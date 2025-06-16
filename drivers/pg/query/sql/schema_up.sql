@@ -12,8 +12,8 @@
 -- in the best interest of the database user that the properties of a graph entity never exceed this limit in large
 -- graphs.
 
--- We need the tri-gram extension to create a GIN text-search index. The goal here isn't full-text search, in which
--- case ts_vector and its ilk would be more suited. This particular selection was made to support accelerated lookups
+-- We need the trigram extension to create a GIN text-search index. The goal here isn't full-text search, in which
+-- case ts_vector and its ilk would be more suited. This particular selection was made to support faster lookups
 -- for "contains", "starts with" and, "ends with" comparison operations.
 create extension if not exists pg_trgm;
 
