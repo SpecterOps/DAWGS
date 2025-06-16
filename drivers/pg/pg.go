@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/graph"
 )
 

@@ -3,6 +3,7 @@ package ops
 import (
 	"errors"
 	"fmt"
+
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"

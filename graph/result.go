@@ -1,5 +1,3 @@
-//go:generate go run go.uber.org/mock/mockgen -source=result.go -copyright_file=../../../../LICENSE.header -destination=./mocks/result.go -package=graph_mocks .
-
 package graph
 
 import (

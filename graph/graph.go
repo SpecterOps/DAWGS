@@ -1,7 +1,5 @@
 package graph
 
-//go:generate go run go.uber.org/mock/mockgen -source=graph.go -copyright_file=../../../../LICENSE.header -destination=./mocks/graph.go -package=graph_mocks .
-
 import (
 	"context"
 	"errors"

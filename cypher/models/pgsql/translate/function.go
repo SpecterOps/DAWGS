@@ -2,8 +2,9 @@ package translate
 
 import (
 	"fmt"
-	"github.com/specterops/dawgs/cypher/models/walk"
 	"strings"
+
+	"github.com/specterops/dawgs/cypher/models/walk"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
