@@ -14,7 +14,7 @@ func BufferedPipe[T any](ctx context.Context) (chan<- T, <-chan T) {
 		readerC = make(chan T)
 
 		// Buffer to hold values when there's no downstream reader available
-		buffer = deque.New[T]()
+		buffer = deque.Deque[T]{}
 
 		// getNext peeks at the next value in the buffer. If the buffer is empty the zero-value of T is returned
 		// instead.

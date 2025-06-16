@@ -5,10 +5,11 @@ package test
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"runtime/debug"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
