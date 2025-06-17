@@ -1,6 +1,6 @@
 module github.com/specterops/dawgs
 
-go 1.24.4
+go 1.23.10
 
 require (
 	cuelang.org/go v0.13.1
