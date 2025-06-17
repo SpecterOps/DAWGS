@@ -72,38 +72,9 @@ func (s *RelationshipPatternVisitor) EnterOC_RelTypeName(ctx *parser.OC_RelTypeN
 }
 
 func (s *RelationshipPatternVisitor) ExitOC_RelTypeName(ctx *parser.OC_RelTypeNameContext) {
-	relationshipType := ctx.GetText()
+	relationshipType := graph.StringKind(ctx.GetText())
 
-	// TODO: TODO TODO TODO
-
-	//switch relationshipType {
-	//case "ALL_ATTACK_PATHS":
-	//	s.ctx.HasShortcutExpansion = true
-	//	if s.ctx.HasMutation {
-	//		s.ctx.AddErrors(ErrUpdateWithExpansionNotSupported)
-	//	}
-	//	addKindsFromRelationships(azure.PathfindingRelationships())
-	//	addKindsFromRelationships(ad.PathfindingRelationships())
-	//
-	//case "AZ_ATTACK_PATHS":
-	//	s.ctx.HasShortcutExpansion = true
-	//	if s.ctx.HasMutation {
-	//		s.ctx.AddErrors(ErrUpdateWithExpansionNotSupported)
-	//	}
-	//	addKindsFromRelationships(azure.PathfindingRelationships())
-	//
-	//case "AD_ATTACK_PATHS":
-	//	s.ctx.HasShortcutExpansion = true
-	//	if s.ctx.HasMutation {
-	//		s.ctx.AddErrors(ErrUpdateWithExpansionNotSupported)
-	//	}
-	//	addKindsFromRelationships(ad.PathfindingRelationships())
-	//default:
-	//	kind := graph.StringKind(relationshipType)
-	//	addKindsFromRelationships([]graph.Kind{kind})
-	//}
-
-	s.RelationshipPattern.Kinds = s.RelationshipPattern.Kinds.Add(graph.StringKind(relationshipType))
+	s.RelationshipPattern.Kinds = s.RelationshipPattern.Kinds.Add(relationshipType)
 	s.ctx.Exit()
 }
 

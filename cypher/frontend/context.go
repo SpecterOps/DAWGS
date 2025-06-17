@@ -18,9 +18,6 @@ type Context struct {
 	visitorStack []*descentEntry
 	filters      []Visitor
 	Errors       []error
-
-	HasMutation          bool
-	HasShortcutExpansion bool
 }
 
 func NewContext(filters ...Visitor) *Context {

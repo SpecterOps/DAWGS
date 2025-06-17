@@ -52,8 +52,4 @@ type UpdatingClauseFilter struct {
 }
 
 func (s *UpdatingClauseFilter) EnterOC_UpdatingClause(ctx *parser.OC_UpdatingClauseContext) {
-	if s.ctx.HasShortcutExpansion {
-		s.ctx.AddErrors(ErrUpdateWithExpansionNotSupported)
-	}
-	s.ctx.HasMutation = true
 }
