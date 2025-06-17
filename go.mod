@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	cuelang.org/go v0.13.1
-	github.com/RoaringBitmap/roaring v1.9.4
+	github.com/RoaringBitmap/roaring/v2 v2.5.0
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/axiomhq/hyperloglog v0.2.5
 	github.com/gammazero/deque v1.0.0

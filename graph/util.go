@@ -1,13 +1,12 @@
 package graph
 
 import (
+	"github.com/specterops/dawgs/cardinality"
 	"sort"
-
-	"github.com/RoaringBitmap/roaring/roaring64"
 )
 
-func NodeSetToBitmap(nodes NodeSet) *roaring64.Bitmap {
-	bitmap := roaring64.NewBitmap()
+func NodeSetToBitmap(nodes NodeSet) cardinality.Duplex[uint64] {
+	bitmap := cardinality.NewBitmap64()
 
 	for _, node := range nodes {
 		bitmap.Add(node.ID.Uint64())
@@ -15,6 +14,7 @@ func NodeSetToBitmap(nodes NodeSet) *roaring64.Bitmap {
 
 	return bitmap
 }
+
 func SortAndSliceNodeSet(set NodeSet, skip, limit int) NodeSet {
 	nodes := SortNodeSetById(set)
 	if skip == 0 && limit == 0 {

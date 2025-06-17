@@ -231,7 +231,7 @@ func (s *ComplexityVisitor) Enter(node cypher.SyntaxNode) {
 
 	case *cypher.Projection:
 		if typedNode.Distinct {
-			// Distinct projections typically reduces result set size
+			// Distinct projections typically reduce result set size
 			s.complexityMeasure.RelativeFitness += 1
 		}
 

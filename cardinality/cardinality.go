@@ -22,7 +22,6 @@ func CloneProvider[T uint32 | uint64](provider Provider[T]) Provider[T] {
 		return typedProvider.Clone()
 
 	default:
-		// TODO: Review this default case
 		return provider
 	}
 }

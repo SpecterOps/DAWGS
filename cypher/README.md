@@ -7,15 +7,6 @@ primary goal of this implementation is to be lightweight and compatible with cyp
 Several features may not be fully supported while this implementation continues to mature. Eventual support for most
 legacy openCypher features is planned.
 
-* [Generating the ANTLR Grammar](#generating-the-antlr-grammar)
-* [Regenerating the ANTLR Parser Implementation](#regenerating-the-antlr-parser-implementation)
-* [Language Features](#language-features)
-    * [Query Cost Model](#query-cost-model)
-        * [Caveats](#caveats)
-        * [Cost Metrics](#cost-metrics)
-    * [Filtered Model Features](#filtered-model-features)
-    * [Unsupported Model Features](#unsupported-model-features)
-
 ## Generating the ANTLR Grammar
 
 openCypher Repository Version Hash: `46223b9e8215814af333b7142850fea99a3949a7`

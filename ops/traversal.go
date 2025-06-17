@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RoaringBitmap/roaring/roaring64"
+	"github.com/specterops/dawgs/cardinality"
+
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
 )
@@ -218,7 +219,7 @@ func AcyclicTraverseNodes(tx graph.Transaction, plan TraversalPlan, nodeFilter N
 	var (
 		nodes         = graph.NewNodeSet()
 		descentFilter = plan.DescentFilter
-		visitedBitmap = roaring64.New()
+		visitedBitmap = cardinality.NewBitmap64()
 	)
 
 	// Prevent expansion of already-visited nodes
@@ -250,7 +251,7 @@ func AcyclicTraverseNodes(tx graph.Transaction, plan TraversalPlan, nodeFilter N
 func AcyclicTraverseTerminals(tx graph.Transaction, plan TraversalPlan) (graph.NodeSet, error) {
 	var (
 		terminals     = graph.NewNodeSet()
-		visitedBitmap = roaring64.New()
+		visitedBitmap = cardinality.NewBitmap64()
 	)
 
 	// Prevent expansion of already-visited nodes

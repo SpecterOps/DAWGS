@@ -1,7 +1,7 @@
 package graph
 
 import (
-	"github.com/RoaringBitmap/roaring/roaring64"
+	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/util/size"
 )
 
@@ -98,8 +98,8 @@ func (s RelationshipSet) AddSet(other RelationshipSet) {
 }
 
 // IDBitmap returns a new roaring64.Bitmap instance containing all Relationship ID values in this RelationshipSet.
-func (s RelationshipSet) IDBitmap() *roaring64.Bitmap {
-	bitmap := roaring64.New()
+func (s RelationshipSet) IDBitmap() cardinality.Duplex[uint64] {
+	bitmap := cardinality.NewBitmap64()
 
 	for id := range s {
 		bitmap.Add(uint64(id))

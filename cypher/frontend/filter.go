@@ -4,9 +4,7 @@ import (
 	"github.com/specterops/dawgs/cypher/parser"
 )
 
-// These are filter overrides to prevent cypher specified ops. Allows for customized parse filters through NewContext fn.
-
-// TODO: Review if relying on a deny model is less secure than explicit allow
+// DefaultCypherContext contains filter overrides to prevent cypher specified ops. Allows for customized parse filters through NewContext fn.
 func DefaultCypherContext() *Context {
 	return NewContext(
 		&UpdatingNotAllowedClauseFilter{},

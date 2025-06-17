@@ -4,7 +4,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/RoaringBitmap/roaring/roaring64"
+	"github.com/specterops/dawgs/cardinality"
+
 	"github.com/specterops/dawgs/util/size"
 )
 
@@ -213,7 +214,7 @@ func (s *IDSegment) Path() IDPath {
 }
 
 func (s *IDSegment) IsCycle() bool {
-	bitmap := roaring64.NewBitmap()
+	bitmap := cardinality.NewBitmap64()
 
 	for cursor := s; cursor != nil; cursor = cursor.Trunk {
 		if !bitmap.CheckedAdd(cursor.Node.Uint64()) {

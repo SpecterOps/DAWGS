@@ -448,7 +448,6 @@ func (s *Properties) Delete(key string) *Properties {
 	return s
 }
 
-// TODO: This function does not correctly communicate that it is lazily instantiated
 func NewProperties() *Properties {
 	return &Properties{}
 }

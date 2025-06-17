@@ -382,14 +382,12 @@ Queries that contain similar constructs will result in the following translation
 
 ### Quantifier Expressions
 
-# TODO
+Quantifier Expressions are currently unsupported but planned.
 
 ## Unsupported Constructs
 
 Below are constructs of the Cypher language that did not make the 1.0 definition of the CySQL specification. Future
 efforts may be pursued to add support for these language features.
-
-# TODO individual use-case examples to better explain terms
 
 * XOR Operations
 * Case Expressions

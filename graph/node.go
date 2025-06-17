@@ -5,7 +5,6 @@ import (
 	"math"
 	"sync"
 
-	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/util/size"
 )
@@ -488,7 +487,7 @@ func (s NodeKindSet) GetCombined(kinds ...Kind) NodeSet {
 
 // EachNode iterates through each node contained within this set.
 func (s NodeKindSet) EachNode(delegate func(node *Node) error) error {
-	visitedIDs := roaring64.New()
+	visitedIDs := cardinality.NewBitmap64()
 
 	for _, set := range s {
 		for _, node := range set {
@@ -518,7 +517,7 @@ func (s NodeKindSet) GetNode(id ID) *Node {
 
 // AllNodeIDs returns all node IDs contained with in this set.
 func (s NodeKindSet) AllNodeIDs() []ID {
-	allIDs := roaring64.New()
+	allIDs := cardinality.NewBitmap64()
 
 	for _, set := range s {
 		for _, node := range set {
@@ -527,7 +526,7 @@ func (s NodeKindSet) AllNodeIDs() []ID {
 	}
 
 	var (
-		uint64Array = allIDs.ToArray()
+		uint64Array = allIDs.Slice()
 		returnArray = make([]ID, len(uint64Array))
 	)
 
@@ -538,7 +537,7 @@ func (s NodeKindSet) AllNodeIDs() []ID {
 	return returnArray
 }
 
-// AllNodes  returns all nodes present in this set as a NodeSet.
+// AllNodes returns all nodes present in this set as a NodeSet.
 func (s NodeKindSet) AllNodes() NodeSet {
 	var allSets = NodeSet{}
 
@@ -551,7 +550,7 @@ func (s NodeKindSet) AllNodes() NodeSet {
 
 // CountAll returns the count of all unique nodes in the set.
 func (s NodeKindSet) CountAll() int64 {
-	var bitmap = roaring64.New()
+	var bitmap = cardinality.NewBitmap64()
 
 	for _, set := range s {
 		for _, node := range set {
@@ -559,7 +558,7 @@ func (s NodeKindSet) CountAll() int64 {
 		}
 	}
 
-	return int64(bitmap.GetCardinality())
+	return int64(bitmap.Cardinality())
 }
 
 // Copy returns a shallow copy of this set.
@@ -579,7 +578,7 @@ func (s NodeKindSet) RemoveNode(id ID) {
 
 // Count returns the count unique nodes for each given kind, summed.
 func (s NodeKindSet) Count(kinds ...Kind) int64 {
-	var bitmap = roaring64.New()
+	var bitmap = cardinality.NewBitmap64()
 
 	for _, kind := range kinds {
 		if set, hasKind := s[kind.String()]; hasKind {
@@ -589,7 +588,7 @@ func (s NodeKindSet) Count(kinds ...Kind) int64 {
 		}
 	}
 
-	return int64(bitmap.GetCardinality())
+	return int64(bitmap.Cardinality())
 }
 
 // Get returns the NodeSet for a given Kind. If there is no NodeSet for the given Kind then an empty NodeSet is returned.

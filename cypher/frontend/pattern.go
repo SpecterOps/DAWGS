@@ -74,16 +74,9 @@ func (s *RelationshipPatternVisitor) EnterOC_RelTypeName(ctx *parser.OC_RelTypeN
 func (s *RelationshipPatternVisitor) ExitOC_RelTypeName(ctx *parser.OC_RelTypeNameContext) {
 	relationshipType := ctx.GetText()
 
-	// Helper function to add kinds from relationships
-	addKindsFromRelationships := func(kinds []graph.Kind) {
-		for _, kind := range kinds {
-			s.RelationshipPattern.Kinds = s.RelationshipPattern.Kinds.Add(kind)
-		}
-	}
+	// TODO: TODO TODO TODO
 
-	// Handle Azure and AD attack paths
-	// TODO: Unwind this with an extension pattern
-	switch relationshipType {
+	//switch relationshipType {
 	//case "ALL_ATTACK_PATHS":
 	//	s.ctx.HasShortcutExpansion = true
 	//	if s.ctx.HasMutation {
@@ -105,11 +98,12 @@ func (s *RelationshipPatternVisitor) ExitOC_RelTypeName(ctx *parser.OC_RelTypeNa
 	//		s.ctx.AddErrors(ErrUpdateWithExpansionNotSupported)
 	//	}
 	//	addKindsFromRelationships(ad.PathfindingRelationships())
-	default:
-		kind := graph.StringKind(relationshipType)
-		addKindsFromRelationships([]graph.Kind{kind})
-	}
+	//default:
+	//	kind := graph.StringKind(relationshipType)
+	//	addKindsFromRelationships([]graph.Kind{kind})
+	//}
 
+	s.RelationshipPattern.Kinds = s.RelationshipPattern.Kinds.Add(graph.StringKind(relationshipType))
 	s.ctx.Exit()
 }
 
