@@ -35,9 +35,7 @@ func (s *liveQuery) runRegularQuery(allShortestPaths bool) graph.Result {
 }
 
 func (s *liveQuery) Query(delegate func(results graph.Result) error, finalCriteria ...graph.Criteria) error {
-	for _, criteria := range finalCriteria {
-		s.queryBuilder.Apply(criteria)
-	}
+	s.queryBuilder.Apply(finalCriteria...)
 
 	if result := s.runRegularQuery(false); result.Error() != nil {
 		return result.Error()
@@ -48,9 +46,7 @@ func (s *liveQuery) Query(delegate func(results graph.Result) error, finalCriter
 }
 
 func (s *liveQuery) QueryAllShortestPaths(delegate func(results graph.Result) error, finalCriteria ...graph.Criteria) error {
-	for _, criteria := range finalCriteria {
-		s.queryBuilder.Apply(criteria)
-	}
+	s.queryBuilder.Apply(finalCriteria...)
 
 	if result := s.runRegularQuery(true); result.Error() != nil {
 		return result.Error()

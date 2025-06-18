@@ -1,1 +1,4 @@
 *.iml
+
+# User IDE Files
+.idea
