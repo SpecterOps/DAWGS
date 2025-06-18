@@ -10,6 +10,15 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n) set n:NodeKind1 remove n:NodeKind2 return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (update node n1 set kind_ids = uniq(sort(n1.kind_ids - array [2]::int2[] || array [1]::int2[])::int2[])::int2[] from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select s1.n0 as n from s1;
 
+-- case: match (n) set n:NodeKind1 set n.prop = '1' return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (update node n1 set kind_ids = uniq(sort(n1.kind_ids || array [1]::int2[])::int2[])::int2[], properties = n1.properties || jsonb_build_object('prop', '1')::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select s1.n0 as n from s1;
+
+-- case: match (n) set n:NodeKind1 remove n:NodeKind2 set n.prop = '1' remove n.name return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (update node n1 set kind_ids = uniq(sort(n1.kind_ids - array [2]::int2[] || array [1]::int2[])::int2[])::int2[], properties = n1.properties - array ['name']::text[] || jsonb_build_object('prop', '1')::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select s1.n0 as n from s1;
+
+-- case: match (n) remove n:NodeKind1 remove n.prop return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (update node n1 set kind_ids = n1.kind_ids - array [1]::int2[], properties = n1.properties - array ['prop']::text[] from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select s1.n0 as n from s1;
+
 -- case: match (n) where n.name = '1234' set n.is_target = true
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') = '1234')), s1 as (update node n1 set properties = n1.properties || jsonb_build_object('is_target', true)::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select 1;
 

@@ -227,7 +227,7 @@ func (s *Translator) buildUpdates() error {
 			}
 
 			if kindRemovals.Set {
-				sqlUpdate.Assignments = []pgsql.Assignment{
+				sqlUpdate.Assignments = append(sqlUpdate.Assignments,
 					pgsql.NewBinaryExpression(
 						kindColumnIdentifier,
 						pgsql.OperatorAssignment,
@@ -253,9 +253,9 @@ func (s *Translator) buildUpdates() error {
 							CastType: pgsql.Int2Array,
 						},
 					),
-				}
+				)
 			} else {
-				sqlUpdate.Assignments = []pgsql.Assignment{
+				sqlUpdate.Assignments = append(sqlUpdate.Assignments,
 					pgsql.NewBinaryExpression(
 						kindColumnIdentifier,
 						pgsql.OperatorAssignment,
@@ -277,10 +277,10 @@ func (s *Translator) buildUpdates() error {
 							CastType: pgsql.Int2Array,
 						},
 					),
-				}
+				)
 			}
 		} else if kindRemovals.Set {
-			sqlUpdate.Assignments = []pgsql.Assignment{pgsql.NewBinaryExpression(
+			sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 				kindColumnIdentifier,
 				pgsql.OperatorAssignment,
 				pgsql.NewBinaryExpression(
@@ -288,7 +288,7 @@ func (s *Translator) buildUpdates() error {
 					pgsql.OperatorSubtract,
 					kindRemovals.Value,
 				),
-			)}
+			))
 		}
 
 		if propertyAssignments.Set {
@@ -297,7 +297,7 @@ func (s *Translator) buildUpdates() error {
 			}
 
 			if propertyRemovals.Set {
-				sqlUpdate.Assignments = []pgsql.Assignment{pgsql.NewBinaryExpression(
+				sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 					pgsql.ColumnProperties,
 					pgsql.OperatorAssignment,
 					pgsql.NewBinaryExpression(
@@ -309,9 +309,9 @@ func (s *Translator) buildUpdates() error {
 						pgsql.OperatorConcatenate,
 						propertyAssignments.Value,
 					),
-				)}
+				))
 			} else {
-				sqlUpdate.Assignments = []pgsql.Assignment{pgsql.NewBinaryExpression(
+				sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 					pgsql.ColumnProperties,
 					pgsql.OperatorAssignment,
 					pgsql.NewBinaryExpression(
@@ -319,10 +319,10 @@ func (s *Translator) buildUpdates() error {
 						pgsql.OperatorConcatenate,
 						propertyAssignments.Value,
 					),
-				)}
+				))
 			}
 		} else if propertyRemovals.Set {
-			sqlUpdate.Assignments = []pgsql.Assignment{pgsql.NewBinaryExpression(
+			sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 				pgsql.ColumnProperties,
 				pgsql.OperatorAssignment,
 				pgsql.NewBinaryExpression(
@@ -330,7 +330,7 @@ func (s *Translator) buildUpdates() error {
 					pgsql.OperatorSubtract,
 					propertyRemovals.Value,
 				),
-			)}
+			))
 		}
 
 		sqlUpdate.Returning = identifierMutation.Projection
