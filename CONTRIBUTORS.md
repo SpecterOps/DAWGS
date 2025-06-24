@@ -20,6 +20,7 @@ This project would not be what it is without the hard work and thoughts of those
 - [Stephen Hinck](https://github.com/StephenHinck)
 - [Youssef Kaiboussi](https://github.com/ykaiboussi)
 - [Stephanie Lamb](https://github.com/stephanieslamb)
+- [Arianna Cooper](https://github.com/ALCooper12)
 - [Elijah Brown](https://github.com/ad7zj)
 - [Martin Sohn Christensen](https://github.com/martinsohn)
 - [Wesley Maffly-Kipp](https://github.com/maffkipp)
