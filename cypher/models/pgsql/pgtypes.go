@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/models/cypher"
+
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -438,14 +440,14 @@ func ValueToDataType(value any) (DataType, error) {
 		return Int4Array, nil
 
 	// * uint32 is here since it can't fit in a signed 16-bit value and therefore must coerce into a higher sized type
-	// * uint is here because it is architecture dependent but expecting it to be an unsigned value between 32-bits and
+	// * uint is here because it is architecture-dependent but expecting it to be an unsigned value between 32-bits and
 	//   64-bits is fine.
 	// * int is here for the same reasons as uint
 	case uint32, uint, uint64, int, int64, graph.ID:
 		return Int8, nil
 
 	// * uint32 is here since it can't fit in a signed 16-bit value and therefore must coerce into a higher sized type
-	// * uint is here because it is architecture dependent but expecting it to be an unsigned value between 32-bits and
+	// * uint is here because it is architecture-dependent but expecting it to be an unsigned value between 32-bits and
 	//   64-bits is fine.
 	// * int is here for the same reasons as uint
 	case []uint32, []uint, []uint64, []int, []int64, []graph.ID:
@@ -477,6 +479,12 @@ func ValueToDataType(value any) (DataType, error) {
 
 	case graph.Kinds:
 		return Int2Array, nil
+
+	case cypher.MapLiteral:
+		return JSONB, nil
+
+	case *cypher.ListLiteral:
+		return JSONBArray, nil
 
 	case []any:
 		return anySliceType(typedValue)

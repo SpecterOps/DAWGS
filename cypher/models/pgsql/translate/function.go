@@ -255,12 +255,12 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 	case cypher.CollectFunction:
 		if typedExpression.NumArguments() != 1 {
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
-		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		} else if collectedExpression, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
 		} else {
 			castType := pgsql.AnyArray
 
-			switch typedArgument := unwrapParenthetical(argument).(type) {
+			switch typedArgument := unwrapParenthetical(collectedExpression).(type) {
 			case pgsql.Identifier:
 				if binding, bound := s.scope.Lookup(typedArgument); !bound {
 					s.SetError(fmt.Errorf("binding not found for collect function argument %s", typedExpression.Name))
@@ -272,24 +272,53 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			}
 
 			s.treeTranslator.PushOperand(
-				pgsql.FunctionCall{
-					Function: pgsql.FunctionArrayRemove,
-					Parameters: []pgsql.Expression{
-						pgsql.FunctionCall{
-							Function:   pgsql.FunctionArrayAggregate,
-							Parameters: []pgsql.Expression{argument},
-							Distinct:   typedExpression.Distinct,
-							CastType:   castType,
-						},
-						pgsql.NullLiteral(),
-					},
-					CastType: castType,
-				},
+				functionWrapCollectToArray(typedExpression.Distinct, collectedExpression, castType),
 			)
 		}
 
 	default:
 		s.SetErrorf("unknown cypher function: %s", typedExpression.Name)
+	}
+}
+
+// functionWrapCollectToArray performs a few wrapper function calls for the collect semantic functionality presented
+// in Neo4j. The outer wrapper in an array_remove(...) call to prune null values from the aggregated column. This
+// prevents null from tainting comparisons that may later be performed against the aggregated column.
+//
+// The next wrapper is a coalesce(...) call to ensure that if the aggregation results in a null return value that the
+// aggregation still returns an empty array. As per documentation in
+// https://www.postgresql.org/docs/current/functions-aggregate.html for versions 16.9 and 17.4:
+// > It should be noted that except for count, these functions return a null value when no rows are selected. In
+// > particular, sum of no rows returns null, not zero as one might expect, and array_agg returns null rather than
+// > an empty array when there are no input rows. The coalesce function can be used to substitute zero or an empty
+// > array for null when necessary.
+//
+// The final function call is the aggregation function itself.
+//
+// Current semantic issues:
+// * `null` values are stripped during aggregation. This may not be the case in Neo4j's query execution pipeline.
+func functionWrapCollectToArray(distinct bool, collectedExpression pgsql.Expression, castType pgsql.DataType) pgsql.FunctionCall {
+	return pgsql.FunctionCall{
+		Function: pgsql.FunctionArrayRemove,
+		Parameters: []pgsql.Expression{
+			pgsql.FunctionCall{
+				Function: pgsql.FunctionCoalesce,
+				Parameters: []pgsql.Expression{
+					pgsql.FunctionCall{
+						Function:   pgsql.FunctionArrayAggregate,
+						Parameters: []pgsql.Expression{collectedExpression},
+						Distinct:   distinct,
+						CastType:   castType,
+					},
+					pgsql.ArrayLiteral{
+						CastType: pgsql.TextArray,
+					},
+				},
+				CastType: castType,
+			},
+			pgsql.NullLiteral(),
+		},
+		CastType: castType,
 	}
 }
 

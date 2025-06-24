@@ -1,8 +1,9 @@
 package graph
 
 import (
-	"github.com/specterops/dawgs/cardinality"
 	"sort"
+
+	"github.com/specterops/dawgs/cardinality"
 )
 
 func NodeSetToBitmap(nodes NodeSet) cardinality.Duplex[uint64] {
