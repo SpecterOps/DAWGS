@@ -54,20 +54,22 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 		}
 
 	case *cypher.Literal:
-		switch typedValue := typedNode.Value.(type) {
-		case *cypher.ListLiteral:
-			if branches, err := cypherSyntaxNodeSliceTypeConvert(typedValue.Expressions()); err != nil {
-				return nil, err
-			} else {
-				return &Cursor[cypher.SyntaxNode]{
-					Node:     typedValue,
-					Branches: branches,
-				}, nil
-			}
+		return &Cursor[cypher.SyntaxNode]{
+			Node: node,
+		}, nil
 
-		default:
+	case cypher.MapLiteral:
+		return &Cursor[cypher.SyntaxNode]{
+			Node: node,
+		}, nil
+
+	case *cypher.ListLiteral:
+		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions()); err != nil {
+			return nil, err
+		} else {
 			return &Cursor[cypher.SyntaxNode]{
-				Node: node,
+				Node:     typedNode,
+				Branches: branches,
 			}, nil
 		}
 

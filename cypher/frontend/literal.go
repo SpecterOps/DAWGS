@@ -79,42 +79,54 @@ func (s *ListLiteralVisitor) ExitOC_Expression(ctx *parser.OC_ExpressionContext)
 type LiteralVisitor struct {
 	BaseVisitor
 
-	Literal *cypher.Literal
+	Literal     *cypher.Literal
+	MapLiteral  cypher.MapLiteral
+	ListLiteral *cypher.ListLiteral
 }
 
 func NewLiteralVisitor() *LiteralVisitor {
-	return &LiteralVisitor{
-		Literal: &cypher.Literal{},
+	return &LiteralVisitor{}
+}
+
+func (s *LiteralVisitor) GetLiteral() cypher.Expression {
+	if s.ListLiteral != nil {
+		return s.ListLiteral
 	}
+
+	if s.MapLiteral != nil {
+		return s.MapLiteral
+	}
+
+	return s.Literal
 }
 
 func (s *LiteralVisitor) EnterOC_IntegerLiteral(ctx *parser.OC_IntegerLiteralContext) {
 	text := ctx.GetText()
 
-	if parsedInt64, err := strconv.ParseInt(ctx.GetText(), 10, 64); err != nil {
+	if parsed, err := strconv.ParseInt(ctx.GetText(), 10, 64); err != nil {
 		s.ctx.AddErrors(fmt.Errorf("invalid integer literal: %s - %w", text, err))
 	} else {
-		s.Literal.Set(parsedInt64)
+		s.Literal = cypher.NewLiteral(parsed, false)
 	}
 }
 
 func (s *LiteralVisitor) EnterOC_BooleanLiteral(ctx *parser.OC_BooleanLiteralContext) {
 	text := ctx.GetText()
 
-	if parsedBool, err := strconv.ParseBool(text); err != nil {
+	if parsed, err := strconv.ParseBool(text); err != nil {
 		s.ctx.AddErrors(fmt.Errorf("invalid boolean literal: %s - %w", text, err))
 	} else {
-		s.Literal.Set(parsedBool)
+		s.Literal = cypher.NewLiteral(parsed, false)
 	}
 }
 
 func (s *LiteralVisitor) EnterOC_DoubleLiteral(ctx *parser.OC_DoubleLiteralContext) {
 	text := ctx.GetText()
 
-	if parsedFloat64, err := strconv.ParseFloat(text, 64); err != nil {
+	if parsed, err := strconv.ParseFloat(text, 64); err != nil {
 		s.ctx.AddErrors(fmt.Errorf("invalid double literal: %s - %w", text, err))
 	} else {
-		s.Literal.Set(parsedFloat64)
+		s.Literal = cypher.NewLiteral(parsed, false)
 	}
 }
 
@@ -123,7 +135,7 @@ func (s *LiteralVisitor) EnterOC_MapLiteral(ctx *parser.OC_MapLiteralContext) {
 }
 
 func (s *LiteralVisitor) ExitOC_MapLiteral(ctx *parser.OC_MapLiteralContext) {
-	s.Literal.Set(s.ctx.Exit().(*MapLiteralVisitor).Map)
+	s.MapLiteral = s.ctx.Exit().(*MapLiteralVisitor).Map
 }
 
 func (s *LiteralVisitor) EnterOC_ListLiteral(ctx *parser.OC_ListLiteralContext) {
@@ -131,5 +143,5 @@ func (s *LiteralVisitor) EnterOC_ListLiteral(ctx *parser.OC_ListLiteralContext) 
 }
 
 func (s *LiteralVisitor) ExitOC_ListLiteral(ctx *parser.OC_ListLiteralContext) {
-	s.Literal.Set(s.ctx.Exit().(*ListLiteralVisitor).List)
+	s.ListLiteral = s.ctx.Exit().(*ListLiteralVisitor).List
 }

@@ -14,8 +14,8 @@ openCypher with translation implementations for backends that do not natively su
 ## Development Setup
 
 For users making changes to `dawgs` and its packages, the [go mod replace](https://go.dev/ref/mod#go-mod-file-replace)
-directive can be utilized. This allows changes made in the checked out `dawgs` repo immediately visible to consuming
-libraries.
+directive can be utilized. This allows changes made in the checked out `dawgs` repo to be immediately visible to
+consuming projects.
 
 **Example**
 

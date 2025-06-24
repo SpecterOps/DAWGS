@@ -23,6 +23,10 @@ var (
 
 	// ErrContextTimedOut is used to mark that an operation was halted due to the context hitting its deadline
 	ErrContextTimedOut = errors.New("context timed out")
+
+	// ErrConcurrentConnectionSlotTimeOut is used to mark that an operation failed due to being unable to acquire a
+	// concurrent connection slot
+	ErrConcurrentConnectionSlotTimeOut = errors.New("context timed out")
 )
 
 func IsErrNotFound(err error) bool {

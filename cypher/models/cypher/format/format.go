@@ -1,6 +1,7 @@
 package format
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -440,17 +441,224 @@ func (s Emitter) formatLiteral(output io.Writer, literal *cypher.Literal) error 
 			return err
 		}
 
-	case cypher.MapLiteral:
-		if err := s.formatMapLiteral(output, typedLiteral); err != nil {
+	default:
+		return s.WriteExpression(output, literal.Value)
+	}
+
+	return nil
+}
+
+func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression) error {
+	switch typedExpression := expression.(type) {
+	case *cypher.ProjectionItem:
+		if err := s.WriteExpression(output, typedExpression.Expression); err != nil {
 			return err
 		}
 
-	case *cypher.ListLiteral:
-		if _, err := io.WriteString(output, "["); err != nil {
+		if typedExpression.Alias != nil {
+			if _, err := io.WriteString(output, " as "); err != nil {
+				return err
+			}
+
+			if err := s.WriteExpression(output, typedExpression.Alias); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.Negation:
+		if _, err := io.WriteString(output, "not "); err != nil {
 			return err
 		}
 
-		for idx, subExpression := range *typedLiteral {
+		switch innerExpression := typedExpression.Expression.(type) {
+		case *cypher.Parenthetical:
+			if err := s.WriteExpression(output, innerExpression); err != nil {
+				return err
+			}
+
+		default:
+			if err := s.WriteExpression(output, innerExpression); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.IDInCollection:
+		if err := s.WriteExpression(output, typedExpression.Variable); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, " in "); err != nil {
+			return err
+		}
+
+		if err := s.WriteExpression(output, typedExpression.Expression); err != nil {
+			return err
+		}
+
+	case *cypher.FilterExpression:
+		if err := s.WriteExpression(output, typedExpression.Specifier); err != nil {
+			return err
+		}
+
+		if typedExpression.Where != nil && len(typedExpression.Where.Expressions) > 0 {
+			if err := s.formatWhere(output, typedExpression.Where); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.Quantifier:
+		if _, err := io.WriteString(output, typedExpression.Type.String()); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, "("); err != nil {
+			return err
+		}
+
+		if err := s.WriteExpression(output, typedExpression.Filter); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, ")"); err != nil {
+			return err
+		}
+
+	case *cypher.Parenthetical:
+		if _, err := io.WriteString(output, "("); err != nil {
+			return err
+		}
+
+		if err := s.WriteExpression(output, typedExpression.Expression); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, ")"); err != nil {
+			return err
+		}
+
+	case *cypher.Disjunction:
+		for idx, joinedExpression := range typedExpression.Expressions {
+			if idx > 0 {
+				if _, err := io.WriteString(output, " or "); err != nil {
+					return err
+				}
+			}
+
+			if err := s.WriteExpression(output, joinedExpression); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.ExclusiveDisjunction:
+		for idx, joinedExpression := range typedExpression.Expressions {
+			if idx > 0 {
+				if _, err := io.WriteString(output, " xor "); err != nil {
+					return err
+				}
+			}
+
+			if err := s.WriteExpression(output, joinedExpression); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.Conjunction:
+		for idx, joinedExpression := range typedExpression.Expressions {
+			if idx > 0 {
+				if _, err := io.WriteString(output, " and "); err != nil {
+					return err
+				}
+			}
+
+			if err := s.WriteExpression(output, joinedExpression); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.Comparison:
+		if err := s.WriteExpression(output, typedExpression.Left); err != nil {
+			return err
+		}
+
+		for _, nextPart := range typedExpression.Partials {
+			if err := s.WriteExpression(output, nextPart); err != nil {
+				return err
+			}
+		}
+
+	case *cypher.PartialComparison:
+		if _, err := io.WriteString(output, " "); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, typedExpression.Operator.String()); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, " "); err != nil {
+			return err
+		}
+
+		if err := s.WriteExpression(output, typedExpression.Right); err != nil {
+			return err
+		}
+
+	case *cypher.Properties:
+		if typedExpression.Map != nil {
+			if err := s.formatMapLiteral(output, typedExpression.Map); err != nil {
+				return err
+			}
+		} else if err := s.WriteExpression(output, typedExpression.Parameter); err != nil {
+			return err
+		}
+
+	case *cypher.Variable:
+		if _, err := io.WriteString(output, typedExpression.Symbol); err != nil {
+			return err
+		}
+
+	case *cypher.Parameter:
+		if _, err := io.WriteString(output, "$"); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, typedExpression.Symbol); err != nil {
+			return err
+		}
+
+	case *cypher.PropertyLookup:
+		if err := s.WriteExpression(output, typedExpression.Atom); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, "."); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, typedExpression.Symbol); err != nil {
+			return err
+		}
+
+	case *cypher.FunctionInvocation:
+		if _, err := io.WriteString(output, strings.Join(typedExpression.Namespace, ".")); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, typedExpression.Name); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, "("); err != nil {
+			return err
+		}
+
+		if typedExpression.Distinct {
+			if _, err := io.WriteString(output, "distinct "); err != nil {
+				return err
+			}
+		}
+
+		for idx, subExpression := range typedExpression.Arguments {
 			if idx > 0 {
 				if _, err := io.WriteString(output, ", "); err != nil {
 					return err
@@ -462,353 +670,151 @@ func (s Emitter) formatLiteral(output io.Writer, literal *cypher.Literal) error 
 			}
 		}
 
-		if _, err := io.WriteString(output, "]"); err != nil {
-			return err
-		}
-
-	default:
-		return fmt.Errorf("unexpected literal type for string formatting: %T", literal)
-	}
-
-	return nil
-}
-
-func (s Emitter) WriteExpression(writer io.Writer, expression cypher.Expression) error {
-	switch typedExpression := expression.(type) {
-	case *cypher.ProjectionItem:
-		if err := s.WriteExpression(writer, typedExpression.Expression); err != nil {
-			return err
-		}
-
-		if typedExpression.Alias != nil {
-			if _, err := io.WriteString(writer, " as "); err != nil {
-				return err
-			}
-
-			if err := s.WriteExpression(writer, typedExpression.Alias); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.Negation:
-		if _, err := io.WriteString(writer, "not "); err != nil {
-			return err
-		}
-
-		switch innerExpression := typedExpression.Expression.(type) {
-		case *cypher.Parenthetical:
-			if err := s.WriteExpression(writer, innerExpression); err != nil {
-				return err
-			}
-
-		default:
-			if err := s.WriteExpression(writer, innerExpression); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.IDInCollection:
-		if err := s.WriteExpression(writer, typedExpression.Variable); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, " in "); err != nil {
-			return err
-		}
-
-		if err := s.WriteExpression(writer, typedExpression.Expression); err != nil {
-			return err
-		}
-
-	case *cypher.FilterExpression:
-		if err := s.WriteExpression(writer, typedExpression.Specifier); err != nil {
-			return err
-		}
-
-		if typedExpression.Where != nil && len(typedExpression.Where.Expressions) > 0 {
-			if err := s.formatWhere(writer, typedExpression.Where); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.Quantifier:
-		if _, err := io.WriteString(writer, typedExpression.Type.String()); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, "("); err != nil {
-			return err
-		}
-
-		if err := s.WriteExpression(writer, typedExpression.Filter); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, ")"); err != nil {
-			return err
-		}
-
-	case *cypher.Parenthetical:
-		if _, err := io.WriteString(writer, "("); err != nil {
-			return err
-		}
-
-		if err := s.WriteExpression(writer, typedExpression.Expression); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, ")"); err != nil {
-			return err
-		}
-
-	case *cypher.Disjunction:
-		for idx, joinedExpression := range typedExpression.Expressions {
-			if idx > 0 {
-				if _, err := io.WriteString(writer, " or "); err != nil {
-					return err
-				}
-			}
-
-			if err := s.WriteExpression(writer, joinedExpression); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.ExclusiveDisjunction:
-		for idx, joinedExpression := range typedExpression.Expressions {
-			if idx > 0 {
-				if _, err := io.WriteString(writer, " xor "); err != nil {
-					return err
-				}
-			}
-
-			if err := s.WriteExpression(writer, joinedExpression); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.Conjunction:
-		for idx, joinedExpression := range typedExpression.Expressions {
-			if idx > 0 {
-				if _, err := io.WriteString(writer, " and "); err != nil {
-					return err
-				}
-			}
-
-			if err := s.WriteExpression(writer, joinedExpression); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.Comparison:
-		if err := s.WriteExpression(writer, typedExpression.Left); err != nil {
-			return err
-		}
-
-		for _, nextPart := range typedExpression.Partials {
-			if err := s.WriteExpression(writer, nextPart); err != nil {
-				return err
-			}
-		}
-
-	case *cypher.PartialComparison:
-		if _, err := io.WriteString(writer, " "); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, typedExpression.Operator.String()); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, " "); err != nil {
-			return err
-		}
-
-		if err := s.WriteExpression(writer, typedExpression.Right); err != nil {
-			return err
-		}
-
-	case *cypher.Properties:
-		if typedExpression.Map != nil {
-			if err := s.formatMapLiteral(writer, typedExpression.Map); err != nil {
-				return err
-			}
-		} else if err := s.WriteExpression(writer, typedExpression.Parameter); err != nil {
-			return err
-		}
-
-	case *cypher.Variable:
-		if _, err := io.WriteString(writer, typedExpression.Symbol); err != nil {
-			return err
-		}
-
-	case *cypher.Parameter:
-		if _, err := io.WriteString(writer, "$"); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, typedExpression.Symbol); err != nil {
-			return err
-		}
-
-	case *cypher.PropertyLookup:
-		if err := s.WriteExpression(writer, typedExpression.Atom); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, "."); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, typedExpression.Symbol); err != nil {
-			return err
-		}
-
-	case *cypher.FunctionInvocation:
-		if _, err := io.WriteString(writer, strings.Join(typedExpression.Namespace, ".")); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, typedExpression.Name); err != nil {
-			return err
-		}
-
-		if _, err := io.WriteString(writer, "("); err != nil {
-			return err
-		}
-
-		if typedExpression.Distinct {
-			if _, err := io.WriteString(writer, "distinct "); err != nil {
-				return err
-			}
-		}
-
-		for idx, subExpression := range typedExpression.Arguments {
-			if idx > 0 {
-				if _, err := io.WriteString(writer, ", "); err != nil {
-					return err
-				}
-			}
-
-			if err := s.WriteExpression(writer, subExpression); err != nil {
-				return err
-			}
-		}
-
-		if _, err := io.WriteString(writer, ")"); err != nil {
+		if _, err := io.WriteString(output, ")"); err != nil {
 			return err
 		}
 
 	case graph.Kind:
-		if _, err := io.WriteString(writer, ":"); err != nil {
+		if _, err := io.WriteString(output, ":"); err != nil {
 			return err
 		}
 
-		if _, err := io.WriteString(writer, typedExpression.String()); err != nil {
+		if _, err := io.WriteString(output, typedExpression.String()); err != nil {
 			return err
 		}
 
 	case graph.Kinds:
-		if _, err := io.WriteString(writer, ":"); err != nil {
+		if _, err := io.WriteString(output, ":"); err != nil {
 			return err
 		}
 
-		if err := writeJoinedKinds(writer, ":", typedExpression); err != nil {
+		if err := writeJoinedKinds(output, ":", typedExpression); err != nil {
 			return err
 		}
 
 	case *cypher.KindMatcher:
 		if len(typedExpression.Kinds) > 1 {
-			if _, err := io.WriteString(writer, "("); err != nil {
+			if _, err := io.WriteString(output, "("); err != nil {
 				return err
 			}
 		}
 
 		for idx, matcher := range typedExpression.Kinds {
 			if idx > 0 {
-				if _, err := io.WriteString(writer, " or "); err != nil {
+				if _, err := io.WriteString(output, " or "); err != nil {
 					return err
 				}
 			}
 
-			if err := s.WriteExpression(writer, typedExpression.Reference); err != nil {
+			if err := s.WriteExpression(output, typedExpression.Reference); err != nil {
 				return err
 			}
 
-			if _, err := io.WriteString(writer, ":"); err != nil {
+			if _, err := io.WriteString(output, ":"); err != nil {
 				return err
 			}
 
-			if _, err := io.WriteString(writer, matcher.String()); err != nil {
+			if _, err := io.WriteString(output, matcher.String()); err != nil {
 				return err
 			}
 		}
 
 		if len(typedExpression.Kinds) > 1 {
-			if _, err := io.WriteString(writer, ")"); err != nil {
+			if _, err := io.WriteString(output, ")"); err != nil {
 				return err
 			}
 		}
 
 	case *cypher.RangeQuantifier:
-		if _, err := io.WriteString(writer, typedExpression.Value); err != nil {
+		if _, err := io.WriteString(output, typedExpression.Value); err != nil {
 			return err
 		}
 
 	case cypher.Operator:
-		if _, err := io.WriteString(writer, typedExpression.String()); err != nil {
+		if _, err := io.WriteString(output, typedExpression.String()); err != nil {
 			return err
 		}
 
 	case *cypher.Skip:
-		return s.WriteExpression(writer, typedExpression.Value)
+		return s.WriteExpression(output, typedExpression.Value)
 
 	case *cypher.Limit:
-		return s.WriteExpression(writer, typedExpression.Value)
+		return s.WriteExpression(output, typedExpression.Value)
 
 	case *cypher.Literal:
 		if !s.StripLiterals {
-			return s.formatLiteral(writer, typedExpression)
+			return s.formatLiteral(output, typedExpression)
 		} else {
-			_, err := io.WriteString(writer, strippedLiteral)
+			_, err := io.WriteString(output, strippedLiteral)
+			return err
+		}
+
+	case cypher.MapLiteral:
+		if err := s.formatMapLiteral(output, typedExpression); err != nil {
+			return err
+		}
+
+	case *cypher.ListLiteral:
+		if !s.StripLiterals {
+			if _, err := io.WriteString(output, "["); err != nil {
+				return err
+			}
+
+			for idx, subExpression := range *typedExpression {
+				if idx > 0 {
+					if _, err := io.WriteString(output, ", "); err != nil {
+						return err
+					}
+				}
+
+				if err := s.WriteExpression(output, subExpression); err != nil {
+					return err
+				}
+			}
+
+			if _, err := io.WriteString(output, "]"); err != nil {
+				return err
+			}
+		} else {
+			_, err := io.WriteString(output, strippedLiteral)
 			return err
 		}
 
 	case *cypher.PatternPredicate:
-		return s.formatPatternElements(writer, typedExpression.PatternElements)
+		return s.formatPatternElements(output, typedExpression.PatternElements)
 
 	case *cypher.ArithmeticExpression:
-		if err := s.WriteExpression(writer, typedExpression.Left); err != nil {
+		if err := s.WriteExpression(output, typedExpression.Left); err != nil {
 			return err
 		}
 
 		for _, part := range typedExpression.Partials {
-			if err := s.WriteExpression(writer, part); err != nil {
+			if err := s.WriteExpression(output, part); err != nil {
 				return err
 			}
 		}
 
 	case *cypher.PartialArithmeticExpression:
-		if _, err := io.WriteString(writer, " "); err != nil {
+		if _, err := io.WriteString(output, " "); err != nil {
 			return err
 		}
 
-		if _, err := io.WriteString(writer, typedExpression.Operator.String()); err != nil {
+		if _, err := io.WriteString(output, typedExpression.Operator.String()); err != nil {
 			return err
 		}
 
-		if _, err := io.WriteString(writer, " "); err != nil {
+		if _, err := io.WriteString(output, " "); err != nil {
 			return err
 		}
 
-		return s.WriteExpression(writer, typedExpression.Right)
+		return s.WriteExpression(output, typedExpression.Right)
 
 	case *cypher.UnaryAddOrSubtractExpression:
-		if _, err := io.WriteString(writer, typedExpression.Operator.String()); err != nil {
+		if _, err := io.WriteString(output, typedExpression.Operator.String()); err != nil {
 			return err
 		}
 
-		return s.WriteExpression(writer, typedExpression.Right)
+		return s.WriteExpression(output, typedExpression.Right)
 
 	default:
 		return fmt.Errorf("unexpected expression type for string formatting: %T", expression)
@@ -1200,4 +1206,14 @@ func (s Emitter) Write(regularQuery *cypher.RegularQuery, writer io.Writer) erro
 	}
 
 	return nil
+}
+
+func RegularQuery(query *cypher.RegularQuery, stripLiterals bool) (string, error) {
+	buffer := &bytes.Buffer{}
+
+	if err := NewCypherEmitter(stripLiterals).Write(query, buffer); err != nil {
+		return "", err
+	} else {
+		return buffer.String(), nil
+	}
 }

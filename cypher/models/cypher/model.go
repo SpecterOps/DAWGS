@@ -139,6 +139,16 @@ func NewRegularQuery() *RegularQuery {
 	return &RegularQuery{}
 }
 
+func NewRegularQueryWithSingleQuery() (*RegularQuery, *SinglePartQuery) {
+	spq := NewSinglePartQuery()
+
+	return &RegularQuery{
+		SingleQuery: &SingleQuery{
+			SinglePartQuery: spq,
+		},
+	}, spq
+}
+
 func (s *RegularQuery) copy() *RegularQuery {
 	if s == nil {
 		return nil
@@ -196,6 +206,11 @@ type ReadingClause struct {
 
 func NewReadingClause() *ReadingClause {
 	return &ReadingClause{}
+}
+
+func (s *ReadingClause) NewMatch(optional bool) *Match {
+	s.Match = NewMatch(optional)
+	return s.Match
 }
 
 func (s *ReadingClause) copy() *ReadingClause {
@@ -299,6 +314,22 @@ func NewSinglePartQuery() *SinglePartQuery {
 	return &SinglePartQuery{}
 }
 
+func (s *SinglePartQuery) NewProjection(distinct bool) *Projection {
+	s.Return = NewReturn()
+	return s.Return.NewProjection(distinct)
+}
+
+func (s *SinglePartQuery) NewReadingClause() *ReadingClause {
+	newReadingClause := NewReadingClause()
+	s.ReadingClauses = append(s.ReadingClauses, newReadingClause)
+
+	return newReadingClause
+}
+
+func (s *SinglePartQuery) NewMatch(optional bool) *Match {
+	return s.NewReadingClause().NewMatch(optional)
+}
+
 func (s *SinglePartQuery) copy() *SinglePartQuery {
 	if s == nil {
 		return nil
@@ -387,6 +418,18 @@ func NewMatch(optional bool) *Match {
 	return &Match{
 		Optional: optional,
 	}
+}
+
+func (s *Match) NewPatternPart() *PatternPart {
+	newPatternPart := NewPatternPart()
+	s.Pattern = append(s.Pattern, newPatternPart)
+
+	return newPatternPart
+}
+
+func (s *Match) NewWhere() *Where {
+	s.Where = NewWhere()
+	return s.Where
 }
 
 func (s *Match) copy() *Match {
@@ -478,10 +521,15 @@ type Delete struct {
 	Expressions []Expression
 }
 
-func NewDelete() *Delete {
+func NewDelete(detach bool, expressions []Expression) *Delete {
 	return &Delete{
-		Detach: false,
+		Detach:      detach,
+		Expressions: expressions,
 	}
+}
+
+func (s *Delete) AddExpression(expression Expression) {
+	s.Expressions = append(s.Expressions, expression)
 }
 
 func (s *Delete) copy() *Delete {
@@ -499,8 +547,10 @@ type Remove struct {
 	Items []*RemoveItem
 }
 
-func NewRemove() *Remove {
-	return &Remove{}
+func NewRemove(items []*RemoveItem) *Remove {
+	return &Remove{
+		Items: items,
+	}
 }
 
 func (s *Remove) copy() *Remove {
@@ -518,8 +568,16 @@ type RemoveItem struct {
 	Property    *PropertyLookup
 }
 
-func NewRemoveItem() *RemoveItem {
-	return &RemoveItem{}
+func RemoveKindsByMatcher(kindMatcher *KindMatcher) *RemoveItem {
+	return &RemoveItem{
+		KindMatcher: kindMatcher,
+	}
+}
+
+func RemoveProperty(propertyLookup *PropertyLookup) *RemoveItem {
+	return &RemoveItem{
+		Property: propertyLookup,
+	}
 }
 
 func (s *RemoveItem) copy() *RemoveItem {
@@ -537,8 +595,10 @@ type Set struct {
 	Items []*SetItem
 }
 
-func NewSet() *Set {
-	return &Set{}
+func NewSet(items []*SetItem) *Set {
+	return &Set{
+		Items: items,
+	}
 }
 
 func (s *Set) copy() *Set {
@@ -557,8 +617,12 @@ type SetItem struct {
 	Right    Expression
 }
 
-func NewSetItem() *SetItem {
-	return &SetItem{}
+func NewSetItem(lOperand Expression, operator AssignmentOperator, rOperand Expression) *SetItem {
+	return &SetItem{
+		Left:     lOperand,
+		Operator: operator,
+		Right:    rOperand,
+	}
 }
 
 func (s *SetItem) copy() *SetItem {
@@ -807,6 +871,16 @@ func NewListLiteral() *ListLiteral {
 	return &ListLiteral{}
 }
 
+func NewStringListLiteral(values []string) *ListLiteral {
+	literal := NewListLiteral()
+
+	for _, value := range values {
+		*literal = append(*literal, NewStringLiteral(value))
+	}
+
+	return literal
+}
+
 func (s *ListLiteral) Keys() []any {
 	keys := make([]any, len(*s))
 
@@ -1017,6 +1091,13 @@ func (s *Comparison) AddPartialComparison(partial *PartialComparison) {
 	s.Partials = append(s.Partials, partial)
 }
 
+func (s *Comparison) NewPartialComparison(operator Operator, rightOperand Expression) *PartialComparison {
+	partial := NewPartialComparison(operator, rightOperand)
+	s.Partials = append(s.Partials, partial)
+
+	return partial
+}
+
 func (s *Comparison) FirstPartial() *PartialComparison {
 	if len(s.Partials) > 0 {
 		return s.Partials[0]
@@ -1036,6 +1117,13 @@ func (s *Comparison) LastPartial() *PartialComparison {
 type PartialComparison struct {
 	Operator Operator
 	Right    Expression
+}
+
+func NewPartialComparison(operator Operator, right Expression) *PartialComparison {
+	return &PartialComparison{
+		Operator: operator,
+		Right:    right,
+	}
 }
 
 func (s *PartialComparison) copy() *PartialComparison {
@@ -1241,10 +1329,6 @@ func (s *Where) copy() *Where {
 	}
 }
 
-type Not struct {
-	Expression Expression
-}
-
 type SortItem struct {
 	Ascending  bool
 	Expression Expression
@@ -1317,6 +1401,11 @@ func NewReturn() *Return {
 	return &Return{}
 }
 
+func (s *Return) NewProjection(distinct bool) *Projection {
+	s.Projection = NewProjection(distinct)
+	return s.Projection
+}
+
 func (s *Return) copy() *Return {
 	if s == nil {
 		return nil
@@ -1373,6 +1462,12 @@ type Limit struct {
 	Value Expression
 }
 
+func NewLimit(limit int) *Limit {
+	return &Limit{
+		Value: NewLiteral(limit, false),
+	}
+}
+
 func (s *Limit) copy() *Limit {
 	if s == nil {
 		return nil
@@ -1387,9 +1482,9 @@ type Skip struct {
 	Value Expression
 }
 
-func NewSkip(value Expression) *Skip {
+func NewSkip(skip int) *Skip {
 	return &Skip{
-		Value: value,
+		Value: NewLiteral(skip, false),
 	}
 }
 

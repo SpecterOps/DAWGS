@@ -195,7 +195,7 @@ func (s *AtomVisitor) ExitOC_Literal(ctx *parser.OC_LiteralContext) {
 			Value: ctx.GetText(),
 		}
 	} else {
-		s.Atom = s.ctx.Exit().(*LiteralVisitor).Literal
+		s.Atom = s.ctx.Exit().(*LiteralVisitor).GetLiteral()
 	}
 }
 
