@@ -16,7 +16,7 @@ func newUpdateKey(identityKind graph.Kind, identityProperties []string, updateKi
 	var keys []string
 
 	// Defensive check: identityKind may be nil or zero value
-	if identityKind != nil {
+	if identityKind != nil && !identityKind.Is(graph.EmptyKind) {
 		keys = append(keys, identityKind.String())
 	}
 
@@ -97,7 +97,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 	for _, batch := range batchedUpdates {
 		output.WriteString("unwind $p as p merge (s")
 
-		if batch.startIdentityKind != nil {
+		if batch.startIdentityKind != nil && !batch.startIdentityKind.Is(graph.EmptyKind) {
 			output.WriteString(fmt.Sprintf(":%s", batch.startIdentityKind.String()))
 		}
 
@@ -121,7 +121,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 		}
 
 		output.WriteString(") merge (e")
-		if batch.endIdentityKind != nil {
+		if batch.endIdentityKind != nil && !batch.endIdentityKind.Is(graph.EmptyKind) {
 			output.WriteString(fmt.Sprintf(":%s", batch.endIdentityKind.String()))
 		}
 
@@ -244,7 +244,7 @@ func cypherBuildNodeUpdateQueryBatch(updates []graph.NodeUpdate) ([]string, []ma
 	for _, batch := range batchedUpdates {
 		output.WriteString("unwind $p as p merge (n")
 
-		if batch.identityKind != nil {
+		if batch.identityKind != nil && !batch.identityKind.Is(graph.EmptyKind) {
 			output.WriteString(fmt.Sprintf(":%s", batch.identityKind.String()))
 		}
 
