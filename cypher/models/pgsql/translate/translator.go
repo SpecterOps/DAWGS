@@ -243,6 +243,10 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			}
 		}
 
+		if numExpressions == 0 && literal.CastType == pgsql.UnsetDataType {
+			literal.CastType = pgsql.AnyArray
+		}
+
 		if literal.CastType == pgsql.UnsetDataType {
 			s.SetErrorf("array literal has no available type hints")
 		} else {

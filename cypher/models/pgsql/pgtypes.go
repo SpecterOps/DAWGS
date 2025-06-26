@@ -15,6 +15,9 @@ var (
 )
 
 const (
+	StringLiteralNull       = "null"
+	StringLiteralEmptyArray = "[]"
+
 	TableNode Identifier = "node"
 	TableEdge Identifier = "edge"
 
