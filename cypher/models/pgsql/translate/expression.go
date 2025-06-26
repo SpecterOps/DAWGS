@@ -281,7 +281,7 @@ func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
 				if lOperandTypeHint == pgsql.AnyArray {
 					break
 				} else {
-					expression.LOperand = rewritePropertyLookupOperator(leftPropertyLookup, lOperandTypeHint)
+					expression.ROperand = rewritePropertyLookupOperator(rightPropertyLookup, lOperandTypeHint)
 				}
 
 			default:
@@ -624,6 +624,34 @@ func isConcatenationOperation(lOperandType, rOperandType pgsql.DataType) bool {
 	return false
 }
 
+func isEmptyArrayLiteralPropertyComparison(expression *pgsql.BinaryExpression) (*pgsql.BinaryExpression, bool) {
+	var (
+		hasPropertyLookup    bool
+		propertyLookup       *pgsql.BinaryExpression
+		hasEmptyArrayLiteral bool
+	)
+
+	if leftPropertyLookup, hasLeftPropertyLookup := expressionToPropertyLookupBinaryExpression(expression.LOperand); hasLeftPropertyLookup {
+		hasPropertyLookup = true
+		propertyLookup = leftPropertyLookup
+	} else if rightPropertyLookup, hasRightPropertyLookup := expressionToPropertyLookupBinaryExpression(expression.ROperand); hasRightPropertyLookup {
+		hasPropertyLookup = true
+		propertyLookup = rightPropertyLookup
+	}
+
+	if arrayLiteral, isArrayLiteral := expression.LOperand.(pgsql.ArrayLiteral); isArrayLiteral {
+		if arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0 {
+			hasEmptyArrayLiteral = true
+		}
+	} else if arrayLiteral, isArrayLiteral := expression.ROperand.(pgsql.ArrayLiteral); isArrayLiteral {
+		if arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0 {
+			hasEmptyArrayLiteral = true
+		}
+	}
+
+	return propertyLookup, hasPropertyLookup && hasEmptyArrayLiteral
+}
+
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
@@ -921,42 +949,20 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		s.PushOperand(newExpression)
 
 	case pgsql.OperatorEquals:
-		var (
-			hasPropertyLookup    bool
-			propertyLookup       *pgsql.BinaryExpression
-			hasEmptyArrayLiteral bool
-		)
-
-		if leftPropertyLookup, hasLeftPropertyLookup := expressionToPropertyLookupBinaryExpression(newExpression.LOperand); hasLeftPropertyLookup {
-			hasPropertyLookup = true
-			propertyLookup = leftPropertyLookup
-		} else if rightPropertyLookup, hasRightPropertyLookup := expressionToPropertyLookupBinaryExpression(newExpression.ROperand); hasRightPropertyLookup {
-			hasPropertyLookup = true
-			propertyLookup = rightPropertyLookup
-		}
-
-		if arrayLiteral, isArrayLiteral := newExpression.LOperand.(pgsql.ArrayLiteral); isArrayLiteral {
-			if arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0 {
-				hasEmptyArrayLiteral = true
-			}
-		} else if arrayLiteral, isArrayLiteral := newExpression.ROperand.(pgsql.ArrayLiteral); isArrayLiteral {
-			if arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0 {
-				hasEmptyArrayLiteral = true
-			}
-		}
-
-		if hasPropertyLookup && hasEmptyArrayLiteral {
+		if propertyLookup, hasEmptyArrayLiteralPropertyComparison := isEmptyArrayLiteralPropertyComparison(newExpression); hasEmptyArrayLiteralPropertyComparison {
 			expandedExpression := pgsql.NewBinaryExpression(
 				pgsql.NewUnaryExpression(pgsql.OperatorNot, pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONBFieldExists, propertyLookup.ROperand)),
 				pgsql.OperatorOr,
 				pgsql.NewBinaryExpression(propertyLookup, pgsql.OperatorEquals, pgsql.NewAnyExpressionHinted(
 					pgsql.ArrayLiteral{
-						Values:   []pgsql.Expression{pgsql.Literal{Value: "null"}, pgsql.Literal{Value: "[]"}},
+						Values: []pgsql.Expression{
+							pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text),
+							pgsql.NewLiteral(pgsql.StringLiteralEmptyArray, pgsql.Text),
+						},
 						CastType: pgsql.TextArray,
 					})))
 
-			err := applyBinaryExpressionTypeHints(s.kindMapper, expandedExpression)
-			if err != nil {
+			if err := applyBinaryExpressionTypeHints(s.kindMapper, expandedExpression); err != nil {
 				return err
 			}
 
@@ -966,42 +972,20 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		}
 
 	case pgsql.OperatorCypherNotEquals:
-		var (
-			hasPropertyLookup    bool
-			propertyLookup       *pgsql.BinaryExpression
-			hasEmptyArrayLiteral bool
-		)
-
-		if leftPropertyLookup, hasLeftPropertyLookup := expressionToPropertyLookupBinaryExpression(newExpression.LOperand); hasLeftPropertyLookup {
-			hasPropertyLookup = true
-			propertyLookup = leftPropertyLookup
-		} else if rightPropertyLookup, hasRightPropertyLookup := expressionToPropertyLookupBinaryExpression(newExpression.ROperand); hasRightPropertyLookup {
-			hasPropertyLookup = true
-			propertyLookup = rightPropertyLookup
-		}
-
-		if arrayLiteral, isArrayLiteral := newExpression.LOperand.(pgsql.ArrayLiteral); isArrayLiteral {
-			if arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0 {
-				hasEmptyArrayLiteral = true
-			}
-		} else if arrayLiteral, isArrayLiteral := newExpression.ROperand.(pgsql.ArrayLiteral); isArrayLiteral {
-			if arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0 {
-				hasEmptyArrayLiteral = true
-			}
-		}
-
-		if hasPropertyLookup && hasEmptyArrayLiteral {
+		if propertyLookup, hasEmptyArrayLiteralPropertyComparison := isEmptyArrayLiteralPropertyComparison(newExpression); hasEmptyArrayLiteralPropertyComparison {
 			expandedExpression := pgsql.NewBinaryExpression(
 				pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONBFieldExists, propertyLookup.ROperand),
 				pgsql.OperatorAnd,
 				pgsql.NewUnaryExpression(pgsql.OperatorNot, pgsql.NewBinaryExpression(propertyLookup, pgsql.OperatorEquals, pgsql.NewAnyExpressionHinted(
 					pgsql.ArrayLiteral{
-						Values:   []pgsql.Expression{pgsql.Literal{Value: "null"}, pgsql.Literal{Value: "[]"}},
+						Values: []pgsql.Expression{
+							pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text),
+							pgsql.NewLiteral(pgsql.StringLiteralEmptyArray, pgsql.Text),
+						},
 						CastType: pgsql.TextArray,
 					}))))
 
-			err := applyBinaryExpressionTypeHints(s.kindMapper, expandedExpression)
-			if err != nil {
+			if err := applyBinaryExpressionTypeHints(s.kindMapper, expandedExpression); err != nil {
 				return err
 			}
 
