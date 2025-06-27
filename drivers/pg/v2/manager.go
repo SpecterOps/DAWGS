@@ -98,7 +98,14 @@ func (s *SchemaManager) fetch(ctx context.Context, tx pgx.Tx) error {
 func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return s.kindIDsByKind
+
+	kindIDsByKindCopy := make(map[int16]graph.Kind, len(s.kindIDsByKind))
+
+	for k, v := range s.kindIDsByKind {
+		kindIDsByKindCopy[k] = v
+	}
+
+	return kindIDsByKindCopy
 }
 
 func (s *SchemaManager) Fetch(ctx context.Context) error {
