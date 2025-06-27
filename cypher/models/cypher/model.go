@@ -565,7 +565,7 @@ func (s *Remove) copy() *Remove {
 
 type RemoveItem struct {
 	KindMatcher *KindMatcher
-	Property    *PropertyLookup
+	Property    Expression
 }
 
 func RemoveKindsByMatcher(kindMatcher *KindMatcher) *RemoveItem {
@@ -574,7 +574,7 @@ func RemoveKindsByMatcher(kindMatcher *KindMatcher) *RemoveItem {
 	}
 }
 
-func RemoveProperty(propertyLookup *PropertyLookup) *RemoveItem {
+func RemoveProperty(propertyLookup Expression) *RemoveItem {
 	return &RemoveItem{
 		Property: propertyLookup,
 	}
@@ -1159,11 +1159,17 @@ func (s *Variable) copy() *Variable {
 
 type ProjectionItem struct {
 	Expression Expression
-	Alias      Expression
+	Alias      *Variable
 }
 
 func NewProjectionItem() *ProjectionItem {
 	return &ProjectionItem{}
+}
+
+func NewProjectionItemWithExpr(expr Expression) *ProjectionItem {
+	return &ProjectionItem{
+		Expression: expr,
+	}
 }
 
 func NewGreedyProjectionItem() *ProjectionItem {
@@ -1258,7 +1264,7 @@ func NewProperties() *Properties {
 
 // NodePattern
 type NodePattern struct {
-	Variable   Expression
+	Variable   *Variable
 	Kinds      graph.Kinds
 	Properties Expression
 }
@@ -1286,7 +1292,7 @@ func (s *NodePattern) AddKind(kind graph.Kind) {
 
 // RelationshipPattern
 type RelationshipPattern struct {
-	Variable   Expression
+	Variable   *Variable
 	Kinds      graph.Kinds
 	Direction  graph.Direction
 	Range      *PatternRange
@@ -1417,7 +1423,7 @@ func (s *Return) copy() *Return {
 }
 
 type PatternPart struct {
-	Variable                Expression
+	Variable                *Variable
 	ShortestPathPattern     bool
 	AllShortestPathsPattern bool
 	PatternElements         []*PatternElement

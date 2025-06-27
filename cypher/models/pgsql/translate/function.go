@@ -13,7 +13,7 @@ import (
 func SymbolsFor(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
 	instance := pgsql.NewSymbolTable()
 
-	return instance, walk.PgSQL(node, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+	return instance, walk.PgSQL(node, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, errorHandler walk.VisitorHandler) {
 		switch typedNode := node.(type) {
 		case pgsql.Identifier:
 			instance.AddIdentifier(typedNode)

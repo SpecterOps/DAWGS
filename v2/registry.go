@@ -22,6 +22,10 @@ func Register(driverName string, constructor DriverConstructor) {
 type Config struct {
 	GraphQueryMemoryLimit size.Size
 	ConnectionString      string
+
+	// DriverConfig holds driver-specific configuration data that will be passed to the driver constructor. The type
+	// and structure depend on the specific driver.
+	DriverConfig any
 }
 
 func Open(ctx context.Context, driverName string, config Config) (Database, error) {

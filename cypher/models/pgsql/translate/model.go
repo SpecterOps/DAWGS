@@ -540,7 +540,7 @@ func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.
 		return "", false, nil
 	}
 
-	var variableExpression cypher.Expression
+	var variableExpression *cypher.Variable
 
 	switch typedExpression := expression.(type) {
 	case *cypher.NodePattern:
@@ -566,11 +566,5 @@ func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.
 		return "", false, nil
 	}
 
-	switch typedVariableExpression := variableExpression.(type) {
-	case *cypher.Variable:
-		return pgsql.Identifier(typedVariableExpression.Symbol), true, nil
-
-	default:
-		return "", false, fmt.Errorf("unknown variable expression type: %T", variableExpression)
-	}
+	return pgsql.Identifier(variableExpression.Symbol), true, nil
 }

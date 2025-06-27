@@ -64,7 +64,7 @@ func (s *Builder) prepareMatch(allShortestPaths bool) error {
 
 		isRelationshipQuery = false
 
-		bindWalk = walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+		bindWalk = walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 			switch typedNode := node.(type) {
 			case *cypher.Variable:
 				switch typedNode.Symbol {
@@ -97,32 +97,24 @@ func (s *Builder) prepareMatch(allShortestPaths bool) error {
 
 		switch typedClause := typedUpdatingClause.Clause.(type) {
 		case *cypher.Create:
-			if err := walk.Cypher(typedClause, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+			if err := walk.Cypher(typedClause, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 				switch typedNode := node.(type) {
 				case *cypher.NodePattern:
-					if patternBinding, typeOK := typedNode.Variable.(*cypher.Variable); !typeOK {
-						errorHandler.SetErrorf("expected variable for pattern binding but got: %T", typedNode.Variable)
-					} else {
-						switch patternBinding.Symbol {
-						case NodeSymbol:
-							creatingSingleNode = true
+					switch typedNode.Variable.Symbol {
+					case NodeSymbol:
+						creatingSingleNode = true
 
-						case EdgeStartSymbol:
-							creatingStartNode = true
+					case EdgeStartSymbol:
+						creatingStartNode = true
 
-						case EdgeEndSymbol:
-							creatingEndNode = true
-						}
+					case EdgeEndSymbol:
+						creatingEndNode = true
 					}
 
 				case *cypher.RelationshipPattern:
-					if patternBinding, typeOK := typedNode.Variable.(*cypher.Variable); !typeOK {
-						errorHandler.SetErrorf("expected variable for pattern binding but got: %T", typedNode.Variable)
-					} else {
-						switch patternBinding.Symbol {
-						case EdgeSymbol:
-							creatingEdge = true
-						}
+					switch typedNode.Variable.Symbol {
+					case EdgeSymbol:
+						creatingEdge = true
 					}
 				}
 			})); err != nil {

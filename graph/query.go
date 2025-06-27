@@ -23,7 +23,7 @@ func ScanNextResult(result Result, targets ...any) error {
 	)
 
 	for _, nextValue := range result.Values() {
-		if !mapper.TryMap(nextValue, targets[nextTargetIdx]) {
+		if !mapper.Map(nextValue, targets[nextTargetIdx]) {
 			return fmt.Errorf("unable to marshal next value %T into target %T", nextValue, targets[nextTargetIdx])
 		}
 

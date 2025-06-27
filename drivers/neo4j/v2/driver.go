@@ -33,7 +33,7 @@ func (s *firstResult) Scan(scanTargets ...any) error {
 	for idx, nextTarget := range scanTargets {
 		nextValue := s.values[idx]
 
-		if !s.mapper.TryMap(nextValue, nextTarget) {
+		if !s.mapper.Map(nextValue, nextTarget) {
 			return fmt.Errorf("unable to scan type %T into target type %T", nextValue, nextTarget)
 		}
 	}
@@ -84,10 +84,6 @@ func newResult(result neo4j.ResultWithContext, err error) v2.Result {
 	}
 }
 
-func newErrorResult(err error) v2.Result {
-	return newResult(nil, err)
-}
-
 func (s *sessionResult) HasNext(ctx context.Context) bool {
 	if s.err != nil {
 		return false
@@ -114,7 +110,7 @@ func (s *sessionResult) Scan(scanTargets ...any) error {
 	for idx, nextTarget := range scanTargets {
 		nextValue := s.nextRecord.Values[idx]
 
-		if !s.mapper.TryMap(nextValue, nextTarget) {
+		if !s.mapper.Map(nextValue, nextTarget) {
 			return fmt.Errorf("unable to scan type %T into target type %T", nextValue, nextTarget)
 		}
 	}
@@ -157,20 +153,42 @@ func newInternalDriver(internalDriver neo4jDriver) *dawgsDriver {
 	}
 }
 
-func (s *dawgsDriver) First(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) v2.Result {
-	if cypherQuery, err := format.RegularQuery(query, false); err != nil {
-		return newErrorResult(err)
-	} else {
-		internalResult, err := s.internalDriver.Run(ctx, cypherQuery, parameters)
-		return newFirstResult(ctx, internalResult, err)
-	}
+func (s *dawgsDriver) WithGraph(target v2.Graph) v2.Driver {
+	// NOOP for now
+	return s
 }
 
-func (s *dawgsDriver) Execute(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) v2.Result {
+func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) error {
+	createQuery, err := v2.Query().Create(
+		&cypher.NodePattern{
+			Variable:   v2.Identifiers.Node(),
+			Kinds:      node.Kinds,
+			Properties: cypher.NewParameter("properties", node.Properties.MapOrEmpty()),
+		},
+	).Build()
+
+	if err != nil {
+		return err
+	}
+
+	result := s.CypherQuery(ctx, createQuery.Query, createQuery.Parameters)
+
+	if err := result.Close(ctx); err != nil {
+		return err
+	}
+
+	return result.Error()
+}
+
+func (s *dawgsDriver) Raw(ctx context.Context, cypherQuery string, parameters map[string]any) v2.Result {
+	internalResult, err := s.internalDriver.Run(ctx, cypherQuery, parameters)
+	return newResult(internalResult, err)
+}
+
+func (s *dawgsDriver) CypherQuery(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) v2.Result {
 	if cypherQuery, err := format.RegularQuery(query, false); err != nil {
-		return newErrorResult(err)
+		return v2.NewErrorResult(err)
 	} else {
-		internalResult, err := s.internalDriver.Run(ctx, cypherQuery, parameters)
-		return newResult(internalResult, err)
+		return s.Raw(ctx, cypherQuery, parameters)
 	}
 }

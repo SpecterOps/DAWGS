@@ -113,7 +113,7 @@ func ExtractSyntaxNodeReferences(root pgsql.SyntaxNode) (*pgsql.IdentifierSet, e
 	dependencies := pgsql.NewIdentifierSet()
 
 	return dependencies, walk.PgSQL(root, walk.NewSimpleVisitor[pgsql.SyntaxNode](
-		func(node pgsql.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+		func(node pgsql.SyntaxNode, errorHandler walk.VisitorHandler) {
 			switch typedNode := node.(type) {
 			case pgsql.Identifier:
 				// Filter for reserved identifiers
