@@ -16,9 +16,8 @@ type database struct {
 	internalDriver            neo4j.DriverWithContext
 	defaultTransactionTimeout time.Duration
 	limiter                   channels.ConcurrencyLimiter
-	writeFlushSize            int
-	batchWriteSize            int
 	graphQueryMemoryLimit     size.Size
+	schemaManager             *SchemaManager
 }
 
 func NewDatabase(internalDriver neo4j.DriverWithContext, cfg v2.Config) v2.Database {
@@ -26,10 +25,13 @@ func NewDatabase(internalDriver neo4j.DriverWithContext, cfg v2.Config) v2.Datab
 		internalDriver:            internalDriver,
 		defaultTransactionTimeout: DefaultNeo4jTransactionTimeout,
 		limiter:                   channels.NewConcurrencyLimiter(DefaultConcurrentConnections),
-		writeFlushSize:            DefaultWriteFlushSize,
-		batchWriteSize:            DefaultBatchWriteSize,
 		graphQueryMemoryLimit:     cfg.GraphQueryMemoryLimit,
+		schemaManager:             NewSchemaManager(internalDriver),
 	}
+}
+
+func (s *database) AssertSchema(ctx context.Context, schema v2.Schema) error {
+	return s.schemaManager.AssertSchema(ctx, schema)
 }
 
 func (s *database) acquireInternalSession(ctx context.Context, options []v2.Option) (neo4j.SessionWithContext, error) {
@@ -46,7 +48,7 @@ func (s *database) acquireInternalSession(ctx context.Context, options []v2.Opti
 	)
 
 	for _, option := range options {
-		if option == v2.SessionOptionReadOnly {
+		if option == v2.OptionReadOnly {
 			sessionCfg.AccessMode = neo4j.AccessModeRead
 		}
 	}

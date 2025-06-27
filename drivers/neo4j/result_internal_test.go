@@ -15,7 +15,7 @@ func mapTestCase[T, V any](t *testing.T, source T, expected V) {
 		mapper = NewValueMapper()
 	)
 
-	require.True(t, mapper.TryMap(source, &value))
+	require.True(t, mapper.Map(source, &value))
 	require.Equalf(t, expected, value, "Mapping case for type %T to %T failed. Value is: %v", source, &value, value)
 }
 

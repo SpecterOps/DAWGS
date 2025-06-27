@@ -12,7 +12,7 @@ import (
 )
 
 func TestWalk(t *testing.T) {
-	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 	})
 
 	// Walk through all positive test cases to ensure that the walker can visit the involved types

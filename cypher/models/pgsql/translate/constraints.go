@@ -176,7 +176,7 @@ func isSyntaxNodeSatisfied(syntaxNode pgsql.SyntaxNode) (bool, error) {
 	var (
 		satisfied = true
 		err       = walk.PgSQL(syntaxNode, walk.NewSimpleVisitor[pgsql.SyntaxNode](
-			func(node pgsql.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+			func(node pgsql.SyntaxNode, errorHandler walk.VisitorHandler) {
 				switch typedNode := node.(type) {
 				case pgsql.SyntaxNodeFuture:
 					satisfied = typedNode.Satisfied()

@@ -8,7 +8,9 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
-type CancelableErrorHandler interface {
+type VisitorHandler interface {
+	Consume()
+	WasConsumed() bool
 	Done() bool
 	Error() error
 	SetDone()
@@ -17,62 +19,61 @@ type CancelableErrorHandler interface {
 }
 
 type Visitor[N any] interface {
-	CancelableErrorHandler
+	VisitorHandler
 
-	Consume()
-	WasConsumed() bool
 	Enter(node N)
 	Visit(node N)
 	Exit(node N)
 }
 
-type cancelableErrorHandler struct {
-	done bool
-	errs []error
+type cancelableVisitorHandler struct {
+	currentSyntaxNodeConsumed bool
+	done                      bool
+	errs                      []error
 }
 
-func (s *cancelableErrorHandler) Done() bool {
+func (s *cancelableVisitorHandler) Done() bool {
 	return s.done
 }
 
-func (s *cancelableErrorHandler) SetDone() {
+func (s *cancelableVisitorHandler) SetDone() {
 	s.done = true
 }
 
-func (s *cancelableErrorHandler) SetError(err error) {
+func (s *cancelableVisitorHandler) SetError(err error) {
 	if err != nil {
 		s.errs = append(s.errs, err)
 		s.done = true
 	}
 }
 
-func (s *cancelableErrorHandler) SetErrorf(format string, args ...any) {
+func (s *cancelableVisitorHandler) SetErrorf(format string, args ...any) {
 	s.SetError(fmt.Errorf(format, args...))
 }
 
-func (s *cancelableErrorHandler) Error() error {
+func (s *cancelableVisitorHandler) Error() error {
 	return errors.Join(s.errs...)
 }
 
-func NewCancelableErrorHandler() CancelableErrorHandler {
-	return &cancelableErrorHandler{}
-}
-
-type composableVisitor[N any] struct {
-	CancelableErrorHandler
-
-	currentSyntaxNodeConsumed bool
-}
-
-func (s *composableVisitor[N]) Consume() {
+func (s *cancelableVisitorHandler) Consume() {
 	s.currentSyntaxNodeConsumed = true
 }
 
-func (s *composableVisitor[N]) WasConsumed() bool {
+func (s *cancelableVisitorHandler) WasConsumed() bool {
 	consumed := s.currentSyntaxNodeConsumed
 	s.currentSyntaxNodeConsumed = false
 
 	return consumed
+}
+
+func NewCancelableErrorHandler() VisitorHandler {
+	return &cancelableVisitorHandler{}
+}
+
+type composableVisitor[N any] struct {
+	VisitorHandler
+
+	currentSyntaxNodeConsumed bool
 }
 
 func (s *composableVisitor[N]) Enter(node N) {
@@ -86,7 +87,7 @@ func (s *composableVisitor[N]) Exit(node N) {
 
 func NewVisitor[E any]() Visitor[E] {
 	return &composableVisitor[E]{
-		CancelableErrorHandler: NewCancelableErrorHandler(),
+		VisitorHandler: NewCancelableErrorHandler(),
 	}
 }
 
@@ -98,7 +99,7 @@ const (
 	OrderPostfix
 )
 
-type SimpleVisitorFunc[N any] func(node N, errorHandler CancelableErrorHandler)
+type SimpleVisitorFunc[N any] func(node N, visitorHandler VisitorHandler)
 
 type simpleVisitor[N any] struct {
 	Visitor[N]

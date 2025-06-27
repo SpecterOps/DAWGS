@@ -50,7 +50,7 @@ func FetchNodeProperties(tx graph.Transaction, nodes graph.NodeSet, propertyName
 			)
 
 			// Map the node ID first
-			if !mapper.TryMap(values[0], &nodeID) {
+			if !mapper.Map(values[0], &nodeID) {
 				return fmt.Errorf("expected node ID as first value but received %T", values[0])
 			}
 
@@ -193,13 +193,13 @@ func FetchPathSetByQuery(tx graph.Transaction, query string) (graph.PathSet, err
 			)
 
 			for _, nextValue := range result.Values() {
-				if mapper.TryMap(nextValue, relationship) {
+				if mapper.Map(nextValue, relationship) {
 					currentPath.Edges = append(currentPath.Edges, relationship)
 					relationship = &graph.Relationship{}
-				} else if mapper.TryMap(nextValue, node) {
+				} else if mapper.Map(nextValue, node) {
 					currentPath.Nodes = append(currentPath.Nodes, node)
 					node = &graph.Node{}
-				} else if mapper.TryMap(nextValue, path) {
+				} else if mapper.Map(nextValue, path) {
 					pathSet = append(pathSet, *path)
 					path = &graph.Path{}
 				}

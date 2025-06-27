@@ -109,7 +109,7 @@ func (s *QueryBuilder) prepareMatch() error {
 
 		isRelationshipQuery = false
 
-		bindWalk = walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+		bindWalk = walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 			switch typedNode := node.(type) {
 			case *cypher.Variable:
 				switch typedNode.Symbol {
@@ -142,32 +142,24 @@ func (s *QueryBuilder) prepareMatch() error {
 
 		switch typedClause := typedUpdatingClause.Clause.(type) {
 		case *cypher.Create:
-			if err := walk.Cypher(typedClause, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+			if err := walk.Cypher(typedClause, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 				switch typedElement := node.(type) {
 				case *cypher.NodePattern:
-					if typedBinding, isVariable := typedElement.Variable.(*cypher.Variable); !isVariable {
-						errorHandler.SetErrorf("expected variable but got %T", typedElement.Variable)
-					} else {
-						switch typedBinding.Symbol {
-						case query.NodeSymbol:
-							creatingSingleNode = true
+					switch typedElement.Variable.Symbol {
+					case query.NodeSymbol:
+						creatingSingleNode = true
 
-						case query.EdgeStartSymbol:
-							creatingStartNode = true
+					case query.EdgeStartSymbol:
+						creatingStartNode = true
 
-						case query.EdgeEndSymbol:
-							creatingEndNode = true
-						}
+					case query.EdgeEndSymbol:
+						creatingEndNode = true
 					}
 
 				case *cypher.RelationshipPattern:
-					if typedBinding, isVariable := typedElement.Variable.(*cypher.Variable); !isVariable {
-						errorHandler.SetErrorf("expected variable but got %T", typedElement.Variable)
-					} else {
-						switch typedBinding.Symbol {
-						case query.EdgeSymbol:
-							creatingRelationship = true
-						}
+					switch typedElement.Variable.Symbol {
+					case query.EdgeSymbol:
+						creatingRelationship = true
 					}
 				}
 			})); err != nil {
@@ -268,7 +260,7 @@ func (s *QueryBuilder) prepareMatch() error {
 func (s *QueryBuilder) compilationErrors() error {
 	var modelErrors []error
 
-	walk.Cypher(s.query, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.CancelableErrorHandler) {
+	walk.Cypher(s.query, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 		if errorNode, typeOK := node.(cypher.Fallible); typeOK {
 			if len(errorNode.Errors()) > 0 {
 				modelErrors = append(modelErrors, errorNode.Errors()...)

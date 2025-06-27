@@ -365,7 +365,7 @@ func NewValueMapper(mappers ...MapFunc) ValueMapper {
 	}
 }
 
-func (s ValueMapper) TryMap(value, target any) bool {
+func (s ValueMapper) Map(value, target any) bool {
 	for _, mapperFunc := range s.mapperFuncs {
 		if mapperFunc(value, target) {
 			return true
@@ -373,4 +373,18 @@ func (s ValueMapper) TryMap(value, target any) bool {
 	}
 
 	return false
+}
+
+func (s ValueMapper) MapAll(values, targets []any) bool {
+	if len(values) != len(targets) {
+		return false
+	}
+
+	for idx, value := range values {
+		if !s.Map(value, targets[idx]) {
+			return false
+		}
+	}
+
+	return true
 }
