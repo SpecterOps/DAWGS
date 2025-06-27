@@ -218,7 +218,7 @@ func (s *pathComposite) TryMap(compositeMap map[string]any) bool {
 func (s *pathComposite) FromMap(compositeMap map[string]any) error {
 	if rawNodes, hasNodes := compositeMap["nodes"]; hasNodes {
 		if typedRawNodes, typeOK := rawNodes.([]any); !typeOK {
-			return fmt.Errorf("")
+			return fmt.Errorf("expected nodes to be []any but got %T", rawNodes)
 		} else {
 			for _, rawNode := range typedRawNodes {
 				switch typedNode := rawNode.(type) {
@@ -240,7 +240,7 @@ func (s *pathComposite) FromMap(compositeMap map[string]any) error {
 
 	if rawEdges, hasEdges := compositeMap["edges"]; hasEdges {
 		if typedRawEdges, typeOK := rawEdges.([]any); !typeOK {
-			return fmt.Errorf("")
+			return fmt.Errorf("expected edges to be []any but got %T", rawEdges)
 		} else {
 			for _, rawEdge := range typedRawEdges {
 				switch typedNode := rawEdge.(type) {

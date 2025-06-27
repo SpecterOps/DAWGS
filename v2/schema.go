@@ -18,6 +18,9 @@ func (s IndexType) String() string {
 	case IndexTypeTextSearch:
 		return "fts"
 
+	case IndexTypeUnsupported:
+		return "unsupported"
+
 	default:
 		return "invalid"
 	}

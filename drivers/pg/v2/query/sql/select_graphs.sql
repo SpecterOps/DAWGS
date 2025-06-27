@@ -1,3 +1,4 @@
 -- Selects all defined graphs in the database.
 select id, name
-from graph;
+from graph
+order by name;

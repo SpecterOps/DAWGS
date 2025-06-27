@@ -72,8 +72,6 @@ func NewCancelableErrorHandler() VisitorHandler {
 
 type composableVisitor[N any] struct {
 	VisitorHandler
-
-	currentSyntaxNodeConsumed bool
 }
 
 func (s *composableVisitor[N]) Enter(node N) {

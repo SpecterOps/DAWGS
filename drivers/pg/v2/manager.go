@@ -67,7 +67,7 @@ func (s *SchemaManager) transaction(ctx context.Context, transactionLogic func(t
 			return err
 		} else {
 			defer func() {
-				if err := transaction.Rollback(ctx); err != nil {
+				if err := transaction.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 					slog.DebugContext(ctx, "failed to rollback transaction", slog.String("err", err.Error()))
 				}
 			}()
@@ -240,12 +240,11 @@ func (s *SchemaManager) assertKinds(ctx context.Context, kinds graph.Kinds) ([]i
 	// in between release of the read-lock and acquisition of the write-lock for this operation
 	if _, missingKinds := s.mapKinds(kinds); len(missingKinds) > 0 {
 		if err := s.transaction(ctx, func(transaction pgx.Tx) error {
-			// TODO: OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol)
+			// Previously calls like this required - pgx.QueryExecModeSimpleProtocol while that seems to no longer be
+			// the case, this comment has been left here in case the issue reappears
 			return s.defineKinds(ctx, transaction, missingKinds)
 		}); err != nil {
 			return nil, err
-		} else {
-
 		}
 	}
 
@@ -374,6 +373,7 @@ func (s *SchemaManager) AssertSchema(ctx context.Context, schema v2.Schema) erro
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// TODO: OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol)
+	// Previously calls like this required - pgx.QueryExecModeSimpleProtocol while that seems to no longer be
+	// the case, this comment has been left here in case the issue reappears
 	return s.assertSchema(ctx, schema)
 }

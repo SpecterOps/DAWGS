@@ -230,14 +230,6 @@ type Properties struct {
 	Modified map[string]struct{} `json:"modified"`
 }
 
-func (s *Properties) ToMap() map[string]any {
-	if s.Map == nil {
-		return map[string]any{}
-	}
-
-	return s.Map
-}
-
 func (s *Properties) Merge(other *Properties) {
 	for otherKey, otherValue := range other.Map {
 		s.Map[otherKey] = otherValue

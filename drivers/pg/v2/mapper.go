@@ -22,6 +22,10 @@ func mapKinds(ctx context.Context, kindMapper pg.KindMapper, untypedValue any) (
 		for idx, untypedElement := range typedValue {
 			if typedElement, typeOK := untypedElement.(int16); typeOK {
 				kindIDs[idx] = typedElement
+			} else {
+				// Type assertion failed, mark as invalid type
+				validType = false
+				break
 			}
 		}
 

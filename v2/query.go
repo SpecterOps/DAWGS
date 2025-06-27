@@ -445,7 +445,7 @@ func (s *builder) buildCreates(singlePartQuery *cypher.SinglePartQuery) error {
 			})
 
 		default:
-			createClause.AddError(fmt.Errorf("invalid type for create: %T", nextCreate))
+			return fmt.Errorf("invalid type for create: %T", nextCreate)
 		}
 	}
 
@@ -538,12 +538,16 @@ type PreparedQuery struct {
 	Parameters map[string]any
 }
 
+func (s *builder) hasActions() bool {
+	return len(s.projections) > 0 || len(s.setItems) > 0 || len(s.removeItems) > 0 || len(s.creates) > 0 || len(s.deleteItems) > 0
+}
+
 func (s *builder) Build() (*PreparedQuery, error) {
 	if len(s.errors) > 0 {
 		return nil, errors.Join(s.errors...)
 	}
 
-	if len(s.projections) == 0 && len(s.setItems) == 0 && len(s.removeItems) == 0 && len(s.creates) == 0 && len(s.deleteItems) == 0 {
+	if !s.hasActions() {
 		return nil, fmt.Errorf("query has no action specified")
 	}
 

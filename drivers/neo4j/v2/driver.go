@@ -163,7 +163,7 @@ func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) error {
 		&cypher.NodePattern{
 			Variable:   v2.Identifiers.Node(),
 			Kinds:      node.Kinds,
-			Properties: cypher.NewParameter("properties", node.Properties.ToMap()),
+			Properties: cypher.NewParameter("properties", node.Properties.MapOrEmpty()),
 		},
 	).Build()
 

@@ -134,6 +134,8 @@ func (s *SchemaManager) transaction(ctx context.Context, transactionHandler func
 		return err
 	} else {
 		defer func() {
+			// Neo4j's error types make detecting if this is a rollback after close very difficult. Because this is a
+			// debug log output, accept the potential verbosity.
 			if err := transaction.Rollback(ctx); err != nil {
 				slog.DebugContext(ctx, "failed to rollback transaction", slog.String("err", err.Error()))
 			}

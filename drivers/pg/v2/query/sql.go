@@ -46,7 +46,7 @@ var (
 	sqlSchemaUp           = loadSQL("schema_up.sql")
 	sqlSchemaDown         = loadSQL("schema_down.sql")
 	sqlSelectTableIndexes = loadSQL("select_table_indexes.sql")
-	sqlSelectKindID       = loadSQL("select_table_indexes.sql")
+	sqlSelectKindID       = loadSQL("select_kind_id.sql")
 	sqlSelectGraphs       = loadSQL("select_graphs.sql")
 	sqlInsertGraph        = loadSQL("insert_graph.sql")
 	sqlInsertKind         = loadSQL("insert_or_get_kind.sql")
