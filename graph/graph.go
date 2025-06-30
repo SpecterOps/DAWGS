@@ -158,19 +158,6 @@ type PropertyValue interface {
 	Any() any
 }
 
-// Entity is a base type for all DAWGS database entity types. This type is often only useful when writing a query
-// generator.
-type Entity interface {
-	// ID returns the ID of the Entity.
-	ID() ID
-
-	// Properties returns the Properties instance for this Entity.
-	Properties() *Properties
-
-	// SizeOf returns the approximate size of this Entity instance.
-	SizeOf() size.Size
-}
-
 type NodeUpdate struct {
 	Node               *Node
 	IdentityKind       Kind
