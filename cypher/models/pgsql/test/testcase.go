@@ -13,14 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/specterops/dawgs/drivers/pg"
-
 	"cuelang.org/go/pkg/regexp"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/cypher/models/walk"
+	"github.com/specterops/dawgs/database"
 	"github.com/stretchr/testify/require"
 )
 
@@ -183,7 +182,7 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 	}
 }
 
-func (s *TranslationTestCase) AssertLive(ctx context.Context, t *testing.T, driver *pg.Driver) {
+func (s *TranslationTestCase) AssertLive(ctx context.Context, t *testing.T, db database.Instance) {
 	if regularQuery, err := frontend.ParseCypher(frontend.NewContext(), s.Cypher); err != nil {
 		t.Fatalf("Failed to compile cypher query: %s - %v", s.Cypher, err)
 	} else {
@@ -200,13 +199,15 @@ func (s *TranslationTestCase) AssertLive(ctx context.Context, t *testing.T, driv
 			}
 		}
 
-		if translation, err := translate.Translate(context.Background(), regularQuery, driver.KindMapper(), s.CypherParams); err != nil {
-			t.Fatalf("Failed to translate cypher query: %s - %v", s.Cypher, err)
-		} else if formattedQuery, err := translate.Translated(translation); err != nil {
-			t.Fatalf("Failed to format SQL translatedQuery: %v", err)
-		} else {
-			require.Nil(t, driver.Run(ctx, "explain "+formattedQuery, translation.Parameters))
-		}
+		require.NoError(t, db.Session(ctx, func(ctx context.Context, driver database.Driver) error {
+			result := driver.Explain(ctx, regularQuery, s.CypherParams)
+
+			if err := result.Close(ctx); err != nil {
+				return err
+			}
+
+			return result.Error()
+		}))
 	}
 }
 

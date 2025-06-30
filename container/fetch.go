@@ -4,21 +4,22 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/specterops/dawgs/database/v1compat"
+	"github.com/specterops/dawgs/database/v1compat/query"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
 	"github.com/specterops/dawgs/util"
 )
 
-func FetchDirectedGraph(ctx context.Context, db graph.Database, criteria graph.Criteria) (DirectedGraph, error) {
+func FetchDirectedGraph(ctx context.Context, db v1compat.Database, criteria v1compat.Criteria) (DirectedGraph, error) {
 	var (
 		measuref   = util.SLogMeasureFunction("FetchDirectedGraph")
 		digraph    = NewCSRGraph()
 		numResults = uint64(0)
 	)
 
-	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	if err := db.ReadTransaction(ctx, func(tx v1compat.Transaction) error {
 		return tx.Relationships().Filter(criteria).Query(
-			func(results graph.Result) error {
+			func(results v1compat.Result) error {
 				var (
 					startID graph.ID
 					endID   graph.ID
@@ -52,6 +53,6 @@ func FetchDirectedGraph(ctx context.Context, db graph.Database, criteria graph.C
 	return digraph, nil
 }
 
-func FetchFilteredDirectedGraph(ctx context.Context, db graph.Database, traversalKinds ...graph.Kind) (DirectedGraph, error) {
+func FetchFilteredDirectedGraph(ctx context.Context, db v1compat.Database, traversalKinds ...graph.Kind) (DirectedGraph, error) {
 	return FetchDirectedGraph(ctx, db, query.KindIn(query.Relationship(), traversalKinds...))
 }
