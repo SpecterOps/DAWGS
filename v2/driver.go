@@ -15,10 +15,6 @@ const (
 	OptionReadWrite Option = 1
 )
 
-var (
-	NoParameters map[string]any = nil
-)
-
 type Driver interface {
 	WithGraph(target Graph) Driver
 
@@ -32,7 +28,10 @@ type Database interface {
 	AssertSchema(ctx context.Context, schema Schema) error
 	Session(ctx context.Context, driverLogic DriverLogic, options ...Option) error
 	Transaction(ctx context.Context, driverLogic DriverLogic, options ...Option) error
-	Close() error
+	Close(ctx context.Context) error
+
+	// FetchKinds retrieves the complete list of kinds available to the database.
+	FetchKinds(ctx context.Context) (graph.Kinds, error)
 }
 
 type Result interface {

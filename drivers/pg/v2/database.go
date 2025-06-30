@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"github.com/specterops/dawgs/graph"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
@@ -78,7 +79,20 @@ func (s *database) Transaction(ctx context.Context, driverLogic v2.DriverLogic, 
 	}
 }
 
-func (s *database) Close() error {
+func (s *database) FetchKinds(ctx context.Context) (graph.Kinds, error) {
+	var (
+		kindIDsByKind = s.schemaManager.GetKindIDsByKind()
+		kinds         = make(graph.Kinds, 0, len(kindIDsByKind))
+	)
+
+	for _, kind := range kindIDsByKind {
+		kinds = append(kinds, kind)
+	}
+
+	return kinds, nil
+}
+
+func (s *database) Close(_ context.Context) error {
 	s.pool.Close()
 	return nil
 }
