@@ -1,6 +1,8 @@
 package container
 
 import (
+	"slices"
+
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
 )
@@ -25,14 +27,14 @@ type Triplestore interface {
 	NumEdges() uint64
 	EachEdge(delegate func(next Edge) bool)
 	EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool)
-
-	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore
 }
 
 type MutableTriplestore interface {
 	Triplestore
 
+	Sort()
 	AddTriple(edge, start, end uint64)
+	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore
 }
 
 type triplestore struct {
@@ -50,6 +52,12 @@ func NewTriplestore() MutableTriplestore {
 		startIndex:   map[uint64]cardinality.Duplex[uint64]{},
 		endIndex:     map[uint64]cardinality.Duplex[uint64]{},
 	}
+}
+
+func (s *triplestore) Sort() {
+	slices.SortFunc(s.edges, func(a, b Edge) int {
+		return int(a.ID) - int(b.ID)
+	})
 }
 
 func (s *triplestore) DeleteEdge(id uint64) {
@@ -201,7 +209,7 @@ func (s *triplestore) EachAdjacentEdge(node uint64, direction graph.Direction, d
 	})
 }
 
-func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
+func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore {
 	return &triplestoreProjection{
 		origin:       s,
 		deletedNodes: deletedNodes,
@@ -215,7 +223,15 @@ type triplestoreProjection struct {
 	deletedEdges cardinality.Duplex[uint64]
 }
 
-func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
+func (s *triplestoreProjection) AddTriple(edge, start, end uint64) {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) Sort() {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore {
 	var (
 		allDeletedNodes = s.deletedNodes.Clone()
 		allDeletedEdges = s.deletedEdges.Clone()

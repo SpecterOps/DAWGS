@@ -9,21 +9,18 @@ import (
 	"sync/atomic"
 
 	"github.com/specterops/dawgs/cardinality"
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/graphcache"
-	"github.com/specterops/dawgs/ops"
 	"github.com/specterops/dawgs/query"
 	"github.com/specterops/dawgs/util"
 	"github.com/specterops/dawgs/util/atomics"
 	"github.com/specterops/dawgs/util/channels"
+	"github.com/specterops/dawgs/util/size"
 )
 
-// Driver is a function that drives sending queries to the graph and retrieving vertexes and edges. Traversal
-// drivers are expected to operate on a cactus tree representation of path space using the graph.PathSegment data
-// structure. Path segments returned by a traversal driver are considered extensions of path space that require
-// further expansion. If a traversal driver returns no descending path segments, then the given segment may be
-// considered terminal.
-type Driver = func(ctx context.Context, tx graph.Transaction, segment *graph.PathSegment) ([]*graph.PathSegment, error)
+// Logic represents callable logic that drives sending queries to the graph
+type Logic = func(ctx context.Context, tx database.Driver, segment *graph.PathSegment) ([]*graph.PathSegment, error)
 
 type PatternMatchDelegate = func(terminal *graph.PathSegment) error
 
@@ -31,44 +28,21 @@ type PatternMatchDelegate = func(terminal *graph.PathSegment) error
 // building the pattern the user may call the Do(...) function and pass it a delegate for handling paths that match
 // the pattern.
 //
-// The return value of the Do(...) function may be passed directly to a Traversal via a Plan as the Plan.Driver field.
+// The return value of the Do(...) function may be passed directly to a Instance via a Plan as the Plan.Driver field.
 type PatternContinuation interface {
-	Outbound(criteria ...graph.Criteria) PatternContinuation
-	OutboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation
-	Inbound(criteria ...graph.Criteria) PatternContinuation
-	InboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation
-	Do(delegate PatternMatchDelegate) Driver
+	Outbound(criteria ...cypher.SyntaxNode) PatternContinuation
+	OutboundWithDepth(min, max int, criteria ...cypher.SyntaxNode) PatternContinuation
+	Inbound(criteria ...cypher.SyntaxNode) PatternContinuation
+	InboundWithDepth(min, max int, criteria ...cypher.SyntaxNode) PatternContinuation
+	Do(delegate PatternMatchDelegate) Logic
 }
 
 // expansion is an internal representation of a path expansion step.
 type expansion struct {
-	criteria  []graph.Criteria
+	criteria  []cypher.SyntaxNode
 	direction graph.Direction
 	minDepth  int
 	maxDepth  int
-}
-
-func (s expansion) PrepareCriteria(segment *graph.PathSegment) (graph.Criteria, error) {
-	var (
-		criteria = s.criteria
-	)
-
-	switch s.direction {
-	case graph.DirectionOutbound:
-		criteria = append([]graph.Criteria{
-			query.Equals(query.StartID(), segment.Node.ID),
-		}, criteria...)
-
-	case graph.DirectionInbound:
-		criteria = append([]graph.Criteria{
-			query.Equals(query.EndID(), segment.Node.ID),
-		}, criteria...)
-
-	default:
-		return nil, fmt.Errorf("unsupported direction %v", s.direction)
-	}
-
-	return query.And(criteria...), nil
 }
 
 type patternTag struct {
@@ -98,13 +72,13 @@ type pattern struct {
 }
 
 // Do assigns the PatterMatchDelegate internally before returning a function pointer to the Driver receiver function.
-func (s *pattern) Do(delegate PatternMatchDelegate) Driver {
+func (s *pattern) Do(delegate PatternMatchDelegate) Logic {
 	s.delegate = delegate
 	return s.Driver
 }
 
 // OutboundWithDepth specifies the next outbound expansion step for this pattern with depth parameters.
-func (s *pattern) OutboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation {
+func (s *pattern) OutboundWithDepth(min, max int, criteria ...cypher.SyntaxNode) PatternContinuation {
 	if min < 0 {
 		min = 1
 		slog.Warn("Negative mindepth not allowed. Setting min depth for expansion to 1")
@@ -127,12 +101,12 @@ func (s *pattern) OutboundWithDepth(min, max int, criteria ...graph.Criteria) Pa
 
 // Outbound specifies the next outbound expansion step for this pattern. By default, this expansion will use a minimum
 // depth of 1 to make the expansion required and a maximum depth of 0 to expand indefinitely.
-func (s *pattern) Outbound(criteria ...graph.Criteria) PatternContinuation {
+func (s *pattern) Outbound(criteria ...cypher.SyntaxNode) PatternContinuation {
 	return s.OutboundWithDepth(1, 0, criteria...)
 }
 
 // InboundWithDepth specifies the next inbound expansion step for this pattern with depth parameters.
-func (s *pattern) InboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation {
+func (s *pattern) InboundWithDepth(min, max int, criteria ...cypher.SyntaxNode) PatternContinuation {
 	if min < 0 {
 		min = 1
 		slog.Warn("Negative mindepth not allowed. Setting min depth for expansion to 1")
@@ -155,7 +129,7 @@ func (s *pattern) InboundWithDepth(min, max int, criteria ...graph.Criteria) Pat
 
 // Inbound specifies the next inbound expansion step for this pattern. By default, this expansion will use a minimum
 // depth of 1 to make the expansion required and a maximum depth of 0 to expand indefinitely.
-func (s *pattern) Inbound(criteria ...graph.Criteria) PatternContinuation {
+func (s *pattern) Inbound(criteria ...cypher.SyntaxNode) PatternContinuation {
 	return s.InboundWithDepth(1, 0, criteria...)
 }
 
@@ -164,7 +138,7 @@ func NewPattern() PatternContinuation {
 	return &pattern{}
 }
 
-func (s *pattern) Driver(ctx context.Context, tx graph.Transaction, segment *graph.PathSegment) ([]*graph.PathSegment, error) {
+func (s *pattern) Driver(ctx context.Context, dbDriver database.Driver, segment *graph.PathSegment) ([]*graph.PathSegment, error) {
 	var (
 		nextSegments []*graph.PathSegment
 
@@ -175,23 +149,61 @@ func (s *pattern) Driver(ctx context.Context, tx graph.Transaction, segment *gra
 
 		// fetchFunc handles directional results from the graph database and is called twice to fetch segment
 		// expansions.
-		fetchFunc = func(cursor graph.Cursor[graph.DirectionalResult]) error {
-			for next := range cursor.Chan() {
-				nextSegment := segment.Descend(next.Node, next.Relationship)
+		fetchFunc = func(criteria cypher.SyntaxNode, direction graph.Direction) error {
+			var (
+				queryBuilder = query.New()
+				allCriteria  = []cypher.SyntaxNode{criteria}
+			)
 
-				// Don't emit cycles out of the fetch
-				if !nextSegment.IsCycle() {
-					nextSegment.Tag = &patternTag{
-						// Use the tag's patternIdx and depth since this is a continuation of the expansions
-						patternIdx: tag.patternIdx,
-						depth:      tag.depth + 1,
-					}
+			switch direction {
+			case graph.DirectionInbound:
+				queryBuilder.Where(append(allCriteria, query.Start().ID().Equals(segment.Node.ID))...).Return(
+					query.Relationship(),
+					query.End(),
+				)
 
-					nextSegments = append(nextSegments, nextSegment)
-				}
+			case graph.DirectionOutbound:
+				queryBuilder.Where(append(allCriteria, query.End().ID().Equals(segment.Node.ID))...).Return(
+					query.Relationship(),
+					query.Start(),
+				)
+
+			default:
+				return fmt.Errorf("unsupported direction %v", direction)
 			}
 
-			return cursor.Error()
+			if preparedQuery, err := queryBuilder.Build(); err != nil {
+				return err
+			} else {
+				result := dbDriver.Exec(ctx, preparedQuery.Query, preparedQuery.Parameters)
+				defer result.Close(ctx)
+
+				for result.HasNext(ctx) {
+					var (
+						nextNode         graph.Node
+						nextRelationship graph.Relationship
+					)
+
+					if err := result.Scan(&nextNode, &nextRelationship); err != nil {
+						return err
+					}
+
+					nextSegment := segment.Descend(&nextNode, &nextRelationship)
+
+					// Don't emit cycles out of the fetch
+					if !nextSegment.IsCycle() {
+						nextSegment.Tag = &patternTag{
+							// Use the tag's patternIdx and depth since this is a continuation of the expansions
+							patternIdx: tag.patternIdx,
+							depth:      tag.depth + 1,
+						}
+
+						nextSegments = append(nextSegments, nextSegment)
+					}
+				}
+
+				return result.Error()
+			}
 		}
 	)
 
@@ -201,43 +213,39 @@ func (s *pattern) Driver(ctx context.Context, tx graph.Transaction, segment *gra
 	// If no max depth was set or if a max depth was set expand the current step further
 	if currentExpansion.maxDepth == 0 || tag.depth < currentExpansion.maxDepth {
 		// Perform the current expansion.
-		if criteria, err := currentExpansion.PrepareCriteria(segment); err != nil {
-			return nil, err
-		} else if err := tx.Relationships().Filter(criteria).FetchDirection(fetchDirection, fetchFunc); err != nil {
+		if err := fetchFunc(currentExpansion.criteria, fetchDirection); err != nil {
 			return nil, err
 		}
-	}
 
-	// Check first if this current segment was fetched using the current expansion (i.e. non-optional)
-	if tag.depth > 0 && currentExpansion.minDepth == 0 || tag.depth >= currentExpansion.minDepth {
-		// No further expansions means this pattern segment is complete. Increment the pattern index to select the
-		// next pattern expansion. Additionally, set the depth back to zero for the tag since we are leaving the
-		// current expansion.
-		tag.patternIdx++
-		tag.depth = 0
+		// Check first if this current segment was fetched using the current expansion (i.e. non-optional)
+		if (tag.depth > 0 && currentExpansion.minDepth == 0) || tag.depth >= currentExpansion.minDepth {
+			// No further expansions means this pattern segment is complete. Increment the pattern index to select the
+			// next pattern expansion. Additionally, set the depth back to zero for the tag since we are leaving the
+			// current expansion.
+			tag.patternIdx++
+			tag.depth = 0
 
-		// Perform the next expansion if there is one.
-		if tag.patternIdx < len(s.expansions) {
-			nextExpansion := s.expansions[tag.patternIdx]
+			// Perform the next expansion if there is one.
+			if tag.patternIdx < len(s.expansions) {
+				nextExpansion := s.expansions[tag.patternIdx]
 
-			// Expand the next segments
-			if criteria, err := nextExpansion.PrepareCriteria(segment); err != nil {
-				return nil, err
-			} else if err := tx.Relationships().Filter(criteria).FetchDirection(fetchDirection, fetchFunc); err != nil {
-				return nil, err
-			}
+				// Expand the next segments
+				if err := fetchFunc(nextExpansion.criteria, fetchDirection); err != nil {
+					return nil, err
+				}
 
-			// If the next expansion is optional, make sure to preserve the current traversal branch
-			if nextExpansion.minDepth == 0 {
-				// Reattach the tag to the segment before adding it to the returned segments for the next expansion
-				segment.Tag = tag
-				nextSegments = append(nextSegments, segment)
-			}
-		} else if len(nextSegments) == 0 {
-			// If there are no expanded segments and there are no remaining expansions, this is a terminal segment.
-			// Hand it off to the delegate and handle any returned error.
-			if err := s.delegate(segment); err != nil {
-				return nil, err
+				// If the next expansion is optional, make sure to preserve the current traversal branch
+				if nextExpansion.minDepth == 0 {
+					// Reattach the tag to the segment before adding it to the returned segments for the next expansion
+					segment.Tag = tag
+					nextSegments = append(nextSegments, segment)
+				}
+			} else if len(nextSegments) == 0 {
+				// If there are no expanded segments and there are no remaining expansions, this is a terminal segment.
+				// Hand it off to the delegate and handle any returned error.
+				if err := s.delegate(segment); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -249,29 +257,30 @@ func (s *pattern) Driver(ctx context.Context, tx graph.Transaction, segment *gra
 type Plan struct {
 	Root        *graph.Node
 	RootSegment *graph.PathSegment
-	Driver      Driver
+	Logic       Logic
 }
 
-type Traversal struct {
-	db         graph.Database
-	numWorkers int
+type Instance struct {
+	db                 database.Instance
+	numParallelWorkers int
+	memoryLimit        size.Size
 }
 
-func New(db graph.Database, numParallelWorkers int) Traversal {
-	return Traversal{
-		db:         db,
-		numWorkers: numParallelWorkers,
+func New(db database.Instance, numParallelWorkers int) Instance {
+	return Instance{
+		db:                 db,
+		numParallelWorkers: numParallelWorkers,
 	}
 }
 
-func (s Traversal) BreadthFirst(ctx context.Context, plan Plan) error {
+func (s Instance) BreadthFirst(ctx context.Context, plan Plan) error {
 	var (
 		// workerWG keeps count of background workers launched in goroutines
 		workerWG = &sync.WaitGroup{}
 
 		// descentWG keeps count of in-flight traversal work. When this wait group reaches a count of 0 the traversal
 		// is considered complete.
-		completionC                    = make(chan struct{}, s.numWorkers*2)
+		completionC                    = make(chan struct{}, s.numParallelWorkers)
 		descentCount                   = &atomic.Int64{}
 		errorCollector                 = util.NewErrorCollector()
 		traversalCtx, doneFunc         = context.WithCancel(ctx)
@@ -296,21 +305,21 @@ func (s Traversal) BreadthFirst(ctx context.Context, plan Plan) error {
 	}
 
 	// Launch the background traversal workers
-	for workerID := 0; workerID < s.numWorkers; workerID++ {
+	for workerID := 0; workerID < s.numParallelWorkers; workerID++ {
 		workerWG.Add(1)
 
 		go func(workerID int) {
 			defer workerWG.Done()
 
-			if err := s.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			if err := s.db.Session(ctx, func(ctx context.Context, driver database.Driver) error {
 				for {
 					if nextDescent, ok := channels.Receive(traversalCtx, segmentReaderC); !ok {
 						return nil
-					} else if tx.GraphQueryMemoryLimit() > 0 && pathTree.SizeOf() > tx.GraphQueryMemoryLimit() {
-						return fmt.Errorf("%w - Limit: %.2f MB - Memory In-Use: %.2f MB", ops.ErrGraphQueryMemoryLimit, tx.GraphQueryMemoryLimit().Mebibytes(), pathTree.SizeOf().Mebibytes())
+					} else if s.memoryLimit > 0 && s.memoryLimit <= pathTree.SizeOf() {
+						return fmt.Errorf("traversal memory limit reached - Limit: %.2f MB - Memory In-Use: %.2f MB", s.memoryLimit.Mebibytes(), pathTree.SizeOf().Mebibytes())
 					} else {
 						// Traverse the descending relationships of the current segment
-						if descendingSegments, err := plan.Driver(traversalCtx, tx, nextDescent); err != nil {
+						if descendingSegments, err := plan.Logic(traversalCtx, driver, nextDescent); err != nil {
 							return err
 						} else {
 							for _, descendingSegment := range descendingSegments {
@@ -354,85 +363,6 @@ func (s Traversal) BreadthFirst(ctx context.Context, plan Plan) error {
 	workerWG.Wait()
 
 	return errorCollector.Combined()
-}
-
-func newVisitorFilter(direction graph.Direction, userFilter graph.Criteria) func(segment *graph.PathSegment) graph.Criteria {
-	return func(segment *graph.PathSegment) graph.Criteria {
-		var filters []graph.Criteria
-
-		if userFilter != nil {
-			filters = append(filters, userFilter)
-		}
-
-		switch direction {
-		case graph.DirectionOutbound:
-			filters = append(filters, query.Equals(query.StartID(), segment.Node.ID))
-
-		case graph.DirectionInbound:
-			filters = append(filters, query.Equals(query.EndID(), segment.Node.ID))
-		}
-
-		return query.And(filters...)
-	}
-}
-
-func shallowFetchRelationships(direction graph.Direction, segment *graph.PathSegment, graphQuery graph.RelationshipQuery) ([]*graph.Relationship, error) {
-	var (
-		relationships  []*graph.Relationship
-		returnCriteria graph.Criteria
-	)
-
-	switch direction {
-	case graph.DirectionOutbound:
-		returnCriteria = query.Returning(
-			query.EndID(),
-			query.KindsOf(query.End()),
-			query.RelationshipID(),
-			query.KindsOf(query.Relationship()),
-		)
-
-	case graph.DirectionInbound:
-		returnCriteria = query.Returning(
-			query.StartID(),
-			query.KindsOf(query.Start()),
-			query.RelationshipID(),
-			query.KindsOf(query.Relationship()),
-		)
-
-	default:
-		return nil, fmt.Errorf("bi-directional or non-directed edges are not supported")
-	}
-
-	if err := graphQuery.Query(func(results graph.Result) error {
-		defer results.Close()
-
-		var (
-			nodeID    graph.ID
-			nodeKinds graph.Kinds
-			edgeID    graph.ID
-			edgeKind  graph.Kind
-		)
-
-		for results.Next() {
-			if err := results.Scan(&nodeID, &nodeKinds, &edgeID, &edgeKind); err != nil {
-				return err
-			}
-
-			switch direction {
-			case graph.DirectionOutbound:
-				relationships = append(relationships, graph.NewRelationship(edgeID, segment.Node.ID, nodeID, nil, edgeKind))
-
-			case graph.DirectionInbound:
-				relationships = append(relationships, graph.NewRelationship(edgeID, nodeID, segment.Node.ID, nil, edgeKind))
-			}
-		}
-
-		return results.Error()
-	}, returnCriteria); err != nil {
-		return nil, err
-	}
-
-	return relationships, nil
 }
 
 // SegmentFilter is a function type that takes a given path segment and returns true if further descent into the path
@@ -523,68 +453,5 @@ func FilteredSkipLimit(filter SkipLimitFilter, visitorFilter SegmentVisitor, ski
 		}
 
 		return shouldDescend
-	}
-}
-
-// LightweightDriver is a Driver constructor that fetches only IDs and Kind information from vertexes and
-// edges stored in the database. This cuts down on network transit and is appropriate for traversals that may involve
-// a large number of or all vertexes within a target graph.
-func LightweightDriver(direction graph.Direction, cache graphcache.Cache, criteria graph.Criteria, filter SegmentFilter, terminalVisitors ...SegmentVisitor) Driver {
-	filterProvider := newVisitorFilter(direction, criteria)
-
-	return func(ctx context.Context, tx graph.Transaction, nextSegment *graph.PathSegment) ([]*graph.PathSegment, error) {
-		var (
-			nextSegments []*graph.PathSegment
-			nextQuery    = tx.Relationships().Filter(filterProvider(nextSegment)).OrderBy(
-				// Order by relationship ID so that skip and limit behave somewhat predictably - cost of this is pretty
-				// small even for large result sets
-				query.Order(query.Identity(query.Relationship()), query.Ascending()),
-			)
-		)
-
-		if relationships, err := shallowFetchRelationships(direction, nextSegment, nextQuery); err != nil {
-			return nil, err
-		} else {
-			// Reconcile the start and end nodes of the fetched relationships with the graph cache
-			nodesToFetch := cardinality.NewBitmap64()
-
-			for _, nextRelationship := range relationships {
-				if nextID, err := direction.PickReverse(nextRelationship); err != nil {
-					return nil, err
-				} else {
-					nodesToFetch.Add(nextID.Uint64())
-				}
-			}
-
-			// Shallow fetching the nodes achieves the same result as shallowFetchRelationships(...) but with the added
-			// benefit of interacting with the graph cache. Any nodes not already in the cache are fetched just-in-time
-			// from the database and stored back in the cache for later.
-			if cachedNodes, err := graphcache.ShallowFetchNodesByID(tx, cache, graph.DuplexToGraphIDs(nodesToFetch)); err != nil {
-				return nil, err
-			} else {
-				cachedNodeSet := graph.NewNodeSet(cachedNodes...)
-
-				for _, nextRelationship := range relationships {
-					if targetID, err := direction.PickReverse(nextRelationship); err != nil {
-						return nil, err
-					} else {
-						nextSegment := nextSegment.Descend(cachedNodeSet[targetID], nextRelationship)
-
-						if filter(nextSegment) {
-							nextSegments = append(nextSegments, nextSegment)
-						}
-					}
-				}
-			}
-		}
-
-		// If this segment has no further descent paths, render it as a path if we have a path visitor specified
-		if len(nextSegments) == 0 && len(terminalVisitors) > 0 {
-			for _, terminalVisitor := range terminalVisitors {
-				terminalVisitor(nextSegment)
-			}
-		}
-
-		return nextSegments, nil
 	}
 }

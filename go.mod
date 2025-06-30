@@ -10,6 +10,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.24.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/gammazero/deque v1.2.0
+	github.com/go-echarts/go-echarts/v2 v2.6.7
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4

@@ -323,8 +323,8 @@ func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIde
 					},
 					From: []pgsql.FromClause{{
 						Source: pgsql.TableReference{
-							Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-							Binding: models.OptionalValue(projected.Identifier),
+							Name:  pgsql.CompoundIdentifier{pgsql.TableEdge},
+							Alias: models.OptionalValue(projected.Identifier),
 						},
 						Joins: nil,
 					}},

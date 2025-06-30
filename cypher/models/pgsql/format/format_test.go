@@ -29,8 +29,8 @@ func TestFormat_TypeCastedParenthetical(t *testing.T) {
 func TestFormat_Delete(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Delete{
 		From: []pgsql.TableReference{{
-			Name:    pgsql.CompoundIdentifier{"table"},
-			Binding: pgsql.AsOptionalIdentifier("t"),
+			Name:  pgsql.CompoundIdentifier{"table"},
+			Alias: pgsql.AsOptionalIdentifier("t"),
 		}},
 		Where: pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{"t", "col1"},
@@ -46,8 +46,8 @@ func TestFormat_Delete(t *testing.T) {
 func TestFormat_Update(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Update{
 		Table: pgsql.TableReference{
-			Name:    pgsql.CompoundIdentifier{"table"},
-			Binding: pgsql.AsOptionalIdentifier("t"),
+			Name:  pgsql.CompoundIdentifier{"table"},
+			Alias: pgsql.AsOptionalIdentifier("t"),
 		},
 		Assignments: []pgsql.Assignment{pgsql.BinaryExpression{
 			Operator: pgsql.OperatorAssignment,
@@ -259,8 +259,8 @@ func TestFormat_Query(t *testing.T) {
 			},
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{
-					Name:    pgsql.CompoundIdentifier{"table"},
-					Binding: pgsql.AsOptionalIdentifier("t"),
+					Name:  pgsql.CompoundIdentifier{"table"},
+					Alias: pgsql.AsOptionalIdentifier("t"),
 				},
 			}},
 			Where: pgsql.BinaryExpression{
@@ -282,12 +282,12 @@ func TestFormat_Merge(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Merge{
 		Into: true,
 		Table: pgsql.TableReference{
-			Name:    pgsql.CompoundIdentifier{"table"},
-			Binding: pgsql.AsOptionalIdentifier("t"),
+			Name:  pgsql.CompoundIdentifier{"table"},
+			Alias: pgsql.AsOptionalIdentifier("t"),
 		},
 		Source: pgsql.TableReference{
-			Name:    pgsql.CompoundIdentifier{"source"},
-			Binding: pgsql.AsOptionalIdentifier("s"),
+			Name:  pgsql.CompoundIdentifier{"source"},
+			Alias: pgsql.AsOptionalIdentifier("s"),
 		},
 		JoinTarget: pgsql.BinaryExpression{
 			LOperand: pgsql.CompoundIdentifier{"t", "source_id"},
@@ -399,14 +399,14 @@ func TestFormat_CTEs(t *testing.T) {
 
 							From: []pgsql.FromClause{{
 								Source: pgsql.TableReference{
-									Name:    pgsql.CompoundIdentifier{"edge"},
-									Binding: pgsql.AsOptionalIdentifier("r"),
+									Name:  pgsql.CompoundIdentifier{"edge"},
+									Alias: pgsql.AsOptionalIdentifier("r"),
 								},
 
 								Joins: []pgsql.Join{{
 									Table: pgsql.TableReference{
-										Name:    pgsql.CompoundIdentifier{"node"},
-										Binding: pgsql.AsOptionalIdentifier("a"),
+										Name:  pgsql.CompoundIdentifier{"node"},
+										Alias: pgsql.AsOptionalIdentifier("a"),
 									},
 									JoinOperator: pgsql.JoinOperator{
 										JoinType: pgsql.JoinTypeInner,
@@ -477,8 +477,8 @@ func TestFormat_CTEs(t *testing.T) {
 								},
 								Joins: []pgsql.Join{{
 									Table: pgsql.TableReference{
-										Name:    pgsql.CompoundIdentifier{"edge"},
-										Binding: pgsql.AsOptionalIdentifier("r"),
+										Name:  pgsql.CompoundIdentifier{"edge"},
+										Alias: pgsql.AsOptionalIdentifier("r"),
 									},
 									JoinOperator: pgsql.JoinOperator{
 										JoinType: pgsql.JoinTypeInner,
@@ -490,8 +490,8 @@ func TestFormat_CTEs(t *testing.T) {
 									},
 								}, {
 									Table: pgsql.TableReference{
-										Name:    pgsql.CompoundIdentifier{"node"},
-										Binding: pgsql.AsOptionalIdentifier("b"),
+										Name:  pgsql.CompoundIdentifier{"node"},
+										Alias: pgsql.AsOptionalIdentifier("b"),
 									},
 									JoinOperator: pgsql.JoinOperator{
 										JoinType: pgsql.JoinTypeInner,
@@ -530,8 +530,8 @@ func TestFormat_CTEs(t *testing.T) {
 				},
 				Joins: []pgsql.Join{{
 					Table: pgsql.TableReference{
-						Name:    pgsql.CompoundIdentifier{"node"},
-						Binding: pgsql.AsOptionalIdentifier("a"),
+						Name:  pgsql.CompoundIdentifier{"node"},
+						Alias: pgsql.AsOptionalIdentifier("a"),
 					},
 					JoinOperator: pgsql.JoinOperator{
 						JoinType: pgsql.JoinTypeInner,
@@ -543,8 +543,8 @@ func TestFormat_CTEs(t *testing.T) {
 					},
 				}, {
 					Table: pgsql.TableReference{
-						Name:    pgsql.CompoundIdentifier{"node"},
-						Binding: pgsql.AsOptionalIdentifier("b"),
+						Name:  pgsql.CompoundIdentifier{"node"},
+						Alias: pgsql.AsOptionalIdentifier("b"),
 					},
 					JoinOperator: pgsql.JoinOperator{
 						JoinType: pgsql.JoinTypeInner,

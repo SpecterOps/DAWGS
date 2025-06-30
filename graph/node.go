@@ -32,19 +32,17 @@ func NewNode(id ID, properties *Properties, kinds ...Kind) *Node {
 }
 
 type serializableNode struct {
-	ID           ID          `json:"id"`
-	Kinds        []string    `json:"kinds"`
-	AddedKinds   []string    `json:"added_kinds"`
-	DeletedKinds []string    `json:"deleted_kinds"`
-	Properties   *Properties `json:"properties"`
+	ID         ID          `json:"id"`
+	Kinds      []string    `json:"kinds"`
+	Properties *Properties `json:"properties"`
 }
 
 type Node struct {
-	ID           ID          `json:"id"`
-	Kinds        Kinds       `json:"kinds"`
-	AddedKinds   Kinds       `json:"added_kinds"`
-	DeletedKinds Kinds       `json:"deleted_kinds"`
-	Properties   *Properties `json:"properties"`
+	ID           ID
+	Kinds        Kinds
+	AddedKinds   Kinds
+	DeletedKinds Kinds
+	Properties   *Properties
 }
 
 func (s *Node) Merge(other *Node) {
@@ -101,11 +99,9 @@ func (s *Node) DeleteKinds(kinds ...Kind) {
 func (s *Node) MarshalJSON() ([]byte, error) {
 	var (
 		jsonNode = serializableNode{
-			ID:           s.ID,
-			Kinds:        s.Kinds.Strings(),
-			AddedKinds:   s.AddedKinds.Strings(),
-			DeletedKinds: s.DeletedKinds.Strings(),
-			Properties:   s.Properties,
+			ID:         s.ID,
+			Kinds:      s.Kinds.Strings(),
+			Properties: s.Properties,
 		}
 	)
 
@@ -253,11 +249,9 @@ func (s *NodeSet) UnmarshalJSON(input []byte) error {
 	nodeSet := make(NodeSet, len(tmpMap))
 	for key, value := range tmpMap {
 		nodeSet[key] = &Node{
-			ID:           value.ID,
-			Kinds:        StringsToKinds(value.Kinds),
-			AddedKinds:   StringsToKinds(value.AddedKinds),
-			DeletedKinds: StringsToKinds(value.DeletedKinds),
-			Properties:   value.Properties,
+			ID:         value.ID,
+			Kinds:      StringsToKinds(value.Kinds),
+			Properties: value.Properties,
 		}
 	}
 
