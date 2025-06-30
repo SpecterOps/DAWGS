@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -107,7 +108,43 @@ func (s *database) Transaction(ctx context.Context, driverLogic v2.DriverLogic, 
 	}
 }
 
-func (s *database) Close() error {
-	//TODO implement me
-	panic("implement me")
+func (s *database) FetchKinds(ctx context.Context) (graph.Kinds, error) {
+	var kinds graph.Kinds
+
+	if session, err := s.acquireInternalSession(ctx, nil); err != nil {
+		return nil, err
+	} else {
+		// Release the connection slot when this function exits
+		defer s.limiter.Release()
+
+		defer func() {
+			if err := session.Close(ctx); err != nil {
+				slog.DebugContext(ctx, "failed to close session", slog.String("err", err.Error()))
+			}
+		}()
+
+		if result, err := session.Run(ctx, "CALL db.labels()", nil); err != nil {
+			return nil, err
+		} else {
+			defer result.Consume(ctx)
+
+			for result.Next(ctx) {
+				values := result.Record().Values
+
+				if len(values) == 0 {
+					return nil, fmt.Errorf("expected at least one value for labels")
+				} else if kindStr, typeOK := values[0].(string); !typeOK {
+					return nil, fmt.Errorf("unexpected label type from Neo4j: %T", values[0])
+				} else {
+					kinds = append(kinds, graph.StringKind(kindStr))
+				}
+			}
+		}
+	}
+
+	return kinds, nil
+}
+
+func (s *database) Close(ctx context.Context) error {
+	return s.internalDriver.Close(ctx)
 }

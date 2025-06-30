@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/specterops/dawgs/graph"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/util/size"
@@ -78,7 +80,20 @@ func (s *database) Transaction(ctx context.Context, driverLogic v2.DriverLogic, 
 	}
 }
 
-func (s *database) Close() error {
+func (s *database) FetchKinds(ctx context.Context) (graph.Kinds, error) {
+	var (
+		kindIDsByKind = s.schemaManager.GetKindIDsByKind()
+		kinds         = make(graph.Kinds, 0, len(kindIDsByKind))
+	)
+
+	for _, kind := range kindIDsByKind {
+		kinds = append(kinds, kind)
+	}
+
+	return kinds, nil
+}
+
+func (s *database) Close(_ context.Context) error {
 	s.pool.Close()
 	return nil
 }
