@@ -231,14 +231,26 @@ type Properties struct {
 }
 
 func (s *Properties) Merge(other *Properties) {
+	if s.Map == nil {
+		s.Map = make(map[string]any, len(other.Map))
+	}
+
 	for otherKey, otherValue := range other.Map {
 		s.Map[otherKey] = otherValue
+	}
+
+	if s.Modified == nil {
+		s.Modified = make(map[string]struct{}, len(other.Modified))
 	}
 
 	for otherModifiedKey := range other.Modified {
 		s.Modified[otherModifiedKey] = struct{}{}
 
 		delete(s.Deleted, otherModifiedKey)
+	}
+
+	if s.Deleted == nil {
+		s.Deleted = make(map[string]struct{}, len(other.Deleted))
 	}
 
 	for otherDeletedKey := range other.Deleted {
@@ -450,14 +462,6 @@ func (s *Properties) Delete(key string) *Properties {
 
 func NewProperties() *Properties {
 	return &Properties{}
-}
-
-func NewPropertiesRed() *Properties {
-	return &Properties{
-		Map:      map[string]any{},
-		Modified: make(map[string]struct{}),
-		Deleted:  make(map[string]struct{}),
-	}
 }
 
 type PropertyMap map[String]any
