@@ -369,7 +369,7 @@ begin
     root_id   int8   not null,
     next_id   int8   not null,
     depth     int4   not null,
-    satisfied bool   not null,
+    satisfied bool,
     is_cycle  bool   not null,
     path      int8[] not null,
     primary key (path)
