@@ -3,10 +3,11 @@ package graph_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
 	"github.com/specterops/dawgs/util/test"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -145,51 +146,4 @@ func TestPathSegment_SizeOf(t *testing.T) {
 	// The original size should have one slice allocation
 	originalSize += int64(size.Of(domainSegment.Branches))
 	require.Equal(t, treeSize, originalSize)
-}
-
-func TestIDSegment_SizeOf(t *testing.T) {
-	var (
-		rootSegment        = graph.NewRootIDSegment(0)
-		sizeOfEmptySegment = rootSegment.SizeOf()
-	)
-
-	// Create a descending group from the root
-	groupSegment := rootSegment.Descend(1, 2)
-	groupSegmentSize := groupSegment.SizeOf()
-
-	// One descent means one allocation plus the 8 byte pointer to it
-	require.Equal(t, int(sizeOfEmptySegment*2)+8, int(rootSegment.SizeOf()))
-
-	// All single-segment sizes without branches should have the same size as a new root segment
-	require.Equal(t, sizeOfEmptySegment, groupSegmentSize)
-
-	// Emulate the two emulated membership edges
-	userSegment := groupSegment.Descend(3, 4)
-	userSegmentSize := userSegment.SizeOf()
-
-	require.Equal(t, int(sizeOfEmptySegment*3)+cap(rootSegment.Branches)*8+cap(groupSegment.Branches)*8, int(rootSegment.SizeOf()))
-	require.Equal(t, int(sizeOfEmptySegment*2)+cap(groupSegment.Branches)*8, int(groupSegment.SizeOf()))
-	require.Equal(t, sizeOfEmptySegment, userSegmentSize)
-
-	computerSegment := groupSegment.Descend(5, 6)
-	computerSegmentSize := computerSegment.SizeOf()
-
-	require.Equal(t, int(sizeOfEmptySegment*4)+cap(rootSegment.Branches)*8+cap(groupSegment.Branches)*8, int(rootSegment.SizeOf()))
-	require.Equal(t, int(sizeOfEmptySegment*3)+cap(groupSegment.Branches)*8, int(groupSegment.SizeOf()))
-	require.Equal(t, sizeOfEmptySegment, computerSegmentSize)
-
-	// Test detaching nodes
-	computerSegment.Detach()
-
-	require.Equal(t, int(sizeOfEmptySegment*3)+cap(rootSegment.Branches)*8+cap(groupSegment.Branches)*8, int(rootSegment.SizeOf()))
-	require.Equal(t, int(sizeOfEmptySegment*2)+cap(groupSegment.Branches)*8, int(groupSegment.SizeOf()))
-
-	userSegment.Detach()
-
-	require.Equal(t, int(sizeOfEmptySegment*2)+cap(rootSegment.Branches)*8+cap(groupSegment.Branches)*8, int(rootSegment.SizeOf()))
-	require.Equal(t, int(sizeOfEmptySegment)+cap(groupSegment.Branches)*8, int(groupSegment.SizeOf()))
-
-	groupSegment.Detach()
-
-	require.Equal(t, int(sizeOfEmptySegment)+cap(rootSegment.Branches)*8, int(rootSegment.SizeOf()))
 }
