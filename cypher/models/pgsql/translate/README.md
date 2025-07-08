@@ -36,7 +36,7 @@ select for `match (n)` with `n` renamed to `n0` and saves the projection under t
 contains the result of `match (n) return n`:
 
 ```postgresql
-s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0)
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0)
 ```
 
 The second planned element executes a select and join for the `match ()-[r]->()` with `r` renamed to `e0`. The current
@@ -45,7 +45,7 @@ as a projection under the result alias `s1`. In addition to joining `n1`, `e0`, 
 result `s0.n0` is also copied as `s1.n0`:
 
 ```postgresql
- s1 as (select s0.n0                                                                     as n0,
+with s1 as (select s0.n0                                                                     as n0,
                (n1.id, n1.kind_ids, n1.properties)::nodecomposite                        as n1,
                (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0,
                (n2.id, n2.kind_ids, n2.properties)::nodecomposite                        as n2
@@ -144,7 +144,7 @@ in scope before it can be satisfied. When the query plan first selects for `n0` 
 `(n0) where n0:NodeKind1`:
 
 ```postgresql
-s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0
             from node n0
             where n0.kind_ids operator (pg_catalog.&&) array [1]::int2[])
 ```
@@ -153,7 +153,7 @@ The second query will project `n1` and make it available. This then allows the p
 constraints: `(n1) where n1:NodeKind2` and `(n0), (n1) where n0.selected or n0.tid = n1.tid`:
 
 ```postgresql
-s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1
+with s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1
             from s0,
                  node n1
             where n1.kind_ids operator (pg_catalog.&&) array [2]::int2[] and ((s0.n0).properties -> 'selected')::bool

@@ -377,11 +377,14 @@ type ExpressionTreeTranslator struct {
 	UserConstraints        *ConstraintTracker
 	TranslationConstraints *ConstraintTracker
 
-	treeBuilder        *Builder
-	kindMapper         *contextAwareKindMapper
-	parentheticalDepth int
-	disjunctionDepth   int
-	conjunctionDepth   int
+	treeBuilder                     *Builder
+	kindMapper                      *contextAwareKindMapper
+	parentheticalDepth              int
+	disjunctionDepth                int
+	conjunctionDepth                int
+	stashedExpressionTreeTranslator *ExpressionTreeTranslator
+	stashedQuantifierArray          []pgsql.Expression
+	// TODO: ^ Is there a better way?
 }
 
 func NewExpressionTreeTranslator(kindMapper *contextAwareKindMapper) *ExpressionTreeTranslator {

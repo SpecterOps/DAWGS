@@ -50,7 +50,8 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.Negation, *cypher.Create, *cypher.Where, *cypher.ListLiteral,
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
-		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher:
+		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
+		*cypher.Quantifier, *cypher.IDInCollection:
 
 	case *cypher.MultiPartQueryPart:
 		if err := s.prepareMultiPartQueryPart(typedExpression); err != nil {
@@ -167,6 +168,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 			s.treeTranslator.VisitOperator(pgsql.OperatorAnd)
 		}
 
+	case *cypher.FilterExpression:
+		if err := s.prepareFilterExpression(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
 	default:
 		s.SetErrorf("unable to translate cypher type: %T", expression)
 	}
@@ -174,6 +180,22 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
+
+	case *cypher.IDInCollection:
+		if err := s.translateIDInCollection(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case *cypher.FilterExpression:
+		if err := s.translateFilterExpression(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case *cypher.Quantifier:
+		if err := s.buildQuantifier(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
 	case *cypher.NodePattern:
 		if err := s.translateNodePattern(typedExpression); err != nil {
 			s.SetError(err)
