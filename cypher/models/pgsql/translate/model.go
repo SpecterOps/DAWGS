@@ -198,6 +198,9 @@ type PatternPart struct {
 	TraversalSteps   []*TraversalStep
 	NodeSelect       NodeSelect
 	Constraints      *ConstraintTracker
+	ContainsQuantifier bool
+	QuantifierIdentifiers *pgsql.IdentifierSet
+	//TODO: ^ Is there a better way?
 }
 
 func (s *PatternPart) LastStep() *TraversalStep {
@@ -554,6 +557,9 @@ func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.
 
 	case *cypher.ProjectionItem:
 		variableExpression = typedExpression.Alias
+
+	case *cypher.IDInCollection:
+		variableExpression = typedExpression.Variable
 
 	case *cypher.Variable:
 		variableExpression = typedExpression
