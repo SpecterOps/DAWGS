@@ -384,7 +384,7 @@ type ExpressionTreeTranslator struct {
 	conjunctionDepth                int
 	stashedExpressionTreeTranslator *ExpressionTreeTranslator
 	stashedQuantifierArray          []pgsql.Expression
-	// TODO: ^ Is there a better way?
+	// TODO: ^ Is there a better way? Yes, but continue with this pattern. Ergonomic seams will show themselves with more use
 }
 
 func NewExpressionTreeTranslator(kindMapper *contextAwareKindMapper) *ExpressionTreeTranslator {

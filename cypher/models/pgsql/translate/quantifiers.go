@@ -61,7 +61,7 @@ func (s *Translator) translateFilterExpression(filterExpression *cypher.FilterEx
 			return err
 		} else {
 			nestedQuery := &pgsql.Parenthetical{
-				// TODO: is CTE needed?
+				// TODO: is CTE needed? No, because this is a sub-expression (rather, subquery) this is fine as-is
 				Expression: pgsql.Select{
 					Projection: []pgsql.SelectItem{
 						pgsql.FunctionCall{
@@ -138,7 +138,7 @@ func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) err
 
 func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifier) error {
 	var (
-		fullQuantifierBinaryExpression pgsql.BinaryExpression
+		fullQuantifierBinaryExpression *pgsql.BinaryExpression
 		quantifierExpression           pgsql.Expression
 		quantifierOperator             pgsql.Operator
 	)
@@ -165,11 +165,12 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 			return fmt.Errorf("unknown quantifier type: %v", cypherQuantifierExpression.Type)
 		}
 
-		fullQuantifierBinaryExpression = pgsql.BinaryExpression{
+		fullQuantifierBinaryExpression = &pgsql.BinaryExpression{
 			Operator: quantifierOperator,
 			LOperand: filterExpression,
 			ROperand: quantifierExpression,
 		}
+
 		s.treeTranslator.PushOperand(pgsql.NewTypeCast(fullQuantifierBinaryExpression, pgsql.Boolean))
 	}
 	return nil
