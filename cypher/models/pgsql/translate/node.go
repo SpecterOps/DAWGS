@@ -76,12 +76,12 @@ func (s *Translator) translateNodePatternToStep(nodePattern *cypher.NodePattern,
 			currentStep.RightNodeBound = bindingResult.AlreadyBound
 
 			// Finish setting up this traversal step for the expansion
-			if currentStep.Expansion.Set {
+			if currentStep.Expansion != nil {
 				// Set the right node data type to the terminal of an expansion
 				currentStep.RightNode.DataType = pgsql.ExpansionTerminalNode
 
 				// TODO: This is a little recursive and could use some refactor love
-				currentExpansion := currentStep.Expansion.Value
+				currentExpansion := currentStep.Expansion
 
 				if err := currentExpansion.CompletePattern(currentStep); err != nil {
 					return err
@@ -93,9 +93,9 @@ func (s *Translator) translateNodePatternToStep(nodePattern *cypher.NodePattern,
 		part.NodeSelect.Binding = bindingResult.Binding
 	}
 
-	if part.PatternBinding.Set {
+	if part.PatternBinding != nil {
 		// If there's a bound pattern track this node as a dependency of the pattern identifier
-		part.PatternBinding.Value.DependOn(bindingResult.Binding)
+		part.PatternBinding.DependOn(bindingResult.Binding)
 	}
 
 	return nil

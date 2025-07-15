@@ -71,7 +71,7 @@ func (s *Translator) buildDeletions(scope *Scope) error {
 			return err
 		}
 
-		sqlDelete.Where = models.ValueOptional(joinConstraint.Expression)
+		sqlDelete.Where = joinConstraint.Expression
 
 		s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
 			Alias: pgsql.TableAlias{

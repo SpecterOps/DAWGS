@@ -3,7 +3,6 @@ package translate
 import (
 	"fmt"
 
-	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
@@ -59,7 +58,7 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 
 func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingResult, part *PatternPart, relationshipPattern *cypher.RelationshipPattern) error {
 	var (
-		expansion      models.Optional[*Expansion]
+		expansion      *Expansion
 		numSteps       = len(part.TraversalSteps)
 		currentStep    = part.TraversalSteps[numSteps-1]
 		isContinuation = currentStep.Edge != nil
@@ -103,22 +102,20 @@ func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingRes
 			return err
 		} else {
 			// Set up the new expansion model here
-			newExpansion := NewExpansionModel(part, relationshipPattern)
+			expansion = NewExpansionModel(part, relationshipPattern)
 
 			// Set the path binding in the expansion struct for easier referencing upstream
-			newExpansion.PathBinding = expansionPathBinding
+			expansion.PathBinding = expansionPathBinding
 
-			if part.PatternBinding.Set {
+			if part.PatternBinding != nil {
 				// If there's a bound pattern track this expansion's path as a dependency of the
 				// pattern identifier
-				part.PatternBinding.Value.DependOn(expansionPathBinding)
+				part.PatternBinding.DependOn(expansionPathBinding)
 			}
-
-			expansion = models.ValueOptional(newExpansion)
 		}
-	} else if part.PatternBinding.Set {
+	} else if part.PatternBinding != nil {
 		// If there's a bound pattern track this edge as a dependency of the pattern identifier
-		part.PatternBinding.Value.DependOn(bindingResult.Binding)
+		part.PatternBinding.DependOn(bindingResult.Binding)
 	}
 
 	if isContinuation {

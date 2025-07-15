@@ -16,24 +16,20 @@ const (
 	expansionSatisfied     pgsql.Identifier = "satisfied"
 	expansionIsCycle       pgsql.Identifier = "is_cycle"
 	expansionPath          pgsql.Identifier = "path"
-	expansionPathspace     pgsql.Identifier = "pathspace"
-	expansionNextPathspace pgsql.Identifier = "next_pathspace"
 	expansionForwardFront  pgsql.Identifier = "forward_front"
 	expansionBackwardFront pgsql.Identifier = "backward_front"
 	expansionNextFront     pgsql.Identifier = "next_front"
 )
 
-func expansionColumns() pgsql.RecordShape {
-	return pgsql.RecordShape{
-		Columns: []pgsql.Identifier{
-			expansionRootID,
-			expansionNextID,
-			expansionDepth,
-			expansionSatisfied,
-			expansionIsCycle,
-			expansionPath,
-		},
-	}
+func expansionColumns() *pgsql.RecordShape {
+	return pgsql.NewRecordShape([]pgsql.Identifier{
+		expansionRootID,
+		expansionNextID,
+		expansionDepth,
+		expansionSatisfied,
+		expansionIsCycle,
+		expansionPath,
+	})
 }
 
 type NodeSelect struct {
@@ -127,7 +123,7 @@ func (s *Expansion) CanExecuteBidirectionalSearch() bool {
 type TraversalStep struct {
 	Frame                  *Frame
 	Direction              graph.Direction
-	Expansion              models.Optional[*Expansion]
+	Expansion              *Expansion
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool
 	LeftNodeConstraints    pgsql.Expression
@@ -167,9 +163,9 @@ func (s *TraversalStep) EndNode() (*BoundIdentifier, error) {
 }
 
 func (s *TraversalStep) FlipNodes() {
-	if s.Expansion.Set {
+	if s.Expansion != nil {
 		// If the expansion is set then column identifiers must also be swapped
-		s.Expansion.Value.FlipDirection()
+		s.Expansion.FlipDirection()
 	}
 
 	var (
@@ -194,7 +190,7 @@ type PatternPart struct {
 	IsTraversal      bool
 	ShortestPath     bool
 	AllShortestPaths bool
-	PatternBinding   models.Optional[*BoundIdentifier]
+	PatternBinding   *BoundIdentifier
 	TraversalSteps   []*TraversalStep
 	NodeSelect       NodeSelect
 	Constraints      *ConstraintTracker
@@ -206,7 +202,7 @@ func (s *PatternPart) LastStep() *TraversalStep {
 
 func (s *PatternPart) ContainsExpansions() bool {
 	for _, traversalStep := range s.TraversalSteps {
-		if traversalStep.Expansion.Set {
+		if traversalStep.Expansion != nil {
 			return true
 		}
 	}
@@ -256,8 +252,8 @@ type QueryPart struct {
 	Frame     *Frame
 	Updates   []*Mutations
 	SortItems []*pgsql.OrderBy
-	Skip      models.Optional[pgsql.Expression]
-	Limit     models.Optional[pgsql.Expression]
+	Skip      pgsql.Expression
+	Limit     pgsql.Expression
 
 	numReadingClauses  int
 	numUpdatingClauses int

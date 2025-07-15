@@ -350,7 +350,7 @@ func (s *Scope) Define(identifier pgsql.Identifier, dataType pgsql.DataType) *Bo
 type BoundIdentifier struct {
 	Identifier     pgsql.Identifier
 	Alias          models.Optional[pgsql.Identifier]
-	Parameter      models.Optional[*pgsql.Parameter]
+	Parameter      *pgsql.Parameter
 	LastProjection *Frame
 	Dependencies   []*BoundIdentifier
 	DataType       pgsql.DataType

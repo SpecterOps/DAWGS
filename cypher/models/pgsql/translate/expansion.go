@@ -14,12 +14,12 @@ const translateDefaultMaxTraversalDepth int64 = 15
 func expansionEdgeJoinCondition(traversalStep *TraversalStep) (pgsql.Expression, error) {
 	return pgd.Equals(
 		pgd.EntityID(traversalStep.LeftNode.Identifier),
-		traversalStep.Expansion.Value.EdgeStartColumn,
+		traversalStep.Expansion.EdgeStartColumn,
 	), nil
 }
 
 func expansionConstraints(traversalStep *TraversalStep) pgsql.Expression {
-	expansionModel := traversalStep.Expansion.Value
+	expansionModel := traversalStep.Expansion
 
 	return pgd.And(
 		pgd.LessThanOrEqualTo(
@@ -47,14 +47,14 @@ type ExpansionBuilder struct {
 }
 
 func NewExpansionBuilder(queryParameters map[string]any, traversalStep *TraversalStep) (*ExpansionBuilder, error) {
-	if !traversalStep.Expansion.Set {
+	if traversalStep.Expansion == nil {
 		return nil, errors.New("traversal step must have expansion set")
 	}
 
 	return &ExpansionBuilder{
 		queryParameters: queryParameters,
 		traversalStep:   traversalStep,
-		model:           traversalStep.Expansion.Value,
+		model:           traversalStep.Expansion,
 	}, nil
 }
 
@@ -132,7 +132,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.Value.PrimerNodeJoinCondition,
+				Constraint: s.traversalStep.Expansion.PrimerNodeJoinCondition,
 			},
 		})
 	}
@@ -145,7 +145,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.Value.ExpansionNodeJoinCondition,
+				Constraint: s.traversalStep.Expansion.ExpansionNodeJoinCondition,
 			},
 		})
 	}
@@ -233,7 +233,7 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.Value.ExpansionNodeJoinCondition,
+				Constraint: s.traversalStep.Expansion.ExpansionNodeJoinCondition,
 			},
 		})
 	}
@@ -304,7 +304,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.Value.PrimerNodeJoinCondition,
+				Constraint: s.traversalStep.Expansion.PrimerNodeJoinCondition,
 			},
 		})
 	}
@@ -317,7 +317,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.Value.ExpansionNodeJoinCondition,
+				Constraint: s.traversalStep.Expansion.ExpansionNodeJoinCondition,
 			},
 		})
 	}
@@ -405,7 +405,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.Value.PrimerNodeJoinCondition,
+				Constraint: s.traversalStep.Expansion.PrimerNodeJoinCondition,
 			},
 		})
 	}
@@ -434,7 +434,7 @@ func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expans
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
 			Name:  expansionModel.Frame.Binding.Identifier,
-			Shape: models.ValueOptional(expansionColumns()),
+			Shape: expansionColumns(),
 		},
 		Query: innerQuery,
 	}
@@ -442,7 +442,7 @@ func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expans
 
 func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgsql.Identifier) (pgsql.Query, error) {
 	var (
-		expansionModel             = s.traversalStep.Expansion.Value
+		expansionModel             = s.traversalStep.Expansion
 		forwardFrontPrimerQuery    = s.prepareForwardFrontPrimerQuery(expansionModel)
 		forwardFrontRecursiveQuery = s.prepareForwardFrontRecursiveQuery(expansionModel)
 		projectionQuery            pgsql.Select
@@ -508,7 +508,7 @@ func (s *ExpansionBuilder) BuildAllShortestPathsRoot() (pgsql.Query, error) {
 
 func (s *ExpansionBuilder) BuildBiDirectionalAllShortestPathsRoot() (pgsql.Query, error) {
 	var (
-		expansionModel              = s.traversalStep.Expansion.Value
+		expansionModel              = s.traversalStep.Expansion
 		forwardFrontPrimerQuery     = s.prepareForwardFrontPrimerQuery(expansionModel)
 		forwardFrontRecursiveQuery  = s.prepareForwardFrontRecursiveQuery(expansionModel)
 		backwardFrontPrimerQuery    = s.prepareBackwardFrontPrimerQuery(expansionModel)
@@ -669,7 +669,7 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier) pgsql.Que
 	query.AddCTE(pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
 			Name:  expansionIdentifier,
-			Shape: models.ValueOptional(expansionColumns()),
+			Shape: expansionColumns(),
 		},
 		Query: pgsql.Query{
 			Body: pgsql.SetOperation{
@@ -684,7 +684,7 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier) pgsql.Que
 }
 
 func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, expansion *ExpansionBuilder) (pgsql.Query, error) {
-	expansionModel := traversalStep.Expansion.Value
+	expansionModel := traversalStep.Expansion
 
 	expansion.ProjectionStatement.Projection = expansionModel.Projection
 	expansion.PrimerStatement.Where = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.EdgeConstraints)
@@ -923,7 +923,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 }
 
 func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, expansion *ExpansionBuilder) (pgsql.Query, error) {
-	expansionModel := traversalStep.Expansion.Value
+	expansionModel := traversalStep.Expansion
 
 	expansion.PrimerStatement = pgsql.Select{
 		Projection: []pgsql.SelectItem{
@@ -1102,7 +1102,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 }
 
 func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversalStep bool, expansionOptions expansionOptions, traversalStep *TraversalStep) error {
-	expansionModel := traversalStep.Expansion.Value
+	expansionModel := traversalStep.Expansion
 
 	// Translate the expansion's constraints - this has the side effect of making the pattern identifiers visible in
 	// the current scope frame

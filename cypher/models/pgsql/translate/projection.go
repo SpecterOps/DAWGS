@@ -436,11 +436,11 @@ func (s *Translator) buildTailProjection() error {
 
 	currentPart.Model.Body = singlePartQuerySelect
 
-	if currentPart.Skip.Set {
+	if currentPart.Skip != nil {
 		currentPart.Model.Offset = currentPart.Skip
 	}
 
-	if currentPart.Limit.Set {
+	if currentPart.Limit != nil {
 		currentPart.Model.Limit = currentPart.Limit
 	}
 
@@ -529,7 +529,7 @@ func (s *Translator) prepareProjection(projection *cypher.Projection) error {
 		} else if pgLiteral, err := pgsql.AsLiteral(cypherLiteral.Value); err != nil {
 			return err
 		} else {
-			currentPart.Skip = models.ValueOptional[pgsql.Expression](pgLiteral)
+			currentPart.Skip = pgLiteral
 		}
 	}
 
@@ -539,7 +539,7 @@ func (s *Translator) prepareProjection(projection *cypher.Projection) error {
 		} else if pgLiteral, err := pgsql.AsLiteral(cypherLiteral.Value); err != nil {
 			return err
 		} else {
-			currentPart.Limit = models.ValueOptional[pgsql.Expression](pgLiteral)
+			currentPart.Limit = pgLiteral
 		}
 	}
 

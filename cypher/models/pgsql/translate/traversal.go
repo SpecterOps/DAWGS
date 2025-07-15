@@ -212,8 +212,8 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 			traversalStep.Frame = traversalStepFrame
 		}
 
-		if traversalStep.Expansion.Set {
-			if err := s.translateTraversalPatternPartWithExpansion(idx == 0, traversalStep.Expansion.Value.Options, traversalStep); err != nil {
+		if traversalStep.Expansion != nil {
+			if err := s.translateTraversalPatternPartWithExpansion(idx == 0, traversalStep.Expansion.Options, traversalStep); err != nil {
 				return err
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {

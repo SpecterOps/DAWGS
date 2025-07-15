@@ -124,7 +124,7 @@ func (s *Translator) buildPatternPredicates() error {
 		}
 
 		for idx, traversalStep := range patternPart.TraversalSteps {
-			if traversalStep.Expansion.Set {
+			if traversalStep.Expansion != nil {
 				return fmt.Errorf("expansion in pattern predicate not supported")
 			}
 

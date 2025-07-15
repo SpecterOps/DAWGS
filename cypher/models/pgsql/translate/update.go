@@ -139,10 +139,10 @@ func (s *Translator) buildUpdates() error {
 		}
 
 		var (
-			kindAssignments      models.Optional[pgsql.Expression]
-			kindRemovals         models.Optional[pgsql.Expression]
-			propertyAssignments  models.Optional[pgsql.Expression]
-			propertyRemovals     models.Optional[pgsql.Expression]
+			kindAssignments      pgsql.Expression
+			kindRemovals         pgsql.Expression
+			propertyAssignments  pgsql.Expression
+			propertyRemovals     pgsql.Expression
 			kindColumnIdentifier = pgsql.ColumnKindID
 		)
 
@@ -163,7 +163,7 @@ func (s *Translator) buildUpdates() error {
 					arrayLiteral.Values[idx] = pgsql.NewLiteral(kindID, pgsql.Int2)
 				}
 
-				kindAssignments = models.ValueOptional(arrayLiteral.AsExpression())
+				kindAssignments = arrayLiteral.AsExpression()
 			}
 		}
 
@@ -180,7 +180,7 @@ func (s *Translator) buildUpdates() error {
 					arrayLiteral.Values[idx] = pgsql.NewLiteral(kindID, pgsql.Int2)
 				}
 
-				kindRemovals = models.ValueOptional(arrayLiteral.AsExpression())
+				kindRemovals = arrayLiteral.AsExpression()
 			}
 		}
 
@@ -206,7 +206,7 @@ func (s *Translator) buildUpdates() error {
 				)
 			}
 
-			propertyAssignments = models.ValueOptional(jsonObjectFunction.AsExpression())
+			propertyAssignments = jsonObjectFunction.AsExpression()
 		}
 
 		if identifierMutation.Removals.Len() > 0 {
@@ -218,15 +218,15 @@ func (s *Translator) buildUpdates() error {
 				fieldRemovalArray.Values = append(fieldRemovalArray.Values, pgsql.NewLiteral(propertyRemoval.Field, pgsql.Text))
 			}
 
-			propertyRemovals = models.ValueOptional(fieldRemovalArray.AsExpression())
+			propertyRemovals = fieldRemovalArray.AsExpression()
 		}
 
-		if kindAssignments.Set {
-			if err := RewriteFrameBindings(s.scope, kindAssignments.Value); err != nil {
+		if kindAssignments != nil {
+			if err := RewriteFrameBindings(s.scope, kindAssignments); err != nil {
 				return err
 			}
 
-			if kindRemovals.Set {
+			if kindRemovals != nil {
 				sqlUpdate.Assignments = append(sqlUpdate.Assignments,
 					pgsql.NewBinaryExpression(
 						kindColumnIdentifier,
@@ -241,10 +241,10 @@ func (s *Translator) buildUpdates() error {
 											pgsql.NewBinaryExpression(
 												pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, kindColumnIdentifier},
 												pgsql.OperatorSubtract,
-												kindRemovals.Value,
+												kindRemovals,
 											),
 											pgsql.OperatorConcatenate,
-											kindAssignments.Value,
+											kindAssignments,
 										),
 									},
 									CastType: pgsql.Int2Array,
@@ -268,7 +268,7 @@ func (s *Translator) buildUpdates() error {
 										pgsql.NewBinaryExpression(
 											pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, kindColumnIdentifier},
 											pgsql.OperatorConcatenate,
-											kindAssignments.Value,
+											kindAssignments,
 										),
 									},
 									CastType: pgsql.Int2Array,
@@ -279,24 +279,24 @@ func (s *Translator) buildUpdates() error {
 					),
 				)
 			}
-		} else if kindRemovals.Set {
+		} else if kindRemovals != nil {
 			sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 				kindColumnIdentifier,
 				pgsql.OperatorAssignment,
 				pgsql.NewBinaryExpression(
 					pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, kindColumnIdentifier},
 					pgsql.OperatorSubtract,
-					kindRemovals.Value,
+					kindRemovals,
 				),
 			))
 		}
 
-		if propertyAssignments.Set {
-			if err := RewriteFrameBindings(s.scope, propertyAssignments.Value); err != nil {
+		if propertyAssignments != nil {
+			if err := RewriteFrameBindings(s.scope, propertyAssignments); err != nil {
 				return err
 			}
 
-			if propertyRemovals.Set {
+			if propertyRemovals != nil {
 				sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 					pgsql.ColumnProperties,
 					pgsql.OperatorAssignment,
@@ -304,10 +304,10 @@ func (s *Translator) buildUpdates() error {
 						pgsql.NewBinaryExpression(
 							pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties},
 							pgsql.OperatorSubtract,
-							propertyRemovals.Value,
+							propertyRemovals,
 						),
 						pgsql.OperatorConcatenate,
-						propertyAssignments.Value,
+						propertyAssignments,
 					),
 				))
 			} else {
@@ -317,24 +317,24 @@ func (s *Translator) buildUpdates() error {
 					pgsql.NewBinaryExpression(
 						pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties},
 						pgsql.OperatorConcatenate,
-						propertyAssignments.Value,
+						propertyAssignments,
 					),
 				))
 			}
-		} else if propertyRemovals.Set {
+		} else if propertyRemovals != nil {
 			sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
 				pgsql.ColumnProperties,
 				pgsql.OperatorAssignment,
 				pgsql.NewBinaryExpression(
 					pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties},
 					pgsql.OperatorSubtract,
-					propertyRemovals.Value,
+					propertyRemovals,
 				),
 			))
 		}
 
 		sqlUpdate.Returning = identifierMutation.Projection
-		sqlUpdate.Where = models.ValueOptional(identifierMutation.JoinConstraint)
+		sqlUpdate.Where = identifierMutation.JoinConstraint
 
 		s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
 			Alias: pgsql.TableAlias{
