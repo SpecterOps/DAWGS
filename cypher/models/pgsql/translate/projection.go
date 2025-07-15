@@ -126,7 +126,7 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
 				Expression: pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
-				Alias:      models.ValueOptional(alias),
+				Alias:      models.OptionalValue(alias),
 			},
 		}, nil
 
@@ -310,7 +310,7 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 						From: []pgsql.FromClause{{
 							Source: pgsql.TableReference{
 								Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-								Binding: models.ValueOptional(projected.Identifier),
+								Binding: models.OptionalValue(projected.Identifier),
 							},
 							Joins: nil,
 						}},

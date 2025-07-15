@@ -299,7 +299,7 @@ func (s *Scope) LookupBindings(identifiers ...pgsql.Identifier) ([]*BoundIdentif
 }
 
 func (s *Scope) Alias(alias pgsql.Identifier, binding *BoundIdentifier) {
-	binding.Alias = models.ValueOptional(alias)
+	binding.Alias = models.OptionalValue(alias)
 	s.aliases[alias] = binding.Identifier
 }
 

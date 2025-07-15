@@ -50,8 +50,8 @@ func newExpansionOptions(part *PatternPart, relationshipPattern *cypher.Relation
 	return expansionOptions{
 		FindShortestPath:     part.ShortestPath,
 		FindAllShortestPaths: part.AllShortestPaths,
-		MinDepth:             models.PointerOptional(relationshipPattern.Range.StartIndex),
-		MaxDepth:             models.PointerOptional(relationshipPattern.Range.EndIndex),
+		MinDepth:             models.OptionalPointer(relationshipPattern.Range.StartIndex),
+		MaxDepth:             models.OptionalPointer(relationshipPattern.Range.EndIndex),
 	}
 }
 
@@ -375,7 +375,7 @@ func (s *Projection) SetIdentifier(identifier pgsql.Identifier) {
 }
 
 func (s *Projection) SetAlias(alias pgsql.Identifier) {
-	s.Alias = models.ValueOptional(alias)
+	s.Alias = models.OptionalValue(alias)
 }
 
 type Removal struct {

@@ -16,14 +16,14 @@ func (s Optional[T]) GetOr(defaultValue T) T {
 	return defaultValue
 }
 
-func ValueOptional[T any](value T) Optional[T] {
+func OptionalValue[T any](value T) Optional[T] {
 	return Optional[T]{
 		Value: value,
 		Set:   true,
 	}
 }
 
-func PointerOptional[T any](value *T) Optional[T] {
+func OptionalPointer[T any](value *T) Optional[T] {
 	if value == nil {
 		return EmptyOptional[T]()
 	}

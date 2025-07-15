@@ -120,7 +120,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	nextQueryFrom := pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-			Binding: models.ValueOptional(s.traversalStep.Edge.Identifier),
+			Binding: models.OptionalValue(s.traversalStep.Edge.Identifier),
 		},
 	}
 
@@ -128,7 +128,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -141,7 +141,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -206,13 +206,13 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 	nextQueryFrom := pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{expansionForwardFront},
-			Binding: models.ValueOptional(expansionModel.Frame.Binding.Identifier),
+			Binding: models.OptionalValue(expansionModel.Frame.Binding.Identifier),
 		},
 
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(s.traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.Edge.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -229,7 +229,7 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -292,7 +292,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 	nextQueryFrom := pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-			Binding: models.ValueOptional(s.traversalStep.Edge.Identifier),
+			Binding: models.OptionalValue(s.traversalStep.Edge.Identifier),
 		},
 	}
 
@@ -300,7 +300,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -313,7 +313,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -378,13 +378,13 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 	nextQueryFrom := pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{expansionBackwardFront},
-			Binding: models.ValueOptional(expansionModel.Frame.Binding.Identifier),
+			Binding: models.OptionalValue(expansionModel.Frame.Binding.Identifier),
 		},
 
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(s.traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.Edge.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -401,7 +401,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -459,7 +459,7 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -472,7 +472,7 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -527,7 +527,7 @@ func (s *ExpansionBuilder) BuildBiDirectionalAllShortestPathsRoot() (pgsql.Query
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -540,7 +540,7 @@ func (s *ExpansionBuilder) BuildBiDirectionalAllShortestPathsRoot() (pgsql.Query
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(s.traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(s.traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -700,7 +700,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-					Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+					Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType: pgsql.JoinTypeInner,
@@ -715,7 +715,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 			}, {
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -727,12 +727,12 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 			},
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.LeftNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -741,7 +741,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 			}, {
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -759,7 +759,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -772,7 +772,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -800,7 +800,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -813,7 +813,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -978,7 +978,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -987,7 +987,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -1004,7 +1004,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -1017,7 +1017,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -1042,7 +1042,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,
@@ -1055,7 +1055,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType: pgsql.JoinTypeInner,

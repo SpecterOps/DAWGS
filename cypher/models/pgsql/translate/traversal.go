@@ -25,12 +25,12 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-			Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 		},
 		Joins: []pgsql.Join{{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.LeftNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -39,7 +39,7 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
@@ -75,7 +75,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-					Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+					Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -84,7 +84,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 			}, {
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -104,12 +104,12 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 			},
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.LeftNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -118,7 +118,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 			}, {
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -151,7 +151,7 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-					Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+					Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -160,7 +160,7 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 			}, {
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
@@ -172,12 +172,12 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 			},
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{
 					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.ValueOptional(traversalStep.RightNode.Identifier),
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,

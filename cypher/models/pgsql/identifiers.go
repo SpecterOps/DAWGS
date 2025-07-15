@@ -27,7 +27,7 @@ func IsReservedIdentifier(identifier Identifier) bool {
 }
 
 func AsOptionalIdentifier(identifier Identifier) models.Optional[Identifier] {
-	return models.ValueOptional(identifier)
+	return models.OptionalValue(identifier)
 }
 
 // IdentifierSet represents a set of identifiers backed by a map[Identifier]struct{} instance.
