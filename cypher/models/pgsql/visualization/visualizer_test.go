@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/database/pg/pgutil"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
