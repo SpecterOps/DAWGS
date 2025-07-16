@@ -18,7 +18,6 @@ var (
 	NodeKind2 = graph.StringKind("NodeKind2")
 	EdgeKind1 = graph.StringKind("EdgeKind1")
 	EdgeKind2 = graph.StringKind("EdgeKind2")
-	NodeBase  = graph.StringKind("Base")
 )
 
 func newKindMapper() pgsql.KindMapper {
@@ -29,7 +28,6 @@ func newKindMapper() pgsql.KindMapper {
 	mapper.Put(NodeKind2)
 	mapper.Put(EdgeKind1)
 	mapper.Put(EdgeKind2)
-	mapper.Put(NodeBase)
 
 	return mapper
 }
