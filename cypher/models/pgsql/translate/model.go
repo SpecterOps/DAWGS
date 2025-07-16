@@ -261,13 +261,16 @@ type QueryPart struct {
 	// The fields below are meant to be used to build each component as the source AST is walked. There's some
 	// repetition of some of the exported fields above which is intentional and may be a good refactor target
 	// in the future
-	patternPredicates []*pgsql.Future[*Pattern]
-	properties        map[string]pgsql.Expression
-	currentPattern    *Pattern
-	stashedPattern    *Pattern
-	projections       *Projections
-	mutations         *Mutations
-	fromClauses       []pgsql.FromClause
+	patternPredicates               []*pgsql.Future[*Pattern]
+	properties                      map[string]pgsql.Expression
+	currentPattern                  *Pattern
+	stashedPattern                  *Pattern
+	projections                     *Projections
+	mutations                       *Mutations
+	fromClauses                     []pgsql.FromClause
+	stashedExpressionTreeTranslator *ExpressionTreeTranslator
+	stashedQuantifierArray          []pgsql.Expression
+	quantifierIdentifiers           *pgsql.IdentifierSet
 }
 
 func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
@@ -276,10 +279,11 @@ func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
 			CommonTableExpressions: &pgsql.With{},
 		},
 
-		numReadingClauses:  numReadingClauses,
-		numUpdatingClauses: numUpdatingClauses,
-		mutations:          NewMutations(),
-		properties:         map[string]pgsql.Expression{},
+		numReadingClauses:     numReadingClauses,
+		numUpdatingClauses:    numUpdatingClauses,
+		mutations:             NewMutations(),
+		properties:            map[string]pgsql.Expression{},
+		quantifierIdentifiers: pgsql.NewIdentifierSet(),
 	}
 }
 
@@ -550,6 +554,9 @@ func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.
 
 	case *cypher.ProjectionItem:
 		variableExpression = typedExpression.Alias
+
+	case *cypher.IDInCollection:
+		variableExpression = typedExpression.Variable
 
 	case *cypher.Variable:
 		variableExpression = typedExpression

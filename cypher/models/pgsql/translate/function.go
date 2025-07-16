@@ -298,6 +298,12 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 // Current semantic issues:
 // * `null` values are stripped during aggregation. This may not be the case in Neo4j's query execution pipeline.
 func functionWrapCollectToArray(distinct bool, collectedExpression pgsql.Expression, castType pgsql.DataType) pgsql.FunctionCall {
+	// TODO: Review this potential bug, nodecomposite array cant be coalesced with text array
+	var coalesceType = pgsql.TextArray
+	if castType == pgsql.NodeCompositeArray {
+		coalesceType = castType
+	}
+
 	return pgsql.FunctionCall{
 		Function: pgsql.FunctionArrayRemove,
 		Parameters: []pgsql.Expression{
@@ -311,7 +317,7 @@ func functionWrapCollectToArray(distinct bool, collectedExpression pgsql.Express
 						CastType:   castType,
 					},
 					pgsql.ArrayLiteral{
-						CastType: pgsql.TextArray,
+						CastType: coalesceType,
 					},
 				},
 				CastType: castType,

@@ -45,7 +45,7 @@ as a projection under the result alias `s1`. In addition to joining `n1`, `e0`, 
 result `s0.n0` is also copied as `s1.n0`:
 
 ```postgresql
- s1 as (select s0.n0                                                                     as n0,
+s1 as (select s0.n0                                                                     as n0,
                (n1.id, n1.kind_ids, n1.properties)::nodecomposite                        as n1,
                (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0,
                (n2.id, n2.kind_ids, n2.properties)::nodecomposite                        as n2

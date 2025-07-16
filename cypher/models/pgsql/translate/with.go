@@ -48,7 +48,11 @@ func (s *Translator) translateWith() error {
 			}
 		}
 
-		if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(s.scope.CurrentFrame().Known().RemoveSet(aggregatedItems.RootIdentifiers())); err != nil {
+		set := s.scope.CurrentFrame().Known().RemoveSet(aggregatedItems.RootIdentifiers())
+		if s.query.CurrentPart().quantifierIdentifiers != nil && s.query.CurrentPart().quantifierIdentifiers.Len() > 0 {
+			set = set.MergeSet(s.query.CurrentPart().quantifierIdentifiers)
+		}
+		if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
 		} else if err := RewriteFrameBindings(s.scope, projectionConstraint.Expression); err != nil {
 			return err

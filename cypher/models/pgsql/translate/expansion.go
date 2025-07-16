@@ -1288,7 +1288,11 @@ func (s *Translator) translateNonTraversalPatternPart(part *PatternPart) error {
 
 		nextFrame.Export(part.NodeSelect.Binding.Identifier)
 
-		if constraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(nextFrame.Known()); err != nil {
+		set := nextFrame.Known().Copy()
+		if s.query.CurrentPart().quantifierIdentifiers != nil && s.query.CurrentPart().quantifierIdentifiers.Len() > 0 {
+			set = set.MergeSet(s.query.CurrentPart().quantifierIdentifiers)
+		}
+		if constraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
 		} else if err := RewriteFrameBindings(s.scope, constraint.Expression); err != nil {
 			return err
