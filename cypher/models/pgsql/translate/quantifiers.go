@@ -11,13 +11,8 @@ import (
 func (s *Translator) prepareFilterExpression(filterExpression *cypher.FilterExpression) error {
 
 	quantifierExpressionTree := NewExpressionTreeTranslator(s.kindMapper)
-	quantifierExpressionTree.stashedExpressionTreeTranslator = s.treeTranslator
+	s.query.CurrentPart().stashedExpressionTreeTranslator = s.treeTranslator
 	s.treeTranslator = quantifierExpressionTree
-
-	frame, err := s.scope.PushFrame()
-	if err != nil {
-		return err
-	}
 
 	if bi, err := s.scope.DefineNew(pgsql.AnyArray); err != nil {
 		return err
@@ -29,13 +24,10 @@ func (s *Translator) prepareFilterExpression(filterExpression *cypher.FilterExpr
 		s.scope.Alias(identifier, bi)
 		if aliasedIdentifier, bound := s.scope.AliasedLookup(identifier); !bound {
 			return fmt.Errorf("filter expression must have an aliased identifier")
-		} else if s.query.CurrentPart().currentPattern.Parts != nil {
-
-			s.query.CurrentPart().currentPattern.CurrentPart().ContainsQuantifier = true
-			frame.Export(aliasedIdentifier.Identifier)
-			s.query.CurrentPart().currentPattern.CurrentPart().QuantifierIdentifiers = pgsql.NewIdentifierSet().Add(aliasedIdentifier.Identifier)
+		} else if s.query.CurrentPart().currentPattern.Parts != nil || s.query.CurrentPart().CurrentProjection() != nil {
+			s.query.CurrentPart().quantifierIdentifiers.Add(aliasedIdentifier.Identifier)
 		} else {
-			return fmt.Errorf("quantifiers are not supported without a pattern expression")
+			return fmt.Errorf("quantifiers are not supported without a pattern or projection expression")
 		}
 	}
 
@@ -61,7 +53,6 @@ func (s *Translator) translateFilterExpression(filterExpression *cypher.FilterEx
 			return err
 		} else {
 			nestedQuery := &pgsql.Parenthetical{
-				// TODO: is CTE needed? No, because this is a sub-expression (rather, subquery) this is fine as-is
 				Expression: pgsql.Select{
 					Projection: []pgsql.SelectItem{
 						pgsql.FunctionCall{
@@ -75,13 +66,9 @@ func (s *Translator) translateFilterExpression(filterExpression *cypher.FilterEx
 				},
 			}
 			// push nested query on stashed expression tree translator
-			s.treeTranslator.stashedExpressionTreeTranslator.treeBuilder.PushOperand(nestedQuery)
-			s.treeTranslator = s.treeTranslator.stashedExpressionTreeTranslator
+			s.query.CurrentPart().stashedExpressionTreeTranslator.treeBuilder.PushOperand(nestedQuery)
+			s.treeTranslator = s.query.CurrentPart().stashedExpressionTreeTranslator
 		}
-	}
-
-	if err := s.scope.PopFrame(); err != nil {
-		return err
 	}
 
 	return nil
@@ -129,8 +116,7 @@ func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) err
 			},
 		}
 
-		s.treeTranslator.stashedExpressionTreeTranslator.stashedQuantifierArray = functionParameters
-		// TODO: Is this ok to do, ie: Would there ever be other from clauses already on this stack?
+		s.query.CurrentPart().stashedQuantifierArray = functionParameters
 		s.query.CurrentPart().AddFromClause(fromClause)
 	}
 	return nil
@@ -158,7 +144,7 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 		case cypher.QuantifierTypeAll:
 			quantifierExpression = pgsql.FunctionCall{
 				Function:   pgsql.FunctionArrayLength,
-				Parameters: []pgsql.Expression{s.treeTranslator.stashedQuantifierArray[0], pgsql.Literal{Value: 1, CastType: pgsql.Int}},
+				Parameters: []pgsql.Expression{s.query.CurrentPart().stashedQuantifierArray[0], pgsql.Literal{Value: 1, CastType: pgsql.Int}},
 			}
 			quantifierOperator = pgsql.OperatorEquals
 		default:

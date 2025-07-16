@@ -377,14 +377,11 @@ type ExpressionTreeTranslator struct {
 	UserConstraints        *ConstraintTracker
 	TranslationConstraints *ConstraintTracker
 
-	treeBuilder                     *Builder
-	kindMapper                      *contextAwareKindMapper
-	parentheticalDepth              int
-	disjunctionDepth                int
-	conjunctionDepth                int
-	stashedExpressionTreeTranslator *ExpressionTreeTranslator
-	stashedQuantifierArray          []pgsql.Expression
-	// TODO: ^ Is there a better way? Yes, but continue with this pattern. Ergonomic seams will show themselves with more use
+	treeBuilder        *Builder
+	kindMapper         *contextAwareKindMapper
+	parentheticalDepth int
+	disjunctionDepth   int
+	conjunctionDepth   int
 }
 
 func NewExpressionTreeTranslator(kindMapper *contextAwareKindMapper) *ExpressionTreeTranslator {

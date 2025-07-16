@@ -1289,8 +1289,8 @@ func (s *Translator) translateNonTraversalPatternPart(part *PatternPart) error {
 		nextFrame.Export(part.NodeSelect.Binding.Identifier)
 
 		set := nextFrame.Known().Copy()
-		if part.ContainsQuantifier {
-			set = set.MergeSet(part.QuantifierIdentifiers)
+		if s.query.CurrentPart().quantifierIdentifiers != nil && s.query.CurrentPart().quantifierIdentifiers.Len() > 0 {
+			set = set.MergeSet(s.query.CurrentPart().quantifierIdentifiers)
 		}
 		if constraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
