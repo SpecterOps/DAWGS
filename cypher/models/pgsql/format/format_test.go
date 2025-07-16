@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/stretchr/testify/require"
@@ -33,11 +32,11 @@ func TestFormat_Delete(t *testing.T) {
 			Name:    pgsql.CompoundIdentifier{"table"},
 			Binding: pgsql.AsOptionalIdentifier("t"),
 		}},
-		Where: models.ValueOptional[pgsql.Expression](pgsql.BinaryExpression{
-			LOperand: pgsql.CompoundIdentifier{"t", "col1"},
-			Operator: pgsql.OperatorLessThan,
-			ROperand: pgsql.NewLiteral(4, pgsql.Int),
-		}),
+		Where: pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{"t", "col1"},
+			pgsql.OperatorLessThan,
+			pgsql.NewLiteral(4, pgsql.Int),
+		),
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
@@ -59,11 +58,11 @@ func TestFormat_Update(t *testing.T) {
 			LOperand: pgsql.Identifier("col2"),
 			ROperand: mustAsLiteral("12345"),
 		}},
-		Where: models.ValueOptional[pgsql.Expression](pgsql.BinaryExpression{
-			LOperand: pgsql.CompoundIdentifier{"t", "col1"},
-			Operator: pgsql.OperatorLessThan,
-			ROperand: pgsql.NewLiteral(4, pgsql.Int),
-		}),
+		Where: pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{"t", "col1"},
+			pgsql.OperatorLessThan,
+			pgsql.NewLiteral(4, pgsql.Int),
+		),
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
@@ -75,9 +74,9 @@ func TestFormat_Insert(t *testing.T) {
 		Table: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{"table"},
 		},
-		Shape: pgsql.RecordShape{
-			Columns: []pgsql.Identifier{"col1", "col2", "col3"},
-		},
+		Shape: pgsql.NewRecordShape(
+			[]pgsql.Identifier{"col1", "col2", "col3"},
+		),
 		Source: &pgsql.Query{
 			Body: pgsql.Values{
 				Values: []pgsql.Expression{mustAsLiteral("1"), mustAsLiteral(1), mustAsLiteral(false)},
@@ -92,9 +91,9 @@ func TestFormat_Insert(t *testing.T) {
 		Table: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{"table"},
 		},
-		Shape: pgsql.RecordShape{
-			Columns: []pgsql.Identifier{"col1", "col2", "col3"},
-		},
+		Shape: pgsql.NewRecordShape(
+			[]pgsql.Identifier{"col1", "col2", "col3"},
+		),
 		Source: &pgsql.Query{
 			Body: pgsql.Select{
 				Projection: []pgsql.SelectItem{
@@ -121,9 +120,9 @@ func TestFormat_Insert(t *testing.T) {
 		Table: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{"table"},
 		},
-		Shape: pgsql.RecordShape{
-			Columns: []pgsql.Identifier{"col1", "col2", "col3"},
-		},
+		Shape: pgsql.NewRecordShape(
+			[]pgsql.Identifier{"col1", "col2", "col3"},
+		),
 		Source: &pgsql.Query{
 			Body: pgsql.Select{
 				Projection: []pgsql.SelectItem{
@@ -153,9 +152,9 @@ func TestFormat_Insert(t *testing.T) {
 		Table: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{"table"},
 		},
-		Shape: pgsql.RecordShape{
-			Columns: []pgsql.Identifier{"col1", "col2", "col3"},
-		},
+		Shape: pgsql.NewRecordShape(
+			[]pgsql.Identifier{"col1", "col2", "col3"},
+		),
 		Source: &pgsql.Query{
 			Body: pgsql.Select{
 				Projection: []pgsql.SelectItem{
@@ -204,9 +203,9 @@ func TestFormat_Insert(t *testing.T) {
 		Table: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{"table"},
 		},
-		Shape: pgsql.RecordShape{
-			Columns: []pgsql.Identifier{"col1", "col2", "col3"},
-		},
+		Shape: pgsql.NewRecordShape(
+			[]pgsql.Identifier{"col1", "col2", "col3"},
+		),
 		Source: &pgsql.Query{
 			Body: pgsql.Select{
 				Projection: []pgsql.SelectItem{
@@ -358,20 +357,18 @@ func TestFormat_CTEs(t *testing.T) {
 		CommonTableExpressions: &pgsql.With{
 			Recursive: true,
 			Expressions: []pgsql.CommonTableExpression{{
-				Materialized: models.ValueOptional(pgsql.Materialized{
+				Materialized: &pgsql.Materialized{
 					Materialized: true,
-				}),
+				},
 				Alias: pgsql.TableAlias{
 					Name: "expansion_1",
-					Shape: models.ValueOptional(pgsql.RecordShape{
-						Columns: []pgsql.Identifier{
-							"root_id",
-							"next_id",
-							"depth",
-							"stop",
-							"is_cycle",
-							"path",
-						},
+					Shape: pgsql.NewRecordShape([]pgsql.Identifier{
+						"root_id",
+						"next_id",
+						"depth",
+						"stop",
+						"is_cycle",
+						"path",
 					}),
 				},
 				Query: pgsql.Query{

@@ -1,7 +1,6 @@
 package translate
 
 import (
-	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
@@ -50,7 +49,7 @@ func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error
 			s.scope.Alias(cypherBinding, pathBinding)
 
 			// Record the new binding in the traversal pattern being built
-			newPatternPart.PatternBinding = models.ValueOptional(pathBinding)
+			newPatternPart.PatternBinding = pathBinding
 		}
 	}
 
@@ -124,7 +123,7 @@ func (s *Translator) buildExpansionPattern(traversalStep *TraversalStep, expansi
 func (s *Translator) buildShortestPathsExpansionPattern(traversalStep *TraversalStep, expansion *ExpansionBuilder, isRootStep, allPaths bool) error {
 	if isRootStep {
 		if allPaths {
-			if traversalStep.Expansion.Value.CanExecuteBidirectionalSearch() {
+			if traversalStep.Expansion.CanExecuteBidirectionalSearch() {
 				if traversalStepQuery, err := expansion.BuildBiDirectionalAllShortestPathsRoot(); err != nil {
 					return err
 				} else {
@@ -175,7 +174,7 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 	for idx, traversalStep := range part.TraversalSteps {
 		isRootStep := idx == 0
 
-		if traversalStep.Expansion.Set {
+		if traversalStep.Expansion != nil {
 			if expansion, err := NewExpansionBuilder(s.translation.Parameters, traversalStep); err != nil {
 				return err
 			} else if part.ShortestPath || part.AllShortestPaths {

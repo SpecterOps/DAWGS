@@ -38,6 +38,12 @@ type RecordShape struct {
 	Columns []Identifier
 }
 
+func NewRecordShape(columns []Identifier) *RecordShape {
+	return &RecordShape{
+		Columns: columns,
+	}
+}
+
 func (s RecordShape) NodeType() string {
 	return "row_shape"
 }
@@ -45,7 +51,7 @@ func (s RecordShape) NodeType() string {
 // TableAlias is an alias for a table with an optional record shape.
 type TableAlias struct {
 	Name  Identifier
-	Shape models.Optional[RecordShape]
+	Shape *RecordShape
 }
 
 func (s TableAlias) NodeType() string {
@@ -944,7 +950,7 @@ func (s OnConflict) AsExpression() Expression {
 // Insert is a SQL statement that is evaluated to insert data into a target table.
 type Insert struct {
 	Table      TableReference
-	Shape      RecordShape
+	Shape      *RecordShape
 	OnConflict *OnConflict
 	Source     *Query
 	Returning  []SelectItem
@@ -962,7 +968,7 @@ func (s Insert) NodeType() string {
 type Delete struct {
 	From      []TableReference
 	Using     []FromClause
-	Where     models.Optional[Expression]
+	Where     Expression
 	Returning []SelectItem
 }
 
@@ -987,7 +993,7 @@ type Update struct {
 	Table       TableReference
 	Assignments []Assignment
 	From        []FromClause
-	Where       models.Optional[Expression]
+	Where       Expression
 	Returning   []SelectItem
 }
 
@@ -1112,7 +1118,7 @@ func (s ExistsExpression) AsExpression() Expression {
 // for use in a larger query
 type CommonTableExpression struct {
 	Alias        TableAlias
-	Materialized models.Optional[Materialized]
+	Materialized *Materialized
 	Query        Query
 }
 
@@ -1153,8 +1159,8 @@ type Query struct {
 	CommonTableExpressions *With
 	Body                   SetExpression
 	OrderBy                []*OrderBy
-	Offset                 models.Optional[Expression]
-	Limit                  models.Optional[Expression]
+	Offset                 Expression
+	Limit                  Expression
 }
 
 func (s Query) AddCTE(cte CommonTableExpression) {

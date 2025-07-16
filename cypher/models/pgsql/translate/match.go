@@ -20,8 +20,8 @@ func (s *Translator) translateMatch() error {
 		}
 
 		// Declare the pattern variable in scope if set
-		if part.PatternBinding.Set {
-			s.scope.Declare(part.PatternBinding.Value.Identifier)
+		if part.PatternBinding != nil {
+			s.scope.Declare(part.PatternBinding.Identifier)
 		}
 	}
 

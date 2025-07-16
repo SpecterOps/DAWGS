@@ -299,7 +299,7 @@ func (s *Scope) LookupBindings(identifiers ...pgsql.Identifier) ([]*BoundIdentif
 }
 
 func (s *Scope) Alias(alias pgsql.Identifier, binding *BoundIdentifier) {
-	binding.Alias = models.ValueOptional(alias)
+	binding.Alias = models.OptionalValue(alias)
 	s.aliases[alias] = binding.Identifier
 }
 
@@ -350,7 +350,7 @@ func (s *Scope) Define(identifier pgsql.Identifier, dataType pgsql.DataType) *Bo
 type BoundIdentifier struct {
 	Identifier     pgsql.Identifier
 	Alias          models.Optional[pgsql.Identifier]
-	Parameter      models.Optional[*pgsql.Parameter]
+	Parameter      *pgsql.Parameter
 	LastProjection *Frame
 	Dependencies   []*BoundIdentifier
 	DataType       pgsql.DataType

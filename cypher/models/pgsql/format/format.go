@@ -184,7 +184,7 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 				return err
 			}
 
-		case pgsql.Materialized:
+		case *pgsql.Materialized:
 			if typedNextExpr.Materialized {
 				exprStack = append(exprStack, pgsql.FormattingLiteral("materialized"))
 			} else {
@@ -635,10 +635,10 @@ func formatFromClauses(builder *OutputBuilder, fromClauses []pgsql.FromClause) e
 func formatTableAlias(builder *OutputBuilder, tableAlias pgsql.TableAlias) error {
 	builder.Write(tableAlias.Name)
 
-	if tableAlias.Shape.Set {
+	if tableAlias.Shape != nil {
 		builder.Write("(")
 
-		for idx, column := range tableAlias.Shape.Value.Columns {
+		for idx, column := range tableAlias.Shape.Columns {
 			if idx > 0 {
 				builder.Write(", ")
 			}
@@ -672,8 +672,8 @@ func formatCommonTableExpressions(builder *OutputBuilder, commonTableExpressions
 
 		builder.Write(" as ")
 
-		if commonTableExpression.Materialized.Set {
-			if err := formatNode(builder, commonTableExpression.Materialized.Value); err != nil {
+		if commonTableExpression.Materialized != nil {
+			if err := formatNode(builder, commonTableExpression.Materialized); err != nil {
 				return err
 			}
 
@@ -722,18 +722,18 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 			}
 		}
 
-		if typedSetExpression.Offset.Set {
+		if typedSetExpression.Offset != nil {
 			builder.Write(" offset ")
 
-			if err := formatNode(builder, typedSetExpression.Offset.Value); err != nil {
+			if err := formatNode(builder, typedSetExpression.Offset); err != nil {
 				return err
 			}
 		}
 
-		if typedSetExpression.Limit.Set {
+		if typedSetExpression.Limit != nil {
 			builder.Write(" limit ")
 
-			if err := formatNode(builder, typedSetExpression.Limit.Value); err != nil {
+			if err := formatNode(builder, typedSetExpression.Limit); err != nil {
 				return err
 			}
 		}
@@ -986,10 +986,10 @@ func formatUpdateStatement(builder *OutputBuilder, update pgsql.Update) error {
 		}
 	}
 
-	if update.Where.Set {
+	if update.Where != nil {
 		builder.Write(" where ")
 
-		if err := formatNode(builder, update.Where.Value); err != nil {
+		if err := formatNode(builder, update.Where); err != nil {
 			return err
 		}
 	}
@@ -1032,10 +1032,10 @@ func formatDeleteStatement(builder *OutputBuilder, sqlDelete pgsql.Delete) error
 		}
 	}
 
-	if sqlDelete.Where.Set {
+	if sqlDelete.Where != nil {
 		builder.Write(" where ")
 
-		if err := formatNode(builder, sqlDelete.Where.Value); err != nil {
+		if err := formatNode(builder, sqlDelete.Where); err != nil {
 			return err
 		}
 	}

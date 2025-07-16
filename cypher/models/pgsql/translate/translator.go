@@ -3,7 +3,6 @@ package translate
 import (
 	"context"
 
-	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/walk"
@@ -94,7 +93,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 				} else {
 					// Lift the parameter value into the parameters map
 					s.translation.Parameters[parameterBinding.Identifier.String()] = negotiatedValue
-					parameterBinding.Parameter = models.ValueOptional(newParameter)
+					parameterBinding.Parameter = newParameter
 				}
 
 				// Set the outer reference
@@ -102,7 +101,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 			}
 		}
 
-		s.treeTranslator.PushOperand(binding.Parameter.Value)
+		s.treeTranslator.PushOperand(binding.Parameter)
 
 	case *cypher.Variable:
 		identifier := pgsql.Identifier(typedExpression.Symbol)

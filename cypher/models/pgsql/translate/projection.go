@@ -126,7 +126,7 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
 				Expression: pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
-				Alias:      models.ValueOptional(alias),
+				Alias:      models.OptionalValue(alias),
 			},
 		}, nil
 
@@ -310,7 +310,7 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 						From: []pgsql.FromClause{{
 							Source: pgsql.TableReference{
 								Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-								Binding: models.ValueOptional(projected.Identifier),
+								Binding: models.OptionalValue(projected.Identifier),
 							},
 							Joins: nil,
 						}},
@@ -436,11 +436,11 @@ func (s *Translator) buildTailProjection() error {
 
 	currentPart.Model.Body = singlePartQuerySelect
 
-	if currentPart.Skip.Set {
+	if currentPart.Skip != nil {
 		currentPart.Model.Offset = currentPart.Skip
 	}
 
-	if currentPart.Limit.Set {
+	if currentPart.Limit != nil {
 		currentPart.Model.Limit = currentPart.Limit
 	}
 
@@ -529,7 +529,7 @@ func (s *Translator) prepareProjection(projection *cypher.Projection) error {
 		} else if pgLiteral, err := pgsql.AsLiteral(cypherLiteral.Value); err != nil {
 			return err
 		} else {
-			currentPart.Skip = models.ValueOptional[pgsql.Expression](pgLiteral)
+			currentPart.Skip = pgLiteral
 		}
 	}
 
@@ -539,7 +539,7 @@ func (s *Translator) prepareProjection(projection *cypher.Projection) error {
 		} else if pgLiteral, err := pgsql.AsLiteral(cypherLiteral.Value); err != nil {
 			return err
 		} else {
-			currentPart.Limit = models.ValueOptional[pgsql.Expression](pgLiteral)
+			currentPart.Limit = pgLiteral
 		}
 	}
 

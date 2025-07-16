@@ -49,7 +49,7 @@ func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart,
 					From: []pgsql.FromClause{{
 						Source: pgsql.TableReference{
 							Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-							Binding: models.ValueOptional(traversalStep.Edge.Identifier),
+							Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 						}},
 					},
 					Where: whereClause,
@@ -124,7 +124,7 @@ func (s *Translator) buildPatternPredicates() error {
 		}
 
 		for idx, traversalStep := range patternPart.TraversalSteps {
-			if traversalStep.Expansion.Set {
+			if traversalStep.Expansion != nil {
 				return fmt.Errorf("expansion in pattern predicate not supported")
 			}
 
