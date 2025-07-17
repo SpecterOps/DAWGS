@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/specterops/dawgs"
@@ -97,4 +98,12 @@ func (s *instance) FetchKinds(ctx context.Context) (graph.Kinds, error) {
 func (s *instance) Close(_ context.Context) error {
 	s.pool.Close()
 	return nil
+}
+
+func KindMapperFromInstance(dbInst database.Instance) (KindMapper, error) {
+	if pgInstance, typeOK := dbInst.(*instance); !typeOK {
+		return nil, fmt.Errorf("dawgs pg: uanble to get kind mapper from instance type: %T", dbInst)
+	} else {
+		return pgInstance.schemaManager, nil
+	}
 }

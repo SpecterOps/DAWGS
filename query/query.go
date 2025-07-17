@@ -314,7 +314,7 @@ type builder struct {
 	limit        *int
 }
 
-func Query() QueryBuilder {
+func New() QueryBuilder {
 	return &builder{}
 }
 

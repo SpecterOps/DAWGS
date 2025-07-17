@@ -25,7 +25,8 @@ type Result interface {
 type Driver interface {
 	WithGraph(target Graph) Driver
 
-	CreateNode(ctx context.Context, node *graph.Node) error
+	CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error)
+	CreateRelationship(ctx context.Context, relationship *graph.Relationship) (graph.ID, error)
 
 	Exec(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
 	Explain(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
