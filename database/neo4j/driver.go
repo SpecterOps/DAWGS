@@ -106,7 +106,7 @@ func (s *dawgsDriver) WithGraph(target database.Graph) database.Driver {
 }
 
 func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) error {
-	createQuery, err := query.Query().Create(
+	createQuery, err := query.New().Create(
 		&cypher.NodePattern{
 			Variable:   query.Identifiers.Node(),
 			Kinds:      node.Kinds,

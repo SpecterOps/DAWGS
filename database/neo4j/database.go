@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
@@ -21,7 +22,7 @@ type instance struct {
 	schemaManager             *SchemaManager
 }
 
-func New(internalDriver neo4j.DriverWithContext, cfg database.Config) database.Instance {
+func New(internalDriver neo4j.DriverWithContext, cfg dawgs.Config) database.Instance {
 	return &instance{
 		internalDriver:            internalDriver,
 		defaultTransactionTimeout: DefaultNeo4jTransactionTimeout,
@@ -123,22 +124,34 @@ func (s *instance) FetchKinds(ctx context.Context) (graph.Kinds, error) {
 			}
 		}()
 
-		if result, err := session.Run(ctx, "CALL db.labels()", nil); err != nil {
-			return nil, err
-		} else {
+		consumeKindResult := func(result neo4j.ResultWithContext) error {
 			defer result.Consume(ctx)
 
 			for result.Next(ctx) {
 				values := result.Record().Values
 
 				if len(values) == 0 {
-					return nil, fmt.Errorf("expected at least one value for labels")
+					return fmt.Errorf("expected at least one value for labels")
 				} else if kindStr, typeOK := values[0].(string); !typeOK {
-					return nil, fmt.Errorf("unexpected label type from Neo4j: %T", values[0])
+					return fmt.Errorf("unexpected label type from Neo4j: %T", values[0])
 				} else {
 					kinds = append(kinds, graph.StringKind(kindStr))
 				}
 			}
+
+			return nil
+		}
+
+		if result, err := session.Run(ctx, "call db.labels();", nil); err != nil {
+			return nil, err
+		} else if err := consumeKindResult(result); err != nil {
+			return nil, err
+		}
+
+		if result, err := session.Run(ctx, "call db.relationshipTypes();", nil); err != nil {
+			return nil, err
+		} else if err := consumeKindResult(result); err != nil {
+			return nil, err
 		}
 	}
 

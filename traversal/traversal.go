@@ -151,7 +151,7 @@ func (s *pattern) Driver(ctx context.Context, dbDriver database.Driver, segment 
 		// expansions.
 		fetchFunc = func(criteria cypher.SyntaxNode, direction graph.Direction) error {
 			var (
-				queryBuilder = query.Query()
+				queryBuilder = query.New()
 				allCriteria  = []cypher.SyntaxNode{criteria}
 			)
 

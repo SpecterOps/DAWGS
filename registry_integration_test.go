@@ -45,7 +45,7 @@ func Test(t *testing.T) {
 			}},
 		})))
 
-	preparedQuery, err := query.Query().Return(query.Node()).Limit(10).Build()
+	preparedQuery, err := query.New().Return(query.Node()).Limit(10).Build()
 	require.NoError(t, err)
 
 	require.NoError(t, graphDB.Session(ctx, func(ctx context.Context, driver database.Driver) error {

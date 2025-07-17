@@ -12,7 +12,7 @@ import (
 )
 
 func TestQuery(t *testing.T) {
-	preparedQuery, err := v2.Query().Where(
+	preparedQuery, err := v2.New().Where(
 		v2.Not(v2.Relationship().HasKind(graph.StringKind("test"))),
 		v2.Not(v2.Relationship().HasKindIn(graph.Kinds{graph.StringKind("A"), graph.StringKind("B")})),
 		v2.Relationship().Property("rel_prop").LessThanOrEqualTo(1234),
@@ -34,7 +34,7 @@ func TestQuery(t *testing.T) {
 
 	require.Equal(t, "match (s)-[r]->() where type(r) <> 'test' and not type(r) in ['A', 'B'] and r.rel_prop <= 1234 and r.other_prop = 5678 and s:test set s.this_prop = 1234 remove e:A:B delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
 
-	preparedQuery, err = v2.Query().Create(
+	preparedQuery, err = v2.New().Create(
 		v2.Node().NodePattern(graph.Kinds{graph.StringKind("A")}, cypher.NewParameter("props", map[string]any{})),
 	).Build()
 
@@ -45,7 +45,7 @@ func TestQuery(t *testing.T) {
 
 	require.Equal(t, "create (n:A $props)", cypherQueryStr)
 
-	preparedQuery, err = v2.Query().Where(
+	preparedQuery, err = v2.New().Where(
 		v2.Start().ID().Equals(1234),
 	).Create(
 		v2.Relationship().RelationshipPattern(graph.StringKind("A"), cypher.NewParameter("props", map[string]any{}), graph.DirectionOutbound),
