@@ -664,7 +664,7 @@ func (s *Create) copy() *Create {
 }
 
 type IDInCollection struct {
-	Variable   Expression
+	Variable   *Variable
 	Expression Expression
 }
 

@@ -1,6 +1,8 @@
 package translate
 
 import (
+	"fmt"
+
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
@@ -103,6 +105,25 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 					// This is being done in case the top-level parameter is a value-type
 					typedExpression.Parameters[idx] = rewritten
 				}
+			// quantifier
+			case pgsql.BinaryExpression:
+				switch typedLOperand := typedParameter.LOperand.(type) {
+				case pgsql.Identifier:
+					if rewritten, err := rewriteIdentifierScopeReference(s.scope, typedLOperand); err != nil {
+						return err
+					} else {
+						typedParameter.LOperand = rewritten
+					}
+				case pgsql.CompoundIdentifier:
+					if rewritten, err := rewriteCompoundIdentifierScopeReference(s.scope, typedLOperand); err != nil {
+						return err
+					} else {
+						typedParameter.LOperand = rewritten
+					}
+				default:
+					return fmt.Errorf("unknown quantifier loperand expression: %v", typedLOperand)
+				}
+				typedExpression.Parameters[idx] = typedParameter
 			}
 		}
 

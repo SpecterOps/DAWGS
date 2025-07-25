@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models"
-	cypher "github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 

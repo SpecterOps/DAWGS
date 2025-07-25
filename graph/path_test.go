@@ -3,10 +3,11 @@ package graph_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
 	"github.com/specterops/dawgs/util/test"
-	"github.com/stretchr/testify/require"
 )
 
 var (
