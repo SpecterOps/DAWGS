@@ -181,24 +181,72 @@ func (s *dawgsDriver) WithGraph(targetGraph database.Graph) database.Driver {
 	return s
 }
 
-func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) error {
+func (s *dawgsDriver) CreateRelationship(ctx context.Context, relationship *graph.Relationship) (graph.ID, error) {
 	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
-		return err
-	} else if kindIDSlice, err := s.schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
-		return err
-	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties); err != nil {
-		return err
+		return 0, err
+	} else if kindIDSlice, err := s.schemaManager.AssertKinds(ctx, graph.Kinds{relationship.Kind}); err != nil {
+		return 0, err
+	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(relationship.Properties); err != nil {
+		return 0, err
 	} else {
-		result := s.executeTranslated(ctx, translatedQuery{
-			SQL: createNodeStatement,
-			Parameters: map[string]any{
-				"graph_id":   targetGraph.ID,
-				"kind_ids":   kindIDSlice,
-				"properties": propertiesJSONB,
-			},
-		})
+		var (
+			newEdgeID graph.ID
+			result    = s.executeTranslated(ctx, translatedQuery{
+				SQL: createEdgeStatement,
+				Parameters: map[string]any{
+					"graph_id":   targetGraph.ID,
+					"start_id":   relationship.StartID,
+					"end_id":     relationship.EndID,
+					"kind_id":    kindIDSlice[0],
+					"properties": propertiesJSONB,
+				},
+			})
+		)
 
 		defer result.Close(ctx)
-		return result.Error()
+
+		if result.HasNext(ctx) {
+			if err := result.Scan(&newEdgeID); err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, graph.ErrNoResultsFound
+		}
+
+		return newEdgeID, result.Error()
+	}
+}
+
+func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error) {
+	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
+		return 0, err
+	} else if kindIDSlice, err := s.schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
+		return 0, err
+	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties); err != nil {
+		return 0, err
+	} else {
+		var (
+			newNodeID graph.ID
+			result    = s.executeTranslated(ctx, translatedQuery{
+				SQL: createNodeStatement,
+				Parameters: map[string]any{
+					"graph_id":   targetGraph.ID,
+					"kind_ids":   kindIDSlice,
+					"properties": propertiesJSONB,
+				},
+			})
+		)
+
+		defer result.Close(ctx)
+
+		if result.HasNext(ctx) {
+			if err := result.Scan(&newNodeID); err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, graph.ErrNoResultsFound
+		}
+
+		return newNodeID, result.Error()
 	}
 }

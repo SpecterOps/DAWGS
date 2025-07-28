@@ -334,7 +334,7 @@ func (s *SchemaManager) assertSchema(ctx context.Context, schema database.Schema
 			return err
 		}
 
-		for _, graphSchema := range schema.Graphs {
+		for _, graphSchema := range schema.GraphSchemas {
 			if _, missingKinds := s.mapKinds(graphSchema.Nodes); len(missingKinds) > 0 {
 				if err := s.defineKinds(ctx, transaction, missingKinds); err != nil {
 					return err

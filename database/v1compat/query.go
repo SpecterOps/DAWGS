@@ -1,8 +1,10 @@
 package v1compat
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -37,6 +39,42 @@ func ScanNextResult(result Result, targets ...any) error {
 	return nil
 }
 
+type resultWrapper struct {
+	result database.Result
+	ctx    context.Context
+	mapper graph.ValueMapper
+}
+
+func (s resultWrapper) Next() bool {
+	return s.result.HasNext(s.ctx)
+}
+
+func (s resultWrapper) Values() []any {
+	return nil
+}
+
+func (s resultWrapper) Mapper() graph.ValueMapper {
+	return s.mapper
+}
+
+func (s resultWrapper) Scan(targets ...any) error {
+	return s.result.Scan(targets...)
+}
+
+func (s resultWrapper) Error() error {
+	return s.result.Error()
+}
+
+func (s resultWrapper) Close() {
+	s.result.Close(s.ctx)
+}
+
+func wrapResult(result database.Result) Result {
+	return &resultWrapper{
+		result: result,
+	}
+}
+
 type ErrorResult struct {
 	err error
 }
@@ -69,9 +107,6 @@ func NewErrorResult(err error) Result {
 		err: err,
 	}
 }
-
-// Criteria is a top-level alias for communicating structured query filter criteria to a query generator.
-type Criteria any
 
 // CriteriaProvider is a function delegate that returns criteria.
 type CriteriaProvider func() Criteria

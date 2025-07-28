@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
-	v2 "github.com/specterops/dawgs/query"
+	v2 "github.com/specterops/dawgs/v2query"
 
 	"github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/graph"

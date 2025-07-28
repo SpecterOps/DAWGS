@@ -1,12 +1,12 @@
 package pg
 
 const (
-	createNodeStatement               = `insert into node (graph_id, kind_ids, properties) values (@graph_id, @kind_ids, @properties) returning (id, kind_ids, properties)::nodeComposite;`
+	createNodeStatement               = `insert into node (graph_id, kind_ids, properties) values (@graph_id, @kind_ids, @properties) returning id;`
 	createNodeWithoutIDBatchStatement = `insert into node (graph_id, kind_ids, properties) select $1, unnest($2::text[])::int2[], unnest($3::jsonb[])`
 	createNodeWithIDBatchStatement    = `insert into node (graph_id, id, kind_ids, properties) select $1, unnest($2::int8[]), unnest($3::text[])::int2[], unnest($4::jsonb[])`
 	deleteNodeWithIDStatement         = `delete from node where node.id = any($1)`
 
-	createEdgeStatement = `insert into edge (graph_id, start_id, end_id, kind_id, properties) values (@graph_id, @start_id, @end_id, @kind_id, @properties) returning (id, start_id, end_id, kind_id, properties)::edgeComposite;`
+	createEdgeStatement = `insert into edge (graph_id, start_id, end_id, kind_id, properties) values (@graph_id, @start_id, @end_id, @kind_id, @properties) returning id;`
 
 	// TODO: The query below is not a pure creation statement as it contains an `on conflict` clause to dance around
 	//	     Azure post-processing. This was done because Azure post will submit the same creation request hundreds of
