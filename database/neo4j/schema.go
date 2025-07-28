@@ -50,7 +50,7 @@ func newNeo4jSchema() neo4jSchema {
 func toNeo4jSchema(dbSchema database.Schema) neo4jSchema {
 	neo4jSchemaInst := newNeo4jSchema()
 
-	for _, graphSchema := range dbSchema.Graphs {
+	for _, graphSchema := range dbSchema.GraphSchemas {
 		for _, index := range graphSchema.NodeIndexes {
 			for _, kind := range graphSchema.Nodes {
 				indexName := strings.ToLower(kind.String()) + "_" + strings.ToLower(index.Field) + "_index"

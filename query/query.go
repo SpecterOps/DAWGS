@@ -132,6 +132,7 @@ type EntityContinuation interface {
 }
 
 type Comparable interface {
+	Contains(value any) cypher.Expression
 	Equals(value any) cypher.Expression
 	GreaterThan(value any) cypher.Expression
 	GreaterThanOrEqualTo(value any) cypher.Expression
@@ -143,8 +144,8 @@ type PropertyContinuation interface {
 	QualifiedExpression
 	Comparable
 
-	Set(value any) cypher.Expression
-	Remove() cypher.Expression
+	Set(value any) *cypher.SetItem
+	Remove() *cypher.RemoveItem
 }
 
 type IdentityContinuation interface {
@@ -166,6 +167,10 @@ func (s *comparisonContinuation) asComparison(operator cypher.Operator, rOperand
 		operator,
 		cypher.NewLiteral(rOperand, rOperand == nil),
 	)
+}
+
+func (s *comparisonContinuation) Contains(value any) cypher.Expression {
+	return s.asComparison(cypher.OperatorContains, value)
 }
 
 func (s *comparisonContinuation) Equals(value any) cypher.Expression {
@@ -192,7 +197,7 @@ type propertyContinuation struct {
 	comparisonContinuation
 }
 
-func (s *propertyContinuation) Set(value any) cypher.Expression {
+func (s *propertyContinuation) Set(value any) *cypher.SetItem {
 	return cypher.NewSetItem(
 		s.qualifier(),
 		cypher.OperatorAssignment,
@@ -200,12 +205,32 @@ func (s *propertyContinuation) Set(value any) cypher.Expression {
 	)
 }
 
-func (s *propertyContinuation) Remove() cypher.Expression {
+func (s *propertyContinuation) Remove() *cypher.RemoveItem {
 	return cypher.RemoveProperty(s.qualifier())
 }
 
 type entity[T any] struct {
 	identifier *cypher.Variable
+}
+
+func (s *entity[T]) SetProperties(properties map[string]any) cypher.Expression {
+	set := &cypher.Set{}
+
+	for key, value := range properties {
+		set.Items = append(set.Items, s.Property(key).Set(value))
+	}
+
+	return set
+}
+
+func (s *entity[T]) RemoveProperties(properties []string) cypher.Expression {
+	remove := &cypher.Remove{}
+
+	for _, key := range properties {
+		remove.Items = append(remove.Items, s.Property(key).Remove())
+	}
+
+	return remove
 }
 
 func (s *entity[T]) RelationshipPattern(kind graph.Kind, properties cypher.Expression, direction graph.Direction) cypher.Expression {
@@ -286,6 +311,8 @@ type NodeContinuation interface {
 	NodePattern(kinds graph.Kinds, properties cypher.Expression) cypher.Expression
 	AddKinds(kinds graph.Kinds) cypher.Expression
 	RemoveKinds(kinds graph.Kinds) cypher.Expression
+	SetProperties(properties map[string]any) cypher.Expression
+	RemoveProperties(properties []string) cypher.Expression
 }
 
 type QueryBuilder interface {
@@ -346,8 +373,14 @@ func (s *builder) Create(creationClauses ...any) QueryBuilder {
 func (s *builder) Update(updates ...any) QueryBuilder {
 	for _, nextUpdate := range updates {
 		switch typedNextUpdate := nextUpdate.(type) {
+		case *cypher.Set:
+			s.setItems = append(s.setItems, typedNextUpdate.Items...)
+
 		case *cypher.SetItem:
 			s.setItems = append(s.setItems, typedNextUpdate)
+
+		case *cypher.Remove:
+			s.removeItems = append(s.removeItems, typedNextUpdate.Items...)
 
 		case *cypher.RemoveItem:
 			s.removeItems = append(s.removeItems, typedNextUpdate)

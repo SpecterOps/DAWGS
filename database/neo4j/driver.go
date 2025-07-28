@@ -94,6 +94,53 @@ type dawgsDriver struct {
 	internalDriver neo4jDriver
 }
 
+func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error) {
+	if builtQuery, err := query.New().Create(
+		query.Node().NodePattern(node.Kinds, node.Properties.MapOrEmpty()),
+	).Build(); err != nil {
+		return 0, err
+	} else {
+		var (
+			newEntityID graph.ID
+			result      = s.Exec(ctx, builtQuery.Query, builtQuery.Parameters)
+		)
+
+		defer result.Close(ctx)
+
+		if err := result.Scan(&newEntityID); err != nil {
+			return 0, err
+		}
+
+		return newEntityID, result.Error()
+	}
+}
+
+func (s *dawgsDriver) CreateRelationship(ctx context.Context, relationship *graph.Relationship) (graph.ID, error) {
+	if builtQuery, err := query.New().Where(
+		query.And(
+			query.Start().ID().Equals(relationship.StartID),
+			query.End().ID().Equals(relationship.StartID),
+		),
+	).Create(
+		query.Relationship().RelationshipPattern(relationship.Kind, relationship.Properties.MapOrEmpty(), graph.DirectionOutbound),
+	).Build(); err != nil {
+		return 0, err
+	} else {
+		var (
+			newEntityID graph.ID
+			result      = s.Exec(ctx, builtQuery.Query, builtQuery.Parameters)
+		)
+
+		defer result.Close(ctx)
+
+		if err := result.Scan(&newEntityID); err != nil {
+			return 0, err
+		}
+
+		return newEntityID, result.Error()
+	}
+}
+
 func newInternalDriver(internalDriver neo4jDriver) *dawgsDriver {
 	return &dawgsDriver{
 		internalDriver: internalDriver,
@@ -103,28 +150,6 @@ func newInternalDriver(internalDriver neo4jDriver) *dawgsDriver {
 func (s *dawgsDriver) WithGraph(target database.Graph) database.Driver {
 	// NOOP for now
 	return s
-}
-
-func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) error {
-	createQuery, err := query.New().Create(
-		&cypher.NodePattern{
-			Variable:   query.Identifiers.Node(),
-			Kinds:      node.Kinds,
-			Properties: cypher.NewParameter("properties", node.Properties.MapOrEmpty()),
-		},
-	).Build()
-
-	if err != nil {
-		return err
-	}
-
-	result := s.Exec(ctx, createQuery.Query, createQuery.Parameters)
-
-	if err := result.Close(ctx); err != nil {
-		return err
-	}
-
-	return result.Error()
 }
 
 func (s *dawgsDriver) exec(ctx context.Context, cypherQuery string, parameters map[string]any) database.Result {

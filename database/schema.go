@@ -45,11 +45,11 @@ type Graph struct {
 }
 
 type Schema struct {
-	Graphs       map[string]Graph
-	defaultGraph string
+	GraphSchemas     map[string]Graph
+	DefaultGraphName string
 }
 
-func NewSchema(defaultGraph string, graphSchemas ...Graph) Schema {
+func NewSchema(defaultGraphName string, graphSchemas ...Graph) Schema {
 	graphSchemaMap := map[string]Graph{}
 
 	for _, graphSchema := range graphSchemas {
@@ -57,12 +57,12 @@ func NewSchema(defaultGraph string, graphSchemas ...Graph) Schema {
 	}
 
 	return Schema{
-		Graphs:       graphSchemaMap,
-		defaultGraph: defaultGraph,
+		GraphSchemas:     graphSchemaMap,
+		DefaultGraphName: defaultGraphName,
 	}
 }
 
 func (s *Schema) DefaultGraph() (Graph, bool) {
-	defaultGraph, hasDefaultGraph := s.Graphs[s.defaultGraph]
+	defaultGraph, hasDefaultGraph := s.GraphSchemas[s.DefaultGraphName]
 	return defaultGraph, hasDefaultGraph
 }

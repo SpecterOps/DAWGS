@@ -6,6 +6,7 @@ import (
 
 	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/util/size"
 )
 
 type Batch interface {
@@ -31,7 +32,7 @@ type Batch interface {
 	UpdateNodeBy(update graph.NodeUpdate) error
 
 	// TODO: Existing batch logic expects this to perform an upsert on conficts with (start_id, end_id, kind). This is incorrect and should be refactored
-	CreateRelationship(relationship *RelationshipQuery) error
+	CreateRelationship(relationship *graph.Relationship) error
 
 	// Deprecated: Use CreateRelationship Instead
 	//
@@ -80,14 +81,13 @@ type Transaction interface {
 	// Relationships creates a new RelationshipQuery and returns it.
 	Relationships() RelationshipQuery
 
-	// Raw allows a user to pass raw queries directly to the database without translation.
-	Raw(query string, parameters map[string]any) Result
-
 	// Query allows a user to execute a given cypher query that will be translated to the target database.
 	Query(query string, parameters map[string]any) Result
 
 	// Commit calls to commit this transaction right away.
 	Commit() error
+
+	GraphQueryMemoryLimit() size.Size
 }
 
 // TransactionDelegate represents a transactional database context actor. Errors returned from a TransactionDelegate
