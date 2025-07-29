@@ -121,7 +121,7 @@ type NodeQuery interface {
 	Filterf(criteriaDelegate CriteriaProvider) NodeQuery
 
 	// Query completes the query and hands the raw result to the given delegate for unmarshalling
-	Query(delegate func(results Result) error, finalCriteria ...Criteria) error
+	Query(delegate func(results Result) error, finalCriteria ...any) error
 
 	// Delete deletes any candidate nodes that match the query criteria
 	Delete() error
@@ -190,7 +190,7 @@ type RelationshipQuery interface {
 	First() (*graph.Relationship, error)
 
 	// Query completes the query and hands the raw result to the given delegate for unmarshalling
-	Query(delegate func(results Result) error, finalCriteria ...Criteria) error
+	Query(delegate func(results Result) error, finalCriteria ...any) error
 
 	// Fetch completes the query and captures a cursor for iterating the result set. This cursor is passed to the given
 	// delegate. Errors from the delegate are returned upwards as the error result of this call.

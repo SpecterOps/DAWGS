@@ -2,7 +2,6 @@ package query
 
 import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
-	"github.com/specterops/dawgs/database/v1compat"
 )
 
 type SortDirection string
@@ -11,14 +10,14 @@ const SortDirectionAscending SortDirection = "asc"
 const SortDirectionDescending SortDirection = "desc"
 
 type SortItem struct {
-	SortCriteria v1compat.Criteria
+	SortCriteria cypher.SyntaxNode
 	Direction    SortDirection
 }
 
 type SortItems []SortItem
 
 func (s SortItems) FormatCypherOrder() *cypher.Order {
-	var orderCriteria []v1compat.Criteria
+	var orderCriteria []cypher.SyntaxNode
 
 	for _, sortItem := range s {
 		switch sortItem.Direction {

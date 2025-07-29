@@ -125,10 +125,21 @@ type QualifiedExpression interface {
 type EntityContinuation interface {
 	QualifiedExpression
 
+	Count() cypher.Expression
 	ID() IdentityContinuation
-	HasKind(kind graph.Kind) cypher.Expression
-	HasKindIn(kinds graph.Kinds) cypher.Expression
 	Property(name string) PropertyContinuation
+}
+
+type KindContinuation interface {
+	Is(kind graph.Kind) cypher.Expression
+	IsOneOf(kinds graph.Kinds) cypher.Expression
+}
+
+type KindsContinuation interface {
+	Has(kind graph.Kind) cypher.Expression
+	HasOneOf(kinds graph.Kinds) cypher.Expression
+	Add(kinds graph.Kinds) cypher.Expression
+	Remove(kinds graph.Kinds) cypher.Expression
 }
 
 type Comparable interface {
@@ -213,6 +224,22 @@ type entity[T any] struct {
 	identifier *cypher.Variable
 }
 
+func (s *entity[T]) Kind() KindContinuation {
+	return &kindContinuation{
+		identifier: s.identifier,
+	}
+}
+
+func (s *entity[T]) Kinds() KindsContinuation {
+	return &kindsContinuation{
+		identifier: s.identifier,
+	}
+}
+
+func (s *entity[T]) Count() cypher.Expression {
+	return cypher.NewSimpleFunctionInvocation(cypher.CountFunction, s.identifier)
+}
+
 func (s *entity[T]) SetProperties(properties map[string]any) cypher.Expression {
 	set := &cypher.Set{}
 
@@ -250,31 +277,8 @@ func (s *entity[T]) NodePattern(kinds graph.Kinds, properties cypher.Expression)
 	}
 }
 
-func (s *entity[T]) AddKinds(kinds graph.Kinds) cypher.Expression {
-	return cypher.NewSetItem(
-		s.identifier,
-		cypher.OperatorLabelAssignment,
-		kinds,
-	)
-}
-
-func (s *entity[T]) RemoveKinds(kinds graph.Kinds) cypher.Expression {
-	return cypher.RemoveKindsByMatcher(cypher.NewKindMatcher(s.identifier, kinds))
-}
-
 func (s *entity[T]) qualifier() cypher.Expression {
 	return s.identifier
-}
-
-func (s *entity[T]) HasKindIn(kinds graph.Kinds) cypher.Expression {
-	return &cypher.KindMatcher{
-		Reference: s.identifier,
-		Kinds:     kinds,
-	}
-}
-
-func (s *entity[T]) HasKind(kind graph.Kind) cypher.Expression {
-	return s.HasKindIn(graph.Kinds{kind})
 }
 
 func (s *entity[T]) ID() IdentityContinuation {
@@ -295,6 +299,48 @@ func (s *entity[T]) Property(propertyName string) PropertyContinuation {
 	}
 }
 
+type kindContinuation struct {
+	identifier *cypher.Variable
+}
+
+func (s kindContinuation) Is(kind graph.Kind) cypher.Expression {
+	return s.IsOneOf(graph.Kinds{kind})
+}
+
+func (s kindContinuation) IsOneOf(kinds graph.Kinds) cypher.Expression {
+	return &cypher.KindMatcher{
+		Reference: s.identifier,
+		Kinds:     kinds,
+	}
+}
+
+type kindsContinuation struct {
+	identifier *cypher.Variable
+}
+
+func (s kindsContinuation) Has(kind graph.Kind) cypher.Expression {
+	return s.HasOneOf(graph.Kinds{kind})
+}
+
+func (s kindsContinuation) HasOneOf(kinds graph.Kinds) cypher.Expression {
+	return &cypher.KindMatcher{
+		Reference: s.identifier,
+		Kinds:     kinds,
+	}
+}
+
+func (s kindsContinuation) Add(kinds graph.Kinds) cypher.Expression {
+	return cypher.NewSetItem(
+		s.identifier,
+		cypher.OperatorLabelAssignment,
+		kinds,
+	)
+}
+
+func (s kindsContinuation) Remove(kinds graph.Kinds) cypher.Expression {
+	return cypher.RemoveKindsByMatcher(cypher.NewKindMatcher(s.identifier, kinds))
+}
+
 type PathContinuation interface {
 	QualifiedExpression
 }
@@ -303,14 +349,18 @@ type RelationshipContinuation interface {
 	EntityContinuation
 
 	RelationshipPattern(kind graph.Kind, properties cypher.Expression, direction graph.Direction) cypher.Expression
+
+	Kind() KindContinuation
+	SetProperties(properties map[string]any) cypher.Expression
+	RemoveProperties(properties []string) cypher.Expression
 }
 
 type NodeContinuation interface {
 	EntityContinuation
 
 	NodePattern(kinds graph.Kinds, properties cypher.Expression) cypher.Expression
-	AddKinds(kinds graph.Kinds) cypher.Expression
-	RemoveKinds(kinds graph.Kinds) cypher.Expression
+
+	Kinds() KindsContinuation
 	SetProperties(properties map[string]any) cypher.Expression
 	RemoveProperties(properties []string) cypher.Expression
 }
@@ -530,6 +580,33 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 			switch typedNextProjection := nextProjection.(type) {
 			case QualifiedExpression:
 				projection.AddItem(cypher.NewProjectionItemWithExpr(typedNextProjection.qualifier()))
+
+			case kindContinuation:
+				var kindExpr cypher.Expression
+
+				switch typedNextProjection.identifier.Symbol {
+				case Identifiers.node, Identifiers.start, Identifiers.end:
+					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, typedNextProjection.identifier)
+
+				case Identifiers.relationship:
+					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, typedNextProjection.identifier)
+				}
+
+				projection.AddItem(cypher.NewProjectionItemWithExpr(kindExpr))
+
+			case kindsContinuation:
+				var kindExpr cypher.Expression
+
+				switch typedNextProjection.identifier.Symbol {
+				case Identifiers.node, Identifiers.start, Identifiers.end:
+					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, typedNextProjection.identifier)
+
+				case Identifiers.relationship:
+					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, typedNextProjection.identifier)
+				}
+
+				projection.AddItem(cypher.NewProjectionItemWithExpr(kindExpr))
+
 			default:
 				projection.AddItem(cypher.NewProjectionItemWithExpr(typedNextProjection))
 			}

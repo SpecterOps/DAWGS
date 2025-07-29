@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/specterops/dawgs/cypher/models/walk"
-	"github.com/specterops/dawgs/database/v1compat"
-
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -30,7 +28,7 @@ func NewBuilder(cache *Cache) *Builder {
 	}
 }
 
-func NewBuilderWithCriteria(criteria ...v1compat.Criteria) *Builder {
+func NewBuilderWithCriteria(criteria ...cypher.SyntaxNode) *Builder {
 	builder := NewBuilder(nil)
 	builder.Apply(criteria...)
 
@@ -221,10 +219,10 @@ func (s *Builder) prepareMatch(allShortestPaths bool) error {
 	return nil
 }
 
-func (s *Builder) Apply(criteria ...v1compat.Criteria) {
+func (s *Builder) Apply(criteria ...cypher.SyntaxNode) {
 	for _, nextCriteria := range criteria {
 		switch typedCriteria := nextCriteria.(type) {
-		case []v1compat.Criteria:
+		case []cypher.SyntaxNode:
 			s.Apply(typedCriteria...)
 
 		case *cypher.Where:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
 )
@@ -52,18 +53,18 @@ type Cursor[T any] interface {
 	Chan() chan T
 }
 
-type ResultMarshaller[T any] func(scanner Result) (T, error)
+type ResultMarshaller[T any] func(scanner database.Result) (T, error)
 
 type ResultIterator[T any] struct {
 	ctx        context.Context
-	result     Result
+	result     database.Result
 	cancelFunc func()
 	valueC     chan T
 	marshaller ResultMarshaller[T]
 	error      error
 }
 
-func NewResultIterator[T any](ctx context.Context, result Result, marshaller ResultMarshaller[T]) Cursor[T] {
+func NewResultIterator[T any](ctx context.Context, result database.Result, marshaller ResultMarshaller[T]) Cursor[T] {
 	var (
 		cursorCtx, cancelFunc = context.WithCancel(ctx)
 		resultIterator        = &ResultIterator[T]{
@@ -83,7 +84,7 @@ func (s *ResultIterator[T]) start() {
 	go func() {
 		defer close(s.valueC)
 
-		for s.result.Next() {
+		for s.result.HasNext(s.ctx) {
 			if nextValue, err := s.marshaller(s.result); err != nil {
 				s.error = err
 				break
@@ -109,7 +110,7 @@ func (s *ResultIterator[T]) Error() error {
 
 func (s *ResultIterator[T]) Close() {
 	s.cancelFunc()
-	s.result.Close()
+	s.result.Close(s.ctx)
 }
 
 func (s *ResultIterator[T]) Chan() chan T {

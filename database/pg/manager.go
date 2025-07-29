@@ -88,6 +88,7 @@ func (s *SchemaManager) fetch(ctx context.Context, tx pgx.Tx) error {
 		s.kindsByID = kinds
 
 		for kind, kindID := range s.kindsByID {
+			s.kindsByID[kind] = kindID
 			s.kindIDsByKind[kindID] = kind
 		}
 	}
@@ -109,6 +110,12 @@ func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
 }
 
 func (s *SchemaManager) Fetch(ctx context.Context) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	clear(s.kindIDsByKind)
+	clear(s.kindsByID)
+
 	return s.transaction(ctx, func(transaction pgx.Tx) error {
 		return s.fetch(ctx, transaction)
 	})
@@ -153,12 +160,13 @@ func (s *SchemaManager) MapKind(ctx context.Context, kind graph.Kind) (int16, er
 	}
 
 	s.lock.RUnlock()
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
 	if err := s.Fetch(ctx); err != nil {
 		return -1, err
 	}
+
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	if id, hasID := s.kindsByID[kind]; hasID {
 		return id, nil
@@ -176,12 +184,13 @@ func (s *SchemaManager) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int1
 	}
 
 	s.lock.RUnlock()
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
 	if err := s.Fetch(ctx); err != nil {
 		return nil, err
 	}
+
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	if mappedKinds, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
 		return mappedKinds, nil
@@ -224,12 +233,13 @@ func (s *SchemaManager) MapKindIDs(ctx context.Context, kindIDs []int16) (graph.
 	}
 
 	s.lock.RUnlock()
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
 	if err := s.Fetch(ctx); err != nil {
 		return nil, err
 	}
+
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	if kinds, missingKinds := s.mapKindIDs(kindIDs); len(missingKinds) == 0 {
 		return kinds, nil

@@ -10,6 +10,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/database/pg/model"
+	"github.com/specterops/dawgs/database/v1compat"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -94,7 +95,7 @@ type dawgsDriver struct {
 	targetGraph        *database.Graph
 }
 
-func newInternalDriver(internalConn internalDriver, schemaManager *SchemaManager) database.Driver {
+func newInternalDriver(internalConn internalDriver, schemaManager *SchemaManager) v1compat.BackwardCompatibleDriver {
 	return &dawgsDriver{
 		internalConn:       internalConn,
 		queryExecMode:      pgx.QueryExecModeCacheStatement,
@@ -148,6 +149,16 @@ func (s *dawgsDriver) translateCypherToPGSQL(ctx context.Context, query *cypher.
 			Parameters: parameters,
 		}, nil
 	}
+}
+
+func (s *dawgsDriver) UpdateNodeBy(update graph.NodeUpdate) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *dawgsDriver) UpdateRelationshipBy(update graph.RelationshipUpdate) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (s *dawgsDriver) Exec(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) database.Result {

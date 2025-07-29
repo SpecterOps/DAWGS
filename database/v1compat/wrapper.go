@@ -11,24 +11,23 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
-type v1CompatibleInstance interface {
+type BackwardCompatibleInstance interface {
 	database.Instance
 
 	RefreshKinds(ctx context.Context) error
 	Raw(ctx context.Context, query string, parameters map[string]any) error
 }
 
-type v1CompatibleDriver interface {
+type BackwardCompatibleDriver interface {
 	database.Driver
 
-	DeleteNode(id graph.ID) error
 	UpdateNodeBy(update graph.NodeUpdate) error
 	UpdateRelationshipBy(update graph.RelationshipUpdate) error
 }
 
 type v1Wrapper struct {
 	schema *database.Schema
-	v2DB   v1CompatibleInstance
+	v2DB   BackwardCompatibleInstance
 }
 
 func (s v1Wrapper) ReadTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
@@ -87,7 +86,7 @@ func (s v1Wrapper) RefreshKinds(ctx context.Context) error {
 }
 
 func V1Wrapper(v2DB database.Instance) Database {
-	if v1CompatibleInstanceRef, typeOK := v2DB.(v1CompatibleInstance); !typeOK {
+	if v1CompatibleInstanceRef, typeOK := v2DB.(BackwardCompatibleInstance); !typeOK {
 		panic(fmt.Sprintf("type %T is not a v1CompatibleInstance", v2DB))
 	} else {
 		return &v1Wrapper{
@@ -106,11 +105,11 @@ func (s v1Wrapper) SetBatchWriteSize(interval int) {
 
 type driverBatchWrapper struct {
 	ctx    context.Context
-	driver v1CompatibleDriver
+	driver BackwardCompatibleDriver
 }
 
 func wrapDriverToBatch(ctx context.Context, driver database.Driver) Batch {
-	if v1CompatibleDriverRef, typeOK := driver.(v1CompatibleDriver); !typeOK {
+	if v1CompatibleDriverRef, typeOK := driver.(BackwardCompatibleDriver); !typeOK {
 		panic(fmt.Sprintf("type %T is not a v1CompatibleDriver", driver))
 	} else {
 		return &driverBatchWrapper{
@@ -131,15 +130,24 @@ func (s driverBatchWrapper) CreateNode(node *graph.Node) error {
 }
 
 func (s driverBatchWrapper) DeleteNode(id graph.ID) error {
-	return s.driver.DeleteNode(id)
+	if builtQuery, err := query.New().Where(
+		query.Node().ID().Equals(id),
+	).Delete(query.Node()).Build(); err != nil {
+		return err
+	} else {
+		result := s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters)
+		defer result.Close(s.ctx)
+
+		return result.Error()
+	}
 }
 
 func (s driverBatchWrapper) Nodes() NodeQuery {
-	return newNodeQuery(s.driver)
+	return newNodeQuery(s.ctx, s.driver)
 }
 
 func (s driverBatchWrapper) Relationships() RelationshipQuery {
-	return newRelationshipQuery(s.driver)
+	return newRelationshipQuery(s.ctx, s.driver)
 }
 
 func (s driverBatchWrapper) UpdateNodeBy(update graph.NodeUpdate) error {
@@ -180,7 +188,7 @@ func (s driverBatchWrapper) Commit() error {
 
 type driverTransactionWrapper struct {
 	ctx    context.Context
-	driver v1CompatibleDriver
+	driver BackwardCompatibleDriver
 }
 
 func (s driverTransactionWrapper) GraphQueryMemoryLimit() size.Size {
@@ -188,7 +196,7 @@ func (s driverTransactionWrapper) GraphQueryMemoryLimit() size.Size {
 }
 
 func wrapDriverToTransaction(ctx context.Context, driver database.Driver) Transaction {
-	if v1CompatibleDriverRef, typeOK := driver.(v1CompatibleDriver); !typeOK {
+	if v1CompatibleDriverRef, typeOK := driver.(BackwardCompatibleDriver); !typeOK {
 		panic(fmt.Sprintf("type %T is not a v1CompatibleDriver", driver))
 	} else {
 		return &driverTransactionWrapper{
@@ -219,11 +227,11 @@ func (s driverTransactionWrapper) UpdateNode(node *graph.Node) error {
 	updateQuery := query.New()
 
 	if len(node.AddedKinds) > 0 {
-		updateQuery.Update(query.Node().AddKinds(node.AddedKinds))
+		updateQuery.Update(query.Node().Kinds().Add(node.AddedKinds))
 	}
 
 	if len(node.DeletedKinds) > 0 {
-		updateQuery.Update(query.Node().RemoveKinds(node.DeletedKinds))
+		updateQuery.Update(query.Node().Kinds().Remove(node.DeletedKinds))
 	}
 
 	if modifiedProperties := node.Properties.ModifiedProperties(); len(modifiedProperties) > 0 {
@@ -243,7 +251,7 @@ func (s driverTransactionWrapper) UpdateNode(node *graph.Node) error {
 }
 
 func (s driverTransactionWrapper) Nodes() NodeQuery {
-	return newNodeQuery(s.driver)
+	return newNodeQuery(s.ctx, s.driver)
 }
 
 func (s driverTransactionWrapper) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) (*graph.Relationship, error) {
@@ -282,7 +290,7 @@ func (s driverTransactionWrapper) UpdateRelationship(relationship *graph.Relatio
 }
 
 func (s driverTransactionWrapper) Relationships() RelationshipQuery {
-	return newRelationshipQuery(s.driver)
+	return newRelationshipQuery(s.ctx, s.driver)
 }
 
 func (s driverTransactionWrapper) Query(query string, parameters map[string]any) Result {

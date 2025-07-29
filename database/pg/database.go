@@ -7,6 +7,7 @@ import (
 
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/database"
+	"github.com/specterops/dawgs/database/v1compat"
 	"github.com/specterops/dawgs/graph"
 
 	"github.com/jackc/pgx/v5"
@@ -37,7 +38,22 @@ type instance struct {
 	schemaManager         *SchemaManager
 }
 
-func New(internalDriver *pgxpool.Pool, cfg dawgs.Config) database.Instance {
+func (s *instance) RefreshKinds(ctx context.Context) error {
+	return s.schemaManager.Fetch(ctx)
+}
+
+func (s *instance) Raw(ctx context.Context, query string, parameters map[string]any) error {
+	if acquiredConn, err := s.pool.Acquire(ctx); err != nil {
+		return err
+	} else {
+		defer acquiredConn.Release()
+
+		_, err := acquiredConn.Exec(ctx, query, pgx.NamedArgs(parameters))
+		return err
+	}
+}
+
+func New(internalDriver *pgxpool.Pool, cfg dawgs.Config) v1compat.BackwardCompatibleInstance {
 	return &instance{
 		pool:                  internalDriver,
 		graphQueryMemoryLimit: cfg.GraphQueryMemoryLimit,
