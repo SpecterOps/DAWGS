@@ -16,6 +16,7 @@ import (
 	"github.com/specterops/dawgs/util"
 	"github.com/specterops/dawgs/util/atomics"
 	"github.com/specterops/dawgs/util/channels"
+	"github.com/specterops/dawgs/util/size"
 )
 
 // Driver is a function that drives sending queries to the graph and retrieving vertexes and edges. Traversal
@@ -257,14 +258,24 @@ type Plan struct {
 }
 
 type Traversal struct {
-	db         graph.Database
-	numWorkers int
+	db          graph.Database
+	memoryLimit size.Size
+	numWorkers  int
 }
 
 func New(db graph.Database, numParallelWorkers int) Traversal {
 	return Traversal{
-		db:         db,
-		numWorkers: numParallelWorkers,
+		db:          db,
+		numWorkers:  numParallelWorkers,
+		memoryLimit: size.Size(0),
+	}
+}
+
+func NewWithMemoryLimit(db graph.Database, numParallelWorkers int, memoryLimit size.Size) Traversal {
+	return Traversal{
+		db:          db,
+		numWorkers:  numParallelWorkers,
+		memoryLimit: memoryLimit,
 	}
 }
 
@@ -281,6 +292,14 @@ func (s Traversal) BreadthFirst(ctx context.Context, plan Plan) error {
 		traversalCtx, doneFunc         = context.WithCancel(ctx)
 		segmentWriterC, segmentReaderC = channels.BufferedPipe[*graph.PathSegment](traversalCtx)
 		pathTree                       graph.Tree
+
+		memoryLimitFunc = func(tx graph.Transaction) size.Size {
+			if s.memoryLimit != 0 {
+				return s.memoryLimit
+			}
+
+			return tx.GraphQueryMemoryLimit()
+		}
 	)
 
 	// Defer calling the cancellation function of the context to ensure that all workers join, no matter what
@@ -310,7 +329,7 @@ func (s Traversal) BreadthFirst(ctx context.Context, plan Plan) error {
 				for {
 					if nextDescent, ok := channels.Receive(traversalCtx, segmentReaderC); !ok {
 						return nil
-					} else if tx.GraphQueryMemoryLimit() > 0 && pathTree.SizeOf() > tx.GraphQueryMemoryLimit() {
+					} else if memoryLimitFunc(tx) > 0 && pathTree.SizeOf() > memoryLimitFunc(tx) {
 						return fmt.Errorf("%w - Limit: %.2f MB - Memory In-Use: %.2f MB", ops.ErrGraphQueryMemoryLimit, tx.GraphQueryMemoryLimit().Mebibytes(), pathTree.SizeOf().Mebibytes())
 					} else {
 						// Traverse the descending relationships of the current segment
