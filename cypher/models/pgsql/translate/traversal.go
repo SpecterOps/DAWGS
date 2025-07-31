@@ -52,6 +52,50 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
+	/*
+		// AND (n0.id <> n1.id)
+		nextSelect.Where = pgsql.OptionalAnd(
+			pgsql.NewParenthetical(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+					pgsql.OperatorCypherNotEquals,
+					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID})),
+			nextSelect.Where)
+	*/
+
+	// AND ((e0.start_id = n0.id OR e0.start_id = n1.id) AND (e0.end_id = n0.id OR e0.end_id = n1.id))
+	nextSelect.Where =
+		pgsql.OptionalAnd(
+			pgsql.NewParenthetical(
+				pgsql.NewBinaryExpression(
+					pgsql.NewParenthetical(
+						pgsql.NewBinaryExpression(
+							pgsql.NewParenthetical(
+								pgsql.NewBinaryExpression(
+									pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+									pgsql.OperatorEquals,
+									pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID})),
+							pgsql.OperatorOr,
+							pgsql.NewParenthetical(
+								pgsql.NewBinaryExpression(
+									pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+									pgsql.OperatorEquals,
+									pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID})))),
+					pgsql.OperatorAnd,
+					pgsql.NewParenthetical(
+						pgsql.NewBinaryExpression(
+							pgsql.NewParenthetical(
+								pgsql.NewBinaryExpression(
+									pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+									pgsql.OperatorEquals,
+									pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID})),
+							pgsql.OperatorOr,
+							pgsql.NewParenthetical(
+								pgsql.NewBinaryExpression(
+									pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+									pgsql.OperatorEquals,
+									pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID})))))),
+			nextSelect.Where)
 
 	return pgsql.Query{
 		Body: nextSelect,
