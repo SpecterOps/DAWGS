@@ -75,6 +75,10 @@ func NewEdgeChange(changeType ChangeType, targetNodeID, relatedNodeID string, ki
 	}
 }
 
+func (s EdgeChange) Type() ChangeType {
+	return s.ChangeType
+}
+
 func (s EdgeChange) IdentityKey() string {
 	return s.TargetNodeID + s.RelatedNodeID + s.Kind.String()
 }

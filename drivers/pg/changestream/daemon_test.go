@@ -13,7 +13,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 	t.Run("when there is no cached change", func(t *testing.T) {
 		t.Run("and changelog is enabled", func(t *testing.T) {
 			ctx := context.TODO()
-			d := changestream.NewDaemon(ctx, &flagEnabled{}, nil)
+			d := changestream.NewDaemon(ctx, &flagEnabled{}, nil, nil)
 			d.State.CheckFeatureFlag(ctx) // todo: this simulates "enabling" the changelog... consider extracting to a helper
 
 			node := &changestream.NodeChange{
@@ -37,7 +37,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 
 		t.Run("and changelog is disabled", func(t *testing.T) {
 			ctx := context.TODO()
-			d := changestream.NewDaemon(ctx, &flagDisabled{}, nil)
+			d := changestream.NewDaemon(ctx, &flagDisabled{}, nil, nil)
 
 			node := &changestream.NodeChange{
 				ChangeType: changestream.ChangeTypeModified,
@@ -57,7 +57,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 	t.Run("when there is a cached change", func(t *testing.T) {
 		t.Run("and the properties hash matches", func(t *testing.T) {
 			ctx := context.TODO()
-			d := changestream.NewDaemon(ctx, &flagEnabled{}, nil)
+			d := changestream.NewDaemon(ctx, &flagEnabled{}, nil, nil)
 
 			props := &graph.Properties{Map: map[string]any{"x": "y"}}
 			hash, _ := props.Hash(nil)
@@ -80,7 +80,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 
 		t.Run("and the properties hash is different", func(t *testing.T) {
 			ctx := context.TODO()
-			d := changestream.NewDaemon(ctx, &flagEnabled{}, nil)
+			d := changestream.NewDaemon(ctx, &flagEnabled{}, nil, nil)
 			key := "bar"
 
 			d.PutCachedChange(key, changestream.ChangeStatus{

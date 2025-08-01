@@ -61,3 +61,7 @@ func shouldAssertNextPartition(lastPartitionAssert time.Time) bool {
 
 	return lastPartitionRangeStr != nowPartitionRangeStr
 }
+
+func NodeChangePartitionName(now time.Time) string {
+	return "node_change_stream_" + now.Format(tablePartitionSuffixFormatStr)
+}

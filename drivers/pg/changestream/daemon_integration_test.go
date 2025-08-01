@@ -3,12 +3,17 @@ package changestream_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/drivers/pg/changestream"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
+
+const pg_connection_string = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
 
 type flagEnabled struct{}
 
@@ -26,7 +31,16 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Dae
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	pgxPool, err := pgxpool.New(ctx, "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432")
+	pgxPool, err := pgxpool.New(ctx, pg_connection_string)
+	require.NoError(t, err)
+
+	graphDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{
+		ConnectionString: pg_connection_string,
+		Pool:             pgxPool,
+	})
+	require.NoError(t, err)
+
+	kindMapper, err := pg.KindMapperFromGraphDatabase(graphDB)
 	require.NoError(t, err)
 
 	_, err = pgxPool.Exec(ctx, changestream.ASSERT_TABLE_SQL)
@@ -42,7 +56,7 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Dae
 		flag = &flagDisabled{}
 	}
 
-	daemon := changestream.NewDaemon(ctx, flag, pgxPool)
+	daemon := changestream.NewDaemon(ctx, flag, pgxPool, kindMapper)
 	daemon.State.CheckFeatureFlag(ctx) // todo: this sets the enabled flag on the state...
 
 	return daemon, ctx, func() {
@@ -153,4 +167,48 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		require.False(t, status.Changed)
 		require.False(t, status.Exists)
 	})
+}
+
+func TestFlushNodeChanges(t *testing.T) {
+	daemon, ctx, teardown := setupIntegrationTest(t, true)
+	defer teardown()
+
+	// Prepare one buffered NodeChange
+	props := graph.NewProperties().Set("foo", "bar")
+	node := &changestream.NodeChange{
+		NodeID:     "test-node-123",
+		Properties: props,
+		Kinds:      graph.Kinds{graph.StringKind("User")},
+	}
+	now := time.Now()
+
+	// queue a single change
+	daemon.QueueChange(ctx, now, node)
+
+	// Call flush
+	err := daemon.FlushNodeChanges(ctx, changestream.NodeChangePartitionName(now))
+	require.NoError(t, err)
+
+	// Query the DB to verify the row exists
+	var (
+		nodeID     string
+		changeType int
+		kindIDs    []int32
+		properties []byte
+	)
+
+	row := daemon.PGX().QueryRow(ctx, `
+		SELECT node_id, change_type, kind_ids, property_fields
+		FROM node_change_stream
+		WHERE node_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, node.NodeID)
+
+	err = row.Scan(&nodeID, &changeType, &kindIDs, &properties)
+	require.NoError(t, err)
+
+	require.Equal(t, node.NodeID, nodeID)
+	require.Equal(t, changestream.ChangeTypeModified, changestream.ChangeType(changeType))
+	// require.Equal(t, []int32{42}, kindIDs)
 }

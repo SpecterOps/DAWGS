@@ -15,6 +15,11 @@ import (
 	"github.com/specterops/dawgs/util/channels"
 )
 
+const (
+	// Limit batch sizes
+	BATCH_SIZE = 1_000
+)
+
 var (
 	// todo: why are the following properties safe to always ignore when computing hashes?
 	// todo: the common, ad, and azure packages where these string constants are defined are
@@ -53,12 +58,13 @@ type Daemon struct {
 	edgeChangeBuffer []*EdgeChange
 }
 
-func NewDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool) *Daemon {
+func NewDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) *Daemon {
 	return &Daemon{
 		changeCache:     make(map[string]ChangeStatus),
 		changeCacheLock: &sync.RWMutex{},
 		State:           newStateManager(flags),
 		pgxPool:         pgxPool,
+		kindMapper:      kindMapper,
 	}
 }
 
@@ -202,5 +208,72 @@ func (s *Daemon) handleIncomingChange(ctx context.Context, change Change, now ti
 		return
 	}
 
-	// s.queueChange(ctx, now, change)
+	s.QueueChange(ctx, now, change)
+}
+
+func (s *Daemon) QueueChange(ctx context.Context, now time.Time, nextChange Change) {
+	switch typedChange := nextChange.(type) {
+	case *NodeChange:
+		s.nodeChangeBuffer = append(s.nodeChangeBuffer, typedChange)
+
+		if len(s.nodeChangeBuffer) >= BATCH_SIZE {
+			if err := s.FlushNodeChanges(ctx, NodeChangePartitionName(now)); err != nil {
+				slog.ErrorContext(ctx, fmt.Sprintf("writing changes to change stream failed: %v", err))
+			}
+		}
+
+	case *EdgeChange:
+
+	default:
+		slog.ErrorContext(ctx, fmt.Sprintf("Unexpected change type: %T", nextChange))
+	}
+}
+
+func (s *Daemon) FlushNodeChanges(ctx context.Context, partitionName string) error {
+	// Early exit check for empty buffer flushes
+	if len(s.nodeChangeBuffer) == 0 {
+		return nil
+	}
+
+	var (
+		numChanges  = len(s.nodeChangeBuffer)
+		now         = time.Now()
+		copyColumns = []string{
+			"node_id",
+			"kind_ids",
+			"properties_hash",
+			"property_fields",
+			"change_type",
+			"created_at",
+		}
+
+		iteratorFunc = func(idx int) ([]any, error) {
+			nextNodeChange := s.nodeChangeBuffer[idx]
+
+			if mappedKindIDs, err := s.kindMapper.MapKinds(ctx, nextNodeChange.Kinds); err != nil {
+				return nil, fmt.Errorf("node kind ID mapping error: %w", err)
+			} else if propertiesHash, err := nextNodeChange.Properties.Hash(ignoredPropertiesKeys); err != nil {
+				return nil, fmt.Errorf("node properties hash error: %w", err)
+			} else {
+				return []any{
+					nextNodeChange.NodeID,
+					mappedKindIDs,
+					propertiesHash,
+					[]string{}, // todo: why do we want to save propertyFields? this would be: nextNodeChange.Properties.Keys(ignoredPropertiesKeys),
+					nextNodeChange.Type(),
+					now,
+				}, nil
+			}
+		}
+	)
+
+	slog.DebugContext(ctx, fmt.Sprintf("flushing %d node changes", numChanges))
+
+	if _, err := s.pgxPool.CopyFrom(ctx, pgx.Identifier{partitionName}, copyColumns, pgx.CopyFromSlice(numChanges, iteratorFunc)); err != nil {
+		slog.Info(fmt.Sprintf("change stream node change insert error: %v", err))
+	}
+
+	// TODO: Should the buffer clear be dependent on no errors?
+	s.nodeChangeBuffer = s.nodeChangeBuffer[:0]
+	return nil
 }
