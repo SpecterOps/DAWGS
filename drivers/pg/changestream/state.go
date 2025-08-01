@@ -1,45 +1,45 @@
 package changestream
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type StateManager interface {
-	IsEnabled() bool
-	EnableDaemon()
-	DisableDaemon()
+type GetFlagByKeyer interface {
+	// GetFlagByKey attempts to fetch a FeatureFlag by its key.
+	GetFlagByKey(context.Context, string) (bool, error)
 }
 
 type stateManager struct {
 	lastTablePartitionAssertion time.Time
-	lastFeatureFlagCheck        time.Time
 	featureFlagCheckInterval    time.Duration
 	stateLock                   *sync.RWMutex
-	// todo: how to pass this bloodhound type into dawgs?
-	// flags                       appcfg.GetFlagByKeyer
-	enabled bool
+	flags                       GetFlagByKeyer // todo: how to pass this bloodhound type into dawgs?
+	enabled                     bool
 }
 
-// todo: initial implementation took { flags appcfg.GetFlagByKeyer } param
-func newStateManager() *stateManager {
-	return &stateManager{
+func newStateManager(flags GetFlagByKeyer) stateManager {
+	return stateManager{
 		featureFlagCheckInterval: time.Minute,
 		stateLock:                &sync.RWMutex{},
-		// flags:                    flags,
-		enabled: false,
+		flags:                    flags,
+		enabled:                  false,
 	}
 }
 
-func (s *stateManager) IsEnabled() bool {
+func (s *stateManager) isEnabled() bool {
 	s.stateLock.RLock()
 	defer s.stateLock.RUnlock()
 
 	return s.enabled
 }
 
-func (s *stateManager) EnableDaemon() {
+func (s *stateManager) enableDaemon() {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 
@@ -50,7 +50,7 @@ func (s *stateManager) EnableDaemon() {
 	}
 }
 
-func (s *stateManager) DisableDaemon() {
+func (s *stateManager) disableDaemon() {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 
@@ -61,23 +61,39 @@ func (s *stateManager) DisableDaemon() {
 	}
 }
 
-// todo: the following is for testing but yuck
-type MockStateManager struct {
-	enabled bool
+func (s *stateManager) checkChangelogPartitions(ctx context.Context, now time.Time, pgxPool *pgxpool.Pool) error {
+	if !shouldAssertNextPartition(s.lastTablePartitionAssertion) {
+		// Early exit as the last check remains authoritative
+		return nil
+	}
+
+	slog.InfoContext(ctx, fmt.Sprintf("Assert changelog partition: %s", now))
+
+	if err := AssertChangelogPartition(ctx, pgxPool); err != nil {
+		return fmt.Errorf("asserting changelog partition: %w", err)
+	}
+
+	s.lastTablePartitionAssertion = now
+	return nil
 }
 
-func NewMockStateManager() *MockStateManager {
-	return &MockStateManager{enabled: true} // default to enabled
-}
+func (s *stateManager) CheckFeatureFlag(ctx context.Context) error {
+	// todo: the initial POC had the following guard in to reduce # of calls.
+	// im not sure if we want to keep it
+	// if since := now.Sub(s.lastFeatureFlagCheck); since < s.featureFlagCheckInterval {
+	// 	// Early exit as the last check remains authoritative
+	// 	return nil
+	// }
 
-func (m *MockStateManager) EnableDaemon() {
-	m.enabled = true
-}
+	if isEnabled, err := s.flags.GetFlagByKey(ctx, "changelog"); err != nil {
+		return err
+	} else if isEnabled {
+		s.enableDaemon()
+	} else {
+		s.disableDaemon()
+	}
 
-func (m *MockStateManager) DisableDaemon() {
-	m.enabled = false
-}
-
-func (m *MockStateManager) IsEnabled() bool {
-	return m.enabled
+	// Update the last flag check time
+	// s.lastFeatureFlagCheck = now
+	return nil
 }

@@ -10,7 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupIntegrationTest(t *testing.T) (*changestream.Daemon, context.Context, func()) {
+type flagEnabled struct{}
+
+func (s *flagEnabled) GetFlagByKey(ctx context.Context, flag string) (bool, error) {
+	return true, nil
+}
+
+type flagDisabled struct{}
+
+func (s *flagDisabled) GetFlagByKey(ctx context.Context, flag string) (bool, error) {
+	return false, nil
+}
+
+func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Daemon, context.Context, func()) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -23,7 +35,15 @@ func setupIntegrationTest(t *testing.T) (*changestream.Daemon, context.Context, 
 	err = changestream.AssertChangelogPartition(ctx, pgxPool)
 	require.NoError(t, err)
 
-	daemon := changestream.NewIntegrationTestDaemon(pgxPool)
+	var flag changestream.GetFlagByKeyer
+	if enableChangelog {
+		flag = &flagEnabled{}
+	} else {
+		flag = &flagDisabled{}
+	}
+
+	daemon := changestream.NewDaemon(ctx, flag, pgxPool)
+	daemon.State.CheckFeatureFlag(ctx) // todo: this sets the enabled flag on the state...
 
 	return daemon, ctx, func() {
 		_, err := pgxPool.Exec(ctx, "TRUNCATE node_change_stream")
@@ -37,7 +57,7 @@ func setupIntegrationTest(t *testing.T) (*changestream.Daemon, context.Context, 
 
 func TestResolveNodeChangeStatus(t *testing.T) {
 	t.Run("cache hit, return early", func(t *testing.T) {
-		daemon, ctx, teardown := setupIntegrationTest(t)
+		daemon, ctx, teardown := setupIntegrationTest(t, true)
 		defer teardown()
 
 		props := graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2})
@@ -56,11 +76,11 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 	})
 
 	t.Run("cache miss, changelog disabled", func(t *testing.T) {
-		daemon, ctx, teardown := setupIntegrationTest(t)
+		daemon, ctx, teardown := setupIntegrationTest(t, false)
 		defer teardown()
 
 		// simulate turning off change log
-		daemon.State.DisableDaemon()
+		// daemon.State.DisableDaemon()
 
 		props := graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2})
 		proposedChange := changestream.NewNodeChange(changestream.ChangeTypeModified, "abc", []graph.Kind{graph.StringKind("kind A")}, props)
@@ -72,7 +92,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 	})
 
 	t.Run("cache miss, changelog enabled, DB match with same hash", func(t *testing.T) {
-		daemon, ctx, teardown := setupIntegrationTest(t)
+		daemon, ctx, teardown := setupIntegrationTest(t, true)
 		defer teardown()
 
 		props := graph.NewProperties().SetAll(map[string]any{"foo": "bar", "a": 1})
@@ -95,7 +115,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 	})
 
 	t.Run("cache miss, changelog enabled, DB match with different hash", func(t *testing.T) {
-		daemon, ctx, teardown := setupIntegrationTest(t)
+		daemon, ctx, teardown := setupIntegrationTest(t, true)
 		defer teardown()
 
 		props := graph.NewProperties().SetAll(map[string]any{"foo": "bar", "a": 1})
@@ -120,7 +140,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 	})
 
 	t.Run("cache miss, changelog enabled, no DB match", func(t *testing.T) {
-		daemon, ctx, teardown := setupIntegrationTest(t)
+		daemon, ctx, teardown := setupIntegrationTest(t, true)
 		defer teardown()
 
 		props := graph.NewProperties().SetAll(map[string]any{"foo": "bar", "a": 1})

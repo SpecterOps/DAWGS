@@ -51,3 +51,13 @@ func AssertChangelogPartition(ctx context.Context, pgxPool *pgxpool.Pool) error 
 
 	return err
 }
+
+func shouldAssertNextPartition(lastPartitionAssert time.Time) bool {
+	var (
+		now                   = time.Now()
+		lastPartitionRangeStr = lastPartitionAssert.Format(tablePartitionRangeFormatStr)
+		nowPartitionRangeStr  = now.Format(tablePartitionRangeFormatStr)
+	)
+
+	return lastPartitionRangeStr != nowPartitionRangeStr
+}

@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -45,24 +48,16 @@ type Daemon struct {
 	kindMapper       pg.KindMapper
 	changeCacheLock  *sync.RWMutex
 	changeCache      map[string]ChangeStatus
-	State            StateManager // todo: can we make this private?
+	State            stateManager // todo: can we make this private?
 	nodeChangeBuffer []*NodeChange
 	edgeChangeBuffer []*EdgeChange
 }
 
-func NewTestDaemon() *Daemon {
+func NewDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool) *Daemon {
 	return &Daemon{
 		changeCache:     make(map[string]ChangeStatus),
 		changeCacheLock: &sync.RWMutex{},
-		State:           NewMockStateManager(),
-	}
-}
-
-func NewIntegrationTestDaemon(pgxPool *pgxpool.Pool) *Daemon {
-	return &Daemon{
-		changeCache:     make(map[string]ChangeStatus),
-		changeCacheLock: &sync.RWMutex{},
-		State:           NewMockStateManager(),
+		State:           newStateManager(flags),
 		pgxPool:         pgxPool,
 	}
 }
@@ -89,7 +84,7 @@ func (s *Daemon) CheckCachedNodeChange(proposedChange *NodeChange) (ChangeStatus
 		lastChange.Exists = true
 	} else {
 		// If the change log is disabled then mark every non-cached lookup as changed
-		lastChange.Changed = !s.State.IsEnabled()
+		lastChange.Changed = !s.State.isEnabled()
 	}
 
 	// Ensure this makes it into the cache before returning
@@ -104,7 +99,7 @@ func (s *Daemon) ResolveNodeChangeStatus(ctx context.Context, proposedChange *No
 		return lastChange, err
 	}
 
-	if s.State.IsEnabled() {
+	if s.State.isEnabled() {
 		var (
 			// todo: define lastNodeChangeSQL
 			lastChangeRow = s.pgxPool.QueryRow(ctx, LAST_NODE_CHANGE_SQL, proposedChange.NodeID, lastChange.PropertiesHash)
@@ -148,4 +143,64 @@ func (s *Daemon) PutCachedChange(cacheKey string, cachedLookup ChangeStatus) {
 	defer s.changeCacheLock.Unlock()
 
 	s.changeCache[cacheKey] = cachedLookup
+}
+
+func (s *Daemon) RunLoop(ctx context.Context) error {
+	if _, err := s.pgxPool.Exec(ctx, ASSERT_TABLE_SQL); err != nil {
+		return fmt.Errorf("failed asserting changelog tablespace: %w", err)
+	}
+	if err := AssertChangelogPartition(ctx, s.pgxPool); err != nil {
+		return fmt.Errorf("failed asserting changelog partition: %w", err)
+	}
+
+	go s.runLoopBody(ctx, 5*time.Second)
+	return nil
+}
+
+func (s *Daemon) runLoopBody(ctx context.Context, flushInterval time.Duration) {
+	ticker := time.NewTicker(flushInterval)
+	defer func() {
+		s.pgxPool.Close()
+		close(s.writerC)
+		ticker.Stop()
+		slog.InfoContext(ctx, "Shutting down change stream")
+	}()
+
+	slog.InfoContext(ctx, "Starting change stream")
+
+	// lastNodeWatermark := 0
+	// lastEdgeWatermark := 0
+
+	for {
+		now := time.Now()
+
+		select {
+		case <-ctx.Done():
+			return
+
+		case change := <-s.readerC:
+			s.handleIncomingChange(ctx, change, now)
+
+		case <-ticker.C:
+			// s.maybeFlush(ctx, now, &lastNodeWatermark, &lastEdgeWatermark)
+		}
+	}
+}
+
+func (s *Daemon) handleIncomingChange(ctx context.Context, change Change, now time.Time) {
+	if err := s.State.CheckFeatureFlag(ctx); err != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("feature flag check failed: %v", err))
+		return
+	}
+
+	if !s.State.isEnabled() {
+		return
+	}
+
+	if err := s.State.checkChangelogPartitions(ctx, now, s.pgxPool); err != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("partition check failed: %v", err))
+		return
+	}
+
+	// s.queueChange(ctx, now, change)
 }
