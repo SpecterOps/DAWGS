@@ -176,7 +176,6 @@ func (s *SchemaManager) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int1
 	}
 }
 func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	fmt.Println(">>>readtx!!()")
 	if cfg, err := renderConfig(batchWriteSize, readOnlyTxOptions, options); err != nil {
 		return err
 	} else if conn, err := s.pool.Acquire(ctx); err != nil {

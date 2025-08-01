@@ -107,7 +107,6 @@ func (s *Daemon) ResolveNodeChangeStatus(ctx context.Context, proposedChange *No
 
 	if s.State.isEnabled() {
 		var (
-			// todo: define lastNodeChangeSQL
 			lastChangeRow = s.pgxPool.QueryRow(ctx, LAST_NODE_CHANGE_SQL, proposedChange.NodeID, lastChange.PropertiesHash)
 			err           = lastChangeRow.Scan(&lastChange.Changed, &lastChange.Type)
 		)
@@ -152,14 +151,18 @@ func (s *Daemon) PutCachedChange(cacheKey string, cachedLookup ChangeStatus) {
 }
 
 func (s *Daemon) RunLoop(ctx context.Context) error {
+	// initialize the node_change_stream, edge_change_stream tables
 	if _, err := s.pgxPool.Exec(ctx, ASSERT_TABLE_SQL); err != nil {
 		return fmt.Errorf("failed asserting changelog tablespace: %w", err)
 	}
-	if err := AssertChangelogPartition(ctx, s.pgxPool); err != nil {
-		return fmt.Errorf("failed asserting changelog partition: %w", err)
-	}
+
+	// todo: return to partitioning once initial implementation is working on one table
+	// if err := AssertChangelogPartition(ctx, s.pgxPool); err != nil {
+	// 	return fmt.Errorf("failed asserting changelog partition: %w", err)
+	// }
 
 	go s.runLoopBody(ctx, 5*time.Second)
+
 	return nil
 }
 
@@ -174,7 +177,7 @@ func (s *Daemon) runLoopBody(ctx context.Context, flushInterval time.Duration) {
 
 	slog.InfoContext(ctx, "Starting change stream")
 
-	// lastNodeWatermark := 0
+	lastNodeWatermark := 0
 	// lastEdgeWatermark := 0
 
 	for {
@@ -188,7 +191,7 @@ func (s *Daemon) runLoopBody(ctx context.Context, flushInterval time.Duration) {
 			s.handleIncomingChange(ctx, change, now)
 
 		case <-ticker.C:
-			// s.maybeFlush(ctx, now, &lastNodeWatermark, &lastEdgeWatermark)
+			lastNodeWatermark = s.maybeFlush(ctx, lastNodeWatermark)
 		}
 	}
 }
@@ -203,10 +206,10 @@ func (s *Daemon) handleIncomingChange(ctx context.Context, change Change, now ti
 		return
 	}
 
-	if err := s.State.checkChangelogPartitions(ctx, now, s.pgxPool); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("partition check failed: %v", err))
-		return
-	}
+	// if err := s.State.checkChangelogPartitions(ctx, now, s.pgxPool); err != nil {
+	// 	slog.ErrorContext(ctx, fmt.Sprintf("partition check failed: %v", err))
+	// 	return
+	// }
 
 	s.QueueChange(ctx, now, change)
 }
@@ -217,7 +220,7 @@ func (s *Daemon) QueueChange(ctx context.Context, now time.Time, nextChange Chan
 		s.nodeChangeBuffer = append(s.nodeChangeBuffer, typedChange)
 
 		if len(s.nodeChangeBuffer) >= BATCH_SIZE {
-			if err := s.FlushNodeChanges(ctx, NodeChangePartitionName(now)); err != nil {
+			if err := s.FlushNodeChanges(ctx); err != nil {
 				slog.ErrorContext(ctx, fmt.Sprintf("writing changes to change stream failed: %v", err))
 			}
 		}
@@ -229,7 +232,7 @@ func (s *Daemon) QueueChange(ctx context.Context, now time.Time, nextChange Chan
 	}
 }
 
-func (s *Daemon) FlushNodeChanges(ctx context.Context, partitionName string) error {
+func (s *Daemon) FlushNodeChanges(ctx context.Context) error {
 	// Early exit check for empty buffer flushes
 	if len(s.nodeChangeBuffer) == 0 {
 		return nil
@@ -255,25 +258,58 @@ func (s *Daemon) FlushNodeChanges(ctx context.Context, partitionName string) err
 			} else if propertiesHash, err := nextNodeChange.Properties.Hash(ignoredPropertiesKeys); err != nil {
 				return nil, fmt.Errorf("node properties hash error: %w", err)
 			} else {
-				return []any{
+				rows := []any{
 					nextNodeChange.NodeID,
 					mappedKindIDs,
 					propertiesHash,
-					[]string{}, // todo: why do we want to save propertyFields? this would be: nextNodeChange.Properties.Keys(ignoredPropertiesKeys),
+					nextNodeChange.Properties.Keys(nil),
 					nextNodeChange.Type(),
 					now,
-				}, nil
+				}
+
+				return rows, nil
 			}
 		}
 	)
 
 	slog.DebugContext(ctx, fmt.Sprintf("flushing %d node changes", numChanges))
 
-	if _, err := s.pgxPool.CopyFrom(ctx, pgx.Identifier{partitionName}, copyColumns, pgx.CopyFromSlice(numChanges, iteratorFunc)); err != nil {
+	// pgx.Identifier{partitionName}
+	if _, err := s.pgxPool.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iteratorFunc)); err != nil {
 		slog.Info(fmt.Sprintf("change stream node change insert error: %v", err))
 	}
 
 	// TODO: Should the buffer clear be dependent on no errors?
 	s.nodeChangeBuffer = s.nodeChangeBuffer[:0]
 	return nil
+}
+
+// maybeFlush will only flush changes when the buffer has not increased in size in two ticks.
+// if the buffer is the same size that implies no new changes have arrived
+func (s *Daemon) maybeFlush(ctx context.Context, lastNodeWatermark int) int {
+	numNodeChanges := len(s.nodeChangeBuffer)
+
+	hasNodeChangesToFlush := numNodeChanges > 0 && numNodeChanges == lastNodeWatermark
+
+	if !hasNodeChangesToFlush { // &&!hasEdgeChangesToFlush
+		// No eligible flush needed
+		lastNodeWatermark = numNodeChanges
+		return lastNodeWatermark
+	}
+
+	// todo: add partitioning l8r
+	// if err := s.State.checkChangelogPartitions(ctx, now, s.pgxPool); err != nil {
+	// 	slog.ErrorContext(ctx, fmt.Sprintf("change log state check error: %v", err))
+	// 	return
+	// }
+
+	if hasNodeChangesToFlush {
+		if err := s.FlushNodeChanges(ctx); err != nil {
+			slog.ErrorContext(ctx, fmt.Sprintf("writing node changes to change stream failed: %v", err))
+		}
+	}
+
+	lastNodeWatermark = len(s.nodeChangeBuffer)
+
+	return lastNodeWatermark
 }

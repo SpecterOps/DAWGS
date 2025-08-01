@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// todo: consider adding `concurrently` to the index creation stmt
+// todo: add back partitions later: partition by range (created_at);
 const (
 	LAST_NODE_CHANGE_SQL = `select cs.properties_hash != $2 as has_changed, cs.change_type from node_change_stream cs where cs.node_id = $1 order by created_at desc limit 1;`
 	ASSERT_TABLE_SQL     = `create table if not exists node_change_stream (
@@ -20,7 +22,7 @@ const (
 							created_at timestamp with time zone not null,
 
 							primary key (id, created_at)
-						) partition by range (created_at);
+						); 
 
 						create index if not exists node_change_stream_node_id_index on node_change_stream using hash (node_id);
 						create index if not exists node_change_stream_created_at_index on node_change_stream using btree (created_at);`
@@ -30,6 +32,10 @@ const (
 	CREATE_PARTITIONS_SQL_FMT = `
 create table if not exists node_change_stream_%s partition of node_change_stream for values from ('%s') to ('%s');
 `
+
+// this is not idempotent and doens't really work
+// ALTER TABLE node_change_stream_%s
+// ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY;
 )
 
 const (

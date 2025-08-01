@@ -43,11 +43,33 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Dae
 	kindMapper, err := pg.KindMapperFromGraphDatabase(graphDB)
 	require.NoError(t, err)
 
+	// initialize a graph with bare minimum kinds... parent bloodhound app has
+	// a defaultGraphSchema defined in the graphschema package. we don't have that nicety available to us here.
+	graphSchema := graph.Schema{
+		Graphs: []graph.Graph{{
+			Name: "test",
+			Nodes: graph.Kinds{
+				graph.StringKind("NodeKind1"),
+				graph.StringKind("NodeKind2"),
+			},
+			Edges: graph.Kinds{
+				graph.StringKind("EdgeKind1"),
+				graph.StringKind("EdgeKind2"),
+			},
+		}},
+		DefaultGraph: graph.Graph{
+			Name: "test",
+		},
+	}
+	schemaManager := pg.NewSchemaManager(pgxPool)
+	err = schemaManager.AssertSchema(ctx, graphSchema)
+	require.NoError(t, err)
+
 	_, err = pgxPool.Exec(ctx, changestream.ASSERT_TABLE_SQL)
 	require.NoError(t, err)
 
-	err = changestream.AssertChangelogPartition(ctx, pgxPool)
-	require.NoError(t, err)
+	// err = changestream.AssertChangelogPartition(ctx, pgxPool)
+	// require.NoError(t, err)
 
 	var flag changestream.GetFlagByKeyer
 	if enableChangelog {
@@ -178,37 +200,40 @@ func TestFlushNodeChanges(t *testing.T) {
 	node := &changestream.NodeChange{
 		NodeID:     "test-node-123",
 		Properties: props,
-		Kinds:      graph.Kinds{graph.StringKind("User")},
+		Kinds:      graph.Kinds{graph.StringKind("NodeKind1")},
 	}
+	hash, _ := node.Properties.Hash(nil)
 	now := time.Now()
 
 	// queue a single change
 	daemon.QueueChange(ctx, now, node)
 
 	// Call flush
-	err := daemon.FlushNodeChanges(ctx, changestream.NodeChangePartitionName(now))
+	err := daemon.FlushNodeChanges(ctx)
 	require.NoError(t, err)
 
 	// Query the DB to verify the row exists
 	var (
-		nodeID     string
-		changeType int
-		kindIDs    []int32
-		properties []byte
+		nodeID         string
+		changeType     int
+		kindIDs        []int32
+		properties     []string
+		propertiesHash []byte
 	)
 
 	row := daemon.PGX().QueryRow(ctx, `
-		SELECT node_id, change_type, kind_ids, property_fields
+		SELECT node_id, change_type, kind_ids, property_fields, properties_hash
 		FROM node_change_stream
 		WHERE node_id = $1
 		ORDER BY created_at DESC
 		LIMIT 1
 	`, node.NodeID)
 
-	err = row.Scan(&nodeID, &changeType, &kindIDs, &properties)
+	err = row.Scan(&nodeID, &changeType, &kindIDs, &properties, &propertiesHash)
 	require.NoError(t, err)
 
 	require.Equal(t, node.NodeID, nodeID)
 	require.Equal(t, changestream.ChangeTypeModified, changestream.ChangeType(changeType))
-	// require.Equal(t, []int32{42}, kindIDs)
+	require.Equal(t, node.Properties.Keys(nil), properties)
+	require.Equal(t, hash, propertiesHash)
 }
