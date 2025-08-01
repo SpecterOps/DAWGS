@@ -52,7 +52,14 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
-
+	// AND (n0.id <> n1.id) - ensures edges are properly constrained to the specified nodes
+	nextSelect.Where = pgsql.OptionalAnd(
+		pgsql.NewParenthetical(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+				pgsql.OperatorCypherNotEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID})),
+		nextSelect.Where)
 	return pgsql.Query{
 		Body: nextSelect,
 	}, nil
