@@ -3,8 +3,11 @@ package query
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
@@ -225,13 +228,13 @@ type entity[T any] struct {
 }
 
 func (s *entity[T]) Kind() KindContinuation {
-	return &kindContinuation{
+	return kindContinuation{
 		identifier: s.identifier,
 	}
 }
 
 func (s *entity[T]) Kinds() KindsContinuation {
-	return &kindsContinuation{
+	return kindsContinuation{
 		identifier: s.identifier,
 	}
 }
@@ -578,6 +581,15 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 
 		for _, nextProjection := range s.projections {
 			switch typedNextProjection := nextProjection.(type) {
+			case *cypher.Return:
+				for _, returnItem := range typedNextProjection.Projection.Items {
+					if typedReturnItem, typeOK := returnItem.(*cypher.ProjectionItem); !typeOK {
+						return fmt.Errorf("invalid type for return: %T", returnItem)
+					} else {
+						projection.AddItem(typedReturnItem)
+					}
+				}
+
 			case QualifiedExpression:
 				projection.AddItem(cypher.NewProjectionItemWithExpr(typedNextProjection.qualifier()))
 
@@ -626,15 +638,14 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 
 func stripASTParameters(query *cypher.RegularQuery) (map[string]any, error) {
 	var (
+		nextID     = 0
 		parameters = map[string]any{}
 		err        = walk.Cypher(query, walk.NewSimpleVisitor(func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
 			switch typedNode := node.(type) {
 			case *cypher.Parameter:
-				if _, exists := parameters[typedNode.Symbol]; exists {
-					errorHandler.SetErrorf("duplicate parameter: %s", typedNode.Symbol)
-				} else {
-					parameters[typedNode.Symbol] = typedNode.Value
-					typedNode.Value = nil
+				if typedNode.Symbol == "" {
+					typedNode.Symbol = "_p" + strconv.Itoa(nextID)
+					nextID += 1
 				}
 			}
 		}))
@@ -664,6 +675,7 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	var (
 		regularQuery, singlePartQuery = cypher.NewRegularQueryWithSingleQuery()
 		match                         = &cypher.Match{}
+		seenIdentifiers               = newIdentifierSet()
 		relationshipKinds             graph.Kinds
 	)
 
@@ -701,16 +713,22 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		}
 
 		whereClause.Add(constraints)
-	}
 
-	if seen, err := extractQueryIdentifiers(singlePartQuery); err != nil {
-		return nil, err
-	} else if isNodePattern(seen) {
-		if err := prepareNodePattern(match, seen); err != nil {
+		if err := seenIdentifiers.CollectFromExpression(whereClause); err != nil {
 			return nil, err
 		}
-	} else if isRelationshipPattern(seen) {
-		if err := prepareRelationshipPattern(match, seen, relationshipKinds); err != nil {
+	}
+
+	if err := seenIdentifiers.CollectFromExpression(singlePartQuery); err != nil {
+		return nil, err
+	}
+
+	if isNodePattern(seenIdentifiers) {
+		if err := prepareNodePattern(match, seenIdentifiers); err != nil {
+			return nil, err
+		}
+	} else if isRelationshipPattern(seenIdentifiers) {
+		if err := prepareRelationshipPattern(match, seenIdentifiers, relationshipKinds); err != nil {
 			return nil, err
 		}
 	} else {
@@ -727,6 +745,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	if parameters, err := stripASTParameters(regularQuery); err != nil {
 		return nil, err
 	} else {
+		emitter := format.NewCypherEmitter(false)
+		emitter.Write(regularQuery, os.Stdout)
+		fmt.Println()
+
 		return &PreparedQuery{
 			Query:      regularQuery,
 			Parameters: parameters,

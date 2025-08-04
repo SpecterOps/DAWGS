@@ -26,6 +26,7 @@ type PathSet = graph.PathSet
 type Criteria = cypher.SyntaxNode
 type Properties = graph.Properties
 type PropertyMap = graph.PropertyMap
+type PropertyValue = graph.PropertyValue
 type Direction = graph.Direction
 type Tree = graph.Tree
 
@@ -53,6 +54,13 @@ var (
 	NewTree                 = graph.NewTree
 
 	EmptyKind = graph.EmptyKind
+
+	ErrNoResultsFound                  = graph.ErrNoResultsFound
+	ErrMissingResultExpectation        = graph.ErrMissingResultExpectation
+	ErrUnsupportedDatabaseOperation    = graph.ErrUnsupportedDatabaseOperation
+	ErrPropertyNotFound                = graph.ErrPropertyNotFound
+	ErrContextTimedOut                 = graph.ErrContextTimedOut
+	ErrConcurrentConnectionSlotTimeOut = graph.ErrConcurrentConnectionSlotTimeOut
 )
 
 type Constraint = database.Constraint

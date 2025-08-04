@@ -21,39 +21,55 @@ type BackwardCompatibleInstance interface {
 type BackwardCompatibleDriver interface {
 	database.Driver
 
-	UpdateNodeBy(update graph.NodeUpdate) error
-	UpdateRelationshipBy(update graph.RelationshipUpdate) error
+	UpdateNodes(ctx context.Context, batch []graph.NodeUpdate) error
+	UpdateRelationships(ctx context.Context, batch []graph.RelationshipUpdate) error
+	CreateNodes(ctx context.Context, batch []*Node) error
+	CreateRelationships(ctx context.Context, batch []*Relationship) error
+	DeleteNodes(ctx context.Context, batch []graph.ID) error
+	DeleteRelationships(ctx context.Context, batch []graph.ID) error
 }
 
 type v1Wrapper struct {
-	schema *database.Schema
-	v2DB   BackwardCompatibleInstance
+	schema         *database.Schema
+	v2DB           BackwardCompatibleInstance
+	writeFlushSize int
+	batchWriteSize int
 }
 
-func (s v1Wrapper) ReadTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
+func V1Wrapper(v2DB database.Instance) Database {
+	if v1CompatibleInstanceRef, typeOK := v2DB.(BackwardCompatibleInstance); !typeOK {
+		panic(fmt.Sprintf("type %T is not a v1CompatibleInstance", v2DB))
+	} else {
+		return &v1Wrapper{
+			v2DB: v1CompatibleInstanceRef,
+		}
+	}
+}
+
+func (s *v1Wrapper) ReadTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
 	return s.v2DB.Session(ctx, func(ctx context.Context, driver database.Driver) error {
 		return txDelegate(wrapDriverToTransaction(ctx, driver))
 	}, database.OptionReadOnly)
 }
 
-func (s v1Wrapper) WriteTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
+func (s *v1Wrapper) WriteTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
 	return s.v2DB.Session(ctx, func(ctx context.Context, driver database.Driver) error {
 		return txDelegate(wrapDriverToTransaction(ctx, driver))
 	})
 }
 
-func (s v1Wrapper) BatchOperation(ctx context.Context, batchDelegate BatchDelegate) error {
+func (s *v1Wrapper) BatchOperation(ctx context.Context, batchDelegate BatchDelegate) error {
 	return s.v2DB.Session(ctx, func(ctx context.Context, driver database.Driver) error {
 		return batchDelegate(wrapDriverToBatch(ctx, driver))
 	})
 }
 
-func (s v1Wrapper) AssertSchema(ctx context.Context, dbSchema database.Schema) error {
+func (s *v1Wrapper) AssertSchema(ctx context.Context, dbSchema database.Schema) error {
 	s.schema = &dbSchema
 	return s.v2DB.AssertSchema(ctx, dbSchema)
 }
 
-func (s v1Wrapper) SetDefaultGraph(ctx context.Context, graphSchema database.Graph) error {
+func (s *v1Wrapper) SetDefaultGraph(ctx context.Context, graphSchema database.Graph) error {
 	if s.schema != nil {
 		s.schema.GraphSchemas[graphSchema.Name] = graphSchema
 		s.schema.DefaultGraphName = graphSchema.Name
@@ -69,43 +85,41 @@ func (s v1Wrapper) SetDefaultGraph(ctx context.Context, graphSchema database.Gra
 	return s.v2DB.AssertSchema(ctx, *s.schema)
 }
 
-func (s v1Wrapper) Run(ctx context.Context, query string, parameters map[string]any) error {
+func (s *v1Wrapper) Run(ctx context.Context, query string, parameters map[string]any) error {
 	return s.v2DB.Raw(ctx, query, parameters)
 }
 
-func (s v1Wrapper) Close(ctx context.Context) error {
+func (s *v1Wrapper) Close(ctx context.Context) error {
 	return s.v2DB.Close(ctx)
 }
 
-func (s v1Wrapper) FetchKinds(ctx context.Context) (graph.Kinds, error) {
+func (s *v1Wrapper) FetchKinds(ctx context.Context) (graph.Kinds, error) {
 	return s.v2DB.FetchKinds(ctx)
 }
 
-func (s v1Wrapper) RefreshKinds(ctx context.Context) error {
+func (s *v1Wrapper) RefreshKinds(ctx context.Context) error {
 	return s.v2DB.RefreshKinds(ctx)
 }
 
-func V1Wrapper(v2DB database.Instance) Database {
-	if v1CompatibleInstanceRef, typeOK := v2DB.(BackwardCompatibleInstance); !typeOK {
-		panic(fmt.Sprintf("type %T is not a v1CompatibleInstance", v2DB))
-	} else {
-		return &v1Wrapper{
-			v2DB: v1CompatibleInstanceRef,
-		}
-	}
+func (s *v1Wrapper) SetWriteFlushSize(interval int) {
+	s.writeFlushSize = interval
 }
 
-func (s v1Wrapper) SetWriteFlushSize(interval int) {
-	// NOOP
-}
-
-func (s v1Wrapper) SetBatchWriteSize(interval int) {
-	// NOOP
+func (s *v1Wrapper) SetBatchWriteSize(interval int) {
+	s.batchWriteSize = interval
 }
 
 type driverBatchWrapper struct {
 	ctx    context.Context
 	driver BackwardCompatibleDriver
+
+	nodeDeletionBuffer         []graph.ID
+	relationshipDeletionBuffer []graph.ID
+	nodeCreateBuffer           []*graph.Node
+	nodeUpdateByBuffer         []graph.NodeUpdate
+	relationshipCreateBuffer   []*graph.Relationship
+	relationshipUpdateByBuffer []graph.RelationshipUpdate
+	batchWriteSize             int
 }
 
 func wrapDriverToBatch(ctx context.Context, driver database.Driver) Batch {
@@ -119,47 +133,92 @@ func wrapDriverToBatch(ctx context.Context, driver database.Driver) Batch {
 	}
 }
 
-func (s driverBatchWrapper) WithGraph(graphSchema database.Graph) Batch {
+func (s *driverBatchWrapper) tryFlush(batchWriteSize int) error {
+	if len(s.nodeUpdateByBuffer) > batchWriteSize {
+		if err := s.driver.UpdateNodes(s.ctx, s.nodeUpdateByBuffer); err != nil {
+			return err
+		}
+
+		s.nodeUpdateByBuffer = s.nodeUpdateByBuffer[:0]
+	}
+
+	if len(s.relationshipUpdateByBuffer) > batchWriteSize {
+		if err := s.driver.UpdateRelationships(s.ctx, s.relationshipUpdateByBuffer); err != nil {
+			return err
+		}
+
+		s.relationshipUpdateByBuffer = s.relationshipUpdateByBuffer[:0]
+	}
+
+	if len(s.relationshipCreateBuffer) > batchWriteSize {
+		if err := s.driver.CreateRelationships(s.ctx, s.relationshipCreateBuffer); err != nil {
+			return err
+		}
+
+		s.relationshipCreateBuffer = s.relationshipCreateBuffer[:0]
+	}
+
+	if len(s.nodeCreateBuffer) > batchWriteSize {
+		if err := s.driver.CreateNodes(s.ctx, s.nodeCreateBuffer); err != nil {
+			return err
+		}
+
+		s.nodeCreateBuffer = s.nodeCreateBuffer[:0]
+	}
+
+	if len(s.nodeDeletionBuffer) > batchWriteSize {
+		if err := s.driver.DeleteNodes(s.ctx, s.nodeDeletionBuffer); err != nil {
+			return err
+		}
+
+		s.nodeDeletionBuffer = s.nodeDeletionBuffer[:0]
+	}
+
+	if len(s.relationshipDeletionBuffer) > batchWriteSize {
+		if err := s.driver.DeleteRelationships(s.ctx, s.relationshipDeletionBuffer); err != nil {
+			return err
+		}
+
+		s.relationshipDeletionBuffer = s.relationshipDeletionBuffer[:0]
+	}
+
+	return nil
+}
+
+func (s *driverBatchWrapper) WithGraph(graphSchema database.Graph) Batch {
 	s.driver.WithGraph(graphSchema)
 	return s
 }
 
-func (s driverBatchWrapper) CreateNode(node *graph.Node) error {
+func (s *driverBatchWrapper) CreateNode(node *graph.Node) error {
 	_, err := s.driver.CreateNode(s.ctx, node)
 	return err
 }
 
-func (s driverBatchWrapper) DeleteNode(id graph.ID) error {
-	if builtQuery, err := query.New().Where(
-		query.Node().ID().Equals(id),
-	).Delete(query.Node()).Build(); err != nil {
-		return err
-	} else {
-		result := s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters)
-		defer result.Close(s.ctx)
-
-		return result.Error()
-	}
+func (s *driverBatchWrapper) DeleteNode(id graph.ID) error {
+	s.nodeDeletionBuffer = append(s.nodeDeletionBuffer, id)
+	return s.tryFlush(s.batchWriteSize)
 }
 
-func (s driverBatchWrapper) Nodes() NodeQuery {
+func (s *driverBatchWrapper) Nodes() NodeQuery {
 	return newNodeQuery(s.ctx, s.driver)
 }
 
-func (s driverBatchWrapper) Relationships() RelationshipQuery {
+func (s *driverBatchWrapper) Relationships() RelationshipQuery {
 	return newRelationshipQuery(s.ctx, s.driver)
 }
 
-func (s driverBatchWrapper) UpdateNodeBy(update graph.NodeUpdate) error {
-	return s.driver.UpdateNodeBy(update)
+func (s *driverBatchWrapper) UpdateNodeBy(update graph.NodeUpdate) error {
+	s.nodeUpdateByBuffer = append(s.nodeUpdateByBuffer, update)
+	return s.tryFlush(s.batchWriteSize)
 }
 
-func (s driverBatchWrapper) CreateRelationship(relationship *graph.Relationship) error {
-	_, err := s.driver.CreateRelationship(s.ctx, relationship)
-	return err
+func (s *driverBatchWrapper) CreateRelationship(relationship *graph.Relationship) error {
+	s.relationshipCreateBuffer = append(s.relationshipCreateBuffer, relationship)
+	return s.tryFlush(s.batchWriteSize)
 }
 
-func (s driverBatchWrapper) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) error {
+func (s *driverBatchWrapper) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) error {
 	return s.CreateRelationship(&graph.Relationship{
 		StartID:    startNodeID,
 		EndID:      endNodeID,
@@ -168,22 +227,18 @@ func (s driverBatchWrapper) CreateRelationshipByIDs(startNodeID, endNodeID graph
 	})
 }
 
-func (s driverBatchWrapper) DeleteRelationship(id graph.ID) error {
-	if deleteQuery, err := query.New().Where(
-		query.Relationship().ID().Equals(id),
-	).Build(); err != nil {
-		return err
-	} else {
-		return s.driver.Exec(s.ctx, deleteQuery.Query, deleteQuery.Parameters).Close(s.ctx)
-	}
+func (s *driverBatchWrapper) DeleteRelationship(id graph.ID) error {
+	s.relationshipDeletionBuffer = append(s.relationshipDeletionBuffer, id)
+	return s.tryFlush(s.batchWriteSize)
 }
 
-func (s driverBatchWrapper) UpdateRelationshipBy(update graph.RelationshipUpdate) error {
-	return s.driver.UpdateRelationshipBy(update)
+func (s *driverBatchWrapper) UpdateRelationshipBy(update graph.RelationshipUpdate) error {
+	s.relationshipUpdateByBuffer = append(s.relationshipUpdateByBuffer, update)
+	return s.tryFlush(s.batchWriteSize)
 }
 
-func (s driverBatchWrapper) Commit() error {
-	return nil
+func (s *driverBatchWrapper) Commit() error {
+	return s.tryFlush(0)
 }
 
 type driverTransactionWrapper struct {

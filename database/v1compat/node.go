@@ -107,6 +107,10 @@ func (s nodeQuery) Count() (int64, error) {
 			return count, result.Error()
 		}
 
+		if result.Error() != nil {
+			return 0, result.Error()
+		}
+
 		return 0, ErrNoResultsFound
 	}
 }
@@ -127,6 +131,10 @@ func (s nodeQuery) First() (*graph.Node, error) {
 			}
 
 			return &node, nil
+		}
+
+		if result.Error() != nil {
+			return nil, result.Error()
 		}
 
 		return nil, ErrNoResultsFound

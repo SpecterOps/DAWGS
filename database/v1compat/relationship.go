@@ -2,6 +2,7 @@ package v1compat
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/graph"
@@ -96,6 +97,10 @@ func (s relationshipQuery) Count() (int64, error) {
 			return count, result.Error()
 		}
 
+		if result.Error() != nil {
+			return 0, result.Error()
+		}
+
 		return 0, ErrNoResultsFound
 	}
 }
@@ -115,7 +120,11 @@ func (s relationshipQuery) First() (*graph.Relationship, error) {
 				return nil, err
 			}
 
-			return &relationship, nil
+			return &relationship, result.Error()
+		}
+
+		if result.Error() != nil {
+			return nil, result.Error()
 		}
 
 		return nil, ErrNoResultsFound
@@ -154,8 +163,38 @@ func (s relationshipQuery) Fetch(delegate func(cursor Cursor[*graph.Relationship
 }
 
 func (s relationshipQuery) FetchDirection(direction graph.Direction, delegate func(cursor Cursor[DirectionalResult]) error) error {
-	//TODO implement me
-	panic("implement me")
+	switch direction {
+	case DirectionOutbound:
+		s.builder.Return(query.Relationship(), query.Start())
+	case DirectionInbound:
+		s.builder.Return(query.Relationship(), query.End())
+	default:
+		return fmt.Errorf("unsupported direction: %v", direction)
+	}
+
+	if builtQuery, err := s.builder.Build(); err != nil {
+		return err
+	} else {
+		resultIter := NewResultIterator(s.ctx, s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters), func(result database.Result) (DirectionalResult, error) {
+			var (
+				relationship graph.Relationship
+				node         graph.Node
+			)
+
+			if err := result.Scan(&relationship, &node); err != nil {
+				return DirectionalResult{}, err
+			}
+
+			return DirectionalResult{
+				Direction:    direction,
+				Relationship: &relationship,
+				Node:         &node,
+			}, result.Scan(&relationship, &node)
+		})
+
+		defer resultIter.Close()
+		return delegate(resultIter)
+	}
 }
 
 func (s relationshipQuery) FetchIDs(delegate func(cursor Cursor[graph.ID]) error) error {

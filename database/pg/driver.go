@@ -151,16 +151,6 @@ func (s *dawgsDriver) translateCypherToPGSQL(ctx context.Context, query *cypher.
 	}
 }
 
-func (s *dawgsDriver) UpdateNodeBy(update graph.NodeUpdate) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *dawgsDriver) UpdateRelationshipBy(update graph.RelationshipUpdate) error {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (s *dawgsDriver) Exec(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) database.Result {
 	if translated, err := s.translateCypherToPGSQL(ctx, query, parameters); err != nil {
 		return database.NewErrorResult(err)
@@ -254,8 +244,6 @@ func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) (graph.I
 			if err := result.Scan(&newNodeID); err != nil {
 				return 0, err
 			}
-		} else {
-			return 0, graph.ErrNoResultsFound
 		}
 
 		return newNodeID, result.Error()

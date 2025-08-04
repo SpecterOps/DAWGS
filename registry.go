@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/specterops/dawgs/database"
+	"github.com/specterops/dawgs/database/v1compat"
 	"github.com/specterops/dawgs/util/size"
 )
 
@@ -34,5 +35,13 @@ func Open(ctx context.Context, driverName string, config Config) (database.Insta
 		return nil, ErrDriverMissing
 	} else {
 		return driverConstructor(ctx, config)
+	}
+}
+
+func OpenV1(ctx context.Context, driverName string, config Config) (v1compat.Database, error) {
+	if driver, err := Open(ctx, driverName, config); err != nil {
+		return nil, ErrDriverMissing
+	} else {
+		return v1compat.V1Wrapper(driver), nil
 	}
 }

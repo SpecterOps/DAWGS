@@ -81,10 +81,6 @@ func NewPool(connectionString string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-type Config struct {
-	Pool *pgxpool.Pool
-}
-
 func init() {
 	dawgs.Register(DriverName, func(ctx context.Context, cfg dawgs.Config) (database.Instance, error) {
 		if cfg.DriverConfig != nil {
