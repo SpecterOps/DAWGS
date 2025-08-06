@@ -17,7 +17,7 @@ import (
 
 const (
 	// Limit batch sizes
-	batchSize = 1_000
+	BATCH_SIZE = 1_000
 )
 
 var (
@@ -65,14 +65,11 @@ func (s *ChangeCache) evaluateNodeChange(proposedChange *NodeChange) (ChangeStat
 		identityKey = proposedChange.IdentityKey()
 	)
 
-	if propertiesHash, err := proposedChange.Properties.Hash(ignoredPropertiesKeys); err != nil {
-		return status, err
-	} else if kindsHash, err := proposedChange.Kinds.Hash(); err != nil {
+	if hash, err := proposedChange.Hash(); err != nil {
 		return status, err
 	} else {
 		// Track the properties hash and kind IDs
-		combinedHash := append(propertiesHash, kindsHash...)
-		status.PropertiesHash = combinedHash
+		status.PropertiesHash = hash
 	}
 
 	if cachedChange, ok := s.get(identityKey); ok {
@@ -194,7 +191,6 @@ func (s *loop) start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 
-			// todo: the following two cases are missing some logic around feature flag checking and watermark logic
 		case change := <-s.ReaderC:
 			if !s.State.isEnabled() {
 				continue

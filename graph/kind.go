@@ -126,6 +126,10 @@ func (s Kinds) ContainsOneOf(others ...Kind) bool {
 
 // Hash returns a hash of the Kinds. It appends them to the hash stream in sorted order.
 func (s Kinds) Hash() ([]byte, error) {
+	if len(s) == 0 {
+		return []byte{}, nil
+	}
+
 	hasher := xxhash.New()
 
 	sort.Strings(s.Strings())
