@@ -95,8 +95,7 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 		copyColumns = []string{
 			"node_id",
 			"kind_ids",
-			"properties_hash",
-			"property_fields",
+			"hash",
 			"change_type",
 			"created_at",
 		}
@@ -107,18 +106,13 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 
 		if mappedKindIDs, err := s.KindMapper.MapKinds(ctx, c.Kinds); err != nil {
 			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
-		} else if propertiesHash, err := c.Properties.Hash(ignoredPropertiesKeys); err != nil {
-			return nil, fmt.Errorf("node properties hash error: %w", err)
-		} else if kindsHash, err := c.Kinds.Hash(); err != nil {
-			return nil, fmt.Errorf("node kinds hash error: %w", err)
+		} else if hash, err := c.Hash(); err != nil {
+			return nil, err
 		} else {
-			combined := append(propertiesHash, kindsHash...)
-
 			rows := []any{
 				c.NodeID,
 				mappedKindIDs,
-				combined,
-				c.Properties.Keys(ignoredPropertiesKeys),
+				hash,
 				c.Type(),
 				now,
 			}

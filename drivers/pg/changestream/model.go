@@ -1,6 +1,8 @@
 package changestream
 
 import (
+	"fmt"
+
 	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/graph"
 )
@@ -54,6 +56,17 @@ func (s NodeChange) Type() ChangeType {
 
 func (s NodeChange) IdentityKey() string {
 	return s.NodeID
+}
+
+func (s NodeChange) Hash() ([]byte, error) {
+	if propertiesHash, err := s.Properties.Hash(ignoredPropertiesKeys); err != nil {
+		return nil, fmt.Errorf("node properties hash error: %w", err)
+	} else if kindsHash, err := s.Kinds.Hash(); err != nil {
+		return nil, fmt.Errorf("node kinds hash error: %w", err)
+	} else {
+		combined := append(propertiesHash, kindsHash...)
+		return combined, nil
+	}
 }
 
 type EdgeChange struct {

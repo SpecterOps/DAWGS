@@ -105,9 +105,6 @@ func setupIntegrationTestRefactor(t *testing.T, enableChangelog bool) (*changest
 	})
 	require.NoError(t, err)
 
-	// kindMapper, err := pg.KindMapperFromGraphDatabase(graphDB)
-	// require.NoError(t, err)
-
 	// initialize a graph with bare minimum kinds... parent bloodhound app has
 	// a defaultGraphSchema defined in the graphschema package. we don't have that nicety available to us here.
 	graphSchema := graph.Schema{
@@ -201,7 +198,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 
 		// simulate an existing db record with same property hash
 		_, err := daemon.PGX().Exec(ctx, `
-			INSERT INTO node_change_stream (node_id, kind_ids, properties_hash, property_fields, change_type, created_at)
+			INSERT INTO node_change_stream (node_id, kind_ids, hash, property_fields, change_type, created_at)
 			VALUES ($1, '{}', $2, '{}', $3, now())
 		`, nodeID, hash, changestream.ChangeTypeModified)
 		require.NoError(t, err)
@@ -226,7 +223,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 
 		// simulate an existing db record with differenty property hash
 		_, err := daemon.PGX().Exec(ctx, `
-			INSERT INTO node_change_stream (node_id, kind_ids, properties_hash, property_fields, change_type, created_at)
+			INSERT INTO node_change_stream (node_id, kind_ids, hash, property_fields, change_type, created_at)
 			VALUES ($1, '{}', $2, '{}', $3, now())
 		`, nodeID, existingPropsHash, changestream.ChangeTypeModified)
 		require.NoError(t, err)
@@ -286,7 +283,7 @@ func TestFlushNodeChanges(t *testing.T) {
 	)
 
 	row := daemon.PGX().QueryRow(ctx, `
-		SELECT node_id, change_type, kind_ids, property_fields, properties_hash
+		SELECT node_id, change_type, kind_ids, property_fields, hash
 		FROM node_change_stream
 		WHERE node_id = $1
 		ORDER BY created_at DESC
@@ -353,27 +350,25 @@ func TestChangelog(t *testing.T) {
 		time.Sleep(time.Second)
 
 		var (
-			nodeID         string
-			changeType     int
-			kindIDs        []int16
-			properties     []string
-			propertiesHash []byte
+			nodeID     string
+			changeType int
+			kindIDs    []int16
+			hash       []byte
 		)
 
 		row := changelog.Writer.PGX.QueryRow(ctx, `
-			SELECT node_id, change_type, kind_ids, property_fields, properties_hash
+			SELECT node_id, change_type, kind_ids, hash
 			FROM node_change_stream
 			WHERE node_id = $1
 			ORDER BY created_at DESC
 			LIMIT 1
 		`, change.NodeID)
 
-		err = row.Scan(&nodeID, &changeType, &kindIDs, &properties, &propertiesHash)
+		err = row.Scan(&nodeID, &changeType, &kindIDs, &hash)
 		require.NoError(t, err)
 		require.Equal(t, change.NodeID, nodeID)
 		require.Equal(t, change.ChangeType, changestream.ChangeType(changeType))
-		require.Equal(t, change.Properties.Keys(nil), properties)
-		require.Equal(t, changeStatus.PropertiesHash, propertiesHash)
+		require.Equal(t, changeStatus.PropertiesHash, hash)
 
 		kindID, err := changelog.Writer.KindMapper.MapKind(ctx, graph.StringKind("NodeKind1"))
 		require.NoError(t, err)
@@ -443,28 +438,25 @@ func TestChangelog(t *testing.T) {
 		time.Sleep(time.Second)
 
 		var (
-			nodeID         string
-			changeType     int
-			kindIDs        []int16
-			properties     []string
-			propertiesHash []byte
+			nodeID     string
+			changeType int
+			kindIDs    []int16
+			hash       []byte
 		)
 
 		row := changelog.Writer.PGX.QueryRow(ctx, `
-			SELECT node_id, change_type, kind_ids, property_fields, properties_hash
+			SELECT node_id, change_type, kind_ids, hash
 			FROM node_change_stream
 			WHERE node_id = $1
 			ORDER BY created_at DESC
 			LIMIT 1
 		`, change.NodeID)
 
-		err = row.Scan(&nodeID, &changeType, &kindIDs, &properties, &propertiesHash)
+		err = row.Scan(&nodeID, &changeType, &kindIDs, &hash)
 		require.NoError(t, err)
 		require.Equal(t, change.NodeID, nodeID)
 		require.Equal(t, change.ChangeType, changestream.ChangeType(changeType))
-		require.Equal(t, change.Properties.Keys(nil), properties)
-		// require.Equal(t, hash, propertiesHash)
-		require.Equal(t, changeStatus.PropertiesHash, propertiesHash)
+		require.Equal(t, changeStatus.PropertiesHash, hash)
 
 		kindID, err := changelog.Writer.KindMapper.MapKind(ctx, graph.StringKind("NodeKind1"))
 		require.NoError(t, err)
@@ -505,27 +497,26 @@ func TestChangelog(t *testing.T) {
 		time.Sleep(time.Second)
 
 		var (
-			nodeID         string
-			changeType     int
-			kindIDs        []int16
-			properties     []string
-			propertiesHash []byte
+			nodeID     string
+			changeType int
+			kindIDs    []int16
+			hash       []byte
 		)
 
 		row := changelog.Writer.PGX.QueryRow(ctx, `
-			SELECT node_id, change_type, kind_ids, property_fields, properties_hash
+			SELECT node_id, change_type, kind_ids, hash
 			FROM node_change_stream
 			WHERE node_id = $1
 			ORDER BY created_at DESC
 			LIMIT 1
 		`, change.NodeID)
 
-		err = row.Scan(&nodeID, &changeType, &kindIDs, &properties, &propertiesHash)
+		err = row.Scan(&nodeID, &changeType, &kindIDs, &hash)
 		require.NoError(t, err)
 		require.Equal(t, change.NodeID, nodeID)
 		require.Equal(t, change.ChangeType, changestream.ChangeType(changeType))
-		require.Equal(t, change.Properties.Keys(nil), properties)
-		require.Equal(t, changeStatus.PropertiesHash, propertiesHash)
+		require.Equal(t, changeStatus.PropertiesHash, hash)
+
 		kindID, err := changelog.Writer.KindMapper.MapKind(ctx, graph.StringKind("NodeKind2"))
 		require.NoError(t, err)
 		require.Contains(t, kindIDs, kindID)
