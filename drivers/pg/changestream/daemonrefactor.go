@@ -128,10 +128,10 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 	}
 
 	if _, err := s.PGX.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
-		slog.Info(fmt.Sprintf("change stream node change insert error: %v", err))
+		return fmt.Errorf("change stream node change insert error: %v", err)
+	} else {
+		return nil
 	}
-
-	return nil
 }
 
 type loop struct {
@@ -176,6 +176,8 @@ func (s *loop) start(ctx context.Context) error {
 
 	slog.InfoContext(ctx, "Starting change stream")
 
+	lastNodeWatermark := 0
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -192,20 +194,46 @@ func (s *loop) start(ctx context.Context) error {
 				s.NodeBuffer = append(s.NodeBuffer, typed)
 				if len(s.NodeBuffer) >= s.BatchSize {
 					// todo: error handling on flush?
-					s.ChangeWriter.flushNodeChanges(ctx, s.NodeBuffer)
+					if err := s.ChangeWriter.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
+						slog.Warn(err.Error())
+					}
 					s.NodeBuffer = s.NodeBuffer[:0]
 				}
 			}
 
 		case <-ticker.C:
-			s.ChangeWriter.flushNodeChanges(ctx, s.NodeBuffer)
-			s.NodeBuffer = s.NodeBuffer[:0]
+			lastNodeWatermark = s.maybeFlush(ctx, lastNodeWatermark)
 		}
 	}
 }
 
+// maybeFlush checks if the node buffer has remained the same size over two ticks.
+// This implies inactivity—no new changes—and triggers a flush of any remaining changes.
+// The function returns the new watermark for tracking buffer growth across ticks.
+func (s *loop) maybeFlush(ctx context.Context, lastNodeWatermark int) int {
+	numNodeChanges := len(s.NodeBuffer)
+
+	hasNodeChangesToFlush := numNodeChanges > 0 && numNodeChanges == lastNodeWatermark
+
+	if !hasNodeChangesToFlush { // &&!hasEdgeChangesToFlush
+		// No eligible flush needed
+		lastNodeWatermark = numNodeChanges
+		return lastNodeWatermark
+	}
+
+	if hasNodeChangesToFlush {
+		if err := s.ChangeWriter.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
+			slog.Warn(err.Error())
+		}
+		s.NodeBuffer = s.NodeBuffer[:0]
+	}
+
+	lastNodeWatermark = len(s.NodeBuffer)
+
+	return lastNodeWatermark
+}
+
 // todo: ChangeLog is the public export for this package to be consumed by bloodhound.
-// ResolveNodeChangeStatus(), Submit() will be defined at this level. All other methods can be private?
 type Changelog struct {
 	Cache  ChangeCache
 	Writer ChangeWriter
