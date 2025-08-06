@@ -50,10 +50,12 @@ func (s *ChangeCache) evaluateNodeChange(proposedChange *NodeChange) (ChangeStat
 
 	if propertiesHash, err := proposedChange.Properties.Hash(ignoredPropertiesKeys); err != nil {
 		return status, err
+	} else if kindsHash, err := proposedChange.Kinds.Hash(); err != nil {
+		return status, err
 	} else {
 		// Track the properties hash and kind IDs
-		// TODO: not currently tracking kinds...
-		status.PropertiesHash = propertiesHash
+		combinedHash := append(propertiesHash, kindsHash...)
+		status.PropertiesHash = combinedHash
 	}
 
 	if cachedChange, ok := s.get(identityKey); ok {
@@ -107,11 +109,15 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
 		} else if propertiesHash, err := c.Properties.Hash(ignoredPropertiesKeys); err != nil {
 			return nil, fmt.Errorf("node properties hash error: %w", err)
+		} else if kindsHash, err := c.Kinds.Hash(); err != nil {
+			return nil, fmt.Errorf("node kinds hash error: %w", err)
 		} else {
+			combined := append(propertiesHash, kindsHash...)
+
 			rows := []any{
 				c.NodeID,
 				mappedKindIDs,
-				propertiesHash,
+				combined,
 				c.Properties.Keys(ignoredPropertiesKeys),
 				c.Type(),
 				now,
@@ -121,7 +127,6 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 		}
 	}
 
-	// pgx.Identifier{partitionName}
 	if _, err := s.PGX.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
 		slog.Info(fmt.Sprintf("change stream node change insert error: %v", err))
 	}
@@ -129,7 +134,7 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 	return nil
 }
 
-type changeLoopDaemon struct {
+type loop struct {
 	State         *stateManager
 	ReaderC       <-chan Change
 	WriterC       chan<- Change
@@ -140,10 +145,10 @@ type changeLoopDaemon struct {
 	BatchSize     int
 }
 
-func newDaemon(ctx context.Context, state *stateManager, writer ChangeWriter, cache ChangeCache, batchSize int) changeLoopDaemon {
+func newLoop(ctx context.Context, state *stateManager, writer ChangeWriter, cache ChangeCache, batchSize int) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
-	return changeLoopDaemon{
+	return loop{
 		State:         state,
 		ReaderC:       readerC,
 		WriterC:       writerC,
@@ -155,7 +160,7 @@ func newDaemon(ctx context.Context, state *stateManager, writer ChangeWriter, ca
 	}
 }
 
-func (s *changeLoopDaemon) start(ctx context.Context) error {
+func (s *loop) start(ctx context.Context) error {
 	ticker := time.NewTicker(s.FlushInterval)
 
 	defer func() {
@@ -204,14 +209,14 @@ func (s *changeLoopDaemon) start(ctx context.Context) error {
 type Changelog struct {
 	Cache  ChangeCache
 	Writer ChangeWriter
-	Loop   changeLoopDaemon
+	Loop   loop
 }
 
 func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int) *Changelog {
 	cache := newChangeCache()
 	writer := newChangeWriter(pgxPool, kindMapper)
 	state := newStateManager(flags)
-	loop := newDaemon(ctx, state, writer, cache, batchSize)
+	loop := newLoop(ctx, state, writer, cache, batchSize)
 
 	// prime the feature flag upon initalization
 	// because state is not a pointer value this doesn't actually update state

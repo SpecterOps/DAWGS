@@ -1,9 +1,12 @@
 package graph
 
 import (
+	"fmt"
+	"sort"
 	"sync"
 	"unsafe"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/util/size"
 )
 
@@ -119,6 +122,21 @@ func (s Kinds) ContainsOneOf(others ...Kind) bool {
 	}
 
 	return false
+}
+
+// Hash returns a hash of the Kinds. It appends them to the hash stream in sorted order.
+func (s Kinds) Hash() ([]byte, error) {
+	hasher := xxhash.New()
+
+	sort.Strings(s.Strings())
+
+	for _, kind := range s {
+		if _, err := hasher.Write([]byte(kind.String())); err != nil {
+			return nil, fmt.Errorf("writing kind to hash: %w", err)
+		}
+	}
+
+	return hasher.Sum(nil), nil
 }
 
 var (

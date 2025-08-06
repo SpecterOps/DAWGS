@@ -303,6 +303,30 @@ func TestFlushNodeChanges(t *testing.T) {
 }
 
 func TestChangelog(t *testing.T) {
+	t.Run("feature flag is off. always submit change. ", func(t *testing.T) {
+		changelog, ctx, teardown := setupIntegrationTestRefactor(t, false)
+		defer teardown()
+
+		change := changestream.NewNodeChange(
+			changestream.ChangeTypeModified,
+			"abc",
+			graph.StringsToKinds([]string{"NodeKind1"}),
+			graph.NewProperties().Set("foo", "bar"),
+		)
+
+		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		require.NoError(t, err)
+		require.True(t, changeStatus.Changed)
+		require.False(t, changeStatus.Exists)
+
+		// is this weird?
+		if changeStatus.ShouldSubmit() {
+			ok := changelog.Submit(ctx, change)
+			require.True(t, ok)
+		} else {
+			require.Fail(t, "ShouldSubmit() should always be true when feature flag is false.")
+		}
+	})
 	t.Run("node unvisited. submit the change.", func(t *testing.T) {
 		changelog, ctx, teardown := setupIntegrationTestRefactor(t, true)
 		defer teardown()
@@ -313,7 +337,6 @@ func TestChangelog(t *testing.T) {
 			graph.StringsToKinds([]string{"NodeKind1"}),
 			graph.NewProperties().Set("foo", "bar"),
 		)
-		hash, _ := change.Properties.Hash(nil) // get the hash for a later assertion
 
 		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
 		require.NoError(t, err)
@@ -326,7 +349,7 @@ func TestChangelog(t *testing.T) {
 			require.True(t, ok)
 		}
 
-		// damnit. but how else?
+		// darn. but how else?
 		time.Sleep(time.Second)
 
 		var (
@@ -350,7 +373,7 @@ func TestChangelog(t *testing.T) {
 		require.Equal(t, change.NodeID, nodeID)
 		require.Equal(t, change.ChangeType, changestream.ChangeType(changeType))
 		require.Equal(t, change.Properties.Keys(nil), properties)
-		require.Equal(t, hash, propertiesHash)
+		require.Equal(t, changeStatus.PropertiesHash, propertiesHash)
 
 		kindID, err := changelog.Writer.KindMapper.MapKind(ctx, graph.StringKind("NodeKind1"))
 		require.NoError(t, err)
@@ -405,7 +428,6 @@ func TestChangelog(t *testing.T) {
 
 		// simulate a property change
 		change.Properties = graph.NewProperties().SetAll(map[string]any{"foo": "a", "bar": "b"})
-		hash, _ := change.Properties.Hash(nil) // get the hash for a later assertion
 		changeStatus, err = changelog.ResolveNodeChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
@@ -417,7 +439,7 @@ func TestChangelog(t *testing.T) {
 			require.True(t, ok)
 		}
 
-		// damnit. but how else?
+		// darn. but how else?
 		time.Sleep(time.Second)
 
 		var (
@@ -441,7 +463,8 @@ func TestChangelog(t *testing.T) {
 		require.Equal(t, change.NodeID, nodeID)
 		require.Equal(t, change.ChangeType, changestream.ChangeType(changeType))
 		require.Equal(t, change.Properties.Keys(nil), properties)
-		require.Equal(t, hash, propertiesHash)
+		// require.Equal(t, hash, propertiesHash)
+		require.Equal(t, changeStatus.PropertiesHash, propertiesHash)
 
 		kindID, err := changelog.Writer.KindMapper.MapKind(ctx, graph.StringKind("NodeKind1"))
 		require.NoError(t, err)
@@ -450,6 +473,61 @@ func TestChangelog(t *testing.T) {
 
 	// TODO: wire up kind changes
 	t.Run("node visited. kinds changed. submit the change.", func(t *testing.T) {
+		changelog, ctx, teardown := setupIntegrationTestRefactor(t, true)
+		defer teardown()
 
+		change := changestream.NewNodeChange(
+			changestream.ChangeTypeModified,
+			"abc",
+			graph.StringsToKinds([]string{"NodeKind1"}),
+			graph.NewProperties().Set("foo", "bar"),
+		)
+
+		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		require.NoError(t, err)
+		require.True(t, changeStatus.Changed)
+		require.False(t, changeStatus.Exists)
+
+		// simulate a kind change
+		change.Kinds = graph.StringsToKinds([]string{"NodeKind2"})
+		changeStatus, err = changelog.ResolveNodeChangeStatus(ctx, change)
+		require.NoError(t, err)
+		require.True(t, changeStatus.Changed)
+		require.True(t, changeStatus.Exists)
+
+		// is this weird?
+		if changeStatus.ShouldSubmit() {
+			ok := changelog.Submit(ctx, change)
+			require.True(t, ok)
+		}
+
+		// darn. but how else?
+		time.Sleep(time.Second)
+
+		var (
+			nodeID         string
+			changeType     int
+			kindIDs        []int16
+			properties     []string
+			propertiesHash []byte
+		)
+
+		row := changelog.Writer.PGX.QueryRow(ctx, `
+			SELECT node_id, change_type, kind_ids, property_fields, properties_hash
+			FROM node_change_stream
+			WHERE node_id = $1
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, change.NodeID)
+
+		err = row.Scan(&nodeID, &changeType, &kindIDs, &properties, &propertiesHash)
+		require.NoError(t, err)
+		require.Equal(t, change.NodeID, nodeID)
+		require.Equal(t, change.ChangeType, changestream.ChangeType(changeType))
+		require.Equal(t, change.Properties.Keys(nil), properties)
+		require.Equal(t, changeStatus.PropertiesHash, propertiesHash)
+		kindID, err := changelog.Writer.KindMapper.MapKind(ctx, graph.StringKind("NodeKind2"))
+		require.NoError(t, err)
+		require.Contains(t, kindIDs, kindID)
 	})
 }
