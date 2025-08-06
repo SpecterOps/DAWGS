@@ -23,8 +23,8 @@ type stateManager struct {
 	enabled                     bool
 }
 
-func newStateManager(flags GetFlagByKeyer) stateManager {
-	return stateManager{
+func newStateManager(flags GetFlagByKeyer) *stateManager {
+	return &stateManager{
 		featureFlagCheckInterval: time.Minute,
 		stateLock:                &sync.RWMutex{},
 		flags:                    flags,
@@ -77,6 +77,7 @@ func (s *stateManager) checkChangelogPartitions(ctx context.Context, now time.Ti
 	return nil
 }
 
+// todo: unexport
 func (s *stateManager) CheckFeatureFlag(ctx context.Context) error {
 	// todo: the initial POC had the following guard in to reduce # of calls.
 	// im not sure if we want to keep it

@@ -37,7 +37,7 @@ var (
 
 type Log interface {
 	ResolveNodeChangeStatus(ctx context.Context, proposedChange *NodeChange) (ChangeStatus, error)
-	CheckCachedNodeChange(proposedChange *NodeChange) (ChangeStatus, error)
+	EvaluateNodeChange(proposedChange *NodeChange) (ChangeStatus, error)
 	LastEdgeChange(ctx context.Context, proposedChange *EdgeChange) (ChangeStatus, error)
 	CachedLastEdgeChange(proposedChange *EdgeChange) (ChangeStatus, error)
 	Submit(ctx context.Context, change Change) bool
@@ -53,7 +53,7 @@ type Daemon struct {
 	kindMapper       pg.KindMapper
 	changeCacheLock  *sync.RWMutex
 	changeCache      map[string]ChangeStatus
-	State            stateManager // todo: can we make this private?
+	State            *stateManager // todo: can we make this private?
 	nodeChangeBuffer []*NodeChange
 	edgeChangeBuffer []*EdgeChange
 }
@@ -72,7 +72,7 @@ func (s *Daemon) PGX() *pgxpool.Pool {
 	return s.pgxPool
 }
 
-func (s *Daemon) CheckCachedNodeChange(proposedChange *NodeChange) (ChangeStatus, error) {
+func (s *Daemon) EvaluateNodeChange(proposedChange *NodeChange) (ChangeStatus, error) {
 	var (
 		lastChange  ChangeStatus
 		identityKey = proposedChange.IdentityKey()
@@ -99,7 +99,7 @@ func (s *Daemon) CheckCachedNodeChange(proposedChange *NodeChange) (ChangeStatus
 }
 
 func (s *Daemon) ResolveNodeChangeStatus(ctx context.Context, proposedChange *NodeChange) (ChangeStatus, error) {
-	lastChange, err := s.CheckCachedNodeChange(proposedChange)
+	lastChange, err := s.EvaluateNodeChange(proposedChange)
 
 	if err != nil || lastChange.Exists {
 		return lastChange, err

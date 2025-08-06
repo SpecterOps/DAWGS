@@ -24,7 +24,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 				Properties: &graph.Properties{Map: map[string]any{"foo": "bar"}},
 			}
 
-			result, err := d.CheckCachedNodeChange(node)
+			result, err := d.EvaluateNodeChange(node)
 			require.NoError(t, err)
 			// todo: is this the intended behavior for result.Changed ?
 			require.False(t, result.Changed)
@@ -47,7 +47,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 				Properties: &graph.Properties{Map: map[string]any{"foo": "bar"}},
 			}
 
-			result, err := d.CheckCachedNodeChange(node)
+			result, err := d.EvaluateNodeChange(node)
 			require.NoError(t, err)
 			require.True(t, result.Changed)
 			require.False(t, result.Exists)
@@ -72,7 +72,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 				Properties: props,
 			}
 
-			result, err := d.CheckCachedNodeChange(node)
+			result, err := d.EvaluateNodeChange(node)
 			require.NoError(t, err)
 			require.False(t, result.Changed)
 			require.True(t, result.Exists)
@@ -94,7 +94,7 @@ func TestCheckCachedNodeChange(t *testing.T) {
 				}},
 			}
 
-			result, err := d.CheckCachedNodeChange(node)
+			result, err := d.EvaluateNodeChange(node)
 			require.NoError(t, err)
 			require.True(t, result.Changed)
 			require.True(t, result.Exists)
