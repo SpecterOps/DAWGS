@@ -205,7 +205,11 @@ func (s *loop) start(ctx context.Context) error {
 
 	// initialize the node_change_stream, edge_change_stream tables
 	if _, err := s.ChangeWriter.PGX.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
-		return fmt.Errorf("failed asserting changelog tablespace: %w", err)
+		return fmt.Errorf("failed asserting node_change_stream tablespace: %w", err)
+	}
+
+	if _, err := s.ChangeWriter.PGX.Exec(ctx, ASSERT_EDGE_CS_TABLE_SQL); err != nil {
+		return fmt.Errorf("failed asserting edge_change_stream tablespace: %w", err)
 	}
 
 	slog.InfoContext(ctx, "Starting change stream")

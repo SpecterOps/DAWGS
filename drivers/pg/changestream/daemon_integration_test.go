@@ -81,7 +81,11 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Cha
 	return daemon, ctx, func() {
 		_, err := pgxPool.Exec(ctx, "TRUNCATE node_change_stream")
 		if err != nil {
-			t.Logf("warning: cleanup failed: %v", err)
+			t.Logf("warning: node cleanup failed: %v", err)
+		}
+		_, err = pgxPool.Exec(ctx, "TRUNCATE edge_change_stream")
+		if err != nil {
+			t.Logf("warning: edge cleanup failed: %v", err)
 		}
 		pgxPool.Close()
 		cancel()

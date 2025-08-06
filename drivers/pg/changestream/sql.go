@@ -28,6 +28,24 @@ const (
 						create index if not exists node_change_stream_node_id_index on node_change_stream using hash (node_id);
 						create index if not exists node_change_stream_created_at_index on node_change_stream using btree (created_at);`
 
+	ASSERT_EDGE_CS_TABLE_SQL = `
+						create table if not exists edge_change_stream (
+						id bigint generated always as identity not null,
+						source_node text not null,
+						target_node text not null,
+						kind_id smallint not null,
+						hash bytea not null,
+						identity_key text not null,
+						change_type integer not null,
+						created_at timestamp with time zone not null,
+
+						primary key (id, created_at)
+					) partition by range (created_at);
+
+					create index if not exists edge_change_stream_source_node_index on edge_change_stream using hash (source_node);
+					create index if not exists edge_change_stream_edge_index on edge_change_stream using hash (identity_key);
+					create index if not exists edge_change_stream_created_at_index on edge_change_stream using btree (created_at);`
+
 	CREATE_PARTITIONS_SQL_FMT = `
 create table if not exists node_change_stream_%s partition of node_change_stream for values from ('%s') to ('%s');
 `
