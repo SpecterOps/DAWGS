@@ -12,7 +12,9 @@ import (
 // todo: add back partitions later: partition by range (created_at);
 const (
 	LAST_NODE_CHANGE_SQL = `select cs.hash != $2 as has_changed, cs.change_type from node_change_stream cs where cs.node_id = $1 order by created_at desc limit 1;`
-	ASSERT_TABLE_SQL     = `create table if not exists node_change_stream (
+	LAST_EDGE_CHANGE_SQL = `select cs.hash != $2 as has_changed, cs.change_type from edge_change_stream cs where cs.identity_hash = $1 order by created_at desc limit 1;`
+
+	ASSERT_NODE_CS_TABLE_SQL = `create table if not exists node_change_stream (
 							id bigint generated always as identity not null,
 							node_id text not null,
 							kind_ids smallint[] not null,

@@ -3,7 +3,6 @@ package changestream
 import (
 	"fmt"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -31,6 +30,8 @@ func (c ChangeType) String() string {
 type Change interface {
 	Type() ChangeType
 	IdentityKey() string
+	Hash() ([]byte, error)
+	Query() string
 }
 
 type NodeChange struct {
@@ -69,22 +70,26 @@ func (s NodeChange) Hash() ([]byte, error) {
 	}
 }
 
+func (s NodeChange) Query() string {
+	return LAST_NODE_CHANGE_SQL
+}
+
 type EdgeChange struct {
 	ChangeType ChangeType
 
-	TargetNodeID  string
-	RelatedNodeID string
-	Kind          graph.Kind
-	Properties    *graph.Properties
+	SourceNodeID string
+	TargetNodeID string
+	Kind         graph.Kind
+	Properties   *graph.Properties
 }
 
-func NewEdgeChange(changeType ChangeType, targetNodeID, relatedNodeID string, kind graph.Kind, properties *graph.Properties) *EdgeChange {
+func NewEdgeChange(changeType ChangeType, sourceNodeID, targetNodeID string, kind graph.Kind, properties *graph.Properties) *EdgeChange {
 	return &EdgeChange{
-		ChangeType:    changeType,
-		TargetNodeID:  targetNodeID,
-		RelatedNodeID: relatedNodeID,
-		Kind:          kind,
-		Properties:    properties,
+		ChangeType:   changeType,
+		SourceNodeID: sourceNodeID,
+		TargetNodeID: targetNodeID,
+		Kind:         kind,
+		Properties:   properties,
 	}
 }
 
@@ -93,17 +98,19 @@ func (s EdgeChange) Type() ChangeType {
 }
 
 func (s EdgeChange) IdentityKey() string {
-	return s.TargetNodeID + s.RelatedNodeID + s.Kind.String()
+	return s.SourceNodeID + s.TargetNodeID + s.Kind.String()
 }
 
-func (s EdgeChange) IdentityHash() ([]byte, error) {
-	digest := xxhash.New()
-
-	if _, err := digest.Write([]byte(s.IdentityKey())); err != nil {
-		return nil, err
+func (s EdgeChange) Hash() ([]byte, error) {
+	if propertiesHash, err := s.Properties.Hash(ignoredPropertiesKeys); err != nil {
+		return nil, fmt.Errorf("edge properties hash error: %w", err)
+	} else {
+		return propertiesHash, nil
 	}
+}
 
-	return digest.Sum(nil), nil
+func (s EdgeChange) Query() string {
+	return LAST_EDGE_CHANGE_SQL
 }
 
 type ChangeStatus struct {

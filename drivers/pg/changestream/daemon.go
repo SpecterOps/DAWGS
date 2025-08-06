@@ -85,6 +85,32 @@ func (s *ChangeCache) evaluateNodeChange(proposedChange *NodeChange) (ChangeStat
 	return status, nil
 }
 
+func (s *ChangeCache) evaluateChange(proposedChange Change) (ChangeStatus, error) {
+	var (
+		status      ChangeStatus
+		identityKey = proposedChange.IdentityKey()
+	)
+
+	if hash, err := proposedChange.Hash(); err != nil {
+		return status, err
+	} else {
+		// Track the properties hash and kind IDs
+		status.PropertiesHash = hash
+	}
+
+	if cachedChange, ok := s.get(identityKey); ok {
+		status.Changed = !bytes.Equal(status.PropertiesHash, cachedChange.PropertiesHash)
+		status.Exists = true
+	} else {
+		// mark every non-cached lookup as changed
+		status.Changed = true
+	}
+
+	// Ensure this makes it into the cache before returning
+	s.put(identityKey, status)
+	return status, nil
+}
+
 type ChangeWriter struct {
 	PGX        *pgxpool.Pool
 	KindMapper pg.KindMapper
@@ -178,7 +204,7 @@ func (s *loop) start(ctx context.Context) error {
 	}()
 
 	// initialize the node_change_stream, edge_change_stream tables
-	if _, err := s.ChangeWriter.PGX.Exec(ctx, ASSERT_TABLE_SQL); err != nil {
+	if _, err := s.ChangeWriter.PGX.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
 		return fmt.Errorf("failed asserting changelog tablespace: %w", err)
 	}
 
@@ -278,6 +304,41 @@ func (s *Changelog) ResolveNodeChangeStatus(ctx context.Context, proposedChange 
 	if s.Loop.State.isEnabled() {
 		var (
 			lastChangeRow = s.Writer.PGX.QueryRow(ctx, LAST_NODE_CHANGE_SQL, proposedChange.NodeID, lastChange.PropertiesHash)
+			err           = lastChangeRow.Scan(&lastChange.Changed, &lastChange.Type)
+		)
+
+		// Assume that the change that exists in some form and error inspect for the negative case
+		lastChange.Exists = true
+
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				// Exit here as this is an unexpected error
+				return lastChange, err
+			}
+
+			// No rows found means the change does not exist
+			lastChange.Exists = false
+		}
+
+		// Ensure this makes it into the cache before returning
+		s.Cache.put(proposedChange.IdentityKey(), lastChange)
+	}
+
+	return lastChange, nil
+
+}
+
+func (s *Changelog) ResolveChangeStatus(ctx context.Context, proposedChange Change) (ChangeStatus, error) {
+	lastChange, err := s.Cache.evaluateChange(proposedChange)
+
+	if err != nil || lastChange.Exists {
+		return lastChange, err
+	}
+
+	// todo: move state should be top level so no gross nesting
+	if s.Loop.State.isEnabled() {
+		var (
+			lastChangeRow = s.Writer.PGX.QueryRow(ctx, proposedChange.Query(), proposedChange.IdentityKey(), lastChange.PropertiesHash)
 			err           = lastChangeRow.Scan(&lastChange.Changed, &lastChange.Type)
 		)
 

@@ -62,7 +62,7 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Cha
 	err = schemaManager.AssertSchema(ctx, graphSchema)
 	require.NoError(t, err)
 
-	_, err = pgxPool.Exec(ctx, changestream.ASSERT_TABLE_SQL)
+	_, err = pgxPool.Exec(ctx, changestream.ASSERT_NODE_CS_TABLE_SQL)
 	require.NoError(t, err)
 
 	// err = changestream.AssertChangelogPartition(ctx, pgxPool)
@@ -100,7 +100,7 @@ func TestChangelog(t *testing.T) {
 			graph.NewProperties().Set("foo", "bar"),
 		)
 
-		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err := changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.False(t, changeStatus.Exists)
@@ -124,7 +124,7 @@ func TestChangelog(t *testing.T) {
 			graph.NewProperties().Set("foo", "bar"),
 		)
 
-		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err := changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.False(t, changeStatus.Exists)
@@ -176,13 +176,13 @@ func TestChangelog(t *testing.T) {
 		)
 
 		// simulate the first write
-		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err := changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.False(t, changeStatus.Exists)
 
 		// now queue up the actual scenario
-		changeStatus, err = changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err = changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.False(t, changeStatus.Changed)
 		require.True(t, changeStatus.Exists)
@@ -205,14 +205,14 @@ func TestChangelog(t *testing.T) {
 			graph.NewProperties().Set("foo", "bar"),
 		)
 
-		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err := changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.False(t, changeStatus.Exists)
 
 		// simulate a property change
 		change.Properties = graph.NewProperties().SetAll(map[string]any{"foo": "a", "bar": "b"})
-		changeStatus, err = changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err = changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.True(t, changeStatus.Exists)
@@ -264,14 +264,14 @@ func TestChangelog(t *testing.T) {
 			graph.NewProperties().Set("foo", "bar"),
 		)
 
-		changeStatus, err := changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err := changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.False(t, changeStatus.Exists)
 
 		// simulate a kind change
 		change.Kinds = graph.StringsToKinds([]string{"NodeKind2"})
-		changeStatus, err = changelog.ResolveNodeChangeStatus(ctx, change)
+		changeStatus, err = changelog.ResolveChangeStatus(ctx, change)
 		require.NoError(t, err)
 		require.True(t, changeStatus.Changed)
 		require.True(t, changeStatus.Exists)
