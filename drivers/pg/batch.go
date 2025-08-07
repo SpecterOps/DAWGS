@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/model"
@@ -46,8 +48,10 @@ type batch struct {
 	nodeUpdateByBuffer         []graph.NodeUpdate
 	relationshipCreateBuffer   []*graph.Relationship
 	relationshipUpdateByBuffer []graph.RelationshipUpdate
-	batchWriteSize             int
-	kindIDEncoder              Int2ArrayEncoder
+	// hmmmm?
+	changeBuffer   []graph.NodeChange
+	batchWriteSize int
+	kindIDEncoder  Int2ArrayEncoder
 }
 
 func newBatch(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config) (*batch, error) {
@@ -86,6 +90,14 @@ func (s *batch) Relationships() graph.RelationshipQuery {
 
 func (s *batch) UpdateNodeBy(update graph.NodeUpdate) error {
 	s.nodeUpdateByBuffer = append(s.nodeUpdateByBuffer, update)
+	return s.tryFlush(s.batchWriteSize)
+}
+
+func (s *batch) SubmitChange(change graph.Change) error {
+	switch typed := change.(type) {
+	case *graph.NodeChange:
+		s.changeBuffer = append(s.changeBuffer, *typed)
+	}
 	return s.tryFlush(s.batchWriteSize)
 }
 
@@ -244,6 +256,53 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 
 	s.nodeUpdateByBuffer = s.nodeUpdateByBuffer[:0]
 	return nil
+}
+
+func (s *batch) tryFlushChangestreamBuffer() error {
+	// Early exit check for empty buffer flushes
+	changes := s.changeBuffer
+	if len(changes) == 0 {
+		return nil
+	}
+
+	var (
+		numChanges  = len(changes)
+		now         = time.Now()
+		copyColumns = []string{
+			"node_id",
+			"kind_ids",
+			"hash",
+			"change_type",
+			"created_at",
+		}
+	)
+
+	iterator := func(i int) ([]any, error) {
+		c := changes[i]
+
+		if mappedKindIDs, err := s.schemaManager.MapKinds(s.ctx, c.Kinds); err != nil {
+			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
+		} else if hash, err := c.Hash(); err != nil {
+			return nil, err
+		} else {
+			rows := []any{
+				c.NodeID,
+				mappedKindIDs,
+				hash,
+				c.Type(),
+				now,
+			}
+
+			return rows, nil
+		}
+	}
+
+	if _, err := s.innerTransaction.conn.CopyFrom(s.ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
+		return fmt.Errorf("change stream node change insert error: %v", err)
+	} else {
+		return nil
+	}
+
 }
 
 type NodeUpsertParameters struct {
@@ -497,6 +556,13 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 func (s *batch) tryFlush(batchWriteSize int) error {
 	if len(s.nodeUpdateByBuffer) > batchWriteSize {
 		if err := s.tryFlushNodeUpdateByBuffer(); err != nil {
+			return err
+		}
+	}
+
+	// todo: can we flush change stream updates straight up on the batch?
+	if len(s.changeBuffer) > batchWriteSize {
+		if err := s.tryFlushChangestreamBuffer(); err != nil {
 			return err
 		}
 	}

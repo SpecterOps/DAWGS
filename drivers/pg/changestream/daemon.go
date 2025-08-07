@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
 )
 
@@ -35,33 +36,33 @@ var (
 // todo: use golang-LRU cache
 // time multiple ingest runs with no cache, size 1_000, 100_000
 type ChangeCache struct {
-	data  map[string]ChangeStatus
+	data  map[string]graph.ChangeStatus
 	mutex *sync.RWMutex
 }
 
 func newChangeCache() ChangeCache {
 	return ChangeCache{
-		data:  make(map[string]ChangeStatus),
+		data:  make(map[string]graph.ChangeStatus),
 		mutex: &sync.RWMutex{},
 	}
 }
 
-func (s *ChangeCache) get(key string) (ChangeStatus, bool) {
+func (s *ChangeCache) get(key string) (graph.ChangeStatus, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	val, ok := s.data[key]
 	return val, ok
 }
 
-func (s *ChangeCache) put(key string, value ChangeStatus) {
+func (s *ChangeCache) put(key string, value graph.ChangeStatus) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.data[key] = value
 }
 
-func (s *ChangeCache) evaluateNodeChange(proposedChange *NodeChange) (ChangeStatus, error) {
+func (s *ChangeCache) evaluateNodeChange(proposedChange *graph.NodeChange) (graph.ChangeStatus, error) {
 	var (
-		status      ChangeStatus
+		status      graph.ChangeStatus
 		identityKey = proposedChange.IdentityKey()
 	)
 
@@ -85,9 +86,9 @@ func (s *ChangeCache) evaluateNodeChange(proposedChange *NodeChange) (ChangeStat
 	return status, nil
 }
 
-func (s *ChangeCache) evaluateChange(proposedChange Change) (ChangeStatus, error) {
+func (s *ChangeCache) evaluateChange(proposedChange graph.Change) (graph.ChangeStatus, error) {
 	var (
-		status      ChangeStatus
+		status      graph.ChangeStatus
 		identityKey = proposedChange.IdentityKey()
 	)
 
@@ -123,7 +124,7 @@ func newChangeWriter(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) ChangeWrit
 	}
 }
 
-func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
+func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*graph.NodeChange) error {
 	// Early exit check for empty buffer flushes
 	if len(changes) == 0 {
 		return nil
@@ -170,17 +171,17 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 
 type loop struct {
 	State         *stateManager
-	ReaderC       <-chan Change
-	WriterC       chan<- Change
+	ReaderC       <-chan graph.Change
+	WriterC       chan<- graph.Change
 	ChangeWriter  ChangeWriter
 	Cache         ChangeCache
 	FlushInterval time.Duration
-	NodeBuffer    []*NodeChange
+	NodeBuffer    []*graph.NodeChange
 	BatchSize     int
 }
 
 func newLoop(ctx context.Context, state *stateManager, writer ChangeWriter, cache ChangeCache, batchSize int) loop {
-	writerC, readerC := channels.BufferedPipe[Change](ctx)
+	writerC, readerC := channels.BufferedPipe[graph.Change](ctx)
 
 	return loop{
 		State:         state,
@@ -189,7 +190,7 @@ func newLoop(ctx context.Context, state *stateManager, writer ChangeWriter, cach
 		ChangeWriter:  writer,
 		Cache:         cache,
 		FlushInterval: 5 * time.Second,
-		NodeBuffer:    make([]*NodeChange, 0),
+		NodeBuffer:    make([]*graph.NodeChange, 0),
 		BatchSize:     batchSize,
 	}
 }
@@ -227,7 +228,7 @@ func (s *loop) start(ctx context.Context) error {
 			}
 
 			switch typed := change.(type) {
-			case *NodeChange:
+			case *graph.NodeChange:
 				s.NodeBuffer = append(s.NodeBuffer, typed)
 				if len(s.NodeBuffer) >= s.BatchSize {
 					// todo: error handling on flush?
@@ -239,15 +240,15 @@ func (s *loop) start(ctx context.Context) error {
 			}
 
 		case <-ticker.C:
-			lastNodeWatermark = s.maybeFlush(ctx, lastNodeWatermark)
+			lastNodeWatermark = s.tryFlush(ctx, lastNodeWatermark)
 		}
 	}
 }
 
-// maybeFlush checks if the node buffer has remained the same size over two ticks.
+// tryFlush checks if the node buffer has remained the same size over two ticks.
 // This implies inactivity—no new changes—and triggers a flush of any remaining changes.
 // The function returns the new watermark for tracking buffer growth across ticks.
-func (s *loop) maybeFlush(ctx context.Context, lastNodeWatermark int) int {
+func (s *loop) tryFlush(ctx context.Context, lastNodeWatermark int) int {
 	numNodeChanges := len(s.NodeBuffer)
 
 	hasNodeChangesToFlush := numNodeChanges > 0 && numNodeChanges == lastNodeWatermark
@@ -297,7 +298,7 @@ func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxp
 	}
 }
 
-func (s *Changelog) ResolveNodeChangeStatus(ctx context.Context, proposedChange *NodeChange) (ChangeStatus, error) {
+func (s *Changelog) ResolveNodeStatus(ctx context.Context, proposedChange *graph.NodeChange) (graph.ChangeStatus, error) {
 	lastChange, err := s.Cache.evaluateNodeChange(proposedChange)
 
 	if err != nil || lastChange.Exists {
@@ -332,7 +333,7 @@ func (s *Changelog) ResolveNodeChangeStatus(ctx context.Context, proposedChange 
 
 }
 
-func (s *Changelog) ResolveChangeStatus(ctx context.Context, proposedChange Change) (ChangeStatus, error) {
+func (s *Changelog) ResolveChangeStatus(ctx context.Context, proposedChange graph.Change) (graph.ChangeStatus, error) {
 	lastChange, err := s.Cache.evaluateChange(proposedChange)
 
 	if err != nil || lastChange.Exists {
@@ -367,6 +368,10 @@ func (s *Changelog) ResolveChangeStatus(ctx context.Context, proposedChange Chan
 
 }
 
-func (s *Changelog) Submit(ctx context.Context, change Change) bool {
-	return channels.Submit(ctx, s.Loop.WriterC, change)
+// func (s *Changelog) Submit(ctx context.Context, change graph.Change) bool {
+// 	return channels.Submit(ctx, s.Loop.WriterC, change)
+// }
+
+func (s *Changelog) Submit(ctx context.Context, change graph.Change, batch graph.Batch) error {
+	return batch.SubmitChange(change)
 }

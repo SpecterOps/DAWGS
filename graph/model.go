@@ -1,9 +1,17 @@
-package changestream
+package graph
 
-import (
-	"fmt"
+import "fmt"
 
-	"github.com/specterops/dawgs/graph"
+var (
+	ignoredPropertiesKeys = map[string]struct{}{
+		// common.ObjectID.String():      {},
+		// common.LastSeen.String():      {},
+		// common.LastCollected.String(): {},
+		// common.IsInherited.String():   {},
+		// ad.DomainSID.String():         {},
+		// ad.IsACL.String():             {},
+		// azure.TenantID.String():       {},
+	}
 )
 
 type ChangeType int
@@ -38,11 +46,11 @@ type NodeChange struct {
 	ChangeType ChangeType
 
 	NodeID     string
-	Kinds      graph.Kinds
-	Properties *graph.Properties
+	Kinds      Kinds
+	Properties *Properties
 }
 
-func NewNodeChange(changeType ChangeType, nodeID string, kinds graph.Kinds, properties *graph.Properties) *NodeChange {
+func NewNodeChange(changeType ChangeType, nodeID string, kinds Kinds, properties *Properties) *NodeChange {
 	return &NodeChange{
 		ChangeType: changeType,
 		NodeID:     nodeID,
@@ -71,7 +79,7 @@ func (s NodeChange) Hash() ([]byte, error) {
 }
 
 func (s NodeChange) Query() string {
-	return LAST_NODE_CHANGE_SQL
+	return "LAST_NODE_CHANGE_SQL"
 }
 
 type EdgeChange struct {
@@ -79,11 +87,11 @@ type EdgeChange struct {
 
 	SourceNodeID string
 	TargetNodeID string
-	Kind         graph.Kind
-	Properties   *graph.Properties
+	Kind         Kind
+	Properties   *Properties
 }
 
-func NewEdgeChange(changeType ChangeType, sourceNodeID, targetNodeID string, kind graph.Kind, properties *graph.Properties) *EdgeChange {
+func NewEdgeChange(changeType ChangeType, sourceNodeID, targetNodeID string, kind Kind, properties *Properties) *EdgeChange {
 	return &EdgeChange{
 		ChangeType:   changeType,
 		SourceNodeID: sourceNodeID,
@@ -110,7 +118,7 @@ func (s EdgeChange) Hash() ([]byte, error) {
 }
 
 func (s EdgeChange) Query() string {
-	return LAST_EDGE_CHANGE_SQL
+	return "LAST_EDGE_CHANGE_SQL"
 }
 
 type ChangeStatus struct {
