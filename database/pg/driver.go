@@ -45,6 +45,10 @@ func (s *queryResult) HasNext(ctx context.Context) bool {
 	return false
 }
 
+func (s *queryResult) Values() []any {
+	return s.values
+}
+
 func (s *queryResult) Scan(scanTargets ...any) error {
 	if s.err != nil {
 		return s.err
@@ -93,6 +97,10 @@ type dawgsDriver struct {
 	queryResultFormats pgx.QueryResultFormats
 	schemaManager      *SchemaManager
 	targetGraph        *database.Graph
+}
+
+func (s *dawgsDriver) Mapper() graph.ValueMapper {
+	return newValueMapper(context.TODO(), s.schemaManager)
 }
 
 func newInternalDriver(internalConn internalDriver, schemaManager *SchemaManager) v1compat.BackwardCompatibleDriver {

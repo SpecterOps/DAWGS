@@ -20,6 +20,11 @@ type Result interface {
 	Scan(scanTargets ...any) error
 	Error() error
 	Close(ctx context.Context) error
+
+	// Values returns the next values array from the result.
+	//
+	// Deprecated: This function will be removed in future version.
+	Values() []any
 }
 
 type Driver interface {
@@ -31,6 +36,7 @@ type Driver interface {
 	Exec(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
 	Explain(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
 	Profile(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
+	Mapper() graph.ValueMapper
 }
 
 type QueryLogic func(ctx context.Context, driver Driver) error
@@ -59,6 +65,10 @@ func (s errorResult) Scan(scanTargets ...any) error {
 
 func (s errorResult) Error() error {
 	return s.err
+}
+
+func (s errorResult) Values() []any {
+	return nil
 }
 
 func (s errorResult) Close(ctx context.Context) error {

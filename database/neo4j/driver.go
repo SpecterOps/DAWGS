@@ -12,6 +12,10 @@ import (
 	"github.com/specterops/dawgs/query"
 )
 
+var (
+	resultValueMapper = newValueMapper()
+)
+
 type sessionResult struct {
 	result     neo4j.ResultWithContext
 	nextRecord *neo4j.Record
@@ -19,9 +23,9 @@ type sessionResult struct {
 	err        error
 }
 
-var (
-	resultValueMapper = newValueMapper()
-)
+func (s *sessionResult) Values() []any {
+	return s.nextRecord.Values
+}
 
 func newResult(result neo4j.ResultWithContext, err error) database.Result {
 	return &sessionResult{
@@ -92,6 +96,10 @@ func (s *sessionDriver) Run(ctx context.Context, cypher string, params map[strin
 
 type dawgsDriver struct {
 	internalDriver neo4jDriver
+}
+
+func (s *dawgsDriver) Mapper() graph.ValueMapper {
+	return resultValueMapper
 }
 
 func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error) {

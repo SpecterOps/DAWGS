@@ -28,7 +28,7 @@ func (s relationshipQuery) exec() (Result, error) {
 		return nil, err
 	} else {
 		result := s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters)
-		return wrapResult(result), nil
+		return wrapResult(result, s.driver.Mapper()), nil
 	}
 }
 
@@ -214,8 +214,29 @@ func (s relationshipQuery) FetchIDs(delegate func(cursor Cursor[graph.ID]) error
 }
 
 func (s relationshipQuery) FetchTriples(delegate func(cursor Cursor[RelationshipTripleResult]) error) error {
-	//TODO implement me
-	panic("implement me")
+	s.builder.Return(query.Start().ID(), query.End().ID(), query.Relationship().ID())
+
+	if builtQuery, err := s.builder.Build(); err != nil {
+		return err
+	} else {
+		resultIter := NewResultIterator(s.ctx, s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters), func(result database.Result) (RelationshipTripleResult, error) {
+			var (
+				startID graph.ID
+				endID   graph.ID
+				edgeID  graph.ID
+				err     = result.Scan(&startID, &endID, &edgeID)
+			)
+
+			return RelationshipTripleResult{
+				StartID: startID,
+				EndID:   endID,
+				ID:      endID,
+			}, err
+		})
+
+		defer resultIter.Close()
+		return delegate(resultIter)
+	}
 }
 
 func (s relationshipQuery) FetchAllShortestPaths(delegate func(cursor Cursor[graph.Path]) error) error {
@@ -224,6 +245,31 @@ func (s relationshipQuery) FetchAllShortestPaths(delegate func(cursor Cursor[gra
 }
 
 func (s relationshipQuery) FetchKinds(delegate func(cursor Cursor[RelationshipKindsResult]) error) error {
-	//TODO implement me
-	panic("implement me")
+	s.builder.Return(query.Start().ID(), query.End().ID(), query.Relationship().ID(), query.Relationship().Kind())
+
+	if builtQuery, err := s.builder.Build(); err != nil {
+		return err
+	} else {
+		resultIter := NewResultIterator(s.ctx, s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters), func(result database.Result) (RelationshipKindsResult, error) {
+			var (
+				startID  graph.ID
+				endID    graph.ID
+				edgeID   graph.ID
+				edgeKind graph.Kind
+				err      = result.Scan(&startID, &endID, &edgeID, &edgeKind)
+			)
+
+			return RelationshipKindsResult{
+				RelationshipTripleResult: RelationshipTripleResult{
+					StartID: startID,
+					EndID:   endID,
+					ID:      endID,
+				},
+				Kind: edgeKind,
+			}, err
+		})
+
+		defer resultIter.Close()
+		return delegate(resultIter)
+	}
 }

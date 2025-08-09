@@ -231,47 +231,53 @@ func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper Kin
 	return nil
 }
 
+func (s *dawgsDriver) updateNodes(ctx context.Context, validatedBatch *query.NodeUpdateBatch) error {
+	var (
+		parameters    = NewNodeUpsertParameters(len(validatedBatch.Updates))
+		kindIDEncoder = NewInt2ArrayEncoder()
+	)
+
+	if err := parameters.AppendAll(ctx, validatedBatch, s.schemaManager, kindIDEncoder); err != nil {
+		return err
+	}
+
+	if graphTarget, err := s.getTargetGraph(ctx); err != nil {
+		return err
+	} else {
+		nodeUpsertQuery := query.FormatNodeUpsert(graphTarget, validatedBatch.IdentityProperties)
+
+		if result, err := s.internalConn.Query(ctx, nodeUpsertQuery, parameters.Format(graphTarget)...); err != nil {
+			return err
+		} else {
+			defer result.Close()
+
+			idFutureIndex := 0
+
+			for result.Next() {
+				if err := result.Scan(&parameters.IDFutures[idFutureIndex].Value); err != nil {
+					return err
+				}
+
+				idFutureIndex++
+			}
+
+			return result.Err()
+		}
+	}
+}
+
 func (s *dawgsDriver) UpdateNodes(ctx context.Context, batch []graph.NodeUpdate) error {
 	if validatedBatch, err := query.ValidateNodeUpdateByBatch(batch); err != nil {
 		return err
 	} else {
-		var (
-			parameters    = NewNodeUpsertParameters(len(validatedBatch.Updates))
-			kindIDEncoder = NewInt2ArrayEncoder()
-		)
-
-		if err := parameters.AppendAll(ctx, validatedBatch, s.schemaManager, kindIDEncoder); err != nil {
-			return err
-		}
-
-		if graphTarget, err := s.getTargetGraph(ctx); err != nil {
-			return err
-		} else {
-			nodeUpsertQuery := query.FormatNodeUpsert(graphTarget, validatedBatch.IdentityProperties)
-
-			if result, err := s.internalConn.Query(ctx, nodeUpsertQuery, parameters.Format(graphTarget)...); err != nil {
-				return err
-			} else {
-				defer result.Close()
-
-				idFutureIndex := 0
-
-				for result.Next() {
-					if err := result.Scan(&parameters.IDFutures[idFutureIndex].Value); err != nil {
-						return err
-					}
-
-					idFutureIndex++
-				}
-
-				return result.Err()
-			}
-		}
+		return s.updateNodes(ctx, validatedBatch)
 	}
 }
 
 func (s *dawgsDriver) UpdateRelationships(ctx context.Context, batch []graph.RelationshipUpdate) error {
 	if validatedBatch, err := query.ValidateRelationshipUpdateByBatch(batch); err != nil {
+		return err
+	} else if err := s.updateNodes(ctx, validatedBatch.NodeUpdates); err != nil {
 		return err
 	} else {
 		parameters := NewRelationshipUpdateByParameters(len(validatedBatch.Updates))

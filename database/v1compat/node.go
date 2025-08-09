@@ -85,7 +85,7 @@ func (s nodeQuery) exec() (Result, error) {
 		return nil, err
 	} else {
 		result := s.driver.Exec(s.ctx, builtQuery.Query, builtQuery.Parameters)
-		return wrapResult(result), nil
+		return wrapResult(result, s.driver.Mapper()), nil
 	}
 }
 

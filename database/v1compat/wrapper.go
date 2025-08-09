@@ -60,7 +60,16 @@ func (s *v1Wrapper) WriteTransaction(ctx context.Context, txDelegate Transaction
 
 func (s *v1Wrapper) BatchOperation(ctx context.Context, batchDelegate BatchDelegate) error {
 	return s.v2DB.Session(ctx, func(ctx context.Context, driver database.Driver) error {
-		return batchDelegate(wrapDriverToBatch(ctx, driver))
+		var (
+			batchWrapper = wrapDriverToBatch(ctx, driver)
+			delegateErr  = batchDelegate(batchWrapper)
+		)
+
+		if delegateErr != nil {
+			return delegateErr
+		}
+
+		return batchWrapper.tryFlush(0)
 	})
 }
 
@@ -122,13 +131,14 @@ type driverBatchWrapper struct {
 	batchWriteSize             int
 }
 
-func wrapDriverToBatch(ctx context.Context, driver database.Driver) Batch {
+func wrapDriverToBatch(ctx context.Context, driver database.Driver) *driverBatchWrapper {
 	if v1CompatibleDriverRef, typeOK := driver.(BackwardCompatibleDriver); !typeOK {
 		panic(fmt.Sprintf("type %T is not a v1CompatibleDriver", driver))
 	} else {
 		return &driverBatchWrapper{
-			ctx:    ctx,
-			driver: v1CompatibleDriverRef,
+			ctx:            ctx,
+			driver:         v1CompatibleDriverRef,
+			batchWriteSize: 2000,
 		}
 	}
 }
@@ -279,7 +289,7 @@ func (s driverTransactionWrapper) CreateNode(properties *graph.Properties, kinds
 }
 
 func (s driverTransactionWrapper) UpdateNode(node *graph.Node) error {
-	updateQuery := query.New()
+	updateQuery := query.New().Where(query.Node().ID().Equals(node.ID))
 
 	if len(node.AddedKinds) > 0 {
 		updateQuery.Update(query.Node().Kinds().Add(node.AddedKinds))
@@ -352,7 +362,7 @@ func (s driverTransactionWrapper) Query(query string, parameters map[string]any)
 	if cypherQuery, err := frontend.ParseCypher(frontend.NewContext(), query); err != nil {
 		return NewErrorResult(err)
 	} else {
-		return wrapResult(s.driver.Exec(s.ctx, cypherQuery, parameters))
+		return wrapResult(s.driver.Exec(s.ctx, cypherQuery, parameters), s.driver.Mapper())
 	}
 }
 

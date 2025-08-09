@@ -3,12 +3,8 @@ package query
 import (
 	"errors"
 	"fmt"
-	"os"
-	"strconv"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
-	"github.com/specterops/dawgs/cypher/models/cypher/format"
-	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -637,21 +633,21 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 }
 
 func stripASTParameters(query *cypher.RegularQuery) (map[string]any, error) {
-	var (
-		nextID     = 0
-		parameters = map[string]any{}
-		err        = walk.Cypher(query, walk.NewSimpleVisitor(func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
-			switch typedNode := node.(type) {
-			case *cypher.Parameter:
-				if typedNode.Symbol == "" {
-					typedNode.Symbol = "_p" + strconv.Itoa(nextID)
-					nextID += 1
-				}
-			}
-		}))
-	)
+	//var (
+	//	nextID     = 0
+	//	parameters = map[string]any{}
+	//	err        = walk.Cypher(query, walk.NewSimpleVisitor(func(node cypher.SyntaxNode, errorHandler walk.VisitorHandler) {
+	//		switch typedNode := node.(type) {
+	//		case *cypher.Parameter:
+	//			typedNode.Symbol = "_p" + strconv.Itoa(nextID)
+	//			parameters[typedNode.Symbol] = typedNode.Value
+	//
+	//			nextID += 1
+	//		}
+	//	}))
+	//)
 
-	return parameters, err
+	return map[string]any{}, nil
 }
 
 type PreparedQuery struct {
@@ -712,10 +708,12 @@ func (s *builder) Build() (*PreparedQuery, error) {
 			}
 		}
 
-		whereClause.Add(constraints)
+		if constraints.Left != nil {
+			whereClause.Add(constraints)
 
-		if err := seenIdentifiers.CollectFromExpression(whereClause); err != nil {
-			return nil, err
+			if err := seenIdentifiers.CollectFromExpression(whereClause); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -742,16 +740,8 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		singlePartQuery.ReadingClauses = append(singlePartQuery.ReadingClauses, newReadingClause)
 	}
 
-	if parameters, err := stripASTParameters(regularQuery); err != nil {
-		return nil, err
-	} else {
-		emitter := format.NewCypherEmitter(false)
-		emitter.Write(regularQuery, os.Stdout)
-		fmt.Println()
-
-		return &PreparedQuery{
-			Query:      regularQuery,
-			Parameters: parameters,
-		}, nil
-	}
+	return &PreparedQuery{
+		Query:      regularQuery,
+		Parameters: map[string]any{},
+	}, nil
 }

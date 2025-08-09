@@ -50,7 +50,7 @@ func (s resultWrapper) Next() bool {
 }
 
 func (s resultWrapper) Values() []any {
-	return nil
+	return s.result.Values()
 }
 
 func (s resultWrapper) Mapper() graph.ValueMapper {
@@ -69,9 +69,10 @@ func (s resultWrapper) Close() {
 	s.result.Close(s.ctx)
 }
 
-func wrapResult(result database.Result) Result {
+func wrapResult(result database.Result, mapper graph.ValueMapper) Result {
 	return &resultWrapper{
 		result: result,
+		mapper: mapper,
 	}
 }
 
