@@ -276,6 +276,56 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			)
 		}
 
+	case cypher.SumFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function:   pgsql.FunctionSum,
+				Parameters: []pgsql.Expression{argument},
+				CastType:   pgsql.Numeric,
+			})
+		}
+
+	case cypher.AvgFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function:   pgsql.FunctionAvg,
+				Parameters: []pgsql.Expression{argument},
+				CastType:   pgsql.Numeric,
+			})
+		}
+
+	case cypher.MinFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function:   pgsql.FunctionMin,
+				Parameters: []pgsql.Expression{argument},
+			})
+		}
+
+	case cypher.MaxFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function:   pgsql.FunctionMax,
+				Parameters: []pgsql.Expression{argument},
+			})
+		}
+
 	default:
 		s.SetErrorf("unknown cypher function: %s", typedExpression.Name)
 	}
