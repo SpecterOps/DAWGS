@@ -29,3 +29,12 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- Multiple aggregates (no GROUP BY needed)
 -- case: MATCH (n) RETURN count(n), sum(n.age), avg(n.age), min(n.age), max(n.age)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8, sum(((s0.n0).properties ->> 'age'))::numeric, avg(((s0.n0).properties ->> 'age'))::numeric, min(((s0.n0).properties ->> 'age')), max(((s0.n0).properties ->> 'age')) from s0;
+
+-- Pure scalar queries (no MATCH clause needed)
+select 42;
+
+-- case: RETURN 'hello world'
+select 'hello world';
+
+-- case: RETURN 2 + 3
+select 2 + 3;

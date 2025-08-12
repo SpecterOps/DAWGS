@@ -417,11 +417,14 @@ func (s *Translator) buildTailProjection() error {
 		singlePartQuerySelect = pgsql.Select{}
 	)
 
-	singlePartQuerySelect.From = []pgsql.FromClause{{
-		Source: pgsql.TableReference{
-			Name: pgsql.CompoundIdentifier{currentFrame.Binding.Identifier},
-		},
-	}}
+	// Only add FROM clause if we have a current frame (i.e., there was a MATCH clause)
+	if currentFrame != nil && currentFrame.Binding.Identifier != "" {
+		singlePartQuerySelect.From = []pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{currentFrame.Binding.Identifier},
+			},
+		}}
+	}
 
 	if projectionConstraint, err := s.treeTranslator.ConsumeAllConstraints(); err != nil {
 		return err
@@ -432,6 +435,52 @@ func (s *Translator) buildTailProjection() error {
 	} else {
 		singlePartQuerySelect.Projection = projection
 		singlePartQuerySelect.Where = projectionConstraint.Expression
+
+		// Apply GROUP BY logic after projections are built and frame bindings are rewritten
+		if currentPart.HasProjections() {
+			var (
+				hasAggregates      = false
+				nonAggregateExprs  = []pgsql.Expression{}
+			)
+
+			// Check if any projections contain aggregate functions
+			for _, projectionItem := range currentPart.projections.Items {
+				if typedSelectItem, ok := projectionItem.SelectItem.(pgsql.FunctionCall); ok {
+					if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbols(typedSelectItem); err != nil {
+						return err
+					} else if !aggregatedFunctionSymbols.IsEmpty() {
+						hasAggregates = true
+						continue
+					}
+				}
+			}
+
+			// If aggregates are present, collect non-aggregate expressions for GROUP BY
+			if hasAggregates {
+				for i, projectionItem := range currentPart.projections.Items {
+					if typedSelectItem, ok := projectionItem.SelectItem.(pgsql.FunctionCall); ok {
+						if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbols(typedSelectItem); err != nil {
+							return err
+						} else if !aggregatedFunctionSymbols.IsEmpty() {
+							// This is an aggregate function, skip it
+							continue
+						}
+					}
+
+					// Use the final processed projection expression for GROUP BY
+					// This ensures the GROUP BY uses the same fully-qualified expressions as SELECT
+					projExpr := projection[i]
+					if aliasedExpr, isAliased := projExpr.(*pgsql.AliasedExpression); isAliased {
+						nonAggregateExprs = append(nonAggregateExprs, aliasedExpr.Expression)
+					} else {
+						nonAggregateExprs = append(nonAggregateExprs, projExpr)
+					}
+				}
+
+				// Add non-aggregate expressions to GROUP BY
+				singlePartQuerySelect.GroupBy = nonAggregateExprs
+			}
+		}
 	}
 
 	currentPart.Model.Body = singlePartQuerySelect

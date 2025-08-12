@@ -655,6 +655,11 @@ func formatTableAlias(builder *OutputBuilder, tableAlias pgsql.TableAlias) error
 }
 
 func formatCommonTableExpressions(builder *OutputBuilder, commonTableExpressions pgsql.With) error {
+	// Only write "with" if there are actually expressions
+	if len(commonTableExpressions.Expressions) == 0 {
+		return nil
+	}
+
 	builder.Write("with ")
 
 	if commonTableExpressions.Recursive {
