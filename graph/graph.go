@@ -300,8 +300,6 @@ type Batch interface {
 	// where the relationship does not yet exist, created.
 	UpdateRelationshipBy(update RelationshipUpdate) error
 
-	SubmitChange(change Change) error
-
 	// Commit calls to commit this batch transaction right away.
 	Commit() error
 }

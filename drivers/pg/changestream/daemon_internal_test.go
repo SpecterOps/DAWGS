@@ -11,8 +11,8 @@ func TestChangeCache(t *testing.T) {
 	t.Run("proposed change not in cache. changed = true, exists = false ", func(t *testing.T) {
 		c := newChangeCache()
 
-		node := &graph.NodeChange{
-			ChangeType: graph.ChangeTypeModified,
+		node := &NodeChange{
+			ChangeType: ChangeTypeModified,
 
 			NodeID:     "abc",
 			Kinds:      nil,
@@ -36,11 +36,11 @@ func TestChangeCache(t *testing.T) {
 		hash, _ := props.Hash(nil)
 
 		key := "foo"
-		c.put(key, graph.ChangeStatus{
+		c.put(key, ChangeStatus{
 			PropertiesHash: hash,
 		})
 
-		node := &graph.NodeChange{
+		node := &NodeChange{
 			NodeID:     key,
 			Properties: props,
 		}
@@ -55,11 +55,11 @@ func TestChangeCache(t *testing.T) {
 		c := newChangeCache()
 		key := "bar"
 
-		c.put(key, graph.ChangeStatus{
+		c.put(key, ChangeStatus{
 			PropertiesHash: []byte("previous-hash"),
 		})
 
-		node := &graph.NodeChange{
+		node := &NodeChange{
 			NodeID: key,
 			Properties: &graph.Properties{
 				Map: map[string]any{
