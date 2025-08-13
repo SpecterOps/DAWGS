@@ -234,6 +234,16 @@ type Properties struct {
 	Modified map[string]struct{} `json:"modified"`
 }
 
+func (s *Properties) DeletedList() []string {
+	list := make([]string, 0, len(s.Deleted))
+
+	for key := range s.Deleted {
+		list = append(list, key)
+	}
+
+	return list
+}
+
 func (s *Properties) Merge(other *Properties) {
 	for otherKey, otherValue := range other.Map {
 		s.Map[otherKey] = otherValue

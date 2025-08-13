@@ -15,11 +15,13 @@ const (
 	LAST_EDGE_CHANGE_SQL = `select cs.hash != $2 as has_changed, cs.change_type from edge_change_stream cs where cs.identity_hash = $1 order by created_at desc limit 1;`
 
 	ASSERT_NODE_CS_TABLE_SQL = `create table if not exists node_change_stream (
-							id bigint generated always as identity not null,
+							id bigserial not null,
 							node_id text not null,
 							kind_ids smallint[] not null,
 							hash bytea not null,
 							change_type integer not null,
+							modified_properties jsonb,
+							deleted_properties text[],
 							created_at timestamp with time zone not null,
 
 							primary key (id, created_at)

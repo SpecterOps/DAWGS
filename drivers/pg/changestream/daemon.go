@@ -3,6 +3,7 @@ package changestream
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
 )
 
@@ -114,13 +116,39 @@ func (s *ChangeCache) evaluateChange(proposedChange Change) (ChangeStatus, error
 type ChangeWriter struct {
 	PGX        *pgxpool.Pool
 	KindMapper pg.KindMapper
+	Encoder    TextArrayEncoder
 }
 
 func newChangeWriter(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) ChangeWriter {
 	return ChangeWriter{
 		PGX:        pgxPool,
 		KindMapper: kindMapper,
+		Encoder: TextArrayEncoder{
+			buffer: &bytes.Buffer{},
+		},
 	}
+}
+
+type TextArrayEncoder struct {
+	buffer *bytes.Buffer
+}
+
+func (s *TextArrayEncoder) Encode(values []string) string {
+	s.buffer.Reset()
+	s.buffer.WriteRune('{')
+
+	for idx, value := range values {
+		if idx > 0 {
+			s.buffer.WriteRune(',')
+		}
+
+		s.buffer.WriteRune('\'')
+		s.buffer.WriteString(value)
+		s.buffer.WriteRune('\'')
+	}
+
+	s.buffer.WriteRune('}')
+	return s.buffer.String()
 }
 
 func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
@@ -135,6 +163,8 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 		copyColumns = []string{
 			"node_id",
 			"kind_ids",
+			"modified_properties",
+			"deleted_properties",
 			"hash",
 			"change_type",
 			"created_at",
@@ -148,10 +178,14 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
 		} else if hash, err := c.Hash(); err != nil {
 			return nil, err
+		} else if modifiedProps, err := modifiedPropertiesJSON(c.Properties); err != nil {
+			return nil, fmt.Errorf("failed creating node change property JSON: %w", err)
 		} else {
 			rows := []any{
 				c.NodeID,
 				mappedKindIDs,
+				modifiedProps,
+				s.Encoder.Encode(c.Properties.DeletedList()),
 				hash,
 				c.Type(),
 				now,
@@ -166,6 +200,16 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 	} else {
 		return nil
 	}
+}
+
+func modifiedPropertiesJSON(properties *graph.Properties) ([]byte, error) {
+	modifiedProperties := make(map[string]any, len(properties.Modified))
+
+	for modifiedKey := range properties.Modified {
+		modifiedProperties[modifiedKey] = properties.Map[modifiedKey]
+	}
+
+	return json.Marshal(modifiedProperties)
 }
 
 type loop struct {
@@ -298,6 +342,7 @@ func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxp
 }
 
 func (s *Changelog) ResolveNodeChangeStatus(ctx context.Context, proposedChange *NodeChange) (ChangeStatus, error) {
+	// todo: if in cache, we early return. this ignores prop diffing
 	lastChange, err := s.Cache.evaluateNodeChange(proposedChange)
 
 	if err != nil || lastChange.Exists {
