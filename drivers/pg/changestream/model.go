@@ -9,9 +9,10 @@ import (
 type ChangeType int
 
 const (
-	ChangeTypeModified ChangeType = iota
-	ChangeTypeAdded
+	ChangeTypeAdded ChangeType = iota
+	ChangeTypeModified
 	ChangeTypeRemoved
+	ChangeTypeNoChange // is this dumb
 )
 
 func (c ChangeType) String() string {
@@ -35,16 +36,19 @@ type Change interface {
 }
 
 type NodeChange struct {
-	ChangeType ChangeType
+	changeType ChangeType
 
-	NodeID     string
-	Kinds      graph.Kinds
-	Properties *graph.Properties
+	NodeID string
+
+	Properties         *graph.Properties
+	ModifiedProperties map[string]any // key-value pairs of changed properties
+	Deleted            []string       // keys of deleted properties
+
+	Kinds graph.Kinds
 }
 
-func NewNodeChange(changeType ChangeType, nodeID string, kinds graph.Kinds, properties *graph.Properties) *NodeChange {
+func NewNodeChange(nodeID string, kinds graph.Kinds, properties *graph.Properties) *NodeChange {
 	return &NodeChange{
-		ChangeType: changeType,
 		NodeID:     nodeID,
 		Kinds:      kinds,
 		Properties: properties,
@@ -52,7 +56,7 @@ func NewNodeChange(changeType ChangeType, nodeID string, kinds graph.Kinds, prop
 }
 
 func (s NodeChange) Type() ChangeType {
-	return s.ChangeType
+	return s.changeType
 }
 
 func (s NodeChange) IdentityKey() string {
@@ -113,13 +117,6 @@ func (s EdgeChange) Query() string {
 	return LAST_EDGE_CHANGE_SQL
 }
 
-type ChangeStatus struct {
-	Type           ChangeType
-	PropertiesHash []byte
-	Exists         bool
-	Changed        bool
-}
-
-func (s ChangeStatus) ShouldSubmit() bool {
-	return !s.Exists || s.Changed
+func (s NodeChange) ShouldSubmit() bool {
+	return s.changeType != ChangeTypeNoChange
 }

@@ -8,70 +8,74 @@ import (
 )
 
 func TestChangeCache(t *testing.T) {
-	t.Run("proposed change not in cache. changed = true, exists = false ", func(t *testing.T) {
+	t.Run("proposed change not in cache. return false.", func(t *testing.T) {
 		c := newChangeCache()
 
 		node := &NodeChange{
-			ChangeType: ChangeTypeModified,
-
-			NodeID:     "abc",
+			NodeID:     "123",
 			Kinds:      nil,
 			Properties: &graph.Properties{Map: map[string]any{"foo": "bar"}},
 		}
 
-		result, err := c.evaluateNodeChange(node)
+		handled, err := c.checkCache(node)
 		require.NoError(t, err)
-		require.True(t, result.Changed)
-		require.False(t, result.Exists)
+		require.False(t, handled)
 
-		cached, ok := c.get(node.IdentityKey())
-		require.True(t, ok)
-		require.Equal(t, result.PropertiesHash, cached.PropertiesHash)
 	})
 
 	t.Run("proposed change is in cache. properties have no diff.", func(t *testing.T) {
-		c := newChangeCache()
+		var (
+			c      = newChangeCache()
+			change = &NodeChange{
+				NodeID:     "123",
+				Kinds:      nil,
+				Properties: &graph.Properties{Map: map[string]any{"a": 1}},
+			}
+			key = change.IdentityKey()
+		)
 
-		props := &graph.Properties{Map: map[string]any{"x": "y"}}
-		hash, _ := props.Hash(nil)
+		// simulate a full cache
+		c.put(key, change)
 
-		key := "foo"
-		c.put(key, ChangeStatus{
-			PropertiesHash: hash,
-		})
-
-		node := &NodeChange{
-			NodeID:     key,
-			Properties: props,
-		}
-
-		result, err := c.evaluateNodeChange(node)
+		handled, err := c.checkCache(change)
 		require.NoError(t, err)
-		require.False(t, result.Changed)
-		require.True(t, result.Exists)
+		require.True(t, handled)
 	})
 
 	t.Run("proposed change is in cache. properties have a diff.", func(t *testing.T) {
-		c := newChangeCache()
-		key := "bar"
+		var (
+			c         = newChangeCache()
+			oldChange = &NodeChange{
+				NodeID:     "123",
+				Kinds:      nil,
+				Properties: &graph.Properties{Map: map[string]any{"a": 1}},
+			}
+			key = oldChange.IdentityKey()
+		)
 
-		c.put(key, ChangeStatus{
-			PropertiesHash: []byte("previous-hash"),
-		})
+		// simulate a full cache
+		c.put(key, oldChange)
 
-		node := &NodeChange{
-			NodeID: key,
-			Properties: &graph.Properties{
-				Map: map[string]any{
-					"changed": 123,
-				},
-			},
+		newChange := &NodeChange{
+			NodeID:     "123",
+			Kinds:      nil,
+			Properties: &graph.Properties{Map: map[string]any{"changed": 1}},
 		}
 
-		result, err := c.evaluateNodeChange(node)
+		handled, err := c.checkCache(newChange)
 		require.NoError(t, err)
-		require.True(t, result.Changed)
-		require.True(t, result.Exists)
+		require.True(t, handled)
+		require.Contains(t, newChange.ModifiedProperties, "changed")
+		require.Contains(t, newChange.Deleted, "a")
 	})
 
+}
+
+func TestDiffProps(t *testing.T) {
+	oldProps := map[string]any{"a": 1}
+	newProps := map[string]any{"a": 1, "b": 2}
+
+	modified, deleted := diffProps(oldProps, newProps)
+	require.Len(t, modified, 1)
+	require.Len(t, deleted, 0)
 }

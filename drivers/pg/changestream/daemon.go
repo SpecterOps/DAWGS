@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
-	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
 )
 
@@ -37,96 +38,117 @@ var (
 // todo: use golang-LRU cache
 // time multiple ingest runs with no cache, size 1_000, 100_000
 type ChangeCache struct {
-	data  map[string]ChangeStatus
+	data  map[string]*NodeChange
 	mutex *sync.RWMutex
 }
 
 func newChangeCache() ChangeCache {
 	return ChangeCache{
-		data:  make(map[string]ChangeStatus),
+		data:  make(map[string]*NodeChange),
 		mutex: &sync.RWMutex{},
 	}
 }
 
-func (s *ChangeCache) get(key string) (ChangeStatus, bool) {
+func (s *ChangeCache) get(key string) (*NodeChange, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	val, ok := s.data[key]
 	return val, ok
 }
 
-func (s *ChangeCache) put(key string, value ChangeStatus) {
+func (s *ChangeCache) put(key string, value *NodeChange) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.data[key] = value
 }
 
-func (s *ChangeCache) evaluateNodeChange(proposedChange *NodeChange) (ChangeStatus, error) {
-	var (
-		status      ChangeStatus
-		identityKey = proposedChange.IdentityKey()
-	)
+// checkCache attempts to resolve the proposed change using the cached snapshot.
+// It MUTATES proposedChange when it can fully resolve (NoChange or Modified) and returns handled=true.
+// On cache miss (no entry), it returns handled=false and does not mutate proposedChange.
+func (s *ChangeCache) checkCache(proposedChange *NodeChange) (bool, error) {
+	key := proposedChange.IdentityKey()
 
-	if hash, err := proposedChange.Hash(); err != nil {
-		return status, err
-	} else {
-		// Track the properties hash and kind IDs
-		status.PropertiesHash = hash
+	proposedHash, err := proposedChange.Hash()
+	if err != nil {
+		return false, fmt.Errorf("hash proposed change: %w", err)
 	}
 
-	if cachedChange, ok := s.get(identityKey); ok {
-		status.Changed = !bytes.Equal(status.PropertiesHash, cachedChange.PropertiesHash)
-		status.Exists = true
-	} else {
-		// mark every non-cached lookup as changed
-		status.Changed = true
+	// try to diff against the cached snapshot
+	cached, ok := s.get(key)
+	if !ok {
+		return false, nil // let caller hit DB
 	}
 
-	// Ensure this makes it into the cache before returning
-	s.put(identityKey, status)
-	return status, nil
+	if prevHash, err := cached.Hash(); err != nil {
+		return false, nil
+	} else if bytes.Equal(prevHash, proposedHash) { // hash equal -> NoChange
+		proposedChange.changeType = ChangeTypeNoChange
+		return true, nil
+	}
+
+	// Hash differs -> Modified,
+	// diff against cached properties
+	oldProps := cached.Properties.MapOrEmpty()
+	newProps := proposedChange.Properties.MapOrEmpty()
+	modified, deleted := diffProps(oldProps, newProps)
+
+	proposedChange.changeType = ChangeTypeModified
+	proposedChange.ModifiedProperties = modified
+	proposedChange.Deleted = deleted
+
+	// Update cache to the new snapshot so next call can short-circuit
+	s.put(key, proposedChange)
+
+	return true, nil
 }
 
-func (s *ChangeCache) evaluateChange(proposedChange Change) (ChangeStatus, error) {
-	var (
-		status      ChangeStatus
-		identityKey = proposedChange.IdentityKey()
-	)
-
-	if hash, err := proposedChange.Hash(); err != nil {
-		return status, err
-	} else {
-		// Track the properties hash and kind IDs
-		status.PropertiesHash = hash
-	}
-
-	if cachedChange, ok := s.get(identityKey); ok {
-		status.Changed = !bytes.Equal(status.PropertiesHash, cachedChange.PropertiesHash)
-		status.Exists = true
-	} else {
-		// mark every non-cached lookup as changed
-		status.Changed = true
-	}
-
-	// Ensure this makes it into the cache before returning
-	s.put(identityKey, status)
-	return status, nil
-}
-
-type ChangeWriter struct {
+type DB struct {
 	PGX        *pgxpool.Pool
 	KindMapper pg.KindMapper
 	Encoder    TextArrayEncoder
 }
 
-func newChangeWriter(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) ChangeWriter {
-	return ChangeWriter{
+func newLogDB(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) DB {
+	return DB{
 		PGX:        pgxPool,
 		KindMapper: kindMapper,
 		Encoder: TextArrayEncoder{
 			buffer: &bytes.Buffer{},
 		},
 	}
+}
+
+type lastNodeState struct {
+	Exists     bool
+	Hash       []byte
+	Properties map[string]any
+}
+
+func (s *DB) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeState, error) {
+	var (
+		storedModifiedProps []byte
+		storedHash          []byte
+	)
+
+	err := s.PGX.QueryRow(ctx, LAST_NODE_CHANGE_SQL_2, nodeID).Scan(&storedModifiedProps, &storedHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return lastNodeState{Exists: false}, nil
+	} else if err != nil {
+		return lastNodeState{}, fmt.Errorf("fetch last node state: %w", err)
+	}
+
+	props := map[string]any{}
+	if len(storedModifiedProps) > 0 { //todo: error handling around stored being nil?
+		if uerr := json.Unmarshal(storedModifiedProps, &props); uerr != nil {
+			return lastNodeState{}, fmt.Errorf("unmarshal stored properties: %w", uerr)
+		}
+	}
+
+	return lastNodeState{
+		Exists:     true,
+		Hash:       storedHash,
+		Properties: props,
+	}, nil
 }
 
 type TextArrayEncoder struct {
@@ -151,7 +173,7 @@ func (s *TextArrayEncoder) Encode(values []string) string {
 	return s.buffer.String()
 }
 
-func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
+func (s *DB) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
 	// Early exit check for empty buffer flushes
 	if len(changes) == 0 {
 		return nil
@@ -178,7 +200,7 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
 		} else if hash, err := c.Hash(); err != nil {
 			return nil, err
-		} else if modifiedProps, err := modifiedPropertiesJSON(c.Properties); err != nil {
+		} else if modifiedProps, err := json.Marshal(c.ModifiedProperties); err != nil {
 			return nil, fmt.Errorf("failed creating node change property JSON: %w", err)
 		} else {
 			rows := []any{
@@ -202,35 +224,25 @@ func (s *ChangeWriter) flushNodeChanges(ctx context.Context, changes []*NodeChan
 	}
 }
 
-func modifiedPropertiesJSON(properties *graph.Properties) ([]byte, error) {
-	modifiedProperties := make(map[string]any, len(properties.Modified))
-
-	for modifiedKey := range properties.Modified {
-		modifiedProperties[modifiedKey] = properties.Map[modifiedKey]
-	}
-
-	return json.Marshal(modifiedProperties)
-}
-
 type loop struct {
 	State         *stateManager
 	ReaderC       <-chan Change
 	WriterC       chan<- Change
-	ChangeWriter  ChangeWriter
+	DB            DB
 	Cache         ChangeCache
 	FlushInterval time.Duration
 	NodeBuffer    []*NodeChange
 	BatchSize     int
 }
 
-func newLoop(ctx context.Context, state *stateManager, writer ChangeWriter, cache ChangeCache, batchSize int) loop {
+func newLoop(ctx context.Context, state *stateManager, db DB, cache ChangeCache, batchSize int) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
 	return loop{
 		State:         state,
 		ReaderC:       readerC,
 		WriterC:       writerC,
-		ChangeWriter:  writer,
+		DB:            db,
 		Cache:         cache,
 		FlushInterval: 5 * time.Second,
 		NodeBuffer:    make([]*NodeChange, 0),
@@ -248,11 +260,11 @@ func (s *loop) start(ctx context.Context) error {
 	}()
 
 	// initialize the node_change_stream, edge_change_stream tables
-	if _, err := s.ChangeWriter.PGX.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
+	if _, err := s.DB.PGX.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
 		return fmt.Errorf("failed asserting node_change_stream tablespace: %w", err)
 	}
 
-	if _, err := s.ChangeWriter.PGX.Exec(ctx, ASSERT_EDGE_CS_TABLE_SQL); err != nil {
+	if _, err := s.DB.PGX.Exec(ctx, ASSERT_EDGE_CS_TABLE_SQL); err != nil {
 		return fmt.Errorf("failed asserting edge_change_stream tablespace: %w", err)
 	}
 
@@ -275,7 +287,7 @@ func (s *loop) start(ctx context.Context) error {
 				s.NodeBuffer = append(s.NodeBuffer, typed)
 				if len(s.NodeBuffer) >= s.BatchSize {
 					// todo: error handling on flush?
-					if err := s.ChangeWriter.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
+					if err := s.DB.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
 						slog.Warn(err.Error())
 					}
 					s.NodeBuffer = s.NodeBuffer[:0]
@@ -283,15 +295,15 @@ func (s *loop) start(ctx context.Context) error {
 			}
 
 		case <-ticker.C:
-			lastNodeWatermark = s.maybeFlush(ctx, lastNodeWatermark)
+			lastNodeWatermark = s.tryFlush(ctx, lastNodeWatermark)
 		}
 	}
 }
 
-// maybeFlush checks if the node buffer has remained the same size over two ticks.
+// tryFlush checks if the node buffer has remained the same size over two ticks.
 // This implies inactivity—no new changes—and triggers a flush of any remaining changes.
 // The function returns the new watermark for tracking buffer growth across ticks.
-func (s *loop) maybeFlush(ctx context.Context, lastNodeWatermark int) int {
+func (s *loop) tryFlush(ctx context.Context, lastNodeWatermark int) int {
 	numNodeChanges := len(s.NodeBuffer)
 
 	hasNodeChangesToFlush := numNodeChanges > 0 && numNodeChanges == lastNodeWatermark
@@ -303,7 +315,7 @@ func (s *loop) maybeFlush(ctx context.Context, lastNodeWatermark int) int {
 	}
 
 	if hasNodeChangesToFlush {
-		if err := s.ChangeWriter.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
+		if err := s.DB.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
 			slog.Warn(err.Error())
 		}
 		s.NodeBuffer = s.NodeBuffer[:0]
@@ -317,13 +329,13 @@ func (s *loop) maybeFlush(ctx context.Context, lastNodeWatermark int) int {
 // todo: ChangeLog is the public export for this package to be consumed by bloodhound.
 type Changelog struct {
 	Cache  ChangeCache
-	Writer ChangeWriter
+	Writer DB
 	Loop   loop
 }
 
 func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int) *Changelog {
 	cache := newChangeCache()
-	writer := newChangeWriter(pgxPool, kindMapper)
+	writer := newLogDB(pgxPool, kindMapper)
 	state := newStateManager(flags)
 	loop := newLoop(ctx, state, writer, cache, batchSize)
 
@@ -341,75 +353,88 @@ func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxp
 	}
 }
 
-func (s *Changelog) ResolveNodeChangeStatus(ctx context.Context, proposedChange *NodeChange) (ChangeStatus, error) {
-	// todo: if in cache, we early return. this ignores prop diffing
-	lastChange, err := s.Cache.evaluateNodeChange(proposedChange)
-
-	if err != nil || lastChange.Exists {
-		return lastChange, err
+// ResolveNodeChange decorated proposedChange with diff details by comparing it to the last seen record in the DB.
+// it mutates proposedChange to set:
+// - changeType: Added, Modified, or NoChange
+// - ModifiedProperties: key-value pairs that are new or changed
+// - Deleted: list of removed property keys
+// Kinds are treated as upsert-always, this function does not diff them kinds.
+func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeChange) error {
+	if handled, err := s.Cache.checkCache(proposedChange); err != nil {
+		return fmt.Errorf("check cache: %w", err)
+	} else if handled {
+		return nil
 	}
 
-	// todo: move state should be top level so no gross nesting
-	if s.Loop.State.isEnabled() {
-		var (
-			lastChangeRow = s.Writer.PGX.QueryRow(ctx, LAST_NODE_CHANGE_SQL, proposedChange.NodeID, lastChange.PropertiesHash)
-			err           = lastChangeRow.Scan(&lastChange.Changed, &lastChange.Type)
-		)
-
-		// Assume that the change that exists in some form and error inspect for the negative case
-		lastChange.Exists = true
-
-		if err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
-				// Exit here as this is an unexpected error
-				return lastChange, err
-			}
-
-			// No rows found means the change does not exist
-			lastChange.Exists = false
-		}
-
-		// Ensure this makes it into the cache before returning
-		s.Cache.put(proposedChange.IdentityKey(), lastChange)
+	// DB Fallback: load the last stored state from the changelog
+	last, err := s.Writer.fetchLastNodeState(ctx, proposedChange.NodeID)
+	if err != nil {
+		return err
 	}
 
-	return lastChange, nil
+	// no prior record -> Add
+	if !last.Exists {
+		proposedChange.changeType = ChangeTypeAdded
+		// Properties: everything is "new"
+		proposedChange.ModifiedProperties = proposedChange.Properties.MapOrEmpty()
+		proposedChange.Deleted = nil
+		// todo: i think we need to store a hash on the proposedChange for caching
+		_, _ = proposedChange.Hash()
+		return nil
+	}
 
+	// we have a prior row: compute proposed combined hash once.
+	proposedHash, err := proposedChange.Hash()
+	if err != nil {
+		return fmt.Errorf("hash proposed change: %w", err)
+	}
+
+	// if hashes match (props+kinds), it's a no-op.
+	if bytes.Equal(proposedHash, last.Hash) {
+		proposedChange.changeType = ChangeTypeNoChange
+		return nil
+	}
+
+	// modified, compute property diffs
+	proposedChange.changeType = ChangeTypeModified
+
+	// property diff
+	oldProps := last.Properties
+	newProps := proposedChange.Properties.MapOrEmpty()
+	modifiedProps, deletedProps := diffProps(oldProps, newProps)
+
+	proposedChange.ModifiedProperties = modifiedProps
+	proposedChange.Deleted = deletedProps
+
+	// update cache with latest snapshot
+	s.Cache.put(proposedChange.IdentityKey(), proposedChange)
+	return nil
 }
 
-func (s *Changelog) ResolveChangeStatus(ctx context.Context, proposedChange Change) (ChangeStatus, error) {
-	lastChange, err := s.Cache.evaluateChange(proposedChange)
+// TODO: this does not treat int(1) === float64(1) so thats probs an issue
+// it needs to normalize slices (probably by sorting them) and it needs to normalize number-ish values so that int64(5) == float64(5), for example
+// diffProps returns modified key→value pairs and a list of deleted keys.
+func diffProps(oldProps, newProps map[string]any) (map[string]any, []string) {
+	var (
+		modified = map[string]any{}
+		deleted  = []string{}
+	)
 
-	if err != nil || lastChange.Exists {
-		return lastChange, err
-	}
-
-	// todo: move state should be top level so no gross nesting
-	if s.Loop.State.isEnabled() {
-		var (
-			lastChangeRow = s.Writer.PGX.QueryRow(ctx, proposedChange.Query(), proposedChange.IdentityKey(), lastChange.PropertiesHash)
-			err           = lastChangeRow.Scan(&lastChange.Changed, &lastChange.Type)
-		)
-
-		// Assume that the change that exists in some form and error inspect for the negative case
-		lastChange.Exists = true
-
-		if err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
-				// Exit here as this is an unexpected error
-				return lastChange, err
-			}
-
-			// No rows found means the change does not exist
-			lastChange.Exists = false
+	for k, v := range newProps {
+		if oldVal, ok := oldProps[k]; !ok || !reflect.DeepEqual(v, oldVal) {
+			modified[k] = v
 		}
-
-		// Ensure this makes it into the cache before returning
-		s.Cache.put(proposedChange.IdentityKey(), lastChange)
 	}
 
-	return lastChange, nil
+	for k := range oldProps {
+		if _, ok := newProps[k]; !ok {
+			deleted = append(deleted, k)
+		}
+	}
 
+	sort.Strings(deleted)
+
+	return modified, deleted
 }
 
 func (s *Changelog) Submit(ctx context.Context, change Change) bool {
