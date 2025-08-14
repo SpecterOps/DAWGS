@@ -19,6 +19,10 @@ const (
 	ListSizeFunction           = "size"
 	CoalesceFunction           = "coalesce"
 	CollectFunction            = "collect"
+	SumFunction                = "sum"
+	AvgFunction                = "avg"
+	MinFunction                = "min"
+	MaxFunction                = "max"
 
 	// ITTC - Instant Type; Temporal Component (https://neo4j.com/docs/cypher-manual/current/functions/temporal/)
 	ITTCYear              = "year"

@@ -15,6 +15,8 @@ const (
 	FunctionArrayRemove              Identifier = "array_remove"
 	FunctionMin                      Identifier = "min"
 	FunctionMax                      Identifier = "max"
+	FunctionSum                      Identifier = "sum"
+	FunctionAvg                      Identifier = "avg"
 	FunctionLocalTimestamp           Identifier = "localtimestamp"
 	FunctionLocalTime                Identifier = "localtime"
 	FunctionCurrentTime              Identifier = "current_time"
@@ -34,7 +36,7 @@ const (
 
 func IsAggregateFunction(function Identifier) bool {
 	switch function {
-	case FunctionCount, FunctionArrayAggregate:
+	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionSum, FunctionAvg:
 		return true
 
 	default:

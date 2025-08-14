@@ -169,7 +169,12 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			t.Fatalf("Failed to format SQL translatedQuery: %v", err)
 		} else {
-			require.Equalf(t, expectedSQL, formattedQuery, "Test case for cypher query: '%s' failed to match.", s.Cypher)
+			// Apply same whitespace normalization as expected SQL (from file parsing)
+			normalizedActual, err := regexp.ReplaceAll("\\s+", strings.TrimSpace(formattedQuery), " ")
+			if err != nil {
+				t.Fatalf("error while attempting to collapse whitespace in actual query: %v", err)
+			}
+			require.Equalf(t, expectedSQL, normalizedActual, "Test case for cypher query: '%s' failed to match.", s.Cypher)
 
 			if s.PgSQLParams != nil {
 				require.Equal(t, s.PgSQLParams, translation.Parameters)
