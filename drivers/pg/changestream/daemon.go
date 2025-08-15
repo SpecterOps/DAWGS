@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"reflect"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,77 +35,9 @@ var (
 	}
 )
 
-// todo: use golang-LRU cache
-// time multiple ingest runs with no cache, size 1_000, 100_000
-type changeCache struct {
-	data  map[string]*NodeChange
-	mutex *sync.RWMutex
-}
-
-func newChangeCache() changeCache {
-	return changeCache{
-		data:  make(map[string]*NodeChange),
-		mutex: &sync.RWMutex{},
-	}
-}
-
-func (s *changeCache) get(key string) (*NodeChange, bool) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	val, ok := s.data[key]
-	return val, ok
-}
-
-func (s *changeCache) put(key string, value *NodeChange) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.data[key] = value
-}
-
-// checkCache attempts to resolve the proposed change using the cached snapshot.
-// It MUTATES proposedChange when it can fully resolve (NoChange or Modified) and returns handled=true.
-// On cache miss (no entry), it returns handled=false and does not mutate proposedChange.
-func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
-	key := proposedChange.IdentityKey()
-
-	proposedHash, err := proposedChange.Hash()
-	if err != nil {
-		return false, fmt.Errorf("hash proposed change: %w", err)
-	}
-
-	// try to diff against the cached snapshot
-	cached, ok := s.get(key)
-	if !ok {
-		return false, nil // let caller hit DB
-	}
-
-	if prevHash, err := cached.Hash(); err != nil {
-		return false, nil
-	} else if bytes.Equal(prevHash, proposedHash) { // hash equal -> NoChange
-		proposedChange.changeType = ChangeTypeNoChange
-		return true, nil
-	}
-
-	// hash differs -> modified,
-	// diff against cached properties
-	oldProps := cached.Properties.MapOrEmpty()
-	newProps := proposedChange.Properties.MapOrEmpty()
-	modified, deleted := diffProps(oldProps, newProps)
-
-	proposedChange.changeType = ChangeTypeModified
-	proposedChange.ModifiedProperties = modified
-	proposedChange.Deleted = deleted
-
-	// Update cache to the new snapshot so next call can short-circuit
-	s.put(key, proposedChange)
-
-	return true, nil
-}
-
 type db struct {
 	PGX        *pgxpool.Pool
 	kindMapper pg.KindMapper
-	encoder    textArrayEncoder
 }
 
 func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) (db, error) {
@@ -122,9 +53,6 @@ func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapp
 	return db{
 		PGX:        pgxPool,
 		kindMapper: kindMapper,
-		encoder: textArrayEncoder{
-			buffer: &bytes.Buffer{},
-		},
 	}, nil
 }
 
@@ -159,28 +87,6 @@ func (s *db) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeSta
 		Hash:       storedHash,
 		Properties: props,
 	}, nil
-}
-
-type textArrayEncoder struct {
-	buffer *bytes.Buffer
-}
-
-func (s *textArrayEncoder) Encode(values []string) string {
-	s.buffer.Reset()
-	s.buffer.WriteRune('{')
-
-	for idx, value := range values {
-		if idx > 0 {
-			s.buffer.WriteRune(',')
-		}
-
-		s.buffer.WriteRune('\'')
-		s.buffer.WriteString(value)
-		s.buffer.WriteRune('\'')
-	}
-
-	s.buffer.WriteRune('}')
-	return s.buffer.String()
 }
 
 func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
@@ -252,6 +158,8 @@ func (s *db) latestChangeID(ctx context.Context, query string) (int64, error) {
 	return lastChangeID, nil
 }
 
+// todo: add this to flushNodeChanges as an optimization. it will compact intra-buffer changes to the same node
+// into a single change prior to flush
 func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
 	if len(changes) == 0 {
 		return nil, nil
@@ -448,9 +356,6 @@ func NewChangelogDaemon(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper p
 	}
 
 	// todo: probably rip this out
-	// prime the feature flag upon initalization
-	// because state is not a pointer value this doesn't actually update state
-	// so i changed it to a pointer
 	// state.CheckFeatureFlag(ctx)
 
 	go loop.start(ctx)

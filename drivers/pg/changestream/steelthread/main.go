@@ -109,6 +109,7 @@ func (s *encoder) Encode(values []int16) string {
 	return s.buffer.String()
 }
 
+// main simulates what ingest will become: a consumer of the changelog.
 func main() {
 	changelog, schemaManager, pool, notifications := setupHarness()
 	ctx, _ := context.WithCancel(context.Background())
