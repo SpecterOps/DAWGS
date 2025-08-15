@@ -37,26 +37,26 @@ var (
 
 // todo: use golang-LRU cache
 // time multiple ingest runs with no cache, size 1_000, 100_000
-type ChangeCache struct {
+type changeCache struct {
 	data  map[string]*NodeChange
 	mutex *sync.RWMutex
 }
 
-func newChangeCache() ChangeCache {
-	return ChangeCache{
+func newChangeCache() changeCache {
+	return changeCache{
 		data:  make(map[string]*NodeChange),
 		mutex: &sync.RWMutex{},
 	}
 }
 
-func (s *ChangeCache) get(key string) (*NodeChange, bool) {
+func (s *changeCache) get(key string) (*NodeChange, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	val, ok := s.data[key]
 	return val, ok
 }
 
-func (s *ChangeCache) put(key string, value *NodeChange) {
+func (s *changeCache) put(key string, value *NodeChange) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.data[key] = value
@@ -65,7 +65,7 @@ func (s *ChangeCache) put(key string, value *NodeChange) {
 // checkCache attempts to resolve the proposed change using the cached snapshot.
 // It MUTATES proposedChange when it can fully resolve (NoChange or Modified) and returns handled=true.
 // On cache miss (no entry), it returns handled=false and does not mutate proposedChange.
-func (s *ChangeCache) checkCache(proposedChange *NodeChange) (bool, error) {
+func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
 	key := proposedChange.IdentityKey()
 
 	proposedHash, err := proposedChange.Hash()
@@ -86,7 +86,7 @@ func (s *ChangeCache) checkCache(proposedChange *NodeChange) (bool, error) {
 		return true, nil
 	}
 
-	// Hash differs -> Modified,
+	// hash differs -> modified,
 	// diff against cached properties
 	oldProps := cached.Properties.MapOrEmpty()
 	newProps := proposedChange.Properties.MapOrEmpty()
@@ -102,20 +102,29 @@ func (s *ChangeCache) checkCache(proposedChange *NodeChange) (bool, error) {
 	return true, nil
 }
 
-type DB struct {
+type db struct {
 	PGX        *pgxpool.Pool
-	KindMapper pg.KindMapper
-	Encoder    TextArrayEncoder
+	kindMapper pg.KindMapper
+	encoder    textArrayEncoder
 }
 
-func newLogDB(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) DB {
-	return DB{
+func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) (db, error) {
+	// initialize the node_change_stream, edge_change_stream tables
+	if _, err := pgxPool.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
+		return db{}, fmt.Errorf("failed asserting node_change_stream tablespace: %w", err)
+	}
+
+	if _, err := pgxPool.Exec(ctx, ASSERT_EDGE_CS_TABLE_SQL); err != nil {
+		return db{}, fmt.Errorf("failed asserting edge_change_stream tablespace: %w", err)
+	}
+
+	return db{
 		PGX:        pgxPool,
-		KindMapper: kindMapper,
-		Encoder: TextArrayEncoder{
+		kindMapper: kindMapper,
+		encoder: textArrayEncoder{
 			buffer: &bytes.Buffer{},
 		},
-	}
+	}, nil
 }
 
 type lastNodeState struct {
@@ -124,7 +133,7 @@ type lastNodeState struct {
 	Properties map[string]any
 }
 
-func (s *DB) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeState, error) {
+func (s *db) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeState, error) {
 	var (
 		storedModifiedProps []byte
 		storedHash          []byte
@@ -151,11 +160,11 @@ func (s *DB) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeSta
 	}, nil
 }
 
-type TextArrayEncoder struct {
+type textArrayEncoder struct {
 	buffer *bytes.Buffer
 }
 
-func (s *TextArrayEncoder) Encode(values []string) string {
+func (s *textArrayEncoder) Encode(values []string) string {
 	s.buffer.Reset()
 	s.buffer.WriteRune('{')
 
@@ -173,7 +182,7 @@ func (s *TextArrayEncoder) Encode(values []string) string {
 	return s.buffer.String()
 }
 
-func (s *DB) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
+func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
 	// Early exit check for empty buffer flushes
 	if len(changes) == 0 {
 		return nil
@@ -196,7 +205,7 @@ func (s *DB) flushNodeChanges(ctx context.Context, changes []*NodeChange) error 
 	iterator := func(i int) ([]any, error) {
 		c := changes[i]
 
-		if mappedKindIDs, err := s.KindMapper.MapKinds(ctx, c.Kinds); err != nil {
+		if mappedKindIDs, err := s.kindMapper.MapKinds(ctx, c.Kinds); err != nil {
 			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
 		} else if hash, err := c.Hash(); err != nil {
 			return nil, err
@@ -207,7 +216,7 @@ func (s *DB) flushNodeChanges(ctx context.Context, changes []*NodeChange) error 
 				c.NodeID,
 				mappedKindIDs,
 				modifiedProps,
-				s.Encoder.Encode(c.Properties.DeletedList()),
+				s.encoder.Encode(c.Properties.DeletedProperties()),
 				hash,
 				c.Type(),
 				now,
@@ -224,18 +233,99 @@ func (s *DB) flushNodeChanges(ctx context.Context, changes []*NodeChange) error 
 	}
 }
 
+func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
+	if len(changes) == 0 {
+		return nil, nil
+	}
+
+	// Group by node_id; keep order of first appearance
+	type group struct{ idxs []int }
+	groups := make(map[string]*group, len(changes))
+	order := make([]string, 0, len(changes)) // todo; is this necessary?
+
+	for idx, change := range changes {
+		g, ok := groups[change.NodeID]
+		if !ok {
+			g = &group{}
+			groups[change.NodeID] = g
+			order = append(order, change.NodeID)
+		}
+		g.idxs = append(g.idxs, idx)
+	}
+
+	// out will hold the result of our merging routine
+	out := make([]*NodeChange, 0, len(groups))
+
+	for _, nodeID := range order {
+		idxs := groups[nodeID].idxs
+		baseline := changes[idxs[0]]
+
+		// baseline FULL properties and kinds
+		baseProps := baseline.Properties.Clone()
+		baseKinds := baseline.Kinds.Copy()
+
+		for _, idx := range idxs[1:] {
+			change := changes[idx]
+
+			// apply modified
+			for k, v := range change.ModifiedProperties {
+				baseProps.Set(k, v)
+			}
+
+			// apply deletions
+			for _, k := range change.Deleted {
+				// delete from modified if possible, otherwise append to deletedlist
+				if _, ok := baseProps.Modified[k]; ok {
+					delete(baseProps.Modified, k)
+				} else {
+					baseProps.Deleted[k] = struct{}{}
+				}
+			}
+
+			// union kinds. i think this handler removes dupes
+			baseKinds = baseKinds.Add(change.Kinds...)
+		}
+
+		// this is how we handle it in the resolver, but perhaps graph.properties API gives us some niceties...
+		// modified, deleted := diffProps(baseProps)
+
+		finalType := baseline.Type()
+		switch {
+		case finalType == ChangeTypeAdded:
+			// keep. this is a brand-new node this flush
+		case len(baseProps.ModifiedProperties()) == 0 || len(baseProps.Deleted) == 0:
+			finalType = ChangeTypeNoChange
+		default:
+			finalType = ChangeTypeModified
+		}
+
+		mergedChange := &NodeChange{
+			NodeID:             nodeID,
+			Kinds:              baseKinds,
+			ModifiedProperties: baseProps.ModifiedProperties(),
+			Deleted:            baseProps.DeletedProperties(),
+			changeType:         finalType,
+			Properties:         baseProps,
+		}
+
+		out = append(out, mergedChange)
+	}
+
+	return out, nil
+}
+
 type loop struct {
 	State         *stateManager
 	ReaderC       <-chan Change
 	WriterC       chan<- Change
-	DB            DB
-	Cache         ChangeCache
+	DB            db
+	Cache         changeCache
 	FlushInterval time.Duration
 	NodeBuffer    []*NodeChange
 	BatchSize     int
 }
 
-func newLoop(ctx context.Context, state *stateManager, db DB, cache ChangeCache, batchSize int) loop {
+func newLoop(ctx context.Context, state *stateManager, db db, cache changeCache, batchSize int) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
 	return loop{
@@ -258,15 +348,6 @@ func (s *loop) start(ctx context.Context) error {
 		ticker.Stop()
 		slog.InfoContext(ctx, "Shutting down change stream")
 	}()
-
-	// initialize the node_change_stream, edge_change_stream tables
-	if _, err := s.DB.PGX.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
-		return fmt.Errorf("failed asserting node_change_stream tablespace: %w", err)
-	}
-
-	if _, err := s.DB.PGX.Exec(ctx, ASSERT_EDGE_CS_TABLE_SQL); err != nil {
-		return fmt.Errorf("failed asserting edge_change_stream tablespace: %w", err)
-	}
 
 	slog.InfoContext(ctx, "Starting change stream")
 
@@ -328,17 +409,22 @@ func (s *loop) tryFlush(ctx context.Context, lastNodeWatermark int) int {
 
 // todo: ChangeLog is the public export for this package to be consumed by bloodhound.
 type Changelog struct {
-	Cache  ChangeCache
-	Writer DB
-	Loop   loop
+	Cache changeCache
+	DB    db
+	Loop  loop
 }
 
 func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int) *Changelog {
 	cache := newChangeCache()
-	writer := newLogDB(pgxPool, kindMapper)
+	db, err := newLogDB(ctx, pgxPool, kindMapper)
 	state := newStateManager(flags)
-	loop := newLoop(ctx, state, writer, cache, batchSize)
+	loop := newLoop(ctx, state, db, cache, batchSize)
 
+	if err != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("failed initializing log DB: %v", err))
+	}
+
+	// todo: probably rip this out
 	// prime the feature flag upon initalization
 	// because state is not a pointer value this doesn't actually update state
 	// so i changed it to a pointer
@@ -347,9 +433,9 @@ func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxp
 	go loop.start(ctx)
 
 	return &Changelog{
-		Cache:  cache,
-		Writer: writer,
-		Loop:   loop,
+		Cache: cache,
+		DB:    db,
+		Loop:  loop,
 	}
 }
 
@@ -367,7 +453,7 @@ func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeC
 	}
 
 	// DB Fallback: load the last stored state from the changelog
-	last, err := s.Writer.fetchLastNodeState(ctx, proposedChange.NodeID)
+	last, err := s.DB.fetchLastNodeState(ctx, proposedChange.NodeID)
 	if err != nil {
 		return err
 	}
