@@ -14,18 +14,6 @@ import (
 
 const pg_connection_string = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
 
-type flagEnabled struct{}
-
-func (s *flagEnabled) GetFlagByKey(ctx context.Context, flag string) (bool, error) {
-	return true, nil
-}
-
-type flagDisabled struct{}
-
-func (s *flagDisabled) GetFlagByKey(ctx context.Context, flag string) (bool, error) {
-	return false, nil
-}
-
 func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Changelog, context.Context, func()) {
 	t.Helper()
 
@@ -69,15 +57,9 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Cha
 	// err = changestream.AssertChangelogPartition(ctx, pgxPool)
 	// require.NoError(t, err)
 
-	var flag changestream.GetFlagByKeyer
-	if enableChangelog {
-		flag = &flagEnabled{}
-	} else {
-		flag = &flagDisabled{}
-	}
-
 	// set batch_size to 1 so that we can test flushing logic
-	daemon := changestream.NewChangelogDaemon(ctx, flag, pool, kindMapper, 1)
+	daemon, err := changestream.NewChangelogDaemon(ctx, pool, kindMapper, 1, nil)
+	require.NoError(t, err)
 
 	return daemon, ctx, func() {
 		_, err := pool.Exec(ctx, "TRUNCATE node_change_stream")
@@ -113,6 +95,12 @@ func insertChangelogRecord(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 					ARRAY[]::text[],                 
 					now()                             
 				);`, oldChange.NodeID, []int{1}, hashbytes)
+
+	require.NoError(t, err)
+}
+
+func insertNodeRecord(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	_, err := pool.Exec(ctx, `insert into node (graph_id, kind_ids, properties) values ($1, $2, $3) returning (id, kind_ids, properties)::nodeComposite;`, 1, []int{1}, map[string]any{"a": 1, "objectid": "abc"})
 
 	require.NoError(t, err)
 }
@@ -227,4 +215,19 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		require.Empty(t, newChange.Deleted)
 		require.Equal(t, newChange.Kinds, newChange.Kinds)
 	})
+}
+
+func TestIngestNode(t *testing.T) {
+	changelog, ctx, teardown := setupIntegrationTest(t, false)
+	defer teardown()
+
+	insertNodeRecord(t, ctx, changelog.DB.PGX) // {a: 1}
+
+	nodeID := "abc"
+	kindIDs := "{1}"
+	jsonb := []byte(`{"hello":"world"}`)
+	deleted := []string{"a"}
+
+	_, err := changelog.DB.PGX.Exec(ctx, changestream.UpdateNodeFromChangeSQL, nodeID, kindIDs, jsonb, deleted)
+	require.NoError(t, err)
 }

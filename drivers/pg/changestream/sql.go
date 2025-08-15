@@ -57,8 +57,14 @@ const (
 					create index if not exists edge_change_stream_created_at_index on edge_change_stream using btree (created_at);`
 
 	CREATE_PARTITIONS_SQL_FMT = `
-create table if not exists node_change_stream_%s partition of node_change_stream for values from ('%s') to ('%s');
-`
+create table if not exists node_change_stream_%s partition of node_change_stream for values from ('%s') to ('%s');`
+
+	SELECT_NODE_CHANGE_RANGE_SQL = `select cs.change_type, cs.node_id, cs.kind_ids, cs.modified_properties, cs.deleted_properties from node_change_stream cs where cs.id > $1 order by created_at asc`
+	LATEST_NODE_CHANGE_SQL       = `select cs.id from node_change_stream cs order by created_at desc limit 1`
+
+	// ingest routine
+	UpdateNodeFromChangeSQL = `update node set kind_ids = $2::int2[], properties = (properties - $4::text[]) || $3::jsonb where properties ->> 'objectid' = $1::text;`
+	InsertNodeFromChangeSQL = `insert into node (graph_id, kind_ids, properties) values ($1, $2::int2[], $3::jsonb)`
 )
 
 const (

@@ -120,3 +120,15 @@ func (s EdgeChange) Query() string {
 func (s NodeChange) ShouldSubmit() bool {
 	return s.changeType != ChangeTypeNoChange
 }
+
+type NotificationType int
+
+const (
+	NotificationNode NotificationType = 0
+	NotificationEdge NotificationType = 1
+)
+
+type Notification struct {
+	Type       NotificationType
+	RevisionID int64
+}

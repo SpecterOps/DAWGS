@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
 )
 
@@ -216,7 +217,7 @@ func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) error 
 				c.NodeID,
 				mappedKindIDs,
 				modifiedProps,
-				s.encoder.Encode(c.Properties.DeletedProperties()),
+				c.Deleted, // i think encoding janked it up, leave as plain []string
 				hash,
 				c.Type(),
 				now,
@@ -231,6 +232,24 @@ func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) error 
 	} else {
 		return nil
 	}
+}
+
+func (s *db) latestNodeChangeID(ctx context.Context) (int64, error) {
+	return s.latestChangeID(ctx, LATEST_NODE_CHANGE_SQL)
+}
+
+func (s *db) latestChangeID(ctx context.Context, query string) (int64, error) {
+	var (
+		lastChangeID  int64
+		lastChangeRow = s.PGX.QueryRow(ctx, query)
+		err           = lastChangeRow.Scan(&lastChangeID)
+	)
+
+	if err != nil {
+		return -1, err
+	}
+
+	return lastChangeID, nil
 }
 
 func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
@@ -315,28 +334,27 @@ func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
 }
 
 type loop struct {
-	State         *stateManager
+	State         *stateManager // todo: remove? unless needed for paritioning
 	ReaderC       <-chan Change
 	WriterC       chan<- Change
+	notificationC chan<- Notification
 	DB            db
-	Cache         changeCache
 	FlushInterval time.Duration
 	NodeBuffer    []*NodeChange
 	BatchSize     int
 }
 
-func newLoop(ctx context.Context, state *stateManager, db db, cache changeCache, batchSize int) loop {
+func newLoop(ctx context.Context, db db, notificationC chan<- Notification, batchSize int) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
 	return loop{
-		State:         state,
 		ReaderC:       readerC,
 		WriterC:       writerC,
 		DB:            db,
-		Cache:         cache,
 		FlushInterval: 5 * time.Second,
 		NodeBuffer:    make([]*NodeChange, 0),
 		BatchSize:     batchSize,
+		notificationC: notificationC,
 	}
 }
 
@@ -359,20 +377,15 @@ func (s *loop) start(ctx context.Context) error {
 			return nil
 
 		case change := <-s.ReaderC:
-			if !s.State.isEnabled() {
-				continue
-			}
-
 			switch typed := change.(type) {
 			case *NodeChange:
 				s.NodeBuffer = append(s.NodeBuffer, typed)
 				if len(s.NodeBuffer) >= s.BatchSize {
-					// todo: error handling on flush?
-					if err := s.DB.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
-						slog.Warn(err.Error())
-					}
-					s.NodeBuffer = s.NodeBuffer[:0]
+					// TODO: error handling here... and clearing buffer? what happens when changes are dropped...
+					lastNodeWatermark = s.tryFlush(ctx, lastNodeWatermark)
 				}
+			case *EdgeChange:
+				slog.Info("not implemented")
 			}
 
 		case <-ticker.C:
@@ -400,6 +413,16 @@ func (s *loop) tryFlush(ctx context.Context, lastNodeWatermark int) int {
 			slog.Warn(err.Error())
 		}
 		s.NodeBuffer = s.NodeBuffer[:0]
+
+		// notify ingest daemon that there are changes to consume
+		if latestNodeChangeID, err := s.DB.latestNodeChangeID(ctx); err != nil {
+			slog.Warn(fmt.Sprintf("getting latest node change id: %v", err))
+		} else if !channels.Submit(ctx, s.notificationC, Notification{
+			Type:       NotificationNode,
+			RevisionID: latestNodeChangeID,
+		}) {
+			slog.Warn(fmt.Sprintf("submitting latest node notification: %v", err))
+		}
 	}
 
 	lastNodeWatermark = len(s.NodeBuffer)
@@ -414,21 +437,21 @@ type Changelog struct {
 	Loop  loop
 }
 
-func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int) *Changelog {
+func NewChangelogDaemon(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int, notificationC chan<- Notification) (*Changelog, error) {
 	cache := newChangeCache()
 	db, err := newLogDB(ctx, pgxPool, kindMapper)
-	state := newStateManager(flags)
-	loop := newLoop(ctx, state, db, cache, batchSize)
+	// state := newStateManager(flags)
+	loop := newLoop(ctx, db, notificationC, batchSize)
 
 	if err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("failed initializing log DB: %v", err))
+		return &Changelog{}, fmt.Errorf("initializing log DB: %w", err)
 	}
 
 	// todo: probably rip this out
 	// prime the feature flag upon initalization
 	// because state is not a pointer value this doesn't actually update state
 	// so i changed it to a pointer
-	state.CheckFeatureFlag(ctx)
+	// state.CheckFeatureFlag(ctx)
 
 	go loop.start(ctx)
 
@@ -436,7 +459,7 @@ func NewChangelogDaemon(ctx context.Context, flags GetFlagByKeyer, pgxPool *pgxp
 		Cache: cache,
 		DB:    db,
 		Loop:  loop,
-	}
+	}, nil
 }
 
 // ResolveNodeChange decorated proposedChange with diff details by comparing it to the last seen record in the DB.
@@ -465,7 +488,7 @@ func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeC
 		proposedChange.ModifiedProperties = proposedChange.Properties.MapOrEmpty()
 		proposedChange.Deleted = nil
 		// todo: i think we need to store a hash on the proposedChange for caching
-		_, _ = proposedChange.Hash()
+		s.Cache.put(proposedChange.IdentityKey(), proposedChange)
 		return nil
 	}
 
@@ -525,4 +548,58 @@ func diffProps(oldProps, newProps map[string]any) (map[string]any, []string) {
 
 func (s *Changelog) Submit(ctx context.Context, change Change) bool {
 	return channels.Submit(ctx, s.Loop.WriterC, change)
+}
+
+func (s *Changelog) ReplayNodeChanges(ctx context.Context, sinceID int64, visitor func(change NodeChange)) error {
+	if nodeChangesResult, err := s.DB.PGX.Query(ctx, SELECT_NODE_CHANGE_RANGE_SQL, sinceID); err != nil {
+		return err
+	} else {
+		defer nodeChangesResult.Close()
+
+		for nodeChangesResult.Next() {
+			var (
+				nodeID             string
+				kindIDs            []int16
+				deletedProperties  []string
+				changeType         ChangeType
+				modifiedProperties = map[string]any{}
+			)
+
+			if err := nodeChangesResult.Scan(&changeType, &nodeID, &kindIDs, &modifiedProperties, &deletedProperties); err != nil {
+				return err
+			}
+
+			modifiedPropertyKeyIndex := make(map[string]struct{}, len(modifiedProperties))
+
+			for key := range modifiedProperties {
+				modifiedPropertyKeyIndex[key] = struct{}{}
+			}
+
+			deletedPropertyKeys := make(map[string]struct{}, len(deletedProperties))
+
+			for _, key := range deletedProperties {
+				deletedPropertyKeys[key] = struct{}{}
+			}
+
+			if mappedKinds, err := s.DB.kindMapper.MapKindIDs(ctx, kindIDs); err != nil {
+				return err
+			} else {
+				visitor(NodeChange{
+					changeType: changeType,
+					NodeID:     nodeID,
+					Kinds:      mappedKinds,
+					Properties: &graph.Properties{
+						Map:      modifiedProperties,
+						Deleted:  deletedPropertyKeys,
+						Modified: modifiedPropertyKeyIndex,
+					},
+					// todo: there is some drift with how these standalone properties are used vs. the nested fields in the Properties obj
+					ModifiedProperties: modifiedProperties,
+					Deleted:            deletedProperties,
+				})
+			}
+		}
+
+		return nodeChangesResult.Err()
+	}
 }
