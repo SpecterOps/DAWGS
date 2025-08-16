@@ -106,16 +106,16 @@ func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeC
 	// property diff
 	oldProps := last.Properties
 	newProps := proposedChange.Properties
-	proposedChange.Properties = DiffProps(oldProps, newProps)
+	proposedChange.Properties = diffProps(oldProps, newProps)
 
 	// update cache with latest snapshot
 	s.Cache.put(proposedChange.IdentityKey(), proposedChange)
 	return nil
 }
 
-// DiffProps hooks into graph.Properties api instead of diffProps which is jank
+// diffProps hooks into graph.Properties api instead of diffProps which is jank
 // todo: does this need to normalize slices so that out-of-order slices don't count as a change. consider sorting
-func DiffProps(oldProps, newProps *graph.Properties) *graph.Properties {
+func diffProps(oldProps, newProps *graph.Properties) *graph.Properties {
 	var (
 		modified = map[string]any{}
 		deleted  []string
@@ -159,7 +159,7 @@ func (s *Changelog) Submit(ctx context.Context, change Change) bool {
 	return channels.Submit(ctx, s.Loop.WriterC, change)
 }
 
-func (s *Changelog) ReplayNodeChanges(ctx context.Context, sinceID int64, visitor func(change NodeChange)) error {
+func (s *Changelog) replayNodeChanges(ctx context.Context, sinceID int64, visitor func(change NodeChange)) error {
 	if nodeChangesResult, err := s.DB.Conn.Query(ctx, SELECT_NODE_CHANGE_RANGE_SQL, sinceID); err != nil {
 		return err
 	} else {
@@ -210,12 +210,12 @@ func (s *Changelog) ReplayNodeChanges(ctx context.Context, sinceID int64, visito
 	}
 }
 
-// ApplyNodeChanges replays node changes with id > sinceID and applies them to the graph
+// applyNodeChangesToGraph replays node changes with id > sinceID and applies them to the graph
 // in a single database transaction.
 //
 //   - set "objectid" to change.NodeID in the properties (as in your main).
 //   - all writes happen in one tx; any row failure causes a rollback and error.
-func (s *Changelog) ApplyNodeChanges(ctx context.Context, graphID int64, sinceID int64) error {
+func (s *Changelog) applyNodeChangesToGraph(ctx context.Context, graphID int64, sinceID int64) error {
 	errs := util.NewErrorCollector()
 	// Start one transaction for the whole batch we’re about to apply
 	tx, err := s.DB.Conn.BeginTx(ctx, pgx.TxOptions{})
@@ -228,7 +228,7 @@ func (s *Changelog) ApplyNodeChanges(ctx context.Context, graphID int64, sinceID
 	}()
 
 	// replay rows > sinceID and apply them row-by-row
-	replayErr := s.ReplayNodeChanges(ctx, sinceID, func(change NodeChange) {
+	replayErr := s.replayNodeChanges(ctx, sinceID, func(change NodeChange) {
 		// ensure objectid mirrors
 		if change.Properties == nil {
 			change.Properties = graph.NewProperties()
@@ -312,7 +312,7 @@ func RunNodeApplierLoop(
 			)
 
 			// probably dont want to bubble this error. in order to keep loop healthy just log it.
-			if err := changelog.ApplyNodeChanges(ctx, graphID, startID); err != nil {
+			if err := changelog.applyNodeChangesToGraph(ctx, graphID, startID); err != nil {
 				slog.Warn(fmt.Sprintf("apply node changes (from %d to %d): %v", startID, n.RevisionID, err))
 			}
 

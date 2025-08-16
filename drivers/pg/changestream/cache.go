@@ -61,7 +61,7 @@ func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
 	// diff against cached properties
 	oldProps := cached.Properties
 	newProps := proposedChange.Properties
-	proposedChange.Properties = DiffProps(oldProps, newProps)
+	proposedChange.Properties = diffProps(oldProps, newProps)
 
 	proposedChange.changeType = ChangeTypeModified
 

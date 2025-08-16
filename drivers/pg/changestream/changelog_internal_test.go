@@ -15,7 +15,7 @@ func TestDiffProps(t *testing.T) {
 	oldProps := graph.NewProperties().SetAll(map[string]any{"a": 1})
 	newProps := graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2})
 
-	diff := DiffProps(oldProps, newProps)
+	diff := diffProps(oldProps, newProps)
 	require.Equal(t, 1, diff.Len())
 	bProp, err := diff.Get("b").Int()
 	require.NoError(t, err)
@@ -25,7 +25,7 @@ func TestDiffProps(t *testing.T) {
 	oldProps = graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2})
 	newProps = graph.NewProperties().SetAll(map[string]any{"a": 1})
 
-	diff = DiffProps(oldProps, newProps)
+	diff = diffProps(oldProps, newProps)
 	require.Equal(t, 0, diff.Len())
 	require.Len(t, diff.DeletedProperties(), 1)
 	require.Contains(t, diff.Deleted, "b")
@@ -64,7 +64,7 @@ func TestReplayNodeChange(t *testing.T) {
 			WillReturnRows(rows)
 
 		var got []NodeChange
-		err := changelog.ReplayNodeChanges(context.Background(), sinceID,
+		err := changelog.replayNodeChanges(context.Background(), sinceID,
 			func(c NodeChange) {
 				got = append(got, c)
 			},
@@ -89,7 +89,7 @@ func TestReplayNodeChange(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(nodeChangeStreamColumns))
 
 		var called bool
-		err := changelog.ReplayNodeChanges(context.Background(), 99,
+		err := changelog.replayNodeChanges(context.Background(), 99,
 			func(c NodeChange) {
 				called = true
 			})
@@ -114,7 +114,7 @@ func TestReplayNodeChange(t *testing.T) {
 			WithArgs(sinceID).
 			WillReturnRows(rows)
 
-		err := changelog.ReplayNodeChanges(context.Background(), sinceID, func(c NodeChange) {})
+		err := changelog.replayNodeChanges(context.Background(), sinceID, func(c NodeChange) {})
 		require.Error(t, err, "expecting replay() to error out")
 	})
 	t.Run("kind mapper error ", func(t *testing.T) {})
