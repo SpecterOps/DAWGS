@@ -27,6 +27,7 @@ require (
 	github.com/kamstrup/intmap v0.5.1 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
+	github.com/pashagolub/pgxmock/v4 v4.8.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect

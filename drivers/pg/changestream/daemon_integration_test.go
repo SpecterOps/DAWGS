@@ -217,7 +217,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 	})
 }
 
-func TestIngestNode(t *testing.T) {
+func TestUpdateNodeFromSql(t *testing.T) {
 	changelog, ctx, teardown := setupIntegrationTest(t, false)
 	defer teardown()
 

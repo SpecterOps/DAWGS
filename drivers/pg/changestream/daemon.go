@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"reflect"
 	"sort"
 	"time"
@@ -89,10 +88,10 @@ func (s *db) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeSta
 	}, nil
 }
 
-func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) error {
+func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) (int64, error) {
 	// Early exit check for empty buffer flushes
 	if len(changes) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	var (
@@ -134,9 +133,11 @@ func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) error 
 	}
 
 	if _, err := s.PGX.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
-		return fmt.Errorf("change stream node change insert error: %v", err)
+		return 0, fmt.Errorf("flushing nodes: %w", err)
+	} else if latestID, err := s.latestNodeChangeID(ctx); err != nil {
+		return 0, fmt.Errorf("reading latest nodeid: %w", err)
 	} else {
-		return nil
+		return latestID, nil
 	}
 }
 
@@ -241,103 +242,6 @@ func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
 	return out, nil
 }
 
-type loop struct {
-	State         *stateManager // todo: remove? unless needed for paritioning
-	ReaderC       <-chan Change
-	WriterC       chan<- Change
-	notificationC chan<- Notification
-	DB            db
-	FlushInterval time.Duration
-	NodeBuffer    []*NodeChange
-	BatchSize     int
-}
-
-func newLoop(ctx context.Context, db db, notificationC chan<- Notification, batchSize int) loop {
-	writerC, readerC := channels.BufferedPipe[Change](ctx)
-
-	return loop{
-		ReaderC:       readerC,
-		WriterC:       writerC,
-		DB:            db,
-		FlushInterval: 5 * time.Second,
-		NodeBuffer:    make([]*NodeChange, 0),
-		BatchSize:     batchSize,
-		notificationC: notificationC,
-	}
-}
-
-func (s *loop) start(ctx context.Context) error {
-	ticker := time.NewTicker(s.FlushInterval)
-
-	defer func() {
-		close(s.WriterC)
-		ticker.Stop()
-		slog.InfoContext(ctx, "Shutting down change stream")
-	}()
-
-	slog.InfoContext(ctx, "Starting change stream")
-
-	lastNodeWatermark := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-
-		case change := <-s.ReaderC:
-			switch typed := change.(type) {
-			case *NodeChange:
-				s.NodeBuffer = append(s.NodeBuffer, typed)
-				if len(s.NodeBuffer) >= s.BatchSize {
-					// TODO: error handling here... and clearing buffer? what happens when changes are dropped...
-					lastNodeWatermark = s.tryFlush(ctx, lastNodeWatermark)
-				}
-			case *EdgeChange:
-				slog.Info("not implemented")
-			}
-
-		case <-ticker.C:
-			lastNodeWatermark = s.tryFlush(ctx, lastNodeWatermark)
-		}
-	}
-}
-
-// tryFlush checks if the node buffer has remained the same size over two ticks.
-// This implies inactivity—no new changes—and triggers a flush of any remaining changes.
-// The function returns the new watermark for tracking buffer growth across ticks.
-func (s *loop) tryFlush(ctx context.Context, lastNodeWatermark int) int {
-	numNodeChanges := len(s.NodeBuffer)
-
-	hasNodeChangesToFlush := numNodeChanges > 0 && numNodeChanges == lastNodeWatermark
-
-	if !hasNodeChangesToFlush { // &&!hasEdgeChangesToFlush
-		// No eligible flush needed
-		lastNodeWatermark = numNodeChanges
-		return lastNodeWatermark
-	}
-
-	if hasNodeChangesToFlush {
-		if err := s.DB.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
-			slog.Warn(err.Error())
-		}
-		s.NodeBuffer = s.NodeBuffer[:0]
-
-		// notify ingest daemon that there are changes to consume
-		if latestNodeChangeID, err := s.DB.latestNodeChangeID(ctx); err != nil {
-			slog.Warn(fmt.Sprintf("getting latest node change id: %v", err))
-		} else if !channels.Submit(ctx, s.notificationC, Notification{
-			Type:       NotificationNode,
-			RevisionID: latestNodeChangeID,
-		}) {
-			slog.Warn(fmt.Sprintf("submitting latest node notification: %v", err))
-		}
-	}
-
-	lastNodeWatermark = len(s.NodeBuffer)
-
-	return lastNodeWatermark
-}
-
 // todo: ChangeLog is the public export for this package to be consumed by bloodhound.
 type Changelog struct {
 	Cache changeCache
@@ -349,7 +253,7 @@ func NewChangelogDaemon(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper p
 	cache := newChangeCache()
 	db, err := newLogDB(ctx, pgxPool, kindMapper)
 	// state := newStateManager(flags)
-	loop := newLoop(ctx, db, notificationC, batchSize)
+	loop := newLoop(ctx, &db, notificationC, batchSize)
 
 	if err != nil {
 		return &Changelog{}, fmt.Errorf("initializing log DB: %w", err)
