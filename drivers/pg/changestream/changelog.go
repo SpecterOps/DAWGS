@@ -254,14 +254,13 @@ func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
 	return out, nil
 }
 
-// todo: ChangeLog is the public export for this package to be consumed by bloodhound.
 type Changelog struct {
 	Cache changeCache
 	DB    db
 	Loop  loop
 }
 
-func NewChangelogDaemon(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int, notificationC chan<- Notification) (*Changelog, error) {
+func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int, notificationC chan<- Notification) (*Changelog, error) {
 	cache := newChangeCache()
 	db, err := newLogDB(ctx, pgxPool, kindMapper)
 	// state := newStateManager(flags)
@@ -526,8 +525,9 @@ func RunNodeApplierLoop(
 				slog.Int64("to_revison", n.RevisionID),
 			)
 
+			// probably dont want to bubble this error. in order to keep loop healthy just log it.
 			if err := changelog.ApplyNodeChanges(ctx, graphID, startID); err != nil {
-				return fmt.Errorf("apply node changes (from %d to %d): %w", startID, n.RevisionID, err)
+				slog.Warn(fmt.Sprintf("apply node changes (from %d to %d): %v", startID, n.RevisionID, err))
 			}
 
 			// next tick will start from here

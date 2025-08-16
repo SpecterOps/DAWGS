@@ -75,7 +75,7 @@ func setupHarness() (*changestream.Changelog, chan changestream.Notification, co
 			os.Exit(1)
 		} else if schemaManager := pg.NewSchemaManager(pool); err != nil {
 			// this is dumb but whatevs
-		} else if changelog, err := changestream.NewChangelogDaemon(ctx, pool, schemaManager, 1000, notificationC); err != nil {
+		} else if changelog, err := changestream.NewChangelog(ctx, pool, schemaManager, 1000, notificationC); err != nil {
 			fmt.Printf("Failed to create daemon: %v\n", err)
 			os.Exit(1)
 		} else {
