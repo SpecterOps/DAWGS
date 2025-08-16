@@ -12,106 +12,23 @@ import (
 )
 
 func TestDiffProps(t *testing.T) {
-	oldProps := map[string]any{"a": 1}
-	newProps := map[string]any{"a": 1, "b": 2}
+	oldProps := graph.NewProperties().SetAll(map[string]any{"a": 1})
+	newProps := graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2})
 
-	modified, deleted := diffProps(oldProps, newProps)
-	require.Len(t, modified, 1)
-	require.Len(t, deleted, 0)
-}
-
-func TestMergeNodeChanges(t *testing.T) {
-	a1 := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeAdded,
-		Properties:         graph.NewProperties().Set("a", 1),
-		ModifiedProperties: graph.NewProperties().Set("a", 1).MapOrEmpty(),
-		Deleted:            nil,
-		Kinds:              graph.Kinds{graph.StringKind("kindA")},
-	}
-
-	a2b3 := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeModified,
-		Properties:         graph.NewProperties().SetAll(map[string]any{"a": 2, "b": 3}),
-		ModifiedProperties: graph.NewProperties().SetAll(map[string]any{"a": 2, "b": 3}).MapOrEmpty(),
-		Deleted:            nil,
-		Kinds:              graph.Kinds{graph.StringKind("kindA")},
-	}
-
-	c1 := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeModified,
-		Properties:         graph.NewProperties().Set("c", 1),
-		ModifiedProperties: graph.NewProperties().Set("c", 1).MapOrEmpty(),
-		Deleted:            []string{"a", "b"},
-		Kinds:              graph.Kinds{graph.StringKind("kindA")},
-	}
-
-	kindB := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeModified,
-		Properties:         nil,
-		ModifiedProperties: nil,
-		Deleted:            nil,
-		Kinds:              graph.Kinds{graph.StringKind("kindB")},
-	}
-
-	changes := []*NodeChange{&a1, &a2b3, &c1, &kindB}
-	merged, err := mergeNodeChanges(changes)
+	diff := DiffProps(oldProps, newProps)
+	require.Equal(t, 1, diff.Len())
+	bProp, err := diff.Get("b").Int()
 	require.NoError(t, err)
+	require.Equal(t, 2, bProp)
+	require.Empty(t, diff.DeletedProperties())
 
-	require.Len(t, merged, 1)
-	m := merged[0]
+	oldProps = graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2})
+	newProps = graph.NewProperties().SetAll(map[string]any{"a": 1})
 
-	require.Equal(t, m.Type(), ChangeTypeAdded)
-	require.Len(t, m.Kinds, 2)
-	require.Contains(t, m.Properties.MapOrEmpty(), "c")
-	require.Contains(t, m.Deleted, "a")
-	require.Contains(t, m.Deleted, "b")
-
-}
-
-func TestMergeNodeChanges2(t *testing.T) {
-	a1b2c3 := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeAdded,
-		Properties:         graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2, "c": 3}),
-		ModifiedProperties: graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2, "c": 3}).MapOrEmpty(),
-		Deleted:            nil,
-		Kinds:              graph.Kinds{graph.StringKind("kindA")},
-	}
-
-	a2 := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeModified,
-		Properties:         graph.NewProperties().SetAll(map[string]any{"a": 2}),
-		ModifiedProperties: graph.NewProperties().SetAll(map[string]any{"a": 2}).MapOrEmpty(),
-		Deleted:            []string{"b", "c"},
-		Kinds:              graph.Kinds{graph.StringKind("kindA")},
-	}
-
-	d4 := NodeChange{
-		NodeID:             "abc",
-		changeType:         ChangeTypeModified,
-		Properties:         graph.NewProperties().Set("d", 4),
-		ModifiedProperties: graph.NewProperties().Set("d", 4).MapOrEmpty(),
-		Deleted:            []string{"a"},
-		Kinds:              graph.Kinds{graph.StringKind("kindA")},
-	}
-
-	changes := []*NodeChange{&a1b2c3, &a2, &d4}
-	merged, err := mergeNodeChanges(changes)
-	require.NoError(t, err)
-
-	require.Len(t, merged, 1)
-	m := merged[0]
-
-	require.Equal(t, m.Type(), ChangeTypeAdded)
-	require.Len(t, m.Kinds, 1)
-	require.Len(t, m.Deleted, 0) // cancelled out
-	require.Len(t, m.ModifiedProperties, 1)
-	require.Contains(t, m.Properties.MapOrEmpty(), "d")
+	diff = DiffProps(oldProps, newProps)
+	require.Equal(t, 0, diff.Len())
+	require.Len(t, diff.DeletedProperties(), 1)
+	require.Contains(t, diff.Deleted, "b")
 
 }
 

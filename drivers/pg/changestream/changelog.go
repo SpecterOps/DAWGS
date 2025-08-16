@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
 	"sort"
-	"time"
 
 	pgx "github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -36,223 +33,6 @@ var (
 		// azure.TenantID.String():       {},
 	}
 )
-
-type db struct {
-	Conn       DBConn
-	kindMapper pg.KindMapper
-}
-
-// DBConn contains the methods we actually use from pgxpool. putting these here makes testing easier
-type DBConn interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
-	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
-}
-
-func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) (db, error) {
-	// initialize the node_change_stream, edge_change_stream tables
-	if _, err := pgxPool.Exec(ctx, ASSERT_NODE_CS_TABLE_SQL); err != nil {
-		return db{}, fmt.Errorf("failed asserting node_change_stream tablespace: %w", err)
-	}
-
-	if _, err := pgxPool.Exec(ctx, ASSERT_EDGE_CS_TABLE_SQL); err != nil {
-		return db{}, fmt.Errorf("failed asserting edge_change_stream tablespace: %w", err)
-	}
-
-	return db{
-		Conn:       pgxPool,
-		kindMapper: kindMapper,
-	}, nil
-}
-
-type lastNodeState struct {
-	Exists     bool
-	Hash       []byte
-	Properties map[string]any
-}
-
-func (s *db) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeState, error) {
-	var (
-		storedModifiedProps []byte
-		storedHash          []byte
-	)
-
-	err := s.Conn.QueryRow(ctx, LAST_NODE_CHANGE_SQL_2, nodeID).Scan(&storedModifiedProps, &storedHash)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return lastNodeState{Exists: false}, nil
-	} else if err != nil {
-		return lastNodeState{}, fmt.Errorf("fetch last node state: %w", err)
-	}
-
-	props := map[string]any{}
-	if len(storedModifiedProps) > 0 { //todo: error handling around stored being nil?
-		if uerr := json.Unmarshal(storedModifiedProps, &props); uerr != nil {
-			return lastNodeState{}, fmt.Errorf("unmarshal stored properties: %w", uerr)
-		}
-	}
-
-	return lastNodeState{
-		Exists:     true,
-		Hash:       storedHash,
-		Properties: props,
-	}, nil
-}
-
-func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) (int64, error) {
-	// Early exit check for empty buffer flushes
-	if len(changes) == 0 {
-		return 0, nil
-	}
-
-	var (
-		numChanges  = len(changes)
-		now         = time.Now()
-		copyColumns = []string{
-			"node_id",
-			"kind_ids",
-			"modified_properties",
-			"deleted_properties",
-			"hash",
-			"change_type",
-			"created_at",
-		}
-	)
-
-	iterator := func(i int) ([]any, error) {
-		c := changes[i]
-
-		if mappedKindIDs, err := s.kindMapper.MapKinds(ctx, c.Kinds); err != nil {
-			return nil, fmt.Errorf("node kind ID mapping error: %w", err)
-		} else if hash, err := c.Hash(); err != nil {
-			return nil, err
-		} else if modifiedProps, err := json.Marshal(c.ModifiedProperties); err != nil {
-			return nil, fmt.Errorf("failed creating node change property JSON: %w", err)
-		} else {
-			rows := []any{
-				c.NodeID,
-				mappedKindIDs,
-				modifiedProps,
-				c.Deleted, // i think encoding janked it up, leave as plain []string
-				hash,
-				c.Type(),
-				now,
-			}
-
-			return rows, nil
-		}
-	}
-
-	if _, err := s.Conn.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
-		return 0, fmt.Errorf("flushing nodes: %w", err)
-	} else if latestID, err := s.latestNodeChangeID(ctx); err != nil {
-		return 0, fmt.Errorf("reading latest nodeid: %w", err)
-	} else {
-		return latestID, nil
-	}
-}
-
-func (s *db) latestNodeChangeID(ctx context.Context) (int64, error) {
-	return s.latestChangeID(ctx, LATEST_NODE_CHANGE_SQL)
-}
-
-func (s *db) latestChangeID(ctx context.Context, query string) (int64, error) {
-	var (
-		lastChangeID  int64
-		lastChangeRow = s.Conn.QueryRow(ctx, query)
-		err           = lastChangeRow.Scan(&lastChangeID)
-	)
-
-	if err != nil {
-		return -1, err
-	}
-
-	return lastChangeID, nil
-}
-
-// todo: add this to flushNodeChanges as an optimization. it will compact intra-buffer changes to the same node
-// into a single change prior to flush
-func mergeNodeChanges(changes []*NodeChange) ([]*NodeChange, error) {
-	if len(changes) == 0 {
-		return nil, nil
-	}
-
-	// Group by node_id; keep order of first appearance
-	type group struct{ idxs []int }
-	groups := make(map[string]*group, len(changes))
-	order := make([]string, 0, len(changes)) // todo; is this necessary?
-
-	for idx, change := range changes {
-		g, ok := groups[change.NodeID]
-		if !ok {
-			g = &group{}
-			groups[change.NodeID] = g
-			order = append(order, change.NodeID)
-		}
-		g.idxs = append(g.idxs, idx)
-	}
-
-	// out will hold the result of our merging routine
-	out := make([]*NodeChange, 0, len(groups))
-
-	for _, nodeID := range order {
-		idxs := groups[nodeID].idxs
-		baseline := changes[idxs[0]]
-
-		// baseline FULL properties and kinds
-		baseProps := baseline.Properties.Clone()
-		baseKinds := baseline.Kinds.Copy()
-
-		for _, idx := range idxs[1:] {
-			change := changes[idx]
-
-			// apply modified
-			for k, v := range change.ModifiedProperties {
-				baseProps.Set(k, v)
-			}
-
-			// apply deletions
-			for _, k := range change.Deleted {
-				// delete from modified if possible, otherwise append to deletedlist
-				if _, ok := baseProps.Modified[k]; ok {
-					delete(baseProps.Modified, k)
-				} else {
-					baseProps.Deleted[k] = struct{}{}
-				}
-			}
-
-			// union kinds. i think this handler removes dupes
-			baseKinds = baseKinds.Add(change.Kinds...)
-		}
-
-		// this is how we handle it in the resolver, but perhaps graph.properties API gives us some niceties...
-		// modified, deleted := diffProps(baseProps)
-
-		finalType := baseline.Type()
-		switch {
-		case finalType == ChangeTypeAdded:
-			// keep. this is a brand-new node this flush
-		case len(baseProps.ModifiedProperties()) == 0 || len(baseProps.Deleted) == 0:
-			finalType = ChangeTypeNoChange
-		default:
-			finalType = ChangeTypeModified
-		}
-
-		mergedChange := &NodeChange{
-			NodeID:             nodeID,
-			Kinds:              baseKinds,
-			ModifiedProperties: baseProps.ModifiedProperties(),
-			Deleted:            baseProps.DeletedProperties(),
-			changeType:         finalType,
-			Properties:         baseProps,
-		}
-
-		out = append(out, mergedChange)
-	}
-
-	return out, nil
-}
 
 type Changelog struct {
 	Cache changeCache
@@ -304,10 +84,6 @@ func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeC
 	// no prior record -> Add
 	if !last.Exists {
 		proposedChange.changeType = ChangeTypeAdded
-		// Properties: everything is "new"
-		proposedChange.ModifiedProperties = proposedChange.Properties.MapOrEmpty()
-		proposedChange.Deleted = nil
-		// todo: i think we need to store a hash on the proposedChange for caching
 		s.Cache.put(proposedChange.IdentityKey(), proposedChange)
 		return nil
 	}
@@ -329,41 +105,54 @@ func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeC
 
 	// property diff
 	oldProps := last.Properties
-	newProps := proposedChange.Properties.MapOrEmpty()
-	modifiedProps, deletedProps := diffProps(oldProps, newProps)
-
-	proposedChange.ModifiedProperties = modifiedProps
-	proposedChange.Deleted = deletedProps
+	newProps := proposedChange.Properties
+	proposedChange.Properties = DiffProps(oldProps, newProps)
 
 	// update cache with latest snapshot
 	s.Cache.put(proposedChange.IdentityKey(), proposedChange)
 	return nil
 }
 
-// TODO: this does not treat int(1) === float64(1) so thats probs an issue
-// it needs to normalize slices (probably by sorting them) and it needs to normalize number-ish values so that int64(5) == float64(5), for example
-// diffProps returns modified key→value pairs and a list of deleted keys.
-func diffProps(oldProps, newProps map[string]any) (map[string]any, []string) {
+// DiffProps hooks into graph.Properties api instead of diffProps which is jank
+// todo: does this need to normalize slices so that out-of-order slices don't count as a change. consider sorting
+func DiffProps(oldProps, newProps *graph.Properties) *graph.Properties {
 	var (
 		modified = map[string]any{}
-		deleted  = []string{}
+		deleted  []string
 	)
 
-	for k, v := range newProps {
-		if oldVal, ok := oldProps[k]; !ok || !reflect.DeepEqual(v, oldVal) {
+	// Collect modified values
+	for k, v := range newProps.Map {
+		if oldVal, ok := oldProps.Map[k]; !ok || !reflect.DeepEqual(v, oldVal) {
 			modified[k] = v
 		}
 	}
 
-	for k := range oldProps {
-		if _, ok := newProps[k]; !ok {
+	// Collect deleted values
+	for k := range oldProps.Map {
+		if _, ok := newProps.Map[k]; !ok {
 			deleted = append(deleted, k)
 		}
 	}
 
 	sort.Strings(deleted)
 
-	return modified, deleted
+	// Build the Modified/Deleted key sets
+	modifiedKeys := make(map[string]struct{}, len(modified))
+	for k := range modified {
+		modifiedKeys[k] = struct{}{}
+	}
+
+	deletedKeys := make(map[string]struct{}, len(deleted))
+	for _, k := range deleted {
+		deletedKeys[k] = struct{}{}
+	}
+
+	return &graph.Properties{
+		Map:      modified,
+		Deleted:  deletedKeys,
+		Modified: modifiedKeys,
+	}
 }
 
 func (s *Changelog) Submit(ctx context.Context, change Change) bool {
@@ -413,9 +202,6 @@ func (s *Changelog) ReplayNodeChanges(ctx context.Context, sinceID int64, visito
 						Deleted:  deletedPropertyKeys,
 						Modified: modifiedPropertyKeyIndex,
 					},
-					// todo: there is some drift with how these standalone properties are used vs. the nested fields in the Properties obj
-					ModifiedProperties: modifiedProperties,
-					Deleted:            deletedProperties,
 				})
 			}
 		}
@@ -444,17 +230,17 @@ func (s *Changelog) ApplyNodeChanges(ctx context.Context, graphID int64, sinceID
 	// replay rows > sinceID and apply them row-by-row
 	replayErr := s.ReplayNodeChanges(ctx, sinceID, func(change NodeChange) {
 		// ensure objectid mirrors
-		if change.ModifiedProperties == nil {
-			change.ModifiedProperties = make(map[string]any, 1)
+		if change.Properties == nil {
+			change.Properties = graph.NewProperties()
 		}
-		change.ModifiedProperties["objectid"] = change.NodeID
+		change.Properties.Set("objectid", change.NodeID)
 
 		kindIDs, err := s.DB.kindMapper.MapKinds(ctx, change.Kinds)
 		if err != nil {
 			errs.Add(fmt.Errorf("map kinds: %w", err))
 		}
 
-		propsJSON, err := json.Marshal(change.ModifiedProperties)
+		propsJSON, err := json.Marshal(change.Properties.MapOrEmpty())
 		if err != nil {
 			errs.Add(fmt.Errorf("marshal properties: %w", err))
 		}
@@ -469,7 +255,7 @@ func (s *Changelog) ApplyNodeChanges(ctx context.Context, graphID int64, sinceID
 
 		case ChangeTypeModified:
 			// UPDATE with upserted props + deletions
-			if _, err := tx.Exec(ctx, UpdateNodeFromChangeSQL, change.NodeID, kindIDs, propsJSON, change.Deleted); err != nil {
+			if _, err := tx.Exec(ctx, UpdateNodeFromChangeSQL, change.NodeID, kindIDs, propsJSON, change.Properties.DeletedProperties()); err != nil {
 				errs.Add(fmt.Errorf("update node %s: %w", change.NodeID, err))
 			}
 

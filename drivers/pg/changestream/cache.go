@@ -59,13 +59,11 @@ func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
 
 	// hash differs -> modified,
 	// diff against cached properties
-	oldProps := cached.Properties.MapOrEmpty()
-	newProps := proposedChange.Properties.MapOrEmpty()
-	modified, deleted := diffProps(oldProps, newProps)
+	oldProps := cached.Properties
+	newProps := proposedChange.Properties
+	proposedChange.Properties = DiffProps(oldProps, newProps)
 
 	proposedChange.changeType = ChangeTypeModified
-	proposedChange.ModifiedProperties = modified
-	proposedChange.Deleted = deleted
 
 	// Update cache to the new snapshot so next call can short-circuit
 	s.put(key, proposedChange)

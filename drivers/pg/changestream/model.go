@@ -37,14 +37,9 @@ type Change interface {
 
 type NodeChange struct {
 	changeType ChangeType
-
-	NodeID string
-
-	Properties         *graph.Properties
-	ModifiedProperties map[string]any // key-value pairs of changed properties
-	Deleted            []string       // keys of deleted properties
-
-	Kinds graph.Kinds
+	NodeID     string
+	Properties *graph.Properties
+	Kinds      graph.Kinds
 }
 
 func NewNodeChange(nodeID string, kinds graph.Kinds, properties *graph.Properties) *NodeChange {

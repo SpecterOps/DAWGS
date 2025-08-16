@@ -65,8 +65,8 @@ func TestChangeCache(t *testing.T) {
 		handled, err := c.checkCache(newChange)
 		require.NoError(t, err)
 		require.True(t, handled)
-		require.Contains(t, newChange.ModifiedProperties, "changed")
-		require.Contains(t, newChange.Deleted, "a")
+		require.Contains(t, newChange.Properties.Modified, "changed")
+		require.Contains(t, newChange.Properties.Deleted, "a")
 	})
 
 }

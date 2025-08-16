@@ -119,9 +119,10 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		err := changelog.ResolveNodeChange(ctx, proposedChange)
 		require.NoError(t, err)
 		require.Equal(t, changestream.ChangeTypeAdded, proposedChange.Type())
-		require.Contains(t, proposedChange.ModifiedProperties, "a")
-		require.Equal(t, 1, proposedChange.ModifiedProperties["a"])
-		require.Empty(t, proposedChange.Deleted)
+		aProp, err := proposedChange.Properties.Get("a").Int()
+		require.NoError(t, err)
+		require.Equal(t, 1, aProp)
+		require.Empty(t, proposedChange.Properties.DeletedProperties())
 	})
 
 	t.Run("resolve change for visited node with no changes.", func(t *testing.T) {
@@ -169,9 +170,10 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		err := changelog.ResolveNodeChange(ctx, newChange)
 		require.NoError(t, err)
 		require.Equal(t, changestream.ChangeTypeModified, newChange.Type())
-		require.Len(t, newChange.ModifiedProperties, 1)
-		require.Contains(t, newChange.ModifiedProperties, "b")
-		require.Equal(t, 2, newChange.ModifiedProperties["b"])
+		require.Equal(t, newChange.Properties.Len(), 1)
+		bProp, err := newChange.Properties.Get("b").Int()
+		require.NoError(t, err)
+		require.Equal(t, 2, bProp)
 	})
 
 	t.Run("resolve change for visited node with 1 deleted, 1 modified property.", func(t *testing.T) {
@@ -189,11 +191,12 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		err := changelog.ResolveNodeChange(ctx, newChange)
 		require.NoError(t, err)
 		require.Equal(t, changestream.ChangeTypeModified, newChange.Type())
-		require.Len(t, newChange.ModifiedProperties, 1)
-		require.Contains(t, newChange.ModifiedProperties, "b")
-		require.Equal(t, 2, newChange.ModifiedProperties["b"])
-		require.Len(t, newChange.Deleted, 1)
-		require.Contains(t, newChange.Deleted, "a")
+		require.Equal(t, newChange.Properties.Len(), 1)
+		bProp, err := newChange.Properties.Get("b").Int()
+		require.NoError(t, err)
+		require.Equal(t, 2, bProp)
+		require.Len(t, newChange.Properties.DeletedProperties(), 1)
+		require.Contains(t, newChange.Properties.Deleted, "a")
 	})
 
 	t.Run("resolve change for visited node with 1 different kind.", func(t *testing.T) {
@@ -211,23 +214,8 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		err := changelog.ResolveNodeChange(ctx, newChange)
 		require.NoError(t, err)
 		require.Equal(t, changestream.ChangeTypeModified, newChange.Type())
-		require.Empty(t, newChange.ModifiedProperties)
-		require.Empty(t, newChange.Deleted)
+		require.Equal(t, 0, newChange.Properties.Len())
+		require.Empty(t, newChange.Properties.DeletedProperties())
 		require.Equal(t, newChange.Kinds, newChange.Kinds)
 	})
-}
-
-func TestUpdateNodeFromSql(t *testing.T) {
-	changelog, ctx, teardown := setupIntegrationTest(t, false)
-	defer teardown()
-
-	insertNodeRecord(t, ctx, changelog.DB.Conn) // {a: 1}
-
-	nodeID := "abc"
-	kindIDs := "{1}"
-	jsonb := []byte(`{"hello":"world"}`)
-	deleted := []string{"a"}
-
-	_, err := changelog.DB.Conn.Exec(ctx, changestream.UpdateNodeFromChangeSQL, nodeID, kindIDs, jsonb, deleted)
-	require.NoError(t, err)
 }
