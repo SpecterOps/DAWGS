@@ -1,16 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/drivers/pg/changestream"
@@ -39,14 +38,12 @@ func schema() graph.Schema {
 	}
 }
 
-func setupHarness() (*changestream.Changelog, *pg.SchemaManager, *pgxpool.Pool, chan changestream.Notification) {
+func setupHarness() (*changestream.Changelog, chan changestream.Notification, context.Context, context.CancelFunc) {
 	const pgConnStr = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
 
 	var (
-		ctx, _ = context.WithCancel(context.Background())
+		ctx, done = context.WithCancel(context.Background())
 	)
-
-	// defer done()
 
 	notificationC := make(chan changestream.Notification)
 
@@ -82,143 +79,113 @@ func setupHarness() (*changestream.Changelog, *pg.SchemaManager, *pgxpool.Pool, 
 			fmt.Printf("Failed to create daemon: %v\n", err)
 			os.Exit(1)
 		} else {
-			return changelog, schemaManager, pool, notificationC
+			return changelog, notificationC, ctx, done
 		}
 	}
 
-	return nil, nil, nil, nil
+	return nil, nil, ctx, done
 }
 
-type encoder struct {
-	buffer *bytes.Buffer
-}
-
-func (s *encoder) Encode(values []int16) string {
-	s.buffer.Reset()
-	s.buffer.WriteRune('{')
-
-	for idx, value := range values {
-		if idx > 0 {
-			s.buffer.WriteRune(',')
-		}
-
-		s.buffer.WriteString(strconv.Itoa(int(value)))
-	}
-
-	s.buffer.WriteRune('}')
-	return s.buffer.String()
-}
-
-// main simulates what ingest will become: a consumer of the changelog.
 func main() {
-	changelog, schemaManager, pool, notifications := setupHarness()
-	ctx, _ := context.WithCancel(context.Background())
-
-	// Ingest routine
-	wg := &sync.WaitGroup{}
-
+	changelog, notifications, ctx, done := setupHarness()
+	// Graceful shutdown on SIGINT/SIGTERM
+	sigC := make(chan os.Signal, 1)
+	signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		var (
-			encoder = encoder{
-				buffer: &bytes.Buffer{},
-			}
-			lastNodeChangeID int64 = 0
-		)
-
-		// Ingest routine
-		wg.Add(1)
-
-		defer wg.Done()
-
-		for notification := range notifications {
-			switch notification.Type {
-			case changestream.NotificationNode:
-				slog.Info("received notification to update nodes to changelog revision",
-					slog.Int64("rev_id", lastNodeChangeID),
-					slog.Int64("next_rev_id", notification.RevisionID))
-
-				if err := changelog.ReplayNodeChanges(ctx, lastNodeChangeID, func(change changestream.NodeChange) {
-
-					change.ModifiedProperties["objectid"] = change.NodeID
-
-					if propertyJSON, err := json.Marshal(change.ModifiedProperties); err != nil {
-						slog.ErrorContext(ctx, "failed to marshal change properties", slog.Any("error", err))
-					} else if kindIDs, err := schemaManager.MapKinds(ctx, change.Kinds); err != nil {
-						slog.ErrorContext(ctx, "failed to map kinds", slog.Any("error", err))
-					} else {
-						switch change.Type() {
-						case changestream.ChangeTypeAdded:
-							// defaultGraph.ID === 1??
-							if _, err := pool.Exec(ctx, changestream.InsertNodeFromChangeSQL, 1, encoder.Encode(kindIDs), propertyJSON); err != nil {
-								slog.ErrorContext(ctx, "failed to insert node to graph", slog.Any("error", err))
-							}
-
-						case changestream.ChangeTypeModified:
-							if _, err := pool.Exec(ctx, changestream.UpdateNodeFromChangeSQL, change.NodeID, encoder.Encode(kindIDs), propertyJSON, change.Deleted); err != nil {
-								slog.ErrorContext(ctx, "failed to update node to graph", slog.Any("error", err))
-							}
-
-						case changestream.ChangeTypeRemoved:
-							slog.Error("not implemented")
-						}
-					}
-				}); err != nil {
-					slog.ErrorContext(ctx, "failed to replay node changes", slog.Any("error", err))
-				}
-
-				lastNodeChangeID = notification.RevisionID
-
-			case changestream.NotificationEdge:
-				slog.Info("received notification to update edges to changelog revision", slog.Int64("rev_id", notification.RevisionID))
-				//lastEdgeChangeID = nextNotification.RevisionID
-			}
-		}
-
-		slog.Info("notification channel closed")
+		<-sigC
+		slog.Info("Received shutdown signal")
+		done()
 	}()
 
-	if err := test_100(ctx, changelog); err != nil {
-		fmt.Printf("Test failed: %v\n", err)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	lastNodeChangeID := 0
+
+	// Run the applier loop in a goroutine like we would in bloodhound.entrypoint.go
+	// could gate this with a feature flag.
+	go func() {
+		defer wg.Done()
+
+		err := changestream.RunNodeApplierLoop(
+			ctx,
+			notifications,
+			changelog,
+			1, // default graph id is 1 yeah?
+			int64(lastNodeChangeID),
+		)
+
+		if err != nil {
+			slog.Error("Node applier loop exited with error", slog.Any("error", err))
+		} else {
+			slog.Info("Node applier loop stopped cleanly")
+		}
+	}()
+
+	if err := test(ctx, changelog); err != nil {
+		fmt.Printf("test_100 failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	slog.Info("Waiting for dawgs to finish")
 	wg.Wait()
+	slog.Info("Shutdown complete")
 }
 
 func test(ctx context.Context, changelog *changestream.Changelog) error {
-	// propose 3 chnages for `123`
-	proposedChange1 := changestream.NewNodeChange(
-		"123",
-		nodeKinds,
-		graph.NewProperties().Set("a", 1),
-	)
-	proposedChange2 := changestream.NewNodeChange(
-		"123",
-		nodeKinds,
-		graph.NewProperties().SetAll(map[string]any{"a": 1, "b": 2}),
-	)
-	proposedChange3 := changestream.NewNodeChange(
-		"123",
-		nodeKinds,
-		graph.NewProperties().SetAll(map[string]any{"a": 2, "b": 3}),
-	)
+	numNodes := 1000
+	for idx := 0; idx < numNodes; idx++ {
+		var (
+			nodeObjectID   = strconv.Itoa(idx)
+			nodeProperties = graph.NewProperties()
+		)
 
-	changes := []*changestream.NodeChange{proposedChange1, proposedChange2, proposedChange3}
+		nodeProperties.Set("objectid", nodeObjectID)
+		nodeProperties.Set("node_index", idx)
 
-	for _, change := range changes {
-		if err := changelog.ResolveNodeChange(ctx, change); err != nil {
+		proposedChange := changestream.NewNodeChange(
+			nodeObjectID,
+			nodeKinds,
+			nodeProperties,
+		)
+
+		if err := changelog.ResolveNodeChange(ctx, proposedChange); err != nil {
 			fmt.Println("blahh")
-		} else if change.ShouldSubmit() {
-			fmt.Println("shouldsubmit")
-			changelog.Submit(ctx, change)
+		} else if proposedChange.ShouldSubmit() {
+			changelog.Submit(ctx, proposedChange)
 		}
 	}
+
+	for idx := 0; idx < numNodes; idx++ {
+		var (
+			nodeObjectID   = strconv.Itoa(idx)
+			nodeProperties = graph.NewProperties()
+		)
+
+		nodeProperties.Set("objectid", nodeObjectID)
+		nodeProperties.Set("node_index", idx)
+		nodeProperties.Set("new_value", 41240-idx) // this property counts as a change
+
+		proposedChange := changestream.NewNodeChange(
+			nodeObjectID,
+			nodeKinds,
+			nodeProperties,
+		)
+
+		if err := changelog.ResolveNodeChange(ctx, proposedChange); err != nil {
+			fmt.Println("blahh")
+		} else if proposedChange.ShouldSubmit() {
+			changelog.Submit(ctx, proposedChange)
+		}
+	}
+
+	slog.Info("Done with test")
 
 	return nil
 }
 
-// test_100 will produce 3 hunnit records in the changelog, which when repalyed, create and make modifications to 100 nodes numbered 0..99
+// test_100 will produce 3 hunnit records in the changelog,
+// which when repalyed, create and make modifications to 100 nodes numbered 0..99
+// as written every node should have 2 props: a:1 and objectid
 func test_100(ctx context.Context, changelog *changestream.Changelog) error {
 	changes := []*changestream.NodeChange{}
 
@@ -254,18 +221,18 @@ func test_100(ctx context.Context, changelog *changestream.Changelog) error {
 		changes = append(changes, change)
 	}
 
-	numSkipped := 0
+	// numSkipped := 0
 	for _, change := range changes {
 		if err := changelog.ResolveNodeChange(ctx, change); err != nil {
-			fmt.Println("blahh")
+			// fmt.Println("blahh")
 		} else if change.ShouldSubmit() {
-			fmt.Println("shouldsubmit")
+			// fmt.Println("shouldsubmit")
 			changelog.Submit(ctx, change)
 		} else {
-			numSkipped++
+			// numSkipped++
 		}
 	}
-	fmt.Println("numskipped; ", numSkipped)
+	// fmt.Println("numskipped; ", numSkipped)
 
 	return nil
 }

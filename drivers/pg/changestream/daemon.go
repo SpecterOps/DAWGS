@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"sort"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/util"
 	"github.com/specterops/dawgs/util/channels"
 )
 
@@ -40,12 +42,13 @@ type db struct {
 	kindMapper pg.KindMapper
 }
 
-// DBConn contains the methods we actually use from pgxpool. putting these here makes testing a blessing
+// DBConn contains the methods we actually use from pgxpool. putting these here makes testing easier
 type DBConn interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
 func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) (db, error) {
@@ -419,5 +422,116 @@ func (s *Changelog) ReplayNodeChanges(ctx context.Context, sinceID int64, visito
 		}
 
 		return nodeChangesResult.Err()
+	}
+}
+
+// ApplyNodeChanges replays node changes with id > sinceID and applies them to the graph
+// in a single database transaction.
+//
+//   - set "objectid" to change.NodeID in the properties (as in your main).
+//   - all writes happen in one tx; any row failure causes a rollback and error.
+func (s *Changelog) ApplyNodeChanges(ctx context.Context, graphID int64, sinceID int64) error {
+	errs := util.NewErrorCollector()
+	// Start one transaction for the whole batch we’re about to apply
+	tx, err := s.DB.Conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	// If anything fails, roll back
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	// replay rows > sinceID and apply them row-by-row
+	replayErr := s.ReplayNodeChanges(ctx, sinceID, func(change NodeChange) {
+		// ensure objectid mirrors
+		if change.ModifiedProperties == nil {
+			change.ModifiedProperties = make(map[string]any, 1)
+		}
+		change.ModifiedProperties["objectid"] = change.NodeID
+
+		kindIDs, err := s.DB.kindMapper.MapKinds(ctx, change.Kinds)
+		if err != nil {
+			errs.Add(fmt.Errorf("map kinds: %w", err))
+		}
+
+		propsJSON, err := json.Marshal(change.ModifiedProperties)
+		if err != nil {
+			errs.Add(fmt.Errorf("marshal properties: %w", err))
+		}
+
+		// apply to graph
+		switch change.Type() {
+		case ChangeTypeAdded:
+			// INSERT
+			if _, err := tx.Exec(ctx, InsertNodeFromChangeSQL, graphID, kindIDs, propsJSON); err != nil {
+				errs.Add(fmt.Errorf("insert node %s: %w", change.NodeID, err))
+			}
+
+		case ChangeTypeModified:
+			// UPDATE with upserted props + deletions
+			if _, err := tx.Exec(ctx, UpdateNodeFromChangeSQL, change.NodeID, kindIDs, propsJSON, change.Deleted); err != nil {
+				errs.Add(fmt.Errorf("update node %s: %w", change.NodeID, err))
+			}
+
+		case ChangeTypeRemoved:
+			errs.Add(fmt.Errorf("delete not implemented for node %s", change.NodeID))
+		}
+	})
+
+	// handle visitor errors and replay errors
+	visitorErrors := errs.Combined()
+	if replayErr != nil {
+		return replayErr
+	} else if visitorErrors != nil {
+		return fmt.Errorf("applying node changes: %w", visitorErrors)
+	}
+
+	// if we made it here, commit all changes
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+// hook for bloodhound datapipe daemon
+// todo: the  caller should maintain `sinceID` across runs (e.g., in-memory now, maybe need a checkpoint table).
+func RunNodeApplierLoop(
+	ctx context.Context,
+	notifications <-chan Notification,
+	changelog *Changelog,
+	graphID int64,
+	sinceID int64,
+) error {
+
+	startID := sinceID
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case n, ok := <-notifications:
+			if !ok {
+				return nil // channel closed, exit
+			}
+
+			if n.Type != NotificationNode {
+				continue
+			}
+
+			slog.Info("applying node changes",
+				slog.Int64("from_revison", startID),
+				slog.Int64("to_revison", n.RevisionID),
+			)
+
+			if err := changelog.ApplyNodeChanges(ctx, graphID, startID); err != nil {
+				return fmt.Errorf("apply node changes (from %d to %d): %w", startID, n.RevisionID, err)
+			}
+
+			// next tick will start from here
+			startID = n.RevisionID
+		}
 	}
 }
