@@ -10,7 +10,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	pgx "github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -35,8 +36,16 @@ var (
 )
 
 type db struct {
-	PGX        *pgxpool.Pool
+	Conn       DBConn
 	kindMapper pg.KindMapper
+}
+
+// DBConn contains the methods we actually use from pgxpool. putting these here makes testing a blessing
+type DBConn interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
 }
 
 func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapper) (db, error) {
@@ -50,7 +59,7 @@ func newLogDB(ctx context.Context, pgxPool *pgxpool.Pool, kindMapper pg.KindMapp
 	}
 
 	return db{
-		PGX:        pgxPool,
+		Conn:       pgxPool,
 		kindMapper: kindMapper,
 	}, nil
 }
@@ -67,7 +76,7 @@ func (s *db) fetchLastNodeState(ctx context.Context, nodeID string) (lastNodeSta
 		storedHash          []byte
 	)
 
-	err := s.PGX.QueryRow(ctx, LAST_NODE_CHANGE_SQL_2, nodeID).Scan(&storedModifiedProps, &storedHash)
+	err := s.Conn.QueryRow(ctx, LAST_NODE_CHANGE_SQL_2, nodeID).Scan(&storedModifiedProps, &storedHash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return lastNodeState{Exists: false}, nil
 	} else if err != nil {
@@ -132,7 +141,7 @@ func (s *db) flushNodeChanges(ctx context.Context, changes []*NodeChange) (int64
 		}
 	}
 
-	if _, err := s.PGX.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
+	if _, err := s.Conn.CopyFrom(ctx, pgx.Identifier{"node_change_stream"}, copyColumns, pgx.CopyFromSlice(numChanges, iterator)); err != nil {
 		return 0, fmt.Errorf("flushing nodes: %w", err)
 	} else if latestID, err := s.latestNodeChangeID(ctx); err != nil {
 		return 0, fmt.Errorf("reading latest nodeid: %w", err)
@@ -148,7 +157,7 @@ func (s *db) latestNodeChangeID(ctx context.Context) (int64, error) {
 func (s *db) latestChangeID(ctx context.Context, query string) (int64, error) {
 	var (
 		lastChangeID  int64
-		lastChangeRow = s.PGX.QueryRow(ctx, query)
+		lastChangeRow = s.Conn.QueryRow(ctx, query)
 		err           = lastChangeRow.Scan(&lastChangeID)
 	)
 
@@ -360,7 +369,7 @@ func (s *Changelog) Submit(ctx context.Context, change Change) bool {
 }
 
 func (s *Changelog) ReplayNodeChanges(ctx context.Context, sinceID int64, visitor func(change NodeChange)) error {
-	if nodeChangesResult, err := s.DB.PGX.Query(ctx, SELECT_NODE_CHANGE_RANGE_SQL, sinceID); err != nil {
+	if nodeChangesResult, err := s.DB.Conn.Query(ctx, SELECT_NODE_CHANGE_RANGE_SQL, sinceID); err != nil {
 		return err
 	} else {
 		defer nodeChangesResult.Close()

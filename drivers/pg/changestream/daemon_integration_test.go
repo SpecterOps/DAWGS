@@ -75,7 +75,7 @@ func setupIntegrationTest(t *testing.T, enableChangelog bool) (*changestream.Cha
 	}
 }
 
-func insertChangelogRecord(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func insertChangelogRecord(t *testing.T, ctx context.Context, pool changestream.DBConn) {
 	oldChange := changestream.NewNodeChange(
 		"123",
 		graph.StringsToKinds([]string{"NodeKind1"}),
@@ -99,7 +99,7 @@ func insertChangelogRecord(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	require.NoError(t, err)
 }
 
-func insertNodeRecord(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func insertNodeRecord(t *testing.T, ctx context.Context, pool changestream.DBConn) {
 	_, err := pool.Exec(ctx, `insert into node (graph_id, kind_ids, properties) values ($1, $2, $3) returning (id, kind_ids, properties)::nodeComposite;`, 1, []int{1}, map[string]any{"a": 1, "objectid": "abc"})
 
 	require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		hashbytes, _ := proposedChange.Hash()
 
 		// simulate an existing record in the changelog
-		_, err := changelog.DB.PGX.Exec(ctx, `INSERT INTO node_change_stream (node_id,kind_ids,hash,change_type,modified_properties,deleted_properties,created_at)
+		_, err := changelog.DB.Conn.Exec(ctx, `INSERT INTO node_change_stream (node_id,kind_ids,hash,change_type,modified_properties,deleted_properties,created_at)
 				VALUES (
 					$1,                             
 					$2,               
@@ -158,7 +158,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		changelog, ctx, teardown := setupIntegrationTest(t, false)
 		defer teardown()
 
-		insertChangelogRecord(t, ctx, changelog.DB.PGX)
+		insertChangelogRecord(t, ctx, changelog.DB.Conn)
 
 		newChange := changestream.NewNodeChange(
 			"123",
@@ -178,7 +178,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		changelog, ctx, teardown := setupIntegrationTest(t, false)
 		defer teardown()
 
-		insertChangelogRecord(t, ctx, changelog.DB.PGX)
+		insertChangelogRecord(t, ctx, changelog.DB.Conn)
 
 		newChange := changestream.NewNodeChange(
 			"123",
@@ -200,7 +200,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 		changelog, ctx, teardown := setupIntegrationTest(t, false)
 		defer teardown()
 
-		insertChangelogRecord(t, ctx, changelog.DB.PGX)
+		insertChangelogRecord(t, ctx, changelog.DB.Conn)
 
 		newChange := changestream.NewNodeChange(
 			"123",
@@ -221,13 +221,13 @@ func TestUpdateNodeFromSql(t *testing.T) {
 	changelog, ctx, teardown := setupIntegrationTest(t, false)
 	defer teardown()
 
-	insertNodeRecord(t, ctx, changelog.DB.PGX) // {a: 1}
+	insertNodeRecord(t, ctx, changelog.DB.Conn) // {a: 1}
 
 	nodeID := "abc"
 	kindIDs := "{1}"
 	jsonb := []byte(`{"hello":"world"}`)
 	deleted := []string{"a"}
 
-	_, err := changelog.DB.PGX.Exec(ctx, changestream.UpdateNodeFromChangeSQL, nodeID, kindIDs, jsonb, deleted)
+	_, err := changelog.DB.Conn.Exec(ctx, changestream.UpdateNodeFromChangeSQL, nodeID, kindIDs, jsonb, deleted)
 	require.NoError(t, err)
 }
