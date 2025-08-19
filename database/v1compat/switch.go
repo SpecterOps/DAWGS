@@ -53,6 +53,13 @@ func NewDatabaseSwitch(ctx context.Context, initialDB Database) *DatabaseSwitch 
 	}
 }
 
+func (s *DatabaseSwitch) V2() database.Instance {
+	s.currentDBLock.RLock()
+	defer s.currentDBLock.RUnlock()
+
+	return s.currentDB.V2()
+}
+
 func (s *DatabaseSwitch) SetDefaultGraph(ctx context.Context, graphSchema Graph) error {
 	s.currentDBLock.RLock()
 	defer s.currentDBLock.RUnlock()
@@ -219,8 +226,4 @@ func (s *DatabaseSwitch) RefreshKinds(ctx context.Context) error {
 
 		return s.currentDB.RefreshKinds(ctx)
 	}
-}
-
-func (s *DatabaseSwitch) V2() database.Instance {
-	return nil
 }

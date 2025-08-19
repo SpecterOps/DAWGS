@@ -425,6 +425,18 @@ func (s *Properties) GetOrDefault(key string, defaultValue any) PropertyValue {
 	return s.GetWithFallback(key, defaultValue)
 }
 
+func PropertiesMustGetOrDefault[T any](properties *Properties, key string, defaultValue T) T {
+	value := properties.GetWithFallback(key, defaultValue)
+
+	if !value.IsNil() {
+		if typedValue, typeOK := value.Any().(T); typeOK {
+			return typedValue
+		}
+	}
+
+	return defaultValue
+}
+
 func (s *Properties) GetWithFallback(key string, defaultValue any, fallbackKeys ...string) PropertyValue {
 	value := defaultValue
 

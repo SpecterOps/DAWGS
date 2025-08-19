@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -109,6 +110,10 @@ func (s Kinds) Strings() []string {
 	}
 
 	return kindStrings
+}
+
+func (s Kinds) Formatted() string {
+	return strings.Join(s.Strings(), ",")
 }
 
 // ContainsOneOf returns true if the Kinds contains one of the given Kind types or false if it does not.

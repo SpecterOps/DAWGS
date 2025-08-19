@@ -59,28 +59,28 @@ func joinedExpressionList(operator cypher.Operator, operands []cypher.SyntaxNode
 }
 
 func Not(operand cypher.Expression) cypher.Expression {
-	switch typedOperand := operand.(type) {
-	case *cypher.KindMatcher:
-		// If the type doesn't match, this code does not handle the error. This will be caught during query build time
-		// instead.
-		if identifier, typeOK := typedOperand.Reference.(*cypher.Variable); typeOK && identifier.Symbol == Identifiers.relationship {
-			if len(typedOperand.Kinds) == 1 {
-				return cypher.NewComparison(
-					cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, identifier),
-					cypher.OperatorNotEquals,
-					cypher.NewStringLiteral(typedOperand.Kinds[0].String()),
-				)
-			} else {
-				return cypher.NewNegation(
-					cypher.NewComparison(
-						cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, identifier),
-						cypher.OperatorIn,
-						cypher.NewStringListLiteral(typedOperand.Kinds.Strings()),
-					),
-				)
-			}
-		}
-	}
+	// switch typedOperand := operand.(type) {
+	// case *cypher.KindMatcher:
+	// 	// If the type doesn't match, this code does not handle the error. This will be caught during query build time
+	// 	// instead.
+	// 	if identifier, typeOK := typedOperand.Reference.(*cypher.Variable); typeOK && identifier.Symbol == Identifiers.relationship {
+	// 		if len(typedOperand.Kinds) == 1 {
+	// 			return cypher.NewComparison(
+	// 				cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, identifier),
+	// 				cypher.OperatorNotEquals,
+	// 				cypher.NewStringLiteral(typedOperand.Kinds[0].String()),
+	// 			)
+	// 		} else {
+	// 			return cypher.NewNegation(
+	// 				cypher.NewComparison(
+	// 					cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, identifier),
+	// 					cypher.OperatorIn,
+	// 					cypher.NewStringListLiteral(typedOperand.Kinds.Strings()),
+	// 				),
+	// 			)
+	// 		}
+	// 	}
+	// }
 
 	return cypher.NewNegation(operand)
 }
@@ -148,6 +148,7 @@ type KindsContinuation interface {
 }
 
 type Comparable interface {
+	In(value any) cypher.Expression
 	Contains(value any) cypher.Expression
 	Equals(value any) cypher.Expression
 	GreaterThan(value any) cypher.Expression
@@ -183,6 +184,10 @@ func (s *comparisonContinuation) asComparison(operator cypher.Operator, rOperand
 		operator,
 		cypher.NewLiteral(rOperand, rOperand == nil),
 	)
+}
+
+func (s *comparisonContinuation) In(value any) cypher.Expression {
+	return s.asComparison(cypher.OperatorIn, value)
 }
 
 func (s *comparisonContinuation) Contains(value any) cypher.Expression {

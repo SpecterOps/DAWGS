@@ -30,12 +30,25 @@ type Result interface {
 type Driver interface {
 	WithGraph(target Graph) Driver
 
+	// Eventually to be deprecated - this is currently a translation gap where cysql doesn't correctly
+	// marshal create statements
+	//
+	// Deprecated: This function will be removed in future version.
 	CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error)
+
+	// Eventually to be deprecated - this is currently a translation gap where cysql doesn't correctly
+	// marshal create statements
+	//
+	// Deprecated: This function will be removed in future version.
 	CreateRelationship(ctx context.Context, relationship *graph.Relationship) (graph.ID, error)
 
 	Exec(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
 	Explain(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
 	Profile(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
+
+	// Mapper is supporting backward compat for v1
+	//
+	// Deprecated: This function will be removed in future version.
 	Mapper() graph.ValueMapper
 }
 

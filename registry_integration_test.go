@@ -4,13 +4,12 @@ package dawgs_test
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"testing"
 
-	//pg_v2 "github.com/specterops/dawgs/drivers/pg/v2"
+	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/database/pg"
+
 	"github.com/specterops/dawgs/database"
-	"github.com/specterops/dawgs/database/neo4j"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
 	"github.com/specterops/dawgs/util/size"
@@ -20,15 +19,10 @@ import (
 func Test(t *testing.T) {
 	ctx := context.Background()
 
-	graphDB, err := database.Open(ctx, neo4j.DriverName, database.Config{
+	graphDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte * 1,
-		ConnectionString:      "neo4j://neo4j:neo4jj@localhost:7687",
+		ConnectionString:      "postgresql://postgres:postgres@localhost:5432/bhe",
 	})
-
-	//graphDB, err := v2.Open(ctx, pg_v2.DriverName, v2.Config{
-	//	GraphQueryMemoryLimit: size.Gibibyte * 1,
-	//	ConnectionString:      "postgresql://postgres:postgres@localhost:5432/bhe",
-	//})
 
 	require.NoError(t, err)
 
@@ -39,42 +33,48 @@ func Test(t *testing.T) {
 			Nodes: graph.Kinds{graph.StringKind("Node")},
 			Edges: graph.Kinds{graph.StringKind("Edge")},
 			NodeIndexes: []database.Index{{
-				Name:  "node_label_name_index",
+				Name:  "node_name_index",
 				Field: "name",
 				Type:  database.IndexTypeTextSearch,
 			}},
 		})))
 
-	preparedQuery, err := query.New().Return(query.Node()).Limit(10).Build()
-	require.NoError(t, err)
-
 	require.NoError(t, graphDB.Session(ctx, func(ctx context.Context, driver database.Driver) error {
-		return driver.CreateNode(ctx, graph.PrepareNode(graph.AsProperties(map[string]any{
+		_, err := driver.CreateNode(ctx, graph.PrepareNode(graph.AsProperties(map[string]any{
 			"name": "THAT NODE",
 		}), graph.StringKind("Node")))
+
+		return err
 	}))
 
-	require.NoError(t, graphDB.Session(ctx, database.FetchNodes(preparedQuery, func(node *graph.Node) error {
-		slog.Info(fmt.Sprintf("Got result from DB: %v", node))
-		return nil
-	})))
+	require.NoError(t, graphDB.Session(ctx, func(ctx context.Context, driver database.Driver) error {
+		myQuery := query.New().Where(
+			query.Node().Property("a").Equals(1234),
+		).OrderBy(
+			query.Node().Property("my_order"),
+		)
 
-	require.NoError(t, graphDB.Transaction(ctx, database.FetchNodes(preparedQuery, func(node *graph.Node) error {
-		slog.Info(fmt.Sprintf("Got result from DB: %v", node))
-		return nil
-	})))
+		if builtQuery, err := myQuery.Build(); err != nil {
+			return err
+		} else {
+			var (
+				node   graph.Node
+				result = driver.Exec(ctx, builtQuery.Query, builtQuery.Parameters)
+			)
 
-	//require.NoError(t, graphDB.Transaction(ctx, func(ctx context.Context, driver v2.Driver) error {
-	//	builder := v2.Query().Create(
-	//		v2.Node().NodePattern(graph.Kinds{graph.StringKind("A")}, cypher.NewParameter("props", map[string]any{
-	//			"name": "1234",
-	//		})),
-	//	)
-	//
-	//	if preparedQuery, err := builder.Build(); err != nil {
-	//		return err
-	//	} else {
-	//		return driver.CypherQuery(ctx, preparedQuery.Query, preparedQuery.Parameters).Close(ctx)
-	//	}
-	//}))
+			defer result.Close(ctx)
+
+			if result.HasNext(ctx) {
+				if err := result.Scan(&node); err != nil {
+					return err
+				} else {
+					require.Equal(t, "THAT NODE", node.Properties.GetOrDefault("name", "").Any())
+				}
+			} else {
+				t.Fatal("no node found")
+			}
+		}
+
+		return nil
+	}))
 }
