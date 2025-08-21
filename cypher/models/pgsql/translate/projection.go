@@ -439,8 +439,8 @@ func (s *Translator) buildTailProjection() error {
 		// Apply GROUP BY logic after projections are built and frame bindings are rewritten
 		if currentPart.HasProjections() {
 			var (
-				hasAggregates      = false
-				nonAggregateExprs  = []pgsql.Expression{}
+				hasAggregates     = false
+				nonAggregateExprs = []pgsql.Expression{}
 			)
 
 			// Check if any projections contain aggregate functions
