@@ -1,15 +1,19 @@
 module github.com/specterops/dawgs
 
-go 1.23.0
+go 1.24
+
+toolchain go1.24.6
 
 require (
 	cuelang.org/go v0.13.2
+	github.com/OneOfOne/xxhash v1.2.8
 	github.com/RoaringBitmap/roaring/v2 v2.6.0
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/axiomhq/hyperloglog v0.2.5
 	github.com/gammazero/deque v1.0.0
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.7.5
+	github.com/klauspost/compress v1.18.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.1
 	github.com/stretchr/testify v1.10.0
 )
@@ -19,6 +23,9 @@ require (
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
+	github.com/go-core-stack/patricia v0.0.0-20250613164405-ac1bcd231c34 // indirect
+	github.com/hashicorp/go-immutable-radix/v2 v2.1.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
@@ -29,9 +36,9 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
+	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
-	golang.org/x/tools v0.34.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
