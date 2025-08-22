@@ -18,10 +18,10 @@ import (
 const (
 	NumMaxEntries              = 8_000_000_000
 	EntrySize                  = 16
-	BlockSize                  = 1024 * 40960
-	CompressedBlockSizeTrigger = 40960
+	BlockSize                  = 1024 * 256
+	CompressedBlockSizeTrigger = 16384 * 2
 	EntriesPerBlock            = BlockSize / EntrySize
-	NumMapBuckets              = NumMaxEntries * 16 / BlockSize
+	NumMapBuckets              = NumMaxEntries / BlockSize
 )
 
 func digestEntityIDHash(digester *xxhash.XXHash64, value string) (uint64, error) {

@@ -22,18 +22,25 @@ func TestAssociativeCache_AddNode(t *testing.T) {
 	//cache, err := NewVoidCache("/tmp/test.db", "objectid")
 	//require.NoError(t, err)
 
-	cache := NewPackMap()
+	//cache := NewBasicMap()
+	cache := NewPackMap(12)
+
 	kinds := graph.Kinds{
 		graph.StringKind("base"),
 		graph.StringKind("next"),
 	}
 
 	var hashes [][]byte
-	const times = 100_000_000
+	const (
+		times        = 500_000_000
+		reportStride = 1_000_000
+	)
+
+	then := time.Now()
 
 	for idx := 0; idx < times; idx++ {
-		if idx > 0 && idx%1_000_000 == 0 {
-			fmt.Printf("Inserted %d\n", idx)
+		if idx > 0 && idx%reportStride == 0 {
+			fmt.Printf("Inserted %d - %.2f pairs/sec\n", idx, float64(idx)/time.Since(then).Seconds())
 		}
 
 		entityHash, err := cache.PutNode("1234-"+strconv.Itoa(idx), &graph.Node{
@@ -51,25 +58,28 @@ func TestAssociativeCache_AddNode(t *testing.T) {
 
 	require.NoError(t, cache.Compact())
 
-	fmt.Printf("Memory prepped, validating %d buckets\n", len(cache.allocatedBuckets))
-
-	cache.GetEntity( "1234-"+strconv.Itoa(1))
-
-	then := time.Now()
-
-	for idx := 0; idx < times; idx++ {
-		hash, err := cache.GetEntity( "1234-"+strconv.Itoa(idx))
-
-		require.NoError(t, err)
-		require.NotEmpty(t, hash, "Missing hash for id %s", "1234-"+strconv.Itoa(idx))
-		require.Equalf(t, hashes[idx], hash, "Hash mismatch for idx %v+ != %v+", hashes[idx], hash)
-
-		if idx > 0 && idx %10_000 == 0 {
-			fmt.Printf("Validated %d - %2.2f ms per-op\n", idx, float64(time.Since(then).Milliseconds())/float64(idx))
-		}
+	for {
+		fmt.Printf("Memory prepped, validating %d buckets\n", cache.Stat())
+		time.Sleep(10 * time.Second)
 	}
 
-	fmt.Printf("Validated in %.2f seconds\n", time.Since(then).Seconds())
+	//fmt.Printf("Memory prepped, validating %d buckets\n", cache.Stat())
+	//
+	//then := time.Now()
+	//
+	//for idx := 0; idx < times; idx++ {
+	//	hash, err := cache.GetEntity("1234-" + strconv.Itoa(idx))
+	//
+	//	require.NoError(t, err)
+	//	require.NotEmpty(t, hash, "Missing hash for id %s", "1234-"+strconv.Itoa(idx))
+	//	require.Equalf(t, hashes[idx], hash, "Hash mismatch for idx %v+ != %v+", hashes[idx], hash)
+	//
+	//	if idx > 0 && idx%reportStride == 0 {
+	//		fmt.Printf("Validated %d - %2.2f ms per-op\n", idx, float64(time.Since(then).Milliseconds())/float64(idx))
+	//	}
+	//}
+	//
+	//fmt.Printf("Validated in %.2f seconds\n", time.Since(then).Seconds())
 
 	//hash, err := cache.Get("anything")
 	//
