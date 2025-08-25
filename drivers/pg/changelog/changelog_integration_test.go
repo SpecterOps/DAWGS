@@ -52,7 +52,8 @@ func setupIntegrationTest(t *testing.T) (*changelog.Changelog, context.Context, 
 	require.NoError(t, err)
 
 	// set batch_size to 1 so that we can test flushing logic
-	daemon, err := changelog.NewChangelog(ctx, pool, 1, kindMapper)
+	daemon := changelog.NewChangelog(pool, kindMapper, 1)
+	daemon.Start(ctx)
 	require.NoError(t, err)
 
 	return daemon, ctx, func() {

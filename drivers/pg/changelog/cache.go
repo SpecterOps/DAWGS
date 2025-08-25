@@ -11,7 +11,7 @@ type cache struct {
 	stats CacheStats
 }
 
-func newChangeCache() cache {
+func newCache() cache {
 	return cache{
 		data:  make(map[uint64]uint64),
 		mutex: &sync.Mutex{},

@@ -29,23 +29,32 @@ var (
 )
 
 type Changelog struct {
-	cache cache
-	db    db
-	loop  loop
+	cache     cache
+	db        db
+	loop      loop
+	batchSize int
 }
 
-func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, batchSize int, kindMapper pg.KindMapper) (*Changelog, error) {
-	cache := newChangeCache()
-	db := newLogDB(pgxPool, kindMapper)
-	loop := newLoop(ctx, &db, batchSize)
-
-	go loop.start(ctx)
+func NewChangelog(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, batchSize int) *Changelog {
+	cache := newCache()
+	db := newDB(pgxPool, kindMapper)
 
 	return &Changelog{
-		cache: cache,
-		db:    db,
-		loop:  loop,
-	}, nil
+		cache:     cache,
+		db:        db,
+		batchSize: batchSize,
+	}
+}
+
+// Start begins a long-running loop that buffers and flushes node/edge updates
+func (s *Changelog) Start(ctx context.Context) {
+	s.loop = newLoop(ctx, &s.db, s.batchSize)
+
+	go func() {
+		if err := s.loop.start(ctx); err != nil {
+			slog.ErrorContext(ctx, "changelog loop exited with error", "err", err)
+		}
+	}()
 }
 
 func (s *Changelog) GetStats() CacheStats {

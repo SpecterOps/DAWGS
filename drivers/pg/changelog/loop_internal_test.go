@@ -24,6 +24,7 @@ func TestLoop(t *testing.T) {
 
 		// Run one iteration
 		go func() { _ = loop.start(ctx) }()
+
 		time.Sleep(50 * time.Millisecond)
 
 		require.Len(t, db.flushedNodes, 2)

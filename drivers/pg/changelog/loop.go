@@ -23,16 +23,16 @@ type flusher interface {
 	flushEdgeChanges(ctx context.Context, changes []EdgeChange) (int64, error)
 }
 
-func newLoop(ctx context.Context, flusher flusher, batchSize int) loop {
+func newLoop(ctx context.Context, f flusher, batchSize int) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
 	return loop{
-		ReaderC:       readerC,
 		WriterC:       writerC,
+		ReaderC:       readerC,
 		FlushInterval: 5 * time.Second,
 		BatchSize:     batchSize,
-		nodeBuffer:    newChangeBuffer(flusher.flushNodeChanges),
-		edgeBuffer:    newChangeBuffer(flusher.flushEdgeChanges),
+		nodeBuffer:    newChangeBuffer(f.flushNodeChanges),
+		edgeBuffer:    newChangeBuffer(f.flushEdgeChanges),
 	}
 }
 

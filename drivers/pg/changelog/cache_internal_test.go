@@ -9,7 +9,7 @@ import (
 
 func TestChangeCache(t *testing.T) {
 	t.Run("node doesn't exist in cache. return true.", func(t *testing.T) {
-		c := newChangeCache()
+		c := newCache()
 
 		node := &NodeChange{
 			NodeID:     "123",
@@ -25,7 +25,7 @@ func TestChangeCache(t *testing.T) {
 
 	t.Run("node is cached with same properties. return false", func(t *testing.T) {
 		var (
-			c      = newChangeCache()
+			c      = newCache()
 			change = &NodeChange{
 				NodeID:     "123",
 				Kinds:      nil,
@@ -45,7 +45,7 @@ func TestChangeCache(t *testing.T) {
 
 	t.Run("node is cached. properties have a diff. return true", func(t *testing.T) {
 		var (
-			c         = newChangeCache()
+			c         = newCache()
 			oldChange = &NodeChange{
 				NodeID:     "123",
 				Kinds:      nil,
@@ -71,7 +71,7 @@ func TestChangeCache(t *testing.T) {
 
 	t.Run("node is cached. kinds have a diff. return true", func(t *testing.T) {
 		var (
-			c         = newChangeCache()
+			c         = newCache()
 			oldChange = &NodeChange{
 				NodeID:     "123",
 				Kinds:      nil,
@@ -96,7 +96,7 @@ func TestChangeCache(t *testing.T) {
 	})
 
 	t.Run("edge doesn't exist in cache. return true.", func(t *testing.T) {
-		c := newChangeCache()
+		c := newCache()
 
 		node := &EdgeChange{
 			SourceNodeID: "123",
@@ -112,7 +112,7 @@ func TestChangeCache(t *testing.T) {
 
 	t.Run("edge is cached. properties have a diff. return true", func(t *testing.T) {
 		var (
-			c         = newChangeCache()
+			c         = newCache()
 			oldChange = &EdgeChange{
 				SourceNodeID: "123",
 				TargetNodeID: "456",

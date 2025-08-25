@@ -31,7 +31,7 @@ type Execer interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
-func newLogDB(conn Execer, kindMapper pg.KindMapper) db {
+func newDB(conn Execer, kindMapper pg.KindMapper) db {
 	return db{
 		conn:       conn,
 		kindMapper: kindMapper,
