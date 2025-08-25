@@ -16,7 +16,7 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, make(chan<- Notification), 2)
+		loop := newLoop(ctx, db, 2)
 
 		// Inject two changes. explicitly cast the NodeChange bc generics jank
 		require.True(t, channels.Submit(ctx, loop.WriterC, Change(&NodeChange{NodeID: "1"})))
@@ -33,7 +33,7 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, make(chan<- Notification), 3)
+		loop := newLoop(ctx, db, 3)
 
 		// Inject two changes. explicitly cast the NodeChange bc generics jank
 		require.True(t, channels.Submit(ctx, loop.WriterC, Change(&NodeChange{NodeID: "1"})))
@@ -50,7 +50,7 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, make(chan<- Notification), 3)
+		loop := newLoop(ctx, db, 3)
 		loop.FlushInterval = 20 * time.Millisecond // best effort
 
 		// Inject two changes. explicitly cast the NodeChange bc generics jank
@@ -60,27 +60,6 @@ func TestLoop(t *testing.T) {
 		time.Sleep(50 * time.Millisecond) // wait longer than flush interval
 
 		require.Len(t, db.flushed, 1)
-	})
-	t.Run("notifications are sent after flush", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		db := &mockFlusher{}
-		notifyC := make(chan Notification, 1)
-		loop := newLoop(ctx, db, notifyC, 1)
-
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(&NodeChange{NodeID: "1"})))
-
-		go func() { _ = loop.start(ctx) }()
-		time.Sleep(50 * time.Millisecond)
-
-		select {
-		case notification := <-notifyC:
-			require.Equal(t, NotificationNode, notification.Type)
-			require.Equal(t, int64(1), notification.RevisionID)
-		default:
-			t.Fatal("expected notification")
-		}
 	})
 }
 

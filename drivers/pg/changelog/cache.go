@@ -1,72 +1,57 @@
 package changelog
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 )
 
-// todo: use golang-LRU cache
-// time multiple ingest runs with no cache, size 1_000, 100_000
 type changeCache struct {
-	data  map[string]*NodeChange
+	data  map[uint64]uint64
 	mutex *sync.RWMutex
 }
 
 func newChangeCache() changeCache {
 	return changeCache{
-		data:  make(map[string]*NodeChange),
+		data:  make(map[uint64]uint64),
 		mutex: &sync.RWMutex{},
 	}
 }
 
-func (s *changeCache) get(key string) (*NodeChange, bool) {
+func (s *changeCache) get(key uint64) (uint64, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	val, ok := s.data[key]
 	return val, ok
 }
 
-func (s *changeCache) put(key string, value *NodeChange) {
+func (s *changeCache) put(key uint64, value uint64) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.data[key] = value
 }
 
 // checkCache attempts to resolve the proposed change using the cached snapshot.
-// It MUTATES proposedChange when it can fully resolve (NoChange or Modified) and returns handled=true.
-// On cache miss (no entry), it returns handled=false and does not mutate proposedChange.
+// it returns true if the proposedChange should be written to the graph
 func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
-	key := proposedChange.IdentityKey()
-
-	proposedHash, err := proposedChange.Hash()
+	idHash := proposedChange.IdentityKey()
+	dataHash, err := proposedChange.Hash()
 	if err != nil {
 		return false, fmt.Errorf("hash proposed change: %w", err)
 	}
 
-	// try to diff against the cached snapshot
-	cached, ok := s.get(key)
+	// try to diff against the storedHash snapshot
+	storedHash, ok := s.get(idHash)
 	if !ok {
-		return false, nil // let caller hit DB
-	}
-
-	if prevHash, err := cached.Hash(); err != nil {
-		return false, nil
-	} else if bytes.Equal(prevHash, proposedHash) { // hash equal -> NoChange
-		proposedChange.changeType = ChangeTypeNoChange
+		s.put(idHash, dataHash)
 		return true, nil
 	}
 
-	// hash differs -> modified,
-	// diff against cached properties
-	oldProps := cached.Properties
-	newProps := proposedChange.Properties
-	proposedChange.Properties = diffProps(oldProps, newProps)
+	if storedHash == dataHash { // hash equal -> no change
+		return false, nil
+	}
 
-	proposedChange.changeType = ChangeTypeModified
-
-	// Update cache to the new snapshot so next call can short-circuit
-	s.put(key, proposedChange)
-
+	// hashes not equal, there is a change
+	// update cache to the new snapshot so next call can short-circuit
+	s.put(idHash, dataHash)
 	return true, nil
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -38,14 +39,12 @@ func schema() graph.Schema {
 	}
 }
 
-func setupHarness() (*changelog.Changelog, chan changelog.Notification, context.Context, context.CancelFunc) {
+func setupHarness() (*changelog.Changelog, graph.Database, context.Context, context.CancelFunc) {
 	const pgConnStr = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
 
 	var (
 		ctx, done = context.WithCancel(context.Background())
 	)
-
-	notificationC := make(chan changelog.Notification)
 
 	if pool, err := pg.NewPool(pgConnStr); err != nil {
 		fmt.Printf("failed to connect to database: %v\n", err)
@@ -73,13 +72,11 @@ func setupHarness() (*changelog.Changelog, chan changelog.Notification, context.
 		if err := dawgsDB.AssertSchema(ctx, schema()); err != nil {
 			fmt.Printf("Failed to validate schema: %v\n", err)
 			os.Exit(1)
-		} else if schemaManager := pg.NewSchemaManager(pool); err != nil {
-			// this is dumb but whatevs
-		} else if changelog, err := changelog.NewChangelog(ctx, pool, schemaManager, 1000, notificationC); err != nil {
+		} else if changelog, err := changelog.NewChangelog(ctx, pool, 1000); err != nil {
 			fmt.Printf("Failed to create daemon: %v\n", err)
 			os.Exit(1)
 		} else {
-			return changelog, notificationC, ctx, done
+			return changelog, dawgsDB, ctx, done
 		}
 	}
 
@@ -87,152 +84,123 @@ func setupHarness() (*changelog.Changelog, chan changelog.Notification, context.
 }
 
 func main() {
-	log, notifications, ctx, done := setupHarness()
+	log, dawgsDB, ctx, done := setupHarness()
 	// Graceful shutdown on SIGINT/SIGTERM
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
 		<-sigC
 		slog.Info("Received shutdown signal")
 		done()
+		wg.Done()
+		os.Exit(0)
 	}()
 
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-
-	lastNodeChangeID := 0
-
-	// Run the applier loop in a goroutine like we would in bloodhound.entrypoint.go
-	// could gate this with a feature flag.
-	go func() {
-		defer wg.Done()
-
-		err := changelog.RunNodeApplierLoop(
-			ctx,
-			notifications,
-			log,
-			1, // default graph id is 1 yeah?
-			int64(lastNodeChangeID),
-		)
-
-		if err != nil {
-			slog.Error("Node applier loop exited with error", slog.Any("error", err))
-		} else {
-			slog.Info("Node applier loop stopped cleanly")
-		}
-	}()
-
-	if err := test(ctx, log); err != nil {
+	if err := test(ctx, log, dawgsDB); err != nil {
 		fmt.Printf("test_100 failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	wg.Wait()
+
 	slog.Info("Shutdown complete")
 }
 
-func test(ctx context.Context, log *changelog.Changelog) error {
-	numNodes := 1000
-	for idx := 0; idx < numNodes; idx++ {
-		var (
-			nodeObjectID   = strconv.Itoa(idx)
-			nodeProperties = graph.NewProperties()
-		)
+func test(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
+	numNodes := 1_000_000
 
-		nodeProperties.Set("objectid", nodeObjectID)
-		nodeProperties.Set("node_index", idx)
+	db.BatchOperation(ctx, func(batch graph.Batch) error {
+		start := time.Now()
+		defer func() {
+			slog.Info("batch 1 finished",
+				"duration", time.Since(start),
+				slog.Int("cache size", log.Size()))
+		}()
 
-		proposedChange := changelog.NewNodeChange(
-			nodeObjectID,
-			nodeKinds,
-			nodeProperties,
-		)
+		slog.Info("batch 1 starting", "timestamp", start)
 
-		if err := log.ResolveNodeChange(ctx, proposedChange); err != nil {
-			fmt.Println("blahh")
-		} else if proposedChange.ShouldSubmit() {
-			log.Submit(ctx, proposedChange)
+		for idx := 0; idx < numNodes; idx++ {
+			var (
+				nodeObjectID   = strconv.Itoa(idx)
+				nodeProperties = graph.NewProperties()
+			)
+
+			nodeProperties.Set("objectid", nodeObjectID)
+			nodeProperties.Set("node_index", idx)
+			nodeProperties.Set("lastseen", start)
+
+			proposedChange := changelog.NewNodeChange(
+				nodeObjectID,
+				nodeKinds,
+				nodeProperties,
+			)
+
+			if shouldSubmit, err := log.ResolveNodeChange(ctx, proposedChange); err != nil {
+				fmt.Println("blahh")
+			} else if shouldSubmit {
+				batch.UpdateNodeBy(graph.NodeUpdate{
+					Node:               graph.PrepareNode(proposedChange.Properties, proposedChange.Kinds...),
+					IdentityProperties: []string{"objectid"},
+				})
+			} else { // we only submit to the log for reconciliation
+				log.Submit(ctx, proposedChange)
+			}
 		}
-	}
+		return nil
+	})
 
-	for idx := 0; idx < numNodes; idx++ {
-		var (
-			nodeObjectID   = strconv.Itoa(idx)
-			nodeProperties = graph.NewProperties()
-		)
+	db.BatchOperation(ctx, func(batch graph.Batch) error {
+		start := time.Now()
+		defer func() {
+			slog.Info("batch 2 finished",
+				"duration", time.Since(start),
+				slog.Int("cache size", log.Size()))
+		}()
 
-		nodeProperties.Set("objectid", nodeObjectID)
-		nodeProperties.Set("node_index", idx)
-		nodeProperties.Set("new_value", 41240-idx) // this property counts as a change
+		slog.Info("batch 2 starting", "timestamp", start)
 
-		proposedChange := changelog.NewNodeChange(
-			nodeObjectID,
-			nodeKinds,
-			nodeProperties,
-		)
+		numBatchUpdates := 0            // should stay 0
+		numQueuedForReconciliation := 0 // should be == numNodes
 
-		if err := log.ResolveNodeChange(ctx, proposedChange); err != nil {
-			fmt.Println("blahh")
-		} else if proposedChange.ShouldSubmit() {
-			log.Submit(ctx, proposedChange)
+		for idx := 0; idx < numNodes; idx++ {
+			var (
+				nodeObjectID   = strconv.Itoa(idx)
+				nodeProperties = graph.NewProperties()
+			)
+
+			nodeProperties.Set("objectid", nodeObjectID)
+			nodeProperties.Set("node_index", idx)
+			nodeProperties.Set("lastseen", start) // timestamp will be different than original batch, but its an ignored prop so should get cache hits still
+
+			proposedChange := changelog.NewNodeChange(
+				nodeObjectID,
+				nodeKinds,
+				nodeProperties,
+			)
+
+			if shouldSubmit, err := log.ResolveNodeChange(ctx, proposedChange); err != nil {
+				fmt.Println("blahh")
+			} else if shouldSubmit {
+				numBatchUpdates++
+				batch.UpdateNodeBy(graph.NodeUpdate{
+					Node:               graph.PrepareNode(proposedChange.Properties, proposedChange.Kinds...),
+					IdentityProperties: []string{"objectid"},
+				})
+			} else { // we only submit to the log for reconciliation
+				numQueuedForReconciliation++
+				log.Submit(ctx, proposedChange)
+			}
 		}
-	}
+
+		slog.Info("counters",
+			slog.Int("batch updates", numBatchUpdates),
+			slog.Int("reconcilation updates", numQueuedForReconciliation))
+		return nil
+	})
 
 	slog.Info("Done with test")
-
-	return nil
-}
-
-// test_100 will produce 3 hunnit records in the changelog,
-// which when repalyed, create and make modifications to 100 nodes numbered 0..99
-// as written every node should have 2 props: a:1 and objectid
-func test_100(ctx context.Context, log *changelog.Changelog) error {
-	changes := []*changelog.NodeChange{}
-
-	// 100 additions
-	for idx := range 100 {
-		nodeID := strconv.Itoa(idx)
-		properties := graph.NewProperties().Set("hello", "world")
-		change := changelog.NewNodeChange(nodeID, nodeKinds, properties)
-		changes = append(changes, change)
-	}
-
-	// 100 no-ops, because these are the same as before
-	for idx := range 100 {
-		nodeID := strconv.Itoa(idx)
-		properties := graph.NewProperties().Set("hello", "world")
-		change := changelog.NewNodeChange(nodeID, nodeKinds, properties)
-		changes = append(changes, change)
-	}
-
-	// 100 updates, change hello prop
-	for idx := range 100 {
-		nodeID := strconv.Itoa(idx)
-		properties := graph.NewProperties().Set("hello", "world_updated")
-		change := changelog.NewNodeChange(nodeID, nodeKinds, properties)
-		changes = append(changes, change)
-	}
-
-	// 100 deletes
-	for idx := range 100 {
-		nodeID := strconv.Itoa(idx)
-		properties := graph.NewProperties().Set("a", 1)
-		change := changelog.NewNodeChange(nodeID, nodeKinds, properties)
-		changes = append(changes, change)
-	}
-
-	// numSkipped := 0
-	for _, change := range changes {
-		if err := log.ResolveNodeChange(ctx, change); err != nil {
-			// fmt.Println("blahh")
-		} else if change.ShouldSubmit() {
-			// fmt.Println("shouldsubmit")
-			log.Submit(ctx, change)
-		} else {
-			// numSkipped++
-		}
-	}
-	// fmt.Println("numskipped; ", numSkipped)
 
 	return nil
 }

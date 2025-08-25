@@ -2,7 +2,6 @@ package changelog
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,10 +9,8 @@ import (
 )
 
 type loop struct {
-	State         *stateManager // todo: remove? unless needed for paritioning
 	ReaderC       <-chan Change
 	WriterC       chan<- Change
-	notificationC chan<- Notification
 	FlushInterval time.Duration
 	NodeBuffer    []*NodeChange
 	BatchSize     int
@@ -24,7 +21,7 @@ type flusher interface {
 	flushNodeChanges(ctx context.Context, changes []*NodeChange) (int64, error)
 }
 
-func newLoop(ctx context.Context, flusher flusher, notificationC chan<- Notification, batchSize int) loop {
+func newLoop(ctx context.Context, flusher flusher, batchSize int) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
 	return loop{
@@ -33,7 +30,6 @@ func newLoop(ctx context.Context, flusher flusher, notificationC chan<- Notifica
 		FlushInterval: 5 * time.Second,
 		NodeBuffer:    make([]*NodeChange, 0),
 		BatchSize:     batchSize,
-		notificationC: notificationC,
 		flusher:       flusher,
 	}
 }
@@ -49,10 +45,14 @@ func (s *loop) start(ctx context.Context) error {
 	}()
 
 	slog.InfoContext(ctx, "starting changelog")
+	start := time.Now()
+
+	channelTicks := 0
 
 	for {
 		select {
 		case <-ctx.Done():
+			slog.Info("channel ticks", "number", channelTicks)
 			// flush any leftovers
 			if err := s.tryFlush(ctx); err != nil {
 				slog.WarnContext(ctx, "final flush failed", "err", err)
@@ -60,6 +60,7 @@ func (s *loop) start(ctx context.Context) error {
 			return nil
 
 		case change, ok := <-s.ReaderC:
+			channelTicks++
 			if !ok {
 				// input closed; try flushing
 				if err := s.tryFlush(ctx); err != nil {
@@ -93,6 +94,7 @@ func (s *loop) start(ctx context.Context) error {
 			}
 
 		case <-idle.C:
+			slog.Info("idle timer tick", "duration", time.Since(start))
 			// idle-based flush
 			if len(s.NodeBuffer) > 0 {
 				if err := s.tryFlush(ctx); err != nil {
@@ -106,21 +108,11 @@ func (s *loop) start(ctx context.Context) error {
 }
 
 func (s *loop) tryFlush(ctx context.Context) error {
-	if lastNodeID, err := s.flusher.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
+	if _, err := s.flusher.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
 		return err
 	} else {
 		// clear buffer regardless of errors
-		// todo: is this chill?
 		s.NodeBuffer = s.NodeBuffer[:0]
-
-		// notify ingest consumer that there are changes ready
-		if !channels.Submit(ctx, s.notificationC, Notification{
-			Type:       NotificationNode,
-			RevisionID: lastNodeID,
-		}) {
-			slog.Warn(fmt.Sprintf("submitting latest node notification: %v", err))
-		}
 	}
-
 	return nil
 }
