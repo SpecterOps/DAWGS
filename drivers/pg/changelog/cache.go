@@ -5,53 +5,60 @@ import (
 	"sync"
 )
 
-type changeCache struct {
+type cache struct {
 	data  map[uint64]uint64
-	mutex *sync.RWMutex
+	mutex *sync.Mutex
+	stats CacheStats
 }
 
-func newChangeCache() changeCache {
-	return changeCache{
+func newChangeCache() cache {
+	return cache{
 		data:  make(map[uint64]uint64),
-		mutex: &sync.RWMutex{},
+		mutex: &sync.Mutex{},
+		stats: CacheStats{},
 	}
 }
 
-func (s *changeCache) get(key uint64) (uint64, bool) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	val, ok := s.data[key]
-	return val, ok
+type CacheStats struct {
+	Hits   uint64 // unchanged
+	Misses uint64 // new or modified
 }
 
-func (s *changeCache) put(key uint64, value uint64) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.data[key] = value
-}
-
-// checkCache attempts to resolve the proposed change using the cached snapshot.
-// it returns true if the proposedChange should be written to the graph
-func (s *changeCache) checkCache(proposedChange Change) (bool, error) {
-	idHash := proposedChange.IdentityKey()
-	dataHash, err := proposedChange.Hash()
+// shouldSubmit compares the proposed change against the cached snapshot.
+// It returns true if the change is new or modified and should be submitted
+// downstream. If the change is identical to the cached version, it returns false.
+func (s *cache) shouldSubmit(change Change) (bool, error) {
+	idHash := change.IdentityKey()
+	dataHash, err := change.Hash()
 	if err != nil {
 		return false, fmt.Errorf("hash proposed change: %w", err)
 	}
 
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	// try to diff against the storedHash snapshot
-	storedHash, ok := s.get(idHash)
-	if !ok {
-		s.put(idHash, dataHash)
-		return true, nil
+	if storedHash, ok := s.data[idHash]; ok {
+		if storedHash == dataHash {
+			s.stats.Hits++
+			return false, nil // unchanged
+		}
 	}
 
-	if storedHash == dataHash { // hashes are equal -> no change
-		return false, nil
-	}
-
-	// hashes are not equal, there is a change
-	// update cache to the new snapshot so next call can short-circuit
-	s.put(idHash, dataHash)
+	// new or modified -> update cache to the new snapshot
+	s.data[idHash] = dataHash
+	s.stats.Misses++
 	return true, nil
+}
+
+func (s *cache) Stats() CacheStats {
+	return s.stats
+}
+
+func (s *cache) ResetStats() CacheStats {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	old := s.stats
+	s.stats = CacheStats{} // zero it out
+	return old
 }

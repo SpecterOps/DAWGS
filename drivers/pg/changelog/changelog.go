@@ -2,7 +2,7 @@ package changelog
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -29,7 +29,7 @@ var (
 )
 
 type Changelog struct {
-	Cache changeCache
+	Cache cache
 	DB    db
 	Loop  loop
 }
@@ -52,12 +52,16 @@ func (s *Changelog) Size() int {
 	return len(s.Cache.data)
 }
 
+func (s *Changelog) FlushStats() {
+	stats := s.Cache.ResetStats()
+	slog.Info("changelog metrics",
+		"hits", stats.Hits,
+		"misses", stats.Misses,
+	)
+}
+
 func (s *Changelog) ResolveChange(ctx context.Context, proposedChange Change) (bool, error) {
-	if shouldSubmit, err := s.Cache.checkCache(proposedChange); err != nil {
-		return shouldSubmit, fmt.Errorf("check cache: %w", err)
-	} else {
-		return shouldSubmit, nil
-	}
+	return s.Cache.shouldSubmit(proposedChange)
 }
 
 func (s *Changelog) Submit(ctx context.Context, change Change) bool {

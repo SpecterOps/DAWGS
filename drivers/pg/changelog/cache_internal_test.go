@@ -17,7 +17,7 @@ func TestChangeCache(t *testing.T) {
 			Properties: &graph.Properties{Map: map[string]any{"foo": "bar"}},
 		}
 
-		shouldSubmit, err := c.checkCache(node)
+		shouldSubmit, err := c.shouldSubmit(node)
 		require.NoError(t, err)
 		require.True(t, shouldSubmit)
 
@@ -36,9 +36,9 @@ func TestChangeCache(t *testing.T) {
 		)
 
 		// simulate a full cache
-		c.put(idHash, dataHash)
+		c.data[idHash] = dataHash
 
-		shouldSubmit, err := c.checkCache(change)
+		shouldSubmit, err := c.shouldSubmit(change)
 		require.NoError(t, err)
 		require.False(t, shouldSubmit)
 	})
@@ -56,7 +56,7 @@ func TestChangeCache(t *testing.T) {
 		)
 
 		// simulate a populated cache
-		c.put(idHash, dataHash)
+		c.data[idHash] = dataHash
 
 		newChange := &NodeChange{
 			NodeID:     "123",
@@ -64,7 +64,7 @@ func TestChangeCache(t *testing.T) {
 			Properties: &graph.Properties{Map: map[string]any{"changed": 1}},
 		}
 
-		shouldSubmit, err := c.checkCache(newChange)
+		shouldSubmit, err := c.shouldSubmit(newChange)
 		require.NoError(t, err)
 		require.True(t, shouldSubmit)
 	})
@@ -82,7 +82,7 @@ func TestChangeCache(t *testing.T) {
 		)
 
 		// simulate a populated cache
-		c.put(idHash, dataHash)
+		c.data[idHash] = dataHash
 
 		newChange := &NodeChange{
 			NodeID:     "123",
@@ -90,7 +90,7 @@ func TestChangeCache(t *testing.T) {
 			Properties: &graph.Properties{Map: map[string]any{"changed": 1}},
 		}
 
-		shouldSubmit, err := c.checkCache(newChange)
+		shouldSubmit, err := c.shouldSubmit(newChange)
 		require.NoError(t, err)
 		require.True(t, shouldSubmit)
 	})
@@ -105,7 +105,7 @@ func TestChangeCache(t *testing.T) {
 			Properties:   &graph.Properties{Map: map[string]any{"foo": "bar"}},
 		}
 
-		shouldSubmit, err := c.checkCache(node)
+		shouldSubmit, err := c.shouldSubmit(node)
 		require.NoError(t, err)
 		require.True(t, shouldSubmit)
 	})
@@ -124,7 +124,7 @@ func TestChangeCache(t *testing.T) {
 		)
 
 		// simulate a populated cache
-		c.put(idHash, dataHash)
+		c.data[idHash] = dataHash
 
 		newChange := &EdgeChange{
 			SourceNodeID: "123",
@@ -133,7 +133,7 @@ func TestChangeCache(t *testing.T) {
 			Properties:   &graph.Properties{Map: map[string]any{"changed": 1}},
 		}
 
-		shouldSubmit, err := c.checkCache(newChange)
+		shouldSubmit, err := c.shouldSubmit(newChange)
 		require.NoError(t, err)
 		require.True(t, shouldSubmit)
 	})

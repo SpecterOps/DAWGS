@@ -153,6 +153,8 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		return nil
 	})
 
+	log.FlushStats()
+
 	db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()
 		defer func() {
@@ -162,9 +164,6 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		}()
 
 		slog.Info("batch 2 starting", "timestamp", start)
-
-		numBatchUpdates := 0            // should stay 0
-		numQueuedForReconciliation := 0 // should be == numNodes
 
 		for idx := 0; idx < numNodes; idx++ {
 			var (
@@ -185,22 +184,19 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
 				fmt.Println("blahh")
 			} else if shouldSubmit {
-				numBatchUpdates++
 				batch.UpdateNodeBy(graph.NodeUpdate{
 					Node:               graph.PrepareNode(proposedChange.Properties, proposedChange.Kinds...),
 					IdentityProperties: []string{"objectid"},
 				})
 			} else { // we only submit to the log for reconciliation
-				numQueuedForReconciliation++
 				log.Submit(ctx, proposedChange)
 			}
 		}
 
-		slog.Info("counters",
-			slog.Int("batch updates", numBatchUpdates),
-			slog.Int("reconcilation updates", numQueuedForReconciliation))
 		return nil
 	})
+
+	log.FlushStats()
 
 	db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()
@@ -211,8 +207,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		}()
 
 		slog.Info("batch 3 starting", "timestamp", start)
-		recUpdates := 0
-		batchUpdates := 0
+
 		for idx := 0; idx < numNodes; idx++ {
 			var (
 				startObjID = "dummy"
@@ -237,7 +232,6 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
 				fmt.Println("blahh")
 			} else if shouldSubmit {
-				batchUpdates++
 				update := graph.RelationshipUpdate{
 					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
 					StartIdentityProperties: []string{"objectid"},
@@ -249,15 +243,13 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 				}
 				batch.UpdateRelationshipBy(update)
 			} else { // we only submit to the log for reconciliation
-				recUpdates++
 				log.Submit(ctx, proposedChange)
 			}
 		}
-		slog.Info("counters",
-			slog.Int("batch updates", batchUpdates),
-			slog.Int("reconciliation updates", recUpdates))
 		return nil
 	})
+
+	log.FlushStats()
 
 	db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()
@@ -268,9 +260,6 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		}()
 
 		slog.Info("batch 4 starting", "timestamp", start)
-
-		numBatchUpdates := 0            // should stay 0
-		numQueuedForReconciliation := 0 // should be == numNodes
 
 		for idx := 0; idx < numNodes; idx++ {
 			var (
@@ -294,7 +283,6 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
 				fmt.Println("blahh")
 			} else if shouldSubmit {
-				numBatchUpdates++
 				update := graph.RelationshipUpdate{
 					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
 					StartIdentityProperties: []string{"objectid"},
@@ -306,16 +294,12 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 				}
 				batch.UpdateRelationshipBy(update)
 			} else { // we only submit to the log for reconciliation
-				numQueuedForReconciliation++
 				log.Submit(ctx, proposedChange)
 			}
 		}
-
-		slog.Info("counters",
-			slog.Int("batch updates", numBatchUpdates),
-			slog.Int("reconcilation updates", numQueuedForReconciliation))
 		return nil
 	})
+	log.FlushStats()
 
 	slog.Info("Done with test")
 
