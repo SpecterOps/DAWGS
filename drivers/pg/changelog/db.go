@@ -6,31 +6,52 @@ import (
 	"log/slog"
 	"time"
 
-	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 )
 
+// db is the persistence layer for the changelog.
+//
+// It provides methods to issue bulk UPDATEs against the node and edge
+// tables. The db type is intentionally thin: it abstracts only the minimal
+// database operations (currently Exec) so that it can be unit tested with
+// pgxmock while still working against a real pgxpool in production.
+//
+// In practice, db is responsible for writing "lastseen" timestamps during
+// flushes, which allows stale nodes and edges to expire out of the graph
+// according to reconciliation policies.
 type db struct {
-	Conn       DBConn
+	conn       Execer
 	kindMapper pg.KindMapper
 }
 
-// DBConn contains the methods we actually use from pgxpool. putting these here makes testing easier
-type DBConn interface {
+// Execer contains the methods we actually use from pgxpool. putting these here makes testing easier
+type Execer interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
-	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
-func newLogDB(pgxPool DBConn, kindMapper pg.KindMapper) (db, error) {
+func newLogDB(conn Execer, kindMapper pg.KindMapper) db {
 	return db{
-		Conn:       pgxPool,
+		conn:       conn,
 		kindMapper: kindMapper,
-	}, nil
+	}
+}
+
+func extractLastSeen(props *graph.Properties, entityID string) time.Time {
+	now := time.Now()
+
+	if props == nil {
+		slog.Warn("property bag is nil", "id", entityID)
+		return now
+	}
+
+	if lastseen, err := props.Get("lastseen").Time(); err != nil {
+		slog.Warn("lastseen property parse error", "id", entityID, "error", err)
+		return now
+	} else {
+		return lastseen
+	}
 }
 
 var updateNodesLastSeenSQL = `
@@ -54,25 +75,15 @@ func (s *db) flushNodeChanges(ctx context.Context, changes []NodeChange) (int64,
 	// defensive:
 	// - ingest codepath always sets the lastseen property. if property is not present on change, log warning and set lastseen to time.now()
 	// seems like unnecessary overhead to extract the property from each change. just read once from first change and re-use.
-	props := changes[0].Properties
-	if props == nil {
-		return 0, fmt.Errorf("property bag for node %s is nil", changes[0].NodeID)
-	}
-
-	var lastseen time.Time
-	lastseen, err := props.Get("lastseen").Time()
-	if err != nil {
-		slog.Warn("lastseen property", slog.Any("error", err))
-		lastseen = time.Now()
-	}
+	lastseen := extractLastSeen(changes[0].Properties, changes[0].NodeID)
 
 	// Collect all node IDs as strings for the WHERE filter
-	ids := make([]string, 0, len(changes))
-	for _, c := range changes {
-		ids = append(ids, c.NodeID)
+	ids := make([]string, len(changes))
+	for i, c := range changes {
+		ids[i] = c.NodeID
 	}
 
-	ct, err := s.Conn.Exec(ctx, updateNodesLastSeenSQL, lastseen, ids)
+	ct, err := s.conn.Exec(ctx, updateNodesLastSeenSQL, lastseen, ids)
 	if err != nil {
 		return 0, fmt.Errorf("updating nodes lastseen: %w", err)
 	}
@@ -107,29 +118,20 @@ func (s *db) flushEdgeChanges(ctx context.Context, changes []EdgeChange) (int64,
 	// defensive:
 	// - ingest codepath always sets the lastseen property. if property is not present on change, log warning and set lastseen to time.now()
 	// seems like unnecessary overhead to extract the property from each change. just read once from first change and re-use.
-	props := changes[0].Properties
-	if props == nil {
-		return 0, fmt.Errorf("property bag for edge %s-[:%s]-%s is nil",
+	lastseen := extractLastSeen(changes[0].Properties,
+		fmt.Sprintf("%s-[:%s]-%s",
 			changes[0].SourceNodeID,
 			changes[0].Kind,
-			changes[0].TargetNodeID)
-	}
-
-	var lastseen time.Time
-	lastseen, err := props.Get("lastseen").Time()
-	if err != nil {
-		slog.Warn("lastseen property", slog.Any("error", err))
-		lastseen = time.Now()
-	}
+			changes[0].TargetNodeID))
 
 	// Collect all edge IDs and kinds as strings for the WHERE filter
-	startIDs := make([]string, 0, len(changes))
-	endIDs := make([]string, 0, len(changes))
-	kinds := make(graph.Kinds, 0, len(changes))
-	for _, c := range changes {
-		startIDs = append(startIDs, c.SourceNodeID)
-		endIDs = append(endIDs, c.TargetNodeID)
-		kinds = append(kinds, c.Kind)
+	startIDs := make([]string, len(changes))
+	endIDs := make([]string, len(changes))
+	kinds := make(graph.Kinds, len(changes))
+	for i, change := range changes {
+		startIDs[i] = change.SourceNodeID
+		endIDs[i] = change.TargetNodeID
+		kinds[i] = change.Kind
 	}
 
 	kindIDs, err := s.kindMapper.MapKinds(ctx, kinds)
@@ -137,7 +139,7 @@ func (s *db) flushEdgeChanges(ctx context.Context, changes []EdgeChange) (int64,
 		return 0, fmt.Errorf("mapping kinds: %w", err)
 	}
 
-	ct, err := s.Conn.Exec(ctx, updateEdgesLastSeenSQL, lastseen, startIDs, endIDs, kindIDs)
+	ct, err := s.conn.Exec(ctx, updateEdgesLastSeenSQL, lastseen, startIDs, endIDs, kindIDs)
 	if err != nil {
 		return 0, fmt.Errorf("updating edges lastseen: %w", err)
 	}

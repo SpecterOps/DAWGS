@@ -36,12 +36,8 @@ type Changelog struct {
 
 func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, batchSize int, kindMapper pg.KindMapper) (*Changelog, error) {
 	cache := newChangeCache()
-	db, err := newLogDB(pgxPool, kindMapper)
+	db := newLogDB(pgxPool, kindMapper)
 	loop := newLoop(ctx, &db, batchSize)
-
-	if err != nil {
-		return &Changelog{}, fmt.Errorf("initializing log DB: %w", err)
-	}
 
 	go loop.start(ctx)
 

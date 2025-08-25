@@ -21,8 +21,7 @@ func TestFlushNodeChanges(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockKindMapper := mocks.NewMockKindMapper(ctrl)
 
-	db, err := newLogDB(mockDB, mockKindMapper)
-	require.NoError(t, err)
+	db := newLogDB(mockDB, mockKindMapper)
 
 	mockDB.ExpectExec(updateNodesLastSeenSQL).
 		WithArgs(pgxmock.AnyArg(), []string{"123", "456"}).
@@ -46,8 +45,7 @@ func TestFlushEdgeChanges(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockKindMapper := mocks.NewMockKindMapper(ctrl)
 
-	db, err := newLogDB(mockDB, mockKindMapper)
-	require.NoError(t, err)
+	db := newLogDB(mockDB, mockKindMapper)
 
 	rawKinds := []graph.Kind{graph.StringKind("a"), graph.StringKind("b")}
 	mappedKinds := []int16{1, 2}
