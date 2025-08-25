@@ -75,7 +75,7 @@ func setupHarness() (*changelog.Changelog, graph.Database, context.Context, cont
 		} else if schemaManager := pg.NewSchemaManager(pool); err != nil {
 			// this is dumb but whatevs
 		} else {
-			changelog := changelog.NewChangelog(pool, schemaManager, 1000)
+			changelog := changelog.NewChangelog(pool, schemaManager, changelog.DefaultOptions())
 			return changelog, dawgsDB, ctx, done
 		}
 	}

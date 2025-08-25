@@ -12,6 +12,18 @@ type Change interface {
 	Hash() (uint64, error)
 }
 
+var (
+	ignoredPropertiesKeys = map[string]struct{}{
+		"lastseen":      {},
+		"objectid":      {},
+		"lastcollected": {},
+		"isinherited":   {},
+		"domainsid":     {},
+		"isacl":         {},
+		"tenantid":      {},
+	}
+)
+
 type NodeChange struct {
 	NodeID     string
 	Properties *graph.Properties

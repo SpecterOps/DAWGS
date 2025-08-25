@@ -16,11 +16,11 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, 2)
+		loop := newLoop(ctx, db, 2, 5*time.Second)
 
 		// Inject two changes. explicitly cast the NodeChange bc generics jank
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(NodeChange{NodeID: "1"})))
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(NodeChange{NodeID: "2"})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "1"})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "2"})))
 
 		// Run one iteration
 		go func() { _ = loop.start(ctx) }()
@@ -35,12 +35,12 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, 2)
+		loop := newLoop(ctx, db, 2, 5*time.Second)
 
 		// queue up nodes < batchSize, edges >= batchSize
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(NodeChange{NodeID: "1"})))
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(EdgeChange{})))
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(EdgeChange{})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "1"})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(EdgeChange{})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(EdgeChange{})))
 
 		// Run one iteration
 		go func() { _ = loop.start(ctx) }()
@@ -54,11 +54,11 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, 3)
+		loop := newLoop(ctx, db, 3, 5*time.Second)
 
 		// Inject two changes. explicitly cast the NodeChange bc generics jank
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(NodeChange{NodeID: "1"})))
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(NodeChange{NodeID: "2"})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "1"})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "2"})))
 
 		// Run one iteration
 		go func() { _ = loop.start(ctx) }()
@@ -71,11 +71,11 @@ func TestLoop(t *testing.T) {
 		defer cancel()
 
 		db := &mockFlusher{}
-		loop := newLoop(ctx, db, 3)
-		loop.FlushInterval = 20 * time.Millisecond // best effort
+		loop := newLoop(ctx, db, 3, 5*time.Second)
+		loop.flushInterval = 20 * time.Millisecond // best effort
 
 		// Inject two changes. explicitly cast the NodeChange bc generics jank
-		require.True(t, channels.Submit(ctx, loop.WriterC, Change(NodeChange{NodeID: "1"})))
+		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "1"})))
 
 		go func() { _ = loop.start(ctx) }()
 		time.Sleep(50 * time.Millisecond) // wait longer than flush interval

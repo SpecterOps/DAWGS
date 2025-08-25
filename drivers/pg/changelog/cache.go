@@ -8,18 +8,18 @@ import (
 type cache struct {
 	data  map[uint64]uint64
 	mutex *sync.Mutex
-	stats CacheStats
+	stats cacheStats
 }
 
 func newCache() cache {
 	return cache{
 		data:  make(map[uint64]uint64),
 		mutex: &sync.Mutex{},
-		stats: CacheStats{},
+		stats: cacheStats{},
 	}
 }
 
-type CacheStats struct {
+type cacheStats struct {
 	Hits   uint64 // unchanged
 	Misses uint64 // new or modified
 }
@@ -51,14 +51,14 @@ func (s *cache) shouldSubmit(change Change) (bool, error) {
 	return true, nil
 }
 
-func (s *cache) getStats() CacheStats {
+func (s *cache) getStats() cacheStats {
 	return s.stats
 }
 
-func (s *cache) resetStats() CacheStats {
+func (s *cache) resetStats() cacheStats {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	old := s.stats
-	s.stats = CacheStats{} // zero it out
+	s.stats = cacheStats{} // zero it out
 	return old
 }

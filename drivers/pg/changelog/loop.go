@@ -9,10 +9,10 @@ import (
 )
 
 type loop struct {
-	ReaderC       <-chan Change
-	WriterC       chan<- Change
-	FlushInterval time.Duration
-	BatchSize     int
+	readerC       <-chan Change
+	writerC       chan<- Change
+	flushInterval time.Duration
+	batchSize     int
 
 	nodeBuffer *changeBuffer[NodeChange]
 	edgeBuffer *changeBuffer[EdgeChange]
@@ -23,14 +23,14 @@ type flusher interface {
 	flushEdgeChanges(ctx context.Context, changes []EdgeChange) (int64, error)
 }
 
-func newLoop(ctx context.Context, f flusher, batchSize int) loop {
+func newLoop(ctx context.Context, f flusher, batchSize int, flushInterval time.Duration) loop {
 	writerC, readerC := channels.BufferedPipe[Change](ctx)
 
 	return loop{
-		WriterC:       writerC,
-		ReaderC:       readerC,
-		FlushInterval: 5 * time.Second,
-		BatchSize:     batchSize,
+		writerC:       writerC,
+		readerC:       readerC,
+		flushInterval: flushInterval,
+		batchSize:     batchSize,
 		nodeBuffer:    newChangeBuffer(f.flushNodeChanges),
 		edgeBuffer:    newChangeBuffer(f.flushEdgeChanges),
 	}
@@ -68,11 +68,11 @@ func (s *changeBuffer[T]) tryFlush(ctx context.Context, batchSize int) error {
 }
 
 func (s *loop) start(ctx context.Context) error {
-	idle := time.NewTimer(s.FlushInterval) // fires once, when we've been idle for flushInterval
+	idle := time.NewTimer(s.flushInterval) // fires once, when we've been idle for flushInterval
 	idle.Stop()                            // if nothing is buffered, keep the timer stopped
 
 	defer func() {
-		close(s.WriterC)
+		close(s.writerC)
 		idle.Stop()
 		slog.InfoContext(ctx, "shutting down changelog")
 	}()
@@ -87,7 +87,7 @@ func (s *loop) start(ctx context.Context) error {
 			_ = s.edgeBuffer.tryFlush(ctx, 0)
 			return nil
 
-		case change, ok := <-s.ReaderC:
+		case change, ok := <-s.readerC:
 			if !ok {
 				// input closed; try flushing
 				_ = s.nodeBuffer.tryFlush(ctx, 0)
@@ -100,7 +100,7 @@ func (s *loop) start(ctx context.Context) error {
 				s.nodeBuffer.add(typed)
 
 				// sized-base flush
-				if err := s.nodeBuffer.tryFlush(ctx, s.BatchSize); err != nil {
+				if err := s.nodeBuffer.tryFlush(ctx, s.batchSize); err != nil {
 					slog.WarnContext(ctx, "flush nodes failed", "err", err)
 				}
 
@@ -108,14 +108,14 @@ func (s *loop) start(ctx context.Context) error {
 				s.edgeBuffer.add(typed)
 
 				// sized-base flush
-				if err := s.edgeBuffer.tryFlush(ctx, s.BatchSize); err != nil {
+				if err := s.edgeBuffer.tryFlush(ctx, s.batchSize); err != nil {
 					slog.WarnContext(ctx, "flush edges failed", "err", err)
 				}
 			}
 
 			// everytime we append to the buffer, we want the flush timer to start
 			// ticking FROM NOW
-			idle.Reset(s.FlushInterval)
+			idle.Reset(s.flushInterval)
 
 		case <-idle.C:
 			// idle-based flush
