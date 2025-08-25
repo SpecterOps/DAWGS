@@ -111,7 +111,8 @@ func main() {
 }
 
 func test(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
-	numNodes := 100_000
+	numNodes := 1_000_000
+	diffBegins := 750_000
 
 	db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()
@@ -172,6 +173,11 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 			nodeProperties.Set("objectid", nodeObjectID)
 			nodeProperties.Set("node_index", idx)
 			nodeProperties.Set("lastseen", start) // timestamp will be different than original batch, but its an ignored prop so should get cache hits still
+
+			// simulate only partial cache hits
+			if idx > diffBegins {
+				nodeProperties.Set("different_prop", idx)
+			}
 
 			proposedChange := changelog.NewNodeChange(
 				nodeObjectID,
@@ -263,8 +269,12 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 
 			edgeProps.Set("startID", startObjID)
 			edgeProps.Set("endID", endObjID)
-			// edgeProps.Set("idx", idx)
 			edgeProps.Set("lastseen", start)
+
+			// simulate only partial cache hits
+			if idx > diffBegins {
+				edgeProps.Set("different_prop", idx)
+			}
 
 			proposedChange := changelog.NewEdgeChange(
 				startObjID,
