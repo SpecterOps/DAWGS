@@ -1,8 +1,11 @@
+//go:build manual_integration
+
 package test
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime/debug"
 	"testing"
 
@@ -21,9 +24,8 @@ const (
 
 func TestTranslationTestCases(t *testing.T) {
 	var (
-		testCtx, done = context.WithCancel(context.Background())
-		// pgConnectionStr = os.Getenv(PGConnectionStringEV)
-		pgConnectionStr = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
+		testCtx, done   = context.WithCancel(context.Background())
+		pgConnectionStr = os.Getenv(PGConnectionStringEV)
 	)
 
 	defer done()
