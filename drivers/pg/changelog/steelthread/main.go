@@ -74,10 +74,8 @@ func setupHarness() (*changelog.Changelog, graph.Database, context.Context, cont
 			os.Exit(1)
 		} else if schemaManager := pg.NewSchemaManager(pool); err != nil {
 			// this is dumb but whatevs
-		} else if changelog, err := changelog.NewChangelog(ctx, pool, 1000, schemaManager); err != nil {
-			fmt.Printf("Failed to create daemon: %v\n", err)
-			os.Exit(1)
 		} else {
+			changelog := changelog.NewChangelog(pool, schemaManager, 1000)
 			return changelog, dawgsDB, ctx, done
 		}
 	}
@@ -87,6 +85,8 @@ func setupHarness() (*changelog.Changelog, graph.Database, context.Context, cont
 
 func main() {
 	log, dawgsDB, ctx, done := setupHarness()
+	log.Start(ctx)
+
 	// Graceful shutdown on SIGINT/SIGTERM
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
@@ -207,16 +207,13 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 
 		for idx := 0; idx < numNodes; idx++ {
 			var (
-				startObjID = "dummy"
-				endObjID   = "dummy2"
-				// startObjID = strconv.Itoa(idx)
-				// endObjID   = strconv.Itoa(idx + 1)
-				edgeProps = graph.NewProperties()
+				startObjID = strconv.Itoa(idx)
+				endObjID   = strconv.Itoa(idx + 1)
+				edgeProps  = graph.NewProperties()
 			)
 
 			edgeProps.Set("startID", startObjID)
 			edgeProps.Set("endID", endObjID)
-			// edgeProps.Set("idx", idx)
 			edgeProps.Set("lastseen", start)
 
 			proposedChange := changelog.NewEdgeChange(
@@ -266,7 +263,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 
 			edgeProps.Set("startID", startObjID)
 			edgeProps.Set("endID", endObjID)
-			edgeProps.Set("idx", idx)
+			// edgeProps.Set("idx", idx)
 			edgeProps.Set("lastseen", start)
 
 			proposedChange := changelog.NewEdgeChange(
