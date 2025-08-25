@@ -32,7 +32,7 @@ func (s *changeCache) put(key uint64, value uint64) {
 
 // checkCache attempts to resolve the proposed change using the cached snapshot.
 // it returns true if the proposedChange should be written to the graph
-func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
+func (s *changeCache) checkCache(proposedChange Change) (bool, error) {
 	idHash := proposedChange.IdentityKey()
 	dataHash, err := proposedChange.Hash()
 	if err != nil {
@@ -46,11 +46,11 @@ func (s *changeCache) checkCache(proposedChange *NodeChange) (bool, error) {
 		return true, nil
 	}
 
-	if storedHash == dataHash { // hash equal -> no change
+	if storedHash == dataHash { // hashes are equal -> no change
 		return false, nil
 	}
 
-	// hashes not equal, there is a change
+	// hashes are not equal, there is a change
 	// update cache to the new snapshot so next call can short-circuit
 	s.put(idHash, dataHash)
 	return true, nil

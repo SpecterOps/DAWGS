@@ -48,8 +48,11 @@ func setupIntegrationTest(t *testing.T) (*changelog.Changelog, context.Context, 
 	err = dawgsDB.AssertSchema(ctx, graphSchema)
 	require.NoError(t, err)
 
+	kindMapper, err := pg.KindMapperFromGraphDatabase(dawgsDB)
+	require.NoError(t, err)
+
 	// set batch_size to 1 so that we can test flushing logic
-	daemon, err := changelog.NewChangelog(ctx, pool, 1)
+	daemon, err := changelog.NewChangelog(ctx, pool, 1, kindMapper)
 	require.NoError(t, err)
 
 	return daemon, ctx, func() {
@@ -77,7 +80,7 @@ func TestResolveNodeChangeStatus(t *testing.T) {
 			graph.NewProperties().Set("a", 1),
 		)
 
-		shouldSubmit, err := log.ResolveNodeChange(ctx, proposedChange)
+		shouldSubmit, err := log.ResolveChange(ctx, proposedChange)
 		require.NoError(t, err)
 		require.True(t, shouldSubmit)
 	})

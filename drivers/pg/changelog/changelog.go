@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/util/channels"
 )
 
@@ -27,21 +28,15 @@ var (
 	}
 )
 
-type ChangeLogger interface {
-	Append(change Change) error
-	BuildGraph() error
-}
-
-// Changelog *will* implement ChangeLogger
 type Changelog struct {
 	Cache changeCache
 	DB    db
 	Loop  loop
 }
 
-func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, batchSize int) (*Changelog, error) {
+func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, batchSize int, kindMapper pg.KindMapper) (*Changelog, error) {
 	cache := newChangeCache()
-	db, err := newLogDB(ctx, pgxPool)
+	db, err := newLogDB(pgxPool, kindMapper)
 	loop := newLoop(ctx, &db, batchSize)
 
 	if err != nil {
@@ -61,13 +56,7 @@ func (s *Changelog) Size() int {
 	return len(s.Cache.data)
 }
 
-// ResolveNodeChange decorated proposedChange with diff details by comparing it to the last seen record in the DB.
-// it mutates proposedChange to set:
-// - changeType: Added, Modified, or NoChange
-// - ModifiedProperties: key-value pairs that are new or changed
-// - Deleted: list of removed property keys
-// Kinds are treated as upsert-always, this function does not diff them kinds.
-func (s *Changelog) ResolveNodeChange(ctx context.Context, proposedChange *NodeChange) (bool, error) {
+func (s *Changelog) ResolveChange(ctx context.Context, proposedChange Change) (bool, error) {
 	if shouldSubmit, err := s.Cache.checkCache(proposedChange); err != nil {
 		return shouldSubmit, fmt.Errorf("check cache: %w", err)
 	} else {

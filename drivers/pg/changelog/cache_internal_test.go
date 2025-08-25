@@ -69,4 +69,72 @@ func TestChangeCache(t *testing.T) {
 		require.True(t, shouldSubmit)
 	})
 
+	t.Run("node is cached. kinds have a diff. return true", func(t *testing.T) {
+		var (
+			c         = newChangeCache()
+			oldChange = &NodeChange{
+				NodeID:     "123",
+				Kinds:      nil,
+				Properties: &graph.Properties{Map: map[string]any{"a": 1}},
+			}
+			idHash      = oldChange.IdentityKey()
+			dataHash, _ = oldChange.Hash()
+		)
+
+		// simulate a populated cache
+		c.put(idHash, dataHash)
+
+		newChange := &NodeChange{
+			NodeID:     "123",
+			Kinds:      graph.StringsToKinds([]string{"kindA"}),
+			Properties: &graph.Properties{Map: map[string]any{"changed": 1}},
+		}
+
+		shouldSubmit, err := c.checkCache(newChange)
+		require.NoError(t, err)
+		require.True(t, shouldSubmit)
+	})
+
+	t.Run("edge doesn't exist in cache. return true.", func(t *testing.T) {
+		c := newChangeCache()
+
+		node := &EdgeChange{
+			SourceNodeID: "123",
+			TargetNodeID: "456",
+			Kind:         graph.StringKind("kindA"),
+			Properties:   &graph.Properties{Map: map[string]any{"foo": "bar"}},
+		}
+
+		shouldSubmit, err := c.checkCache(node)
+		require.NoError(t, err)
+		require.True(t, shouldSubmit)
+	})
+
+	t.Run("edge is cached. properties have a diff. return true", func(t *testing.T) {
+		var (
+			c         = newChangeCache()
+			oldChange = &EdgeChange{
+				SourceNodeID: "123",
+				TargetNodeID: "456",
+				Kind:         graph.StringKind("a"),
+				Properties:   &graph.Properties{Map: map[string]any{"a": 1}},
+			}
+			idHash      = oldChange.IdentityKey()
+			dataHash, _ = oldChange.Hash()
+		)
+
+		// simulate a populated cache
+		c.put(idHash, dataHash)
+
+		newChange := &EdgeChange{
+			SourceNodeID: "123",
+			TargetNodeID: "456",
+			Kind:         graph.StringKind("a"),
+			Properties:   &graph.Properties{Map: map[string]any{"changed": 1}},
+		}
+
+		shouldSubmit, err := c.checkCache(newChange)
+		require.NoError(t, err)
+		require.True(t, shouldSubmit)
+	})
 }

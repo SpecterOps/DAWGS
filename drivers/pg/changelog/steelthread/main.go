@@ -72,7 +72,9 @@ func setupHarness() (*changelog.Changelog, graph.Database, context.Context, cont
 		if err := dawgsDB.AssertSchema(ctx, schema()); err != nil {
 			fmt.Printf("Failed to validate schema: %v\n", err)
 			os.Exit(1)
-		} else if changelog, err := changelog.NewChangelog(ctx, pool, 1000); err != nil {
+		} else if schemaManager := pg.NewSchemaManager(pool); err != nil {
+			// this is dumb but whatevs
+		} else if changelog, err := changelog.NewChangelog(ctx, pool, 1000, schemaManager); err != nil {
 			fmt.Printf("Failed to create daemon: %v\n", err)
 			os.Exit(1)
 		} else {
@@ -109,7 +111,7 @@ func main() {
 }
 
 func test(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
-	numNodes := 1_000_000
+	numNodes := 100_000
 
 	db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()
@@ -137,7 +139,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 				nodeProperties,
 			)
 
-			if shouldSubmit, err := log.ResolveNodeChange(ctx, proposedChange); err != nil {
+			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
 				fmt.Println("blahh")
 			} else if shouldSubmit {
 				batch.UpdateNodeBy(graph.NodeUpdate{
@@ -180,7 +182,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 				nodeProperties,
 			)
 
-			if shouldSubmit, err := log.ResolveNodeChange(ctx, proposedChange); err != nil {
+			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
 				fmt.Println("blahh")
 			} else if shouldSubmit {
 				numBatchUpdates++
@@ -188,6 +190,121 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 					Node:               graph.PrepareNode(proposedChange.Properties, proposedChange.Kinds...),
 					IdentityProperties: []string{"objectid"},
 				})
+			} else { // we only submit to the log for reconciliation
+				numQueuedForReconciliation++
+				log.Submit(ctx, proposedChange)
+			}
+		}
+
+		slog.Info("counters",
+			slog.Int("batch updates", numBatchUpdates),
+			slog.Int("reconcilation updates", numQueuedForReconciliation))
+		return nil
+	})
+
+	db.BatchOperation(ctx, func(batch graph.Batch) error {
+		start := time.Now()
+		defer func() {
+			slog.Info("batch 3 finished",
+				"duration", time.Since(start),
+				slog.Int("cache size", log.Size()))
+		}()
+
+		slog.Info("batch 3 starting", "timestamp", start)
+		recUpdates := 0
+		batchUpdates := 0
+		for idx := 0; idx < numNodes; idx++ {
+			var (
+				startObjID = "dummy"
+				endObjID   = "dummy2"
+				// startObjID = strconv.Itoa(idx)
+				// endObjID   = strconv.Itoa(idx + 1)
+				edgeProps = graph.NewProperties()
+			)
+
+			edgeProps.Set("startID", startObjID)
+			edgeProps.Set("endID", endObjID)
+			// edgeProps.Set("idx", idx)
+			edgeProps.Set("lastseen", start)
+
+			proposedChange := changelog.NewEdgeChange(
+				startObjID,
+				endObjID,
+				edgeKinds[0],
+				edgeProps,
+			)
+
+			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
+				fmt.Println("blahh")
+			} else if shouldSubmit {
+				batchUpdates++
+				update := graph.RelationshipUpdate{
+					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
+					StartIdentityProperties: []string{"objectid"},
+					// StartIdentityKind:       sourceKind,
+					End: graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": endObjID, "lastseen": start}), nodeKinds...),
+					// EndIdentityKind:       sourceKind,
+					EndIdentityProperties: []string{"objectid"},
+					Relationship:          graph.PrepareRelationship(edgeProps, edgeKinds[0]),
+				}
+				batch.UpdateRelationshipBy(update)
+			} else { // we only submit to the log for reconciliation
+				recUpdates++
+				log.Submit(ctx, proposedChange)
+			}
+		}
+		slog.Info("counters",
+			slog.Int("batch updates", batchUpdates),
+			slog.Int("reconciliation updates", recUpdates))
+		return nil
+	})
+
+	db.BatchOperation(ctx, func(batch graph.Batch) error {
+		start := time.Now()
+		defer func() {
+			slog.Info("batch 4 finished",
+				"duration", time.Since(start),
+				slog.Int("cache size", log.Size()))
+		}()
+
+		slog.Info("batch 4 starting", "timestamp", start)
+
+		numBatchUpdates := 0            // should stay 0
+		numQueuedForReconciliation := 0 // should be == numNodes
+
+		for idx := 0; idx < numNodes; idx++ {
+			var (
+				startObjID = strconv.Itoa(idx)
+				endObjID   = strconv.Itoa(idx + 1)
+				edgeProps  = graph.NewProperties()
+			)
+
+			edgeProps.Set("startID", startObjID)
+			edgeProps.Set("endID", endObjID)
+			edgeProps.Set("idx", idx)
+			edgeProps.Set("lastseen", start)
+
+			proposedChange := changelog.NewEdgeChange(
+				startObjID,
+				endObjID,
+				edgeKinds[0],
+				edgeProps,
+			)
+
+			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
+				fmt.Println("blahh")
+			} else if shouldSubmit {
+				numBatchUpdates++
+				update := graph.RelationshipUpdate{
+					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
+					StartIdentityProperties: []string{"objectid"},
+					// StartIdentityKind:       sourceKind,
+					End: graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": endObjID, "lastseen": start}), nodeKinds...),
+					// EndIdentityKind:       sourceKind,
+					EndIdentityProperties: []string{"objectid"},
+					Relationship:          graph.PrepareRelationship(edgeProps, edgeKinds[0]),
+				}
+				batch.UpdateRelationshipBy(update)
 			} else { // we only submit to the log for reconciliation
 				numQueuedForReconciliation++
 				log.Submit(ctx, proposedChange)
