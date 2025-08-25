@@ -111,8 +111,8 @@ func main() {
 }
 
 func test(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
-	numNodes := 1_000_000
-	diffBegins := 750_000
+	numNodes := 10_000_000
+	diffBegins := 7_500_000
 
 	db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()

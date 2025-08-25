@@ -5,6 +5,13 @@ import (
 	"sync"
 )
 
+// cache is an in-memory deduplication layer for changelog entries.
+//
+// It maps a change's identity hash to its most recent content hash,
+// allowing the changelog to decide whether an incoming change
+// is new/modified (submit) or unchanged (skip).
+//
+// It also maintains simple hit/miss counters for observability, which can be reset between ingest batches.
 type cache struct {
 	data  map[uint64]uint64
 	mutex *sync.Mutex

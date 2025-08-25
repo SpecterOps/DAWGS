@@ -8,6 +8,11 @@ import (
 	"github.com/specterops/dawgs/util/channels"
 )
 
+// loop coordinates the ingestion of deduplicated graph changes.
+// It buffers NodeChange and EdgeChange values in memory, and flushes them
+// to the backing flusher either when:
+//   - the buffer reaches the configured batch size, or
+//   - no new changes arrive within the flush interval.
 type loop struct {
 	readerC       <-chan Change
 	writerC       chan<- Change
