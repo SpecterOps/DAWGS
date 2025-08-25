@@ -51,11 +51,11 @@ func (s *cache) shouldSubmit(change Change) (bool, error) {
 	return true, nil
 }
 
-func (s *cache) Stats() CacheStats {
+func (s *cache) getStats() CacheStats {
 	return s.stats
 }
 
-func (s *cache) ResetStats() CacheStats {
+func (s *cache) resetStats() CacheStats {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	old := s.stats

@@ -29,9 +29,9 @@ var (
 )
 
 type Changelog struct {
-	Cache cache
-	DB    db
-	Loop  loop
+	cache cache
+	db    db
+	loop  loop
 }
 
 func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, batchSize int, kindMapper pg.KindMapper) (*Changelog, error) {
@@ -42,28 +42,28 @@ func NewChangelog(ctx context.Context, pgxPool *pgxpool.Pool, batchSize int, kin
 	go loop.start(ctx)
 
 	return &Changelog{
-		Cache: cache,
-		DB:    db,
-		Loop:  loop,
+		cache: cache,
+		db:    db,
+		loop:  loop,
 	}, nil
 }
 
-func (s *Changelog) Size() int {
-	return len(s.Cache.data)
+func (s *Changelog) GetStats() CacheStats {
+	return s.cache.getStats()
 }
 
 func (s *Changelog) FlushStats() {
-	stats := s.Cache.ResetStats()
+	stats := s.cache.resetStats()
 	slog.Info("changelog metrics",
 		"hits", stats.Hits,
 		"misses", stats.Misses,
 	)
 }
 
-func (s *Changelog) ResolveChange(ctx context.Context, proposedChange Change) (bool, error) {
-	return s.Cache.shouldSubmit(proposedChange)
+func (s *Changelog) ResolveChange(ctx context.Context, change Change) (bool, error) {
+	return s.cache.shouldSubmit(change)
 }
 
 func (s *Changelog) Submit(ctx context.Context, change Change) bool {
-	return channels.Submit(ctx, s.Loop.WriterC, change)
+	return channels.Submit(ctx, s.loop.WriterC, change)
 }

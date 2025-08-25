@@ -12,10 +12,10 @@ type loop struct {
 	ReaderC       <-chan Change
 	WriterC       chan<- Change
 	FlushInterval time.Duration
-	NodeBuffer    []NodeChange
-	EdgeBuffer    []EdgeChange
 	BatchSize     int
-	flusher       flusher // interface for testing seam
+
+	nodeBuffer *changeBuffer[NodeChange]
+	edgeBuffer *changeBuffer[EdgeChange]
 }
 
 type flusher interface {
@@ -30,11 +30,41 @@ func newLoop(ctx context.Context, flusher flusher, batchSize int) loop {
 		ReaderC:       readerC,
 		WriterC:       writerC,
 		FlushInterval: 5 * time.Second,
-		NodeBuffer:    make([]NodeChange, 0),
-		EdgeBuffer:    make([]EdgeChange, 0),
 		BatchSize:     batchSize,
-		flusher:       flusher,
+		nodeBuffer:    newChangeBuffer(flusher.flushNodeChanges),
+		edgeBuffer:    newChangeBuffer(flusher.flushEdgeChanges),
 	}
+}
+
+// changeBuffer is a small helper that accumulates changes and flushes them
+// via a supplied function when size thresholds are hit.
+type changeBuffer[T any] struct {
+	buf     []T
+	flushFn func(ctx context.Context, changes []T) (int64, error)
+}
+
+func newChangeBuffer[T any](flushFn func(ctx context.Context, changes []T) (int64, error)) *changeBuffer[T] {
+	return &changeBuffer[T]{buf: make([]T, 0), flushFn: flushFn}
+}
+
+func (s *changeBuffer[T]) add(change T) {
+	s.buf = append(s.buf, change)
+}
+
+// tryFlush flushes the buffer if batchSize == 0 (force flush) or
+// if the buffer length meets/exceeds batchSize. It clears the buffer
+// regardless of flush success.
+func (s *changeBuffer[T]) tryFlush(ctx context.Context, batchSize int) error {
+	if len(s.buf) == 0 {
+		return nil
+	}
+	if batchSize == 0 || len(s.buf) >= batchSize {
+		if _, err := s.flushFn(ctx, s.buf); err != nil {
+			return err
+		}
+		s.buf = s.buf[:0]
+	}
+	return nil
 }
 
 func (s *loop) start(ctx context.Context) error {
@@ -53,73 +83,50 @@ func (s *loop) start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			// flush any leftovers
-			if err := s.tryFlush(ctx, 0); err != nil {
-				slog.WarnContext(ctx, "final flush failed", "err", err)
-			}
+			_ = s.nodeBuffer.tryFlush(ctx, 0)
+			_ = s.edgeBuffer.tryFlush(ctx, 0)
 			return nil
 
 		case change, ok := <-s.ReaderC:
 			if !ok {
 				// input closed; try flushing
-				if err := s.tryFlush(ctx, 0); err != nil {
-					slog.WarnContext(ctx, "final flush failed", "err", err)
-				}
+				_ = s.nodeBuffer.tryFlush(ctx, 0)
+				_ = s.edgeBuffer.tryFlush(ctx, 0)
 				return nil
 			}
 
 			switch typed := change.(type) {
 			case NodeChange:
-				s.NodeBuffer = append(s.NodeBuffer, typed)
+				s.nodeBuffer.add(typed)
 
 				// sized-base flush
-				if err := s.tryFlush(ctx, s.BatchSize); err != nil {
-					slog.WarnContext(ctx, "flush failed", "err", err)
+				if err := s.nodeBuffer.tryFlush(ctx, s.BatchSize); err != nil {
+					slog.WarnContext(ctx, "flush nodes failed", "err", err)
 				}
-
-				// everytime we append to the buffer, we want the flush timer to start
-				// ticking FROM NOW
-				idle.Reset(s.FlushInterval)
 
 			case EdgeChange:
-				s.EdgeBuffer = append(s.EdgeBuffer, typed)
+				s.edgeBuffer.add(typed)
 
 				// sized-base flush
-				if err := s.tryFlush(ctx, s.BatchSize); err != nil {
-					slog.WarnContext(ctx, "flush failed", "err", err)
+				if err := s.edgeBuffer.tryFlush(ctx, s.BatchSize); err != nil {
+					slog.WarnContext(ctx, "flush edges failed", "err", err)
 				}
-
-				// everytime we append to the buffer, we want the flush timer to start
-				// ticking FROM NOW
-				idle.Reset(s.FlushInterval)
 			}
+
+			// everytime we append to the buffer, we want the flush timer to start
+			// ticking FROM NOW
+			idle.Reset(s.FlushInterval)
 
 		case <-idle.C:
 			// idle-based flush
-			if err := s.tryFlush(ctx, 0); err != nil {
-				slog.WarnContext(ctx, "idle flush failed", "err", err)
+			if err := s.nodeBuffer.tryFlush(ctx, 0); err != nil {
+				slog.WarnContext(ctx, "idle flush (nodes) failed", "err", err)
+			}
+			if err := s.edgeBuffer.tryFlush(ctx, 0); err != nil {
+				slog.WarnContext(ctx, "idle flush (edges) failed", "err", err)
 			}
 		}
 
 	}
 
-}
-
-func (s *loop) tryFlush(ctx context.Context, batchWriteSize int) error {
-	if len(s.NodeBuffer) >= batchWriteSize {
-		if _, err := s.flusher.flushNodeChanges(ctx, s.NodeBuffer); err != nil {
-			return err
-		}
-		// clear buffer regardless of errors
-		s.NodeBuffer = s.NodeBuffer[:0]
-	}
-
-	if len(s.EdgeBuffer) >= batchWriteSize {
-		if _, err := s.flusher.flushEdgeChanges(ctx, s.EdgeBuffer); err != nil {
-			return err
-		}
-		// clear buffer regardless of errors
-		s.EdgeBuffer = s.EdgeBuffer[:0]
-	}
-
-	return nil
 }

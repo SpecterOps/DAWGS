@@ -117,8 +117,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		start := time.Now()
 		defer func() {
 			slog.Info("batch 1 finished",
-				"duration", time.Since(start),
-				slog.Int("cache size", log.Size()))
+				"duration", time.Since(start))
 		}()
 
 		slog.Info("batch 1 starting", "timestamp", start)
@@ -159,8 +158,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		start := time.Now()
 		defer func() {
 			slog.Info("batch 2 finished",
-				"duration", time.Since(start),
-				slog.Int("cache size", log.Size()))
+				"duration", time.Since(start))
 		}()
 
 		slog.Info("batch 2 starting", "timestamp", start)
@@ -202,8 +200,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		start := time.Now()
 		defer func() {
 			slog.Info("batch 3 finished",
-				"duration", time.Since(start),
-				slog.Int("cache size", log.Size()))
+				"duration", time.Since(start))
 		}()
 
 		slog.Info("batch 3 starting", "timestamp", start)
@@ -255,8 +252,7 @@ func test(ctx context.Context, log *changelog.Changelog, db graph.Database) erro
 		start := time.Now()
 		defer func() {
 			slog.Info("batch 4 finished",
-				"duration", time.Since(start),
-				slog.Int("cache size", log.Size()))
+				"duration", time.Since(start))
 		}()
 
 		slog.Info("batch 4 starting", "timestamp", start)
