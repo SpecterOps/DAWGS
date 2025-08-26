@@ -17,6 +17,16 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+type Harness struct {
+	DB        graph.Database
+	Log       *changelog.Changelog
+	Ctx       context.Context
+	Cancel    context.CancelFunc
+	WaitGroup *sync.WaitGroup
+}
+
+const pgConnStr = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
+
 var (
 	nodeKinds = graph.Kinds{graph.StringKind("NK1")}
 	edgeKinds = graph.Kinds{graph.StringKind("EK2")}
@@ -39,27 +49,25 @@ func schema() graph.Schema {
 	}
 }
 
-func setupHarness() (*changelog.Changelog, graph.Database, context.Context, context.CancelFunc) {
-	const pgConnStr = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
+func newHarness() *Harness {
+	ctx, cancel := context.WithCancel(context.Background())
 
-	var (
-		ctx, done = context.WithCancel(context.Background())
-	)
+	pool, err := pg.NewPool(pgConnStr)
+	if err != nil {
+		slog.Error("failed to connect", "err", err)
+		os.Exit(1)
+	}
 
-	if pool, err := pg.NewPool(pgConnStr); err != nil {
-		fmt.Printf("failed to connect to database: %v\n", err)
+	dawgsDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{ConnectionString: pgConnStr, Pool: pool})
+	if err != nil {
+		slog.Error("failed to open", "err", err)
 		os.Exit(1)
-	} else if dawgsDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{
-		ConnectionString: pgConnStr,
-		Pool:             pool,
-	}); err != nil {
-		fmt.Printf("Failed to open database connection: %v\n", err)
-		os.Exit(1)
-	} else {
-		// Attempt to truncate but don't care about the error
-		dawgsDB.Run(
-			ctx,
-			`
+	}
+
+	// Attempt to truncate but don't care about the error
+	dawgsDB.Run(
+		ctx,
+		`
 						do $$ declare
 							r record;
 						begin
@@ -69,242 +77,156 @@ func setupHarness() (*changelog.Changelog, graph.Database, context.Context, cont
 						end $$;
 		`, nil)
 
-		if err := dawgsDB.AssertSchema(ctx, schema()); err != nil {
-			fmt.Printf("Failed to validate schema: %v\n", err)
-			os.Exit(1)
-		} else if schemaManager := pg.NewSchemaManager(pool); err != nil {
-			// this is dumb but whatevs
-		} else {
-			changelog := changelog.NewChangelog(pool, schemaManager, changelog.DefaultOptions())
-			return changelog, dawgsDB, ctx, done
-		}
-	}
-
-	return nil, nil, ctx, done
-}
-
-func main() {
-	log, dawgsDB, ctx, done := setupHarness()
-	log.Start(ctx)
-
-	// Graceful shutdown on SIGINT/SIGTERM
-	sigC := make(chan os.Signal, 1)
-	signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		<-sigC
-		slog.Info("Received shutdown signal")
-		done()
-		wg.Done()
-		os.Exit(0)
-	}()
-
-	if err := test(ctx, log, dawgsDB); err != nil {
-		fmt.Printf("test_100 failed: %v\n", err)
+	if err := dawgsDB.AssertSchema(ctx, schema()); err != nil {
+		slog.Error("schema validation failed", "err", err)
 		os.Exit(1)
 	}
 
-	wg.Wait()
+	schemaManager := pg.NewSchemaManager(pool)
+	log := changelog.NewChangelog(pool, schemaManager, changelog.DefaultOptions())
 
-	slog.Info("Shutdown complete")
+	return &Harness{DB: dawgsDB, Log: log, Ctx: ctx, Cancel: cancel, WaitGroup: &sync.WaitGroup{}}
 }
 
-func test(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
+func (h *Harness) Close() {
+	h.Cancel()
+	h.WaitGroup.Wait()
+}
+
+func waitForShutdown(cancel func(), wg *sync.WaitGroup) {
+	sigC := make(chan os.Signal, 1)
+	signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-sigC
+		slog.Info("Received shutdown signal")
+		cancel()
+		// os.Exit(0)
+	}()
+}
+
+func main() {
+	harness := newHarness()
+	defer harness.Close()
+
+	harness.Log.Start(harness.Ctx)
+	waitForShutdown(harness.Cancel, harness.WaitGroup)
+
+	if err := runTest(harness.Ctx, harness.Log, harness.DB); err != nil {
+		slog.Error("test failed", "err", err)
+		os.Exit(1)
+	}
+
+	harness.WaitGroup.Wait()
+	slog.Info("Shutdown complete")
+
+	os.Exit(0)
+}
+
+func runTest(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
 	numNodes := 10_000_000
-	diffBegins := 7_500_000
+	diffBegins := 9_000_000
 
-	db.BatchOperation(ctx, func(batch graph.Batch) error {
-		start := time.Now()
-		defer func() {
-			slog.Info("batch 1 finished",
-				"duration", time.Since(start))
-		}()
+	runNodeBatch(ctx, log, db, numNodes, diffBegins, false, "node batch 1")
+	runNodeBatch(ctx, log, db, numNodes, diffBegins, true, "node batch 2")
 
-		slog.Info("batch 1 starting", "timestamp", start)
-
-		for idx := 0; idx < numNodes; idx++ {
-			var (
-				nodeObjectID   = strconv.Itoa(idx)
-				nodeProperties = graph.NewProperties()
-			)
-
-			nodeProperties.Set("objectid", nodeObjectID)
-			nodeProperties.Set("node_index", idx)
-			nodeProperties.Set("lastseen", start)
-
-			proposedChange := changelog.NewNodeChange(
-				nodeObjectID,
-				nodeKinds,
-				nodeProperties,
-			)
-
-			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
-				fmt.Println("blahh")
-			} else if shouldSubmit {
-				batch.UpdateNodeBy(graph.NodeUpdate{
-					Node:               graph.PrepareNode(proposedChange.Properties, proposedChange.Kinds...),
-					IdentityProperties: []string{"objectid"},
-				})
-			} else { // we only submit to the log for reconciliation
-				log.Submit(ctx, proposedChange)
-			}
-		}
-		return nil
-	})
-
-	log.FlushStats()
-
-	db.BatchOperation(ctx, func(batch graph.Batch) error {
-		start := time.Now()
-		defer func() {
-			slog.Info("batch 2 finished",
-				"duration", time.Since(start))
-		}()
-
-		slog.Info("batch 2 starting", "timestamp", start)
-
-		for idx := 0; idx < numNodes; idx++ {
-			var (
-				nodeObjectID   = strconv.Itoa(idx)
-				nodeProperties = graph.NewProperties()
-			)
-
-			nodeProperties.Set("objectid", nodeObjectID)
-			nodeProperties.Set("node_index", idx)
-			nodeProperties.Set("lastseen", start) // timestamp will be different than original batch, but its an ignored prop so should get cache hits still
-
-			// simulate only partial cache hits
-			if idx > diffBegins {
-				nodeProperties.Set("different_prop", idx)
-			}
-
-			proposedChange := changelog.NewNodeChange(
-				nodeObjectID,
-				nodeKinds,
-				nodeProperties,
-			)
-
-			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
-				fmt.Println("blahh")
-			} else if shouldSubmit {
-				batch.UpdateNodeBy(graph.NodeUpdate{
-					Node:               graph.PrepareNode(proposedChange.Properties, proposedChange.Kinds...),
-					IdentityProperties: []string{"objectid"},
-				})
-			} else { // we only submit to the log for reconciliation
-				log.Submit(ctx, proposedChange)
-			}
-		}
-
-		return nil
-	})
-
-	log.FlushStats()
-
-	db.BatchOperation(ctx, func(batch graph.Batch) error {
-		start := time.Now()
-		defer func() {
-			slog.Info("batch 3 finished",
-				"duration", time.Since(start))
-		}()
-
-		slog.Info("batch 3 starting", "timestamp", start)
-
-		for idx := 0; idx < numNodes; idx++ {
-			var (
-				startObjID = strconv.Itoa(idx)
-				endObjID   = strconv.Itoa(idx + 1)
-				edgeProps  = graph.NewProperties()
-			)
-
-			edgeProps.Set("startID", startObjID)
-			edgeProps.Set("endID", endObjID)
-			edgeProps.Set("lastseen", start)
-
-			proposedChange := changelog.NewEdgeChange(
-				startObjID,
-				endObjID,
-				edgeKinds[0],
-				edgeProps,
-			)
-
-			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
-				fmt.Println("blahh")
-			} else if shouldSubmit {
-				update := graph.RelationshipUpdate{
-					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
-					StartIdentityProperties: []string{"objectid"},
-					// StartIdentityKind:       sourceKind,
-					End: graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": endObjID, "lastseen": start}), nodeKinds...),
-					// EndIdentityKind:       sourceKind,
-					EndIdentityProperties: []string{"objectid"},
-					Relationship:          graph.PrepareRelationship(edgeProps, edgeKinds[0]),
-				}
-				batch.UpdateRelationshipBy(update)
-			} else { // we only submit to the log for reconciliation
-				log.Submit(ctx, proposedChange)
-			}
-		}
-		return nil
-	})
-
-	log.FlushStats()
-
-	db.BatchOperation(ctx, func(batch graph.Batch) error {
-		start := time.Now()
-		defer func() {
-			slog.Info("batch 4 finished",
-				"duration", time.Since(start))
-		}()
-
-		slog.Info("batch 4 starting", "timestamp", start)
-
-		for idx := 0; idx < numNodes; idx++ {
-			var (
-				startObjID = strconv.Itoa(idx)
-				endObjID   = strconv.Itoa(idx + 1)
-				edgeProps  = graph.NewProperties()
-			)
-
-			edgeProps.Set("startID", startObjID)
-			edgeProps.Set("endID", endObjID)
-			edgeProps.Set("lastseen", start)
-
-			// simulate only partial cache hits
-			if idx > diffBegins {
-				edgeProps.Set("different_prop", idx)
-			}
-
-			proposedChange := changelog.NewEdgeChange(
-				startObjID,
-				endObjID,
-				edgeKinds[0],
-				edgeProps,
-			)
-
-			if shouldSubmit, err := log.ResolveChange(ctx, proposedChange); err != nil {
-				fmt.Println("blahh")
-			} else if shouldSubmit {
-				update := graph.RelationshipUpdate{
-					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
-					StartIdentityProperties: []string{"objectid"},
-					// StartIdentityKind:       sourceKind,
-					End: graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": endObjID, "lastseen": start}), nodeKinds...),
-					// EndIdentityKind:       sourceKind,
-					EndIdentityProperties: []string{"objectid"},
-					Relationship:          graph.PrepareRelationship(edgeProps, edgeKinds[0]),
-				}
-				batch.UpdateRelationshipBy(update)
-			} else { // we only submit to the log for reconciliation
-				log.Submit(ctx, proposedChange)
-			}
-		}
-		return nil
-	})
-	log.FlushStats()
+	runEdgeBatch(ctx, log, db, numNodes, diffBegins, false, "edge batch 3")
+	runEdgeBatch(ctx, log, db, numNodes, diffBegins, true, "edge batch 4")
 
 	slog.Info("Done with test")
-
 	return nil
+}
+
+func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Database, numNodes, diffBegins int, simulateDiff bool, label string) {
+	db.BatchOperation(ctx, func(batch graph.Batch) error {
+
+		start := time.Now()
+		slog.Info(fmt.Sprintf("%s starting", label), "timestamp", start)
+		defer func() {
+			slog.Info(fmt.Sprintf("%s finished", label), "duration", time.Since(start))
+		}()
+
+		for idx := 0; idx < numNodes; idx++ {
+			if idx%1000 == 0 {
+				if ctx.Err() != nil {
+					slog.Info("batch interrupted", "idx", idx)
+					return ctx.Err()
+				}
+			}
+
+			props := graph.NewProperties().
+				Set("objectid", strconv.Itoa(idx)).
+				Set("node_index", idx).
+				Set("lastseen", start)
+
+			if simulateDiff && idx > diffBegins {
+				props.Set("different_prop", idx)
+			}
+
+			change := changelog.NewNodeChange(strconv.Itoa(idx), nodeKinds, props)
+			if submit, err := log.ResolveChange(ctx, change); err != nil {
+				slog.Error("ResolveChange failed", "err", err)
+			} else if submit {
+				batch.UpdateNodeBy(graph.NodeUpdate{
+					Node:               graph.PrepareNode(props, nodeKinds...),
+					IdentityProperties: []string{"objectid"},
+				})
+			} else {
+				log.Submit(ctx, change)
+			}
+		}
+		return nil
+	})
+	log.FlushStats()
+}
+
+func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Database, numNodes, diffBegins int, simulateDiff bool, label string) {
+	db.BatchOperation(ctx, func(batch graph.Batch) error {
+		start := time.Now()
+		slog.Info(fmt.Sprintf("%s starting", label), "timestamp", start)
+		defer func() {
+			slog.Info(fmt.Sprintf("%s finished", label), "duration", time.Since(start))
+		}()
+
+		for idx := 0; idx < numNodes; idx++ {
+			if idx%1000 == 0 {
+				if ctx.Err() != nil {
+					slog.Info("batch interrupted", "idx", idx)
+					return ctx.Err()
+				}
+			}
+
+			startObjID := strconv.Itoa(idx)
+			endObjID := strconv.Itoa(idx + 1)
+
+			props := graph.NewProperties().
+				Set("startID", startObjID).
+				Set("endID", endObjID).
+				Set("lastseen", start)
+
+			if simulateDiff && idx > diffBegins {
+				props.Set("different_prop", idx)
+			}
+
+			change := changelog.NewEdgeChange(startObjID, endObjID, edgeKinds[0], props)
+			if submit, err := log.ResolveChange(ctx, change); err != nil {
+				slog.Error("ResolveChange failed", "err", err)
+			} else if submit {
+				update := graph.RelationshipUpdate{
+					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
+					StartIdentityProperties: []string{"objectid"},
+					End:                     graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": endObjID, "lastseen": start}), nodeKinds...),
+					EndIdentityProperties:   []string{"objectid"},
+					Relationship:            graph.PrepareRelationship(props, edgeKinds[0]),
+				}
+				batch.UpdateRelationshipBy(update)
+			} else {
+				log.Submit(ctx, change)
+			}
+		}
+		return nil
+	})
+	log.FlushStats()
 }
