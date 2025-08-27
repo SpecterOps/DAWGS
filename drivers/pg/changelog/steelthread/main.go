@@ -126,8 +126,8 @@ func main() {
 }
 
 func runTest(ctx context.Context, log *changelog.Changelog, db graph.Database) error {
-	numNodes := 10_000_000
-	diffBegins := 9_000_000
+	numNodes := 1_000_000
+	diffBegins := 900_000
 
 	runNodeBatch(ctx, log, db, numNodes, diffBegins, false, "node batch 1")
 	runNodeBatch(ctx, log, db, numNodes, diffBegins, true, "node batch 2")
@@ -166,9 +166,9 @@ func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 			}
 
 			change := changelog.NewNodeChange(strconv.Itoa(idx), nodeKinds, props)
-			if submit, err := log.ResolveChange(ctx, change); err != nil {
+			if shouldSubmit, err := log.ResolveChange(ctx, change); err != nil {
 				slog.Error("ResolveChange failed", "err", err)
-			} else if submit {
+			} else if shouldSubmit {
 				batch.UpdateNodeBy(graph.NodeUpdate{
 					Node:               graph.PrepareNode(props, nodeKinds...),
 					IdentityProperties: []string{"objectid"},
@@ -211,9 +211,9 @@ func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 			}
 
 			change := changelog.NewEdgeChange(startObjID, endObjID, edgeKinds[0], props)
-			if submit, err := log.ResolveChange(ctx, change); err != nil {
+			if shouldSubmit, err := log.ResolveChange(ctx, change); err != nil {
 				slog.Error("ResolveChange failed", "err", err)
-			} else if submit {
+			} else if shouldSubmit {
 				update := graph.RelationshipUpdate{
 					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
 					StartIdentityProperties: []string{"objectid"},
