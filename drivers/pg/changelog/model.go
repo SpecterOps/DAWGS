@@ -8,8 +8,8 @@ import (
 )
 
 type Change interface {
-	IdentityKey() uint64
-	Hash() (uint64, error)
+	IdentityKey() uint64   // identity hash
+	Hash() (uint64, error) // content hash
 }
 
 var (
@@ -44,7 +44,12 @@ func (s NodeChange) IdentityKey() uint64 {
 }
 
 func (s NodeChange) Hash() (uint64, error) {
-	if propertiesHash, err := s.Properties.Hash(ignoredPropertiesKeys); err != nil {
+	props := s.Properties
+	if props == nil {
+		props = graph.NewProperties()
+	}
+
+	if propertiesHash, err := props.Hash(ignoredPropertiesKeys); err != nil {
 		return 0, fmt.Errorf("node properties hash error: %w", err)
 	} else if kindsHash, err := s.Kinds.Hash(); err != nil {
 		return 0, fmt.Errorf("node kinds hash error: %w", err)
@@ -71,13 +76,18 @@ func NewEdgeChange(sourceNodeID, targetNodeID string, kind graph.Kind, propertie
 }
 
 func (s EdgeChange) IdentityKey() uint64 {
-	identity := s.SourceNodeID + s.TargetNodeID + s.Kind.String()
+	identity := s.SourceNodeID + "|" + s.TargetNodeID + "|" + s.Kind.String()
 	hash := xxhash.Sum64String(identity)
 	return hash
 }
 
 func (s EdgeChange) Hash() (uint64, error) {
-	if dataHash, err := s.Properties.Hash(ignoredPropertiesKeys); err != nil {
+	props := s.Properties
+	if props == nil {
+		props = graph.NewProperties()
+	}
+
+	if dataHash, err := props.Hash(ignoredPropertiesKeys); err != nil {
 		return 0, fmt.Errorf("edge properties hash error: %w", err)
 	} else {
 		return xxhash.Sum64(dataHash), nil

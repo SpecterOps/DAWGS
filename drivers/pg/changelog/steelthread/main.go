@@ -25,8 +25,6 @@ type Harness struct {
 	WaitGroup *sync.WaitGroup
 }
 
-const pgConnStr = "user=bhe password=weneedbetterpasswords dbname=bhe host=localhost port=55432"
-
 var (
 	nodeKinds = graph.Kinds{graph.StringKind("NK1")}
 	edgeKinds = graph.Kinds{graph.StringKind("EK2")}
@@ -52,13 +50,20 @@ func schema() graph.Schema {
 func newHarness() *Harness {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	pool, err := pg.NewPool(pgConnStr)
+	connStr := os.Getenv("PG_CONNECTION_STRING")
+	if connStr == "" {
+		slog.Error("PG_CONNECTION_STRING env variable is not set")
+		cancel()
+		os.Exit(1)
+	}
+
+	pool, err := pg.NewPool(connStr)
 	if err != nil {
 		slog.Error("failed to connect", "err", err)
 		os.Exit(1)
 	}
 
-	dawgsDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{ConnectionString: pgConnStr, Pool: pool})
+	dawgsDB, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{ConnectionString: connStr, Pool: pool})
 	if err != nil {
 		slog.Error("failed to open", "err", err)
 		os.Exit(1)
@@ -129,18 +134,26 @@ func runTest(ctx context.Context, log *changelog.Changelog, db graph.Database) e
 	numNodes := 1_000_000
 	diffBegins := 900_000
 
-	runNodeBatch(ctx, log, db, numNodes, diffBegins, false, "node batch 1")
-	runNodeBatch(ctx, log, db, numNodes, diffBegins, true, "node batch 2")
+	if err := runNodeBatch(ctx, log, db, numNodes, diffBegins, false, "node batch 1"); err != nil {
+		slog.ErrorContext(ctx, "run node batch 1", "err", err)
+	}
+	if err := runNodeBatch(ctx, log, db, numNodes, diffBegins, true, "node batch 2"); err != nil {
+		slog.ErrorContext(ctx, "run node batch 2", "err", err)
+	}
 
-	runEdgeBatch(ctx, log, db, numNodes, diffBegins, false, "edge batch 3")
-	runEdgeBatch(ctx, log, db, numNodes, diffBegins, true, "edge batch 4")
+	if err := runEdgeBatch(ctx, log, db, numNodes, diffBegins, false, "edge batch 3"); err != nil {
+		slog.ErrorContext(ctx, "run edge batch 1", "err", err)
+	}
+	if err := runEdgeBatch(ctx, log, db, numNodes, diffBegins, true, "edge batch 4"); err != nil {
+		slog.ErrorContext(ctx, "run edge batch 2", "err", err)
+	}
 
 	slog.Info("Done with test")
 	return nil
 }
 
-func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Database, numNodes, diffBegins int, simulateDiff bool, label string) {
-	db.BatchOperation(ctx, func(batch graph.Batch) error {
+func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Database, numNodes, diffBegins int, simulateDiff bool, label string) error {
+	return db.BatchOperation(ctx, func(batch graph.Batch) error {
 
 		start := time.Now()
 		slog.Info(fmt.Sprintf("%s starting", label), "timestamp", start)
@@ -169,21 +182,26 @@ func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 			if shouldSubmit, err := log.ResolveChange(ctx, change); err != nil {
 				slog.Error("ResolveChange failed", "err", err)
 			} else if shouldSubmit {
-				batch.UpdateNodeBy(graph.NodeUpdate{
+				if err := batch.UpdateNodeBy(graph.NodeUpdate{
 					Node:               graph.PrepareNode(props, nodeKinds...),
 					IdentityProperties: []string{"objectid"},
-				})
+				}); err != nil {
+					return fmt.Errorf("UpdatedNodeBy failed at idx=%d: %w", idx, err)
+				}
+
 			} else {
 				log.Submit(ctx, change)
 			}
 		}
+
+		log.FlushStats()
 		return nil
 	})
-	log.FlushStats()
+
 }
 
-func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Database, numNodes, diffBegins int, simulateDiff bool, label string) {
-	db.BatchOperation(ctx, func(batch graph.Batch) error {
+func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Database, numNodes, diffBegins int, simulateDiff bool, label string) error {
+	return db.BatchOperation(ctx, func(batch graph.Batch) error {
 		start := time.Now()
 		slog.Info(fmt.Sprintf("%s starting", label), "timestamp", start)
 		defer func() {
@@ -221,12 +239,15 @@ func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 					EndIdentityProperties:   []string{"objectid"},
 					Relationship:            graph.PrepareRelationship(props, edgeKinds[0]),
 				}
-				batch.UpdateRelationshipBy(update)
+				if err := batch.UpdateRelationshipBy(update); err != nil {
+					return fmt.Errorf("UpdateRelationshipBy failed at idx=%d: %w", idx, err)
+				}
 			} else {
 				log.Submit(ctx, change)
 			}
 		}
+
+		log.FlushStats()
 		return nil
 	})
-	log.FlushStats()
 }

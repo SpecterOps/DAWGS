@@ -59,6 +59,8 @@ func (s *cache) shouldSubmit(change Change) (bool, error) {
 }
 
 func (s *cache) getStats() cacheStats {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	return s.stats
 }
 

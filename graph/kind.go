@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"sync"
@@ -124,18 +125,27 @@ func (s Kinds) ContainsOneOf(others ...Kind) bool {
 	return false
 }
 
-// Hash returns a hash of the Kinds. It appends them to the hash stream in sorted order.
+// Hash returns a deterministic hash of the Kinds in sorted order.
 func (s Kinds) Hash() ([]byte, error) {
+	hasher := xxhash.New()
 	if len(s) == 0 {
-		return []byte{}, nil
+		return hasher.Sum(nil), nil
 	}
 
-	hasher := xxhash.New()
+	// sort names for deterministic order
+	ks := s.Strings()
+	sort.Strings(ks)
 
-	sort.Strings(s.Strings())
+	for _, kind := range ks {
+		// frame kinds with a length-prefix to prevent collisions like: ["ab","c"] === ["a","bc"]
+		buf := make([]byte, binary.MaxVarintLen64)
+		n := binary.PutUvarint(buf, uint64(len(kind)))
 
-	for _, kind := range s {
-		if _, err := hasher.Write([]byte(kind.String())); err != nil {
+		if _, err := hasher.Write(buf[:n]); err != nil {
+			return nil, fmt.Errorf("writing length prefix: %w", err)
+		}
+
+		if _, err := hasher.Write([]byte(kind)); err != nil {
 			return nil, fmt.Errorf("writing kind to hash: %w", err)
 		}
 	}

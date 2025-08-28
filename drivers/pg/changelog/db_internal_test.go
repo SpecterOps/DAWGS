@@ -17,9 +17,11 @@ func TestFlushNodeChanges(t *testing.T) {
 
 	mockDB, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	require.NoError(t, err)
+	defer mockDB.Close()
 
 	ctrl := gomock.NewController(t)
 	mockKindMapper := mocks.NewMockKindMapper(ctrl)
+	t.Cleanup(ctrl.Finish)
 
 	db := newDB(mockDB, mockKindMapper)
 
@@ -33,6 +35,7 @@ func TestFlushNodeChanges(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, int64(2), rowsAffected)
+	require.NoError(t, mockDB.ExpectationsWereMet())
 }
 
 func TestFlushEdgeChanges(t *testing.T) {
@@ -41,9 +44,11 @@ func TestFlushEdgeChanges(t *testing.T) {
 
 	mockDB, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	require.NoError(t, err)
+	defer mockDB.Close()
 
 	ctrl := gomock.NewController(t)
 	mockKindMapper := mocks.NewMockKindMapper(ctrl)
+	t.Cleanup(ctrl.Finish)
 
 	db := newDB(mockDB, mockKindMapper)
 
@@ -64,4 +69,5 @@ func TestFlushEdgeChanges(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, int64(2), rowsAffected)
+	require.NoError(t, mockDB.ExpectationsWereMet())
 }

@@ -77,7 +77,6 @@ func (s *loop) start(ctx context.Context) error {
 	idle.Stop()                            // if nothing is buffered, keep the timer stopped
 
 	defer func() {
-		close(s.writerC)
 		idle.Stop()
 		slog.InfoContext(ctx, "shutting down changelog")
 	}()

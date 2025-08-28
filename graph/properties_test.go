@@ -148,6 +148,16 @@ func TestPropertiesHash(t *testing.T) {
 		assert.Equal(t, h1, h2)
 	})
 
+	t.Run("ambiguity is resolved", func(t *testing.T) {
+		a := graph.NewProperties().Set("a", "bc")
+		b := graph.NewProperties().Set("ab", "c")
+
+		h1, _ := a.Hash(nil)
+		h2, _ := b.Hash(nil)
+
+		assert.NotEqual(t, h1, h2)
+	})
+
 	t.Run("ignored keys", func(t *testing.T) {
 		props := graph.NewProperties().SetAll(map[string]any{
 			"keep": "yes",
