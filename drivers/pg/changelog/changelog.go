@@ -15,6 +15,10 @@ type Changelog struct {
 	db      db
 	loop    loop
 	options Options
+
+	// clean shutdown
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 type Options struct {
@@ -29,9 +33,12 @@ func DefaultOptions() Options {
 	}
 }
 
-func NewChangelog(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, opts Options) *Changelog {
-	cache := newCache()
-	db := newDB(pgxPool, kindMapper)
+func NewChangelog(pool *pgxpool.Pool, opts Options) *Changelog {
+	var (
+		cache      = newCache()
+		kindMapper = pg.NewSchemaManager(pool)
+		db         = newDB(pool, kindMapper)
+	)
 
 	return &Changelog{
 		cache:   cache,
@@ -42,13 +49,40 @@ func NewChangelog(pgxPool *pgxpool.Pool, kindMapper pg.KindMapper, opts Options)
 
 // Start begins a long-running loop that buffers and flushes node/edge updates
 func (s *Changelog) Start(ctx context.Context) {
+	var cctx context.Context
+	cctx, s.cancel = context.WithCancel(ctx)
+	s.done = make(chan struct{})
+
 	s.loop = newLoop(ctx, &s.db, s.options.BatchSize, s.options.FlushInterval)
 
 	go func() {
-		if err := s.loop.start(ctx); err != nil {
-			slog.ErrorContext(ctx, "changelog loop exited with error", "err", err)
+		defer close(s.done)
+		if err := s.loop.start(cctx); err != nil {
+			slog.ErrorContext(cctx, "changelog loop exited with error", "err", err)
 		}
 	}()
+}
+
+func (s *Changelog) Stop(ctx context.Context) error {
+	if s.cancel == nil {
+		return nil // never started
+	}
+
+	// tell loop to stop
+	s.cancel()
+
+	// wait until loop exits or context times out
+	select {
+	case <-s.done:
+		slog.Info("changelog shutdown complete")
+		return nil
+	case <-ctx.Done():
+		return ctx.Err() // caller's timeout
+	}
+}
+
+func (s *Changelog) Name() string {
+	return "Changelog Daemon"
 }
 
 func (s *Changelog) GetStats() cacheStats {

@@ -87,8 +87,7 @@ func newHarness() *Harness {
 		os.Exit(1)
 	}
 
-	schemaManager := pg.NewSchemaManager(pool)
-	log := changelog.NewChangelog(pool, schemaManager, changelog.DefaultOptions())
+	log := changelog.NewChangelog(pool, changelog.DefaultOptions())
 
 	return &Harness{DB: dawgsDB, Log: log, Ctx: ctx, Cancel: cancel, WaitGroup: &sync.WaitGroup{}}
 }
