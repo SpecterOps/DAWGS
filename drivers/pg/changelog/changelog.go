@@ -50,13 +50,16 @@ func (s *Changelog) Start(ctx context.Context) {
 	cctx, s.cancel = context.WithCancel(ctx)
 	s.done = make(chan struct{})
 
-	s.loop = newLoop(ctx, NewDBFlusher(s.conn), s.options.BatchSize, s.options.FlushInterval)
+	s.loop = newLoop(ctx, newDBFlusher(s.conn), s.options.BatchSize, s.options.FlushInterval)
 
 	go func() {
 		defer close(s.done)
-		if err := s.loop.start(cctx); err != nil {
+		if err := s.loop.start_new_parallel(cctx, s.conn, 6); err != nil {
 			slog.ErrorContext(cctx, "changelog loop exited with error", "err", err)
 		}
+		// if err := s.loop.start(cctx); err != nil {
+		// 	slog.ErrorContext(cctx, "changelog loop exited with error", "err", err)
+		// }
 	}()
 }
 

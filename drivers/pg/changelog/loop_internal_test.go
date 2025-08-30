@@ -89,7 +89,7 @@ type mockFlusher struct {
 	flushedChanges []Change
 }
 
-func (m *mockFlusher) Flush(_ context.Context, changes []Change) error {
+func (m *mockFlusher) flush(_ context.Context, changes []Change) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.flushedChanges = append(m.flushedChanges, changes...)
