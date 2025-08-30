@@ -87,7 +87,7 @@ func newHarness() *Harness {
 		os.Exit(1)
 	}
 
-	log := changelog.NewChangelog(pool, changelog.DefaultOptions())
+	log := changelog.NewChangelog(dawgsDB, changelog.DefaultOptions())
 
 	return &Harness{DB: dawgsDB, Log: log, Ctx: ctx, Cancel: cancel, WaitGroup: &sync.WaitGroup{}}
 }
@@ -178,7 +178,7 @@ func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 			}
 
 			change := changelog.NewNodeChange(strconv.Itoa(idx), nodeKinds, props)
-			if shouldSubmit, err := log.ResolveChange(ctx, change); err != nil {
+			if shouldSubmit, err := log.ResolveChange(change); err != nil {
 				slog.Error("ResolveChange failed", "err", err)
 			} else if shouldSubmit {
 				if err := batch.UpdateNodeBy(graph.NodeUpdate{
@@ -187,7 +187,6 @@ func runNodeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 				}); err != nil {
 					return fmt.Errorf("UpdatedNodeBy failed at idx=%d: %w", idx, err)
 				}
-
 			} else {
 				log.Submit(ctx, change)
 			}
@@ -207,6 +206,8 @@ func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 			slog.Info(fmt.Sprintf("%s finished", label), "duration", time.Since(start))
 		}()
 
+		batchCount := 0
+		submittedCount := 0
 		for idx := 0; idx < numNodes; idx++ {
 			if idx%1000 == 0 {
 				if ctx.Err() != nil {
@@ -228,9 +229,10 @@ func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 			}
 
 			change := changelog.NewEdgeChange(startObjID, endObjID, edgeKinds[0], props)
-			if shouldSubmit, err := log.ResolveChange(ctx, change); err != nil {
+			if shouldSubmit, err := log.ResolveChange(change); err != nil {
 				slog.Error("ResolveChange failed", "err", err)
 			} else if shouldSubmit {
+				batchCount++
 				update := graph.RelationshipUpdate{
 					Start:                   graph.PrepareNode(graph.NewProperties().SetAll(map[string]any{"objectid": startObjID, "lastseen": start}), nodeKinds...),
 					StartIdentityProperties: []string{"objectid"},
@@ -242,9 +244,11 @@ func runEdgeBatch(ctx context.Context, log *changelog.Changelog, db graph.Databa
 					return fmt.Errorf("UpdateRelationshipBy failed at idx=%d: %w", idx, err)
 				}
 			} else {
+				submittedCount++
 				log.Submit(ctx, change)
 			}
 		}
+		fmt.Printf("batchCount: %d, submittedCount: %d \n", batchCount, submittedCount)
 
 		log.FlushStats()
 		return nil
