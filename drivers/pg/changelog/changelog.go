@@ -5,14 +5,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/channels"
 )
 
 type Changelog struct {
 	cache   cache
-	db      db
+	conn    graph.Database
 	loop    loop
 	options Options
 
@@ -33,17 +32,15 @@ func DefaultOptions() Options {
 	}
 }
 
-func NewChangelog(pool *pgxpool.Pool, opts Options) *Changelog {
+func NewChangelog(dawgsDB graph.Database, opts Options) *Changelog {
 	var (
-		cache      = newCache()
-		kindMapper = pg.NewSchemaManager(pool)
-		db         = newDB(pool, kindMapper)
+		cache = newCache()
 	)
 
 	return &Changelog{
 		cache:   cache,
-		db:      db,
 		options: opts,
+		conn:    dawgsDB,
 	}
 }
 
@@ -53,7 +50,7 @@ func (s *Changelog) Start(ctx context.Context) {
 	cctx, s.cancel = context.WithCancel(ctx)
 	s.done = make(chan struct{})
 
-	s.loop = newLoop(ctx, &s.db, s.options.BatchSize, s.options.FlushInterval)
+	s.loop = newLoop(ctx, NewDBFlusher(s.conn), s.options.BatchSize, s.options.FlushInterval)
 
 	go func() {
 		defer close(s.done)
@@ -97,7 +94,7 @@ func (s *Changelog) FlushStats() {
 	)
 }
 
-func (s *Changelog) ResolveChange(ctx context.Context, change Change) (bool, error) {
+func (s *Changelog) ResolveChange(change Change) (bool, error) {
 	return s.cache.shouldSubmit(change)
 }
 

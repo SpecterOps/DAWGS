@@ -37,6 +37,7 @@ type cacheStats struct {
 func (s *cache) shouldSubmit(change Change) (bool, error) {
 	idHash := change.IdentityKey()
 	dataHash, err := change.Hash()
+
 	if err != nil {
 		return false, fmt.Errorf("hash proposed change: %w", err)
 	}

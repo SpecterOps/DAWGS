@@ -27,7 +27,7 @@ func TestLoop(t *testing.T) {
 
 		time.Sleep(50 * time.Millisecond)
 
-		require.Len(t, db.flushedNodes, 2)
+		require.Len(t, db.flushedChanges, 2)
 	})
 
 	t.Run("flushes edges on batch size", func(t *testing.T) {
@@ -38,7 +38,6 @@ func TestLoop(t *testing.T) {
 		loop := newLoop(ctx, db, 2, 5*time.Second)
 
 		// queue up nodes < batchSize, edges >= batchSize
-		require.True(t, channels.Submit(ctx, loop.writerC, Change(NodeChange{NodeID: "1"})))
 		require.True(t, channels.Submit(ctx, loop.writerC, Change(EdgeChange{})))
 		require.True(t, channels.Submit(ctx, loop.writerC, Change(EdgeChange{})))
 
@@ -46,9 +45,9 @@ func TestLoop(t *testing.T) {
 		go func() { _ = loop.start(ctx) }()
 		time.Sleep(50 * time.Millisecond)
 
-		require.Len(t, db.flushedNodes, 0)
-		require.Len(t, db.flushedEdges, 2)
+		require.Len(t, db.flushedChanges, 2)
 	})
+
 	t.Run("no flush happens before batch size", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -64,8 +63,9 @@ func TestLoop(t *testing.T) {
 		go func() { _ = loop.start(ctx) }()
 		time.Sleep(50 * time.Millisecond)
 
-		require.Len(t, db.flushedNodes, 0) // nothing was flushed because buffer never reached batch_size
+		require.Len(t, db.flushedChanges, 0) // nothing was flushed because buffer never reached batch_size
 	})
+
 	t.Run("timer triggers flush after inactivity", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -80,28 +80,18 @@ func TestLoop(t *testing.T) {
 		go func() { _ = loop.start(ctx) }()
 		time.Sleep(50 * time.Millisecond) // wait longer than flush interval
 
-		require.Len(t, db.flushedNodes, 1)
+		require.Len(t, db.flushedChanges, 1)
 	})
 }
 
 type mockFlusher struct {
-	mu           sync.Mutex
-	flushedNodes []NodeChange
-	flushedEdges []EdgeChange
-	latestID     int64
+	mu             sync.Mutex
+	flushedChanges []Change
 }
 
-func (m *mockFlusher) flushNodeChanges(_ context.Context, changes []NodeChange) (int64, error) {
+func (m *mockFlusher) Flush(_ context.Context, changes []Change) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.flushedNodes = append(m.flushedNodes, changes...)
-	m.latestID = int64(len(m.flushedNodes))
-	return m.latestID, nil
-}
-func (m *mockFlusher) flushEdgeChanges(_ context.Context, changes []EdgeChange) (int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.flushedEdges = append(m.flushedEdges, changes...)
-	m.latestID = int64(len(m.flushedEdges))
-	return m.latestID, nil
+	m.flushedChanges = append(m.flushedChanges, changes...)
+	return nil
 }
