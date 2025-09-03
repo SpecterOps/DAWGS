@@ -45,21 +45,27 @@ func NewChangelog(dawgsDB graph.Database, opts Options) *Changelog {
 }
 
 // Start begins a long-running loop that buffers and flushes node/edge updates
+// TODO: right-size the map here?
+// will need to pass a bool
 func (s *Changelog) Start(ctx context.Context) {
 	var cctx context.Context
 	cctx, s.cancel = context.WithCancel(ctx)
 	s.done = make(chan struct{})
 
-	s.loop = newLoop(ctx, newDBFlusher(s.conn), s.options.BatchSize, s.options.FlushInterval)
+	// FF check, db check for size of nodes + edge table. default to 1mil size
+	// s.cache = newCache()
 
+	s.loop = newLoop(cctx, newDBFlusher(s.conn), s.options.BatchSize, s.options.FlushInterval)
+	// s.enabled := FF
 	go func() {
 		defer close(s.done)
-		if err := s.loop.start_new_parallel(cctx, s.conn, 6); err != nil {
-			slog.ErrorContext(cctx, "changelog loop exited with error", "err", err)
-		}
-		// if err := s.loop.start(cctx); err != nil {
+		// s.loop = newLoop(cctx, s.conn, 6)
+		// if err := s.loop.start_new_parallel(cctx, s.conn, 2); err != nil {
 		// 	slog.ErrorContext(cctx, "changelog loop exited with error", "err", err)
 		// }
+		if err := s.loop.start_parallel(cctx); err != nil {
+			slog.ErrorContext(cctx, "changelog loop exited with error", "err", err)
+		}
 	}()
 }
 

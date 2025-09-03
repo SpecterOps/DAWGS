@@ -3,7 +3,6 @@ package changelog
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
@@ -80,104 +79,6 @@ func (s *loop) start(ctx context.Context) error {
 		}
 
 	}
-}
-
-// start_new is an attempt to rely on the internals of dawgs.BatchOperation to handle buffering/flusing logic
-// the core loop could be greatly simplified this way.
-// OPEN QUESTIONS:
-// - this is one long-lived batch operation.i THINK this is safe because our batchoperations are not holding on to a real pg transaction?
-// - if the above is an issue: periodically restart batch operation (e.g. after N changes or N seconds)?
-func (s *loop) start_new(ctx context.Context, db graph.Database) error {
-	slog.InfoContext(ctx, "starting changelog loop")
-
-	idleTimer := time.NewTimer(s.flushInterval)
-	idleTimer.Stop() // inactive until first change
-	defer idleTimer.Stop()
-
-	return db.BatchOperation(ctx, func(batch graph.Batch) error {
-
-		for {
-			select {
-			case <-ctx.Done():
-				slog.InfoContext(ctx, "shutting down loop")
-				return nil
-
-			case change, ok := <-s.readerC:
-				if !ok {
-					slog.InfoContext(ctx, "input closed")
-					return nil
-				}
-
-				if err := change.Apply(batch); err != nil {
-					slog.WarnContext(ctx, "failed to apply change", "err", err)
-				}
-
-				idleTimer.Reset(s.flushInterval)
-
-			case <-idleTimer.C:
-				slog.InfoContext(ctx, "idle period reached, committing batch", "timestamp", time.Now())
-				if err := batch.Commit(); err != nil {
-					slog.WarnContext(ctx, "idle commit failed", "err", err)
-				}
-				// Keep timer stopped until new activity
-				idleTimer.Stop()
-			}
-		}
-	})
-}
-
-// WARN failed to apply change id=1 err="edge: update EK2 (12205->12206): ERROR: ON CONFLICT DO UPDATE command cannot affect row a second time (SQLSTATE 21000)"
-func (s *loop) start_new_parallel(ctx context.Context, db graph.Database, workerCount int) error {
-	slog.InfoContext(ctx, "starting parallel changelog loop", "workers", workerCount)
-
-	var wg sync.WaitGroup
-	wg.Add(workerCount)
-
-	for i := 0; i < workerCount; i++ {
-		go func(id int) {
-			defer wg.Done()
-			slog.InfoContext(ctx, "worker started", "id", id)
-
-			idleTimer := time.NewTimer(s.flushInterval)
-			idleTimer.Stop() // inactive until first change
-			defer idleTimer.Stop()
-
-			// each worker runs its own long-lived BatchOperation
-			err := db.BatchOperation(ctx, func(batch graph.Batch) error {
-				for {
-					select {
-					case <-ctx.Done():
-						slog.InfoContext(ctx, "worker shutting down", "id", id)
-						return nil
-
-					case change, ok := <-s.readerC:
-						if !ok {
-							slog.InfoContext(ctx, "worker input closed", "id", id)
-							return nil
-						}
-						if err := change.Apply(batch); err != nil {
-							slog.WarnContext(ctx, "failed to apply change", "id", id, "err", err)
-						}
-
-					case <-idleTimer.C:
-						slog.InfoContext(ctx, "idle period reached, committing batch", "timestamp", time.Now())
-						if err := batch.Commit(); err != nil {
-							slog.WarnContext(ctx, "idle commit failed", "err", err)
-						}
-						// Keep timer stopped until new activity
-						idleTimer.Stop()
-					}
-				}
-			})
-
-			if err != nil {
-				slog.ErrorContext(ctx, "worker batch operation exited", "id", id, "err", err)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-	return nil
 }
 
 // this interface helps unit testing the loop logic
