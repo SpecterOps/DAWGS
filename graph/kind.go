@@ -1,9 +1,13 @@
 package graph
 
 import (
+	"encoding/binary"
+	"fmt"
+	"sort"
 	"sync"
 	"unsafe"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/util/size"
 )
 
@@ -119,6 +123,34 @@ func (s Kinds) ContainsOneOf(others ...Kind) bool {
 	}
 
 	return false
+}
+
+// Hash returns a deterministic hash of the Kinds in sorted order.
+func (s Kinds) Hash() ([]byte, error) {
+	hasher := xxhash.New()
+	if len(s) == 0 {
+		return hasher.Sum(nil), nil
+	}
+
+	// sort names for deterministic order
+	ks := s.Strings()
+	sort.Strings(ks)
+
+	for _, kind := range ks {
+		// frame kinds with a length-prefix to prevent collisions like: ["ab","c"] === ["a","bc"]
+		buf := make([]byte, binary.MaxVarintLen64)
+		n := binary.PutUvarint(buf, uint64(len(kind)))
+
+		if _, err := hasher.Write(buf[:n]); err != nil {
+			return nil, fmt.Errorf("writing length prefix: %w", err)
+		}
+
+		if _, err := hasher.Write([]byte(kind)); err != nil {
+			return nil, fmt.Errorf("writing kind to hash: %w", err)
+		}
+	}
+
+	return hasher.Sum(nil), nil
 }
 
 var (

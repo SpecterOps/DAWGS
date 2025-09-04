@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,5 +88,86 @@ func TestGetWithFallbackProperties(t *testing.T) {
 		value, err := properties.GetWithFallback("", "ChemicalX", "").String()
 		require.Nil(t, err)
 		require.Equal(t, "ChemicalX", value)
+	})
+}
+
+func TestPropertiesKey(t *testing.T) {
+	// sorted and ignores "z"
+	props := graph.NewProperties()
+	props.SetAll(map[string]any{
+		"z": 1,
+		"a": 2,
+		"m": 3,
+	})
+	ignored := map[string]struct{}{
+		"z": {},
+	}
+
+	got := props.Keys(ignored)
+	want := []string{"a", "m"} // sorted, excludes "z"
+
+	assert.Equal(t, want, got)
+
+	// sorted and ignores all
+	props = graph.NewProperties()
+	props.SetAll(map[string]any{
+		"a": 2,
+	})
+	ignored = map[string]struct{}{
+		"a": {},
+	}
+
+	assert.Empty(t, props.Keys(ignored))
+
+	// sorted and empty
+	props = graph.NewProperties()
+	assert.Empty(t, props.Keys(nil))
+}
+
+func TestPropertiesHash(t *testing.T) {
+	t.Run("Hash is deterministic", func(t *testing.T) {
+		props := graph.NewProperties().SetAll(map[string]any{
+			"foo": "bar",
+			"baz": 42,
+		})
+		h1, err1 := props.Hash(nil)
+		h2, err2 := props.Hash(nil)
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.Equal(t, h1, h2)
+	})
+
+	t.Run("order of keys doesn't matter", func(t *testing.T) {
+		a := graph.NewProperties().SetAll(map[string]any{"x": 1, "y": 2})
+		b := graph.NewProperties().SetAll(map[string]any{"y": 2, "x": 1})
+
+		h1, _ := a.Hash(nil)
+		h2, _ := b.Hash(nil)
+
+		assert.Equal(t, h1, h2)
+	})
+
+	t.Run("ambiguity is resolved", func(t *testing.T) {
+		a := graph.NewProperties().Set("a", "bc")
+		b := graph.NewProperties().Set("ab", "c")
+
+		h1, _ := a.Hash(nil)
+		h2, _ := b.Hash(nil)
+
+		assert.NotEqual(t, h1, h2)
+	})
+
+	t.Run("ignored keys", func(t *testing.T) {
+		props := graph.NewProperties().SetAll(map[string]any{
+			"keep": "yes",
+			"drop": "no",
+		})
+		ignored := map[string]struct{}{"drop": {}}
+
+		h1, _ := props.Hash(nil)
+		h2, _ := props.Hash(ignored)
+
+		assert.NotEqual(t, h1, h2)
 	})
 }
