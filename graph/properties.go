@@ -466,24 +466,22 @@ func (s *Properties) Keys(ignoredKeys map[string]struct{}) []string {
 	return keys
 }
 
-// Hash returns a hash of the Properties' key-value pairs, ignoring specified keys.
+// HashInto returns a hash of the Properties' key-value pairs, ignoring specified keys.
 // It marshals values using JSON and appends them to the hash stream in sorted key order.
-func (s *Properties) Hash(ignoredKeys map[string]struct{}) ([]byte, error) {
-	hasher := xxhash.New()
-
+func (s *Properties) HashInto(h *xxhash.Digest, ignoredKeys map[string]struct{}) error {
 	keys := s.Keys(ignoredKeys)
 	for _, key := range keys {
-		if err := writeKeyValueToHash(hasher, key, s.Map[key]); err != nil {
-			return nil, err
+		if err := writeKeyValueToHash(h, key, s.Map[key]); err != nil {
+			return err
 		}
 	}
 
-	return hasher.Sum(nil), nil
+	return nil
 }
 
 // writeKeyValueToHash writes a single key and its JSON-encoded value to the given hash.
-func writeKeyValueToHash(hasher io.Writer, key string, value any) error {
-	if _, err := hasher.Write([]byte(key)); err != nil {
+func writeKeyValueToHash(h io.Writer, key string, value any) error {
+	if _, err := h.Write([]byte(key)); err != nil {
 		return fmt.Errorf("writing key to hash: %w", err)
 	}
 
@@ -492,7 +490,7 @@ func writeKeyValueToHash(hasher io.Writer, key string, value any) error {
 		return fmt.Errorf("marshaling value for key %q: %w", key, err)
 	}
 
-	if _, err := hasher.Write(encodedValue); err != nil {
+	if _, err := h.Write(encodedValue); err != nil {
 		return fmt.Errorf("writing value to hash: %w", err)
 	}
 

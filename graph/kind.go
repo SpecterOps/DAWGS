@@ -126,31 +126,34 @@ func (s Kinds) ContainsOneOf(others ...Kind) bool {
 }
 
 // Hash returns a deterministic hash of the Kinds in sorted order.
-func (s Kinds) Hash() ([]byte, error) {
-	hasher := xxhash.New()
+func (s Kinds) HashInto(h *xxhash.Digest) error {
 	if len(s) == 0 {
-		return hasher.Sum(nil), nil
+		return nil
 	}
 
 	// sort names for deterministic order
 	ks := s.Strings()
 	sort.Strings(ks)
 
-	for _, kind := range ks {
-		// frame kinds with a length-prefix to prevent collisions like: ["ab","c"] === ["a","bc"]
-		buf := make([]byte, binary.MaxVarintLen64)
-		n := binary.PutUvarint(buf, uint64(len(kind)))
+	// Reuse one stack-allocated buffer for all length prefixes
+	var lenbuf [binary.MaxVarintLen64]byte
 
-		if _, err := hasher.Write(buf[:n]); err != nil {
-			return nil, fmt.Errorf("writing length prefix: %w", err)
+	for i := range ks {
+		kind := ks[i]
+
+		// frame kinds with a length-prefix to prevent collisions like: ["ab","c"] === ["a","bc"]
+		n := binary.PutUvarint(lenbuf[:], uint64(len(kind)))
+		if _, err := h.Write(lenbuf[:n]); err != nil {
+			return fmt.Errorf("writing length prefix: %w", err)
 		}
 
-		if _, err := hasher.Write([]byte(kind)); err != nil {
-			return nil, fmt.Errorf("writing kind to hash: %w", err)
+		// NOTE: converting string -> []byte allocates; see note below.
+		if _, err := h.Write([]byte(kind)); err != nil {
+			return fmt.Errorf("writing kind to hash: %w", err)
 		}
 	}
 
-	return hasher.Sum(nil), nil
+	return nil
 }
 
 var (
