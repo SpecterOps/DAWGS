@@ -1,14 +1,16 @@
-package experiment
+package container
 
 import (
 	"errors"
+	"iter"
 	"math"
 
 	"github.com/bits-and-blooms/bitset"
 )
 
 var (
-	ErrUnorderedAppend = errors.New("unordered append")
+	ErrUnorderedAppend      = errors.New("unordered append")
+	ErrValueOutsideUniverse = errors.New("value outside EFSet universe")
 )
 
 type EFSet struct {
@@ -72,6 +74,22 @@ func AllocateEFSet(universeMin, universeMax uint64, maxValues uint) *EFSet {
 	}
 }
 
+func (s *EFSet) Iterator() iter.Seq2[uint, uint64] {
+	return iter.Seq2[uint, uint64](func(yield func(uint, uint64) bool) {
+		iterInst := NewEFSetIterator(s)
+
+		for idx := uint(0); idx < s.len; idx++ {
+			if !yield(idx, iterInst.Next()) {
+				break
+			}
+		}
+	})
+}
+
+func (s *EFSet) Len() uint {
+	return s.len
+}
+
 func (s *EFSet) Lookup(index uint) uint64 {
 	var (
 		upper             = s.upperBits.Select(index) - index - 1
@@ -110,6 +128,10 @@ func (s *EFSet) append(value uint64) {
 }
 
 func (s *EFSet) Append(value uint64) error {
+	if value < s.universeMin || value > s.universeMax {
+		return ErrValueOutsideUniverse
+	}
+
 	if value < s.last {
 		return ErrUnorderedAppend
 	}
@@ -119,6 +141,10 @@ func (s *EFSet) Append(value uint64) error {
 }
 
 func (s *EFSet) MustAppend(value uint64) {
+	if value < s.universeMin || value > s.universeMax {
+		panic(ErrValueOutsideUniverse)
+	}
+
 	if value < s.last {
 		panic(ErrUnorderedAppend)
 	}
@@ -163,7 +189,7 @@ type EFSetIterator struct {
 	lowerIdx uint
 }
 
-func NewEFVecIter(vec *EFSet) *EFSetIterator {
+func NewEFSetIterator(vec *EFSet) *EFSetIterator {
 	return &EFSetIterator{
 		vec: vec,
 	}
