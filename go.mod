@@ -4,7 +4,6 @@ go 1.23.0
 
 require (
 	cuelang.org/go v0.13.2
-	github.com/OneOfOne/xxhash v1.2.8
 	github.com/RoaringBitmap/roaring/v2 v2.10.0
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/axiomhq/hyperloglog v0.2.5
