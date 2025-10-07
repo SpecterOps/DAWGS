@@ -4,9 +4,10 @@ go 1.23.0
 
 require (
 	cuelang.org/go v0.13.2
-	github.com/RoaringBitmap/roaring/v2 v2.6.0
+	github.com/RoaringBitmap/roaring/v2 v2.10.0
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/axiomhq/hyperloglog v0.2.5
+	github.com/bits-and-blooms/bitset v1.24.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/gammazero/deque v1.0.0
 	github.com/jackc/pgtype v1.14.4
@@ -16,7 +17,6 @@ require (
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.22.0 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
