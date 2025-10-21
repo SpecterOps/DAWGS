@@ -247,7 +247,7 @@ Takes a given expression and text delimiter and returns a text array containing 
 given expression does not evaluate to a text value this function will raise an error.
 
 ```
-match (u:User) where '255' in split(n.ip_addr, '.') return n
+match (u:User) where '255' in split(n.ip_addr, '.') return u
 ```
 
 ### `tolower`
