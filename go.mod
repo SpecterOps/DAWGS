@@ -1,6 +1,10 @@
 module github.com/specterops/dawgs
 
-go 1.23.0
+go 1.24.4
+
+toolchain go1.24.6
+
+replace github.com/specterops/bloodhound v0.0.0 => ../bloodhound-enterprise/bhce
 
 require (
 	cuelang.org/go v0.13.2
