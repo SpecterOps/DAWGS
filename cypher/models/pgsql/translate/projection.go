@@ -111,257 +111,287 @@ func buildVisibleProjections(scope *Scope) (BoundProjections, error) {
 	}
 }
 
-func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
-	switch projected.DataType {
-	case pgsql.ExpansionPath:
-		if projected.LastProjection != nil {
-			return []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
-					Alias:      pgsql.AsOptionalIdentifier(alias),
-				},
-			}, nil
-		}
-
+func buildProjectionForExpansionPath(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
-				Expression: pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
-				Alias:      models.OptionalValue(alias),
-			},
-		}, nil
-
-	case pgsql.PathComposite:
-		var (
-			parameterExpression    pgsql.Expression
-			edgeReferences         []pgsql.Expression
-			nodeReferences         []pgsql.Expression
-			useEdgesToPathFunction = false
-		)
-
-		// Path composite components are encoded as dependencies on the bound identifier representing the
-		// path. This is not ideal as it escapes normal translation flow as driven by the structure of the
-		// originating cypher AST.
-		for _, dependency := range projected.Dependencies {
-			switch dependency.DataType {
-			case pgsql.ExpansionPath:
-				parameterExpression = pgsql.OptionalBinaryExpressionJoin(
-					parameterExpression,
-					pgsql.OperatorConcatenate,
-					dependency.Identifier,
-				)
-
-				useEdgesToPathFunction = true
-
-			case pgsql.EdgeComposite:
-				edgeReferences = append(edgeReferences, rewriteCompositeTypeFieldReference(
-					scope.CurrentFrameBinding().Identifier,
-					pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
-				))
-
-				useEdgesToPathFunction = true
-
-			case pgsql.NodeComposite:
-				nodeReferences = append(nodeReferences, rewriteCompositeTypeFieldReference(
-					scope.CurrentFrameBinding().Identifier,
-					pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
-				))
-
-			default:
-				return nil, fmt.Errorf("unsupported type for path rendering: %s", dependency.DataType)
-			}
-		}
-
-		// The code below is covering a strange edge-case of cypher where a query may contain the following
-		// form: match p = (n) return p
-		//
-		// In this case it is not appropriate to call the edges_to_path(...) function and instead a call to
-		// the corresponding nodes_to_path(...) function must be authored.
-		if useEdgesToPathFunction {
-			// It's possible for a path to contain both edge ID references and expansion references. Expansions
-			// are represented as a concatenation of arrays of edge IDs contained within the parameterExpression
-			// variable. If there are edge ID references that are a part of the path then the individual edge
-			// references must first be rewritten as an array and then further concatenated to the existing
-			// path results.
-			if len(edgeReferences) > 0 {
-				parameterExpression = pgsql.OptionalBinaryExpressionJoin(
-					parameterExpression,
-					pgsql.OperatorConcatenate,
-					pgsql.ArrayLiteral{
-						Values:   edgeReferences,
-						CastType: pgsql.Int8Array,
-					},
-				)
-			}
-
-			return []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgsql.FunctionCall{
-						Function: pgsql.FunctionEdgesToPath,
-						Parameters: []pgsql.Expression{
-							pgsql.Variadic{
-								Expression: parameterExpression,
-							},
-						},
-						CastType: pgsql.PathComposite,
-					},
-					Alias: pgsql.AsOptionalIdentifier(alias),
-				},
-			}, nil
-		} else if len(nodeReferences) > 0 {
-			return []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgsql.FunctionCall{
-						Function: pgsql.FunctionNodesToPath,
-						Parameters: []pgsql.Expression{
-							pgsql.Variadic{
-								Expression: pgsql.ArrayLiteral{
-									Values:   nodeReferences,
-									CastType: pgsql.Int8Array,
-								},
-							},
-						},
-						CastType: pgsql.PathComposite,
-					},
-					Alias: pgsql.AsOptionalIdentifier(alias),
-				},
-			}, nil
-		}
-
-		return nil, fmt.Errorf("path variable does not contain valid components")
-
-	case pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
-		if projected.LastProjection != nil {
-			return []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
-					Alias:      pgsql.AsOptionalIdentifier(alias),
-				},
-			}, nil
-		}
-
-		value := pgsql.CompositeValue{
-			DataType: pgsql.NodeComposite,
-		}
-
-		for _, nodeTableColumn := range pgsql.NodeTableColumns {
-			value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, nodeTableColumn})
-		}
-
-		// Change the type to the node composite now that this is projected
-		projected.DataType = pgsql.NodeComposite
-
-		// Create a new final projection that's aliased to the visible binding's identifier
-		return []pgsql.SelectItem{
-			&pgsql.AliasedExpression{
-				Expression: value,
-				Alias:      pgsql.AsOptionalIdentifier(alias),
-			},
-		}, nil
-
-	case pgsql.NodeComposite:
-		if projected.LastProjection != nil {
-			return []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
-					Alias:      pgsql.AsOptionalIdentifier(alias),
-				},
-			}, nil
-		}
-
-		value := pgsql.CompositeValue{
-			DataType: pgsql.NodeComposite,
-		}
-
-		for _, nodeTableColumn := range pgsql.NodeTableColumns {
-			value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, nodeTableColumn})
-		}
-
-		// Create a new final projection that's aliased to the visible binding's identifier
-		return []pgsql.SelectItem{
-			&pgsql.AliasedExpression{
-				Expression: value,
-				Alias:      pgsql.AsOptionalIdentifier(alias),
-			},
-		}, nil
-
-	case pgsql.ExpansionEdge:
-		value := pgsql.CompositeValue{
-			DataType: pgsql.EdgeComposite,
-		}
-
-		for _, edgeTableColumn := range pgsql.EdgeTableColumns {
-			value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, edgeTableColumn})
-		}
-
-		// Change the type to the node composite now that this is projected
-		projected.DataType = pgsql.EdgeComposite
-
-		// Create a new final projection that's aliased to the visible binding's identifier
-		return []pgsql.SelectItem{
-			&pgsql.AliasedExpression{
-				Expression: &pgsql.Parenthetical{
-					Expression: pgsql.Select{
-						Projection: []pgsql.SelectItem{
-							pgsql.FunctionCall{
-								Function:   pgsql.FunctionArrayAggregate,
-								Parameters: []pgsql.Expression{value},
-							},
-						},
-						From: []pgsql.FromClause{{
-							Source: pgsql.TableReference{
-								Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-								Binding: models.OptionalValue(projected.Identifier),
-							},
-							Joins: nil,
-						}},
-						Where: pgsql.NewBinaryExpression(
-							pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID},
-							pgsql.OperatorEquals,
-							pgsql.NewAnyExpression(
-								pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
-								pgsql.ExpansionPath,
-							),
-						),
-					},
-				},
-				Alias: pgsql.AsOptionalIdentifier(alias),
-			},
-		}, nil
-
-	case pgsql.EdgeComposite:
-		if projected.LastProjection != nil {
-			return []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
-					Alias:      pgsql.AsOptionalIdentifier(alias),
-				},
-			}, nil
-		}
-
-		value := pgsql.CompositeValue{
-			DataType: pgsql.EdgeComposite,
-		}
-
-		for _, edgeTableColumn := range pgsql.EdgeTableColumns {
-			value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, edgeTableColumn})
-		}
-
-		// Create a new final projection that's aliased to the visible binding's identifier
-		return []pgsql.SelectItem{
-			&pgsql.AliasedExpression{
-				Expression: value,
+				Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
 				Alias:      pgsql.AsOptionalIdentifier(alias),
 			},
 		}, nil
 	}
 
-	// If this isn't a type that requires a unique projection, reflect the identifier as-is with its alias
 	return []pgsql.SelectItem{
 		&pgsql.AliasedExpression{
-			Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
+			Expression: pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
+			Alias:      models.OptionalValue(alias),
+		},
+	}, nil
+}
+
+func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
+	var (
+		parameterExpression    pgsql.Expression
+		edgeReferences         []pgsql.Expression
+		nodeReferences         []pgsql.Expression
+		useEdgesToPathFunction = false
+	)
+
+	// Path composite components are encoded as dependencies on the bound identifier representing the
+	// path. This is not ideal as it escapes normal translation flow as driven by the structure of the
+	// originating cypher AST.
+	for _, dependency := range projected.Dependencies {
+		switch dependency.DataType {
+		case pgsql.ExpansionPath:
+			parameterExpression = pgsql.OptionalBinaryExpressionJoin(
+				parameterExpression,
+				pgsql.OperatorConcatenate,
+				dependency.Identifier,
+			)
+
+			useEdgesToPathFunction = true
+
+		case pgsql.EdgeComposite:
+			edgeReferences = append(edgeReferences, rewriteCompositeTypeFieldReference(
+				scope.CurrentFrameBinding().Identifier,
+				pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
+			))
+
+			useEdgesToPathFunction = true
+
+		case pgsql.NodeComposite:
+			nodeReferences = append(nodeReferences, rewriteCompositeTypeFieldReference(
+				scope.CurrentFrameBinding().Identifier,
+				pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
+			))
+
+		default:
+			return nil, fmt.Errorf("unsupported type for path rendering: %s", dependency.DataType)
+		}
+	}
+
+	// The code below is covering a strange edge-case of cypher where a query may contain the following
+	// form: match p = (n) return p
+	//
+	// In this case it is not appropriate to call the edges_to_path(...) function and instead a call to
+	// the corresponding nodes_to_path(...) function must be authored.
+	if useEdgesToPathFunction {
+		// It's possible for a path to contain both edge ID references and expansion references. Expansions
+		// are represented as a concatenation of arrays of edge IDs contained within the parameterExpression
+		// variable. If there are edge ID references that are a part of the path then the individual edge
+		// references must first be rewritten as an array and then further concatenated to the existing
+		// path results.
+		if len(edgeReferences) > 0 {
+			parameterExpression = pgsql.OptionalBinaryExpressionJoin(
+				parameterExpression,
+				pgsql.OperatorConcatenate,
+				pgsql.ArrayLiteral{
+					Values:   edgeReferences,
+					CastType: pgsql.Int8Array,
+				},
+			)
+		}
+
+		return []pgsql.SelectItem{
+			&pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function: pgsql.FunctionEdgesToPath,
+					Parameters: []pgsql.Expression{
+						pgsql.Variadic{
+							Expression: parameterExpression,
+						},
+					},
+					CastType: pgsql.PathComposite,
+				},
+				Alias: pgsql.AsOptionalIdentifier(alias),
+			},
+		}, nil
+	} else if len(nodeReferences) > 0 {
+		return []pgsql.SelectItem{
+			&pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function: pgsql.FunctionNodesToPath,
+					Parameters: []pgsql.Expression{
+						pgsql.Variadic{
+							Expression: pgsql.ArrayLiteral{
+								Values:   nodeReferences,
+								CastType: pgsql.Int8Array,
+							},
+						},
+					},
+					CastType: pgsql.PathComposite,
+				},
+				Alias: pgsql.AsOptionalIdentifier(alias),
+			},
+		}, nil
+	}
+
+	return nil, fmt.Errorf("path variable does not contain valid components")
+}
+
+func buildProjectionForExpansionNode(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.LastProjection != nil {
+		return []pgsql.SelectItem{
+			&pgsql.AliasedExpression{
+				Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
+				Alias:      pgsql.AsOptionalIdentifier(alias),
+			},
+		}, nil
+	}
+
+	value := pgsql.CompositeValue{
+		DataType: pgsql.NodeComposite,
+	}
+
+	for _, nodeTableColumn := range pgsql.NodeTableColumns {
+		value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, nodeTableColumn})
+	}
+
+	// Change the type to the node composite now that this is projected
+	projected.DataType = pgsql.NodeComposite
+
+	// Create a new final projection that's aliased to the visible binding's identifier
+	return []pgsql.SelectItem{
+		&pgsql.AliasedExpression{
+			Expression: value,
 			Alias:      pgsql.AsOptionalIdentifier(alias),
 		},
 	}, nil
+}
+
+func buildProjectionForNodeComposite(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.LastProjection != nil {
+		return []pgsql.SelectItem{
+			&pgsql.AliasedExpression{
+				Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
+				Alias:      pgsql.AsOptionalIdentifier(alias),
+			},
+		}, nil
+	}
+
+	value := pgsql.CompositeValue{
+		DataType: pgsql.NodeComposite,
+	}
+
+	for _, nodeTableColumn := range pgsql.NodeTableColumns {
+		value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, nodeTableColumn})
+	}
+
+	// Create a new final projection that's aliased to the visible binding's identifier
+	return []pgsql.SelectItem{
+		&pgsql.AliasedExpression{
+			Expression: value,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		},
+	}, nil
+}
+
+func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
+	var (
+		edgeAggregateParameter = pgsql.CompositeValue{
+			DataType: pgsql.EdgeComposite,
+		}
+
+		edgeWhereClause = pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID},
+			pgsql.OperatorEquals,
+			pgsql.NewAnyExpression(
+				pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
+				pgsql.ExpansionPath,
+			),
+		)
+	)
+
+	// Reference all of the edge table columns to create the edge composites
+	for _, edgeTableColumn := range pgsql.EdgeTableColumns {
+		edgeAggregateParameter.Values = append(edgeAggregateParameter.Values, pgsql.CompoundIdentifier{projected.Identifier, edgeTableColumn})
+	}
+
+	// Change the type to the node composite now that this is projected
+	projected.DataType = pgsql.EdgeComposite
+
+	// Create a new final projection that's aliased to the visible binding's identifier
+	return []pgsql.SelectItem{
+		&pgsql.AliasedExpression{
+			Expression: &pgsql.Parenthetical{
+				Expression: pgsql.Select{
+					Projection: []pgsql.SelectItem{
+						pgsql.FunctionCall{
+							Function:   pgsql.FunctionArrayAggregate,
+							Parameters: []pgsql.Expression{edgeAggregateParameter},
+						},
+					},
+					From: []pgsql.FromClause{{
+						Source: pgsql.TableReference{
+							Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+							Binding: models.OptionalValue(projected.Identifier),
+						},
+						Joins: nil,
+					}},
+					Where: edgeWhereClause,
+				},
+			},
+			Alias: pgsql.AsOptionalIdentifier(alias),
+		},
+	}, nil
+}
+
+func buildProjectionForEdgeComposite(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.LastProjection != nil {
+		return []pgsql.SelectItem{
+			&pgsql.AliasedExpression{
+				Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
+				Alias:      pgsql.AsOptionalIdentifier(alias),
+			},
+		}, nil
+	}
+
+	value := pgsql.CompositeValue{
+		DataType: pgsql.EdgeComposite,
+	}
+
+	for _, edgeTableColumn := range pgsql.EdgeTableColumns {
+		value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, edgeTableColumn})
+	}
+
+	// Create a new final projection that's aliased to the visible binding's identifier
+	return []pgsql.SelectItem{
+		&pgsql.AliasedExpression{
+			Expression: value,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		},
+	}, nil
+}
+
+func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	switch projected.DataType {
+	case pgsql.ExpansionPath:
+		return buildProjectionForExpansionPath(alias, projected, scope, referenceFrame)
+
+	case pgsql.PathComposite:
+		return buildProjectionForPathComposite(alias, projected, scope)
+
+	case pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
+		return buildProjectionForExpansionNode(alias, projected, referenceFrame)
+
+	case pgsql.NodeComposite:
+		return buildProjectionForNodeComposite(alias, projected, referenceFrame)
+
+	case pgsql.ExpansionEdge:
+		return buildProjectionForExpansionEdge(alias, projected, scope)
+
+	case pgsql.EdgeComposite:
+		return buildProjectionForEdgeComposite(alias, projected, referenceFrame)
+
+	default:
+		// If this isn't a type that requires a unique projection, reflect the identifier as-is with its alias
+		return []pgsql.SelectItem{
+			&pgsql.AliasedExpression{
+				Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
+				Alias:      pgsql.AsOptionalIdentifier(alias),
+			},
+		}, nil
+	}
 }
 
 func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error) {
@@ -417,7 +447,7 @@ func (s *Translator) buildTailProjection() error {
 		singlePartQuerySelect = pgsql.Select{}
 	)
 
-	// Only add FROM clause if we have a current frame (i.e., there was a MATCH clause)
+	// Only add FROM clause if we have a current frame (i.e. there was a MATCH clause)
 	if currentFrame != nil && currentFrame.Binding.Identifier != "" {
 		singlePartQuerySelect.From = []pgsql.FromClause{{
 			Source: pgsql.TableReference{

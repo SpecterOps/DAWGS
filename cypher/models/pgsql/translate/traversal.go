@@ -220,7 +220,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 
 		if traversalStep.Expansion != nil {
-			if err := s.translateTraversalPatternPartWithExpansion(idx == 0, traversalStep.Expansion.Options, traversalStep); err != nil {
+			if err := s.translateTraversalPatternPartWithExpansion(idx == 0, traversalStep); err != nil {
 				return err
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {
