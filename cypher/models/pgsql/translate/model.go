@@ -39,15 +39,15 @@ type NodeSelect struct {
 	Constraints pgsql.Expression
 }
 
-type expansionOptions struct {
+type ExpansionOptions struct {
 	FindShortestPath     bool
 	FindAllShortestPaths bool
 	MinDepth             models.Optional[int64]
 	MaxDepth             models.Optional[int64]
 }
 
-func newExpansionOptions(part *PatternPart, relationshipPattern *cypher.RelationshipPattern) expansionOptions {
-	return expansionOptions{
+func newExpansionOptions(part *PatternPart, relationshipPattern *cypher.RelationshipPattern) ExpansionOptions {
+	return ExpansionOptions{
 		FindShortestPath:     part.ShortestPath,
 		FindAllShortestPaths: part.AllShortestPaths,
 		MinDepth:             models.OptionalPointer(relationshipPattern.Range.StartIndex),
@@ -58,7 +58,7 @@ func newExpansionOptions(part *PatternPart, relationshipPattern *cypher.Relation
 type Expansion struct {
 	Frame       *Frame
 	PathBinding *BoundIdentifier
-	Options     expansionOptions
+	Options     ExpansionOptions
 
 	PrimerNodeConstraints              pgsql.Expression
 	PrimerNodeSatisfactionProjection   pgsql.SelectItem
