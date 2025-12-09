@@ -919,6 +919,18 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		}
 	}
 
+	// Check for min-path depth as this will also filter the final expansion projection
+	if expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value > 1 {
+		expansion.ProjectionStatement.Where = pgsql.OptionalAnd(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionDepth},
+				pgsql.OperatorGreaterThanOrEqualTo,
+				pgsql.NewLiteral(expansionModel.Options.MinDepth.Value, pgsql.Int),
+			),
+			expansion.ProjectionStatement.Where,
+		)
+	}
+
 	return expansion.Build(expansionModel.Frame.Binding.Identifier), nil
 }
 
@@ -1096,12 +1108,24 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		}
 	}
 
+	// Check for min-path depth as this will also filter the final expansion projection
+	if expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value > 1 {
+		expansion.ProjectionStatement.Where = pgsql.OptionalAnd(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionDepth},
+				pgsql.OperatorGreaterThanOrEqualTo,
+				pgsql.NewLiteral(expansionModel.Options.MinDepth.Value, pgsql.Int),
+			),
+			expansion.ProjectionStatement.Where,
+		)
+	}
+
 	return pgsql.Query{
 		Body: expansion.Build(expansionModel.Frame.Binding.Identifier),
 	}, nil
 }
 
-func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversalStep bool, expansionOptions expansionOptions, traversalStep *TraversalStep) error {
+func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversalStep bool, traversalStep *TraversalStep) error {
 	expansionModel := traversalStep.Expansion
 
 	// Translate the expansion's constraints - this has the side effect of making the pattern identifiers visible in
@@ -1118,6 +1142,14 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversal
 		return err
 	} else {
 		expansionModel.Frame = expansionFrame
+	}
+
+	if expansionModel.TerminalNodeConstraints != nil {
+		if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](expansionModel.TerminalNodeConstraints); err != nil {
+			return err
+		} else {
+			expansionModel.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
+		}
 	}
 
 	// Expansion edge join condition
@@ -1157,7 +1189,7 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversal
 		traversalStep.Projection = boundProjections.Items
 	}
 
-	if expansionOptions.FindShortestPath || expansionOptions.FindAllShortestPaths {
+	if expansionModel.Options.FindShortestPath || expansionModel.Options.FindAllShortestPaths {
 		if err := s.translateShortestPathTraversal(expansionModel); err != nil {
 			return err
 		}
@@ -1232,12 +1264,6 @@ func (s *Translator) translateExpansionConstraints(isFirstTraversalStep bool, st
 				return err
 			} else {
 				expansionModel.TerminalNodeConstraints = constraints.RightNode.Expression
-
-				if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](expansionModel.TerminalNodeConstraints); err != nil {
-					return err
-				} else {
-					expansionModel.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
-				}
 			}
 		}
 	}
