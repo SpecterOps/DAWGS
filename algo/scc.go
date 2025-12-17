@@ -120,7 +120,7 @@ func StronglyConnectedComponents(ctx context.Context, digraph container.Directed
 			}
 		}
 
-		return true
+		return util.IsContextLive(ctx)
 	})
 
 	return components, nodeToComp

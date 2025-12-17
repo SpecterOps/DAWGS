@@ -20,10 +20,6 @@ type Result interface {
 	Scan(scanTargets ...any) error
 	Error() error
 	Close(ctx context.Context) error
-
-	// Values returns the next values array from the result.
-	//
-	// Deprecated: This function will be removed in future version.
 	Values() []any
 }
 

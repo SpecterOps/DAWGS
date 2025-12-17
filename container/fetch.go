@@ -99,6 +99,13 @@ type TSDB struct {
 	EdgeKinds   KindMap
 }
 
+func NewTSDB() TSDB {
+	return TSDB{
+		Triplestore: NewTriplestore(),
+		EdgeKinds:   KindMap{},
+	}
+}
+
 func FetchTriplestore(ctx context.Context, graphDB database.Instance, filter cypher.SyntaxNode) (TSDB, error) {
 	tsdb := TSDB{
 		Triplestore: NewTriplestore(),
