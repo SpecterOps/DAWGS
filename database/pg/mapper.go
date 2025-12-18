@@ -48,6 +48,50 @@ func mapKinds(ctx context.Context, kindMapper KindMapper, untypedValue any) (gra
 	return nil, validType
 }
 
+func TryMapNode(ctx context.Context, values map[string]any, kindMapper KindMapper) (*graph.Node, bool) {
+	var node nodeComposite
+
+	if node.TryMap(values) {
+		var graphNode graph.Node
+
+		if err := node.ToNode(ctx, kindMapper, &graphNode); err == nil {
+			return &graphNode, true
+		}
+	}
+
+	return nil, false
+}
+
+func TryMapRelationship(ctx context.Context, values map[string]any, kindMapper KindMapper) (*graph.Relationship, bool) {
+	var edge edgeComposite
+
+	if edge.TryMap(values) {
+		var graphRelationship graph.Relationship
+
+		if err := edge.ToRelationship(ctx, kindMapper, &graphRelationship); err == nil {
+			return &graphRelationship, true
+		}
+	}
+
+	return nil, false
+}
+
+func TryMapToGraphType(ctx context.Context, value any, kindMapper KindMapper) any {
+	switch typedValue := value.(type) {
+	case map[string]any:
+		if node, mapped := TryMapNode(ctx, typedValue, kindMapper); mapped {
+			return node
+		}
+
+		if relationship, mapped := TryMapRelationship(ctx, typedValue, kindMapper); mapped {
+			return relationship
+		}
+
+	}
+
+	return value
+}
+
 func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 	return func(value, target any) bool {
 		switch typedTarget := target.(type) {

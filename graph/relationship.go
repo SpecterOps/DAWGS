@@ -1,9 +1,19 @@
 package graph
 
 import (
+	"encoding/json"
+
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/util/size"
 )
+
+type serializableRelationship struct {
+	ID         ID          `json:"id"`
+	StartID    ID          `json:"start_id"`
+	EndID      ID          `json:"end_id"`
+	Kind       string      `json:"kind"`
+	Properties *Properties `json:"properties"`
+}
 
 type Relationship struct {
 	ID         ID
@@ -11,6 +21,20 @@ type Relationship struct {
 	EndID      ID
 	Kind       Kind
 	Properties *Properties
+}
+
+func (s *Relationship) MarshalJSON() ([]byte, error) {
+	var (
+		jsonNode = serializableRelationship{
+			ID:         s.ID,
+			StartID:    s.StartID,
+			EndID:      s.EndID,
+			Kind:       s.Kind.String(),
+			Properties: s.Properties,
+		}
+	)
+
+	return json.Marshal(jsonNode)
 }
 
 func (s *Relationship) Merge(other *Relationship) {

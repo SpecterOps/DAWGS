@@ -229,9 +229,13 @@ func NewPropertyResult(key string, value any) PropertyValue {
 
 // Properties is a map type that satisfies the Properties interface.
 type Properties struct {
-	Map      map[string]any      `json:"map"`
-	Deleted  map[string]struct{} `json:"deleted"`
-	Modified map[string]struct{} `json:"modified"`
+	Map      map[string]any
+	Deleted  map[string]struct{}
+	Modified map[string]struct{}
+}
+
+func (s *Properties) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.Map)
 }
 
 func (s *Properties) Merge(other *Properties) {
@@ -426,6 +430,10 @@ func (s *Properties) GetOrDefault(key string, defaultValue any) PropertyValue {
 }
 
 func PropertiesMustGetOrDefault[T any](properties *Properties, key string, defaultValue T) T {
+	if properties == nil {
+		return defaultValue
+	}
+
 	value := properties.GetWithFallback(key, defaultValue)
 
 	if !value.IsNil() {
