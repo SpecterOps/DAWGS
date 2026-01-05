@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/util/size"
 )
 
 var (
@@ -40,10 +41,10 @@ type Driver struct {
 	*SchemaManager
 }
 
-func NewDriver(pool *pgxpool.Pool) *Driver {
+func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
 	return &Driver{
 		pool:          pool,
-		SchemaManager: NewSchemaManager(pool),
+		SchemaManager: NewSchemaManager(pool, graphQueryMemoryLimit),
 	}
 }
 

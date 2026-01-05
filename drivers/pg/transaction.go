@@ -87,7 +87,7 @@ func (s *transaction) driver() driver {
 }
 
 func (s *transaction) GraphQueryMemoryLimit() size.Size {
-	return size.Gibibyte
+	return s.schemaManager.graphQueryMemoryLimit
 }
 
 func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {

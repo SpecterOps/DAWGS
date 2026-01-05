@@ -12,6 +12,7 @@ import (
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/drivers/pg/query"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/util/size"
 )
 
 type KindMapper interface {
@@ -32,23 +33,25 @@ func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 }
 
 type SchemaManager struct {
-	defaultGraph    model.Graph
-	pool            *pgxpool.Pool
-	hasDefaultGraph bool
-	graphs          map[string]model.Graph
-	kindsByID       map[graph.Kind]int16
-	kindIDsByKind   map[int16]graph.Kind
-	lock            *sync.RWMutex
+	defaultGraph          model.Graph
+	pool                  *pgxpool.Pool
+	hasDefaultGraph       bool
+	graphs                map[string]model.Graph
+	kindsByID             map[graph.Kind]int16
+	kindIDsByKind         map[int16]graph.Kind
+	lock                  *sync.RWMutex
+	graphQueryMemoryLimit size.Size
 }
 
-func NewSchemaManager(pool *pgxpool.Pool) *SchemaManager {
+func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
 	return &SchemaManager{
-		pool:            pool,
-		hasDefaultGraph: false,
-		graphs:          map[string]model.Graph{},
-		kindsByID:       map[graph.Kind]int16{},
-		kindIDsByKind:   map[int16]graph.Kind{},
-		lock:            &sync.RWMutex{},
+		pool:                  pool,
+		hasDefaultGraph:       false,
+		graphs:                map[string]model.Graph{},
+		kindsByID:             map[graph.Kind]int16{},
+		kindIDsByKind:         map[int16]graph.Kind{},
+		lock:                  &sync.RWMutex{},
+		graphQueryMemoryLimit: graphQueryMemoryLimit,
 	}
 }
 

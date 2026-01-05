@@ -83,6 +83,6 @@ func NewPool(connectionString string) (*pgxpool.Pool, error) {
 
 func init() {
 	dawgs.Register(DriverName, func(ctx context.Context, cfg dawgs.Config) (graph.Database, error) {
-		return NewDriver(cfg.Pool), nil
+		return NewDriver(cfg.GraphQueryMemoryLimit, cfg.Pool), nil
 	})
 }
