@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/database"
 	"github.com/specterops/dawgs/database/v1compat"
@@ -99,18 +100,32 @@ type TSDB struct {
 	EdgeKinds   KindMap
 }
 
-func NewTSDB() TSDB {
+func (s TSDB) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) TSDB {
 	return TSDB{
-		Triplestore: NewTriplestore(),
-		EdgeKinds:   KindMap{},
+		Triplestore: s.Triplestore.Projection(deletedNodes, deletedEdges),
+		EdgeKinds:   s.EdgeKinds,
 	}
 }
 
-func FetchTriplestore(ctx context.Context, graphDB database.Instance, filter cypher.SyntaxNode) (TSDB, error) {
-	tsdb := TSDB{
-		Triplestore: NewTriplestore(),
-		EdgeKinds:   KindMap{},
+func NewTSDB(ts MutableTriplestore, edgeKinds KindMap) TSDB {
+	return TSDB{
+		Triplestore: ts,
+		EdgeKinds:   edgeKinds,
 	}
+}
+
+func EmptyTSDB() TSDB {
+	return NewTSDB(NewTriplestore(), KindMap{})
+}
+
+func FetchTSDB(ctx context.Context, graphDB database.Instance, filter cypher.SyntaxNode) (TSDB, error) {
+	var (
+		store = NewTriplestore()
+		tsdb  = TSDB{
+			Triplestore: store,
+			EdgeKinds:   KindMap{},
+		}
+	)
 
 	defer util.SLogMeasureFunction("FetchTriplestore")()
 

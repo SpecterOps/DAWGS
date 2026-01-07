@@ -33,7 +33,7 @@ func main() {
 		query.Not(query.End().Kinds().HasOneOf(metaKinds)),
 	)
 
-	if digraph, err := container.FetchTriplestore(ctx, dbInst, kindFilter); err != nil {
+	if digraph, err := container.FetchTSDB(ctx, dbInst, kindFilter); err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("Loaded %d nodes\n", digraph.Triplestore.NumNodes())

@@ -6,7 +6,7 @@ CGO_ENABLED?=0
 MAIN_PACKAGES=$$($(GO_CMD) list ./...)
 
 default: format test
-all: mod_update mod_tidy generate format test
+all: generate format test
 update: mod_update mod_tidy
 
 generate:

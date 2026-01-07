@@ -1,9 +1,6 @@
 package container
 
 import (
-	"sync"
-
-	"github.com/gammazero/deque"
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
 )
@@ -28,14 +25,13 @@ type Triplestore interface {
 	NumEdges() uint64
 	EachEdge(delegate func(next Edge) bool)
 	EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool)
-
-	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore
 }
 
 type MutableTriplestore interface {
 	Triplestore
 
 	AddTriple(edge, start, end uint64)
+	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore
 }
 
 type triplestore struct {
@@ -204,7 +200,7 @@ func (s *triplestore) EachAdjacentEdge(node uint64, direction graph.Direction, d
 	})
 }
 
-func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
+func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore {
 	return &triplestoreProjection{
 		origin:       s,
 		deletedNodes: deletedNodes,
@@ -218,7 +214,11 @@ type triplestoreProjection struct {
 	deletedEdges cardinality.Duplex[uint64]
 }
 
-func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
+func (s *triplestoreProjection) AddTriple(edge, start, end uint64) {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore {
 	var (
 		allDeletedNodes = s.deletedNodes.Clone()
 		allDeletedEdges = s.deletedEdges.Clone()
@@ -296,42 +296,4 @@ func (s *triplestoreProjection) EachAdjacentNode(node uint64, direction graph.Di
 	s.EachAdjacentEdge(node, direction, func(next Edge) bool {
 		return delegate(next.Pick(direction))
 	})
-}
-
-type ThreadSafeDeque[T any] struct {
-	lock      *sync.RWMutex
-	container deque.Deque[T]
-}
-
-func (s *ThreadSafeDeque[T]) PushFront(elem T) {
-	s.lock.Lock()
-	s.container.PushFront(elem)
-	s.lock.Unlock()
-}
-
-func (s *ThreadSafeDeque[T]) PushBack(elem T) {
-	s.lock.Lock()
-	s.container.PushBack(elem)
-	s.lock.Unlock()
-}
-
-func (s *ThreadSafeDeque[T]) PopFront() T {
-	s.lock.Lock()
-	value := s.container.PopFront()
-	s.lock.Unlock()
-	return value
-}
-
-func (s *ThreadSafeDeque[T]) PopBack() T {
-	s.lock.Lock()
-	value := s.container.PopBack()
-	s.lock.Unlock()
-	return value
-}
-
-func (s *ThreadSafeDeque[T]) Len() int {
-	s.lock.RLock()
-	numElements := s.container.Len()
-	s.lock.RUnlock()
-	return numElements
 }
