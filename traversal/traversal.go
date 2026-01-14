@@ -196,57 +196,53 @@ func (s *pattern) Driver(ctx context.Context, tx graph.Transaction, segment *gra
 	)
 
 	// The fetch direction is the reverse intent of the expansion direction
-	if fetchDirection, err := currentExpansion.direction.Reverse(); err != nil {
-		return nil, err
-	} else {
-		// If no max depth was set or if a max depth was set expand the current step further
-		if currentExpansion.maxDepth == 0 || tag.depth < currentExpansion.maxDepth {
-			// Perform the current expansion.
-			if criteria, err := currentExpansion.PrepareCriteria(segment); err != nil {
+	fetchDirection := currentExpansion.direction.Reverse()
+
+	// If no max depth was set or if a max depth was set expand the current step further
+	if currentExpansion.maxDepth == 0 || tag.depth < currentExpansion.maxDepth {
+		// Perform the current expansion.
+		if criteria, err := currentExpansion.PrepareCriteria(segment); err != nil {
+			return nil, err
+		} else if err := tx.Relationships().Filter(criteria).FetchDirection(fetchDirection, fetchFunc); err != nil {
+			return nil, err
+		}
+	}
+
+	// Check first if this current segment was fetched using the current expansion (i.e. non-optional)
+	if tag.depth > 0 && currentExpansion.minDepth == 0 || tag.depth >= currentExpansion.minDepth {
+		// No further expansions means this pattern segment is complete. Increment the pattern index to select the
+		// next pattern expansion. Additionally, set the depth back to zero for the tag since we are leaving the
+		// current expansion.
+		tag.patternIdx++
+		tag.depth = 0
+
+		// Perform the next expansion if there is one.
+		if tag.patternIdx < len(s.expansions) {
+			nextExpansion := s.expansions[tag.patternIdx]
+
+			// Expand the next segments
+			if criteria, err := nextExpansion.PrepareCriteria(segment); err != nil {
 				return nil, err
 			} else if err := tx.Relationships().Filter(criteria).FetchDirection(fetchDirection, fetchFunc); err != nil {
 				return nil, err
 			}
-		}
 
-		// Check first if this current segment was fetched using the current expansion (i.e. non-optional)
-		if tag.depth > 0 && currentExpansion.minDepth == 0 || tag.depth >= currentExpansion.minDepth {
-			// No further expansions means this pattern segment is complete. Increment the pattern index to select the
-			// next pattern expansion. Additionally, set the depth back to zero for the tag since we are leaving the
-			// current expansion.
-			tag.patternIdx++
-			tag.depth = 0
-
-			// Perform the next expansion if there is one.
-			if tag.patternIdx < len(s.expansions) {
-				nextExpansion := s.expansions[tag.patternIdx]
-
-				// Expand the next segments
-				if criteria, err := nextExpansion.PrepareCriteria(segment); err != nil {
-					return nil, err
-				} else if err := tx.Relationships().Filter(criteria).FetchDirection(fetchDirection, fetchFunc); err != nil {
-					return nil, err
-				}
-
-				// If the next expansion is optional, make sure to preserve the current traversal branch
-				if nextExpansion.minDepth == 0 {
-					// Reattach the tag to the segment before adding it to the returned segments for the next expansion
-					segment.Tag = tag
-					nextSegments = append(nextSegments, segment)
-				}
-			} else if len(nextSegments) == 0 {
-				// If there are no expanded segments and there are no remaining expansions, this is a terminal segment.
-				// Hand it off to the delegate and handle any returned error.
-				if err := s.delegate(segment); err != nil {
-					return nil, err
-				}
+			// If the next expansion is optional, make sure to preserve the current traversal branch
+			if nextExpansion.minDepth == 0 {
+				// Reattach the tag to the segment before adding it to the returned segments for the next expansion
+				segment.Tag = tag
+				nextSegments = append(nextSegments, segment)
+			}
+		} else if len(nextSegments) == 0 {
+			// If there are no expanded segments and there are no remaining expansions, this is a terminal segment.
+			// Hand it off to the delegate and handle any returned error.
+			if err := s.delegate(segment); err != nil {
+				return nil, err
 			}
 		}
-
-		// If the above condition does not match then this current expansion is non-terminal and non-continuable
 	}
 
-	// Return any collected segments
+	// If the above condition does not match then this current expansion is non-terminal and non-continuable
 	return nextSegments, nil
 }
 
