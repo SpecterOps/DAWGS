@@ -26,16 +26,16 @@ var ErrInvalidDirection = errors.New("must be called with either an inbound or o
 type Direction int
 
 // Reverse returns the reverse of the current direction.
-func (s Direction) Reverse() (Direction, error) {
+func (s Direction) Reverse() Direction {
 	switch s {
 	case DirectionInbound:
-		return DirectionOutbound, nil
+		return DirectionOutbound
 
 	case DirectionOutbound:
-		return DirectionInbound, nil
+		return DirectionInbound
 
 	default:
-		return 0, ErrInvalidDirection
+		return DirectionBoth
 	}
 }
 
