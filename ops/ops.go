@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/specterops/dawgs/util/size"
-
-	"github.com/specterops/dawgs/util/channels"
-
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
+	"github.com/specterops/dawgs/util/channels"
+	"github.com/specterops/dawgs/util/size"
 )
 
 func FetchAllNodeProperties(tx graph.Transaction, nodes graph.NodeSet) error {
@@ -160,13 +158,22 @@ func FetchNodesByQuery(tx graph.Transaction, query string, limit int) (graph.Nod
 		// If the limit is set to < 0 the first part of this condition returns true and short-circuits. Otherwise,
 		// the check goes on to see if there are more nodes in the node set than the specified allowed limit
 		for (limit <= 0 || nodes.Len() < limit) && result.Next() {
-			var node graph.Node
+			// It is possible a path is returned, in that case, just add all nodes from that path
+			var (
+				node   = &graph.Node{}
+				path   = &graph.Path{}
+				mapper = result.Mapper()
+			)
 
-			if err := result.Scan(&node); err != nil {
-				return nil, err
+			for _, nextValue := range result.Values() {
+				if mapper.Map(nextValue, node) {
+					nodes.Add(node)
+					node = &graph.Node{}
+				} else if mapper.Map(nextValue, path) {
+					nodes.Add(path.Nodes...)
+					path = &graph.Path{}
+				}
 			}
-
-			nodes.Add(&node)
 		}
 
 		return nodes, result.Error()
