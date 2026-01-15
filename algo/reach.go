@@ -16,7 +16,6 @@ type reachCursor struct {
 	component   uint64
 	adjacent    []uint64
 	adjacentIdx int
-	resolved    bool
 	reach       cardinality.Duplex[uint64]
 	ancestor    *reachCursor
 }
@@ -84,7 +83,6 @@ func (s *ReachabilityCache) newReachCursor(component uint64, direction graph.Dir
 		component:   component,
 		adjacent:    adjacentComponents,
 		adjacentIdx: 0,
-		resolved:    true,
 		reach:       componentReach,
 		ancestor:    previous,
 	}
@@ -100,7 +98,6 @@ func (s *ReachabilityCache) newRootReachCursor(component uint64, direction graph
 		component:   component,
 		adjacent:    adjacentComponents,
 		adjacentIdx: 0,
-		resolved:    true,
 		reach:       componentReach,
 	}
 }
@@ -220,9 +217,7 @@ func (s *ReachabilityCache) componentMemberReachDFS(component uint64, direction 
 			reachCursor.Complete()
 
 			// Update the cache with this component's reach
-			if reachCursor.resolved {
-				s.cacheComponentReach(reachCursor.component, direction, reachCursor.reach)
-			}
+			s.cacheComponentReach(reachCursor.component, direction, reachCursor.reach)
 		} else if visitedComponents.CheckedAdd(nextAdjacent) {
 			if cachedReach, cached := s.cachedComponentReach(nextAdjacent, direction); cached {
 				visitedComponents.Or(cachedReach.ComponentReach)
@@ -233,21 +228,11 @@ func (s *ReachabilityCache) componentMemberReachDFS(component uint64, direction 
 			} else {
 				stack.PushBack(s.newReachCursor(nextAdjacent, direction, reachCursor))
 			}
-		} else {
-			// This path indicates that one of the adjacent nodes to the reach cursor was not fully visited
-			// meaning the reach of this cursor can not be cached. Make it a passthrough to its ancestor to
-			// avoid having to excessively Or(...) further reach roll-ups.
-			reachCursor.resolved = false
-
-			if reachCursor.ancestor != nil {
-				reachCursor.ancestor.reach.Or(reachCursor.reach)
-				reachCursor.reach = reachCursor.ancestor.reach
-			}
 		}
 	}
 }
 
-func (s *ReachabilityCache) ComponentMemberReach(nodeID uint64, direction graph.Direction) cardinality.Duplex[uint64] {
+func (s *ReachabilityCache) Reach(nodeID uint64, direction graph.Direction) cardinality.Duplex[uint64] {
 	if rootComponent, rootInComponent := s.Components.ContainingComponent(nodeID); rootInComponent {
 		if cachedReach, cached := s.cachedComponentReach(rootComponent, direction); cached {
 			return cachedReach.MemberReach
@@ -263,12 +248,22 @@ func (s *ReachabilityCache) ComponentMemberReach(nodeID uint64, direction graph.
 	return cardinality.NewBitmap64()
 }
 
+func (s *ReachabilityCache) ReachExclusive(nodeID uint64, direction graph.Direction) cardinality.Duplex[uint64] {
+	var (
+		componentMemberReachRef = s.Reach(nodeID, direction)
+		componentMemberReach    = componentMemberReachRef.Clone()
+	)
+
+	componentMemberReach.Remove(nodeID)
+	return componentMemberReach
+}
+
 func (s *ReachabilityCache) OrReachability(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
-	duplex.Or(s.ComponentMemberReach(node, direction))
+	duplex.Or(s.Reach(node, direction))
 }
 
 func (s *ReachabilityCache) XorReachability(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
-	duplex.Xor(s.ComponentMemberReach(node, direction))
+	duplex.Xor(s.Reach(node, direction))
 }
 
 func edgesFilteredByKinds(kinds ...graph.Kind) graph.Criteria {
