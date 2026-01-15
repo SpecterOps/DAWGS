@@ -232,8 +232,8 @@ func (s *ReachabilityCache) componentMemberReachDFS(component uint64, direction 
 	}
 }
 
-func (s *ReachabilityCache) Reach(nodeID uint64, direction graph.Direction) cardinality.Duplex[uint64] {
-	if rootComponent, rootInComponent := s.Components.ContainingComponent(nodeID); rootInComponent {
+func (s *ReachabilityCache) ReachOfComponentContainingMember(member uint64, direction graph.Direction) cardinality.Duplex[uint64] {
+	if rootComponent, rootInComponent := s.Components.ContainingComponent(member); rootInComponent {
 		if cachedReach, cached := s.cachedComponentReach(rootComponent, direction); cached {
 			return cachedReach.MemberReach
 		} else {
@@ -248,22 +248,18 @@ func (s *ReachabilityCache) Reach(nodeID uint64, direction graph.Direction) card
 	return cardinality.NewBitmap64()
 }
 
-func (s *ReachabilityCache) ReachExclusive(nodeID uint64, direction graph.Direction) cardinality.Duplex[uint64] {
-	var (
-		componentMemberReachRef = s.Reach(nodeID, direction)
-		componentMemberReach    = componentMemberReachRef.Clone()
-	)
-
-	componentMemberReach.Remove(nodeID)
-	return componentMemberReach
+func (s *ReachabilityCache) OrReach(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
+	// Reach bitmap will contain the member due to resolution of component reach
+	duplex.Or(s.ReachOfComponentContainingMember(node, direction))
+	duplex.Remove(node)
 }
 
-func (s *ReachabilityCache) OrReachability(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
-	duplex.Or(s.Reach(node, direction))
-}
+func (s *ReachabilityCache) XorReach(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
+	// Reach bitmap will contain the member due to resolution of component reach
+	reachBitmap := s.ReachOfComponentContainingMember(node, direction).Clone()
+	reachBitmap.Remove(node)
 
-func (s *ReachabilityCache) XorReachability(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
-	duplex.Xor(s.Reach(node, direction))
+	duplex.Xor(reachBitmap)
 }
 
 func edgesFilteredByKinds(kinds ...graph.Kind) graph.Criteria {

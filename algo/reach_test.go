@@ -66,7 +66,7 @@ func TestReachabilityCache(t *testing.T) {
 
 	// Validate reach rollup
 	for expectedNode, expectedReach := range expected {
-		actualReach := reachability.Reach(expectedNode, graph.DirectionOutbound).Slice()
+		actualReach := reachability.ReachOfComponentContainingMember(expectedNode, graph.DirectionOutbound).Slice()
 		require.Equalf(t, expectedReach, actualReach, "Reach for node %d is invalid", expectedNode)
 	}
 }
