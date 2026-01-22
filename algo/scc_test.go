@@ -15,7 +15,7 @@ import (
 // 0 -> 1 -> 2 -> 3
 func TestSCC_Chain(t *testing.T) {
 	var (
-		digraph = container.BuildCSRGraph(map[uint64][]uint64{
+		digraph = container.BuildGraph(container.NewCSRGraph, map[uint64][]uint64{
 			0: {1},
 			1: {2},
 			2: {3},
@@ -48,7 +48,7 @@ func TestSCC_Chain(t *testing.T) {
 // 1
 func TestSCC_SimpleCycle(t *testing.T) {
 	var (
-		digraph = container.BuildCSRGraph(map[uint64][]uint64{
+		digraph = container.BuildGraph(container.NewCSRGraph, map[uint64][]uint64{
 			0: {0}, // self‑loop component
 			1: {},  // isolated vertex – must be present as a key!
 		})
@@ -74,7 +74,7 @@ func TestSCC_SimpleCycle(t *testing.T) {
 // 3 -> 1
 func TestSCC_FigureEight(t *testing.T) {
 	var (
-		digraph = container.BuildCSRGraph(map[uint64][]uint64{
+		digraph = container.BuildGraph(container.NewCSRGraph, map[uint64][]uint64{
 			0: {1},
 			1: {2, 3},
 			2: {0},
@@ -107,7 +107,7 @@ func TestSCC_FigureEight(t *testing.T) {
 // 2 → 3           (bridge from A to B)
 func TestComponentGraph_EdgeDeduplication(t *testing.T) {
 	var (
-		digraph = container.BuildCSRGraph(map[uint64][]uint64{
+		digraph = container.BuildGraph(container.NewCSRGraph, map[uint64][]uint64{
 			0: {1},
 			1: {2},
 			2: {0, 3},
@@ -162,7 +162,7 @@ func TestComponentGraph_EdgeDeduplication(t *testing.T) {
 // 6 -> 7 -> 8 -> 6
 func TestComponentHistogram(t *testing.T) {
 	var (
-		digraph = container.BuildCSRGraph(map[uint64][]uint64{
+		digraph = container.BuildGraph(container.NewCSRGraph, map[uint64][]uint64{
 			0: {1},
 			1: {2},
 			2: {0},

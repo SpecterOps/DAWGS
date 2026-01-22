@@ -21,7 +21,7 @@ import (
 // 8 → 9           (bridge from C to D)
 func TestReachabilityCache(t *testing.T) {
 	var (
-		digraph = container.BuildCSRGraph(map[uint64][]uint64{
+		digraph = container.BuildGraph(container.NewCSRGraph, map[uint64][]uint64{
 			0:  {1},
 			1:  {2},
 			2:  {0, 3},

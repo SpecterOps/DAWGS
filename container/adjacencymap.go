@@ -19,6 +19,20 @@ func NewAdjacencyMapGraph() MutableDirectedGraph {
 	}
 }
 
+func BuildAdjacencyMapGraph(adj map[uint64][]uint64) MutableDirectedGraph {
+	digraph := NewAdjacencyMapGraph()
+
+	for src, outs := range adj {
+		digraph.AddNode(src)
+
+		for _, dst := range outs {
+			digraph.AddNode(dst)
+			digraph.AddEdge(src, dst)
+		}
+	}
+
+	return digraph
+}
 func (s *adjacencyMapDigraph) AddNode(node uint64) {
 	s.nodes.Add(node)
 }

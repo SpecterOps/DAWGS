@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCSRDigraph(t *testing.T) {
+func TestAdjacencyMapDigraph(t *testing.T) {
 	var (
-		digraph  = container.NewCSRGraph()
+		digraph  = container.NewAdjacencyMapGraph()
 		expected = map[uint64][]uint64{
 			1: []uint64{2, 3, 4, 5, 6, 7},
 			2: []uint64{3, 4, 5, 6, 7},
@@ -35,7 +35,7 @@ func TestCSRDigraph(t *testing.T) {
 	}
 }
 
-func BenchmarkCSRDigraphAdjacency(b *testing.B) {
+func BenchmarkAdjacencyMapDigraphAdjacency(b *testing.B) {
 	const (
 		maxNodes    = 100_000
 		numAdjacent = 100
@@ -50,7 +50,7 @@ func BenchmarkCSRDigraphAdjacency(b *testing.B) {
 		}
 	}
 
-	csrGraph := container.BuildGraph(container.NewCSRGraph, adj)
+	csrGraph := container.BuildGraph(container.NewAdjacencyMapGraph, adj)
 
 	// Use a simple delegate function for testing
 	delegate := func(adjacent uint64) bool {

@@ -54,6 +54,21 @@ type MutableDirectedGraph interface {
 	AddEdge(start, end uint64)
 }
 
+func BuildGraph(constructor func() MutableDirectedGraph, adj map[uint64][]uint64) MutableDirectedGraph {
+	digraph := constructor()
+
+	for src, outs := range adj {
+		digraph.AddNode(src)
+
+		for _, dst := range outs {
+			digraph.AddNode(dst)
+			digraph.AddEdge(src, dst)
+		}
+	}
+
+	return digraph
+}
+
 type KindDatabase struct {
 	EdgeKindMap KindMap
 	NodeKindMap KindMap

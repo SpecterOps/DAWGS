@@ -7,8 +7,6 @@ import (
 
 // csrDigraph implements a mutable directed graph using compressed sparse row storage.
 type csrDigraph struct {
-	nodes cardinality.Duplex[uint64] // Bitmap of all vertices (original IDs)
-
 	// Mapping between external IDs and dense CSR indices
 	idToIdx map[uint64]uint64 // external ID → dense index
 	idxToID []uint64          // dense index → external ID
@@ -32,26 +30,10 @@ type csrDigraph struct {
 // NewCSRGraph creates an empty mutable directed graph that uses CSR internally.
 func NewCSRGraph() MutableDirectedGraph {
 	return &csrDigraph{
-		nodes:   cardinality.NewBitmap64(),
 		idToIdx: make(map[uint64]uint64),
 		outTmp:  make(map[uint64]map[uint64]struct{}),
 		inTmp:   make(map[uint64]map[uint64]struct{}),
 	}
-}
-
-func BuildCSRGraph(adj map[uint64][]uint64) DirectedGraph {
-	digraph := NewCSRGraph()
-
-	for src, outs := range adj {
-		digraph.AddNode(src)
-
-		for _, dst := range outs {
-			digraph.AddNode(dst)
-			digraph.AddEdge(src, dst)
-		}
-	}
-
-	return digraph
 }
 
 // ensureNode registers a vertex if it does not already exist. Returns the dense CSR index for the given external ID.
@@ -64,9 +46,6 @@ func (g *csrDigraph) ensureNode(id uint64) uint64 {
 
 	g.idToIdx[id] = idx
 	g.idxToID = append(g.idxToID, id)
-
-	// Update bitmap.
-	g.nodes.Add(id)
 
 	// Allocate empty adjacency sets for the builder.
 	g.outTmp[idx] = make(map[uint64]struct{})
@@ -155,7 +134,7 @@ func (g *csrDigraph) csrRange(idx uint64, dir graph.Direction) []uint64 {
 
 		return g.inAdj[start:end]
 
-	case graph.DirectionBoth:
+	default:
 		var (
 			outStart, outEnd = g.outOffsets[idx], g.outOffsets[idx+1]
 			inStart, inEnd   = g.inOffsets[idx], g.inOffsets[idx+1]
@@ -166,9 +145,6 @@ func (g *csrDigraph) csrRange(idx uint64, dir graph.Direction) []uint64 {
 		merged = append(merged, g.inAdj[inStart:inEnd]...)
 
 		return merged
-
-	default:
-		return nil
 	}
 }
 
@@ -199,7 +175,7 @@ func (g *csrDigraph) AddEdge(start, end uint64) {
 }
 
 func (g *csrDigraph) NumNodes() uint64 {
-	return g.nodes.Cardinality()
+	return uint64(len(g.idxToID))
 }
 
 func (g *csrDigraph) NumEdges() uint64 {
@@ -210,11 +186,15 @@ func (g *csrDigraph) NumEdges() uint64 {
 }
 
 func (g *csrDigraph) Nodes() cardinality.Duplex[uint64] {
-	return g.nodes
+	return cardinality.NewBitmap64With(g.idxToID...)
 }
 
 func (g *csrDigraph) EachNode(delegate func(node uint64) bool) {
-	g.nodes.Each(delegate)
+	for _, id := range g.idxToID {
+		if !delegate(id) {
+			return
+		}
+	}
 }
 
 func (g *csrDigraph) AdjacentNodes(node uint64, direction graph.Direction) []uint64 {
@@ -263,7 +243,7 @@ func (g *csrDigraph) EachAdjacentNode(node uint64, direction graph.Direction, de
 				}
 			}
 
-		case graph.DirectionBoth:
+		default:
 			for next, end := g.outOffsets[idx], g.outOffsets[idx+1]; next < end; next++ {
 				if !delegate(g.outAdj[next]) {
 					return
@@ -288,7 +268,6 @@ func (g *csrDigraph) Normalize() ([]uint64, DirectedGraph) {
 
 	// Build a new CSR graph where the external IDs are the dense indices
 	newGraph := &csrDigraph{
-		nodes:   cardinality.NewBitmap64(),
 		idToIdx: make(map[uint64]uint64, len(g.idxToID)),
 		idxToID: make([]uint64, len(g.idxToID)),
 
@@ -305,7 +284,6 @@ func (g *csrDigraph) Normalize() ([]uint64, DirectedGraph) {
 	for denseIdx := range g.idxToID {
 		newGraph.idToIdx[uint64(denseIdx)] = uint64(denseIdx)
 		newGraph.idxToID[denseIdx] = uint64(denseIdx)
-		newGraph.nodes.Add(uint64(denseIdx))
 	}
 
 	// Copy offsets (they are already correct because vertex ordering is identical).
