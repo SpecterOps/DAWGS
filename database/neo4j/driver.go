@@ -2,6 +2,7 @@ package neo4j
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -100,6 +101,14 @@ type dawgsDriver struct {
 
 func (s *dawgsDriver) Mapper() graph.ValueMapper {
 	return resultValueMapper
+}
+
+func (s *dawgsDriver) UpsertNode(ctx context.Context, node *graph.Node) error {
+	return errors.New("unsupported")
+}
+
+func (s *dawgsDriver) UpsertRelationship(ctx context.Context, startMatchProperty, endMatchProperty string, startMatchValue, endMatchValue any, kind graph.Kind, properties *graph.Properties) error {
+	return errors.New("unsupported")
 }
 
 func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error) {

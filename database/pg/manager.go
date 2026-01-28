@@ -288,6 +288,16 @@ func (s *SchemaManager) AssertKinds(ctx context.Context, kinds graph.Kinds) ([]i
 	return s.assertKinds(ctx, kinds)
 }
 
+func (s *SchemaManager) AssertKind(ctx context.Context, kind graph.Kind) (int16, error) {
+	kindIDs, err := s.AssertKinds(ctx, graph.Kinds{kind})
+
+	if err != nil {
+		return 0, err
+	}
+
+	return kindIDs[0], nil
+}
+
 func (s *SchemaManager) DefaultGraph() (database.Graph, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()

@@ -3,11 +3,11 @@ package pg
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/jackc/pgtype"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/database/pg/model"
 	"github.com/specterops/dawgs/database/pg/query"
@@ -43,14 +43,14 @@ func (s *Int2ArrayEncoder) Encode(values []int16) string {
 type NodeUpsertParameters struct {
 	IDFutures    []*query.Future[graph.ID]
 	KindIDSlices []string
-	Properties   []pgtype.JSONB
+	Properties   []json.RawMessage
 }
 
 func NewNodeUpsertParameters(size int) *NodeUpsertParameters {
 	return &NodeUpsertParameters{
 		IDFutures:    make([]*query.Future[graph.ID], 0, size),
 		KindIDSlices: make([]string, 0, size),
-		Properties:   make([]pgtype.JSONB, 0, size),
+		Properties:   make([]json.RawMessage, 0, size),
 	}
 }
 
@@ -94,7 +94,7 @@ type RelationshipUpdateByParameters struct {
 	StartIDs   []graph.ID
 	EndIDs     []graph.ID
 	KindIDs    []int16
-	Properties []pgtype.JSONB
+	Properties []json.RawMessage
 }
 
 func NewRelationshipUpdateByParameters(size int) *RelationshipUpdateByParameters {
@@ -102,7 +102,7 @@ func NewRelationshipUpdateByParameters(size int) *RelationshipUpdateByParameters
 		StartIDs:   make([]graph.ID, 0, size),
 		EndIDs:     make([]graph.ID, 0, size),
 		KindIDs:    make([]int16, 0, size),
-		Properties: make([]pgtype.JSONB, 0, size),
+		Properties: make([]json.RawMessage, 0, size),
 	}
 }
 
@@ -148,7 +148,7 @@ type relationshipCreateBatch struct {
 	startIDs         []uint64
 	endIDs           []uint64
 	edgeKindIDs      []int16
-	edgePropertyBags []pgtype.JSONB
+	edgePropertyBags []json.RawMessage
 }
 
 func newRelationshipCreateBatch(size int) *relationshipCreateBatch {
@@ -156,7 +156,7 @@ func newRelationshipCreateBatch(size int) *relationshipCreateBatch {
 		startIDs:         make([]uint64, 0, size),
 		endIDs:           make([]uint64, 0, size),
 		edgeKindIDs:      make([]int16, 0, size),
-		edgePropertyBags: make([]pgtype.JSONB, 0, size),
+		edgePropertyBags: make([]json.RawMessage, 0, size),
 	}
 }
 
@@ -308,7 +308,7 @@ func (s *dawgsDriver) CreateNodes(ctx context.Context, batch []*graph.Node) erro
 		kindIDEncoder = Int2ArrayEncoder{
 			buffer: &bytes.Buffer{},
 		}
-		properties = make([]pgtype.JSONB, numCreates)
+		properties = make([]json.RawMessage, numCreates)
 	)
 
 	for idx, nextNode := range batch {

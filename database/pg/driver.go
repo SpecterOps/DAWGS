@@ -217,6 +217,52 @@ func (s *dawgsDriver) CreateRelationship(ctx context.Context, relationship *grap
 	}
 }
 
+func (s *dawgsDriver) UpsertNode(ctx context.Context, node *graph.Node) error {
+	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
+		return err
+	} else if kindIDSlice, err := s.schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
+		return err
+	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties); err != nil {
+		return err
+	} else {
+		result := s.executeTranslated(ctx, translatedQuery{
+			SQL: formatUpsertNodeSQL(targetGraph.ID),
+			Parameters: map[string]any{
+				"graph_id":   targetGraph.ID,
+				"kind_ids":   kindIDSlice,
+				"properties": propertiesJSONB,
+			},
+		})
+
+		defer result.Close(ctx)
+		return result.Error()
+	}
+}
+
+func (s *dawgsDriver) UpsertRelationship(ctx context.Context, startMatchProperty, endMatchProperty string, startMatchValue, endMatchValue any, kind graph.Kind, properties *graph.Properties) error {
+	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
+		return err
+	} else if kindID, err := s.schemaManager.AssertKind(ctx, kind); err != nil {
+		return err
+	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(properties); err != nil {
+		return err
+	} else {
+		result := s.executeTranslated(ctx, translatedQuery{
+			SQL: formatEdgeUpsertSQL(targetGraph.ID, startMatchProperty, endMatchProperty),
+			Parameters: map[string]any{
+				"start_match_value": startMatchValue,
+				"end_match_value":   endMatchValue,
+				"graph_id":          targetGraph.ID,
+				"kind_id":           kindID,
+				"properties":        propertiesJSONB,
+			},
+		})
+
+		defer result.Close(ctx)
+		return result.Error()
+	}
+}
+
 func (s *dawgsDriver) CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error) {
 	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
 		return 0, err

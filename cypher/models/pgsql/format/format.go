@@ -281,8 +281,8 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			}
 
 		case pgsql.TableReference:
-			if typedNextExpr.Binding.Set {
-				exprStack = append(exprStack, typedNextExpr.Binding.Value, pgsql.FormattingLiteral(" "))
+			if typedNextExpr.Alias.Set {
+				exprStack = append(exprStack, typedNextExpr.Alias.Value, pgsql.FormattingLiteral(" "))
 			}
 
 			exprStack = append(exprStack, typedNextExpr.Name)
