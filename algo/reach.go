@@ -8,8 +8,9 @@ import (
 	"github.com/gammazero/deque"
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/container"
+	"github.com/specterops/dawgs/database/v1compat"
+	"github.com/specterops/dawgs/database/v1compat/query"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
 )
 
 type reachCursor struct {
@@ -262,11 +263,11 @@ func (s *ReachabilityCache) XorReach(node uint64, direction graph.Direction, dup
 	duplex.Xor(reachBitmap)
 }
 
-func edgesFilteredByKinds(kinds ...graph.Kind) graph.Criteria {
+func edgesFilteredByKinds(kinds ...graph.Kind) v1compat.Criteria {
 	return query.KindIn(query.Relationship(), kinds...)
 }
 
-func FetchReachabilityCache(ctx context.Context, db graph.Database, criteria graph.Criteria) (*ReachabilityCache, error) {
+func FetchReachabilityCache(ctx context.Context, db v1compat.Database, criteria v1compat.Criteria) (*ReachabilityCache, error) {
 	if digraph, err := container.FetchDirectedGraph(ctx, db, criteria); err != nil {
 		return nil, err
 	} else {
@@ -275,6 +276,6 @@ func FetchReachabilityCache(ctx context.Context, db graph.Database, criteria gra
 	}
 }
 
-func FetchFilteredReachabilityCache(ctx context.Context, db graph.Database, traversalKinds ...graph.Kind) (*ReachabilityCache, error) {
+func FetchFilteredReachabilityCache(ctx context.Context, db v1compat.Database, traversalKinds ...graph.Kind) (*ReachabilityCache, error) {
 	return FetchReachabilityCache(ctx, db, edgesFilteredByKinds(traversalKinds...))
 }

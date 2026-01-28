@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
@@ -70,6 +71,9 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 
 func formatValue(builder *OutputBuilder, value any) error {
 	switch typedValue := value.(type) {
+	case time.Time:
+		builder.Write("'", typedValue.Format(time.RFC3339Nano), "'::timestamp with time zone")
+
 	case uint:
 		builder.Write(strconv.FormatUint(uint64(typedValue), 10))
 
@@ -116,7 +120,11 @@ func formatValue(builder *OutputBuilder, value any) error {
 		return formatSlice(builder, typedValue, pgsql.Int8Array)
 
 	case string:
-		builder.Write("'", typedValue, "'")
+		// Double single quotes per SQL string literal rules
+		builder.Write("'", strings.ReplaceAll(typedValue, "'", "''"), "'")
+
+	case []string:
+		return formatSlice(builder, typedValue, pgsql.TextArray)
 
 	case bool:
 		builder.Write(strconv.FormatBool(typedValue))
@@ -273,8 +281,8 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			}
 
 		case pgsql.TableReference:
-			if typedNextExpr.Binding.Set {
-				exprStack = append(exprStack, typedNextExpr.Binding.Value, pgsql.FormattingLiteral(" "))
+			if typedNextExpr.Alias.Set {
+				exprStack = append(exprStack, typedNextExpr.Alias.Value, pgsql.FormattingLiteral(" "))
 			}
 
 			exprStack = append(exprStack, typedNextExpr.Name)

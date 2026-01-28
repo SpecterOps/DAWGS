@@ -49,7 +49,7 @@ func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart,
 					From: []pgsql.FromClause{{
 						Source: pgsql.TableReference{
 							Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-							Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+							Alias: models.OptionalValue(traversalStep.Edge.Identifier),
 						}},
 					},
 					Where: whereClause,

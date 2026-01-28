@@ -124,14 +124,14 @@ func (s *Translator) buildUpdates() error {
 		switch identifierMutation.UpdateBinding.DataType {
 		case pgsql.NodeComposite:
 			sqlUpdate.Table = pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
+				Name:  pgsql.CompoundIdentifier{pgsql.TableNode},
+				Alias: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
 			}
 
 		case pgsql.EdgeComposite:
 			sqlUpdate.Table = pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
+				Name:  pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Alias: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
 			}
 
 		default:

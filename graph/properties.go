@@ -229,20 +229,36 @@ func NewPropertyResult(key string, value any) PropertyValue {
 
 // Properties is a map type that satisfies the Properties interface.
 type Properties struct {
-	Map      map[string]any      `json:"map"`
-	Deleted  map[string]struct{} `json:"deleted"`
-	Modified map[string]struct{} `json:"modified"`
+	Map      map[string]any
+	Deleted  map[string]struct{}
+	Modified map[string]struct{}
+}
+
+func (s *Properties) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.Map)
 }
 
 func (s *Properties) Merge(other *Properties) {
+	if s.Map == nil {
+		s.Map = make(map[string]any, len(other.Map))
+	}
+
 	for otherKey, otherValue := range other.Map {
 		s.Map[otherKey] = otherValue
+	}
+
+	if s.Modified == nil {
+		s.Modified = make(map[string]struct{}, len(other.Modified))
 	}
 
 	for otherModifiedKey := range other.Modified {
 		s.Modified[otherModifiedKey] = struct{}{}
 
 		delete(s.Deleted, otherModifiedKey)
+	}
+
+	if s.Deleted == nil {
+		s.Deleted = make(map[string]struct{}, len(other.Deleted))
 	}
 
 	for otherDeletedKey := range other.Deleted {
@@ -413,6 +429,22 @@ func (s *Properties) GetOrDefault(key string, defaultValue any) PropertyValue {
 	return s.GetWithFallback(key, defaultValue)
 }
 
+func PropertiesMustGetOrDefault[T any](properties *Properties, key string, defaultValue T) T {
+	if properties == nil {
+		return defaultValue
+	}
+
+	value := properties.GetWithFallback(key, defaultValue)
+
+	if !value.IsNil() {
+		if typedValue, typeOK := value.Any().(T); typeOK {
+			return typedValue
+		}
+	}
+
+	return defaultValue
+}
+
 func (s *Properties) GetWithFallback(key string, defaultValue any, fallbackKeys ...string) PropertyValue {
 	value := defaultValue
 
@@ -499,14 +531,6 @@ func writeKeyValueToHash(h io.Writer, key string, value any) error {
 
 func NewProperties() *Properties {
 	return &Properties{}
-}
-
-func NewPropertiesRed() *Properties {
-	return &Properties{
-		Map:      map[string]any{},
-		Modified: make(map[string]struct{}),
-		Deleted:  make(map[string]struct{}),
-	}
 }
 
 type PropertyMap map[String]any

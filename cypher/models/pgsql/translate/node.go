@@ -122,7 +122,7 @@ func (s *Translator) buildNodePatternPart(part *PatternPart) error {
 	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-			Binding: models.OptionalValue(part.NodeSelect.Binding.Identifier),
+			Alias: models.OptionalValue(part.NodeSelect.Binding.Identifier),
 		},
 	})
 

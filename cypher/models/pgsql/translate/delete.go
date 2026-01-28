@@ -54,13 +54,13 @@ func (s *Translator) buildDeletions(scope *Scope) error {
 		case pgsql.NodeComposite:
 			sqlDelete.From = append(sqlDelete.From, pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.OptionalValue(identifierDeletion.UpdateBinding.Identifier),
+				Alias: models.OptionalValue(identifierDeletion.UpdateBinding.Identifier),
 			})
 
 		case pgsql.EdgeComposite:
 			sqlDelete.From = append(sqlDelete.From, pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(identifierDeletion.UpdateBinding.Identifier),
+				Alias: models.OptionalValue(identifierDeletion.UpdateBinding.Identifier),
 			})
 
 		default:
