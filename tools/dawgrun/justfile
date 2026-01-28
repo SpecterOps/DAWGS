@@ -1,0 +1,24 @@
+default: build
+
+vet:
+	go mod tidy
+	go fmt ./... 
+	go vet ./...
+
+build *BUILDARGS: vet
+	go build -o dawgrun {{BUILDARGS}} ./cmd/...
+
+build-with-dawgs path_to_dawgs *BUILDARGS:
+  go work edit -replace=github.com/specterops/dawgs={{path_to_dawgs}}
+  just build {{BUILDARGS}}
+
+build-with-upstream *BUILDARGS:
+  go work edit -dropreplace=github.com/specterops/dawgs
+  just build {{BUILDARGS}}
+
+clean:
+  @rm -f dawgrun
+
+[arg("port", long)]
+debug port="38697": build
+  dlv exec --continue --accept-multiclient --headless --listen 127.0.0.1:{{port}} ./dawgrun
