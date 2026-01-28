@@ -180,26 +180,30 @@ func FetchNodesByQuery(tx graph.Transaction, query string, limit int) (graph.Nod
 	}
 }
 
-func FetchPathSetByQuery(tx graph.Transaction, query string) (graph.PathSet, error) {
+type QueryResult struct {
+	Paths    graph.PathSet
+	Literals graph.Literals
+}
+
+func FetchByQuery(tx graph.Transaction, query string) (QueryResult, error) {
 	var (
 		currentPath graph.Path
-		pathSet     graph.PathSet
+		result      QueryResult
 	)
 
-	if result := tx.Query(query, map[string]any{}); result.Error() != nil {
-		return pathSet, result.Error()
+	if queryResult := tx.Query(query, map[string]any{}); queryResult.Error() != nil {
+		return result, queryResult.Error()
 	} else {
-		defer result.Close()
+		defer queryResult.Close()
 
-		for result.Next() {
+		for queryResult.Next() {
 			var (
 				relationship = &graph.Relationship{}
 				node         = &graph.Node{}
 				path         = &graph.Path{}
-				mapper       = result.Mapper()
+				mapper       = queryResult.Mapper()
 			)
-
-			for _, nextValue := range result.Values() {
+			for i, nextValue := range queryResult.Values() {
 				if mapper.Map(nextValue, relationship) {
 					currentPath.Edges = append(currentPath.Edges, relationship)
 					relationship = &graph.Relationship{}
@@ -207,29 +211,37 @@ func FetchPathSetByQuery(tx graph.Transaction, query string) (graph.PathSet, err
 					currentPath.Nodes = append(currentPath.Nodes, node)
 					node = &graph.Node{}
 				} else if mapper.Map(nextValue, path) {
-					pathSet = append(pathSet, *path)
+					result.Paths = append(result.Paths, *path)
 					path = &graph.Path{}
+				} else {
+					// This is a catch-all in order to support string / boolean / numeric values
+					literal := graph.Literal{Value: nextValue}
+					if i < len(queryResult.Keys()) {
+						literal.Key = queryResult.Keys()[i]
+					}
+
+					result.Literals = append(result.Literals, literal)
 				}
 			}
 
 			if tx.GraphQueryMemoryLimit() > 0 {
 				var (
 					currentPathSize = size.OfSlice(currentPath.Edges) + size.OfSlice(currentPath.Nodes)
-					pathSetSize     = size.Of(pathSet)
+					pathSetSize     = size.Of(result.Paths)
 				)
 
 				if currentPathSize > tx.GraphQueryMemoryLimit() || pathSetSize > tx.GraphQueryMemoryLimit() {
-					return pathSet, fmt.Errorf("%s - Limit: %.2f MB", "query required more memory than allowed", tx.GraphQueryMemoryLimit().Mebibytes())
+					return result, fmt.Errorf("%s - Limit: %.2f MB", "query required more memory than allowed", tx.GraphQueryMemoryLimit().Mebibytes())
 				}
 			}
 		}
 
 		// If there were elements added to the current path ensure that it's added to the path set before returning
 		if len(currentPath.Nodes) > 0 || len(currentPath.Edges) > 0 {
-			pathSet = append(pathSet, currentPath)
+			result.Paths = append(result.Paths, currentPath)
 		}
 
-		return pathSet, result.Error()
+		return result, queryResult.Error()
 	}
 }
 

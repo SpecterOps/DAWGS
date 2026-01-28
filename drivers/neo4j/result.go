@@ -23,6 +23,10 @@ func (s *internalResult) Mapper() graph.ValueMapper {
 	return NewValueMapper()
 }
 
+func (s *internalResult) Keys() []string {
+	return s.driverResult.Record().Keys
+}
+
 func (s *internalResult) Values() []any {
 	return s.driverResult.Record().Values
 }

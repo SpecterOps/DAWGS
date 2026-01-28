@@ -4,6 +4,7 @@ import "fmt"
 
 type Result interface {
 	Next() bool
+	Keys() []string
 	Values() []any
 	Mapper() ValueMapper
 
@@ -35,6 +36,10 @@ func ScanNextResult(result Result, targets ...any) error {
 
 type ErrorResult struct {
 	err error
+}
+
+func (s ErrorResult) Keys() []string {
+	return nil
 }
 
 func (s ErrorResult) Values() []any {
