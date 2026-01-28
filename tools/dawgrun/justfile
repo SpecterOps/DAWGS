@@ -1,0 +1,36 @@
+set dotenv-load := true
+set dotenv-filename := ".build.env"
+
+default: build
+
+vet:
+    go mod tidy
+    go fmt ./... 
+    go vet ./...
+
+build *BUILDARGS: vet
+    go build -o dawgrun {{ BUILDARGS }} ./cmd/...
+
+build-with-dawgs path_to_dawgs *BUILDARGS:
+    echo 'GOWORK=off' > .build.env
+    go mod edit -replace=github.com/specterops/dawgs={{ path_to_dawgs }}
+    just build {{ BUILDARGS }}
+
+build-with-upstream *BUILDARGS:
+    #!/usr/bin/env sh
+    [ -f .build.env ] && {
+      rm -f .build.env 
+      unset GOWORK
+      just build-with-upstream {{ BUILDARGS }}
+    } || {
+      go work edit -dropreplace=github.com/specterops/dawgs
+      go mod edit -dropreplace=github.com/specterops/dawgs
+      just build {{ BUILDARGS }}
+    }
+
+clean:
+    @rm -f dawgrun
+
+[arg("port", long="port")]
+debug port="38697": build
+    dlv exec --continue --accept-multiclient --headless --listen 127.0.0.1:{{ port }} ./dawgrun
