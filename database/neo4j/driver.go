@@ -103,6 +103,14 @@ func (s *dawgsDriver) Mapper() graph.ValueMapper {
 	return resultValueMapper
 }
 
+func (s *dawgsDriver) InsertNode(ctx context.Context, node *graph.Node) error {
+	return errors.New("unsupported")
+}
+
+func (s *dawgsDriver) InsertRelationship(ctx context.Context, startMatchProperty, endMatchProperty string, startMatchValue, endMatchValue any, kind graph.Kind, properties *graph.Properties) error {
+	return errors.New("unsupported")
+}
+
 func (s *dawgsDriver) UpsertNode(ctx context.Context, node *graph.Node) error {
 	return errors.New("unsupported")
 }

@@ -217,6 +217,52 @@ func (s *dawgsDriver) CreateRelationship(ctx context.Context, relationship *grap
 	}
 }
 
+func (s *dawgsDriver) InsertNode(ctx context.Context, node *graph.Node) error {
+	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
+		return err
+	} else if kindIDSlice, err := s.schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
+		return err
+	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties); err != nil {
+		return err
+	} else {
+		result := s.executeTranslated(ctx, translatedQuery{
+			SQL: formatNodeInsertSQL(targetGraph.ID),
+			Parameters: map[string]any{
+				"graph_id":   targetGraph.ID,
+				"kind_ids":   kindIDSlice,
+				"properties": propertiesJSONB,
+			},
+		})
+
+		defer result.Close(ctx)
+		return result.Error()
+	}
+}
+
+func (s *dawgsDriver) InsertRelationship(ctx context.Context, startMatchProperty, endMatchProperty string, startMatchValue, endMatchValue any, kind graph.Kind, properties *graph.Properties) error {
+	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
+		return err
+	} else if kindID, err := s.schemaManager.AssertKind(ctx, kind); err != nil {
+		return err
+	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(properties); err != nil {
+		return err
+	} else {
+		result := s.executeTranslated(ctx, translatedQuery{
+			SQL: formatEdgeInsertSQL(targetGraph.ID, startMatchProperty, endMatchProperty),
+			Parameters: map[string]any{
+				"start_match_value": startMatchValue,
+				"end_match_value":   endMatchValue,
+				"graph_id":          targetGraph.ID,
+				"kind_id":           kindID,
+				"properties":        propertiesJSONB,
+			},
+		})
+
+		defer result.Close(ctx)
+		return result.Error()
+	}
+}
+
 func (s *dawgsDriver) UpsertNode(ctx context.Context, node *graph.Node) error {
 	if targetGraph, err := s.getTargetGraph(ctx); err != nil {
 		return err
@@ -226,7 +272,7 @@ func (s *dawgsDriver) UpsertNode(ctx context.Context, node *graph.Node) error {
 		return err
 	} else {
 		result := s.executeTranslated(ctx, translatedQuery{
-			SQL: formatUpsertNodeSQL(targetGraph.ID),
+			SQL: formatNodeUpsertSQL(targetGraph.ID),
 			Parameters: map[string]any{
 				"graph_id":   targetGraph.ID,
 				"kind_ids":   kindIDSlice,

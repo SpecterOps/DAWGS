@@ -26,18 +26,16 @@ type Result interface {
 type Driver interface {
 	WithGraph(target Graph) Driver
 
-	// Eventually to be deprecated - this is currently a translation gap where cysql doesn't correctly
-	// marshal create statements
-	//
 	// Deprecated: This function will be removed in future version.
 	CreateNode(ctx context.Context, node *graph.Node) (graph.ID, error)
-	UpsertNode(ctx context.Context, node *graph.Node) error
 
-	// Eventually to be deprecated - this is currently a translation gap where cysql doesn't correctly
-	// marshal create statements
-	//
 	// Deprecated: This function will be removed in future version.
 	CreateRelationship(ctx context.Context, relationship *graph.Relationship) (graph.ID, error)
+
+	InsertNode(ctx context.Context, node *graph.Node) error
+	UpsertNode(ctx context.Context, node *graph.Node) error
+
+	InsertRelationship(ctx context.Context, startMatchProperty, endMatchProperty string, startMatchValue, endMatchValue any, kind graph.Kind, properties *graph.Properties) error
 	UpsertRelationship(ctx context.Context, startMatchProperty, endMatchProperty string, startMatchValue, endMatchValue any, kind graph.Kind, properties *graph.Properties) error
 
 	Exec(ctx context.Context, query *cypher.RegularQuery, parameters map[string]any) Result
