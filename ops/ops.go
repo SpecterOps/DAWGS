@@ -188,7 +188,10 @@ type QueryResult struct {
 func FetchByQuery(tx graph.Transaction, query string) (QueryResult, error) {
 	var (
 		currentPath graph.Path
-		result      QueryResult
+		result      = QueryResult{
+			Paths:    graph.NewPathSet(),
+			Literals: graph.Literals{},
+		}
 	)
 
 	if queryResult := tx.Query(query, map[string]any{}); queryResult.Error() != nil {
