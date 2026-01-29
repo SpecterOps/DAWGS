@@ -25,6 +25,7 @@ func (s *queryResult) Keys() []string {
 
 func (s *queryResult) Next() bool {
 	if s.rows.Next() {
+		s.keys = []string{}
 		for _, desc := range s.rows.FieldDescriptions() {
 			s.keys = append(s.keys, desc.Name)
 		}
