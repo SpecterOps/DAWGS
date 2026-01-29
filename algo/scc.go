@@ -284,14 +284,14 @@ func (s ComponentGraph) OriginReachable(startID, endID uint64) bool {
 func NewComponentGraph(ctx context.Context, originGraph container.DirectedGraph) ComponentGraph {
 	var (
 		componentMembers, memberComponentLookup = StronglyConnectedComponents(ctx, originGraph)
-		componentDigraph                        = container.NewCSRGraph()
+		componentDigraphBuilder                 = container.NewCSRDigraphBuilder()
 	)
 
 	defer util.SLogMeasureFunction("NewComponentGraph")()
 
 	// Ensure all components are present as vertices, even if they have no edges
 	for componentID := range componentMembers {
-		componentDigraph.AddNode(uint64(componentID))
+		componentDigraphBuilder.AddNode(uint64(componentID))
 	}
 
 	originGraph.EachNode(func(node uint64) bool {
@@ -299,7 +299,7 @@ func NewComponentGraph(ctx context.Context, originGraph container.DirectedGraph)
 
 		originGraph.EachAdjacentNode(node, graph.DirectionInbound, func(adjacent uint64) bool {
 			if adjacentComponent := memberComponentLookup[adjacent]; nodeComponent != adjacentComponent {
-				componentDigraph.AddEdge(adjacentComponent, nodeComponent)
+				componentDigraphBuilder.AddEdge(adjacentComponent, nodeComponent)
 			}
 
 			return util.IsContextLive(ctx)
@@ -307,7 +307,7 @@ func NewComponentGraph(ctx context.Context, originGraph container.DirectedGraph)
 
 		originGraph.EachAdjacentNode(node, graph.DirectionOutbound, func(adjacent uint64) bool {
 			if adjacentComponent := memberComponentLookup[adjacent]; nodeComponent != adjacentComponent {
-				componentDigraph.AddEdge(nodeComponent, adjacentComponent)
+				componentDigraphBuilder.AddEdge(nodeComponent, adjacentComponent)
 			}
 
 			return util.IsContextLive(ctx)
@@ -319,6 +319,6 @@ func NewComponentGraph(ctx context.Context, originGraph container.DirectedGraph)
 	return ComponentGraph{
 		componentMembers:      componentMembers,
 		memberComponentLookup: memberComponentLookup,
-		digraph:               componentDigraph,
+		digraph:               componentDigraphBuilder.Build(),
 	}
 }

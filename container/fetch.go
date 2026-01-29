@@ -12,7 +12,7 @@ import (
 func FetchDirectedGraph(ctx context.Context, db graph.Database, criteria graph.Criteria) (DirectedGraph, error) {
 	var (
 		measuref   = util.SLogMeasureFunction("FetchDirectedGraph")
-		digraph    = NewCSRGraph()
+		builder    = NewCSRDigraphBuilder()
 		numResults = uint64(0)
 	)
 
@@ -29,7 +29,7 @@ func FetchDirectedGraph(ctx context.Context, db graph.Database, criteria graph.C
 						return err
 					}
 
-					digraph.AddEdge(startID.Uint64(), endID.Uint64())
+					builder.AddEdge(startID.Uint64(), endID.Uint64())
 					numResults += 1
 				}
 
@@ -43,6 +43,8 @@ func FetchDirectedGraph(ctx context.Context, db graph.Database, criteria graph.C
 	}); err != nil {
 		return nil, err
 	}
+
+	digraph := builder.Build()
 
 	measuref(
 		slog.Uint64("num_nodes", digraph.NumNodes()),

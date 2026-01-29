@@ -8,6 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func addAdjacencyMapToMutableDigraph(digraph container.MutableDirectedGraph, adj map[uint64][]uint64) {
+	for src, outs := range adj {
+		digraph.AddNode(src)
+
+		for _, dst := range outs {
+			digraph.AddNode(dst)
+			digraph.AddEdge(src, dst)
+		}
+	}
+}
+
 func TestAdjacencyMapDigraph(t *testing.T) {
 	var (
 		digraph  = container.NewAdjacencyMapGraph()
@@ -50,7 +61,8 @@ func BenchmarkAdjacencyMapDigraphAdjacency(b *testing.B) {
 		}
 	}
 
-	csrGraph := container.BuildGraph(container.NewAdjacencyMapGraph, adj)
+	digraph := container.NewAdjacencyMapGraph()
+	addAdjacencyMapToMutableDigraph(digraph, adj)
 
 	// Use a simple delegate function for testing
 	delegate := func(adjacent uint64) bool {
@@ -62,7 +74,7 @@ func BenchmarkAdjacencyMapDigraphAdjacency(b *testing.B) {
 	node := uint64(0)
 
 	for b.Loop() {
-		csrGraph.EachAdjacentNode(node, graph.DirectionOutbound, delegate)
+		digraph.EachAdjacentNode(node, graph.DirectionOutbound, delegate)
 
 		if node += 1; node >= maxNodes {
 			node = 0
