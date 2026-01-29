@@ -23,7 +23,17 @@ func (s *internalResult) Mapper() graph.ValueMapper {
 	return NewValueMapper()
 }
 
+func (s *internalResult) Keys() []string {
+	if s.driverResult == nil || s.driverResult.Record() == nil {
+		return nil
+	}
+	return s.driverResult.Record().Keys
+}
+
 func (s *internalResult) Values() []any {
+	if s.driverResult == nil || s.driverResult.Record() == nil {
+		return nil
+	}
 	return s.driverResult.Record().Values
 }
 
