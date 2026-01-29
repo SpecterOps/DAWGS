@@ -231,9 +231,10 @@ func FetchByQuery(tx graph.Transaction, query string) (QueryResult, error) {
 				var (
 					currentPathSize = size.OfSlice(currentPath.Edges) + size.OfSlice(currentPath.Nodes)
 					pathSetSize     = size.Of(result.Paths)
+					literalSize     = size.Of(result.Literals)
 				)
 
-				if currentPathSize > tx.GraphQueryMemoryLimit() || pathSetSize > tx.GraphQueryMemoryLimit() {
+				if currentPathSize > tx.GraphQueryMemoryLimit() || pathSetSize+literalSize > tx.GraphQueryMemoryLimit() {
 					return result, fmt.Errorf("%s - Limit: %.2f MB", "query required more memory than allowed", tx.GraphQueryMemoryLimit().Mebibytes())
 				}
 			}
