@@ -47,26 +47,17 @@ type DirectedGraph interface {
 	EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool)
 }
 
+type DigraphBuilder interface {
+	AddNode(node uint64)
+	AddEdge(start, end uint64)
+	Build() DirectedGraph
+}
+
 type MutableDirectedGraph interface {
 	DirectedGraph
 
 	AddNode(node uint64)
 	AddEdge(start, end uint64)
-}
-
-func BuildGraph(constructor func() MutableDirectedGraph, adj map[uint64][]uint64) MutableDirectedGraph {
-	digraph := constructor()
-
-	for src, outs := range adj {
-		digraph.AddNode(src)
-
-		for _, dst := range outs {
-			digraph.AddNode(dst)
-			digraph.AddEdge(src, dst)
-		}
-	}
-
-	return digraph
 }
 
 type KindDatabase struct {
