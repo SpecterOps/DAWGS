@@ -61,7 +61,7 @@ func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery
 			part.Model.CommonTableExpressions = nil
 		}
 
-		// Autor the part as a nested CTE
+		// Author the part as a nested CTE
 		nextCTE := pgsql.CommonTableExpression{
 			Query: *part.Model,
 		}
