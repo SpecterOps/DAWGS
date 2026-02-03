@@ -1,6 +1,8 @@
 package container
 
 import (
+	"slices"
+
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
 )
@@ -30,6 +32,7 @@ type Triplestore interface {
 type MutableTriplestore interface {
 	Triplestore
 
+	Sort()
 	AddTriple(edge, start, end uint64)
 	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore
 }
@@ -49,6 +52,12 @@ func NewTriplestore() MutableTriplestore {
 		startIndex:   map[uint64]cardinality.Duplex[uint64]{},
 		endIndex:     map[uint64]cardinality.Duplex[uint64]{},
 	}
+}
+
+func (s *triplestore) Sort() {
+	slices.SortFunc(s.edges, func(a, b Edge) int {
+		return int(a.ID) - int(b.ID)
+	})
 }
 
 func (s *triplestore) DeleteEdge(id uint64) {
@@ -215,6 +224,10 @@ type triplestoreProjection struct {
 }
 
 func (s *triplestoreProjection) AddTriple(edge, start, end uint64) {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) Sort() {
 	panic("unsupported")
 }
 
