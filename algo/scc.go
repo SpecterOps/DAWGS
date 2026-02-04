@@ -136,6 +136,7 @@ func (s ComponentGraph) HasMember(memberID uint64) bool {
 	_, hasMember := s.memberComponentLookup[memberID]
 	return hasMember
 }
+
 func (s ComponentGraph) KnownMembers() cardinality.Duplex[uint64] {
 	members := cardinality.NewBitmap64()
 
@@ -153,6 +154,10 @@ func (s ComponentGraph) Digraph() container.DirectedGraph {
 func (s ComponentGraph) ContainingComponent(memberID uint64) (uint64, bool) {
 	component, inComponentDigraph := s.memberComponentLookup[memberID]
 	return component, inComponentDigraph
+}
+
+func (s ComponentGraph) ComponentMembers(componentID uint64) cardinality.Duplex[uint64] {
+	return s.componentMembers[componentID]
 }
 
 func (s ComponentGraph) CollectComponentMembers(componentID uint64, members cardinality.Duplex[uint64]) {
