@@ -27,11 +27,11 @@ func TestNewProperties(t *testing.T) {
 	properties.Set("test", "test")
 	properties.Set("value", "test")
 
-	require.Equal(t, 440, int(properties.SizeOf()))
+	require.Equal(t, 146, int(properties.SizeOf()))
 
 	properties.Delete("value")
 
-	require.Equal(t, 296, int(properties.SizeOf()))
+	require.Equal(t, 105, int(properties.SizeOf()))
 
 	require.False(t, properties.Exists("not found"))
 	require.Equal(t, 1, properties.Len())
@@ -56,14 +56,14 @@ func TestSizeOfProperties(t *testing.T) {
 
 	// Set an initial value to force allocation
 	properties.Set("initial", 0)
-	require.Equal(t, 256, int(properties.SizeOf()))
+	require.Equal(t, 78, int(properties.SizeOf()))
 
 	// Further allocation past 8 forces a new bucket to be allocated for the backing maps in the properties struct
 	for iter := 0; iter < 8; iter++ {
 		properties.Set("test"+strconv.Itoa(iter), iter)
 	}
 
-	require.Equal(t, 1600, int(properties.SizeOf()))
+	require.Equal(t, 478, int(properties.SizeOf()))
 
 }
 
