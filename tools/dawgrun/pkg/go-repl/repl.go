@@ -15,15 +15,10 @@ import (
 	"golang.org/x/term"
 )
 
-var (
-	// Period between polls for terminal size changes.
-	// 10ms is the default, human reaction times are an order of magnitude slower than this interval,
-	// and auto generated escape sequence bytes are an order of magnitude faster than this interval.
-	SIZE_POLLING_INTERVAL = 10 * time.Millisecond
-
-	// Used by the package maintainer:
-	DEBUG = "" // a non-empty string specifies the destination file for debugging info
-)
+// Period between polls for terminal size changes.
+// 10ms is the default, human reaction times are an order of magnitude slower than this interval,
+// and auto generated escape sequence bytes are an order of magnitude faster than this interval.
+var SIZE_POLLING_INTERVAL = 10 * time.Millisecond
 
 type (
 	StatusWidgetFn  func(*Repl) string
@@ -38,9 +33,10 @@ type Repl struct {
 
 	StatusWidgets *StatusWidgetFns
 
-	history     [][]byte // simply keep everything, it doesn't matter
-	historyIdx  int      // -1 for last
-	historyFile *os.File // open history file, so we can keep appending
+	history         [][]byte // simply keep everything, it doesn't matter
+	historyIdx      int      // -1 for last
+	historyMaxLines int
+	historyFile     *os.File // open history file, so we can keep appending
 
 	phraseRe *regexp.Regexp
 
@@ -75,28 +71,30 @@ type Options struct {
 // Create a new Repl using your custom Handler.
 func NewRepl(handler Handler, opts *Options) *Repl {
 	r := &Repl{
-		handler:     handler,
-		history:     make([][]byte, 0),
-		historyIdx:  -1,
-		historyFile: nil,
-		phraseRe:    regexp.MustCompile(`([0-9a-zA-Z_\-\.]+)`),
-		reader:      newStdinReader(),
-		buffer:      nil,
-		backup:      nil,
-		prevDel:     nil,
-		filter:      nil,
-		bufferPos:   0,
-		viewStart:   0,
-		viewEnd:     -1,
-		promptRow:   -1,
-		width:       0,
-		height:      0,
-		onEnd:       nil,
-		debug:       nil,
+		handler:         handler,
+		history:         make([][]byte, 0),
+		historyIdx:      -1,
+		historyFile:     nil,
+		historyMaxLines: 1000,
+		phraseRe:        regexp.MustCompile(`([0-9a-zA-Z_\-\.]+)`),
+		reader:          newStdinReader(),
+		buffer:          nil,
+		backup:          nil,
+		prevDel:         nil,
+		filter:          nil,
+		bufferPos:       0,
+		viewStart:       0,
+		viewEnd:         -1,
+		promptRow:       -1,
+		width:           0,
+		height:          0,
+		onEnd:           nil,
+		debug:           nil,
 	}
 
-	if DEBUG != "" {
-		debug, err := os.Create(DEBUG)
+	debug := os.Getenv("REPL_DEBUG_LOG")
+	if debug != "" {
+		debug, err := os.Create(debug)
 		if err != nil {
 			panic(fmt.Errorf("error start repl (debug): %w", err))
 		}
@@ -124,6 +122,7 @@ func (r *Repl) loadOptions(opts *Options) error {
 	}
 
 	r.historyFile = historyFile
+	r.historyMaxLines = opts.HistoryMaxLines
 
 	// Load history file into the buffer
 	if err := r.loadHistory(); err != nil {
@@ -163,6 +162,15 @@ func (r *Repl) loadHistory() error {
 func (r *Repl) saveHistory() error {
 	if err := r.historyFile.Truncate(0); err != nil {
 		return fmt.Errorf("could not truncate history file: %w", err)
+	}
+
+	if _, err := r.historyFile.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("could not seek to beginning after truncate: %w", err)
+	}
+
+	// truncate history buffer before save.
+	if len(r.history) > r.historyMaxLines {
+		r.history = r.history[0:r.historyMaxLines]
 	}
 
 	historyWriter := bufio.NewWriter(r.historyFile)

@@ -3,4 +3,5 @@ go 1.25.4
 use (
 	.
 	./tools/dawgrun
+	./tools/dawgrun/pkg/go-repl
 )
