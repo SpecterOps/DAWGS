@@ -22,7 +22,7 @@ func Of[T any](templatedValue T) Size {
 	switch typedValue := any(templatedValue).(type) {
 	case string:
 		// Strings must have their inner allocation counted
-		totalSize *= Size(len(typedValue))
+		totalSize += Size(len(typedValue))
 	}
 
 	return totalSize

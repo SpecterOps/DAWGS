@@ -23,7 +23,10 @@ func TestOfAny(t *testing.T) {
 	require.Equal(t, size.Size(0x08), size.OfAny(complex64(1)))
 	require.Equal(t, size.Size(0x10), size.OfAny(complex128(2)))
 
-	require.Equal(t, size.Size(0x40), size.OfAny("test"))
+	// string header: 16
+	// string bytes: 4
+	// total: 20 == 0x14
+	require.Equal(t, size.Size(0x14), size.OfAny("test"))
 	require.Equal(t, size.Size(0x08), size.OfAny(uint(0)))
 	require.Equal(t, size.Size(0x01), size.OfAny(uint8(1)))
 	require.Equal(t, size.Size(0x02), size.OfAny(uint16(2)))
@@ -57,10 +60,14 @@ func TestOfAny(t *testing.T) {
 	require.Equal(t, size.Size(0x30), size.OfAny([]complex64{1, 2, 3}))
 	require.Equal(t, size.Size(0x48), size.OfAny([]complex128{1, 2, 3}))
 
-	require.Equal(t, size.Size(0x108), size.OfAny([]string{"a", "baa", "long string"}))
+	// string headers: 16 * 3
+	// string bytes: 1 + 3 + 11
+	// slice header: 24
+	// grand total: 87 == 0x57
+	require.Equal(t, size.Size(0x57), size.OfAny([]string{"a", "baa", "long string"}))
 	require.Equal(t, size.Size(0x1b), size.OfAny([]bool{true, false, true}))
 
-	require.Equal(t, size.Size(0x44), size.OfAny([]any{"aa", 123, false}))
+	require.Equal(t, size.Size(0x36), size.OfAny([]any{"aa", 123, false}))
 }
 
 func TestOfValueSlice(t *testing.T) {
