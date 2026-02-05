@@ -52,7 +52,7 @@ func main() {
 	handler.cmdScope = commands.NewScope()
 	handler.r = repl.NewRepl(handler, &repl.Options{
 		HistoryFilePath: path.Join(appConfigBaseDir, "history.txt"),
-		HistoryMaxLines: 10000,
+		HistoryMaxLines: 1000,
 		StatusWidgets: &repl.StatusWidgetFns{
 			Right: makeConnectionsStatusWidget(handler.cmdScope),
 		},
