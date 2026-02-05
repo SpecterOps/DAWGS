@@ -286,3 +286,12 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (s) where [] <> s.prop  return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ? 'prop' and not (n0.properties ->> 'prop') = any (array ['null', '[]']::text[])))) select s0.n0 as s from s0;
+
+-- case: match (n:NodeKind1) optional match (m:NodeKind2) where m.distinguishedname = n.unknown + m.unknown return n, m
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.&&) array [1]::int2[]), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where ((n1.properties ->> 'distinguishedname') = ((s0.n0).properties -> 'unknown') + (n1.properties -> 'unknown')) and n1.kind_ids operator (pg_catalog.&&) array [2]::int2[]), s2 as (select s0.n0 as n0, s1.n1 as n1 from s0 left outer join s1 on (s0.n0 = s1.n0)) select s2.n0 as n, s2.n1 as m from s2;
+
+-- case: optional match (n:NodeKind1) return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.&&) array [1]::int2[]) select s0.n0 as n from s0;
+
+-- case: match (n:NodeKind1) optional match (m:NodeKind2) where m.distinguishedname = n.unknown + m.unknown optional match (o:NodeKind2) where o.distinguishedname <> n.otherunknown return n, m, o
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.&&) array [1]::int2[]), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where ((n1.properties ->> 'distinguishedname') = ((s0.n0).properties -> 'unknown') + (n1.properties -> 'unknown')) and n1.kind_ids operator (pg_catalog.&&) array [2]::int2[]), s2 as (select s0.n0 as n0, s1.n1 as n1 from s0 left outer join s1 on (s0.n0 = s1.n0)), s3 as (select s2.n0 as n0, s2.n1 as n1, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s2, node n2 where ((n2.properties -> 'distinguishedname') <> ((s2.n0).properties -> 'otherunknown')) and n2.kind_ids operator (pg_catalog.&&) array [2]::int2[]), s4 as (select s2.n0 as n0, s2.n1 as n1, s3.n2 as n2 from s2 left outer join s3 on (s2.n1 = s3.n1) and (s2.n0 = s3.n0)) select s4.n0 as n, s4.n1 as m, s4.n2 as o from s4;
