@@ -3,8 +3,9 @@ module github.com/specterops/dawgs
 go 1.24.0
 
 require (
-	github.com/specterops/BloodHound v0.0.0-580f0c7776b5ab0f354c45337cc286bce7c4dffd
 	cuelang.org/go v0.15.1
+	github.com/aws/aws-sdk-go-v2/config v1.31.13
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.10
 	github.com/RoaringBitmap/roaring/v2 v2.14.4
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/axiomhq/hyperloglog v0.2.5

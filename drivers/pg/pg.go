@@ -8,9 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/bloodhound/cmd/api/src/config"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -51,7 +51,7 @@ func afterPooledConnectionRelease(conn *pgx.Conn) bool {
 	return true
 }
 
-func NewPool(cfg config.DatabaseConfiguration) (*pgxpool.Pool, error) {
+func NewPool(cfg drivers.DatabaseConfiguration) (*pgxpool.Pool, error) {
 
 	poolCtx, done := context.WithTimeout(context.Background(), poolInitConnectionTimeout)
 	defer done()
