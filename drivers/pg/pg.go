@@ -71,14 +71,14 @@ func NewPool(cfg config.DatabaseConfiguration) (*pgxpool.Pool, error) {
 	poolCfg.AfterConnect = afterPooledConnectionEstablished
 	poolCfg.AfterRelease = afterPooledConnectionRelease
 
-	poolCfg.BeforeConnect = func(ctx context.Context, poolCfg *pgx.ConnConfig) error {
-		slog.Info(fmt.Sprint("RDS credentional beforeConnect(), creating new IAM credentials"))
+	poolCfg.BeforeConnect = func(ctx context.Context, connCfg *pgx.ConnConfig) error {
+		slog.Info("RDS credential beforeConnect(), creating new IAM credentials")
 		refreshConnectionString := cfg.PostgreSQLConnectionString()
 		newPoolCfg, err := pgxpool.ParseConfig(refreshConnectionString)
 		if err != nil {
 			return err
 		}
-		poolCfg.Password = newPoolCfg.ConnConfig.Password
+		connCfg.Password = newPoolCfg.ConnConfig.Password
 		return nil
 	}
 
