@@ -62,6 +62,32 @@ type Segment struct {
 	Previous *Segment
 }
 
+func (s *Segment) Path() Path {
+	path := Path{
+		Edges: make([]Edge, 0, s.Depth()),
+	}
+
+	for cursor := s; cursor != nil; cursor = cursor.Previous {
+		if cursor.Previous != nil {
+			path.Edges = append(path.Edges, Edge{
+				ID:    cursor.Edge,
+				Start: cursor.Previous.Node,
+				End:   cursor.Node,
+			})
+		}
+	}
+
+	return path
+}
+
+func (s *Segment) Descend(node, edge uint64) *Segment {
+	return &Segment{
+		Node:     node,
+		Edge:     edge,
+		Previous: s,
+	}
+}
+
 func (s *Segment) Each(visitor func(cursor *Segment) bool) {
 	for cursor := s; cursor != nil; cursor = cursor.Previous {
 		if !visitor(cursor) {

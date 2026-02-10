@@ -34,6 +34,10 @@ func BuildAdjacencyMapGraph(adj map[uint64][]uint64) MutableDirectedGraph {
 	return digraph
 }
 
+func (s *adjacencyMapDigraph) ContainsNode(node uint64) bool {
+	return s.nodes.Contains(node)
+}
+
 func (s *adjacencyMapDigraph) AddNode(node uint64) {
 	s.nodes.Add(node)
 }

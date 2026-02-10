@@ -105,6 +105,7 @@ func AdjacentNodes(digraph DirectedGraph, node uint64, direction graph.Direction
 
 type DirectedGraph interface {
 	NumNodes() uint64
+	ContainsNode(node uint64) bool
 	EachNode(delegate func(node uint64) bool)
 	EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool)
 }

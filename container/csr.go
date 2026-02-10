@@ -68,8 +68,14 @@ func (s *csrDigraph) NumEdges() uint64 {
 	return uint64(len(s.outAdj))
 }
 
-func (s *csrDigraph) Nodes() cardinality.Duplex[uint64] {
-	return cardinality.NewBitmap64With(s.denseIdxToID...)
+func (s *csrDigraph) ContainsNode(node uint64) bool {
+	for _, storedNode := range s.denseIdxToID {
+		if node == storedNode {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *csrDigraph) EachNode(delegate func(node uint64) bool) {
