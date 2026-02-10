@@ -2,6 +2,8 @@
 
 Database Abstraction Wrapper for Graph Schemas
 
+![A Corgi Treat](logo_small.png)
+
 ## Purpose
 
 DAWGS is a collection of tools and query language helpers to enable running property graphs on vanilla PostgreSQL

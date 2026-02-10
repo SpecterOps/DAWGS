@@ -2,62 +2,58 @@ package container
 
 import (
 	"context"
-	"sync"
+	"log/slog"
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
+	"github.com/specterops/dawgs/util"
 )
 
-func FetchDirectedGraph(ctx context.Context, graphDB graph.Database, relationshipFilter graph.Criteria) (DirectedGraph, error) {
-	type anonymousEdge struct {
-		StartID graph.ID
-		EndID   graph.ID
-	}
-
+func FetchDirectedGraph(ctx context.Context, db graph.Database, criteria graph.Criteria) (DirectedGraph, error) {
 	var (
-		edgeC   = make(chan anonymousEdge, 4096)
-		mergeWG = &sync.WaitGroup{}
-		digraph = NewDirectedGraph()
+		measuref   = util.SLogMeasureFunction("FetchDirectedGraph")
+		builder    = NewCSRDigraphBuilder()
+		numResults = uint64(0)
 	)
 
-	mergeWG.Add(1)
-
-	go func() {
-		defer mergeWG.Done()
-
-		for edge := range edgeC {
-			digraph.AddEdge(edge.StartID, edge.EndID)
-		}
-	}()
-
-	if err := graphDB.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		return tx.Relationships().Filter(relationshipFilter).Query(func(results graph.Result) error {
-			for results.Next() {
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		return tx.Relationships().Filter(criteria).Query(
+			func(results graph.Result) error {
 				var (
 					startID graph.ID
 					endID   graph.ID
 				)
 
-				if err := results.Scan(&startID, &endID); err != nil {
-					return err
+				for results.Next() {
+					if err := results.Scan(&startID, &endID); err != nil {
+						return err
+					}
+
+					builder.AddEdge(startID.Uint64(), endID.Uint64())
+					numResults += 1
 				}
 
-				edgeC <- anonymousEdge{
-					StartID: startID,
-					EndID:   endID,
-				}
-			}
-
-			return results.Error()
-		}, query.Returning(query.StartID(), query.EndID()))
+				return results.Error()
+			},
+			query.Returning(
+				query.StartID(),
+				query.EndID(),
+			),
+		)
 	}); err != nil {
-		// Ensure that the edge channel is closed to prevent goroutine leaks
-		close(edgeC)
 		return nil, err
 	}
 
-	close(edgeC)
-	mergeWG.Wait()
+	digraph := builder.Build()
+
+	measuref(
+		slog.Uint64("num_nodes", digraph.NumNodes()),
+		slog.Uint64("num_edges", numResults),
+	)
 
 	return digraph, nil
+}
+
+func FetchFilteredDirectedGraph(ctx context.Context, db graph.Database, traversalKinds ...graph.Kind) (DirectedGraph, error) {
+	return FetchDirectedGraph(ctx, db, query.KindIn(query.Relationship(), traversalKinds...))
 }

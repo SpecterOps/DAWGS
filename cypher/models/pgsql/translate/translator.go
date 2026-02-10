@@ -410,7 +410,7 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.Match:
-		if err := s.translateMatch(); err != nil {
+		if err := s.translateMatch(typedExpression); err != nil {
 			s.SetError(err)
 		}
 
