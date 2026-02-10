@@ -38,7 +38,7 @@ func (s DatabaseConfiguration) PostgreSQLConnectionString() string {
 
 		dbinput := strings.TrimSuffix(cname, ".") + ":5432"
 		slog.Info("requesting auth token")
-		authenticationToken, err := auth.BuildAuthToken(context.TODO(), dbinput, "us-east-1", s.Username, cfg.Credentials)
+		authenticationToken, err := auth.BuildAuthToken(context.TODO(), dbinput, cfg.Region, s.Username, cfg.Credentials)
 		if err != nil {
 			panic("failed to create authentication token: " + err.Error())
 		}
@@ -49,7 +49,7 @@ func (s DatabaseConfiguration) PostgreSQLConnectionString() string {
 	} else if s.Connection != "" {
 		return s.Connection
 	} else {
-		return fmt.Sprintf("postgresql://%s:%s@%s/%s", s.Username, s.Secret, s.Address, s.Database)
+		return fmt.Sprintf("postgresql://%s:%s@%s/%s", s.Username, url.QueryEscape(s.Secret), s.Address, s.Database)
 	}
 }
 
