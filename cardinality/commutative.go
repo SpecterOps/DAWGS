@@ -1,61 +1,60 @@
 package cardinality
 
-type CommutativeDuplex64 struct {
-	duplexes []Duplex[uint64]
+type DuplexCommutation[T uint32 | uint64] []Duplex[T]
+
+func CommutativeOr[T uint32 | uint64](duplexes ...Duplex[T]) DuplexCommutation[T] {
+	return duplexes
 }
 
-func NewCommutativeDuplex64() *CommutativeDuplex64 {
-	return &CommutativeDuplex64{}
+func (s DuplexCommutation[T]) Or(duplexes ...Duplex[T]) DuplexCommutation[T] {
+	return append(s, duplexes...)
 }
 
-func (s *CommutativeDuplex64) orAll() Duplex[uint64] {
-	tempBitmap := NewBitmap64()
-
-	for _, nextDuplex := range s.duplexes {
-		tempBitmap.Or(nextDuplex)
-	}
-
-	return tempBitmap
-}
-
-func (s *CommutativeDuplex64) Or(duplex ...Duplex[uint64]) {
-	s.duplexes = append(s.duplexes, duplex...)
-}
-
-func (s *CommutativeDuplex64) OrInto(duplex Duplex[uint64]) {
-	for _, internalDuplex := range s.duplexes {
-		duplex.Or(internalDuplex)
-	}
-}
-
-func (s *CommutativeDuplex64) AndInto(duplex Duplex[uint64]) {
-	for _, internalDuplex := range s.duplexes {
-		duplex.And(internalDuplex)
-	}
-}
-
-func (s *CommutativeDuplex64) OrAll(other *CommutativeDuplex64) {
-	s.duplexes = append(s.duplexes, other.duplexes...)
-}
-
-func (s *CommutativeDuplex64) Cardinality() uint64 {
-	return s.orAll().Cardinality()
-}
-
-func (s *CommutativeDuplex64) Slice() []uint64 {
-	return s.orAll().Slice()
-}
-
-func (s *CommutativeDuplex64) Each(delegate func(value uint64) bool) {
-	s.orAll().Each(delegate)
-}
-
-func (s *CommutativeDuplex64) Contains(value uint64) bool {
-	for _, nextDuplex := range s.duplexes {
-		if nextDuplex.Contains(value) {
+func (s DuplexCommutation[T]) Contains(value T) bool {
+	for _, duplex := range s {
+		if duplex.Cardinality() > 0 && duplex.Contains(value) {
 			return true
 		}
 	}
 
 	return false
+}
+
+type CommutativeDuplexes[T uint32 | uint64] struct {
+	or  []DuplexCommutation[T]
+	and []DuplexCommutation[T]
+}
+
+func (s *CommutativeDuplexes[T]) Or(dc DuplexCommutation[T]) {
+	s.or = append(s.or, dc)
+}
+
+func (s *CommutativeDuplexes[T]) And(dc DuplexCommutation[T]) {
+	s.and = append(s.and, dc)
+}
+
+func (s *CommutativeDuplexes[T]) valueInOrSets(value T) bool {
+	// Search each bitwise or set. Only one set is required to contain the value.
+	for _, orSet := range s.or {
+		if orSet.Contains(value) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *CommutativeDuplexes[T]) valueInAndSets(value T) bool {
+	// Search each bitwise and set. Each and set must contain the value.
+	for _, andSet := range s.and {
+		if !andSet.Contains(value) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (s *CommutativeDuplexes[T]) Contains(value T) bool {
+	return s.valueInOrSets(value) && s.valueInAndSets(value)
 }
