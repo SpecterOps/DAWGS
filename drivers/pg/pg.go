@@ -71,15 +71,19 @@ func NewPool(cfg drivers.DatabaseConfiguration) (*pgxpool.Pool, error) {
 	poolCfg.AfterConnect = afterPooledConnectionEstablished
 	poolCfg.AfterRelease = afterPooledConnectionRelease
 
-	poolCfg.BeforeConnect = func(ctx context.Context, connCfg *pgx.ConnConfig) error {
-		slog.Info("RDS credential beforeConnect(), creating new IAM credentials")
-		refreshConnectionString := cfg.PostgreSQLConnectionString()
-		newPoolCfg, err := pgxpool.ParseConfig(refreshConnectionString)
-		if err != nil {
-			return err
+	if cfg.EnableRDSIAMAuth {
+		// Only enable the BeforeConnect handler if RDS IAM Auth is enabled
+		poolCfg.BeforeConnect = func(ctx context.Context, connCfg *pgx.ConnConfig) error {
+			slog.Debug("New Connection RDS IAM Auth")
+
+			if newPoolCfg, err := pgxpool.ParseConfig(cfg.PostgreSQLConnectionString()); err != nil {
+				return err
+			} else {
+				connCfg.Password = newPoolCfg.ConnConfig.Password
+			}
+
+			return nil
 		}
-		connCfg.Password = newPoolCfg.ConnConfig.Password
-		return nil
 	}
 
 	pool, err := pgxpool.NewWithConfig(poolCtx, poolCfg)
