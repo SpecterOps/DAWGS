@@ -168,7 +168,6 @@ func FetchTSDB(ctx context.Context, graphDB database.Instance, filter cypher.Syn
 		})
 	)
 
-	tsdb.Triplestore.Sort()
 	return tsdb, err
 }
 

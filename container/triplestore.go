@@ -1,8 +1,6 @@
 package container
 
 import (
-	"slices"
-
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
 )
@@ -60,9 +58,11 @@ func NewTriplestore() MutableTriplestore {
 }
 
 func (s *triplestore) Sort() {
-	slices.SortFunc(s.edges, func(a, b Edge) int {
-		return int(a.ID) - int(b.ID)
-	})
+	panic("not implemented")
+
+	// slices.SortFunc(s.edges, func(a, b Edge) int {
+	// 	return int(a.ID) - int(b.ID)
+	// })
 }
 
 func (s *triplestore) DeleteEdge(id uint64) {
