@@ -201,6 +201,20 @@ func TestDataType_Comparable(t *testing.T) {
 			Expected:   false,
 		},
 
+		// Array types may use the "LHS contains RHS" operator but only if their base types match
+		{
+			LeftTypes:  []DataType{IntArray},
+			Operators:  []Operator{OperatorPGArrayLHSContainsRHS},
+			RightTypes: []DataType{IntArray},
+			Expected:   true,
+		},
+		{
+			LeftTypes:  []DataType{IntArray},
+			Operators:  []Operator{OperatorPGArrayLHSContainsRHS},
+			RightTypes: []DataType{Int},
+			Expected:   false,
+		},
+
 		// Catch all for any unsupported operator
 		{
 			LeftTypes:  []DataType{Int},
