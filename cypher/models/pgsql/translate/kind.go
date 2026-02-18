@@ -17,7 +17,7 @@ func newPGKindIDMatcher(scope *Scope, treeTranslator *ExpressionTreeTranslator, 
 		treeTranslator.PushOperand(pgd.Column(binding.Identifier, pgsql.ColumnKindIDs))
 		treeTranslator.PushOperand(kindIDsLiteral)
 
-		return treeTranslator.CompleteBinaryExpression(scope, pgsql.OperatorPGArrayOverlap)
+		return treeTranslator.CompleteBinaryExpression(scope, pgsql.OperatorPGArrayLHSContainsRHS)
 
 	case pgsql.EdgeComposite, pgsql.ExpansionEdge:
 		treeTranslator.PushOperand(pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnKindID})

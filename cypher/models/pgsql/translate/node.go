@@ -54,7 +54,7 @@ func (s *Translator) translateNodePatternToStep(nodePattern *cypher.NodePattern,
 			return err
 		} else if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(bindingResult.Binding.Identifier), pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{bindingResult.Binding.Identifier, pgsql.ColumnKindIDs},
-			pgsql.OperatorPGArrayOverlap,
+			pgsql.OperatorPGArrayLHSContainsRHS,
 			kindIDsLiteral,
 		)); err != nil {
 			return err
