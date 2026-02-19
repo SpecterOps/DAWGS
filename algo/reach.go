@@ -7,8 +7,9 @@ import (
 	"github.com/specterops/dawgs/cache"
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/container"
+	"github.com/specterops/dawgs/database/v1compat"
+	"github.com/specterops/dawgs/database/v1compat/query"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
 )
 
 // reachCursor tracks the DFS state for a single component while exploring the
@@ -286,14 +287,14 @@ func (s *ReachabilityCache) XorReach(node uint64, direction graph.Direction, dup
 
 // edgesFilteredByKinds returns a query. Criteria that selects only edges whose
 // kind matches one of the supplied kinds.
-func edgesFilteredByKinds(kinds ...graph.Kind) graph.Criteria {
+func edgesFilteredByKinds(kinds ...graph.Kind) v1compat.Criteria {
 	return query.KindIn(query.Relationship(), kinds...)
 }
 
 // FetchReachabilityCache builds a ReachabilityCache for the entire directed
 // graph represented by the supplied database and criteria. The cache size is set
 // to roughly 15% of the number of nodes in the graph (rounded down).
-func FetchReachabilityCache(ctx context.Context, db graph.Database, criteria graph.Criteria) (*ReachabilityCache, error) {
+func FetchReachabilityCache(ctx context.Context, db v1compat.Database, criteria v1compat.Criteria) (*ReachabilityCache, error) {
 	if digraph, err := container.FetchDirectedGraph(ctx, db, criteria); err != nil {
 		return nil, err
 	} else {
@@ -305,6 +306,6 @@ func FetchReachabilityCache(ctx context.Context, db graph.Database, criteria gra
 // FetchFilteredReachabilityCache builds a ReachabilityCache for a graph that
 // contains only edges of the supplied kinds. It is a convenience wrapper
 // around FetchReachabilityCache that constructs the appropriate criteria.
-func FetchFilteredReachabilityCache(ctx context.Context, db graph.Database, traversalKinds ...graph.Kind) (*ReachabilityCache, error) {
+func FetchFilteredReachabilityCache(ctx context.Context, db v1compat.Database, traversalKinds ...graph.Kind) (*ReachabilityCache, error) {
 	return FetchReachabilityCache(ctx, db, edgesFilteredByKinds(traversalKinds...))
 }

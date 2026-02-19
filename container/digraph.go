@@ -41,23 +41,25 @@ func (s KindMap) FindAll(id uint64) graph.Kinds {
 	return matchedKinds
 }
 
-type DirectedGraph interface {
-	NumNodes() uint64
-	EachNode(delegate func(node uint64) bool)
-	EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool)
-}
-
 type DigraphBuilder interface {
 	AddNode(node uint64)
 	AddEdge(start, end uint64)
 	Build() DirectedGraph
 }
 
-type MutableDirectedGraph interface {
-	DirectedGraph
+func BuildGraph(constructor func() MutableDirectedGraph, adj map[uint64][]uint64) MutableDirectedGraph {
+	digraph := constructor()
 
-	AddNode(node uint64)
-	AddEdge(start, end uint64)
+	for src, outs := range adj {
+		digraph.AddNode(src)
+
+		for _, dst := range outs {
+			digraph.AddNode(dst)
+			digraph.AddEdge(src, dst)
+		}
+	}
+
+	return digraph
 }
 
 type KindDatabase struct {
@@ -99,6 +101,20 @@ func AdjacentNodes(digraph DirectedGraph, node uint64, direction graph.Direction
 	})
 
 	return nodes
+}
+
+type DirectedGraph interface {
+	NumNodes() uint64
+	ContainsNode(node uint64) bool
+	EachNode(delegate func(node uint64) bool)
+	EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool)
+}
+
+type MutableDirectedGraph interface {
+	DirectedGraph
+
+	AddNode(node uint64)
+	AddEdge(start, end uint64)
 }
 
 func Dimensions(digraph DirectedGraph, direction graph.Direction) (uint64, uint64) {

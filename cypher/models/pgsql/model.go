@@ -712,8 +712,8 @@ func AsCompoundIdentifier[T string | Identifier](parts ...T) CompoundIdentifier 
 }
 
 type TableReference struct {
-	Name    CompoundIdentifier
-	Binding models.Optional[Identifier]
+	Name  CompoundIdentifier
+	Alias models.Optional[Identifier]
 }
 
 func (s TableReference) AsExpression() Expression {

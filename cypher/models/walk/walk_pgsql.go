@@ -135,8 +135,8 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 			Branches: []pgsql.SyntaxNode{typedNode.Name},
 		}
 
-		if typedNode.Binding.Set {
-			nextCursor.AddBranches(typedNode.Binding.Value)
+		if typedNode.Alias.Set {
+			nextCursor.AddBranches(typedNode.Alias.Value)
 		}
 
 		return nextCursor, nil

@@ -6,13 +6,13 @@ import (
 
 type threadSafeDuplex[T uint32 | uint64] struct {
 	provider Duplex[T]
-	lock     *sync.Mutex
+	lock     *sync.RWMutex
 }
 
 func ThreadSafeDuplex[T uint32 | uint64](provider Duplex[T]) Duplex[T] {
 	return threadSafeDuplex[T]{
 		provider: provider,
-		lock:     &sync.Mutex{},
+		lock:     &sync.RWMutex{},
 	}
 }
 
@@ -66,34 +66,38 @@ func (s threadSafeDuplex[T]) Or(other Provider[T]) {
 }
 
 func (s threadSafeDuplex[T]) Cardinality() uint64 {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	return s.provider.Cardinality()
 }
 
 func (s threadSafeDuplex[T]) Slice() []T {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	return s.provider.Slice()
 }
 
 func (s threadSafeDuplex[T]) Contains(value T) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	return s.provider.Contains(value)
 }
 
 func (s threadSafeDuplex[T]) Each(delegate func(value T) bool) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	s.provider.Each(delegate)
 }
 
 func (s threadSafeDuplex[T]) CheckedAdd(value T) bool {
+	if s.Contains(value) {
+		return false
+	}
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -101,21 +105,21 @@ func (s threadSafeDuplex[T]) CheckedAdd(value T) bool {
 }
 
 func (s threadSafeDuplex[T]) Clone() Duplex[T] {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	return ThreadSafeDuplex(s.provider.Clone())
 }
 
 type threadSafeSimplex[T uint32 | uint64] struct {
 	provider Simplex[T]
-	lock     *sync.Mutex
+	lock     *sync.RWMutex
 }
 
 func ThreadSafeSimplex[T uint32 | uint64](provider Simplex[T]) Simplex[T] {
 	return threadSafeSimplex[T]{
 		provider: provider,
-		lock:     &sync.Mutex{},
+		lock:     &sync.RWMutex{},
 	}
 }
 
@@ -141,15 +145,15 @@ func (s threadSafeSimplex[T]) Or(other Provider[T]) {
 }
 
 func (s threadSafeSimplex[T]) Cardinality() uint64 {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	return s.provider.Cardinality()
 }
 
 func (s threadSafeSimplex[T]) Clone() Simplex[T] {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	return ThreadSafeSimplex(s.provider.Clone())
 }

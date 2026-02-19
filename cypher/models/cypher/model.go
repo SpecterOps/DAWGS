@@ -770,6 +770,12 @@ type Literal struct {
 }
 
 func NewLiteral(value any, null bool) *Literal {
+	if !null {
+		if strValue, typeOK := value.(string); typeOK {
+			return NewStringLiteral(strValue)
+		}
+	}
+
 	return &Literal{
 		Value: value,
 		Null:  null,
@@ -777,7 +783,10 @@ func NewLiteral(value any, null bool) *Literal {
 }
 
 func NewStringLiteral(value string) *Literal {
-	return NewLiteral("'"+value+"'", false)
+	return &Literal{
+		Value: "'" + value + "'",
+		Null:  false,
+	}
 }
 
 func (s *Literal) copy() *Literal {

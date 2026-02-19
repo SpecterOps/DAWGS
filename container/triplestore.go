@@ -6,9 +6,13 @@ import (
 )
 
 type Edge struct {
-	ID    uint64
-	Start uint64
-	End   uint64
+	ID    uint64 `json:"id"`
+	Start uint64 `json:"start_id"`
+	End   uint64 `json:"end_id"`
+}
+
+type Path struct {
+	Edges []Edge `json:"edges"`
 }
 
 func (s Edge) Pick(direction graph.Direction) uint64 {
@@ -25,14 +29,15 @@ type Triplestore interface {
 	NumEdges() uint64
 	EachEdge(delegate func(next Edge) bool)
 	EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool)
-
-	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore
 }
 
 type MutableTriplestore interface {
 	Triplestore
 
+	Sort()
+	AddNode(node uint64)
 	AddTriple(edge, start, end uint64)
+	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore
 }
 
 type triplestore struct {
@@ -52,12 +57,24 @@ func NewTriplestore() MutableTriplestore {
 	}
 }
 
+func (s *triplestore) Sort() {
+	panic("not implemented")
+
+	// slices.SortFunc(s.edges, func(a, b Edge) int {
+	// 	return int(a.ID) - int(b.ID)
+	// })
+}
+
 func (s *triplestore) DeleteEdge(id uint64) {
 	s.deletedEdges.Add(id)
 }
 
 func (s *triplestore) Edges() []Edge {
 	return s.edges
+}
+
+func (s *triplestore) ContainsNode(node uint64) bool {
+	return s.nodes.Contains(node)
 }
 
 func (s *triplestore) NumNodes() uint64 {
@@ -201,7 +218,7 @@ func (s *triplestore) EachAdjacentEdge(node uint64, direction graph.Direction, d
 	})
 }
 
-func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
+func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore {
 	return &triplestoreProjection{
 		origin:       s,
 		deletedNodes: deletedNodes,
@@ -215,7 +232,23 @@ type triplestoreProjection struct {
 	deletedEdges cardinality.Duplex[uint64]
 }
 
-func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
+func (s *triplestoreProjection) AddTriple(edge, start, end uint64) {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) AddNode(node uint64) {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) Sort() {
+	panic("unsupported")
+}
+
+func (s *triplestoreProjection) ContainsNode(node uint64) bool {
+	return s.origin.ContainsNode(node) && !s.deletedNodes.Contains(node)
+}
+
+func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) MutableTriplestore {
 	var (
 		allDeletedNodes = s.deletedNodes.Clone()
 		allDeletedEdges = s.deletedEdges.Clone()
