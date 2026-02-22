@@ -1,14 +1,21 @@
 package container
 
 import (
+	"slices"
+
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
 )
 
 type Edge struct {
-	ID    uint64
-	Start uint64
-	End   uint64
+	ID    uint64     `json:"id"`
+	Kind  graph.Kind `json:"kind"`
+	Start uint64     `json:"start_id"`
+	End   uint64     `json:"end_id"`
+}
+
+type Path struct {
+	Edges []Edge `json:"edges"`
 }
 
 func (s Edge) Pick(direction graph.Direction) uint64 {
@@ -25,51 +32,124 @@ type Triplestore interface {
 	NumEdges() uint64
 	EachEdge(delegate func(next Edge) bool)
 	EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool)
-
-	Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore
 }
 
 type MutableTriplestore interface {
 	Triplestore
 
-	AddTriple(edge, start, end uint64)
+	Sort()
+	AddNode(node uint64)
+	AddEdge(edge Edge)
+}
+
+func AdjacentEdges(ts Triplestore, node uint64, direction graph.Direction) []Edge {
+	var edges []Edge
+
+	ts.EachAdjacentEdge(node, direction, func(next Edge) bool {
+		edges = append(edges, next)
+		return true
+	})
+
+	return edges
 }
 
 type triplestore struct {
-	nodes        cardinality.Duplex[uint64]
-	edges        []Edge
-	deletedEdges cardinality.Duplex[uint64]
-	startIndex   map[uint64]cardinality.Duplex[uint64]
-	endIndex     map[uint64]cardinality.Duplex[uint64]
+	edges      []Edge
+	startIndex map[uint64][]uint64
+	endIndex   map[uint64][]uint64
 }
 
 func NewTriplestore() MutableTriplestore {
 	return &triplestore{
-		nodes:        cardinality.NewBitmap64(),
-		deletedEdges: cardinality.NewBitmap64(),
-		startIndex:   map[uint64]cardinality.Duplex[uint64]{},
-		endIndex:     map[uint64]cardinality.Duplex[uint64]{},
+		startIndex: map[uint64][]uint64{},
+		endIndex:   map[uint64][]uint64{},
 	}
 }
 
-func (s *triplestore) DeleteEdge(id uint64) {
-	s.deletedEdges.Add(id)
+func (s *triplestore) Sort() {
+	// Clear but preserve allocations
+	clear(s.startIndex)
+	clear(s.endIndex)
+
+	// Sort edges by ID
+	slices.SortFunc(s.edges, func(a, b Edge) int {
+		if a.ID > b.ID {
+			return 1
+		}
+
+		if a.ID < b.ID {
+			return -1
+		}
+
+		return 0
+	})
+
+	// Rebuild node to edge index lookups
+	for edgeIdx, edge := range s.edges {
+		s.startIndex[edge.Start] = append(s.startIndex[edge.Start], uint64(edgeIdx))
+		s.endIndex[edge.End] = append(s.endIndex[edge.End], uint64(edgeIdx))
+	}
 }
 
 func (s *triplestore) Edges() []Edge {
 	return s.edges
 }
 
+func (s *triplestore) ContainsNode(node uint64) bool {
+	_, hasNode := s.startIndex[node]
+
+	if hasNode {
+		return true
+	}
+
+	_, hasNode = s.endIndex[node]
+	return hasNode
+}
+
+func (s *triplestore) nodeBitmap() cardinality.Duplex[uint64] {
+	nodes := cardinality.NewBitmap64()
+
+	for nodeID := range s.startIndex {
+		nodes.Add(nodeID)
+	}
+
+	for nodeID := range s.endIndex {
+		nodes.Add(nodeID)
+	}
+
+	return nodes
+}
+
 func (s *triplestore) NumNodes() uint64 {
-	return s.nodes.Cardinality()
+	return s.nodeBitmap().Cardinality()
 }
 
 func (s *triplestore) AddNode(node uint64) {
-	s.nodes.Add(node)
+	if _, exists := s.startIndex[node]; !exists {
+		s.startIndex[node] = nil
+	}
+
+	if _, exists := s.endIndex[node]; !exists {
+		s.endIndex[node] = nil
+	}
 }
 
 func (s *triplestore) EachNode(delegate func(node uint64) bool) {
-	s.nodes.Each(delegate)
+	nodes := cardinality.NewBitmap64()
+
+	for nodeID := range s.startIndex {
+		nodes.Add(nodeID)
+
+		if !delegate(nodeID) {
+			return
+		}
+	}
+
+	for nodeID := range s.endIndex {
+		if nodes.CheckedAdd(nodeID) && !delegate(nodeID) {
+			return
+		}
+	}
 }
 
 func (s *triplestore) EachEdge(delegate func(edge Edge) bool) {
@@ -80,112 +160,96 @@ func (s *triplestore) EachEdge(delegate func(edge Edge) bool) {
 	}
 }
 
-func (s *triplestore) AddTriple(edge, start, end uint64) {
-	s.edges = append(s.edges, Edge{
-		ID:    edge,
-		Start: start,
-		End:   end,
-	})
-
+func (s *triplestore) AddEdge(edge Edge) {
+	s.edges = append(s.edges, edge)
 	edgeIdx := len(s.edges) - 1
 
-	if edgeBitmap, exists := s.startIndex[start]; exists {
-		edgeBitmap.Add(uint64(edgeIdx))
-	} else {
-		edgeBitmap = cardinality.NewBitmap64()
-		edgeBitmap.Add(uint64(edgeIdx))
-
-		s.startIndex[start] = edgeBitmap
-	}
-
-	if edgeBitmap, exists := s.endIndex[end]; exists {
-		edgeBitmap.Add(uint64(edgeIdx))
-	} else {
-		edgeBitmap = cardinality.NewBitmap64()
-		edgeBitmap.Add(uint64(edgeIdx))
-
-		s.endIndex[end] = edgeBitmap
-	}
-
-	s.nodes.Add(start, end)
+	s.startIndex[edge.Start] = append(s.startIndex[edge.Start], uint64(edgeIdx))
+	s.endIndex[edge.End] = append(s.endIndex[edge.End], uint64(edgeIdx))
 }
 
-func (s *triplestore) adjacentEdgeIndices(node uint64, direction graph.Direction) cardinality.Duplex[uint64] {
-	edgeIndices := cardinality.NewBitmap64()
-
+func (s *triplestore) adjacentEdgeIndices(node uint64, direction graph.Direction) []uint64 {
 	switch direction {
 	case graph.DirectionOutbound:
 		if outboundEdges, hasOutbound := s.startIndex[node]; hasOutbound {
-			edgeIndices.Or(outboundEdges)
+			return outboundEdges
 		}
 
 	case graph.DirectionInbound:
 		if inboundEdges, hasInbound := s.endIndex[node]; hasInbound {
-			edgeIndices.Or(inboundEdges)
+			return inboundEdges
 		}
 
 	default:
+		edgeIndices := cardinality.NewBitmap64()
+
 		if outboundEdges, hasOutbound := s.startIndex[node]; hasOutbound {
-			edgeIndices.Or(outboundEdges)
+			edgeIndices.Add(outboundEdges...)
 		}
 
 		if inboundEdges, hasInbound := s.endIndex[node]; hasInbound {
-			edgeIndices.Or(inboundEdges)
+			edgeIndices.Add(inboundEdges...)
 		}
+
+		return edgeIndices.Slice()
 	}
 
-	return edgeIndices
+	return nil
 }
 
 func (s *triplestore) AdjacentEdges(node uint64, direction graph.Direction) []uint64 {
 	var (
 		edgeIndices = s.adjacentEdgeIndices(node, direction)
-		edgeIDs     = make([]uint64, 0, edgeIndices.Cardinality())
+		edgeIDs     = make([]uint64, len(edgeIndices))
 	)
 
-	edgeIndices.Each(func(value uint64) bool {
-		edgeIDs = append(edgeIDs, s.edges[value].ID)
-		return true
-	})
+	for idx, edgeIdx := range edgeIndices {
+		edgeIDs[idx] = s.edges[edgeIdx].ID
+	}
 
 	return edgeIDs
 }
 
-func (s *triplestore) adjacent(node uint64, direction graph.Direction) cardinality.Duplex[uint64] {
+func (s *triplestore) adjacent(node uint64, direction graph.Direction) []uint64 {
 	nodes := cardinality.NewBitmap64()
 
-	s.adjacentEdgeIndices(node, direction).Each(func(edgeIndex uint64) bool {
-		if edge := s.edges[edgeIndex]; !s.deletedEdges.Contains(edge.ID) {
-			switch direction {
-			case graph.DirectionOutbound:
-				nodes.Add(edge.End)
+	for _, edgeIndex := range s.adjacentEdgeIndices(node, direction) {
+		edge := s.edges[edgeIndex]
 
-			case graph.DirectionInbound:
-				nodes.Add(edge.Start)
+		switch direction {
+		case graph.DirectionOutbound:
+			nodes.Add(edge.End)
 
-			default:
+		case graph.DirectionInbound:
+			nodes.Add(edge.Start)
+
+		default:
+			if node == edge.Start {
 				nodes.Add(edge.End)
+			} else {
 				nodes.Add(edge.Start)
 			}
 		}
+	}
 
-		return true
-	})
-
-	return nodes
+	return nodes.Slice()
 }
 
 func (s *triplestore) AdjacentNodes(node uint64, direction graph.Direction) []uint64 {
-	return s.adjacent(node, direction).Slice()
+	return s.adjacent(node, direction)
 }
 
 func (s *triplestore) EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool) {
-	s.adjacent(node, direction).Each(delegate)
+	for _, node := range s.adjacent(node, direction) {
+		if !delegate(node) {
+			break
+		}
+	}
 }
 
 func (s *triplestore) Degrees(node uint64, direction graph.Direction) uint64 {
 	if adjacent := s.adjacent(node, direction); adjacent != nil {
-		return adjacent.Cardinality()
+		return uint64(len(adjacent))
 	}
 
 	return 0
@@ -196,101 +260,9 @@ func (s *triplestore) NumEdges() uint64 {
 }
 
 func (s *triplestore) EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool) {
-	s.adjacentEdgeIndices(node, direction).Each(func(edgeIndex uint64) bool {
-		return delegate(s.edges[edgeIndex])
-	})
-}
-
-func (s *triplestore) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
-	return &triplestoreProjection{
-		origin:       s,
-		deletedNodes: deletedNodes,
-		deletedEdges: deletedEdges,
+	for _, edgeIndex := range s.adjacentEdgeIndices(node, direction) {
+		if !delegate(s.edges[edgeIndex]) {
+			break
+		}
 	}
-}
-
-type triplestoreProjection struct {
-	origin       *triplestore
-	deletedNodes cardinality.Duplex[uint64]
-	deletedEdges cardinality.Duplex[uint64]
-}
-
-func (s *triplestoreProjection) Projection(deletedNodes, deletedEdges cardinality.Duplex[uint64]) Triplestore {
-	var (
-		allDeletedNodes = s.deletedNodes.Clone()
-		allDeletedEdges = s.deletedEdges.Clone()
-	)
-
-	allDeletedNodes.Or(deletedNodes)
-	allDeletedEdges.Or(deletedEdges)
-
-	return &triplestoreProjection{
-		origin:       s.origin,
-		deletedNodes: allDeletedNodes,
-		deletedEdges: allDeletedEdges,
-	}
-}
-
-func (s *triplestoreProjection) NumNodes() uint64 {
-	count := uint64(0)
-
-	s.origin.EachNode(func(value uint64) bool {
-		if !s.deletedNodes.Contains(value) {
-			count += 1
-		}
-
-		return true
-	})
-
-	return count
-}
-
-func (s *triplestoreProjection) NumEdges() uint64 {
-	count := uint64(0)
-
-	s.origin.EachEdge(func(next Edge) bool {
-		if !s.deletedEdges.Contains(next.ID) {
-			count += 1
-		}
-
-		return true
-	})
-
-	return count
-}
-
-func (s *triplestoreProjection) EachNode(delegate func(node uint64) bool) {
-	s.origin.EachNode(func(node uint64) bool {
-		if !s.deletedNodes.Contains(node) {
-			return delegate(node)
-		}
-
-		return true
-	})
-}
-
-func (s *triplestoreProjection) EachEdge(delegate func(next Edge) bool) {
-	s.origin.EachEdge(func(next Edge) bool {
-		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.Start) {
-			return delegate(next)
-		}
-
-		return true
-	})
-}
-
-func (s *triplestoreProjection) EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool) {
-	s.origin.EachAdjacentEdge(node, direction, func(next Edge) bool {
-		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.Start) {
-			return delegate(next)
-		}
-
-		return true
-	})
-}
-
-func (s *triplestoreProjection) EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool) {
-	s.EachAdjacentEdge(node, direction, func(next Edge) bool {
-		return delegate(next.Pick(direction))
-	})
 }

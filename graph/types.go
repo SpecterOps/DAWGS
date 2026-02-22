@@ -182,7 +182,7 @@ func (s ThreadSafeKindBitmap) Clone() *ThreadSafeKindBitmap {
 
 	clone := NewThreadSafeKindBitmap()
 	for kind, kindBitmap := range s.bitmaps {
-		clone.bitmaps[kind] = kindBitmap.Clone()
+		clone.bitmaps[kind] = kindBitmap.Clone().(cardinality.Duplex[uint64])
 	}
 
 	return clone
