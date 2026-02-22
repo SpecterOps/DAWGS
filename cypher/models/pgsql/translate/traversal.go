@@ -10,9 +10,22 @@ import (
 )
 
 func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *TraversalStep) (pgsql.Query, error) {
-	nextSelect := pgsql.Select{
-		Projection: traversalStep.Projection,
-	}
+	var (
+		// Partition node constraints
+		rightJoinLocal, rightJoinExternal = partitionConstraintByLocality(
+			traversalStep.RightNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		leftJoinLocal, leftJoinExternal = partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect = pgsql.Select{
+			Projection: traversalStep.Projection,
+		}
+	)
 
 	if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
@@ -34,7 +47,7 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: traversalStep.LeftNodeJoinCondition,
+				Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
 			},
 		}, {
 			Table: pgsql.TableReference{
@@ -43,15 +56,21 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: traversalStep.RightNodeJoinCondition,
+				Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
 			},
 		}},
 	})
 
-	// Append all constraints to the where clause
-	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+	// For an inner join, PostgreSQL's optimizer can push start and end predicates into the join if they're part
+	// of the where clause below, but it requires additional planning work and may not do so reliably when multiple
+	// CTEs are involved or the planner's cost model is off.
+	//
+	// Emitting them directly in the JOIN ON constraint makes the intent unambiguous and enables the planner to
+	// apply the GIN kind index during the join, before materializing the intermediate result.
+	nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
-	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
 	// AND (n0.id <> n1.id) - ensures edges are properly constrained to the specified nodes
 	nextSelect.Where = pgsql.OptionalAnd(
 		pgsql.NewParenthetical(
@@ -70,11 +89,23 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
 	}
 
-	nextSelect := pgsql.Select{
-		Projection: traversalStep.Projection,
-	}
+	var (
+		// Partition right-node constraints: only locally-scoped terms go into JOIN ON.
+		// Constraints that reference comma-connected CTEs (e.g. s0.i0 from a prior WITH)
+		// must remain in WHERE — they are out of scope inside an explicit JOIN chain.
+		rightJoinLocal, rightJoinExternal = partitionConstraintByLocality(
+			traversalStep.RightNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect = pgsql.Select{
+			Projection: traversalStep.Projection,
+		}
+	)
 
 	if traversalStep.LeftNodeBound {
+		// prevFrame is the JOIN root here (not comma-connected), so LeftNodeConstraints
+		// can safely reference it. No partitioning needed for this branch.
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name: pgsql.CompoundIdentifier{partFrame.Previous.Binding.Identifier},
@@ -86,7 +117,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: traversalStep.LeftNodeJoinCondition,
+					Constraint: pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, traversalStep.LeftNodeJoinCondition),
 				},
 			}, {
 				Table: pgsql.TableReference{
@@ -95,11 +126,18 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: traversalStep.RightNodeJoinCondition,
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
 				},
 			}},
 		})
 	} else {
+		// In this branch prevFrame is comma-separated, so only {e0, n1} are in scope
+		// for n1's JOIN ON condition.
+		leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
 		if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
 			nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 				Source: pgsql.TableReference{
@@ -120,7 +158,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: traversalStep.LeftNodeJoinCondition,
+					Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
 				},
 			}, {
 				Table: pgsql.TableReference{
@@ -129,16 +167,23 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: traversalStep.RightNodeJoinCondition,
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
 				},
 			}},
 		})
+
+		// External left-node constraints go into WHERE.
+		nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
 	}
 
-	// Append all constraints to the where clause
-	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+	// For an inner join, PostgreSQL's optimizer can push start and end predicates into the join if they're part
+	// of the where clause below, but it requires additional planning work and may not do so reliably when multiple
+	// CTEs are involved or the planner's cost model is off.
+	//
+	// Emitting them directly in the JOIN ON constraint makes the intent unambiguous and enables the planner to
+	// apply the GIN kind index during the join, before materializing the intermediate result.
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
-	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
 
 	return pgsql.Query{
 		Body: nextSelect,
@@ -171,7 +216,7 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: traversalStep.RightNodeJoinCondition,
+					Constraint: pgsql.OptionalAnd(traversalStep.RightNodeConstraints, traversalStep.RightNodeJoinCondition),
 				},
 			}},
 		})
@@ -188,16 +233,21 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: traversalStep.RightNodeJoinCondition,
+					Constraint: pgsql.OptionalAnd(traversalStep.RightNodeConstraints, traversalStep.RightNodeJoinCondition),
 				},
 			}},
 		})
 	}
 
-	// Append all constraints to the where clause
-	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+	// Append only edge constraints to the where clause.
+	//
+	// For an inner join, PostgreSQL's optimizer can push start and end predicates into the join if they're part
+	// of the where clause below, but it requires additional planning work and may not do so reliably when multiple
+	// CTEs are involved or the planner's cost model is off.
+	//
+	// Emitting them directly in the JOIN ON constraint makes the intent unambiguous and enables the planner to
+	// apply the GIN kind index during the join, before materializing the intermediate result.
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
-	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
 
 	return pgsql.Query{
 		Body: nextSelect,

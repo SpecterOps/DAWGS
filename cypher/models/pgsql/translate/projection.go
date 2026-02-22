@@ -132,8 +132,10 @@ func buildProjectionForExpansionPath(alias pgsql.Identifier, projected *BoundIde
 func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
 	var (
 		parameterExpression    pgsql.Expression
-		edgeReferences         []pgsql.Expression
+		preExpansionEdgeRefs   []pgsql.Expression
+		postExpansionEdgeRefs  []pgsql.Expression
 		nodeReferences         []pgsql.Expression
+		seenExpansionPath      = false
 		useEdgesToPathFunction = false
 	)
 
@@ -143,21 +145,26 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 	for _, dependency := range projected.Dependencies {
 		switch dependency.DataType {
 		case pgsql.ExpansionPath:
+			seenExpansionPath = true
+			useEdgesToPathFunction = true
+
 			parameterExpression = pgsql.OptionalBinaryExpressionJoin(
-				parameterExpression,
-				pgsql.OperatorConcatenate,
-				dependency.Identifier,
+				parameterExpression, pgsql.OperatorConcatenate, dependency.Identifier,
 			)
 
+		case pgsql.EdgeComposite:
 			useEdgesToPathFunction = true
 
-		case pgsql.EdgeComposite:
-			edgeReferences = append(edgeReferences, rewriteCompositeTypeFieldReference(
+			ref := rewriteCompositeTypeFieldReference(
 				scope.CurrentFrameBinding().Identifier,
 				pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
-			))
+			)
 
-			useEdgesToPathFunction = true
+			if seenExpansionPath {
+				postExpansionEdgeRefs = append(postExpansionEdgeRefs, ref)
+			} else {
+				preExpansionEdgeRefs = append(preExpansionEdgeRefs, ref)
+			}
 
 		case pgsql.NodeComposite:
 			nodeReferences = append(nodeReferences, rewriteCompositeTypeFieldReference(
@@ -176,20 +183,26 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 	// In this case it is not appropriate to call the edges_to_path(...) function and instead a call to
 	// the corresponding nodes_to_path(...) function must be authored.
 	if useEdgesToPathFunction {
-		// It's possible for a path to contain both edge ID references and expansion references. Expansions
-		// are represented as a concatenation of arrays of edge IDs contained within the parameterExpression
-		// variable. If there are edge ID references that are a part of the path then the individual edge
-		// references must first be rewritten as an array and then further concatenated to the existing
-		// path results.
-		if len(edgeReferences) > 0 {
+		// Pre-expansion edges go LEFT of the expansion (existing prepend semantics).
+		if len(preExpansionEdgeRefs) > 0 {
 			parameterExpression = pgsql.OptionalBinaryExpressionJoin(
 				parameterExpression,
 				pgsql.OperatorConcatenate,
-				pgsql.ArrayLiteral{
-					Values:   edgeReferences,
-					CastType: pgsql.Int8Array,
-				},
+				pgsql.ArrayLiteral{Values: preExpansionEdgeRefs, CastType: pgsql.Int8Array},
 			)
+		}
+
+		// Post-expansion edges go RIGHT of the expansion — use NewBinaryExpression directly.
+		if len(postExpansionEdgeRefs) > 0 {
+			postArray := pgsql.ArrayLiteral{Values: postExpansionEdgeRefs, CastType: pgsql.Int8Array}
+
+			if parameterExpression == nil {
+				parameterExpression = postArray
+			} else {
+				parameterExpression = pgsql.NewBinaryExpression(
+					parameterExpression, pgsql.OperatorConcatenate, postArray,
+				)
+			}
 		}
 
 		return []pgsql.SelectItem{

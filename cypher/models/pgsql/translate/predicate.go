@@ -105,7 +105,7 @@ func (s *Translator) buildPatternPredicates() error {
 			)
 
 			if traversalStep.Direction == graph.DirectionBoth {
-				if hasGlobalConstraints, err := s.treeTranslator.UserConstraints.HasConstraints(traversalStepIdentifiers); err != nil {
+				if hasGlobalConstraints, err := s.treeTranslator.HasAnyConstraints(traversalStepIdentifiers); err != nil {
 					return err
 				} else if hasPredicateConstraints, err := patternPart.Constraints.HasConstraints(traversalStepIdentifiers); err != nil {
 					return err

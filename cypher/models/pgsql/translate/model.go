@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -118,6 +119,59 @@ func (s *Expansion) FlipDirection() {
 
 func (s *Expansion) CanExecuteBidirectionalSearch() bool {
 	return s.PrimerNodeConstraints != nil && s.TerminalNodeConstraints != nil
+}
+
+// flattenConjunction collects the leaf operands of a left-recursive AND chain.
+func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
+	if bin, typeOK := expr.(*pgsql.BinaryExpression); !typeOK || bin.Operator != pgsql.OperatorAnd {
+		return []pgsql.Expression{expr}
+	} else {
+		return append(flattenConjunction(bin.LOperand), flattenConjunction(bin.ROperand)...)
+	}
+}
+
+// isLocalToScope returns true only when every compound-identifier root found
+// in the expression is a member of localScope.
+func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+	isLocal := true
+
+	walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
+		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
+			if ci, ok := node.(pgsql.CompoundIdentifier); ok && len(ci) > 0 {
+				if !localScope.Contains(ci[0]) {
+					isLocal = false
+					handler.SetDone()
+				}
+			}
+		},
+	))
+
+	return isLocal
+}
+
+// partitionConstraintByLocality splits a conjunction (A AND B AND ...) into
+// two expressions: one whose every compound-identifier root is contained in
+// localScope (safe for JOIN ON), and one whose roots reference outside
+// identifiers (must stay in WHERE).
+//
+// Only top-level AND operands are split. If an expression is not a
+// BinaryExpression with OperatorAnd, the whole expression is tested as a unit.
+func partitionConstraintByLocality(expression pgsql.Expression, localScope *pgsql.IdentifierSet) (pgsql.Expression, pgsql.Expression) {
+	var (
+		joinConstraints  pgsql.Expression
+		whereConstraints pgsql.Expression
+		terms            = flattenConjunction(expression)
+	)
+
+	for _, term := range terms {
+		if isLocalToScope(term, localScope) {
+			joinConstraints = pgsql.OptionalAnd(joinConstraints, term)
+		} else {
+			whereConstraints = pgsql.OptionalAnd(whereConstraints, term)
+		}
+	}
+
+	return joinConstraints, whereConstraints
 }
 
 type TraversalStep struct {

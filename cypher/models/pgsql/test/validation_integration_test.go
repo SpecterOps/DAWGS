@@ -65,13 +65,16 @@ func TestTranslationTestCases(t *testing.T) {
 			t.Fatalf("Failed asserting graph schema: %v", err)
 		}
 
-		casesRun := 0
+		var (
+			casesRun     = 0
+			cassesPassed = 0
+		)
 
 		if testCases, err := ReadTranslationTestCases(); err != nil {
 			t.Fatal(err)
 		} else {
 			for _, testCase := range testCases {
-				t.Run(testCase.Name, func(t *testing.T) {
+				passed := t.Run(testCase.Name, func(t *testing.T) {
 					defer func() {
 						if err := recover(); err != nil {
 							debug.PrintStack()
@@ -82,10 +85,14 @@ func TestTranslationTestCases(t *testing.T) {
 					testCase.AssertLive(testCtx, t, pgConnection)
 				})
 
+				if passed {
+					cassesPassed += 1
+				}
+
 				casesRun += 1
 			}
 		}
 
-		fmt.Printf("Validated %d test cases\n", casesRun)
+		fmt.Printf("Validated %d test cases with %d passing\n", casesRun, cassesPassed)
 	}
 }

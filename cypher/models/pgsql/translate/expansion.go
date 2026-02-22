@@ -22,7 +22,7 @@ func expansionConstraints(traversalStep *TraversalStep) pgsql.Expression {
 	expansionModel := traversalStep.Expansion
 
 	return pgd.And(
-		pgd.LessThanOrEqualTo(
+		pgd.LessThan(
 			pgd.Column(expansionModel.Frame.Binding.Identifier, expansionDepth),
 			pgd.IntLiteral(expansionModel.Options.MaxDepth.GetOr(translateDefaultMaxTraversalDepth)),
 		),
