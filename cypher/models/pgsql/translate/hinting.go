@@ -137,7 +137,7 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 
 		case pgsql.OperatorAnd, pgsql.OperatorOr, pgsql.OperatorEquals, pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo,
 			pgsql.OperatorLessThan, pgsql.OperatorLessThanOrEqualTo, pgsql.OperatorIn, pgsql.OperatorJSONBFieldExists,
-			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap:
+			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap, pgsql.OperatorPGArrayLHSContainsRHS:
 			return pgsql.Boolean, nil
 
 		default:

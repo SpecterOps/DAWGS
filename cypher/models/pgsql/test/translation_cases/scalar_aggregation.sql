@@ -1,3 +1,19 @@
+-- Copyright 2026 Specter Ops, Inc.
+--
+-- Licensed under the Apache License, Version 2.0
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--     http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+--
+-- SPDX-License-Identifier: Apache-2.0
+
 -- Test cases for scalar aggregation functions with GROUP BY support
 -- Tests verify the new aggregate functions (sum, avg, min, max) work correctly
 -- and that GROUP BY clauses are properly generated for mixed scalar/aggregate queries
@@ -6,7 +22,7 @@
 -- case: MATCH (n) RETURN sum(n.age)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum(((s0.n0).properties ->> 'age'))::numeric from s0;
 
--- Simple average aggregate  
+-- Simple average aggregate
 -- case: MATCH (n) RETURN avg(n.salary)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select avg(((s0.n0).properties ->> 'salary'))::numeric from s0;
 
@@ -75,3 +91,4 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 
 -- case: MATCH (n) WITH count(n) as lim MATCH (o) RETURN o
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s1.n0)::int8 as i0 from s1), s2 as (select s0.i0 as i0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1) select s2.n1 as o from s2;
+

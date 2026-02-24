@@ -10,9 +10,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-var (
-	ErrNoAvailableArrayDataType = errors.New("data type has no direct array representation")
-)
+var ErrNoAvailableArrayDataType = errors.New("data type has no direct array representation")
 
 const (
 	StringLiteralNull       = "null"
@@ -118,7 +116,7 @@ func (s DataType) IsKnown() bool {
 
 func (s DataType) IsComparable(other DataType, operator Operator) bool {
 	switch operator {
-	case OperatorPGArrayOverlap, OperatorArrayOverlap:
+	case OperatorPGArrayOverlap, OperatorArrayOverlap, OperatorPGArrayLHSContainsRHS:
 		if !s.IsArrayType() || !other.IsArrayType() {
 			return false
 		}
