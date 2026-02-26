@@ -87,6 +87,10 @@ func (s *InMemoryKindMapper) AssertKinds(ctx context.Context, kinds graph.Kinds)
 }
 
 func (s *InMemoryKindMapper) Put(kind graph.Kind) int16 {
+	if kindID, ok := s.KindToID[kind]; ok {
+		return kindID
+	}
+
 	kindID := s.nextKindID
 	s.nextKindID += 1
 
