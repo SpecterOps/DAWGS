@@ -79,6 +79,38 @@ func formatCreatePartitionTable(name, parent string, graphID int32) string {
 	return builder.String()
 }
 
+func formatMergeJoinCondition(propertyNames []string) string {
+	builder := strings.Builder{}
+	builder.WriteString("on ")
+
+	for idx, propertyName := range propertyNames {
+		if idx > 0 {
+			builder.WriteString(" and ")
+		}
+
+		builder.WriteString("i.properties->>'")
+		builder.WriteString(propertyName)
+		builder.WriteString("' = n.properties->>'")
+		builder.WriteString(propertyName)
+		builder.WriteString("'")
+	}
+
+	return builder.String()
+}
+
+func FormatNodeMerge(graphTarget model.Graph, identityProperties []string) string {
+	return join(
+		"merge into ", graphTarget.Partitions.Node.Name, " as n using (",
+		"select $1 as graph_id, unnest($2::text[])::int2[] as kind_ids, unnest($3::text[])::int2[] as deleted_kind_ids, unnest($4::jsonb[]) as properties) ",
+		"as i ",
+		formatMergeJoinCondition(identityProperties),
+		" when matched then update set properties = n.properties || i.properties, ",
+		"kind_ids = uniq(sort(n.kind_ids - i.deleted_kind_ids || i.kind_ids)) ",
+		"when not matched then insert (graph_id, kind_ids, properties) values (i.graph_id, i.kind_ids, i.properties) ",
+		"returning n.id;",
+	)
+}
+
 func formatConflictMatcher(propertyNames []string, defaultOnConflict string) string {
 	builder := strings.Builder{}
 	builder.WriteString("on conflict (")

@@ -213,7 +213,7 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 	if graphTarget, err := s.innerTransaction.getTargetGraph(); err != nil {
 		return err
 	} else {
-		query := sql.FormatNodeUpsert(graphTarget, updates.IdentityProperties)
+		query := sql.FormatNodeMerge(graphTarget, updates.IdentityProperties)
 
 		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format(graphTarget)...); err != nil {
 			return err
@@ -249,6 +249,7 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 type NodeUpsertParameters struct {
 	IDFutures    []*sql.Future[graph.ID]
 	KindIDSlices []string
+	DeletedKinds []string
 	Properties   []pgtype.JSONB
 }
 
@@ -256,6 +257,7 @@ func NewNodeUpsertParameters(size int) *NodeUpsertParameters {
 	return &NodeUpsertParameters{
 		IDFutures:    make([]*sql.Future[graph.ID], 0, size),
 		KindIDSlices: make([]string, 0, size),
+		DeletedKinds: make([]string, 0, size),
 		Properties:   make([]pgtype.JSONB, 0, size),
 	}
 }
@@ -264,6 +266,7 @@ func (s *NodeUpsertParameters) Format(graphTarget model.Graph) []any {
 	return []any{
 		graphTarget.ID,
 		s.KindIDSlices,
+		s.DeletedKinds,
 		s.Properties,
 	}
 }
@@ -273,6 +276,12 @@ func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdat
 
 	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, update.Node.Kinds); err != nil {
 		return fmt.Errorf("unable to map kinds %w", err)
+	} else {
+		s.KindIDSlices = append(s.KindIDSlices, kindIDEncoder.Encode(mappedKindIDs))
+	}
+
+	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, update.Node.DeletedKinds); err != nil {
+		return fmt.Errorf("unable to map deleted kinds %w", err)
 	} else {
 		s.KindIDSlices = append(s.KindIDSlices, kindIDEncoder.Encode(mappedKindIDs))
 	}
