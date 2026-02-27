@@ -9,7 +9,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
 )
 
-func newPGKindIDMatcher(scope *Scope, treeTranslator *ExpressionTreeTranslator, binding *BoundIdentifier, kindIDs []int16) error {
+func newPGKindIDMatcher(scope *Scope, treeTranslator *ExpressionTreeTranslator, binding *BoundIdentifier, kindIDs []int16, isExclusive bool) error {
 	kindIDsLiteral := pgsql.NewLiteral(kindIDs, pgsql.Int2Array)
 
 	switch binding.DataType {
@@ -17,9 +17,22 @@ func newPGKindIDMatcher(scope *Scope, treeTranslator *ExpressionTreeTranslator, 
 		treeTranslator.PushOperand(pgd.Column(binding.Identifier, pgsql.ColumnKindIDs))
 		treeTranslator.PushOperand(kindIDsLiteral)
 
-		return treeTranslator.CompleteBinaryExpression(scope, pgsql.OperatorPGArrayLHSContainsRHS)
+		// In an exclusive kind match, if there are no kind IDs to be matched on,
+		// the behavior of the contains (`@>`) operator will select all nodes, which drastically differs from
+		// the overlap operator's behavior (matches nothing), so preserve the previous behavior.
+		//
+		// There shouldn't be a case in the Cypher frontend where a kind ID matcher is
+		// created without any kind IDs to match on, but `query.Kind`/`query.KindIn` can create those
+		// edge cases. We want any existing `query.Kind`/`query.KindIn` usages to match the previous behavior
+		// expectations by using overlap/`&&`, which protects from the empty RHS problem.
+		if isExclusive && len(kindIDs) > 0 {
+			return treeTranslator.CompleteBinaryExpression(scope, pgsql.OperatorPGArrayLHSContainsRHS)
+		} else {
+			return treeTranslator.CompleteBinaryExpression(scope, pgsql.OperatorPGArrayOverlap)
+		}
 
 	case pgsql.EdgeComposite, pgsql.ExpansionEdge:
+		// Edge kind checking is a strict equality, so the IsExclusive condition does not apply here.
 		treeTranslator.PushOperand(pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnKindID})
 		treeTranslator.PushOperand(pgsql.NewAnyExpressionHinted(kindIDsLiteral))
 
@@ -39,6 +52,6 @@ func (s *Translator) translateKindMatcher(kindMatcher *cypher.KindMatcher) error
 	} else if kindIDs, err := s.kindMapper.MapKinds(kindMatcher.Kinds); err != nil {
 		return fmt.Errorf("failed to translate kinds: %w", err)
 	} else {
-		return newPGKindIDMatcher(s.scope, s.treeTranslator, binding, kindIDs)
+		return newPGKindIDMatcher(s.scope, s.treeTranslator, binding, kindIDs, kindMatcher.IsExclusive)
 	}
 }

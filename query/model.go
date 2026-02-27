@@ -10,9 +10,7 @@ import (
 )
 
 func convertCriteria[T any](criteria ...graph.Criteria) []T {
-	var (
-		converted = make([]T, len(criteria))
-	)
+	converted := make([]T, len(criteria))
 
 	for idx, nextCriteria := range criteria {
 		converted[idx] = nextCriteria.(T)
@@ -67,8 +65,9 @@ func DeleteKind(reference graph.Criteria, kind graph.Kind) *cypherModel.Updating
 	return cypherModel.NewUpdatingClause(&cypherModel.Remove{
 		Items: []*cypherModel.RemoveItem{{
 			KindMatcher: &cypherModel.KindMatcher{
-				Reference: reference,
-				Kinds:     graph.Kinds{kind},
+				Reference:   reference,
+				Kinds:       graph.Kinds{kind},
+				IsExclusive: false,
 			},
 		}},
 	})
@@ -78,8 +77,9 @@ func DeleteKinds(reference graph.Criteria, kinds graph.Kinds) *cypherModel.Updat
 	return cypherModel.NewUpdatingClause(&cypherModel.Remove{
 		Items: []*cypherModel.RemoveItem{{
 			KindMatcher: &cypherModel.KindMatcher{
-				Reference: reference,
-				Kinds:     kinds,
+				Reference:   reference,
+				Kinds:       kinds,
+				IsExclusive: false,
 			},
 		}},
 	})
@@ -131,13 +131,14 @@ func DeleteProperties(reference graph.Criteria, propertyNames ...string) *cypher
 
 func Kind(reference graph.Criteria, kinds ...graph.Kind) *cypherModel.KindMatcher {
 	return &cypherModel.KindMatcher{
-		Reference: reference,
-		Kinds:     kinds,
+		Reference:   reference,
+		Kinds:       kinds,
+		IsExclusive: false,
 	}
 }
 
 func KindIn(reference graph.Criteria, kinds ...graph.Kind) *cypherModel.KindMatcher {
-	return cypherModel.NewKindMatcher(reference, kinds)
+	return cypherModel.NewKindMatcher(reference, kinds, false)
 }
 
 func NodeProperty(name string) *cypherModel.PropertyLookup {
