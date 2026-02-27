@@ -68,7 +68,13 @@ func (s bitmap64) CheckedAdd(value uint64) bool {
 }
 
 func (s bitmap64) Add(values ...uint64) {
-	s.bitmap.AddMany(values)
+	switch len(values) {
+	case 0:
+	case 1:
+		s.bitmap.Add(values[0])
+	default:
+		s.bitmap.AddMany(values)
+	}
 }
 
 func (s bitmap64) Remove(value uint64) {
