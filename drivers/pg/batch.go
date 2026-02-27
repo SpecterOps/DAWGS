@@ -250,6 +250,7 @@ type NodeUpsertParameters struct {
 	IDFutures    []*sql.Future[graph.ID]
 	KindIDSlices []string
 	Properties   []pgtype.JSONB
+	DeletedKinds []string
 }
 
 func NewNodeUpsertParameters(size int) *NodeUpsertParameters {
@@ -257,6 +258,7 @@ func NewNodeUpsertParameters(size int) *NodeUpsertParameters {
 		IDFutures:    make([]*sql.Future[graph.ID], 0, size),
 		KindIDSlices: make([]string, 0, size),
 		Properties:   make([]pgtype.JSONB, 0, size),
+		DeletedKinds: make([]string, 0, size),
 	}
 }
 
@@ -265,6 +267,7 @@ func (s *NodeUpsertParameters) Format(graphTarget model.Graph) []any {
 		graphTarget.ID,
 		s.KindIDSlices,
 		s.Properties,
+		s.DeletedKinds,
 	}
 }
 
@@ -281,6 +284,12 @@ func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdat
 		return err
 	} else {
 		s.Properties = append(s.Properties, propertiesJSONB)
+	}
+
+	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, update.Node.DeletedKinds); err != nil {
+		return fmt.Errorf("unable to map deleted kinds %w", err)
+	} else {
+		s.DeletedKinds = append(s.DeletedKinds, kindIDEncoder.Encode(mappedKindIDs))
 	}
 
 	return nil

@@ -102,12 +102,27 @@ func formatConflictMatcher(propertyNames []string, defaultOnConflict string) str
 }
 
 func FormatNodeUpsert(graphTarget model.Graph, identityProperties []string) string {
+	/*
+
+		with upsert_data (graph_id, kind_ids, properties, deleted_kinds) as
+		(select $1::int4, unnest($2::text[])::int2[], unnest($3::jsonb[]), unnest($4::text[])::int2[])
+		insert into node_1 as n
+		(graph_id, kind_ids, properties)
+		select graph_id, kind_ids, properties from upsert_data
+		on conflict ((properties->>'objectid'))
+		do update set properties = n.properties || excluded.properties, kind_ids = uniq(sort(n.kind_ids - (select deleted_kinds from upsert_data where properties->>'objectid' = excluded.properties->>'objectid') || excluded.kind_ids))
+		returning id;
+
+	*/
+
 	return join(
+		"with upsert_data (graph_id, kind_ids, properties, deleted_kinds) as ",
+		"(select $1::int4, unnest($2::text[])::int2[], unnest($3::jsonb[]), unnest($4::text[])::int2[]) ",
 		"insert into ", graphTarget.Partitions.Node.Name, " as n ",
 		"(graph_id, kind_ids, properties) ",
-		"select $1, unnest($2::text[])::int2[], unnest($3::jsonb[]) ",
+		"select graph_id, kind_ids, properties from upsert_data ",
 		formatConflictMatcher(identityProperties, "id, graph_id"),
-		"do update set properties = n.properties || excluded.properties, kind_ids = uniq(sort(n.kind_ids || excluded.kind_ids)) ",
+		"do update set properties = n.properties || excluded.properties, kind_ids = uniq(sort(n.kind_ids - (select deleted_kinds from upsert_data where properties->>'objectid' = excluded.properties->>'objectid') || excluded.kind_ids)) ",
 		"returning id;",
 	)
 }
