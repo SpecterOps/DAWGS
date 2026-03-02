@@ -3,6 +3,7 @@ package pgsql
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"reflect"
 
@@ -53,6 +54,10 @@ func MapStringAnyToJSONB(values map[string]any) (pgtype.JSONB, error) {
 
 func PropertiesToJSONB(properties *graph.Properties) (pgtype.JSONB, error) {
 	return MapStringAnyToJSONB(properties.MapOrEmpty())
+}
+
+func DeletedPropertiesToString(properties *graph.Properties) string {
+	return "{" + strings.Join(properties.DeletedProperties(), ",") + "}"
 }
 
 func JSONBToProperties(jsonb pgtype.JSONB) (*graph.Properties, error) {

@@ -283,6 +283,9 @@ type Batch interface {
 	// exist, created.
 	UpdateNodeBy(update NodeUpdate) error
 
+	// Updates nodes by ID
+	UpdateNodes(nodes []*Node) error
+
 	// TODO: Existing batch logic expects this to perform an upsert on conficts with (start_id, end_id, kind). This is incorrect and should be refactored
 	CreateRelationship(relationship *Relationship) error
 

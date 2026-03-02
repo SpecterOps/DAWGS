@@ -16,6 +16,10 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+const (
+	LargeUpdateThreshold = 1_000_000
+)
+
 type Int2ArrayEncoder struct {
 	buffer *bytes.Buffer
 }
@@ -43,6 +47,7 @@ type batch struct {
 	nodeDeletionBuffer         []graph.ID
 	relationshipDeletionBuffer []graph.ID
 	nodeCreateBuffer           []*graph.Node
+	nodeUpdateBuffer           []*graph.Node
 	nodeUpdateByBuffer         []graph.NodeUpdate
 	relationshipCreateBuffer   []*graph.Relationship
 	relationshipUpdateByBuffer []graph.RelationshipUpdate
@@ -87,6 +92,27 @@ func (s *batch) Relationships() graph.RelationshipQuery {
 func (s *batch) UpdateNodeBy(update graph.NodeUpdate) error {
 	s.nodeUpdateByBuffer = append(s.nodeUpdateByBuffer, update)
 	return s.tryFlush(s.batchWriteSize)
+}
+
+// TODO: test COPY ... FROM ... with MERGE INTO ...
+func (s *batch) largeUpdate(_ []*graph.Node) error {
+	return nil
+}
+
+func (s *batch) UpdateNodes(nodes []*graph.Node) error {
+	if len(nodes) > LargeUpdateThreshold {
+		return s.largeUpdate(nodes)
+	} else {
+		for _, node := range nodes {
+
+			s.nodeUpdateBuffer = append(s.nodeUpdateBuffer, node)
+			if err := s.tryFlush(s.batchWriteSize); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *batch) flushNodeDeleteBuffer() error {
@@ -243,6 +269,101 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 	}
 
 	s.nodeUpdateByBuffer = s.nodeUpdateByBuffer[:0]
+	return nil
+}
+
+func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
+	parameters := NewNodeUpdateParameters(len(nodes))
+
+	if err := parameters.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
+		return err
+	}
+
+	if graphTarget, err := s.innerTransaction.getTargetGraph(); err != nil {
+		return err
+	} else {
+		query := sql.FormatNodesUpdate(graphTarget)
+
+		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format()...); err != nil {
+			return err
+		} else {
+			rows.Close()
+
+			return rows.Err()
+		}
+	}
+}
+
+func (s *batch) tryFlushNodeUpdateBuffer() error {
+	if err := s.flushNodeUpdateBatch(s.nodeUpdateBuffer); err != nil {
+		return err
+	}
+
+	s.nodeUpdateBuffer = s.nodeUpdateBuffer[:0]
+	return nil
+}
+
+type NodeUpdateParameters struct {
+	NodeIDs           []graph.ID
+	KindSlices        []string
+	DeletedKindSlices []string
+	Properties        []pgtype.JSONB
+	DeletedProperties []string
+}
+
+func NewNodeUpdateParameters(size int) *NodeUpdateParameters {
+	return &NodeUpdateParameters{
+		NodeIDs:           make([]graph.ID, 0, size),
+		KindSlices:        make([]string, 0, size),
+		DeletedKindSlices: make([]string, 0, size),
+		Properties:        make([]pgtype.JSONB, 0, size),
+		DeletedProperties: make([]string, 0, size),
+	}
+}
+
+func (s *NodeUpdateParameters) Format() []any {
+	return []any{
+		s.NodeIDs,
+		s.KindSlices,
+		s.DeletedKindSlices,
+		s.Properties,
+		s.DeletedProperties,
+	}
+}
+
+func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	s.NodeIDs = append(s.NodeIDs, node.ID)
+
+	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
+		return fmt.Errorf("unable to map kinds %w", err)
+	} else {
+		s.KindSlices = append(s.KindSlices, kindIDEncoder.Encode(mappedKindIDs))
+	}
+
+	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, node.DeletedKinds); err != nil {
+		return fmt.Errorf("unable to map kinds %w", err)
+	} else {
+		s.DeletedKindSlices = append(s.DeletedKindSlices, kindIDEncoder.Encode(mappedKindIDs))
+	}
+
+	if propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties); err != nil {
+		return err
+	} else {
+		s.Properties = append(s.Properties, propertiesJSONB)
+	}
+
+	s.DeletedProperties = append(s.DeletedProperties, pgsql.DeletedPropertiesToString(node.Properties))
+
+	return nil
+}
+
+func (s *NodeUpdateParameters) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	for _, node := range nodes {
+		if err := s.Append(ctx, node, schemaManager, kindIDEncoder); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -497,6 +618,12 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 func (s *batch) tryFlush(batchWriteSize int) error {
 	if len(s.nodeUpdateByBuffer) > batchWriteSize {
 		if err := s.tryFlushNodeUpdateByBuffer(); err != nil {
+			return err
+		}
+	}
+
+	if len(s.nodeUpdateBuffer) > batchWriteSize {
+		if err := s.tryFlushNodeUpdateBuffer(); err != nil {
 			return err
 		}
 	}

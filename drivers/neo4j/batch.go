@@ -55,6 +55,11 @@ func (s *batchTransaction) UpdateNodeBy(update graph.NodeUpdate) error {
 	return nil
 }
 
+func (s *batchTransaction) UpdateNodes(nodes []*graph.Node) error {
+	panic("unimplemented")
+	return nil
+}
+
 func (s *batchTransaction) UpdateRelationshipBy(update graph.RelationshipUpdate) error {
 	if s.relationshipUpdateByBuffer = append(s.relationshipUpdateByBuffer, update); len(s.relationshipUpdateByBuffer) >= s.batchWriteSize {
 		return s.flushRelationshipUpdates()

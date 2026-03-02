@@ -101,6 +101,45 @@ func formatConflictMatcher(propertyNames []string, defaultOnConflict string) str
 	return builder.String()
 }
 
+func FormatNodesUpdate(graphTarget model.Graph) string {
+
+	/*
+		TODO: clean up
+
+		update node_1 as n
+		set
+		  kind_ids = sort (uniq (kind_ids - u.deleted_kinds || u.added_kinds)),
+		  properties = n.properties - u.deleted_properties || u.properties
+		from
+		  (
+		    select
+		      unnest(:IDS::text[])::int8 as id,
+		      unnest(:KINDS::text[])::int2[] as added_kinds,
+		      unnest(:DELETED_KINDS::text[])::int2[] as deleted_kinds,
+		      unnest(:PROPERTIES::jsonb[]) as properties,
+			  unnest(:DELETED_PROPERTIES::text[])::text[] as deleted_properties
+		  ) as u
+		where
+		  n.id = u.id;
+
+	*/
+
+	return join(
+		"update ", graphTarget.Partitions.Node.Name, " as n ",
+		"set ",
+		" kind_ids = sort (uniq (kind_ids - u.deleted_kinds || u.added_kinds)), ",
+		" properties = n.properties - u.deleted_properties || u.properties ",
+		"from ",
+		" (select ",
+		"  unnest($1::text[])::int8 as id, ",
+		"  unnest($2::text[])::int2[] as added_kinds, ",
+		"  unnest($3::text[])::int2[] as deleted_kinds, ",
+		"  unnest($4::jsonb[]) as properties, ",
+		"  unnest($5::text[])::text[] as deleted_properties) as u ",
+		"where n.id = u.id ",
+	)
+}
+
 func FormatNodeUpsert(graphTarget model.Graph, identityProperties []string) string {
 	return join(
 		"insert into ", graphTarget.Partitions.Node.Name, " as n ",

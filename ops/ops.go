@@ -598,3 +598,17 @@ func ParallelFetchNodes(ctx context.Context, db graph.Database, criteria graph.C
 		return parallelFetchNodes(ctx, db, largestNodeID, criteria, numWorkers)
 	}
 }
+
+/*
+UpdateNodes batch updates nodes by node ID.
+This should be the default tool for updating a collection of nodes from memory.
+*/
+func UpdateNodes(ctx context.Context, graphDB graph.Database, nodes []*graph.Node) error {
+	if err := graphDB.BatchOperation(ctx, func(batch graph.Batch) error {
+		return batch.UpdateNodes(nodes)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
