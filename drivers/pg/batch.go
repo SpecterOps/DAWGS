@@ -100,15 +100,11 @@ func (s *batch) largeUpdate(_ []*graph.Node) error {
 }
 
 func (s *batch) UpdateNodes(nodes []*graph.Node) error {
-	if len(nodes) > LargeUpdateThreshold {
-		return s.largeUpdate(nodes)
-	} else {
-		for _, node := range nodes {
+	for _, node := range nodes {
 
-			s.nodeUpdateBuffer = append(s.nodeUpdateBuffer, node)
-			if err := s.tryFlush(s.batchWriteSize); err != nil {
-				return err
-			}
+		s.nodeUpdateBuffer = append(s.nodeUpdateBuffer, node)
+		if err := s.tryFlush(s.batchWriteSize); err != nil {
+			return err
 		}
 	}
 
