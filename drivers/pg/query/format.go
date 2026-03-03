@@ -127,7 +127,7 @@ func FormatNodesUpdate(graphTarget model.Graph) string {
 	return join(
 		"update ", graphTarget.Partitions.Node.Name, " as n ",
 		"set ",
-		" kind_ids = sort (uniq (kind_ids - u.deleted_kinds || u.added_kinds)), ",
+		" kind_ids = uniq(sort(kind_ids - u.deleted_kinds || u.added_kinds)), ",
 		" properties = n.properties - u.deleted_properties || u.properties ",
 		"from ",
 		" (select ",
