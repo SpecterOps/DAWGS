@@ -141,7 +141,7 @@ func (s *DatabaseSwitch) WriteTransaction(ctx context.Context, txDelegate Transa
 	}
 }
 
-func (s *DatabaseSwitch) BatchOperation(ctx context.Context, batchDelegate BatchDelegate) error {
+func (s *DatabaseSwitch) BatchOperation(ctx context.Context, batchDelegate BatchDelegate, options ...BatchOption) error {
 	if internalCtx, err := s.newInternalContext(ctx); err != nil {
 		return err
 	} else {
@@ -150,7 +150,7 @@ func (s *DatabaseSwitch) BatchOperation(ctx context.Context, batchDelegate Batch
 		s.currentDBLock.RLock()
 		defer s.currentDBLock.RUnlock()
 
-		return s.currentDB.BatchOperation(internalCtx, batchDelegate)
+		return s.currentDB.BatchOperation(internalCtx, batchDelegate, options...)
 	}
 }
 
