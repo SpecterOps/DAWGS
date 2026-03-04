@@ -1,6 +1,7 @@
 package graph_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
@@ -58,6 +59,42 @@ func Test_StripAllPropertiesExcept(t *testing.T) {
 			except: nil,
 			assertions: func(t *testing.T, node *graph.Node) {
 				assert.Equal(t, 0, node.Properties.Len())
+			},
+		},
+		{
+			name: "respects deleted properties",
+			setup: func() *graph.Node {
+				node := graph.NewNode(graph.ID(1), graph.NewProperties())
+				node.Properties.Delete("key")
+				return node
+			},
+			except: []string{"key"},
+			assertions: func(t *testing.T, node *graph.Node) {
+				deleted := node.Properties.DeletedProperties()
+				assert.Equal(t, 1, len(deleted))
+				assert.True(t, slices.Contains(deleted, "key"))
+			},
+		},
+		{
+			name: "respects deleted properties 2",
+			setup: func() *graph.Node {
+				node := graph.NewNode(graph.ID(1), graph.NewProperties())
+				node.Properties.Set("hello", "value1")
+				node.Properties.Set("loremipsum", "value2")
+				node.Properties.Delete("key1")
+				node.Properties.Delete("key2")
+				node.Properties.Delete("key3")
+				return node
+			},
+			except: []string{"hello", "world", "key1", "key2"},
+			assertions: func(t *testing.T, node *graph.Node) {
+				deleted := node.Properties.DeletedProperties()
+				assert.Equal(t, 2, len(deleted))
+				assert.True(t, slices.Contains(deleted, "key1"))
+				assert.True(t, slices.Contains(deleted, "key2"))
+				assert.False(t, node.Properties.Exists("loremipsum"))
+				assert.True(t, node.Properties.Exists("hello"))
+				assert.Equal(t, "value1", node.Properties.Get("hello").Any())
 			},
 		},
 	}
