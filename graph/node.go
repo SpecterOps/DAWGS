@@ -112,6 +112,10 @@ func (s *Node) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonNode)
 }
 
+/*
+StripAllPropertiesExcept removes all properties from the node except for the ones specified in the except list.
+Deleted properties are also removed from the node, except for the ones specified in the except list.
+*/
 func (s *Node) StripAllPropertiesExcept(except ...string) {
 	newProperties := NewProperties()
 
