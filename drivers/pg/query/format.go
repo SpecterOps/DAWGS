@@ -102,28 +102,6 @@ func formatConflictMatcher(propertyNames []string, defaultOnConflict string) str
 }
 
 func FormatNodesUpdate(graphTarget model.Graph) string {
-
-	/*
-		TODO: clean up
-
-		update node_1 as n
-		set
-		  kind_ids = sort (uniq (kind_ids - u.deleted_kinds || u.added_kinds)),
-		  properties = n.properties - u.deleted_properties || u.properties
-		from
-		  (
-		    select
-		      unnest(:IDS::text[])::int8 as id,
-		      unnest(:KINDS::text[])::int2[] as added_kinds,
-		      unnest(:DELETED_KINDS::text[])::int2[] as deleted_kinds,
-		      unnest(:PROPERTIES::jsonb[]) as properties,
-			  unnest(:DELETED_PROPERTIES::text[])::text[] as deleted_properties
-		  ) as u
-		where
-		  n.id = u.id;
-
-	*/
-
 	return join(
 		"update ", graphTarget.Partitions.Node.Name, " as n ",
 		"set ",
@@ -136,7 +114,35 @@ func FormatNodesUpdate(graphTarget model.Graph) string {
 		"  unnest($3::text[])::int2[] as deleted_kinds, ",
 		"  unnest($4::jsonb[]) as properties, ",
 		"  unnest($5::text[])::text[] as deleted_properties) as u ",
-		"where n.id = u.id ",
+		"where n.id = u.id; ",
+	)
+}
+
+// NodeUpdateStagingTable is the name of the temporary staging table used by largeUpdate.
+const NodeUpdateStagingTable = "node_update_staging"
+
+// NodeUpdateStagingColumns lists the columns (in order) written by a COPY FROM during largeUpdate.
+var NodeUpdateStagingColumns = []string{"id", "added_kinds", "deleted_kinds", "properties", "deleted_props"}
+
+func FormatCreateNodeUpdateStagingTable(stagingTable string) string {
+	return join(
+		"create temp table if not exists ", stagingTable, " (",
+		"id bigint, ",
+		"added_kinds text, ",
+		"deleted_kinds text, ",
+		"properties text, ",
+		"deleted_props text",
+		") on commit drop;",
+	)
+}
+
+func FormatMergeNodeLargeUpdate(graphTarget model.Graph, stagingTable string) string {
+	return join(
+		"merge into ", graphTarget.Partitions.Node.Name, " as n ",
+		"using ", stagingTable, " as u on n.id = u.id ",
+		"when matched then update set ",
+		"kind_ids = uniq(sort(n.kind_ids - u.deleted_kinds::int2[] || u.added_kinds::int2[])), ",
+		"properties = n.properties - u.deleted_props::text[] || u.properties::jsonb;",
 	)
 }
 

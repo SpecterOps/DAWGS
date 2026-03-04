@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/model"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	LargeUpdateThreshold = 1_000_000
+	LargeNodeUpdateThreshold = 1_000_000
 )
 
 type Int2ArrayEncoder struct {
@@ -94,12 +95,110 @@ func (s *batch) UpdateNodeBy(update graph.NodeUpdate) error {
 	return s.tryFlush(s.batchWriteSize)
 }
 
-// TODO: test COPY ... FROM ... with MERGE INTO ...
-func (s *batch) largeUpdate(_ []*graph.Node) error {
+// largeUpdate performs a bulk node update using PostgreSQL's COPY FROM to stream
+// nodes into a temporary staging table and then MERGE INTO the live node partition.
+// This path is more efficient than a parameterised UPDATE for very large batches
+// (see LargeUpdateThreshold).
+func (s *batch) largeUpdate(nodes []*graph.Node) error {
+	tx, err := s.innerTransaction.conn.Begin(s.ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(s.ctx, sql.FormatCreateNodeUpdateStagingTable(sql.NodeUpdateStagingTable)); err != nil {
+		return fmt.Errorf("creating node update staging table: %w", err)
+	}
+
+	nodeRows := NewLargeNodeUpdateRows(len(nodes))
+	if err := nodeRows.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
+		return err
+	}
+
+	// Stream the rows into the staging table via COPY FROM.
+	if _, err := tx.Conn().CopyFrom(
+		s.ctx,
+		pgx.Identifier{sql.NodeUpdateStagingTable},
+		sql.NodeUpdateStagingColumns,
+		pgx.CopyFromRows(nodeRows.Rows()),
+	); err != nil {
+		return fmt.Errorf("copying nodes into staging table: %w", err)
+	}
+
+	graphTarget, err := s.innerTransaction.getTargetGraph()
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(s.ctx, sql.FormatMergeNodeLargeUpdate(graphTarget, sql.NodeUpdateStagingTable)); err != nil {
+		return fmt.Errorf("merging node updates from staging table: %w", err)
+	}
+
+	if err := tx.Commit(s.ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// LargeNodeUpdateRows accumulates encoded node rows for bulk loading via COPY FROM.
+// The column order matches sql.NodeUpdateStagingColumns.
+type LargeNodeUpdateRows struct {
+	rows [][]any
+}
+
+func NewLargeNodeUpdateRows(size int) *LargeNodeUpdateRows {
+	return &LargeNodeUpdateRows{
+		rows: make([][]any, 0, size),
+	}
+}
+
+func (s *LargeNodeUpdateRows) Rows() [][]any {
+	return s.rows
+}
+
+func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	addedKindIDs, err := schemaManager.AssertKinds(ctx, node.Kinds)
+	if err != nil {
+		return fmt.Errorf("mapping added kinds for node %d: %w", node.ID, err)
+	}
+
+	deletedKindIDs, err := schemaManager.AssertKinds(ctx, node.DeletedKinds)
+	if err != nil {
+		return fmt.Errorf("mapping deleted kinds for node %d: %w", node.ID, err)
+	}
+
+	propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties)
+	if err != nil {
+		return fmt.Errorf("encoding properties for node %d: %w", node.ID, err)
+	}
+
+	s.rows = append(s.rows, []any{
+		node.ID.Int64(),
+		kindIDEncoder.Encode(addedKindIDs),
+		kindIDEncoder.Encode(deletedKindIDs),
+		string(propertiesJSONB.Bytes),
+		pgsql.DeletedPropertiesToString(node.Properties),
+	})
+
+	return nil
+}
+
+// AppendAll encodes every node in the slice and appends its row to the accumulator.
+func (s *LargeNodeUpdateRows) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	for _, node := range nodes {
+		if err := s.Append(ctx, node, schemaManager, kindIDEncoder); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (s *batch) UpdateNodes(nodes []*graph.Node) error {
+	if len(nodes) > LargeNodeUpdateThreshold {
+		return s.largeUpdate(nodes)
+	}
+
 	for _, node := range nodes {
 
 		s.nodeUpdateBuffer = append(s.nodeUpdateBuffer, node)
