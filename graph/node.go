@@ -115,6 +115,8 @@ func (s *Node) MarshalJSON() ([]byte, error) {
 /*
 StripAllPropertiesExcept removes all properties from the node except for the ones specified in the except list.
 Deleted properties are also removed from the node, except for the ones specified in the except list.
+The use case for this function is if you have fully hydrated nodes in memory,
+but only want to update a few properties it is most efficient to strip all properties except for the ones you want to update.
 */
 func (s *Node) StripAllPropertiesExcept(except ...string) {
 	newProperties := NewProperties()
