@@ -606,7 +606,7 @@ This should be the default tool for updating a collection of nodes from memory.
 func UpdateNodes(ctx context.Context, graphDB graph.Database, nodes []*graph.Node, batchSize ...int) error {
 	options := func(_ *graph.BatchConfig) {}
 
-	if batchSize != nil {
+	if len(batchSize) > 0 {
 		options = graph.WithBatchSize(batchSize[0])
 	}
 
