@@ -21,6 +21,9 @@ const (
 	// Unique node properties are both covered by a compatible index and unique, making them highly selective
 	selectivityWeightUniqueNodeProperty = 100
 
+	// Bound identifiers are heavily weighted for preserving join order integrity
+	selectivityWeightBoundIdentifier = 700
+
 	// Operators that narrow the search space are given a higher selectivity
 	selectivityWeightNarrowSearch = 30
 
@@ -189,7 +192,7 @@ func MeasureSelectivity(scope *Scope, owningIdentifierBound bool, expression pgs
 
 	// If the identifier is reified at this stage in the query then it's already selected
 	if owningIdentifierBound {
-		visitor.addSelectivity(selectivityWeightNarrowSearch)
+		visitor.addSelectivity(selectivityWeightBoundIdentifier)
 	}
 
 	if expression != nil {
