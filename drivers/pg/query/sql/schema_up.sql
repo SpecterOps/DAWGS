@@ -92,10 +92,11 @@ $$;
 -- contain a disjunction of kinds for creating node subsets without requiring edges.
 create table if not exists node
 (
-  id         bigserial  not null,
-  graph_id   integer    not null,
-  kind_ids   smallint[] not null,
-  properties jsonb      not null,
+  id         bigserial    not null,
+  graph_id   integer      not null,
+  kind_ids   smallint[]   not null,
+  properties jsonb        not null,
+  created_at timestamptz  not null default now(),
 
   primary key (id, graph_id),
   foreign key (graph_id) references graph (id) on delete cascade
@@ -133,12 +134,13 @@ $$;
 -- The edge table is a partitioned table view that partitions over the graph ID that each edge belongs to.
 create table if not exists edge
 (
-  id         bigserial not null,
-  graph_id   integer   not null,
-  start_id   bigint    not null,
-  end_id     bigint    not null,
-  kind_id    smallint  not null,
-  properties jsonb     not null,
+  id         bigserial   not null,
+  graph_id   integer     not null,
+  start_id   bigint      not null,
+  end_id     bigint      not null,
+  kind_id    smallint    not null,
+  properties jsonb       not null,
+  created_at timestamptz not null default now(),
 
   primary key (id, graph_id),
   foreign key (graph_id) references graph (id) on delete cascade,
@@ -146,13 +148,44 @@ create table if not exists edge
   unique (graph_id, start_id, end_id, kind_id)
 ) partition by list (graph_id);
 
+-- Deletion log tables for temporal graph reconstruction. These capture the full state of deleted rows so that
+-- historical graph snapshots can be materialized on demand.
+create table if not exists node_deletion_log
+(
+  id         bigserial   not null primary key,
+  graph_id   integer     not null,
+  node_id    bigint      not null,
+  kind_ids   smallint[]  not null,
+  properties jsonb       not null,
+  created_at timestamptz not null,
+  deleted_at timestamptz not null default now()
+);
+
+create table if not exists edge_deletion_log
+(
+  id         bigserial   not null primary key,
+  graph_id   integer     not null,
+  edge_id    bigint      not null,
+  start_id   bigint      not null,
+  end_id     bigint      not null,
+  kind_id    smallint    not null,
+  properties jsonb       not null,
+  created_at timestamptz not null,
+  deleted_at timestamptz not null default now()
+);
+
 -- delete_node_edges is a trigger and associated plpgsql function to cascade delete edges when attached nodes are
 -- deleted. While this could be done with a foreign key relationship, it would scope the cascade delete to individual
 -- node partitions and therefore require the graph_id value of each node as part of the delete statement.
+-- The CTE also logs the deleted edges to the edge_deletion_log for temporal reconstruction.
 create or replace function delete_node_edges() returns trigger as
 $$
 begin
-  delete from edge where start_id = OLD.id or end_id = OLD.id;
+  with deleted as (
+    delete from edge where start_id = OLD.id or end_id = OLD.id returning *
+  )
+  insert into edge_deletion_log (graph_id, edge_id, start_id, end_id, kind_id, properties, created_at)
+  select graph_id, id, start_id, end_id, kind_id, properties, created_at from deleted;
   return null;
 end
 $$
