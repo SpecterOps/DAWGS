@@ -339,7 +339,6 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format(graphTarget)...); err != nil {
 			return err
 		} else {
-			// TODO: rows.Err() is never called, silently swallowing errors
 			defer rows.Close()
 
 			idFutureIndex := 0
@@ -350,6 +349,10 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 				}
 
 				idFutureIndex++
+			}
+
+			if rows.Err() != nil {
+				return rows.Err()
 			}
 		}
 	}
