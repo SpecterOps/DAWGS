@@ -1,8 +1,9 @@
-package graph
+package graph_test
 
 import (
 	"testing"
 
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,8 +35,8 @@ func TestWithBatchSize(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			config := &BatchConfig{}
-			opt := WithBatchSize(tc.batchSize)
+			config := &graph.BatchConfig{}
+			opt := graph.WithBatchSize(tc.batchSize)
 			opt(config)
 			assert.Equal(t, tc.expectedSize, config.BatchSize)
 		})
