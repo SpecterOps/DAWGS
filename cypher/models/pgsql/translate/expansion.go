@@ -949,9 +949,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		expansion.ProjectionStatement.Where = projectionConstraints
 	}
 
-	return pgsql.Query{
-		Body: expansion.Build(expansionModel.Frame.Binding.Identifier),
-	}, nil
+	return expansion.Build(expansionModel.Frame.Binding.Identifier), nil
 }
 
 func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep) []pgsql.SelectItem {
@@ -1050,13 +1048,19 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStep *Traversa
 		err                   error
 	)
 
-	// Constraints that target the terminal node may crop up here where it's finally in scope. Additionally,
-	// only accept paths that are marked satisfied from the recursive descent CTE
-	if expansionModel.TerminalNodeSatisfactionProjection != nil {
-		if constraints, err = s.treeTranslator.ConsumeConstraintsFromVisibleSet(expansionModel.Frame.Visible); err != nil {
-			return projectionConstraints, err
-		} else if projectionConstraints, err = ConjoinExpressions(s.kindMapper, []pgsql.Expression{pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionSatisfied}, constraints.Expression}); err != nil {
-			return projectionConstraints, err
+	if constraints, err = s.treeTranslator.ConsumeConstraintsFromVisibleSet(expansionModel.Frame.Visible); err != nil {
+		return projectionConstraints, err
+	} else {
+		if expansionModel.TerminalNodeSatisfactionProjection != nil {
+			expressions := []pgsql.Expression{
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionSatisfied},
+				constraints.Expression,
+			}
+			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, expressions); err != nil {
+				return projectionConstraints, err
+			}
+		} else {
+			projectionConstraints = constraints.Expression
 		}
 	}
 
