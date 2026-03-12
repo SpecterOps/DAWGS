@@ -351,8 +351,8 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 				idFutureIndex++
 			}
 
-			if rows.Err() != nil {
-				return rows.Err()
+			if err := rows.Err(); err != nil {
+				return err
 			}
 		}
 	}
