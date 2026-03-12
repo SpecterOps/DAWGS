@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/graph"
@@ -228,7 +231,117 @@ func (s nodeUpdateByMap) add(update graph.NodeUpdate) {
 	}
 }
 
-func cypherBuildNodeUpdateQueryBatch(updates []graph.NodeUpdate) ([]string, []map[string]any) {
+func nodeToNodeUpdateKey(digester *xxhash.Digest, node *graph.Node) uint64 {
+	digester.Reset()
+
+	var (
+		kindSet     = map[string]struct{}{}
+		digestKinds = func() {
+			sortedKinds := make([]string, 0, len(kindSet))
+
+			for nextKind := range maps.Keys(kindSet) {
+				sortedKinds = append(sortedKinds, nextKind)
+			}
+
+			slices.Sort(sortedKinds)
+
+			for _, nextKind := range sortedKinds {
+				digester.WriteString(nextKind)
+			}
+
+			clear(kindSet)
+		}
+	)
+
+	for _, addedKindStr := range node.AddedKinds.Strings() {
+		kindSet[addedKindStr] = struct{}{}
+	}
+
+	digestKinds()
+
+	for _, removedKindStr := range node.AddedKinds.Strings() {
+		kindSet[removedKindStr] = struct{}{}
+	}
+
+	digestKinds()
+
+	return digester.Sum64()
+}
+
+type nodeUpdateBatch struct {
+	nodeKindsToAdd    graph.Kinds
+	nodeKindsToRemove graph.Kinds
+	Parameters        []map[string]any
+}
+
+func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[string]any) {
+	var (
+		queries         []string
+		queryParameters []map[string]any
+
+		output         = strings.Builder{}
+		batchedUpdates = map[uint64]*nodeUpdateBatch{}
+		digester       = xxhash.New()
+	)
+
+	for _, nodeToUpdate := range updates {
+		updateKey := nodeToNodeUpdateKey(digester, nodeToUpdate)
+
+		if existingBatch, hasBatch := batchedUpdates[updateKey]; hasBatch {
+			existingBatch.Parameters = append(existingBatch.Parameters, map[string]any{
+				"id":         nodeToUpdate.ID,
+				"properties": nodeToUpdate.Properties,
+			})
+		} else {
+			batchedUpdates[updateKey] = &nodeUpdateBatch{
+				nodeKindsToAdd:    nodeToUpdate.AddedKinds,
+				nodeKindsToRemove: nodeToUpdate.DeletedKinds,
+				Parameters: []map[string]any{{
+					"id":         nodeToUpdate.ID,
+					"properties": nodeToUpdate.Properties,
+				}},
+			}
+		}
+	}
+
+	for _, batch := range batchedUpdates {
+		output.WriteString("unwind $p as p update (n) where id(n) = p.id set n += p.properties")
+
+		if len(batch.nodeKindsToAdd) > 0 {
+			for _, kindToAdd := range batch.nodeKindsToAdd {
+				output.WriteString(", n:")
+				output.WriteString(kindToAdd.String())
+			}
+		}
+
+		if len(batch.nodeKindsToRemove) > 0 {
+			output.WriteString(" remove ")
+
+			for idx, kindToRemove := range batch.nodeKindsToRemove {
+				if idx > 0 {
+					output.WriteString(",")
+				}
+
+				output.WriteString("n:")
+				output.WriteString(kindToRemove.String())
+			}
+		}
+
+		output.WriteString(";")
+
+		// Write out the query to be run
+		queries = append(queries, output.String())
+		queryParameters = append(queryParameters, map[string]any{
+			"p": batch.Parameters,
+		})
+
+		output.Reset()
+	}
+
+	return queries, queryParameters
+}
+
+func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []map[string]any) {
 	var (
 		queries         []string
 		queryParameters []map[string]any

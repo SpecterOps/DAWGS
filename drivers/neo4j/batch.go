@@ -20,6 +20,7 @@ type batchTransaction struct {
 	innerTx                    *neo4jTransaction
 	nodeDeletionBuffer         []graph.ID
 	relationshipDeletionBuffer []graph.ID
+	nodeUpdateBuffer           []*graph.Node
 	nodeUpdateByBuffer         []graph.NodeUpdate
 	relationshipCreateBuffer   []createRelationshipByIDs
 	relationshipUpdateByBuffer []graph.RelationshipUpdate
@@ -48,15 +49,22 @@ func (s *batchTransaction) Relationships() graph.RelationshipQuery {
 }
 
 func (s *batchTransaction) UpdateNodeBy(update graph.NodeUpdate) error {
-	if s.nodeUpdateByBuffer = append(s.nodeUpdateByBuffer, update); len(s.nodeUpdateByBuffer) >= s.batchWriteSize {
-		return s.flushNodeUpdates()
+	s.nodeUpdateByBuffer = append(s.nodeUpdateByBuffer, update)
+
+	if len(s.nodeUpdateByBuffer) >= s.batchWriteSize {
+		return s.flushNodeUpdateByBuffer()
 	}
 
 	return nil
 }
 
 func (s *batchTransaction) UpdateNodes(nodes []*graph.Node) error {
-	panic("unimplemented")
+	s.nodeUpdateBuffer = append(s.nodeUpdateBuffer, nodes...)
+
+	if len(s.nodeUpdateBuffer) > s.batchWriteSize {
+		return s.flushNodeUpdateBuffer()
+	}
+
 	return nil
 }
 
@@ -78,7 +86,13 @@ func (s *batchTransaction) DeleteRelationships(ids []graph.ID) error {
 
 func (s *batchTransaction) Commit() error {
 	if len(s.nodeUpdateByBuffer) > 0 {
-		if err := s.flushNodeUpdates(); err != nil {
+		if err := s.flushNodeUpdateByBuffer(); err != nil {
+			return err
+		}
+	}
+
+	if len(s.nodeUpdateBuffer) > 0 {
+		if err := s.flushNodeUpdateBuffer(); err != nil {
 			return err
 		}
 	}
@@ -226,11 +240,18 @@ func (s *batchTransaction) flushRelationshipDeletions() error {
 	return s.DeleteRelationships(buffer)
 }
 
-func (s *batchTransaction) flushNodeUpdates() error {
+func (s *batchTransaction) flushNodeUpdateByBuffer() error {
 	buffer := s.nodeUpdateByBuffer
 	s.nodeUpdateByBuffer = s.nodeUpdateByBuffer[:0]
 
 	return s.innerTx.updateNodesBy(buffer...)
+}
+
+func (s *batchTransaction) flushNodeUpdateBuffer() error {
+	buffer := s.nodeUpdateBuffer
+	s.nodeUpdateBuffer = s.nodeUpdateBuffer[:0]
+
+	return s.innerTx.updateNodeBatch(buffer)
 }
 
 func (s *batchTransaction) flushRelationshipUpdates() error {
