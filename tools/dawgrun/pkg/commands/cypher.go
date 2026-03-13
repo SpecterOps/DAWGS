@@ -77,7 +77,14 @@ func translateToPsqlCmd() CommandDesc {
 				fmt.Fprintf(ctx.output, "\n")
 			}
 
-			sqlQuery, err := format.SyntaxNode(result.Statement)
+			// Certain queries will materialize parameters into the output when translated, so we need to build
+			// an OutputBuilder so we can carry forward those params.
+			queryBuilder := format.NewOutputBuilder()
+			if result.Parameters != nil {
+				queryBuilder.WithMaterializedParameters(result.Parameters)
+			}
+
+			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
 			if err != nil {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
@@ -131,7 +138,14 @@ func explainAsPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
 			}
 
-			sqlQuery, err := format.SyntaxNode(result.Statement)
+			// Certain queries will materialize parameters into the output when translated, so we need to build
+			// an OutputBuilder so we can carry forward those params.
+			queryBuilder := format.NewOutputBuilder()
+			if result.Parameters != nil {
+				queryBuilder.WithMaterializedParameters(result.Parameters)
+			}
+
+			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
 			if err != nil {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
