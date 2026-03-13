@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
-	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -239,7 +238,7 @@ func nodeToNodeUpdateKey(digester *xxhash.Digest, node *graph.Node) uint64 {
 		digestKinds = func() {
 			sortedKinds := make([]string, 0, len(kindSet))
 
-			for nextKind := range maps.Keys(kindSet) {
+			for nextKind := range kindSet {
 				sortedKinds = append(sortedKinds, nextKind)
 			}
 
