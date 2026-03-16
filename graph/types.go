@@ -136,10 +136,6 @@ func NewThreadSafeKindBitmap() *ThreadSafeKindBitmap {
 	}
 }
 
-func (s ThreadSafeKindBitmap) Count(kinds ...Kind) uint64 {
-	return s.Get(kinds...).Cardinality()
-}
-
 func (s ThreadSafeKindBitmap) Get(kinds ...Kind) cardinality.Duplex[uint64] {
 	s.rwLock.RLock()
 	defer s.rwLock.RUnlock()
@@ -168,7 +164,7 @@ func (s ThreadSafeKindBitmap) Or(kind Kind, other cardinality.Duplex[uint64]) {
 	if kindBitmap, hasKind := s.bitmaps[kind.String()]; hasKind {
 		kindBitmap.Or(other)
 	} else {
-		s.bitmaps[kind.String()] = other
+		s.bitmaps[kind.String()] = other.Clone()
 	}
 }
 
@@ -206,10 +202,7 @@ func (s ThreadSafeKindBitmap) Add(kind Kind, value uint64) {
 	if kindBitmap, hasKind := s.bitmaps[kind.String()]; hasKind {
 		kindBitmap.Add(value)
 	} else {
-		kindBitmap = cardinality.NewBitmap64()
-		kindBitmap.Add(value)
-
-		s.bitmaps[kind.String()] = kindBitmap
+		s.bitmaps[kind.String()] = cardinality.NewBitmap64With(value)
 	}
 }
 
@@ -219,14 +212,10 @@ func (s ThreadSafeKindBitmap) CheckedAdd(kind Kind, value uint64) bool {
 
 	if kindBitmap, hasKind := s.bitmaps[kind.String()]; hasKind {
 		return kindBitmap.CheckedAdd(value)
-	} else {
-		kindBitmap = cardinality.NewBitmap64()
-		kindBitmap.Add(value)
-
-		s.bitmaps[kind.String()] = kindBitmap
-
-		return true
 	}
+
+	s.bitmaps[kind.String()] = cardinality.NewBitmap64With(value)
+	return true
 }
 
 // IndexedSlice is a structure maps a comparable key to a value that implements size.Sizable.
