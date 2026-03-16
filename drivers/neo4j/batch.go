@@ -129,7 +129,7 @@ func (s *batchTransaction) Close() error {
 }
 
 func (s *batchTransaction) UpdateNode(target *graph.Node) error {
-	return s.innerTx.UpdateNode(target)
+	return s.UpdateNodes([]*graph.Node{target})
 }
 
 func (s *batchTransaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) error {

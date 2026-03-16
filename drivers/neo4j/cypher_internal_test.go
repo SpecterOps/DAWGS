@@ -96,11 +96,18 @@ func Test_cypherBuildNodeUpdateQueryBatch(t *testing.T) {
 			),
 		}
 
+		expectedQueries = []string{
+			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:Fool, n:Asset;",
+			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:Fool remove n:User;",
+		}
+
 		queries, parameters = cypherBuildNodeUpdateQueryBatch(nodes)
 	)
 
-	assert.Equal(t, "unwind $p as p update (n) where id(n) = p.id set n += p.properties, n:Fool, n:Asset;", queries[0])
-	assert.Equal(t, "unwind $p as p update (n) where id(n) = p.id set n += p.properties, n:Fool remove n:User;", queries[1])
+	for _, expectedQuery := range expectedQueries {
+		assert.Contains(t, queries, expectedQuery)
+	}
+
 	assert.Equal(t, 2, len(parameters))
 }
 

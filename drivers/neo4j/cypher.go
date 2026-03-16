@@ -289,7 +289,7 @@ func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[str
 		if existingBatch, hasBatch := batchedUpdates[updateKey]; hasBatch {
 			existingBatch.Parameters = append(existingBatch.Parameters, map[string]any{
 				"id":         nodeToUpdate.ID,
-				"properties": nodeToUpdate.Properties,
+				"properties": nodeToUpdate.Properties.Map,
 			})
 		} else {
 			batchedUpdates[updateKey] = &nodeUpdateBatch{
@@ -297,14 +297,14 @@ func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[str
 				nodeKindsToRemove: nodeToUpdate.DeletedKinds,
 				Parameters: []map[string]any{{
 					"id":         nodeToUpdate.ID,
-					"properties": nodeToUpdate.Properties,
+					"properties": nodeToUpdate.Properties.Map,
 				}},
 			}
 		}
 	}
 
 	for _, batch := range batchedUpdates {
-		output.WriteString("unwind $p as p update (n) where id(n) = p.id set n += p.properties")
+		output.WriteString("unwind $p as p match (n) where id(n) = p.id set n += p.properties")
 
 		if len(batch.nodeKindsToAdd) > 0 {
 			for _, kindToAdd := range batch.nodeKindsToAdd {
