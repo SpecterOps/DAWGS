@@ -683,8 +683,11 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier) pgsql.Que
 	return query
 }
 
-func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, expansion *ExpansionBuilder) (pgsql.Query, error) {
-	expansionModel := traversalStep.Expansion
+func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
+	var (
+		traversalStep  = traversalStepContext.CurrentStep
+		expansionModel = traversalStep.Expansion
+	)
 
 	expansion.ProjectionStatement.Projection = expansionModel.Projection
 	expansion.PrimerStatement.Where = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.EdgeConstraints)
@@ -828,7 +831,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 		}},
 	})
 
-	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStep); err != nil {
+	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
 		expansion.ProjectionStatement.Where = projectionConstraints
@@ -837,8 +840,11 @@ func (s *Translator) buildExpansionPatternRoot(traversalStep *TraversalStep, exp
 	return expansion.Build(expansionModel.Frame.Binding.Identifier), nil
 }
 
-func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, expansion *ExpansionBuilder) (pgsql.Query, error) {
-	expansionModel := traversalStep.Expansion
+func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
+	var (
+		traversalStep  = traversalStepContext.CurrentStep
+		expansionModel = traversalStep.Expansion
+	)
 
 	expansion.ProjectionStatement.Projection = expansionModel.Projection
 	expansion.PrimerStatement.Where = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.EdgeConstraints)
@@ -943,7 +949,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStep *TraversalStep, exp
 		}},
 	})
 
-	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStep); err != nil {
+	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
 		expansion.ProjectionStatement.Where = projectionConstraints
@@ -1040,32 +1046,50 @@ func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalS
 	}
 }
 
-func (s *Translator) buildExpansionProjectionConstraints(traversalStep *TraversalStep) (pgsql.Expression, error) {
+func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext TraversalStepContext) (pgsql.Expression, error) {
 	var (
-		expansionModel        = traversalStep.Expansion
+		currentStep           = traversalStepContext.CurrentStep
+		previousStep          = traversalStepContext.PreviousStep
+		expansionModel        = currentStep.Expansion
 		projectionConstraints pgsql.Expression
 		constraints           *Constraint
 		err                   error
+		joinCondition         pgsql.Expression
 	)
+
+	if previousStep != nil {
+		joinCondition = pgd.Equals(
+			pgsql.RowColumnReference{
+				Identifier: pgsql.CompoundIdentifier{previousStep.Frame.Binding.Identifier, currentStep.LeftNode.Identifier},
+				Column:     pgsql.ColumnID,
+			},
+			pgd.Column(expansionModel.Frame.Binding.Identifier, expansionRootID),
+		)
+	}
 
 	if constraints, err = s.treeTranslator.ConsumeConstraintsFromVisibleSet(expansionModel.Frame.Visible); err != nil {
 		return projectionConstraints, err
 	} else {
+		// Constraints that target the terminal node may crop up here where it's finally in scope. Additionally,
+		// only accept paths that are marked satisfied from the recursive descent CTE
 		if expansionModel.TerminalNodeSatisfactionProjection != nil {
 			expressions := []pgsql.Expression{
 				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionSatisfied},
 				constraints.Expression,
+				joinCondition,
 			}
 			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, expressions); err != nil {
 				return projectionConstraints, err
 			}
 		} else {
-			projectionConstraints = constraints.Expression
+			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, []pgsql.Expression{constraints.Expression, joinCondition}); err != nil {
+				return projectionConstraints, err
+			}
 		}
 	}
 
 	// Check for min-path depth as this will also filter the final expansion projection
-	if expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value > 1 {
+	if expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value >= 1 {
 		projectionConstraints = pgsql.OptionalAnd(
 			pgsql.NewBinaryExpression(
 				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionDepth},
