@@ -34,7 +34,7 @@ func TestDeletedPropertiesToString(t *testing.T) {
 				return props
 			},
 			check: func(t *testing.T, result string) {
-				assert.Equal(t, "{mykey}", result)
+				assert.Equal(t, "{\"mykey\"}", result)
 			},
 		},
 		{
@@ -49,7 +49,7 @@ func TestDeletedPropertiesToString(t *testing.T) {
 			},
 			check: func(t *testing.T, result string) {
 				// Map iteration order is non-deterministic; accept either ordering.
-				assert.True(t, result == "{alpha,beta}" || result == "{beta,alpha}",
+				assert.True(t, result == "{\"alpha\",\"beta\"}" || result == "{\"beta\",\"alpha\"}",
 					"unexpected result: %s", result)
 			},
 		},
@@ -63,7 +63,7 @@ func TestDeletedPropertiesToString(t *testing.T) {
 				return props
 			},
 			check: func(t *testing.T, result string) {
-				assert.Equal(t, "{removed}", result)
+				assert.Equal(t, "{\"removed\"}", result)
 				assert.NotContains(t, result, "active")
 			},
 		},
