@@ -1089,7 +1089,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 	}
 
 	// Check for min-path depth as this will also filter the final expansion projection
-	if expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value >= 1 {
+	if expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value > 1 {
 		projectionConstraints = pgsql.OptionalAnd(
 			pgsql.NewBinaryExpression(
 				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionDepth},
