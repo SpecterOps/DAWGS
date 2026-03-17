@@ -105,6 +105,8 @@ func (s *batch) largeUpdate(nodes []*graph.Node) error {
 		return err
 	}
 
+	defer tx.Rollback(s.ctx)
+
 	if _, err := tx.Exec(s.ctx, sql.FormatCreateNodeUpdateStagingTable(sql.NodeUpdateStagingTable)); err != nil {
 		return fmt.Errorf("creating node update staging table: %w", err)
 	}

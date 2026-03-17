@@ -604,15 +604,15 @@ UpdateNodes batch updates nodes by node ID.
 This should be the default tool for updating a collection of nodes from memory.
 */
 func UpdateNodes(ctx context.Context, graphDB graph.Database, nodes []*graph.Node, batchSize ...int) error {
-	options := func(_ *graph.BatchConfig) {}
+	options := []graph.BatchOption{}
 
 	if len(batchSize) > 0 {
-		options = graph.WithBatchSize(batchSize[0])
+		options = append(options, graph.WithBatchSize(batchSize[0]))
 	}
 
 	if err := graphDB.BatchOperation(ctx, func(batch graph.Batch) error {
 		return batch.UpdateNodes(nodes)
-	}, options); err != nil {
+	}, options...); err != nil {
 		return err
 	}
 
