@@ -68,7 +68,13 @@ func (s bitmap32) CheckedAdd(value uint32) bool {
 }
 
 func (s bitmap32) Add(values ...uint32) {
-	s.bitmap.AddMany(values)
+	switch len(values) {
+	case 0:
+	case 1:
+		s.bitmap.Add(values[0])
+	default:
+		s.bitmap.AddMany(values)
+	}
 }
 
 func (s bitmap32) Remove(value uint32) {

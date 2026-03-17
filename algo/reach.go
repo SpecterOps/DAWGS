@@ -278,7 +278,7 @@ func (s *ReachabilityCache) OrReach(node uint64, direction graph.Direction, dupl
 // from the result before the XOR operation.
 func (s *ReachabilityCache) XorReach(node uint64, direction graph.Direction, duplex cardinality.Duplex[uint64]) {
 	// Reach bitmap will contain the member due to resolution of component reach
-	reachBitmap := s.ReachOfComponentContainingMember(node, direction).Clone()
+	reachBitmap := s.ReachOfComponentContainingMember(node, direction).Clone().(cardinality.Duplex[uint64])
 	reachBitmap.Remove(node)
 
 	duplex.Xor(reachBitmap)
