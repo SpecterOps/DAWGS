@@ -92,9 +92,11 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 	return nil
 }
 
-func (s *Translator) buildExpansionPattern(traversalStep *TraversalStep, expansion *ExpansionBuilder, isRootStep bool) error {
-	if isRootStep {
-		if traversalStepQuery, err := s.buildExpansionPatternRoot(traversalStep, expansion); err != nil {
+func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) error {
+	traversalStep := traversalStepContext.CurrentStep
+
+	if traversalStepContext.IsRootStep {
+		if traversalStepQuery, err := s.buildExpansionPatternRoot(traversalStepContext, expansion); err != nil {
 			return err
 		} else {
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
@@ -105,7 +107,7 @@ func (s *Translator) buildExpansionPattern(traversalStep *TraversalStep, expansi
 			})
 		}
 	} else {
-		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStep, expansion); err != nil {
+		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStepContext, expansion); err != nil {
 			return err
 		} else {
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
@@ -120,8 +122,10 @@ func (s *Translator) buildExpansionPattern(traversalStep *TraversalStep, expansi
 	return nil
 }
 
-func (s *Translator) buildShortestPathsExpansionPattern(traversalStep *TraversalStep, expansion *ExpansionBuilder, isRootStep, allPaths bool) error {
-	if isRootStep {
+func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder, allPaths bool) error {
+	traversalStep := traversalStepContext.CurrentStep
+
+	if traversalStepContext.IsRootStep {
 		if allPaths {
 			if traversalStep.Expansion.CanExecuteBidirectionalSearch() {
 				if traversalStepQuery, err := expansion.BuildBiDirectionalAllShortestPathsRoot(); err != nil {
@@ -155,7 +159,7 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStep *Traversal
 			})
 		}
 	} else {
-		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStep, expansion); err != nil {
+		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStepContext, expansion); err != nil {
 			return err
 		} else {
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
@@ -170,18 +174,34 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStep *Traversal
 	return nil
 }
 
+type TraversalStepContext struct {
+	PreviousStep *TraversalStep
+	CurrentStep  *TraversalStep
+	IsRootStep   bool
+}
+
 func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 	for idx, traversalStep := range part.TraversalSteps {
-		isRootStep := idx == 0
+		var (
+			isRootStep           = idx == 0
+			traversalStepContext = TraversalStepContext{
+				CurrentStep: traversalStep,
+				IsRootStep:  isRootStep,
+			}
+		)
+
+		if idx > 0 {
+			traversalStepContext.PreviousStep = part.TraversalSteps[idx-1]
+		}
 
 		if traversalStep.Expansion != nil {
 			if expansion, err := NewExpansionBuilder(s.translation.Parameters, traversalStep); err != nil {
 				return err
 			} else if part.ShortestPath || part.AllShortestPaths {
-				if err := s.buildShortestPathsExpansionPattern(traversalStep, expansion, isRootStep, part.AllShortestPaths); err != nil {
+				if err := s.buildShortestPathsExpansionPattern(traversalStepContext, expansion, part.AllShortestPaths); err != nil {
 					return err
 				}
-			} else if err := s.buildExpansionPattern(traversalStep, expansion, isRootStep); err != nil {
+			} else if err := s.buildExpansionPattern(traversalStepContext, expansion); err != nil {
 				return err
 			}
 		} else if err := s.buildTraversalPattern(traversalStep, isRootStep); err != nil {
