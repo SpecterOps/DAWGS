@@ -58,6 +58,10 @@ func PropertiesToJSONB(properties *graph.Properties) (pgtype.JSONB, error) {
 }
 
 func DeletedPropertiesToString(properties *graph.Properties) string {
+	if properties == nil {
+		return "{}"
+	}
+
 	deleted := properties.DeletedProperties()
 	quoted := make([]string, 0, len(deleted))
 

@@ -368,7 +368,9 @@ type TransactionOption func(config *TransactionConfig)
 
 func WithBatchSize(size int) BatchOption {
 	return func(config *BatchConfig) {
-		config.BatchSize = size
+		if size > 0 {
+			config.BatchSize = size
+		}
 	}
 }
 

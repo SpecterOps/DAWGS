@@ -121,6 +121,11 @@ but only want to update a few properties it is most efficient to strip all prope
 func (s *Node) StripAllPropertiesExcept(except ...string) {
 	newProperties := NewProperties()
 
+	if s.Properties == nil {
+		s.Properties = newProperties
+		return
+	}
+
 	for _, exclusion := range except {
 		if s.Properties.Exists(exclusion) {
 			newProperties.Set(exclusion, s.Properties.Get(exclusion).Any())
