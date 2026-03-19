@@ -20,10 +20,6 @@ import (
 
 const Neo4jConnectionStringEnv = "NEO4J_CONNECTION"
 
-func init() {
-	os.Setenv(Neo4jConnectionStringEnv, "neo4j://neo4j:neo4jj@localhost:7687")
-}
-
 var (
 	NodeKind1 = graph.StringKind("NodeKind1")
 	NodeKind2 = graph.StringKind("NodeKind2")

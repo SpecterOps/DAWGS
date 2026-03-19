@@ -63,12 +63,22 @@ func Test_nodeToNodeUpdateKey(t *testing.T) {
 				graph.Kinds{graph.StringKind("User")},
 			),
 		)
+
+		// Digest 5 should deviate from digest 4 because it no longer includes the User kind in the deleted set
+		digest5 = nodeToNodeUpdateKey(digester,
+			newTestingNode(
+				graph.Kinds{graph.StringKind("User"), graph.StringKind("Tom")},
+				graph.Kinds{graph.StringKind("Fool")},
+				graph.Kinds{},
+			),
+		)
 	)
 
 	assert.Equal(t, digest1, digest2)
 	assert.Equal(t, digest3, digest4)
 
 	assert.NotEqual(t, digest1, digest3)
+	assert.NotEqual(t, digest4, digest5)
 }
 
 func Test_cypherBuildNodeUpdateQueryBatch(t *testing.T) {

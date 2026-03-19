@@ -230,39 +230,38 @@ func (s nodeUpdateByMap) add(update graph.NodeUpdate) {
 	}
 }
 
+func digestKeys(digester *xxhash.Digest, keys map[string]struct{}) {
+	sortedKinds := make([]string, 0, len(keys))
+
+	for nextKind := range keys {
+		sortedKinds = append(sortedKinds, nextKind)
+	}
+
+	slices.Sort(sortedKinds)
+
+	for _, nextKind := range sortedKinds {
+		digester.WriteString(nextKind)
+	}
+}
+
 func nodeToNodeUpdateKey(digester *xxhash.Digest, node *graph.Node) uint64 {
 	digester.Reset()
 
-	var (
-		kindSet     = map[string]struct{}{}
-		digestKinds = func() {
-			sortedKinds := make([]string, 0, len(kindSet))
-
-			for nextKind := range kindSet {
-				sortedKinds = append(sortedKinds, nextKind)
-			}
-
-			slices.Sort(sortedKinds)
-
-			for _, nextKind := range sortedKinds {
-				digester.WriteString(nextKind)
-			}
-
-			clear(kindSet)
-		}
-	)
+	kindSet := map[string]struct{}{}
 
 	for _, addedKindStr := range node.AddedKinds.Strings() {
 		kindSet[addedKindStr] = struct{}{}
 	}
 
-	digestKinds()
+	digestKeys(digester, kindSet)
+	clear(kindSet)
 
-	for _, removedKindStr := range node.AddedKinds.Strings() {
+	for _, removedKindStr := range node.DeletedKinds.Strings() {
 		kindSet[removedKindStr] = struct{}{}
 	}
 
-	digestKinds()
+	digestKeys(digester, kindSet)
+	clear(kindSet)
 
 	return digester.Sum64()
 }
