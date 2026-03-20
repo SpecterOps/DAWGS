@@ -25,8 +25,10 @@ func (s AssignmentOperator) String() string {
 	return string(s)
 }
 
-type SyntaxNode any
-type Expression SyntaxNode
+type (
+	SyntaxNode any
+	Expression SyntaxNode
+)
 
 type ExpressionList interface {
 	Add(expression Expression)
@@ -744,12 +746,15 @@ func NewRangeQuantifier(value string) *RangeQuantifier {
 type KindMatcher struct {
 	Reference Expression
 	Kinds     graph.Kinds
+	// IsExclusive changes the kind matching operator from overlap (PG &&) to a stricter "left contains right" (PG @>)
+	IsExclusive bool
 }
 
-func NewKindMatcher(reference Expression, kinds graph.Kinds) *KindMatcher {
+func NewKindMatcher(reference Expression, kinds graph.Kinds, isExclusive bool) *KindMatcher {
 	return &KindMatcher{
-		Reference: reference,
-		Kinds:     kinds,
+		Reference:   reference,
+		Kinds:       kinds,
+		IsExclusive: isExclusive,
 	}
 }
 
@@ -759,8 +764,9 @@ func (s *KindMatcher) copy() *KindMatcher {
 	}
 
 	return &KindMatcher{
-		Reference: Copy(s.Reference),
-		Kinds:     Copy(s.Kinds),
+		Reference:   Copy(s.Reference),
+		Kinds:       Copy(s.Kinds),
+		IsExclusive: s.IsExclusive,
 	}
 }
 

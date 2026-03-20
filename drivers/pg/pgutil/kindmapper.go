@@ -7,17 +7,17 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-var nextKindID = int16(1)
-
 type InMemoryKindMapper struct {
-	KindToID map[graph.Kind]int16
-	IDToKind map[int16]graph.Kind
+	nextKindID int16
+	KindToID   map[graph.Kind]int16
+	IDToKind   map[int16]graph.Kind
 }
 
 func NewInMemoryKindMapper() *InMemoryKindMapper {
 	return &InMemoryKindMapper{
-		KindToID: map[graph.Kind]int16{},
-		IDToKind: map[int16]graph.Kind{},
+		nextKindID: int16(1),
+		KindToID:   map[graph.Kind]int16{},
+		IDToKind:   map[int16]graph.Kind{},
 	}
 }
 
@@ -67,6 +67,7 @@ func (s *InMemoryKindMapper) mapKinds(kinds graph.Kinds) ([]int16, graph.Kinds) 
 
 	return ids, missing
 }
+
 func (s *InMemoryKindMapper) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
 	if ids, missing := s.mapKinds(kinds); len(missing) > 0 {
 		return nil, fmt.Errorf("missing kinds: %v", missing)
@@ -86,8 +87,12 @@ func (s *InMemoryKindMapper) AssertKinds(ctx context.Context, kinds graph.Kinds)
 }
 
 func (s *InMemoryKindMapper) Put(kind graph.Kind) int16 {
-	kindID := nextKindID
-	nextKindID += 1
+	if kindID, ok := s.KindToID[kind]; ok {
+		return kindID
+	}
+
+	kindID := s.nextKindID
+	s.nextKindID += 1
 
 	s.KindToID[kind] = kindID
 	s.IDToKind[kindID] = kind

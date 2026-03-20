@@ -378,6 +378,8 @@ type NonArithmeticOperatorExpressionVisitor struct {
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_NodeLabels(ctx *parser.OC_NodeLabelsContext) {
 	s.Expression = &cypher.KindMatcher{
 		Reference: s.Expression,
+		// Cypher-generated `KindMatcher`s should _always_ be exclusive to jive with the spec
+		IsExclusive: true,
 	}
 }
 
