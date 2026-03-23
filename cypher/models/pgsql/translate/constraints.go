@@ -150,17 +150,19 @@ func terminalNodeConstraint(edgeIdentifier, nodeIdentifier pgsql.Identifier, dir
 		}, nil
 
 	case graph.DirectionBoth:
-		return pgsql.NewBinaryExpression(
+		return pgsql.NewParenthetical(
 			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID},
-			),
-			pgsql.OperatorOr,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID},
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID},
+				),
+				pgsql.OperatorOr,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID},
+				),
 			),
 		), nil
 
