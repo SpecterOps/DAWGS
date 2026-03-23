@@ -27,6 +27,60 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 		}
 	)
 
+	if traversalStep.LeftNodeBound {
+		// Left node was already materialized in the previous frame. Promote that frame and join only the terminal node here.
+		//
+		// prevFrame is the join root so LeftNodeConstraints can safely reference it in the edge ON clause without partitioning.
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{traversalStep.Frame.Previous.Binding.Identifier},
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+					Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, traversalStep.LeftNodeJoinCondition),
+				},
+			}, {
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition)},
+			}},
+		})
+
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
+		// left node is not joined here, so the guard must reference the bound node through the previous frame
+		nextSelect.Where = pgsql.OptionalAnd(
+			pgsql.NewParenthetical(
+				pgsql.NewBinaryExpression(
+					pgsql.RowColumnReference{
+						Identifier: pgsql.CompoundIdentifier{
+							traversalStep.Frame.Previous.Binding.Identifier,
+							traversalStep.LeftNode.Identifier,
+						},
+						Column: pgsql.ColumnID,
+					},
+					pgsql.OperatorCypherNotEquals,
+					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+				),
+			),
+			nextSelect.Where,
+		)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	}
+
 	if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 			Source: pgsql.TableReference{

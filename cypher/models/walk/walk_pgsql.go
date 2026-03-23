@@ -90,10 +90,16 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		return nextCursor, nil
 
 	case *pgsql.AliasedExpression:
-		return &Cursor[pgsql.SyntaxNode]{
+		nextCursor := &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
 			Branches: []pgsql.SyntaxNode{typedNode.Expression},
-		}, nil
+		}
+
+		if typedNode.Alias.Set {
+			nextCursor.AddBranches(typedNode.Alias.Value)
+		}
+
+		return nextCursor, nil
 
 	case pgsql.SetOperation:
 		return &Cursor[pgsql.SyntaxNode]{
@@ -102,10 +108,16 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		}, nil
 
 	case pgsql.AliasedExpression:
-		return &Cursor[pgsql.SyntaxNode]{
+		nextCursor := &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
 			Branches: []pgsql.SyntaxNode{typedNode.Expression},
-		}, nil
+		}
+
+		if typedNode.Alias.Set {
+			nextCursor.AddBranches(typedNode.Alias.Value)
+		}
+
+		return nextCursor, nil
 
 	case pgsql.CompositeValue:
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Values); err != nil {
@@ -255,7 +267,7 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 	case pgsql.RowColumnReference:
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
-			Branches: []pgsql.SyntaxNode{typedNode.Identifier},
+			Branches: []pgsql.SyntaxNode{typedNode.Identifier, typedNode.Column},
 		}, nil
 
 	case pgsql.ArrayIndex:
