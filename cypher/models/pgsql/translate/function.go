@@ -134,6 +134,7 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 				Function:   pgsql.FunctionCount,
 				Parameters: []pgsql.Expression{argument},
 				CastType:   pgsql.Int8,
+				Distinct:   typedExpression.Distinct,
 			})
 		}
 
