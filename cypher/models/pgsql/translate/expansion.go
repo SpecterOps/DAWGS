@@ -485,6 +485,29 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 		}},
 	}}
 
+	// If the traversal's left node was already bound in a prior frame, that frame must appear in the
+	// projection's FROM clause so that columns like s0.e0 and s0.n0 are in scope.
+	if s.traversalStep.LeftNodeBound && s.traversalStep.Frame.Previous != nil {
+		prevFrameID := s.traversalStep.Frame.Previous.Binding.Identifier
+
+		// Prepend as a comma-join so it does not interfere with the explicit JOIN chain.
+		projectionQuery.From = append([]pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{prevFrameID},
+			},
+		}}, projectionQuery.From...)
+
+		// (s0.n1).id = s2.root_id
+		projectionQuery.Where = pgsql.NewBinaryExpression(
+			pgsql.RowColumnReference{
+				Identifier: pgsql.CompoundIdentifier{prevFrameID, s.traversalStep.LeftNode.Identifier},
+				Column:     pgsql.ColumnID,
+			},
+			pgsql.OperatorEquals,
+			pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
+		)
+	}
+
 	if harnessParameters, err := s.shortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery); err != nil {
 		return pgsql.Query{}, err
 	} else {
@@ -552,6 +575,29 @@ func (s *ExpansionBuilder) BuildBiDirectionalAllShortestPathsRoot() (pgsql.Query
 			},
 		}},
 	}}
+
+	// If the traversal's left node was already bound in a prior frame, that frame must appear in the
+	// projection's FROM clause so that columns like s0.e0 and s0.n0 are in scope.
+	if s.traversalStep.LeftNodeBound && s.traversalStep.Frame.Previous != nil {
+		prevFrameID := s.traversalStep.Frame.Previous.Binding.Identifier
+
+		// Prepend as a comma-join so it does not interfere with the explicit JOIN chain.
+		projectionQuery.From = append([]pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{prevFrameID},
+			},
+		}}, projectionQuery.From...)
+
+		// (s0.n1).id = s2.root_id
+		projectionQuery.Where = pgsql.NewBinaryExpression(
+			pgsql.RowColumnReference{
+				Identifier: pgsql.CompoundIdentifier{prevFrameID, s.traversalStep.LeftNode.Identifier},
+				Column:     pgsql.ColumnID,
+			},
+			pgsql.OperatorEquals,
+			pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
+		)
+	}
 
 	if harnessParameters, err := s.bidirectionalAllShortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery, backwardFrontPrimerQuery, backwardFrontRecursiveQuery); err != nil {
 		return pgsql.Query{}, err
@@ -689,8 +735,32 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		expansionModel = traversalStep.Expansion
 	)
 
+	// Determine local scope of the primer: the edge and both nodes.
+	primerLocal, primerExternal := partitionConstraintByLocality(
+		expansionModel.PrimerNodeConstraints,
+		pgsql.AsIdentifierSet(
+			traversalStep.LeftNode.Identifier,
+			traversalStep.Edge.Identifier,
+			traversalStep.RightNode.Identifier,
+		),
+	)
+
+	// External terms reference a prior CTE (e.g. s0.i0). Cross-join it into the
+	// primer so it is in scope for the base case WHERE clause.
+	if primerExternal != nil && traversalStep.Frame.Previous != nil {
+		expansion.PrimerStatement.From = append([]pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{traversalStep.Frame.Previous.Binding.Identifier},
+			},
+		}}, expansion.PrimerStatement.From...)
+	}
+
+	expansion.PrimerStatement.Where = pgsql.OptionalAnd(
+		pgsql.OptionalAnd(primerLocal, primerExternal),
+		expansionModel.EdgeConstraints,
+	)
+
 	expansion.ProjectionStatement.Projection = expansionModel.Projection
-	expansion.PrimerStatement.Where = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.EdgeConstraints)
 	expansion.RecursiveStatement.Where = pgsql.OptionalAnd(expansionModel.EdgeConstraints, expansionModel.RecursiveConstraints)
 	expansion.PrimerStatement.Projection = s.buildExpansionPrimerProjection(traversalStep)
 	expansion.RecursiveStatement.Projection = s.buildExpansionRecursiveProjection(traversalStep)

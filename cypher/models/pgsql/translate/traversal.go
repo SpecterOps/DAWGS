@@ -130,6 +130,43 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 			}},
 		})
+	} else if traversalStep.RightNodeBound {
+		// Right node was already materialized in a previous frame.
+		//
+		// We have to promote that frame to the explicit JOIN root so that RightNodeJoinCondition can reference
+		// it in the ON clause. PostgreSQL forbids referencing a comma-joined table inside a subsequent
+		// explicit JOIN's ON clause.
+		leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{partFrame.Previous.Binding.Identifier},
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+					Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
+				},
+			}, {
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
+				},
+			}},
+		})
+
+		nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
 	} else {
 		// In this branch prevFrame is comma-separated, so only {e0, n1} are in scope
 		// for n1's JOIN ON condition.
