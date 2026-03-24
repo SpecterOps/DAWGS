@@ -112,6 +112,33 @@ func (s *Node) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonNode)
 }
 
+/*
+StripAllPropertiesExcept removes all properties from the node except for the ones specified in the except list.
+Deleted properties are also removed from the node, except for the ones specified in the except list.
+The use case for this function is if you have fully hydrated nodes in memory,
+but only want to update a few properties it is most efficient to strip all properties except for the ones you want to update.
+*/
+func (s *Node) StripAllPropertiesExcept(except ...string) {
+	newProperties := NewProperties()
+
+	if s.Properties == nil {
+		s.Properties = newProperties
+		return
+	}
+
+	for _, exclusion := range except {
+		if s.Properties.Exists(exclusion) {
+			newProperties.Set(exclusion, s.Properties.Get(exclusion).Any())
+		}
+
+		if _, present := s.Properties.Deleted[exclusion]; present {
+			newProperties.Delete(exclusion)
+		}
+	}
+
+	s.Properties = newProperties
+}
+
 // NodeSet is a mapped index of Node instances and their ID fields.
 type NodeSet map[ID]*Node
 

@@ -64,8 +64,16 @@ func (s *Driver) SetWriteFlushSize(size int) {
 	// THis is a no-op function since PostgreSQL does not require transaction rotation like Neo4j does
 }
 
-func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate) error {
-	if cfg, err := renderConfig(batchWriteSize, readWriteTxOptions, nil); err != nil {
+func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
+	batchConfig := &graph.BatchConfig{
+		BatchSize: batchWriteSize,
+	}
+
+	for _, opt := range options {
+		opt(batchConfig)
+	}
+
+	if cfg, err := renderConfig(batchConfig.BatchSize, readWriteTxOptions, nil); err != nil {
 		return err
 	} else if conn, err := s.pool.Acquire(ctx); err != nil {
 		return err

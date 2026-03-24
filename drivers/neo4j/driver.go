@@ -43,12 +43,20 @@ func (s *driver) SetWriteFlushSize(size int) {
 	s.writeFlushSize = size
 }
 
-func (s *driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate) error {
+func (s *driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
 	// Attempt to acquire a connection slot or wait for a bit until one becomes available
 	if !s.limiter.Acquire(ctx) {
 		return graph.ErrContextTimedOut
 	} else {
 		defer s.limiter.Release()
+	}
+
+	config := &graph.BatchConfig{
+		BatchSize: s.batchWriteSize,
+	}
+
+	for _, opt := range options {
+		opt(config)
 	}
 
 	var (
@@ -57,7 +65,7 @@ func (s *driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 		}
 
 		session = s.driver.NewSession(writeCfg())
-		batch   = newBatchOperation(ctx, session, cfg, s.writeFlushSize, s.batchWriteSize, s.graphQueryMemoryLimit)
+		batch   = newBatchOperation(ctx, session, cfg, s.writeFlushSize, config.BatchSize, s.graphQueryMemoryLimit)
 	)
 
 	defer session.Close()
