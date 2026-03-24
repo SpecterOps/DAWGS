@@ -26,17 +26,19 @@ func leftNodeConstraint(edgeIdentifier, nodeIdentifier pgsql.Identifier, directi
 		}, nil
 
 	case graph.DirectionBoth:
-		return pgsql.NewBinaryExpression(
+		return pgsql.NewParenthetical(
 			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID},
-			),
-			pgsql.OperatorOr,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID},
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID},
+				),
+				pgsql.OperatorOr,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID},
+				),
 			),
 		), nil
 
@@ -71,17 +73,19 @@ func rightEdgeConstraint(traversalStep *TraversalStep) (pgsql.Expression, error)
 			}, nil
 
 		case graph.DirectionBoth:
-			return pgsql.NewBinaryExpression(
+			return pgsql.NewParenthetical(
 				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-				),
-				pgsql.OperatorOr,
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+					),
+					pgsql.OperatorOr,
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+					),
 				),
 			), nil
 
@@ -146,17 +150,19 @@ func terminalNodeConstraint(edgeIdentifier, nodeIdentifier pgsql.Identifier, dir
 		}, nil
 
 	case graph.DirectionBoth:
-		return pgsql.NewBinaryExpression(
+		return pgsql.NewParenthetical(
 			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID},
-			),
-			pgsql.OperatorOr,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID},
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID},
+				),
+				pgsql.OperatorOr,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID},
+				),
 			),
 		), nil
 
@@ -370,6 +376,13 @@ type PatternConstraints struct {
 // In cases that match this heuristic, it's beneficial to begin the traversal with the most tightly constrained set
 // of nodes. To accomplish this we flip the order of the traversal step.
 func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, traversalStep *TraversalStep) error {
+	// If the left node is already materialized from a previous step, it is the anchor
+	// for this expansion. Flipping the traversal direction would detach it from the
+	// previous frame and produce invalid SQL (missing FROM-clause entry).
+	if traversalStep.LeftNodeBound {
+		return nil
+	}
+
 	if leftNodeSelectivity, err := MeasureSelectivity(scope, traversalStep.LeftNodeBound, s.LeftNode.Expression); err != nil {
 		return err
 	} else if rightNodeSelectivity, err := MeasureSelectivity(scope, traversalStep.RightNodeBound, s.RightNode.Expression); err != nil {
