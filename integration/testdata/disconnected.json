@@ -1,0 +1,9 @@
+{
+  "graph": {
+    "nodes": [
+      {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "A"}},
+      {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "B"}}
+    ],
+    "edges": []
+  }
+}

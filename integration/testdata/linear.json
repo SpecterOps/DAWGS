@@ -1,0 +1,13 @@
+{
+  "graph": {
+    "nodes": [
+      {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "A"}},
+      {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "B"}},
+      {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "C"}}
+    ],
+    "edges": [
+      {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+      {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"}
+    ]
+  }
+}

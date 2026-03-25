@@ -59,8 +59,8 @@ func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 	schema := graph.Schema{
 		Graphs: []graph.Graph{{
 			Name:  "opengraph_test",
-			Nodes: graph.Kinds{graph.StringKind("Person"), graph.StringKind("Place"), graph.StringKind("NodeKind1"), graph.StringKind("NodeKind2")},
-			Edges: graph.Kinds{graph.StringKind("KNOWS"), graph.StringKind("LIVES_IN"), graph.StringKind("EdgeKind1"), graph.StringKind("EdgeKind2")},
+			Nodes: graph.Kinds{graph.StringKind("Person"), graph.StringKind("Place")},
+			Edges: graph.Kinds{graph.StringKind("KNOWS"), graph.StringKind("LIVES_IN")},
 		}},
 		DefaultGraph: graph.Graph{Name: "opengraph_test"},
 	}
