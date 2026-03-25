@@ -103,6 +103,17 @@ func SetupDB(t *testing.T) (graph.Database, context.Context) {
 	return db, ctx
 }
 
+// ClearGraph deletes all nodes (and cascading edges) from the database.
+func ClearGraph(t *testing.T, db graph.Database, ctx context.Context) {
+	t.Helper()
+
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		return tx.Nodes().Delete()
+	}); err != nil {
+		t.Fatalf("failed to clear graph: %v", err)
+	}
+}
+
 // LoadDataset loads a named JSON dataset from testdata/ and returns the ID mapping.
 func LoadDataset(t *testing.T, db graph.Database, ctx context.Context, name string) opengraph.IDMap {
 	t.Helper()
@@ -154,6 +165,24 @@ func ASPQuery(idMap opengraph.IDMap, start, end string) string {
 		"MATCH p = allShortestPaths((s)-[:EdgeKind1*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
 		idMap[start], idMap[end],
 	)
+}
+
+// AssertIDSet checks that two sets of fixture node IDs match (order-independent).
+func AssertIDSet(t *testing.T, got, expected []string) {
+	t.Helper()
+
+	sort.Strings(got)
+	sort.Strings(expected)
+
+	if len(got) != len(expected) {
+		t.Fatalf("ID set length: got %d, want %d\n  got:  %v\n  want: %v", len(got), len(expected), got, expected)
+	}
+
+	for i := range got {
+		if got[i] != expected[i] {
+			t.Fatalf("ID set mismatch at index %d:\n  got:  %v\n  want: %v", i, got, expected)
+		}
+	}
 }
 
 // AssertPaths checks that the returned paths match the expected set of fixture node ID sequences.
