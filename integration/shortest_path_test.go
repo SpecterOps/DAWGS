@@ -18,7 +18,10 @@
 
 package integration
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestAllShortestPaths(t *testing.T) {
 	db, ctx := SetupDB(t)
@@ -50,7 +53,13 @@ func TestAllShortestPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.dataset, func(t *testing.T) {
 			idMap := LoadDataset(t, db, ctx, tt.dataset)
-			paths := QueryPaths(t, ctx, db, ASPQuery(idMap, tt.start, tt.end))
+
+			cypher := fmt.Sprintf(
+				"MATCH p = allShortestPaths((s)-[:EdgeKind1*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
+				idMap[tt.start], idMap[tt.end],
+			)
+
+			paths := QueryPaths(t, ctx, db, cypher)
 			AssertPaths(t, paths, idMap, tt.expected)
 		})
 	}

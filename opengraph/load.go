@@ -47,6 +47,10 @@ func Load(ctx context.Context, db graph.Database, r io.Reader) (IDMap, error) {
 // WriteGraph writes the nodes and edges of g into db.
 // Returns a mapping from document node IDs to database IDs.
 func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error) {
+	if g == nil {
+		return nil, nil
+	}
+
 	nodeMap := make(IDMap, len(g.Nodes))
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {

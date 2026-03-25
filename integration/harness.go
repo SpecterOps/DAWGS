@@ -159,12 +159,40 @@ func QueryPaths(t *testing.T, ctx context.Context, db graph.Database, cypher str
 	return paths
 }
 
-// ASPQuery builds an allShortestPaths Cypher query using literal database IDs.
-func ASPQuery(idMap opengraph.IDMap, start, end string) string {
-	return fmt.Sprintf(
-		"MATCH p = allShortestPaths((s)-[:EdgeKind1*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-		idMap[start], idMap[end],
-	)
+// QueryNodeIDs runs a Cypher query that returns nodes and collects their fixture IDs.
+// Duplicate nodes are deduplicated.
+func QueryNodeIDs(t *testing.T, ctx context.Context, db graph.Database, cypher string, idMap opengraph.IDMap) []string {
+	t.Helper()
+
+	rev := make(map[graph.ID]string, len(idMap))
+	for fid, dbID := range idMap {
+		rev[dbID] = fid
+	}
+
+	var ids []string
+	seen := make(map[string]bool)
+
+	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		result := tx.Query(cypher, nil)
+		defer result.Close()
+
+		for result.Next() {
+			var n graph.Node
+			if err := result.Scan(&n); err != nil {
+				return err
+			}
+			if fid, ok := rev[n.ID]; ok && !seen[fid] {
+				ids = append(ids, fid)
+				seen[fid] = true
+			}
+		}
+		return result.Error()
+	})
+	if err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+
+	return ids
 }
 
 // AssertIDSet checks that two sets of fixture node IDs match (order-independent).

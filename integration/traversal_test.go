@@ -21,8 +21,6 @@ package integration
 import (
 	"fmt"
 	"testing"
-
-	"github.com/specterops/dawgs/graph"
 )
 
 func TestVariableLengthTraversal(t *testing.T) {
@@ -54,34 +52,7 @@ func TestVariableLengthTraversal(t *testing.T) {
 				idMap[tt.start],
 			)
 
-			var gotIDs []string
-			err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-				result := tx.Query(cypher, nil)
-				defer result.Close()
-
-				rev := make(map[graph.ID]string, len(idMap))
-				for fid, dbID := range idMap {
-					rev[dbID] = fid
-				}
-
-				seen := make(map[string]bool)
-				for result.Next() {
-					var n graph.Node
-					if err := result.Scan(&n); err != nil {
-						return err
-					}
-					if fid, ok := rev[n.ID]; ok && !seen[fid] {
-						gotIDs = append(gotIDs, fid)
-						seen[fid] = true
-					}
-				}
-				return result.Error()
-			})
-			if err != nil {
-				t.Fatalf("query failed: %v", err)
-			}
-
-			AssertIDSet(t, gotIDs, tt.expected)
+			AssertIDSet(t, QueryNodeIDs(t, ctx, db, cypher, idMap), tt.expected)
 		})
 	}
 }

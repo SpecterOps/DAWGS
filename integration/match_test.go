@@ -124,32 +124,7 @@ func TestMatchReturnNodes(t *testing.T) {
 				idMap[tt.queryID],
 			)
 
-			var gotIDs []string
-			err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-				result := tx.Query(cypher, nil)
-				defer result.Close()
-
-				rev := make(map[graph.ID]string, len(idMap))
-				for fid, dbID := range idMap {
-					rev[dbID] = fid
-				}
-
-				for result.Next() {
-					var n graph.Node
-					if err := result.Scan(&n); err != nil {
-						return err
-					}
-					if fid, ok := rev[n.ID]; ok {
-						gotIDs = append(gotIDs, fid)
-					}
-				}
-				return result.Error()
-			})
-			if err != nil {
-				t.Fatalf("query failed: %v", err)
-			}
-
-			AssertIDSet(t, gotIDs, tt.expected)
+			AssertIDSet(t, QueryNodeIDs(t, ctx, db, cypher, idMap), tt.expected)
 		})
 	}
 }
