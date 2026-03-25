@@ -10,14 +10,6 @@ import (
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
-	"github.com/specterops/dawgs/graph"
-)
-
-var (
-	NodeKind1 = graph.StringKind("NodeKind1")
-	NodeKind2 = graph.StringKind("NodeKind2")
-	EdgeKind1 = graph.StringKind("EdgeKind1")
-	EdgeKind2 = graph.StringKind("EdgeKind2")
 )
 
 func newKindMapper() pgsql.KindMapper {
