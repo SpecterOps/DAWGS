@@ -21,14 +21,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
 	"github.com/specterops/dawgs/graph"
 )
 
 // IDMap maps document string node IDs to their database-assigned IDs.
 type IDMap map[string]graph.ID
 
-// Load reads a Document from r, validates it, and writes the graph into db using a batch operation.
-// It returns a mapping from document node IDs to database IDs.
+// Load reads a Document from r, validates it, and writes the graph into db.
+// Returns a mapping from document node IDs to database IDs.
 func Load(ctx context.Context, db graph.Database, r io.Reader) (IDMap, error) {
 	var doc Document
 
@@ -43,15 +44,15 @@ func Load(ctx context.Context, db graph.Database, r io.Reader) (IDMap, error) {
 	return WriteGraph(ctx, db, &doc.Graph)
 }
 
-// WriteGraph writes the nodes and edges of g into db using a batch operation.
+// WriteGraph writes the nodes and edges of g into db.
+// Returns a mapping from document node IDs to database IDs.
 func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error) {
 	nodeMap := make(IDMap, len(g.Nodes))
 
-	if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		for _, node := range g.Nodes {
-			dbNode := graph.PrepareNode(graph.AsProperties(node.Properties), graph.StringsToKinds(node.Kinds)...)
-
-			if err := batch.CreateNode(dbNode); err != nil {
+			dbNode, err := tx.CreateNode(graph.AsProperties(node.Properties), graph.StringsToKinds(node.Kinds)...)
+			if err != nil {
 				return fmt.Errorf("could not create node %q: %w", node.ID, err)
 			}
 
@@ -69,12 +70,12 @@ func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error)
 				return fmt.Errorf("could not find end node %q", edge.EndID)
 			}
 
-			if err := batch.CreateRelationshipByIDs(startID, endID, graph.StringKind(edge.Kind), graph.AsProperties(edge.Properties)); err != nil {
+			if _, err := tx.CreateRelationshipByIDs(startID, endID, graph.StringKind(edge.Kind), graph.AsProperties(edge.Properties)); err != nil {
 				return fmt.Errorf("could not create edge (%s)-[%s]->(%s): %w", edge.StartID, edge.Kind, edge.EndID, err)
 			}
 		}
 
-		return batch.Commit()
+		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("opengraph: write error: %w", err)
 	}

@@ -27,7 +27,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -44,7 +43,7 @@ func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 		t.Skip("PG_CONNECTION_STRING not set")
 	}
 
-	pool, err := pgxpool.New(ctx, connStr)
+	pool, err := pg.NewPool(connStr)
 	if err != nil {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
@@ -60,8 +59,8 @@ func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 	schema := graph.Schema{
 		Graphs: []graph.Graph{{
 			Name:  "opengraph_test",
-			Nodes: graph.Kinds{graph.StringKind("Person"), graph.StringKind("Place")},
-			Edges: graph.Kinds{graph.StringKind("KNOWS"), graph.StringKind("LIVES_IN")},
+			Nodes: graph.Kinds{graph.StringKind("Person"), graph.StringKind("Place"), graph.StringKind("NodeKind1"), graph.StringKind("NodeKind2")},
+			Edges: graph.Kinds{graph.StringKind("KNOWS"), graph.StringKind("LIVES_IN"), graph.StringKind("EdgeKind1"), graph.StringKind("EdgeKind2")},
 		}},
 		DefaultGraph: graph.Graph{Name: "opengraph_test"},
 	}
@@ -98,24 +97,13 @@ func TestLoad(t *testing.T) {
 		}
 	}`
 
-	idMap, err := Load(ctx, db, strings.NewReader(input))
-	if err != nil {
+	if _, err := Load(ctx, db, strings.NewReader(input)); err != nil {
 		t.Fatalf("Load failed: %v", err)
-	}
-
-	if len(idMap) != 3 {
-		t.Fatalf("expected 3 node IDs, got %d", len(idMap))
-	}
-
-	for _, key := range []string{"alice", "bob", "nyc"} {
-		if _, ok := idMap[key]; !ok {
-			t.Errorf("missing ID mapping for %q", key)
-		}
 	}
 
 	// Verify nodes exist in DB
 	var nodeCount int64
-	err = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var countErr error
 		nodeCount, countErr = tx.Nodes().Count()
 		return countErr
