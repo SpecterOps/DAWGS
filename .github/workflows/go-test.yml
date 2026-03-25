@@ -21,6 +21,7 @@ on:
     branches:
       - "main"
       - "stage/**"
+      - "PQE-401"
     types:
       - "opened"
       - "synchronize"
@@ -62,3 +63,60 @@ jobs:
       - name: Run Tests
         run: |
           go test ./...
+
+  integration-test:
+    name: Run integration tests (${{ matrix.driver }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - driver: pg
+            connection: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
+          - driver: neo4j
+            connection: bolt://neo4j:weneedbetterpasswords@localhost:7687
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dawgs
+          POSTGRES_PASSWORD: weneedbetterpasswords
+          POSTGRES_DB: dawgs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dawgs -d dawgs"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        volumes:
+          - pg_data:/var/lib/postgresql/data
+      neo4j:
+        image: neo4j:4.4.42
+        env:
+          NEO4J_AUTH: neo4j/weneedbetterpasswords
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "curl -f http://localhost:7474"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        volumes:
+          - neo4j_data:/data
+    steps:
+      - name: Checkout source code for this repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Run integration tests
+        env:
+          Driver_CONNECTION_STRING: ${{ matrix.connection }}
+        run: |
+          go test -tags integration -v ./ops/...
