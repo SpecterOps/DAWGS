@@ -205,7 +205,7 @@ func (s *TranslationTestCase) AssertLive(ctx context.Context, t *testing.T, driv
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			t.Fatalf("Failed to format SQL translatedQuery: %v", err)
 		} else {
-			require.Nil(t, driver.Run(ctx, "explain "+formattedQuery, translation.Parameters))
+			require.NoError(t, driver.Run(ctx, "explain "+formattedQuery, translation.Parameters))
 		}
 	}
 }

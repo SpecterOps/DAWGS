@@ -14,11 +14,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package query
+package query_test
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/drivers/pg/model"
+	query "github.com/specterops/dawgs/drivers/pg/query"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,13 +33,13 @@ import (
 func TestNodeUpdateBatch(t *testing.T) {
 	tests := []struct {
 		name   string
-		setup  func(t *testing.T) *NodeUpdateBatch
-		assert func(t *testing.T, updates *NodeUpdateBatch)
+		setup  func(t *testing.T) *query.NodeUpdateBatch
+		assert func(t *testing.T, updates *query.NodeUpdateBatch)
 	}{
 		{
 			name: "Success: Conflicting key successfully serializes — batch keeps both identities",
-			setup: func(t *testing.T) *NodeUpdateBatch {
-				updates := NewNodeUpdateBatch()
+			setup: func(t *testing.T) *query.NodeUpdateBatch {
+				updates := query.NewNodeUpdateBatch()
 
 				// Add node A to the batch
 				firstNode := graph.NewNode(0, graph.NewProperties().Set("objectid", "OID-A"), graph.StringKind("User"))
@@ -63,7 +66,7 @@ func TestNodeUpdateBatch(t *testing.T) {
 
 				return updates
 			},
-			assert: func(t *testing.T, updates *NodeUpdateBatch) {
+			assert: func(t *testing.T, updates *query.NodeUpdateBatch) {
 				// The snapshot must preserve OID-A so two distinct keys exist.
 				assert.Len(t, updates.Updates, 2, "batch must hold two distinct entries")
 
@@ -88,7 +91,7 @@ func TestNodeUpdateBatch(t *testing.T) {
 		},
 		{
 			name: "Success: Conflicting key successfully serializes — both entries merge into one row",
-			setup: func(t *testing.T) *NodeUpdateBatch {
+			setup: func(t *testing.T) *query.NodeUpdateBatch {
 				// Add node A to the batch
 				firstNode := graph.NewNode(0, graph.NewProperties().Set("objectid", "OID-A"), graph.StringKind("User"))
 				queuedUpdates := []graph.NodeUpdate{{
@@ -110,12 +113,12 @@ func TestNodeUpdateBatch(t *testing.T) {
 				})
 
 				// Validate the batch
-				updates, err := ValidateNodeUpdateByBatch(queuedUpdates)
+				updates, err := query.ValidateNodeUpdateByBatch(queuedUpdates)
 				require.NoError(t, err, "setup: ValidateNodeUpdateByBatch failed")
 
 				return updates
 			},
-			assert: func(t *testing.T, updates *NodeUpdateBatch) {
+			assert: func(t *testing.T, updates *query.NodeUpdateBatch) {
 				// Both entries share key "OID-B" at validation time, so they merge.
 				assert.Len(t, updates.Updates, 1, "both entries share OID-B so they merge")
 
@@ -138,4 +141,87 @@ func TestNodeUpdateBatch(t *testing.T) {
 			tt.assert(t, updates)
 		})
 	}
+}
+
+func generateTestGraphTarget(nodePartitionName string) model.Graph {
+	return model.Graph{
+		Partitions: model.GraphPartitions{
+			Node: model.NewGraphPartition(nodePartitionName),
+		},
+	}
+}
+
+func TestFormatNodesUpdate(t *testing.T) {
+	t.Parallel()
+
+	var (
+		partitionName = "node_1"
+		expected      = strings.Join([]string{
+			"update node_1 as n ",
+			"set ",
+			" kind_ids = uniq(sort(kind_ids - u.deleted_kinds || u.added_kinds)), ",
+			" properties = n.properties - u.deleted_properties || u.properties ",
+			"from ",
+			" (select ",
+			"  unnest($1::text[])::int8 as id, ",
+			"  unnest($2::text[])::int2[] as added_kinds, ",
+			"  unnest($3::text[])::int2[] as deleted_kinds, ",
+			"  unnest($4::jsonb[]) as properties, ",
+			"  unnest($5::text[])::text[] as deleted_properties) as u ",
+			"where n.id = u.id; ",
+		}, "")
+		result = query.FormatNodesUpdate(generateTestGraphTarget(partitionName))
+	)
+
+	assert.Equal(t, expected, result)
+}
+
+func TestFormatCreateNodeUpdateStagingTable(t *testing.T) {
+	t.Parallel()
+
+	var (
+		tableName = "my_staging_table"
+		expected  = strings.Join([]string{
+			"create temp table if not exists my_staging_table (",
+			"id bigint, ",
+			"added_kinds text, ",
+			"deleted_kinds text, ",
+			"properties text, ",
+			"deleted_props text",
+			") on commit drop;",
+		}, "")
+		result = query.FormatCreateNodeUpdateStagingTable(tableName)
+	)
+
+	assert.Equal(t, expected, result)
+}
+
+func TestFormatMergeNodeLargeUpdate(t *testing.T) {
+	t.Parallel()
+
+	var (
+		partitionName = "node_part_1"
+		stagingTable  = "my_staging"
+		expected      = strings.Join([]string{
+			"merge into node_part_1 as n ",
+			"using my_staging as u on n.id = u.id ",
+			"when matched then update set ",
+			"kind_ids = uniq(sort(n.kind_ids - u.deleted_kinds::int2[] || u.added_kinds::int2[])), ",
+			"properties = n.properties - u.deleted_props::text[] || u.properties::jsonb;",
+		}, "")
+		result = query.FormatMergeNodeLargeUpdate(generateTestGraphTarget(partitionName), stagingTable)
+	)
+
+	assert.Equal(t, expected, result)
+}
+
+func TestNodeUpdateStagingColumns(t *testing.T) {
+	t.Parallel()
+
+	var (
+		// Note: order is important
+		expected = []string{"id", "added_kinds", "deleted_kinds", "properties", "deleted_props"}
+	)
+
+	assert.Equal(t, expected, query.NodeUpdateStagingColumns)
 }

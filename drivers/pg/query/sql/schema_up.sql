@@ -338,11 +338,18 @@ $$
 
 create or replace function public.edges_to_path(path variadic int8[]) returns pathComposite as
 $$
-select row (array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)::nodeComposite[],
-         array_agg(distinct (r.id, r.start_id, r.end_id, r.kind_id, r.properties)::edgeComposite)::edgeComposite[])::pathComposite
-from edge r
-       join node n on n.id = r.start_id or n.id = r.end_id
-where r.id = any (path);
+select row (
+  (select array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)
+   from node n
+   where n.id in (
+     select start_id from edge where id = any(path)
+     union
+     select end_id from edge where id = any(path)
+   )),
+  (select array_agg(distinct (r.id, r.start_id, r.end_id, r.kind_id, r.properties)::edgeComposite)
+   from edge r
+   where r.id = any(path))
+)::pathComposite;
 $$
   language sql
   immutable
