@@ -229,6 +229,10 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 
 				idFutureIndex++
 			}
+
+			if err := rows.Err(); err != nil {
+				return err
+			}
 		}
 	}
 

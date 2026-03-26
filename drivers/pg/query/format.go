@@ -166,7 +166,9 @@ func (s *NodeUpdateBatch) Add(update graph.NodeUpdate) (*Future[graph.ID], error
 	if key, err := update.Key(); err != nil {
 		return nil, err
 	} else {
-		update.Node.AddKinds(update.Node.Kinds...)
+		// create a copy of the node so that we can safely mutate it
+		batchNode := graph.NewNode(update.Node.ID, update.Node.Properties.Clone(), update.Node.Kinds...)
+		batchNode.AddKinds(batchNode.Kinds...)
 
 		if len(s.IdentityProperties) == 0 {
 			s.IdentityProperties = make([]string, len(update.IdentityProperties))
@@ -174,14 +176,14 @@ func (s *NodeUpdateBatch) Add(update graph.NodeUpdate) (*Future[graph.ID], error
 		}
 
 		if existingUpdate, hasExisting := s.Updates[key]; hasExisting {
-			existingUpdate.Node.Merge(update.Node)
+			existingUpdate.Node.Merge(batchNode)
 			return existingUpdate.IDFuture, nil
 		} else {
 			newIDFuture := NewFuture(graph.ID(0))
 
 			s.Updates[key] = &NodeUpdate{
 				IDFuture: newIDFuture,
-				Node:     update.Node,
+				Node:     batchNode,
 			}
 
 			return newIDFuture, nil
