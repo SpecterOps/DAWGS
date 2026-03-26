@@ -9,6 +9,7 @@ var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
 	"lookup-kind-id": lookupKindIDCmd(),
 	"open-pg-db":     openPGDBCmd(),
 	"parse":          parseCmd(),
+	"query-cypher":   queryCypherCmd(),
 	"quit":           quitCmd(),
 	"runtime-trace":  runtimeTraceCmd(),
 	"translate-psql": translateToPsqlCmd(),

@@ -1,14 +1,20 @@
 package commands
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/kanmu/go-sqlfmt/sqlfmt"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/graph"
+	"golang.org/x/term"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
 )
@@ -182,5 +188,170 @@ func explainAsPsqlCmd() CommandDesc {
 
 			return nil
 		},
+	}
+}
+
+func queryCypherCmd() CommandDesc {
+	return CommandDesc{
+		args: []string{"<conn>", "<...query>"},
+		help: "Executes a Cypher query and renders results in a table",
+		desc: "Runs a Cypher query over an active backend connection and pretty-prints fetched rows",
+
+		Fn: func(ctx *CommandContext, fields []string) error {
+			if len(fields) < 2 {
+				return fmt.Errorf("invalid usage, requires: <connection name> <query>")
+			}
+
+			connName := fields[0]
+			conn, ok := ctx.scope.connections[connName]
+			if !ok {
+				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
+			}
+
+			cypherQuery := strings.Join(fields[1:], " ")
+
+			return conn.ReadTransaction(ctx, func(tx graph.Transaction) error {
+				result := tx.Query(cypherQuery, nil)
+				if err := result.Error(); err != nil {
+					return fmt.Errorf("error running cypher query '%s': %w", cypherQuery, err)
+				}
+				defer result.Close()
+
+				outputTable := table.NewWriter()
+				style := table.StyleRounded
+				style.Options.SeparateRows = true
+				style.Size.WidthMax = cypherResultTableWidth()
+				outputTable.SetStyle(style)
+
+				rowCount := 0
+				for result.Next() {
+					values := result.Values()
+
+					if rowCount == 0 {
+						headers := buildCypherResultHeader(result.Keys(), len(values))
+						outputTable.AppendHeader(headers)
+						outputTable.SetColumnConfigs(buildCypherResultColumnConfigs(len(headers), style.Size.WidthMax))
+					}
+
+					outputTable.AppendRow(buildCypherResultRow(values))
+					rowCount++
+				}
+
+				if err := result.Error(); err != nil {
+					return fmt.Errorf("error fetching query rows: %w", err)
+				}
+
+				if rowCount == 0 {
+					fmt.Fprint(ctx.output, "(0 rows)\n")
+					return nil
+				}
+
+				fmt.Fprint(ctx.output, outputTable.Render())
+				fmt.Fprintf(ctx.output, "\n(%d rows)\n", rowCount)
+				return nil
+			})
+		},
+	}
+}
+
+func cypherResultTableWidth() int {
+	const (
+		fallbackWidth = 120
+		minWidth      = 40
+	)
+
+	if width, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+		width -= 2
+		if width >= minWidth {
+			return width
+		}
+	}
+
+	return fallbackWidth
+}
+
+func buildCypherResultColumnConfigs(columnCount, tableWidth int) []table.ColumnConfig {
+	if columnCount == 0 {
+		return nil
+	}
+
+	const (
+		minColumnWidth = 12
+		innerPadding   = 3
+	)
+
+	availableWidth := tableWidth - 1 - (columnCount * innerPadding)
+	columnWidth := availableWidth / columnCount
+	if columnWidth < minColumnWidth {
+		columnWidth = minColumnWidth
+	}
+
+	configs := make([]table.ColumnConfig, 0, columnCount)
+	for idx := 0; idx < columnCount; idx++ {
+		configs = append(configs, table.ColumnConfig{
+			Number:           idx + 1,
+			WidthMax:         columnWidth,
+			WidthMaxEnforcer: text.WrapHard,
+		})
+	}
+
+	return configs
+}
+
+func buildCypherResultHeader(keys []string, numValues int) table.Row {
+	columns := append([]string{}, keys...)
+
+	if len(columns) < numValues {
+		for idx := len(columns); idx < numValues; idx++ {
+			columns = append(columns, fmt.Sprintf("column_%d", idx+1))
+		}
+	}
+
+	header := make(table.Row, len(columns))
+	for idx, key := range columns {
+		header[idx] = key
+	}
+
+	return header
+}
+
+func buildCypherResultRow(values []any) table.Row {
+	row := make(table.Row, len(values))
+	for idx, value := range values {
+		row[idx] = formatCypherResultValue(value)
+	}
+
+	return row
+}
+
+func formatCypherResultValue(value any) any {
+	switch typed := value.(type) {
+	case nil:
+		return "<nil>"
+	case bool,
+		int,
+		int8,
+		int16,
+		int32,
+		int64,
+		uint,
+		uint8,
+		uint16,
+		uint32,
+		uint64,
+		float32,
+		float64,
+		string:
+		return typed
+	case []byte:
+		return string(typed)
+	case fmt.Stringer:
+		return typed.String()
+	default:
+		if marshaled, err := json.Marshal(typed); err == nil {
+			return string(marshaled)
+		}
+
+		return fmt.Sprintf("%v", typed)
 	}
 }
