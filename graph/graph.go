@@ -283,6 +283,9 @@ type Batch interface {
 	// exist, created.
 	UpdateNodeBy(update NodeUpdate) error
 
+	// Updates nodes by ID
+	UpdateNodes(nodes []*Node) error
+
 	// TODO: Existing batch logic expects this to perform an upsert on conficts with (start_id, end_id, kind). This is incorrect and should be refactored
 	CreateRelationship(relationship *Relationship) error
 
@@ -363,6 +366,20 @@ type TransactionConfig struct {
 // TransactionOption is a function that represents a configuration setting for the underlying database transaction.
 type TransactionOption func(config *TransactionConfig)
 
+func WithBatchSize(size int) BatchOption {
+	return func(config *BatchConfig) {
+		if size > 0 {
+			config.BatchSize = size
+		}
+	}
+}
+
+type BatchOption func(config *BatchConfig)
+
+type BatchConfig struct {
+	BatchSize int
+}
+
 // Database is a high-level interface representing transactional entry-points into DAWGS driver implementations.
 type Database interface {
 	// SetWriteFlushSize sets a new write flush interval on the current driver
@@ -383,7 +400,7 @@ type Database interface {
 	// given logic function. Batch operations are fundamentally different between databases supported by DAWGS,
 	// necessitating a different interface that lacks many of the convenience features of a regular read or write
 	// transaction.
-	BatchOperation(ctx context.Context, batchDelegate BatchDelegate) error
+	BatchOperation(ctx context.Context, batchDelegate BatchDelegate, options ...BatchOption) error
 
 	// AssertSchema will apply the given schema to the underlying database.
 	AssertSchema(ctx context.Context, dbSchema Schema) error

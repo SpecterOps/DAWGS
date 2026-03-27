@@ -4,10 +4,122 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/graph"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newTestingNode(existingKinds, addedKinds, deletedKinds graph.Kinds) *graph.Node {
+	node := graph.PrepareNode(
+		graph.AsProperties(map[string]any{
+			"name":                "tomfoolery jim",
+			"tomfoolery_detected": true,
+		}),
+		existingKinds...,
+	)
+
+	node.AddKinds(addedKinds...)
+	node.DeleteKinds(deletedKinds...)
+
+	return node
+}
+
+func Test_nodeToNodeUpdateKey(t *testing.T) {
+	var (
+		digester = xxhash.New()
+
+		// Digests 1 and 2 should have the same update key as the query that updates both
+		// entities should be structurally the same
+		digest1 = nodeToNodeUpdateKey(digester,
+			newTestingNode(
+				graph.Kinds{graph.StringKind("Jim"), graph.StringKind("User")},
+				graph.Kinds{graph.StringKind("Fool"), graph.StringKind("Asset")},
+				graph.Kinds{},
+			),
+		)
+		digest2 = nodeToNodeUpdateKey(digester,
+			newTestingNode(
+				graph.Kinds{graph.StringKind("Jim"), graph.StringKind("User")},
+				graph.Kinds{graph.StringKind("Asset"), graph.StringKind("Fool")},
+				graph.Kinds{},
+			),
+		)
+
+		// Digest 3 and 4 should have a distinct update key from digests 1 and 2 becaus the query
+		// structure must be different
+		digest3 = nodeToNodeUpdateKey(digester,
+			newTestingNode(
+				graph.Kinds{graph.StringKind("Jim"), graph.StringKind("User")},
+				graph.Kinds{graph.StringKind("Fool")},
+				graph.Kinds{graph.StringKind("User")},
+			),
+		)
+		digest4 = nodeToNodeUpdateKey(digester,
+			newTestingNode(
+				graph.Kinds{graph.StringKind("User"), graph.StringKind("Tom")},
+				graph.Kinds{graph.StringKind("Fool")},
+				graph.Kinds{graph.StringKind("User")},
+			),
+		)
+
+		// Digest 5 should deviate from digest 4 because it no longer includes the User kind in the deleted set
+		digest5 = nodeToNodeUpdateKey(digester,
+			newTestingNode(
+				graph.Kinds{graph.StringKind("User"), graph.StringKind("Tom")},
+				graph.Kinds{graph.StringKind("Fool")},
+				graph.Kinds{},
+			),
+		)
+	)
+
+	assert.Equal(t, digest1, digest2)
+	assert.Equal(t, digest3, digest4)
+
+	assert.NotEqual(t, digest1, digest3)
+	assert.NotEqual(t, digest4, digest5)
+}
+
+func Test_cypherBuildNodeUpdateQueryBatch(t *testing.T) {
+	var (
+		nodes = []*graph.Node{
+			newTestingNode(
+				graph.Kinds{graph.StringKind("Jim"), graph.StringKind("User")},
+				graph.Kinds{graph.StringKind("Fool"), graph.StringKind("Asset")},
+				graph.Kinds{},
+			),
+			newTestingNode(
+				graph.Kinds{graph.StringKind("Jim"), graph.StringKind("User")},
+				graph.Kinds{graph.StringKind("Asset"), graph.StringKind("Fool")},
+				graph.Kinds{},
+			),
+			newTestingNode(
+				graph.Kinds{graph.StringKind("Jim"), graph.StringKind("User")},
+				graph.Kinds{graph.StringKind("Fool")},
+				graph.Kinds{graph.StringKind("User")},
+			),
+			newTestingNode(
+				graph.Kinds{graph.StringKind("User"), graph.StringKind("Tom")},
+				graph.Kinds{graph.StringKind("Fool")},
+				graph.Kinds{graph.StringKind("User")},
+			),
+		}
+
+		expectedQueries = []string{
+			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:Fool, n:Asset;",
+			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:Fool remove n:User;",
+		}
+
+		queries, parameters = cypherBuildNodeUpdateQueryBatch(nodes)
+	)
+
+	for _, expectedQuery := range expectedQueries {
+		assert.Contains(t, queries, expectedQuery)
+	}
+
+	assert.Equal(t, 2, len(parameters))
+}
 
 func Test_relUpdateKey(t *testing.T) {
 	updateKey := relUpdateKey(graph.RelationshipUpdate{

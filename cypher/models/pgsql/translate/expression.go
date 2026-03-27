@@ -405,6 +405,13 @@ func mergeUserAndTranslationConstraints(userConstraints, translationConstraints 
 	return translationConstraints
 }
 
+func (s *ExpressionTreeTranslator) HasAnyConstraints(scope *pgsql.IdentifierSet) (bool, error) {
+	if hasUser, err := s.UserConstraints.HasConstraints(scope); err != nil || hasUser {
+		return hasUser, err
+	}
+	return s.TranslationConstraints.HasConstraints(scope)
+}
+
 func (s *ExpressionTreeTranslator) ConsumeConstraintsFromVisibleSet(visible *pgsql.IdentifierSet) (*Constraint, error) {
 	if userConstraints, err := s.UserConstraints.ConsumeSet(s.kindMapper, visible); err != nil {
 		return nil, err
@@ -553,8 +560,29 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 							newExpression.ROperand = pgsql.CompoundIdentifier{typedROperand, pgsql.ColumnID}
 
 						case pgsql.NodeCompositeArray:
+							const unnestElemAlias pgsql.Identifier = "_unnest_elem"
 							newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}
-							newExpression.ROperand = pgsql.CompoundIdentifier{typedROperand, pgsql.ColumnID}
+							newExpression.ROperand = pgsql.Subquery{
+								Query: pgsql.Query{
+									Body: pgsql.Select{
+										Projection: pgsql.Projection{
+											pgsql.RowColumnReference{
+												Identifier: unnestElemAlias,
+												Column:     pgsql.ColumnID,
+											},
+										},
+										From: []pgsql.FromClause{{
+											Source: pgsql.AliasedExpression{
+												Expression: pgsql.FunctionCall{
+													Function:   pgsql.FunctionUnnest,
+													Parameters: []pgsql.Expression{typedROperand},
+												},
+												Alias: pgsql.AsOptionalIdentifier(unnestElemAlias),
+											},
+										}},
+									},
+								},
+							}
 
 						default:
 							return fmt.Errorf("invalid comparison between types %s and %s", boundLOperand.DataType, boundROperand.DataType)

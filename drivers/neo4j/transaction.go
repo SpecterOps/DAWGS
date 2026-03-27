@@ -93,10 +93,25 @@ func (s *neo4jTransaction) UpdateRelationshipBy(update graph.RelationshipUpdate)
 	return s.updateRelationshipsBy(update)
 }
 
+func (s *neo4jTransaction) updateNodeBatch(batch []*graph.Node) error {
+	var (
+		numUpdates                     = len(batch)
+		statements, queryParameterMaps = cypherBuildNodeUpdateQueryBatch(batch)
+	)
+
+	for parameterIdx, stmt := range statements {
+		if result := s.Raw(stmt, queryParameterMaps[parameterIdx]); result.Error() != nil {
+			return fmt.Errorf("update nodes by error on statement (%s): %s", stmt, result.Error())
+		}
+	}
+
+	return s.logWrites(numUpdates)
+}
+
 func (s *neo4jTransaction) updateNodesBy(updates ...graph.NodeUpdate) error {
 	var (
 		numUpdates                     = len(updates)
-		statements, queryParameterMaps = cypherBuildNodeUpdateQueryBatch(updates)
+		statements, queryParameterMaps = cypherBuildNodeUpdateQueryByBatch(updates)
 	)
 
 	for parameterIdx, stmt := range statements {

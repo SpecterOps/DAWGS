@@ -271,7 +271,7 @@ func (s *triplestoreProjection) EachNode(delegate func(node uint64) bool) {
 
 func (s *triplestoreProjection) EachEdge(delegate func(next Edge) bool) {
 	s.origin.EachEdge(func(next Edge) bool {
-		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.Start) {
+		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.End) {
 			return delegate(next)
 		}
 
