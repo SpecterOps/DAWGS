@@ -383,6 +383,10 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(isFirstTraver
 		return err
 	} else {
 		if isFirstTraversalStep {
+			if err := constraints.OptimizePatternConstraintBalance(s.scope, traversalStep); err != nil {
+				return err
+			}
+
 			hasPreviousFrame := traversalStep.Frame.Previous != nil
 
 			if hasPreviousFrame {

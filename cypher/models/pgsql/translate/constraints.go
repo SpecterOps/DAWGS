@@ -383,11 +383,19 @@ func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, trav
 		return nil
 	}
 
-	if leftNodeSelectivity, err := MeasureSelectivity(scope, traversalStep.LeftNodeBound, s.LeftNode.Expression); err != nil {
+	if traversalStep.RightNodeBound {
+		// Right is the tighter anchor by definition; flip once to normalize it to the left.
+		traversalStep.FlipNodes()
+		s.FlipNodes()
+
+		return nil
+	}
+
+	if leftNodeSelectivity, err := MeasureSelectivity(scope, s.LeftNode.Expression); err != nil {
 		return err
-	} else if rightNodeSelectivity, err := MeasureSelectivity(scope, traversalStep.RightNodeBound, s.RightNode.Expression); err != nil {
+	} else if rightNodeSelectivity, err := MeasureSelectivity(scope, s.RightNode.Expression); err != nil {
 		return err
-	} else if rightNodeSelectivity > leftNodeSelectivity {
+	} else if rightNodeSelectivity-leftNodeSelectivity >= selectivityFlipThreshold {
 		// (a)-[*..]->(b:Constraint)
 		// (a)<-[*..]-(b:Constraint)
 		traversalStep.FlipNodes()

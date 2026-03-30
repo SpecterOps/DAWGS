@@ -42,6 +42,15 @@ const (
 
 	// Disjunctions expand search space by adding a secondary, conditional operation
 	selectivityWeightDisjunction = -100
+
+	// selectivityFlipThreshold is the minimum score advantage the right-hand node must hold
+	// over the left-hand node before OptimizePatternConstraintBalance commits to a traversal
+	// direction flip. It is set to selectivityWeightNarrowSearch so that structural AST noise
+	// — in particular the per-AND-node conjunction bonus — cannot trigger a flip on its own.
+	// A single meaningful narrowing predicate (=, IN, kind filter) on the right side is
+	// sufficient to clear this bar; a bare AND connector (weight 5) or a range comparison on
+	// an unindexed property (weight 10) is not.
+	selectivityFlipThreshold = selectivityWeightNarrowSearch
 )
 
 // knownNodePropertySelectivity is a hack to enable the selectivity measurement to take advantage of known property indexes
@@ -92,6 +101,20 @@ func (s *measureSelectivityVisitor) addSelectivity(value int) {
 	}
 }
 
+func isColumnIDRef(expression pgsql.Expression) bool {
+	switch typedExpression := expression.(type) {
+	case pgsql.CompoundIdentifier:
+		if typedExpression.HasField() {
+			switch typedExpression.Field() {
+			case pgsql.ColumnID:
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func (s *measureSelectivityVisitor) Enter(node pgsql.SyntaxNode) {
 	switch typedNode := node.(type) {
 	case *pgsql.UnaryExpression:
@@ -101,29 +124,20 @@ func (s *measureSelectivityVisitor) Enter(node pgsql.SyntaxNode) {
 		}
 
 	case *pgsql.BinaryExpression:
-		switch typedLOperand := typedNode.LOperand.(type) {
-		case pgsql.CompoundIdentifier:
-			if typedLOperand.HasField() {
-				switch typedLOperand.Field() {
-				case pgsql.ColumnID:
-					// Identifier references typically have high selectivity. This might be a nested reference, reducing the
-					// effectiveness of the heuristic but the benefits outweigh this deficiency
-					s.addSelectivity(selectivityWeightEntityIDReference)
-				}
-			}
+		var (
+			lOperandIsID = isColumnIDRef(typedNode.LOperand)
+			rOperandIsID = isColumnIDRef(typedNode.ROperand)
+		)
+
+		if lOperandIsID && !rOperandIsID {
+			// Point lookup: n0.id = <literal or param> — highly selective
+			s.addSelectivity(selectivityWeightEntityIDReference)
+		} else if rOperandIsID && !lOperandIsID {
+			// Canonically unusual, but handle it the same
+			s.addSelectivity(selectivityWeightEntityIDReference)
 		}
 
-		switch typedROperand := typedNode.ROperand.(type) {
-		case pgsql.CompoundIdentifier:
-			if typedROperand.HasField() {
-				switch typedROperand.Field() {
-				case pgsql.ColumnID:
-					// Identifier references typically have high selectivity. This might be a nested reference, reducing the
-					// effectiveness of the heuristic but the benefits outweigh this deficiency
-					s.addSelectivity(selectivityWeightEntityIDReference)
-				}
-			}
-		}
+		// If both sides are ID refs, this is a join condition — do not score as a point lookup
 
 		switch typedNode.Operator {
 		case pgsql.OperatorOr:
@@ -141,8 +155,15 @@ func (s *measureSelectivityVisitor) Enter(node pgsql.SyntaxNode) {
 		case pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorRegexMatch, pgsql.OperatorSimilarTo:
 			s.addSelectivity(selectivityWeightStringSearch)
 
-		case pgsql.OperatorIn, pgsql.OperatorEquals, pgsql.OperatorIs, pgsql.OperatorPGArrayOverlap, pgsql.OperatorArrayOverlap:
+		case pgsql.OperatorIn, pgsql.OperatorEquals, pgsql.OperatorIs:
 			s.addSelectivity(selectivityWeightNarrowSearch)
+
+		case pgsql.OperatorPGArrayOverlap, pgsql.OperatorArrayOverlap:
+			s.addSelectivity(selectivityWeightNarrowSearch)
+
+		case pgsql.OperatorPGArrayLHSContainsRHS:
+			// @> is strictly more selective than &&: all kind_ids must be present.
+			s.addSelectivity(selectivityWeightNarrowSearch + selectivityWeightConjunction)
 
 		case pgsql.OperatorJSONField, pgsql.OperatorJSONTextField, pgsql.OperatorPropertyLookup:
 			if propertyLookup, err := binaryExpressionToPropertyLookup(typedNode); err != nil {
@@ -187,13 +208,8 @@ func (s *measureSelectivityVisitor) Exit(node pgsql.SyntaxNode) {
 // bound component is considered to be highly-selective.
 //
 // Many numbers are magic values selected based on implementor's perception of selectivity of certain operators.
-func MeasureSelectivity(scope *Scope, owningIdentifierBound bool, expression pgsql.Expression) (int, error) {
+func MeasureSelectivity(scope *Scope, expression pgsql.Expression) (int, error) {
 	visitor := newMeasureSelectivityVisitor(scope)
-
-	// If the identifier is reified at this stage in the query then it's already selected
-	if owningIdentifierBound {
-		visitor.addSelectivity(selectivityWeightBoundIdentifier)
-	}
 
 	if expression != nil {
 		if err := walk.PgSQL(expression, visitor); err != nil {
