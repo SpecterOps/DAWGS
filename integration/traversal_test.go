@@ -24,7 +24,7 @@ import (
 )
 
 func TestVariableLengthTraversal(t *testing.T) {
-	db, ctx := SetupDB(t)
+	db, ctx := SetupDB(t, "linear", "diamond", "wide_diamond", "dead_end", "disconnected")
 
 	tests := []struct {
 		dataset  string

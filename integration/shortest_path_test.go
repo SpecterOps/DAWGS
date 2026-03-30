@@ -24,7 +24,7 @@ import (
 )
 
 func TestAllShortestPaths(t *testing.T) {
-	db, ctx := SetupDB(t)
+	db, ctx := SetupDB(t, "diamond", "direct_shortcut", "linear", "dead_end", "disconnected", "wide_diamond")
 
 	tests := []struct {
 		dataset    string

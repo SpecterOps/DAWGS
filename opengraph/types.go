@@ -16,6 +16,8 @@
 
 package opengraph
 
+import "github.com/specterops/dawgs/graph"
+
 // Document is the top-level container for an OpenGraph JSON file.
 type Document struct {
 	Graph Graph `json:"graph"`
@@ -40,4 +42,17 @@ type Edge struct {
 	EndID      string         `json:"end_id"`
 	Kind       string         `json:"kind"`
 	Properties map[string]any `json:"properties,omitempty"`
+}
+
+// Kinds returns the unique node and edge kinds found in the graph.
+func (g Graph) Kinds() (nodeKinds, edgeKinds graph.Kinds) {
+	for _, node := range g.Nodes {
+		nodeKinds = nodeKinds.Add(graph.StringsToKinds(node.Kinds)...)
+	}
+
+	for _, edge := range g.Edges {
+		edgeKinds = edgeKinds.Add(graph.StringKind(edge.Kind))
+	}
+
+	return nodeKinds, edgeKinds
 }

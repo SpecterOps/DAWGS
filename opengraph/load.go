@@ -28,17 +28,27 @@ import (
 // IDMap maps document string node IDs to their database-assigned IDs.
 type IDMap map[string]graph.ID
 
-// Load reads a Document from r, validates it, and writes the graph into db.
-// Returns a mapping from document node IDs to database IDs.
-func Load(ctx context.Context, db graph.Database, r io.Reader) (IDMap, error) {
+// ParseDocument decodes and validates a Document from r without writing to a database.
+func ParseDocument(r io.Reader) (Document, error) {
 	var doc Document
 
 	if err := json.NewDecoder(r).Decode(&doc); err != nil {
-		return nil, fmt.Errorf("opengraph: decode error: %w", err)
+		return doc, fmt.Errorf("opengraph: decode error: %w", err)
 	}
 
 	if err := Validate(doc); err != nil {
-		return nil, fmt.Errorf("opengraph: validation error: %w", err)
+		return doc, fmt.Errorf("opengraph: validation error: %w", err)
+	}
+
+	return doc, nil
+}
+
+// Load reads a Document from r, validates it, and writes the graph into db.
+// Returns a mapping from document node IDs to database IDs.
+func Load(ctx context.Context, db graph.Database, r io.Reader) (IDMap, error) {
+	doc, err := ParseDocument(r)
+	if err != nil {
+		return nil, err
 	}
 
 	return WriteGraph(ctx, db, &doc.Graph)
@@ -53,6 +63,7 @@ func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error)
 
 	nodeMap := make(IDMap, len(g.Nodes))
 
+	// Nodes are created via WriteTransaction so we get database IDs back for edge mapping.
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		for _, node := range g.Nodes {
 			dbNode, err := tx.CreateNode(graph.AsProperties(node.Properties), graph.StringsToKinds(node.Kinds)...)
@@ -63,6 +74,13 @@ func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error)
 			nodeMap[node.ID] = dbNode.ID
 		}
 
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("opengraph: node write error: %w", err)
+	}
+
+	// Edges are created via BatchOperation for bulk insert performance.
+	if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
 		for _, edge := range g.Edges {
 			startID, ok := nodeMap[edge.StartID]
 			if !ok {
@@ -74,14 +92,14 @@ func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error)
 				return fmt.Errorf("could not find end node %q", edge.EndID)
 			}
 
-			if _, err := tx.CreateRelationshipByIDs(startID, endID, graph.StringKind(edge.Kind), graph.AsProperties(edge.Properties)); err != nil {
+			if err := batch.CreateRelationshipByIDs(startID, endID, graph.StringKind(edge.Kind), graph.AsProperties(edge.Properties)); err != nil {
 				return fmt.Errorf("could not create edge (%s)-[%s]->(%s): %w", edge.StartID, edge.Kind, edge.EndID, err)
 			}
 		}
 
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("opengraph: write error: %w", err)
+		return nil, fmt.Errorf("opengraph: edge write error: %w", err)
 	}
 
 	return nodeMap, nil

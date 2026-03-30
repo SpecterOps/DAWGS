@@ -36,13 +36,15 @@ import (
 )
 
 var (
-	driverFlag  = flag.String("driver", "pg", "database driver to test against (pg, neo4j)")
-	connStrFlag = flag.String("connection", "", "database connection string (overrides PG_CONNECTION_STRING env var)")
+	driverFlag       = flag.String("driver", "pg", "database driver to test against (pg, neo4j)")
+	connStrFlag      = flag.String("connection", "", "database connection string (overrides PG_CONNECTION_STRING env var)")
+	localDatasetFlag = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
 )
 
-// SetupDB opens a database connection for the selected driver, asserts schema,
-// and registers cleanup. Returns the database and a background context.
-func SetupDB(t *testing.T) (graph.Database, context.Context) {
+// SetupDB opens a database connection for the selected driver, asserts a schema
+// derived from the given datasets, and registers cleanup. Returns the database
+// and a background context.
+func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -52,7 +54,7 @@ func SetupDB(t *testing.T) (graph.Database, context.Context) {
 		connStr = os.Getenv("PG_CONNECTION_STRING")
 	}
 	if connStr == "" {
-		t.Skip("no connection string: set -connection flag or PG_CONNECTION_STRING env var")
+		t.Fatal("no connection string: set -connection flag or PG_CONNECTION_STRING env var")
 	}
 
 	cfg := dawgs.Config{
@@ -74,17 +76,13 @@ func SetupDB(t *testing.T) (graph.Database, context.Context) {
 		t.Fatalf("Failed to open database: %v", err)
 	}
 
+	nodeKinds, edgeKinds := collectKinds(t, datasets)
+
 	schema := graph.Schema{
 		Graphs: []graph.Graph{{
-			Name: "integration_test",
-			Nodes: graph.Kinds{
-				graph.StringKind("NodeKind1"),
-				graph.StringKind("NodeKind2"),
-			},
-			Edges: graph.Kinds{
-				graph.StringKind("EdgeKind1"),
-				graph.StringKind("EdgeKind2"),
-			},
+			Name:  "integration_test",
+			Nodes: nodeKinds,
+			Edges: edgeKinds,
 		}},
 		DefaultGraph: graph.Graph{Name: "integration_test"},
 	}
@@ -103,6 +101,32 @@ func SetupDB(t *testing.T) (graph.Database, context.Context) {
 	return db, ctx
 }
 
+// collectKinds parses the given datasets and returns the union of all node and edge kinds.
+func collectKinds(t *testing.T, datasets []string) (graph.Kinds, graph.Kinds) {
+	t.Helper()
+
+	var nodeKinds, edgeKinds graph.Kinds
+
+	for _, name := range datasets {
+		f, err := os.Open(datasetPath(name))
+		if err != nil {
+			t.Fatalf("failed to open dataset %q for kind scanning: %v", name, err)
+		}
+
+		doc, err := opengraph.ParseDocument(f)
+		f.Close()
+		if err != nil {
+			t.Fatalf("failed to parse dataset %q: %v", name, err)
+		}
+
+		nk, ek := doc.Graph.Kinds()
+		nodeKinds = nodeKinds.Add(nk...)
+		edgeKinds = edgeKinds.Add(ek...)
+	}
+
+	return nodeKinds, edgeKinds
+}
+
 // ClearGraph deletes all nodes (and cascading edges) from the database.
 func ClearGraph(t *testing.T, db graph.Database, ctx context.Context) {
 	t.Helper()
@@ -114,11 +138,17 @@ func ClearGraph(t *testing.T, db graph.Database, ctx context.Context) {
 	}
 }
 
+// datasetPath returns the filesystem path for a named dataset.
+// Names may include subdirectories (e.g. "local/phantom").
+func datasetPath(name string) string {
+	return "testdata/" + name + ".json"
+}
+
 // LoadDataset loads a named JSON dataset from testdata/ and returns the ID mapping.
 func LoadDataset(t *testing.T, db graph.Database, ctx context.Context, name string) opengraph.IDMap {
 	t.Helper()
 
-	f, err := os.Open("testdata/" + name + ".json")
+	f, err := os.Open(datasetPath(name))
 	if err != nil {
 		t.Fatalf("failed to open dataset %q: %v", name, err)
 	}

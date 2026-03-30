@@ -26,7 +26,7 @@ import (
 )
 
 func TestMatchNodesByKind(t *testing.T) {
-	db, ctx := SetupDB(t)
+	db, ctx := SetupDB(t, "diamond", "linear", "wide_diamond", "disconnected", "dead_end", "direct_shortcut")
 
 	tests := []struct {
 		dataset       string
@@ -63,7 +63,7 @@ func TestMatchNodesByKind(t *testing.T) {
 }
 
 func TestMatchEdgesByKind(t *testing.T) {
-	db, ctx := SetupDB(t)
+	db, ctx := SetupDB(t, "diamond", "linear", "wide_diamond", "disconnected", "dead_end", "direct_shortcut")
 
 	tests := []struct {
 		dataset       string
@@ -100,7 +100,7 @@ func TestMatchEdgesByKind(t *testing.T) {
 }
 
 func TestMatchReturnNodes(t *testing.T) {
-	db, ctx := SetupDB(t)
+	db, ctx := SetupDB(t, "diamond", "linear", "wide_diamond", "disconnected", "dead_end", "direct_shortcut")
 
 	tests := []struct {
 		dataset  string
