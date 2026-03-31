@@ -63,17 +63,9 @@ jobs:
         run: |
           go test ./...
 
-  integration-test:
-    name: Run integration tests (${{ matrix.driver }})
+  integration-test-pg:
+    name: Run integration tests (pg)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - driver: pg
-            connection: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
-          - driver: neo4j
-            connection: bolt://neo4j:weneedbetterpasswords@localhost:7687
     services:
       postgres:
         image: postgres:16
@@ -88,6 +80,27 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+    steps:
+      - name: Checkout source code for this repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Run integration tests
+        env:
+          Driver_CONNECTION_STRING: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
+        run: |
+          go test -tags integration -v ./ops/...
+
+  integration-test-neo4j:
+    name: Run integration tests (neo4j)
+    runs-on: ubuntu-latest
+    services:
       neo4j:
         image: neo4j:4.4.42
         env:
@@ -113,6 +126,6 @@ jobs:
 
       - name: Run integration tests
         env:
-          Driver_CONNECTION_STRING: ${{ matrix.connection }}
+          Driver_CONNECTION_STRING: bolt://neo4j:weneedbetterpasswords@localhost:7687
         run: |
-          go test -tags integration -v ./ops/
+          go test -tags integration -v ./ops/...
