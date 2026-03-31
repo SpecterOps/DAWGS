@@ -72,6 +72,10 @@ func dbSetup(t *testing.T) *TestSuite {
 			ConnectionString:      connStr,
 		})
 		require.NoError(t, err)
+
+		// Assert the test schema
+		err = db.AssertSchema(context.Background(), testSchema)
+		require.NoError(t, err)
 	default:
 		t.Fatalf("Unsupported connection string scheme %q. Use postgres:// or neo4j:// (or bolt://).", u.Scheme)
 	}
