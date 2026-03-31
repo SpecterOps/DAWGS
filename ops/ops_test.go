@@ -44,7 +44,8 @@ func dbSetup(t *testing.T) *TestSuite {
 		DefaultGraph: graph.Graph{Name: "ops_test"},
 	}
 
-	switch strings.ToLower(u.Scheme) {
+	scheme := strings.ToLower(u.Scheme)
+	switch scheme {
 	case "postgres", "postgresql":
 		// Create the connection pool
 		pgxPool, poolErr := pg.NewPool(connStr)
@@ -62,7 +63,7 @@ func dbSetup(t *testing.T) *TestSuite {
 		require.NoError(t, err)
 	case "neo4j", "bolt":
 		// The neo4j dawgs driver requires the "neo4j://" scheme; rewrite bolt:// transparently.
-		if u.Scheme == "bolt" {
+		if scheme == "bolt" {
 			u.Scheme = "neo4j"
 			connStr = u.String()
 		}
