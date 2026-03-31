@@ -21,7 +21,6 @@ on:
     branches:
       - "main"
       - "stage/**"
-      - "PQE-401"
     types:
       - "opened"
       - "synchronize"
