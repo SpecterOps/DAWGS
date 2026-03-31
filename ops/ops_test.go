@@ -147,6 +147,7 @@ func TestDeleteRelationshipsQuery(t *testing.T) {
 		}
 		return err
 	})
+	require.NoError(t, err)
 
 	err = testSuite.db.ReadTransaction(testSuite.ctx, func(tx graph.Transaction) error {
 		var err error
