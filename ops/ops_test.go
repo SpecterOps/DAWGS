@@ -59,7 +59,7 @@ func dbSetup(t *testing.T) *TestSuite {
 		require.NoError(t, err)
 
 		// Assert the test schema
-		err := db.AssertSchema(context.Background(), testSchema)
+		err = db.AssertSchema(context.Background(), testSchema)
 		require.NoError(t, err)
 	case "neo4j", "bolt":
 		// The neo4j dawgs driver requires the "neo4j://" scheme; rewrite bolt:// transparently.

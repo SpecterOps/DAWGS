@@ -115,4 +115,4 @@ jobs:
         env:
           Driver_CONNECTION_STRING: ${{ matrix.connection }}
         run: |
-          go test -tags integration -v ./ops/...
+          go test -tags integration -v ./ops/
