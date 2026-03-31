@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "name": "detach-delete a typed node and its incident edges",
+      "cypher": "match (s:NodeKind1) detach delete s",
+      "fixture": {
+        "nodes": [{"id": "victim", "kinds": ["NodeKind1"], "properties": {"name": "victim"}}],
+        "edges": []
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "traverse two hops then delete the typed edge at the second hop",
+      "cypher": "match ()-[]->()-[r:EdgeKind2]->() delete r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "c", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "no_error"
+    }
+  ]
+}

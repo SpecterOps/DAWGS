@@ -1,0 +1,85 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "return all edges",
+      "cypher": "match ()-[r]->() return r",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter edges by type() string comparison",
+      "cypher": "match ()-[r]->() where type(r) = 'EdgeKind1' return r",
+      "assert": "non_empty"
+    },
+    {
+      "name": "count edges of a specific kind",
+      "cypher": "match ()-[r:EdgeKind1]->() return count(r) as the_count",
+      "assert": {"at_least_int": 1}
+    },
+    {
+      "name": "count typed edges reaching a node matching an inline property map",
+      "cypher": "match ()-[r:EdgeKind1]->({name: \"123\"}) return count(r) as the_count",
+      "assert": {"exact_int": 0}
+    },
+    {
+      "name": "filter edges by a numeric property value",
+      "cypher": "match ()-[r]->() where r.value = 42 return r",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter edges by a boolean property",
+      "cypher": "match ()-[r]->() where r.bool_prop return r",
+      "assert": "non_empty"
+    },
+    {
+      "name": "one-hop traversal filtering where source and target are not the same node",
+      "cypher": "match (n1)-[]->(n2) where n1 <> n2 return n2",
+      "assert": "non_empty"
+    },
+    {
+      "name": "traverse between typed endpoints with edge kind alternatives",
+      "cypher": "match (s:NodeKind1)-[r:EdgeKind1|EdgeKind2]->(e:NodeKind2) return s.name, e.name",
+      "assert": "non_empty"
+    },
+    {
+      "name": "traverse between multi-kind endpoints using edge kind alternatives",
+      "cypher": "match (s:NodeKind1:NodeKind2)-[r:EdgeKind1|EdgeKind2]->(e:NodeKind2:NodeKind1) return s.name, e.name",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter edges with reversed type() equality (literal on left)",
+      "cypher": "match ()-[r]->() where 'EdgeKind1' = type(r) return r",
+      "assert": "non_empty"
+    },
+    {
+      "name": "traverse incoming edges filtering by kind alternatives",
+      "cypher": "match (s)<-[r:EdgeKind1|EdgeKind2]-(e) return s.name, e.name",
+      "assert": "non_empty"
+    },
+    {
+      "name": "shared-node forward chain with two outgoing edges",
+      "cypher": "match ()-[e0]->(n)-[e1]->() return e0, n, e1",
+      "assert": "non_empty"
+    },
+    {
+      "name": "two-hop chain filtering where the two traversed edges are not equal",
+      "cypher": "match ()-[r]->()-[e]->(n) where r <> e return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "cross-product of an unrelated node and an edge",
+      "cypher": "match (n), ()-[r]->() return n, r",
+      "assert": "non_empty"
+    },
+    {
+      "name": "cross-product of two independent edge traversals",
+      "cypher": "match ()-[r]->(), ()-[e]->() return r, e",
+      "assert": "non_empty"
+    },
+    {
+      "name": "return id labels and type from an edge traversal with a numeric id filter",
+      "cypher": "match (s)-[r:EdgeKind1]->(e) where not (s.system_tags contains 'admin_tier_0') and id(e) = 1 return id(s), labels(s), id(r), type(r)",
+      "assert": "no_error"
+    }
+  ]
+}

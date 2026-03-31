@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "name": "group nodes by a property and return the sum of another property per group",
+      "cypher": "MATCH (n) RETURN n.department, sum(n.salary)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"department": "eng", "salary": 100}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"department": "eng", "salary": 200}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"department": "hr", "salary": 150}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "group nodes by a property and return the average of another property per group",
+      "cypher": "MATCH (n) RETURN n.department, avg(n.age)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"department": "eng", "age": 30}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"department": "eng", "age": 40}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "compute count sum avg min and max of a property in a single projection",
+      "cypher": "MATCH (n) RETURN count(n), sum(n.age), avg(n.age), min(n.age), max(n.age)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"age": 25}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"age": 35}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "group nodes by a property and collect names per group",
+      "cypher": "MATCH (n) RETURN n.department, collect(n.name)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"department": "eng", "name": "alice"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"department": "eng", "name": "bob"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "group nodes by a property and return both a collected list and a count",
+      "cypher": "MATCH (n) RETURN n.department, collect(n.name), count(n)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"department": "ops", "name": "carol"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"department": "ops", "name": "dave"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "compute a ratio by dividing two aggregate results in a WITH stage",
+      "cypher": "MATCH (n) WITH sum(n.age) as total_age, count(n) as total_count RETURN total_age / total_count as avg_age",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"age": 30}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"age": 50}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

@@ -1,0 +1,186 @@
+{
+  "cases": [
+    {
+      "name": "bind a two-hop path and return the terminal node",
+      "cypher": "match p = ()-[r1]->()-[r2]->(e) return e",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "c", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a converging diamond path with endpoint property filters",
+      "cypher": "match p = (a)-[]->()<-[]-(f) where a.name = 'value' and f.is_target return p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "value"}},
+          {"id": "mid", "kinds": ["NodeKind2"]},
+          {"id": "f", "kinds": ["NodeKind1"], "properties": {"is_target": true}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "f", "end_id": "mid", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a node-only path with a contains property filter",
+      "cypher": "match p = (n:NodeKind1) where n.name contains 'test' return p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "testuser"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "admin"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a path with an undirected edge between typed nodes",
+      "cypher": "match p = (n:NodeKind1)-[r]-(m:NodeKind1) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "three-hop traversal filtering named edges by their property",
+      "cypher": "match ()-[r1]->()-[r2]->()-[]->() where r1.label = 'first' and r2.label = 'second' return r1",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "c", "kinds": ["NodeKind1"]},
+          {"id": "d", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1", "properties": {"label": "first"}},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2", "properties": {"label": "second"}},
+          {"start_id": "c", "end_id": "d", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a one-hop path between typed nodes filtered by a boolean edge property",
+      "cypher": "match p = (:NodeKind1)-[r]->(:NodeKind1) where r.isacl return p limit 100",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1", "properties": {"isacl": true}}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "return a named first edge and the full path including its subsequent expansion",
+      "cypher": "match p = ()-[e:EdgeKind1]->()-[:EdgeKind1*1..]->() return e, p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "c", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a typed one-hop path where the target property does not contain a toUpper result",
+      "cypher": "match p = (m:NodeKind1)-[:EdgeKind1]->(c:NodeKind2) where m.objectid ends with '-1' and not toUpper(c.operatingsystem) contains 'SERVER' return p limit 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "m", "kinds": ["NodeKind1"], "properties": {"objectid": "S-1-5-21-1"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"operatingsystem": "workstation"}}
+        ],
+        "edges": [{"start_id": "m", "end_id": "c", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a two-hop typed path filtered by array membership on the intermediate node",
+      "cypher": "match p = (:NodeKind1)-[:EdgeKind1|EdgeKind2]->(e:NodeKind2)-[:EdgeKind2]->(:NodeKind1) where 'a' in e.values or 'b' in e.values or size(e.values) = 0 return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"]},
+          {"id": "mid", "kinds": ["NodeKind2"], "properties": {"values": ["a", "c"]}},
+          {"id": "dst", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a path with one fixed hop then variable expansion filtered by coalesce contains",
+      "cypher": "match p = (:NodeKind1)-[:EdgeKind1]->(:NodeKind2)-[:EdgeKind2*1..]->(t:NodeKind2) where coalesce(t.system_tags, '') contains 'admin_tier_0' return p limit 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "t", "kinds": ["NodeKind2"], "properties": {"system_tags": "admin_tier_0"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "t", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter a typed node with WHERE then bind its variable-length expansion path",
+      "cypher": "match (u:NodeKind1) where u.samaccountname in ['foo', 'bar'] match p = (u)-[:EdgeKind1|EdgeKind2*1..3]->(t) where coalesce(t.system_tags, '') contains 'admin_tier_0' return p limit 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "u", "kinds": ["NodeKind1"], "properties": {"samaccountname": "foo"}},
+          {"id": "t", "kinds": ["NodeKind2"], "properties": {"system_tags": "admin_tier_0"}}
+        ],
+        "edges": [{"start_id": "u", "end_id": "t", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "three consecutive MATCHes that anchor two nodes and bind the connecting path",
+      "cypher": "match (x:NodeKind1) where x.name = 'foo' match (y:NodeKind2) where y.name = 'bar' match p=(x)-[:EdgeKind1]->(y) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "x", "kinds": ["NodeKind1"], "properties": {"name": "foo"}},
+          {"id": "y", "kinds": ["NodeKind2"], "properties": {"name": "bar"}}
+        ],
+        "edges": [{"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "match a node with an inline property map then bind its outgoing path to a second inline-map node",
+      "cypher": "match (x:NodeKind1{name:'foo'}) match p=(x)-[:EdgeKind1]->(y:NodeKind2{name:'bar'}) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "x", "kinds": ["NodeKind1"], "properties": {"name": "foo"}},
+          {"id": "y", "kinds": ["NodeKind2"], "properties": {"name": "bar"}}
+        ],
+        "edges": [{"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

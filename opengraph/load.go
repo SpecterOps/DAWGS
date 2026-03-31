@@ -104,3 +104,40 @@ func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error)
 
 	return nodeMap, nil
 }
+
+// WriteGraphTx writes the nodes and edges of g using an existing transaction.
+// This is useful for creating fixture data that will be rolled back.
+func WriteGraphTx(tx graph.Transaction, g *Graph) (IDMap, error) {
+	if g == nil {
+		return nil, nil
+	}
+
+	nodeMap := make(IDMap, len(g.Nodes))
+
+	for _, node := range g.Nodes {
+		dbNode, err := tx.CreateNode(graph.AsProperties(node.Properties), graph.StringsToKinds(node.Kinds)...)
+		if err != nil {
+			return nil, fmt.Errorf("could not create node %q: %w", node.ID, err)
+		}
+
+		nodeMap[node.ID] = dbNode.ID
+	}
+
+	for _, edge := range g.Edges {
+		startID, ok := nodeMap[edge.StartID]
+		if !ok {
+			return nil, fmt.Errorf("could not find start node %q", edge.StartID)
+		}
+
+		endID, ok := nodeMap[edge.EndID]
+		if !ok {
+			return nil, fmt.Errorf("could not find end node %q", edge.EndID)
+		}
+
+		if _, err := tx.CreateRelationshipByIDs(startID, endID, graph.StringKind(edge.Kind), graph.AsProperties(edge.Properties)); err != nil {
+			return nil, fmt.Errorf("could not create edge (%s)-[%s]->(%s): %w", edge.StartID, edge.Kind, edge.EndID, err)
+		}
+	}
+
+	return nodeMap, nil
+}

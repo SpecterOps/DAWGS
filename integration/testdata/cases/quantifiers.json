@@ -1,0 +1,30 @@
+{
+  "dataset": "quantifier",
+  "cases": [
+    {
+      "name": "ANY quantifier over an array property with a contains predicate",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.usedeskeyonly OR ANY(type IN n.supportedencryptiontypes WHERE type CONTAINS 'DES') RETURN n LIMIT 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "ALL quantifier over an array property with a contains predicate",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.usedeskeyonly OR ALL(type IN n.supportedencryptiontypes WHERE type CONTAINS 'DES') RETURN n LIMIT 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "NONE quantifier over an array property with a contains predicate",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.usedeskeyonly OR NONE(type IN n.supportedencryptiontypes WHERE type CONTAINS 'DES') RETURN n LIMIT 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "SINGLE quantifier over an array property with a contains predicate",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.usedeskeyonly OR SINGLE(type IN n.supportedencryptiontypes WHERE type CONTAINS 'DES') RETURN n LIMIT 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "multiple ANY quantifiers where the second ANY has a compound OR predicate",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.usedeskeyonly OR ANY(type IN n.supportedencryptiontypes WHERE type CONTAINS 'DES') OR ANY(type IN n.serviceprincipalnames WHERE toLower(type) CONTAINS 'mssql' OR toLower(type) CONTAINS 'mssqlcluster') RETURN n LIMIT 100",
+      "assert": "non_empty"
+    }
+  ]
+}
