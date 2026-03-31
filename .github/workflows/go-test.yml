@@ -89,8 +89,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        volumes:
-          - pg_data:/var/lib/postgresql/data
       neo4j:
         image: neo4j:4.4.42
         env:
@@ -102,8 +100,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        volumes:
-          - neo4j_data:/data
     steps:
       - name: Checkout source code for this repository
         uses: actions/checkout@v4
