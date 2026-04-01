@@ -81,7 +81,7 @@ func main() {
 	if *onlyDataset != "" {
 		datasets = []string{*onlyDataset}
 	} else {
-		datasets = smallDatasets
+		datasets = defaultDatasets
 		if *localDataset != "" {
 			datasets = append(datasets, *localDataset)
 		}

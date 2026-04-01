@@ -31,24 +31,14 @@ type Scenario struct {
 	Query   func(tx graph.Transaction) error
 }
 
-// smallDatasets is the set of datasets committed to the repo.
-var smallDatasets = []string{"diamond", "linear", "wide_diamond", "disconnected", "dead_end", "direct_shortcut"}
+// defaultDatasets is the set of datasets committed to the repo.
+var defaultDatasets = []string{"base"}
 
 // scenariosForDataset returns all benchmark scenarios for a given dataset and its loaded ID map.
 func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	switch dataset {
-	case "diamond":
-		return diamondScenarios(idMap)
-	case "linear":
-		return linearScenarios(idMap)
-	case "wide_diamond":
-		return wideDiamondScenarios(idMap)
-	case "disconnected":
-		return disconnectedScenarios(idMap)
-	case "dead_end":
-		return deadEndScenarios(idMap)
-	case "direct_shortcut":
-		return directShortcutScenarios(idMap)
+	case "base":
+		return baseScenarios(idMap)
 	case "local/phantom":
 		return phantomScenarios(idMap)
 	default:
@@ -71,95 +61,32 @@ func cypherQuery(cypher string) func(tx graph.Transaction) error {
 		result := tx.Query(cypher, nil)
 		defer result.Close()
 		for result.Next() {
-			// drain results
 		}
 		return result.Error()
 	}
 }
 
-func shortestPathQuery(idMap opengraph.IDMap, start, end string) func(tx graph.Transaction) error {
-	return cypherQuery(fmt.Sprintf(
-		"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-		idMap[start], idMap[end],
-	))
-}
+// --- Base dataset scenarios (n1 -> n2 -> n3) ---
 
-func traversalQuery(idMap opengraph.IDMap, start string) func(tx graph.Transaction) error {
-	return cypherQuery(fmt.Sprintf(
-		"MATCH (s)-[:EdgeKind1*1..]->(e) WHERE id(s) = %d RETURN e",
-		idMap[start],
-	))
-}
-
-func matchReturnQuery(idMap opengraph.IDMap, start string) func(tx graph.Transaction) error {
-	return cypherQuery(fmt.Sprintf(
-		"MATCH (s)-[:EdgeKind1]->(e) WHERE id(s) = %d RETURN e",
-		idMap[start],
-	))
-}
-
-// --- Small dataset scenarios ---
-
-func diamondScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "diamond"
+func baseScenarios(idMap opengraph.IDMap) []Scenario {
+	ds := "base"
 	return []Scenario{
 		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
 		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "a -> d", Query: shortestPathQuery(idMap, "a", "d")},
-		{Section: "Traversal", Dataset: ds, Label: "a", Query: traversalQuery(idMap, "a")},
-		{Section: "Match Return", Dataset: ds, Label: "a", Query: matchReturnQuery(idMap, "a")},
-	}
-}
-
-func linearScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "linear"
-	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "a -> c", Query: shortestPathQuery(idMap, "a", "c")},
-		{Section: "Traversal", Dataset: ds, Label: "a", Query: traversalQuery(idMap, "a")},
-		{Section: "Match Return", Dataset: ds, Label: "a", Query: matchReturnQuery(idMap, "a")},
-	}
-}
-
-func wideDiamondScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "wide_diamond"
-	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "a -> e", Query: shortestPathQuery(idMap, "a", "e")},
-		{Section: "Traversal", Dataset: ds, Label: "a", Query: traversalQuery(idMap, "a")},
-		{Section: "Match Return", Dataset: ds, Label: "a", Query: matchReturnQuery(idMap, "a")},
-	}
-}
-
-func disconnectedScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "disconnected"
-	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "a -> b", Query: shortestPathQuery(idMap, "a", "b")},
-		{Section: "Traversal", Dataset: ds, Label: "a", Query: traversalQuery(idMap, "a")},
-	}
-}
-
-func deadEndScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "dead_end"
-	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "a -> c", Query: shortestPathQuery(idMap, "a", "c")},
-		{Section: "Traversal", Dataset: ds, Label: "a", Query: traversalQuery(idMap, "a")},
-	}
-}
-
-func directShortcutScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "direct_shortcut"
-	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "a -> d", Query: shortestPathQuery(idMap, "a", "d")},
-		{Section: "Traversal", Dataset: ds, Label: "a", Query: traversalQuery(idMap, "a")},
+		{Section: "Shortest Paths", Dataset: ds, Label: "n1 -> n3", Query: cypherQuery(fmt.Sprintf(
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
+			idMap["n1"], idMap["n3"],
+		))},
+		{Section: "Traversal", Dataset: ds, Label: "n1", Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
+			idMap["n1"],
+		))},
+		{Section: "Match Return", Dataset: ds, Label: "n1", Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[]->(e) WHERE id(s) = %d RETURN e",
+			idMap["n1"],
+		))},
+		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind1", Query: cypherQuery("MATCH (n:NodeKind1) RETURN n")},
+		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind2", Query: cypherQuery("MATCH (n:NodeKind2) RETURN n")},
 	}
 }
 
@@ -173,7 +100,6 @@ func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
 	}
 
-	// Kind-filtered counts
 	for _, kind := range []string{"User", "Group", "Computer"} {
 		k := kind
 		scenarios = append(scenarios, Scenario{
@@ -184,7 +110,6 @@ func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 		})
 	}
 
-	// Traversal at increasing depths from a known User node (ID "41" = SVC_DOMAINJOIN)
 	if _, ok := idMap["41"]; ok {
 		for _, depth := range []int{1, 2, 3} {
 			d := depth
@@ -199,7 +124,6 @@ func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 			})
 		}
 
-		// Edge-kind-specific traversals
 		for _, ek := range []string{"MemberOf", "GenericAll", "HasSession"} {
 			edgeKind := ek
 			scenarios = append(scenarios, Scenario{
@@ -214,14 +138,16 @@ func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 		}
 	}
 
-	// Shortest path: User "41" to Domain "587"
 	if _, ok := idMap["41"]; ok {
 		if _, ok := idMap["587"]; ok {
 			scenarios = append(scenarios, Scenario{
 				Section: "Shortest Paths",
 				Dataset: ds,
 				Label:   "41 -> 587",
-				Query:   shortestPathQuery(idMap, "41", "587"),
+				Query: cypherQuery(fmt.Sprintf(
+					"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
+					idMap["41"], idMap["587"],
+				)),
 			})
 		}
 	}
