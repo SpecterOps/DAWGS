@@ -26,9 +26,9 @@ type TestSuite struct {
 func dbSetup(t *testing.T) *TestSuite {
 	t.Helper()
 
-	connStr := os.Getenv("Driver_CONNECTION_STRING")
+	connStr := os.Getenv("CONNECTION_STRING")
 	if connStr == "" {
-		t.Fatal("No driver connection string specified. Set the Driver_CONNECTION_STRING environment variable.")
+		t.Fatal("No driver connection string specified. Set the CONNECTION_STRING environment variable.")
 	}
 
 	u, err := url.Parse(connStr)
