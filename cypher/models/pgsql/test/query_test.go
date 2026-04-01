@@ -9,7 +9,16 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/cypher/models/walk"
+	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
+)
+
+var (
+	// Node and edge kinds to keep queries consistent
+	NodeKind1 = graph.StringKind("NodeKind1")
+	NodeKind2 = graph.StringKind("NodeKind2")
+	EdgeKind1 = graph.StringKind("EdgeKind1")
+	EdgeKind2 = graph.StringKind("EdgeKind2")
 )
 
 func TestQuery_KindGeneratesInclusiveKindMatcher(t *testing.T) {

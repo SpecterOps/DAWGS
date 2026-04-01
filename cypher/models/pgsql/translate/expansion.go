@@ -812,10 +812,18 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		expansion.RecursiveStatement.Projection = projection
 	}
 
+	// Craft the from clause
+	nextQueryFrom := pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+		},
+	}
+
 	// If the left node was already bound at time of translation connect this expansion to the
 	// previously materialized node
 	if traversalStep.LeftNodeBound {
-		expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, pgsql.FromClause{
+		nextQueryFrom = pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name: pgsql.CompoundIdentifier{traversalStep.Frame.Previous.Binding.Identifier},
 			},
@@ -834,19 +842,11 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 							pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
 						)),
 				},
-			}, {
-				Table: pgsql.TableReference{
-					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
-				},
-				JoinOperator: pgsql.JoinOperator{
-					JoinType:   pgsql.JoinTypeInner,
-					Constraint: expansionModel.ExpansionNodeJoinCondition,
-				},
 			}},
-		})
-	} else {
-		expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, pgsql.FromClause{
+		}
+	} else if expansionModel.PrimerNodeConstraints != nil {
+		// Primer node constraints require a join of of the left node
+		nextQueryFrom = pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
 				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
@@ -858,40 +858,48 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: expansionModel.PrimerNodeJoinCondition,
-				},
-			}, {
-				Table: pgsql.TableReference{
-					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
-				},
-				JoinOperator: pgsql.JoinOperator{
-					JoinType:   pgsql.JoinTypeInner,
-					Constraint: expansionModel.ExpansionNodeJoinCondition,
+					Constraint: traversalStep.Expansion.PrimerNodeJoinCondition,
 				},
 			}},
+		}
+	}
+
+	// If there are terminal node constraints then the right node must be joined
+	if expansionModel.TerminalNodeSatisfactionProjection != nil {
+		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
+			Table: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
+			},
+			JoinOperator: pgsql.JoinOperator{
+				JoinType:   pgsql.JoinTypeInner,
+				Constraint: traversalStep.Expansion.ExpansionNodeJoinCondition,
+			},
 		})
 	}
 
-	// Make sure the recursive query has the expansion bound
-	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
-		Source: pgsql.TableReference{
-			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+	expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, nextQueryFrom)
+
+	// Build recursive step joins. The terminal node join is only added when the
+	// expansion carries terminal-node constraints, which are the only cases where
+	// node columns appear in the recursive body.
+	recursiveJoins := []pgsql.Join{{
+		Table: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 		},
-		Joins: []pgsql.Join{{
-			Table: pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
-			},
-			JoinOperator: pgsql.JoinOperator{
-				JoinType: pgsql.JoinTypeInner,
-				Constraint: pgsql.NewBinaryExpression(
-					expansionModel.EdgeStartColumn,
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-				),
-			},
-		}, {
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				expansionModel.EdgeStartColumn,
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
+			),
+		},
+	}}
+
+	if expansionModel.TerminalNodeConstraints != nil {
+		recursiveJoins = append(recursiveJoins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
 				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
@@ -900,7 +908,14 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				JoinType:   pgsql.JoinTypeInner,
 				Constraint: expansionModel.ExpansionNodeJoinCondition,
 			},
-		}},
+		})
+	}
+
+	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+		},
+		Joins: recursiveJoins,
 	})
 
 	// The current query part may not have a frame associated with it if is a single part query component
@@ -999,25 +1014,27 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 		}},
 	})
 
-	// Make sure the recursive query has the expansion bound
-	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
-		Source: pgsql.TableReference{
-			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+	// Build recursive step joins. The terminal node join is only added when the
+	// expansion carries terminal-node constraints, which are the only cases where
+	// node columns appear in the recursive body.
+	recursiveJoins := []pgsql.Join{{
+		Table: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 		},
-		Joins: []pgsql.Join{{
-			Table: pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
-			},
-			JoinOperator: pgsql.JoinOperator{
-				JoinType: pgsql.JoinTypeInner,
-				Constraint: pgsql.NewBinaryExpression(
-					expansionModel.EdgeStartColumn,
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-				),
-			},
-		}, {
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				expansionModel.EdgeStartColumn,
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
+			),
+		},
+	}}
+
+	// If there are terminal node constraints then the right node must be joined
+	if expansionModel.TerminalNodeSatisfactionProjection != nil {
+		recursiveJoins = append(recursiveJoins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
 				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
@@ -1026,7 +1043,14 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 				JoinType:   pgsql.JoinTypeInner,
 				Constraint: expansionModel.ExpansionNodeJoinCondition,
 			},
-		}},
+		})
+	}
+
+	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+		},
+		Joins: recursiveJoins,
 	})
 
 	// Select the expansion components for the projection statement
