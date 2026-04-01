@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dawgs
+      POSTGRES_PASSWORD: weneedbetterpasswords
+      POSTGRES_DB: dawgs
+    ports:
+      - "65432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  neo4j:
+    image: neo4j:4.4.42
+    environment:
+      NEO4J_AUTH: neo4j/weneedbetterpasswords
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  pg_data:
+  neo4j_data:
