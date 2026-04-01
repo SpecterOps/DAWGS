@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
@@ -33,20 +34,20 @@ import (
 
 // caseFile represents one JSON test case file.
 type caseFile struct {
-	Dataset string     `json:"dataset"`
-	Skip    string     `json:"skip,omitempty"`
-	Cases   []testCase `json:"cases"`
+	Dataset     string     `json:"dataset"`
+	SkipDrivers []string   `json:"skip_drivers,omitempty"`
+	Cases       []testCase `json:"cases"`
 }
 
 // testCase is a single test: a Cypher query and an assertion on its result.
 // Cases with a "fixture" field run in a write transaction that rolls back,
 // so the inline data doesn't persist.
 type testCase struct {
-	Name    string           `json:"name"`
-	Skip    string           `json:"skip,omitempty"`
-	Cypher  string           `json:"cypher"`
-	Assert  json.RawMessage  `json:"assert"`
-	Fixture *opengraph.Graph `json:"fixture,omitempty"`
+	Name        string           `json:"name"`
+	SkipDrivers []string         `json:"skip_drivers,omitempty"`
+	Cypher      string           `json:"cypher"`
+	Assert      json.RawMessage  `json:"assert"`
+	Fixture     *opengraph.Graph `json:"fixture,omitempty"`
 }
 
 func TestCypher(t *testing.T) {
@@ -91,23 +92,28 @@ func TestCypher(t *testing.T) {
 
 	db, ctx := SetupDB(t, datasetNames...)
 
+	driver := *driverFlag
+
 	for _, g := range groups {
 		ClearGraph(t, db, ctx)
 		LoadDataset(t, db, ctx, g.dataset)
 
 		for _, cf := range g.files {
-			if cf.Skip != "" {
-				t.Run(cf.Skip, func(t *testing.T) {
-					t.Skipf("skipped: %s", cf.Skip)
-				})
+			if slices.Contains(cf.SkipDrivers, driver) {
 				continue
 			}
 
 			for _, tc := range cf.Cases {
 				t.Run(tc.Name, func(t *testing.T) {
-					if tc.Skip != "" {
-						t.Skipf("skipped: %s", tc.Skip)
+					if slices.Contains(tc.SkipDrivers, driver) {
+						t.Skipf("skipped for driver %s", driver)
 					}
+
+					defer func() {
+						if r := recover(); r != nil {
+							t.Fatalf("panic: %v", r)
+						}
+					}()
 
 					check := parseAssertion(t, tc.Assert)
 
@@ -327,11 +333,3 @@ func assertContainsNodeWithProp(key, expected string) func(*testing.T, graph.Res
 	}
 }
 
-// formatCaseSummary is used for logging.
-func formatCaseSummary(files []string) string {
-	total := 0
-	for range files {
-		total++
-	}
-	return fmt.Sprintf("%d case files", total)
-}

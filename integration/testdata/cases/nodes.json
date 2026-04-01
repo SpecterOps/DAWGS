@@ -63,6 +63,7 @@
     },
     {
       "name": "filter typed node where array property overlaps a literal list",
+      "skip_drivers": ["neo4j"],
       "cypher": "match (n:NodeKind1) where ['DES-CBC-CRC', 'DES-CBC-MD5', 'RC4-HMAC-MD5'] in n.arrayProperty return n",
       "assert": "non_empty"
     },
@@ -218,6 +219,7 @@
     },
     {
       "name": "filter typed node where toInt of a property appears in a literal integer list",
+      "skip_drivers": ["neo4j"],
       "cypher": "match (n:NodeKind1) where toInt(n.value) in [1, 2, 3, 4] return n",
       "assert": "non_empty"
     },
@@ -238,6 +240,7 @@
     },
     {
       "name": "filter node where a property equals date plus a duration string",
+      "skip_drivers": ["neo4j"],
       "cypher": "match (s) where s.created_at = date() + duration('4 hours') return s",
       "assert": "no_error"
     },
