@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "name": "traverse one edge filtering both endpoints by property",
+      "cypher": "match (s)-[r]->(e) where s.name = '123' and e.name = '321' return s, r, e",
+      "fixture": {
+        "nodes": [
+          {"id": "s", "kinds": ["NodeKind1"], "properties": {"name": "123"}},
+          {"id": "e", "kinds": ["NodeKind2"], "properties": {"name": "321"}}
+        ],
+        "edges": [{"start_id": "s", "end_id": "e", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "return source node and outgoing edge filtered by source property",
+      "cypher": "match (n)-[r]->() where n.name = '123' return n, r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "123"}},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "diamond pattern where two edges converge on one node",
+      "cypher": "match ()-[e0]->(n)<-[e1]-() return e0, n, e1",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind1"]},
+          {"id": "m", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "m", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "m", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "pattern where a middle node has both an outgoing and an incoming edge",
+      "cypher": "match ()<-[e0]-(n)<-[e1]-() return e0, n, e1",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "mid", "kinds": ["NodeKind2"]},
+          {"id": "b", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "b", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "traverse edge where the edge property flag is explicitly false",
+      "cypher": "match (s)-[r]->(e) where s.name = '123' and e:NodeKind1 and not r.property return s, r, e",
+      "fixture": {
+        "nodes": [
+          {"id": "s", "kinds": ["NodeKind2"], "properties": {"name": "123"}},
+          {"id": "e", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [{"start_id": "s", "end_id": "e", "kind": "EdgeKind1", "properties": {"property": false}}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "traverse two chained typed edges and return aliased endpoint properties",
+      "cypher": "match (s)-[:EdgeKind1|EdgeKind2]->(e)-[:EdgeKind1]->() return s.name as s_name, e.name as e_name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "src"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"name": "mid"}},
+          {"id": "c", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed source node by four alternative name values with OR",
+      "cypher": "match (n:NodeKind1)-[r]->() where n.name = '123' or n.name = '321' or n.name = '222' or n.name = '333' return n, r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "123"}},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a one-hop typed path filtered by array membership or empty array size",
+      "cypher": "match p = (:NodeKind1)-[:EdgeKind1|EdgeKind2]->(c:NodeKind2) where '123' in c.prop2 or '243' in c.prop2 or size(c.prop2) = 0 return p limit 10",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"prop2": []}}
+        ],
+        "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

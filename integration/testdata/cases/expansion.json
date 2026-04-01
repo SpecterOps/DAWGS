@@ -1,0 +1,55 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "unbounded variable-length traversal returning both endpoints",
+      "cypher": "match (n)-[*..]->(e) return n, e",
+      "assert": "non_empty"
+    },
+    {
+      "name": "variable-length traversal bounded to depth 1-2",
+      "cypher": "match (n)-[*1..2]->(e) return n, e",
+      "assert": "non_empty"
+    },
+    {
+      "name": "variable-length traversal bounded to depth 3-5 (expect empty with shallow fixture)",
+      "cypher": "match (n)-[*3..5]->(e) return n, e",
+      "assert": "no_error"
+    },
+    {
+      "name": "bind unbounded path variable reaching a typed endpoint",
+      "cypher": "match p = (n)-[*..]->(e:NodeKind1) return p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind path variable for unbounded traversal between typed endpoints",
+      "cypher": "match p = (s:NodeKind1)-[*..]->(e:NodeKind2) return p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bounded incoming variable-length traversal with depth range 2-5",
+      "cypher": "match (n)<-[*2..5]-(e) return n, e",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind expansion path where the source and destination must be distinct nodes",
+      "cypher": "match p = (s:NodeKind1)-[*..]->(e:NodeKind2) where s <> e return p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind an incoming unbounded expansion path to a typed source",
+      "cypher": "match p = (:NodeKind1)<-[:EdgeKind1|EdgeKind2*..]-() return p limit 10",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind expansion path filtered by a regular expression on the endpoint name",
+      "cypher": "match p = (n:NodeKind1)-[:EdgeKind1|EdgeKind2*1..2]->(r:NodeKind2) where r.name =~ '1.*' return p limit 10",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind incoming expansion path where source matches a kind disjunction",
+      "cypher": "match p = (t:NodeKind2)<-[:EdgeKind1*1..]-(a) where (a:NodeKind1 or a:NodeKind2) and t.objectid ends with '-2' return p limit 1000",
+      "assert": "non_empty"
+    }
+  ]
+}
