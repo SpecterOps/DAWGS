@@ -92,7 +92,10 @@ func TestCypher(t *testing.T) {
 
 	db, ctx := SetupDB(t, datasetNames...)
 
-	driver := *driverFlag
+	driver, err := driverFromConnStr(os.Getenv("CONNECTION_STRING"))
+	if err != nil {
+		t.Fatalf("Failed to detect driver: %v", err)
+	}
 
 	for _, g := range groups {
 		ClearGraph(t, db, ctx)
