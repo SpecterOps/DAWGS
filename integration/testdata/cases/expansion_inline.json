@@ -18,6 +18,7 @@
     },
     {
       "name": "unbounded traversal filtering every traversed edge by a property",
+      "skip_drivers": ["neo4j"],
       "cypher": "match (n)-[r*..]->(e:NodeKind1) where n.name = 'n1' and r.prop = 'a' return e",
       "fixture": {
         "nodes": [

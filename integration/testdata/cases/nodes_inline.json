@@ -15,7 +15,7 @@
     },
     {
       "name": "cross-product filter where two nodes match different typed properties",
-      "skip": "PG type inference bug: mixed string/int cross-product properties (see zinic/testing fork)",
+      "skip_drivers": ["pg"],
       "cypher": "match (s), (e) where s.name = '1234' and e.other = 1234 return s",
       "fixture": {
         "nodes": [
@@ -97,7 +97,7 @@
     },
     {
       "name": "filter cross-product where either node satisfies a different property predicate",
-      "skip": "PG type inference bug: mixed string/int cross-product properties (see zinic/testing fork)",
+      "skip_drivers": ["pg"],
       "cypher": "match (s), (e) where s.name = '1234' or e.other = 1234 return s",
       "fixture": {
         "nodes": [
