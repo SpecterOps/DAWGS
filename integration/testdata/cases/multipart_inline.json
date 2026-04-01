@@ -1,0 +1,80 @@
+{
+  "cases": [
+    {
+      "name": "carry a node through WITH and re-match it by ID",
+      "cypher": "match (n:NodeKind1) where n.value = 1 with n match (b) where id(b) = id(n) return b",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"value": 1}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "exclude second-stage results using a collected list from the first stage",
+      "cypher": "match (g1:NodeKind1) where g1.name starts with 'test' with collect(g1.domain) as excludes match (d:NodeKind2) where d.name starts with 'other' and not d.name in excludes return d",
+      "fixture": {
+        "nodes": [
+          {"id": "g1", "kinds": ["NodeKind1"], "properties": {"name": "testnode", "domain": "test.local"}},
+          {"id": "d1", "kinds": ["NodeKind2"], "properties": {"name": "othernode"}},
+          {"id": "d2", "kinds": ["NodeKind2"], "properties": {"name": "othertest"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "three-stage pipeline carrying nodes through successive WITH clauses",
+      "cypher": "match (n:NodeKind1) where n.value = 1 with n match (f) where f.name = 'me' with f match (b) where id(b) = id(f) return b",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"value": 1}},
+          {"id": "f", "kinds": ["NodeKind2"], "properties": {"name": "me"}}
+        ],
+        "edges": []
+      },
+      "assert": {"contains_node_with_prop": ["name", "me"]}
+    },
+    {
+      "name": "filter a carried node using a per-group count in a WITH stage",
+      "cypher": "match (n:NodeKind1)<-[:EdgeKind1]-(:NodeKind2) where n.objectid ends with '-516' with n, count(n) as dc_count where dc_count = 1 return n",
+      "fixture": {
+        "nodes": [
+          {"id": "dst", "kinds": ["NodeKind1"], "properties": {"objectid": "S-1-5-21-516"}},
+          {"id": "src", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed nodes by a regular expression and carry collected results to the next stage",
+      "cypher": "match (cg:NodeKind1) where cg.name =~ \".*TT\" with collect(cg.name) as names return names",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "SCOTT"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "admin"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "expand from a typed node count reachable typed targets and order by that count",
+      "cypher": "match (n:NodeKind1) where n.hasspn = true match (n)-[:EdgeKind1|EdgeKind2*1..]->(c:NodeKind2) with distinct n, count(c) as adminCount return n order by adminCount desc limit 100",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"hasspn": true}},
+          {"id": "c1", "kinds": ["NodeKind2"]},
+          {"id": "c2", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "c1", "kind": "EdgeKind1"},
+          {"start_id": "src", "end_id": "c2", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

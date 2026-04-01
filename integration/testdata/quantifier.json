@@ -1,0 +1,39 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "qAny",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "usedeskeyonly": false,
+          "supportedencryptiontypes": ["DES-CBC-CRC", "AES-128"]
+        }
+      },
+      {
+        "id": "qAll",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "usedeskeyonly": false,
+          "supportedencryptiontypes": ["DES-CBC-CRC", "DES-CBC-MD5"]
+        }
+      },
+      {
+        "id": "qNone",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "usedeskeyonly": false,
+          "supportedencryptiontypes": ["AES-128", "RC4-HMAC"]
+        }
+      },
+      {
+        "id": "qSingle",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "usedeskeyonly": false,
+          "supportedencryptiontypes": ["DES-CBC-CRC", "AES-128"]
+        }
+      }
+    ],
+    "edges": []
+  }
+}

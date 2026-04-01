@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "name": "chain multiple SET clauses to update several properties on a node",
+      "cypher": "match (n) set n.other = 1 set n.prop = '1' return n",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "updateme"}}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "add multiple kind labels to a node",
+      "cypher": "match (n) set n:NodeKind1:NodeKind2 return n",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1"]}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "remove multiple kind labels from a node",
+      "cypher": "match (n) remove n:NodeKind1:NodeKind2 return n",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1", "NodeKind2"]}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "set a boolean property on a filtered node",
+      "cypher": "match (n) where n.name = '1234' set n.is_target = true",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}}],
+        "edges": []
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "set a property on a traversed edge from a typed source node",
+      "cypher": "match (n)-[r:EdgeKind1]->() where n:NodeKind1 set r.visited = true return r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "add one kind label and remove another in the same statement",
+      "cypher": "match (n) set n:NodeKind1 remove n:NodeKind2 return n",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1", "NodeKind2"]}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "add a kind label and set a property in the same statement",
+      "cypher": "match (n) set n:NodeKind1 set n.flag = '1' return n",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind2"]}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "remove a kind label and a property in the same statement",
+      "cypher": "match (n) remove n:NodeKind1 remove n.prop return n",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1"], "properties": {"prop": "val"}}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "remove a single node property",
+      "cypher": "match (s) remove s.name",
+      "fixture": {
+        "nodes": [{"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "drop-me"}}],
+        "edges": []
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "set a property on an edge leading to a typed target node",
+      "cypher": "match ()-[r]->(:NodeKind1) set r.is_special_outbound = true",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind2"]},
+          {"id": "dst", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "update a source node property and an edge property together",
+      "cypher": "match (a)-[r]->(:NodeKind1) set a.name = '123', r.is_special_outbound = true",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind2"]},
+          {"id": "dst", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
+      },
+      "assert": "no_error"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "shortest path across two hops",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'SOME NAME' AND e.name = 'n3' RETURN p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "shortest path single hop",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'SOME NAME' AND e.name = '1234' RETURN p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "shortest path wrong direction returns empty",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'n3' AND e.name = 'SOME NAME' RETURN p",
+      "assert": "empty"
+    },
+    {
+      "name": "shortest path to self returns empty",
+      "skip_drivers": ["neo4j"],
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'SOME NAME' AND e.name = 'SOME NAME' RETURN p",
+      "assert": "empty"
+    }
+  ]
+}

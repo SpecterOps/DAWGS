@@ -354,20 +354,6 @@ return p limit 1
 Queries that contain similar constructs will result in the following translation error:
 `ERROR: column notation .id applied to type nodecomposite[], which is not a composite type (SQLSTATE 42809)`.
 
-### Right-Hand Bound Node Lookups
-
-Patterns that utilize a bound reference in the right-hand node pattern will not correctly author the required SQL joins:
-
-```
-match (e)
-match p = ()-[]->(e)
-return p
-limit 1
-```
-
-Queries that contain similar constructs will result in the following translation error:
-`ERROR: invalid reference to FROM-clause entry for table "s0" (SQLSTATE 42P01)`.
-
 ### Untyped Array References and Literals
 
 Untyped array references, including empty arrays, fail to pass type inference checks in CySQL. Support for additional

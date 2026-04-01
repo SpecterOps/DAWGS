@@ -70,6 +70,7 @@ type Expansion struct {
 	ExpansionNodeJoinCondition         pgsql.Expression
 	TerminalNodeConstraints            pgsql.Expression
 	TerminalNodeSatisfactionProjection pgsql.SelectItem
+	DeferredNodeSatisfactionConstraint pgsql.Expression
 
 	PrimerQueryParameter            *BoundIdentifier
 	BackwardPrimerQueryParameter    *BoundIdentifier

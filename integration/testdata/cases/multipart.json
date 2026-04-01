@@ -1,0 +1,35 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "bind a literal as a WITH variable and filter typed nodes by it",
+      "cypher": "with '1' as target match (n:NodeKind1) where n.value = target return n",
+      "assert": "no_error"
+    },
+    {
+      "name": "bind any node then find all one-hop paths that reach it",
+      "cypher": "match (e) match p = ()-[]->(e) return p limit 1",
+      "assert": "non_empty"
+    },
+    {
+      "name": "carry a node through WITH and re-match it under its original kind label",
+      "cypher": "match (u:NodeKind1)-[:EdgeKind1]->(g:NodeKind2) with g match (g)<-[:EdgeKind1]-(u:NodeKind1) return g",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a numeric literal as a WITH variable and use it in arithmetic in the next MATCH",
+      "cypher": "with 365 as max_days match (n:NodeKind1) where n.pwdlastset < (datetime().epochseconds - (max_days * 86400)) and not n.pwdlastset IN [-1.0, 0.0] return n limit 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "match a typed node then bind its variable-length expansion to a path",
+      "cypher": "match (n:NodeKind1) where n.objectid = 'S-1-5-21-1' match p = (n)-[:EdgeKind1|EdgeKind2*1..]->(c:NodeKind2) return p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "match two paths that share a common middle node and return both",
+      "cypher": "match p = (a)-[]->() match q = ()-[]->(a) return p, q",
+      "assert": "non_empty"
+    }
+  ]
+}
