@@ -93,9 +93,9 @@ jobs:
 
       - name: Run integration tests
         env:
-          Driver_CONNECTION_STRING: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
+          CONNECTION_STRING: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
         run: |
-          go test -tags manual_integration ./integration $Driver_CONNECTION_STRING 
+          go test -tags manual_integration ./integration $CONNECTION_STRING 
 
   integration-test-neo4j:
     name: Run integration tests (neo4j)
@@ -126,6 +126,6 @@ jobs:
 
       - name: Run integration tests
         env:
-          Driver_CONNECTION_STRING: neo4j://neo4j:weneedbetterpasswords@localhost:7687
+          CONNECTION_STRING: neo4j://neo4j:weneedbetterpasswords@localhost:7687
         run: |
-          go test -tags manual_integration ./integration $Driver_CONNECTION_STRING
+          go test -tags manual_integration ./integration $CONNECTION_STRING
