@@ -1,0 +1,123 @@
+{
+  "cases": [
+    {
+      "name": "filter node where property value appears in a literal list",
+      "cypher": "match (s) where s.name in ['option 1', 'option 2'] return s",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "option 1"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"name": "option 2"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "option 3"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "cross-product filter where two nodes match different typed properties",
+      "skip_drivers": ["pg"],
+      "cypher": "match (s), (e) where s.name = '1234' and e.other = 1234 return s",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node where a scalar value appears in an array property",
+      "cypher": "match (n) where 1 in n.array return n",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"array": [1, 2, 3]}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node with coalesce equality on both sides",
+      "cypher": "match (n:NodeKind1) where coalesce(n.name, '') = coalesce(n.migrated_name, '') return n",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "mirror", "migrated_name": "mirror"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "differ"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using an arithmetic expression in the WHERE clause",
+      "cypher": "match (s) where s.value + 2 / 3 > 10 return s",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 20}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"value": 1}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node using toLower contains with a compound AND predicate",
+      "cypher": "match (n:NodeKind1) where n:NodeKind1 and toLower(n.tenantid) contains 'myid' and n.system_tags contains 'tag' return n",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"tenantid": "MyID-Corp", "system_tags": "tag_admin"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node where a scalar appears in an array property concatenated with a literal list",
+      "cypher": "match (n:NodeKind1) where '1' in n.array_prop + ['1', '2'] return n",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"array_prop": ["x", "y"]}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "return source and an aliased property from an unrelated node in a cross-product",
+      "cypher": "match (s), (e) where s.name = 'n1' return s, e.name as othername",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "n1"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"name": "n2"}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter cross-product where either node satisfies a different property predicate",
+      "skip_drivers": ["pg"],
+      "cypher": "match (s), (e) where s.name = '1234' or e.other = 1234 return s",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "return a size of an array property in the projection",
+      "cypher": "MATCH (n) RETURN size(n.tags)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"tags": ["admin", "user"]}}
+        ],
+        "edges": []
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

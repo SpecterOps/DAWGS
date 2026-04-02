@@ -1,0 +1,85 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "count all nodes",
+      "cypher": "MATCH (n) RETURN count(n)",
+      "assert": {"at_least_int": 3}
+    },
+    {
+      "name": "return a constant string literal",
+      "cypher": "RETURN 'hello world'",
+      "assert": "non_empty"
+    },
+    {
+      "name": "return a constant arithmetic expression",
+      "cypher": "RETURN 2 + 3",
+      "assert": "non_empty"
+    },
+    {
+      "name": "collect all node name properties into a list",
+      "cypher": "MATCH (n) RETURN collect(n.name)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "return the size of a collected list of node properties",
+      "cypher": "MATCH (n) RETURN size(collect(n.name))",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter on an aggregate result using WITH and WHERE",
+      "cypher": "MATCH (n) WITH count(n) as cnt WHERE cnt > 1 RETURN cnt",
+      "assert": "non_empty"
+    },
+    {
+      "name": "group by node and filter on per-node count",
+      "cypher": "MATCH (n) WITH n, count(n) as node_count WHERE node_count > 1 RETURN n, node_count",
+      "assert": "no_error"
+    },
+    {
+      "name": "sum a numeric node property across all nodes",
+      "cypher": "MATCH (n) RETURN sum(n.value)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "average a numeric node property across all nodes",
+      "cypher": "MATCH (n) RETURN avg(n.value)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "minimum of a numeric node property across all nodes",
+      "cypher": "MATCH (n) RETURN min(n.value)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "maximum of a numeric node property across all nodes",
+      "cypher": "MATCH (n) RETURN max(n.value)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "group nodes by a property and count each group",
+      "cypher": "MATCH (n) RETURN n.domain, count(n)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "compute multiple aggregates in a single projection",
+      "cypher": "MATCH (n) RETURN count(n), sum(n.value)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter nodes using size() on an array property in WHERE",
+      "cypher": "MATCH (n) WHERE size(n.array_value) > 0 RETURN n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "feed an aggregate result from a WITH stage into a subsequent MATCH",
+      "cypher": "MATCH (n) WITH count(n) as lim MATCH (o) RETURN o",
+      "assert": "non_empty"
+    },
+    {
+      "name": "collect node properties in a WITH stage then filter by the collected size",
+      "cypher": "MATCH (n) WITH n, collect(n.prop) as props WHERE size(props) > 1 RETURN n, props",
+      "assert": "no_error"
+    }
+  ]
+}

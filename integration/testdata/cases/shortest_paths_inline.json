@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "name": "shortest path picks direct edge over longer route",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'a' AND e.name = 'd' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["NodeKind1"], "properties": {"name": "d"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"},
+          {"start_id": "c", "end_id": "d", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"row_count": 1}
+    },
+    {
+      "name": "multiple shortest paths of equal length",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'a' AND e.name = 'd' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["NodeKind1"], "properties": {"name": "d"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "c", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "d", "kind": "EdgeKind1"},
+          {"start_id": "c", "end_id": "d", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"row_count": 2}
+    },
+    {
+      "name": "no path between disconnected nodes",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'a' AND e.name = 'b' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "b"}}
+        ],
+        "edges": []
+      },
+      "assert": "empty"
+    },
+    {
+      "name": "three shortest paths through a wide fan",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'a' AND e.name = 'e' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["NodeKind1"], "properties": {"name": "d"}},
+          {"id": "e", "kinds": ["NodeKind1"], "properties": {"name": "e"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "c", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "e", "kind": "EdgeKind1"},
+          {"start_id": "c", "end_id": "e", "kind": "EdgeKind1"},
+          {"start_id": "d", "end_id": "e", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "dead end branch does not affect shortest path",
+      "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'a' AND e.name = 'c' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["NodeKind1"], "properties": {"name": "d"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"row_count": 1}
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "cases": [
+    {
+      "name": "unbounded traversal from a named source to a typed endpoint",
+      "cypher": "match (n)-[*..]->(e:NodeKind1) where n.name = 'n1' return e",
+      "fixture": {
+        "nodes": [
+          {"id": "n1", "kinds": ["NodeKind1"], "properties": {"name": "n1"}},
+          {"id": "n2", "kinds": ["NodeKind2"], "properties": {"name": "n2"}},
+          {"id": "n3", "kinds": ["NodeKind1"], "properties": {"name": "n3"}}
+        ],
+        "edges": [
+          {"start_id": "n1", "end_id": "n2", "kind": "EdgeKind1"},
+          {"start_id": "n2", "end_id": "n3", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"contains_node_with_prop": ["name", "n3"]}
+    },
+    {
+      "name": "unbounded traversal filtering every traversed edge by a property",
+      "skip_drivers": ["neo4j"],
+      "cypher": "match (n)-[r*..]->(e:NodeKind1) where n.name = 'n1' and r.prop = 'a' return e",
+      "fixture": {
+        "nodes": [
+          {"id": "n1", "kinds": ["NodeKind1"], "properties": {"name": "n1"}},
+          {"id": "n2", "kinds": ["NodeKind2"], "properties": {"name": "n2"}},
+          {"id": "n3", "kinds": ["NodeKind1"], "properties": {"name": "n3"}}
+        ],
+        "edges": [
+          {"start_id": "n1", "end_id": "n2", "kind": "EdgeKind1", "properties": {"prop": "a"}},
+          {"start_id": "n2", "end_id": "n3", "kind": "EdgeKind2", "properties": {"prop": "a"}}
+        ]
+      },
+      "assert": {"contains_node_with_prop": ["name", "n3"]}
+    },
+    {
+      "name": "unbounded expansion followed by a single fixed step",
+      "cypher": "match (n)-[*..]->(e:NodeKind1)-[]->(l) where n.name = 'start' return l",
+      "fixture": {
+        "nodes": [
+          {"id": "start", "kinds": ["NodeKind2"], "properties": {"name": "start"}},
+          {"id": "mid", "kinds": ["NodeKind1"], "properties": {"name": "mid"}},
+          {"id": "leaf", "kinds": ["NodeKind2"], "properties": {"name": "leaf"}}
+        ],
+        "edges": [
+          {"start_id": "start", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "leaf", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"contains_node_with_prop": ["name", "leaf"]}
+    },
+    {
+      "name": "fixed step followed by a bounded variable-length expansion",
+      "cypher": "match (n)-[]->(e:NodeKind1)-[*2..3]->(l) where n.name = 'start' return l",
+      "fixture": {
+        "nodes": [
+          {"id": "start", "kinds": ["NodeKind2"], "properties": {"name": "start"}},
+          {"id": "mid", "kinds": ["NodeKind1"], "properties": {"name": "mid"}},
+          {"id": "hop1", "kinds": ["NodeKind2"], "properties": {"name": "hop1"}},
+          {"id": "hop2", "kinds": ["NodeKind2"], "properties": {"name": "hop2"}}
+        ],
+        "edges": [
+          {"start_id": "start", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "hop1", "kind": "EdgeKind2"},
+          {"start_id": "hop1", "end_id": "hop2", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"contains_node_with_prop": ["name", "hop2"]}
+    },
+    {
+      "name": "unbounded expansion to a typed endpoint returning the source node",
+      "cypher": "match (n)-[*..]->(e:NodeKind1) where n.name = 'n2' return n",
+      "fixture": {
+        "nodes": [
+          {"id": "n2", "kinds": ["NodeKind2"], "properties": {"name": "n2"}},
+          {"id": "n3", "kinds": ["NodeKind1"], "properties": {"name": "n3"}}
+        ],
+        "edges": [{"start_id": "n2", "end_id": "n3", "kind": "EdgeKind1"}]
+      },
+      "assert": {"contains_node_with_prop": ["name", "n2"]}
+    },
+    {
+      "name": "bounded variable-length expansion followed by a single fixed step",
+      "cypher": "match (n)-[*2..3]->(e:NodeKind1)-[]->(l) where n.name = 'n1' return l",
+      "fixture": {
+        "nodes": [
+          {"id": "n1", "kinds": ["NodeKind2"], "properties": {"name": "n1"}},
+          {"id": "hop", "kinds": ["NodeKind2"], "properties": {"name": "hop"}},
+          {"id": "mid", "kinds": ["NodeKind1"], "properties": {"name": "mid"}},
+          {"id": "leaf", "kinds": ["NodeKind2"], "properties": {"name": "leaf"}}
+        ],
+        "edges": [
+          {"start_id": "n1", "end_id": "hop", "kind": "EdgeKind1"},
+          {"start_id": "hop", "end_id": "mid", "kind": "EdgeKind2"},
+          {"start_id": "mid", "end_id": "leaf", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"contains_node_with_prop": ["name", "leaf"]}
+    },
+    {
+      "name": "two unbounded expansions joined through a typed fixed step",
+      "cypher": "match (n)-[*..]->(e)-[:EdgeKind1|EdgeKind2]->()-[*..]->(l) where n.name = 'n1' and e.name = 'n2' return l",
+      "fixture": {
+        "nodes": [
+          {"id": "n1", "kinds": ["NodeKind1"], "properties": {"name": "n1"}},
+          {"id": "n2", "kinds": ["NodeKind2"], "properties": {"name": "n2"}},
+          {"id": "bridge", "kinds": ["NodeKind2"]},
+          {"id": "leaf", "kinds": ["NodeKind1"], "properties": {"name": "leaf"}}
+        ],
+        "edges": [
+          {"start_id": "n1", "end_id": "n2", "kind": "EdgeKind1"},
+          {"start_id": "n2", "end_id": "bridge", "kind": "EdgeKind2"},
+          {"start_id": "bridge", "end_id": "leaf", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"contains_node_with_prop": ["name", "leaf"]}
+    },
+    {
+      "name": "bind expansion path filtered by a split membership check on the endpoint",
+      "cypher": "match p = (:NodeKind1)-[:EdgeKind1*1..]->(n:NodeKind2) where 'admin_tier_0' in split(n.system_tags, ' ') return p limit 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"system_tags": "admin_tier_0 extra_tag"}}
+        ],
+        "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind expansion path filtering both endpoints using ends-with on objectid",
+      "cypher": "match p = (g:NodeKind1)-[:EdgeKind1|EdgeKind2*]->(target:NodeKind1) where g.objectid ends with '-src' and target.objectid ends with '-tgt' return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"objectid": "S-1-src"}},
+          {"id": "tgt", "kinds": ["NodeKind1"], "properties": {"objectid": "S-1-tgt"}}
+        ],
+        "edges": [{"start_id": "src", "end_id": "tgt", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "bind a single typed node to a path variable",
+      "cypher": "match p = (:NodeKind1) return p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind a one-hop traversal to a path variable",
+      "cypher": "match p = ()-[]->() return p",
+      "assert": "non_empty"
+    },
+    {
+      "name": "bind an unbounded variable-length path to a path variable",
+      "cypher": "match p = ()-[*..]->(e) return p limit 1",
+      "assert": "non_empty"
+    }
+  ]
+}

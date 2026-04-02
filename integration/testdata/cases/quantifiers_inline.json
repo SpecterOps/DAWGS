@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {
+      "name": "NONE quantifier over a collected list in a WITH-piped stage",
+      "cypher": "MATCH (m:NodeKind1) WHERE m.unconstraineddelegation = true WITH m MATCH (n:NodeKind1)-[:EdgeKind1]->(g:NodeKind2) WHERE g.objectid ENDS WITH '-516' WITH m, COLLECT(n) AS matchingNs WHERE NONE(n IN matchingNs WHERE n.objectid = m.objectid) RETURN m",
+      "fixture": {
+        "nodes": [
+          {"id": "m", "kinds": ["NodeKind1"], "properties": {"unconstraineddelegation": true, "objectid": "test-m"}},
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"objectid": "other-id"}},
+          {"id": "g", "kinds": ["NodeKind2"], "properties": {"objectid": "S-1-5-21-516"}}
+        ],
+        "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "ALL quantifier over a collected list in a WITH-piped stage",
+      "cypher": "MATCH (m:NodeKind1) WHERE m.unconstraineddelegation = true WITH m MATCH (n:NodeKind1)-[:EdgeKind1]->(g:NodeKind2) WHERE g.objectid ENDS WITH '-516' WITH m, COLLECT(n) AS matchingNs WHERE ALL(n IN matchingNs WHERE n.objectid = m.objectid) RETURN m",
+      "fixture": {
+        "nodes": [
+          {"id": "m", "kinds": ["NodeKind1"], "properties": {"unconstraineddelegation": true, "objectid": "test-m"}},
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"objectid": "test-m"}},
+          {"id": "g", "kinds": ["NodeKind2"], "properties": {"objectid": "S-1-5-21-516"}}
+        ],
+        "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "ANY quantifier in first stage gates a pipeline where NONE filters the collected output",
+      "cypher": "MATCH (m:NodeKind1) WHERE ANY(name IN m.serviceprincipalnames WHERE name CONTAINS 'PHANTOM') WITH m MATCH (n:NodeKind1)-[:EdgeKind1]->(g:NodeKind2) WHERE g.objectid ENDS WITH '-525' WITH m, COLLECT(n) AS matchingNs WHERE NONE(t IN matchingNs WHERE t.objectid = m.objectid) RETURN m",
+      "fixture": {
+        "nodes": [
+          {"id": "m", "kinds": ["NodeKind1"], "properties": {"objectid": "m-obj", "serviceprincipalnames": ["PHANTOM/host"]}},
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"objectid": "other-obj"}},
+          {"id": "g", "kinds": ["NodeKind2"], "properties": {"objectid": "S-1-5-21-525"}}
+        ],
+        "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
+      },
+      "assert": "non_empty"
+    }
+  ]
+}

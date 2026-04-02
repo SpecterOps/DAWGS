@@ -1,0 +1,15 @@
+{
+  "cases": [
+    {
+      "name": "set a string property on a filtered node and return the updated node",
+      "cypher": "match (n) where n.name = 'n3' set n.name = 'RENAMED' return n",
+      "fixture": {
+        "nodes": [
+          {"id": "n3", "kinds": ["NodeKind1", "NodeKind2"], "properties": {"name": "n3", "value": 3, "prop": "a"}}
+        ],
+        "edges": []
+      },
+      "assert": {"contains_node_with_prop": ["name", "RENAMED"]}
+    }
+  ]
+}

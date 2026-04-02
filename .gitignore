@@ -2,3 +2,6 @@
 
 # User IDE Files
 .idea
+
+# Local integration test datasets
+integration/testdata/local/

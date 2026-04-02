@@ -1,0 +1,363 @@
+{
+  "dataset": "base",
+  "cases": [
+    {
+      "name": "return kind labels for all nodes",
+      "cypher": "match (n) return labels(n)",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter any node by string property equality",
+      "cypher": "match (n) where n.name = '1234' return n",
+      "assert": {"contains_node_with_prop": ["name", "1234"]}
+    },
+    {
+      "name": "filter a typed node using an inline property map",
+      "cypher": "match (n:NodeKind1 {name: \"SOME NAME\"}) return n",
+      "assert": {"contains_node_with_prop": ["name", "SOME NAME"]}
+    },
+    {
+      "name": "return all nodes",
+      "cypher": "match (s) return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter nodes matching a kind disjunction",
+      "cypher": "match (s) where (s:NodeKind1 or s:NodeKind2) return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "cross-product filter where two nodes share a property value",
+      "cypher": "match (n:NodeKind1), (e) where n.name = e.name return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter any node by string property equality (s binding)",
+      "cypher": "match (s) where s.name = '1234' return s",
+      "assert": {"contains_node_with_prop": ["name", "1234"]}
+    },
+    {
+      "name": "filter node by string starts-with prefix",
+      "cypher": "match (s) where s.name starts with '123' return s",
+      "assert": {"contains_node_with_prop": ["name", "1234"]}
+    },
+    {
+      "name": "filter node by string ends-with suffix",
+      "cypher": "match (s) where s.name ends with 'NAME' return s",
+      "assert": {"contains_node_with_prop": ["name", "SOME NAME"]}
+    },
+    {
+      "name": "filter node where a property is not null",
+      "cypher": "match (n) where n.system_tags is not null return n",
+      "assert": {"contains_node_with_prop": ["system_tags", "admin_tier_0"]}
+    },
+    {
+      "name": "filter typed node using coalesce with contains predicate",
+      "cypher": "match (n:NodeKind1) where coalesce(n.system_tags, '') contains 'admin_tier_0' return n",
+      "assert": {"contains_node_with_prop": ["system_tags", "admin_tier_0"]}
+    },
+    {
+      "name": "filter typed node by array property size",
+      "cypher": "match (n:NodeKind1) where size(n.array_value) > 0 return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node where array property overlaps a literal list",
+      "skip_drivers": ["neo4j"],
+      "cypher": "match (n:NodeKind1) where ['DES-CBC-CRC', 'DES-CBC-MD5', 'RC4-HMAC-MD5'] in n.arrayProperty return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node where array property contains one of several scalar values",
+      "cypher": "match (u:NodeKind1) where 'DES-CBC-CRC' in u.arrayProperty or 'DES-CBC-MD5' in u.arrayProperty return u",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node carrying two kind labels simultaneously",
+      "cypher": "match (s) where s:NodeKind1 and s:NodeKind2 return s",
+      "assert": {"contains_node_with_prop": ["name", "n3"]}
+    },
+    {
+      "name": "paginate results using SKIP and LIMIT",
+      "cypher": "match (n) return n skip 5 limit 10",
+      "assert": "no_error"
+    },
+    {
+      "name": "order results by node ID descending",
+      "cypher": "match (s) return s order by id(s) desc",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter isolated nodes with no adjacent edges",
+      "cypher": "match (s) where not (s)-[]-() return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter nodes where node ID appears in another node's array property",
+      "cypher": "match (s), (e) where id(s) in e.captured_ids return s, e",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter typed node with starts-with using a function call as the prefix",
+      "cypher": "match (n:NodeKind1) where n.distinguishedname starts with toUpper('admin') return n",
+      "assert": "empty"
+    },
+    {
+      "name": "optional match returns results even when the pattern may be absent",
+      "cypher": "optional match (n:NodeKind1) return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "double-negation filter selects nodes where a property is null",
+      "cypher": "match (n) where not n.property is not null return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter nodes where array property equals an empty array literal",
+      "cypher": "match (s) where s.prop = [] return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node by string contains predicate",
+      "cypher": "match (s) where s.name contains '123' return s",
+      "assert": {"contains_node_with_prop": ["name", "1234"]}
+    },
+    {
+      "name": "filter node using negated starts-with predicate",
+      "cypher": "match (s) where not s.name starts with 'XYZ' return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using negated contains predicate",
+      "cypher": "match (s) where not s.name contains 'XYZ' return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using negated ends-with predicate",
+      "cypher": "match (s) where not s.name ends with 'XYZ' return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node where string property starts with another property",
+      "cypher": "match (s) where s.name starts with s.other return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node where string property contains another property",
+      "cypher": "match (s) where s.name contains s.other return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node where string property ends with another property",
+      "cypher": "match (s) where s.name ends with s.other return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter nodes where a datetime property is null",
+      "cypher": "match (s) where s.created_at is null return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "project an arithmetic expression on a node property",
+      "cypher": "match (s) return s.value + 1",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node using datetime arithmetic against epoch seconds",
+      "cypher": "match (u:NodeKind1) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using coalesce equality on a named property",
+      "cypher": "match (n) where coalesce(n.name, '') = '1234' return n",
+      "assert": {"contains_node_with_prop": ["name", "1234"]}
+    },
+    {
+      "name": "filter typed node using three-argument coalesce equality against an integer",
+      "cypher": "match (n:NodeKind1) where coalesce(n.a, n.b, 1) = 1 return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node using two-property coalesce that resolves to null",
+      "cypher": "match (n:NodeKind1) where coalesce(n.a, n.b) = 1 return n",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter typed node with coalesce on the right-hand side of equality",
+      "cypher": "match (n:NodeKind1) where 1 = coalesce(n.a, n.b) return n",
+      "assert": "no_error"
+    },
+    {
+      "name": "project a compound arithmetic expression dividing a shifted property",
+      "cypher": "match (s) return (s.value + 1) / 3",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using toLower equality and return distinct results",
+      "cypher": "match (s) where toLower(s.name) = '1234' return distinct s",
+      "assert": {"contains_node_with_prop": ["name", "1234"]}
+    },
+    {
+      "name": "filter typed node where a property contains a toUpper result",
+      "cypher": "match (n:NodeKind1) where n.distinguishedname contains toUpper('test') return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node where a property equals a toUpper result (no match)",
+      "cypher": "match (n:NodeKind1) where n.distinguishedname = toUpper('admin') return n",
+      "assert": "empty"
+    },
+    {
+      "name": "filter typed node where a property ends with a toUpper result (no match)",
+      "cypher": "match (n:NodeKind1) where n.distinguishedname ends with toUpper('com') return n",
+      "assert": "empty"
+    },
+    {
+      "name": "filter typed node where toString of a property appears in a literal list",
+      "cypher": "match (n:NodeKind1) where toString(n.functionallevel) in ['2008 R2', '2012', '2008', '2003'] return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node where toInt of a property appears in a literal integer list",
+      "skip_drivers": ["neo4j"],
+      "cypher": "match (n:NodeKind1) where toInt(n.value) in [1, 2, 3, 4] return n",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node using datetime arithmetic against epoch milliseconds",
+      "cypher": "match (u:NodeKind1) where u.pwdlastset < (datetime().epochmillis - 86400000) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node where a datetime property equals the current date",
+      "cypher": "match (s) where s.created_at = date() return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals date minus a duration",
+      "cypher": "match (s) where s.created_at = date() - duration('P1D') return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals date plus a duration string",
+      "skip_drivers": ["neo4j"],
+      "cypher": "match (s) where s.created_at = date() + duration('4 hours') return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals a literal date value",
+      "cypher": "match (s) where s.created_at = date('2023-4-4') return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a datetime property equals the current datetime",
+      "cypher": "match (s) where s.created_at = datetime() return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals a literal datetime value",
+      "cypher": "match (s) where s.created_at = datetime('2019-06-01T18:40:32.142+0100') return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals the current local datetime",
+      "cypher": "match (s) where s.created_at = localdatetime() return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals a literal local datetime value",
+      "cypher": "match (s) where s.created_at = localdatetime('2019-06-01T18:40:32.142') return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals the current local time",
+      "cypher": "match (s) where s.created_at = localtime() return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property equals a literal local time value",
+      "cypher": "match (s) where s.created_at = localtime('4:4:4') return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node using a negated parenthesized equality predicate",
+      "cypher": "match (s) where not (s.name = '123') return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using negated 2-hop path existence",
+      "cypher": "match (s) where not (s)-[]->()-[]->() return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node using negated directed edge pattern with property constraints",
+      "cypher": "match (s) where not (s)-[{prop: 'a'}]->({name: 'n3'}) return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using negated incoming edge pattern with property constraints",
+      "cypher": "match (s) where not (s)<-[{prop: 'a'}]-({name: 'n3'}) return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "return id of node where negated kind filter removes typed results",
+      "cypher": "match (s) where not (s)-[]-() return id(s)",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where id appears in a literal integer list",
+      "cypher": "match (s) where id(s) in [1, 2, 3, 4] return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter typed node where array property contains one of three scalar values",
+      "cypher": "match (u:NodeKind1) where 'DES-CBC-CRC' in u.arrayProperty or 'DES-CBC-MD5' in u.arrayProperty or 'RC4-HMAC-MD5' in u.arrayProperty return u",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node where an empty array literal equals a property (reversed operands)",
+      "cypher": "match (s) where [] = s.prop return s",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter node where a property is not equal to an empty array",
+      "cypher": "match (s) where s.prop <> [] return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter node using negated equality to an empty array",
+      "cypher": "match (s) where not s.prop = [] return s",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node using property equality with literal-then-property concatenation",
+      "cypher": "match (n:NodeKind1) match (m:NodeKind2) where m.distinguishedname = 'CN=ADMINSDHOLDER,CN=SYSTEM,' + n.distinguishedname return m",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node using property equality with property-then-literal concatenation",
+      "cypher": "match (n:NodeKind1) match (m:NodeKind2) where m.distinguishedname = n.distinguishedname + 'CN=ADMINSDHOLDER,CN=SYSTEM,' return m",
+      "assert": "no_error"
+    },
+    {
+      "name": "filter typed node using property equality with two literal strings concatenated",
+      "cypher": "match (n:NodeKind1) match (m:NodeKind2) where m.distinguishedname = '1' + '2' return m",
+      "assert": "no_error"
+    },
+    {
+      "name": "order results by two properties with mixed sort directions",
+      "cypher": "match (s) return s order by s.name, s.other_prop desc",
+      "assert": "non_empty"
+    },
+    {
+      "name": "two sequential optional matches where only the anchor node is required",
+      "cypher": "match (n:NodeKind1) optional match (m:NodeKind2) where m.distinguishedname starts with n.distinguishedname optional match (o:NodeKind2) where o.distinguishedname <> n.distinguishedname return n, m, o",
+      "assert": "non_empty"
+    },
+    {
+      "name": "filter typed node with compound hasspn enabled and not-ends-with checks",
+      "cypher": "match (u:NodeKind1) where u.hasspn = true and u.enabled = true and not '-502' ends with u.objectid and not coalesce(u.gmsa, false) = true and not coalesce(u.msa, false) = true return u limit 10",
+      "assert": "non_empty"
+    }
+  ]
+}

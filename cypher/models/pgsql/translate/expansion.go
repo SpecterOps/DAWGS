@@ -70,10 +70,52 @@ func nextFrontInsert(body pgsql.SetExpression) pgsql.Insert {
 	}
 }
 
-func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) pgsql.Select {
-	nextQuery := pgsql.Select{
-		Where: pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.EdgeConstraints),
+func deframeExpression(expression pgsql.Expression) pgsql.Expression {
+	if expression == nil {
+		return nil
 	}
+
+	switch typedExpression := expression.(type) {
+	case pgsql.RowColumnReference:
+		if compound, ok := typedExpression.Identifier.(pgsql.CompoundIdentifier); ok && len(compound) >= 2 {
+			// Drop the frame prefix and keep only the leaf identifier + column.
+			return pgsql.CompoundIdentifier{compound[len(compound)-1], typedExpression.Column}
+		}
+
+		return expression
+
+	case *pgsql.BinaryExpression:
+		return &pgsql.BinaryExpression{
+			Operator: typedExpression.Operator,
+			LOperand: deframeExpression(typedExpression.LOperand),
+			ROperand: deframeExpression(typedExpression.ROperand),
+		}
+
+	case *pgsql.Parenthetical:
+		return &pgsql.Parenthetical{
+			Expression: deframeExpression(typedExpression.Expression),
+		}
+
+	default:
+		return expression
+	}
+}
+
+func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) pgsql.Select {
+	var (
+		primerNodeConstraints   = expansionModel.PrimerNodeConstraints
+		primerNodeJoinCondition = expansionModel.PrimerNodeJoinCondition
+		nextQuery               = pgsql.Select{
+			Where: expansionModel.EdgeConstraints,
+		}
+	)
+
+	if s.traversalStep.LeftNodeBound {
+		primerNodeConstraints = deframeExpression(primerNodeConstraints)
+		primerNodeJoinCondition = pgd.Equals(pgd.Column(s.traversalStep.LeftNode.Identifier, pgsql.ColumnID), pgd.StartID(s.traversalStep.Edge.Identifier))
+	}
+
+	nextQuery.Where = pgsql.OptionalAnd(primerNodeConstraints, nextQuery.Where)
 
 	nextQuery.Projection = []pgsql.SelectItem{
 		s.model.EdgeStartColumn,
@@ -124,7 +166,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		},
 	}
 
-	if expansionModel.PrimerNodeConstraints != nil {
+	if primerNodeConstraints != nil {
 		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
@@ -132,7 +174,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: s.traversalStep.Expansion.PrimerNodeJoinCondition,
+				Constraint: deframeExpression(primerNodeJoinCondition),
 			},
 		})
 	}
@@ -763,12 +805,25 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 	expansion.ProjectionStatement.Projection = expansionModel.Projection
 	expansion.RecursiveStatement.Where = pgsql.OptionalAnd(expansionModel.EdgeConstraints, expansionModel.RecursiveConstraints)
 	expansion.PrimerStatement.Projection = s.buildExpansionPrimerProjection(traversalStep)
-	expansion.RecursiveStatement.Projection = s.buildExpansionRecursiveProjection(traversalStep)
+
+	if projection, err := s.buildExpansionRecursiveProjection(traversalStep); err != nil {
+		return pgsql.Query{}, err
+	} else {
+		expansion.RecursiveStatement.Projection = projection
+	}
+
+	// Craft the from clause
+	nextQueryFrom := pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+		},
+	}
 
 	// If the left node was already bound at time of translation connect this expansion to the
 	// previously materialized node
 	if traversalStep.LeftNodeBound {
-		expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, pgsql.FromClause{
+		nextQueryFrom = pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name: pgsql.CompoundIdentifier{traversalStep.Frame.Previous.Binding.Identifier},
 			},
@@ -787,19 +842,11 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 							pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
 						)),
 				},
-			}, {
-				Table: pgsql.TableReference{
-					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
-				},
-				JoinOperator: pgsql.JoinOperator{
-					JoinType:   pgsql.JoinTypeInner,
-					Constraint: expansionModel.ExpansionNodeJoinCondition,
-				},
 			}},
-		})
-	} else {
-		expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, pgsql.FromClause{
+		}
+	} else if expansionModel.PrimerNodeConstraints != nil {
+		// Primer node constraints require a join of of the left node
+		nextQueryFrom = pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
 				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
@@ -811,40 +858,48 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: expansionModel.PrimerNodeJoinCondition,
-				},
-			}, {
-				Table: pgsql.TableReference{
-					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
-				},
-				JoinOperator: pgsql.JoinOperator{
-					JoinType:   pgsql.JoinTypeInner,
-					Constraint: expansionModel.ExpansionNodeJoinCondition,
+					Constraint: traversalStep.Expansion.PrimerNodeJoinCondition,
 				},
 			}},
+		}
+	}
+
+	// If there are terminal node constraints then the right node must be joined
+	if expansionModel.TerminalNodeSatisfactionProjection != nil {
+		nextQueryFrom.Joins = append(nextQueryFrom.Joins, pgsql.Join{
+			Table: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
+			},
+			JoinOperator: pgsql.JoinOperator{
+				JoinType:   pgsql.JoinTypeInner,
+				Constraint: traversalStep.Expansion.ExpansionNodeJoinCondition,
+			},
 		})
 	}
 
-	// Make sure the recursive query has the expansion bound
-	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
-		Source: pgsql.TableReference{
-			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+	expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, nextQueryFrom)
+
+	// Build recursive step joins. The terminal node join is only added when the
+	// expansion carries terminal-node constraints, which are the only cases where
+	// node columns appear in the recursive body.
+	recursiveJoins := []pgsql.Join{{
+		Table: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 		},
-		Joins: []pgsql.Join{{
-			Table: pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
-			},
-			JoinOperator: pgsql.JoinOperator{
-				JoinType: pgsql.JoinTypeInner,
-				Constraint: pgsql.NewBinaryExpression(
-					expansionModel.EdgeStartColumn,
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-				),
-			},
-		}, {
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				expansionModel.EdgeStartColumn,
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
+			),
+		},
+	}}
+
+	if expansionModel.TerminalNodeConstraints != nil {
+		recursiveJoins = append(recursiveJoins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
 				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
@@ -853,7 +908,14 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				JoinType:   pgsql.JoinTypeInner,
 				Constraint: expansionModel.ExpansionNodeJoinCondition,
 			},
-		}},
+		})
+	}
+
+	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+		},
+		Joins: recursiveJoins,
 	})
 
 	// The current query part may not have a frame associated with it if is a single part query component
@@ -920,7 +982,12 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 	expansion.PrimerStatement.Where = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.EdgeConstraints)
 	expansion.RecursiveStatement.Where = pgsql.OptionalAnd(expansionModel.EdgeConstraints, expansionModel.RecursiveConstraints)
 	expansion.PrimerStatement.Projection = s.buildExpansionPrimerProjection(traversalStep)
-	expansion.RecursiveStatement.Projection = s.buildExpansionRecursiveProjection(traversalStep)
+
+	if projection, err := s.buildExpansionRecursiveProjection(traversalStep); err != nil {
+		return pgsql.Query{}, err
+	} else {
+		expansion.RecursiveStatement.Projection = projection
+	}
 
 	expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
@@ -947,25 +1014,27 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 		}},
 	})
 
-	// Make sure the recursive query has the expansion bound
-	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
-		Source: pgsql.TableReference{
-			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+	// Build recursive step joins. The terminal node join is only added when the
+	// expansion carries terminal-node constraints, which are the only cases where
+	// node columns appear in the recursive body.
+	recursiveJoins := []pgsql.Join{{
+		Table: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 		},
-		Joins: []pgsql.Join{{
-			Table: pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
-			},
-			JoinOperator: pgsql.JoinOperator{
-				JoinType: pgsql.JoinTypeInner,
-				Constraint: pgsql.NewBinaryExpression(
-					expansionModel.EdgeStartColumn,
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-				),
-			},
-		}, {
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				expansionModel.EdgeStartColumn,
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
+			),
+		},
+	}}
+
+	// If there are terminal node constraints then the right node must be joined
+	if expansionModel.TerminalNodeSatisfactionProjection != nil {
+		recursiveJoins = append(recursiveJoins, pgsql.Join{
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
 				Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
@@ -974,7 +1043,14 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 				JoinType:   pgsql.JoinTypeInner,
 				Constraint: expansionModel.ExpansionNodeJoinCondition,
 			},
-		}},
+		})
+	}
+
+	expansion.RecursiveStatement.From = append(expansion.RecursiveStatement.From, pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name: pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
+		},
+		Joins: recursiveJoins,
 	})
 
 	// Select the expansion components for the projection statement
@@ -1068,29 +1144,47 @@ func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep
 	}
 }
 
-func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalStep) []pgsql.SelectItem {
+func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalStep) ([]pgsql.SelectItem, error) {
 	expansionModel := traversalStep.Expansion
 
 	if expansionModel.TerminalNodeSatisfactionProjection != nil {
-		return []pgsql.SelectItem{
-			pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			expansionModel.EdgeEndColumn,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionDepth},
-				pgsql.OperatorAdd,
-				pgsql.NewLiteral(1, pgsql.Int),
+		// Split up constraints that can not be satisfied by the local scope of the expansion. This is done to ensure
+		// that cross-entity references and other extra-scope comparisons are added external to the expansion frame.
+		localSatisfiedConstraint, externalSatisfiedConstraint := partitionConstraintByLocality(
+			pgsql.Expression(expansionModel.TerminalNodeSatisfactionProjection),
+			pgsql.AsIdentifierSet(
+				traversalStep.LeftNode.Identifier,
+				traversalStep.Edge.Identifier,
+				traversalStep.RightNode.Identifier,
 			),
-			expansionModel.TerminalNodeSatisfactionProjection,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
-				pgsql.OperatorEquals,
-				pgsql.NewAnyExpression(pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath}, pgsql.ExpansionPath),
-			),
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath},
-				pgsql.OperatorConcatenate,
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
-			),
+		)
+
+		// Store the external constraints to be inserted during the final projection and where clause
+		expansionModel.DeferredNodeSatisfactionConstraint = externalSatisfiedConstraint
+
+		if satisfiedSelectItem, err := pgsql.As[pgsql.SelectItem](localSatisfiedConstraint); err != nil {
+			return nil, err
+		} else {
+			return []pgsql.SelectItem{
+				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
+				expansionModel.EdgeEndColumn,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionDepth},
+					pgsql.OperatorAdd,
+					pgsql.NewLiteral(1, pgsql.Int),
+				),
+				satisfiedSelectItem,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.NewAnyExpression(pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath}, pgsql.ExpansionPath),
+				),
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath},
+					pgsql.OperatorConcatenate,
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
+				),
+			}, nil
 		}
 	} else {
 		return []pgsql.SelectItem{
@@ -1112,7 +1206,7 @@ func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalS
 				pgsql.OperatorConcatenate,
 				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
 			),
-		}
+		}, nil
 	}
 }
 
@@ -1148,8 +1242,14 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 				constraints.Expression,
 				joinCondition,
 			}
+
 			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, expressions); err != nil {
 				return projectionConstraints, err
+			}
+
+			// Append any deferred (non-local) constraints onto the projection constraints
+			if expansionModel.DeferredNodeSatisfactionConstraint != nil {
+				projectionConstraints = pgsql.OptionalAnd(projectionConstraints, expansionModel.DeferredNodeSatisfactionConstraint)
 			}
 		} else {
 			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, []pgsql.Expression{constraints.Expression, joinCondition}); err != nil {

@@ -1,0 +1,69 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "n1",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "name": "SOME NAME",
+          "value": 1,
+          "objectid": "S-1-5-21-1",
+          "enabled": true,
+          "hasspn": true,
+          "pwdlastset": -2,
+          "functionallevel": "2012",
+          "system_tags": "admin_tier_0",
+          "domain": "test.local",
+          "other": "SOME NAME",
+          "tid": "tid1",
+          "selected": true,
+          "array_value": [1, 2],
+          "arrayProperty": ["DES-CBC-CRC", "DES-CBC-MD5"],
+          "distinguishedname": "CN=TEST,DC=example,DC=com",
+          "samaccountname": "testuser",
+          "email": "test@example.com"
+        }
+      },
+      {
+        "id": "n2",
+        "kinds": ["NodeKind2"],
+        "properties": {
+          "name": "1234",
+          "value": 2,
+          "objectid": "S-1-5-21-2",
+          "tid": "tid1",
+          "distinguishedname": "CN=ADMINSDHOLDER,CN=SYSTEM,CN=TEST,DC=example,DC=com",
+          "samaccountname": "adminuser",
+          "email": "admin@example.com",
+          "domain": "other.local"
+        }
+      },
+      {
+        "id": "n3",
+        "kinds": ["NodeKind1", "NodeKind2"],
+        "properties": {
+          "name": "n3",
+          "value": 3,
+          "prop": "a"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "start_id": "n1",
+        "end_id": "n2",
+        "kind": "EdgeKind1",
+        "properties": {
+          "prop": "a",
+          "value": 42,
+          "bool_prop": true
+        }
+      },
+      {
+        "start_id": "n2",
+        "end_id": "n3",
+        "kind": "EdgeKind2"
+      }
+    ]
+  }
+}
