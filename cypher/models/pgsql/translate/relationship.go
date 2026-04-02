@@ -15,6 +15,8 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 
 	if bindingResult, err := s.bindPatternExpression(relationshipPattern, pgsql.EdgeComposite); err != nil {
 		return err
+	} else if currentQueryPart.isCreating {
+		return s.collectCreateEdgePattern(relationshipPattern, patternPart, bindingResult)
 	} else {
 		if err := s.translateRelationshipPatternToStep(bindingResult, patternPart, relationshipPattern); err != nil {
 			return err
@@ -52,6 +54,52 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 			}
 		}
 	}
+
+	return nil
+}
+
+// collectCreateEdgePattern captures a relationship pattern inside a create clause. The left node has already been recorded in
+// part.TraversalSteps; this function creates an EdgeCreate entry and hooks it into the current traversal step so that
+// collectCreateNodePattern can fill in the right node when it is visited next.
+func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.RelationshipPattern, part *PatternPart, bindingResult BindingResult) error {
+	var (
+		queryPart = s.query.CurrentPart()
+		numSteps  = len(part.TraversalSteps)
+	)
+
+	if numSteps == 0 {
+		return fmt.Errorf("relationship pattern encountered before any left node in CREATE pattern")
+	}
+
+	currentStep := part.TraversalSteps[numSteps-1]
+
+	// If the current step already has an edge this relationship is part of a multi-hop chain.
+	// Start a fresh traversal step whose left node is the right node of the preceding step,
+	// mirroring the continuation logic in translateRelationshipPatternToStep.
+	if currentStep.Edge != nil {
+		part.TraversalSteps = append(part.TraversalSteps, &TraversalStep{
+			LeftNode:      currentStep.RightNode,
+			LeftNodeBound: currentStep.RightNodeBound,
+		})
+		currentStep = part.TraversalSteps[len(part.TraversalSteps)-1]
+	}
+
+	currentStep.Edge = bindingResult.Binding
+	currentStep.Direction = relationshipPattern.Direction
+
+	// Register the edge as a dependency of any enclosing path binding.
+	if part.PatternBinding != nil {
+		part.PatternBinding.DependOn(bindingResult.Binding)
+	}
+
+	// Build the EdgeCreate; RightNode will be filled in by collectCreateNodePattern.
+	queryPart.mutations.EdgeCreations.Put(bindingResult.Binding.Identifier, &EdgeCreate{
+		Binding:    bindingResult.Binding,
+		Properties: queryPart.ConsumeProperties(),
+		Kinds:      relationshipPattern.Kinds,
+		LeftNode:   currentStep.LeftNode,
+		Direction:  relationshipPattern.Direction,
+	})
 
 	return nil
 }

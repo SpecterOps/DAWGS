@@ -956,6 +956,14 @@ type Insert struct {
 	Returning  []SelectItem
 }
 
+func (s Insert) AsExpression() Expression {
+	return s
+}
+
+func (s Insert) AsSetExpression() SetExpression {
+	return s
+}
+
 func (s Insert) AsStatement() Statement {
 	return s
 }

@@ -1,0 +1,134 @@
+{
+  "cases": [
+    {
+      "name": "create a node with a kind label and string property, return it",
+      "cypher": "create (n:NodeKind1 {name: 'Bob'}) return n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"contains_node_with_prop": ["name", "Bob"]}
+    },
+    {
+      "name": "create a node with a kind label, no return",
+      "cypher": "create (n:NodeKind1)",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "no_error"
+    },
+    {
+      "name": "create an unlabeled node, no return",
+      "cypher": "create (n)",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "no_error"
+    },
+    {
+      "name": "create a node with two kind labels and two properties, return it",
+      "cypher": "create (n:NodeKind1:NodeKind2 {name: 'Bob', value: 1}) return n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"contains_node_with_prop": ["name", "Bob"]}
+    },
+    {
+      "name": "create an unlabeled node and return it",
+      "cypher": "create (n) return n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "non_empty"
+    },
+    {
+      "name": "create a node with a string and integer property, return it",
+      "cypher": "create (n:NodeKind1 {name: 'Alice', value: 42}) return n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"contains_node_with_prop": ["name", "Alice"]}
+    },
+    {
+      "name": "match a typed node then create a second typed node in the same statement, return it",
+      "cypher": "match (n:NodeKind1) with n create (m:NodeKind2) return m",
+      "fixture": {
+        "nodes": [{"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "existing"}}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "match a typed node then create a second typed node with a property, return it",
+      "cypher": "match (n:NodeKind1) with n create (m:NodeKind2 {name: 'Bob'}) return m",
+      "fixture": {
+        "nodes": [{"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "existing"}}],
+        "edges": []
+      },
+      "assert": {"contains_node_with_prop": ["name", "Bob"]}
+    },
+    {
+      "name": "match a typed node then create a second typed node, no return",
+      "cypher": "match (n:NodeKind1) with n create (m:NodeKind2)",
+      "fixture": {
+        "nodes": [{"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "existing"}}],
+        "edges": []
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "create two typed nodes connected by a directed edge, no return",
+      "cypher": "create (a:NodeKind1)-[:EdgeKind1]->(b:NodeKind2)",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "no_error"
+    },
+    {
+      "name": "create two typed nodes connected by a named edge, return the edge",
+      "cypher": "create (a:NodeKind1)-[r:EdgeKind1]->(b:NodeKind2) return r",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "non_empty"
+    },
+    {
+      "name": "create two typed nodes connected by an edge with a property, no return",
+      "cypher": "create (a:NodeKind1)-[:EdgeKind1 {name: 'rel'}]->(b:NodeKind2)",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "no_error"
+    },
+    {
+      "name": "create two typed nodes connected by a reverse-directed edge, no return",
+      "cypher": "create (a:NodeKind1)<-[:EdgeKind1]-(b:NodeKind2)",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "no_error"
+    },
+    {
+      "name": "match an existing node then create an edge from it to a new typed node, no return",
+      "cypher": "match (a:NodeKind1) with a create (a)-[:EdgeKind1]->(b:NodeKind2)",
+      "fixture": {
+        "nodes": [{"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "existing"}}],
+        "edges": []
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "match an existing node then create a named edge from it to a new typed node, return the edge",
+      "cypher": "match (a:NodeKind1) with a create (a)-[r:EdgeKind1]->(b:NodeKind2) return r",
+      "fixture": {
+        "nodes": [{"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "existing"}}],
+        "edges": []
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "create a path of two typed nodes with edge properties, return the source node",
+      "cypher": "create (a:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(:NodeKind2 {name: 'test'}) return a",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"contains_node_with_prop": ["name", "abc"]}
+    },
+    {
+      "name": "create a path of two typed nodes with edge properties, return the destination node",
+      "cypher": "create (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(c:NodeKind2 {name: 'test'}) return c",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"contains_node_with_prop": ["name", "test"]}
+    },
+    {
+      "name": "create a diamond pattern with two paths sharing a target node, return the shared node",
+      "cypher": "create (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(c:NodeKind2 {name: 'test'})<-[:EdgeKind2]-(:NodeKind1 {name: 'other'}) return c",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"contains_node_with_prop": ["name", "test"]}
+    },
+    {
+      "name": "create a named path and return it",
+      "cypher": "create p = (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(:NodeKind2 {name: 'test'}) return p",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "non_empty"
+    }
+  ]
+}
+

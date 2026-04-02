@@ -46,7 +46,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.Comparison, *cypher.Skip, *cypher.Limit, cypher.Operator, *cypher.ArithmeticExpression,
 		*cypher.NodePattern, *cypher.RelationshipPattern, *cypher.Remove, *cypher.Set,
 		*cypher.ReadingClause, *cypher.UnaryAddOrSubtractExpression, *cypher.PropertyLookup,
-		*cypher.Negation, *cypher.Create, *cypher.Where, *cypher.ListLiteral,
+		*cypher.Negation, *cypher.Where, *cypher.ListLiteral,
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
@@ -56,6 +56,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		if err := s.prepareUnwind(typedExpression); err != nil {
 			s.SetError(err)
 		}
+
+	case *cypher.Create:
+		currentQueryPart := s.query.CurrentPart()
+		currentQueryPart.currentPattern = &Pattern{}
+		currentQueryPart.isCreating = true
 
 	case *cypher.MultiPartQueryPart:
 		if err := s.prepareMultiPartQueryPart(typedExpression); err != nil {
@@ -229,6 +234,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 	case *cypher.Delete:
 		if err := s.translateDelete(s.scope, typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case *cypher.Create:
+		if err := s.translateCreate(typedExpression); err != nil {
 			s.SetError(err)
 		}
 

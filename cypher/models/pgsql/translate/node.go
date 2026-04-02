@@ -16,8 +16,63 @@ func (s *Translator) translateNodePattern(nodePattern *cypher.NodePattern) error
 
 	if bindingResult, err := s.bindPatternExpression(nodePattern, pgsql.NodeComposite); err != nil {
 		return err
+	} else if queryPart.isCreating {
+		return s.collectCreateNodePattern(nodePattern, patternPart, bindingResult)
 	} else if err := s.translateNodePatternToStep(nodePattern, patternPart, bindingResult); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (s *Translator) collectCreateNodePattern(nodePattern *cypher.NodePattern, part *PatternPart, bindingResult BindingResult) error {
+	queryPart := s.query.CurrentPart()
+
+	if !bindingResult.AlreadyBound {
+		// Only insert nodes that are being newly created, not those already bound from a match statement.
+		queryPart.mutations.Creations.Put(bindingResult.Binding.Identifier, &NodeCreate{
+			Binding:    bindingResult.Binding,
+			Properties: queryPart.ConsumeProperties(),
+			Kinds:      nodePattern.Kinds,
+		})
+	} else {
+		// Consume any accumulated properties even if the node is already bound.
+		queryPart.ConsumeProperties()
+	}
+
+	if part.IsTraversal {
+		// Track nodes in traversal steps so that edge creation can resolve start/end IDs.
+		numSteps := len(part.TraversalSteps)
+
+		if numSteps == 0 {
+			// This is the left (start) node of the pattern.
+			part.TraversalSteps = append(part.TraversalSteps, &TraversalStep{
+				LeftNode:      bindingResult.Binding,
+				LeftNodeBound: bindingResult.AlreadyBound,
+			})
+		} else {
+			currentStep := part.TraversalSteps[numSteps-1]
+
+			if currentStep.RightNode == nil {
+				// This is the right (end) node of the current step.
+				currentStep.RightNode = bindingResult.Binding
+				currentStep.RightNodeBound = bindingResult.AlreadyBound
+
+				// Propagate the right node to any pending EdgeCreate for this step.
+				if currentStep.Edge != nil {
+					if pendingEdge := queryPart.mutations.EdgeCreations.Get(currentStep.Edge.Identifier); pendingEdge != nil {
+						pendingEdge.RightNode = bindingResult.Binding
+					}
+				}
+			}
+		}
+	} else {
+		part.NodeSelect.Binding = bindingResult.Binding
+	}
+
+	// Register this node as a dependency of any enclosing path binding.
+	if part.PatternBinding != nil {
+		part.PatternBinding.DependOn(bindingResult.Binding)
 	}
 
 	return nil

@@ -783,6 +783,9 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 	case pgsql.Values:
 		return formatNode(builder, typedSetExpression)
 
+	case pgsql.Insert:
+		return formatInsertStatement(builder, typedSetExpression)
+
 	case pgsql.Update:
 		return formatUpdateStatement(builder, typedSetExpression)
 

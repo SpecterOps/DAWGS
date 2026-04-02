@@ -327,6 +327,7 @@ type QueryPart struct {
 	stashedQuantifierArray          []pgsql.Expression
 	quantifierIdentifiers           *pgsql.IdentifierSet
 	unwindClauses                   []UnwindClause
+	isCreating                      bool
 }
 
 type UnwindClause struct {
@@ -411,6 +412,10 @@ func (s *QueryPart) HasDeletions() bool {
 	return s.mutations != nil && s.mutations.Deletions.Len() > 0
 }
 
+func (s *QueryPart) HasCreations() bool {
+	return s.mutations != nil && (s.mutations.Creations.Len() > 0 || s.mutations.EdgeCreations.Len() > 0)
+}
+
 func (s *QueryPart) PrepareProjection() {
 	s.projections.Items = append(s.projections.Items, &Projection{})
 }
@@ -483,15 +488,36 @@ type Delete struct {
 	UpdateBinding *BoundIdentifier
 }
 
+// NodeCreate holds everything needed to emit an INSERT CTE for a CREATE node pattern.
+type NodeCreate struct {
+	Binding    *BoundIdentifier
+	Properties map[string]pgsql.Expression
+	Kinds      graph.Kinds
+}
+
+// EdgeCreate holds everything needed to emit an INSERT CTE for a CREATE relationship pattern.
+type EdgeCreate struct {
+	Binding    *BoundIdentifier
+	Properties map[string]pgsql.Expression
+	Kinds      graph.Kinds
+	LeftNode   *BoundIdentifier
+	RightNode  *BoundIdentifier
+	Direction  graph.Direction
+}
+
 type Mutations struct {
-	Deletions *graph.IndexedSlice[pgsql.Identifier, *Delete]
-	Updates   *graph.IndexedSlice[pgsql.Identifier, *Update]
+	Deletions     *graph.IndexedSlice[pgsql.Identifier, *Delete]
+	Updates       *graph.IndexedSlice[pgsql.Identifier, *Update]
+	Creations     *graph.IndexedSlice[pgsql.Identifier, *NodeCreate]
+	EdgeCreations *graph.IndexedSlice[pgsql.Identifier, *EdgeCreate]
 }
 
 func NewMutations() *Mutations {
 	return &Mutations{
-		Deletions: graph.NewIndexedSlice[pgsql.Identifier, *Delete](),
-		Updates:   graph.NewIndexedSlice[pgsql.Identifier, *Update](),
+		Deletions:     graph.NewIndexedSlice[pgsql.Identifier, *Delete](),
+		Updates:       graph.NewIndexedSlice[pgsql.Identifier, *Update](),
+		Creations:     graph.NewIndexedSlice[pgsql.Identifier, *NodeCreate](),
+		EdgeCreations: graph.NewIndexedSlice[pgsql.Identifier, *EdgeCreate](),
 	}
 }
 
@@ -639,4 +665,45 @@ func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.
 	}
 
 	return pgsql.Identifier(variableExpression.Symbol), true, nil
+}
+
+// FromClauseBuilder accumulates de-duplicated CTE from clauses. Each CTE frame is emitted at most once regardless of how
+// many bindings refer to it, making it safe to call AddIdentifer or AddBinding repeatedly.
+type FromClauseBuilder struct {
+	seen        map[pgsql.Identifier]struct{}
+	fromClauses []pgsql.FromClause
+}
+
+func NewFromClauseBuilder() *FromClauseBuilder {
+	return &FromClauseBuilder{
+		seen: make(map[pgsql.Identifier]struct{}),
+	}
+}
+
+// AddIdentifer appends a from clause for frameID if it has not been seen before.
+func (s *FromClauseBuilder) AddIdentifer(frameID pgsql.Identifier) {
+	if frameID == "" {
+		return
+	}
+
+	if _, already := s.seen[frameID]; !already {
+		s.seen[frameID] = struct{}{}
+		s.fromClauses = append(s.fromClauses, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{frameID},
+			},
+		})
+	}
+}
+
+// AddBinding adds the frame in which binding was last materialized, if any.
+func (s *FromClauseBuilder) AddBinding(binding *BoundIdentifier) {
+	if binding.LastProjection != nil {
+		s.AddIdentifer(binding.LastProjection.Binding.Identifier)
+	}
+}
+
+// Clauses returns the accumulated from Clauses in insertion order.
+func (s *FromClauseBuilder) Clauses() []pgsql.FromClause {
+	return s.fromClauses
 }

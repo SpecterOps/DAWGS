@@ -155,8 +155,16 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 		case pgsql.EdgeComposite:
 			useEdgesToPathFunction = true
 
+			// For create patterns each edge lives in its own insert CTE frame where LastProjection is
+			// set. For match patterns, edges are visible through the current scope frame.
+			edgeFrameID := scope.CurrentFrameBinding().Identifier
+
+			if dependency.LastProjection != nil {
+				edgeFrameID = dependency.LastProjection.Binding.Identifier
+			}
+
 			ref := rewriteCompositeTypeFieldReference(
-				scope.CurrentFrameBinding().Identifier,
+				edgeFrameID,
 				pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
 			)
 
@@ -167,8 +175,15 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 			}
 
 		case pgsql.NodeComposite:
+			// Similar frame-resolution logic as EdgeComposite above.
+			nodeFrameID := scope.CurrentFrameBinding().Identifier
+
+			if dependency.LastProjection != nil {
+				nodeFrameID = dependency.LastProjection.Binding.Identifier
+			}
+
 			nodeReferences = append(nodeReferences, rewriteCompositeTypeFieldReference(
-				scope.CurrentFrameBinding().Identifier,
+				nodeFrameID,
 				pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
 			))
 
@@ -474,21 +489,56 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 	return sqlSelect, nil
 }
 
+// collectProjectionFromFrames determines the FROM clauses needed to resolve all projected
+// identifiers in the tail SELECT. For each identifier projection the binding's LastProjection
+// frame is used directly; PathComposite bindings (which are computed, not stored) fall back
+// to the frames of their dependencies instead. When nothing specific is found the current
+// scope frame is used as the sole source, preserving existing behaviour for MATCH queries
+// where bindings carry no LastProjection.
+func (s *Translator) collectProjectionFromFrames(projections []*Projection) []pgsql.FromClause {
+	fromClauseBuilder := NewFromClauseBuilder()
+
+	for _, projection := range projections {
+		identExpr, ok := projection.SelectItem.(pgsql.Identifier)
+		if !ok {
+			continue
+		}
+
+		binding, bound := s.scope.Lookup(identExpr)
+		if !bound {
+			continue
+		}
+
+		if binding.LastProjection != nil {
+			// Directly materialized binding (e.g. a CREATE'd node or edge INSERT CTE).
+			fromClauseBuilder.AddBinding(binding)
+		} else if binding.DataType == pgsql.PathComposite {
+			// Path bindings are computed in the SELECT list; collect frames from their
+			// component dependencies (nodes and edges that were materialized).
+			for _, dep := range binding.Dependencies {
+				fromClauseBuilder.AddBinding(dep)
+			}
+		}
+	}
+
+	// Fall back to the current frame for MATCH-style queries where bindings are not
+	// individually materialized and therefore carry no LastProjection.
+	if len(fromClauseBuilder.Clauses()) == 0 {
+		if currentFrame := s.scope.CurrentFrame(); currentFrame != nil {
+			fromClauseBuilder.AddIdentifer(currentFrame.Binding.Identifier)
+		}
+	}
+
+	return fromClauseBuilder.Clauses()
+}
+
 func (s *Translator) buildTailProjection() error {
 	var (
 		currentPart           = s.query.CurrentPart()
-		currentFrame          = s.scope.CurrentFrame()
 		singlePartQuerySelect = pgsql.Select{}
 	)
 
-	// Only add FROM clause if we have a current frame (i.e. there was a MATCH clause)
-	if currentFrame != nil && currentFrame.Binding.Identifier != "" {
-		singlePartQuerySelect.From = []pgsql.FromClause{{
-			Source: pgsql.TableReference{
-				Name: pgsql.CompoundIdentifier{currentFrame.Binding.Identifier},
-			},
-		}}
-	}
+	singlePartQuerySelect.From = s.collectProjectionFromFrames(currentPart.projections.Items)
 
 	for _, unwind := range currentPart.unwindClauses {
 		singlePartQuerySelect.From = append(singlePartQuerySelect.From, pgsql.FromClause{
