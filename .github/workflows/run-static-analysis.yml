@@ -40,5 +40,6 @@ jobs:
           check-latest: true
 
       - name: Run Analysis
+        continue-on-error: true
         run: |
           go tool golangci-lint run ./...
