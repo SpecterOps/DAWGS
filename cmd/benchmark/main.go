@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -39,10 +40,11 @@ func main() {
 		driver       = flag.String("driver", "pg", "database driver (pg, neo4j)")
 		connStr      = flag.String("connection", "", "database connection string (or PG_CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
-		output     = flag.String("output", "", "markdown output file (default: stdout)")
-		datasetDir = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
+		output       = flag.String("output", "", "markdown output file (default: stdout)")
+		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
+		dbcfg        = drivers.DatabaseConfiguration{}
 	)
 
 	flag.Parse()
@@ -62,8 +64,10 @@ func main() {
 		ConnectionString:      conn,
 	}
 
+	dbcfg.Connection = conn
+
 	if *driver == pg.DriverName {
-		pool, err := pg.NewPool(conn)
+		pool, err := pg.NewPool(dbcfg)
 		if err != nil {
 			fatal("failed to create pool: %v", err)
 		}

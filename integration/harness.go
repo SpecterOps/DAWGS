@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -79,8 +80,11 @@ func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context)
 		ConnectionString:      connStr,
 	}
 
+	dbcfg := drivers.DatabaseConfiguration{}
+	dbcfg.Connection = connStr
+
 	if driver == pg.DriverName {
-		pool, err := pg.NewPool(connStr)
+		pool, err := pg.NewPool(dbcfg)
 		if err != nil {
 			t.Fatalf("Failed to create PG pool: %v", err)
 		}
