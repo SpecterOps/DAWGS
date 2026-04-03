@@ -107,8 +107,8 @@ create table if not exists node
 alter table node
   alter column properties set storage main;
 
--- Index on the graph ID of each node.
-create index if not exists node_graph_id_index on node using btree (graph_id);
+-- Remove the old graph ID index.
+drop index if exists node_graph_id_index;
 
 -- Index node kind IDs so that lookups by kind is accelerated.
 create index if not exists node_kind_ids_index on node using gin (kind_ids);
@@ -176,8 +176,8 @@ execute procedure delete_node_edges();
 alter table edge
   alter column properties set storage main;
 
--- Index on the graph ID of each edge.
-create index if not exists edge_graph_id_index on edge using btree (graph_id);
+-- Remove the old graph ID index.
+drop index if exists edge_graph_id_index;
 
 -- Index on the start vertex of each edge.
 create index if not exists edge_start_id_index on edge using btree (start_id);
@@ -187,6 +187,11 @@ create index if not exists edge_end_id_index on edge using btree (end_id);
 
 -- Index on the kind of each edge.
 create index if not exists edge_kind_index on edge using btree (kind_id);
+
+-- Index lookups that include the edge's start or end id along with a filter for the edge type. This is the most
+-- common join filter during traversal.
+create index if not exists edge_start_kind_index on edge using btree (start_id, kind_id);
+create index if not exists edge_end_kind_index on edge using btree (end_id, kind_id);
 
 -- Path composite type
 do
