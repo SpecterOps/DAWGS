@@ -12,7 +12,7 @@ const (
 	//	     Azure post-processing. This was done because Azure post will submit the same creation request hundreds of
 	// 		 times for the same edge. In PostgreSQL this results in a constraint violation. For now this is best-effort
 	//		 until Azure post-processing can be refactored.
-	createEdgeBatchStatement  = `insert into edge as e (graph_id, start_id, end_id, kind_id, properties) select $1, unnest($2::int8[]), unnest($3::int8[]), unnest($4::int2[]), unnest($5::jsonb[]) on conflict (graph_id, start_id, end_id, kind_id) do update set properties = e.properties || excluded.properties;`
+	createEdgeBatchStatement  = `insert into edge as e (graph_id, start_id, end_id, kind_id, properties) select $1, unnest($2::int8[]), unnest($3::int8[]), unnest($4::int2[]), unnest($5::jsonb[]) on conflict (start_id, end_id, kind_id, graph_id) do update set properties = e.properties || excluded.properties;`
 	deleteEdgeWithIDStatement = `delete from edge as e where e.id = any($1)`
 
 	edgePropertySetOnlyStatement      = `update edge set properties = properties || $1::jsonb where edge.id = $2`
