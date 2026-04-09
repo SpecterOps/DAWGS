@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -54,20 +52,8 @@ func afterPooledConnectionRelease(conn *pgx.Conn) bool {
 }
 
 func NewPool(cfg drivers.DatabaseConfiguration) (*pgxpool.Pool, error) {
-
 	poolCtx, done := context.WithTimeout(context.Background(), poolInitConnectionTimeout)
 	defer done()
-
-	if cfg.EnableRDSIAMAuth {
-		// Must use CNAME with IAM auth
-		host := cfg.Address
-		if hostCName, err := net.LookupCNAME(cfg.Address); err != nil {
-			slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
-		} else {
-			host = hostCName
-		}
-		cfg.Address = strings.TrimSuffix(host, ".") + ":5432"
-	}
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.PostgreSQLConnectionString())
 	if err != nil {
@@ -87,8 +73,6 @@ func NewPool(cfg drivers.DatabaseConfiguration) (*pgxpool.Pool, error) {
 	if cfg.EnableRDSIAMAuth {
 		// Only enable the BeforeConnect handler if RDS IAM Auth is enabled
 		poolCfg.BeforeConnect = func(ctx context.Context, connCfg *pgx.ConnConfig) error {
-			slog.Debug("New Connection RDS IAM Auth")
-
 			if newPoolCfg, err := pgxpool.ParseConfig(cfg.PostgreSQLConnectionString()); err != nil {
 				return err
 			} else {

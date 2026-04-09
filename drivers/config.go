@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
+	"strings"
 
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
@@ -29,18 +31,24 @@ func (s DatabaseConfiguration) defaultPostgreSQLConnectionString() string {
 }
 
 func (s DatabaseConfiguration) RDSIAMAuthConnectionString() string {
-	slog.Info("Loading RDS Configuration With IAM Auth")
-
 	if cfg, err := awsConfig.LoadDefaultConfig(context.TODO()); err != nil {
 		slog.Error("AWS Config Loading Error", slog.String("err", err.Error()))
 	} else {
-		slog.Info("Requesting RDS IAM Auth Token")
+		// Must use CNAME with IAM auth
+		host := s.Address
+		if hostCName, err := net.LookupCNAME(s.Address); err != nil {
+			slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
+		} else {
+			host = hostCName
+		}
+		endpoint := strings.TrimSuffix(host, ".") + ":5432"
 
-		if authenticationToken, err := auth.BuildAuthToken(context.TODO(), s.Address, cfg.Region, s.Username, cfg.Credentials); err != nil {
+		slog.Info("Requesting RDS IAM Auth Token")
+		if authenticationToken, err := auth.BuildAuthToken(context.TODO(), endpoint, cfg.Region, s.Username, cfg.Credentials); err != nil {
 			slog.Error("RDS IAM Auth Token Request Error", slog.String("err", err.Error()))
 		} else {
 			slog.Info("RDS IAM Auth Token Created")
-			return fmt.Sprintf("postgresql://%s:%s@%s/%s", s.Username, url.QueryEscape(authenticationToken), s.Address, s.Database)
+			return fmt.Sprintf("postgresql://%s:%s@%s/%s", s.Username, url.QueryEscape(authenticationToken), endpoint, s.Database)
 		}
 	}
 
