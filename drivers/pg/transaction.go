@@ -269,7 +269,9 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
 	if parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query); err != nil {
 		return graph.NewErrorResult(err)
-	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters); err != nil {
+	} else if graphTarget, err := s.getTargetGraph(); err != nil {
+		return graph.NewErrorResult(err)
+	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID); err != nil {
 		return graph.NewErrorResult(err)
 	} else if sqlQuery, err := translate.Translated(translated); err != nil {
 		return graph.NewErrorResult(err)

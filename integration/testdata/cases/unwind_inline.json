@@ -1,0 +1,84 @@
+{
+  "cases": [
+    {
+      "name": "unwind integer array and return elements",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN x",
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind string array and return elements",
+      "cypher": "WITH ['a', 'b', 'c'] AS names UNWIND names AS name RETURN name",
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind with order by descending",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN x ORDER BY x DESC",
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind with distinct removes duplicates",
+      "cypher": "WITH [1, 2, 3, 1, 2] AS ids UNWIND ids AS x RETURN DISTINCT x",
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind with count aggregation",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN count(x)",
+      "assert": {"exact_int": 3}
+    },
+    {
+      "name": "unwind with where filter",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x WITH x WHERE x > 1 RETURN x",
+      "assert": {"row_count": 2}
+    },
+    {
+      "name": "unwind with limit",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN x LIMIT 2",
+      "assert": {"row_count": 2}
+    },
+    {
+      "name": "standalone unwind without preceding clause",
+      "cypher": "UNWIND [1, 2, 3] AS x RETURN x",
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind collected node names and return them",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.tag = 'unwind_test' WITH collect(n.name) AS names UNWIND names AS name RETURN name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "unwind_test"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "unwind_test"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "gamma", "tag": "unwind_test"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind collected names then filter with starts with",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.tag = 'unwind_sw' WITH collect(n.name) AS names UNWIND names AS name WITH name WHERE name STARTS WITH 'test' RETURN name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "test_one", "tag": "unwind_sw"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "test_two", "tag": "unwind_sw"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "other", "tag": "unwind_sw"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_count": 2}
+    },
+    {
+      "name": "unwind collected names then match against another kind",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.tag = 'unwind_xk' WITH collect(n.name) AS names UNWIND names AS name MATCH (m:NodeKind2) WHERE m.name = name RETURN m",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "shared", "tag": "unwind_xk"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "only_kind1", "tag": "unwind_xk"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"name": "shared"}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"name": "only_kind2"}}
+        ],
+        "edges": []
+      },
+      "assert": {"contains_node_with_prop": ["name", "shared"]}
+    }
+  ]
+}

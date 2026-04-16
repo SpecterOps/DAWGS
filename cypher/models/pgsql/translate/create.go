@@ -48,18 +48,29 @@ func (s *Translator) buildNodeCreations() error {
 				Alias: pgsql.AsOptionalIdentifier(nodeCreate.Binding.Identifier),
 			}
 
+			// Build the column list and value list, including graph_id when a
+			// target graph is configured.
+			columns := []pgsql.Identifier{
+				pgsql.ColumnKindIDs,
+				pgsql.ColumnProperties,
+			}
+
+			values := []pgsql.Expression{kindIdsExpr, propsExpr}
+
+			if s.graphID != 0 {
+				columns = append([]pgsql.Identifier{pgsql.ColumnGraphID}, columns...)
+				values = append([]pgsql.Expression{pgsql.NewLiteral(s.graphID, pgsql.Int4)}, values...)
+			}
+
 			// Build the INSERT statement
 			sqlInsert := pgsql.Insert{
 				Table: pgsql.TableReference{
 					Name: pgsql.CompoundIdentifier{pgsql.TableNode},
 				},
-				Shape: pgsql.NewRecordShape([]pgsql.Identifier{
-					pgsql.ColumnKindIDs,
-					pgsql.ColumnProperties,
-				}),
+				Shape: pgsql.NewRecordShape(columns),
 				Source: &pgsql.Query{
 					Body: pgsql.Values{
-						Values: []pgsql.Expression{kindIdsExpr, propsExpr},
+						Values: values,
 					},
 				},
 				Returning: []pgsql.SelectItem{returningItem},
@@ -171,43 +182,52 @@ func (s *Translator) buildEdgeCreations() error {
 			} else if endIDRef, err := buildCreatedNodeIDRef(endNode); err != nil {
 				return err
 			} else {
-				var (
-					// RETURNING (id, start_id, end_id, kind_id, properties)::edgecomposite as e0
-					returningExpr = &pgsql.AliasedExpression{
-						Expression: pgsql.CompositeValue{
-							DataType: pgsql.EdgeComposite,
-							Values: []pgsql.Expression{
-								pgsql.ColumnID,
-								pgsql.ColumnStartID,
-								pgsql.ColumnEndID,
-								pgsql.ColumnKindID,
-								pgsql.ColumnProperties,
-							},
-						},
-						Alias: pgsql.AsOptionalIdentifier(edgeCreate.Binding.Identifier),
-					}
-
-					// insert into edge (start_id, end_id, kind_id, properties)
-					// select <startIDRef>, <endIDRef>, <kindID>, <props> from <nodeFrames>
-					sqlInsert = pgsql.Insert{
-						Table: pgsql.TableReference{
-							Name: pgsql.CompoundIdentifier{pgsql.TableEdge},
-						},
-						Shape: pgsql.NewRecordShape([]pgsql.Identifier{
+				// RETURNING (id, start_id, end_id, kind_id, properties)::edgecomposite as e0
+				returningExpr := &pgsql.AliasedExpression{
+					Expression: pgsql.CompositeValue{
+						DataType: pgsql.EdgeComposite,
+						Values: []pgsql.Expression{
+							pgsql.ColumnID,
 							pgsql.ColumnStartID,
 							pgsql.ColumnEndID,
 							pgsql.ColumnKindID,
 							pgsql.ColumnProperties,
-						}),
-						Source: &pgsql.Query{
-							Body: pgsql.Select{
-								Projection: []pgsql.SelectItem{startIDRef, endIDRef, kindIDExpr, buildPropertiesObject(edgeCreate.Properties)},
-								From:       buildEdgeNodeFromClauses(startNode, endNode),
-							},
 						},
-						Returning: []pgsql.SelectItem{returningExpr},
-					}
-				)
+					},
+					Alias: pgsql.AsOptionalIdentifier(edgeCreate.Binding.Identifier),
+				}
+
+				// Build the column list and projection, including graph_id when a
+				// target graph is configured.
+				columns := []pgsql.Identifier{
+					pgsql.ColumnStartID,
+					pgsql.ColumnEndID,
+					pgsql.ColumnKindID,
+					pgsql.ColumnProperties,
+				}
+
+				projection := []pgsql.SelectItem{startIDRef, endIDRef, kindIDExpr, buildPropertiesObject(edgeCreate.Properties)}
+
+				if s.graphID != 0 {
+					columns = append([]pgsql.Identifier{pgsql.ColumnGraphID}, columns...)
+					projection = append([]pgsql.SelectItem{pgsql.NewLiteral(s.graphID, pgsql.Int4)}, projection...)
+				}
+
+				// insert into edge (graph_id, start_id, end_id, kind_id, properties)
+				// select <graphID>, <startIDRef>, <endIDRef>, <kindID>, <props> from <nodeFrames>
+				sqlInsert := pgsql.Insert{
+					Table: pgsql.TableReference{
+						Name: pgsql.CompoundIdentifier{pgsql.TableEdge},
+					},
+					Shape: pgsql.NewRecordShape(columns),
+					Source: &pgsql.Query{
+						Body: pgsql.Select{
+							Projection: projection,
+							From:       buildEdgeNodeFromClauses(startNode, endNode),
+						},
+					},
+					Returning: []pgsql.SelectItem{returningExpr},
+				}
 
 				edgeCreate.Binding.MaterializedBy(insertFrame)
 				insertFrame.Export(edgeCreate.Binding.Identifier)

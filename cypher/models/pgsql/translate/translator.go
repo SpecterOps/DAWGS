@@ -14,13 +14,14 @@ type Translator struct {
 
 	ctx            context.Context
 	kindMapper     *contextAwareKindMapper
+	graphID        int32
 	translation    Result
 	treeTranslator *ExpressionTreeTranslator
 	query          *Query
 	scope          *Scope
 }
 
-func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *Translator {
+func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
 	if parameters == nil {
 		parameters = map[string]any{}
 	}
@@ -34,6 +35,7 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
+		graphID:        graphID,
 		treeTranslator: NewExpressionTreeTranslator(ctxAwareKindMapper),
 		query:          &Query{},
 		scope:          NewScope(),
@@ -463,8 +465,8 @@ type Result struct {
 	Parameters map[string]any
 }
 
-func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any) (Result, error) {
-	translator := NewTranslator(ctx, kindMapper, parameters)
+func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
+	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 
 	if err := walk.Cypher(cypherQuery, translator); err != nil {
 		return Result{}, err

@@ -28,7 +28,7 @@ func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapp
 
 	output.WriteString("\n")
 
-	if translation, err := Translate(ctx, regularQuery, kindMapper, nil); err != nil {
+	if translation, err := Translate(ctx, regularQuery, kindMapper, nil, 0); err != nil {
 		return format.Formatted{}, err
 	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder()); err != nil {
 		return format.Formatted{}, err
