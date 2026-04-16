@@ -73,7 +73,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') = any (array ['option 1', 'option 2']::text[]))) select s0.n0 as s from s0;
 
 -- case: match (s) where toLower(s.name) = '1234' return distinct s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (lower((n0.properties ->> 'name'))::text = '1234')) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (lower((n0.properties ->> 'name'))::text = '1234')) select distinct s0.n0 as s from s0;
 
 -- case: match (s:NodeKind1), (e:NodeKind2) where s.name = e.name return s, e
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where (((s0.n0).properties -> 'name') = (n1.properties -> 'name')) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s1.n0 as s, s1.n1 as e from s1;

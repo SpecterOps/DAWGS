@@ -30,7 +30,7 @@ with s0 as (select array ['a', 'b', 'c']::text[] as i0) select i1 as name from s
 with s0 as (select array [1, 2, 3]::int8[] as i0) select i1 as x from s0, unnest(i0) as i1 order by i1 desc;
 
 -- case: with [1, 2, 3, 1, 2] as ids unwind ids as x return distinct x
-with s0 as (select array [1, 2, 3, 1, 2]::int8[] as i0) select i1 as x from s0, unnest(i0) as i1;
+with s0 as (select array [1, 2, 3, 1, 2]::int8[] as i0) select distinct i1 as x from s0, unnest(i0) as i1;
 
 -- case: with [1, 2, 3] as ids unwind ids as x return count(x)
 with s0 as (select array [1, 2, 3]::int8[] as i0) select count(i1)::int8 from s0, unnest(i0) as i1;

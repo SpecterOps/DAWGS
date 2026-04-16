@@ -433,7 +433,8 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 
 func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error) {
 	sqlSelect := pgsql.Select{
-		Where: part.projections.Constraints,
+		Distinct: part.projections.Distinct,
+		Where:    part.projections.Constraints,
 	}
 
 	// If there's a projection frame set, some additional negotiation is required to identify which frame the
@@ -529,7 +530,9 @@ func (s *Translator) collectProjectionFromFrames(projections []*Projection) []pg
 func (s *Translator) buildTailProjection() error {
 	var (
 		currentPart           = s.query.CurrentPart()
-		singlePartQuerySelect = pgsql.Select{}
+		singlePartQuerySelect = pgsql.Select{
+			Distinct: currentPart.projections.Distinct,
+		}
 	)
 
 	singlePartQuerySelect.From = s.collectProjectionFromFrames(currentPart.projections.Items)

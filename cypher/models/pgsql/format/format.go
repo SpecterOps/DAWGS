@@ -530,7 +530,11 @@ func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (string, er
 }
 
 func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
-	builder.Write("select ")
+	if selectStmt.Distinct {
+		builder.Write("select distinct ")
+	} else {
+		builder.Write("select ")
+	}
 
 	for idx, projection := range selectStmt.Projection {
 		if idx > 0 {
