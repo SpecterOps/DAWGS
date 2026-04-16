@@ -326,6 +326,12 @@ type QueryPart struct {
 	stashedExpressionTreeTranslator *ExpressionTreeTranslator
 	stashedQuantifierArray          []pgsql.Expression
 	quantifierIdentifiers           *pgsql.IdentifierSet
+	unwindClauses                   []UnwindClause
+}
+
+type UnwindClause struct {
+	Expression pgsql.Expression
+	Binding    *BoundIdentifier
 }
 
 func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
@@ -340,6 +346,14 @@ func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
 		properties:            map[string]pgsql.Expression{},
 		quantifierIdentifiers: pgsql.NewIdentifierSet(),
 	}
+}
+
+func (s *QueryPart) AddUnwindClause(clause UnwindClause) {
+	s.unwindClauses = append(s.unwindClauses, clause)
+}
+
+func (s *QueryPart) HasUnwindClauses() bool {
+	return len(s.unwindClauses) > 0
 }
 
 func (s *QueryPart) AddFromClause(clause pgsql.FromClause) {

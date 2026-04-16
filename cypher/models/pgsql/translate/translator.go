@@ -52,6 +52,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.Quantifier, *cypher.IDInCollection:
 
+	case *cypher.Unwind:
+		if err := s.prepareUnwind(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
 	case *cypher.MultiPartQueryPart:
 		if err := s.prepareMultiPartQueryPart(typedExpression); err != nil {
 			s.SetError(err)
@@ -411,6 +416,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 	case *cypher.Match:
 		if err := s.translateMatch(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case *cypher.Unwind:
+		if err := s.translateUnwind(typedExpression); err != nil {
 			s.SetError(err)
 		}
 

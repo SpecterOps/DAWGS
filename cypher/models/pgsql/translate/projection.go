@@ -398,9 +398,18 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 
 	default:
 		// If this isn't a type that requires a unique projection, reflect the identifier as-is with its alias
+		var expression pgsql.Expression
+
+		if referenceFrame != nil {
+			expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+		} else {
+			// UNWIND variable: already in FROM via unnest, no CTE reference needed
+			expression = projected.Identifier
+		}
+
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
-				Expression: pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier},
+				Expression: expression,
 				Alias:      pgsql.AsOptionalIdentifier(alias),
 			},
 		}, nil
@@ -429,6 +438,18 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 				Source: part.Frame.Previous.Binding.Identifier,
 			}}
 		}
+	}
+
+	for _, unwind := range part.unwindClauses {
+		sqlSelect.From = append(sqlSelect.From, pgsql.FromClause{
+			Source: pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function:   pgsql.FunctionUnnest,
+					Parameters: []pgsql.Expression{unwind.Expression},
+				},
+				Alias: pgsql.AsOptionalIdentifier(unwind.Binding.Identifier),
+			},
+		})
 	}
 
 	for _, projection := range part.projections.Items {
@@ -467,6 +488,18 @@ func (s *Translator) buildTailProjection() error {
 				Name: pgsql.CompoundIdentifier{currentFrame.Binding.Identifier},
 			},
 		}}
+	}
+
+	for _, unwind := range currentPart.unwindClauses {
+		singlePartQuerySelect.From = append(singlePartQuerySelect.From, pgsql.FromClause{
+			Source: pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function:   pgsql.FunctionUnnest,
+					Parameters: []pgsql.Expression{unwind.Expression},
+				},
+				Alias: pgsql.AsOptionalIdentifier(unwind.Binding.Identifier),
+			},
+		})
 	}
 
 	if projectionConstraint, err := s.treeTranslator.ConsumeAllConstraints(); err != nil {

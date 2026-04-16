@@ -335,4 +335,3 @@ func assertContainsNodeWithProp(key, expected string) func(*testing.T, graph.Res
 		t.Fatalf("no row contains a node with %s = %q", key, expected)
 	}
 }
-
