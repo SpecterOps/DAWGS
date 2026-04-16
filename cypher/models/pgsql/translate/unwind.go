@@ -17,11 +17,13 @@ func (s *Translator) prepareUnwind(unwind *cypher.Unwind) error {
 
 		// If there is no current frame (e.g. standalone unwind without a preceding
 		// WITH or MATCH), push a new frame to satisfy the scope requirements of
-		// Declare and Export.
+		// Declare and Export. The frame is marked Synthetic so that downstream
+		// projection logic does not treat it as a real SQL FROM source.
 		if s.scope.CurrentFrame() == nil {
 			if frame, err := s.scope.PushFrame(); err != nil {
 				return err
 			} else {
+				frame.Synthetic = true
 				s.query.CurrentPart().Frame = frame
 			}
 		}

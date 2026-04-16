@@ -439,7 +439,7 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 	// If there's a projection frame set, some additional negotiation is required to identify which frame the
 	// from-statement should be written to. Some of this would be better figured out during the translation
 	// of the projection where query scope and other components are not yet fully translated.
-	if part.projections.Frame != nil {
+	if part.projections.Frame != nil && !part.projections.Frame.Synthetic {
 		// Look up to see if there are CTE expressions registered. If there are then it is likely
 		// there was a projection between this CTE and the previous multipart query part
 		hasCTEs := part.Model.CommonTableExpressions != nil && len(part.Model.CommonTableExpressions.Expressions) > 0
@@ -522,9 +522,11 @@ func (s *Translator) collectProjectionFromFrames(projections []*Projection) []pg
 	}
 
 	// Fall back to the current frame for MATCH-style queries where bindings are not
-	// individually materialized and therefore carry no LastProjection.
+	// individually materialized and therefore carry no LastProjection. Synthetic
+	// frames (e.g. bookkeeping-only frames pushed for standalone UNWIND) are
+	// skipped because they have no backing CTE or table.
 	if len(fromClauseBuilder.Clauses()) == 0 {
-		if currentFrame := s.scope.CurrentFrame(); currentFrame != nil {
+		if currentFrame := s.scope.CurrentFrame(); currentFrame != nil && !currentFrame.Synthetic {
 			fromClauseBuilder.AddIdentifer(currentFrame.Binding.Identifier)
 		}
 	}

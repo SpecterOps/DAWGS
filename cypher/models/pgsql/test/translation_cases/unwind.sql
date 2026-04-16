@@ -45,4 +45,4 @@ with s0 as (select array [1, 2, 3]::int8[] as i0), s1 as (select i1 as i1 from s
 with s0 as (select array [1, 2, 3]::int8[] as i0) select i1 as x from s0, unnest(i0) as i1 limit 2;
 
 -- case: unwind [1, 2, 3] as x return x
-select i0 as x from s0, unnest(array [1, 2, 3]::int8[]) as i0;
+select i0 as x from unnest(array [1, 2, 3]::int8[]) as i0;

@@ -60,6 +60,12 @@ type Frame struct {
 	stashedVisible  *pgsql.IdentifierSet
 	Exported        *pgsql.IdentifierSet
 	stashedExported *pgsql.IdentifierSet
+
+	// Synthetic marks a frame that exists only for scope bookkeeping (e.g. a
+	// standalone UNWIND with no preceding WITH/MATCH). Synthetic frames must
+	// not be emitted as SQL FROM sources because they have no backing CTE or
+	// table.
+	Synthetic bool
 }
 
 func (s *Frame) RestoreStashed() {
