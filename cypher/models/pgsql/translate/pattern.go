@@ -69,6 +69,14 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 		if traversalStepQuery, err := s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep); err != nil {
 			return err
 		} else {
+			// Consume any pending UNWIND clauses so that the unnest(...) sources
+			// are available in this CTE's FROM, allowing downstream WHERE to
+			// reference the unwind binding.
+			if selectBody, ok := traversalStepQuery.Body.(pgsql.Select); ok {
+				selectBody.From = append(selectBody.From, unwindFromClauses(s.query.CurrentPart().ConsumeUnwindClauses())...)
+				traversalStepQuery.Body = selectBody
+			}
+
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
 				Alias: pgsql.TableAlias{
 					Name: traversalStep.Frame.Binding.Identifier,

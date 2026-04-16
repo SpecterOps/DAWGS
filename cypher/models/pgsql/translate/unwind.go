@@ -33,6 +33,26 @@ func (s *Translator) prepareUnwind(unwind *cypher.Unwind) error {
 	}
 }
 
+// unwindFromClauses converts a slice of UnwindClause into pgsql.FromClause
+// entries suitable for inclusion in a SELECT's FROM list.
+func unwindFromClauses(clauses []UnwindClause) []pgsql.FromClause {
+	fromClauses := make([]pgsql.FromClause, 0, len(clauses))
+
+	for _, clause := range clauses {
+		fromClauses = append(fromClauses, pgsql.FromClause{
+			Source: pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function:   pgsql.FunctionUnnest,
+					Parameters: []pgsql.Expression{clause.Expression},
+				},
+				Alias: pgsql.AsOptionalIdentifier(clause.Binding.Identifier),
+			},
+		})
+	}
+
+	return fromClauses
+}
+
 func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 	// Pop variable identifier (pushed by *cypher.Variable Enter handler)
 	if variableIdentifier, err := s.treeTranslator.PopOperand(); err != nil {

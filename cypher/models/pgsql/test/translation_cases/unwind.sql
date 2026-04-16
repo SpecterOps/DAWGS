@@ -36,7 +36,7 @@ with s0 as (select array [1, 2, 3, 1, 2]::int8[] as i0) select i1 as x from s0, 
 with s0 as (select array [1, 2, 3]::int8[] as i0) select count(i1)::int8 from s0, unnest(i0) as i1;
 
 -- case: match (n:NodeKind1) with collect(n.name) as names unwind names as name match (m:NodeKind2) where m.name = name return m
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(((s1.n0).properties ->> 'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1), s2 as (select s0.i0 as i0, i1 as i1, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where ((n1.properties ->> 'name') = i1) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s2.n1 as m from s2, unnest(i0) as i1;
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(((s1.n0).properties ->> 'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1), s2 as (select s0.i0 as i0, i1 as i1, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, unnest(i0) as i1, node n1 where ((n1.properties ->> 'name') = i1) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s2.n1 as m from s2;
 
 -- case: with [1, 2, 3] as ids unwind ids as x with x where x > 1 return x
 with s0 as (select array [1, 2, 3]::int8[] as i0), s1 as (select i1 as i1 from s0, unnest(i0) as i1 where (i1 > 1)) select s1.i1 as x from s1;

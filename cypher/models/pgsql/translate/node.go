@@ -174,6 +174,11 @@ func (s *Translator) buildNodePatternPart(part *PatternPart) error {
 		})
 	}
 
+	// Consume any pending UNWIND clauses so that the unnest(...) sources are
+	// available in this CTE's FROM, allowing downstream WHERE to reference the
+	// unwind binding.
+	nextSelect.From = append(nextSelect.From, unwindFromClauses(s.query.CurrentPart().ConsumeUnwindClauses())...)
+
 	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{pgsql.TableNode},

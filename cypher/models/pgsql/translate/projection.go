@@ -455,17 +455,9 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 		}
 	}
 
-	for _, unwind := range part.unwindClauses {
-		sqlSelect.From = append(sqlSelect.From, pgsql.FromClause{
-			Source: pgsql.AliasedExpression{
-				Expression: pgsql.FunctionCall{
-					Function:   pgsql.FunctionUnnest,
-					Parameters: []pgsql.Expression{unwind.Expression},
-				},
-				Alias: pgsql.AsOptionalIdentifier(unwind.Binding.Identifier),
-			},
-		})
-	}
+	// Append any unconsumed UNWIND clauses. When a downstream MATCH already
+	// consumed them, this slice will be empty and the append is a no-op.
+	sqlSelect.From = append(sqlSelect.From, unwindFromClauses(part.ConsumeUnwindClauses())...)
 
 	for _, projection := range part.projections.Items {
 		builtProjection := projection.SelectItem
@@ -542,17 +534,9 @@ func (s *Translator) buildTailProjection() error {
 
 	singlePartQuerySelect.From = s.collectProjectionFromFrames(currentPart.projections.Items)
 
-	for _, unwind := range currentPart.unwindClauses {
-		singlePartQuerySelect.From = append(singlePartQuerySelect.From, pgsql.FromClause{
-			Source: pgsql.AliasedExpression{
-				Expression: pgsql.FunctionCall{
-					Function:   pgsql.FunctionUnnest,
-					Parameters: []pgsql.Expression{unwind.Expression},
-				},
-				Alias: pgsql.AsOptionalIdentifier(unwind.Binding.Identifier),
-			},
-		})
-	}
+	// Append any unconsumed UNWIND clauses. When a downstream MATCH already
+	// consumed them, this slice will be empty and the append is a no-op.
+	singlePartQuerySelect.From = append(singlePartQuerySelect.From, unwindFromClauses(currentPart.ConsumeUnwindClauses())...)
 
 	if projectionConstraint, err := s.treeTranslator.ConsumeAllConstraints(); err != nil {
 		return err

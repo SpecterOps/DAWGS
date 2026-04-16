@@ -357,6 +357,16 @@ func (s *QueryPart) HasUnwindClauses() bool {
 	return len(s.unwindClauses) > 0
 }
 
+// ConsumeUnwindClauses returns all pending UNWIND clauses and clears them from
+// the query part. This allows callers (e.g. pattern builders) to claim the
+// clauses early so that downstream MATCH/WHERE can bind against them. If no
+// clauses remain, the projection-time fallback becomes a no-op.
+func (s *QueryPart) ConsumeUnwindClauses() []UnwindClause {
+	clauses := s.unwindClauses
+	s.unwindClauses = nil
+	return clauses
+}
+
 func (s *QueryPart) AddFromClause(clause pgsql.FromClause) {
 	s.fromClauses = append(s.fromClauses, clause)
 }
