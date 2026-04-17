@@ -30,17 +30,19 @@ func (s DatabaseConfiguration) defaultPostgreSQLConnectionString() string {
 	return fmt.Sprintf("postgresql://%s:%s@%s/%s", s.Username, url.QueryEscape(s.Secret), s.Address, s.Database)
 }
 
+// Looks up CNAME record to get an RDS instance identifier and builds an IAM auth token, returning a connection string
 func (s DatabaseConfiguration) RDSIAMAuthConnectionString() string {
 	if cfg, err := awsConfig.LoadDefaultConfig(context.TODO()); err != nil {
 		slog.Error("AWS Config Loading Error", slog.String("err", err.Error()))
 	} else {
-		// Must use CNAME with IAM auth
+		// Must use instance endpoint with IAM auth
 		host := s.Address
 		if hostCName, err := net.LookupCNAME(s.Address); err != nil {
 			slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
 		} else {
 			host = hostCName
 		}
+		// Instance endpoint always returns with a trailing '.'
 		endpoint := strings.TrimSuffix(host, ".") + ":5432"
 
 		slog.Info("Requesting RDS IAM Auth Token")
