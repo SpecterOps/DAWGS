@@ -74,14 +74,22 @@ func (s DatabaseConfiguration) Neo4jConnectionString() string {
 }
 
 func (s DatabaseConfiguration) LookupEndpoint() string {
-	host, port, _ := net.SplitHostPort(s.Address)
-	if hostCName, err := net.LookupCNAME(host); err != nil {
+	host := s.Address
+	port := "5432"
+
+	if splitHost, splitPort, err := net.SplitHostPort(s.Address); err == nil {
+		host = splitHost
+		port = splitPort
+	} else {
+		slog.Warn("Missing port in address. Using default port 5432.", slog.String("err", err.Error()))
+	}
+
+	if hostCName, err := net.DefaultResolver.LookupCNAME(context.TODO(), host); err != nil {
 		slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
-		return s.Address
 	} else {
 		host = hostCName
 	}
 
 	// Instance endpoint always returns with a trailing '.'
-	return strings.TrimSuffix(host, ".") + ":" + port
+	return net.JoinHostPort(strings.TrimSuffix(host, "."), port)
 }
