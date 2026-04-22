@@ -20,6 +20,7 @@ type DatabaseConfiguration struct {
 	Secret                string `json:"secret"`
 	MaxConcurrentSessions int    `json:"max_concurrent_sessions"`
 	EnableRDSIAMAuth      bool   `json:"enable_rds_iam_auth"`
+	Endpoint              string
 }
 
 func (s DatabaseConfiguration) defaultPostgreSQLConnectionString() string {
@@ -36,14 +37,12 @@ func (s DatabaseConfiguration) RDSIAMAuthConnectionString() string {
 		slog.Error("AWS Config Loading Error", slog.String("err", err.Error()))
 	} else {
 		// Must use instance endpoint with IAM auth
-		host := s.Address
-		if hostCName, err := net.LookupCNAME(s.Address); err != nil {
-			slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
+		var endpoint string
+		if s.Endpoint != "" {
+			endpoint = s.Endpoint
 		} else {
-			host = hostCName
+			endpoint = s.LookupEndpoint()
 		}
-		// Instance endpoint always returns with a trailing '.'
-		endpoint := strings.TrimSuffix(host, ".") + ":5432"
 
 		slog.Info("Requesting RDS IAM Auth Token")
 		if authenticationToken, err := auth.BuildAuthToken(context.TODO(), endpoint, cfg.Region, s.Username, cfg.Credentials); err != nil {
@@ -72,4 +71,16 @@ func (s DatabaseConfiguration) Neo4jConnectionString() string {
 	}
 
 	return s.Connection
+}
+
+func (s DatabaseConfiguration) LookupEndpoint() string {
+	host := s.Address
+	if hostCName, err := net.LookupCNAME(s.Address); err != nil {
+		slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
+	} else {
+		host = hostCName
+	}
+
+	// Instance endpoint always returns with a trailing '.'
+	return strings.TrimSuffix(host, ".") + ":5432"
 }

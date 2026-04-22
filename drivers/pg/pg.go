@@ -72,6 +72,7 @@ func NewPool(cfg drivers.DatabaseConfiguration) (*pgxpool.Pool, error) {
 
 	if cfg.EnableRDSIAMAuth {
 		// Only enable the BeforeConnect handler if RDS IAM Auth is enabled
+		cfg.Endpoint = cfg.LookupEndpoint()
 		poolCfg.BeforeConnect = func(ctx context.Context, connCfg *pgx.ConnConfig) error {
 			if newPoolCfg, err := pgxpool.ParseConfig(cfg.PostgreSQLConnectionString()); err != nil {
 				return err
