@@ -54,6 +54,7 @@ func (s DatabaseConfiguration) RDSIAMAuthConnectionString() string {
 		}
 	}
 
+	slog.Warn("Failed to create IAM auth token. Falling back to default Postgres connection string")
 	return s.defaultPostgreSQLConnectionString()
 }
 
