@@ -74,14 +74,11 @@ func (s DatabaseConfiguration) Neo4jConnectionString() string {
 }
 
 func (s DatabaseConfiguration) LookupEndpoint() string {
-	host := s.Address
-	port := "5432"
-
-	if splitHost, splitPort, err := net.SplitHostPort(s.Address); err == nil {
-		host = splitHost
-		port = splitPort
-	} else {
+	host, port, err := net.SplitHostPort(s.Address)
+	if err != nil {
 		slog.Warn("Missing port in address. Using default port 5432.", slog.String("err", err.Error()))
+		host = s.Address
+		port = "5432"
 	}
 
 	if hostCName, err := net.DefaultResolver.LookupCNAME(context.TODO(), host); err != nil {
