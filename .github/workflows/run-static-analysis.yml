@@ -39,6 +39,10 @@ jobs:
           cache: true
           check-latest: true
 
+      - name: Vet source code
+        run: |
+          go vet $(go list ./... | grep -v github.com/specterops/dawgs/cypher/parser)
+
       - name: Run Analysis
         continue-on-error: true
         run: |
