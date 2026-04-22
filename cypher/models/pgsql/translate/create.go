@@ -48,19 +48,20 @@ func (s *Translator) buildNodeCreations() error {
 				Alias: pgsql.AsOptionalIdentifier(nodeCreate.Binding.Identifier),
 			}
 
-			// Build the column list and value list, including graph_id when a
-			// target graph is configured.
-			columns := []pgsql.Identifier{
-				pgsql.ColumnKindIDs,
-				pgsql.ColumnProperties,
-			}
+			// Build the column list and value list, including graph_id
+			var (
+				columns = []pgsql.Identifier{
+					pgsql.ColumnGraphID,
+					pgsql.ColumnKindIDs,
+					pgsql.ColumnProperties,
+				}
 
-			values := []pgsql.Expression{kindIdsExpr, propsExpr}
-
-			if s.graphID != 0 {
-				columns = append([]pgsql.Identifier{pgsql.ColumnGraphID}, columns...)
-				values = append([]pgsql.Expression{pgsql.NewLiteral(s.graphID, pgsql.Int4)}, values...)
-			}
+				values = []pgsql.Expression{
+					pgsql.NewLiteral(s.graphID, pgsql.Int4),
+					kindIdsExpr,
+					propsExpr,
+				}
+			)
 
 			// Build the INSERT statement
 			sqlInsert := pgsql.Insert{
