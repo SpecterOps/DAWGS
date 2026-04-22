@@ -67,20 +67,21 @@ func (s DatabaseConfiguration) PostgreSQLConnectionString() string {
 
 func (s DatabaseConfiguration) Neo4jConnectionString() string {
 	if s.Connection == "" {
-		return fmt.Sprintf("neo4j://%s:%s@%s/%s", s.Username, s.Secret, s.Address, s.Database)
+		return fmt.Sprintf("neo4j://%s:%s@%s/%s", s.Username, url.QueryEscape(s.Secret), s.Address, s.Database)
 	}
 
 	return s.Connection
 }
 
 func (s DatabaseConfiguration) LookupEndpoint() string {
-	host := s.Address
-	if hostCName, err := net.LookupCNAME(s.Address); err != nil {
+	host, port, _ := net.SplitHostPort(s.Address)
+	if hostCName, err := net.LookupCNAME(host); err != nil {
 		slog.Warn("Error looking up CNAME for DB host. Using original address.", slog.String("err", err.Error()))
+		return s.Address
 	} else {
 		host = hostCName
 	}
 
 	// Instance endpoint always returns with a trailing '.'
-	return strings.TrimSuffix(host, ".") + ":5432"
+	return strings.TrimSuffix(host, ".") + ":" + port
 }
