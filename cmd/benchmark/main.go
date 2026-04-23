@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -62,12 +64,14 @@ func main() {
 		ConnectionString:      conn,
 	}
 
+	var pgPool *pgxpool.Pool
 	if *driver == pg.DriverName {
 		pool, err := pg.NewPool(conn)
 		if err != nil {
 			fatal("failed to create pool: %v", err)
 		}
 		cfg.Pool = pool
+		pgPool = pool
 	}
 
 	db, err := dawgs.Open(ctx, *driver, cfg)
@@ -130,6 +134,12 @@ func main() {
 		}
 
 		fmt.Fprintf(os.Stderr, "  loaded %d nodes\n", len(idMap))
+
+		if pgPool != nil {
+			if _, err := pgPool.Exec(ctx, "VACUUM (ANALYZE)"); err != nil {
+				fmt.Fprintf(os.Stderr, "  vacuum failed: %v\n", err)
+			}
+		}
 
 		// Run scenarios
 		for _, s := range scenariosForDataset(ds, idMap) {
