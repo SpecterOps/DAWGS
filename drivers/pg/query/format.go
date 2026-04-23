@@ -161,7 +161,7 @@ func FormatRelationshipPartitionUpsert(graphTarget model.Graph, identityProperti
 	return join("insert into ", graphTarget.Partitions.Edge.Name, " as e ",
 		"(graph_id, start_id, end_id, kind_id, properties) ",
 		"select $1, unnest($2::int8[]), unnest($3::int8[]), unnest($4::int2[]), unnest($5::jsonb[]) ",
-		formatConflictMatcher(identityProperties, "graph_id, start_id, end_id, kind_id"),
+		formatConflictMatcher(identityProperties, "start_id, end_id, kind_id, graph_id"),
 		"do update set properties = e.properties || excluded.properties;",
 	)
 }
