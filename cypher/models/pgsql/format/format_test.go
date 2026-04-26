@@ -571,3 +571,31 @@ func TestFormat_CTEs(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, "with recursive expansion_1(root_id, next_id, depth, stop, is_cycle, path) as materialized (select r.start_id, r.end_id, 1, false, r.start_id = r.end_id, array [r.id] from edge r join node a on a.id = r.start_id where a.kind_ids operator (pg_catalog.&&) array [23]::int2[] union all select expansion_1.root_id, r.end_id, expansion_1.depth + 1, b.kind_ids operator (pg_catalog.&&) array [24]::int2[], r.id = any(expansion_1.path), expansion_1.path || r.id from expansion_1 join edge r on r.start_id = expansion_1.next_id join node b on b.id = r.end_id where not expansion_1.is_cycle and not expansion_1.stop) select a.properties, b.properties from expansion_1 join node a on a.id = expansion_1.root_id join node b on b.id = expansion_1.next_id where not expansion_1.is_cycle and expansion_1.stop;", formattedQuery)
 }
+
+func TestFormat_QueryInjection(t *testing.T) {
+	query := pgsql.Query{
+		Body: pgsql.Select{
+			Distinct: false,
+			Projection: []pgsql.SelectItem{
+				pgsql.Wildcard{},
+			},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{"table"},
+					Binding: pgsql.AsOptionalIdentifier("t"),
+				},
+			}},
+			Where: pgsql.BinaryExpression{
+				LOperand: pgsql.CompoundIdentifier{"t", "col1"},
+				Operator: pgsql.Operator("="),
+				ROperand: pgsql.Literal{
+					Value: "alpha' || select ('malicious')",
+				},
+			},
+		},
+	}
+
+	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
+	require.Nil(t, err)
+	require.Equal(t, `select * from table t where t.col1 = 'alpha'' || select (''malicious'')';`, formattedQuery)
+}

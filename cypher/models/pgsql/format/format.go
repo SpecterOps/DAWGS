@@ -116,7 +116,7 @@ func formatValue(builder *OutputBuilder, value any) error {
 		return formatSlice(builder, typedValue, pgsql.Int8Array)
 
 	case string:
-		builder.Write("'", typedValue, "'")
+		builder.Write("'", strings.ReplaceAll(typedValue, "'", "''"), "'")
 
 	case bool:
 		builder.Write(strconv.FormatBool(typedValue))

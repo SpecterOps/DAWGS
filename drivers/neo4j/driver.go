@@ -162,6 +162,20 @@ func (s *driver) FetchKinds(ctx context.Context) (graph.Kinds, error) {
 				}
 			}
 		}
+
+		if result := tx.Raw("CALL db.relationshipTypes()", nil); result.Error() != nil {
+			return result.Error()
+		} else {
+			for result.Next() {
+				var kind string
+				if err := result.Scan(&kind); err != nil {
+					return err
+				} else {
+					kinds = append(kinds, graph.StringKind(kind))
+				}
+			}
+		}
+
 		return nil
 	}); err != nil {
 		return nil, err
