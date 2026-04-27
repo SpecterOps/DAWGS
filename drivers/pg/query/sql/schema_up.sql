@@ -143,7 +143,7 @@ create table if not exists edge
   primary key (id, graph_id),
   foreign key (graph_id) references graph (id) on delete cascade,
 
-  unique (graph_id, start_id, end_id, kind_id)
+  unique (start_id, end_id, kind_id, graph_id)
 ) partition by list (graph_id);
 
 -- delete_node_edges is a trigger and associated plpgsql function to cascade delete edges when attached nodes are
@@ -176,22 +176,20 @@ execute procedure delete_node_edges();
 alter table edge
   alter column properties set storage main;
 
--- Remove the old graph ID index.
+-- Remove old indexes that are now redundant or superseded.
 drop index if exists edge_graph_id_index;
+drop index if exists edge_start_id_index;
+drop index if exists edge_end_id_index;
+drop index if exists edge_kind_index;
+drop index if exists edge_start_kind_index;
+drop index if exists edge_end_kind_index;
 
--- Index on the start vertex of each edge.
-create index if not exists edge_start_id_index on edge using btree (start_id);
-
--- Index on the start vertex of each edge.
-create index if not exists edge_end_id_index on edge using btree (end_id);
-
--- Index on the kind of each edge.
-create index if not exists edge_kind_index on edge using btree (kind_id);
-
--- Index lookups that include the edge's start or end id along with a filter for the edge type. This is the most
--- common join filter during traversal.
-create index if not exists edge_start_kind_index on edge using btree (start_id, kind_id);
-create index if not exists edge_end_kind_index on edge using btree (end_id, kind_id);
+-- Covering indexes for traversal joins. The INCLUDE columns allow index-only scans for the common case where
+-- the join needs (id, start_id, end_id, kind_id) without fetching from the heap. The standalone start_id,
+-- end_id, and kind_id indexes are intentionally omitted: the composite indexes satisfy left-prefix lookups
+-- on start_id or end_id alone, and kind_id is never queried in isolation during traversal.
+create index if not exists edge_start_id_kind_id_id_end_id_index on edge using btree (start_id, kind_id) include (id, end_id);
+create index if not exists edge_end_id_kind_id_id_start_id_index on edge using btree (end_id, kind_id) include (id, start_id);
 
 -- Path composite type
 do
@@ -365,6 +363,9 @@ create or replace function public.create_unidirectional_pathspace_tables()
   returns void as
 $$
 begin
+  -- The path column is not used as a primary key. Deduplication is handled by DISTINCT ON clauses in the
+  -- harness functions. Removing the PK on the variable-length int8[] array eliminates O(n)-key B-tree
+  -- maintenance that grows with traversal depth.
   create temporary table forward_front
   (
     root_id   int8   not null,
@@ -372,8 +373,7 @@ begin
     depth     int4   not null,
     satisfied bool,
     is_cycle  bool   not null,
-    path      int8[] not null,
-    primary key (path)
+    path      int8[] not null
   ) on commit drop;
 
   create temporary table next_front
@@ -383,8 +383,7 @@ begin
     depth     int4   not null,
     satisfied bool,
     is_cycle  bool   not null,
-    path      int8[] not null,
-    primary key (path)
+    path      int8[] not null
   ) on commit drop;
 
   create index forward_front_next_id_index on forward_front using btree (next_id);

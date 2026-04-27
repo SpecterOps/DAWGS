@@ -45,13 +45,13 @@ func (s Query) describeGraphPartition(name string) (model.GraphPartition, error)
 				if captureGroups[pgIndexRegexGroupUnique] == pgIndexUniqueStr {
 					graphPartition.Constraints[indexName] = graph.Constraint{
 						Name:  indexName,
-						Field: captureGroups[pgIndexRegexGroupFields],
+						Field: captureGroups[pgIndexRegexGroupUsingFields],
 						Type:  parsePostgresIndexType(captureGroups[pgIndexRegexGroupIndexType]),
 					}
 				} else {
 					graphPartition.Indexes[indexName] = graph.Index{
 						Name:  indexName,
-						Field: captureGroups[pgIndexRegexGroupFields],
+						Field: captureGroups[pgIndexRegexGroupUsingFields],
 						Type:  parsePostgresIndexType(captureGroups[pgIndexRegexGroupIndexType]),
 					}
 				}
