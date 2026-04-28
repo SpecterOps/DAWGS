@@ -783,7 +783,11 @@ func NewLiteral(value any, null bool) *Literal {
 }
 
 func NewStringLiteral(value string) *Literal {
-	return NewLiteral("'"+value+"'", false)
+	// Escape backslashes and single quotes for Cypher string literals
+	// In Cypher: backslash must be \\ and single quote must be \'
+	escaped := strings.ReplaceAll(value, "\\", "\\\\")
+	escaped = strings.ReplaceAll(escaped, "'", "\\'")
+	return NewLiteral("'"+escaped+"'", false)
 }
 
 func (s *Literal) copy() *Literal {
