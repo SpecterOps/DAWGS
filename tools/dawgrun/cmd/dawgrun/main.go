@@ -12,7 +12,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/shlex"
-	repl "github.com/openengineer/go-repl"
+	repl "github.com/specterops/go-repl"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/commands"
 )

@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/openengineer/go-repl"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/go-repl"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
 )
