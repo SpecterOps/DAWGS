@@ -13,6 +13,7 @@ import (
 	"github.com/kanmu/go-sqlfmt/sqlfmt"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"golang.org/x/term"
 
@@ -83,7 +84,7 @@ func translateToPsqlCmd() CommandDesc {
 				kindMapper = stubs.MapperFromKindMap(kindMap)
 			}
 
-			result, err := translate.Translate(ctx, query, kindMapper, nil)
+			result, err := translate.Translate(ctx, query, kindMapper, nil, defaultGraphID(ctx, kindMapperConnRef))
 			if err != nil {
 				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
 			}
@@ -149,7 +150,7 @@ func explainAsPsqlCmd() CommandDesc {
 
 			// Populate a DumbKindMapper from the database's kinds table
 			kindMapper := stubs.MapperFromKindMap(kindMap)
-			result, err := translate.Translate(ctx, query, kindMapper, nil)
+			result, err := translate.Translate(ctx, query, kindMapper, nil, defaultGraphID(ctx, connName))
 			if err != nil {
 				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
 			}
@@ -201,6 +202,28 @@ func explainAsPsqlCmd() CommandDesc {
 			return nil
 		},
 	}
+}
+
+func defaultGraphID(ctx *CommandContext, connName string) int32 {
+	if connName == "" {
+		return translate.DefaultGraphID
+	}
+
+	conn, ok := ctx.scope.connections[connName]
+	if !ok {
+		return translate.DefaultGraphID
+	}
+
+	driver, ok := conn.(*pg.Driver)
+	if !ok {
+		return translate.DefaultGraphID
+	}
+
+	if defaultGraph, hasDefaultGraph := driver.DefaultGraph(); hasDefaultGraph {
+		return defaultGraph.ID
+	}
+
+	return translate.DefaultGraphID
 }
 
 func queryCypherCmd() CommandDesc {

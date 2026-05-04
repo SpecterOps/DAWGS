@@ -36,7 +36,7 @@ func TestQuery_KindGeneratesInclusiveKindMatcher(t *testing.T) {
 			t.Errorf("could not build query: %v", err)
 		}
 
-		translatedQuery, err := translate.Translate(context.Background(), builtQuery, mapper, nil)
+		translatedQuery, err := translate.Translate(context.Background(), builtQuery, mapper, nil, translate.DefaultGraphID)
 		if err != nil {
 			t.Errorf("could not translate query: %#v: %v", builtQuery, err)
 		}

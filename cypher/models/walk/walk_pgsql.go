@@ -255,8 +255,20 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 	case pgsql.Join:
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
-			Branches: []pgsql.SyntaxNode{typedNode.JoinOperator},
+			Branches: []pgsql.SyntaxNode{typedNode.Table, typedNode.JoinOperator},
 		}, nil
+
+	case pgsql.LateralSubquery:
+		nextCursor := &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: []pgsql.SyntaxNode{typedNode.Query},
+		}
+
+		if typedNode.Binding.Set {
+			nextCursor.AddBranches(typedNode.Binding.Value)
+		}
+
+		return nextCursor, nil
 
 	case pgsql.JoinOperator:
 		return &Cursor[pgsql.SyntaxNode]{

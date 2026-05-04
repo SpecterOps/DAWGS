@@ -121,7 +121,7 @@ func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMap
 			}
 		}
 
-		if translation, err := translate.Translate(context.Background(), regularQuery, kindMapper, nil); err != nil {
+		if translation, err := translate.Translate(context.Background(), regularQuery, kindMapper, nil, translate.DefaultGraphID); err != nil {
 			return err
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			return err
@@ -164,7 +164,7 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 			}
 		}
 
-		if translation, err := translate.Translate(context.Background(), regularQuery, kindMapper, nil); err != nil {
+		if translation, err := translate.Translate(context.Background(), regularQuery, kindMapper, nil, translate.DefaultGraphID); err != nil {
 			t.Fatalf("Failed to translate cypher query: %s - %v", s.Cypher, err)
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			t.Fatalf("Failed to format SQL translatedQuery: %v", err)
@@ -200,7 +200,12 @@ func (s *TranslationTestCase) AssertLive(ctx context.Context, t *testing.T, driv
 			}
 		}
 
-		if translation, err := translate.Translate(context.Background(), regularQuery, driver.KindMapper(), s.CypherParams); err != nil {
+		defaultGraph, hasDefaultGraph := driver.DefaultGraph()
+		if !hasDefaultGraph {
+			t.Fatalf("Driver has no default graph set")
+		}
+
+		if translation, err := translate.Translate(context.Background(), regularQuery, driver.KindMapper(), s.CypherParams, defaultGraph.ID); err != nil {
 			t.Fatalf("Failed to translate cypher query: %s - %v", s.Cypher, err)
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			t.Fatalf("Failed to format SQL translatedQuery: %v", err)

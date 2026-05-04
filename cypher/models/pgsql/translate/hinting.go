@@ -169,6 +169,10 @@ func (s *contextAwareKindMapper) MapKinds(kinds graph.Kinds) ([]int16, error) {
 	return s.kindMapper.MapKinds(s.ctx, kinds)
 }
 
+func (s *contextAwareKindMapper) AssertKinds(kinds graph.Kinds) ([]int16, error) {
+	return s.kindMapper.AssertKinds(s.ctx, kinds)
+}
+
 func applyTypeFunctionLikeTypeHints(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
 	switch typedLOperand := expression.LOperand.(type) {
 	case pgsql.CompoundIdentifier:

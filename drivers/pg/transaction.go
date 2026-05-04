@@ -117,6 +117,14 @@ func (s *transaction) getTargetGraph() (model.Graph, error) {
 	return s.schemaManager.AssertGraph(s, s.targetSchema)
 }
 
+func (s *transaction) targetGraphID() (int32, error) {
+	if graphTarget, err := s.getTargetGraph(); err != nil {
+		return 0, err
+	} else {
+		return graphTarget.ID, nil
+	}
+}
+
 func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Kind) (*graph.Node, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
@@ -174,7 +182,7 @@ func (s *transaction) UpdateNode(node *graph.Node) error {
 
 func (s *transaction) Nodes() graph.NodeQuery {
 	return &nodeQuery{
-		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager),
+		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
 	}
 }
 
@@ -252,7 +260,7 @@ func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error
 
 func (s *transaction) Relationships() graph.RelationshipQuery {
 	return &relationshipQuery{
-		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager),
+		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
 	}
 }
 
@@ -269,7 +277,9 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
 	if parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query); err != nil {
 		return graph.NewErrorResult(err)
-	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters); err != nil {
+	} else if graphTarget, err := s.getTargetGraph(); err != nil {
+		return graph.NewErrorResult(err)
+	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID); err != nil {
 		return graph.NewErrorResult(err)
 	} else if sqlQuery, err := translate.Translated(translated); err != nil {
 		return graph.NewErrorResult(err)
