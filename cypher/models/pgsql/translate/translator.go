@@ -9,18 +9,25 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// DefaultGraphID is the graph_id used by callers that do not have a specific
+// graph target available (tests, tooling, and visualization passes that only
+// exercise translation output).
+const DefaultGraphID int32 = 0
+
 type Translator struct {
 	walk.Visitor[cypher.SyntaxNode]
 
 	ctx            context.Context
 	kindMapper     *contextAwareKindMapper
+	graphID        int32
 	translation    Result
 	treeTranslator *ExpressionTreeTranslator
 	query          *Query
 	scope          *Scope
+	unwindTargets  map[*cypher.Variable]struct{}
 }
 
-func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *Translator {
+func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
 	if parameters == nil {
 		parameters = map[string]any{}
 	}
@@ -34,9 +41,11 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
+		graphID:        graphID,
 		treeTranslator: NewExpressionTreeTranslator(ctxAwareKindMapper),
 		query:          &Query{},
 		scope:          NewScope(),
+		unwindTargets:  map[*cypher.Variable]struct{}{},
 	}
 }
 
@@ -46,11 +55,26 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.Comparison, *cypher.Skip, *cypher.Limit, cypher.Operator, *cypher.ArithmeticExpression,
 		*cypher.NodePattern, *cypher.RelationshipPattern, *cypher.Remove, *cypher.Set,
 		*cypher.ReadingClause, *cypher.UnaryAddOrSubtractExpression, *cypher.PropertyLookup,
-		*cypher.Negation, *cypher.Create, *cypher.Where, *cypher.ListLiteral,
+		*cypher.Negation, *cypher.Where, *cypher.ListLiteral,
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.Quantifier, *cypher.IDInCollection:
+
+	case *cypher.Unwind:
+		if typedExpression.Variable != nil {
+			// The UNWIND target is declared by the UNWIND clause itself, so later
+			// variable visits for the same syntax node must not resolve through
+			// the normal outer-scope lookup path.
+			s.unwindTargets[typedExpression.Variable] = struct{}{}
+		}
+
+	case *cypher.Create:
+		// CREATE pattern nodes and relationships are collected first, then
+		// translated into mutation CTEs after the full pattern is known.
+		currentQueryPart := s.query.CurrentPart()
+		currentQueryPart.currentPattern = &Pattern{}
+		currentQueryPart.isCreating = true
 
 	case *cypher.MultiPartQueryPart:
 		if err := s.prepareMultiPartQueryPart(typedExpression); err != nil {
@@ -104,12 +128,18 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushOperand(binding.Parameter)
 
 	case *cypher.Variable:
-		identifier := pgsql.Identifier(typedExpression.Symbol)
-
-		if binding, resolved := s.scope.AliasedLookup(identifier); !resolved {
-			s.SetErrorf("unable to resolve or otherwise lookup identifer %s", identifier)
-		} else {
+		if binding, isUnwindTarget, err := s.prepareUnwindTarget(typedExpression); err != nil {
+			s.SetError(err)
+		} else if isUnwindTarget {
 			s.treeTranslator.PushOperand(binding.Identifier)
+		} else {
+			identifier := pgsql.Identifier(typedExpression.Symbol)
+
+			if binding, resolved := s.scope.AliasedLookup(identifier); !resolved {
+				s.SetErrorf("unable to resolve or otherwise lookup identifer %s", identifier)
+			} else {
+				s.treeTranslator.PushOperand(binding.Identifier)
+			}
 		}
 
 	case *cypher.Literal:
@@ -224,6 +254,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 	case *cypher.Delete:
 		if err := s.translateDelete(s.scope, typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case *cypher.Create:
+		if err := s.translateCreate(typedExpression); err != nil {
 			s.SetError(err)
 		}
 
@@ -414,6 +449,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			s.SetError(err)
 		}
 
+	case *cypher.Unwind:
+		if err := s.translateUnwind(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
 	case *cypher.With:
 		if err := s.translateWith(); err != nil {
 			s.SetError(err)
@@ -443,8 +483,8 @@ type Result struct {
 	Parameters map[string]any
 }
 
-func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any) (Result, error) {
-	translator := NewTranslator(ctx, kindMapper, parameters)
+func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
+	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 
 	if err := walk.Cypher(cypherQuery, translator); err != nil {
 		return Result{}, err

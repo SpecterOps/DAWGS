@@ -15,6 +15,8 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 
 	if bindingResult, err := s.bindPatternExpression(relationshipPattern, pgsql.EdgeComposite); err != nil {
 		return err
+	} else if currentQueryPart.isCreating {
+		return s.collectCreateEdgePattern(relationshipPattern, patternPart, bindingResult)
 	} else {
 		if err := s.translateRelationshipPatternToStep(bindingResult, patternPart, relationshipPattern); err != nil {
 			return err
@@ -52,6 +54,49 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 			}
 		}
 	}
+
+	return nil
+}
+
+func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.RelationshipPattern, part *PatternPart, bindingResult BindingResult) error {
+	var (
+		queryPart = s.query.CurrentPart()
+		numSteps  = len(part.TraversalSteps)
+	)
+
+	if numSteps == 0 {
+		return fmt.Errorf("relationship pattern encountered before any left node in CREATE pattern")
+	}
+
+	currentStep := part.TraversalSteps[numSteps-1]
+	if currentStep.Edge != nil {
+		// Multiple relationships in one CREATE pattern share the prior right node
+		// as the next left node, so start a continuation step before collecting
+		// the new edge.
+		part.TraversalSteps = append(part.TraversalSteps, &TraversalStep{
+			LeftNode:      currentStep.RightNode,
+			LeftNodeBound: currentStep.RightNodeBound,
+		})
+
+		currentStep = part.TraversalSteps[len(part.TraversalSteps)-1]
+	}
+
+	currentStep.Edge = bindingResult.Binding
+	currentStep.Direction = relationshipPattern.Direction
+
+	if part.PatternBinding != nil {
+		// Pattern bindings are materialized later from their dependencies; record
+		// the created edge even though the INSERT has not been built yet.
+		part.PatternBinding.DependOn(bindingResult.Binding)
+	}
+
+	queryPart.mutations.EdgeCreations.Put(bindingResult.Binding.Identifier, &EdgeCreate{
+		Binding:    bindingResult.Binding,
+		Properties: queryPart.ConsumeProperties(),
+		Kinds:      relationshipPattern.Kinds,
+		LeftNode:   currentStep.LeftNode,
+		Direction:  relationshipPattern.Direction,
+	})
 
 	return nil
 }

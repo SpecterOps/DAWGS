@@ -564,7 +564,7 @@ func (s FunctionCall) TypeHint() DataType {
 }
 
 type Join struct {
-	Table        TableReference
+	Table        Expression
 	JoinOperator JoinOperator
 }
 
@@ -722,6 +722,19 @@ func (s TableReference) AsExpression() Expression {
 
 func (s TableReference) NodeType() string {
 	return "table_reference"
+}
+
+type LateralSubquery struct {
+	Query   Query
+	Binding models.Optional[Identifier]
+}
+
+func (s LateralSubquery) AsExpression() Expression {
+	return s
+}
+
+func (s LateralSubquery) NodeType() string {
+	return "lateral_subquery"
 }
 
 type FromClause struct {
@@ -954,6 +967,14 @@ type Insert struct {
 	OnConflict *OnConflict
 	Source     *Query
 	Returning  []SelectItem
+}
+
+func (s Insert) AsExpression() Expression {
+	return s
+}
+
+func (s Insert) AsSetExpression() SetExpression {
+	return s
 }
 
 func (s Insert) AsStatement() Statement {

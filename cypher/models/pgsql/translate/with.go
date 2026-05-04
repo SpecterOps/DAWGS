@@ -72,15 +72,24 @@ func (s *Translator) translateWith() error {
 				if binding, isBound := s.scope.Lookup(typedSelectItem); !isBound {
 					return fmt.Errorf("unable to lookup identifer %s for with statement", typedSelectItem)
 				} else {
+					var selectItem pgsql.SelectItem
+					if binding.LastProjection != nil {
+						selectItem = pgsql.CompoundIdentifier{
+							binding.LastProjection.Binding.Identifier, typedSelectItem,
+						}
+					} else {
+						// A WITH can project bindings introduced in the same query
+						// part before they have a materialized frame back-reference.
+						selectItem = typedSelectItem
+					}
+
 					// Track this projected item for scope pruning
 					projectedItems.Add(binding.Identifier)
 
 					// Create a new projection that maps the identifier
 					currentPart.projections.Items[idx] = &Projection{
-						SelectItem: pgsql.CompoundIdentifier{
-							binding.LastProjection.Binding.Identifier, typedSelectItem,
-						},
-						Alias: pgsql.AsOptionalIdentifier(binding.Identifier),
+						SelectItem: selectItem,
+						Alias:      pgsql.AsOptionalIdentifier(binding.Identifier),
 					}
 
 					// Assign the frame to the binding's last projection backref

@@ -279,6 +279,13 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 
 			exprStack = append(exprStack, typedNextExpr.Name)
 
+		case pgsql.LateralSubquery:
+			if typedNextExpr.Binding.Set {
+				exprStack = append(exprStack, typedNextExpr.Binding.Value, pgsql.FormattingLiteral(" "))
+			}
+
+			exprStack = append(exprStack, pgsql.FormattingLiteral(")"), typedNextExpr.Query, pgsql.FormattingLiteral("lateral ("))
+
 		case pgsql.Assignment:
 			exprStack = append(exprStack,
 				typedNextExpr,
@@ -532,6 +539,10 @@ func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (string, er
 func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
 	builder.Write("select ")
 
+	if selectStmt.Distinct {
+		builder.Write("distinct ")
+	}
+
 	for idx, projection := range selectStmt.Projection {
 		if idx > 0 {
 			builder.Write(", ")
@@ -783,6 +794,9 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 	case pgsql.Values:
 		return formatNode(builder, typedSetExpression)
 
+	case pgsql.Insert:
+		return formatInsertStatement(builder, typedSetExpression)
+
 	case pgsql.Update:
 		return formatUpdateStatement(builder, typedSetExpression)
 
@@ -909,7 +923,7 @@ func formatInsertStatement(builder *OutputBuilder, insert pgsql.Insert) error {
 		return err
 	}
 
-	if len(insert.Shape.Columns) > 0 {
+	if insert.Shape != nil && len(insert.Shape.Columns) > 0 {
 		builder.Write(" (")
 
 		for idx, column := range insert.Shape.Columns {

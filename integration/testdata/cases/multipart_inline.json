@@ -49,6 +49,19 @@
       "assert": "non_empty"
     },
     {
+      "name": "preserve anchored optional-match rows when counting absent relationships",
+      "cypher": "match (g:NodeKind1) optional match (g)<-[r:EdgeKind1]-(m:NodeKind2) with g, count(r) as memberCount where memberCount = 0 return g",
+      "fixture": {
+        "nodes": [
+          {"id": "empty", "kinds": ["NodeKind1"], "properties": {"name": "no-members"}},
+          {"id": "linked", "kinds": ["NodeKind1"], "properties": {"name": "has-member"}},
+          {"id": "member", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "member", "end_id": "linked", "kind": "EdgeKind1"}]
+      },
+      "assert": {"contains_node_with_prop": ["name", "no-members"]}
+    },
+    {
       "name": "filter typed nodes by a regular expression and carry collected results to the next stage",
       "cypher": "match (cg:NodeKind1) where cg.name =~ \".*TT\" with collect(cg.name) as names return names",
       "fixture": {
@@ -75,6 +88,23 @@
         ]
       },
       "assert": "non_empty"
+    },
+    {
+      "name": "correlate bound expansion results before counting reachable targets",
+      "cypher": "match (n:NodeKind1) where n.correlationcase = 'bound-expansion-count' match (n)-[:EdgeKind1|EdgeKind2*1..]->(c:NodeKind2) with distinct n, count(c) as adminCount where n.name = 'alpha' return adminCount",
+      "fixture": {
+        "nodes": [
+          {"id": "alpha", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "correlationcase": "bound-expansion-count"}},
+          {"id": "beta", "kinds": ["NodeKind1"], "properties": {"name": "beta", "correlationcase": "bound-expansion-count"}},
+          {"id": "alpha_target", "kinds": ["NodeKind2"]},
+          {"id": "beta_target", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [
+          {"start_id": "alpha", "end_id": "alpha_target", "kind": "EdgeKind1"},
+          {"start_id": "beta", "end_id": "beta_target", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"exact_int": 1}
     }
   ]
 }

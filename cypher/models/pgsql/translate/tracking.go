@@ -60,6 +60,7 @@ type Frame struct {
 	stashedVisible  *pgsql.IdentifierSet
 	Exported        *pgsql.IdentifierSet
 	stashedExported *pgsql.IdentifierSet
+	Synthetic       bool
 }
 
 func (s *Frame) RestoreStashed() {

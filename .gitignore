@@ -2,6 +2,7 @@
 
 # User IDE Files
 .idea
+.zed
 
 # Local integration test datasets
 integration/testdata/local/

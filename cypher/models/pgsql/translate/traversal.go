@@ -366,7 +366,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {
 			return fmt.Errorf("expected shortest path search to utilize variable expansion: ()-[*..]->()")
-		} else if err := s.translateTraversalPatternPartWithoutExpansion(idx == 0, traversalStep); err != nil {
+		} else if err := s.translateTraversalPatternPartWithoutExpansion(part, idx, traversalStep); err != nil {
 			return err
 		}
 	}
@@ -378,7 +378,64 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 	return nil
 }
 
-func (s *Translator) translateTraversalPatternPartWithoutExpansion(isFirstTraversalStep bool, traversalStep *TraversalStep) error {
+func patternBindingDependsOn(queryPart *QueryPart, part *PatternPart, binding *BoundIdentifier) bool {
+	if queryPart == nil || part == nil || part.PatternBinding == nil || binding == nil {
+		return false
+	}
+
+	if !queryPart.ReferencesBinding(part.PatternBinding) {
+		return false
+	}
+
+	for _, dependency := range part.PatternBinding.Dependencies {
+		if dependency.Identifier == binding.Identifier {
+			return true
+		}
+	}
+
+	return false
+}
+
+func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if binding == nil {
+		return false
+	}
+
+	// Keep aliases referenced by later clauses and bindings needed to materialize
+	// a referenced path pattern. Everything else can stay internal to this step.
+	if (binding.Alias.Set && queryPart.ReferencesBinding(binding)) || patternBindingDependsOn(queryPart, part, binding) {
+		return true
+	}
+
+	if stepIndex+1 < len(part.TraversalSteps) {
+		// A multi-hop pattern needs the right node from this step as the next
+		// step's left node even when the user never projects it.
+		nextStep := part.TraversalSteps[stepIndex+1]
+		return nextStep.LeftNode != nil && nextStep.LeftNode.Identifier == binding.Identifier
+	}
+
+	return false
+}
+
+func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
+	// Bound endpoints already exist in an outer frame. Only unexport unbound
+	// values that later clauses and continuation steps cannot observe.
+	if !traversalStep.LeftNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.LeftNode) {
+		traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
+	}
+
+	if !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.Edge) {
+		traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+	}
+
+	if !traversalStep.RightNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.RightNode) {
+		traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
+	}
+}
+
+func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *PatternPart, stepIndex int, traversalStep *TraversalStep) error {
+	isFirstTraversalStep := stepIndex == 0
+
 	if constraints, err := consumePatternConstraints(isFirstTraversalStep, nonRecursivePattern, traversalStep, s.treeTranslator); err != nil {
 		return err
 	} else {
@@ -452,6 +509,8 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(isFirstTraver
 			traversalStep.RightNodeJoinCondition = rightNodeJoinCondition
 		}
 	}
+
+	pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep)
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {
 		return err
