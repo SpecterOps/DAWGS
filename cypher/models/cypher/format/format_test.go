@@ -44,8 +44,8 @@ func TestNewStringLiteral_Escaping(t *testing.T) {
 	}{
 		{
 			name:     "backslash should be escaped",
-			input:    `MAYYHEM\PS1-PSV$@`,
-			expected: `'MAYYHEM\\PS1-PSV$@'`,
+			input:    `TEST\PS1-PSV$@`,
+			expected: `'TEST\\PS1-PSV$@'`,
 		},
 		{
 			name:     "single quote should be escaped",
@@ -94,8 +94,8 @@ func TestNewStringLiteral_InQuery(t *testing.T) {
 		{
 			name:          "backslash in objectid",
 			propertyKey:   "objectid",
-			value:         `MAYYHEM\PS1-PSV$@`,
-			expectedQuery: `match (n {objectid: 'MAYYHEM\\PS1-PSV$@'}) return n`,
+			value:         `TEST\PS1-PSV$@`,
+			expectedQuery: `match (n {objectid: 'TEST\\PS1-PSV$@'}) return n`,
 		},
 		{
 			name:          "single quote in name",

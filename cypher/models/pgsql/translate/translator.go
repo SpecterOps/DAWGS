@@ -2,6 +2,8 @@ package translate
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -116,8 +118,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		literalValue := typedExpression.Value
 
 		if stringValue, isString := typedExpression.Value.(string); isString {
-			// Cypher parser wraps string literals with ' characters
-			literalValue = stringValue[1 : len(stringValue)-1]
+			if decoded, err := decodeCypherStringLiteral(stringValue); err != nil {
+				s.SetError(err)
+			} else {
+				literalValue = decoded
+			}
 		}
 
 		if newLiteral, err := pgsql.AsLiteral(literalValue); err != nil {
@@ -451,4 +456,48 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	}
 
 	return translator.translation, nil
+}
+
+func decodeCypherStringLiteral(raw string) (string, error) {
+	if len(raw) < 2 {
+		return "", fmt.Errorf("invalid cypher string literal: %q", raw)
+	} else if quote := raw[0]; (quote != '\'' && quote != '"') || raw[len(raw)-1] != quote {
+		return "", fmt.Errorf("invalid cypher string literal: missing or mismatched surrounding quotes: %q", raw)
+	}
+	// Cypher parser wraps string literals with ' characters
+	body := raw[1 : len(raw)-1]
+	var b strings.Builder
+	b.Grow(len(body))
+	for i := 0; i < len(body); i++ {
+		if body[i] != '\\' {
+			b.WriteByte(body[i])
+			continue
+		}
+		if i+1 >= len(body) {
+			return "", fmt.Errorf("dangling escape in string literal")
+		}
+		switch c := body[i+1]; c {
+		case '\\', '\'', '"':
+			b.WriteByte(c)
+			i++
+		case 'b', 'B':
+			b.WriteByte('\b')
+			i++
+		case 'f', 'F':
+			b.WriteByte('\f')
+			i++
+		case 'n', 'N':
+			b.WriteByte('\n')
+			i++
+		case 'r', 'R':
+			b.WriteByte('\r')
+			i++
+		case 't', 'T':
+			b.WriteByte('\t')
+			i++
+		default:
+			return "", fmt.Errorf("invalid escape \\%c", c)
+		}
+	}
+	return b.String(), nil
 }

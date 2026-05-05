@@ -770,11 +770,42 @@ func (s *KindMatcher) copy() *KindMatcher {
 	}
 }
 
+// Literal is a Cypher AST node representing a literal value (string, integer,
+// float, boolean, list, map, or null).
+//
+// String values carry a representation contract that callers must respect:
+// when Value holds a string, it must be in Cypher source form, meaning the
+// raw token as it would appear in a query, including the surrounding quote
+// characters (' or ") and with all escape sequences left un-decoded
+// (\\, \', \", \b, \f, \n, \r, \t, \uXXXX, \UXXXXXXXX). The parser stores
+// string literals in this form so that the AST round-trips back to source
+// verbatim via the format package, and downstream backends (for example the
+// PgSQL translator) decode the source form into the final byte sequence
+// before emitting their target language.
+//
+// Use NewStringLiteral to construct a string-valued Literal from an arbitrary
+// Go string; it performs the required quoting and escaping. Constructing a
+// Literal directly with a raw, un-quoted Go string in Value will be rejected
+// at translation time.
+//
+// Non-string values (int, float64, bool, etc.) are stored as-is and are not
+// subject to the source-form contract. Null literals set Null to true and
+// leave Value unused.
 type Literal struct {
 	Value any
 	Null  bool
 }
 
+// NewLiteral constructs a Literal wrapping the provided value.
+//
+// This constructor does not transform value in any way. When passing a string,
+// the caller is responsible for ensuring it is already in Cypher source form
+// (surrounding quotes present, special characters escaped); see the Literal
+// type documentation for the full contract. For arbitrary Go strings, prefer
+// NewStringLiteral, which performs the quoting and escaping for you.
+//
+// For non-string values (numbers, booleans) value is stored verbatim. To
+// represent a Cypher null, pass null=true.
 func NewLiteral(value any, null bool) *Literal {
 	return &Literal{
 		Value: value,
@@ -782,9 +813,20 @@ func NewLiteral(value any, null bool) *Literal {
 	}
 }
 
+// NewStringLiteral constructs a string-valued Literal from an arbitrary Go
+// string, producing the Cypher source-form representation required by the
+// Literal contract.
+//
+// The input is escaped for Cypher single-quoted string literals — every
+// backslash is doubled (\ becomes \\) and every single quote is escaped
+// (' becomes \') — and then wrapped in surrounding single quotes. The
+// resulting Literal.Value is a Cypher source token equivalent to what the
+// parser would have produced for the same input, so it round-trips correctly
+// through emitters and is decoded back to the original byte sequence by
+// translator backends.
+//
+// Example: NewStringLiteral(`TEST\PS1`) yields Value == `'TEST\\PS1'`.
 func NewStringLiteral(value string) *Literal {
-	// Escape backslashes and single quotes for Cypher string literals
-	// In Cypher: backslash must be \\ and single quote must be \'
 	escaped := strings.ReplaceAll(value, "\\", "\\\\")
 	escaped = strings.ReplaceAll(escaped, "'", "\\'")
 	return NewLiteral("'"+escaped+"'", false)
