@@ -777,11 +777,12 @@ func (s *KindMatcher) copy() *KindMatcher {
 // when Value holds a string, it must be in Cypher source form, meaning the
 // raw token as it would appear in a query, including the surrounding quote
 // characters (' or ") and with all escape sequences left un-decoded
-// (\\, \', \", \b, \f, \n, \r, \t, \uXXXX, \UXXXXXXXX). The parser stores
-// string literals in this form so that the AST round-trips back to source
-// verbatim via the format package, and downstream backends (for example the
-// PgSQL translator) decode the source form into the final byte sequence
-// before emitting their target language.
+// (\\, \', \", \b, \f, \n, \r, \t). Non-ASCII characters are carried as raw
+// UTF-8 bytes inside the literal body. The parser stores string literals in
+// this form so that the AST round-trips back to source verbatim via the
+// format package, and downstream backends (for example the PgSQL translator)
+// decode the source form into the final byte sequence before emitting their
+// target language.
 //
 // Use NewStringLiteral to construct a string-valued Literal from an arbitrary
 // Go string; it performs the required quoting and escaping. Constructing a
