@@ -382,6 +382,7 @@ type TraversalStep struct {
 	Frame                  *Frame
 	Direction              graph.Direction
 	Expansion              *Expansion
+	PathReversed           bool
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool
 	LeftNodeConstraints    pgsql.Expression
@@ -442,6 +443,8 @@ func (s *TraversalStep) FlipNodes() {
 	case graph.DirectionInbound:
 		s.Direction = graph.DirectionOutbound
 	}
+
+	s.PathReversed = !s.PathReversed
 }
 
 type PatternPart struct {

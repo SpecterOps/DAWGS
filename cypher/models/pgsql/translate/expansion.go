@@ -1016,10 +1016,18 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 
 	nextQuery.Projection = append(nextQuery.Projection, pgsql.NewLiteral(false, pgsql.Boolean))
 
-	nextQuery.Projection = append(nextQuery.Projection, pgd.Concatenate(
+	pathProjection := pgd.Concatenate(
 		pgd.Column(expansionModel.Frame.Binding.Identifier, expansionPath),
 		pgd.EntityID(s.traversalStep.Edge.Identifier),
-	))
+	)
+	if s.traversalStep.PathReversed && !expansionModel.UseBidirectionalSearch {
+		pathProjection = pgd.Concatenate(
+			pgd.EntityID(s.traversalStep.Edge.Identifier),
+			pgd.Column(expansionModel.Frame.Binding.Identifier, expansionPath),
+		)
+	}
+
+	nextQuery.Projection = append(nextQuery.Projection, pathProjection)
 
 	nextQueryFrom := pgsql.FromClause{
 		Source: pgsql.TableReference{
@@ -2015,6 +2023,20 @@ func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep
 	}
 }
 
+func expansionRecursivePathExpression(traversalStep *TraversalStep) *pgsql.BinaryExpression {
+	var (
+		expansionModel = traversalStep.Expansion
+		path           = pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath}
+		edgeID         = pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID}
+	)
+
+	if traversalStep.PathReversed {
+		return pgsql.NewBinaryExpression(edgeID, pgsql.OperatorConcatenate, path)
+	}
+
+	return pgsql.NewBinaryExpression(path, pgsql.OperatorConcatenate, edgeID)
+}
+
 func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalStep) ([]pgsql.SelectItem, error) {
 	expansionModel := traversalStep.Expansion
 
@@ -2043,11 +2065,7 @@ func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalS
 				),
 				satisfiedSelectItem,
 				pgsql.NewLiteral(false, pgsql.Boolean),
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath},
-					pgsql.OperatorConcatenate,
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
-				),
+				expansionRecursivePathExpression(traversalStep),
 			}, nil
 		}
 	} else {
@@ -2061,11 +2079,7 @@ func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalS
 			),
 			pgsql.NewLiteral(false, pgsql.Boolean),
 			pgsql.NewLiteral(false, pgsql.Boolean),
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionPath},
-				pgsql.OperatorConcatenate,
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
-			),
+			expansionRecursivePathExpression(traversalStep),
 		}, nil
 	}
 }

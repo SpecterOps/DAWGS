@@ -134,6 +134,36 @@ func buildProjectionForExpansionPath(alias pgsql.Identifier, projected *BoundIde
 	}, nil
 }
 
+func concatenatePathCompositeParts(parts []pgsql.Expression) pgsql.Expression {
+	if len(parts) == 0 {
+		return nil
+	}
+
+	joined := parts[0]
+	for idx := 1; idx < len(parts); idx++ {
+		joined = pgsql.NewBinaryExpression(joined, pgsql.OperatorConcatenate, parts[idx])
+	}
+
+	return joined
+}
+
+func bindingFrameReference(scope *Scope, binding *BoundIdentifier) pgsql.CompoundIdentifier {
+	frameIdentifier := scope.CurrentFrameBinding().Identifier
+	if binding.LastProjection != nil {
+		frameIdentifier = binding.LastProjection.Binding.Identifier
+	}
+
+	return pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier}
+}
+
+func expansionPathEdgeArrayReference(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
+	for _, dependency := range expansionPath.Dependencies {
+		return bindingFrameReference(scope, dependency), nil
+	}
+
+	return nil, fmt.Errorf("expansion path %s does not reference an expansion edge binding", expansionPath.Identifier)
+}
+
 func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
@@ -145,14 +175,11 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 	}
 
 	var (
-		parameterExpression    pgsql.Expression
-		preExpansionEdgeRefs   []pgsql.Expression
-		postExpansionEdgeRefs  []pgsql.Expression
-		nodeReferences         []pgsql.Expression
-		directNodeReferences   []pgsql.Expression
-		directEdgeReferences   []pgsql.Expression
-		seenExpansionPath      = false
-		useEdgesToPathFunction = false
+		edgeArrayReferences  []pgsql.Expression
+		nodeReferences       []pgsql.Expression
+		directNodeReferences []pgsql.Expression
+		directEdgeReferences []pgsql.Expression
+		seenExpansionPath    = false
 	)
 
 	// Path composite components are encoded as dependencies on the bound identifier representing the
@@ -162,29 +189,23 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 		switch dependency.DataType {
 		case pgsql.ExpansionPath:
 			seenExpansionPath = true
-			useEdgesToPathFunction = true
-
-			parameterExpression = pgsql.OptionalBinaryExpressionJoin(
-				parameterExpression, pgsql.OperatorConcatenate, dependency.Identifier,
-			)
+			if edgeArrayReference, err := expansionPathEdgeArrayReference(scope, dependency); err != nil {
+				return nil, err
+			} else {
+				edgeArrayReferences = append(edgeArrayReferences, edgeArrayReference)
+			}
 
 		case pgsql.EdgeComposite:
-			useEdgesToPathFunction = true
-			directEdgeReferences = append(directEdgeReferences, pgsql.CompoundIdentifier{
+			directEdgeReference := pgsql.CompoundIdentifier{
 				scope.CurrentFrameBinding().Identifier,
 				dependency.Identifier,
-			})
-
-			ref := rewriteCompositeTypeFieldReference(
-				scope.CurrentFrameBinding().Identifier,
-				pgsql.CompoundIdentifier{dependency.Identifier, pgsql.ColumnID},
-			)
-
-			if seenExpansionPath {
-				postExpansionEdgeRefs = append(postExpansionEdgeRefs, ref)
-			} else {
-				preExpansionEdgeRefs = append(preExpansionEdgeRefs, ref)
 			}
+
+			directEdgeReferences = append(directEdgeReferences, directEdgeReference)
+			edgeArrayReferences = append(edgeArrayReferences, pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{directEdgeReference},
+				CastType: pgsql.EdgeCompositeArray,
+			})
 
 		case pgsql.NodeComposite:
 			directNodeReferences = append(directNodeReferences, pgsql.CompoundIdentifier{
@@ -227,36 +248,26 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 		}, nil
 	}
 
-	if useEdgesToPathFunction {
-		// Pre-expansion edges go LEFT of the expansion (existing prepend semantics).
-		if len(preExpansionEdgeRefs) > 0 {
-			parameterExpression = pgsql.OptionalBinaryExpressionJoin(
-				parameterExpression,
-				pgsql.OperatorConcatenate,
-				pgsql.ArrayLiteral{Values: preExpansionEdgeRefs, CastType: pgsql.Int8Array},
-			)
+	if seenExpansionPath {
+		if len(directNodeReferences) == 0 {
+			return nil, fmt.Errorf("expansion path %s does not contain a root node reference", projected.Identifier)
 		}
 
-		// Post-expansion edges go RIGHT of the expansion — use NewBinaryExpression directly.
-		if len(postExpansionEdgeRefs) > 0 {
-			postArray := pgsql.ArrayLiteral{Values: postExpansionEdgeRefs, CastType: pgsql.Int8Array}
-
-			if parameterExpression == nil {
-				parameterExpression = postArray
-			} else {
-				parameterExpression = pgsql.NewBinaryExpression(
-					parameterExpression, pgsql.OperatorConcatenate, postArray,
-				)
-			}
+		edgeArrayExpression := concatenatePathCompositeParts(edgeArrayReferences)
+		if edgeArrayExpression == nil {
+			edgeArrayExpression = pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}
 		}
 
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
 				Expression: pgsql.FunctionCall{
-					Function: pgsql.FunctionEdgesToPath,
+					Function: pgsql.FunctionOrderedEdgesToPath,
 					Parameters: []pgsql.Expression{
-						pgsql.Variadic{
-							Expression: parameterExpression,
+						directNodeReferences[0],
+						edgeArrayExpression,
+						pgsql.ArrayLiteral{
+							Values:   directNodeReferences,
+							CastType: pgsql.NodeCompositeArray,
 						},
 					},
 					CastType: pgsql.PathComposite,
@@ -345,49 +356,18 @@ func buildProjectionForNodeComposite(alias pgsql.Identifier, projected *BoundIde
 }
 
 func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
-	var (
-		edgeAggregateParameter = pgsql.CompositeValue{
-			DataType: pgsql.EdgeComposite,
-		}
-
-		edgeWhereClause = pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID},
-			pgsql.OperatorEquals,
-			pgsql.NewAnyExpression(
-				pgsql.CompoundIdentifier{scope.CurrentFrame().Binding.Identifier, pgsql.ColumnPath},
-				pgsql.ExpansionPath,
-			),
-		)
-	)
-
-	// Reference all of the edge table columns to create the edge composites
-	for _, edgeTableColumn := range pgsql.EdgeTableColumns {
-		edgeAggregateParameter.Values = append(edgeAggregateParameter.Values, pgsql.CompoundIdentifier{projected.Identifier, edgeTableColumn})
-	}
-
-	// Change the type to the node composite now that this is projected
+	// Change the type to the edge composite now that this is projected
 	projected.DataType = pgsql.EdgeComposite
 
 	// Create a new final projection that's aliased to the visible binding's identifier
 	return []pgsql.SelectItem{
 		&pgsql.AliasedExpression{
 			Expression: &pgsql.Parenthetical{
-				Expression: pgsql.Select{
-					Projection: []pgsql.SelectItem{
-						pgsql.FunctionCall{
-							Function:   pgsql.FunctionArrayAggregate,
-							Parameters: []pgsql.Expression{edgeAggregateParameter},
-						},
-					},
-					From: []pgsql.FromClause{{
-						Source: pgsql.TableReference{
-							Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-							Binding: models.OptionalValue(projected.Identifier),
-						},
-						Joins: nil,
-					}},
-					Where: edgeWhereClause,
-				},
+				Expression: pgsql.FormattingLiteral(fmt.Sprintf(
+					"select coalesce(array_agg((%[1]s.id, %[1]s.start_id, %[1]s.end_id, %[1]s.kind_id, %[1]s.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest(%[2]s.path) with ordinality as _path(id, ordinality) join edge %[1]s on %[1]s.id = _path.id",
+					projected.Identifier,
+					scope.CurrentFrame().Binding.Identifier,
+				)),
 			},
 			Alias: pgsql.AsOptionalIdentifier(alias),
 		},
