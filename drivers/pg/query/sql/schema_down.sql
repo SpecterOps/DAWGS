@@ -60,6 +60,7 @@ drop function if exists _format_traversal_query;
 drop function if exists _format_traversal_initial_query;
 drop function if exists expand_traversal_step;
 drop function if exists traverse;
+drop function if exists ordered_edges_to_path(nodeComposite, edgeComposite[], nodeComposite[]);
 drop function if exists edges_to_path;
 drop function if exists traverse_paths;
 

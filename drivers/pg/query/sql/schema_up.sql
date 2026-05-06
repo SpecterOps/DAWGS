@@ -359,6 +359,100 @@ $$
   parallel safe
   strict;
 
+create or replace function public.ordered_edges_to_path(root nodeComposite, edges edgeComposite[], known_nodes nodeComposite[]) returns pathComposite as
+$$
+with recursive edge_bounds(edge_count) as
+(
+  select coalesce(array_length(edges, 1), 0)
+),
+path_walk(idx, current_node_id, node_ids, edge_ordinals, last_ordinal, direction) as
+(
+  select 1::int4,
+         (root).id,
+         array [(root).id]::int8[],
+         array []::int8[],
+         case
+           when edge_bounds.edge_count > 0 and ((root).id = (edges[1]).start_id or (root).id = (edges[1]).end_id) then 0::int8
+           when edge_bounds.edge_count > 0 and ((root).id = (edges[edge_bounds.edge_count]).start_id or (root).id = (edges[edge_bounds.edge_count]).end_id) then edge_bounds.edge_count::int8 + 1
+           else 0::int8
+         end as last_ordinal,
+         case
+           when edge_bounds.edge_count > 0 and
+                not ((root).id = (edges[1]).start_id or (root).id = (edges[1]).end_id) and
+                ((root).id = (edges[edge_bounds.edge_count]).start_id or (root).id = (edges[edge_bounds.edge_count]).end_id) then -1::int8
+           else 1::int8
+         end as direction
+  from edge_bounds
+  union all
+  select path_walk.idx + 1,
+         next_step.next_node_id,
+         path_walk.node_ids || next_step.next_node_id,
+         path_walk.edge_ordinals || next_step.ordinality,
+         next_step.ordinality,
+         path_walk.direction
+  from path_walk
+  cross join edge_bounds
+  cross join lateral
+  (
+    select edge_item.input_ordinality as ordinality,
+           case
+             when path_walk.current_node_id = edge_item.start_id then edge_item.end_id
+             when path_walk.current_node_id = edge_item.end_id then edge_item.start_id
+           end as next_node_id
+    from unnest(edges) with ordinality as edge_item(id, start_id, end_id, kind_id, properties, input_ordinality)
+    where edge_item.input_ordinality != all (path_walk.edge_ordinals)
+      and (
+        path_walk.current_node_id = edge_item.start_id or
+        path_walk.current_node_id = edge_item.end_id
+      )
+    order by
+      case when edge_item.input_ordinality = path_walk.last_ordinal + path_walk.direction then 0 else 1 end,
+      case when path_walk.direction < 0 then -edge_item.input_ordinality else edge_item.input_ordinality end
+    limit 1
+  ) next_step
+  where path_walk.idx <= edge_bounds.edge_count
+),
+final_walk as
+(
+  select path_walk.node_ids, path_walk.edge_ordinals
+  from path_walk
+  order by path_walk.idx desc
+  limit 1
+)
+select row (
+  (
+    select coalesce(
+      array_agg(coalesce(known_node.node, (n.id, n.kind_ids, n.properties)::nodeComposite) order by ordered_node.ordinality)::nodeComposite[],
+      array []::nodeComposite[]
+    )
+    from final_walk
+    cross join lateral unnest(final_walk.node_ids) with ordinality as ordered_node(id, ordinality)
+    left join lateral
+    (
+      select (candidate.id, candidate.kind_ids, candidate.properties)::nodeComposite as node
+      from unnest(known_nodes) as candidate(id, kind_ids, properties)
+      where candidate.id = ordered_node.id
+      limit 1
+    ) known_node on true
+    left join node n on n.id = ordered_node.id and known_node.node is null
+  ),
+  (
+    select coalesce(
+      array_agg((ordered_edge.id, ordered_edge.start_id, ordered_edge.end_id, ordered_edge.kind_id, ordered_edge.properties)::edgeComposite order by selected_edge.path_ordinality)::edgeComposite[],
+      array []::edgeComposite[]
+    )
+    from final_walk
+    cross join lateral unnest(final_walk.edge_ordinals) with ordinality as selected_edge(edge_ordinality, path_ordinality)
+    join lateral unnest(edges) with ordinality as ordered_edge(id, start_id, end_id, kind_id, properties, input_ordinality)
+      on ordered_edge.input_ordinality = selected_edge.edge_ordinality
+  )
+)::pathComposite;
+$$
+  language sql
+  stable
+  parallel safe
+  strict;
+
 create or replace function public.create_unidirectional_pathspace_tables()
   returns void as
 $$

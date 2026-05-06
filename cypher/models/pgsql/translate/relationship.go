@@ -151,6 +151,7 @@ func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingRes
 
 			// Set the path binding in the expansion struct for easier referencing upstream
 			expansion.PathBinding = expansionPathBinding
+			expansionPathBinding.DependOn(bindingResult.Binding)
 
 			if part.PatternBinding != nil {
 				// If there's a bound pattern track this expansion's path as a dependency of the

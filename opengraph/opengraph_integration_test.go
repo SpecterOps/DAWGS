@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
@@ -43,7 +44,7 @@ func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 		t.Skip("PG_CONNECTION_STRING not set")
 	}
 
-	pool, err := pg.NewPool(connStr)
+	pool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: connStr})
 	if err != nil {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
