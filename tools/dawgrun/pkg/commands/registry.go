@@ -7,17 +7,21 @@ import (
 )
 
 var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
-	"exit":           quitCmd(),
-	"explain-psql":   explainAsPsqlCmd(),
-	"load-db-kinds":  getPGDBKinds(),
-	"lookup-kind":    lookupKindCmd(),
-	"lookup-kind-id": lookupKindIDCmd(),
-	"open-pg-db":     openPGDBCmd(),
-	"parse":          parseCmd(),
-	"query-cypher":   queryCypherCmd(),
-	"quit":           quitCmd(),
-	"runtime-trace":  runtimeTraceCmd(),
-	"translate-psql": translateToPsqlCmd(),
+	"copy-opengraph":   copyOpenGraphCmd(),
+	"exit":             quitCmd(),
+	"explain-psql":     explainAsPsqlCmd(),
+	"list-connections": listConnectionsCmd(),
+	"load-opengraph":   loadOpenGraphCmd(),
+	"load-db-kinds":    getPGDBKinds(),
+	"lookup-kind":      lookupKindCmd(),
+	"lookup-kind-id":   lookupKindIDCmd(),
+	"open":             openCmd(),
+	"parse":            parseCmd(),
+	"query-cypher":     queryCypherCmd(),
+	"quit":             quitCmd(),
+	"runtime-trace":    runtimeTraceCmd(),
+	"save-opengraph":   saveOpenGraphCmd(),
+	"translate-psql":   translateToPsqlCmd(),
 }
 
 func init() {

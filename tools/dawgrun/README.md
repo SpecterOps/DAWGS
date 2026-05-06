@@ -29,8 +29,8 @@
 `DAWGS` and the data structures it produces.
 
 It currently runs as a REPL for introspecting a `DAWGS`-compatible
-Postgres graph, parsing and translating Cypher queries, and executing
-queries against a live connection.
+graph backend (Postgres or Neo4j), parsing and translating Cypher
+queries, and executing queries against a live connection.
 
 ## Building
 
@@ -64,17 +64,21 @@ The REPL supports command-name completion with `Tab`; ambiguous matches render a
 Available commands:
 
 ```
+    copy-opengraph                  Copies all graph data from one connection to another
     exit                            Quit
     explain-psql                    Explains a translated query over an active PG connection
     help                            This help message, but also more detailed help for individual commands
+    list-connections                Lists currently open named connections
+    load-opengraph                  Loads an OpenGraph JSON file into a connection
     load-db-kinds                   Loads/shows the kind mapping from the specified DB into the 'active set'
     lookup-kind                     Looks up a kind from database based on kind name
     lookup-kind-id                  Looks up a kind from database based on kind ID
-    open-pg-db                      Connects to a specified DAWGS-compatible Postgres DB to do graph introspection.
+    open                            Connects to a named DAWGS-compatible backend using a connection string.
     parse                           Parses and dumps a Cypher query to AST form.
     query-cypher                    Executes a Cypher query and renders table or JSON output
     quit                            Quit
     runtime-trace                   Manage runtime tracing
+    save-opengraph                  Dumps all data from a connection as OpenGraph JSON
     translate-psql                  Parses a query and converts it to the underlying PostgreSQL query
 ```
 
@@ -84,6 +88,10 @@ Most commands that touch a database take a connection _name_ as their
 first argument. Names are assigned when you open the connection and
 are reused for the remainder of the session. The bottom-right status
 widget shows the current number of open connections.
+
+To list their names directly:
+
+    dawgrun > list-connections
 
 A "kind map" is the mapping between a graph's kind names (e.g.
 `User`, `Group`) and the numeric IDs they are stored under in
@@ -95,13 +103,21 @@ and dumps the result.
 
 ## Examples
 
-### Open a Postgres connection
+### Open a backend connection
 
-    dawgrun > open-pg-db local "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable"
-    Opened connection 'local': postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable
+    dawgrun > open local "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable"
+    Opened pg connection 'local'
 
 The first argument (`local`) is the name other commands will refer
-to; the second is any DAWGS-compatible Postgres connection string.
+to; the second is a DAWGS-compatible connection string. The backend
+driver is inferred from the connection string scheme:
+
+- `postgres` / `postgresql` -> `pg`
+- `neo4j` -> `neo4j`
+
+If needed, you can override autodetection with `-driver`:
+
+    dawgrun > open -driver neo4j local "neo4j://neo4j:password@localhost:7687"
 
 ### Inspect kinds
 
@@ -118,6 +134,27 @@ Resolve a kind name to its numeric ID:
 
     dawgrun > lookup-kind-id local 3
     Kind ID 3 => User
+
+### Save, load, and copy OpenGraph data
+
+Dump a connection's full graph as highlighted OpenGraph JSON in the console:
+
+    dawgrun > save-opengraph local
+
+Write it to a file instead:
+
+    dawgrun > save-opengraph -out graph.json local
+    Wrote 12345 nodes and 67890 edges to graph.json
+
+Load an OpenGraph file into a target connection:
+
+    dawgrun > load-opengraph local graph.json
+    Loaded 12345 nodes and 67890 edges from graph.json into connection 'local'
+
+Copy the full graph from one active connection to another:
+
+    dawgrun > copy-opengraph source target
+    Copied 12345 nodes and 67890 edges from connection 'source' to connection 'target'
 
 ### Parse a Cypher query to AST
 

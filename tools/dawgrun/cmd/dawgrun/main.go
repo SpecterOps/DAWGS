@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/shlex"
 	repl "github.com/specterops/go-repl"
 
@@ -30,6 +31,9 @@ var (
 )
 
 func main() {
+	// Configure spew's display options
+	spew.Config.DisablePointerAddresses = true
+
 	fmt.Printf("\n%s\n%s",
 		art,
 		bannerStyle.Render(banner),

@@ -95,7 +95,11 @@ This section documents the implemented baseline at the time of writing.
 
 The current command set includes:
 
-- `open-pg-db` - open a named DAWGS-compatible PostgreSQL connection
+- `copy-opengraph` - copy a full graph from one named connection to another
+- `open` - open a named DAWGS-compatible connection (PostgreSQL or Neo4j)
+- `list-connections` - list currently open named backend connections
+- `save-opengraph` - export a connection's full graph as OpenGraph JSON
+- `load-opengraph` - load OpenGraph JSON into a named connection
 - `load-db-kinds` - refresh and print kind mappings for a connection
 - `lookup-kind` / `lookup-kind-id` - resolve kind names and IDs
 - `parse` - parse CySQL/Cypher into AST and dump highlighted output
@@ -121,11 +125,11 @@ Named connections and lazily loaded kind maps provide the basis for cross-comman
 
 - Kind maps are fetched from the live backend and cached in command scope.
 - Name/ID lookup helpers support debugging mismatches in query translation and execution.
-- Current backend connection command is PostgreSQL-specific.
+- Backend connection opening is driver-agnostic via connection-string scheme detection.
 
 ### 4.5 Known Constraints
 
-- Backend connection management is PostgreSQL-specific (`open-pg-db`); broader driver support is not yet implemented.
+- Kind ID lookup commands are PostgreSQL-specific because they depend on numeric kind IDs.
 - REPL input uses shell-style tokenization, which affects quoting behavior for Cypher string literals.
 - The tool is interactive-first; scriptability exists only in limited form through command composition and shell invocation patterns.
 
@@ -142,14 +146,14 @@ This proposal keeps the broad long-term goal intact while defining concrete near
 Requirements:
 
 - The tool MUST preserve straightforward connection management for at least PostgreSQL.
-- The tool SHOULD provide a path to generic `open-db` behavior for additional DAWGS drivers.
+- The tool SHOULD preserve backend-agnostic `open` behavior for additional DAWGS drivers.
 - Kind inspection SHOULD remain available as first-class commands and SHOULD support both name-to-ID and ID-to-name workflows.
 - Refresh semantics for kind mappings MUST remain explicit and predictable.
 
 Implementation direction:
 
 - Evolve command surface from backend-specific naming toward backend-agnostic patterns where practical.
-- Maintain compatibility with existing `open-pg-db` usage during migration.
+- Keep connection-opening semantics explicit and discoverable through command help.
 
 ### 5.2 Query Tooling
 
@@ -213,7 +217,7 @@ Practical indicators include:
 
 ## 8. Open Questions
 
-- What is the preferred migration path from `open-pg-db` to a generic multi-driver connection interface?
+- Should `open` support additional secure Neo4j URI schemes beyond `neo4j://` by default?
 - Which automation model is most valuable first: startup config profiles, scripted command batches, or both?
 - What level of translation-step introspection is useful by default versus too noisy for routine workflows?
 - Should roadmap features be tagged by maturity level directly in help output to clarify supported versus experimental behavior?
