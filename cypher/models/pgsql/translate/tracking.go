@@ -169,6 +169,20 @@ func (s *Scope) Snapshot() *Scope {
 		definitionsCopy[k] = v.Copy()
 	}
 
+	for _, definition := range definitionsCopy {
+		for idx, dependency := range definition.Dependencies {
+			if dependency == nil {
+				continue
+			}
+
+			if copiedDependency, found := definitionsCopy[dependency.Identifier]; found {
+				definition.Dependencies[idx] = copiedDependency
+			} else {
+				definition.Dependencies[idx] = dependency.Copy()
+			}
+		}
+	}
+
 	return &Scope{
 		nextFrameID: s.nextFrameID,
 		stack:       stackCopy,
