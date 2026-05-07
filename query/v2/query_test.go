@@ -40,7 +40,7 @@ func TestQuery(t *testing.T) {
 	cypherQueryStr, err := format.RegularQuery(preparedQuery.Query, false)
 	require.NoError(t, err)
 
-	require.Equal(t, "match (s)-[r]->() where not r:test and not (r:A or r:B) and r.rel_prop <= $p0 and r.other_prop = $p1 and s:test set s.this_prop = $p2 remove e:A:B detach delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
+	require.Equal(t, "match (s)-[r]->(e) where not r:test and not (r:A or r:B) and r.rel_prop <= $p0 and r.other_prop = $p1 and s:test set s.this_prop = $p2 remove e:A:B detach delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
 	require.Equal(t, map[string]any{
 		"p0": 1234,
 		"p1": 5678,
@@ -250,6 +250,40 @@ func TestRawProjectionAndOrderInputsAreNormalized(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "match (n) return id(n) order by n.name desc", renderPrepared(t, preparedQuery))
+}
+
+func TestRawUpdatingInputsAreValidated(t *testing.T) {
+	var setClause *cypher.Set
+	_, err := v2.New().Update(setClause).Build()
+	require.ErrorContains(t, err, "set clause is nil")
+
+	_, err = v2.New().Update(&cypher.Set{Items: []*cypher.SetItem{nil}}).Build()
+	require.ErrorContains(t, err, "set item is nil")
+
+	_, err = v2.New().Update(&cypher.SetItem{}).Build()
+	require.ErrorContains(t, err, "set item left has nil expression")
+
+	var removeClause *cypher.Remove
+	_, err = v2.New().Update(removeClause).Build()
+	require.ErrorContains(t, err, "remove clause is nil")
+
+	_, err = v2.New().Update(&cypher.Remove{Items: []*cypher.RemoveItem{nil}}).Build()
+	require.ErrorContains(t, err, "remove item is nil")
+
+	_, err = v2.New().Update(&cypher.RemoveItem{}).Build()
+	require.ErrorContains(t, err, "remove item has no target")
+
+	var deleteVariable *cypher.Variable
+	_, err = v2.New().Delete(deleteVariable).Build()
+	require.ErrorContains(t, err, "delete expression has nil expression")
+
+	var nodePattern *cypher.NodePattern
+	_, err = v2.New().Create(nodePattern).Build()
+	require.ErrorContains(t, err, "node pattern is nil")
+
+	var relationshipPattern *cypher.RelationshipPattern
+	_, err = v2.New().Create(relationshipPattern).Build()
+	require.ErrorContains(t, err, "relationship pattern is nil")
 }
 
 func TestInvalidHelperInputsReturnBuildErrors(t *testing.T) {

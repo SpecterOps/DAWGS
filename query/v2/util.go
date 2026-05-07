@@ -119,7 +119,7 @@ func prepareCreateRelationshipMatch(match *cypher.Match, seen *identifierSet, id
 
 func isDetachDeleteQualifier(qualifier cypher.Expression, identifiers runtimeIdentifiers) bool {
 	variable, typeOK := qualifier.(*cypher.Variable)
-	if !typeOK {
+	if !typeOK || variable == nil {
 		return false
 	}
 
@@ -287,6 +287,128 @@ func validateExpressionValue(expression cypher.Expression, context string) error
 	}
 
 	return collectModelErrors(expression)
+}
+
+func validateAssignmentOperator(operator cypher.AssignmentOperator) error {
+	switch operator {
+	case cypher.OperatorAssignment, cypher.OperatorAdditionAssignment, cypher.OperatorLabelAssignment:
+		return nil
+	default:
+		return fmt.Errorf("unsupported set item operator: %s", operator)
+	}
+}
+
+func setItemFromValue(setItem *cypher.SetItem) (*cypher.SetItem, error) {
+	if setItem == nil {
+		return nil, fmt.Errorf("set item is nil")
+	}
+
+	if err := validateExpressionValue(setItem.Left, "set item left"); err != nil {
+		return nil, err
+	}
+
+	if err := validateAssignmentOperator(setItem.Operator); err != nil {
+		return nil, err
+	}
+
+	if err := validateExpressionValue(setItem.Right, "set item right"); err != nil {
+		return nil, err
+	}
+
+	if err := collectModelErrors(setItem); err != nil {
+		return nil, err
+	}
+
+	return setItem, nil
+}
+
+func setItemsFromSet(setClause *cypher.Set) ([]*cypher.SetItem, error) {
+	if setClause == nil {
+		return nil, fmt.Errorf("set clause is nil")
+	}
+
+	setItems := make([]*cypher.SetItem, 0, len(setClause.Items))
+
+	for _, setItem := range setClause.Items {
+		if normalizedSetItem, err := setItemFromValue(setItem); err != nil {
+			return nil, err
+		} else {
+			setItems = append(setItems, normalizedSetItem)
+		}
+	}
+
+	return setItems, nil
+}
+
+func removeItemFromValue(removeItem *cypher.RemoveItem) (*cypher.RemoveItem, error) {
+	if removeItem == nil {
+		return nil, fmt.Errorf("remove item is nil")
+	}
+
+	hasKindMatcher := removeItem.KindMatcher != nil
+	hasProperty := !isNilPointer(removeItem.Property)
+
+	switch {
+	case hasKindMatcher && hasProperty:
+		return nil, fmt.Errorf("remove item has multiple targets")
+
+	case hasKindMatcher:
+		if err := collectModelErrors(removeItem.KindMatcher); err != nil {
+			return nil, err
+		}
+
+	case hasProperty:
+		if err := validateExpressionValue(removeItem.Property, "remove item property"); err != nil {
+			return nil, err
+		}
+
+	default:
+		return nil, fmt.Errorf("remove item has no target")
+	}
+
+	if err := collectModelErrors(removeItem); err != nil {
+		return nil, err
+	}
+
+	return removeItem, nil
+}
+
+func removeItemsFromRemove(removeClause *cypher.Remove) ([]*cypher.RemoveItem, error) {
+	if removeClause == nil {
+		return nil, fmt.Errorf("remove clause is nil")
+	}
+
+	removeItems := make([]*cypher.RemoveItem, 0, len(removeClause.Items))
+
+	for _, removeItem := range removeClause.Items {
+		if normalizedRemoveItem, err := removeItemFromValue(removeItem); err != nil {
+			return nil, err
+		} else {
+			removeItems = append(removeItems, normalizedRemoveItem)
+		}
+	}
+
+	return removeItems, nil
+}
+
+func validateNodePattern(nodePattern *cypher.NodePattern) error {
+	if nodePattern == nil {
+		return fmt.Errorf("node pattern is nil")
+	}
+
+	return collectModelErrors(nodePattern)
+}
+
+func validateRelationshipPattern(relationshipPattern *cypher.RelationshipPattern) error {
+	if relationshipPattern == nil {
+		return fmt.Errorf("relationship pattern is nil")
+	}
+
+	if err := validateRelationshipDirection(relationshipPattern.Direction); err != nil {
+		return err
+	}
+
+	return collectModelErrors(relationshipPattern)
 }
 
 func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
@@ -476,21 +598,55 @@ func (s *identifierSet) CollectFromValue(value any) error {
 		}
 
 	case *cypher.Set:
-		return s.CollectFromExpression(typedValue)
+		if setItems, err := setItemsFromSet(typedValue); err != nil {
+			return err
+		} else {
+			for _, setItem := range setItems {
+				if err := s.CollectFromExpression(setItem); err != nil {
+					return err
+				}
+			}
+		}
 
 	case *cypher.SetItem:
-		return s.CollectFromExpression(typedValue)
+		if setItem, err := setItemFromValue(typedValue); err != nil {
+			return err
+		} else {
+			return s.CollectFromExpression(setItem)
+		}
 
 	case *cypher.Remove:
-		return s.CollectFromExpression(typedValue)
+		if removeItems, err := removeItemsFromRemove(typedValue); err != nil {
+			return err
+		} else {
+			for _, removeItem := range removeItems {
+				if err := s.CollectFromValue(removeItem); err != nil {
+					return err
+				}
+			}
+		}
 
 	case *cypher.RemoveItem:
-		return s.CollectFromExpression(typedValue)
+		if removeItem, err := removeItemFromValue(typedValue); err != nil {
+			return err
+		} else if removeItem.KindMatcher != nil {
+			return s.CollectFromExpression(removeItem.KindMatcher)
+		} else {
+			return s.CollectFromExpression(removeItem)
+		}
 
 	case *cypher.NodePattern:
+		if err := validateNodePattern(typedValue); err != nil {
+			return err
+		}
+
 		return s.CollectFromExpression(typedValue)
 
 	case *cypher.RelationshipPattern:
+		if err := validateRelationshipPattern(typedValue); err != nil {
+			return err
+		}
+
 		return s.CollectFromExpression(typedValue)
 
 	case *cypher.Variable:
@@ -569,6 +725,10 @@ func collectCreateScope(identifiers runtimeIdentifiers, values ...any) (*createS
 	for _, value := range values {
 		switch typedValue := value.(type) {
 		case *cypher.RelationshipPattern:
+			if err := validateRelationshipPattern(typedValue); err != nil {
+				return nil, err
+			}
+
 			scope.createsRelationship = true
 			scope.identifiers.Add(identifiers.start)
 			scope.identifiers.Add(identifiers.end)
@@ -688,6 +848,11 @@ func collectModelErrorsFromKnownValues(values ...any) error {
 				modelErrors = append(modelErrors, err)
 			}
 
+		case *cypher.NodePattern:
+			if err := validateNodePattern(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
 		case *cypher.Order:
 			if _, err := sortItemsFromOrder(typedValue); err != nil {
 				modelErrors = append(modelErrors, err)
@@ -704,6 +869,39 @@ func collectModelErrorsFromKnownValues(values ...any) error {
 
 		case *cypher.Return:
 			if _, err := projectionItemsFromReturn(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.RelationshipPattern:
+			if err := validateRelationshipPattern(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.Remove:
+			if _, err := removeItemsFromRemove(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.RemoveItem:
+			if _, err := removeItemFromValue(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.Set:
+			if _, err := setItemsFromSet(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.SetItem:
+			if _, err := setItemFromValue(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
 				modelErrors = append(modelErrors, err)
 			}
 
@@ -727,15 +925,9 @@ func collectModelErrorsFromKnownValues(values ...any) error {
 			*cypher.KindMatcher,
 			*cypher.ListLiteral,
 			*cypher.Negation,
-			*cypher.NodePattern,
 			*cypher.Parenthetical,
 			*cypher.PatternPredicate,
 			*cypher.PropertyLookup,
-			*cypher.RelationshipPattern,
-			*cypher.Remove,
-			*cypher.RemoveItem,
-			*cypher.Set,
-			*cypher.SetItem,
 			*cypher.UnaryAddOrSubtractExpression,
 			*cypher.UpdatingClause,
 			*cypher.Variable:

@@ -773,20 +773,36 @@ func (s *builder) Update(updates ...any) QueryBuilder {
 	for _, nextUpdate := range updates {
 		switch typedNextUpdate := nextUpdate.(type) {
 		case *cypher.Set:
-			s.setItems = append(s.setItems, typedNextUpdate.Items...)
-			s.appendSetItems(typedNextUpdate.Items...)
+			if setItems, err := setItemsFromSet(typedNextUpdate); err != nil {
+				s.trackError(err)
+			} else {
+				s.setItems = append(s.setItems, setItems...)
+				s.appendSetItems(setItems...)
+			}
 
 		case *cypher.SetItem:
-			s.setItems = append(s.setItems, typedNextUpdate)
-			s.appendSetItems(typedNextUpdate)
+			if setItem, err := setItemFromValue(typedNextUpdate); err != nil {
+				s.trackError(err)
+			} else {
+				s.setItems = append(s.setItems, setItem)
+				s.appendSetItems(setItem)
+			}
 
 		case *cypher.Remove:
-			s.removeItems = append(s.removeItems, typedNextUpdate.Items...)
-			s.appendRemoveItems(typedNextUpdate.Items...)
+			if removeItems, err := removeItemsFromRemove(typedNextUpdate); err != nil {
+				s.trackError(err)
+			} else {
+				s.removeItems = append(s.removeItems, removeItems...)
+				s.appendRemoveItems(removeItems...)
+			}
 
 		case *cypher.RemoveItem:
-			s.removeItems = append(s.removeItems, typedNextUpdate)
-			s.appendRemoveItems(typedNextUpdate)
+			if removeItem, err := removeItemFromValue(typedNextUpdate); err != nil {
+				s.trackError(err)
+			} else {
+				s.removeItems = append(s.removeItems, removeItem)
+				s.appendRemoveItems(removeItem)
+			}
 
 		default:
 			s.trackError(fmt.Errorf("unknown update type: %T", nextUpdate))
@@ -804,6 +820,10 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 		switch typedNextUpdate := nextDelete.(type) {
 		case QualifiedExpression:
 			qualifier := typedNextUpdate.qualifier()
+			if err := validateExpressionValue(qualifier, "delete expression"); err != nil {
+				s.trackError(err)
+				continue
+			}
 
 			if isDetachDeleteQualifier(qualifier, s.identifiers) {
 				s.detachDelete = true
@@ -814,6 +834,11 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 			pendingDeleteItems = append(pendingDeleteItems, qualifier)
 
 		case *cypher.Variable:
+			if err := validateExpressionValue(typedNextUpdate, "delete expression"); err != nil {
+				s.trackError(err)
+				continue
+			}
+
 			switch typedNextUpdate.Symbol {
 			case s.identifiers.node, s.identifiers.start, s.identifiers.end:
 				s.detachDelete = true
@@ -859,6 +884,10 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 		case QualifiedExpression:
 			switch typedExpression := typedNextCreate.qualifier().(type) {
 			case *cypher.Variable:
+				if typedExpression == nil {
+					return fmt.Errorf("invalid variable reference for create: <nil>")
+				}
+
 				switch typedExpression.Symbol {
 				case identifiers.node, identifiers.start, identifiers.end:
 					pattern.AddPatternElements(&cypher.NodePattern{
@@ -874,10 +903,14 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 			}
 
 		case *cypher.NodePattern:
+			if err := validateNodePattern(typedNextCreate); err != nil {
+				return err
+			}
+
 			pattern.AddPatternElements(typedNextCreate)
 
 		case *cypher.RelationshipPattern:
-			if err := validateRelationshipDirection(typedNextCreate.Direction); err != nil {
+			if err := validateRelationshipPattern(typedNextCreate); err != nil {
 				return err
 			}
 
