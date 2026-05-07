@@ -323,3 +323,33 @@ func TestUpdateCompatibilityHelpers(t *testing.T) {
 		"p1": "updated",
 	}, preparedQuery.Parameters)
 }
+
+func TestSetPropertiesSortsKeys(t *testing.T) {
+	properties := map[string]any{
+		"zeta":  3,
+		"alpha": 1,
+		"mid":   2,
+	}
+
+	preparedQuery, err := v2.New().Update(
+		v2.SetProperties(v2.Node(), properties),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match (n) set n.alpha = $p0, n.mid = $p1, n.zeta = $p2", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": 1,
+		"p1": 2,
+		"p2": 3,
+	}, preparedQuery.Parameters)
+
+	preparedQuery, err = v2.New().Update(
+		v2.Node().SetProperties(properties),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match (n) set n.alpha = $p0, n.mid = $p1, n.zeta = $p2", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": 1,
+		"p1": 2,
+		"p2": 3,
+	}, preparedQuery.Parameters)
+}

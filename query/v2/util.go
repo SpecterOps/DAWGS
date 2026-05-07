@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
@@ -183,6 +184,17 @@ func propertyLookupOrError(reference any, propertyName string) cypher.Expression
 	} else {
 		return cypher.NewPropertyLookup(variable.Symbol, propertyName)
 	}
+}
+
+func sortedPropertyKeys(properties map[string]any) []string {
+	keys := make([]string, 0, len(properties))
+
+	for key := range properties {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+	return keys
 }
 
 func projectionExpression(value any) (cypher.Expression, error) {

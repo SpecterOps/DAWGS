@@ -448,8 +448,8 @@ func (s *entity[T]) Count() cypher.Expression {
 func (s *entity[T]) SetProperties(properties map[string]any) cypher.Expression {
 	set := &cypher.Set{}
 
-	for key, value := range properties {
-		set.Items = append(set.Items, s.Property(key).Set(value))
+	for _, key := range sortedPropertyKeys(properties) {
+		set.Items = append(set.Items, s.Property(key).Set(properties[key]))
 	}
 
 	return set

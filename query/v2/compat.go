@@ -112,11 +112,11 @@ func SetProperty(reference any, value any) *cypher.SetItem {
 func SetProperties(reference any, properties map[string]any) *cypher.Set {
 	set := &cypher.Set{}
 
-	for key, value := range properties {
+	for _, key := range sortedPropertyKeys(properties) {
 		set.Items = append(set.Items, cypher.NewSetItem(
 			propertyLookupOrError(reference, key),
 			cypher.OperatorAssignment,
-			valueExpression(value),
+			valueExpression(properties[key]),
 		))
 	}
 
