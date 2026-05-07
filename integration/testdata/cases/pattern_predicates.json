@@ -1,0 +1,25 @@
+{
+  "dataset": "bed6695",
+  "cases": [
+    {
+      "name": "BED-6695 negated incoming pattern predicate with contains filter remains row-correlated",
+      "cypher": "match (g:NodeKind1) where g.name contains 'BED-6695 KEY ADMINS' and not ((g)<-[:EdgeKind1]-(:NodeKind2)) return count(g)",
+      "assert": {"exact_int": 1}
+    },
+    {
+      "name": "BED-6695 flipped equivalent pattern predicate returns the same count",
+      "cypher": "match (g:NodeKind1) where g.name contains 'BED-6695 KEY ADMINS' and not ((:NodeKind2)-[:EdgeKind1]->(g)) return count(g)",
+      "assert": {"exact_int": 1}
+    },
+    {
+      "name": "BED-6695 positive incoming pattern predicate with contains filter remains row-correlated",
+      "cypher": "match (g:NodeKind1) where g.name contains 'BED-6695 KEY ADMINS' and (g)<-[:EdgeKind1]-(:NodeKind2) return count(g)",
+      "assert": {"exact_int": 1}
+    },
+    {
+      "name": "BED-6695 negated incoming pattern predicate without property filter remains row-correlated",
+      "cypher": "match (g:NodeKind1) where not ((g)<-[:EdgeKind1]-(:NodeKind2)) return count(g)",
+      "assert": {"exact_int": 1}
+    }
+  ]
+}

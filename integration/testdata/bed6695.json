@@ -1,0 +1,34 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "key_admins_empty",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "name": "BED-6695 KEY ADMINS EMPTY"
+        }
+      },
+      {
+        "id": "key_admins_membered",
+        "kinds": ["NodeKind1"],
+        "properties": {
+          "name": "BED-6695 KEY ADMINS MEMBERED"
+        }
+      },
+      {
+        "id": "member_user",
+        "kinds": ["NodeKind2"],
+        "properties": {
+          "name": "BED-6695 MEMBER USER"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "start_id": "member_user",
+        "end_id": "key_admins_membered",
+        "kind": "EdgeKind1"
+      }
+    ]
+  }
+}
