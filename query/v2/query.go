@@ -3,6 +3,7 @@ package v2
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/graph"
@@ -46,6 +47,7 @@ var Identifiers = runtimeIdentifiers{
 
 type Scope struct {
 	identifiers runtimeIdentifiers
+	errors      []error
 }
 
 func DefaultScope() Scope {
@@ -55,19 +57,55 @@ func DefaultScope() Scope {
 }
 
 func NewScope(path, node, start, relationship, end string) Scope {
+	identifiers := runtimeIdentifiers{
+		path:         path,
+		node:         node,
+		start:        start,
+		relationship: relationship,
+		end:          end,
+	}
+
 	return Scope{
-		identifiers: runtimeIdentifiers{
-			path:         path,
-			node:         node,
-			start:        start,
-			relationship: relationship,
-			end:          end,
-		},
+		identifiers: identifiers,
+		errors:      validateRuntimeIdentifiers(identifiers),
 	}
 }
 
+func validateRuntimeIdentifiers(identifiers runtimeIdentifiers) []error {
+	aliases := []struct {
+		role  string
+		value string
+	}{
+		{role: "path", value: identifiers.path},
+		{role: "node", value: identifiers.node},
+		{role: "start", value: identifiers.start},
+		{role: "relationship", value: identifiers.relationship},
+		{role: "end", value: identifiers.end},
+	}
+
+	var (
+		errs []error
+		seen = map[string]string{}
+	)
+
+	for _, alias := range aliases {
+		if strings.TrimSpace(alias.value) == "" {
+			errs = append(errs, fmt.Errorf("scope alias %s is empty", alias.role))
+			continue
+		}
+
+		if existingRole, exists := seen[alias.value]; exists {
+			errs = append(errs, fmt.Errorf("scope aliases %s and %s both use %q", existingRole, alias.role, alias.value))
+		} else {
+			seen[alias.value] = alias.role
+		}
+	}
+
+	return errs
+}
+
 func (s Scope) New() QueryBuilder {
-	return newBuilder(s.identifiers)
+	return newBuilder(s.identifiers, s.errors...)
 }
 
 func (s Scope) Node() NodeContinuation {
@@ -614,9 +652,10 @@ func New() QueryBuilder {
 	return DefaultScope().New()
 }
 
-func newBuilder(identifiers runtimeIdentifiers) QueryBuilder {
+func newBuilder(identifiers runtimeIdentifiers, errs ...error) QueryBuilder {
 	return &builder{
 		identifiers:           identifiers,
+		errors:                append([]error(nil), errs...),
 		relationshipDirection: graph.DirectionOutbound,
 	}
 }

@@ -163,6 +163,16 @@ func TestScopedKindsOfCompatibilityHelper(t *testing.T) {
 	require.Equal(t, "match ()-[edge]->(target) return type(edge), labels(target)", renderPrepared(t, preparedQuery))
 }
 
+func TestInvalidScopeAliasesReturnBuildErrors(t *testing.T) {
+	emptyAliasScope := v2.NewScope("", "node", "start", "relationship", "end")
+	_, err := emptyAliasScope.New().Return(emptyAliasScope.Node()).Build()
+	require.ErrorContains(t, err, "scope alias path is empty")
+
+	duplicateAliasScope := v2.NewScope("path", "node", "node", "relationship", "end")
+	_, err = duplicateAliasScope.New().Return(duplicateAliasScope.Start()).Build()
+	require.ErrorContains(t, err, `scope aliases node and start both use "node"`)
+}
+
 func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().WithRelationshipDirection(graph.Direction(99)).Return(v2.Relationship()).Build()
 	require.ErrorContains(t, err, "unsupported relationship direction: invalid")
