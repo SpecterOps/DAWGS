@@ -130,18 +130,6 @@ func TestBackendParityPGTranslate(t *testing.T) {
 			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select (s0.n0).id, (s0.e0).id, (s0.n1).id from s0;",
 			expectedParams: map[string]any{"p0": 1, "pi0": 1},
 		},
-		"create relationship": {
-			builder: v2.New().Where(
-				v2.Start().ID().Equals(1),
-				v2.End().ID().Equals(2),
-			).Create(
-				v2.RelationshipPattern(edgeKind, nil, graph.DirectionOutbound),
-			).Return(
-				v2.Relationship().ID(),
-			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = @pi0::int8)), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where (n1.id = @pi1::int8)) select e0.id from s1 where e0.kind_id = any (array [2]::int2[]);",
-			expectedParams: map[string]any{"p0": 1, "p1": 2, "pi0": 1, "pi1": 2},
-		},
 		"update node": {
 			builder: v2.New().Where(
 				v2.Node().ID().Equals(1),
@@ -176,4 +164,22 @@ func TestBackendParityPGTranslate(t *testing.T) {
 			require.Equal(t, testCase.expectedParams, translation.Parameters)
 		})
 	}
+}
+
+func TestBackendParityPGCreateUnsupported(t *testing.T) {
+	edgeKind := graph.StringKind("MemberOf")
+	mapper := testKindMapper(edgeKind)
+
+	preparedQuery, err := v2.New().Where(
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Create(
+		v2.RelationshipPattern(edgeKind, nil, graph.DirectionOutbound),
+	).Return(
+		v2.Relationship().ID(),
+	).Build()
+	require.NoError(t, err)
+
+	_, err = translate.Translate(context.Background(), preparedQuery.Query, mapper, preparedQuery.Parameters)
+	require.ErrorContains(t, err, "pgsql translator does not support create clauses")
 }
