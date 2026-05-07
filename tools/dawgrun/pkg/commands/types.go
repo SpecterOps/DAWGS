@@ -170,3 +170,11 @@ func (s *Scope) DropConnection(name string) {
 	delete(s.connections, name)
 	delete(s.connKindMaps, name)
 }
+
+func (s *Scope) GetConnection(name string) (graph.Database, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn, ok := s.connections[name]
+	return conn, ok
+}

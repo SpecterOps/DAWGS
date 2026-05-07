@@ -39,7 +39,7 @@ func saveOpenGraphCmd() CommandDesc {
 			}
 
 			connName := fields[0]
-			conn, ok := ctx.scope.connections[connName]
+			conn, ok := ctx.scope.GetConnection(connName)
 			if !ok {
 				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
 			}
@@ -89,7 +89,7 @@ func loadOpenGraphCmd() CommandDesc {
 			connName := fields[0]
 			inputFilePath := fields[1]
 
-			conn, ok := ctx.scope.connections[connName]
+			conn, ok := ctx.scope.GetConnection(connName)
 			if !ok {
 				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
 			}
@@ -132,12 +132,12 @@ func copyOpenGraphCmd() CommandDesc {
 				return fmt.Errorf("source and destination connections must differ")
 			}
 
-			fromConn, ok := ctx.scope.connections[fromConnName]
+			fromConn, ok := ctx.scope.GetConnection(fromConnName)
 			if !ok {
 				return fmt.Errorf("connection %s not found; did you `open` it?", fromConnName)
 			}
 
-			toConn, ok := ctx.scope.connections[toConnName]
+			toConn, ok := ctx.scope.GetConnection(toConnName)
 			if !ok {
 				return fmt.Errorf("connection %s not found; did you `open` it?", toConnName)
 			}
@@ -156,6 +156,9 @@ func copyOpenGraphCmd() CommandDesc {
 			}()
 
 			doc, err := opengraph.ParseDocument(pipeReader)
+			if err != nil {
+				_ = pipeReader.CloseWithError(err)
+			}
 			exportErr := <-exportErrCh
 
 			if exportErr != nil {

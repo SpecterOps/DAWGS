@@ -87,6 +87,7 @@ func openCmd() CommandDesc {
 				ConnectionString: connStr,
 			}
 
+			openSuccess := false
 			switch driverName {
 			case pg.DriverName:
 				connPool, err := pg.NewPool(drivers.DatabaseConfiguration{
@@ -95,6 +96,11 @@ func openCmd() CommandDesc {
 				if err != nil {
 					return fmt.Errorf("error opening connection pool: %w", err)
 				}
+				defer func() {
+					if !openSuccess {
+						connPool.Close()
+					}
+				}()
 
 				config.Pool = connPool
 			case neo4j.DriverName:
@@ -108,7 +114,7 @@ func openCmd() CommandDesc {
 				return fmt.Errorf("error opening %s database connection '%s': %w", driverName, connStr, err)
 			}
 
-			if existingConn, ok := ctx.scope.connections[name]; ok {
+			if existingConn, ok := ctx.scope.GetConnection(name); ok {
 				// Warn+close existing connection before overwriting it
 				ctx.output.Warnf("Discarding previous connection for '%s'", name)
 				if err := existingConn.Close(ctx); err != nil {
@@ -121,6 +127,7 @@ func openCmd() CommandDesc {
 
 			fmt.Fprintf(ctx.output, "Opened %s connection '%s'\n", driverName, name)
 			ctx.scope.AddConnection(name, querier)
+			openSuccess = true
 
 			return nil
 		},
@@ -168,7 +175,7 @@ func getPGDBKinds() CommandDesc {
 }
 
 func loadKindMap(ctx *CommandContext, connName string) (stubs.KindMap, error) {
-	conn, ok := ctx.scope.connections[connName]
+	conn, ok := ctx.scope.GetConnection(connName)
 	if !ok {
 		return nil, fmt.Errorf("unknown connection %s; did you `open` it?", connName)
 	}
