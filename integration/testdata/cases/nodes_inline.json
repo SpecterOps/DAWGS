@@ -15,12 +15,14 @@
     },
     {
       "name": "cross-product filter where two nodes match different typed properties",
-      "skip_drivers": ["pg"],
       "cypher": "match (s), (e) where s.name = '1234' and e.other = 1234 return s",
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}},
-          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}}
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": 1234}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"other": "1234"}},
+          {"id": "e", "kinds": ["NodeKind2"], "properties": {"other": "not-number"}}
         ],
         "edges": []
       },
@@ -97,16 +99,18 @@
     },
     {
       "name": "filter cross-product where either node satisfies a different property predicate",
-      "skip_drivers": ["pg"],
       "cypher": "match (s), (e) where s.name = '1234' or e.other = 1234 return s",
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}},
-          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}}
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": 1234}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"other": "1234"}},
+          {"id": "e", "kinds": ["NodeKind2"], "properties": {"other": "not-number"}}
         ],
         "edges": []
       },
-      "assert": {"row_count": 3, "node_ids": ["a", "a", "b"]}
+      "assert": {"row_count": 9, "node_ids": ["a", "a", "a", "a", "a", "b", "c", "d", "e"]}
     },
     {
       "name": "return a size of an array property in the projection",

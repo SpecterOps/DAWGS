@@ -296,16 +296,13 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 			return other, true
 
 		case Text:
-			switch other {
-			case UnknownDataType:
-				// Overwrite the unknown data type here and assume that it will resolve to text
-				return s, true
-
-			default:
-				return s, s == other
-			}
+			return s, true
 
 		default:
+			if other == Text {
+				return other, true
+			}
+
 			return UnknownDataType, false
 		}
 	}
