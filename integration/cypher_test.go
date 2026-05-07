@@ -23,9 +23,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
@@ -99,7 +102,7 @@ func TestCypher(t *testing.T) {
 
 	for _, g := range groups {
 		ClearGraph(t, db, ctx)
-		LoadDataset(t, db, ctx, g.dataset)
+		datasetIDMap := LoadDataset(t, db, ctx, g.dataset)
 
 		for _, cf := range g.files {
 			if slices.Contains(cf.SkipDrivers, driver) {
@@ -123,7 +126,7 @@ func TestCypher(t *testing.T) {
 					if tc.Fixture != nil {
 						runWithFixture(t, ctx, db, tc, check)
 					} else {
-						runReadOnly(t, ctx, db, tc, check)
+						runReadOnly(t, ctx, db, datasetIDMap, tc, check)
 					}
 				})
 			}
@@ -141,7 +144,13 @@ func TestCypher(t *testing.T) {
 //	{"at_least_int": N}                   — first scalar >= N
 //	{"exact_int": N}                      — first scalar == N
 //	{"contains_node_with_prop": [K, V]}   — some row has a node with property K=V
-func parseAssertion(t *testing.T, raw json.RawMessage) func(*testing.T, graph.Result) {
+//	{"node_ids": ["a", "b"]}              — exact multiset of returned fixture node IDs, order-independent
+//	{"node_id_set": ["a", "b"]}           — exact set of returned fixture node IDs, order-independent
+//	{"ordered_node_ids": ["a", "b"]}      — first returned node ID per row, preserving row order
+//	{"path_node_ids": [["a", "b"]]}       — exact multiset of returned path node ID sequences
+//
+// Object assertions may combine multiple keys; every assertion must pass.
+func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 	t.Helper()
 
 	// Try as a simple string first.
@@ -159,54 +168,69 @@ func parseAssertion(t *testing.T, raw json.RawMessage) func(*testing.T, graph.Re
 		}
 	}
 
-	// Otherwise it's an object with one key.
+	// Otherwise it's an object with one or more assertions.
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		t.Fatalf("failed to parse assertion: %v", err)
 	}
 
+	var assertions []resultAssertion
 	for key, val := range obj {
 		switch key {
 		case "row_count":
-			var n int
-			json.Unmarshal(val, &n)
-			return assertRowCount(n)
+			assertions = append(assertions, assertRowCount(decodeAssertionValue[int](t, key, val)))
 
 		case "at_least_int":
-			var n int64
-			json.Unmarshal(val, &n)
-			return assertAtLeastInt64(n)
+			assertions = append(assertions, assertAtLeastInt64(decodeAssertionValue[int64](t, key, val)))
 
 		case "exact_int":
-			var n int64
-			json.Unmarshal(val, &n)
-			return assertExactInt64(n)
+			assertions = append(assertions, assertExactInt64(decodeAssertionValue[int64](t, key, val)))
 
 		case "contains_node_with_prop":
-			var pair [2]string
-			json.Unmarshal(val, &pair)
-			return assertContainsNodeWithProp(pair[0], pair[1])
+			pair := decodeAssertionValue[[2]string](t, key, val)
+			assertions = append(assertions, assertContainsNodeWithProp(pair[0], pair[1]))
+
+		case "node_ids":
+			assertions = append(assertions, assertNodeIDs(decodeAssertionValue[[]string](t, key, val), false))
+
+		case "node_id_set":
+			assertions = append(assertions, assertNodeIDs(decodeAssertionValue[[]string](t, key, val), true))
+
+		case "ordered_node_ids":
+			assertions = append(assertions, assertOrderedNodeIDs(decodeAssertionValue[[]string](t, key, val)))
+
+		case "path_node_ids":
+			assertions = append(assertions, assertPathNodeIDs(decodeAssertionValue[[][]string](t, key, val)))
 
 		default:
 			t.Fatalf("unknown assertion key: %q", key)
 		}
 	}
 
-	t.Fatal("empty assertion object")
-	return nil
+	if len(assertions) == 0 {
+		t.Fatal("empty assertion object")
+	}
+
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		for _, assertion := range assertions {
+			assertion(t, result, ctx)
+		}
+	}
 }
 
 // errFixtureRollback is returned to unconditionally roll back inline fixture data.
 var errFixtureRollback = errors.New("fixture rollback")
 
 // runReadOnly executes a test case against the pre-loaded dataset.
-func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check func(*testing.T, graph.Result)) {
+func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap opengraph.IDMap, tc testCase, check resultAssertion) {
 	t.Helper()
 
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Query(tc.Cypher, nil)
 		defer result.Close()
-		check(t, result)
+		check(t, collectResult(t, result), newAssertionContext(idMap))
 		return nil
 	})
 	if err != nil {
@@ -216,17 +240,22 @@ func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, tc testCa
 
 // runWithFixture creates inline fixture data in a write transaction, runs the
 // query, checks the assertion, then rolls back so the data doesn't persist.
-func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check func(*testing.T, graph.Result)) {
+func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check resultAssertion) {
 	t.Helper()
 
 	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		if _, err := opengraph.WriteGraphTx(tx, tc.Fixture); err != nil {
+		if err := tx.Nodes().Delete(); err != nil {
+			return fmt.Errorf("clearing graph before fixture: %w", err)
+		}
+
+		idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
+		if err != nil {
 			return fmt.Errorf("creating fixture: %w", err)
 		}
 
 		result := tx.Query(tc.Cypher, nil)
 		defer result.Close()
-		check(t, result)
+		check(t, collectResult(t, result), newAssertionContext(idMap))
 
 		return errFixtureRollback
 	})
@@ -238,60 +267,114 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 
 // --- Assertion implementations ---
 
-func assertNonEmpty(t *testing.T, result graph.Result) {
+type resultAssertion func(*testing.T, queryResult, assertionContext)
+
+type assertionContext struct {
+	fixtureIDByID map[graph.ID]string
+}
+
+func newAssertionContext(idMap opengraph.IDMap) assertionContext {
+	ctx := assertionContext{
+		fixtureIDByID: make(map[graph.ID]string, len(idMap)),
+	}
+
+	for fixtureID, dbID := range idMap {
+		ctx.fixtureIDByID[dbID] = fixtureID
+	}
+
+	return ctx
+}
+
+func (s assertionContext) fixtureID(t *testing.T, dbID graph.ID) string {
 	t.Helper()
-	if !result.Next() {
-		if err := result.Error(); err != nil {
-			t.Fatalf("query error: %v", err)
-		}
+
+	if fixtureID, found := s.fixtureIDByID[dbID]; found {
+		return fixtureID
+	}
+
+	t.Fatalf("database node ID %d was not found in the assertion fixture ID map", dbID)
+	return ""
+}
+
+type resultRow struct {
+	keys   []string
+	values []any
+}
+
+type queryResult struct {
+	rows   []resultRow
+	mapper graph.ValueMapper
+}
+
+func collectResult(t *testing.T, result graph.Result) queryResult {
+	t.Helper()
+
+	collected := queryResult{
+		mapper: result.Mapper(),
+	}
+
+	for result.Next() {
+		collected.rows = append(collected.rows, resultRow{
+			keys:   append([]string(nil), result.Keys()...),
+			values: append([]any(nil), result.Values()...),
+		})
+	}
+
+	if err := result.Error(); err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+
+	return collected
+}
+
+func decodeAssertionValue[T any](t *testing.T, key string, raw json.RawMessage) T {
+	t.Helper()
+
+	var value T
+	if err := json.Unmarshal(raw, &value); err != nil {
+		t.Fatalf("failed to decode assertion %q: %v", key, err)
+	}
+
+	return value
+}
+
+func assertNonEmpty(t *testing.T, result queryResult, _ assertionContext) {
+	t.Helper()
+	if len(result.rows) == 0 {
 		t.Fatal("expected non-empty result set")
 	}
 }
 
-func assertEmpty(t *testing.T, result graph.Result) {
+func assertEmpty(t *testing.T, result queryResult, _ assertionContext) {
 	t.Helper()
-	if result.Next() {
-		t.Fatal("expected empty result set but got rows")
-	}
-	if err := result.Error(); err != nil {
-		t.Fatalf("query error: %v", err)
+	if len(result.rows) > 0 {
+		t.Fatalf("expected empty result set but got %d rows", len(result.rows))
 	}
 }
 
-func assertNoError(t *testing.T, result graph.Result) {
+func assertNoError(t *testing.T, _ queryResult, _ assertionContext) {
 	t.Helper()
-	for result.Next() {
-	}
-	if err := result.Error(); err != nil {
-		t.Fatalf("query error: %v", err)
-	}
 }
 
-func assertRowCount(n int) func(*testing.T, graph.Result) {
-	return func(t *testing.T, result graph.Result) {
+func assertRowCount(n int) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
-		count := 0
-		for result.Next() {
-			count++
-		}
-		if err := result.Error(); err != nil {
-			t.Fatalf("query error: %v", err)
-		}
-		if count != n {
+		if count := len(result.rows); count != n {
 			t.Fatalf("row count: got %d, want %d", count, n)
 		}
 	}
 }
 
-func assertAtLeastInt64(min int64) func(*testing.T, graph.Result) {
-	return func(t *testing.T, result graph.Result) {
+func assertAtLeastInt64(min int64) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
-		if !result.Next() {
+		if len(result.rows) == 0 {
 			t.Fatal("no rows returned")
 		}
-		val, ok := result.Values()[0].(int64)
+		val, ok := asInt64(firstScalarValue(t, result))
 		if !ok {
-			t.Fatalf("expected int64, got %T: %v", result.Values()[0], result.Values()[0])
+			value := firstScalarValue(t, result)
+			t.Fatalf("expected integer, got %T: %v", value, value)
 		}
 		if val < min {
 			t.Fatalf("got %d, want >= %d", val, min)
@@ -299,15 +382,16 @@ func assertAtLeastInt64(min int64) func(*testing.T, graph.Result) {
 	}
 }
 
-func assertExactInt64(expected int64) func(*testing.T, graph.Result) {
-	return func(t *testing.T, result graph.Result) {
+func assertExactInt64(expected int64) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
-		if !result.Next() {
-			t.Fatal("no rows returned")
+		if len(result.rows) != 1 {
+			t.Fatalf("exact integer assertion expected one row, got %d", len(result.rows))
 		}
-		val, ok := result.Values()[0].(int64)
+		val, ok := asInt64(firstScalarValue(t, result))
 		if !ok {
-			t.Fatalf("expected int64, got %T: %v", result.Values()[0], result.Values()[0])
+			value := firstScalarValue(t, result)
+			t.Fatalf("expected integer, got %T: %v", value, value)
 		}
 		if val != expected {
 			t.Fatalf("got %d, want %d", val, expected)
@@ -315,24 +399,192 @@ func assertExactInt64(expected int64) func(*testing.T, graph.Result) {
 	}
 }
 
-func assertContainsNodeWithProp(key, expected string) func(*testing.T, graph.Result) {
-	return func(t *testing.T, result graph.Result) {
+func firstScalarValue(t *testing.T, result queryResult) any {
+	t.Helper()
+
+	if len(result.rows) == 0 {
+		t.Fatal("no rows returned")
+	}
+
+	if len(result.rows[0].values) == 0 {
+		t.Fatal("first row has no values")
+	}
+
+	return result.rows[0].values[0]
+}
+
+func asInt64(value any) (int64, bool) {
+	switch typedValue := value.(type) {
+	case int:
+		return int64(typedValue), true
+	case int8:
+		return int64(typedValue), true
+	case int16:
+		return int64(typedValue), true
+	case int32:
+		return int64(typedValue), true
+	case int64:
+		return typedValue, true
+	case uint:
+		if uint64(typedValue) <= math.MaxInt64 {
+			return int64(typedValue), true
+		}
+	case uint8:
+		return int64(typedValue), true
+	case uint16:
+		return int64(typedValue), true
+	case uint32:
+		return int64(typedValue), true
+	case uint64:
+		if typedValue <= math.MaxInt64 {
+			return int64(typedValue), true
+		}
+	case float32:
+		if math.Trunc(float64(typedValue)) == float64(typedValue) {
+			return int64(typedValue), true
+		}
+	case float64:
+		if math.Trunc(typedValue) == typedValue {
+			return int64(typedValue), true
+		}
+	}
+
+	return 0, false
+}
+
+func assertContainsNodeWithProp(key, expected string) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
-		mapper := result.Mapper()
-		for result.Next() {
-			for _, rawVal := range result.Values() {
+		for _, row := range result.rows {
+			for _, rawVal := range row.values {
 				var node graph.Node
-				if mapper.Map(rawVal, &node) {
+				if result.mapper.Map(rawVal, &node) {
 					if s, err := node.Properties.Get(key).String(); err == nil && s == expected {
 						return
 					}
 				}
 			}
 		}
-		if err := result.Error(); err != nil {
-			t.Fatalf("query error: %v", err)
-		}
 		t.Fatalf("no row contains a node with %s = %q", key, expected)
 	}
 }
 
+func assertNodeIDs(expected []string, unique bool) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		got := collectNodeIDs(t, result, ctx, unique)
+		assertStringMultiset(t, got, expected, "node IDs")
+	}
+}
+
+func assertOrderedNodeIDs(expected []string) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for rowIdx, row := range result.rows {
+			var found bool
+			for _, rawVal := range row.values {
+				var node graph.Node
+				if result.mapper.Map(rawVal, &node) {
+					got = append(got, ctx.fixtureID(t, node.ID))
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Fatalf("row %d did not contain a node value", rowIdx)
+			}
+		}
+
+		if strings.Join(got, "\x00") != strings.Join(expected, "\x00") {
+			t.Fatalf("ordered node IDs mismatch:\n  got:  %v\n  want: %v", got, expected)
+		}
+	}
+}
+
+func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, unique bool) []string {
+	t.Helper()
+
+	ids := make([]string, 0, len(result.rows))
+	seen := map[string]bool{}
+
+	for _, row := range result.rows {
+		for _, rawVal := range row.values {
+			var node graph.Node
+			if result.mapper.Map(rawVal, &node) {
+				fixtureID := ctx.fixtureID(t, node.ID)
+				if unique {
+					if seen[fixtureID] {
+						continue
+					}
+					seen[fixtureID] = true
+				}
+
+				ids = append(ids, fixtureID)
+			}
+		}
+	}
+
+	return ids
+}
+
+func assertPathNodeIDs(expected [][]string) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for _, row := range result.rows {
+			for _, rawVal := range row.values {
+				var path graph.Path
+				if result.mapper.Map(rawVal, &path) {
+					got = append(got, pathNodeIDSignature(t, path, ctx))
+				}
+			}
+		}
+
+		want := make([]string, len(expected))
+		for idx, pathNodeIDs := range expected {
+			want[idx] = strings.Join(pathNodeIDs, "->")
+		}
+
+		assertStringMultiset(t, got, want, "path node ID sequences")
+	}
+}
+
+func pathNodeIDSignature(t *testing.T, path graph.Path, ctx assertionContext) string {
+	t.Helper()
+
+	nodeIDs := make([]string, len(path.Nodes))
+	for idx, node := range path.Nodes {
+		if node == nil {
+			t.Fatalf("path contains nil node at index %d", idx)
+		}
+
+		nodeIDs[idx] = ctx.fixtureID(t, node.ID)
+	}
+
+	return strings.Join(nodeIDs, "->")
+}
+
+func assertStringMultiset(t *testing.T, got, expected []string, label string) {
+	t.Helper()
+
+	got = append([]string(nil), got...)
+	expected = append([]string(nil), expected...)
+
+	sort.Strings(got)
+	sort.Strings(expected)
+
+	if len(got) != len(expected) {
+		t.Fatalf("%s count: got %d, want %d\n  got:  %v\n  want: %v", label, len(got), len(expected), got, expected)
+	}
+
+	for idx := range got {
+		if got[idx] != expected[idx] {
+			t.Fatalf("%s mismatch at index %d:\n  got:  %v\n  want: %v", label, idx, got, expected)
+		}
+	}
+}

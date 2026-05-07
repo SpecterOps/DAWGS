@@ -9,7 +9,7 @@
         ],
         "edges": []
       },
-      "assert": {"contains_node_with_prop": ["name", "RENAMED"]}
+      "assert": {"row_count": 1, "node_ids": ["n3"], "contains_node_with_prop": ["name", "RENAMED"]}
     }
   ]
 }

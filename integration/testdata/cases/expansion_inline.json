@@ -14,7 +14,7 @@
           {"start_id": "n2", "end_id": "n3", "kind": "EdgeKind2"}
         ]
       },
-      "assert": {"contains_node_with_prop": ["name", "n3"]}
+      "assert": {"node_ids": ["n3"]}
     },
     {
       "name": "unbounded traversal filtering every traversed edge by a property",
@@ -31,7 +31,7 @@
           {"start_id": "n2", "end_id": "n3", "kind": "EdgeKind2", "properties": {"prop": "a"}}
         ]
       },
-      "assert": {"contains_node_with_prop": ["name", "n3"]}
+      "assert": {"node_ids": ["n3"]}
     },
     {
       "name": "unbounded expansion followed by a single fixed step",
@@ -47,7 +47,7 @@
           {"start_id": "mid", "end_id": "leaf", "kind": "EdgeKind2"}
         ]
       },
-      "assert": {"contains_node_with_prop": ["name", "leaf"]}
+      "assert": {"node_ids": ["leaf"]}
     },
     {
       "name": "fixed step followed by a bounded variable-length expansion",
@@ -65,7 +65,7 @@
           {"start_id": "hop1", "end_id": "hop2", "kind": "EdgeKind2"}
         ]
       },
-      "assert": {"contains_node_with_prop": ["name", "hop2"]}
+      "assert": {"node_ids": ["hop2"]}
     },
     {
       "name": "unbounded expansion to a typed endpoint returning the source node",
@@ -77,7 +77,7 @@
         ],
         "edges": [{"start_id": "n2", "end_id": "n3", "kind": "EdgeKind1"}]
       },
-      "assert": {"contains_node_with_prop": ["name", "n2"]}
+      "assert": {"node_ids": ["n2"]}
     },
     {
       "name": "bounded variable-length expansion followed by a single fixed step",
@@ -95,7 +95,7 @@
           {"start_id": "mid", "end_id": "leaf", "kind": "EdgeKind1"}
         ]
       },
-      "assert": {"contains_node_with_prop": ["name", "leaf"]}
+      "assert": {"node_ids": ["leaf"]}
     },
     {
       "name": "two unbounded expansions joined through a typed fixed step",
@@ -113,7 +113,7 @@
           {"start_id": "bridge", "end_id": "leaf", "kind": "EdgeKind1"}
         ]
       },
-      "assert": {"contains_node_with_prop": ["name", "leaf"]}
+      "assert": {"node_ids": ["leaf"]}
     },
     {
       "name": "bind expansion path filtered by a split membership check on the endpoint",
@@ -125,7 +125,7 @@
         ],
         "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"path_node_ids": [["src", "dst"]]}
     },
     {
       "name": "bind expansion path filtering both endpoints using ends-with on objectid",
@@ -137,7 +137,7 @@
         ],
         "edges": [{"start_id": "src", "end_id": "tgt", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"path_node_ids": [["src", "tgt"]]}
     }
   ]
 }

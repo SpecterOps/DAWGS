@@ -4,7 +4,7 @@
       "name": "create a node with a kind label and string property",
       "cypher": "CREATE (n:NodeKind1 {name: 'Bob'}) RETURN n",
       "fixture": {"nodes": [], "edges": []},
-      "assert": {"contains_node_with_prop": ["name", "Bob"]}
+      "assert": {"row_count": 1, "contains_node_with_prop": ["name", "Bob"]}
     },
     {
       "name": "create a node with a kind label and no return",
@@ -16,19 +16,19 @@
       "name": "create an unlabeled node",
       "cypher": "CREATE (n) RETURN n",
       "fixture": {"nodes": [], "edges": []},
-      "assert": "non_empty"
+      "assert": {"row_count": 1}
     },
     {
       "name": "create two typed nodes connected by a directed edge",
       "cypher": "CREATE (a:NodeKind1)-[r:EdgeKind1]->(b:NodeKind2) RETURN r",
       "fixture": {"nodes": [], "edges": []},
-      "assert": "non_empty"
+      "assert": {"row_count": 1}
     },
     {
       "name": "create two typed nodes connected by a reverse edge",
       "cypher": "CREATE (a:NodeKind1)<-[r:EdgeKind1]-(b:NodeKind2) RETURN r",
       "fixture": {"nodes": [], "edges": []},
-      "assert": "non_empty"
+      "assert": {"row_count": 1}
     },
     {
       "name": "match two rows then create one node per row",
@@ -52,7 +52,7 @@
         ],
         "edges": []
       },
-      "assert": {"contains_node_with_prop": ["source", "source-a"]}
+      "assert": {"row_count": 1, "contains_node_with_prop": ["source", "source-a"]}
     },
     {
       "name": "match two rows then create one edge per row",
@@ -76,7 +76,7 @@
       "name": "create a named path and return it",
       "cypher": "CREATE p = (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(:NodeKind2 {name: 'test'}) RETURN p",
       "fixture": {"nodes": [], "edges": []},
-      "assert": "non_empty"
+      "assert": {"row_count": 1}
     }
   ]
 }
