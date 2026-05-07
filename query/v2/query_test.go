@@ -148,7 +148,10 @@ func TestScopedRelationshipPatternControls(t *testing.T) {
 
 func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().WithRelationshipDirection(graph.Direction(99)).Return(v2.Relationship()).Build()
-	require.ErrorContains(t, err, "invalid relationship direction: invalid")
+	require.ErrorContains(t, err, "unsupported relationship direction: invalid")
+
+	_, err = v2.New().WithRelationshipDirection(graph.DirectionBoth).Return(v2.Relationship()).Build()
+	require.ErrorContains(t, err, "unsupported relationship direction: both")
 }
 
 func TestProjectionAndOrderHelpers(t *testing.T) {

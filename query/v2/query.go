@@ -607,11 +607,11 @@ func (s *builder) WithAllShortestPaths() QueryBuilder {
 
 func (s *builder) WithRelationshipDirection(direction graph.Direction) QueryBuilder {
 	switch direction {
-	case graph.DirectionInbound, graph.DirectionOutbound, graph.DirectionBoth:
+	case graph.DirectionInbound, graph.DirectionOutbound:
 		s.relationshipDirection = direction
 
 	default:
-		s.trackError(fmt.Errorf("invalid relationship direction: %s", direction))
+		s.trackError(fmt.Errorf("unsupported relationship direction: %s", direction))
 	}
 
 	return s
