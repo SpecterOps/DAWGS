@@ -220,6 +220,38 @@ func TestUnsupportedOrderByTypeReturnsError(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported expression type: int")
 }
 
+func TestRawProjectionAndOrderInputsAreValidated(t *testing.T) {
+	_, err := v2.New().Return(&cypher.Return{}).Build()
+	require.ErrorContains(t, err, "return clause has nil projection")
+
+	returnClause := cypher.NewReturn()
+	returnClause.NewProjection(false).Items = append(returnClause.Projection.Items, &cypher.ProjectionItem{})
+	_, err = v2.New().Return(returnClause).Build()
+	require.ErrorContains(t, err, "projection item has nil expression")
+
+	_, err = v2.New().Return(v2.Node()).OrderBy(&cypher.SortItem{}).Build()
+	require.ErrorContains(t, err, "sort item has nil expression")
+
+	_, err = v2.New().Return(v2.Node()).OrderBy(&cypher.Order{
+		Items: []*cypher.SortItem{{}},
+	}).Build()
+	require.ErrorContains(t, err, "sort item has nil expression")
+}
+
+func TestRawProjectionAndOrderInputsAreNormalized(t *testing.T) {
+	returnClause := cypher.NewReturn()
+	returnClause.NewProjection(false).Items = append(returnClause.Projection.Items, v2.Node().ID())
+
+	preparedQuery, err := v2.New().Return(returnClause).OrderBy(&cypher.Order{
+		Items: []*cypher.SortItem{
+			v2.Desc(v2.Node().Property("name")),
+		},
+	}).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return id(n) order by n.name desc", renderPrepared(t, preparedQuery))
+}
+
 func TestInvalidHelperInputsReturnBuildErrors(t *testing.T) {
 	cases := map[string]struct {
 		builder v2.QueryBuilder

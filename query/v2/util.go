@@ -147,6 +147,15 @@ func invalidExpression(err error) *cypher.FunctionInvocation {
 	return cypher.WithErrors(cypher.NewSimpleFunctionInvocation("__invalid_expression__"), err)
 }
 
+func isNilPointer(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	reflectValue := reflect.ValueOf(value)
+	return reflectValue.Kind() == reflect.Ptr && reflectValue.IsNil()
+}
+
 func expressionOrError(value any) cypher.Expression {
 	if expression, err := projectionExpression(value); err != nil {
 		return invalidExpression(err)
@@ -177,6 +186,10 @@ func propertyLookupOrError(reference any, propertyName string) cypher.Expression
 }
 
 func projectionExpression(value any) (cypher.Expression, error) {
+	if isNilPointer(value) {
+		return nil, fmt.Errorf("expression is nil: %T", value)
+	}
+
 	switch typedValue := value.(type) {
 	case kindContinuation:
 		return kindProjectionExpression(typedValue.role, typedValue.identifier)
@@ -256,10 +269,22 @@ func projectionExpression(value any) (cypher.Expression, error) {
 	}
 }
 
+func validateExpressionValue(expression cypher.Expression, context string) error {
+	if isNilPointer(expression) {
+		return fmt.Errorf("%s has nil expression", context)
+	}
+
+	return collectModelErrors(expression)
+}
+
 func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
 	if projectionItem, typeOK := value.(*cypher.ProjectionItem); typeOK {
-		if projectionItem.Expression == nil {
-			return nil, fmt.Errorf("projection item has nil expression")
+		if projectionItem == nil {
+			return nil, fmt.Errorf("projection item is nil")
+		}
+
+		if err := validateExpressionValue(projectionItem.Expression, "projection item"); err != nil {
+			return nil, err
 		}
 
 		if err := collectModelErrors(projectionItem); err != nil {
@@ -278,8 +303,12 @@ func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
 
 func sortItemFromValue(value any) (*cypher.SortItem, error) {
 	if sortItem, typeOK := value.(*cypher.SortItem); typeOK {
-		if sortItem.Expression == nil {
-			return nil, fmt.Errorf("sort item has nil expression")
+		if sortItem == nil {
+			return nil, fmt.Errorf("sort item is nil")
+		}
+
+		if err := validateExpressionValue(sortItem.Expression, "sort item"); err != nil {
+			return nil, err
 		}
 
 		if err := collectModelErrors(sortItem); err != nil {
@@ -297,6 +326,46 @@ func sortItemFromValue(value any) (*cypher.SortItem, error) {
 			Expression: expression,
 		}, nil
 	}
+}
+
+func projectionItemsFromReturn(returnClause *cypher.Return) ([]*cypher.ProjectionItem, error) {
+	if returnClause == nil {
+		return nil, fmt.Errorf("return clause is nil")
+	}
+
+	if returnClause.Projection == nil {
+		return nil, fmt.Errorf("return clause has nil projection")
+	}
+
+	projectionItems := make([]*cypher.ProjectionItem, 0, len(returnClause.Projection.Items))
+
+	for _, returnItem := range returnClause.Projection.Items {
+		if projectionItem, err := projectionItemFromValue(returnItem); err != nil {
+			return nil, err
+		} else {
+			projectionItems = append(projectionItems, projectionItem)
+		}
+	}
+
+	return projectionItems, nil
+}
+
+func sortItemsFromOrder(order *cypher.Order) ([]*cypher.SortItem, error) {
+	if order == nil {
+		return nil, fmt.Errorf("order is nil")
+	}
+
+	sortItems := make([]*cypher.SortItem, 0, len(order.Items))
+
+	for _, sortItem := range order.Items {
+		if normalizedSortItem, err := sortItemFromValue(sortItem); err != nil {
+			return nil, err
+		} else {
+			sortItems = append(sortItems, normalizedSortItem)
+		}
+	}
+
+	return sortItems, nil
 }
 
 type identifierSet struct {
@@ -366,13 +435,33 @@ func (s *identifierSet) CollectFromValue(value any) error {
 		return nil
 
 	case *cypher.Return:
-		return s.CollectFromExpression(typedValue)
+		if projectionItems, err := projectionItemsFromReturn(typedValue); err != nil {
+			return err
+		} else {
+			for _, projectionItem := range projectionItems {
+				if err := s.CollectFromExpression(projectionItem); err != nil {
+					return err
+				}
+			}
+		}
 
 	case *cypher.Order:
-		return s.CollectFromExpression(typedValue)
+		if sortItems, err := sortItemsFromOrder(typedValue); err != nil {
+			return err
+		} else {
+			for _, sortItem := range sortItems {
+				if err := s.CollectFromExpression(sortItem); err != nil {
+					return err
+				}
+			}
+		}
 
 	case *cypher.SortItem:
-		return s.CollectFromExpression(typedValue)
+		if sortItem, err := sortItemFromValue(typedValue); err != nil {
+			return err
+		} else {
+			return s.CollectFromExpression(sortItem)
+		}
 
 	case *cypher.Set:
 		return s.CollectFromExpression(typedValue)
@@ -557,6 +646,11 @@ func collectModelErrorsFromKnownValues(values ...any) error {
 		case nil:
 			continue
 
+		case []any:
+			if err := collectModelErrorsFromKnownValues(typedValue...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
 		case []cypher.SyntaxNode:
 			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
 				modelErrors = append(modelErrors, err)
@@ -587,6 +681,32 @@ func collectModelErrorsFromKnownValues(values ...any) error {
 				modelErrors = append(modelErrors, err)
 			}
 
+		case *cypher.Order:
+			if _, err := sortItemsFromOrder(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.ProjectionItem:
+			if _, err := projectionItemFromValue(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.Return:
+			if _, err := projectionItemsFromReturn(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.SortItem:
+			if _, err := sortItemFromValue(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			} else if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
 		case *cypher.ArithmeticExpression,
 			*cypher.Comparison,
 			*cypher.Conjunction,
@@ -601,18 +721,14 @@ func collectModelErrorsFromKnownValues(values ...any) error {
 			*cypher.ListLiteral,
 			*cypher.Negation,
 			*cypher.NodePattern,
-			*cypher.Order,
 			*cypher.Parenthetical,
 			*cypher.PatternPredicate,
-			*cypher.ProjectionItem,
 			*cypher.PropertyLookup,
 			*cypher.RelationshipPattern,
 			*cypher.Remove,
 			*cypher.RemoveItem,
-			*cypher.Return,
 			*cypher.Set,
 			*cypher.SetItem,
-			*cypher.SortItem,
 			*cypher.UnaryAddOrSubtractExpression,
 			*cypher.UpdatingClause,
 			*cypher.Variable:

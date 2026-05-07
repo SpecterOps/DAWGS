@@ -940,12 +940,18 @@ func (s *builder) buildProjectionOrder() (*cypher.Order, error) {
 		for _, untypedSortItem := range s.sortItems {
 			switch typedSortItem := untypedSortItem.(type) {
 			case *cypher.Order:
-				for _, sortItem := range typedSortItem.Items {
-					orderByNode.Items = append(orderByNode.Items, sortItem)
+				if sortItems, err := sortItemsFromOrder(typedSortItem); err != nil {
+					return nil, err
+				} else {
+					orderByNode.Items = append(orderByNode.Items, sortItems...)
 				}
 
 			case *cypher.SortItem:
-				orderByNode.Items = append(orderByNode.Items, typedSortItem)
+				if sortItem, err := sortItemFromValue(typedSortItem); err != nil {
+					return nil, err
+				} else {
+					orderByNode.Items = append(orderByNode.Items, sortItem)
+				}
 
 			default:
 				if sortItem, err := sortItemFromValue(typedSortItem); err != nil {
@@ -978,11 +984,11 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 		for _, nextProjection := range s.projections {
 			switch typedNextProjection := nextProjection.(type) {
 			case *cypher.Return:
-				for _, returnItem := range typedNextProjection.Projection.Items {
-					if typedReturnItem, typeOK := returnItem.(*cypher.ProjectionItem); !typeOK {
-						return fmt.Errorf("invalid type for return: %T", returnItem)
-					} else {
-						projection.AddItem(typedReturnItem)
+				if projectionItems, err := projectionItemsFromReturn(typedNextProjection); err != nil {
+					return err
+				} else {
+					for _, projectionItem := range projectionItems {
+						projection.AddItem(projectionItem)
 					}
 				}
 
