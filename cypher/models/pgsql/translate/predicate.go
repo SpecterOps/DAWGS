@@ -83,6 +83,8 @@ func (s *Translator) translatePatternPredicate() error {
 	return nil
 }
 
+// buildPatternPredicates is used by translateMatch to resolve deferred pattern predicate
+// futures collected for the current MATCH/OPTIONAL MATCH query part's WHERE expressions
 func (s *Translator) buildPatternPredicates() error {
 	for _, predicateFuture := range s.query.CurrentPart().patternPredicates {
 		var (
@@ -142,7 +144,17 @@ func (s *Translator) buildPatternPredicates() error {
 					})
 				}
 			} else {
-				if traversalStepQuery, err := s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep); err != nil {
+				var (
+					traversalStepQuery pgsql.Query
+					err                error
+				)
+				if traversalStep.Direction != graph.DirectionBoth && (traversalStep.LeftNodeBound || traversalStep.RightNodeBound) {
+					traversalStepQuery, err = s.buildTraversalPatternRootWithOuterCorrelation(traversalStep.Frame, traversalStep)
+				} else {
+					traversalStepQuery, err = s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep)
+				}
+
+				if err != nil {
 					return err
 				} else {
 					subQuery.AddCTE(pgsql.CommonTableExpression{

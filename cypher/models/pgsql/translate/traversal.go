@@ -51,7 +51,8 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition)},
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
+				},
 			}},
 		})
 
@@ -136,6 +137,96 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	return pgsql.Query{
 		Body: nextSelect,
 	}, nil
+}
+
+// buildTraversalPatternRootWithOuterCorrelation constructs a traversal pattern root, preserving the correlation to
+// the outer query part's context
+func (s *Translator) buildTraversalPatternRootWithOuterCorrelation(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
+	if traversalStep.Direction == graph.DirectionBoth {
+		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
+	}
+
+	var (
+		// Partition right-node constraints: only locally-scoped terms go into JOIN ON.
+		// Constraints that reference comma-connected CTEs (e.g. s0.i0 from a prior WITH)
+		// must remain in WHERE — they are out of scope inside an explicit JOIN chain.
+		rightJoinLocal, rightJoinExternal = partitionConstraintByLocality(
+			traversalStep.RightNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect = pgsql.Select{
+			Projection: traversalStep.Projection,
+		}
+	)
+
+	if traversalStep.LeftNodeBound {
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
+				},
+			}},
+		})
+
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	} else if traversalStep.RightNodeBound {
+		// Right node was already materialized in a previous frame.
+		//
+		// We have to promote that frame to the explicit JOIN root so that RightNodeJoinCondition can reference
+		// it in the ON clause. PostgreSQL forbids referencing a comma-joined table inside a subsequent
+		// explicit JOIN's ON clause.
+		leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
+				},
+			}},
+		})
+
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinLocal, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	} else {
+		// There is nothing to do to preserve outer bounds correlation - do the unbound traversal step
+		return s.buildTraversalPatternRoot(partFrame, traversalStep)
+	}
 }
 
 func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
