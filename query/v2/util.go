@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/walk"
@@ -195,6 +196,32 @@ func sortedPropertyKeys(properties map[string]any) []string {
 
 	sort.Strings(keys)
 	return keys
+}
+
+func isCypherSymbolStart(char byte) bool {
+	return char == '_' || (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z')
+}
+
+func isCypherSymbolPart(char byte) bool {
+	return isCypherSymbolStart(char) || (char >= '0' && char <= '9')
+}
+
+func validateCypherSymbol(symbol, context string) error {
+	if strings.TrimSpace(symbol) == "" {
+		return fmt.Errorf("%s is empty", context)
+	}
+
+	if !isCypherSymbolStart(symbol[0]) {
+		return fmt.Errorf("%s has invalid symbol %q", context, symbol)
+	}
+
+	for idx := 1; idx < len(symbol); idx++ {
+		if !isCypherSymbolPart(symbol[idx]) {
+			return fmt.Errorf("%s has invalid symbol %q", context, symbol)
+		}
+	}
+
+	return nil
 }
 
 func projectionExpression(value any) (cypher.Expression, error) {
@@ -419,6 +446,12 @@ func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
 
 		if err := validateExpressionValue(projectionItem.Expression, "projection item"); err != nil {
 			return nil, err
+		}
+
+		if projectionItem.Alias != nil {
+			if err := validateCypherSymbol(projectionItem.Alias.Symbol, "projection alias"); err != nil {
+				return nil, err
+			}
 		}
 
 		if err := collectModelErrors(projectionItem); err != nil {

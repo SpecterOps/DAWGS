@@ -171,6 +171,10 @@ func TestInvalidScopeAliasesReturnBuildErrors(t *testing.T) {
 	duplicateAliasScope := v2.NewScope("path", "node", "node", "relationship", "end")
 	_, err = duplicateAliasScope.New().Return(duplicateAliasScope.Start()).Build()
 	require.ErrorContains(t, err, `scope aliases node and start both use "node"`)
+
+	invalidAliasScope := v2.NewScope("path", "bad name", "start", "relationship", "end")
+	_, err = invalidAliasScope.New().Return(invalidAliasScope.Node()).Build()
+	require.ErrorContains(t, err, `scope alias node has invalid symbol "bad name"`)
 }
 
 func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
@@ -213,6 +217,17 @@ func TestProjectionAliasDoesNotCreateMatchInference(t *testing.T) {
 
 	require.Equal(t, "return 1 as one", renderPrepared(t, preparedQuery))
 	require.Empty(t, preparedQuery.Parameters)
+}
+
+func TestInvalidProjectionAliasReturnsBuildError(t *testing.T) {
+	_, err := v2.New().Return(v2.As(v2.Literal(1), "bad alias")).Build()
+	require.ErrorContains(t, err, `projection alias has invalid symbol "bad alias"`)
+
+	_, err = v2.New().Return(&cypher.ProjectionItem{
+		Expression: v2.Literal(1),
+		Alias:      cypher.NewVariableWithSymbol("1bad"),
+	}).Build()
+	require.ErrorContains(t, err, `projection alias has invalid symbol "1bad"`)
 }
 
 func TestUnsupportedOrderByTypeReturnsError(t *testing.T) {

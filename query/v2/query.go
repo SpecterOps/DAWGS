@@ -3,7 +3,6 @@ package v2
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/graph"
@@ -89,8 +88,8 @@ func validateRuntimeIdentifiers(identifiers runtimeIdentifiers) []error {
 	)
 
 	for _, alias := range aliases {
-		if strings.TrimSpace(alias.value) == "" {
-			errs = append(errs, fmt.Errorf("scope alias %s is empty", alias.role))
+		if err := validateCypherSymbol(alias.value, "scope alias "+alias.role); err != nil {
+			errs = append(errs, err)
 			continue
 		}
 
