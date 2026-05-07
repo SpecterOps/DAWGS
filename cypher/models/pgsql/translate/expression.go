@@ -178,6 +178,36 @@ func rewritePropertyLookupOperator(propertyLookup *pgsql.BinaryExpression, dataT
 	}
 }
 
+func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
+	switch dataType {
+	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric, pgsql.Text:
+		return true
+
+	default:
+		return false
+	}
+}
+
+func rewriteJSONScalarEqualityOperand(expression pgsql.Expression) (pgsql.Expression, bool) {
+	if literal, isLiteral := expression.(pgsql.Literal); isLiteral && literal.Null {
+		return nil, false
+	}
+
+	if typedExpression, isTypeHinted := expression.(pgsql.TypeHinted); !isTypeHinted {
+		return nil, false
+	} else if dataType := typedExpression.TypeHint(); !isJSONScalarEqualityType(dataType) {
+		return nil, false
+	} else {
+		return pgsql.FunctionCall{
+			Function: pgsql.FunctionToJSONB,
+			Parameters: []pgsql.Expression{
+				pgsql.NewTypeCast(expression, dataType),
+			},
+			CastType: pgsql.JSONB,
+		}, true
+	}
+}
+
 func lookupRequiresElementType(typeHint pgsql.DataType, operator pgsql.Operator, otherOperand pgsql.SyntaxNode) bool {
 	if typeHint.IsArrayType() {
 		switch operator {
@@ -215,8 +245,10 @@ func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
 		rightPropertyLookup, hasRightPropertyLookup = expressionToPropertyLookupBinaryExpression(expression.ROperand)
 	)
 
-	// Ensure that direct property comparisons prefer JSONB - JSONB
-	if hasLeftPropertyLookup && hasRightPropertyLookup {
+	// Ensure that direct property comparisons prefer JSONB - JSONB. Non-comparison operators must keep their
+	// property lookups text-oriented until rewriteBinaryExpression has enough context to disambiguate them.
+	if hasLeftPropertyLookup && hasRightPropertyLookup &&
+		(pgsql.OperatorIsComparator(expression.Operator) || expression.Operator == pgsql.OperatorCypherNotEquals) {
 		leftPropertyLookup.Operator = pgsql.OperatorJSONField
 		rightPropertyLookup.Operator = pgsql.OperatorJSONField
 
@@ -247,7 +279,10 @@ func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
 				}
 
 			case pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals:
-				if rOperandTypeHint == pgsql.AnyArray {
+				if rewrittenROperand, rewritten := rewriteJSONScalarEqualityOperand(expression.ROperand); rewritten {
+					leftPropertyLookup.Operator = pgsql.OperatorJSONField
+					expression.ROperand = rewrittenROperand
+				} else if rOperandTypeHint == pgsql.AnyArray {
 					break
 				} else {
 					expression.LOperand = rewritePropertyLookupOperator(leftPropertyLookup, rOperandTypeHint)
@@ -278,7 +313,10 @@ func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
 				// for special (like, ilike, etc.) character classes
 
 			case pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals:
-				if lOperandTypeHint == pgsql.AnyArray {
+				if rewrittenLOperand, rewritten := rewriteJSONScalarEqualityOperand(expression.LOperand); rewritten {
+					expression.LOperand = rewrittenLOperand
+					rightPropertyLookup.Operator = pgsql.OperatorJSONField
+				} else if lOperandTypeHint == pgsql.AnyArray {
 					break
 				} else {
 					expression.ROperand = rewritePropertyLookupOperator(rightPropertyLookup, lOperandTypeHint)
@@ -617,12 +655,17 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 	return nil
 }
 
-// isConcatenationOperation accepts two pgsql.DataType values and attempts to determine if the value are able to be
-// concatenated.
+func isPropertyLookup(expression pgsql.Expression) bool {
+	_, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression)
+	return isPropertyLookup
+}
+
+// isConcatenationOperation accepts two expressions and their inferred pgsql.DataType values and attempts to determine
+// if the values are able to be concatenated.
 //
 // For further information regarding the conditional logic, please see the PgSQL upstream documentation:
 // https://www.postgresql.org/docs/9.1/functions-string.html
-func isConcatenationOperation(lOperandType, rOperandType pgsql.DataType) bool {
+func isConcatenationOperation(lOperand, rOperand pgsql.Expression, lOperandType, rOperandType pgsql.DataType) bool {
 	// Any use of an array type automatically assumes concatenation
 	if lOperandType.IsArrayType() || rOperandType.IsArrayType() {
 		return true
@@ -633,20 +676,14 @@ func isConcatenationOperation(lOperandType, rOperandType pgsql.DataType) bool {
 	// unknown + text
 	// text + text
 
-	// In the case below where both operands have no type information, no further
-	// intent can be inferred for this operator
-	switch lOperandType {
-	case pgsql.Text:
-		switch rOperandType {
-		case pgsql.Text, pgsql.UnknownDataType:
-			return true
-		}
+	if lOperandType == pgsql.Text || rOperandType == pgsql.Text {
+		return true
+	}
 
-	case pgsql.UnknownDataType:
-		switch rOperandType {
-		case pgsql.Text:
-			return true
-		}
+	// Dynamic properties have no schema-level type information. When both operands are dynamic property lookups,
+	// prefer Cypher's string concatenation form instead of emitting invalid jsonb + jsonb SQL.
+	if lOperandType == pgsql.UnknownDataType && rOperandType == pgsql.UnknownDataType {
+		return isPropertyLookup(lOperand) && isPropertyLookup(rOperand)
 	}
 
 	return false
@@ -689,7 +726,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			return err
 		} else if rOperandType, err := InferExpressionType(newExpression.ROperand); err != nil {
 			return err
-		} else if isConcatenationOperation(lOperandType, rOperandType) {
+		} else if isConcatenationOperation(newExpression.LOperand, newExpression.ROperand, lOperandType, rOperandType) {
 			newExpression.Operator = pgsql.OperatorConcatenate
 		}
 

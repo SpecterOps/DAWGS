@@ -11,6 +11,7 @@ const (
 	FunctionJSONBArrayElementsText   Identifier = "jsonb_array_elements_text"
 	FunctionJSONBBuildObject         Identifier = "jsonb_build_object"
 	FunctionJSONBArrayLength         Identifier = "jsonb_array_length"
+	FunctionToJSONB                  Identifier = "to_jsonb"
 	FunctionArrayLength              Identifier = "array_length"
 	FunctionArrayAggregate           Identifier = "array_agg"
 	FunctionArrayRemove              Identifier = "array_remove"
