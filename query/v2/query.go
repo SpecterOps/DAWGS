@@ -231,11 +231,15 @@ type KindsContinuation interface {
 type Comparable interface {
 	In(value any) cypher.Expression
 	Contains(value any) cypher.Expression
+	StartsWith(value any) cypher.Expression
+	EndsWith(value any) cypher.Expression
 	Equals(value any) cypher.Expression
 	GreaterThan(value any) cypher.Expression
 	GreaterThanOrEqualTo(value any) cypher.Expression
 	LessThan(value any) cypher.Expression
 	LessThanOrEqualTo(value any) cypher.Expression
+	IsNull() cypher.Expression
+	IsNotNull() cypher.Expression
 }
 
 type PropertyContinuation interface {
@@ -275,6 +279,14 @@ func (s *comparisonContinuation) Contains(value any) cypher.Expression {
 	return s.asComparison(cypher.OperatorContains, value)
 }
 
+func (s *comparisonContinuation) StartsWith(value any) cypher.Expression {
+	return s.asComparison(cypher.OperatorStartsWith, value)
+}
+
+func (s *comparisonContinuation) EndsWith(value any) cypher.Expression {
+	return s.asComparison(cypher.OperatorEndsWith, value)
+}
+
 func (s *comparisonContinuation) Equals(value any) cypher.Expression {
 	return s.asComparison(cypher.OperatorEquals, value)
 }
@@ -293,6 +305,14 @@ func (s *comparisonContinuation) LessThan(value any) cypher.Expression {
 
 func (s *comparisonContinuation) LessThanOrEqualTo(value any) cypher.Expression {
 	return s.asComparison(cypher.OperatorLessThanOrEqualTo, value)
+}
+
+func (s *comparisonContinuation) IsNull() cypher.Expression {
+	return cypher.NewComparison(s.qualifier(), cypher.OperatorIs, Literal(nil))
+}
+
+func (s *comparisonContinuation) IsNotNull() cypher.Expression {
+	return cypher.NewComparison(s.qualifier(), cypher.OperatorIsNot, Literal(nil))
 }
 
 type propertyContinuation struct {

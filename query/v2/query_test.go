@@ -111,3 +111,40 @@ func TestUnsupportedOrderByTypeReturnsError(t *testing.T) {
 	_, err := v2.New().Return(v2.Node()).OrderBy(123).Build()
 	require.ErrorContains(t, err, "unsupported expression type: int")
 }
+
+func TestCompatibilityHelpers(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.And(
+			v2.InIDs(v2.NodeID(), 1, 2),
+			v2.KindIn(v2.Node(), graph.StringKind("User")),
+			v2.CaseInsensitiveStringContains(v2.Node().Property("name"), "ADMIN"),
+			v2.IsNotNull(v2.Node().Property("enabled")),
+		),
+	).Return(
+		v2.CountDistinct(v2.Node()),
+		v2.KindsOf(v2.Node()),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) where id(n) in $p0 and n:User and toLower(n.name) contains $p1 and n.enabled is not null return count(distinct n), labels(n)", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": []graph.ID{1, 2},
+		"p1": "admin",
+	}, preparedQuery.Parameters)
+}
+
+func TestUpdateCompatibilityHelpers(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.Node().ID().Equals(1),
+	).Update(
+		v2.AddKind(v2.Node(), graph.StringKind("Enabled")),
+		v2.SetProperties(v2.Node(), map[string]any{"name": "updated"}),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) where id(n) = $p0 set n:Enabled, n.name = $p1", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": 1,
+		"p1": "updated",
+	}, preparedQuery.Parameters)
+}
