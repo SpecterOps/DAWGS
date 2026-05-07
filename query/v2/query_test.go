@@ -31,7 +31,12 @@ func TestQuery(t *testing.T) {
 	cypherQueryStr, err := format.RegularQuery(preparedQuery.Query, false)
 	require.NoError(t, err)
 
-	require.Equal(t, "match (s)-[r]->() where not r:test and not (r:A or r:B) and r.rel_prop <= 1234 and r.other_prop = 5678 and s:test set s.this_prop = 1234 remove e:A:B delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
+	require.Equal(t, "match (s)-[r]->() where not r:test and not (r:A or r:B) and r.rel_prop <= $p0 and r.other_prop = $p1 and s:test set s.this_prop = $p2 remove e:A:B delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
+	require.Equal(t, map[string]any{
+		"p0": 1234,
+		"p1": 5678,
+		"p2": 1234,
+	}, preparedQuery.Parameters)
 
 	preparedQuery, err = v2.New().Create(
 		v2.Node().NodePattern(graph.Kinds{graph.StringKind("A")}, cypher.NewParameter("props", map[string]any{})),
@@ -43,4 +48,7 @@ func TestQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "create (n:A $props)", cypherQueryStr)
+	require.Equal(t, map[string]any{
+		"props": map[string]any{},
+	}, preparedQuery.Parameters)
 }

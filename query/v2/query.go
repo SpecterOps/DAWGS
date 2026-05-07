@@ -44,7 +44,7 @@ var Identifiers = runtimeIdentifiers{
 	end:          "e",
 }
 
-func newLiteral(value any) *cypher.Literal {
+func Literal(value any) *cypher.Literal {
 	if value == nil {
 		return cypher.NewLiteral(nil, true)
 	}
@@ -54,6 +54,65 @@ func newLiteral(value any) *cypher.Literal {
 	}
 
 	return cypher.NewLiteral(value, false)
+}
+
+func Parameter(value any) *cypher.Parameter {
+	if parameter, typeOK := value.(*cypher.Parameter); typeOK {
+		return parameter
+	}
+
+	return &cypher.Parameter{
+		Value: value,
+	}
+}
+
+func NamedParameter(symbol string, value any) *cypher.Parameter {
+	return cypher.NewParameter(symbol, value)
+}
+
+func valueExpression(value any) cypher.Expression {
+	switch typedValue := value.(type) {
+	case *cypher.Parameter:
+		return typedValue
+	case *cypher.Literal:
+		return typedValue
+	case *cypher.Variable:
+		return typedValue
+	case *cypher.PropertyLookup:
+		return typedValue
+	case *cypher.FunctionInvocation:
+		return typedValue
+	case *cypher.Parenthetical:
+		return typedValue
+	case *cypher.Comparison:
+		return typedValue
+	case *cypher.Negation:
+		return typedValue
+	case *cypher.Conjunction:
+		return typedValue
+	case *cypher.Disjunction:
+		return typedValue
+	case *cypher.ExclusiveDisjunction:
+		return typedValue
+	case *cypher.KindMatcher:
+		return typedValue
+	case *cypher.ListLiteral:
+		return typedValue
+	case cypher.MapLiteral:
+		return typedValue
+	case *cypher.PatternPredicate:
+		return typedValue
+	case *cypher.ArithmeticExpression:
+		return typedValue
+	case *cypher.UnaryAddOrSubtractExpression:
+		return typedValue
+	case *cypher.FilterExpression:
+		return typedValue
+	case *cypher.IDInCollection:
+		return typedValue
+	default:
+		return Parameter(value)
+	}
 }
 
 func joinedExpressionList(operator cypher.Operator, operands []cypher.SyntaxNode) cypher.SyntaxNode {
@@ -171,7 +230,7 @@ func (s *comparisonContinuation) asComparison(operator cypher.Operator, rOperand
 	return cypher.NewComparison(
 		s.qualifier(),
 		operator,
-		newLiteral(rOperand),
+		valueExpression(rOperand),
 	)
 }
 
@@ -211,7 +270,7 @@ func (s *propertyContinuation) Set(value any) *cypher.SetItem {
 	return cypher.NewSetItem(
 		s.qualifier(),
 		cypher.OperatorAssignment,
-		newLiteral(value),
+		valueExpression(value),
 	)
 }
 
@@ -764,8 +823,12 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		singlePartQuery.ReadingClauses = append(singlePartQuery.ReadingClauses, newReadingClause)
 	}
 
-	return &PreparedQuery{
-		Query:      regularQuery,
-		Parameters: map[string]any{},
-	}, nil
+	if parameters, err := materializeParameters(regularQuery); err != nil {
+		return nil, err
+	} else {
+		return &PreparedQuery{
+			Query:      regularQuery,
+			Parameters: parameters,
+		}, nil
+	}
 }

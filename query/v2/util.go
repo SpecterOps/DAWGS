@@ -3,6 +3,8 @@ package v2
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"strconv"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/walk"
@@ -171,4 +173,57 @@ func extractCypherIdentifiers(expression cypher.Expression) (*identifierSet, err
 	)
 
 	return identifierExtractorVisitor.seen, err
+}
+
+type parameterMaterializer struct {
+	walk.Visitor[cypher.SyntaxNode]
+
+	parameters map[string]any
+	nextIndex  int
+}
+
+func newParameterMaterializer() *parameterMaterializer {
+	return &parameterMaterializer{
+		Visitor:    walk.NewVisitor[cypher.SyntaxNode](),
+		parameters: map[string]any{},
+	}
+}
+
+func (s *parameterMaterializer) nextSymbol() string {
+	for {
+		symbol := "p" + strconv.Itoa(s.nextIndex)
+		s.nextIndex++
+
+		if _, taken := s.parameters[symbol]; !taken {
+			return symbol
+		}
+	}
+}
+
+func (s *parameterMaterializer) Enter(node cypher.SyntaxNode) {
+	parameter, typeOK := node.(*cypher.Parameter)
+	if !typeOK {
+		return
+	}
+
+	if parameter.Symbol == "" {
+		parameter.Symbol = s.nextSymbol()
+	}
+
+	if existingValue, exists := s.parameters[parameter.Symbol]; exists && !reflect.DeepEqual(existingValue, parameter.Value) {
+		s.SetErrorf("parameter %s is bound to multiple values", parameter.Symbol)
+		return
+	}
+
+	s.parameters[parameter.Symbol] = parameter.Value
+}
+
+func materializeParameters(query *cypher.RegularQuery) (map[string]any, error) {
+	materializer := newParameterMaterializer()
+
+	if err := walk.Cypher(query, materializer); err != nil {
+		return nil, err
+	}
+
+	return materializer.parameters, nil
 }
