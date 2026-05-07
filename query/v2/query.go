@@ -141,6 +141,39 @@ func Or(operands ...cypher.SyntaxNode) cypher.SyntaxNode {
 	return joinedExpressionList(cypher.OperatorOr, operands)
 }
 
+type SortDirection int
+
+const (
+	SortAscending SortDirection = iota
+	SortDescending
+)
+
+func Asc(expression any) *cypher.SortItem {
+	return Order(expression, SortAscending)
+}
+
+func Desc(expression any) *cypher.SortItem {
+	return Order(expression, SortDescending)
+}
+
+func Order(expression any, direction SortDirection) *cypher.SortItem {
+	sortExpression, _ := projectionExpression(expression)
+
+	return &cypher.SortItem{
+		Ascending:  direction != SortDescending,
+		Expression: sortExpression,
+	}
+}
+
+func As(expression any, alias string) *cypher.ProjectionItem {
+	projectionExpression, _ := projectionExpression(expression)
+
+	return &cypher.ProjectionItem{
+		Expression: projectionExpression,
+		Alias:      cypher.NewVariableWithSymbol(alias),
+	}
+}
+
 func Node() NodeContinuation {
 	return &entity[NodeContinuation]{
 		identifier: Identifiers.Node(),
@@ -427,10 +460,11 @@ type NodeContinuation interface {
 
 type QueryBuilder interface {
 	Where(constraints ...cypher.SyntaxNode) QueryBuilder
-	OrderBy(sortItems ...cypher.SyntaxNode) QueryBuilder
+	OrderBy(sortItems ...any) QueryBuilder
 	Skip(offset int) QueryBuilder
 	Limit(limit int) QueryBuilder
 	Return(projections ...any) QueryBuilder
+	ReturnDistinct(projections ...any) QueryBuilder
 	Update(updatingClauses ...any) QueryBuilder
 	Create(creationClauses ...any) QueryBuilder
 	Delete(expressions ...any) QueryBuilder
@@ -442,8 +476,9 @@ type QueryBuilder interface {
 type builder struct {
 	errors               []error
 	constraints          []cypher.SyntaxNode
-	sortItems            []cypher.SyntaxNode
+	sortItems            []any
 	projections          []any
+	distinct             bool
 	creates              []any
 	setItems             []*cypher.SetItem
 	removeItems          []*cypher.RemoveItem
@@ -469,7 +504,7 @@ func (s *builder) WithAllShortestPaths() QueryBuilder {
 	return s
 }
 
-func (s *builder) OrderBy(sortItems ...cypher.SyntaxNode) QueryBuilder {
+func (s *builder) OrderBy(sortItems ...any) QueryBuilder {
 	s.sortItems = append(s.sortItems, sortItems...)
 	return s
 }
@@ -485,6 +520,12 @@ func (s *builder) Limit(limit int) QueryBuilder {
 }
 
 func (s *builder) Return(projections ...any) QueryBuilder {
+	s.projections = append(s.projections, projections...)
+	return s
+}
+
+func (s *builder) ReturnDistinct(projections ...any) QueryBuilder {
+	s.distinct = true
 	s.projections = append(s.projections, projections...)
 	return s
 }
@@ -523,8 +564,7 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 		case QualifiedExpression:
 			qualifier := typedNextUpdate.qualifier()
 
-			switch qualifier {
-			case Identifiers.node, Identifiers.start, Identifiers.end:
+			if isDetachDeleteQualifier(qualifier) {
 				s.detachDelete = true
 			}
 
@@ -647,6 +687,13 @@ func (s *builder) buildProjectionOrder() (*cypher.Order, error) {
 
 			case *cypher.SortItem:
 				orderByNode.Items = append(orderByNode.Items, typedSortItem)
+
+			default:
+				if sortItem, err := sortItemFromValue(typedSortItem); err != nil {
+					return nil, err
+				} else {
+					orderByNode.Items = append(orderByNode.Items, sortItem)
+				}
 			}
 		}
 	}
@@ -667,7 +714,7 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 			return fmt.Errorf("query expected projected items")
 		}
 
-		projection := singlePartQuery.NewProjection(false)
+		projection := singlePartQuery.NewProjection(s.distinct)
 
 		for _, nextProjection := range s.projections {
 			switch typedNextProjection := nextProjection.(type) {
@@ -680,37 +727,12 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 					}
 				}
 
-			case QualifiedExpression:
-				projection.AddItem(cypher.NewProjectionItemWithExpr(typedNextProjection.qualifier()))
-
-			case kindContinuation:
-				var kindExpr cypher.Expression
-
-				switch typedNextProjection.identifier.Symbol {
-				case Identifiers.node, Identifiers.start, Identifiers.end:
-					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, typedNextProjection.identifier)
-
-				case Identifiers.relationship:
-					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, typedNextProjection.identifier)
-				}
-
-				projection.AddItem(cypher.NewProjectionItemWithExpr(kindExpr))
-
-			case kindsContinuation:
-				var kindExpr cypher.Expression
-
-				switch typedNextProjection.identifier.Symbol {
-				case Identifiers.node, Identifiers.start, Identifiers.end:
-					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, typedNextProjection.identifier)
-
-				case Identifiers.relationship:
-					kindExpr = cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, typedNextProjection.identifier)
-				}
-
-				projection.AddItem(cypher.NewProjectionItemWithExpr(kindExpr))
-
 			default:
-				projection.AddItem(cypher.NewProjectionItemWithExpr(typedNextProjection))
+				if projectionItem, err := projectionItemFromValue(typedNextProjection); err != nil {
+					return err
+				} else {
+					projection.AddItem(projectionItem)
+				}
 			}
 		}
 

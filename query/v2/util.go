@@ -103,6 +103,136 @@ func prepareCreateRelationshipMatch(match *cypher.Match, seen *identifierSet) er
 	return nil
 }
 
+func isDetachDeleteQualifier(qualifier cypher.Expression) bool {
+	variable, typeOK := qualifier.(*cypher.Variable)
+	if !typeOK {
+		return false
+	}
+
+	switch variable.Symbol {
+	case Identifiers.node, Identifiers.start, Identifiers.end:
+		return true
+	default:
+		return false
+	}
+}
+
+func kindProjectionExpression(identifier *cypher.Variable) (cypher.Expression, error) {
+	switch identifier.Symbol {
+	case Identifiers.node, Identifiers.start, Identifiers.end:
+		return cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, identifier), nil
+
+	case Identifiers.relationship:
+		return cypher.NewSimpleFunctionInvocation(cypher.EdgeTypeFunction, identifier), nil
+
+	default:
+		return nil, fmt.Errorf("invalid kind projection reference: %s", identifier.Symbol)
+	}
+}
+
+func projectionExpression(value any) (cypher.Expression, error) {
+	switch typedValue := value.(type) {
+	case QualifiedExpression:
+		return typedValue.qualifier(), nil
+
+	case kindContinuation:
+		return kindProjectionExpression(typedValue.identifier)
+
+	case kindsContinuation:
+		return kindProjectionExpression(typedValue.identifier)
+
+	case *cypher.ProjectionItem:
+		return typedValue.Expression, nil
+
+	case *cypher.Parameter:
+		return typedValue, nil
+
+	case *cypher.Literal:
+		return typedValue, nil
+
+	case *cypher.Variable:
+		return typedValue, nil
+
+	case *cypher.PropertyLookup:
+		return typedValue, nil
+
+	case *cypher.FunctionInvocation:
+		return typedValue, nil
+
+	case *cypher.Parenthetical:
+		return typedValue, nil
+
+	case *cypher.Comparison:
+		return typedValue, nil
+
+	case *cypher.Negation:
+		return typedValue, nil
+
+	case *cypher.Conjunction:
+		return typedValue, nil
+
+	case *cypher.Disjunction:
+		return typedValue, nil
+
+	case *cypher.ExclusiveDisjunction:
+		return typedValue, nil
+
+	case *cypher.KindMatcher:
+		return typedValue, nil
+
+	case *cypher.ListLiteral:
+		return typedValue, nil
+
+	case cypher.MapLiteral:
+		return typedValue, nil
+
+	case *cypher.PatternPredicate:
+		return typedValue, nil
+
+	case *cypher.ArithmeticExpression:
+		return typedValue, nil
+
+	case *cypher.UnaryAddOrSubtractExpression:
+		return typedValue, nil
+
+	case *cypher.FilterExpression:
+		return typedValue, nil
+
+	case *cypher.IDInCollection:
+		return typedValue, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported expression type: %T", value)
+	}
+}
+
+func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
+	if projectionItem, typeOK := value.(*cypher.ProjectionItem); typeOK {
+		return projectionItem, nil
+	}
+
+	if expression, err := projectionExpression(value); err != nil {
+		return nil, err
+	} else {
+		return cypher.NewProjectionItemWithExpr(expression), nil
+	}
+}
+
+func sortItemFromValue(value any) (*cypher.SortItem, error) {
+	if sortItem, typeOK := value.(*cypher.SortItem); typeOK {
+		return sortItem, nil
+	}
+
+	if expression, err := projectionExpression(value); err != nil {
+		return nil, err
+	} else {
+		return &cypher.SortItem{
+			Ascending:  true,
+			Expression: expression,
+		}, nil
+	}
+}
+
 type identifierSet struct {
 	identifiers map[string]struct{}
 }

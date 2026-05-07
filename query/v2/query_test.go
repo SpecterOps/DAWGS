@@ -40,7 +40,7 @@ func TestQuery(t *testing.T) {
 	cypherQueryStr, err := format.RegularQuery(preparedQuery.Query, false)
 	require.NoError(t, err)
 
-	require.Equal(t, "match (s)-[r]->() where not r:test and not (r:A or r:B) and r.rel_prop <= $p0 and r.other_prop = $p1 and s:test set s.this_prop = $p2 remove e:A:B delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
+	require.Equal(t, "match (s)-[r]->() where not r:test and not (r:A or r:B) and r.rel_prop <= $p0 and r.other_prop = $p1 and s:test set s.this_prop = $p2 remove e:A:B detach delete s return r, s.node_prop skip 10 limit 10", cypherQueryStr)
 	require.Equal(t, map[string]any{
 		"p0": 1234,
 		"p1": 5678,
@@ -93,4 +93,21 @@ func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
 	require.Equal(t, map[string]any{
 		"props": map[string]any{"name": "node"},
 	}, preparedQuery.Parameters)
+}
+
+func TestProjectionAndOrderHelpers(t *testing.T) {
+	preparedQuery, err := v2.New().ReturnDistinct(
+		v2.As(v2.Node().ID(), "node_id"),
+	).OrderBy(
+		v2.Node().Property("name"),
+		v2.Desc(v2.Node().ID()),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return distinct id(n) as node_id order by n.name asc, id(n) desc", renderPrepared(t, preparedQuery))
+}
+
+func TestUnsupportedOrderByTypeReturnsError(t *testing.T) {
+	_, err := v2.New().Return(v2.Node()).OrderBy(123).Build()
+	require.ErrorContains(t, err, "unsupported expression type: int")
 }
