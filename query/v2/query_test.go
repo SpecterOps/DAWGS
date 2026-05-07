@@ -128,6 +128,29 @@ func TestUpdatingClausesPreserveFluentOrder(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestScopedRelationshipPatternControls(t *testing.T) {
+	scope := v2.NewScope("path", "person", "source", "edge", "target")
+
+	preparedQuery, err := scope.New().WithRelationshipDirection(graph.DirectionInbound).Where(
+		scope.Relationship().Kind().Is(graph.StringKind("MemberOf")),
+		scope.Start().ID().Equals(1),
+	).Return(
+		scope.Relationship().Kind(),
+		scope.End().Kinds(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (source)<-[edge:MemberOf]-(target) where id(source) = $p0 return type(edge), labels(target)", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": 1,
+	}, preparedQuery.Parameters)
+}
+
+func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
+	_, err := v2.New().WithRelationshipDirection(graph.Direction(99)).Return(v2.Relationship()).Build()
+	require.ErrorContains(t, err, "invalid relationship direction: invalid")
+}
+
 func TestProjectionAndOrderHelpers(t *testing.T) {
 	preparedQuery, err := v2.New().ReturnDistinct(
 		v2.As(v2.Node().ID(), "node_id"),

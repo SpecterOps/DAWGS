@@ -11,42 +11,42 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-func isNodePattern(seen *identifierSet) bool {
-	return seen.Contains(Identifiers.node)
+func isNodePattern(seen *identifierSet, identifiers runtimeIdentifiers) bool {
+	return seen.Contains(identifiers.node)
 }
 
-func isRelationshipPattern(seen *identifierSet) bool {
+func isRelationshipPattern(seen *identifierSet, identifiers runtimeIdentifiers) bool {
 	var (
-		hasStart        = seen.Contains(Identifiers.start)
-		hasRelationship = seen.Contains(Identifiers.relationship)
-		hasEnd          = seen.Contains(Identifiers.end)
+		hasStart        = seen.Contains(identifiers.start)
+		hasRelationship = seen.Contains(identifiers.relationship)
+		hasEnd          = seen.Contains(identifiers.end)
 	)
 
 	return hasStart || hasRelationship || hasEnd
 }
 
-func prepareNodePattern(match *cypher.Match, seen *identifierSet) error {
-	if isRelationshipPattern(seen) {
+func prepareNodePattern(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers) error {
+	if isRelationshipPattern(seen, identifiers) {
 		return fmt.Errorf("query mixes node and relationship query identifiers")
 	}
 
 	match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
-		Variable: Identifiers.Node(),
+		Variable: identifiers.Node(),
 	})
 
 	return nil
 }
 
-func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, relationshipKinds graph.Kinds, shortestPaths, allShortestPaths bool) error {
+func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers, relationshipKinds graph.Kinds, direction graph.Direction, shortestPaths, allShortestPaths bool) error {
 	if shortestPaths && allShortestPaths {
 		return errors.New("query is requesting both all shortest paths and shortest paths")
 	}
 
 	var (
 		newPatternPart   = match.NewPatternPart()
-		startNodeSeen    = seen.Contains(Identifiers.start)
-		relationshipSeen = seen.Contains(Identifiers.relationship)
-		endNodeSeen      = seen.Contains(Identifiers.end)
+		startNodeSeen    = seen.Contains(identifiers.start)
+		relationshipSeen = seen.Contains(identifiers.relationship)
+		endNodeSeen      = seen.Contains(identifiers.end)
 	)
 
 	newPatternPart.ShortestPathPattern = shortestPaths
@@ -54,7 +54,7 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, relati
 
 	if startNodeSeen {
 		newPatternPart.AddPatternElements(&cypher.NodePattern{
-			Variable: Identifiers.Start(),
+			Variable: identifiers.Start(),
 		})
 	} else {
 		newPatternPart.AddPatternElements(&cypher.NodePattern{})
@@ -62,15 +62,15 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, relati
 
 	relationshipPattern := &cypher.RelationshipPattern{
 		Kinds:     relationshipKinds,
-		Direction: graph.DirectionOutbound,
+		Direction: direction,
 	}
 
 	if relationshipSeen {
-		relationshipPattern.Variable = Identifiers.Relationship()
+		relationshipPattern.Variable = identifiers.Relationship()
 	}
 
 	if shortestPaths || allShortestPaths {
-		newPatternPart.Variable = Identifiers.Path()
+		newPatternPart.Variable = identifiers.Path()
 		relationshipPattern.Range = &cypher.PatternRange{}
 	}
 
@@ -78,7 +78,7 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, relati
 
 	if endNodeSeen {
 		newPatternPart.AddPatternElements(&cypher.NodePattern{
-			Variable: Identifiers.End(),
+			Variable: identifiers.End(),
 		})
 	} else {
 		newPatternPart.AddPatternElements(&cypher.NodePattern{})
@@ -87,38 +87,38 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, relati
 	return nil
 }
 
-func prepareCreateRelationshipMatch(match *cypher.Match, seen *identifierSet) error {
-	if seen.Contains(Identifiers.start) {
+func prepareCreateRelationshipMatch(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers) error {
+	if seen.Contains(identifiers.start) {
 		match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
-			Variable: Identifiers.Start(),
+			Variable: identifiers.Start(),
 		})
 	}
 
-	if seen.Contains(Identifiers.end) {
+	if seen.Contains(identifiers.end) {
 		match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
-			Variable: Identifiers.End(),
+			Variable: identifiers.End(),
 		})
 	}
 
 	return nil
 }
 
-func isDetachDeleteQualifier(qualifier cypher.Expression) bool {
+func isDetachDeleteQualifier(qualifier cypher.Expression, identifiers runtimeIdentifiers) bool {
 	variable, typeOK := qualifier.(*cypher.Variable)
 	if !typeOK {
 		return false
 	}
 
 	switch variable.Symbol {
-	case Identifiers.node, Identifiers.start, Identifiers.end:
+	case identifiers.node, identifiers.start, identifiers.end:
 		return true
 	default:
 		return false
 	}
 }
 
-func kindProjectionExpression(identifier *cypher.Variable) (cypher.Expression, error) {
-	switch identifier.Symbol {
+func kindProjectionExpression(role string, identifier *cypher.Variable) (cypher.Expression, error) {
+	switch role {
 	case Identifiers.node, Identifiers.start, Identifiers.end:
 		return cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, identifier), nil
 
@@ -169,10 +169,10 @@ func projectionExpression(value any) (cypher.Expression, error) {
 		return typedValue.qualifier(), nil
 
 	case kindContinuation:
-		return kindProjectionExpression(typedValue.identifier)
+		return kindProjectionExpression(typedValue.role, typedValue.identifier)
 
 	case kindsContinuation:
-		return kindProjectionExpression(typedValue.identifier)
+		return kindProjectionExpression(typedValue.role, typedValue.identifier)
 
 	case *cypher.ProjectionItem:
 		if typedValue.Expression == nil {
@@ -447,7 +447,7 @@ type createScope struct {
 	createsRelationship bool
 }
 
-func collectCreateScope(values ...any) (*createScope, error) {
+func collectCreateScope(identifiers runtimeIdentifiers, values ...any) (*createScope, error) {
 	scope := &createScope{
 		identifiers: newIdentifierSet(),
 	}
@@ -456,8 +456,8 @@ func collectCreateScope(values ...any) (*createScope, error) {
 		switch typedValue := value.(type) {
 		case *cypher.RelationshipPattern:
 			scope.createsRelationship = true
-			scope.identifiers.Add(Identifiers.start)
-			scope.identifiers.Add(Identifiers.end)
+			scope.identifiers.Add(identifiers.start)
+			scope.identifiers.Add(identifiers.end)
 
 			if typedValue.Variable != nil {
 				scope.identifiers.Add(typedValue.Variable.Symbol)

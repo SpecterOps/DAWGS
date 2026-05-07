@@ -44,6 +44,67 @@ var Identifiers = runtimeIdentifiers{
 	end:          "e",
 }
 
+type Scope struct {
+	identifiers runtimeIdentifiers
+}
+
+func DefaultScope() Scope {
+	return Scope{
+		identifiers: Identifiers,
+	}
+}
+
+func NewScope(path, node, start, relationship, end string) Scope {
+	return Scope{
+		identifiers: runtimeIdentifiers{
+			path:         path,
+			node:         node,
+			start:        start,
+			relationship: relationship,
+			end:          end,
+		},
+	}
+}
+
+func (s Scope) New() QueryBuilder {
+	return newBuilder(s.identifiers)
+}
+
+func (s Scope) Node() NodeContinuation {
+	return &entity[NodeContinuation]{
+		identifier: s.identifiers.Node(),
+		role:       Identifiers.node,
+	}
+}
+
+func (s Scope) Path() PathContinuation {
+	return &entity[PathContinuation]{
+		identifier: s.identifiers.Path(),
+		role:       Identifiers.path,
+	}
+}
+
+func (s Scope) Start() NodeContinuation {
+	return &entity[NodeContinuation]{
+		identifier: s.identifiers.Start(),
+		role:       Identifiers.start,
+	}
+}
+
+func (s Scope) Relationship() RelationshipContinuation {
+	return &entity[RelationshipContinuation]{
+		identifier: s.identifiers.Relationship(),
+		role:       Identifiers.relationship,
+	}
+}
+
+func (s Scope) End() NodeContinuation {
+	return &entity[NodeContinuation]{
+		identifier: s.identifiers.End(),
+		role:       Identifiers.end,
+	}
+}
+
 func Literal(value any) *cypher.Literal {
 	if value == nil {
 		return cypher.NewLiteral(nil, true)
@@ -171,33 +232,23 @@ func As(expression any, alias string) *cypher.ProjectionItem {
 }
 
 func Node() NodeContinuation {
-	return &entity[NodeContinuation]{
-		identifier: Identifiers.Node(),
-	}
+	return DefaultScope().Node()
 }
 
 func Path() PathContinuation {
-	return &entity[PathContinuation]{
-		identifier: Identifiers.Path(),
-	}
+	return DefaultScope().Path()
 }
 
 func Start() NodeContinuation {
-	return &entity[NodeContinuation]{
-		identifier: Identifiers.Start(),
-	}
+	return DefaultScope().Start()
 }
 
 func Relationship() RelationshipContinuation {
-	return &entity[RelationshipContinuation]{
-		identifier: Identifiers.Relationship(),
-	}
+	return DefaultScope().Relationship()
 }
 
 func End() NodeContinuation {
-	return &entity[NodeContinuation]{
-		identifier: Identifiers.End(),
-	}
+	return DefaultScope().End()
 }
 
 type QualifiedExpression interface {
@@ -329,17 +380,20 @@ func (s *propertyContinuation) Remove() *cypher.RemoveItem {
 
 type entity[T any] struct {
 	identifier *cypher.Variable
+	role       string
 }
 
 func (s *entity[T]) Kind() KindContinuation {
 	return kindContinuation{
 		identifier: s.identifier,
+		role:       s.role,
 	}
 }
 
 func (s *entity[T]) Kinds() KindsContinuation {
 	return kindsContinuation{
 		identifier: s.identifier,
+		role:       s.role,
 	}
 }
 
@@ -408,6 +462,7 @@ func (s *entity[T]) Property(propertyName string) PropertyContinuation {
 
 type kindContinuation struct {
 	identifier *cypher.Variable
+	role       string
 }
 
 func (s kindContinuation) Is(kind graph.Kind) cypher.Expression {
@@ -423,6 +478,7 @@ func (s kindContinuation) IsOneOf(kinds graph.Kinds) cypher.Expression {
 
 type kindsContinuation struct {
 	identifier *cypher.Variable
+	role       string
 }
 
 func (s kindsContinuation) Has(kind graph.Kind) cypher.Expression {
@@ -486,6 +542,7 @@ type QueryBuilder interface {
 	Delete(expressions ...any) QueryBuilder
 	WithShortestPaths() QueryBuilder
 	WithAllShortestPaths() QueryBuilder
+	WithRelationshipDirection(direction graph.Direction) QueryBuilder
 	Build() (*PreparedQuery, error)
 }
 
@@ -508,25 +565,34 @@ type pendingUpdatingClause struct {
 }
 
 type builder struct {
-	errors               []error
-	constraints          []cypher.SyntaxNode
-	sortItems            []any
-	projections          []any
-	distinct             bool
-	updatingClauses      []pendingUpdatingClause
-	creates              []any
-	setItems             []*cypher.SetItem
-	removeItems          []*cypher.RemoveItem
-	deleteItems          []cypher.Expression
-	detachDelete         bool
-	shortestPathQuery    bool
-	allShorestPathsQuery bool
-	skip                 *int
-	limit                *int
+	errors                []error
+	constraints           []cypher.SyntaxNode
+	sortItems             []any
+	projections           []any
+	distinct              bool
+	identifiers           runtimeIdentifiers
+	updatingClauses       []pendingUpdatingClause
+	creates               []any
+	setItems              []*cypher.SetItem
+	removeItems           []*cypher.RemoveItem
+	deleteItems           []cypher.Expression
+	detachDelete          bool
+	relationshipDirection graph.Direction
+	shortestPathQuery     bool
+	allShorestPathsQuery  bool
+	skip                  *int
+	limit                 *int
 }
 
 func New() QueryBuilder {
-	return &builder{}
+	return DefaultScope().New()
+}
+
+func newBuilder(identifiers runtimeIdentifiers) QueryBuilder {
+	return &builder{
+		identifiers:           identifiers,
+		relationshipDirection: graph.DirectionOutbound,
+	}
 }
 
 func (s *builder) WithShortestPaths() QueryBuilder {
@@ -536,6 +602,18 @@ func (s *builder) WithShortestPaths() QueryBuilder {
 
 func (s *builder) WithAllShortestPaths() QueryBuilder {
 	s.allShorestPathsQuery = true
+	return s
+}
+
+func (s *builder) WithRelationshipDirection(direction graph.Direction) QueryBuilder {
+	switch direction {
+	case graph.DirectionInbound, graph.DirectionOutbound, graph.DirectionBoth:
+		s.relationshipDirection = direction
+
+	default:
+		s.trackError(fmt.Errorf("invalid relationship direction: %s", direction))
+	}
+
 	return s
 }
 
@@ -664,7 +742,7 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 		case QualifiedExpression:
 			qualifier := typedNextUpdate.qualifier()
 
-			if isDetachDeleteQualifier(qualifier) {
+			if isDetachDeleteQualifier(qualifier, s.identifiers) {
 				s.detachDelete = true
 				pendingDetachDelete = true
 			}
@@ -674,7 +752,7 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 
 		case *cypher.Variable:
 			switch typedNextUpdate.Symbol {
-			case Identifiers.node, Identifiers.start, Identifiers.end:
+			case s.identifiers.node, s.identifiers.start, s.identifiers.end:
 				s.detachDelete = true
 				pendingDetachDelete = true
 			}
@@ -700,7 +778,7 @@ func (s *builder) Where(constraints ...cypher.SyntaxNode) QueryBuilder {
 	return s
 }
 
-func buildCreates(singlePartQuery *cypher.SinglePartQuery, creates []any) error {
+func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeIdentifiers, creates []any) error {
 	if len(creates) == 0 {
 		return nil
 	}
@@ -719,7 +797,7 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, creates []any) error 
 			switch typedExpression := typedNextCreate.qualifier().(type) {
 			case *cypher.Variable:
 				switch typedExpression.Symbol {
-				case Identifiers.node, Identifiers.start, Identifiers.end:
+				case identifiers.node, identifiers.start, identifiers.end:
 					pattern.AddPatternElements(&cypher.NodePattern{
 						Variable: cypher.NewVariableWithSymbol(typedExpression.Symbol),
 					})
@@ -734,13 +812,13 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, creates []any) error 
 
 		case *cypher.RelationshipPattern:
 			pattern.AddPatternElements(&cypher.NodePattern{
-				Variable: cypher.NewVariableWithSymbol(Identifiers.start),
+				Variable: identifiers.Start(),
 			})
 
 			pattern.AddPatternElements(typedNextCreate)
 
 			pattern.AddPatternElements(&cypher.NodePattern{
-				Variable: cypher.NewVariableWithSymbol(Identifiers.end),
+				Variable: identifiers.End(),
 			})
 
 		default:
@@ -774,7 +852,7 @@ func (s *builder) buildUpdatingClauses(singlePartQuery *cypher.SinglePartQuery) 
 			))
 
 		case updatingClauseCreate:
-			if err := buildCreates(singlePartQuery, updatingClause.creates); err != nil {
+			if err := buildCreates(singlePartQuery, s.identifiers, updatingClause.creates); err != nil {
 				return err
 			}
 		}
@@ -894,7 +972,7 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		relationshipKinds             graph.Kinds
 	)
 
-	createScope, err := collectCreateScope(s.creates...)
+	createScope, err := collectCreateScope(s.identifiers, s.creates...)
 	if err != nil {
 		return nil, err
 	}
@@ -922,9 +1000,9 @@ func (s *builder) Build() (*PreparedQuery, error) {
 			case *cypher.KindMatcher:
 				if identifier, typeOK := typedNextConstraint.Reference.(*cypher.Variable); !typeOK {
 					return nil, fmt.Errorf("expected type *cypher.Variable, got %T", typedNextConstraint)
-				} else if identifier.Symbol == Identifiers.relationship {
+				} else if identifier.Symbol == s.identifiers.relationship {
 					relationshipKinds = relationshipKinds.Add(typedNextConstraint.Kinds...)
-					readIdentifiers.Add(Identifiers.relationship)
+					readIdentifiers.Add(s.identifiers.relationship)
 					continue
 				}
 			}
@@ -956,16 +1034,16 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	matchIdentifiers.Or(actionIdentifiers)
 
 	if len(s.constraints) > 0 || len(s.creates) == 0 || matchIdentifiers.Len() > 0 {
-		if isNodePattern(matchIdentifiers) {
-			if err := prepareNodePattern(match, matchIdentifiers); err != nil {
+		if isNodePattern(matchIdentifiers, s.identifiers) {
+			if err := prepareNodePattern(match, matchIdentifiers, s.identifiers); err != nil {
 				return nil, err
 			}
-		} else if createScope.createsRelationship && !matchIdentifiers.Contains(Identifiers.relationship) {
-			if err := prepareCreateRelationshipMatch(match, matchIdentifiers); err != nil {
+		} else if createScope.createsRelationship && !matchIdentifiers.Contains(s.identifiers.relationship) {
+			if err := prepareCreateRelationshipMatch(match, matchIdentifiers, s.identifiers); err != nil {
 				return nil, err
 			}
-		} else if isRelationshipPattern(matchIdentifiers) {
-			if err := prepareRelationshipPattern(match, matchIdentifiers, relationshipKinds, s.shortestPathQuery, s.allShorestPathsQuery); err != nil {
+		} else if isRelationshipPattern(matchIdentifiers, s.identifiers) {
+			if err := prepareRelationshipPattern(match, matchIdentifiers, s.identifiers, relationshipKinds, s.relationshipDirection, s.shortestPathQuery, s.allShorestPathsQuery); err != nil {
 				return nil, err
 			}
 		} else {
