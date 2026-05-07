@@ -489,12 +489,31 @@ type QueryBuilder interface {
 	Build() (*PreparedQuery, error)
 }
 
+type updatingClauseKind int
+
+const (
+	updatingClauseSet updatingClauseKind = iota
+	updatingClauseRemove
+	updatingClauseDelete
+	updatingClauseCreate
+)
+
+type pendingUpdatingClause struct {
+	kind        updatingClauseKind
+	creates     []any
+	setItems    []*cypher.SetItem
+	removeItems []*cypher.RemoveItem
+	deleteItems []cypher.Expression
+	detach      bool
+}
+
 type builder struct {
 	errors               []error
 	constraints          []cypher.SyntaxNode
 	sortItems            []any
 	projections          []any
 	distinct             bool
+	updatingClauses      []pendingUpdatingClause
 	creates              []any
 	setItems             []*cypher.SetItem
 	removeItems          []*cypher.RemoveItem
@@ -546,8 +565,66 @@ func (s *builder) ReturnDistinct(projections ...any) QueryBuilder {
 	return s
 }
 
+func (s *builder) appendSetItems(items ...*cypher.SetItem) {
+	if len(items) == 0 {
+		return
+	}
+
+	lastClauseIdx := len(s.updatingClauses) - 1
+	if lastClauseIdx >= 0 && s.updatingClauses[lastClauseIdx].kind == updatingClauseSet {
+		s.updatingClauses[lastClauseIdx].setItems = append(s.updatingClauses[lastClauseIdx].setItems, items...)
+	} else {
+		s.updatingClauses = append(s.updatingClauses, pendingUpdatingClause{
+			kind:     updatingClauseSet,
+			setItems: items,
+		})
+	}
+}
+
+func (s *builder) appendRemoveItems(items ...*cypher.RemoveItem) {
+	if len(items) == 0 {
+		return
+	}
+
+	lastClauseIdx := len(s.updatingClauses) - 1
+	if lastClauseIdx >= 0 && s.updatingClauses[lastClauseIdx].kind == updatingClauseRemove {
+		s.updatingClauses[lastClauseIdx].removeItems = append(s.updatingClauses[lastClauseIdx].removeItems, items...)
+	} else {
+		s.updatingClauses = append(s.updatingClauses, pendingUpdatingClause{
+			kind:        updatingClauseRemove,
+			removeItems: items,
+		})
+	}
+}
+
+func (s *builder) appendDeleteItems(detach bool, items ...cypher.Expression) {
+	if len(items) == 0 {
+		return
+	}
+
+	lastClauseIdx := len(s.updatingClauses) - 1
+	if lastClauseIdx >= 0 && s.updatingClauses[lastClauseIdx].kind == updatingClauseDelete {
+		s.updatingClauses[lastClauseIdx].detach = s.updatingClauses[lastClauseIdx].detach || detach
+		s.updatingClauses[lastClauseIdx].deleteItems = append(s.updatingClauses[lastClauseIdx].deleteItems, items...)
+	} else {
+		s.updatingClauses = append(s.updatingClauses, pendingUpdatingClause{
+			kind:        updatingClauseDelete,
+			deleteItems: items,
+			detach:      detach,
+		})
+	}
+}
+
 func (s *builder) Create(creationClauses ...any) QueryBuilder {
 	s.creates = append(s.creates, creationClauses...)
+
+	if len(creationClauses) > 0 {
+		s.updatingClauses = append(s.updatingClauses, pendingUpdatingClause{
+			kind:    updatingClauseCreate,
+			creates: creationClauses,
+		})
+	}
+
 	return s
 }
 
@@ -556,15 +633,19 @@ func (s *builder) Update(updates ...any) QueryBuilder {
 		switch typedNextUpdate := nextUpdate.(type) {
 		case *cypher.Set:
 			s.setItems = append(s.setItems, typedNextUpdate.Items...)
+			s.appendSetItems(typedNextUpdate.Items...)
 
 		case *cypher.SetItem:
 			s.setItems = append(s.setItems, typedNextUpdate)
+			s.appendSetItems(typedNextUpdate)
 
 		case *cypher.Remove:
 			s.removeItems = append(s.removeItems, typedNextUpdate.Items...)
+			s.appendRemoveItems(typedNextUpdate.Items...)
 
 		case *cypher.RemoveItem:
 			s.removeItems = append(s.removeItems, typedNextUpdate)
+			s.appendRemoveItems(typedNextUpdate)
 
 		default:
 			s.trackError(fmt.Errorf("unknown update type: %T", nextUpdate))
@@ -575,6 +656,9 @@ func (s *builder) Update(updates ...any) QueryBuilder {
 }
 
 func (s *builder) Delete(deleteItems ...any) QueryBuilder {
+	var pendingDeleteItems []cypher.Expression
+	pendingDetachDelete := false
+
 	for _, nextDelete := range deleteItems {
 		switch typedNextUpdate := nextDelete.(type) {
 		case QualifiedExpression:
@@ -582,23 +666,28 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 
 			if isDetachDeleteQualifier(qualifier) {
 				s.detachDelete = true
+				pendingDetachDelete = true
 			}
 
 			s.deleteItems = append(s.deleteItems, qualifier)
+			pendingDeleteItems = append(pendingDeleteItems, qualifier)
 
 		case *cypher.Variable:
 			switch typedNextUpdate.Symbol {
 			case Identifiers.node, Identifiers.start, Identifiers.end:
 				s.detachDelete = true
+				pendingDetachDelete = true
 			}
 
 			s.deleteItems = append(s.deleteItems, typedNextUpdate)
+			pendingDeleteItems = append(pendingDeleteItems, typedNextUpdate)
 
 		default:
 			s.trackError(fmt.Errorf("unknown delete type: %T", nextDelete))
 		}
 	}
 
+	s.appendDeleteItems(pendingDetachDelete, pendingDeleteItems...)
 	return s
 }
 
@@ -611,8 +700,8 @@ func (s *builder) Where(constraints ...cypher.SyntaxNode) QueryBuilder {
 	return s
 }
 
-func (s *builder) buildCreates(singlePartQuery *cypher.SinglePartQuery) error {
-	if len(s.creates) == 0 {
+func buildCreates(singlePartQuery *cypher.SinglePartQuery, creates []any) error {
+	if len(creates) == 0 {
 		return nil
 	}
 
@@ -624,7 +713,7 @@ func (s *builder) buildCreates(singlePartQuery *cypher.SinglePartQuery) error {
 		}
 	)
 
-	for _, nextCreate := range s.creates {
+	for _, nextCreate := range creates {
 		switch typedNextCreate := nextCreate.(type) {
 		case QualifiedExpression:
 			switch typedExpression := typedNextCreate.qualifier().(type) {
@@ -664,28 +753,34 @@ func (s *builder) buildCreates(singlePartQuery *cypher.SinglePartQuery) error {
 }
 
 func (s *builder) buildUpdatingClauses(singlePartQuery *cypher.SinglePartQuery) error {
-	if len(s.setItems) > 0 {
-		singlePartQuery.UpdatingClauses = append(singlePartQuery.UpdatingClauses, cypher.NewUpdatingClause(
-			cypher.NewSet(s.setItems),
-		))
+	for _, updatingClause := range s.updatingClauses {
+		switch updatingClause.kind {
+		case updatingClauseSet:
+			singlePartQuery.UpdatingClauses = append(singlePartQuery.UpdatingClauses, cypher.NewUpdatingClause(
+				cypher.NewSet(updatingClause.setItems),
+			))
+
+		case updatingClauseRemove:
+			singlePartQuery.UpdatingClauses = append(singlePartQuery.UpdatingClauses, cypher.NewUpdatingClause(
+				cypher.NewRemove(updatingClause.removeItems),
+			))
+
+		case updatingClauseDelete:
+			singlePartQuery.UpdatingClauses = append(singlePartQuery.UpdatingClauses, cypher.NewUpdatingClause(
+				cypher.NewDelete(
+					updatingClause.detach,
+					updatingClause.deleteItems,
+				),
+			))
+
+		case updatingClauseCreate:
+			if err := buildCreates(singlePartQuery, updatingClause.creates); err != nil {
+				return err
+			}
+		}
 	}
 
-	if len(s.removeItems) > 0 {
-		singlePartQuery.UpdatingClauses = append(singlePartQuery.UpdatingClauses, cypher.NewUpdatingClause(
-			cypher.NewRemove(s.removeItems),
-		))
-	}
-
-	if len(s.deleteItems) > 0 {
-		singlePartQuery.UpdatingClauses = append(singlePartQuery.UpdatingClauses, cypher.NewUpdatingClause(
-			cypher.NewDelete(
-				s.detachDelete,
-				s.deleteItems,
-			),
-		))
-	}
-
-	return s.buildCreates(singlePartQuery)
+	return nil
 }
 
 func (s *builder) buildProjectionOrder() (*cypher.Order, error) {

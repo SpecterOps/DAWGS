@@ -95,6 +95,39 @@ func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestUpdatingClausesPreserveFluentOrder(t *testing.T) {
+	preparedQuery, err := v2.New().Create(
+		v2.NodePattern(graph.Kinds{graph.StringKind("User")}, nil),
+	).Update(
+		v2.SetProperty(v2.Node().Property("name"), "created"),
+	).Return(
+		v2.Node().Property("name"),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "create (n:User) set n.name = $p0 return n.name", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": "created",
+	}, preparedQuery.Parameters)
+
+	preparedQuery, err = v2.New().Where(
+		v2.Node().ID().Equals(1),
+	).Update(
+		v2.DeleteProperties(v2.Node(), "old"),
+	).Update(
+		v2.SetProperty(v2.Node().Property("new"), "value"),
+	).Return(
+		v2.Node(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) where id(n) = $p0 remove n.old set n.new = $p1 return n", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": 1,
+		"p1": "value",
+	}, preparedQuery.Parameters)
+}
+
 func TestProjectionAndOrderHelpers(t *testing.T) {
 	preparedQuery, err := v2.New().ReturnDistinct(
 		v2.As(v2.Node().ID(), "node_id"),
