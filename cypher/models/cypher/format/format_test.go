@@ -7,6 +7,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/cypher/format"
+	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/stretchr/testify/require"
@@ -111,6 +112,55 @@ func TestCypherEmitter_MapLiteralPropagatesWriterError(t *testing.T) {
 			err := format.NewCypherEmitter(false).WriteExpression(writer, testCase.mapLiteral)
 
 			require.ErrorIs(t, err, expectedErr)
+		})
+	}
+}
+
+func TestCypherEmitter_RelationshipDirections(t *testing.T) {
+	testCases := []struct {
+		name      string
+		direction graph.Direction
+		expected  string
+	}{
+		{
+			name:      "outbound",
+			direction: graph.DirectionOutbound,
+			expected:  "match (a)-[r]->(b) return r",
+		},
+		{
+			name:      "inbound",
+			direction: graph.DirectionInbound,
+			expected:  "match (a)<-[r]-(b) return r",
+		},
+		{
+			name:      "both",
+			direction: graph.DirectionBoth,
+			expected:  "match (a)-[r]-(b) return r",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			regularQuery, singlePartQuery := cypher.NewRegularQueryWithSingleQuery()
+			match := singlePartQuery.NewReadingClause().NewMatch(false)
+			match.NewPatternPart().AddPatternElements(
+				&cypher.NodePattern{
+					Variable: cypher.NewVariableWithSymbol("a"),
+				},
+				&cypher.RelationshipPattern{
+					Variable:  cypher.NewVariableWithSymbol("r"),
+					Direction: testCase.direction,
+				},
+				&cypher.NodePattern{
+					Variable: cypher.NewVariableWithSymbol("b"),
+				},
+			)
+
+			singlePartQuery.NewProjection(false).AddItem(cypher.NewProjectionItemWithExpr(cypher.NewVariableWithSymbol("r")))
+
+			rendered, err := format.RegularQuery(regularQuery, false)
+			require.NoError(t, err)
+			require.Equal(t, testCase.expected, rendered)
 		})
 	}
 }

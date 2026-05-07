@@ -24,6 +24,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
@@ -78,9 +79,7 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		output bytes.Buffer
 	)
 
-	if err := writeJSON(&output, report); err != nil {
-		t.Fatalf("write JSON: %v", err)
-	}
+	require.NoError(t, writeJSON(&output, report))
 
 	text := output.String()
 	for _, expected := range []string{
@@ -102,9 +101,7 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		`"referenced_symbols": [`,
 		`"section": "Traversal"`,
 	} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("JSON report missing %q:\n%s", expected, text)
-		}
+		require.Contains(t, text, expected)
 	}
 }
 
@@ -135,9 +132,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		output bytes.Buffer
 	)
 
-	if err := writeMarkdown(&output, report); err != nil {
-		t.Fatalf("write markdown: %v", err)
-	}
+	require.NoError(t, writeMarkdown(&output, report))
 
 	text := output.String()
 	for _, expected := range []string{
@@ -145,18 +140,84 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		"Duplicate Rows",
 		"| ADCS Fanout / combined | adcs_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
 	} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("markdown report missing %q:\n%s", expected, text)
-		}
+		require.Contains(t, text, expected)
 	}
 }
 
 func TestValidateIterationsRejectsZero(t *testing.T) {
-	if err := validateIterations(0); err == nil {
-		t.Fatal("expected zero iterations to be rejected")
-	}
+	require.Error(t, validateIterations(0))
+	require.NoError(t, validateIterations(1))
+}
 
-	if err := validateIterations(1); err != nil {
-		t.Fatalf("expected one iteration to be valid: %v", err)
+func TestWriteReportRejectsUnknownFormat(t *testing.T) {
+	err := writeReport(&bytes.Buffer{}, Report{}, "xml")
+	require.ErrorContains(t, err, "unsupported output format")
+}
+
+func TestWriteJSON(t *testing.T) {
+	report := testReport()
+	var out bytes.Buffer
+
+	require.NoError(t, writeReport(&out, report, reportFormatJSON))
+
+	require.Contains(t, out.String(), `"driver": "pg"`)
+	require.Contains(t, out.String(), `"samples": [`)
+	require.Contains(t, out.String(), `1000000`)
+}
+
+func TestWriteBenchfmt(t *testing.T) {
+	report := testReport()
+	var out bytes.Buffer
+
+	require.NoError(t, writeReport(&out, report, reportFormatBenchfmt))
+
+	output := out.String()
+	require.Contains(t, output, "goos: ")
+	require.Contains(t, output, "goarch: ")
+	require.Contains(t, output, "pkg: github.com/specterops/dawgs/cmd/benchmark")
+	require.Contains(t, output, "BenchmarkDawgsIntegration/pg/base/Match_Nodes/base-")
+	require.Contains(t, output, "\t1\t1000000 ns/op")
+	require.Contains(t, output, "\t1\t2000000 ns/op")
+}
+
+func TestSanitizeBenchNamePart(t *testing.T) {
+	require.Equal(t, "Shortest_Paths", sanitizeBenchNamePart("Shortest Paths"))
+	require.Equal(t, "n1_-_n3", sanitizeBenchNamePart("n1 -> n3"))
+	require.Equal(t, "local/phantom", sanitizeBenchNamePart("local/phantom"))
+	require.Equal(t, "unknown", sanitizeBenchNamePart(""))
+}
+
+func TestWriteMarkdownOmitsSamples(t *testing.T) {
+	report := testReport()
+	var out bytes.Buffer
+
+	require.NoError(t, writeReport(&out, report, reportFormatMarkdown))
+
+	output := out.String()
+	require.Contains(t, output, "| Match Nodes | base | 2 | - | - | 2.0ms | 2.0ms | 2.0ms | - |")
+	require.False(t, strings.Contains(output, "1000000"))
+}
+
+func testReport() Report {
+	return Report{
+		Driver:     "pg",
+		GitRef:     "abcdef0",
+		Date:       "2026-05-11",
+		Iterations: 2,
+		Results: []Result{{
+			Section:  "Match Nodes",
+			Dataset:  "base",
+			Label:    "base",
+			RowCount: 2,
+			Stats: Stats{
+				Median: 2 * time.Millisecond,
+				P95:    2 * time.Millisecond,
+				Max:    2 * time.Millisecond,
+			},
+			Samples: []time.Duration{
+				time.Millisecond,
+				2 * time.Millisecond,
+			},
+		}},
 	}
 }
