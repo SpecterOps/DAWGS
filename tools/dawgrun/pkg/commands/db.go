@@ -1,47 +1,120 @@
 package commands
 
 import (
+	"flag"
 	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers"
+	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
 )
 
-// TODO(seanj): Convert to generic open-db command that supports any available driver
-func openPGDBCmd() CommandDesc {
+func listConnectionsCmd() CommandDesc {
 	return CommandDesc{
-		args: []string{"<name>", "<connection string>"},
-		help: "Connects to a specified DAWGS-compatible Postgres DB to do graph introspection.",
+		args: []string{},
+		help: "Lists currently open named connections",
+		desc: "Prints all active connection names for this REPL session.",
 
 		Fn: func(ctx *CommandContext, fields []string) error {
+			if len(fields) != 0 {
+				return fmt.Errorf("invalid usage: list-connections")
+			}
+
+			connNames := ctx.scope.GetConnectionNames()
+			if len(connNames) == 0 {
+				fmt.Fprintln(ctx.output, "No open connections")
+				return nil
+			}
+
+			fmt.Fprintf(ctx.output, "Open connections (%d):\n", len(connNames))
+			for _, connName := range connNames {
+				fmt.Fprintf(ctx.output, "  %s\n", connName)
+			}
+
+			return nil
+		},
+	}
+}
+
+func openCmd() CommandDesc {
+	flagSet := flag.NewFlagSet("open", flag.ContinueOnError)
+
+	driverOverride := ""
+	flagSet.StringVar(&driverOverride, "driver", "", "Driver override: pg or neo4j (default: infer from connection string scheme)")
+
+	return CommandDesc{
+		args:  []string{"[flags]", "<name>", "<connection string>"},
+		help:  "Connects to a named DAWGS-compatible backend using a connection string.",
+		desc:  "Infers backend driver from the connection string scheme (postgres/postgresql => pg, neo4j => neo4j).",
+		flags: flagSet,
+
+		ClearFlagsFn: func() {
+			driverOverride = ""
+		},
+
+		Fn: func(ctx *CommandContext, fields []string) error {
+			driverOverride = ""
+			if err := flagSet.Parse(fields); err != nil {
+				return fmt.Errorf("could not parse flags: %w", err)
+			}
+
+			fields = flagSet.Args()
 			if len(fields) < 2 {
-				return fmt.Errorf("invalid usage: open-pg-db <name> <connection str>")
+				return fmt.Errorf("invalid usage: open [flags] <name> <connection str>")
 			}
 
 			name := fields[0]
 			connStr := fields[1]
-			connPool, err := pg.NewPool(drivers.DatabaseConfiguration{
-				Connection: connStr,
-			})
-			if err != nil {
-				return fmt.Errorf("error opening connection pool: %w", err)
+
+			driverName := ""
+			if strings.TrimSpace(driverOverride) != "" {
+				driverName = strings.ToLower(strings.TrimSpace(driverOverride))
+			} else if detectedDriverName, err := driverFromConnectionString(connStr); err != nil {
+				return err
+			} else {
+				driverName = detectedDriverName
 			}
 
-			querier, err := dawgs.Open(ctx, "pg", dawgs.Config{
+			config := dawgs.Config{
 				ConnectionString: connStr,
-				Pool:             connPool,
-			})
-			if err != nil {
-				return fmt.Errorf("error opening database connection '%s': %w", connStr, err)
 			}
 
-			if existingConn, ok := ctx.scope.connections[name]; ok {
+			openSuccess := false
+			switch driverName {
+			case pg.DriverName:
+				connPool, err := pg.NewPool(drivers.DatabaseConfiguration{
+					Connection: connStr,
+				})
+				if err != nil {
+					return fmt.Errorf("error opening connection pool: %w", err)
+				}
+				defer func() {
+					if !openSuccess {
+						connPool.Close()
+					}
+				}()
+
+				config.Pool = connPool
+			case neo4j.DriverName:
+				// No additional setup required for Neo4j before dawgs.Open.
+			default:
+				return fmt.Errorf("unsupported driver %q; expected one of: %s, %s", driverName, pg.DriverName, neo4j.DriverName)
+			}
+
+			querier, err := dawgs.Open(ctx, driverName, config)
+			if err != nil {
+				return fmt.Errorf("error opening %s database connection '%s': %w", driverName, connStr, err)
+			}
+
+			if existingConn, ok := ctx.scope.GetConnection(name); ok {
 				// Warn+close existing connection before overwriting it
 				ctx.output.Warnf("Discarding previous connection for '%s'", name)
 				if err := existingConn.Close(ctx); err != nil {
@@ -52,11 +125,28 @@ func openPGDBCmd() CommandDesc {
 				ctx.scope.DropConnection(name)
 			}
 
-			fmt.Fprintf(ctx.output, "Opened connection '%s'\n", name)
+			fmt.Fprintf(ctx.output, "Opened %s connection '%s'\n", driverName, name)
 			ctx.scope.AddConnection(name, querier)
+			openSuccess = true
 
 			return nil
 		},
+	}
+}
+
+func driverFromConnectionString(connStr string) (string, error) {
+	parsedURL, err := url.Parse(connStr)
+	if err != nil {
+		return "", fmt.Errorf("could not parse connection string: %w", err)
+	}
+
+	switch strings.ToLower(parsedURL.Scheme) {
+	case "postgres", "postgresql":
+		return pg.DriverName, nil
+	case neo4j.DriverName:
+		return neo4j.DriverName, nil
+	default:
+		return "", fmt.Errorf("unknown connection string scheme %q; expected postgres/postgresql or neo4j", parsedURL.Scheme)
 	}
 }
 
@@ -85,7 +175,7 @@ func getPGDBKinds() CommandDesc {
 }
 
 func loadKindMap(ctx *CommandContext, connName string) (stubs.KindMap, error) {
-	conn, ok := ctx.scope.connections[connName]
+	conn, ok := ctx.scope.GetConnection(connName)
 	if !ok {
 		return nil, fmt.Errorf("unknown connection %s; did you `open` it?", connName)
 	}

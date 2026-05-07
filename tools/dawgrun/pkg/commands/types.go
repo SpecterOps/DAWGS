@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -144,6 +146,14 @@ func (s *Scope) GetNumConnections() int {
 	return len(s.connections)
 }
 
+// GetConnectionNames returns sorted names for tracked database connections.
+func (s *Scope) GetConnectionNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return slices.Sorted(maps.Keys(s.connections))
+}
+
 // AddConnection stores or replaces a named database connection in scope.
 func (s *Scope) AddConnection(name string, querier graph.Database) {
 	s.mu.Lock()
@@ -159,4 +169,12 @@ func (s *Scope) DropConnection(name string) {
 
 	delete(s.connections, name)
 	delete(s.connKindMaps, name)
+}
+
+func (s *Scope) GetConnection(name string) (graph.Database, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn, ok := s.connections[name]
+	return conn, ok
 }
