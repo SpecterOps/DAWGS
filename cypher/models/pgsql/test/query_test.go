@@ -5,12 +5,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
+	v2 "github.com/specterops/dawgs/query/v2"
 )
 
 var (
@@ -24,19 +23,18 @@ var (
 func TestQuery_KindGeneratesInclusiveKindMatcher(t *testing.T) {
 	mapper := newKindMapper()
 
-	queries := []*cypher.Where{
-		query.Where(query.KindIn(query.Node(), NodeKind1)),
-		query.Where(query.Kind(query.Node(), NodeKind2)),
+	queries := []v2.QueryBuilder{
+		v2.New().Where(v2.KindIn(v2.Node(), NodeKind1)).Return(v2.Node()),
+		v2.New().Where(v2.Kind(v2.Node(), NodeKind2)).Return(v2.Node()),
 	}
 
-	for _, nodeQuery := range queries {
-		builder := query.NewBuilderWithCriteria(nodeQuery)
-		builtQuery, err := builder.Build(false)
+	for _, queryBuilder := range queries {
+		builtQuery, err := queryBuilder.Build()
 		if err != nil {
 			t.Errorf("could not build query: %v", err)
 		}
 
-		translatedQuery, err := translate.Translate(context.Background(), builtQuery, mapper, nil, translate.DefaultGraphID)
+		translatedQuery, err := translate.Translate(context.Background(), builtQuery.Query, mapper, builtQuery.Parameters, translate.DefaultGraphID)
 		if err != nil {
 			t.Errorf("could not translate query: %#v: %v", builtQuery, err)
 		}
@@ -47,7 +45,7 @@ func TestQuery_KindGeneratesInclusiveKindMatcher(t *testing.T) {
 				switch leftTyped := typedNode.LOperand.(type) {
 				case pgsql.CompoundIdentifier:
 					if slices.Equal(leftTyped, pgsql.AsCompoundIdentifier("n0", "kind_ids")) && typedNode.Operator != pgsql.OperatorPGArrayOverlap {
-						t.Errorf("query did not generate an array overlap operator (&&): %#v", nodeQuery)
+						t.Errorf("query did not generate an array overlap operator (&&): %#v", builtQuery)
 					}
 				}
 			}
