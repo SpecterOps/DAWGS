@@ -296,7 +296,7 @@ func (s Emitter) formatProjection(output io.Writer, projection *cypher.Projectio
 }
 
 func (s Emitter) formatReturn(output io.Writer, returnClause *cypher.Return) error {
-	if _, err := io.WriteString(output, " return "); err != nil {
+	if _, err := io.WriteString(output, "return "); err != nil {
 		return err
 	}
 
@@ -1095,6 +1095,12 @@ func (s Emitter) formatSinglePartQuery(writer io.Writer, singlePartQuery *cypher
 	}
 
 	if singlePartQuery.Return != nil {
+		if len(singlePartQuery.ReadingClauses) > 0 || len(singlePartQuery.UpdatingClauses) > 0 {
+			if _, err := io.WriteString(writer, " "); err != nil {
+				return err
+			}
+		}
+
 		return s.formatReturn(writer, singlePartQuery.Return)
 	}
 

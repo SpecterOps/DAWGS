@@ -510,11 +510,6 @@ func (s *identifierExtractor) Enter(node cypher.SyntaxNode) {
 		if typedNode.Variable != nil {
 			s.seen.Add(typedNode.Variable.Symbol)
 		}
-
-	case *cypher.ProjectionItem:
-		if typedNode.Alias != nil {
-			s.seen.Add(typedNode.Alias.Symbol)
-		}
 	}
 }
 

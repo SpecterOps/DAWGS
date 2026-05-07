@@ -183,6 +183,16 @@ func TestProjectionAndOrderHelpers(t *testing.T) {
 	require.Equal(t, "match (n) return distinct id(n) as node_id order by n.name asc, id(n) desc", renderPrepared(t, preparedQuery))
 }
 
+func TestProjectionAliasDoesNotCreateMatchInference(t *testing.T) {
+	preparedQuery, err := v2.New().Return(
+		v2.As(v2.Literal(1), "one"),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "return 1 as one", renderPrepared(t, preparedQuery))
+	require.Empty(t, preparedQuery.Parameters)
+}
+
 func TestUnsupportedOrderByTypeReturnsError(t *testing.T) {
 	_, err := v2.New().Return(v2.Node()).OrderBy(123).Build()
 	require.ErrorContains(t, err, "unsupported expression type: int")

@@ -1062,7 +1062,7 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	matchIdentifiers := readIdentifiers.Clone()
 	matchIdentifiers.Or(actionIdentifiers)
 
-	if len(s.constraints) > 0 || len(s.creates) == 0 || matchIdentifiers.Len() > 0 {
+	if len(s.constraints) > 0 || matchIdentifiers.Len() > 0 {
 		if isNodePattern(matchIdentifiers, s.identifiers) {
 			if err := prepareNodePattern(match, matchIdentifiers, s.identifiers); err != nil {
 				return nil, err
