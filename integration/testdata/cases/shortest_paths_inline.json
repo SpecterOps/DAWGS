@@ -17,7 +17,7 @@
           {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"}
         ]
       },
-      "assert": {"row_count": 1}
+      "assert": {"row_count": 1, "path_node_ids": [["a", "d"]]}
     },
     {
       "name": "multiple shortest paths of equal length",
@@ -36,7 +36,7 @@
           {"start_id": "c", "end_id": "d", "kind": "EdgeKind1"}
         ]
       },
-      "assert": {"row_count": 2}
+      "assert": {"row_count": 2, "path_node_ids": [["a", "b", "d"], ["a", "c", "d"]]}
     },
     {
       "name": "no path between disconnected nodes",
@@ -70,7 +70,7 @@
           {"start_id": "d", "end_id": "e", "kind": "EdgeKind1"}
         ]
       },
-      "assert": {"row_count": 3}
+      "assert": {"row_count": 3, "path_node_ids": [["a", "b", "e"], ["a", "c", "e"], ["a", "d", "e"]]}
     },
     {
       "name": "dead end branch does not affect shortest path",
@@ -88,7 +88,7 @@
           {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"}
         ]
       },
-      "assert": {"row_count": 1}
+      "assert": {"row_count": 1, "path_node_ids": [["a", "b", "c"]]}
     }
   ]
 }

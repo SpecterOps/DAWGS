@@ -11,7 +11,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a", "b"]}
     },
     {
       "name": "cross-product filter where two nodes match different typed properties",
@@ -24,7 +24,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter node where a scalar value appears in an array property",
@@ -35,7 +35,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter typed node with coalesce equality on both sides",
@@ -47,7 +47,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter node using an arithmetic expression in the WHERE clause",
@@ -59,7 +59,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter typed node using toLower contains with a compound AND predicate",
@@ -70,7 +70,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter typed node where a scalar appears in an array property concatenated with a literal list",
@@ -81,7 +81,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "return source and an aliased property from an unrelated node in a cross-product",
@@ -93,7 +93,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 2, "node_ids": ["a", "a"]}
     },
     {
       "name": "filter cross-product where either node satisfies a different property predicate",
@@ -106,7 +106,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 3, "node_ids": ["a", "a", "b"]}
     },
     {
       "name": "return a size of an array property in the projection",
@@ -117,7 +117,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"exact_int": 2}
     }
   ]
 }
