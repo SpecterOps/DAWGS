@@ -151,6 +151,18 @@ func TestScopedRelationshipPatternControls(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestScopedKindsOfCompatibilityHelper(t *testing.T) {
+	scope := v2.NewScope("path", "person", "source", "edge", "target")
+
+	preparedQuery, err := scope.New().Return(
+		v2.KindsOf(scope.Relationship()),
+		v2.KindsOf(scope.End()),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match ()-[edge]->(target) return type(edge), labels(target)", renderPrepared(t, preparedQuery))
+}
+
 func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().WithRelationshipDirection(graph.Direction(99)).Return(v2.Relationship()).Build()
 	require.ErrorContains(t, err, "unsupported relationship direction: invalid")

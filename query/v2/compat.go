@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -49,6 +50,18 @@ func Size(expression any) *cypher.FunctionInvocation {
 }
 
 func KindsOf(reference any) *cypher.FunctionInvocation {
+	if scopedReference, typeOK := reference.(scopedExpression); typeOK {
+		if variable, typeOK := scopedReference.qualifier().(*cypher.Variable); !typeOK {
+			return invalidExpression(fmt.Errorf("expected variable reference, got %T", scopedReference.qualifier()))
+		} else if expression, err := kindProjectionExpression(scopedReference.roleName(), variable); err != nil {
+			return invalidExpression(err)
+		} else if invocation, typeOK := expression.(*cypher.FunctionInvocation); !typeOK {
+			return invalidExpression(fmt.Errorf("expected kind projection function, got %T", expression))
+		} else {
+			return invocation
+		}
+	}
+
 	expression := expressionOrError(reference)
 
 	switch typedExpression := expression.(type) {

@@ -165,14 +165,14 @@ func propertyLookupOrError(reference any, propertyName string) cypher.Expression
 
 func projectionExpression(value any) (cypher.Expression, error) {
 	switch typedValue := value.(type) {
-	case QualifiedExpression:
-		return typedValue.qualifier(), nil
-
 	case kindContinuation:
 		return kindProjectionExpression(typedValue.role, typedValue.identifier)
 
 	case kindsContinuation:
 		return kindProjectionExpression(typedValue.role, typedValue.identifier)
+
+	case QualifiedExpression:
+		return typedValue.qualifier(), nil
 
 	case *cypher.ProjectionItem:
 		if typedValue.Expression == nil {

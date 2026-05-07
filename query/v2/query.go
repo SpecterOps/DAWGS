@@ -255,6 +255,12 @@ type QualifiedExpression interface {
 	qualifier() cypher.Expression
 }
 
+type scopedExpression interface {
+	QualifiedExpression
+
+	roleName() string
+}
+
 type EntityContinuation interface {
 	QualifiedExpression
 
@@ -442,6 +448,10 @@ func (s *entity[T]) qualifier() cypher.Expression {
 	return s.identifier
 }
 
+func (s *entity[T]) roleName() string {
+	return s.role
+}
+
 func (s *entity[T]) ID() IdentityContinuation {
 	return &comparisonContinuation{
 		qualifierExpression: &cypher.FunctionInvocation{
@@ -465,6 +475,14 @@ type kindContinuation struct {
 	role       string
 }
 
+func (s kindContinuation) qualifier() cypher.Expression {
+	return s.identifier
+}
+
+func (s kindContinuation) roleName() string {
+	return s.role
+}
+
 func (s kindContinuation) Is(kind graph.Kind) cypher.Expression {
 	return s.IsOneOf(graph.Kinds{kind})
 }
@@ -479,6 +497,14 @@ func (s kindContinuation) IsOneOf(kinds graph.Kinds) cypher.Expression {
 type kindsContinuation struct {
 	identifier *cypher.Variable
 	role       string
+}
+
+func (s kindsContinuation) qualifier() cypher.Expression {
+	return s.identifier
+}
+
+func (s kindsContinuation) roleName() string {
+	return s.role
 }
 
 func (s kindsContinuation) Has(kind graph.Kind) cypher.Expression {
