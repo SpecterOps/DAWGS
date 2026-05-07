@@ -632,12 +632,10 @@ func (s *builder) WithAllShortestPaths() QueryBuilder {
 }
 
 func (s *builder) WithRelationshipDirection(direction graph.Direction) QueryBuilder {
-	switch direction {
-	case graph.DirectionInbound, graph.DirectionOutbound:
+	if err := validateRelationshipDirection(direction); err != nil {
+		s.trackError(err)
+	} else {
 		s.relationshipDirection = direction
-
-	default:
-		s.trackError(fmt.Errorf("unsupported relationship direction: %s", direction))
 	}
 
 	return s
@@ -840,6 +838,10 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 			pattern.AddPatternElements(typedNextCreate)
 
 		case *cypher.RelationshipPattern:
+			if err := validateRelationshipDirection(typedNextCreate.Direction); err != nil {
+				return err
+			}
+
 			pattern.AddPatternElements(&cypher.NodePattern{
 				Variable: identifiers.Start(),
 			})

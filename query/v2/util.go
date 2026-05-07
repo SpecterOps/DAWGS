@@ -37,9 +37,22 @@ func prepareNodePattern(match *cypher.Match, seen *identifierSet, identifiers ru
 	return nil
 }
 
+func validateRelationshipDirection(direction graph.Direction) error {
+	switch direction {
+	case graph.DirectionInbound, graph.DirectionOutbound:
+		return nil
+	default:
+		return fmt.Errorf("unsupported relationship direction: %s", direction)
+	}
+}
+
 func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers, relationshipKinds graph.Kinds, direction graph.Direction, shortestPaths, allShortestPaths bool) error {
 	if shortestPaths && allShortestPaths {
 		return errors.New("query is requesting both all shortest paths and shortest paths")
+	}
+
+	if err := validateRelationshipDirection(direction); err != nil {
+		return err
 	}
 
 	var (

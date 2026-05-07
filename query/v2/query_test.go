@@ -171,6 +171,18 @@ func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported relationship direction: both")
 }
 
+func TestInvalidExplicitRelationshipPatternDirectionReturnsError(t *testing.T) {
+	_, err := v2.New().Create(
+		v2.RelationshipPattern(graph.StringKind("Edge"), nil, graph.DirectionBoth),
+	).Build()
+	require.ErrorContains(t, err, "unsupported relationship direction: both")
+
+	_, err = v2.New().Create(
+		v2.Relationship().RelationshipPattern(graph.StringKind("Edge"), nil, graph.Direction(99)),
+	).Build()
+	require.ErrorContains(t, err, "unsupported relationship direction: invalid")
+}
+
 func TestProjectionAndOrderHelpers(t *testing.T) {
 	preparedQuery, err := v2.New().ReturnDistinct(
 		v2.As(v2.Node().ID(), "node_id"),
