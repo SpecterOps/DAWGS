@@ -753,9 +753,14 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	var (
 		regularQuery, singlePartQuery = cypher.NewRegularQueryWithSingleQuery()
 		match                         = &cypher.Match{}
-		seenIdentifiers               = newIdentifierSet()
+		readIdentifiers               = newIdentifierSet()
 		relationshipKinds             graph.Kinds
 	)
+
+	createScope, err := collectCreateScope(s.creates...)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := s.buildUpdatingClauses(singlePartQuery); err != nil {
 		return nil, err
@@ -778,6 +783,7 @@ func (s *builder) Build() (*PreparedQuery, error) {
 					return nil, fmt.Errorf("expected type *cypher.Variable, got %T", typedNextConstraint)
 				} else if identifier.Symbol == Identifiers.relationship {
 					relationshipKinds = relationshipKinds.Add(typedNextConstraint.Kinds...)
+					readIdentifiers.Add(Identifiers.relationship)
 					continue
 				}
 			}
@@ -792,23 +798,33 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		if constraints.Left != nil {
 			whereClause.Add(constraints)
 
-			if err := seenIdentifiers.CollectFromExpression(whereClause); err != nil {
+			if err := readIdentifiers.CollectFromExpression(whereClause); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	if err := seenIdentifiers.CollectFromExpression(singlePartQuery); err != nil {
+	actionIdentifiers, err := collectIdentifiersFromValues(s.setItems, s.removeItems, s.deleteItems, s.projections, s.sortItems)
+	if err != nil {
 		return nil, err
 	}
 
-	if len(s.constraints) > 0 || len(s.creates) == 0 {
-		if isNodePattern(seenIdentifiers) {
-			if err := prepareNodePattern(match, seenIdentifiers); err != nil {
+	actionIdentifiers.Remove(createScope.identifiers)
+
+	matchIdentifiers := readIdentifiers.Clone()
+	matchIdentifiers.Or(actionIdentifiers)
+
+	if len(s.constraints) > 0 || len(s.creates) == 0 || matchIdentifiers.Len() > 0 {
+		if isNodePattern(matchIdentifiers) {
+			if err := prepareNodePattern(match, matchIdentifiers); err != nil {
 				return nil, err
 			}
-		} else if isRelationshipPattern(seenIdentifiers) {
-			if err := prepareRelationshipPattern(match, seenIdentifiers, relationshipKinds, s.shortestPathQuery, s.allShorestPathsQuery); err != nil {
+		} else if createScope.createsRelationship && !matchIdentifiers.Contains(Identifiers.relationship) {
+			if err := prepareCreateRelationshipMatch(match, matchIdentifiers); err != nil {
+				return nil, err
+			}
+		} else if isRelationshipPattern(matchIdentifiers) {
+			if err := prepareRelationshipPattern(match, matchIdentifiers, relationshipKinds, s.shortestPathQuery, s.allShorestPathsQuery); err != nil {
 				return nil, err
 			}
 		} else {

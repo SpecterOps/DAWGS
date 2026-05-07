@@ -10,6 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func renderPrepared(t *testing.T, preparedQuery *v2.PreparedQuery) string {
+	t.Helper()
+
+	cypherQueryStr, err := format.RegularQuery(preparedQuery.Query, false)
+	require.NoError(t, err)
+
+	return cypherQueryStr
+}
+
 func TestQuery(t *testing.T) {
 	preparedQuery, err := v2.New().Where(
 		v2.Not(v2.Relationship().Kind().Is(graph.StringKind("test"))),
@@ -50,5 +59,38 @@ func TestQuery(t *testing.T) {
 	require.Equal(t, "create (n:A $props)", cypherQueryStr)
 	require.Equal(t, map[string]any{
 		"props": map[string]any{},
+	}, preparedQuery.Parameters)
+}
+
+func TestCreateRelationshipWithMatchedEndpoints(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Create(
+		v2.Relationship().RelationshipPattern(graph.StringKind("A"), v2.NamedParameter("props", map[string]any{"name": "rel"}), graph.DirectionOutbound),
+	).Return(
+		v2.Relationship().ID(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (s), (e) where id(s) = $p0 and id(e) = $p1 create (s)-[r:A $props]->(e) return id(r)", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0":    1,
+		"p1":    2,
+		"props": map[string]any{"name": "rel"},
+	}, preparedQuery.Parameters)
+}
+
+func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
+	preparedQuery, err := v2.New().Create(
+		v2.Node().NodePattern(graph.Kinds{graph.StringKind("A")}, v2.NamedParameter("props", map[string]any{"name": "node"})),
+	).Return(
+		v2.Node().ID(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "create (n:A $props) return id(n)", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"props": map[string]any{"name": "node"},
 	}, preparedQuery.Parameters)
 }

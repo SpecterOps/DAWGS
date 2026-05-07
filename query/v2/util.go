@@ -87,6 +87,22 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, relati
 	return nil
 }
 
+func prepareCreateRelationshipMatch(match *cypher.Match, seen *identifierSet) error {
+	if seen.Contains(Identifiers.start) {
+		match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
+			Variable: Identifiers.Start(),
+		})
+	}
+
+	if seen.Contains(Identifiers.end) {
+		match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
+			Variable: Identifiers.End(),
+		})
+	}
+
+	return nil
+}
+
 type identifierSet struct {
 	identifiers map[string]struct{}
 }
@@ -101,9 +117,25 @@ func (s *identifierSet) Add(identifier string) {
 	s.identifiers[identifier] = struct{}{}
 }
 
+func (s *identifierSet) Len() int {
+	return len(s.identifiers)
+}
+
+func (s *identifierSet) Clone() *identifierSet {
+	clone := newIdentifierSet()
+	clone.Or(s)
+	return clone
+}
+
 func (s *identifierSet) Or(other *identifierSet) {
 	for otherIdentifier := range other.identifiers {
 		s.identifiers[otherIdentifier] = struct{}{}
+	}
+}
+
+func (s *identifierSet) Remove(other *identifierSet) {
+	for otherIdentifier := range other.identifiers {
+		delete(s.identifiers, otherIdentifier)
 	}
 }
 
@@ -119,6 +151,143 @@ func (s *identifierSet) CollectFromExpression(expr cypher.Expression) error {
 		s.Or(exprIdentifiers)
 		return nil
 	}
+}
+
+func (s *identifierSet) CollectFromValue(value any) error {
+	switch typedValue := value.(type) {
+	case nil:
+		return nil
+
+	case QualifiedExpression:
+		return s.CollectFromExpression(typedValue.qualifier())
+
+	case kindContinuation:
+		s.Add(typedValue.identifier.Symbol)
+		return nil
+
+	case kindsContinuation:
+		s.Add(typedValue.identifier.Symbol)
+		return nil
+
+	case *cypher.Return:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.Order:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.SortItem:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.Set:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.SetItem:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.Remove:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.RemoveItem:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.NodePattern:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.RelationshipPattern:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.Variable:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.FunctionInvocation:
+		return s.CollectFromExpression(typedValue)
+
+	case *cypher.PropertyLookup:
+		return s.CollectFromExpression(typedValue)
+
+	case []any:
+		for _, item := range typedValue {
+			if err := s.CollectFromValue(item); err != nil {
+				return err
+			}
+		}
+
+	case []cypher.SyntaxNode:
+		for _, item := range typedValue {
+			if err := s.CollectFromValue(item); err != nil {
+				return err
+			}
+		}
+
+	case []cypher.Expression:
+		for _, item := range typedValue {
+			if err := s.CollectFromValue(item); err != nil {
+				return err
+			}
+		}
+
+	case []*cypher.SetItem:
+		for _, item := range typedValue {
+			if err := s.CollectFromValue(item); err != nil {
+				return err
+			}
+		}
+
+	case []*cypher.RemoveItem:
+		for _, item := range typedValue {
+			if err := s.CollectFromValue(item); err != nil {
+				return err
+			}
+		}
+
+	default:
+		return nil
+	}
+
+	return nil
+}
+
+func collectIdentifiersFromValues(values ...any) (*identifierSet, error) {
+	identifiers := newIdentifierSet()
+
+	for _, value := range values {
+		if err := identifiers.CollectFromValue(value); err != nil {
+			return nil, err
+		}
+	}
+
+	return identifiers, nil
+}
+
+type createScope struct {
+	identifiers         *identifierSet
+	createsRelationship bool
+}
+
+func collectCreateScope(values ...any) (*createScope, error) {
+	scope := &createScope{
+		identifiers: newIdentifierSet(),
+	}
+
+	for _, value := range values {
+		switch typedValue := value.(type) {
+		case *cypher.RelationshipPattern:
+			scope.createsRelationship = true
+			scope.identifiers.Add(Identifiers.start)
+			scope.identifiers.Add(Identifiers.end)
+
+			if typedValue.Variable != nil {
+				scope.identifiers.Add(typedValue.Variable.Symbol)
+			}
+
+		default:
+			if err := scope.identifiers.CollectFromValue(value); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return scope, nil
 }
 
 type identifierExtractor struct {
