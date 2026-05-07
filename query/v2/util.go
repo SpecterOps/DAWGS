@@ -130,6 +130,39 @@ func kindProjectionExpression(identifier *cypher.Variable) (cypher.Expression, e
 	}
 }
 
+func invalidExpression(err error) *cypher.FunctionInvocation {
+	return cypher.WithErrors(cypher.NewSimpleFunctionInvocation("__invalid_expression__"), err)
+}
+
+func expressionOrError(value any) cypher.Expression {
+	if expression, err := projectionExpression(value); err != nil {
+		return invalidExpression(err)
+	} else {
+		return expression
+	}
+}
+
+func variableReference(value any) (*cypher.Variable, error) {
+	expression, err := projectionExpression(value)
+	if err != nil {
+		return nil, err
+	}
+
+	if variable, typeOK := expression.(*cypher.Variable); !typeOK {
+		return nil, fmt.Errorf("expected variable reference, got %T", expression)
+	} else {
+		return variable, nil
+	}
+}
+
+func propertyLookupOrError(reference any, propertyName string) cypher.Expression {
+	if variable, err := variableReference(reference); err != nil {
+		return invalidExpression(err)
+	} else {
+		return cypher.NewPropertyLookup(variable.Symbol, propertyName)
+	}
+}
+
 func projectionExpression(value any) (cypher.Expression, error) {
 	switch typedValue := value.(type) {
 	case QualifiedExpression:
@@ -142,6 +175,10 @@ func projectionExpression(value any) (cypher.Expression, error) {
 		return kindProjectionExpression(typedValue.identifier)
 
 	case *cypher.ProjectionItem:
+		if typedValue.Expression == nil {
+			return nil, fmt.Errorf("projection item has nil expression")
+		}
+
 		return typedValue.Expression, nil
 
 	case *cypher.Parameter:
@@ -208,6 +245,14 @@ func projectionExpression(value any) (cypher.Expression, error) {
 
 func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
 	if projectionItem, typeOK := value.(*cypher.ProjectionItem); typeOK {
+		if projectionItem.Expression == nil {
+			return nil, fmt.Errorf("projection item has nil expression")
+		}
+
+		if err := collectModelErrors(projectionItem); err != nil {
+			return nil, err
+		}
+
 		return projectionItem, nil
 	}
 
@@ -220,6 +265,14 @@ func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
 
 func sortItemFromValue(value any) (*cypher.SortItem, error) {
 	if sortItem, typeOK := value.(*cypher.SortItem); typeOK {
+		if sortItem.Expression == nil {
+			return nil, fmt.Errorf("sort item has nil expression")
+		}
+
+		if err := collectModelErrors(sortItem); err != nil {
+			return nil, err
+		}
+
 		return sortItem, nil
 	}
 
@@ -472,6 +525,106 @@ func extractCypherIdentifiers(expression cypher.Expression) (*identifierSet, err
 	)
 
 	return identifierExtractorVisitor.seen, err
+}
+
+func collectModelErrors(node cypher.SyntaxNode) error {
+	var modelErrors []error
+
+	if err := walk.Cypher(node, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if errorNode, typeOK := node.(cypher.Fallible); typeOK {
+			modelErrors = append(modelErrors, errorNode.Errors()...)
+		}
+	})); err != nil {
+		modelErrors = append(modelErrors, err)
+	}
+
+	return errors.Join(modelErrors...)
+}
+
+func collectModelErrorsFromKnownValues(values ...any) error {
+	var modelErrors []error
+
+	for _, value := range values {
+		switch typedValue := value.(type) {
+		case nil:
+			continue
+
+		case []cypher.SyntaxNode:
+			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case []cypher.Expression:
+			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case []*cypher.SetItem:
+			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case []*cypher.RemoveItem:
+			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case []*cypher.ProjectionItem:
+			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case []*cypher.SortItem:
+			if err := collectModelErrorsFromKnownValues(anySlice(typedValue)...); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+
+		case *cypher.ArithmeticExpression,
+			*cypher.Comparison,
+			*cypher.Conjunction,
+			*cypher.Create,
+			*cypher.Delete,
+			*cypher.Disjunction,
+			*cypher.ExclusiveDisjunction,
+			*cypher.FilterExpression,
+			*cypher.FunctionInvocation,
+			*cypher.IDInCollection,
+			*cypher.KindMatcher,
+			*cypher.ListLiteral,
+			*cypher.Negation,
+			*cypher.NodePattern,
+			*cypher.Order,
+			*cypher.Parenthetical,
+			*cypher.PatternPredicate,
+			*cypher.ProjectionItem,
+			*cypher.PropertyLookup,
+			*cypher.RelationshipPattern,
+			*cypher.Remove,
+			*cypher.RemoveItem,
+			*cypher.Return,
+			*cypher.Set,
+			*cypher.SetItem,
+			*cypher.SortItem,
+			*cypher.UnaryAddOrSubtractExpression,
+			*cypher.UpdatingClause,
+			*cypher.Variable:
+			if err := collectModelErrors(typedValue); err != nil {
+				modelErrors = append(modelErrors, err)
+			}
+		}
+	}
+
+	return errors.Join(modelErrors...)
+}
+
+func anySlice[T any](values []T) []any {
+	items := make([]any, len(values))
+
+	for idx, value := range values {
+		items[idx] = value
+	}
+
+	return items
 }
 
 type parameterMaterializer struct {

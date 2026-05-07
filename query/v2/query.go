@@ -157,19 +157,15 @@ func Desc(expression any) *cypher.SortItem {
 }
 
 func Order(expression any, direction SortDirection) *cypher.SortItem {
-	sortExpression, _ := projectionExpression(expression)
-
 	return &cypher.SortItem{
 		Ascending:  direction != SortDescending,
-		Expression: sortExpression,
+		Expression: expressionOrError(expression),
 	}
 }
 
 func As(expression any, alias string) *cypher.ProjectionItem {
-	projectionExpression, _ := projectionExpression(expression)
-
 	return &cypher.ProjectionItem{
-		Expression: projectionExpression,
+		Expression: expressionOrError(expression),
 		Alias:      cypher.NewVariableWithSymbol(alias),
 	}
 }
@@ -792,6 +788,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		return nil, fmt.Errorf("query has no action specified")
 	}
 
+	if err := collectModelErrorsFromKnownValues(s.constraints, s.setItems, s.removeItems, s.deleteItems, s.projections, s.sortItems); err != nil {
+		return nil, err
+	}
+
 	var (
 		regularQuery, singlePartQuery = cypher.NewRegularQueryWithSingleQuery()
 		match                         = &cypher.Match{}
@@ -819,6 +819,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		)
 
 		for _, nextConstraint := range s.constraints {
+			if err := collectModelErrorsFromKnownValues(nextConstraint); err != nil {
+				return nil, err
+			}
+
 			switch typedNextConstraint := nextConstraint.(type) {
 			case *cypher.KindMatcher:
 				if identifier, typeOK := typedNextConstraint.Reference.(*cypher.Variable); !typeOK {
@@ -879,6 +883,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		newReadingClause.Match = match
 
 		singlePartQuery.ReadingClauses = append(singlePartQuery.ReadingClauses, newReadingClause)
+	}
+
+	if err := collectModelErrors(regularQuery); err != nil {
+		return nil, err
 	}
 
 	if parameters, err := materializeParameters(regularQuery); err != nil {

@@ -112,6 +112,41 @@ func TestUnsupportedOrderByTypeReturnsError(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported expression type: int")
 }
 
+func TestInvalidHelperInputsReturnBuildErrors(t *testing.T) {
+	cases := map[string]struct {
+		builder v2.QueryBuilder
+		err     string
+	}{
+		"aliased projection": {
+			builder: v2.New().Return(v2.As(123, "bad")),
+			err:     "unsupported expression type: int",
+		},
+		"sort item": {
+			builder: v2.New().Return(v2.Node()).OrderBy(v2.Desc(123)),
+			err:     "unsupported expression type: int",
+		},
+		"set properties": {
+			builder: v2.New().Update(v2.SetProperties(123, map[string]any{"name": "bad"})),
+			err:     "unsupported expression type: int",
+		},
+		"delete properties": {
+			builder: v2.New().Update(v2.DeleteProperties(123, "name")),
+			err:     "unsupported expression type: int",
+		},
+		"pattern predicate": {
+			builder: v2.New().Where(v2.HasRelationships(123)).Return(v2.Node()),
+			err:     "unsupported expression type: int",
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := testCase.builder.Build()
+			require.ErrorContains(t, err, testCase.err)
+		})
+	}
+}
+
 func TestCompatibilityHelpers(t *testing.T) {
 	preparedQuery, err := v2.New().Where(
 		v2.And(

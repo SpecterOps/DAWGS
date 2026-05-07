@@ -13,9 +13,7 @@ func Variable(name string) *cypher.Variable {
 }
 
 func Identity(reference any) *cypher.FunctionInvocation {
-	expression, _ := projectionExpression(reference)
-
-	return cypher.NewSimpleFunctionInvocation(cypher.IdentityFunction, expression)
+	return cypher.NewSimpleFunctionInvocation(cypher.IdentityFunction, expressionOrError(reference))
 }
 
 func NodeID() *cypher.FunctionInvocation {
@@ -35,27 +33,23 @@ func EndID() *cypher.FunctionInvocation {
 }
 
 func Count(reference any) *cypher.FunctionInvocation {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewSimpleFunctionInvocation(cypher.CountFunction, expression)
+	return cypher.NewSimpleFunctionInvocation(cypher.CountFunction, expressionOrError(reference))
 }
 
 func CountDistinct(reference any) *cypher.FunctionInvocation {
-	expression, _ := projectionExpression(reference)
-
 	return &cypher.FunctionInvocation{
 		Name:      cypher.CountFunction,
 		Distinct:  true,
-		Arguments: []cypher.Expression{expression},
+		Arguments: []cypher.Expression{expressionOrError(reference)},
 	}
 }
 
 func Size(expression any) *cypher.FunctionInvocation {
-	expr, _ := projectionExpression(expression)
-	return cypher.NewSimpleFunctionInvocation(cypher.ListSizeFunction, expr)
+	return cypher.NewSimpleFunctionInvocation(cypher.ListSizeFunction, expressionOrError(expression))
 }
 
 func KindsOf(reference any) *cypher.FunctionInvocation {
-	expression, _ := projectionExpression(reference)
+	expression := expressionOrError(reference)
 
 	switch typedExpression := expression.(type) {
 	case *cypher.Variable:
@@ -72,10 +66,8 @@ func KindsOf(reference any) *cypher.FunctionInvocation {
 }
 
 func Kind(reference any, kinds ...graph.Kind) *cypher.KindMatcher {
-	expression, _ := projectionExpression(reference)
-
 	return &cypher.KindMatcher{
-		Reference: expression,
+		Reference: expressionOrError(reference),
 		Kinds:     kinds,
 	}
 }
@@ -89,8 +81,7 @@ func AddKind(reference any, kind graph.Kind) *cypher.SetItem {
 }
 
 func AddKinds(reference any, kinds graph.Kinds) *cypher.SetItem {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewSetItem(expression, cypher.OperatorLabelAssignment, kinds)
+	return cypher.NewSetItem(expressionOrError(reference), cypher.OperatorLabelAssignment, kinds)
 }
 
 func DeleteKind(reference any, kind graph.Kind) *cypher.RemoveItem {
@@ -98,23 +89,19 @@ func DeleteKind(reference any, kind graph.Kind) *cypher.RemoveItem {
 }
 
 func DeleteKinds(reference any, kinds graph.Kinds) *cypher.RemoveItem {
-	expression, _ := projectionExpression(reference)
-	return cypher.RemoveKindsByMatcher(cypher.NewKindMatcher(expression, kinds, false))
+	return cypher.RemoveKindsByMatcher(cypher.NewKindMatcher(expressionOrError(reference), kinds, false))
 }
 
 func SetProperty(reference any, value any) *cypher.SetItem {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewSetItem(expression, cypher.OperatorAssignment, valueExpression(value))
+	return cypher.NewSetItem(expressionOrError(reference), cypher.OperatorAssignment, valueExpression(value))
 }
 
 func SetProperties(reference any, properties map[string]any) *cypher.Set {
 	set := &cypher.Set{}
-	expression, _ := projectionExpression(reference)
-	variable, _ := expression.(*cypher.Variable)
 
 	for key, value := range properties {
 		set.Items = append(set.Items, cypher.NewSetItem(
-			cypher.NewPropertyLookup(variable.Symbol, key),
+			propertyLookupOrError(reference, key),
 			cypher.OperatorAssignment,
 			valueExpression(value),
 		))
@@ -124,17 +111,14 @@ func SetProperties(reference any, properties map[string]any) *cypher.Set {
 }
 
 func DeleteProperty(reference any) *cypher.RemoveItem {
-	expression, _ := projectionExpression(reference)
-	return cypher.RemoveProperty(expression)
+	return cypher.RemoveProperty(expressionOrError(reference))
 }
 
 func DeleteProperties(reference any, propertyNames ...string) *cypher.Remove {
 	remove := &cypher.Remove{}
-	expression, _ := projectionExpression(reference)
-	variable, _ := expression.(*cypher.Variable)
 
 	for _, propertyName := range propertyNames {
-		remove.Items = append(remove.Items, cypher.RemoveProperty(cypher.NewPropertyLookup(variable.Symbol, propertyName)))
+		remove.Items = append(remove.Items, cypher.RemoveProperty(propertyLookupOrError(reference, propertyName)))
 	}
 
 	return remove
@@ -174,13 +158,11 @@ func RelationshipPattern(kind graph.Kind, properties cypher.Expression, directio
 }
 
 func Equals(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorEquals, valueExpression(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorEquals, valueExpression(value))
 }
 
 func GreaterThan(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorGreaterThan, valueExpression(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorGreaterThan, valueExpression(value))
 }
 
 func After(reference any, value any) cypher.Expression {
@@ -188,8 +170,7 @@ func After(reference any, value any) cypher.Expression {
 }
 
 func GreaterThanOrEqualTo(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorGreaterThanOrEqualTo, valueExpression(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorGreaterThanOrEqualTo, valueExpression(value))
 }
 
 func GreaterThanOrEquals(reference any, value any) cypher.Expression {
@@ -197,8 +178,7 @@ func GreaterThanOrEquals(reference any, value any) cypher.Expression {
 }
 
 func LessThan(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorLessThan, valueExpression(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorLessThan, valueExpression(value))
 }
 
 func LessThanGraphQuery(reference any, other any) cypher.Expression {
@@ -214,8 +194,7 @@ func BeforeGraphQuery(reference any, other any) cypher.Expression {
 }
 
 func LessThanOrEqualTo(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorLessThanOrEqualTo, valueExpression(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorLessThanOrEqualTo, valueExpression(value))
 }
 
 func LessThanOrEquals(reference any, value any) cypher.Expression {
@@ -223,17 +202,15 @@ func LessThanOrEquals(reference any, value any) cypher.Expression {
 }
 
 func In(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorIn, valueExpression(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorIn, valueExpression(value))
 }
 
 func InInverted(reference any, value any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(valueExpression(value), cypher.OperatorIn, expression)
+	return cypher.NewComparison(valueExpression(value), cypher.OperatorIn, expressionOrError(reference))
 }
 
 func InIDs(reference any, ids ...graph.ID) cypher.Expression {
-	expression, _ := projectionExpression(reference)
+	expression := expressionOrError(reference)
 
 	if variable, typeOK := expression.(*cypher.Variable); typeOK {
 		expression = Identity(variable)
@@ -243,45 +220,36 @@ func InIDs(reference any, ids ...graph.ID) cypher.Expression {
 }
 
 func StringContains(reference any, value string) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorContains, Parameter(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorContains, Parameter(value))
 }
 
 func StringStartsWith(reference any, value string) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorStartsWith, Parameter(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorStartsWith, Parameter(value))
 }
 
 func StringEndsWith(reference any, value string) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorEndsWith, Parameter(value))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorEndsWith, Parameter(value))
 }
 
 func CaseInsensitiveStringContains(reference any, value string) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-
 	return cypher.NewComparison(
-		cypher.NewSimpleFunctionInvocation("toLower", expression),
+		cypher.NewSimpleFunctionInvocation("toLower", expressionOrError(reference)),
 		cypher.OperatorContains,
 		Parameter(strings.ToLower(value)),
 	)
 }
 
 func CaseInsensitiveStringStartsWith(reference any, value string) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-
 	return cypher.NewComparison(
-		cypher.NewSimpleFunctionInvocation("toLower", expression),
+		cypher.NewSimpleFunctionInvocation("toLower", expressionOrError(reference)),
 		cypher.OperatorStartsWith,
 		Parameter(strings.ToLower(value)),
 	)
 }
 
 func CaseInsensitiveStringEndsWith(reference any, value string) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-
 	return cypher.NewComparison(
-		cypher.NewSimpleFunctionInvocation("toLower", expression),
+		cypher.NewSimpleFunctionInvocation("toLower", expressionOrError(reference)),
 		cypher.OperatorEndsWith,
 		Parameter(strings.ToLower(value)),
 	)
@@ -292,23 +260,25 @@ func Exists(reference any) cypher.Expression {
 }
 
 func IsNull(reference any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorIs, Literal(nil))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorIs, Literal(nil))
 }
 
 func IsNotNull(reference any) cypher.Expression {
-	expression, _ := projectionExpression(reference)
-	return cypher.NewComparison(expression, cypher.OperatorIsNot, Literal(nil))
+	return cypher.NewComparison(expressionOrError(reference), cypher.OperatorIsNot, Literal(nil))
 }
 
 func HasRelationships(reference any) *cypher.PatternPredicate {
-	expression, _ := projectionExpression(reference)
-	variable, _ := expression.(*cypher.Variable)
-
 	patternPredicate := cypher.NewPatternPredicate()
-	patternPredicate.AddElement(&cypher.NodePattern{
-		Variable: cypher.NewVariableWithSymbol(variable.Symbol),
-	})
+
+	if variable, err := variableReference(reference); err != nil {
+		patternPredicate.AddElement(&cypher.NodePattern{
+			Properties: invalidExpression(err),
+		})
+	} else {
+		patternPredicate.AddElement(&cypher.NodePattern{
+			Variable: cypher.NewVariableWithSymbol(variable.Symbol),
+		})
+	}
 
 	patternPredicate.AddElement(&cypher.RelationshipPattern{
 		Direction: graph.DirectionBoth,
