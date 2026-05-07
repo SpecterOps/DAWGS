@@ -74,7 +74,7 @@ func TestTranslate_PatternPredicateInboundShape_CypherFrontend(t *testing.T) {
 		t.Fatalf("failed to parse cypher query: %v", err)
 	}
 
-	translatedQuery, err := translate.Translate(context.Background(), regularQuery, newKindMapper(), nil)
+	translatedQuery, err := translate.Translate(context.Background(), regularQuery, newKindMapper(), nil, translate.DefaultGraphID)
 	if err != nil {
 		t.Fatalf("failed to translate cypher query: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestTranslate_PatternPredicateInboundShape_GraphFrontend(t *testing.T) {
 		t.Fatalf("failed to build graph frontend query: %v", err)
 	}
 
-	translatedQuery, err := translate.Translate(context.Background(), rawQuery, newKindMapper(), nil)
+	translatedQuery, err := translate.Translate(context.Background(), rawQuery, newKindMapper(), nil, translate.DefaultGraphID)
 	if err != nil {
 		t.Fatalf("failed to translate graph frontend query: %v", err)
 	}
