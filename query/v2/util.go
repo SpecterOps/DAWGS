@@ -579,11 +579,6 @@ type identifierExtractor struct {
 	walk.Visitor[cypher.SyntaxNode]
 
 	seen *identifierSet
-
-	inDelete bool
-	inUpdate bool
-	inCreate bool
-	inWhere  bool
 }
 
 func newIdentifierExtractor() *identifierExtractor {
