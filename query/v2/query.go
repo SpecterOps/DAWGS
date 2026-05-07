@@ -805,6 +805,9 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 				default:
 					return fmt.Errorf("invalid variable reference for create: %s", typedExpression.Symbol)
 				}
+
+			default:
+				return fmt.Errorf("invalid qualified expression for create: %T", typedExpression)
 			}
 
 		case *cypher.NodePattern:

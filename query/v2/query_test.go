@@ -95,6 +95,11 @@ func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestInvalidCreateQualifiedExpressionReturnsError(t *testing.T) {
+	_, err := v2.New().Create(v2.Node().Property("name")).Build()
+	require.ErrorContains(t, err, "invalid qualified expression for create: *cypher.PropertyLookup")
+}
+
 func TestUpdatingClausesPreserveFluentOrder(t *testing.T) {
 	preparedQuery, err := v2.New().Create(
 		v2.NodePattern(graph.Kinds{graph.StringKind("User")}, nil),
