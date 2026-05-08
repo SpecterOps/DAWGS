@@ -107,6 +107,27 @@
         "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
       },
       "assert": "no_error"
+    },
+    {
+      "name": "return a node after setting multiple scalar properties",
+      "cypher": "match (n:NodeKind1) where n.name = 'set-props' set n.flag = true, n.score = 42 return n",
+      "fixture": {
+        "nodes": [{"id": "n", "kinds": ["NodeKind1"], "properties": {"name": "set-props"}}],
+        "edges": []
+      },
+      "assert": {"row_count": 1, "contains_node_with_props": {"flag": true, "score": 42}}
+    },
+    {
+      "name": "return an edge after setting a relationship property",
+      "cypher": "match (a)-[r:EdgeKind1]->(b) where a.name = 'edge-source' set r.visited = true return r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "edge-source"}},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": {"row_count": 1, "contains_edge": {"start": "a", "end": "b", "kind": "EdgeKind1", "props": {"visited": true}}}
     }
   ]
 }

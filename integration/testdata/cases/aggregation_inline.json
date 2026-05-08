@@ -72,6 +72,19 @@
         "edges": []
       },
       "assert": "non_empty"
+    },
+    {
+      "name": "count distinct property values from typed nodes",
+      "cypher": "MATCH (n:NodeKind1) RETURN count(distinct n.department)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"department": "eng"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"department": "eng"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"department": "ops"}}
+        ],
+        "edges": []
+      },
+      "assert": {"exact_int": 2}
     }
   ]
 }

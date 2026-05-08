@@ -105,6 +105,30 @@
         ]
       },
       "assert": {"exact_int": 1}
+    },
+    {
+      "name": "unwind a collected list carried from a WITH stage",
+      "cypher": "match (a:NodeKind1) where a.tag = 'collect_unwind' with collect(a.name) as names unwind names as name return name order by name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "collect_unwind"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "collect_unwind"}}
+        ],
+        "edges": []
+      },
+      "assert": {"ordered_scalar_values": ["alpha", "beta"]}
+    },
+    {
+      "name": "preserve rows through chained optional matches with a missing second hop",
+      "cypher": "match (a:NodeKind1) where a.name = 'anchor' optional match (a)-[:EdgeKind1]->(b:NodeKind2) optional match (b)-[:EdgeKind2]->(c:NodeKind1) return a, b, c",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "anchor"}},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": {"row_count": 1, "node_ids": ["a", "b"]}
     }
   ]
 }

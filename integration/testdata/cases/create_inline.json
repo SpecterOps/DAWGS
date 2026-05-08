@@ -79,10 +79,22 @@
       "assert": {"row_count": 3}
     },
     {
+      "name": "carry matched row values into created node properties and return them in order",
+      "cypher": "MATCH (a:NodeKind1) WHERE a.tag = 'create_scalar_source' WITH a CREATE (b:NodeKind2 {source: a.name}) RETURN b.source ORDER BY b.source",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "create_scalar_source"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "create_scalar_source"}}
+        ],
+        "edges": []
+      },
+      "assert": {"ordered_scalar_values": ["alpha", "beta"]}
+    },
+    {
       "name": "create a named path and return it",
       "cypher": "CREATE p = (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(:NodeKind2 {name: 'test'}) RETURN p",
       "fixture": {"nodes": [], "edges": []},
-      "assert": {"row_count": 1, "path_lengths": [1], "path_edge_kinds": [["EdgeKind1"]]}
+      "assert": {"row_count": 1, "path_lengths": [1], "path_edge_kinds": [["EdgeKind1"]], "contains_edge": {"kind": "EdgeKind1", "props": {"prop": 123}}}
     }
   ]
 }
