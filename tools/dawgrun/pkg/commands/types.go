@@ -5,17 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"os"
-	"slices"
 	"strings"
-	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/go-repl"
 
-	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/session"
 )
 
 type (
@@ -30,8 +26,8 @@ type (
 		// output is a convenience type to make issuing warnings and formatting outputs easier
 		output *CommandOutput
 
-		// scope is a singleton instance held by the command manager that holds any persistent state for a command.
-		scope *Scope
+		// session is a singleton held by the command manager for persistent dawgrun state.
+		session *session.Session
 	}
 	// CommandDesc defines a command's behavior, arguments, and flag lifecycle.
 	CommandDesc struct {
@@ -50,21 +46,15 @@ type (
 		warnings      []string
 		outputBuilder strings.Builder
 	}
-	// Scope holds persistent command state that can be shared across invocations.
-	Scope struct {
-		mu           sync.RWMutex
-		connections  map[string]graph.Database
-		connKindMaps map[string]stubs.KindMap
-	}
 )
 
 // NewCommandContext creates a command context with a fresh output buffer.
-func NewCommandContext(ctx context.Context, instance *repl.Repl, scope *Scope) *CommandContext {
+func NewCommandContext(ctx context.Context, instance *repl.Repl, session *session.Session) *CommandContext {
 	return &CommandContext{
 		Context:  ctx,
 		output:   new(CommandOutput),
 		instance: instance,
-		scope:    scope,
+		session:  session,
 	}
 }
 
@@ -128,53 +118,4 @@ func (co *CommandOutput) WriteHighlightedWithStyle(text, lexer, style string) {
 	} else {
 		co.outputBuilder.WriteString(highlighted)
 	}
-}
-
-// NewScope creates an empty shared scope for command state.
-func NewScope() *Scope {
-	return &Scope{
-		connections:  make(map[string]graph.Database),
-		connKindMaps: make(map[string]stubs.KindMap),
-	}
-}
-
-// GetNumConnections returns the number of tracked database connections.
-func (s *Scope) GetNumConnections() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return len(s.connections)
-}
-
-// GetConnectionNames returns sorted names for tracked database connections.
-func (s *Scope) GetConnectionNames() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return slices.Sorted(maps.Keys(s.connections))
-}
-
-// AddConnection stores or replaces a named database connection in scope.
-func (s *Scope) AddConnection(name string, querier graph.Database) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.connections[name] = querier
-}
-
-// DropConnection removes a named connection and any cached kind map.
-func (s *Scope) DropConnection(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.connections, name)
-	delete(s.connKindMaps, name)
-}
-
-func (s *Scope) GetConnection(name string) (graph.Database, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	conn, ok := s.connections[name]
-	return conn, ok
 }

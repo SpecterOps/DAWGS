@@ -1,14 +1,8 @@
 package commands
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"io"
-	"os"
-	"strings"
-
-	"github.com/specterops/dawgs/opengraph"
 )
 
 func saveOpenGraphCmd() CommandDesc {
@@ -39,37 +33,17 @@ func saveOpenGraphCmd() CommandDesc {
 			}
 
 			connName := fields[0]
-			conn, ok := ctx.scope.GetConnection(connName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
-			}
-
-			exportBuffer := new(bytes.Buffer)
-			if err := opengraph.Export(ctx, conn, exportBuffer); err != nil {
+			result, err := ctx.session.SaveOpenGraph(ctx, connName, outFilePath)
+			if err != nil {
 				return fmt.Errorf("could not export opengraph data: %w", err)
 			}
 
-			if strings.TrimSpace(outFilePath) == "" {
-				ctx.output.WriteHighlighted(exportBuffer.String(), "json")
+			if result.OutputPath == "" {
+				ctx.output.WriteHighlighted(result.JSON, "json")
 				return nil
 			}
 
-			outFile, err := os.Create(outFilePath)
-			if err != nil {
-				return fmt.Errorf("could not create output file %s: %w", outFilePath, err)
-			}
-			defer outFile.Close()
-
-			if _, err := outFile.Write(exportBuffer.Bytes()); err != nil {
-				return fmt.Errorf("could not write output file %s: %w", outFilePath, err)
-			}
-
-			doc, err := opengraph.ParseDocument(bytes.NewReader(exportBuffer.Bytes()))
-			if err != nil {
-				return fmt.Errorf("could not parse exported opengraph document: %w", err)
-			}
-
-			fmt.Fprintf(ctx.output, "Wrote %d nodes and %d edges to %s\n", len(doc.Graph.Nodes), len(doc.Graph.Edges), outFilePath)
+			fmt.Fprintf(ctx.output, "Wrote %d nodes and %d edges to %s\n", result.Nodes, result.Edges, result.OutputPath)
 			return nil
 		},
 	}
@@ -88,28 +62,12 @@ func loadOpenGraphCmd() CommandDesc {
 
 			connName := fields[0]
 			inputFilePath := fields[1]
-
-			conn, ok := ctx.scope.GetConnection(connName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
-			}
-
-			inputFile, err := os.Open(inputFilePath)
+			result, err := ctx.session.LoadOpenGraph(ctx, connName, inputFilePath)
 			if err != nil {
-				return fmt.Errorf("could not open opengraph input file %s: %w", inputFilePath, err)
-			}
-			defer inputFile.Close()
-
-			doc, err := opengraph.ParseDocument(inputFile)
-			if err != nil {
-				return fmt.Errorf("could not parse opengraph input file %s: %w", inputFilePath, err)
+				return err
 			}
 
-			if _, err := opengraph.WriteGraph(ctx, conn, &doc.Graph); err != nil {
-				return fmt.Errorf("could not write opengraph data into connection %s: %w", connName, err)
-			}
-
-			fmt.Fprintf(ctx.output, "Loaded %d nodes and %d edges from %s into connection '%s'\n", len(doc.Graph.Nodes), len(doc.Graph.Edges), inputFilePath, connName)
+			fmt.Fprintf(ctx.output, "Loaded %d nodes and %d edges from %s into connection '%s'\n", result.Nodes, result.Edges, result.InputPath, result.Connection)
 			return nil
 		},
 	}
@@ -126,54 +84,12 @@ func copyOpenGraphCmd() CommandDesc {
 				return fmt.Errorf("invalid usage: copy-opengraph <from-connection> <to-connection>")
 			}
 
-			fromConnName := fields[0]
-			toConnName := fields[1]
-			if fromConnName == toConnName {
-				return fmt.Errorf("source and destination connections must differ")
-			}
-
-			fromConn, ok := ctx.scope.GetConnection(fromConnName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", fromConnName)
-			}
-
-			toConn, ok := ctx.scope.GetConnection(toConnName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", toConnName)
-			}
-
-			pipeReader, pipeWriter := io.Pipe()
-			exportErrCh := make(chan error, 1)
-
-			go func() {
-				if err := opengraph.Export(ctx, fromConn, pipeWriter); err != nil {
-					_ = pipeWriter.CloseWithError(err)
-					exportErrCh <- err
-					return
-				}
-
-				exportErrCh <- pipeWriter.Close()
-			}()
-
-			doc, err := opengraph.ParseDocument(pipeReader)
+			result, err := ctx.session.CopyOpenGraph(ctx, fields[0], fields[1])
 			if err != nil {
-				_ = pipeReader.CloseWithError(err)
-			}
-			exportErr := <-exportErrCh
-
-			if exportErr != nil {
-				return fmt.Errorf("could not export opengraph data from connection %s: %w", fromConnName, exportErr)
+				return err
 			}
 
-			if err != nil {
-				return fmt.Errorf("could not parse streamed opengraph data from connection %s: %w", fromConnName, err)
-			}
-
-			if _, err := opengraph.WriteGraph(ctx, toConn, &doc.Graph); err != nil {
-				return fmt.Errorf("could not copy opengraph data into connection %s: %w", toConnName, err)
-			}
-
-			fmt.Fprintf(ctx.output, "Copied %d nodes and %d edges from connection '%s' to connection '%s'\n", len(doc.Graph.Nodes), len(doc.Graph.Edges), fromConnName, toConnName)
+			fmt.Fprintf(ctx.output, "Copied %d nodes and %d edges from connection '%s' to connection '%s'\n", result.Nodes, result.Edges, result.Source, result.Target)
 			return nil
 		},
 	}

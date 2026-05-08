@@ -16,6 +16,7 @@ import (
 	repl "github.com/specterops/go-repl"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/commands"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/session"
 )
 
 var (
@@ -53,12 +54,12 @@ func main() {
 	}
 
 	handler := new(handler)
-	handler.cmdScope = commands.NewScope()
+	handler.session = session.New()
 	handler.r = repl.NewRepl(handler, &repl.Options{
 		HistoryFilePath: path.Join(appConfigBaseDir, "history.txt"),
 		HistoryMaxLines: 1000,
 		StatusWidgets: &repl.StatusWidgetFns{
-			Right: makeConnectionsStatusWidget(handler.cmdScope),
+			Right: makeConnectionsStatusWidget(handler.session),
 		},
 	})
 
@@ -73,8 +74,8 @@ var (
 )
 
 type handler struct {
-	r        *repl.Repl
-	cmdScope *commands.Scope
+	r       *repl.Repl
+	session *session.Session
 }
 
 func (h *handler) Prompt() string {
@@ -154,7 +155,7 @@ func (h *handler) Eval(line string) string {
 	command := strings.ToLower(fields[0])
 	rest := fields[1:]
 	if cmd, ok := commands.Registry()[command]; ok {
-		cmdCtx := commands.NewCommandContext(ctx, h.r, h.cmdScope)
+		cmdCtx := commands.NewCommandContext(ctx, h.r, h.session)
 		defer trace.StartRegion(cmdCtx, fmt.Sprintf("command-%s", command)).End()
 		err := cmd.Fn(cmdCtx, rest)
 		// Reset command's associated flags after exec
@@ -178,9 +179,9 @@ func (h *handler) Eval(line string) string {
 	return fmt.Sprintf("Unknown command %s; try `help`?", command)
 }
 
-func makeConnectionsStatusWidget(cmdScope *commands.Scope) repl.StatusWidgetFn {
+func makeConnectionsStatusWidget(session *session.Session) repl.StatusWidgetFn {
 	return func(r *repl.Repl) string {
-		if numConns := cmdScope.GetNumConnections(); numConns == 0 {
+		if numConns := session.NumConnections(); numConns == 0 {
 			return "No connections"
 		} else {
 			return fmt.Sprintf("%d connection(s)", numConns)

@@ -261,4 +261,5 @@ require (
 tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	github.com/specterops/dawgs/tools/dawgrun/cmd/dawgrun
+	github.com/specterops/dawgs/tools/dawgrun/cmd/dawgrun-mcp
 )

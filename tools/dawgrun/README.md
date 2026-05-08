@@ -57,6 +57,54 @@ You are dropped into a prompt:
 At any time, run `help` to list commands or `help <command>` for
 detailed usage, flag defaults, and description.
 
+## MCP server
+
+`dawgrun-mcp` is a stdio MCP server that exposes the dawgrun command
+surface to agent clients. It uses a dedicated dawgrun session that
+keeps named backend connections and loaded kind maps in memory for the
+lifetime of the MCP process, mirroring the REPL session model without
+going through the REPL command parser.
+
+Run it from a `DAWGS` checkout with:
+
+    go tool dawgrun-mcp
+
+An MCP client can launch it with a config like:
+
+```json
+{
+  "mcpServers": {
+    "dawgrun": {
+      "command": "go",
+      "args": ["tool", "dawgrun-mcp"]
+    }
+  }
+}
+```
+
+For OpenCode specifically, use the array-form local command:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "dawgrun": {
+      "type": "local",
+      "command": ["go", "tool", "dawgrun-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Write-capable tools such as `load_opengraph` and `copy_opengraph` are
+gated behind `--allow-writes`. The server closes open connections when
+the MCP process exits, and also exposes `close_connection` for explicit
+session cleanup.
+
+Tool responses include `structuredContent` where possible, with the same
+payload rendered as JSON text for clients that only display text output.
+
 ## Commands
 
 The REPL supports command-name completion with `Tab`; ambiguous matches render a transient popover list near the prompt and can be dismissed with `Esc`.

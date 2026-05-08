@@ -7,16 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
-	"github.com/kanmu/go-sqlfmt/sqlfmt"
-	"github.com/specterops/dawgs/cypher/models/pgsql/format"
-	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/graph"
 	"golang.org/x/term"
 
-	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/session"
 )
 
 const (
@@ -30,12 +25,12 @@ func parseCmd() CommandDesc {
 		help: "Parses and dumps a Cypher query to AST form.",
 
 		Fn: func(ctx *CommandContext, fields []string) error {
-			query, err := parseQueryArray(fields)
+			result, err := ctx.session.ParseCypher(strings.Join(fields, " "))
 			if err != nil {
 				return fmt.Errorf("error trying to parse query '%s': %w", fields, err)
 			}
 
-			ctx.output.WriteHighlighted(spew.Sdump(query), "golang")
+			ctx.output.WriteHighlighted(result["ast"], "golang")
 			return nil
 		},
 	}
@@ -68,52 +63,17 @@ func translateToPsqlCmd() CommandDesc {
 			}
 
 			fields = flagSet.Args()
-			query, err := parseQueryArray(fields)
-			if err != nil {
-				return fmt.Errorf("error trying to parse query '%s': %w", fields, err)
-			}
-
-			kindMapper := stubs.EmptyMapper()
-			if kindMapperConnRef != "" {
-				// Fetch kinds regardless of if it's already loaded.
-				kindMap, err := loadKindMap(ctx, kindMapperConnRef)
-				if err != nil {
-					return fmt.Errorf("could not load kind map for explain: %w", err)
-				}
-				kindMapper = stubs.MapperFromKindMap(kindMap)
-			}
-
-			result, err := translate.Translate(ctx, query, kindMapper, nil)
+			result, err := ctx.session.TranslateCypherToPGSQL(ctx, strings.Join(fields, " "), kindMapperConnRef, dumpTranslatedAst)
 			if err != nil {
 				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
 			}
 			if dumpTranslatedAst {
 				fmt.Fprintf(ctx.output, "TRANSLATOR AST\n\n")
-				ctx.output.WriteHighlighted(spew.Sdump(result.Statement), "golang")
+				ctx.output.WriteHighlighted(result.PGAst, "golang")
 				fmt.Fprintf(ctx.output, "\n")
 			}
 
-			// Certain queries will materialize parameters into the output when translated, so we need to build
-			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
-			if result.Parameters != nil {
-				queryBuilder.WithMaterializedParameters(result.Parameters)
-			}
-
-			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
-			if err != nil {
-				return fmt.Errorf("could not format translated statement into a string query: %w", err)
-			}
-
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
-				Distance: 0,
-			})
-			if err != nil {
-				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
-			}
-
-			ctx.output.WriteHighlighted(formattedQuery, "postgres")
+			ctx.output.WriteHighlighted(result.SQL, "postgres")
 			return nil
 		},
 	}
@@ -131,71 +91,15 @@ func explainAsPsqlCmd() CommandDesc {
 			}
 
 			connName := fields[0]
-			conn, ok := ctx.scope.connections[connName]
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
-			}
-
-			// Fetch kinds regardless of if it's already loaded.
-			kindMap, err := loadKindMap(ctx, connName)
-			if err != nil {
-				return fmt.Errorf("could not load kind map for explain: %w", err)
-			}
-
-			query, err := parseQueryArray(fields[1:])
-			if err != nil {
-				return fmt.Errorf("could not parse query: %w", err)
-			}
-
-			// Populate a DumbKindMapper from the database's kinds table
-			kindMapper := stubs.MapperFromKindMap(kindMap)
-			result, err := translate.Translate(ctx, query, kindMapper, nil)
-			if err != nil {
-				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
-			}
-
-			// Certain queries will materialize parameters into the output when translated, so we need to build
-			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
-			if result.Parameters != nil {
-				queryBuilder.WithMaterializedParameters(result.Parameters)
-			}
-
-			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
-			if err != nil {
-				return fmt.Errorf("could not format translated statement into a string query: %w", err)
-			}
-
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
-				Distance: 2,
-			})
-			if err != nil {
-				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
-			}
-			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", formattedQuery)
-			ctx.output.WriteHighlighted(explainSQLQuery, "postgres")
-			fmt.Fprint(ctx.output, "\n\n")
-
-			err = conn.ReadTransaction(ctx, func(tx graph.Transaction) error {
-				result := tx.Raw(explainSQLQuery, nil)
-				if err := result.Error(); err != nil {
-					return fmt.Errorf("error running raw query: '%s': %w", explainSQLQuery, err)
-				}
-				defer result.Close()
-
-				var value string
-				for result.Next() {
-					if err := graph.ScanNextResult(result, &value); err != nil {
-						return fmt.Errorf("could not scan EXPLAIN row: %w", err)
-					}
-					fmt.Fprintf(ctx.output, "  %s\n", value)
-				}
-
-				return nil
-			})
+			result, err := ctx.session.ExplainCypherPGSQL(ctx, connName, strings.Join(fields[1:], " "))
 			if err != nil {
 				return fmt.Errorf("could not run EXPLAIN query: %w", err)
+			}
+
+			ctx.output.WriteHighlighted(result.SQL, "postgres")
+			fmt.Fprint(ctx.output, "\n\n")
+			for _, planLine := range result.Plan {
+				fmt.Fprintf(ctx.output, "  %s\n", planLine)
 			}
 
 			return nil
@@ -237,106 +141,63 @@ func queryCypherCmd() CommandDesc {
 			}
 
 			connName := fields[0]
-			conn, ok := ctx.scope.connections[connName]
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
+			result, err := ctx.session.QueryCypher(ctx, connName, strings.Join(fields[1:], " "))
+			if err != nil {
+				return err
 			}
 
-			cypherQuery := strings.Join(fields[1:], " ")
+			switch outputFormat {
+			case queryCypherOutputFormatJSON:
+				return queryCypherSessionOutputJSON(ctx, result)
+			case queryCypherOutputFormatTable:
+				return queryCypherSessionOutputTable(ctx, result)
+			}
 
-			return conn.ReadTransaction(ctx, func(tx graph.Transaction) error {
-				result := tx.Query(cypherQuery, nil)
-				if err := result.Error(); err != nil {
-					return fmt.Errorf("error running cypher query '%s': %w", cypherQuery, err)
-				}
-				defer result.Close()
-
-				switch outputFormat {
-				case queryCypherOutputFormatJSON:
-					return queryCypherOutputJSON(ctx, result)
-				case queryCypherOutputFormatTable:
-					return queryCypherOutputTable(ctx, result)
-				}
-
-				return fmt.Errorf("unknown output format: %s", outputFormat)
-			})
+			return fmt.Errorf("unknown output format: %s", outputFormat)
 		},
 	}
 }
 
-func queryCypherOutputJSON(ctx *CommandContext, result graph.Result) error {
-	var outputColumns []string
-
-	fmt.Fprint(ctx.output, "[\n")
-
-	rowCount := 0
-	for result.Next() {
-		values := result.Values()
-		insertFormat := ",\n    %s"
-
-		if rowCount == 0 {
-			outputColumns = buildCypherResultColumns(result.Keys(), len(values))
-			insertFormat = "    %s"
-		}
-
-		rowOutput, err := json.MarshalIndent(buildCypherResultJSONRow(outputColumns, values), "    ", "    ")
-		if err != nil {
-			return fmt.Errorf("error marshalling JSON row: %v: %w", values, err)
-		}
-
-		fmt.Fprintf(ctx.output, insertFormat, rowOutput)
-		rowCount++
+func queryCypherSessionOutputJSON(ctx *CommandContext, result session.QueryResult) error {
+	rowOutput, err := json.MarshalIndent(result.Rows, "", "    ")
+	if err != nil {
+		return fmt.Errorf("error marshalling JSON rows: %w", err)
 	}
 
-	if err := result.Error(); err != nil {
-		return fmt.Errorf("error fetching query rows: %w", err)
-	}
-
-	fmt.Fprint(ctx.output, "\n]\n")
-
+	fmt.Fprintln(ctx.output, string(rowOutput))
 	return nil
 }
 
-func queryCypherOutputTable(ctx *CommandContext, result graph.Result) error {
-	var (
-		outputColumns []string
-		outputTable   table.Writer
-	)
-
-	outputTable = table.NewWriter()
-	style := table.StyleRounded
-	style.Options.SeparateRows = true
-	style.Size.WidthMax = cypherResultTableWidth()
-	outputTable.SetStyle(style)
-
-	rowCount := 0
-	for result.Next() {
-		values := result.Values()
-
-		if rowCount == 0 {
-			outputColumns = buildCypherResultColumns(result.Keys(), len(values))
-
-			outputTable.AppendHeader(buildCypherResultHeader(outputColumns))
-			outputTable.SetColumnConfigs(buildCypherResultColumnConfigs(len(outputColumns), cypherResultTableWidth()))
-		}
-
-		outputTable.AppendRow(buildCypherResultRow(values))
-		rowCount++
-	}
-
-	if err := result.Error(); err != nil {
-		return fmt.Errorf("error fetching query rows: %w", err)
-	}
-
-	if rowCount == 0 {
+func queryCypherSessionOutputTable(ctx *CommandContext, result session.QueryResult) error {
+	if result.RowCount == 0 {
 		fmt.Fprint(ctx.output, "(0 rows)\n")
 		return nil
 	}
 
-	fmt.Fprint(ctx.output, outputTable.Render())
-	fmt.Fprintf(ctx.output, "\n(%d rows)\n", rowCount)
+	outputTable := table.NewWriter()
+	style := table.StyleRounded
+	style.Options.SeparateRows = true
+	style.Size.WidthMax = cypherResultTableWidth()
+	outputTable.SetStyle(style)
+	outputTable.AppendHeader(buildCypherResultHeader(result.Columns))
+	outputTable.SetColumnConfigs(buildCypherResultColumnConfigs(len(result.Columns), cypherResultTableWidth()))
 
+	for _, row := range result.Rows {
+		outputTable.AppendRow(buildSessionCypherResultRow(result.Columns, row))
+	}
+
+	fmt.Fprint(ctx.output, outputTable.Render())
+	fmt.Fprintf(ctx.output, "\n(%d rows)\n", result.RowCount)
 	return nil
+}
+
+func buildSessionCypherResultRow(columns []string, values map[string]any) table.Row {
+	row := make(table.Row, len(columns))
+	for idx, column := range columns {
+		row[idx] = formatCypherResultValue(values[column])
+	}
+
+	return row
 }
 
 func cypherResultTableWidth() int {
@@ -379,79 +240,10 @@ func buildCypherResultColumnConfigs(columnCount, tableWidth int) []table.ColumnC
 	return configs
 }
 
-func buildCypherResultColumns(keys []string, numValues int) []string {
-	columns := append([]string{}, keys...)
-
-	if len(columns) < numValues {
-		for idx := len(columns); idx < numValues; idx++ {
-			columns = append(columns, fmt.Sprintf("column_%d", idx+1))
-		}
-	}
-
-	return columns
-}
-
 func buildCypherResultHeader(columns []string) table.Row {
 	row := make(table.Row, len(columns))
 	for idx, key := range columns {
 		row[idx] = key
-	}
-
-	return row
-}
-
-func buildCypherResultJSONRow(columns []string, values []any) map[string]any {
-	row := make(map[string]any, len(columns))
-	for idx, key := range columns {
-		if idx < len(values) {
-			row[key] = formatCypherResultJSONValue(values[idx])
-		} else {
-			row[key] = nil
-		}
-	}
-
-	return row
-}
-
-func formatCypherResultJSONValue(value any) any {
-	switch typed := value.(type) {
-	case nil:
-		return nil
-	case bool,
-		int,
-		int8,
-		int16,
-		int32,
-		int64,
-		uint,
-		uint8,
-		uint16,
-		uint32,
-		uint64,
-		float32,
-		float64,
-		string:
-		return typed
-	case graph.ID:
-		return typed.Uint64()
-	case []byte:
-		return string(typed)
-	default:
-		if marshaled, err := json.Marshal(typed); err == nil {
-			var normalized any
-			if err := json.Unmarshal(marshaled, &normalized); err == nil {
-				return normalized
-			}
-		}
-
-		return fmt.Sprintf("%v", typed)
-	}
-}
-
-func buildCypherResultRow(values []any) table.Row {
-	row := make(table.Row, len(values))
-	for idx, value := range values {
-		row[idx] = formatCypherResultValue(value)
 	}
 
 	return row

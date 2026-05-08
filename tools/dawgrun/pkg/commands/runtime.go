@@ -2,8 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
-	"runtime/trace"
 	"strings"
 )
 
@@ -21,10 +19,6 @@ func quitCmd() CommandDesc {
 }
 
 func runtimeTraceCmd() CommandDesc {
-	state := make(map[string]any)
-	state["run"] = false
-	state["tracefile"] = nil
-
 	usage := "runtime-trace <start|stop> [tracefile]"
 
 	return CommandDesc{
@@ -40,47 +34,22 @@ stop - Stop runtime tracing and close the trace file`,
 			subcmd := strings.ToLower(fields[0])
 			switch subcmd {
 			case "start":
-				if running, ok := state["run"].(bool); ok && running {
-					return fmt.Errorf("runtime tracing is already enabled")
-				}
-
 				var traceOut string
 				if len(fields) > 1 {
 					traceOut = fields[1]
-				} else {
-					traceOut = "trace.out"
 				}
 
-				traceFile, err := os.Create(traceOut)
+				result, err := ctx.session.StartRuntimeTrace(traceOut)
 				if err != nil {
-					return fmt.Errorf("error creating tracefile: %w", err)
+					return err
 				}
 
-				if err := trace.Start(traceFile); err != nil {
-					traceFile.Close()
-					return fmt.Errorf("could not start tracing: %w", err)
-				}
-
-				state["run"] = true
-				state["tracefile"] = traceFile
-
-				fmt.Fprintf(ctx.output, "Started runtime tracing to %s", traceOut)
+				fmt.Fprintf(ctx.output, "Started runtime tracing to %s", result.Path)
 				return nil
 			case "stop":
-				if running, ok := state["run"].(bool); ok && !running {
-					return fmt.Errorf("runtime tracing is not running")
+				if err := ctx.session.StopRuntimeTrace(); err != nil {
+					return err
 				}
-
-				trace.Stop()
-				traceFile, ok := state["tracefile"].(*os.File)
-				if !ok {
-					return fmt.Errorf("could not get open tracing file")
-				}
-
-				traceFile.Close()
-
-				state["run"] = false
-				state["tracefile"] = nil
 
 				fmt.Fprint(ctx.output, "Stopped runtime tracing")
 				return nil
