@@ -122,6 +122,31 @@
         "edges": []
       },
       "assert": {"exact_int": 2}
+    },
+    {
+      "name": "filter typed nodes with null check and negated boolean property",
+      "cypher": "match (n:NodeKind1) where n.name is not null and not n.disabled return n",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "enabled", "disabled": false}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "disabled", "disabled": true}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"disabled": false}}
+        ],
+        "edges": []
+      },
+      "assert": {"node_ids": ["a"]}
+    },
+    {
+      "name": "return ordered property projections from typed nodes",
+      "cypher": "match (n:NodeKind1) where n.tag = 'ordered_projection' return n.name order by n.name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "ordered_projection"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "ordered_projection"}}
+        ],
+        "edges": []
+      },
+      "assert": {"ordered_scalar_values": ["alpha", "beta"]}
     }
   ]
 }

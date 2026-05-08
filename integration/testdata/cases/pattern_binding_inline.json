@@ -181,6 +181,34 @@
         "edges": [{"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}]
       },
       "assert": "non_empty"
+    },
+    {
+      "name": "return two named paths from the same row",
+      "cypher": "match p=(a:NodeKind1)-[:EdgeKind1]->(b:NodeKind2) match q=(b)-[:EdgeKind2]->(c:NodeKind1) return p, q",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "c", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"path_node_ids": [["a", "b"], ["b", "c"]], "path_edge_kinds": [["EdgeKind1"], ["EdgeKind2"]]}
+    },
+    {
+      "name": "bind an inbound directed path between typed nodes",
+      "cypher": "match p=(a:NodeKind1)<-[:EdgeKind1]-(b:NodeKind2) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "b", "end_id": "a", "kind": "EdgeKind1"}]
+      },
+      "assert": {"path_node_ids": [["a", "b"]], "path_edge_kinds": [["EdgeKind1"]]}
     }
   ]
 }

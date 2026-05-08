@@ -125,7 +125,7 @@
         ],
         "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
       },
-      "assert": {"path_node_ids": [["src", "dst"]]}
+      "assert": {"path_node_ids": [["src", "dst"]], "path_edge_kinds": [["EdgeKind1"]]}
     },
     {
       "name": "bind expansion path filtering both endpoints using ends-with on objectid",
@@ -137,7 +137,7 @@
         ],
         "edges": [{"start_id": "src", "end_id": "tgt", "kind": "EdgeKind1"}]
       },
-      "assert": {"path_node_ids": [["src", "tgt"]]}
+      "assert": {"path_node_ids": [["src", "tgt"]], "path_edge_kinds": [["EdgeKind1"]]}
     }
   ]
 }
