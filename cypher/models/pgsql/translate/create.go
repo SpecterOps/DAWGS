@@ -176,9 +176,13 @@ func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame,
 	return projectFrame, nil
 }
 
-func (s *Translator) translateCreate(create *cypher.Create) error {
+func (s *Translator) translateCreate(_ *cypher.Create) error {
 	s.query.CurrentPart().isCreating = false
 
+	return nil
+}
+
+func (s *Translator) buildCreates() error {
 	if err := s.buildNodeCreations(); err != nil {
 		return err
 	}

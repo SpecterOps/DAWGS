@@ -19,6 +19,12 @@
       "assert": {"row_count": 1}
     },
     {
+      "name": "create two nodes from consecutive create clauses",
+      "cypher": "CREATE (a:NodeKind1 {name: 'first'}) CREATE (b:NodeKind2 {name: 'second'}) RETURN a, b",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1, "contains_node_with_prop": ["name", "second"]}
+    },
+    {
       "name": "create two typed nodes connected by a directed edge",
       "cypher": "CREATE (a:NodeKind1)-[r:EdgeKind1]->(b:NodeKind2) RETURN r",
       "fixture": {"nodes": [], "edges": []},
