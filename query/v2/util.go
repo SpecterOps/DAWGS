@@ -619,14 +619,6 @@ func (s *identifierSet) CollectFromValue(value any) error {
 	case QualifiedExpression:
 		return s.CollectFromExpression(typedValue.qualifier())
 
-	case kindContinuation:
-		s.Add(typedValue.identifier.Symbol)
-		return nil
-
-	case kindsContinuation:
-		s.Add(typedValue.identifier.Symbol)
-		return nil
-
 	case *cypher.Return:
 		if projectionItems, err := projectionItemsFromReturn(typedValue); err != nil {
 			return err

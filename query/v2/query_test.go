@@ -187,26 +187,28 @@ func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 
 func TestShortestPathControls(t *testing.T) {
 	preparedQuery, err := v2.New().WithShortestPaths().Where(
+		v2.Relationship().Kind().Is(graph.StringKind("MemberOf")),
 		v2.Start().ID().Equals(1),
 		v2.End().ID().Equals(2),
 	).Return(
 		v2.Path(),
 	).Build()
 	require.NoError(t, err)
-	require.Equal(t, "match p = shortestPath((s)-[*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
+	require.Equal(t, "match p = shortestPath((s)-[r:MemberOf*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
 	require.Equal(t, map[string]any{
 		"p0": 1,
 		"p1": 2,
 	}, preparedQuery.Parameters)
 
 	preparedQuery, err = v2.New().WithAllShortestPaths().Where(
+		v2.Relationship().Kind().Is(graph.StringKind("MemberOf")),
 		v2.Start().ID().Equals(1),
 		v2.End().ID().Equals(2),
 	).Return(
 		v2.Path(),
 	).Build()
 	require.NoError(t, err)
-	require.Equal(t, "match p = allShortestPaths((s)-[*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
+	require.Equal(t, "match p = allShortestPaths((s)-[r:MemberOf*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
 
 	_, err = v2.New().WithShortestPaths().WithAllShortestPaths().Where(
 		v2.Start().ID().Equals(1),
@@ -215,6 +217,16 @@ func TestShortestPathControls(t *testing.T) {
 		v2.Path(),
 	).Build()
 	require.ErrorContains(t, err, "query is requesting both all shortest paths and shortest paths")
+}
+
+func TestMixedNodeAndRelationshipIdentifiersReturnError(t *testing.T) {
+	_, err := v2.New().Where(
+		v2.Node().ID().Equals(1),
+		v2.Relationship().ID().Equals(2),
+	).Return(
+		v2.Node(),
+	).Build()
+	require.ErrorContains(t, err, "query mixes node and relationship query identifiers")
 }
 
 func TestInvalidExplicitRelationshipPatternDirectionReturnsError(t *testing.T) {
@@ -315,6 +327,26 @@ func TestRawReturnInputPreservesProjectionMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "match (n) return distinct id(n) order by n.name desc skip 5 limit 10", renderPrepared(t, preparedQuery))
+}
+
+func TestRawReturnInputMergesWithBuilderProjectionControls(t *testing.T) {
+	returnClause := cypher.NewReturn()
+	projection := returnClause.NewProjection(true)
+	projection.Items = append(projection.Items, v2.Node().ID())
+	projection.Order = &cypher.Order{
+		Items: []*cypher.SortItem{
+			v2.Desc(v2.Node().Property("name")),
+		},
+	}
+	projection.Skip = cypher.NewSkip(5)
+	projection.Limit = cypher.NewLimit(10)
+
+	preparedQuery, err := v2.New().Return(returnClause).OrderBy(
+		v2.Asc(v2.Node().Property("created_at")),
+	).Skip(15).Limit(20).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return distinct id(n) order by n.name desc, n.created_at asc skip 15 limit 20", renderPrepared(t, preparedQuery))
 }
 
 func TestRawUpdatingInputsAreValidated(t *testing.T) {

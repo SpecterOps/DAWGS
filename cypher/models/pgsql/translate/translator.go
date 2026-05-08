@@ -284,9 +284,6 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			s.SetError(err)
 		}
 
-	case *cypher.Create:
-		s.SetErrorf("pgsql translator does not support create clauses")
-
 	case *cypher.Delete:
 		if err := s.translateDelete(s.scope, typedExpression); err != nil {
 			s.SetError(err)

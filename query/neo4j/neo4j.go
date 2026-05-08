@@ -53,6 +53,14 @@ func (s *QueryBuilder) rewriteParameters() error {
 	return nil
 }
 
+func hasPreparedMatchPattern(readingClause *cypher.ReadingClause) bool {
+	if readingClause == nil || readingClause.Match == nil {
+		return false
+	}
+
+	return len(readingClause.Match.Pattern) > 0
+}
+
 func (s *QueryBuilder) Apply(criteria graph.Criteria) {
 	switch typedCriteria := criteria.(type) {
 	case *cypher.Where:
@@ -199,6 +207,10 @@ func (s *QueryBuilder) prepareMatch() error {
 	// Validate we're not mixing references
 	if isRelationshipQuery && singleNodeBound {
 		return ErrAmbiguousQueryVariables
+	}
+
+	if firstReadingClause := query.GetFirstReadingClause(s.query); hasPreparedMatchPattern(firstReadingClause) {
+		return nil
 	}
 
 	if singleNodeBound && !creatingSingleNode {
