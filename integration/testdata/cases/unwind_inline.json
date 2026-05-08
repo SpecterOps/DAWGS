@@ -3,7 +3,7 @@
     {
       "name": "unwind integer array and return elements",
       "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN x",
-      "assert": {"row_count": 3}
+      "assert": {"ordered_scalar_values": [1, 2, 3]}
     },
     {
       "name": "unwind with distinct removes duplicates",
@@ -18,12 +18,12 @@
     {
       "name": "unwind with where filter",
       "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x WITH x WHERE x > 1 RETURN x",
-      "assert": {"row_count": 2}
+      "assert": {"ordered_scalar_values": [2, 3]}
     },
     {
       "name": "standalone unwind without preceding clause",
       "cypher": "UNWIND [1, 2, 3] AS x RETURN x",
-      "assert": {"row_count": 3}
+      "assert": {"ordered_scalar_values": [1, 2, 3]}
     },
     {
       "name": "unwind target can shadow source name",

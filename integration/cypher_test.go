@@ -26,6 +26,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -49,6 +50,7 @@ type testCase struct {
 	Name        string           `json:"name"`
 	SkipDrivers []string         `json:"skip_drivers,omitempty"`
 	Cypher      string           `json:"cypher"`
+	Params      map[string]any   `json:"params,omitempty"`
 	Assert      json.RawMessage  `json:"assert"`
 	Fixture     *opengraph.Graph `json:"fixture,omitempty"`
 }
@@ -143,11 +145,17 @@ func TestCypher(t *testing.T) {
 //	{"row_count": N}                      — exactly N rows
 //	{"at_least_int": N}                   — first scalar >= N
 //	{"exact_int": N}                      — first scalar == N
+//	{"scalar_values": [V...]}             — exact multiset of first scalar values, order-independent
+//	{"ordered_scalar_values": [V...]}     — exact first scalar values, preserving row order
 //	{"contains_node_with_prop": [K, V]}   — some row has a node with property K=V
+//	{"contains_node_with_props": {K: V}}  — some row has a node with all listed properties
+//	{"contains_edge": {start,end,kind,props}} — some row/path has a relationship matching all listed fields
 //	{"node_ids": ["a", "b"]}              — exact multiset of returned fixture node IDs, order-independent
 //	{"node_id_set": ["a", "b"]}           — exact set of returned fixture node IDs, order-independent
 //	{"ordered_node_ids": ["a", "b"]}      — first returned node ID per row, preserving row order
 //	{"path_node_ids": [["a", "b"]]}       — exact multiset of returned path node ID sequences
+//	{"path_lengths": [N...]}              — exact multiset of returned path edge counts
+//	{"path_edge_kinds": [["K"...]]}       — exact multiset of returned path edge kind sequences
 //
 // Object assertions may combine multiple keys; every assertion must pass.
 func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
@@ -186,9 +194,21 @@ func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 		case "exact_int":
 			assertions = append(assertions, assertExactInt64(decodeAssertionValue[int64](t, key, val)))
 
+		case "scalar_values":
+			assertions = append(assertions, assertScalarValues(decodeAssertionValue[[]any](t, key, val), false))
+
+		case "ordered_scalar_values":
+			assertions = append(assertions, assertScalarValues(decodeAssertionValue[[]any](t, key, val), true))
+
 		case "contains_node_with_prop":
 			pair := decodeAssertionValue[[2]string](t, key, val)
 			assertions = append(assertions, assertContainsNodeWithProp(pair[0], pair[1]))
+
+		case "contains_node_with_props":
+			assertions = append(assertions, assertContainsNodeWithProps(decodeAssertionValue[map[string]any](t, key, val)))
+
+		case "contains_edge":
+			assertions = append(assertions, assertContainsEdge(decodeAssertionValue[edgeExpectation](t, key, val)))
 
 		case "node_ids":
 			assertions = append(assertions, assertNodeIDs(decodeAssertionValue[[]string](t, key, val), false))
@@ -201,6 +221,12 @@ func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 
 		case "path_node_ids":
 			assertions = append(assertions, assertPathNodeIDs(decodeAssertionValue[[][]string](t, key, val)))
+
+		case "path_lengths":
+			assertions = append(assertions, assertPathLengths(decodeAssertionValue[[]int](t, key, val)))
+
+		case "path_edge_kinds":
+			assertions = append(assertions, assertPathEdgeKinds(decodeAssertionValue[[][]string](t, key, val)))
 
 		default:
 			t.Fatalf("unknown assertion key: %q", key)
@@ -228,7 +254,7 @@ func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap ope
 	t.Helper()
 
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(tc.Cypher, nil)
+		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()
 		check(t, collectResult(t, result), newAssertionContext(idMap))
 		return nil
@@ -253,7 +279,7 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 			return fmt.Errorf("creating fixture: %w", err)
 		}
 
-		result := tx.Query(tc.Cypher, nil)
+		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()
 		check(t, collectResult(t, result), newAssertionContext(idMap))
 
@@ -399,6 +425,34 @@ func assertExactInt64(expected int64) resultAssertion {
 	}
 }
 
+func assertScalarValues(expected []any, ordered bool) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for rowIdx, row := range result.rows {
+			if len(row.values) == 0 {
+				t.Fatalf("row %d has no values", rowIdx)
+			}
+
+			got = append(got, scalarSignature(row.values[0]))
+		}
+
+		want := make([]string, len(expected))
+		for idx, expectedValue := range expected {
+			want[idx] = scalarSignature(expectedValue)
+		}
+
+		if ordered {
+			if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+				t.Fatalf("ordered scalar values mismatch:\n  got:  %v\n  want: %v", got, want)
+			}
+		} else {
+			assertStringMultiset(t, got, want, "scalar values")
+		}
+	}
+}
+
 func firstScalarValue(t *testing.T, result queryResult) any {
 	t.Helper()
 
@@ -452,6 +506,29 @@ func asInt64(value any) (int64, bool) {
 	return 0, false
 }
 
+func scalarSignature(value any) string {
+	if value == nil {
+		return "null:"
+	}
+
+	if number, ok := asFloat64(value); ok {
+		return fmt.Sprintf("number:%g", number)
+	}
+
+	switch typedValue := value.(type) {
+	case string:
+		return "string:" + typedValue
+	case bool:
+		return fmt.Sprintf("bool:%t", typedValue)
+	default:
+		if encoded, err := json.Marshal(typedValue); err == nil {
+			return fmt.Sprintf("json:%s", encoded)
+		}
+
+		return fmt.Sprintf("%T:%v", typedValue, typedValue)
+	}
+}
+
 func assertContainsNodeWithProp(key, expected string) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -466,6 +543,53 @@ func assertContainsNodeWithProp(key, expected string) resultAssertion {
 			}
 		}
 		t.Fatalf("no row contains a node with %s = %q", key, expected)
+	}
+}
+
+func assertContainsNodeWithProps(expected map[string]any) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		for _, row := range result.rows {
+			for _, rawVal := range row.values {
+				var node graph.Node
+				if result.mapper.Map(rawVal, &node) && propertiesMatch(node.Properties, expected) {
+					return
+				}
+
+				var path graph.Path
+				if result.mapper.Map(rawVal, &path) {
+					for _, pathNode := range path.Nodes {
+						if pathNode != nil && propertiesMatch(pathNode.Properties, expected) {
+							return
+						}
+					}
+				}
+			}
+		}
+
+		t.Fatalf("no row contains a node with properties %v", expected)
+	}
+}
+
+type edgeExpectation struct {
+	Start string         `json:"start,omitempty"`
+	End   string         `json:"end,omitempty"`
+	Kind  string         `json:"kind,omitempty"`
+	Props map[string]any `json:"props,omitempty"`
+}
+
+func assertContainsEdge(expected edgeExpectation) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		for _, relationship := range collectRelationships(t, result) {
+			if relationshipMatches(t, relationship, expected, ctx) {
+				return
+			}
+		}
+
+		t.Fatalf("no row contains an edge matching %+v", expected)
 	}
 }
 
@@ -554,6 +678,42 @@ func assertPathNodeIDs(expected [][]string) resultAssertion {
 	}
 }
 
+func assertPathLengths(expected []int) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for _, path := range collectPaths(t, result) {
+			got = append(got, fmt.Sprintf("%d", len(path.Edges)))
+		}
+
+		want := make([]string, len(expected))
+		for idx, expectedLength := range expected {
+			want[idx] = fmt.Sprintf("%d", expectedLength)
+		}
+
+		assertStringMultiset(t, got, want, "path lengths")
+	}
+}
+
+func assertPathEdgeKinds(expected [][]string) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for _, path := range collectPaths(t, result) {
+			got = append(got, pathEdgeKindSignature(t, path))
+		}
+
+		want := make([]string, len(expected))
+		for idx, expectedKinds := range expected {
+			want[idx] = strings.Join(expectedKinds, "->")
+		}
+
+		assertStringMultiset(t, got, want, "path edge kind sequences")
+	}
+}
+
 func pathNodeIDSignature(t *testing.T, path graph.Path, ctx assertionContext) string {
 	t.Helper()
 
@@ -567,6 +727,146 @@ func pathNodeIDSignature(t *testing.T, path graph.Path, ctx assertionContext) st
 	}
 
 	return strings.Join(nodeIDs, "->")
+}
+
+func pathEdgeKindSignature(t *testing.T, path graph.Path) string {
+	t.Helper()
+
+	edgeKinds := make([]string, len(path.Edges))
+	for idx, edge := range path.Edges {
+		if edge == nil {
+			t.Fatalf("path contains nil edge at index %d", idx)
+		}
+
+		if edge.Kind == nil {
+			t.Fatalf("path edge at index %d has nil kind", idx)
+		}
+
+		edgeKinds[idx] = edge.Kind.String()
+	}
+
+	return strings.Join(edgeKinds, "->")
+}
+
+func collectPaths(t *testing.T, result queryResult) []graph.Path {
+	t.Helper()
+
+	var paths []graph.Path
+	for _, row := range result.rows {
+		for _, rawVal := range row.values {
+			var path graph.Path
+			if result.mapper.Map(rawVal, &path) {
+				paths = append(paths, path)
+			}
+		}
+	}
+
+	return paths
+}
+
+func collectRelationships(t *testing.T, result queryResult) []graph.Relationship {
+	t.Helper()
+
+	var relationships []graph.Relationship
+	for _, row := range result.rows {
+		for _, rawVal := range row.values {
+			var relationship graph.Relationship
+			if result.mapper.Map(rawVal, &relationship) {
+				relationships = append(relationships, relationship)
+			}
+
+			var path graph.Path
+			if result.mapper.Map(rawVal, &path) {
+				for _, pathRelationship := range path.Edges {
+					if pathRelationship != nil {
+						relationships = append(relationships, *pathRelationship)
+					}
+				}
+			}
+		}
+	}
+
+	return relationships
+}
+
+func relationshipMatches(t *testing.T, relationship graph.Relationship, expected edgeExpectation, ctx assertionContext) bool {
+	t.Helper()
+
+	if expected.Start != "" && ctx.fixtureID(t, relationship.StartID) != expected.Start {
+		return false
+	}
+
+	if expected.End != "" && ctx.fixtureID(t, relationship.EndID) != expected.End {
+		return false
+	}
+
+	if expected.Kind != "" {
+		if relationship.Kind == nil || relationship.Kind.String() != expected.Kind {
+			return false
+		}
+	}
+
+	return propertiesMatch(relationship.Properties, expected.Props)
+}
+
+func propertiesMatch(properties *graph.Properties, expected map[string]any) bool {
+	if len(expected) == 0 {
+		return true
+	}
+
+	if properties == nil {
+		return false
+	}
+
+	for key, expectedValue := range expected {
+		actualValue := properties.Get(key).Any()
+		if !valuesEqual(actualValue, expectedValue) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func valuesEqual(actual, expected any) bool {
+	if actualNumber, actualIsNumber := asFloat64(actual); actualIsNumber {
+		if expectedNumber, expectedIsNumber := asFloat64(expected); expectedIsNumber {
+			return actualNumber == expectedNumber
+		}
+	}
+
+	return reflect.DeepEqual(actual, expected)
+}
+
+func asFloat64(value any) (float64, bool) {
+	switch typedValue := value.(type) {
+	case int:
+		return float64(typedValue), true
+	case int8:
+		return float64(typedValue), true
+	case int16:
+		return float64(typedValue), true
+	case int32:
+		return float64(typedValue), true
+	case int64:
+		return float64(typedValue), true
+	case uint:
+		return float64(typedValue), true
+	case uint8:
+		return float64(typedValue), true
+	case uint16:
+		return float64(typedValue), true
+	case uint32:
+		return float64(typedValue), true
+	case uint64:
+		return float64(typedValue), true
+	case float32:
+		return float64(typedValue), true
+	case float64:
+		return typedValue, true
+	default:
+		return 0, false
+	}
 }
 
 func assertStringMultiset(t *testing.T, got, expected []string, label string) {
