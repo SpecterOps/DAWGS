@@ -54,6 +54,10 @@ func (s *Translator) translateUpdates() error {
 		return nil
 	}
 
+	if err := s.buildCreates(); err != nil {
+		return err
+	}
+
 	for _, updateClause := range currentQueryPart.mutations.Updates.Values() {
 		if stepFrame, err := s.scope.PushFrame(); err != nil {
 			return err
