@@ -63,6 +63,14 @@ func driverFromConnStr(connStr string) (string, error) {
 func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
+	return SetupDBWithKinds(t, nil, nil, datasets...)
+}
+
+// SetupDBWithKinds opens a database connection like SetupDB, then extends the
+// asserted schema with additional node and edge kinds.
+func SetupDBWithKinds(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
 	ctx := context.Background()
 
 	connStr := os.Getenv("CONNECTION_STRING")
@@ -97,6 +105,8 @@ func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context)
 	}
 
 	nodeKinds, edgeKinds := collectKinds(t, datasets)
+	nodeKinds = nodeKinds.Add(extraNodeKinds...)
+	edgeKinds = edgeKinds.Add(extraEdgeKinds...)
 
 	schema := graph.Schema{
 		Graphs: []graph.Graph{{
