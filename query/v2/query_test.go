@@ -185,6 +185,38 @@ func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported relationship direction: both")
 }
 
+func TestShortestPathControls(t *testing.T) {
+	preparedQuery, err := v2.New().WithShortestPaths().Where(
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Return(
+		v2.Path(),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match p = shortestPath((s)-[*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": 1,
+		"p1": 2,
+	}, preparedQuery.Parameters)
+
+	preparedQuery, err = v2.New().WithAllShortestPaths().Where(
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Return(
+		v2.Path(),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match p = allShortestPaths((s)-[*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
+
+	_, err = v2.New().WithShortestPaths().WithAllShortestPaths().Where(
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Return(
+		v2.Path(),
+	).Build()
+	require.ErrorContains(t, err, "query is requesting both all shortest paths and shortest paths")
+}
+
 func TestInvalidExplicitRelationshipPatternDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().Create(
 		v2.RelationshipPattern(graph.StringKind("Edge"), nil, graph.DirectionBoth),
@@ -267,6 +299,24 @@ func TestRawProjectionAndOrderInputsAreNormalized(t *testing.T) {
 	require.Equal(t, "match (n) return id(n) order by n.name desc", renderPrepared(t, preparedQuery))
 }
 
+func TestRawReturnInputPreservesProjectionMetadata(t *testing.T) {
+	returnClause := cypher.NewReturn()
+	projection := returnClause.NewProjection(true)
+	projection.Items = append(projection.Items, v2.Node().ID())
+	projection.Order = &cypher.Order{
+		Items: []*cypher.SortItem{
+			v2.Desc(v2.Node().Property("name")),
+		},
+	}
+	projection.Skip = cypher.NewSkip(5)
+	projection.Limit = cypher.NewLimit(10)
+
+	preparedQuery, err := v2.New().Return(returnClause).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return distinct id(n) order by n.name desc skip 5 limit 10", renderPrepared(t, preparedQuery))
+}
+
 func TestRawUpdatingInputsAreValidated(t *testing.T) {
 	var setClause *cypher.Set
 	_, err := v2.New().Update(setClause).Build()
@@ -334,6 +384,37 @@ func TestInvalidHelperInputsReturnBuildErrors(t *testing.T) {
 			require.ErrorContains(t, err, testCase.err)
 		})
 	}
+}
+
+func TestNamedParameterMaterialization(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.Node().Property("first").Equals("auto"),
+		v2.Node().Property("second").Equals(v2.NamedParameter("p0", "named")),
+	).Return(
+		v2.Node(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) where n.first = $p1 and n.second = $p0 return n", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0": "named",
+		"p1": "auto",
+	}, preparedQuery.Parameters)
+
+	_, err = v2.New().Where(
+		v2.Node().Property("name").Equals(v2.NamedParameter("bad name", "value")),
+	).Return(
+		v2.Node(),
+	).Build()
+	require.ErrorContains(t, err, `parameter has invalid symbol "bad name"`)
+
+	_, err = v2.New().Where(
+		v2.Node().Property("first").Equals(v2.NamedParameter("same", "first")),
+		v2.Node().Property("second").Equals(v2.NamedParameter("same", "second")),
+	).Return(
+		v2.Node(),
+	).Build()
+	require.ErrorContains(t, err, "parameter same is bound to multiple values")
 }
 
 func TestCompatibilityHelpers(t *testing.T) {

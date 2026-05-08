@@ -998,6 +998,49 @@ func (s *builder) buildProjectionOrder() (*cypher.Order, error) {
 	return orderByNode, nil
 }
 
+func appendProjectionOrder(projection *cypher.Projection, sortItems ...*cypher.SortItem) {
+	if len(sortItems) == 0 {
+		return
+	}
+
+	if projection.Order == nil {
+		projection.Order = &cypher.Order{}
+	}
+
+	projection.Order.Items = append(projection.Order.Items, sortItems...)
+}
+
+func applyReturnProjection(projection *cypher.Projection, returnClause *cypher.Return) error {
+	if projectionItems, err := projectionItemsFromReturn(returnClause); err != nil {
+		return err
+	} else {
+		projection.Distinct = projection.Distinct || returnClause.Projection.Distinct
+		projection.All = projection.All || returnClause.Projection.All
+
+		for _, projectionItem := range projectionItems {
+			projection.AddItem(projectionItem)
+		}
+	}
+
+	if returnClause.Projection.Order != nil {
+		if sortItems, err := sortItemsFromOrder(returnClause.Projection.Order); err != nil {
+			return err
+		} else {
+			appendProjectionOrder(projection, sortItems...)
+		}
+	}
+
+	if returnClause.Projection.Skip != nil {
+		projection.Skip = returnClause.Projection.Skip
+	}
+
+	if returnClause.Projection.Limit != nil {
+		projection.Limit = returnClause.Projection.Limit
+	}
+
+	return nil
+}
+
 func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error {
 	var (
 		hasProjectedItems  = len(s.projections) > 0
@@ -1016,12 +1059,8 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 		for _, nextProjection := range s.projections {
 			switch typedNextProjection := nextProjection.(type) {
 			case *cypher.Return:
-				if projectionItems, err := projectionItemsFromReturn(typedNextProjection); err != nil {
+				if err := applyReturnProjection(projection, typedNextProjection); err != nil {
 					return err
-				} else {
-					for _, projectionItem := range projectionItems {
-						projection.AddItem(projectionItem)
-					}
 				}
 
 			default:
@@ -1044,7 +1083,7 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 		if projectionOrder, err := s.buildProjectionOrder(); err != nil {
 			return err
 		} else if projectionOrder != nil {
-			projection.Order = projectionOrder
+			appendProjectionOrder(projection, projectionOrder.Items...)
 		}
 	}
 

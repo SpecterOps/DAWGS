@@ -504,6 +504,10 @@ func projectionItemsFromReturn(returnClause *cypher.Return) ([]*cypher.Projectio
 		return nil, fmt.Errorf("return clause has nil projection")
 	}
 
+	if err := validateProjectionMetadata(returnClause.Projection); err != nil {
+		return nil, err
+	}
+
 	projectionItems := make([]*cypher.ProjectionItem, 0, len(returnClause.Projection.Items))
 
 	for _, returnItem := range returnClause.Projection.Items {
@@ -515,6 +519,28 @@ func projectionItemsFromReturn(returnClause *cypher.Return) ([]*cypher.Projectio
 	}
 
 	return projectionItems, nil
+}
+
+func validateProjectionMetadata(projection *cypher.Projection) error {
+	if projection.Order != nil {
+		if _, err := sortItemsFromOrder(projection.Order); err != nil {
+			return err
+		}
+	}
+
+	if projection.Skip != nil {
+		if err := validateExpressionValue(projection.Skip.Value, "projection skip"); err != nil {
+			return err
+		}
+	}
+
+	if projection.Limit != nil {
+		if err := validateExpressionValue(projection.Limit.Value, "projection limit"); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func sortItemsFromOrder(order *cypher.Order) ([]*cypher.SortItem, error) {
@@ -990,10 +1016,16 @@ type parameterMaterializer struct {
 	nextIndex  int
 }
 
-func newParameterMaterializer() *parameterMaterializer {
+func newParameterMaterializer(parameters map[string]any) *parameterMaterializer {
+	materializedParameters := map[string]any{}
+
+	for symbol, value := range parameters {
+		materializedParameters[symbol] = value
+	}
+
 	return &parameterMaterializer{
 		Visitor:    walk.NewVisitor[cypher.SyntaxNode](),
-		parameters: map[string]any{},
+		parameters: materializedParameters,
 	}
 }
 
@@ -1026,8 +1058,55 @@ func (s *parameterMaterializer) Enter(node cypher.SyntaxNode) {
 	s.parameters[parameter.Symbol] = parameter.Value
 }
 
+type namedParameterCollector struct {
+	walk.Visitor[cypher.SyntaxNode]
+
+	parameters map[string]any
+}
+
+func newNamedParameterCollector() *namedParameterCollector {
+	return &namedParameterCollector{
+		Visitor:    walk.NewVisitor[cypher.SyntaxNode](),
+		parameters: map[string]any{},
+	}
+}
+
+func (s *namedParameterCollector) Enter(node cypher.SyntaxNode) {
+	parameter, typeOK := node.(*cypher.Parameter)
+	if !typeOK || parameter.Symbol == "" {
+		return
+	}
+
+	if err := validateCypherSymbol(parameter.Symbol, "parameter"); err != nil {
+		s.SetError(err)
+		return
+	}
+
+	if existingValue, exists := s.parameters[parameter.Symbol]; exists && !reflect.DeepEqual(existingValue, parameter.Value) {
+		s.SetErrorf("parameter %s is bound to multiple values", parameter.Symbol)
+		return
+	}
+
+	s.parameters[parameter.Symbol] = parameter.Value
+}
+
+func collectNamedParameters(query *cypher.RegularQuery) (map[string]any, error) {
+	collector := newNamedParameterCollector()
+
+	if err := walk.Cypher(query, collector); err != nil {
+		return nil, err
+	}
+
+	return collector.parameters, nil
+}
+
 func materializeParameters(query *cypher.RegularQuery) (map[string]any, error) {
-	materializer := newParameterMaterializer()
+	namedParameters, err := collectNamedParameters(query)
+	if err != nil {
+		return nil, err
+	}
+
+	materializer := newParameterMaterializer(namedParameters)
 
 	if err := walk.Cypher(query, materializer); err != nil {
 		return nil, err
