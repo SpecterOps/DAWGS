@@ -1,0 +1,124 @@
+{
+  "metamorphic": [
+    {
+      "name": "fixed hop and bounded one-hop expansion return the same path",
+      "compare": "path_node_ids",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "src"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"name": "dst"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"name": "decoy"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "c", "kind": "EdgeKind2"}
+        ]
+      },
+      "queries": [
+        {
+          "name": "fixed one-hop",
+          "cypher": "match p=(a:NodeKind1)-[:EdgeKind1]->(b:NodeKind2) where a.name = 'src' return p"
+        },
+        {
+          "name": "bounded variable one-hop",
+          "cypher": "match p=(a:NodeKind1)-[:EdgeKind1*1..1]->(b:NodeKind2) where a.name = 'src' return p"
+        }
+      ]
+    },
+    {
+      "name": "shortest path agrees with the direct path when a longer branch exists",
+      "compare": "path_node_ids",
+      "fixture": {
+        "nodes": [
+          {"id": "s", "kinds": ["NodeKind1"], "properties": {"name": "src"}},
+          {"id": "mid", "kinds": ["NodeKind1"], "properties": {"name": "mid"}},
+          {"id": "e", "kinds": ["NodeKind2"], "properties": {"name": "dst"}}
+        ],
+        "edges": [
+          {"start_id": "s", "end_id": "e", "kind": "EdgeKind1"},
+          {"start_id": "s", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "e", "kind": "EdgeKind1"}
+        ]
+      },
+      "queries": [
+        {
+          "name": "direct path",
+          "cypher": "match p=(s:NodeKind1)-[:EdgeKind1]->(e:NodeKind2) where s.name = 'src' and e.name = 'dst' return p"
+        },
+        {
+          "name": "all shortest paths",
+          "cypher": "match p=allShortestPaths((s)-[*1..]->(e)) where s.name = 'src' and e.name = 'dst' return p"
+        }
+      ]
+    },
+    {
+      "name": "redundant null predicate preserves the matched node set",
+      "compare": "node_ids",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "target"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "other"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"enabled": true}}
+        ],
+        "edges": []
+      },
+      "queries": [
+        {
+          "name": "base predicate",
+          "cypher": "match (n:NodeKind1) where n.name = 'target' return n"
+        },
+        {
+          "name": "redundant null check",
+          "cypher": "match (n:NodeKind1) where n.name = 'target' and n.name is not null return n"
+        }
+      ]
+    },
+    {
+      "name": "WITH carry-through preserves ordered scalar projections",
+      "compare": "ordered_scalar_values",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "ordered"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "ordered"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"name": "gamma", "tag": "ordered"}}
+        ],
+        "edges": []
+      },
+      "queries": [
+        {
+          "name": "direct ordered projection",
+          "cypher": "match (n:NodeKind1) where n.tag = 'ordered' return n.name order by n.name"
+        },
+        {
+          "name": "ordered projection through WITH",
+          "cypher": "match (n:NodeKind1) where n.tag = 'ordered' with n return n.name order by n.name"
+        }
+      ]
+    },
+    {
+      "name": "DISTINCT preserves the reachable source node set",
+      "compare": "node_id_set",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "source"}},
+          {"id": "a", "kinds": ["NodeKind2"]},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "a", "kind": "EdgeKind1"},
+          {"start_id": "src", "end_id": "b", "kind": "EdgeKind1"}
+        ]
+      },
+      "queries": [
+        {
+          "name": "duplicated traversal source rows",
+          "cypher": "match (n:NodeKind1)-[:EdgeKind1]->() where n.name = 'source' return n"
+        },
+        {
+          "name": "distinct traversal source rows",
+          "cypher": "match (n:NodeKind1)-[:EdgeKind1]->() where n.name = 'source' return distinct n"
+        }
+      ]
+    }
+  ]
+}
