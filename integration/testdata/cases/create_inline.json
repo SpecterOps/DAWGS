@@ -82,7 +82,7 @@
       "name": "create a named path and return it",
       "cypher": "CREATE p = (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(:NodeKind2 {name: 'test'}) RETURN p",
       "fixture": {"nodes": [], "edges": []},
-      "assert": {"row_count": 1}
+      "assert": {"row_count": 1, "path_lengths": [1], "path_edge_kinds": [["EdgeKind1"]]}
     }
   ]
 }

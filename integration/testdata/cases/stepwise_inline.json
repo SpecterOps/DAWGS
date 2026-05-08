@@ -10,7 +10,7 @@
         ],
         "edges": [{"start_id": "s", "end_id": "e", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "contains_edge": {"start": "s", "end": "e", "kind": "EdgeKind1"}}
     },
     {
       "name": "return source node and outgoing edge filtered by source property",
@@ -22,7 +22,7 @@
         ],
         "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "contains_edge": {"start": "a", "end": "b", "kind": "EdgeKind1"}}
     },
     {
       "name": "diamond pattern where two edges converge on one node",
@@ -66,7 +66,7 @@
         ],
         "edges": [{"start_id": "s", "end_id": "e", "kind": "EdgeKind1", "properties": {"property": false}}]
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "contains_edge": {"start": "s", "end": "e", "kind": "EdgeKind1", "props": {"property": false}}}
     },
     {
       "name": "traverse two chained typed edges and return aliased endpoint properties",
@@ -82,7 +82,7 @@
           {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "ordered_scalar_values": ["src"]}
     },
     {
       "name": "filter typed source node by four alternative name values with OR",
@@ -106,7 +106,7 @@
         ],
         "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"path_node_ids": [["src", "dst"]], "path_edge_kinds": [["EdgeKind1"]]}
     }
   ]
 }

@@ -14,7 +14,7 @@
           {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["c"]}
     },
     {
       "name": "bind a converging diamond path with endpoint property filters",
@@ -128,7 +128,7 @@
           {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"path_node_ids": [["src", "mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
     },
     {
       "name": "bind a path with one fixed hop then variable expansion filtered by coalesce contains",
