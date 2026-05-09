@@ -42,6 +42,10 @@ func (s *internalResult) Scan(targets ...any) error {
 }
 
 func (s *internalResult) Next() bool {
+	if s.driverResult == nil {
+		return false
+	}
+
 	return s.driverResult.Next()
 }
 

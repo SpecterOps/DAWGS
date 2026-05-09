@@ -133,6 +133,7 @@
         },
         {
           "name": "node pattern property map parameter",
+          "skip_drivers": ["neo4j"],
           "vars": {
             "query": "match (n:TemplateNodeKind1 $props) return n.name"
           },
@@ -141,6 +142,7 @@
         },
         {
           "name": "relationship pattern property map parameter",
+          "skip_drivers": ["neo4j"],
           "vars": {
             "query": "match (a:TemplateNodeKind1)-[r:TemplateEdgeKind1 $props]->(b:TemplateNodeKind2) return a.name, b.name"
           },

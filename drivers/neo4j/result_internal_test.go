@@ -1,6 +1,7 @@
 package neo4j
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -58,4 +59,14 @@ func Test_mapValue(t *testing.T) {
 	mapTestCase(t, anyStringSlice, stringSlice)
 	mapTestCase(t, anyStringSlice, kindSlice)
 	mapTestCase(t, anyStringSlice, kinds)
+}
+
+func TestInternalResult_NextWithRunError(t *testing.T) {
+	expectedErr := errors.New("run failed")
+	result := NewResult("match (n) return n", expectedErr, nil)
+
+	require.False(t, result.Next())
+	require.ErrorIs(t, result.Error(), expectedErr)
+	require.Nil(t, result.Keys())
+	require.Nil(t, result.Values())
 }
