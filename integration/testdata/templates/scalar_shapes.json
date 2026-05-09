@@ -66,6 +66,18 @@
             }
           },
           {
+            "id": "zeta",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "null-tags",
+              "group": "null-tags",
+              "department": "ops",
+              "score": 6,
+              "objectid": "S-7-504",
+              "tags": null
+            }
+          },
+          {
             "id": "other",
             "kinds": ["TemplateNodeKind2"],
             "properties": {
@@ -134,6 +146,13 @@
           "name": "none quantifier over missing property list is not true",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group = 'missing-tags' and none(tag in n.tags where tag contains 'admin') return n.name"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "none quantifier over null property list is not true",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'null-tags' and none(tag in n.tags where tag contains 'admin') return n.name"
           },
           "assert": "empty"
         },
