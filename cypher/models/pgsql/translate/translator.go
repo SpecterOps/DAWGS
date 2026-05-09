@@ -264,6 +264,15 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			s.query.CurrentPart().AddProperty(typedExpression.Key, value)
 		}
 
+	case *cypher.Properties:
+		if typedExpression.Parameter != nil {
+			if value, err := s.treeTranslator.PopOperand(); err != nil {
+				s.SetError(err)
+			} else {
+				s.query.CurrentPart().AddPropertyParameter(value)
+			}
+		}
+
 	case *cypher.PatternPredicate:
 		if err := s.translatePatternPredicate(); err != nil {
 			s.SetError(err)

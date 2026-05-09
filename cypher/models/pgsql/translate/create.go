@@ -292,20 +292,32 @@ func (s *Translator) buildKindIDsArray(nodeCreate *NodeCreate) (pgsql.SelectItem
 	return arrayLiteral, nil
 }
 
-func (s *Translator) buildPropertiesObject(properties map[string]pgsql.Expression) (pgsql.SelectItem, error) {
+func (s *Translator) buildPropertiesObject(properties TranslatedProperties) (pgsql.SelectItem, error) {
+	if properties.Parameter != nil {
+		if err := RewriteFrameBindings(s.scope, properties.Parameter); err != nil {
+			return nil, err
+		}
+
+		if selectItem, isSelectItem := properties.Parameter.(pgsql.SelectItem); !isSelectItem {
+			return nil, fmt.Errorf("expected property parameter expression %T to be a select item", properties.Parameter)
+		} else {
+			return selectItem, nil
+		}
+	}
+
 	jsonObjectFunction := pgsql.FunctionCall{
 		Function: pgsql.FunctionJSONBBuildObject,
 		CastType: pgsql.JSONB,
 	}
 
-	keys := make([]string, 0, len(properties))
-	for key := range properties {
+	keys := make([]string, 0, len(properties.Map))
+	for key := range properties.Map {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		value := properties[key]
+		value := properties.Map[key]
 		if err := RewriteFrameBindings(s.scope, value); err != nil {
 			return nil, err
 		}
