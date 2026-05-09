@@ -17,10 +17,9 @@
       "assert": "empty"
     },
     {
-      "name": "shortest path to self returns empty",
-      "skip_drivers": ["neo4j"],
+      "name": "shortest path to self errors",
       "cypher": "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE s.name = 'SOME NAME' AND e.name = 'SOME NAME' RETURN p",
-      "assert": "empty"
+      "assert": "query_error"
     }
   ]
 }

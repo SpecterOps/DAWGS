@@ -27,7 +27,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -38,21 +37,19 @@ import (
 
 // caseFile represents one JSON test case file.
 type caseFile struct {
-	Dataset     string     `json:"dataset"`
-	SkipDrivers []string   `json:"skip_drivers,omitempty"`
-	Cases       []testCase `json:"cases"`
+	Dataset string     `json:"dataset"`
+	Cases   []testCase `json:"cases"`
 }
 
 // testCase is a single test: a Cypher query and an assertion on its result.
 // Cases with a "fixture" field run in a write transaction that rolls back,
 // so the inline data doesn't persist.
 type testCase struct {
-	Name        string           `json:"name"`
-	SkipDrivers []string         `json:"skip_drivers,omitempty"`
-	Cypher      string           `json:"cypher"`
-	Params      map[string]any   `json:"params,omitempty"`
-	Assert      json.RawMessage  `json:"assert"`
-	Fixture     *opengraph.Graph `json:"fixture,omitempty"`
+	Name    string           `json:"name"`
+	Cypher  string           `json:"cypher"`
+	Params  map[string]any   `json:"params,omitempty"`
+	Assert  json.RawMessage  `json:"assert"`
+	Fixture *opengraph.Graph `json:"fixture,omitempty"`
 }
 
 func TestCypher(t *testing.T) {
@@ -97,26 +94,13 @@ func TestCypher(t *testing.T) {
 
 	db, ctx := SetupDB(t, datasetNames...)
 
-	driver, err := driverFromConnStr(os.Getenv("CONNECTION_STRING"))
-	if err != nil {
-		t.Fatalf("Failed to detect driver: %v", err)
-	}
-
 	for _, g := range groups {
 		ClearGraph(t, db, ctx)
 		datasetIDMap := LoadDataset(t, db, ctx, g.dataset)
 
 		for _, cf := range g.files {
-			if slices.Contains(cf.SkipDrivers, driver) {
-				continue
-			}
-
 			for _, tc := range cf.Cases {
 				t.Run(tc.Name, func(t *testing.T) {
-					if slices.Contains(tc.SkipDrivers, driver) {
-						t.Skipf("skipped for driver %s", driver)
-					}
-
 					defer func() {
 						if r := recover(); r != nil {
 							t.Fatalf("panic: %v", r)
@@ -142,6 +126,7 @@ func TestCypher(t *testing.T) {
 //	"non_empty"                           — at least one row
 //	"empty"                               — zero rows
 //	"no_error"                            — drains result, checks no error
+//	"query_error"                         — drains result, expects an error
 //	{"row_count": N}                      — exactly N rows
 //	{"at_least_int": N}                   — first scalar >= N
 //	{"exact_int": N}                      — first scalar == N
@@ -160,7 +145,7 @@ func TestCypher(t *testing.T) {
 //	{"path_edge_kinds": [["K"...]]}       — exact multiset of returned path edge kind sequences
 //
 // Object assertions may combine multiple keys; every assertion must pass.
-func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
+func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 	t.Helper()
 
 	// Try as a simple string first.
@@ -168,11 +153,13 @@ func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 	if err := json.Unmarshal(raw, &str); err == nil {
 		switch str {
 		case "non_empty":
-			return assertNonEmpty
+			return caseAssertion{check: assertNonEmpty}
 		case "empty":
-			return assertEmpty
+			return caseAssertion{check: assertEmpty}
 		case "no_error":
-			return assertNoError
+			return caseAssertion{check: assertNoError}
+		case "query_error":
+			return caseAssertion{expectQueryError: true}
 		default:
 			t.Fatalf("unknown string assertion: %q", str)
 		}
@@ -245,12 +232,14 @@ func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 		t.Fatal("empty assertion object")
 	}
 
-	return func(t *testing.T, result queryResult, ctx assertionContext) {
-		t.Helper()
+	return caseAssertion{
+		check: func(t *testing.T, result queryResult, ctx assertionContext) {
+			t.Helper()
 
-		for _, assertion := range assertions {
-			assertion(t, result, ctx)
-		}
+			for _, assertion := range assertions {
+				assertion(t, result, ctx)
+			}
+		},
 	}
 }
 
@@ -258,25 +247,34 @@ func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 var errFixtureRollback = errors.New("fixture rollback")
 
 // runReadOnly executes a test case against the pre-loaded dataset.
-func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap opengraph.IDMap, tc testCase, check resultAssertion) {
+func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap opengraph.IDMap, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
+	queryErrorObserved := false
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()
-		check(t, collectResult(t, result), newAssertionContext(idMap))
+		assertion.checkResult(t, result, newAssertionContext(idMap))
+		if assertion.expectQueryError {
+			queryErrorObserved = true
+		}
 		return nil
 	})
 	if err != nil {
+		if assertion.expectQueryError && queryErrorObserved {
+			return
+		}
+
 		t.Fatalf("transaction failed: %v", err)
 	}
 }
 
 // runWithFixture creates inline fixture data in a write transaction, runs the
 // query, checks the assertion, then rolls back so the data doesn't persist.
-func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check resultAssertion) {
+func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
+	queryErrorObserved := false
 	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		if err := tx.Nodes().Delete(); err != nil {
 			return fmt.Errorf("clearing graph before fixture: %w", err)
@@ -289,10 +287,17 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 
 		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()
-		check(t, collectResult(t, result), newAssertionContext(idMap))
+		assertion.checkResult(t, result, newAssertionContext(idMap))
+		if assertion.expectQueryError {
+			queryErrorObserved = true
+		}
 
 		return errFixtureRollback
 	})
+
+	if assertion.expectQueryError && queryErrorObserved && err != nil {
+		return
+	}
 
 	if !errors.Is(err, errFixtureRollback) {
 		t.Fatalf("unexpected transaction error: %v", err)
@@ -301,7 +306,27 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 
 // --- Assertion implementations ---
 
+type caseAssertion struct {
+	check            resultAssertion
+	expectQueryError bool
+}
+
 type resultAssertion func(*testing.T, queryResult, assertionContext)
+
+func (s caseAssertion) checkResult(t *testing.T, result graph.Result, ctx assertionContext) {
+	t.Helper()
+
+	if s.expectQueryError {
+		assertQueryError(t, result)
+		return
+	}
+
+	if s.check == nil {
+		t.Fatal("assertion has no result check")
+	}
+
+	s.check(t, collectResult(t, result), ctx)
+}
 
 type assertionContext struct {
 	fixtureIDByID map[graph.ID]string
@@ -359,6 +384,17 @@ func collectResult(t *testing.T, result graph.Result) queryResult {
 	}
 
 	return collected
+}
+
+func assertQueryError(t *testing.T, result graph.Result) {
+	t.Helper()
+
+	for result.Next() {
+	}
+
+	if err := result.Error(); err == nil {
+		t.Fatal("expected query error but query completed successfully")
+	}
 }
 
 func decodeAssertionValue[T any](t *testing.T, key string, raw json.RawMessage) T {

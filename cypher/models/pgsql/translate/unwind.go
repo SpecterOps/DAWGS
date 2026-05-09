@@ -14,12 +14,17 @@ func (s *Translator) prepareUnwindTarget(variable *cypher.Variable) (*BoundIdent
 
 	delete(s.unwindTargets, variable)
 
+	cypherIdentifier := pgsql.Identifier(variable.Symbol)
+	if existingBinding, bound := s.scope.AliasedLookup(cypherIdentifier); bound {
+		return nil, true, fmt.Errorf("unwind target %s shadows existing binding %s", cypherIdentifier, existingBinding.Identifier)
+	}
+
 	binding, err := s.scope.DefineNew(pgsql.UnsetDataType)
 	if err != nil {
 		return nil, true, err
 	}
 
-	s.scope.Alias(pgsql.Identifier(variable.Symbol), binding)
+	s.scope.Alias(cypherIdentifier, binding)
 	return binding, true, nil
 }
 

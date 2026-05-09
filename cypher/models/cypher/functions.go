@@ -16,6 +16,7 @@ const (
 	StringSplitToArrayFunction = "split"
 	ToStringFunction           = "tostring"
 	ToIntegerFunction          = "toint"
+	ToIntegerAliasFunction     = "tointeger"
 	ListSizeFunction           = "size"
 	CoalesceFunction           = "coalesce"
 	CollectFunction            = "collect"

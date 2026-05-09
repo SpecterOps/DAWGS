@@ -2,8 +2,11 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -34,7 +37,7 @@ func (s *queryResult) Next() bool {
 		// the pgx type will have error information attached to it which is reflected by the Error receiver function
 		// of this type
 		if values, err := s.rows.Values(); err == nil {
-			s.values = values
+			s.values = decodeJSONValues(values, s.rows.FieldDescriptions())
 			return true
 		}
 	}
@@ -56,4 +59,38 @@ func (s *queryResult) Error() error {
 
 func (s *queryResult) Close() {
 	s.rows.Close()
+}
+
+func decodeJSONValues(values []any, fields []pgconn.FieldDescription) []any {
+	decodedValues := make([]any, len(values))
+	copy(decodedValues, values)
+
+	for idx, field := range fields {
+		switch field.DataTypeOID {
+		case pgtype.JSONOID, pgtype.JSONBOID:
+			if decoded, ok := decodeJSONValue(values[idx]); ok {
+				decodedValues[idx] = decoded
+			}
+		}
+	}
+
+	return decodedValues
+}
+
+func decodeJSONValue(value any) (any, bool) {
+	switch typedValue := value.(type) {
+	case []byte:
+		var decoded any
+		if err := json.Unmarshal(typedValue, &decoded); err == nil {
+			return decoded, true
+		}
+
+	case string:
+		var decoded any
+		if err := json.Unmarshal([]byte(typedValue), &decoded); err == nil {
+			return decoded, true
+		}
+	}
+
+	return nil, false
 }

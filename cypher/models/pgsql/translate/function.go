@@ -242,7 +242,7 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.treeTranslator.PushOperand(pgsql.NewTypeCast(argument, pgsql.Text))
 		}
 
-	case cypher.ToIntegerFunction:
+	case cypher.ToIntegerFunction, cypher.ToIntegerAliasFunction:
 		if typedExpression.NumArguments() != 1 {
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
@@ -315,10 +315,13 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
+		} else if typeCastNumericArg, err := TypeCastExpression(argument, pgsql.Float8); err != nil {
+			s.SetError(err)
 		} else {
 			s.treeTranslator.PushOperand(pgsql.FunctionCall{
 				Function:   pgsql.FunctionMin,
-				Parameters: []pgsql.Expression{argument},
+				Parameters: []pgsql.Expression{typeCastNumericArg},
+				CastType:   pgsql.Float8,
 			})
 		}
 
@@ -327,10 +330,13 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
+		} else if typeCastNumericArg, err := TypeCastExpression(argument, pgsql.Float8); err != nil {
+			s.SetError(err)
 		} else {
 			s.treeTranslator.PushOperand(pgsql.FunctionCall{
 				Function:   pgsql.FunctionMax,
-				Parameters: []pgsql.Expression{argument},
+				Parameters: []pgsql.Expression{typeCastNumericArg},
+				CastType:   pgsql.Float8,
 			})
 		}
 

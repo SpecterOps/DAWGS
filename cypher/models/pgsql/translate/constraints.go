@@ -198,6 +198,60 @@ func isSyntaxNodeSatisfied(syntaxNode pgsql.SyntaxNode) (bool, error) {
 	return satisfied, err
 }
 
+func expressionHasPropertyLookupRoot(expression pgsql.Expression, root pgsql.Identifier) bool {
+	found := false
+
+	_ = walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
+		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
+			propertyLookup, isPropertyLookup := node.(*pgsql.BinaryExpression)
+			if !isPropertyLookup || !pgsql.OperatorIsPropertyLookup(propertyLookup.Operator) {
+				return
+			}
+
+			if decomposed, err := binaryExpressionToPropertyLookup(propertyLookup); err == nil &&
+				len(decomposed.Reference) > 0 &&
+				decomposed.Reference[0] == root {
+				found = true
+				handler.SetDone()
+			}
+		},
+	))
+
+	return found
+}
+
+func isEndpointIDReference(expression pgsql.Expression, endpoint pgsql.Identifier) bool {
+	compoundIdentifier, isCompoundIdentifier := unwrapParenthetical(expression).(pgsql.CompoundIdentifier)
+	return isCompoundIdentifier &&
+		len(compoundIdentifier) == 2 &&
+		compoundIdentifier[0] == endpoint &&
+		compoundIdentifier[1] == pgsql.ColumnID
+}
+
+func expressionHasEndpointInequality(expression pgsql.Expression, leftEndpoint, rightEndpoint pgsql.Identifier) bool {
+	found := false
+
+	_ = walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
+		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
+			binaryExpression, isBinaryExpression := node.(*pgsql.BinaryExpression)
+			if !isBinaryExpression ||
+				!binaryExpression.Operator.IsIn(pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals) {
+				return
+			}
+
+			if (isEndpointIDReference(binaryExpression.LOperand, leftEndpoint) &&
+				isEndpointIDReference(binaryExpression.ROperand, rightEndpoint)) ||
+				(isEndpointIDReference(binaryExpression.LOperand, rightEndpoint) &&
+					isEndpointIDReference(binaryExpression.ROperand, leftEndpoint)) {
+				found = true
+				handler.SetDone()
+			}
+		},
+	))
+
+	return found
+}
+
 // Constraint is an extracted expression that contains an identifier set of symbols required to be
 // in scope for this constraint to be solvable.
 type Constraint struct {
@@ -226,6 +280,16 @@ type ConstraintTracker struct {
 
 func NewConstraintTracker() *ConstraintTracker {
 	return &ConstraintTracker{}
+}
+
+func (s *ConstraintTracker) HasEndpointInequality(leftEndpoint, rightEndpoint pgsql.Identifier) bool {
+	for _, constraint := range s.Constraints {
+		if expressionHasEndpointInequality(constraint.Expression, leftEndpoint, rightEndpoint) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *ConstraintTracker) HasConstraints(scope *pgsql.IdentifierSet) (bool, error) {
@@ -450,6 +514,10 @@ func consumePatternConstraints(isFirstTraversalStep, isRecursivePattern bool, tr
 
 	if constraints.Edge, err = treeTranslator.ConsumeConstraintsFromVisibleSet(knownBindings); err != nil {
 		return constraints, err
+	}
+	if isRecursivePattern && constraints.Edge.Expression != nil &&
+		expressionHasPropertyLookupRoot(constraints.Edge.Expression, traversalStep.Edge.Identifier) {
+		return constraints, fmt.Errorf("variable-length relationship binding %s is a list and does not support direct property lookup", traversalStep.Edge.Identifier)
 	}
 
 	// Export the right node identifier last

@@ -70,7 +70,13 @@ func TestBatchTransaction_NodeUpdate(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	// Regsiter a cleanup step to wipe the database
+	assert.NoError(t,
+		graphDB.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			return tx.Nodes().Filter(query.Kind(query.Node(), NodeKind1)).Delete()
+		}),
+	)
+
+	// Register a cleanup step to wipe the database
 	t.Cleanup(func() {
 		cleanupCtx, done := context.WithTimeout(context.Background(), time.Minute)
 		defer done()
