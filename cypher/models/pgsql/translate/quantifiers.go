@@ -127,6 +127,7 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 		fullQuantifierBinaryExpression *pgsql.BinaryExpression
 		quantifierExpression           pgsql.Expression
 		quantifierOperator             pgsql.Operator
+		nullInputCheck                 pgsql.Expression
 	)
 	if filterExpression, err := s.treeTranslator.PopOperand(); err != nil {
 		s.SetError(err)
@@ -138,6 +139,11 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 		case cypher.QuantifierTypeNone:
 			quantifierExpression = pgsql.Literal{Value: 0, CastType: pgsql.Int}
 			quantifierOperator = pgsql.OperatorEquals
+			nullInputCheck = pgsql.NewBinaryExpression(
+				s.query.CurrentPart().stashedQuantifierArray[0],
+				pgsql.OperatorIsNot,
+				pgsql.NullLiteral(),
+			)
 		case cypher.QuantifierTypeSingle:
 			quantifierExpression = pgsql.Literal{Value: 1, CastType: pgsql.Int}
 			quantifierOperator = pgsql.OperatorEquals
@@ -155,6 +161,14 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 			Operator: quantifierOperator,
 			LOperand: filterExpression,
 			ROperand: quantifierExpression,
+		}
+
+		if nullInputCheck != nil {
+			fullQuantifierBinaryExpression = pgsql.NewBinaryExpression(
+				fullQuantifierBinaryExpression,
+				pgsql.OperatorAnd,
+				nullInputCheck,
+			)
 		}
 
 		s.treeTranslator.PushOperand(pgsql.NewTypeCast(fullQuantifierBinaryExpression, pgsql.Boolean))
