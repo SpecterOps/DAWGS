@@ -778,39 +778,51 @@ func rewritePropertyLookupNullCheck(propertyLookup *pgsql.BinaryExpression, isNo
 	))
 }
 
-func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, negated bool) *pgsql.BinaryExpression {
-	propertyLookup.Operator = pgsql.OperatorJSONField
+func jsonFieldPropertyLookup(propertyLookup *pgsql.BinaryExpression) *pgsql.BinaryExpression {
+	return pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONField, propertyLookup.ROperand)
+}
 
-	existsExpression := pgsql.NewBinaryExpression(
-		propertyLookup.LOperand,
-		pgsql.OperatorJSONBFieldExists,
-		propertyLookup.ROperand,
-	)
+func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, negated bool) *pgsql.BinaryExpression {
 	emptyArrayExpression := pgsql.NewBinaryExpression(
-		propertyLookup,
+		jsonFieldPropertyLookup(propertyLookup),
 		pgsql.OperatorEquals,
 		jsonEmptyArrayLiteral(),
+	)
+	nullExpression := pgsql.NewBinaryExpression(
+		jsonFieldPropertyLookup(propertyLookup),
+		pgsql.OperatorEquals,
+		jsonNullLiteral(),
+	)
+	nullTaintExpression := pgsql.NewBinaryExpression(
+		nullExpression,
+		pgsql.OperatorAnd,
+		pgsql.NullLiteral(),
 	)
 
 	if negated {
 		return pgsql.NewBinaryExpression(
 			pgsql.NewBinaryExpression(
-				existsExpression,
+				pgsql.NewBinaryExpression(
+					jsonFieldPropertyLookup(propertyLookup),
+					pgsql.OperatorNotEquals,
+					jsonEmptyArrayLiteral(),
+				),
 				pgsql.OperatorAnd,
-				pgsql.NewUnaryExpression(pgsql.OperatorNot, emptyArrayExpression),
+				pgsql.NewBinaryExpression(
+					jsonFieldPropertyLookup(propertyLookup),
+					pgsql.OperatorNotEquals,
+					jsonNullLiteral(),
+				),
 			),
-			pgsql.OperatorAnd,
-			pgsql.NewUnaryExpression(
-				pgsql.OperatorNot,
-				pgsql.NewBinaryExpression(propertyLookup, pgsql.OperatorEquals, jsonNullLiteral()),
-			),
+			pgsql.OperatorOr,
+			nullTaintExpression,
 		)
 	}
 
 	return pgsql.NewBinaryExpression(
-		existsExpression,
-		pgsql.OperatorAnd,
 		emptyArrayExpression,
+		pgsql.OperatorOr,
+		nullTaintExpression,
 	)
 }
 
