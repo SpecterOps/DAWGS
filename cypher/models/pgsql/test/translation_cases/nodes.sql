@@ -111,8 +111,8 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (s) where s.created_at = date() - duration('P1D') return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = current_date::date - interval 'P1D')) select s0.n0 as s from s0;
 
--- case: match (s) where s.created_at = date() + duration('4 hours') return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = current_date::date + interval '4 hours')) select s0.n0 as s from s0;
+-- case: match (s) where s.created_at = date() + duration('PT4H') return s
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = current_date::date + interval 'PT4H')) select s0.n0 as s from s0;
 
 -- case: match (s) where s.created_at = date('2023-4-4') return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = ('2023-4-4')::date)) select s0.n0 as s from s0;
@@ -223,7 +223,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n:NodeKind1) where toString(n.functionallevel) in ['2008 R2','2012','2008','2003','2003 Interim','2000 Mixed/Native'] return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'functionallevel') = any (array ['2008 R2', '2012', '2008', '2003', '2003 Interim', '2000 Mixed/Native']::text[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
--- case: match (n:NodeKind1) where toInt(n.value) in [1, 2, 3, 4] return n
+-- case: match (n:NodeKind1) where toInteger(n.value) in [1, 2, 3, 4] return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'value'))::int8 = any (array [1, 2, 3, 4]::int8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100
@@ -265,7 +265,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ('1' = any (jsonb_to_text_array((n0.properties -> 'array_prop'))::text[] || array ['1', '2']::text[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where ['DES-CBC-CRC', 'DES-CBC-MD5', 'RC4-HMAC-MD5'] in n.arrayProperty return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (array ['DES-CBC-CRC', 'DES-CBC-MD5', 'RC4-HMAC-MD5']::text[] operator (pg_catalog.&&) jsonb_to_text_array((n0.properties -> 'arrayProperty'))::text[]) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (false) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where 'DES-CBC-CRC' in u.arrayProperty or 'DES-CBC-MD5' in u.arrayProperty or 'RC4-HMAC-MD5' in u.arrayProperty return u
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ('DES-CBC-CRC' = any (jsonb_to_text_array((n0.properties -> 'arrayProperty'))::text[]) or 'DES-CBC-MD5' = any (jsonb_to_text_array((n0.properties -> 'arrayProperty'))::text[]) or 'RC4-HMAC-MD5' = any (jsonb_to_text_array((n0.properties -> 'arrayProperty'))::text[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0;
@@ -314,4 +314,3 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where n.name = "alpha' || (SELECT inet_server_addr()::text::int) || '" return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'name'))::jsonb = to_jsonb(('alpha'' || (SELECT inet_server_addr()::text::int) || ''')::text)::jsonb)) select s0.n0 as n from s0;
-

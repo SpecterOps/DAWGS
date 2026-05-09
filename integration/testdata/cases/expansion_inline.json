@@ -17,8 +17,7 @@
       "assert": {"node_ids": ["n3"]}
     },
     {
-      "name": "unbounded traversal filtering every traversed edge by a property",
-      "skip_drivers": ["neo4j"],
+      "name": "variable-length relationship binding property lookup errors",
       "cypher": "match (n)-[r*..]->(e:NodeKind1) where n.name = 'n1' and r.prop = 'a' return e",
       "fixture": {
         "nodes": [
@@ -31,7 +30,7 @@
           {"start_id": "n2", "end_id": "n3", "kind": "EdgeKind2", "properties": {"prop": "a"}}
         ]
       },
-      "assert": {"node_ids": ["n3"]}
+      "assert": "query_error"
     },
     {
       "name": "unbounded expansion followed by a single fixed step",

@@ -43,6 +43,10 @@ make test_all
 `make test_all` runs unit tests and the integration suites. Integration tests use the `CONNECTION_STRING` environment
 variable and run against the backend selected by that connection string's scheme.
 
+The shared integration cases under `integration/testdata/cases` and `integration/testdata/templates` are expected to be
+semantically equivalent across supported backends. Avoid driver-specific skips or expected results in those files; add
+driver-scoped integration coverage instead when a backend-only capability needs to be tested.
+
 Benign local examples:
 
 ```bash

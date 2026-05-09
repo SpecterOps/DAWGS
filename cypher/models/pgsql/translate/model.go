@@ -73,6 +73,7 @@ type Expansion struct {
 	DeferredNodeSatisfactionConstraint pgsql.Expression
 	UseMaterializedTerminalFilter      bool
 	UseMaterializedEndpointPairFilter  bool
+	HasExplicitEndpointInequality      bool
 
 	PrimerQueryParameter            *BoundIdentifier
 	BackwardPrimerQueryParameter    *BoundIdentifier

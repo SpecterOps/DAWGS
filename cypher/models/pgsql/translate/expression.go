@@ -454,6 +454,11 @@ func (s *ExpressionTreeTranslator) HasAnyConstraints(scope *pgsql.IdentifierSet)
 	return s.TranslationConstraints.HasConstraints(scope)
 }
 
+func (s *ExpressionTreeTranslator) HasEndpointInequality(leftEndpoint, rightEndpoint pgsql.Identifier) bool {
+	return s.UserConstraints.HasEndpointInequality(leftEndpoint, rightEndpoint) ||
+		s.TranslationConstraints.HasEndpointInequality(leftEndpoint, rightEndpoint)
+}
+
 func (s *ExpressionTreeTranslator) ConsumeConstraintsFromVisibleSet(visible *pgsql.IdentifierSet) (*Constraint, error) {
 	if userConstraints, err := s.UserConstraints.ConsumeSet(s.kindMapper, visible); err != nil {
 		return nil, err
@@ -1115,6 +1120,9 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 					// Attempt to figure out the cast by looking at the left operand
 					if leftHint, err := InferExpressionType(newExpression.LOperand); err != nil {
 						return err
+					} else if leftHint.IsArrayType() {
+						s.PushOperand(pgsql.NewLiteral(false, pgsql.Boolean))
+						return nil
 					} else if leftArrayHint, err := leftHint.ToArrayType(); err != nil {
 						return err
 					} else {
@@ -1136,7 +1144,8 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			if lOperandTypeHint, err := InferExpressionType(newExpression.LOperand); err != nil {
 				return err
 			} else if lOperandTypeHint.IsArrayType() {
-				newExpression.Operator = pgsql.OperatorPGArrayOverlap
+				s.PushOperand(pgsql.NewLiteral(false, pgsql.Boolean))
+				return nil
 			} else {
 				newExpression.Operator = pgsql.OperatorEquals
 				newExpression.ROperand = pgsql.NewAnyExpression(newExpression.ROperand, typedROperand.TypeHint())

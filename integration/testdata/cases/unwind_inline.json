@@ -26,10 +26,9 @@
       "assert": {"ordered_scalar_values": [1, 2, 3]}
     },
     {
-      "name": "unwind target can shadow source name",
+      "name": "unwind target cannot shadow source name",
       "cypher": "WITH [1, 2, 3] AS x UNWIND x AS x RETURN x",
-      "skip_drivers": ["neo4j"],
-      "assert": {"row_count": 3}
+      "assert": "query_error"
     },
     {
       "name": "unwind collected node names and return them",

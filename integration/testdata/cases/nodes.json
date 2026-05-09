@@ -62,10 +62,9 @@
       "assert": {"node_ids": ["n1"]}
     },
     {
-      "name": "filter typed node where array property overlaps a literal list",
-      "skip_drivers": ["neo4j"],
+      "name": "filter typed node where literal list membership in scalar array is false",
       "cypher": "match (n:NodeKind1) where ['DES-CBC-CRC', 'DES-CBC-MD5', 'RC4-HMAC-MD5'] in n.arrayProperty return n",
-      "assert": {"node_ids": ["n1"]}
+      "assert": "empty"
     },
     {
       "name": "filter typed node where array property contains one of several scalar values",
@@ -218,9 +217,8 @@
       "assert": "non_empty"
     },
     {
-      "name": "filter typed node where toInt of a property appears in a literal integer list",
-      "skip_drivers": ["neo4j"],
-      "cypher": "match (n:NodeKind1) where toInt(n.value) in [1, 2, 3, 4] return n",
+      "name": "filter typed node where toInteger of a property appears in a literal integer list",
+      "cypher": "match (n:NodeKind1) where toInteger(n.value) in [1, 2, 3, 4] return n",
       "assert": "non_empty"
     },
     {
@@ -240,8 +238,7 @@
     },
     {
       "name": "filter node where a property equals date plus a duration string",
-      "skip_drivers": ["neo4j"],
-      "cypher": "match (s) where s.created_at = date() + duration('4 hours') return s",
+      "cypher": "match (s) where s.created_at = date() + duration('PT4H') return s",
       "assert": "no_error"
     },
     {

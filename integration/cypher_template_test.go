@@ -26,7 +26,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -36,43 +35,37 @@ import (
 )
 
 type cypherTemplateFile struct {
-	SkipDrivers []string                  `json:"skip_drivers,omitempty"`
 	Families    []cypherTemplateFamily    `json:"families,omitempty"`
 	Metamorphic []cypherMetamorphicFamily `json:"metamorphic,omitempty"`
 	path        string
 }
 
 type cypherTemplateFamily struct {
-	Name        string                  `json:"name"`
-	SkipDrivers []string                `json:"skip_drivers,omitempty"`
-	Fixture     *opengraph.Graph        `json:"fixture"`
-	Template    string                  `json:"template"`
-	Params      map[string]any          `json:"params,omitempty"`
-	Variants    []cypherTemplateVariant `json:"variants"`
+	Name     string                  `json:"name"`
+	Fixture  *opengraph.Graph        `json:"fixture"`
+	Template string                  `json:"template"`
+	Params   map[string]any          `json:"params,omitempty"`
+	Variants []cypherTemplateVariant `json:"variants"`
 }
 
 type cypherTemplateVariant struct {
-	Name           string                     `json:"name"`
-	SkipDrivers    []string                   `json:"skip_drivers,omitempty"`
-	Vars           map[string]string          `json:"vars,omitempty"`
-	Params         map[string]any             `json:"params,omitempty"`
-	Assert         json.RawMessage            `json:"assert"`
-	AssertByDriver map[string]json.RawMessage `json:"assert_by_driver,omitempty"`
+	Name   string            `json:"name"`
+	Vars   map[string]string `json:"vars,omitempty"`
+	Params map[string]any    `json:"params,omitempty"`
+	Assert json.RawMessage   `json:"assert"`
 }
 
 type cypherMetamorphicFamily struct {
-	Name        string                   `json:"name"`
-	SkipDrivers []string                 `json:"skip_drivers,omitempty"`
-	Fixture     *opengraph.Graph         `json:"fixture"`
-	Compare     comparisonModes          `json:"compare"`
-	Queries     []cypherMetamorphicQuery `json:"queries"`
+	Name    string                   `json:"name"`
+	Fixture *opengraph.Graph         `json:"fixture"`
+	Compare comparisonModes          `json:"compare"`
+	Queries []cypherMetamorphicQuery `json:"queries"`
 }
 
 type cypherMetamorphicQuery struct {
-	Name        string         `json:"name"`
-	SkipDrivers []string       `json:"skip_drivers,omitempty"`
-	Cypher      string         `json:"cypher"`
-	Params      map[string]any `json:"params,omitempty"`
+	Name   string         `json:"name"`
+	Cypher string         `json:"cypher"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 func TestCypherTemplates(t *testing.T) {
@@ -81,32 +74,15 @@ func TestCypherTemplates(t *testing.T) {
 
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 
-	driver, err := driverFromConnStr(os.Getenv("CONNECTION_STRING"))
-	if err != nil {
-		t.Fatalf("Failed to detect driver: %v", err)
-	}
-
 	for _, templateFile := range templateFiles {
 		fileName := strings.TrimSuffix(filepath.Base(templateFile.path), filepath.Ext(templateFile.path))
 		t.Run(fileName, func(t *testing.T) {
-			if slices.Contains(templateFile.SkipDrivers, driver) {
-				t.Skipf("skipped for driver %s", driver)
-			}
-
 			for _, family := range templateFile.Families {
 				t.Run(family.Name, func(t *testing.T) {
-					if slices.Contains(family.SkipDrivers, driver) {
-						t.Skipf("skipped for driver %s", driver)
-					}
-
 					for _, variant := range family.Variants {
 						t.Run(variant.Name, func(t *testing.T) {
-							if slices.Contains(variant.SkipDrivers, driver) {
-								t.Skipf("skipped for driver %s", driver)
-							}
-
 							cypher := renderCypherTemplate(t, family.Template, variant.Vars)
-							check := parseAssertion(t, variant.assertionForDriver(driver))
+							check := parseAssertion(t, variant.Assert)
 							tc := testCase{
 								Name:    variant.Name,
 								Cypher:  cypher,
@@ -122,25 +98,11 @@ func TestCypherTemplates(t *testing.T) {
 
 			for _, family := range templateFile.Metamorphic {
 				t.Run(family.Name, func(t *testing.T) {
-					if slices.Contains(family.SkipDrivers, driver) {
-						t.Skipf("skipped for driver %s", driver)
-					}
-
-					runMetamorphicFamily(t, ctx, db, family, driver)
+					runMetamorphicFamily(t, ctx, db, family)
 				})
 			}
 		})
 	}
-}
-
-func (s cypherTemplateVariant) assertionForDriver(driver string) json.RawMessage {
-	if s.AssertByDriver != nil {
-		if assertion, found := s.AssertByDriver[driver]; found {
-			return assertion
-		}
-	}
-
-	return s.Assert
 }
 
 func loadCypherTemplateFiles(t *testing.T) []cypherTemplateFile {
@@ -228,13 +190,14 @@ func mergeParams(base, overrides map[string]any) map[string]any {
 	return merged
 }
 
-func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check resultAssertion) {
+func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
 	if tc.Fixture == nil {
 		t.Fatal("template cases must define an inline fixture")
 	}
 
+	queryErrorObserved := false
 	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
 		if err != nil {
@@ -243,17 +206,24 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 
 		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()
-		check(t, collectResult(t, result), newAssertionContext(idMap))
+		assertion.checkResult(t, result, newAssertionContext(idMap))
+		if assertion.expectQueryError {
+			queryErrorObserved = true
+		}
 
 		return errFixtureRollback
 	})
+
+	if assertion.expectQueryError && queryErrorObserved && err != nil {
+		return
+	}
 
 	if !errors.Is(err, errFixtureRollback) {
 		t.Fatalf("unexpected transaction error: %v", err)
 	}
 }
 
-func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, family cypherMetamorphicFamily, driver string) {
+func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, family cypherMetamorphicFamily) {
 	t.Helper()
 
 	if family.Fixture == nil {
@@ -275,10 +245,6 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 		var baseline []string
 
 		for _, query := range family.Queries {
-			if slices.Contains(query.SkipDrivers, driver) {
-				continue
-			}
-
 			result := tx.Query(query.Cypher, query.Params)
 			collected := collectResult(t, result)
 			result.Close()

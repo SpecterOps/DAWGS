@@ -17,6 +17,7 @@ These instructions apply to the entire repository.
 - `make test_all` is the default validation command. It runs unit tests and all integration suites.
 - Integration suites consume `CONNECTION_STRING`. If `CONNECTION_STRING` is not present in the LLM context, ask the user to add it before running `make test_all`.
 - Run `make test_all` only for the backend selected by the scheme in `CONNECTION_STRING`. Tests for other backends should skip themselves.
+- Core integration cases in `integration/testdata/cases` and `integration/testdata/templates` must be backend-equivalent. Do not add driver-specific skips or driver-specific expected assertions to these suites. If a backend capability needs dedicated coverage, put it in a clearly driver-scoped test that is skipped unless `CONNECTION_STRING` selects that backend.
 - `make test` is available for unit tests only.
 - `make test_integration` is available for integration tests only.
 - Agents are empowered to update dependencies as part of normal maintenance when the change warrants it.

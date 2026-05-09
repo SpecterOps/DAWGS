@@ -996,6 +996,14 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
+
+	if !expansionModel.HasExplicitEndpointInequality {
+		nextQuery.Where = pgsql.OptionalAnd(
+			nextQuery.Where,
+			shortestPathTerminalFilterSelfEndpointGuard(s.model.EdgeStartColumn),
+		)
+	}
+
 	return frontPrimerQuery(seed, nextQuery), primerProjectionPredicate
 }
 
@@ -1331,6 +1339,92 @@ func (s *ExpansionBuilder) applyShortestPathSeedProjectionConstraints(projection
 	projectionQuery.Where = pgsql.OptionalAnd(projectionQuery.Where, projectionConstraints)
 }
 
+// Match Neo4j's shortest-path behavior by surfacing an error for result rows
+// where the resolved root and terminal endpoints are the same node.
+func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expression {
+	endpointDifference := func() pgsql.Expression {
+		return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{expansionFrame, expansionRootID},
+			pgsql.OperatorSubtract,
+			pgsql.CompoundIdentifier{expansionFrame, expansionNextID},
+		))
+	}
+
+	return pgsql.NewBinaryExpression(
+		pgsql.NewBinaryExpression(
+			endpointDifference(),
+			pgsql.OperatorDivide,
+			endpointDifference(),
+		),
+		pgsql.OperatorEquals,
+		pgsql.NewLiteral(1, pgsql.Int),
+	)
+}
+
+// PostgreSQL has no portable expression-level RAISE; the denominator becomes
+// zero when the shortest-path root is also present in the terminal filter.
+func shortestPathTerminalFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.Expression {
+	matchingTerminalCount := pgsql.Subquery{
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: []pgsql.SelectItem{
+					pgsql.FunctionCall{
+						Function: pgsql.FunctionCount,
+						Parameters: []pgsql.Expression{
+							pgsql.Wildcard{},
+						},
+						CastType: pgsql.Int8,
+					},
+				},
+				From: []pgsql.FromClause{{
+					Source: pgsql.TableReference{
+						Name: pgsql.CompoundIdentifier{expansionTerminalFilter},
+					},
+				}},
+				Where: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{expansionTerminalFilter, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					rootID,
+				),
+			},
+		},
+	}
+
+	denominator := pgsql.NewParenthetical(pgsql.NewBinaryExpression(
+		pgsql.NewLiteral(1, pgsql.Int8),
+		pgsql.OperatorSubtract,
+		pgsql.FunctionCall{
+			Function: pgsql.Identifier("least"),
+			Parameters: []pgsql.Expression{
+				pgsql.NewLiteral(1, pgsql.Int8),
+				matchingTerminalCount,
+			},
+			CastType: pgsql.Int8,
+		},
+	))
+
+	return pgsql.NewBinaryExpression(
+		pgsql.NewBinaryExpression(
+			pgsql.NewLiteral(1, pgsql.Int8),
+			pgsql.OperatorDivide,
+			denominator,
+		),
+		pgsql.OperatorEquals,
+		pgsql.NewLiteral(1, pgsql.Int8),
+	)
+}
+
+func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *pgsql.Select, expansionModel *Expansion) {
+	if expansionModel.HasExplicitEndpointInequality {
+		return
+	}
+
+	projectionQuery.Where = pgsql.OptionalAnd(
+		projectionQuery.Where,
+		shortestPathSelfEndpointGuard(expansionModel.Frame.Binding.Identifier),
+	)
+}
+
 func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgsql.Identifier) (pgsql.Query, error) {
 	var (
 		expansionModel  = s.traversalStep.Expansion
@@ -1377,6 +1471,7 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 
 	s.applyBoundEndpointProjectionConstraints(&projectionQuery, expansionModel)
 	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, forwardSeedProjectionConstraints)
+	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
 	if harnessParameters, err := s.shortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery); err != nil {
 		return pgsql.Query{}, err
@@ -1477,6 +1572,7 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 
 	s.applyBoundEndpointProjectionConstraints(&projectionQuery, expansionModel)
 	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, pgsql.OptionalAnd(forwardSeedProjectionConstraints, backwardSeedProjectionConstraints))
+	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
 	if harnessParameters, err := s.bidirectionalAllShortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery, backwardFrontPrimerQuery, backwardFrontRecursiveQuery); err != nil {
 		return pgsql.Query{}, err
@@ -2306,6 +2402,10 @@ func (s *Translator) translateShortestPathTraversal(traversalStep *TraversalStep
 	}
 
 	expansionModel.UseBidirectionalSearch = useBidirectionalSearch
+	expansionModel.HasExplicitEndpointInequality = s.treeTranslator.HasEndpointInequality(
+		traversalStep.LeftNode.Identifier,
+		traversalStep.RightNode.Identifier,
+	)
 
 	// If this query is a shortest-path look up, the translator will have to use a function harness for
 	// traversal. As such, query fragments for the traversal harness will have to be passed by the parameters
