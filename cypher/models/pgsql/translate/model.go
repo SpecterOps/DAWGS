@@ -523,7 +523,7 @@ type QueryPart struct {
 	// repetition of some of the exported fields above which is intentional and may be a good refactor target
 	// in the future
 	patternPredicates               []*pgsql.Future[*Pattern]
-	properties                      map[string]pgsql.Expression
+	properties                      TranslatedProperties
 	currentPattern                  *Pattern
 	stashedPattern                  *Pattern
 	projections                     *Projections
@@ -543,6 +543,21 @@ type UnwindClause struct {
 	Binding    *BoundIdentifier
 }
 
+type TranslatedProperties struct {
+	Map       map[string]pgsql.Expression
+	Parameter pgsql.Expression
+}
+
+func NewTranslatedProperties() TranslatedProperties {
+	return TranslatedProperties{
+		Map: map[string]pgsql.Expression{},
+	}
+}
+
+func (s TranslatedProperties) IsEmpty() bool {
+	return len(s.Map) == 0 && s.Parameter == nil
+}
+
 func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
 	return &QueryPart{
 		Model: &pgsql.Query{
@@ -552,7 +567,7 @@ func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
 		numReadingClauses:     numReadingClauses,
 		numUpdatingClauses:    numUpdatingClauses,
 		mutations:             NewMutations(),
-		properties:            map[string]pgsql.Expression{},
+		properties:            NewTranslatedProperties(),
 		limitPushdownFrames:   pgsql.NewIdentifierSet(),
 		referencedIdentifiers: pgsql.NewIdentifierSet(),
 		quantifierIdentifiers: pgsql.NewIdentifierSet(),
@@ -641,16 +656,24 @@ func (s *QueryPart) CurrentProjection() *Projection {
 }
 
 func (s *QueryPart) HasProperties() bool {
-	return len(s.properties) > 0
+	return !s.properties.IsEmpty()
 }
 
 func (s *QueryPart) AddProperty(key string, expression pgsql.Expression) {
-	s.properties[key] = expression
+	if s.properties.Map == nil {
+		s.properties.Map = map[string]pgsql.Expression{}
+	}
+
+	s.properties.Map[key] = expression
 }
 
-func (s *QueryPart) ConsumeProperties() map[string]pgsql.Expression {
+func (s *QueryPart) AddPropertyParameter(expression pgsql.Expression) {
+	s.properties.Parameter = expression
+}
+
+func (s *QueryPart) ConsumeProperties() TranslatedProperties {
 	properties := s.properties
-	s.properties = map[string]pgsql.Expression{}
+	s.properties = NewTranslatedProperties()
 
 	return properties
 }
@@ -706,13 +729,13 @@ type Delete struct {
 
 type NodeCreate struct {
 	Binding    *BoundIdentifier
-	Properties map[string]pgsql.Expression
+	Properties TranslatedProperties
 	Kinds      graph.Kinds
 }
 
 type EdgeCreate struct {
 	Binding    *BoundIdentifier
-	Properties map[string]pgsql.Expression
+	Properties TranslatedProperties
 	Kinds      graph.Kinds
 	LeftNode   *BoundIdentifier
 	RightNode  *BoundIdentifier

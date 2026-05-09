@@ -404,6 +404,12 @@ func NegotiateValue(value any) (any, error) {
 	case []graph.ID:
 		return graph.IDsToUint64Slice(typedValue), nil
 
+	case map[string]any:
+		return MapStringAnyToJSONB(typedValue)
+
+	case *graph.Properties:
+		return PropertiesToJSONB(typedValue)
+
 	default:
 		return value, nil
 	}
@@ -479,6 +485,9 @@ func ValueToDataType(value any) (DataType, error) {
 		return Int2Array, nil
 
 	case cypher.MapLiteral:
+		return JSONB, nil
+
+	case map[string]any, *graph.Properties:
 		return JSONB, nil
 
 	case *cypher.ListLiteral:

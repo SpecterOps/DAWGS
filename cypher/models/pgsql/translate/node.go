@@ -75,20 +75,9 @@ func (s *Translator) translateNodePatternToStep(nodePattern *cypher.NodePattern,
 
 	// Check the IR for any collected properties
 	if currentQueryPart.HasProperties() {
-		var propertyConstraints pgsql.Expression
-
-		for key, value := range currentQueryPart.ConsumeProperties() {
-			s.treeTranslator.PushOperand(pgsql.NewPropertyLookup(pgsql.CompoundIdentifier{bindingResult.Binding.Identifier, pgsql.ColumnProperties}, pgsql.NewLiteral(key, pgsql.Text)))
-			s.treeTranslator.PushOperand(value)
-
-			if newConstraint, err := s.treeTranslator.PopBinaryExpression(pgsql.OperatorEquals); err != nil {
-				return err
-			} else {
-				propertyConstraints = pgsql.OptionalAnd(propertyConstraints, newConstraint)
-			}
-		}
-
-		if err := s.treeTranslator.AddTranslationConstraint(pgsql.AsIdentifierSet(bindingResult.Binding.Identifier), propertyConstraints); err != nil {
+		if propertyConstraints, err := s.buildPatternPropertyConstraints(bindingResult.Binding, currentQueryPart.ConsumeProperties()); err != nil {
+			return err
+		} else if err := s.treeTranslator.AddTranslationConstraint(pgsql.AsIdentifierSet(bindingResult.Binding.Identifier), propertyConstraints); err != nil {
 			return err
 		}
 	}
