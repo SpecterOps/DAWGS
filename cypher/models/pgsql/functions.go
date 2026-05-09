@@ -28,6 +28,7 @@ const (
 	FunctionToLower                  Identifier = "lower"
 	FunctionToUpper                  Identifier = "upper"
 	FunctionCoalesce                 Identifier = "coalesce"
+	FunctionReplace                  Identifier = "replace"
 	FunctionUnnest                   Identifier = "unnest"
 	FunctionNextValue                Identifier = "nextval"
 	FunctionPGGetSerialSequence      Identifier = "pg_get_serial_sequence"
