@@ -78,6 +78,38 @@
             }
           },
           {
+            "id": "eta",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "has%percent",
+              "group": "wildcard"
+            }
+          },
+          {
+            "id": "theta",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "hasXpercent",
+              "group": "wildcard"
+            }
+          },
+          {
+            "id": "iota",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "under_score",
+              "group": "wildcard"
+            }
+          },
+          {
+            "id": "kappa",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "underXscore",
+              "group": "wildcard"
+            }
+          },
+          {
             "id": "other",
             "kinds": ["TemplateNodeKind2"],
             "properties": {
@@ -162,6 +194,34 @@
             "query": "match (n:TemplateNodeKind1) where n.group = 'null-tags' and none(tag in n.tags where tag contains 'admin') return n.name"
           },
           "assert": "empty"
+        },
+        {
+          "name": "property is null matches missing and json null values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['missing-tags', 'null-tags'] and n.tags is null return n.name order by n.name"
+          },
+          "assert": {"ordered_scalar_values": ["missing-tags", "null-tags"]}
+        },
+        {
+          "name": "property is not null excludes json null values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'null-tags' and n.tags is not null return n.name"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "contains percent treats percent as a literal character",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name contains '%' return n.name"
+          },
+          "assert": {"scalar_values": ["has%percent"]}
+        },
+        {
+          "name": "starts with underscore treats underscore as a literal character",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name starts with 'under_' return n.name"
+          },
+          "assert": {"scalar_values": ["under_score"]}
         },
         {
           "name": "size of empty literal list is zero",
