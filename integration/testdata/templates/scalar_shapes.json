@@ -164,6 +164,13 @@
           "assert": "empty"
         },
         {
+          "name": "size of empty literal list is zero",
+          "vars": {
+            "query": "return size([])"
+          },
+          "assert": {"scalar_values": [0]}
+        },
+        {
           "name": "grouped aggregate row projection",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, count(n), sum(n.score) order by n.department"
