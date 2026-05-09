@@ -488,11 +488,18 @@ func (s *Translator) translateCoalesceFunction(functionInvocation *cypher.Functi
 			}
 		}
 
+		if expectedType == pgsql.AnyArray {
+			expectedType = pgsql.TextArray
+		}
+
 		if expectedType.IsKnown() {
 			// Rewrite any property lookup operators now that we have some type information
 			for idx, argument := range arguments {
 				if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(argument); isPropertyLookup {
 					arguments[idx] = rewritePropertyLookupOperator(propertyLookup, expectedType)
+				} else if arrayLiteral, isArrayLiteral := argument.(pgsql.ArrayLiteral); isArrayLiteral && arrayLiteral.CastType == pgsql.AnyArray {
+					arrayLiteral.CastType = expectedType
+					arguments[idx] = arrayLiteral
 				}
 			}
 		}
