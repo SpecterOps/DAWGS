@@ -143,8 +143,8 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 			quantifierOperator = pgsql.OperatorEquals
 		case cypher.QuantifierTypeAll:
 			quantifierExpression = pgsql.FunctionCall{
-				Function:   pgsql.FunctionArrayLength,
-				Parameters: []pgsql.Expression{s.query.CurrentPart().stashedQuantifierArray[0], pgsql.Literal{Value: 1, CastType: pgsql.Int}},
+				Function:   pgsql.FunctionCardinality,
+				Parameters: []pgsql.Expression{s.query.CurrentPart().stashedQuantifierArray[0]},
 			}
 			quantifierOperator = pgsql.OperatorEquals
 		default:
