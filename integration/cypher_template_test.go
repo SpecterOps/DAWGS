@@ -78,7 +78,7 @@ func TestCypherTemplates(t *testing.T) {
 	templateFiles := loadCypherTemplateFiles(t)
 	nodeKinds, edgeKinds := cypherTemplateKinds(templateFiles)
 
-	db, ctx := SetupDBWithKinds(t, nodeKinds, edgeKinds, "base")
+	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 
 	driver, err := driverFromConnStr(os.Getenv("CONNECTION_STRING"))
 	if err != nil {
@@ -113,7 +113,7 @@ func TestCypherTemplates(t *testing.T) {
 								Fixture: family.Fixture,
 							}
 
-							runWithRequiredFixture(t, ctx, db, tc, check)
+							runWithTemplateFixture(t, ctx, db, tc, check)
 						})
 					}
 				})
@@ -217,14 +217,29 @@ func mergeParams(base, overrides map[string]any) map[string]any {
 	return merged
 }
 
-func runWithRequiredFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check resultAssertion) {
+func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, check resultAssertion) {
 	t.Helper()
 
 	if tc.Fixture == nil {
 		t.Fatal("template cases must define an inline fixture")
 	}
 
-	runWithFixture(t, ctx, db, tc, check)
+	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
+		if err != nil {
+			return fmt.Errorf("creating fixture: %w", err)
+		}
+
+		result := tx.Query(tc.Cypher, tc.Params)
+		defer result.Close()
+		check(t, collectResult(t, result), newAssertionContext(idMap))
+
+		return errFixtureRollback
+	})
+
+	if !errors.Is(err, errFixtureRollback) {
+		t.Fatalf("unexpected transaction error: %v", err)
+	}
 }
 
 func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, family cypherMetamorphicFamily, driver string) {
@@ -239,10 +254,6 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 	}
 
 	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		if err := tx.Nodes().Delete(); err != nil {
-			return fmt.Errorf("clearing graph before fixture: %w", err)
-		}
-
 		idMap, err := opengraph.WriteGraphTx(tx, family.Fixture)
 		if err != nil {
 			return fmt.Errorf("creating fixture: %w", err)
@@ -302,6 +313,10 @@ func comparisonSignature(t *testing.T, result queryResult, ctx assertionContext,
 		return sortedSignatures(firstScalarSignatures(t, result))
 	case "ordered_scalar_values":
 		return firstScalarSignatures(t, result)
+	case "row_values":
+		return sortedSignatures(rowScalarSignatures(result))
+	case "ordered_row_values":
+		return rowScalarSignatures(result)
 	case "node_ids":
 		return sortedSignatures(collectNodeIDs(t, result, ctx, false))
 	case "node_id_set":
@@ -334,6 +349,15 @@ func firstScalarSignatures(t *testing.T, result queryResult) []string {
 		}
 
 		signatures = append(signatures, scalarSignature(row.values[0]))
+	}
+
+	return signatures
+}
+
+func rowScalarSignatures(result queryResult) []string {
+	signatures := make([]string, 0, len(result.rows))
+	for _, row := range result.rows {
+		signatures = append(signatures, rowScalarSignature(row.values))
 	}
 
 	return signatures

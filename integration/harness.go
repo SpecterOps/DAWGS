@@ -63,12 +63,27 @@ func driverFromConnStr(connStr string) (string, error) {
 func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
-	return SetupDBWithKinds(t, nil, nil, datasets...)
+	return setupDB(t, true, nil, nil, datasets...)
 }
 
 // SetupDBWithKinds opens a database connection like SetupDB, then extends the
 // asserted schema with additional node and edge kinds.
 func SetupDBWithKinds(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
+	return setupDB(t, true, extraNodeKinds, extraEdgeKinds, datasets...)
+}
+
+// SetupDBWithKindsNoGraphCleanup opens a database connection like SetupDBWithKinds
+// but only closes the connection during cleanup. Use this for rollback-only tests
+// that must not clear a shared database.
+func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
+	return setupDB(t, false, extraNodeKinds, extraEdgeKinds, datasets...)
+}
+
+func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -122,9 +137,11 @@ func SetupDBWithKinds(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, 
 	}
 
 	t.Cleanup(func() {
-		_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			return tx.Nodes().Delete()
-		})
+		if cleanupGraph {
+			_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+				return tx.Nodes().Delete()
+			})
+		}
 		db.Close(ctx)
 	})
 
