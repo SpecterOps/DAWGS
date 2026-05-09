@@ -36,6 +36,22 @@
           "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
         },
         {
+          "name": "null equality parameter returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name = $name return n.name"
+          },
+          "params": {"name": null},
+          "assert": "empty"
+        },
+        {
+          "name": "null parameter list membership returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name"
+          },
+          "params": {"names": null},
+          "assert": "empty"
+        },
+        {
           "name": "empty parameter list membership returns no rows",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name"
@@ -82,6 +98,30 @@
           },
           "params": {"minimum": 2},
           "assert": {"ordered_scalar_values": ["beta", "gamma"]}
+        },
+        {
+          "name": "numeric range predicate parameters",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score >= $minimum and n.score < $maximum return n.name"
+          },
+          "params": {"minimum": 2, "maximum": 3},
+          "assert": {"scalar_values": ["beta"]}
+        },
+        {
+          "name": "ends with parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.objectid) ends with $suffix return n.name order by n.name"
+          },
+          "params": {"suffix": "-500"},
+          "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
+        },
+        {
+          "name": "negated parameter list predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score is not null and not n.name in $excluded return n.name order by n.name"
+          },
+          "params": {"excluded": ["alpha", "gamma"]},
+          "assert": {"ordered_scalar_values": ["beta"]}
         },
         {
           "name": "relationship property equality parameter",
