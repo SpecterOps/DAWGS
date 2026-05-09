@@ -213,6 +213,33 @@
           "cypher": "match (n:TemplateNodeKind1) where n.tag = 'collect' with collect(n.name) as names unwind names as name return name order by name"
         }
       ]
+    },
+    {
+      "name": "fixed and variable path projections preserve scalar rows and path shape",
+      "compare": ["row_values", "path_node_ids", "path_edge_kinds"],
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src", "route": "multi-mode"}},
+          {"id": "b", "kinds": ["TemplateNodeKind2"], "properties": {"name": "mid", "route": "multi-mode"}},
+          {"id": "c", "kinds": ["TemplateNodeKind1"], "properties": {"name": "dst", "route": "multi-mode"}},
+          {"id": "decoy", "kinds": ["TemplateNodeKind1"], "properties": {"name": "decoy", "route": "multi-mode"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "TemplateEdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "TemplateEdgeKind2"},
+          {"start_id": "a", "end_id": "decoy", "kind": "TemplateEdgeKind2"}
+        ]
+      },
+      "queries": [
+        {
+          "name": "fixed two-hop scalar and path projection",
+          "cypher": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1]->(:TemplateNodeKind2)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) where a.name = 'src' and c.name = 'dst' return a.name, c.name, p"
+        },
+        {
+          "name": "bounded expansion scalar and path projection",
+          "cypher": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1|TemplateEdgeKind2*2..2]->(c:TemplateNodeKind1) where a.name = 'src' and c.name = 'dst' return a.name, c.name, p"
+        }
+      ]
     }
   ]
 }

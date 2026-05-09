@@ -224,6 +224,27 @@
           "assert": "empty"
         },
         {
+          "name": "property is not null includes empty list values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['shape', 'missing-tags', 'null-tags'] and n.tags is not null return n.name order by n.name"
+          },
+          "assert": {"ordered_scalar_values": ["alpha", "beta", "gamma"]}
+        },
+        {
+          "name": "coalesced missing null and empty property lists match zero size",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['shape', 'missing-tags', 'null-tags'] and size(coalesce(n.tags, [])) = 0 return n.name order by n.name"
+          },
+          "assert": {"ordered_scalar_values": ["gamma", "missing-tags", "null-tags"]}
+        },
+        {
+          "name": "unwind coalesced property lists skips missing null and empty lists",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['shape', 'missing-tags', 'null-tags'] with n unwind coalesce(n.tags, []) as tag return n.name, tag order by n.name, tag"
+          },
+          "assert": {"ordered_row_values": [["alpha", "admin"], ["alpha", "tier0"], ["beta", "user"]]}
+        },
+        {
           "name": "contains percent treats percent as a literal character",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name contains '%' return n.name"
@@ -257,6 +278,21 @@
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, count(n), sum(n.score) order by n.department"
           },
           "assert": {"ordered_row_values": [["eng", 2, 3], ["ops", 1, 3]]}
+        },
+        {
+          "name": "aggregate aliases can be filtered and ordered",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' with count(n) as node_count, sum(n.score) as score_total where node_count >= 1 return node_count, score_total order by score_total"
+          },
+          "assert": {"ordered_row_values": [[3, 6]]}
+        },
+        {
+          "name": "parameterized aggregate alias filter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' with count(n) as node_count where node_count >= $minimum return node_count"
+          },
+          "params": {"minimum": 2},
+          "assert": {"row_values": [[3]]}
         },
         {
           "name": "grouped min max and avg aggregate row projection",
