@@ -717,6 +717,11 @@ func isEmptyArrayLiteralPropertyComparison(expression *pgsql.BinaryExpression) (
 	return propertyLookup, hasPropertyLookup && hasEmptyArrayLiteral
 }
 
+func isEmptyAnyArrayLiteral(expression pgsql.Expression) bool {
+	arrayLiteral, isArrayLiteral := expression.(pgsql.ArrayLiteral)
+	return isArrayLiteral && arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0
+}
+
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
@@ -965,6 +970,11 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		}
 
 	case pgsql.OperatorIn:
+		if isEmptyAnyArrayLiteral(newExpression.ROperand) {
+			s.PushOperand(pgsql.NewLiteral(false, pgsql.Boolean))
+			return nil
+		}
+
 		newExpression.Operator = pgsql.OperatorEquals
 
 		switch typedROperand := newExpression.ROperand.(type) {
