@@ -317,9 +317,9 @@ $$
 begin
   if target != 'null'::jsonb then
     return array(select jsonb_array_elements_text(target));
-  else
-    return array []::text[];
   end if;
+
+  return null;
 end
 $$
   language plpgsql
