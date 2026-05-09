@@ -231,6 +231,13 @@
           "assert": {"scalar_values": [0]}
         },
         {
+          "name": "size of coalesced missing and null property lists is zero",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['missing-tags', 'null-tags'] return n.name, size(coalesce(n.tags, [])) order by n.name"
+          },
+          "assert": {"ordered_row_values": [["missing-tags", 0], ["null-tags", 0]]}
+        },
+        {
           "name": "grouped aggregate row projection",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, count(n), sum(n.score) order by n.department"
