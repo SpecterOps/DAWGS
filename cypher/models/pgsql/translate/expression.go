@@ -774,6 +774,92 @@ func rewritePropertyLookupNullCheck(propertyLookup *pgsql.BinaryExpression, isNo
 	))
 }
 
+func escapeLikePatternExpression(expression pgsql.Expression) pgsql.Expression {
+	var escapedExpression pgsql.Expression = pgsql.NewTypeCast(expression, pgsql.Text)
+
+	for _, replacement := range []struct {
+		old string
+		new string
+	}{
+		{old: "\\", new: "\\\\"},
+		{old: "%", new: "\\%"},
+		{old: "_", new: "\\_"},
+	} {
+		escapedExpression = pgsql.FunctionCall{
+			Function: pgsql.FunctionReplace,
+			Parameters: []pgsql.Expression{
+				escapedExpression,
+				pgsql.NewLiteral(replacement.old, pgsql.Text),
+				pgsql.NewLiteral(replacement.new, pgsql.Text),
+			},
+			CastType: pgsql.Text,
+		}
+	}
+
+	return escapedExpression
+}
+
+func escapeLikePatternOperand(operand pgsql.Expression) (pgsql.Expression, error) {
+	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(operand); isPropertyLookup {
+		propertyLookup.Operator = pgsql.OperatorJSONTextField
+		return escapeLikePatternExpression(propertyLookup), nil
+	}
+
+	if parenthetical, isParenthetical := operand.(*pgsql.Parenthetical); isParenthetical {
+		typeCastedOperand, err := TypeCastExpression(parenthetical, pgsql.Text)
+		if err != nil {
+			return nil, err
+		}
+
+		return escapeLikePatternExpression(typeCastedOperand), nil
+	}
+
+	return escapeLikePatternExpression(operand), nil
+}
+
+func buildContainsLikePattern(operand pgsql.Expression) (pgsql.Expression, error) {
+	escapedOperand, err := escapeLikePatternOperand(operand)
+	if err != nil {
+		return nil, err
+	}
+
+	return pgsql.NewBinaryExpression(
+		pgsql.NewLiteral("%", pgsql.Text),
+		pgsql.OperatorConcatenate,
+		pgsql.NewBinaryExpression(
+			escapedOperand,
+			pgsql.OperatorConcatenate,
+			pgsql.NewLiteral("%", pgsql.Text),
+		),
+	), nil
+}
+
+func buildStartsWithLikePattern(operand pgsql.Expression) (pgsql.Expression, error) {
+	escapedOperand, err := escapeLikePatternOperand(operand)
+	if err != nil {
+		return nil, err
+	}
+
+	return pgsql.NewBinaryExpression(
+		escapedOperand,
+		pgsql.OperatorConcatenate,
+		pgsql.NewLiteral("%", pgsql.Text),
+	), nil
+}
+
+func buildEndsWithLikePattern(operand pgsql.Expression) (pgsql.Expression, error) {
+	escapedOperand, err := escapeLikePatternOperand(operand)
+	if err != nil {
+		return nil, err
+	}
+
+	return pgsql.NewBinaryExpression(
+		pgsql.NewLiteral("%", pgsql.Text),
+		pgsql.OperatorConcatenate,
+		escapedOperand,
+	), nil
+}
+
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
@@ -812,51 +898,25 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 		case *pgsql.Parenthetical:
-			if typeCastedROperand, err := TypeCastExpression(typedROperand, pgsql.Text); err != nil {
+			if pattern, err := buildContainsLikePattern(typedROperand); err != nil {
 				return err
 			} else {
-				newExpression.ROperand = pgsql.NewBinaryExpression(
-					pgsql.NewLiteral("%", pgsql.Text),
-					pgsql.OperatorConcatenate,
-					pgsql.NewBinaryExpression(
-						typeCastedROperand,
-						pgsql.OperatorConcatenate,
-						pgsql.NewLiteral("%", pgsql.Text),
-					),
-				)
+				newExpression.ROperand = pattern
 			}
 
 		case *pgsql.BinaryExpression:
-			if stringLiteral, err := pgsql.AsLiteral("%"); err != nil {
+			if pattern, err := buildContainsLikePattern(typedROperand); err != nil {
 				return err
 			} else {
-				if pgsql.OperatorIsPropertyLookup(typedROperand.Operator) {
-					typedROperand.Operator = pgsql.OperatorJSONTextField
-				}
-
-				newExpression.ROperand = pgsql.NewTypeCast(pgsql.NewBinaryExpression(
-					stringLiteral,
-					pgsql.OperatorConcatenate,
-					pgsql.NewBinaryExpression(
-						&pgsql.Parenthetical{
-							Expression: typedROperand,
-						},
-						pgsql.OperatorConcatenate,
-						stringLiteral,
-					),
-				), pgsql.Text)
+				newExpression.ROperand = pgsql.NewTypeCast(pattern, pgsql.Text)
 			}
 
 		default:
-			newExpression.ROperand = pgsql.NewBinaryExpression(
-				pgsql.NewLiteral("%", pgsql.Text),
-				pgsql.OperatorConcatenate,
-				pgsql.NewBinaryExpression(
-					typedROperand,
-					pgsql.OperatorConcatenate,
-					pgsql.NewLiteral("%", pgsql.Text),
-				),
-			)
+			if pattern, err := buildContainsLikePattern(typedROperand); err != nil {
+				return err
+			} else {
+				newExpression.ROperand = pattern
+			}
 		}
 
 		s.PushOperand(newExpression)
@@ -888,39 +948,25 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 		case *pgsql.Parenthetical:
-			if typeCastedROperand, err := TypeCastExpression(typedROperand, pgsql.Text); err != nil {
+			if pattern, err := buildStartsWithLikePattern(typedROperand); err != nil {
 				return err
 			} else {
-				newExpression.ROperand = pgsql.NewBinaryExpression(
-					typeCastedROperand,
-					pgsql.OperatorConcatenate,
-					pgsql.NewLiteral("%", pgsql.Text),
-				)
+				newExpression.ROperand = pattern
 			}
 
 		case *pgsql.BinaryExpression:
-			if stringLiteral, err := pgsql.AsLiteral("%"); err != nil {
+			if pattern, err := buildStartsWithLikePattern(typedROperand); err != nil {
 				return err
 			} else {
-				if pgsql.OperatorIsPropertyLookup(typedROperand.Operator) {
-					typedROperand.Operator = pgsql.OperatorJSONTextField
-				}
-
-				newExpression.ROperand = pgsql.NewTypeCast(pgsql.NewBinaryExpression(
-					&pgsql.Parenthetical{
-						Expression: typedROperand,
-					},
-					pgsql.OperatorConcatenate,
-					stringLiteral,
-				), pgsql.Text)
+				newExpression.ROperand = pgsql.NewTypeCast(pattern, pgsql.Text)
 			}
 
 		default:
-			newExpression.ROperand = pgsql.NewBinaryExpression(
-				typedROperand,
-				pgsql.OperatorConcatenate,
-				pgsql.NewLiteral("%", pgsql.Text),
-			)
+			if pattern, err := buildStartsWithLikePattern(typedROperand); err != nil {
+				return err
+			} else {
+				newExpression.ROperand = pattern
+			}
 		}
 
 		s.PushOperand(newExpression)
@@ -948,35 +994,25 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 		case *pgsql.Parenthetical:
-			if typeCastedROperand, err := TypeCastExpression(typedROperand, pgsql.Text); err != nil {
+			if pattern, err := buildEndsWithLikePattern(typedROperand); err != nil {
 				return err
 			} else {
-				newExpression.ROperand = pgsql.NewBinaryExpression(
-					pgsql.NewLiteral("%", pgsql.Text),
-					pgsql.OperatorConcatenate,
-					typeCastedROperand,
-				)
+				newExpression.ROperand = pattern
 			}
 
 		case *pgsql.BinaryExpression:
-			if pgsql.OperatorIsPropertyLookup(typedROperand.Operator) {
-				typedROperand.Operator = pgsql.OperatorJSONTextField
+			if pattern, err := buildEndsWithLikePattern(typedROperand); err != nil {
+				return err
+			} else {
+				newExpression.ROperand = pgsql.NewTypeCast(pattern, pgsql.Text)
 			}
 
-			newExpression.ROperand = pgsql.NewTypeCast(pgsql.NewBinaryExpression(
-				pgsql.NewLiteral("%", pgsql.Text),
-				pgsql.OperatorConcatenate,
-				&pgsql.Parenthetical{
-					Expression: typedROperand,
-				},
-			), pgsql.Text)
-
 		default:
-			newExpression.ROperand = pgsql.NewBinaryExpression(
-				pgsql.NewLiteral("%", pgsql.Text),
-				pgsql.OperatorConcatenate,
-				typedROperand,
-			)
+			if pattern, err := buildEndsWithLikePattern(typedROperand); err != nil {
+				return err
+			} else {
+				newExpression.ROperand = pattern
+			}
 		}
 
 		s.PushOperand(newExpression)

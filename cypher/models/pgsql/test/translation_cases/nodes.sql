@@ -169,13 +169,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not coalesce((n0.properties ->> 'name'), '')::text like '%123')) select s0.n0 as s from s0;
 
 -- case: match (s) where s.name starts with s.other return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like (((n0.properties ->> 'other')) || '%')::text)) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like (replace(replace(replace((n0.properties ->> 'other'), '\', '\\')::text, '%', '\%')::text, '_', '\_')::text || '%')::text)) select s0.n0 as s from s0;
 
 -- case: match (s) where s.name contains s.other return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like ('%' || ((n0.properties ->> 'other')) || '%')::text)) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like ('%' || replace(replace(replace((n0.properties ->> 'other'), '\', '\\')::text, '%', '\%')::text, '_', '\_')::text || '%')::text)) select s0.n0 as s from s0;
 
 -- case: match (s) where s.name ends with s.other return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like ('%' || ((n0.properties ->> 'other')))::text)) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like ('%' || replace(replace(replace((n0.properties ->> 'other'), '\', '\\')::text, '%', '\%')::text, '_', '\_')::text)::text)) select s0.n0 as s from s0;
 
 -- case: match (n) where n:NodeKind1 and toLower(n.tenantid) contains 'myid' and n.system_tags contains 'tag' return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and lower((n0.properties ->> 'tenantid'))::text like '%myid%' and (n0.properties ->> 'system_tags') like '%tag%')) select s0.n0 as n from s0;
@@ -196,13 +196,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'distinguishedname'))::jsonb = to_jsonb((upper('admin')::text)::text)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where n.distinguishedname starts with toUpper('admin') return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') like upper('admin')::text || '%') and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') like replace(replace(replace((upper('admin')::text)::text, '\', '\\')::text, '%', '\%')::text, '_', '\_')::text || '%') and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where n.distinguishedname contains toUpper('admin') return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') like '%' || upper('admin')::text || '%') and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') like '%' || replace(replace(replace((upper('admin')::text)::text, '\', '\\')::text, '%', '\%')::text, '_', '\_')::text || '%') and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where n.distinguishedname ends with toUpper('admin') return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') like '%' || upper('admin')::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') like '%' || replace(replace(replace((upper('admin')::text)::text, '\', '\\')::text, '%', '\%')::text, '_', '\_')::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (s) where not (s)-[{prop: 'a'}]->({name: 'n3'}) return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from s0 join edge e0 on (s0.n0).id = e0.start_id join node n1 on ((n1.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb and n1.id = e0.end_id where ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb) select count(*) > 0 from s1));
@@ -212,13 +212,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where n.system_tags contains ($param) return n
 -- pgsql_params:{"pi0":null}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'system_tags') like '%' || (@pi0)::text || '%')) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'system_tags') like '%' || replace(replace(replace((@pi0)::text, '\', '\\')::text, '%', '\%')::text, '_', '\_')::text || '%')) select s0.n0 as n from s0;
 
 -- case: match (n) where n.system_tags starts with (1) return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'system_tags') like (1)::text || '%')) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'system_tags') like replace(replace(replace((1)::text, '\', '\\')::text, '%', '\%')::text, '_', '\_')::text || '%')) select s0.n0 as n from s0;
 
 -- case: match (n) where n.system_tags ends with ('text') return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'system_tags') like '%' || ('text')::text)) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'system_tags') like '%' || replace(replace(replace(('text')::text, '\', '\\')::text, '%', '\%')::text, '_', '\_')::text)) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where toString(n.functionallevel) in ['2008 R2','2012','2008','2003','2003 Interim','2000 Mixed/Native'] return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'functionallevel') = any (array ['2008 R2', '2012', '2008', '2003', '2003 Interim', '2000 Mixed/Native']::text[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
@@ -256,7 +256,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (1 = coalesce((n0.properties ->> 'a'), (n0.properties ->> 'b'))::int8) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.hasspn = true and u.enabled = true and not '-502' ends with u.objectid and not coalesce(u.gmsa, false) = true and not coalesce(u.msa, false) = true return u limit 10
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'hasspn'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> 'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb and not '-502' like ('%' || ((n0.properties ->> 'objectid')))::text and not coalesce(((n0.properties ->> 'gmsa'))::bool, false)::bool = true and not coalesce(((n0.properties ->> 'msa'))::bool, false)::bool = true) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 10;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'hasspn'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> 'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb and not '-502' like ('%' || replace(replace(replace((n0.properties ->> 'objectid'), '\', '\\')::text, '%', '\%')::text, '_', '\_')::text)::text and not coalesce(((n0.properties ->> 'gmsa'))::bool, false)::bool = true and not coalesce(((n0.properties ->> 'msa'))::bool, false)::bool = true) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 10;
 
 -- case: match (n:NodeKind1) where coalesce(n.name, '') = coalesce(n.migrated_name, '') return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce((n0.properties ->> 'name'), '')::text = coalesce((n0.properties ->> 'migrated_name'), '')::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
@@ -314,3 +314,4 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where n.name = "alpha' || (SELECT inet_server_addr()::text::int) || '" return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'name'))::jsonb = to_jsonb(('alpha'' || (SELECT inet_server_addr()::text::int) || ''')::text)::jsonb)) select s0.n0 as n from s0;
+
