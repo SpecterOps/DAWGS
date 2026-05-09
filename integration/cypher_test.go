@@ -147,6 +147,8 @@ func TestCypher(t *testing.T) {
 //	{"exact_int": N}                      — first scalar == N
 //	{"scalar_values": [V...]}             — exact multiset of first scalar values, order-independent
 //	{"ordered_scalar_values": [V...]}     — exact first scalar values, preserving row order
+//	{"row_values": [[V...]]}              — exact multiset of scalar row values, order-independent
+//	{"ordered_row_values": [[V...]]}      — exact scalar row values, preserving row order
 //	{"contains_node_with_prop": [K, V]}   — some row has a node with property K=V
 //	{"contains_node_with_props": {K: V}}  — some row has a node with all listed properties
 //	{"contains_edge": {start,end,kind,props}} — some row/path has a relationship matching all listed fields
@@ -199,6 +201,12 @@ func parseAssertion(t *testing.T, raw json.RawMessage) resultAssertion {
 
 		case "ordered_scalar_values":
 			assertions = append(assertions, assertScalarValues(decodeAssertionValue[[]any](t, key, val), true))
+
+		case "row_values":
+			assertions = append(assertions, assertRowValues(decodeAssertionValue[[][]any](t, key, val), false))
+
+		case "ordered_row_values":
+			assertions = append(assertions, assertRowValues(decodeAssertionValue[[][]any](t, key, val), true))
 
 		case "contains_node_with_prop":
 			pair := decodeAssertionValue[[2]string](t, key, val)
@@ -453,6 +461,30 @@ func assertScalarValues(expected []any, ordered bool) resultAssertion {
 	}
 }
 
+func assertRowValues(expected [][]any, ordered bool) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for _, row := range result.rows {
+			got = append(got, rowScalarSignature(row.values))
+		}
+
+		want := make([]string, len(expected))
+		for idx, expectedRow := range expected {
+			want[idx] = rowScalarSignature(expectedRow)
+		}
+
+		if ordered {
+			if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+				t.Fatalf("ordered row values mismatch:\n  got:  %v\n  want: %v", got, want)
+			}
+		} else {
+			assertStringMultiset(t, got, want, "row values")
+		}
+	}
+}
+
 func firstScalarValue(t *testing.T, result queryResult) any {
 	t.Helper()
 
@@ -504,6 +536,20 @@ func asInt64(value any) (int64, bool) {
 	}
 
 	return 0, false
+}
+
+func rowScalarSignature(values []any) string {
+	parts := make([]string, len(values))
+	for idx, value := range values {
+		parts[idx] = scalarSignature(value)
+	}
+
+	encoded, err := json.Marshal(parts)
+	if err != nil {
+		return strings.Join(parts, "\x00")
+	}
+
+	return string(encoded)
 }
 
 func scalarSignature(value any) string {
