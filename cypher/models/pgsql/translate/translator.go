@@ -20,6 +20,7 @@ type Translator struct {
 	ctx            context.Context
 	kindMapper     *contextAwareKindMapper
 	graphID        int32
+	parameters     map[string]any
 	translation    Result
 	treeTranslator *ExpressionTreeTranslator
 	query          *Query
@@ -32,16 +33,22 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		parameters = map[string]any{}
 	}
 
+	inputParameters := make(map[string]any, len(parameters))
+	for key, value := range parameters {
+		inputParameters[key] = value
+	}
+
 	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper)
 
 	return &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
-			Parameters: parameters,
+			Parameters: map[string]any{},
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
 		graphID:        graphID,
+		parameters:     inputParameters,
 		treeTranslator: NewExpressionTreeTranslator(ctxAwareKindMapper),
 		query:          &Query{},
 		scope:          NewScope(),
@@ -109,10 +116,12 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 					s.scope.Alias(cypherIdentifier, parameterBinding)
 				}
 
+				parameterValue := s.resolveParameterValue(typedExpression)
+
 				// Create a new container for the parameter and its value
-				if newParameter, err := pgsql.AsParameter(parameterBinding.Identifier, typedExpression.Value); err != nil {
+				if newParameter, err := pgsql.AsParameter(parameterBinding.Identifier, parameterValue); err != nil {
 					s.SetError(err)
-				} else if negotiatedValue, err := pgsql.NegotiateValue(typedExpression.Value); err != nil {
+				} else if negotiatedValue, err := pgsql.NegotiateValue(parameterValue); err != nil {
 					s.SetError(err)
 				} else {
 					// Lift the parameter value into the parameters map
@@ -205,6 +214,14 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	default:
 		s.SetErrorf("unable to translate cypher type: %T", expression)
 	}
+}
+
+func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
+	if value, hasValue := s.parameters[parameter.Symbol]; hasValue {
+		return value
+	}
+
+	return parameter.Value
 }
 
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
