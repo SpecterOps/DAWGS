@@ -12,9 +12,9 @@
           {"id": "e", "kinds": ["TemplateNodeKind1"], "properties": {"name": "inbound"}}
         ],
         "edges": [
-          {"start_id": "a", "end_id": "b", "kind": "TemplateEdgeKind1"},
-          {"start_id": "b", "end_id": "c", "kind": "TemplateEdgeKind2"},
-          {"start_id": "d", "end_id": "e", "kind": "TemplateEdgeKind1"}
+          {"start_id": "a", "end_id": "b", "kind": "TemplateEdgeKind1", "properties": {"label": "first"}},
+          {"start_id": "b", "end_id": "c", "kind": "TemplateEdgeKind2", "properties": {"label": "second"}},
+          {"start_id": "d", "end_id": "e", "kind": "TemplateEdgeKind1", "properties": {"label": "inbound"}}
         ]
       },
       "variants": [
@@ -27,9 +27,33 @@
           "assert": {"path_node_ids": [["a", "b"]], "path_edge_kinds": [["TemplateEdgeKind1"]]}
         },
         {
+          "name": "undirected typed one-hop",
+          "vars": {
+            "pattern": "(a:TemplateNodeKind1)-[:TemplateEdgeKind1]-(b:TemplateNodeKind2)",
+            "predicate": "a.name = 'src'"
+          },
+          "assert": {"path_node_ids": [["a", "b"]], "path_edge_kinds": [["TemplateEdgeKind1"]]}
+        },
+        {
+          "name": "named relationship property filter",
+          "vars": {
+            "pattern": "(a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2)",
+            "predicate": "a.name = 'src' and r.label = 'first'"
+          },
+          "assert": {"path_node_ids": [["a", "b"]], "contains_edge": {"start": "a", "end": "b", "kind": "TemplateEdgeKind1", "props": {"label": "first"}}}
+        },
+        {
           "name": "directed typed two-hop",
           "vars": {
             "pattern": "(a:TemplateNodeKind1)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1)",
+            "predicate": "a.name = 'src'"
+          },
+          "assert": {"path_node_ids": [["a", "b", "c"]], "path_edge_kinds": [["TemplateEdgeKind1", "TemplateEdgeKind2"]]}
+        },
+        {
+          "name": "bounded variable-length two-hop",
+          "vars": {
+            "pattern": "(a:TemplateNodeKind1)-[:TemplateEdgeKind1|TemplateEdgeKind2*2..2]->(c:TemplateNodeKind1)",
             "predicate": "a.name = 'src'"
           },
           "assert": {"path_node_ids": [["a", "b", "c"]], "path_edge_kinds": [["TemplateEdgeKind1", "TemplateEdgeKind2"]]}
