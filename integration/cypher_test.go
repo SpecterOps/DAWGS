@@ -568,11 +568,37 @@ func scalarSignature(value any) string {
 		return fmt.Sprintf("bool:%t", typedValue)
 	default:
 		if encoded, err := json.Marshal(typedValue); err == nil {
+			if signature, ok := jsonNumberSignature(encoded); ok {
+				return signature
+			}
+
 			return fmt.Sprintf("json:%s", encoded)
 		}
 
 		return fmt.Sprintf("%T:%v", typedValue, typedValue)
 	}
+}
+
+func jsonNumberSignature(encoded []byte) (string, bool) {
+	decoder := json.NewDecoder(strings.NewReader(string(encoded)))
+	decoder.UseNumber()
+
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return "", false
+	}
+
+	number, ok := decoded.(json.Number)
+	if !ok {
+		return "", false
+	}
+
+	value, err := number.Float64()
+	if err != nil {
+		return "", false
+	}
+
+	return fmt.Sprintf("number:%g", value), true
 }
 
 func assertContainsNodeWithProp(key, expected string) resultAssertion {
