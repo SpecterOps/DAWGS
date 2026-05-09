@@ -63,7 +63,7 @@ type cypherMetamorphicFamily struct {
 	Name        string                   `json:"name"`
 	SkipDrivers []string                 `json:"skip_drivers,omitempty"`
 	Fixture     *opengraph.Graph         `json:"fixture"`
-	Compare     string                   `json:"compare"`
+	Compare     comparisonModes          `json:"compare"`
 	Queries     []cypherMetamorphicQuery `json:"queries"`
 }
 
@@ -303,40 +303,84 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 	}
 }
 
-func comparisonSignature(t *testing.T, result queryResult, ctx assertionContext, mode string) []string {
+type comparisonModes []string
+
+func (s *comparisonModes) UnmarshalJSON(raw []byte) error {
+	var mode string
+	if err := json.Unmarshal(raw, &mode); err == nil {
+		*s = comparisonModes{mode}
+		return nil
+	}
+
+	var modes []string
+	if err := json.Unmarshal(raw, &modes); err != nil {
+		return err
+	}
+
+	*s = comparisonModes(modes)
+	return nil
+}
+
+func (s comparisonModes) String() string {
+	return strings.Join(s, ",")
+}
+
+func comparisonSignature(t *testing.T, result queryResult, ctx assertionContext, modes comparisonModes) []string {
 	t.Helper()
 
+	if len(modes) == 0 {
+		t.Fatal("metamorphic comparison must specify at least one mode")
+	}
+
+	signature := make([]string, 0, len(modes))
+	for _, mode := range modes {
+		signature = append(signature, comparisonModeSignature(t, result, ctx, mode))
+	}
+
+	return signature
+}
+
+func comparisonModeSignature(t *testing.T, result queryResult, ctx assertionContext, mode string) string {
+	t.Helper()
+
+	var signature []string
 	switch mode {
 	case "row_count":
-		return []string{fmt.Sprintf("%d", len(result.rows))}
+		signature = []string{fmt.Sprintf("%d", len(result.rows))}
 	case "scalar_values":
-		return sortedSignatures(firstScalarSignatures(t, result))
+		signature = sortedSignatures(firstScalarSignatures(t, result))
 	case "ordered_scalar_values":
-		return firstScalarSignatures(t, result)
+		signature = firstScalarSignatures(t, result)
 	case "row_values":
-		return sortedSignatures(rowScalarSignatures(result))
+		signature = sortedSignatures(rowScalarSignatures(result))
 	case "ordered_row_values":
-		return rowScalarSignatures(result)
+		signature = rowScalarSignatures(result)
 	case "node_ids":
-		return sortedSignatures(collectNodeIDs(t, result, ctx, false))
+		signature = sortedSignatures(collectNodeIDs(t, result, ctx, false))
 	case "node_id_set":
-		return sortedSignatures(collectNodeIDs(t, result, ctx, true))
+		signature = sortedSignatures(collectNodeIDs(t, result, ctx, true))
 	case "path_node_ids":
 		signatures := make([]string, 0, len(result.rows))
 		for _, path := range collectPaths(t, result) {
 			signatures = append(signatures, pathNodeIDSignature(t, path, ctx))
 		}
-		return sortedSignatures(signatures)
+		signature = sortedSignatures(signatures)
 	case "path_edge_kinds":
 		signatures := make([]string, 0, len(result.rows))
 		for _, path := range collectPaths(t, result) {
 			signatures = append(signatures, pathEdgeKindSignature(t, path))
 		}
-		return sortedSignatures(signatures)
+		signature = sortedSignatures(signatures)
 	default:
 		t.Fatalf("unknown metamorphic comparison mode %q", mode)
-		return nil
 	}
+
+	encoded, err := json.Marshal(signature)
+	if err != nil {
+		t.Fatalf("failed to encode metamorphic comparison signature: %v", err)
+	}
+
+	return mode + ":" + string(encoded)
 }
 
 func firstScalarSignatures(t *testing.T, result queryResult) []string {
