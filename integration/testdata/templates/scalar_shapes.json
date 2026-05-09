@@ -118,6 +118,20 @@
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, count(n), sum(n.score) order by n.department"
           },
           "assert": {"ordered_row_values": [["eng", 2, 3], ["ops", 1, 3]]}
+        },
+        {
+          "name": "grouped min max and avg aggregate row projection",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, min(n.score), max(n.score), avg(n.score) order by n.department"
+          },
+          "assert": {"ordered_row_values": [["eng", "1", "2", 1.5], ["ops", "3", "3", 3]]}
+        },
+        {
+          "name": "single-row aggregate tuple projection",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return count(n), count(distinct n.department), min(n.score), max(n.score), avg(n.score)"
+          },
+          "assert": {"row_values": [[3, 2, "1", "3", 2]]}
         }
       ]
     }
