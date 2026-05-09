@@ -203,6 +203,13 @@
           "assert": {"scalar_values": ["gamma"]}
         },
         {
+          "name": "negated empty list inequality excludes missing and null property lists",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['shape', 'missing-tags', 'null-tags'] and not n.tags <> [] return n.name"
+          },
+          "assert": {"scalar_values": ["gamma"]}
+        },
+        {
           "name": "property is null matches missing and json null values",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group in ['missing-tags', 'null-tags'] and n.tags is null return n.name order by n.name"
