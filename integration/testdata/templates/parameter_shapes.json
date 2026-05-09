@@ -40,6 +40,14 @@
           "assert": "empty"
         },
         {
+          "name": "empty parameter list size is zero",
+          "vars": {
+            "query": "return size($names)"
+          },
+          "params": {"names": []},
+          "assert": {"scalar_values": [0]}
+        },
+        {
           "name": "string contains parameter",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where toLower(n.name) contains $needle return n.name"
