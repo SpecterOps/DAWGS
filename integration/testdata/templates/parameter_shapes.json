@@ -1,0 +1,61 @@
+{
+  "families": [
+    {
+      "name": "parameterized predicate shapes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "alpha", "kinds": ["TemplateNodeKind1"], "properties": {"name": "alpha", "score": 1, "objectid": "S-1-500"}},
+          {"id": "beta", "kinds": ["TemplateNodeKind1"], "properties": {"name": "beta", "score": 2, "objectid": "S-2-501"}},
+          {"id": "gamma", "kinds": ["TemplateNodeKind1"], "properties": {"name": "gamma", "score": 3, "objectid": "S-3-500"}},
+          {"id": "target", "kinds": ["TemplateNodeKind2"], "properties": {"name": "target"}}
+        ],
+        "edges": [
+          {"start_id": "alpha", "end_id": "target", "kind": "TemplateEdgeKind1", "properties": {"label": "linked"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "property equality parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name = $name return n.name"
+          },
+          "params": {"name": "alpha"},
+          "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "literal property in parameter list",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name order by n.name"
+          },
+          "params": {"names": ["alpha", "gamma"]},
+          "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
+        },
+        {
+          "name": "string contains parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.name) contains $needle return n.name"
+          },
+          "params": {"needle": "alp"},
+          "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "numeric comparison parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score >= $minimum return n.name order by n.name"
+          },
+          "params": {"minimum": 2},
+          "assert": {"ordered_scalar_values": ["beta", "gamma"]}
+        },
+        {
+          "name": "relationship property equality parameter",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) where r.label = $label return a.name, b.name"
+          },
+          "params": {"label": "linked"},
+          "assert": {"row_values": [["alpha", "target"]]}
+        }
+      ]
+    }
+  ]
+}
