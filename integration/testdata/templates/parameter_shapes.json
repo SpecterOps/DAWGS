@@ -54,6 +54,22 @@
           },
           "params": {"label": "linked"},
           "assert": {"row_values": [["alpha", "target"]]}
+        },
+        {
+          "name": "node pattern property map parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1 $props) return n.name"
+          },
+          "params": {"props": {"name": "beta", "score": 2}},
+          "assert": {"scalar_values": ["beta"]}
+        },
+        {
+          "name": "relationship pattern property map parameter",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1)-[r:TemplateEdgeKind1 $props]->(b:TemplateNodeKind2) return a.name, b.name"
+          },
+          "params": {"props": {"label": "linked"}},
+          "assert": {"row_values": [["alpha", "target"]]}
         }
       ]
     }
