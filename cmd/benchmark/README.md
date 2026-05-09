@@ -26,7 +26,7 @@ go run ./cmd/benchmark -connection "..." -output report.md
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-driver` | `pg` | Database driver (`pg`, `neo4j`) |
-| `-connection` | | Connection string (or `PG_CONNECTION_STRING` env) |
+| `-connection` | | Connection string (or `CONNECTION_STRING` env) |
 | `-iterations` | `10` | Timed iterations per scenario |
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
@@ -57,7 +57,7 @@ $ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:testpassword@l
 ## Example: PG on local/phantom
 
 ```
-$ export PG_CONNECTION_STRING="postgresql://dawgs:dawgs@localhost:5432/dawgs"
+$ export CONNECTION_STRING="postgresql://dawgs:dawgs@localhost:5432/dawgs"
 $ go run ./cmd/benchmark -dataset local/phantom
 ```
 
