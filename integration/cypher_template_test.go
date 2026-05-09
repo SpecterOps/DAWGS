@@ -52,11 +52,12 @@ type cypherTemplateFamily struct {
 }
 
 type cypherTemplateVariant struct {
-	Name        string            `json:"name"`
-	SkipDrivers []string          `json:"skip_drivers,omitempty"`
-	Vars        map[string]string `json:"vars,omitempty"`
-	Params      map[string]any    `json:"params,omitempty"`
-	Assert      json.RawMessage   `json:"assert"`
+	Name           string                     `json:"name"`
+	SkipDrivers    []string                   `json:"skip_drivers,omitempty"`
+	Vars           map[string]string          `json:"vars,omitempty"`
+	Params         map[string]any             `json:"params,omitempty"`
+	Assert         json.RawMessage            `json:"assert"`
+	AssertByDriver map[string]json.RawMessage `json:"assert_by_driver,omitempty"`
 }
 
 type cypherMetamorphicFamily struct {
@@ -105,7 +106,7 @@ func TestCypherTemplates(t *testing.T) {
 							}
 
 							cypher := renderCypherTemplate(t, family.Template, variant.Vars)
-							check := parseAssertion(t, variant.Assert)
+							check := parseAssertion(t, variant.assertionForDriver(driver))
 							tc := testCase{
 								Name:    variant.Name,
 								Cypher:  cypher,
@@ -130,6 +131,16 @@ func TestCypherTemplates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (s cypherTemplateVariant) assertionForDriver(driver string) json.RawMessage {
+	if s.AssertByDriver != nil {
+		if assertion, found := s.AssertByDriver[driver]; found {
+			return assertion
+		}
+	}
+
+	return s.Assert
 }
 
 func loadCypherTemplateFiles(t *testing.T) []cypherTemplateFile {
