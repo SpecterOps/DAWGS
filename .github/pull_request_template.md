@@ -20,7 +20,7 @@ Resolves: <TICKET_OR_ISSUE_NUMBER>
 
 - [ ] Unit tests added / updated
 - [ ] Integration tests added / updated
-- [ ] Manual integration tests run (`go test -tags manual_integration ./integration/...`)
+- [ ] Full test suite run (`make test_all` with `CONNECTION_STRING` set)
 
 ## Screenshots (if appropriate):
 

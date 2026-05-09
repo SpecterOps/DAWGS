@@ -5,6 +5,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -19,12 +20,29 @@ import (
 )
 
 const (
-	PGConnectionStringEV = "PG_CONNECTION_STRING"
+	connectionStringEnv = "CONNECTION_STRING"
 
 	emptyFrontier = `insert into next_front (root_id, next_id, depth, satisfied, is_cycle, path)
 select 1::int8, 1::int8, 1::int4, false, false, array []::int8[]
 where false;`
 )
+
+func pgConnectionString(t *testing.T) string {
+	t.Helper()
+
+	connStr := os.Getenv(connectionStringEnv)
+	require.NotEmpty(t, connStr)
+	if isNeo4jConnectionString(connStr) {
+		t.Skipf("%s is not a PostgreSQL connection string", connectionStringEnv)
+	}
+
+	return connStr
+}
+
+func isNeo4jConnectionString(connStr string) bool {
+	u, err := url.Parse(connStr)
+	return err == nil && (u.Scheme == "neo4j" || strings.HasPrefix(u.Scheme, "neo4j+"))
+}
 
 func nextFrontValues(rows ...string) string {
 	return fmt.Sprintf(
@@ -41,14 +59,10 @@ func pairFilterValues(rows ...string) string {
 }
 
 func TestTranslationTestCases(t *testing.T) {
-	var (
-		testCtx, done   = context.WithCancel(context.Background())
-		pgConnectionStr = os.Getenv(PGConnectionStringEV)
-	)
-
+	testCtx, done := context.WithCancel(context.Background())
 	defer done()
 
-	require.NotEmpty(t, pgConnectionStr)
+	pgConnectionStr := pgConnectionString(t)
 
 	// pg.NewPool installs the AfterConnect and AfterRelease hooks that register
 	// the composite types (nodecomposite, edgecomposite, pathcomposite) on every
@@ -121,14 +135,10 @@ func TestTranslationTestCases(t *testing.T) {
 }
 
 func TestBidirectionalASPHarnessOverloads(t *testing.T) {
-	var (
-		testCtx, done   = context.WithCancel(context.Background())
-		pgConnectionStr = os.Getenv(PGConnectionStringEV)
-	)
-
+	testCtx, done := context.WithCancel(context.Background())
 	defer done()
 
-	require.NotEmpty(t, pgConnectionStr)
+	pgConnectionStr := pgConnectionString(t)
 
 	pgxPool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: pgConnectionStr})
 	require.NoError(t, err)

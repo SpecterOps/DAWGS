@@ -39,13 +39,19 @@ test:
 	@echo "Running tests..."
 	@$(GO_CMD) test -race -cover -count=1 -parallel=10 $(MAIN_PACKAGES)
 
+test_all: test test_integration
+
+test_integration:
+	@echo "Running all integration tests..."
+	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -parallel=1 $(MAIN_PACKAGES)
+
 test_neo4j:
 	@echo "Running Neo4j integration tests..."
-	@$(GO_CMD) test -tags neo4j_integration -race -cover -count=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -tags integration -race -cover -count=1 -parallel=1 $(MAIN_PACKAGES)
 
 test_pg:
 	@echo "Running PostgreSQL integration tests..."
-	@$(GO_CMD) test -tags pg_integration -race -cover -count=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -tags manual_integration -race -cover -count=1 -parallel=1 $(MAIN_PACKAGES)
 
 test_update:
 	@echo "Updating test cases..."
@@ -87,6 +93,8 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  test        - Run all unit tests with coverage"
+	@echo "  test_all    - Run all tests including integration tests"
+	@echo "  test_integration - Run all integration tests"
 	@echo "  test_bench  - Run benchmark test"
 	@echo "  test_neo4j  - Run Neo4j integration tests"
 	@echo "  test_pg     - Run PostgreSQL integration tests"

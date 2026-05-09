@@ -33,3 +33,21 @@ development processes.
 ```bash
 make
 ```
+
+For validation before handing off a change, run the full test target:
+
+```bash
+make test_all
+```
+
+`make test_all` runs unit tests and the integration suites. Integration tests use the `CONNECTION_STRING` environment
+variable and run against the backend selected by that connection string's scheme.
+
+Benign local examples:
+
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
+```
+
+Use `make test` for unit tests only and `make test_integration` for integration tests only.

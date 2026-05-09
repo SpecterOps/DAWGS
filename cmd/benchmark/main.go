@@ -38,7 +38,7 @@ import (
 func main() {
 	var (
 		driver       = flag.String("driver", "pg", "database driver (pg, neo4j)")
-		connStr      = flag.String("connection", "", "database connection string (or PG_CONNECTION_STRING)")
+		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
 		output       = flag.String("output", "", "markdown output file (default: stdout)")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
@@ -51,10 +51,10 @@ func main() {
 
 	conn := *connStr
 	if conn == "" {
-		conn = os.Getenv("PG_CONNECTION_STRING")
+		conn = os.Getenv("CONNECTION_STRING")
 	}
 	if conn == "" {
-		fatal("no connection string: set -connection flag or PG_CONNECTION_STRING env var")
+		fatal("no connection string: set -connection flag or CONNECTION_STRING env var")
 	}
 
 	dbcfg.Connection = conn
