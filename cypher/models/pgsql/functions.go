@@ -13,6 +13,7 @@ const (
 	FunctionJSONBArrayLength         Identifier = "jsonb_array_length"
 	FunctionToJSONB                  Identifier = "to_jsonb"
 	FunctionArrayLength              Identifier = "array_length"
+	FunctionCardinality              Identifier = "cardinality"
 	FunctionArrayAggregate           Identifier = "array_agg"
 	FunctionArrayRemove              Identifier = "array_remove"
 	FunctionMin                      Identifier = "min"
