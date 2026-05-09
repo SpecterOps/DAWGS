@@ -119,6 +119,100 @@
           "cypher": "match (n:TemplateNodeKind1)-[:TemplateEdgeKind1]->() where n.name = 'source' return distinct n"
         }
       ]
+    },
+    {
+      "name": "two fixed hops and bounded two-hop expansion return the same path",
+      "compare": "path_node_ids",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
+          {"id": "b", "kinds": ["TemplateNodeKind2"], "properties": {"name": "mid"}},
+          {"id": "c", "kinds": ["TemplateNodeKind1"], "properties": {"name": "dst"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "TemplateEdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "TemplateEdgeKind2"}
+        ]
+      },
+      "queries": [
+        {
+          "name": "fixed two-hop path",
+          "cypher": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1]->(:TemplateNodeKind2)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) where a.name = 'src' and c.name = 'dst' return p"
+        },
+        {
+          "name": "bounded variable two-hop path",
+          "cypher": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1|TemplateEdgeKind2*2..2]->(c:TemplateNodeKind1) where a.name = 'src' and c.name = 'dst' return p"
+        }
+      ]
+    },
+    {
+      "name": "bounded and unbounded expansions agree on an acyclic two-hop fixture",
+      "compare": "path_node_ids",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
+          {"id": "b", "kinds": ["TemplateNodeKind2"], "properties": {"name": "mid"}},
+          {"id": "c", "kinds": ["TemplateNodeKind1"], "properties": {"name": "dst"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "TemplateEdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "TemplateEdgeKind2"}
+        ]
+      },
+      "queries": [
+        {
+          "name": "bounded one-to-two-hop path",
+          "cypher": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1|TemplateEdgeKind2*1..2]->(c:TemplateNodeKind1) where a.name = 'src' and c.name = 'dst' return p"
+        },
+        {
+          "name": "unbounded path on bounded fixture",
+          "cypher": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1|TemplateEdgeKind2*1..]->(c:TemplateNodeKind1) where a.name = 'src' and c.name = 'dst' return p"
+        }
+      ]
+    },
+    {
+      "name": "IN list predicate matches equivalent OR predicate",
+      "compare": "node_ids",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "alpha"}},
+          {"id": "b", "kinds": ["TemplateNodeKind1"], "properties": {"name": "beta"}},
+          {"id": "c", "kinds": ["TemplateNodeKind1"], "properties": {"name": "gamma"}}
+        ],
+        "edges": []
+      },
+      "queries": [
+        {
+          "name": "literal list membership",
+          "cypher": "match (n:TemplateNodeKind1) where n.name in ['alpha', 'gamma'] return n"
+        },
+        {
+          "name": "equivalent disjunction",
+          "cypher": "match (n:TemplateNodeKind1) where n.name = 'alpha' or n.name = 'gamma' return n"
+        }
+      ]
+    },
+    {
+      "name": "collect and unwind preserves ordered scalar projection",
+      "compare": "ordered_scalar_values",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "beta", "tag": "collect"}},
+          {"id": "b", "kinds": ["TemplateNodeKind1"], "properties": {"name": "alpha", "tag": "collect"}},
+          {"id": "c", "kinds": ["TemplateNodeKind2"], "properties": {"name": "gamma", "tag": "collect"}}
+        ],
+        "edges": []
+      },
+      "queries": [
+        {
+          "name": "direct ordered projection",
+          "cypher": "match (n:TemplateNodeKind1) where n.tag = 'collect' return n.name order by n.name"
+        },
+        {
+          "name": "collect unwind ordered projection",
+          "cypher": "match (n:TemplateNodeKind1) where n.tag = 'collect' with collect(n.name) as names unwind names as name return name order by name"
+        }
+      ]
     }
   ]
 }
