@@ -63,6 +63,13 @@
             "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name = 'target' optional match (b)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) where c.name = 'tail' return a.name, b.name, c.name order by a.name"
           },
           "assert": {"ordered_row_values": [["filtered", null, null], ["linked", "target", "tail"], ["unlinked", null, null]]}
+        },
+        {
+          "name": "optional where aggregate counts only accepted optional bindings",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name = 'target' return a.name, count(b) order by a.name"
+          },
+          "assert": {"ordered_row_values": [["filtered", 0], ["linked", 1], ["unlinked", 0]]}
         }
       ]
     }
