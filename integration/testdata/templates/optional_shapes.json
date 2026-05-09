@@ -1,0 +1,34 @@
+{
+  "families": [
+    {
+      "name": "optional match null row semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "linked", "kinds": ["TemplateNodeKind1"], "properties": {"name": "linked", "group": "optional"}},
+          {"id": "unlinked", "kinds": ["TemplateNodeKind1"], "properties": {"name": "unlinked", "group": "optional"}},
+          {"id": "target", "kinds": ["TemplateNodeKind2"], "properties": {"name": "target"}}
+        ],
+        "edges": [
+          {"start_id": "linked", "end_id": "target", "kind": "TemplateEdgeKind1"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "optional relationship preserves unmatched source rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) return a.name, b.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["linked", "target"], ["unlinked", null]]}
+        },
+        {
+          "name": "chained optional match preserves null second-hop rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) optional match (b)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) return a.name, b.name, c.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["linked", "target", null], ["unlinked", null, null]]}
+        }
+      ]
+    }
+  ]
+}
