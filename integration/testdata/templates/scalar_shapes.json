@@ -129,6 +129,13 @@
           "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
         },
         {
+          "name": "empty literal list membership returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in [] return n.name"
+          },
+          "assert": "empty"
+        },
+        {
           "name": "array quantifier predicate",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where any(tag in n.tags where tag contains 'admin') return n.name order by n.name"
