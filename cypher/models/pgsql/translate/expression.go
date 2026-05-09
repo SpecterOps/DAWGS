@@ -138,7 +138,11 @@ func rewriteStringWildCardLiteral(expression pgsql.Expression) (pgsql.Expression
 		if strValue, typeOK := typedExpression.Value.(string); !typeOK {
 			return nil, fmt.Errorf("expected a string literal but received type: %T", typedExpression.Value)
 		} else {
-			rewritten := strings.Replace(strValue, "_", "\\_", -1)
+			rewritten := strings.NewReplacer(
+				"\\", "\\\\",
+				"%", "\\%",
+				"_", "\\_",
+			).Replace(strValue)
 			return pgsql.NewLiteral(rewritten, pgsql.Text), nil
 		}
 
@@ -737,6 +741,39 @@ func isKnownEmptyArrayExpression(expression pgsql.Expression) bool {
 	}
 }
 
+func jsonNullLiteral() pgsql.Expression {
+	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text), pgsql.JSONB)
+}
+
+func rewritePropertyLookupNullCheck(propertyLookup *pgsql.BinaryExpression, isNotNull bool) pgsql.Expression {
+	propertyLookup.Operator = pgsql.OperatorJSONField
+
+	existsExpression := pgsql.NewBinaryExpression(
+		propertyLookup.LOperand,
+		pgsql.OperatorJSONBFieldExists,
+		propertyLookup.ROperand,
+	)
+	jsonNullExpression := pgsql.NewBinaryExpression(
+		propertyLookup,
+		pgsql.OperatorEquals,
+		jsonNullLiteral(),
+	)
+
+	if isNotNull {
+		return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
+			existsExpression,
+			pgsql.OperatorAnd,
+			pgsql.NewUnaryExpression(pgsql.OperatorNot, jsonNullExpression),
+		))
+	}
+
+	return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
+		pgsql.NewUnaryExpression(pgsql.OperatorNot, existsExpression),
+		pgsql.OperatorOr,
+		jsonNullExpression,
+	))
+}
+
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
@@ -949,17 +986,12 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		case *pgsql.BinaryExpression:
 			switch typedLOperand.Operator {
 			case pgsql.OperatorPropertyLookup, pgsql.OperatorJSONField, pgsql.OperatorJSONTextField:
-				// This is a null-check against a property. This should be rewritten using the JSON field exists
-				// operator instead. It can be
 				switch typedROperand := newExpression.ROperand.(type) {
 				case pgsql.Literal:
 					if typedROperand.Null {
-						newExpression.Operator = pgsql.OperatorJSONBFieldExists
-						newExpression.LOperand = typedLOperand.LOperand
-						newExpression.ROperand = typedLOperand.ROperand
+						s.PushOperand(rewritePropertyLookupNullCheck(typedLOperand, false))
+						return nil
 					}
-
-					s.PushOperand(pgsql.NewUnaryExpression(pgsql.OperatorNot, newExpression))
 				}
 			}
 		}
@@ -969,17 +1001,12 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		case *pgsql.BinaryExpression:
 			switch typedLOperand.Operator {
 			case pgsql.OperatorPropertyLookup, pgsql.OperatorJSONField, pgsql.OperatorJSONTextField:
-				// This is a null-check against a property. This should be rewritten using the JSON field exists
-				// operator instead. It can be
 				switch typedROperand := newExpression.ROperand.(type) {
 				case pgsql.Literal:
 					if typedROperand.Null {
-						newExpression.Operator = pgsql.OperatorJSONBFieldExists
-						newExpression.LOperand = typedLOperand.LOperand
-						newExpression.ROperand = typedLOperand.ROperand
+						s.PushOperand(rewritePropertyLookupNullCheck(typedLOperand, true))
+						return nil
 					}
-
-					s.PushOperand(newExpression)
 				}
 			}
 		}

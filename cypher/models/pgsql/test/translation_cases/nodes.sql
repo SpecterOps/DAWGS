@@ -79,7 +79,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where (((s0.n0).properties -> 'name') = (n1.properties -> 'name')) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s1.n0 as s, s1.n1 as e from s1;
 
 -- case: match (n) where n.system_tags is not null and not (n:NodeKind1 or n:NodeKind2) return id(n)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.properties ? 'system_tags' and not (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [2]::int2[]))) select (s0.n0).id from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ? 'system_tags' and not (n0.properties -> 'system_tags') = ('null')::jsonb) and not (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [2]::int2[]))) select (s0.n0).id from s0;
 
 -- case: match (s), (e) where s.name = '1234' and e.other = 1234 return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'name'))::jsonb = to_jsonb(('1234')::text)::jsonb)), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where (((n1.properties -> 'other'))::jsonb = to_jsonb((1234)::int8)::jsonb)) select s1.n0 as s from s1;
@@ -145,10 +145,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') = any (array ['option 1', 'option 2']::text[]))) select s0.n0 as s from s0;
 
 -- case: match (s) where s.created_at is null return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not n0.properties ? 'created_at')) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((not n0.properties ? 'created_at' or (n0.properties -> 'created_at') = ('null')::jsonb))) select s0.n0 as s from s0;
 
 -- case: match (s) where s.created_at is not null return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.properties ? 'created_at')) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ? 'created_at' and not (n0.properties -> 'created_at') = ('null')::jsonb))) select s0.n0 as s from s0;
 
 -- case: match (s) where s.name starts with '123' return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'name') like '123%')) select s0.n0 as s from s0;
@@ -283,7 +283,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1 where ((n1.properties ->> 'distinguishedname') = '1' || '2') and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s1.n1 as m from s1;
 
 -- case: match (n) where not n.property is not null return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not n0.properties ? 'property')) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not (n0.properties ? 'property' and not (n0.properties -> 'property') = ('null')::jsonb))) select s0.n0 as n from s0;
 
 -- case: match (s) where s.prop = [] return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((not n0.properties ? 'prop' or (n0.properties ->> 'prop') = any (array ['null', '[]']::text[])))) select s0.n0 as s from s0;
