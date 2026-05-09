@@ -32,6 +32,14 @@
           "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
         },
         {
+          "name": "empty parameter list membership returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name"
+          },
+          "params": {"names": []},
+          "assert": "empty"
+        },
+        {
           "name": "string contains parameter",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where toLower(n.name) contains $needle return n.name"
