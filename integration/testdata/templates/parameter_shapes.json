@@ -8,6 +8,10 @@
           {"id": "alpha", "kinds": ["TemplateNodeKind1"], "properties": {"name": "alpha", "score": 1, "objectid": "S-1-500"}},
           {"id": "beta", "kinds": ["TemplateNodeKind1"], "properties": {"name": "beta", "score": 2, "objectid": "S-2-501"}},
           {"id": "gamma", "kinds": ["TemplateNodeKind1"], "properties": {"name": "gamma", "score": 3, "objectid": "S-3-500"}},
+          {"id": "percent", "kinds": ["TemplateNodeKind1"], "properties": {"name": "has%percent", "group": "wildcard"}},
+          {"id": "percent-decoy", "kinds": ["TemplateNodeKind1"], "properties": {"name": "hasXpercent", "group": "wildcard"}},
+          {"id": "underscore", "kinds": ["TemplateNodeKind1"], "properties": {"name": "under_score", "group": "wildcard"}},
+          {"id": "underscore-decoy", "kinds": ["TemplateNodeKind1"], "properties": {"name": "underXscore", "group": "wildcard"}},
           {"id": "target", "kinds": ["TemplateNodeKind2"], "properties": {"name": "target"}}
         ],
         "edges": [
@@ -54,6 +58,22 @@
           },
           "params": {"needle": "alp"},
           "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "contains percent parameter treats percent as a literal character",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name contains $needle return n.name"
+          },
+          "params": {"needle": "%"},
+          "assert": {"scalar_values": ["has%percent"]}
+        },
+        {
+          "name": "starts with underscore parameter treats underscore as a literal character",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name starts with $prefix return n.name"
+          },
+          "params": {"prefix": "under_"},
+          "assert": {"scalar_values": ["under_score"]}
         },
         {
           "name": "numeric comparison parameter",
