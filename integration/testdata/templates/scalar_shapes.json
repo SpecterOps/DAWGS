@@ -1,0 +1,125 @@
+{
+  "families": [
+    {
+      "name": "scalar predicate projection and aggregation shapes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "alpha",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "alpha",
+              "group": "shape",
+              "department": "eng",
+              "score": 1,
+              "objectid": "S-1-500",
+              "tags": ["admin", "tier0"]
+            }
+          },
+          {
+            "id": "beta",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "beta",
+              "group": "shape",
+              "department": "eng",
+              "score": 2,
+              "objectid": "S-2-501",
+              "tags": ["user"]
+            }
+          },
+          {
+            "id": "gamma",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "gamma",
+              "group": "shape",
+              "department": "ops",
+              "score": 3,
+              "objectid": "S-3-500",
+              "tags": []
+            }
+          },
+          {
+            "id": "delta",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "fallback",
+              "alias": "delta",
+              "group": "other",
+              "department": "ops",
+              "score": 4,
+              "objectid": "S-4-502",
+              "tags": ["admin"]
+            }
+          },
+          {
+            "id": "other",
+            "kinds": ["TemplateNodeKind2"],
+            "properties": {
+              "name": "alpha",
+              "group": "shape",
+              "department": "eng",
+              "score": 99,
+              "objectid": "S-5-500",
+              "tags": ["admin"]
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "ordered multi-column scalar projection",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.name, n.score order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha", 1], ["beta", 2], ["gamma", 3]]}
+        },
+        {
+          "name": "ordered projection with skip and limit",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.name order by n.name skip 1 limit 1"
+          },
+          "assert": {"ordered_scalar_values": ["beta"]}
+        },
+        {
+          "name": "distinct scalar projection",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return distinct n.department order by n.department"
+          },
+          "assert": {"ordered_scalar_values": ["eng", "ops"]}
+        },
+        {
+          "name": "coalesce fallback predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where coalesce(n.alias, n.name) = 'delta' return n.name"
+          },
+          "assert": {"scalar_values": ["fallback"]}
+        },
+        {
+          "name": "list membership and string suffix predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in ['alpha', 'gamma'] and toLower(n.objectid) ends with '-500' return n.name order by n.name"
+          },
+          "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
+        },
+        {
+          "name": "array quantifier predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where any(tag in n.tags where tag contains 'admin') return n.name order by n.name"
+          },
+          "assert": {"ordered_scalar_values": ["alpha", "fallback"]}
+        },
+        {
+          "name": "grouped aggregate row projection",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, count(n), sum(n.score) order by n.department"
+          },
+          "assert": {"ordered_row_values": [["eng", 2, 3], ["ops", 1, 3]]}
+        }
+      ]
+    }
+  ]
+}
