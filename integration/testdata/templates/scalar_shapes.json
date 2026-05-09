@@ -113,6 +113,13 @@
           "assert": {"ordered_scalar_values": ["alpha", "fallback"]}
         },
         {
+          "name": "all quantifier over empty property list is true",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and all(tag in n.tags where tag contains 'admin') return n.name"
+          },
+          "assert": {"scalar_values": ["gamma"]}
+        },
+        {
           "name": "grouped aggregate row projection",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.department, count(n), sum(n.score) order by n.department"
