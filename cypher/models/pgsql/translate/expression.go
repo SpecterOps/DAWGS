@@ -722,7 +722,7 @@ func isEmptyAnyArrayLiteral(expression pgsql.Expression) bool {
 	return isArrayLiteral && arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0
 }
 
-func isKnownEmptyInList(expression pgsql.Expression) bool {
+func isKnownEmptyArrayExpression(expression pgsql.Expression) bool {
 	if isEmptyAnyArrayLiteral(expression) {
 		return true
 	}
@@ -985,7 +985,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		}
 
 	case pgsql.OperatorIn:
-		if isKnownEmptyInList(newExpression.ROperand) {
+		if isKnownEmptyArrayExpression(newExpression.ROperand) {
 			s.PushOperand(pgsql.NewLiteral(false, pgsql.Boolean))
 			return nil
 		}

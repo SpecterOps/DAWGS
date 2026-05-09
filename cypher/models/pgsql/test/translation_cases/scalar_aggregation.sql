@@ -54,13 +54,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select jsonb_array_length(((s0.n0).properties -> 'tags'))::int from s0;
 
 -- case: MATCH (n) RETURN size(collect(n.name))
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_length(array_remove(coalesce(array_agg(((s0.n0).properties ->> 'name'))::anyarray, array []::text[])::anyarray, null)::anyarray, 1)::int from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cardinality(array_remove(coalesce(array_agg(((s0.n0).properties ->> 'name'))::anyarray, array []::text[])::anyarray, null)::anyarray)::int from s0;
 
 -- case: MATCH (n) WHERE size(n.permissions) > 2 RETURN n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (jsonb_array_length((n0.properties -> 'permissions'))::int > 2)) select s0.n0 as n from s0;
 
 -- case: MATCH (n) WITH n, collect(n.prop) as props WHERE size(props) > 1 RETURN n, props
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, array_remove(coalesce(array_agg(((s1.n0).properties ->> 'prop'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as props from s0 where (array_length(s0.i0, 1)::int > 1);
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, array_remove(coalesce(array_agg(((s1.n0).properties ->> 'prop'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as props from s0 where (cardinality(s0.i0)::int > 1);
 
 -- case: MATCH (n) WITH n, count(n) as node_count WHERE node_count > 1 RETURN n, node_count
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, count(s1.n0)::int8 as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as node_count from s0 where (s0.i0 > 1);
@@ -73,4 +73,3 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 
 -- case: MATCH (n) WITH count(n) as lim MATCH (o) RETURN o
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s1.n0)::int8 as i0 from s1), s2 as (select s0.i0 as i0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1) select s2.n1 as o from s2;
-
