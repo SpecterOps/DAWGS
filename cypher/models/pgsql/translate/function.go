@@ -201,10 +201,13 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 					Parameters: []pgsql.Expression{argument},
 					CastType:   pgsql.Int,
 				}
+			} else if isKnownEmptyArrayExpression(argument) {
+				s.treeTranslator.PushOperand(pgsql.NewLiteral(0, pgsql.Int))
+				return
 			} else {
 				functionCall = pgsql.FunctionCall{
-					Function:   pgsql.FunctionArrayLength,
-					Parameters: []pgsql.Expression{argument, pgsql.NewLiteral(1, pgsql.Int)},
+					Function:   pgsql.FunctionCardinality,
+					Parameters: []pgsql.Expression{argument},
 					CastType:   pgsql.Int,
 				}
 			}
