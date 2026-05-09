@@ -2,7 +2,7 @@
   "metamorphic": [
     {
       "name": "fixed hop and bounded one-hop expansion return the same path",
-      "compare": "path_node_ids",
+      "compare": ["path_node_ids", "path_edge_kinds"],
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
@@ -27,7 +27,7 @@
     },
     {
       "name": "shortest path agrees with the direct path when a longer branch exists",
-      "compare": "path_node_ids",
+      "compare": ["path_node_ids", "path_edge_kinds"],
       "fixture": {
         "nodes": [
           {"id": "s", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
@@ -122,7 +122,7 @@
     },
     {
       "name": "two fixed hops and bounded two-hop expansion return the same path",
-      "compare": "path_node_ids",
+      "compare": ["path_node_ids", "path_edge_kinds"],
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
@@ -147,7 +147,7 @@
     },
     {
       "name": "bounded and unbounded expansions agree on an acyclic two-hop fixture",
-      "compare": "path_node_ids",
+      "compare": ["path_node_ids", "path_edge_kinds"],
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
