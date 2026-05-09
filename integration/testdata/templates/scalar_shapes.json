@@ -55,6 +55,17 @@
             }
           },
           {
+            "id": "epsilon",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "missing-tags",
+              "group": "missing-tags",
+              "department": "ops",
+              "score": 5,
+              "objectid": "S-6-503"
+            }
+          },
+          {
             "id": "other",
             "kinds": ["TemplateNodeKind2"],
             "properties": {
@@ -118,6 +129,13 @@
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and all(tag in n.tags where tag contains 'admin') return n.name"
           },
           "assert": {"scalar_values": ["gamma"]}
+        },
+        {
+          "name": "none quantifier over missing property list is not true",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'missing-tags' and none(tag in n.tags where tag contains 'admin') return n.name"
+          },
+          "assert": "empty"
         },
         {
           "name": "grouped aggregate row projection",
