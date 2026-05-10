@@ -647,6 +647,13 @@ func (s *identifierSet) CollectFromValue(value any) error {
 	case QualifiedExpression:
 		return s.CollectFromExpression(typedValue.qualifier())
 
+	case *cypher.ProjectionItem:
+		if projectionItem, err := projectionItemFromValue(typedValue); err != nil {
+			return err
+		} else {
+			return s.CollectFromExpression(projectionItem)
+		}
+
 	case *cypher.Return:
 		if projectionItems, err := projectionItemsFromReturn(typedValue); err != nil {
 			return err

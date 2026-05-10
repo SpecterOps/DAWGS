@@ -310,6 +310,15 @@ func TestProjectionAliasDoesNotCreateMatchInference(t *testing.T) {
 	require.Empty(t, preparedQuery.Parameters)
 }
 
+func TestAliasedProjectionCreatesMatchInference(t *testing.T) {
+	preparedQuery, err := v2.New().Return(
+		v2.As(v2.Node().ID(), "node_id"),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return id(n) as node_id", renderPrepared(t, preparedQuery))
+}
+
 func TestInvalidProjectionAliasReturnsBuildError(t *testing.T) {
 	_, err := v2.New().Return(v2.As(v2.Literal(1), "bad alias")).Build()
 	require.ErrorContains(t, err, `projection alias has invalid symbol "bad alias"`)
