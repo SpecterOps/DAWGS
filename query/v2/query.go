@@ -78,6 +78,7 @@ func ExactDepth(depth int64) TraversalDepth {
 	return newTraversalDepth(depthBound, depthBound)
 }
 
+// Accessors return fresh variables; compare symbols rather than pointer identity.
 func (s runtimeIdentifiers) Path() *cypher.Variable {
 	return cypher.NewVariableWithSymbol(s.path)
 }
@@ -731,6 +732,7 @@ type QueryBuilder interface {
 	Where(constraints ...cypher.SyntaxNode) QueryBuilder
 	OrderBy(sortItems ...any) QueryBuilder
 	Skip(offset int) QueryBuilder
+	// Limit accepts zero, which renders LIMIT 0 and returns an empty result set.
 	Limit(limit int) QueryBuilder
 	Return(projections ...any) QueryBuilder
 	ReturnDistinct(projections ...any) QueryBuilder
@@ -898,6 +900,7 @@ func (s *builder) appendDeleteItems(detach bool, items ...cypher.Expression) {
 		return
 	}
 
+	// Consecutive deletes share one clause; any node delete makes the whole clause DETACH DELETE.
 	lastClauseIdx := len(s.updatingClauses) - 1
 	if lastClauseIdx >= 0 && s.updatingClauses[lastClauseIdx].kind == updatingClauseDelete {
 		s.updatingClauses[lastClauseIdx].detach = s.updatingClauses[lastClauseIdx].detach || detach

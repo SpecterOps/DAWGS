@@ -692,12 +692,20 @@ func (s *identifierSet) Clone() *identifierSet {
 }
 
 func (s *identifierSet) Or(other *identifierSet) {
+	if s == nil || other == nil {
+		return
+	}
+
 	for otherIdentifier := range other.identifiers {
 		s.identifiers[otherIdentifier] = struct{}{}
 	}
 }
 
 func (s *identifierSet) Remove(other *identifierSet) {
+	if s == nil || other == nil {
+		return
+	}
+
 	for otherIdentifier := range other.identifiers {
 		delete(s.identifiers, otherIdentifier)
 	}
