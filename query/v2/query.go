@@ -1370,7 +1370,7 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		return nil, fmt.Errorf("query has no action specified")
 	}
 
-	if err := collectModelErrorsFromKnownValues(s.constraints, s.setItems, s.removeItems, s.deleteItems, s.projections, s.sortItems); err != nil {
+	if err := collectModelErrorsFromKnownValues(s.constraints, s.creates, s.setItems, s.removeItems, s.deleteItems, s.projections, s.sortItems); err != nil {
 		return nil, err
 	}
 
@@ -1405,10 +1405,6 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		}
 
 		for _, nextConstraint := range s.constraints {
-			if err := collectModelErrorsFromKnownValues(nextConstraint); err != nil {
-				return nil, err
-			}
-
 			switch typedNextConstraint := nextConstraint.(type) {
 			case *cypher.KindMatcher:
 				if identifier, typeOK := typedNextConstraint.Reference.(*cypher.Variable); !typeOK {
