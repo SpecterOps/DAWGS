@@ -214,6 +214,10 @@ func valueExpression(value any) cypher.Expression {
 }
 
 func joinedExpressionList(operator cypher.Operator, operands []cypher.SyntaxNode) cypher.SyntaxNode {
+	if len(operands) == 0 {
+		return invalidExpression(fmt.Errorf("%s requires at least one operand", operator))
+	}
+
 	expressionList := &cypher.Comparison{}
 
 	if len(operands) > 0 {

@@ -250,6 +250,14 @@ func TestMixedNodeAndRelationshipIdentifiersReturnError(t *testing.T) {
 	require.ErrorContains(t, err, "query mixes node and relationship query identifiers")
 }
 
+func TestEmptyLogicalHelpersReturnBuildErrors(t *testing.T) {
+	_, err := v2.New().Where(v2.And()).Return(v2.Node()).Build()
+	require.ErrorContains(t, err, "and requires at least one operand")
+
+	_, err = v2.New().Where(v2.Or()).Return(v2.Node()).Build()
+	require.ErrorContains(t, err, "or requires at least one operand")
+}
+
 func TestInvalidExplicitRelationshipPatternDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().Create(
 		v2.RelationshipPattern(graph.StringKind("Edge"), nil, graph.DirectionBoth),
