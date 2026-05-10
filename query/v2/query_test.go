@@ -505,6 +505,25 @@ func TestNamedParameterMaterialization(t *testing.T) {
 	require.ErrorContains(t, err, "parameter same is bound to multiple values")
 }
 
+func TestQualifiedExpressionValuesUseProjectionSemantics(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.Node().Property("copy").Equals(v2.Node().Property("source")),
+		v2.Node().Property("kinds").Equals(v2.Node().Kinds()),
+	).Return(
+		v2.Node(),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match (n) where n.copy = n.source and n.kinds = labels(n) return n", renderPrepared(t, preparedQuery))
+
+	preparedQuery, err = v2.New().Where(
+		v2.Relationship().Property("kind").Equals(v2.Relationship().Kind()),
+	).Return(
+		v2.Relationship(),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match ()-[r]->() where r.kind = type(r) return r", renderPrepared(t, preparedQuery))
+}
+
 func TestBuildDoesNotMutateCallerOwnedAST(t *testing.T) {
 	constraint := v2.Node().Property("name").Equals("alice")
 	constraintParameter := constraint.(*cypher.Comparison).FirstPartial().Right.(*cypher.Parameter)

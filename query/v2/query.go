@@ -208,6 +208,12 @@ func valueExpression(value any) cypher.Expression {
 		return typedValue
 	case *cypher.IDInCollection:
 		return typedValue
+	case QualifiedExpression:
+		if expression, err := projectionExpression(typedValue); err != nil {
+			return invalidExpression(err)
+		} else {
+			return expression
+		}
 	default:
 		return Parameter(value)
 	}
