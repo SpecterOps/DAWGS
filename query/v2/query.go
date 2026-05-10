@@ -867,6 +867,37 @@ func (s *builder) Where(constraints ...cypher.SyntaxNode) QueryBuilder {
 	return s
 }
 
+func patternEndsWithNodePattern(pattern *cypher.PatternPart) bool {
+	numElements := len(pattern.PatternElements)
+	if numElements == 0 {
+		return false
+	}
+
+	return pattern.PatternElements[numElements-1].IsNodePattern()
+}
+
+func isCreateNodeValue(value any, identifiers runtimeIdentifiers) bool {
+	switch typedValue := value.(type) {
+	case QualifiedExpression:
+		if variable, typeOK := typedValue.qualifier().(*cypher.Variable); typeOK {
+			switch variable.Symbol {
+			case identifiers.node, identifiers.start, identifiers.end:
+				return true
+			}
+		}
+
+	case *cypher.NodePattern:
+		return typedValue != nil
+	}
+
+	return false
+}
+
+func nextCreateValueIsNode(creates []any, idx int, identifiers runtimeIdentifiers) bool {
+	nextIdx := idx + 1
+	return nextIdx < len(creates) && isCreateNodeValue(creates[nextIdx], identifiers)
+}
+
 func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeIdentifiers, creates []any) error {
 	if len(creates) == 0 {
 		return nil
@@ -880,7 +911,7 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 		}
 	)
 
-	for _, nextCreate := range creates {
+	for idx, nextCreate := range creates {
 		switch typedNextCreate := nextCreate.(type) {
 		case QualifiedExpression:
 			switch typedExpression := typedNextCreate.qualifier().(type) {
@@ -915,15 +946,19 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 				return err
 			}
 
-			pattern.AddPatternElements(&cypher.NodePattern{
-				Variable: identifiers.Start(),
-			})
+			if !patternEndsWithNodePattern(pattern) {
+				pattern.AddPatternElements(&cypher.NodePattern{
+					Variable: identifiers.Start(),
+				})
+			}
 
 			pattern.AddPatternElements(cypher.Copy(typedNextCreate))
 
-			pattern.AddPatternElements(&cypher.NodePattern{
-				Variable: identifiers.End(),
-			})
+			if !nextCreateValueIsNode(creates, idx, identifiers) {
+				pattern.AddPatternElements(&cypher.NodePattern{
+					Variable: identifiers.End(),
+				})
+			}
 
 		default:
 			return fmt.Errorf("invalid type for create: %T", nextCreate)

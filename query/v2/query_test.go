@@ -81,6 +81,27 @@ func TestCreateRelationshipWithMatchedEndpoints(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestCreateRelationshipWithExplicitEndpoints(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Create(
+		v2.Start(),
+		v2.RelationshipPattern(graph.StringKind("A"), v2.NamedParameter("props", map[string]any{"name": "rel"}), graph.DirectionOutbound),
+		v2.End(),
+	).Return(
+		v2.Relationship().ID(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (s), (e) where id(s) = $p0 and id(e) = $p1 create (s)-[r:A $props]->(e) return id(r)", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"p0":    1,
+		"p1":    2,
+		"props": map[string]any{"name": "rel"},
+	}, preparedQuery.Parameters)
+}
+
 func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
 	preparedQuery, err := v2.New().Create(
 		v2.Node().NodePattern(graph.Kinds{graph.StringKind("A")}, v2.NamedParameter("props", map[string]any{"name": "node"})),
