@@ -281,34 +281,88 @@ func valueExpression(value any) cypher.Expression {
 	}
 }
 
-func joinedExpressionList(operator cypher.Operator, operands []cypher.SyntaxNode) cypher.SyntaxNode {
+func joinedExpressionList(operator cypher.Operator, operands []cypher.SyntaxNode) ([]cypher.Expression, cypher.SyntaxNode) {
 	if len(operands) == 0 {
-		return invalidExpression(fmt.Errorf("%s requires at least one operand", operator))
+		return nil, invalidExpression(fmt.Errorf("%s requires at least one operand", operator))
 	}
 
-	expressionList := &cypher.Comparison{}
+	expressions := make([]cypher.Expression, len(operands))
+	for idx, operand := range operands {
+		expressions[idx] = operand
+	}
 
-	if len(operands) > 0 {
-		expressionList.Left = operands[0]
+	return expressions, nil
+}
 
-		for _, operand := range operands[1:] {
-			expressionList.NewPartialComparison(operator, operand)
+func comparisonHasLogicalOperator(comparison *cypher.Comparison) bool {
+	if comparison == nil {
+		return false
+	}
+
+	for _, partial := range comparison.Partials {
+		switch partial.Operator {
+		case cypher.OperatorAnd, cypher.OperatorOr:
+			return true
 		}
 	}
 
-	return expressionList
+	return false
+}
+
+func parenthesizeDisjunctiveExpression(expression cypher.Expression) cypher.Expression {
+	switch typedExpression := expression.(type) {
+	case *cypher.Parenthetical:
+		return typedExpression
+	case *cypher.Disjunction, *cypher.ExclusiveDisjunction:
+		return cypher.NewParenthetical(typedExpression)
+	case *cypher.Comparison:
+		if comparisonHasLogicalOperator(typedExpression) {
+			return cypher.NewParenthetical(typedExpression)
+		}
+	}
+
+	return expression
+}
+
+func parenthesizeLogicalExpression(expression cypher.Expression) cypher.Expression {
+	switch typedExpression := expression.(type) {
+	case *cypher.Parenthetical:
+		return typedExpression
+	case *cypher.Conjunction, *cypher.Disjunction, *cypher.ExclusiveDisjunction:
+		return cypher.NewParenthetical(typedExpression)
+	case *cypher.Comparison:
+		if comparisonHasLogicalOperator(typedExpression) {
+			return cypher.NewParenthetical(typedExpression)
+		}
+	}
+
+	return expression
 }
 
 func Not(operand cypher.Expression) cypher.Expression {
-	return cypher.NewNegation(operand)
+	return cypher.NewNegation(parenthesizeLogicalExpression(operand))
 }
 
 func And(operands ...cypher.SyntaxNode) cypher.SyntaxNode {
-	return joinedExpressionList(cypher.OperatorAnd, operands)
+	expressions, errExpression := joinedExpressionList(cypher.OperatorAnd, operands)
+	if errExpression != nil {
+		return errExpression
+	}
+
+	for idx, expression := range expressions {
+		expressions[idx] = parenthesizeDisjunctiveExpression(expression)
+	}
+
+	return cypher.NewConjunction(expressions...)
 }
 
 func Or(operands ...cypher.SyntaxNode) cypher.SyntaxNode {
-	return joinedExpressionList(cypher.OperatorOr, operands)
+	expressions, errExpression := joinedExpressionList(cypher.OperatorOr, operands)
+	if errExpression != nil {
+		return errExpression
+	}
+
+	return cypher.NewParenthetical(cypher.NewDisjunction(expressions...))
 }
 
 type SortDirection int
@@ -1343,7 +1397,7 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	if len(s.constraints) > 0 {
 		var (
 			whereClause                      = match.NewWhere()
-			constraints                      = &cypher.Comparison{}
+			constraints                      = cypher.NewConjunction()
 			numRelationshipKindMatchers, err = countRelationshipKindMatchers(s.constraints, s.identifiers)
 		)
 		if err != nil {
@@ -1367,14 +1421,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 			}
 
 			constraintCopy := cypher.Copy(nextConstraint)
-			if constraints.Left == nil {
-				constraints.Left = constraintCopy
-			} else {
-				constraints.NewPartialComparison(cypher.OperatorAnd, constraintCopy)
-			}
+			constraints.Add(parenthesizeDisjunctiveExpression(constraintCopy))
 		}
 
-		if constraints.Left != nil {
+		if constraints.Len() > 0 {
 			whereClause.Add(constraints)
 
 			whereIdentifiers := newIdentifierSet()
