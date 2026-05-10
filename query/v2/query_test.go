@@ -19,6 +19,21 @@ func renderPrepared(t *testing.T, preparedQuery *v2.PreparedQuery) string {
 	return cypherQueryStr
 }
 
+func firstCreateClause(t *testing.T, preparedQuery *v2.PreparedQuery) *cypher.Create {
+	t.Helper()
+
+	updatingClauses := preparedQuery.Query.SingleQuery.SinglePartQuery.UpdatingClauses
+	require.NotEmpty(t, updatingClauses)
+
+	updatingClause, typeOK := updatingClauses[0].(*cypher.UpdatingClause)
+	require.True(t, typeOK)
+
+	createClause, typeOK := updatingClause.Clause.(*cypher.Create)
+	require.True(t, typeOK)
+
+	return createClause
+}
+
 func TestQuery(t *testing.T) {
 	preparedQuery, err := v2.New().Where(
 		v2.Not(v2.Relationship().Kind().Is(graph.StringKind("test"))),
@@ -100,6 +115,28 @@ func TestCreateRelationshipWithExplicitEndpoints(t *testing.T) {
 		"p1":    2,
 		"props": map[string]any{"name": "rel"},
 	}, preparedQuery.Parameters)
+}
+
+func TestCreateSplitsDisjointNodePatterns(t *testing.T) {
+	preparedQuery, err := v2.New().Create(
+		v2.NodePattern(graph.Kinds{graph.StringKind("A")}, nil),
+		v2.NodePattern(graph.Kinds{graph.StringKind("B")}, nil),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "create (n:A), (n:B)", renderPrepared(t, preparedQuery))
+	require.Len(t, firstCreateClause(t, preparedQuery).Pattern, 2)
+}
+
+func TestCreateSplitsBackToBackRelationshipPatterns(t *testing.T) {
+	preparedQuery, err := v2.New().Create(
+		v2.RelationshipPattern(graph.StringKind("A"), nil, graph.DirectionOutbound),
+		v2.RelationshipPattern(graph.StringKind("B"), nil, graph.DirectionOutbound),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "create (s)-[r:A]->(e), (s)-[r:B]->(e)", renderPrepared(t, preparedQuery))
+	require.Len(t, firstCreateClause(t, preparedQuery).Pattern, 2)
 }
 
 func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
@@ -530,6 +567,13 @@ func TestProjectionAndOrderHelpers(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "match (n) return distinct id(n) as node_id order by n.name asc, id(n) desc", renderPrepared(t, preparedQuery))
+}
+
+func TestInvalidSortDirectionReturnsError(t *testing.T) {
+	_, err := v2.New().Return(v2.Node()).OrderBy(
+		v2.Order(v2.Node().Property("name"), v2.SortDirection(99)),
+	).Build()
+	require.ErrorContains(t, err, "unsupported sort direction: 99")
 }
 
 func TestPaginationZeroValuesAndNegativeValidation(t *testing.T) {

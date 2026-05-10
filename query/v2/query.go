@@ -385,10 +385,24 @@ func Desc(expression any) *cypher.SortItem {
 	return Order(expression, SortDescending)
 }
 
+func validateSortDirection(direction SortDirection) error {
+	switch direction {
+	case SortAscending, SortDescending:
+		return nil
+	default:
+		return fmt.Errorf("unsupported sort direction: %d", direction)
+	}
+}
+
 func Order(expression any, direction SortDirection) *cypher.SortItem {
+	expressionValue := expressionOrError(expression)
+	if err := validateSortDirection(direction); err != nil {
+		expressionValue = invalidExpression(err)
+	}
+
 	return &cypher.SortItem{
 		Ascending:  direction != SortDescending,
-		Expression: expressionOrError(expression),
+		Expression: expressionValue,
 	}
 }
 
@@ -1097,9 +1111,36 @@ func isCreateNodeValue(value any, identifiers runtimeIdentifiers) bool {
 	return false
 }
 
+func isCreateRelationshipValue(value any) bool {
+	_, typeOK := value.(*cypher.RelationshipPattern)
+	return typeOK
+}
+
 func nextCreateValueIsNode(creates []any, idx int, identifiers runtimeIdentifiers) bool {
 	nextIdx := idx + 1
 	return nextIdx < len(creates) && isCreateNodeValue(creates[nextIdx], identifiers)
+}
+
+func newCreatePatternPart(createClause *cypher.Create) *cypher.PatternPart {
+	pattern := &cypher.PatternPart{}
+	createClause.Pattern = append(createClause.Pattern, pattern)
+	return pattern
+}
+
+func createPatternHasElements(pattern *cypher.PatternPart) bool {
+	return pattern != nil && len(pattern.PatternElements) > 0
+}
+
+func shouldStartNewCreatePattern(pattern *cypher.PatternPart, nextCreate any, patternClosed bool, identifiers runtimeIdentifiers) bool {
+	if !createPatternHasElements(pattern) {
+		return false
+	}
+
+	if isCreateNodeValue(nextCreate, identifiers) && patternEndsWithNodePattern(pattern) {
+		return true
+	}
+
+	return patternClosed && isCreateRelationshipValue(nextCreate)
 }
 
 func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeIdentifiers, creates []any) error {
@@ -1108,14 +1149,19 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 	}
 
 	var (
-		pattern      = &cypher.PatternPart{}
 		createClause = &cypher.Create{
-			Unique:  false,
-			Pattern: []*cypher.PatternPart{pattern},
+			Unique: false,
 		}
+		pattern       = newCreatePatternPart(createClause)
+		patternClosed bool
 	)
 
 	for idx, nextCreate := range creates {
+		if shouldStartNewCreatePattern(pattern, nextCreate, patternClosed, identifiers) {
+			pattern = newCreatePatternPart(createClause)
+			patternClosed = false
+		}
+
 		switch typedNextCreate := nextCreate.(type) {
 		case QualifiedExpression:
 			switch typedExpression := typedNextCreate.qualifier().(type) {
@@ -1129,6 +1175,7 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 					pattern.AddPatternElements(&cypher.NodePattern{
 						Variable: cypher.NewVariableWithSymbol(typedExpression.Symbol),
 					})
+					patternClosed = false
 
 				default:
 					return fmt.Errorf("invalid variable reference for create: %s", typedExpression.Symbol)
@@ -1144,6 +1191,7 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 			}
 
 			pattern.AddPatternElements(cypher.Copy(typedNextCreate))
+			patternClosed = false
 
 		case *cypher.RelationshipPattern:
 			if err := validateRelationshipPattern(typedNextCreate); err != nil {
@@ -1162,6 +1210,9 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 				pattern.AddPatternElements(&cypher.NodePattern{
 					Variable: identifiers.End(),
 				})
+				patternClosed = true
+			} else {
+				patternClosed = false
 			}
 
 		default:
