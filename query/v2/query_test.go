@@ -116,6 +116,56 @@ func TestCreateNodeReturnDoesNotCreateMatch(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestLogicalHelpersPreservePrecedence(t *testing.T) {
+	a := v2.Node().Property("a").Equals("a")
+	b := v2.Node().Property("b").Equals("b")
+	c := v2.Node().Property("c").Equals("c")
+
+	testCases := []struct {
+		name     string
+		builder  v2.QueryBuilder
+		expected string
+	}{
+		{
+			name: "or is parenthesized in isolation",
+			builder: v2.New().Where(
+				v2.Or(a, b),
+			).Return(v2.Node()),
+			expected: "match (n) where (n.a = $p0 or n.b = $p1) return n",
+		},
+		{
+			name: "or is parenthesized when where and-chains constraints",
+			builder: v2.New().Where(
+				v2.Or(a, b),
+				c,
+			).Return(v2.Node()),
+			expected: "match (n) where (n.a = $p0 or n.b = $p1) and n.c = $p2 return n",
+		},
+		{
+			name: "nested or is parenthesized inside and",
+			builder: v2.New().Where(
+				v2.And(a, v2.Or(b, c)),
+			).Return(v2.Node()),
+			expected: "match (n) where n.a = $p0 and (n.b = $p1 or n.c = $p2) return n",
+		},
+		{
+			name: "not wraps or",
+			builder: v2.New().Where(
+				v2.Not(v2.Or(a, b)),
+			).Return(v2.Node()),
+			expected: "match (n) where not (n.a = $p0 or n.b = $p1) return n",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			preparedQuery, err := testCase.builder.Build()
+			require.NoError(t, err)
+			require.Equal(t, testCase.expected, renderPrepared(t, preparedQuery))
+		})
+	}
+}
+
 func TestInvalidCreateQualifiedExpressionReturnsError(t *testing.T) {
 	_, err := v2.New().Create(v2.Node().Property("name")).Build()
 	require.ErrorContains(t, err, "invalid qualified expression for create: *cypher.PropertyLookup")

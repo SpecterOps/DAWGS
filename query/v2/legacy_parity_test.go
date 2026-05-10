@@ -94,6 +94,35 @@ func TestLegacyNeo4jParity(t *testing.T) {
 		)
 	})
 
+	t.Run("node read with or and adjacent predicate", func(t *testing.T) {
+		assertLegacyNeo4jParity(t,
+			legacyquery.SinglePartQuery(
+				legacyquery.Where(
+					legacyquery.And(
+						legacyquery.Or(
+							legacyquery.Equals(legacyquery.NodeProperty("name"), "alice"),
+							legacyquery.Equals(legacyquery.NodeProperty("name"), "bob"),
+						),
+						legacyquery.IsNotNull(legacyquery.NodeProperty("enabled")),
+					),
+				),
+				legacyquery.Returning(
+					legacyquery.Node(),
+				),
+			),
+			v2.New().Where(
+				v2.Or(
+					v2.Node().Property("name").Equals("alice"),
+					v2.Node().Property("name").Equals("bob"),
+				),
+				v2.Node().Property("enabled").IsNotNull(),
+			).Return(
+				v2.Node(),
+			),
+			false,
+		)
+	})
+
 	t.Run("relationship read", func(t *testing.T) {
 		assertLegacyNeo4jParity(t,
 			legacyquery.SinglePartQuery(
