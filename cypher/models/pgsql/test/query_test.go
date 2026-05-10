@@ -31,12 +31,12 @@ func TestQuery_KindGeneratesInclusiveKindMatcher(t *testing.T) {
 	for _, queryBuilder := range queries {
 		builtQuery, err := queryBuilder.Build()
 		if err != nil {
-			t.Errorf("could not build query: %v", err)
+			t.Fatalf("could not build query: %v", err)
 		}
 
 		translatedQuery, err := translate.Translate(context.Background(), builtQuery.Query, mapper, builtQuery.Parameters, translate.DefaultGraphID)
 		if err != nil {
-			t.Errorf("could not translate query: %#v: %v", builtQuery, err)
+			t.Fatalf("could not translate query: %#v: %v", builtQuery, err)
 		}
 
 		walk.PgSQL(translatedQuery.Statement, walk.NewSimpleVisitor(func(node pgsql.SyntaxNode, visitorHandler walk.VisitorHandler) {

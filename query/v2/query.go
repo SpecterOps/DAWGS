@@ -880,6 +880,14 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 			s.deleteItems = append(s.deleteItems, deleteItem)
 			pendingDeleteItems = append(pendingDeleteItems, deleteItem)
 
+		case *cypher.PropertyLookup:
+			if err := validateExpressionValue(typedNextUpdate, "delete expression"); err != nil {
+				s.trackError(err)
+				continue
+			}
+
+			s.trackError(fmt.Errorf("delete target must be a node, relationship, or variable; use remove for properties"))
+
 		case QualifiedExpression:
 			if isNilPointer(typedNextUpdate) {
 				s.trackError(fmt.Errorf("delete target is nil"))

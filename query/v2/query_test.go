@@ -329,6 +329,13 @@ func TestAliasedProjectionCreatesMatchInference(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "match (n) return id(n) as node_id", renderPrepared(t, preparedQuery))
+
+	preparedQuery, err = v2.New().Return(
+		v2.As(v2.Node(), "alias"),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return n as alias", renderPrepared(t, preparedQuery))
 }
 
 func TestInvalidProjectionAliasReturnsBuildError(t *testing.T) {
@@ -469,10 +476,11 @@ func TestRawUpdatingInputsAreValidated(t *testing.T) {
 
 func TestDeleteRejectsNonTargetQualifiedExpressions(t *testing.T) {
 	cases := map[string]any{
-		"property": v2.Node().Property("name"),
-		"id":       v2.Node().ID(),
-		"kinds":    v2.Node().Kinds(),
-		"kind":     v2.Relationship().Kind(),
+		"property continuation": v2.Node().Property("name"),
+		"raw property lookup":   cypher.NewPropertyLookup("n", "name"),
+		"id":                    v2.Node().ID(),
+		"kinds":                 v2.Node().Kinds(),
+		"kind":                  v2.Relationship().Kind(),
 	}
 
 	for name, target := range cases {
