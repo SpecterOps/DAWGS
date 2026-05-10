@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/walk"
@@ -264,12 +266,12 @@ func sortedPropertyKeys(properties map[string]any) []string {
 	return keys
 }
 
-func isCypherSymbolStart(char byte) bool {
-	return char == '_' || (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z')
+func isCypherSymbolStart(char rune) bool {
+	return char == '_' || unicode.IsLetter(char) || unicode.In(char, unicode.Nl, unicode.Pc)
 }
 
-func isCypherSymbolPart(char byte) bool {
-	return isCypherSymbolStart(char) || (char >= '0' && char <= '9')
+func isCypherSymbolPart(char rune) bool {
+	return isCypherSymbolStart(char) || unicode.IsDigit(char) || unicode.In(char, unicode.Mark, unicode.Sc)
 }
 
 func validateCypherSymbol(symbol, context string) error {
@@ -277,12 +279,16 @@ func validateCypherSymbol(symbol, context string) error {
 		return fmt.Errorf("%s is empty", context)
 	}
 
-	if !isCypherSymbolStart(symbol[0]) {
+	if !utf8.ValidString(symbol) {
 		return fmt.Errorf("%s has invalid symbol %q", context, symbol)
 	}
 
-	for idx := 1; idx < len(symbol); idx++ {
-		if !isCypherSymbolPart(symbol[idx]) {
+	for idx, char := range symbol {
+		if idx == 0 {
+			if !isCypherSymbolStart(char) {
+				return fmt.Errorf("%s has invalid symbol %q", context, symbol)
+			}
+		} else if !isCypherSymbolPart(char) {
 			return fmt.Errorf("%s has invalid symbol %q", context, symbol)
 		}
 	}

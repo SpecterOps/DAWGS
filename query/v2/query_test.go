@@ -248,6 +248,22 @@ func TestInvalidScopeAliasesReturnBuildErrors(t *testing.T) {
 	require.ErrorContains(t, err, `scope alias node has invalid symbol "bad name"`)
 }
 
+func TestUnicodeCypherSymbols(t *testing.T) {
+	scope := v2.NewScope("路径", "节点", "起点", "关系", "终点")
+
+	preparedQuery, err := scope.New().Where(
+		scope.Node().Property("name").Equals(v2.NamedParameter("名字", "alice")),
+	).Return(
+		v2.As(scope.Node().ID(), "标识"),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (节点) where 节点.name = $名字 return id(节点) as 标识", renderPrepared(t, preparedQuery))
+	require.Equal(t, map[string]any{
+		"名字": "alice",
+	}, preparedQuery.Parameters)
+}
+
 func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().WithRelationshipDirection(graph.Direction(99)).Return(v2.Relationship()).Build()
 	require.ErrorContains(t, err, "unsupported relationship direction: invalid")
