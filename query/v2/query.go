@@ -308,6 +308,12 @@ type scopedExpression interface {
 	roleName() string
 }
 
+type deleteTarget interface {
+	QualifiedExpression
+
+	deleteTarget()
+}
+
 type EntityContinuation interface {
 	QualifiedExpression
 
@@ -494,6 +500,8 @@ func (s *entity[T]) NodePattern(kinds graph.Kinds, properties cypher.Expression)
 func (s *entity[T]) qualifier() cypher.Expression {
 	return s.identifier
 }
+
+func (s *entity[T]) deleteTarget() {}
 
 func (s *entity[T]) roleName() string {
 	return s.role
@@ -837,37 +845,53 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 
 	for _, nextDelete := range deleteItems {
 		switch typedNextUpdate := nextDelete.(type) {
-		case QualifiedExpression:
-			qualifier := typedNextUpdate.qualifier()
-			if err := validateExpressionValue(qualifier, "delete expression"); err != nil {
+		case deleteTarget:
+			if isNilPointer(typedNextUpdate) {
+				s.trackError(fmt.Errorf("delete target is nil"))
+				continue
+			}
+
+			deleteItem, detach, err := deleteItemFromExpression(typedNextUpdate.qualifier(), s.identifiers)
+			if err != nil {
 				s.trackError(err)
 				continue
 			}
 
-			if isDetachDeleteQualifier(qualifier, s.identifiers) {
+			if detach {
 				s.detachDelete = true
 				pendingDetachDelete = true
 			}
 
-			deleteItem := copyExpression(qualifier)
 			s.deleteItems = append(s.deleteItems, deleteItem)
 			pendingDeleteItems = append(pendingDeleteItems, deleteItem)
 
 		case *cypher.Variable:
-			if err := validateExpressionValue(typedNextUpdate, "delete expression"); err != nil {
+			deleteItem, detach, err := deleteItemFromExpression(typedNextUpdate, s.identifiers)
+			if err != nil {
 				s.trackError(err)
 				continue
 			}
 
-			switch typedNextUpdate.Symbol {
-			case s.identifiers.node, s.identifiers.start, s.identifiers.end:
+			if detach {
 				s.detachDelete = true
 				pendingDetachDelete = true
 			}
 
-			deleteItem := copyExpression(typedNextUpdate)
 			s.deleteItems = append(s.deleteItems, deleteItem)
 			pendingDeleteItems = append(pendingDeleteItems, deleteItem)
+
+		case QualifiedExpression:
+			if isNilPointer(typedNextUpdate) {
+				s.trackError(fmt.Errorf("delete target is nil"))
+				continue
+			}
+
+			if err := validateExpressionValue(typedNextUpdate.qualifier(), "delete expression"); err != nil {
+				s.trackError(err)
+				continue
+			}
+
+			s.trackError(fmt.Errorf("delete target must be an entity, path, or variable; got %T", nextDelete))
 
 		default:
 			s.trackError(fmt.Errorf("unknown delete type: %T", nextDelete))
@@ -876,6 +900,19 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 
 	s.appendDeleteItems(pendingDetachDelete, pendingDeleteItems...)
 	return s
+}
+
+func deleteItemFromExpression(expression cypher.Expression, identifiers runtimeIdentifiers) (cypher.Expression, bool, error) {
+	if err := validateExpressionValue(expression, "delete expression"); err != nil {
+		return nil, false, err
+	}
+
+	variable, typeOK := expression.(*cypher.Variable)
+	if !typeOK || variable == nil {
+		return nil, false, fmt.Errorf("delete target must resolve to a variable, got %T", expression)
+	}
+
+	return copyExpression(variable), isDetachDeleteQualifier(variable, identifiers), nil
 }
 
 func (s *builder) trackError(err error) {

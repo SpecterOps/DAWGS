@@ -439,6 +439,22 @@ func TestRawUpdatingInputsAreValidated(t *testing.T) {
 	require.ErrorContains(t, err, "relationship pattern is nil")
 }
 
+func TestDeleteRejectsNonTargetQualifiedExpressions(t *testing.T) {
+	cases := map[string]any{
+		"property": v2.Node().Property("name"),
+		"id":       v2.Node().ID(),
+		"kinds":    v2.Node().Kinds(),
+		"kind":     v2.Relationship().Kind(),
+	}
+
+	for name, target := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := v2.New().Delete(target).Build()
+			require.ErrorContains(t, err, "delete target must be an entity, path, or variable")
+		})
+	}
+}
+
 func TestInvalidHelperInputsReturnBuildErrors(t *testing.T) {
 	cases := map[string]struct {
 		builder v2.QueryBuilder
