@@ -16,6 +16,68 @@ type runtimeIdentifiers struct {
 	end          string
 }
 
+type TraversalDepth struct {
+	patternRange *cypher.PatternRange
+	err          error
+}
+
+func traversalDepthBound(value int64) *int64 {
+	return &value
+}
+
+func newTraversalDepth(start, end *int64) TraversalDepth {
+	if start != nil && *start < 0 {
+		return TraversalDepth{
+			err: fmt.Errorf("traversal depth minimum must be non-negative: %d", *start),
+		}
+	}
+
+	if end != nil && *end < 0 {
+		return TraversalDepth{
+			err: fmt.Errorf("traversal depth maximum must be non-negative: %d", *end),
+		}
+	}
+
+	if start != nil && end != nil && *end < *start {
+		return TraversalDepth{
+			err: fmt.Errorf("traversal depth maximum %d is less than minimum %d", *end, *start),
+		}
+	}
+
+	return TraversalDepth{
+		patternRange: cypher.NewPatternRange(start, end),
+	}
+}
+
+func (s TraversalDepth) rangePattern() *cypher.PatternRange {
+	if s.patternRange == nil {
+		return &cypher.PatternRange{}
+	}
+
+	return cypher.Copy(s.patternRange)
+}
+
+func AnyDepth() TraversalDepth {
+	return newTraversalDepth(nil, nil)
+}
+
+func MinDepth(min int64) TraversalDepth {
+	return newTraversalDepth(traversalDepthBound(min), nil)
+}
+
+func MaxDepth(max int64) TraversalDepth {
+	return newTraversalDepth(nil, traversalDepthBound(max))
+}
+
+func DepthRange(min, max int64) TraversalDepth {
+	return newTraversalDepth(traversalDepthBound(min), traversalDepthBound(max))
+}
+
+func ExactDepth(depth int64) TraversalDepth {
+	depthBound := traversalDepthBound(depth)
+	return newTraversalDepth(depthBound, depthBound)
+}
+
 func (s runtimeIdentifiers) Path() *cypher.Variable {
 	return cypher.NewVariableWithSymbol(s.path)
 }
@@ -623,6 +685,7 @@ type QueryBuilder interface {
 	Delete(expressions ...any) QueryBuilder
 	WithShortestPaths() QueryBuilder
 	WithAllShortestPaths() QueryBuilder
+	WithTraversalDepth(depth TraversalDepth) QueryBuilder
 	WithRelationshipDirection(direction graph.Direction) QueryBuilder
 	Build() (*PreparedQuery, error)
 }
@@ -659,6 +722,7 @@ type builder struct {
 	deleteItems           []cypher.Expression
 	detachDelete          bool
 	relationshipDirection graph.Direction
+	traversalDepth        *cypher.PatternRange
 	shortestPathQuery     bool
 	allShorestPathsQuery  bool
 	skip                  *int
@@ -684,6 +748,16 @@ func (s *builder) WithShortestPaths() QueryBuilder {
 
 func (s *builder) WithAllShortestPaths() QueryBuilder {
 	s.allShorestPathsQuery = true
+	return s
+}
+
+func (s *builder) WithTraversalDepth(depth TraversalDepth) QueryBuilder {
+	if depth.err != nil {
+		s.trackError(depth.err)
+	} else {
+		s.traversalDepth = depth.rangePattern()
+	}
+
 	return s
 }
 
@@ -1225,6 +1299,14 @@ func (s *builder) wantsShortestPathPattern() bool {
 	return s.shortestPathQuery || s.allShorestPathsQuery
 }
 
+func (s *builder) wantsTraversalPattern() bool {
+	return s.traversalDepth != nil
+}
+
+func (s *builder) usesRangedRelationshipPattern() bool {
+	return s.wantsTraversalPattern() || s.wantsShortestPathPattern()
+}
+
 func (s *builder) Build() (*PreparedQuery, error) {
 	if len(s.errors) > 0 {
 		return nil, errors.Join(s.errors...)
@@ -1295,9 +1377,16 @@ func (s *builder) Build() (*PreparedQuery, error) {
 		if constraints.Left != nil {
 			whereClause.Add(constraints)
 
-			if err := readIdentifiers.CollectFromExpression(whereClause); err != nil {
+			whereIdentifiers := newIdentifierSet()
+			if err := whereIdentifiers.CollectFromExpression(whereClause); err != nil {
 				return nil, err
 			}
+
+			if s.usesRangedRelationshipPattern() && whereIdentifiers.Contains(s.identifiers.relationship) {
+				return nil, fmt.Errorf("ranged relationship patterns only support top-level relationship kind constraints")
+			}
+
+			readIdentifiers.Or(whereIdentifiers)
 		}
 	}
 
@@ -1308,11 +1397,19 @@ func (s *builder) Build() (*PreparedQuery, error) {
 
 	actionIdentifiers.Remove(createScope.identifiers)
 
+	if s.usesRangedRelationshipPattern() && actionIdentifiers.Contains(s.identifiers.relationship) {
+		return nil, fmt.Errorf("ranged relationship patterns do not support relationship projections or mutations; return the path instead")
+	}
+
 	matchIdentifiers := readIdentifiers.Clone()
 	matchIdentifiers.Or(actionIdentifiers)
 
 	if err := validateKnownIdentifiers(matchIdentifiers, s.identifiers); err != nil {
 		return nil, err
+	}
+
+	if s.wantsTraversalPattern() && !isRelationshipPattern(matchIdentifiers, s.identifiers) && !matchIdentifiers.Contains(s.identifiers.path) {
+		return nil, fmt.Errorf("recursive traversal query requires relationship query identifiers")
 	}
 
 	if s.wantsShortestPathPattern() && !isRelationshipPattern(matchIdentifiers, s.identifiers) {
@@ -1328,8 +1425,8 @@ func (s *builder) Build() (*PreparedQuery, error) {
 			if err := prepareCreateRelationshipMatch(match, matchIdentifiers, s.identifiers); err != nil {
 				return nil, err
 			}
-		} else if isRelationshipPattern(matchIdentifiers, s.identifiers) {
-			if err := prepareRelationshipPattern(match, matchIdentifiers, s.identifiers, relationshipKinds, s.relationshipDirection, s.shortestPathQuery, s.allShorestPathsQuery); err != nil {
+		} else if isRelationshipPattern(matchIdentifiers, s.identifiers) || (s.wantsTraversalPattern() && matchIdentifiers.Contains(s.identifiers.path)) {
+			if err := prepareRelationshipPattern(match, matchIdentifiers, s.identifiers, relationshipKinds, s.traversalDepth, s.relationshipDirection, s.shortestPathQuery, s.allShorestPathsQuery); err != nil {
 				return nil, err
 			}
 		} else {

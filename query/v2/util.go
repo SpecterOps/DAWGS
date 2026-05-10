@@ -100,7 +100,7 @@ func validateRelationshipDirection(direction graph.Direction) error {
 	}
 }
 
-func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers, relationshipKinds graph.Kinds, direction graph.Direction, shortestPaths, allShortestPaths bool) error {
+func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers, relationshipKinds graph.Kinds, relationshipRange *cypher.PatternRange, direction graph.Direction, shortestPaths, allShortestPaths bool) error {
 	if shortestPaths && allShortestPaths {
 		return errors.New("query is requesting both all shortest paths and shortest paths")
 	}
@@ -109,7 +109,8 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identi
 		return err
 	}
 
-	if err := validateBoundIdentifiers(seen, relationshipPatternIdentifierSet(identifiers, shortestPaths || allShortestPaths)); err != nil {
+	hasRangedRelationshipPattern := relationshipRange != nil || shortestPaths || allShortestPaths
+	if err := validateBoundIdentifiers(seen, relationshipPatternIdentifierSet(identifiers, hasRangedRelationshipPattern)); err != nil {
 		return err
 	}
 
@@ -140,8 +141,13 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identi
 		relationshipPattern.Variable = identifiers.Relationship()
 	}
 
-	if shortestPaths || allShortestPaths {
+	if shortestPaths || allShortestPaths || (relationshipRange != nil && seen.Contains(identifiers.path)) {
 		newPatternPart.Variable = identifiers.Path()
+	}
+
+	if relationshipRange != nil {
+		relationshipPattern.Range = cypher.Copy(relationshipRange)
+	} else if shortestPaths || allShortestPaths {
 		relationshipPattern.Range = &cypher.PatternRange{}
 	}
 

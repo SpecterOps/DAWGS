@@ -231,6 +231,16 @@ func TestShortestPathControls(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "match p = allShortestPaths((s)-[r:MemberOf*]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
 
+	preparedQuery, err = v2.New().WithShortestPaths().WithTraversalDepth(v2.MinDepth(1)).Where(
+		v2.Relationship().Kind().Is(graph.StringKind("MemberOf")),
+		v2.Start().ID().Equals(1),
+		v2.End().ID().Equals(2),
+	).Return(
+		v2.Path(),
+	).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match p = shortestPath((s)-[r:MemberOf*1..]->(e)) where id(s) = $p0 and id(e) = $p1 return p", renderPrepared(t, preparedQuery))
+
 	_, err = v2.New().WithShortestPaths().WithAllShortestPaths().Where(
 		v2.Start().ID().Equals(1),
 		v2.End().ID().Equals(2),
@@ -244,6 +254,96 @@ func TestShortestPathControls(t *testing.T) {
 
 	_, err = v2.New().WithAllShortestPaths().Return(v2.As(v2.Literal(1), "one")).Build()
 	require.ErrorContains(t, err, "shortest path query requires relationship query identifiers")
+}
+
+func TestTraversalDepthControls(t *testing.T) {
+	cases := map[string]struct {
+		builder        v2.QueryBuilder
+		expectedCypher string
+		expectedParams map[string]any
+	}{
+		"any depth": {
+			builder:        v2.New().WithTraversalDepth(v2.AnyDepth()).Return(v2.End()),
+			expectedCypher: "match ()-[*]->(e) return e",
+		},
+		"minimum depth": {
+			builder:        v2.New().WithTraversalDepth(v2.MinDepth(1)).Return(v2.End()),
+			expectedCypher: "match ()-[*1..]->(e) return e",
+		},
+		"maximum depth": {
+			builder:        v2.New().WithTraversalDepth(v2.MaxDepth(5)).Return(v2.End()),
+			expectedCypher: "match ()-[*..5]->(e) return e",
+		},
+		"depth range": {
+			builder: v2.New().WithTraversalDepth(v2.DepthRange(1, 5)).Where(
+				v2.Relationship().Kind().IsOneOf(graph.Kinds{graph.StringKind("KindA"), graph.StringKind("KindB")}),
+				v2.Start().ID().Equals(1),
+				v2.End().Kinds().Has(graph.StringKind("User")),
+			).Return(
+				v2.Path(),
+				v2.End(),
+			),
+			expectedCypher: "match p = (s)-[r:KindA|KindB*1..5]->(e) where id(s) = $p0 and e:User return p, e",
+			expectedParams: map[string]any{"p0": 1},
+		},
+		"exact depth": {
+			builder:        v2.New().WithTraversalDepth(v2.ExactDepth(3)).Return(v2.End()),
+			expectedCypher: "match ()-[*3..3]->(e) return e",
+		},
+		"inbound depth range": {
+			builder:        v2.New().WithTraversalDepth(v2.DepthRange(2, 5)).WithRelationshipDirection(graph.DirectionInbound).Return(v2.Start()),
+			expectedCypher: "match (s)<-[*2..5]-() return s",
+		},
+		"path only": {
+			builder:        v2.New().WithTraversalDepth(v2.AnyDepth()).Return(v2.Path()),
+			expectedCypher: "match p = ()-[*]->() return p",
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			preparedQuery, err := testCase.builder.Build()
+			require.NoError(t, err)
+			require.Equal(t, testCase.expectedCypher, renderPrepared(t, preparedQuery))
+
+			if testCase.expectedParams == nil {
+				require.Empty(t, preparedQuery.Parameters)
+			} else {
+				require.Equal(t, testCase.expectedParams, preparedQuery.Parameters)
+			}
+		})
+	}
+}
+
+func TestInvalidTraversalDepthControls(t *testing.T) {
+	_, err := v2.New().WithTraversalDepth(v2.MinDepth(-1)).Return(v2.End()).Build()
+	require.ErrorContains(t, err, "traversal depth minimum must be non-negative: -1")
+
+	_, err = v2.New().WithTraversalDepth(v2.MaxDepth(-1)).Return(v2.End()).Build()
+	require.ErrorContains(t, err, "traversal depth maximum must be non-negative: -1")
+
+	_, err = v2.New().WithTraversalDepth(v2.DepthRange(3, 1)).Return(v2.End()).Build()
+	require.ErrorContains(t, err, "traversal depth maximum 1 is less than minimum 3")
+
+	_, err = v2.New().WithTraversalDepth(v2.AnyDepth()).Return(v2.Node()).Build()
+	require.ErrorContains(t, err, "recursive traversal query requires relationship query identifiers")
+
+	_, err = v2.New().WithTraversalDepth(v2.AnyDepth()).Where(
+		v2.Relationship().Property("enabled").Equals(true),
+	).Return(
+		v2.End(),
+	).Build()
+	require.ErrorContains(t, err, "ranged relationship patterns only support top-level relationship kind constraints")
+
+	_, err = v2.New().WithTraversalDepth(v2.AnyDepth()).Return(v2.Relationship()).Build()
+	require.ErrorContains(t, err, "ranged relationship patterns do not support relationship projections or mutations")
+
+	_, err = v2.New().WithTraversalDepth(v2.AnyDepth()).Where(
+		v2.Start().ID().Equals(1),
+	).Delete(
+		v2.Relationship(),
+	).Build()
+	require.ErrorContains(t, err, "ranged relationship patterns do not support relationship projections or mutations")
 }
 
 func TestMixedNodeAndRelationshipIdentifiersReturnError(t *testing.T) {

@@ -75,6 +75,17 @@ func TestBackendParityNeo4jPrepare(t *testing.T) {
 			expectedCypher: "match p = allShortestPaths((s)-[r:MemberOf*]->(e)) where id(s) = $p0 and id(e) = $p1 return p",
 			expectedParams: map[string]any{"p0": 1, "p1": 2},
 		},
+		"recursive traversal": {
+			builder: v2.New().WithTraversalDepth(v2.DepthRange(1, 2)).Where(
+				v2.Relationship().Kind().Is(graph.StringKind("MemberOf")),
+				v2.Start().ID().Equals(1),
+			).Return(
+				v2.Path(),
+				v2.End().ID(),
+			),
+			expectedCypher: "match p = (s)-[r:MemberOf*1..2]->(e) where id(s) = $p0 return p, id(e)",
+			expectedParams: map[string]any{"p0": 1},
+		},
 		"create node": {
 			builder: v2.New().Create(
 				v2.NodePattern(graph.Kinds{graph.StringKind("User")}, v2.NamedParameter("props", map[string]any{"name": "u"})),
@@ -125,6 +136,65 @@ func TestBackendParityNeo4jPrepare(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, testCase.expectedCypher, rendered)
 			require.Equal(t, testCase.expectedParams, queryBuilder.Parameters)
+		})
+	}
+}
+
+func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
+	edgeKind := graph.StringKind("MemberOf")
+	mapper := testKindMapper(edgeKind)
+
+	cases := map[string]struct {
+		builder             v2.QueryBuilder
+		expectedSQLContains []string
+	}{
+		"path": {
+			builder: v2.New().WithTraversalDepth(v2.DepthRange(1, 2)).Where(
+				v2.Relationship().Kind().Is(edgeKind),
+				v2.Start().ID().Equals(1),
+			).Return(
+				v2.Path(),
+			),
+			expectedSQLContains: []string{
+				"with recursive",
+				"ordered_edges_to_path",
+				"n0.id = @pi0::int8",
+				"e0.kind_id = any (array [1]::int2[])",
+				"depth < 2",
+			},
+		},
+		"endpoints": {
+			builder: v2.New().WithTraversalDepth(v2.DepthRange(1, 2)).Where(
+				v2.Relationship().Kind().Is(edgeKind),
+				v2.Start().ID().Equals(1),
+			).Return(
+				v2.Start().ID(),
+				v2.End().ID(),
+			),
+			expectedSQLContains: []string{
+				"with recursive",
+				"n0.id = @pi0::int8",
+				"e0.kind_id = any (array [1]::int2[])",
+				"depth < 2",
+				"select (s0.n0).id, (s0.n1).id from s0",
+			},
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			preparedQuery, err := testCase.builder.Build()
+			require.NoError(t, err)
+
+			translation, err := translate.Translate(context.Background(), preparedQuery.Query, mapper, preparedQuery.Parameters, translate.DefaultGraphID)
+			require.NoError(t, err)
+
+			sql, err := translate.Translated(translation)
+			require.NoError(t, err)
+
+			for _, expected := range testCase.expectedSQLContains {
+				require.Contains(t, sql, expected)
+			}
 		})
 	}
 }
