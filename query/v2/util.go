@@ -665,6 +665,10 @@ func (s *identifierSet) CollectFromValue(value any) error {
 			}
 		}
 
+		if err := s.CollectFromProjectionMetadata(typedValue.Projection); err != nil {
+			return err
+		}
+
 	case *cypher.Order:
 		if sortItems, err := sortItemsFromOrder(typedValue); err != nil {
 			return err
@@ -781,6 +785,32 @@ func (s *identifierSet) CollectFromValue(value any) error {
 
 	default:
 		return nil
+	}
+
+	return nil
+}
+
+func (s *identifierSet) CollectFromProjectionMetadata(projection *cypher.Projection) error {
+	if projection == nil {
+		return nil
+	}
+
+	if projection.Order != nil {
+		if err := s.CollectFromValue(projection.Order); err != nil {
+			return err
+		}
+	}
+
+	if projection.Skip != nil {
+		if err := s.CollectFromExpression(projection.Skip.Value); err != nil {
+			return err
+		}
+	}
+
+	if projection.Limit != nil {
+		if err := s.CollectFromExpression(projection.Limit.Value); err != nil {
+			return err
+		}
 	}
 
 	return nil

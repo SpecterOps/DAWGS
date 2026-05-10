@@ -397,6 +397,22 @@ func TestRawReturnInputPreservesProjectionMetadata(t *testing.T) {
 	require.Equal(t, "match (n) return distinct id(n) order by n.name desc skip 5 limit 10", renderPrepared(t, preparedQuery))
 }
 
+func TestRawReturnMetadataCreatesMatchInference(t *testing.T) {
+	returnClause := cypher.NewReturn()
+	projection := returnClause.NewProjection(false)
+	projection.Items = append(projection.Items, v2.Literal(1))
+	projection.Order = &cypher.Order{
+		Items: []*cypher.SortItem{
+			v2.Desc(v2.Node().Property("name")),
+		},
+	}
+
+	preparedQuery, err := v2.New().Return(returnClause).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return 1 order by n.name desc", renderPrepared(t, preparedQuery))
+}
+
 func TestRawReturnInputMergesWithBuilderProjectionControls(t *testing.T) {
 	returnClause := cypher.NewReturn()
 	projection := returnClause.NewProjection(true)
