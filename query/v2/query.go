@@ -829,8 +829,9 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 				pendingDetachDelete = true
 			}
 
-			s.deleteItems = append(s.deleteItems, qualifier)
-			pendingDeleteItems = append(pendingDeleteItems, qualifier)
+			deleteItem := copyExpression(qualifier)
+			s.deleteItems = append(s.deleteItems, deleteItem)
+			pendingDeleteItems = append(pendingDeleteItems, deleteItem)
 
 		case *cypher.Variable:
 			if err := validateExpressionValue(typedNextUpdate, "delete expression"); err != nil {
@@ -844,8 +845,9 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 				pendingDetachDelete = true
 			}
 
-			s.deleteItems = append(s.deleteItems, typedNextUpdate)
-			pendingDeleteItems = append(pendingDeleteItems, typedNextUpdate)
+			deleteItem := copyExpression(typedNextUpdate)
+			s.deleteItems = append(s.deleteItems, deleteItem)
+			pendingDeleteItems = append(pendingDeleteItems, deleteItem)
 
 		default:
 			s.trackError(fmt.Errorf("unknown delete type: %T", nextDelete))
@@ -906,7 +908,7 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 				return err
 			}
 
-			pattern.AddPatternElements(typedNextCreate)
+			pattern.AddPatternElements(cypher.Copy(typedNextCreate))
 
 		case *cypher.RelationshipPattern:
 			if err := validateRelationshipPattern(typedNextCreate); err != nil {
@@ -917,7 +919,7 @@ func buildCreates(singlePartQuery *cypher.SinglePartQuery, identifiers runtimeId
 				Variable: identifiers.Start(),
 			})
 
-			pattern.AddPatternElements(typedNextCreate)
+			pattern.AddPatternElements(cypher.Copy(typedNextCreate))
 
 			pattern.AddPatternElements(&cypher.NodePattern{
 				Variable: identifiers.End(),
@@ -1031,11 +1033,11 @@ func applyReturnProjection(projection *cypher.Projection, returnClause *cypher.R
 	}
 
 	if returnClause.Projection.Skip != nil {
-		projection.Skip = returnClause.Projection.Skip
+		projection.Skip = copySkip(returnClause.Projection.Skip)
 	}
 
 	if returnClause.Projection.Limit != nil {
-		projection.Limit = returnClause.Projection.Limit
+		projection.Limit = copyLimit(returnClause.Projection.Limit)
 	}
 
 	return nil
@@ -1154,10 +1156,11 @@ func (s *builder) Build() (*PreparedQuery, error) {
 				}
 			}
 
+			constraintCopy := cypher.Copy(nextConstraint)
 			if constraints.Left == nil {
-				constraints.Left = nextConstraint
+				constraints.Left = constraintCopy
 			} else {
-				constraints.NewPartialComparison(cypher.OperatorAnd, nextConstraint)
+				constraints.NewPartialComparison(cypher.OperatorAnd, constraintCopy)
 			}
 		}
 

@@ -449,6 +449,41 @@ func TestNamedParameterMaterialization(t *testing.T) {
 	require.ErrorContains(t, err, "parameter same is bound to multiple values")
 }
 
+func TestBuildDoesNotMutateCallerOwnedAST(t *testing.T) {
+	constraint := v2.Node().Property("name").Equals("alice")
+	constraintParameter := constraint.(*cypher.Comparison).FirstPartial().Right.(*cypher.Parameter)
+
+	preparedQuery, err := v2.New().Where(constraint).Return(v2.Node()).Build()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"p0": "alice"}, preparedQuery.Parameters)
+	require.Empty(t, constraintParameter.Symbol)
+
+	setItem := v2.SetProperty(v2.Node().Property("status"), "active")
+	setParameter := setItem.Right.(*cypher.Parameter)
+
+	preparedQuery, err = v2.New().Where(v2.Node().ID().Equals(1)).Update(setItem).Build()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"p0": 1, "p1": "active"}, preparedQuery.Parameters)
+	require.Empty(t, setParameter.Symbol)
+
+	createPattern := v2.NodePattern(graph.Kinds{graph.StringKind("User")}, v2.Parameter(map[string]any{"name": "node"}))
+	createParameter := createPattern.Properties.(*cypher.Parameter)
+
+	preparedQuery, err = v2.New().Create(createPattern).Build()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"p0": map[string]any{"name": "node"}}, preparedQuery.Parameters)
+	require.Empty(t, createParameter.Symbol)
+
+	rawReturn := cypher.NewReturn()
+	rawReturn.NewProjection(false).AddItem(cypher.NewProjectionItemWithExpr(v2.Parameter("projected")))
+	rawReturnParameter := rawReturn.Projection.Items[0].(*cypher.ProjectionItem).Expression.(*cypher.Parameter)
+
+	preparedQuery, err = v2.New().Return(rawReturn).Build()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"p0": "projected"}, preparedQuery.Parameters)
+	require.Empty(t, rawReturnParameter.Symbol)
+}
+
 func TestCompatibilityHelpers(t *testing.T) {
 	preparedQuery, err := v2.New().Where(
 		v2.And(

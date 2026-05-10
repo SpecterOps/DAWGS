@@ -308,6 +308,34 @@ func projectionExpression(value any) (cypher.Expression, error) {
 	}
 }
 
+func copyExpression(expression cypher.Expression) cypher.Expression {
+	return cypher.Copy(expression)
+}
+
+func copyProjectionItem(item *cypher.ProjectionItem) *cypher.ProjectionItem {
+	return cypher.Copy(item)
+}
+
+func copySortItem(item *cypher.SortItem) *cypher.SortItem {
+	return cypher.Copy(item)
+}
+
+func copySetItem(item *cypher.SetItem) *cypher.SetItem {
+	return cypher.Copy(item)
+}
+
+func copyRemoveItem(item *cypher.RemoveItem) *cypher.RemoveItem {
+	return cypher.Copy(item)
+}
+
+func copySkip(skip *cypher.Skip) *cypher.Skip {
+	return cypher.Copy(skip)
+}
+
+func copyLimit(limit *cypher.Limit) *cypher.Limit {
+	return cypher.Copy(limit)
+}
+
 func validateExpressionValue(expression cypher.Expression, context string) error {
 	if isNilPointer(expression) {
 		return fmt.Errorf("%s has nil expression", context)
@@ -346,7 +374,7 @@ func setItemFromValue(setItem *cypher.SetItem) (*cypher.SetItem, error) {
 		return nil, err
 	}
 
-	return setItem, nil
+	return copySetItem(setItem), nil
 }
 
 func setItemsFromSet(setClause *cypher.Set) ([]*cypher.SetItem, error) {
@@ -397,7 +425,7 @@ func removeItemFromValue(removeItem *cypher.RemoveItem) (*cypher.RemoveItem, err
 		return nil, err
 	}
 
-	return removeItem, nil
+	return copyRemoveItem(removeItem), nil
 }
 
 func removeItemsFromRemove(removeClause *cypher.Remove) ([]*cypher.RemoveItem, error) {
@@ -458,13 +486,13 @@ func projectionItemFromValue(value any) (*cypher.ProjectionItem, error) {
 			return nil, err
 		}
 
-		return projectionItem, nil
+		return copyProjectionItem(projectionItem), nil
 	}
 
 	if expression, err := projectionExpression(value); err != nil {
 		return nil, err
 	} else {
-		return cypher.NewProjectionItemWithExpr(expression), nil
+		return cypher.NewProjectionItemWithExpr(copyExpression(expression)), nil
 	}
 }
 
@@ -482,7 +510,7 @@ func sortItemFromValue(value any) (*cypher.SortItem, error) {
 			return nil, err
 		}
 
-		return sortItem, nil
+		return copySortItem(sortItem), nil
 	}
 
 	if expression, err := projectionExpression(value); err != nil {
@@ -490,7 +518,7 @@ func sortItemFromValue(value any) (*cypher.SortItem, error) {
 	} else {
 		return &cypher.SortItem{
 			Ascending:  true,
-			Expression: expression,
+			Expression: copyExpression(expression),
 		}, nil
 	}
 }
