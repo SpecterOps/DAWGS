@@ -891,7 +891,7 @@ func (s *builder) Delete(deleteItems ...any) QueryBuilder {
 				continue
 			}
 
-			s.trackError(fmt.Errorf("delete target must be an entity, path, or variable; got %T", nextDelete))
+			s.trackError(fmt.Errorf("delete target must be a node, relationship, or variable; got %T", nextDelete))
 
 		default:
 			s.trackError(fmt.Errorf("unknown delete type: %T", nextDelete))
@@ -910,6 +910,10 @@ func deleteItemFromExpression(expression cypher.Expression, identifiers runtimeI
 	variable, typeOK := expression.(*cypher.Variable)
 	if !typeOK || variable == nil {
 		return nil, false, fmt.Errorf("delete target must resolve to a variable, got %T", expression)
+	}
+
+	if variable.Symbol == identifiers.path {
+		return nil, false, fmt.Errorf("delete target must be a node or relationship variable, got path variable %q", variable.Symbol)
 	}
 
 	return copyExpression(variable), isDetachDeleteQualifier(variable, identifiers), nil

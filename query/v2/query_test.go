@@ -478,9 +478,17 @@ func TestDeleteRejectsNonTargetQualifiedExpressions(t *testing.T) {
 	for name, target := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := v2.New().Delete(target).Build()
-			require.ErrorContains(t, err, "delete target must be an entity, path, or variable")
+			require.ErrorContains(t, err, "delete target must be a node, relationship, or variable")
 		})
 	}
+}
+
+func TestDeleteRejectsPathTargets(t *testing.T) {
+	_, err := v2.New().Delete(v2.Path()).Build()
+	require.ErrorContains(t, err, `delete target must be a node or relationship variable, got path variable "p"`)
+
+	_, err = v2.New().Delete(v2.Variable("p")).Build()
+	require.ErrorContains(t, err, `delete target must be a node or relationship variable, got path variable "p"`)
 }
 
 func TestInvalidHelperInputsReturnBuildErrors(t *testing.T) {
