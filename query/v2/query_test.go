@@ -274,6 +274,18 @@ func TestProjectionAndOrderHelpers(t *testing.T) {
 	require.Equal(t, "match (n) return distinct id(n) as node_id order by n.name asc, id(n) desc", renderPrepared(t, preparedQuery))
 }
 
+func TestPaginationZeroValuesAndNegativeValidation(t *testing.T) {
+	preparedQuery, err := v2.New().Return(v2.Node()).Skip(0).Limit(0).Build()
+	require.NoError(t, err)
+	require.Equal(t, "match (n) return n skip 0 limit 0", renderPrepared(t, preparedQuery))
+
+	_, err = v2.New().Return(v2.Node()).Skip(-1).Build()
+	require.ErrorContains(t, err, "skip must be non-negative: -1")
+
+	_, err = v2.New().Return(v2.Node()).Limit(-1).Build()
+	require.ErrorContains(t, err, "limit must be non-negative: -1")
+}
+
 func TestProjectionAliasDoesNotCreateMatchInference(t *testing.T) {
 	preparedQuery, err := v2.New().Return(
 		v2.As(v2.Literal(1), "one"),

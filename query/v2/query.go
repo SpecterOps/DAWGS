@@ -685,11 +685,21 @@ func (s *builder) OrderBy(sortItems ...any) QueryBuilder {
 }
 
 func (s *builder) Skip(skip int) QueryBuilder {
+	if skip < 0 {
+		s.trackError(fmt.Errorf("skip must be non-negative: %d", skip))
+		return s
+	}
+
 	s.skip = &skip
 	return s
 }
 
 func (s *builder) Limit(limit int) QueryBuilder {
+	if limit < 0 {
+		s.trackError(fmt.Errorf("limit must be non-negative: %d", limit))
+		return s
+	}
+
 	s.limit = &limit
 	return s
 }
@@ -1081,8 +1091,8 @@ func applyReturnProjection(projection *cypher.Projection, returnClause *cypher.R
 func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error {
 	var (
 		hasProjectedItems  = len(s.projections) > 0
-		hasSkip            = s.skip != nil && *s.skip > 0
-		hasLimit           = s.limit != nil && *s.limit > 0
+		hasSkip            = s.skip != nil
+		hasLimit           = s.limit != nil
 		requiresProjection = hasProjectedItems || hasSkip || hasLimit
 	)
 
@@ -1109,11 +1119,11 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 			}
 		}
 
-		if s.skip != nil && *s.skip > 0 {
+		if s.skip != nil {
 			projection.Skip = cypher.NewSkip(*s.skip)
 		}
 
-		if s.limit != nil && *s.limit > 0 {
+		if s.limit != nil {
 			projection.Limit = cypher.NewLimit(*s.limit)
 		}
 
