@@ -446,8 +446,8 @@ type KindContinuation interface {
 type KindsContinuation interface {
 	Has(kind graph.Kind) cypher.Expression
 	HasOneOf(kinds graph.Kinds) cypher.Expression
-	Add(kinds graph.Kinds) cypher.Expression
-	Remove(kinds graph.Kinds) cypher.Expression
+	Add(kinds graph.Kinds) *cypher.SetItem
+	Remove(kinds graph.Kinds) *cypher.RemoveItem
 }
 
 type Comparable interface {
@@ -576,7 +576,7 @@ func (s *entity[T]) Count() cypher.Expression {
 	return cypher.NewSimpleFunctionInvocation(cypher.CountFunction, s.identifier)
 }
 
-func (s *entity[T]) SetProperties(properties map[string]any) cypher.Expression {
+func (s *entity[T]) SetProperties(properties map[string]any) *cypher.Set {
 	set := &cypher.Set{}
 
 	for _, key := range sortedPropertyKeys(properties) {
@@ -586,7 +586,7 @@ func (s *entity[T]) SetProperties(properties map[string]any) cypher.Expression {
 	return set
 }
 
-func (s *entity[T]) RemoveProperties(properties []string) cypher.Expression {
+func (s *entity[T]) RemoveProperties(properties []string) *cypher.Remove {
 	remove := &cypher.Remove{}
 
 	for _, key := range properties {
@@ -689,7 +689,7 @@ func (s kindsContinuation) HasOneOf(kinds graph.Kinds) cypher.Expression {
 	}
 }
 
-func (s kindsContinuation) Add(kinds graph.Kinds) cypher.Expression {
+func (s kindsContinuation) Add(kinds graph.Kinds) *cypher.SetItem {
 	return cypher.NewSetItem(
 		s.identifier,
 		cypher.OperatorLabelAssignment,
@@ -697,7 +697,7 @@ func (s kindsContinuation) Add(kinds graph.Kinds) cypher.Expression {
 	)
 }
 
-func (s kindsContinuation) Remove(kinds graph.Kinds) cypher.Expression {
+func (s kindsContinuation) Remove(kinds graph.Kinds) *cypher.RemoveItem {
 	return cypher.RemoveKindsByMatcher(cypher.NewKindMatcher(s.identifier, kinds, false))
 }
 
@@ -713,8 +713,8 @@ type RelationshipContinuation interface {
 	RelationshipPattern(kind graph.Kind, properties cypher.Expression, direction graph.Direction) cypher.Expression
 
 	Kind() KindContinuation
-	SetProperties(properties map[string]any) cypher.Expression
-	RemoveProperties(properties []string) cypher.Expression
+	SetProperties(properties map[string]any) *cypher.Set
+	RemoveProperties(properties []string) *cypher.Remove
 }
 
 type NodeContinuation interface {
@@ -723,8 +723,8 @@ type NodeContinuation interface {
 	NodePattern(kinds graph.Kinds, properties cypher.Expression) cypher.Expression
 
 	Kinds() KindsContinuation
-	SetProperties(properties map[string]any) cypher.Expression
-	RemoveProperties(properties []string) cypher.Expression
+	SetProperties(properties map[string]any) *cypher.Set
+	RemoveProperties(properties []string) *cypher.Remove
 }
 
 type QueryBuilder interface {

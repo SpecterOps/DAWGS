@@ -857,6 +857,28 @@ func TestUpdateCompatibilityHelpers(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestFluentMutationHelpersReturnConcreteMutationTypes(t *testing.T) {
+	kinds := graph.Kinds{graph.StringKind("Enabled")}
+
+	var addItem *cypher.SetItem = v2.Node().Kinds().Add(kinds)
+	require.NotNil(t, addItem)
+
+	var removeItem *cypher.RemoveItem = v2.Node().Kinds().Remove(kinds)
+	require.NotNil(t, removeItem)
+
+	var nodeSet *cypher.Set = v2.Node().SetProperties(map[string]any{"name": "updated"})
+	require.Len(t, nodeSet.Items, 1)
+
+	var nodeRemove *cypher.Remove = v2.Node().RemoveProperties([]string{"stale"})
+	require.Len(t, nodeRemove.Items, 1)
+
+	var relationshipSet *cypher.Set = v2.Relationship().SetProperties(map[string]any{"name": "updated"})
+	require.Len(t, relationshipSet.Items, 1)
+
+	var relationshipRemove *cypher.Remove = v2.Relationship().RemoveProperties([]string{"stale"})
+	require.Len(t, relationshipRemove.Items, 1)
+}
+
 func TestSetPropertiesSortsKeys(t *testing.T) {
 	properties := map[string]any{
 		"zeta":  3,
