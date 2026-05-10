@@ -27,9 +27,61 @@ func isRelationshipPattern(seen *identifierSet, identifiers runtimeIdentifiers) 
 	return hasStart || hasRelationship || hasEnd
 }
 
+func runtimeIdentifierSet(identifiers runtimeIdentifiers) *identifierSet {
+	return newIdentifierSet(
+		identifiers.path,
+		identifiers.node,
+		identifiers.start,
+		identifiers.relationship,
+		identifiers.end,
+	)
+}
+
+func nodePatternIdentifierSet(identifiers runtimeIdentifiers) *identifierSet {
+	return newIdentifierSet(identifiers.node)
+}
+
+func relationshipPatternIdentifierSet(identifiers runtimeIdentifiers, includePath bool) *identifierSet {
+	allowedIdentifiers := newIdentifierSet(
+		identifiers.start,
+		identifiers.relationship,
+		identifiers.end,
+	)
+
+	if includePath {
+		allowedIdentifiers.Add(identifiers.path)
+	}
+
+	return allowedIdentifiers
+}
+
+func createRelationshipMatchIdentifierSet(identifiers runtimeIdentifiers) *identifierSet {
+	return newIdentifierSet(identifiers.start, identifiers.end)
+}
+
+func validateKnownIdentifiers(seen *identifierSet, identifiers runtimeIdentifiers) error {
+	if identifier, hasIdentifier := seen.FirstOutside(runtimeIdentifierSet(identifiers)); hasIdentifier {
+		return fmt.Errorf("query contains unknown identifier %q", identifier)
+	}
+
+	return nil
+}
+
+func validateBoundIdentifiers(seen, bound *identifierSet) error {
+	if identifier, hasIdentifier := seen.FirstOutside(bound); hasIdentifier {
+		return fmt.Errorf("query contains unbound identifier %q", identifier)
+	}
+
+	return nil
+}
+
 func prepareNodePattern(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers) error {
 	if isRelationshipPattern(seen, identifiers) {
 		return fmt.Errorf("query mixes node and relationship query identifiers")
+	}
+
+	if err := validateBoundIdentifiers(seen, nodePatternIdentifierSet(identifiers)); err != nil {
+		return err
 	}
 
 	match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
@@ -54,6 +106,10 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identi
 	}
 
 	if err := validateRelationshipDirection(direction); err != nil {
+		return err
+	}
+
+	if err := validateBoundIdentifiers(seen, relationshipPatternIdentifierSet(identifiers, shortestPaths || allShortestPaths)); err != nil {
 		return err
 	}
 
@@ -103,6 +159,10 @@ func prepareRelationshipPattern(match *cypher.Match, seen *identifierSet, identi
 }
 
 func prepareCreateRelationshipMatch(match *cypher.Match, seen *identifierSet, identifiers runtimeIdentifiers) error {
+	if err := validateBoundIdentifiers(seen, createRelationshipMatchIdentifierSet(identifiers)); err != nil {
+		return err
+	}
+
 	if seen.Contains(identifiers.start) {
 		match.NewPatternPart().AddPatternElements(&cypher.NodePattern{
 			Variable: identifiers.Start(),
@@ -593,10 +653,16 @@ type identifierSet struct {
 	identifiers map[string]struct{}
 }
 
-func newIdentifierSet() *identifierSet {
-	return &identifierSet{
+func newIdentifierSet(identifiers ...string) *identifierSet {
+	set := &identifierSet{
 		identifiers: map[string]struct{}{},
 	}
+
+	for _, identifier := range identifiers {
+		set.Add(identifier)
+	}
+
+	return set
 }
 
 func (s *identifierSet) Add(identifier string) {
@@ -628,6 +694,24 @@ func (s *identifierSet) Remove(other *identifierSet) {
 func (s *identifierSet) Contains(identifier string) bool {
 	_, containsIdentifier := s.identifiers[identifier]
 	return containsIdentifier
+}
+
+func (s *identifierSet) FirstOutside(allowed *identifierSet) (string, bool) {
+	var identifiers []string
+
+	for identifier := range s.identifiers {
+		if !allowed.Contains(identifier) {
+			identifiers = append(identifiers, identifier)
+		}
+	}
+
+	sort.Strings(identifiers)
+
+	if len(identifiers) == 0 {
+		return "", false
+	}
+
+	return identifiers[0], true
 }
 
 func (s *identifierSet) CollectFromExpression(expr cypher.Expression) error {

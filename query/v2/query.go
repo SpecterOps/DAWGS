@@ -1311,6 +1311,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	matchIdentifiers := readIdentifiers.Clone()
 	matchIdentifiers.Or(actionIdentifiers)
 
+	if err := validateKnownIdentifiers(matchIdentifiers, s.identifiers); err != nil {
+		return nil, err
+	}
+
 	if s.wantsShortestPathPattern() && !isRelationshipPattern(matchIdentifiers, s.identifiers) {
 		return nil, fmt.Errorf("shortest path query requires relationship query identifiers")
 	}

@@ -256,6 +256,57 @@ func TestMixedNodeAndRelationshipIdentifiersReturnError(t *testing.T) {
 	require.ErrorContains(t, err, "query mixes node and relationship query identifiers")
 }
 
+func TestRawIdentifiersMustBeKnownToScope(t *testing.T) {
+	cases := map[string]v2.QueryBuilder{
+		"delete": v2.New().Where(
+			v2.Node().ID().Equals(1),
+		).Delete(
+			v2.Variable("x"),
+		),
+		"projection": v2.New().Return(
+			v2.Node(),
+			v2.Variable("x"),
+		),
+		"sort": v2.New().Return(
+			v2.Node(),
+		).OrderBy(
+			v2.Asc(v2.Variable("x")),
+		),
+	}
+
+	for name, builder := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := builder.Build()
+			require.ErrorContains(t, err, `query contains unknown identifier "x"`)
+		})
+	}
+}
+
+func TestPathIdentifierRequiresShortestPathMatch(t *testing.T) {
+	_, err := v2.New().Return(
+		v2.Node(),
+		v2.Path(),
+	).Build()
+	require.ErrorContains(t, err, `query contains unbound identifier "p"`)
+
+	_, err = v2.New().Return(
+		v2.Relationship(),
+		v2.Path(),
+	).Build()
+	require.ErrorContains(t, err, `query contains unbound identifier "p"`)
+}
+
+func TestCreatedRawIdentifiersDoNotRequireMatch(t *testing.T) {
+	preparedQuery, err := v2.New().Create(&cypher.NodePattern{
+		Variable: v2.Variable("created"),
+	}).Return(
+		v2.Variable("created"),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "create (created) return created", renderPrepared(t, preparedQuery))
+}
+
 func TestMultipleRelationshipKindMatchersRemainConjunctive(t *testing.T) {
 	preparedQuery, err := v2.New().Where(
 		v2.Relationship().Kind().Is(graph.StringKind("A")),
