@@ -363,6 +363,10 @@ func Or(operands ...cypher.SyntaxNode) cypher.SyntaxNode {
 		return errExpression
 	}
 
+	for idx, expression := range expressions {
+		expressions[idx] = parenthesizeLogicalExpression(expression)
+	}
+
 	return cypher.NewParenthetical(cypher.NewDisjunction(expressions...))
 }
 

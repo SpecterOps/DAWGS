@@ -149,6 +149,13 @@ func TestLogicalHelpersPreservePrecedence(t *testing.T) {
 			expected: "match (n) where n.a = $p0 and (n.b = $p1 or n.c = $p2) return n",
 		},
 		{
+			name: "nested and is parenthesized inside or",
+			builder: v2.New().Where(
+				v2.Or(v2.And(a, b), c),
+			).Return(v2.Node()),
+			expected: "match (n) where ((n.a = $p0 and n.b = $p1) or n.c = $p2) return n",
+		},
+		{
 			name: "not wraps or",
 			builder: v2.New().Where(
 				v2.Not(v2.Or(a, b)),
