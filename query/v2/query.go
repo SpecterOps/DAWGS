@@ -1184,6 +1184,22 @@ func (s *builder) buildProjection(singlePartQuery *cypher.SinglePartQuery) error
 	return nil
 }
 
+func countRelationshipKindMatchers(constraints []cypher.SyntaxNode, identifiers runtimeIdentifiers) (int, error) {
+	var count int
+
+	for _, nextConstraint := range constraints {
+		if kindMatcher, typeOK := nextConstraint.(*cypher.KindMatcher); typeOK {
+			if identifier, typeOK := kindMatcher.Reference.(*cypher.Variable); !typeOK {
+				return 0, fmt.Errorf("expected type *cypher.Variable, got %T", kindMatcher.Reference)
+			} else if identifier.Symbol == identifiers.relationship {
+				count++
+			}
+		}
+	}
+
+	return count, nil
+}
+
 type PreparedQuery struct {
 	Query      *cypher.RegularQuery
 	Parameters map[string]any
@@ -1232,9 +1248,13 @@ func (s *builder) Build() (*PreparedQuery, error) {
 
 	if len(s.constraints) > 0 {
 		var (
-			whereClause = match.NewWhere()
-			constraints = &cypher.Comparison{}
+			whereClause                      = match.NewWhere()
+			constraints                      = &cypher.Comparison{}
+			numRelationshipKindMatchers, err = countRelationshipKindMatchers(s.constraints, s.identifiers)
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		for _, nextConstraint := range s.constraints {
 			if err := collectModelErrorsFromKnownValues(nextConstraint); err != nil {
@@ -1244,8 +1264,8 @@ func (s *builder) Build() (*PreparedQuery, error) {
 			switch typedNextConstraint := nextConstraint.(type) {
 			case *cypher.KindMatcher:
 				if identifier, typeOK := typedNextConstraint.Reference.(*cypher.Variable); !typeOK {
-					return nil, fmt.Errorf("expected type *cypher.Variable, got %T", typedNextConstraint)
-				} else if identifier.Symbol == s.identifiers.relationship {
+					return nil, fmt.Errorf("expected type *cypher.Variable, got %T", typedNextConstraint.Reference)
+				} else if identifier.Symbol == s.identifiers.relationship && numRelationshipKindMatchers == 1 {
 					relationshipKinds = relationshipKinds.Add(typedNextConstraint.Kinds...)
 					readIdentifiers.Add(s.identifiers.relationship)
 					continue

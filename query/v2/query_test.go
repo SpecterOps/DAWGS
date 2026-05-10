@@ -256,6 +256,18 @@ func TestMixedNodeAndRelationshipIdentifiersReturnError(t *testing.T) {
 	require.ErrorContains(t, err, "query mixes node and relationship query identifiers")
 }
 
+func TestMultipleRelationshipKindMatchersRemainConjunctive(t *testing.T) {
+	preparedQuery, err := v2.New().Where(
+		v2.Relationship().Kind().Is(graph.StringKind("A")),
+		v2.Relationship().Kind().Is(graph.StringKind("B")),
+	).Return(
+		v2.Relationship(),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match ()-[r]->() where r:A and r:B return r", renderPrepared(t, preparedQuery))
+}
+
 func TestEmptyLogicalHelpersReturnBuildErrors(t *testing.T) {
 	_, err := v2.New().Where(v2.And()).Return(v2.Node()).Build()
 	require.ErrorContains(t, err, "and requires at least one operand")
