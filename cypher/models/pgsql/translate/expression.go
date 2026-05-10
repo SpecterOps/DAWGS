@@ -831,90 +831,38 @@ func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, n
 	)
 }
 
-func escapeLikePatternExpression(expression pgsql.Expression) pgsql.Expression {
-	var escapedExpression pgsql.Expression = pgsql.NewTypeCast(expression, pgsql.Text)
-
-	for _, replacement := range []struct {
-		old string
-		new string
-	}{
-		{old: "\\", new: "\\\\"},
-		{old: "%", new: "\\%"},
-		{old: "_", new: "\\_"},
-	} {
-		escapedExpression = pgsql.FunctionCall{
-			Function: pgsql.FunctionReplace,
-			Parameters: []pgsql.Expression{
-				escapedExpression,
-				pgsql.NewLiteral(replacement.old, pgsql.Text),
-				pgsql.NewLiteral(replacement.new, pgsql.Text),
-			},
-			CastType: pgsql.Text,
-		}
-	}
-
-	return escapedExpression
-}
-
-func escapeLikePatternOperand(operand pgsql.Expression) (pgsql.Expression, error) {
+func cypherStringPredicateTextOperand(operand pgsql.Expression) (pgsql.Expression, error) {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(operand); isPropertyLookup {
 		propertyLookup.Operator = pgsql.OperatorJSONTextField
-		return escapeLikePatternExpression(propertyLookup), nil
+		return propertyLookup, nil
 	}
 
 	if parenthetical, isParenthetical := operand.(*pgsql.Parenthetical); isParenthetical {
-		typeCastedOperand, err := TypeCastExpression(parenthetical, pgsql.Text)
-		if err != nil {
-			return nil, err
-		}
-
-		return escapeLikePatternExpression(typeCastedOperand), nil
+		return TypeCastExpression(parenthetical, pgsql.Text)
 	}
 
-	return escapeLikePatternExpression(operand), nil
+	return pgsql.NewTypeCast(operand, pgsql.Text), nil
 }
 
-func buildContainsLikePattern(operand pgsql.Expression) (pgsql.Expression, error) {
-	escapedOperand, err := escapeLikePatternOperand(operand)
+func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand pgsql.Expression) (pgsql.Expression, error) {
+	leftText, err := cypherStringPredicateTextOperand(lOperand)
 	if err != nil {
 		return nil, err
 	}
 
-	return pgsql.NewBinaryExpression(
-		pgsql.NewLiteral("%", pgsql.Text),
-		pgsql.OperatorConcatenate,
-		pgsql.NewBinaryExpression(
-			escapedOperand,
-			pgsql.OperatorConcatenate,
-			pgsql.NewLiteral("%", pgsql.Text),
-		),
-	), nil
-}
-
-func buildStartsWithLikePattern(operand pgsql.Expression) (pgsql.Expression, error) {
-	escapedOperand, err := escapeLikePatternOperand(operand)
+	rightText, err := cypherStringPredicateTextOperand(rOperand)
 	if err != nil {
 		return nil, err
 	}
 
-	return pgsql.NewBinaryExpression(
-		escapedOperand,
-		pgsql.OperatorConcatenate,
-		pgsql.NewLiteral("%", pgsql.Text),
-	), nil
-}
-
-func buildEndsWithLikePattern(operand pgsql.Expression) (pgsql.Expression, error) {
-	escapedOperand, err := escapeLikePatternOperand(operand)
-	if err != nil {
-		return nil, err
-	}
-
-	return pgsql.NewBinaryExpression(
-		pgsql.NewLiteral("%", pgsql.Text),
-		pgsql.OperatorConcatenate,
-		escapedOperand,
-	), nil
+	return pgsql.FunctionCall{
+		Function: function,
+		Parameters: []pgsql.Expression{
+			leftText,
+			rightText,
+		},
+		CastType: pgsql.Boolean,
+	}, nil
 }
 
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
@@ -954,25 +902,16 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 				newExpression.ROperand = pgsql.NewLiteral("%"+stringValue+"%", rOperandDataType)
 			}
 
-		case *pgsql.Parenthetical:
-			if pattern, err := buildContainsLikePattern(typedROperand); err != nil {
-				return err
-			} else {
-				newExpression.ROperand = pattern
-			}
-
-		case *pgsql.BinaryExpression:
-			if pattern, err := buildContainsLikePattern(typedROperand); err != nil {
-				return err
-			} else {
-				newExpression.ROperand = pgsql.NewTypeCast(pattern, pgsql.Text)
-			}
-
 		default:
-			if pattern, err := buildContainsLikePattern(typedROperand); err != nil {
+			if predicateFunction, err := cypherStringPredicateFunction(
+				pgsql.FunctionCypherContains,
+				newExpression.LOperand,
+				typedROperand,
+			); err != nil {
 				return err
 			} else {
-				newExpression.ROperand = pattern
+				s.PushOperand(predicateFunction)
+				return nil
 			}
 		}
 
@@ -1004,25 +943,16 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 				newExpression.ROperand = pgsql.NewLiteral(stringValue+"%", rOperandDataType)
 			}
 
-		case *pgsql.Parenthetical:
-			if pattern, err := buildStartsWithLikePattern(typedROperand); err != nil {
-				return err
-			} else {
-				newExpression.ROperand = pattern
-			}
-
-		case *pgsql.BinaryExpression:
-			if pattern, err := buildStartsWithLikePattern(typedROperand); err != nil {
-				return err
-			} else {
-				newExpression.ROperand = pgsql.NewTypeCast(pattern, pgsql.Text)
-			}
-
 		default:
-			if pattern, err := buildStartsWithLikePattern(typedROperand); err != nil {
+			if predicateFunction, err := cypherStringPredicateFunction(
+				pgsql.FunctionCypherStartsWith,
+				newExpression.LOperand,
+				typedROperand,
+			); err != nil {
 				return err
 			} else {
-				newExpression.ROperand = pattern
+				s.PushOperand(predicateFunction)
+				return nil
 			}
 		}
 
@@ -1050,25 +980,16 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 				newExpression.ROperand = pgsql.NewLiteral("%"+stringValue, rOperandDataType)
 			}
 
-		case *pgsql.Parenthetical:
-			if pattern, err := buildEndsWithLikePattern(typedROperand); err != nil {
-				return err
-			} else {
-				newExpression.ROperand = pattern
-			}
-
-		case *pgsql.BinaryExpression:
-			if pattern, err := buildEndsWithLikePattern(typedROperand); err != nil {
-				return err
-			} else {
-				newExpression.ROperand = pgsql.NewTypeCast(pattern, pgsql.Text)
-			}
-
 		default:
-			if pattern, err := buildEndsWithLikePattern(typedROperand); err != nil {
+			if predicateFunction, err := cypherStringPredicateFunction(
+				pgsql.FunctionCypherEndsWith,
+				newExpression.LOperand,
+				typedROperand,
+			); err != nil {
 				return err
 			} else {
-				newExpression.ROperand = pattern
+				s.PushOperand(predicateFunction)
+				return nil
 			}
 		}
 

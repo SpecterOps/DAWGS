@@ -327,6 +327,36 @@ $$
   parallel safe
   strict;
 
+create or replace function public.cypher_contains(haystack text, needle text)
+  returns bool as
+$$
+select strpos(haystack, needle) > 0;
+$$
+  language sql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.cypher_starts_with(haystack text, prefix text)
+  returns bool as
+$$
+select left(haystack, char_length(prefix)) = prefix;
+$$
+  language sql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.cypher_ends_with(haystack text, suffix text)
+  returns bool as
+$$
+select right(haystack, char_length(suffix)) = suffix;
+$$
+  language sql
+  immutable
+  parallel safe
+  strict;
+
 create or replace function public.nodes_to_path(nodes variadic int8[]) returns pathComposite as
 $$
 select row (array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)::nodeComposite[],

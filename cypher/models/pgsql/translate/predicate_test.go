@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -31,4 +32,71 @@ RETURN p`)
 	require.Contains(t, formatted, "as p from s0 where")
 	require.Contains(t, formatted, "with s1 as")
 	require.NotContains(t, formatted, "as p from s1 where")
+}
+
+func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[string]any) string {
+	t.Helper()
+
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("NodeKind1"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, parameters, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	return formatted
+}
+
+func TestDynamicStringPredicatesUseHelperFunctions(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		query      string
+		parameters map[string]any
+		function   string
+	}{
+		{
+			name:       "contains parameter",
+			query:      `MATCH (n:NodeKind1) WHERE n.name CONTAINS $needle RETURN n`,
+			parameters: map[string]any{"needle": "needle"},
+			function:   "cypher_contains",
+		},
+		{
+			name:       "starts with parameter",
+			query:      `MATCH (n:NodeKind1) WHERE n.name STARTS WITH $prefix RETURN n`,
+			parameters: map[string]any{"prefix": "prefix"},
+			function:   "cypher_starts_with",
+		},
+		{
+			name:       "ends with parameter",
+			query:      `MATCH (n:NodeKind1) WHERE n.name ENDS WITH $suffix RETURN n`,
+			parameters: map[string]any{"suffix": "suffix"},
+			function:   "cypher_ends_with",
+		},
+		{
+			name:     "contains property",
+			query:    `MATCH (n:NodeKind1) WHERE n.name CONTAINS n.other RETURN n`,
+			function: "cypher_contains",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, testCase.query, testCase.parameters)
+
+			require.Contains(t, formatted, testCase.function+"(")
+			require.NotContains(t, formatted, "replace(")
+		})
+	}
+}
+
+func TestLiteralStringPredicatesKeepLikePatterns(t *testing.T) {
+	formatted := translatePredicateQuery(t, `MATCH (n:NodeKind1) WHERE n.name CONTAINS 'needle' RETURN n`, nil)
+
+	require.Contains(t, formatted, " like ")
+	require.Contains(t, formatted, "'%needle%'")
+	require.NotContains(t, formatted, "cypher_contains(")
+	require.Equal(t, 1, strings.Count(formatted, " like "))
 }
