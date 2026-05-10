@@ -274,9 +274,13 @@ func TestUnicodeCypherSymbols(t *testing.T) {
 func TestInvalidRelationshipDirectionReturnsError(t *testing.T) {
 	_, err := v2.New().WithRelationshipDirection(graph.Direction(99)).Return(v2.Relationship()).Build()
 	require.ErrorContains(t, err, "unsupported relationship direction: invalid")
+}
 
-	_, err = v2.New().WithRelationshipDirection(graph.DirectionBoth).Return(v2.Relationship()).Build()
-	require.ErrorContains(t, err, "unsupported relationship direction: both")
+func TestRelationshipDirectionBoth(t *testing.T) {
+	preparedQuery, err := v2.New().WithRelationshipDirection(graph.DirectionBoth).Return(v2.Relationship()).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match ()-[r]-() return r", renderPrepared(t, preparedQuery))
 }
 
 func TestShortestPathControls(t *testing.T) {
@@ -500,13 +504,17 @@ func TestEmptyLogicalHelpersReturnBuildErrors(t *testing.T) {
 	require.ErrorContains(t, err, "or requires at least one operand")
 }
 
-func TestInvalidExplicitRelationshipPatternDirectionReturnsError(t *testing.T) {
-	_, err := v2.New().Create(
+func TestExplicitRelationshipPatternDirectionBoth(t *testing.T) {
+	preparedQuery, err := v2.New().Create(
 		v2.RelationshipPattern(graph.StringKind("Edge"), nil, graph.DirectionBoth),
 	).Build()
-	require.ErrorContains(t, err, "unsupported relationship direction: both")
+	require.NoError(t, err)
 
-	_, err = v2.New().Create(
+	require.Equal(t, "create (s)-[r:Edge]-(e)", renderPrepared(t, preparedQuery))
+}
+
+func TestInvalidExplicitRelationshipPatternDirectionReturnsError(t *testing.T) {
+	_, err := v2.New().Create(
 		v2.Relationship().RelationshipPattern(graph.StringKind("Edge"), nil, graph.Direction(99)),
 	).Build()
 	require.ErrorContains(t, err, "unsupported relationship direction: invalid")

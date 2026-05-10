@@ -6,6 +6,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/cypher/format"
+	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,55 @@ func TestCypherEmitter_StripLiterals(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, emitter.Write(regularQuery, buffer))
 	require.Equal(t, "match (n {value: $STRIPPED}) where n.other = $STRIPPED and n.number = $STRIPPED return n.name, n", buffer.String())
+}
+
+func TestCypherEmitter_RelationshipDirections(t *testing.T) {
+	testCases := []struct {
+		name      string
+		direction graph.Direction
+		expected  string
+	}{
+		{
+			name:      "outbound",
+			direction: graph.DirectionOutbound,
+			expected:  "match (a)-[r]->(b) return r",
+		},
+		{
+			name:      "inbound",
+			direction: graph.DirectionInbound,
+			expected:  "match (a)<-[r]-(b) return r",
+		},
+		{
+			name:      "both",
+			direction: graph.DirectionBoth,
+			expected:  "match (a)-[r]-(b) return r",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			regularQuery, singlePartQuery := cypher.NewRegularQueryWithSingleQuery()
+			match := singlePartQuery.NewReadingClause().NewMatch(false)
+			match.NewPatternPart().AddPatternElements(
+				&cypher.NodePattern{
+					Variable: cypher.NewVariableWithSymbol("a"),
+				},
+				&cypher.RelationshipPattern{
+					Variable:  cypher.NewVariableWithSymbol("r"),
+					Direction: testCase.direction,
+				},
+				&cypher.NodePattern{
+					Variable: cypher.NewVariableWithSymbol("b"),
+				},
+			)
+
+			singlePartQuery.NewProjection(false).AddItem(cypher.NewProjectionItemWithExpr(cypher.NewVariableWithSymbol("r")))
+
+			rendered, err := format.RegularQuery(regularQuery, false)
+			require.NoError(t, err)
+			require.Equal(t, testCase.expected, rendered)
+		})
+	}
 }
 
 func TestCypherEmitter_HappyPath(t *testing.T) {

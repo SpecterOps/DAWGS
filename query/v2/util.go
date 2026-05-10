@@ -95,7 +95,7 @@ func prepareNodePattern(match *cypher.Match, seen *identifierSet, identifiers ru
 
 func validateRelationshipDirection(direction graph.Direction) error {
 	switch direction {
-	case graph.DirectionInbound, graph.DirectionOutbound:
+	case graph.DirectionInbound, graph.DirectionOutbound, graph.DirectionBoth:
 		return nil
 	default:
 		return fmt.Errorf("unsupported relationship direction: %s", direction)
