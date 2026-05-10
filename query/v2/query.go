@@ -1150,6 +1150,10 @@ func (s *builder) hasActions() bool {
 	return len(s.projections) > 0 || len(s.setItems) > 0 || len(s.removeItems) > 0 || len(s.creates) > 0 || len(s.deleteItems) > 0
 }
 
+func (s *builder) wantsShortestPathPattern() bool {
+	return s.shortestPathQuery || s.allShorestPathsQuery
+}
+
 func (s *builder) Build() (*PreparedQuery, error) {
 	if len(s.errors) > 0 {
 		return nil, errors.Join(s.errors...)
@@ -1231,6 +1235,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 
 	matchIdentifiers := readIdentifiers.Clone()
 	matchIdentifiers.Or(actionIdentifiers)
+
+	if s.wantsShortestPathPattern() && !isRelationshipPattern(matchIdentifiers, s.identifiers) {
+		return nil, fmt.Errorf("shortest path query requires relationship query identifiers")
+	}
 
 	if len(s.constraints) > 0 || matchIdentifiers.Len() > 0 {
 		if isNodePattern(matchIdentifiers, s.identifiers) {

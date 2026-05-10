@@ -238,6 +238,12 @@ func TestShortestPathControls(t *testing.T) {
 		v2.Path(),
 	).Build()
 	require.ErrorContains(t, err, "query is requesting both all shortest paths and shortest paths")
+
+	_, err = v2.New().WithShortestPaths().Return(v2.Node()).Build()
+	require.ErrorContains(t, err, "shortest path query requires relationship query identifiers")
+
+	_, err = v2.New().WithAllShortestPaths().Return(v2.As(v2.Literal(1), "one")).Build()
+	require.ErrorContains(t, err, "shortest path query requires relationship query identifiers")
 }
 
 func TestMixedNodeAndRelationshipIdentifiersReturnError(t *testing.T) {
