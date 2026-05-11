@@ -43,6 +43,7 @@ const (
 	FunctionOrderedEdgesToPath            Identifier = "ordered_edges_to_path"
 	FunctionNodesToPath                   Identifier = "nodes_to_path"
 	FunctionExtract                       Identifier = "extract"
+	FunctionGenerateSubscripts            Identifier = "generate_subscripts"
 )
 
 func IsAggregateFunction(function Identifier) bool {

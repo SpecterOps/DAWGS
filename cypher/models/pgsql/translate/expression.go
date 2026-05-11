@@ -1064,6 +1064,8 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 
 		switch typedROperand := newExpression.ROperand.(type) {
 		case pgsql.TypeCast:
+			rewroteTypeCast := false
+
 			switch typedInnerOperand := typedROperand.Expression.(type) {
 			case *pgsql.BinaryExpression:
 				if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(typedInnerOperand); isPropertyLookup {
@@ -1086,7 +1088,19 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 								CastType:   leftArrayHint,
 							},
 						)
+						rewroteTypeCast = true
 					}
+				}
+			}
+
+			if !rewroteTypeCast {
+				if lOperandTypeHint, err := InferExpressionType(newExpression.LOperand); err != nil {
+					return err
+				} else if lOperandTypeHint.IsArrayType() {
+					s.PushOperand(pgsql.NewLiteral(false, pgsql.Boolean))
+					return nil
+				} else {
+					newExpression.ROperand = pgsql.NewAnyExpression(newExpression.ROperand, typedROperand.TypeHint())
 				}
 			}
 

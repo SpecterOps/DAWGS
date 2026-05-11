@@ -56,6 +56,18 @@
         "edges": []
       },
       "assert": {"contains_node_with_prop": ["name", "shared"]}
+    },
+    {
+      "name": "unwind labels and aggregate by string kind",
+      "cypher": "MATCH (n) WHERE n.environmentid = '1234' UNWIND labels(n) AS kind RETURN kind, count(n) AS count",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {"environmentid": "1234"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"environmentid": "other"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [["NodeKind1", 1], ["NodeKind2", 1]]}
     }
   ]
 }

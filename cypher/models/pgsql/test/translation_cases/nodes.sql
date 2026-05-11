@@ -15,7 +15,19 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- case: match (n) return labels(n)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (s0.n0).kind_ids from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] from s0;
+
+-- case: match (n) where 'NodeKind1' in labels(n) return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ('NodeKind1' = any ((array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[]));
+
+-- case: match (n) where labels(n) = ['NodeKind1', 'NodeKind2'] return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] = array ['NodeKind1', 'NodeKind2']::text[]);
+
+-- case: match (n) where n.name = 'n3' with labels(n) as labels return labels, size(labels)
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb)) select (array(select _kind.name from generate_subscripts((s1.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s1.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] as i0 from s1) select s0.i0 as labels, cardinality(s0.i0)::int from s0;
+
+-- case: match (n) with 1 as _kind_idx, n return labels(n), _kind_idx
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select 1 as i0, s1.n0 as n0 from s1) select (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[], s0.i0 as _kind_idx from s0;
 
 -- case: match (n) where ID(n) = 1 return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = 1)) select s0.n0 as n from s0;

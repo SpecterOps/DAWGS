@@ -233,6 +233,57 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 	return nil
 }
 
+func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted {
+	const (
+		kindAlias      pgsql.Identifier = "_kind"
+		kindIndexAlias pgsql.Identifier = "_kind_idx"
+	)
+
+	kindIDs := pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs}
+
+	return pgsql.NewTypeCast(pgsql.ArrayExpression{
+		Expression: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{
+					pgsql.CompoundIdentifier{kindAlias, pgsql.ColumnName},
+				},
+				From: []pgsql.FromClause{
+					{
+						Source: pgsql.AliasedExpression{
+							Expression: pgsql.FunctionCall{
+								Function: pgsql.FunctionGenerateSubscripts,
+								Parameters: []pgsql.Expression{
+									kindIDs,
+									pgsql.NewLiteral(1, pgsql.Int),
+								},
+							},
+							Alias: pgsql.AsOptionalIdentifier(kindIndexAlias),
+						},
+					},
+					{
+						Source: pgsql.TableReference{
+							Name:    pgsql.CompoundIdentifier{pgsql.TableKind},
+							Binding: pgsql.AsOptionalIdentifier(kindAlias),
+						},
+					},
+				},
+				Where: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{kindAlias, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					&pgsql.ArrayIndex{
+						Expression: pgsql.NewParenthetical(kindIDs),
+						Indexes:    []pgsql.Expression{kindIndexAlias},
+					},
+				),
+			},
+			OrderBy: []*pgsql.OrderBy{{
+				Expression: kindIndexAlias,
+				Ascending:  true,
+			}},
+		},
+	}, pgsql.TextArray)
+}
+
 func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocation) {
 	switch formattedName := strings.ToLower(typedExpression.Name); formattedName {
 	case cypher.DurationFunction:
@@ -301,7 +352,7 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 		} else if identifier, isIdentifier := argument.(pgsql.Identifier); !isIdentifier {
 			s.SetErrorf("expected an identifier for the cypher function: %s but received %T", typedExpression.Name, argument)
 		} else {
-			s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs})
+			s.treeTranslator.PushOperand(translateNodeLabelsExpression(identifier))
 		}
 
 	case cypher.CountFunction:

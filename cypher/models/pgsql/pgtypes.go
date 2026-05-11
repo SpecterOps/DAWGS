@@ -18,8 +18,10 @@ const (
 
 	TableNode Identifier = "node"
 	TableEdge Identifier = "edge"
+	TableKind Identifier = "kind"
 
 	ColumnID         Identifier = "id"
+	ColumnName       Identifier = "name"
 	ColumnPath       Identifier = "path"
 	ColumnProperties Identifier = "properties"
 	ColumnKindIDs    Identifier = "kind_ids"

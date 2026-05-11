@@ -3,8 +3,33 @@
   "cases": [
     {
       "name": "return kind labels for all nodes",
-      "cypher": "match (n) return labels(n)",
-      "assert": {"row_count": 3}
+      "cypher": "match (n) return labels(n) order by n.name",
+      "assert": {"ordered_scalar_values": [["NodeKind2"], ["NodeKind1"], ["NodeKind1", "NodeKind2"]]}
+    },
+    {
+      "name": "return string kind labels from labels()",
+      "cypher": "match (n) where n.name = 'n3' unwind labels(n) as label return label order by label",
+      "assert": {"ordered_scalar_values": ["NodeKind1", "NodeKind2"]}
+    },
+    {
+      "name": "filter nodes by string membership in labels()",
+      "cypher": "match (n) where 'NodeKind1' in labels(n) return n",
+      "assert": {"node_ids": ["n1", "n3"]}
+    },
+    {
+      "name": "filter nodes by exact labels() list equality",
+      "cypher": "match (n) where labels(n) = ['NodeKind1', 'NodeKind2'] return n",
+      "assert": {"node_ids": ["n3"]}
+    },
+    {
+      "name": "carry labels() through with and compute list size",
+      "cypher": "match (n) where n.name = 'n3' with labels(n) as labels return labels, size(labels)",
+      "assert": {"row_values": [[["NodeKind1", "NodeKind2"], 2]]}
+    },
+    {
+      "name": "labels() lookup is isolated from generated alias collisions",
+      "cypher": "match (n) where n.name = 'n3' with 1 as _kind_idx, n unwind labels(n) as label return _kind_idx, label order by label",
+      "assert": {"ordered_row_values": [[1, "NodeKind1"], [1, "NodeKind2"]]}
     },
     {
       "name": "filter any node by string property equality",
