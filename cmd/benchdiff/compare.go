@@ -52,10 +52,11 @@ func runUnitComparison(ctx context.Context, cfg resolvedConfig, baseWorktree, ta
 		return comparison{}, err
 	}
 
-	regressions, err := regressionsForFiles(baseFile, targetFile, cfg.Threshold)
+	findings, err := findingsForFiles(baseFile, targetFile)
 	if err != nil {
 		return comparison{}, err
 	}
+	regressions := findings.regressionsOver(cfg.Threshold)
 
 	return comparison{
 		Name:          "Unit Benchmarks",
@@ -63,6 +64,7 @@ func runUnitComparison(ctx context.Context, cfg resolvedConfig, baseWorktree, ta
 		TargetFile:    targetFile,
 		BenchstatFile: benchstatFile,
 		Benchstat:     string(benchstatOutput),
+		Findings:      findings,
 		Regressions:   regressions,
 	}, nil
 }
@@ -153,10 +155,11 @@ func runIntegrationComparison(ctx context.Context, cfg resolvedConfig, baseWorkt
 		return comparison{}, err
 	}
 
-	regressions, err := regressionsForFiles(baseFile, targetFile, cfg.Threshold)
+	findings, err := findingsForFiles(baseFile, targetFile)
 	if err != nil {
 		return comparison{}, err
 	}
+	regressions := findings.regressionsOver(cfg.Threshold)
 
 	return comparison{
 		Name:          "Integration Benchmarks",
@@ -165,6 +168,7 @@ func runIntegrationComparison(ctx context.Context, cfg resolvedConfig, baseWorkt
 		BenchstatFile: benchstatFile,
 		Benchstat:     string(benchstatOutput),
 		Notes:         notes,
+		Findings:      findings,
 		Regressions:   regressions,
 	}, nil
 }
@@ -256,21 +260,4 @@ func runBenchstat(ctx context.Context, cfg resolvedConfig, baseFile, targetFile 
 
 	args := append(fields[1:], baseFile, targetFile)
 	return runCommand(ctx, cfg.Root, nil, fields[0], args...)
-}
-
-func regressionsForFiles(baseFile, targetFile string, threshold float64) ([]regression, error) {
-	if threshold <= 0 {
-		return nil, nil
-	}
-
-	base, err := parseBenchfmtNSFile(baseFile)
-	if err != nil {
-		return nil, err
-	}
-	target, err := parseBenchfmtNSFile(targetFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return findRegressions(base, target, threshold), nil
 }

@@ -36,6 +36,22 @@ var benchmarkLinePattern = regexp.MustCompile(`^(Benchmark\S+)\s+\d+\s+([0-9]+(?
 
 type benchmarkSamples map[string][]float64
 
+type comparisonFindings struct {
+	Compared     int
+	Regressions  []benchmarkFinding
+	Improvements []benchmarkFinding
+	Unchanged    int
+	OnlyBase     []string
+	OnlyTarget   []string
+}
+
+type benchmarkFinding struct {
+	Name           string
+	BaseMedianNS   float64
+	TargetMedianNS float64
+	DeltaPercent   float64
+}
+
 type regression struct {
 	Name           string
 	BaseMedianNS   float64
@@ -73,15 +89,27 @@ func parseBenchfmtNSFile(path string) (benchmarkSamples, error) {
 	return parseBenchfmtNS(data), nil
 }
 
-func findRegressions(base, target benchmarkSamples, threshold float64) []regression {
-	if threshold <= 0 {
-		return nil
+func summarizeFindings(base, target benchmarkSamples) comparisonFindings {
+	findings := comparisonFindings{}
+	names := map[string]struct{}{}
+
+	for name := range base {
+		names[name] = struct{}{}
+	}
+	for name := range target {
+		names[name] = struct{}{}
 	}
 
-	var regressions []regression
-	for name, baseValues := range base {
+	for name := range names {
+		baseValues := base[name]
 		targetValues := target[name]
-		if len(baseValues) == 0 || len(targetValues) == 0 {
+
+		switch {
+		case len(baseValues) == 0:
+			findings.OnlyTarget = append(findings.OnlyTarget, name)
+			continue
+		case len(targetValues) == 0:
+			findings.OnlyBase = append(findings.OnlyBase, name)
 			continue
 		}
 
@@ -91,20 +119,68 @@ func findRegressions(base, target benchmarkSamples, threshold float64) []regress
 			continue
 		}
 
-		percent := ((targetMedian - baseMedian) / baseMedian) * 100
-		if percent > threshold {
-			regressions = append(regressions, regression{
-				Name:           name,
-				BaseMedianNS:   baseMedian,
-				TargetMedianNS: targetMedian,
-				Percent:        percent,
-			})
+		findings.Compared++
+		deltaPercent := ((targetMedian - baseMedian) / baseMedian) * 100
+		finding := benchmarkFinding{
+			Name:           name,
+			BaseMedianNS:   baseMedian,
+			TargetMedianNS: targetMedian,
+			DeltaPercent:   deltaPercent,
+		}
+
+		switch {
+		case deltaPercent > 0:
+			findings.Regressions = append(findings.Regressions, finding)
+		case deltaPercent < 0:
+			findings.Improvements = append(findings.Improvements, finding)
+		default:
+			findings.Unchanged++
 		}
 	}
 
-	sort.Slice(regressions, func(i, j int) bool {
-		return regressions[i].Percent > regressions[j].Percent
+	sort.Slice(findings.Regressions, func(i, j int) bool {
+		return findings.Regressions[i].DeltaPercent > findings.Regressions[j].DeltaPercent
 	})
+	sort.Slice(findings.Improvements, func(i, j int) bool {
+		return findings.Improvements[i].DeltaPercent < findings.Improvements[j].DeltaPercent
+	})
+	sort.Strings(findings.OnlyBase)
+	sort.Strings(findings.OnlyTarget)
+
+	return findings
+}
+
+func findingsForFiles(baseFile, targetFile string) (comparisonFindings, error) {
+	base, err := parseBenchfmtNSFile(baseFile)
+	if err != nil {
+		return comparisonFindings{}, err
+	}
+	target, err := parseBenchfmtNSFile(targetFile)
+	if err != nil {
+		return comparisonFindings{}, err
+	}
+
+	return summarizeFindings(base, target), nil
+}
+
+func (findings comparisonFindings) regressionsOver(threshold float64) []regression {
+	if threshold <= 0 {
+		return nil
+	}
+
+	var regressions []regression
+	for _, finding := range findings.Regressions {
+		if finding.DeltaPercent <= threshold {
+			continue
+		}
+
+		regressions = append(regressions, regression{
+			Name:           finding.Name,
+			BaseMedianNS:   finding.BaseMedianNS,
+			TargetMedianNS: finding.TargetMedianNS,
+			Percent:        finding.DeltaPercent,
+		})
+	}
 
 	return regressions
 }

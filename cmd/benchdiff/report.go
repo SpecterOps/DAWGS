@@ -22,8 +22,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
+
+const maxFindingRows = 10
 
 func writeRunReport(path string, summary runSummary) error {
 	var out bytes.Buffer
@@ -57,6 +60,8 @@ func writeRunReport(path string, summary runSummary) error {
 	}
 	fmt.Fprintln(&out)
 
+	writeFindingsSummary(&out, summary)
+
 	for _, comparison := range summary.Comparisons {
 		fmt.Fprintf(&out, "## %s\n\n", comparison.Name)
 		for _, note := range comparison.Notes {
@@ -88,6 +93,110 @@ func writeRunReport(path string, summary runSummary) error {
 	return os.WriteFile(path, out.Bytes(), 0644)
 }
 
+func writeFindingsSummary(out *bytes.Buffer, summary runSummary) {
+	fmt.Fprintln(out, "## Findings")
+	fmt.Fprintln(out)
+
+	if len(summary.Comparisons) == 0 {
+		fmt.Fprintln(out, "No benchmark comparisons were run.")
+		fmt.Fprintln(out)
+		return
+	}
+
+	for _, comparison := range summary.Comparisons {
+		findings := comparison.Findings
+		fmt.Fprintf(out, "### %s\n\n", comparison.Name)
+		fmt.Fprintf(out, "- Compared %d matching benchmark%s.\n", findings.Compared, pluralSuffix(findings.Compared))
+		fmt.Fprintf(out, "- Median regressions: %d; median improvements: %d; unchanged: %d.\n",
+			len(findings.Regressions),
+			len(findings.Improvements),
+			findings.Unchanged,
+		)
+		if len(findings.OnlyBase) > 0 {
+			fmt.Fprintf(out, "- Only in base: %s.\n", inlineBenchmarkList(findings.OnlyBase, maxFindingRows))
+		}
+		if len(findings.OnlyTarget) > 0 {
+			fmt.Fprintf(out, "- Only in target: %s.\n", inlineBenchmarkList(findings.OnlyTarget, maxFindingRows))
+		}
+		fmt.Fprintln(out)
+
+		writeFindingTable(out, "Top Median Regressions", findings.Regressions, maxFindingRows)
+		writeFindingTable(out, "Top Median Improvements", findings.Improvements, maxFindingRows)
+	}
+}
+
+func writeFindingTable(out *bytes.Buffer, title string, findings []benchmarkFinding, limit int) {
+	fmt.Fprintf(out, "#### %s\n\n", title)
+	if len(findings) == 0 {
+		fmt.Fprintln(out, "None.")
+		fmt.Fprintln(out)
+		return
+	}
+
+	fmt.Fprintln(out, "| Benchmark | Base Median | Target Median | Change |")
+	fmt.Fprintln(out, "|-----------|------------:|--------------:|-------:|")
+
+	for idx, finding := range findings {
+		if idx >= limit {
+			break
+		}
+
+		fmt.Fprintf(out, "| `%s` | %s | %s | %+.2f%% |\n",
+			finding.Name,
+			formatNS(finding.BaseMedianNS),
+			formatNS(finding.TargetMedianNS),
+			finding.DeltaPercent,
+		)
+	}
+	if len(findings) > limit {
+		fmt.Fprintf(out, "\n_%d more not shown._\n", len(findings)-limit)
+	}
+	fmt.Fprintln(out)
+}
+
+func pluralSuffix(count int) string {
+	if count == 1 {
+		return ""
+	}
+
+	return "s"
+}
+
+func inlineBenchmarkList(names []string, limit int) string {
+	var builder strings.Builder
+
+	for idx, name := range names {
+		if idx >= limit {
+			break
+		}
+		if idx > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteByte('`')
+		builder.WriteString(name)
+		builder.WriteByte('`')
+	}
+
+	if len(names) > limit {
+		fmt.Fprintf(&builder, ", and %d more", len(names)-limit)
+	}
+
+	return builder.String()
+}
+
+func formatNS(value float64) string {
+	switch {
+	case value >= float64(time.Second):
+		return fmt.Sprintf("%.2fs", value/float64(time.Second))
+	case value >= float64(time.Millisecond):
+		return fmt.Sprintf("%.2fms", value/float64(time.Millisecond))
+	case value >= float64(time.Microsecond):
+		return fmt.Sprintf("%.2fus", value/float64(time.Microsecond))
+	default:
+		return fmt.Sprintf("%.0fns", value)
+	}
+}
+
 func writeRegressionSection(out *bytes.Buffer, comparison comparison, threshold float64) {
 	if threshold <= 0 {
 		return
@@ -103,10 +212,10 @@ func writeRegressionSection(out *bytes.Buffer, comparison comparison, threshold 
 	fmt.Fprintln(out, "| Benchmark | Base Median | Target Median | Change |")
 	fmt.Fprintln(out, "|-----------|------------:|--------------:|-------:|")
 	for _, regression := range comparison.Regressions {
-		fmt.Fprintf(out, "| `%s` | %.0f ns/op | %.0f ns/op | +%.2f%% |\n",
+		fmt.Fprintf(out, "| `%s` | %s | %s | +%.2f%% |\n",
 			regression.Name,
-			regression.BaseMedianNS,
-			regression.TargetMedianNS,
+			formatNS(regression.BaseMedianNS),
+			formatNS(regression.TargetMedianNS),
 			regression.Percent,
 		)
 	}

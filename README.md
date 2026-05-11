@@ -77,4 +77,5 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 go run ./cmd/benchdiff -base main -target HEAD -kind all -driver pg -fail-regression 10%
 ```
 
-The harness writes raw outputs and a Markdown report under `.bench/runs/` by default.
+The harness writes raw outputs and a Markdown report under `.bench/runs/` by default. The report begins with comparison
+findings before listing the raw `benchstat` output for each benchmark suite.

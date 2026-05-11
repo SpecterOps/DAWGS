@@ -33,6 +33,7 @@ type comparison struct {
 	BenchstatFile string
 	Benchstat     string
 	Notes         []string
+	Findings      comparisonFindings
 	Regressions   []regression
 }
 

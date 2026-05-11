@@ -36,20 +36,36 @@ BenchmarkOther/sub-12              1       200 ns/op
 	require.Equal(t, []float64{200}, samples["BenchmarkOther/sub-12"])
 }
 
-func TestFindRegressions(t *testing.T) {
+func TestSummarizeFindings(t *testing.T) {
 	base := benchmarkSamples{
-		"BenchmarkFast-12": {100, 110, 120},
-		"BenchmarkSame-12": {100, 100, 100},
+		"BenchmarkRegression-12":  {100, 110, 120},
+		"BenchmarkImprovement-12": {200, 200, 200},
+		"BenchmarkSame-12":        {100, 100, 100},
+		"BenchmarkOnlyBase-12":    {50},
 	}
 	target := benchmarkSamples{
-		"BenchmarkFast-12": {140, 150, 160},
-		"BenchmarkSame-12": {105, 105, 105},
+		"BenchmarkRegression-12":  {140, 150, 160},
+		"BenchmarkImprovement-12": {100, 100, 100},
+		"BenchmarkSame-12":        {100, 100, 100},
+		"BenchmarkOnlyTarget-12":  {75},
 	}
 
-	regressions := findRegressions(base, target, 10)
+	findings := summarizeFindings(base, target)
 
+	require.Equal(t, 3, findings.Compared)
+	require.Equal(t, 1, findings.Unchanged)
+	require.Equal(t, []string{"BenchmarkOnlyBase-12"}, findings.OnlyBase)
+	require.Equal(t, []string{"BenchmarkOnlyTarget-12"}, findings.OnlyTarget)
+	require.Len(t, findings.Regressions, 1)
+	require.Equal(t, "BenchmarkRegression-12", findings.Regressions[0].Name)
+	require.InDelta(t, 36.36, findings.Regressions[0].DeltaPercent, 0.01)
+	require.Len(t, findings.Improvements, 1)
+	require.Equal(t, "BenchmarkImprovement-12", findings.Improvements[0].Name)
+	require.Equal(t, -50.0, findings.Improvements[0].DeltaPercent)
+
+	regressions := findings.regressionsOver(10)
 	require.Len(t, regressions, 1)
-	require.Equal(t, "BenchmarkFast-12", regressions[0].Name)
+	require.Equal(t, "BenchmarkRegression-12", regressions[0].Name)
 	require.InDelta(t, 36.36, regressions[0].Percent, 0.01)
 }
 
