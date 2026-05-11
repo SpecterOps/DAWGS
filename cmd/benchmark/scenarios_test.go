@@ -17,6 +17,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
@@ -40,6 +41,40 @@ func TestBaseScenariosDeclareExpectedRows(t *testing.T) {
 	requireExpectedRows(t, scenarios, "Filter By Kind", "NodeKind2", 2)
 }
 
+func TestTraversalShapesDatasetIsValid(t *testing.T) {
+	file, err := os.Open("../../integration/testdata/traversal_shapes.json")
+	require.NoError(t, err)
+	defer file.Close()
+
+	doc, err := opengraph.ParseDocument(file)
+	require.NoError(t, err)
+	require.Len(t, doc.Graph.Nodes, 45)
+	require.Len(t, doc.Graph.Edges, 41)
+}
+
+func TestTraversalShapesScenariosDeclareExpectedRows(t *testing.T) {
+	scenarios := traversalShapesScenarios(traversalShapesIDMap())
+
+	requireExpectedRows(t, scenarios, "Match Nodes", traversalShapesDataset, 45)
+	requireExpectedRows(t, scenarios, "Match Edges", traversalShapesDataset, 41)
+	requireExpectedRows(t, scenarios, "Traversal Depth", "chain depth 1", 1)
+	requireExpectedRows(t, scenarios, "Traversal Depth", "chain depth 3", 3)
+	requireExpectedRows(t, scenarios, "Traversal Depth", "chain depth 10", 10)
+	requireExpectedRows(t, scenarios, "Traversal Depth", "fanout depth 1", 3)
+	requireExpectedRows(t, scenarios, "Traversal Depth", "fanout depth 2", 9)
+	requireExpectedRows(t, scenarios, "Traversal Depth", "fanout depth 3", 15)
+	requireExpectedRows(t, scenarios, "Traversal Cycle", "bounded cycle", 4)
+	requireExpectedRows(t, scenarios, "Traversal Dead End", "chain terminal", 0)
+	requireExpectedRows(t, scenarios, "Edge Kind Traversal", "Allowed", 3)
+	requireExpectedRows(t, scenarios, "Edge Kind Traversal", "all kinds", 6)
+	requireExpectedRows(t, scenarios, "Shortest Paths", "diamond many paths", 3)
+	requireExpectedRows(t, scenarios, "Shortest Paths", "disconnected", 0)
+}
+
+func TestDefaultDatasetsIncludeTraversalShapes(t *testing.T) {
+	require.Contains(t, defaultDatasets, traversalShapesDataset)
+}
+
 func TestValidateScenarioRows(t *testing.T) {
 	scenario := Scenario{
 		Section:      "Traversal",
@@ -50,6 +85,24 @@ func TestValidateScenarioRows(t *testing.T) {
 
 	require.NoError(t, validateScenarioRows(scenario, 2))
 	require.ErrorContains(t, validateScenarioRows(scenario, 1), "Traversal/n1 on base expected 2 rows, got 1")
+}
+
+func traversalShapesIDMap() opengraph.IDMap {
+	ids := []string{
+		"c0", "c10",
+		"f0",
+		"d0", "d4",
+		"y0",
+		"x0", "x1",
+		"s0",
+	}
+
+	idMap := opengraph.IDMap{}
+	for idx, id := range ids {
+		idMap[id] = graph.ID(idx + 1)
+	}
+
+	return idMap
 }
 
 func requireExpectedRows(t *testing.T, scenarios []Scenario, section, label string, expectedRows int) {

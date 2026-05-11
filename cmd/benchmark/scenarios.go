@@ -32,14 +32,18 @@ type Scenario struct {
 	Query        func(tx graph.Transaction) (int, error)
 }
 
+const traversalShapesDataset = "traversal_shapes"
+
 // defaultDatasets is the set of datasets committed to the repo.
-var defaultDatasets = []string{"base"}
+var defaultDatasets = []string{"base", traversalShapesDataset}
 
 // scenariosForDataset returns all benchmark scenarios for a given dataset and its loaded ID map.
 func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	switch dataset {
 	case "base":
 		return baseScenarios(idMap)
+	case traversalShapesDataset:
+		return traversalShapesScenarios(idMap)
 	case "local/phantom":
 		return phantomScenarios(idMap)
 	default:
@@ -96,6 +100,64 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 		))},
 		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind1", ExpectedRows: expectRows(2), Query: cypherQuery("MATCH (n:NodeKind1) RETURN n")},
 		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind2", ExpectedRows: expectRows(2), Query: cypherQuery("MATCH (n:NodeKind2) RETURN n")},
+	}
+}
+
+// --- Traversal shape scenarios ---
+
+func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
+	ds := traversalShapesDataset
+	return []Scenario{
+		{Section: "Match Nodes", Dataset: ds, Label: ds, ExpectedRows: expectRows(45), Query: countNodes},
+		{Section: "Match Edges", Dataset: ds, Label: ds, ExpectedRows: expectRows(41), Query: countEdges},
+		{Section: "Traversal Depth", Dataset: ds, Label: "chain depth 1", ExpectedRows: expectRows(1), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:ChainEdge*1..1]->(e) WHERE id(s) = %d RETURN e",
+			idMap["c0"],
+		))},
+		{Section: "Traversal Depth", Dataset: ds, Label: "chain depth 3", ExpectedRows: expectRows(3), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:ChainEdge*1..3]->(e) WHERE id(s) = %d RETURN e",
+			idMap["c0"],
+		))},
+		{Section: "Traversal Depth", Dataset: ds, Label: "chain depth 10", ExpectedRows: expectRows(10), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:ChainEdge*1..10]->(e) WHERE id(s) = %d RETURN e",
+			idMap["c0"],
+		))},
+		{Section: "Traversal Depth", Dataset: ds, Label: "fanout depth 1", ExpectedRows: expectRows(3), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:FanoutEdge*1..1]->(e) WHERE id(s) = %d RETURN e",
+			idMap["f0"],
+		))},
+		{Section: "Traversal Depth", Dataset: ds, Label: "fanout depth 2", ExpectedRows: expectRows(9), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:FanoutEdge*1..2]->(e) WHERE id(s) = %d RETURN e",
+			idMap["f0"],
+		))},
+		{Section: "Traversal Depth", Dataset: ds, Label: "fanout depth 3", ExpectedRows: expectRows(15), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:FanoutEdge*1..3]->(e) WHERE id(s) = %d RETURN e",
+			idMap["f0"],
+		))},
+		{Section: "Traversal Cycle", Dataset: ds, Label: "bounded cycle", ExpectedRows: expectRows(4), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:CycleEdge*1..4]->(e) WHERE id(s) = %d RETURN e",
+			idMap["y0"],
+		))},
+		{Section: "Traversal Dead End", Dataset: ds, Label: "chain terminal", ExpectedRows: expectRows(0), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:ChainEdge*1..]->(e) WHERE id(s) = %d RETURN e",
+			idMap["c10"],
+		))},
+		{Section: "Edge Kind Traversal", Dataset: ds, Label: "Allowed", ExpectedRows: expectRows(3), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[:Allowed*1..]->(e) WHERE id(s) = %d RETURN e",
+			idMap["s0"],
+		))},
+		{Section: "Edge Kind Traversal", Dataset: ds, Label: "all kinds", ExpectedRows: expectRows(6), Query: cypherQuery(fmt.Sprintf(
+			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
+			idMap["s0"],
+		))},
+		{Section: "Shortest Paths", Dataset: ds, Label: "diamond many paths", ExpectedRows: expectRows(3), Query: cypherQuery(fmt.Sprintf(
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
+			idMap["d0"], idMap["d4"],
+		))},
+		{Section: "Shortest Paths", Dataset: ds, Label: "disconnected", ExpectedRows: expectRows(0), Query: cypherQuery(fmt.Sprintf(
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
+			idMap["x0"], idMap["x1"],
+		))},
 	}
 }
 

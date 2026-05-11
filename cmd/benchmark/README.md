@@ -5,8 +5,11 @@ Runs query scenarios against a real database and outputs a markdown timing table
 ## Usage
 
 ```bash
-# Default dataset (base)
+# Default datasets (base and traversal_shapes)
 go run ./cmd/benchmark -connection "postgresql://dawgs:dawgs@localhost:5432/dawgs"
+
+# Traversal shape dataset only
+go run ./cmd/benchmark -connection "..." -dataset traversal_shapes
 
 # Local dataset (not committed to repo)
 go run ./cmd/benchmark -connection "..." -dataset local/phantom
@@ -39,6 +42,10 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 
 Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a
 separate `ns/op` sample so two benchmark runs can be compared directly.
+
+The committed default datasets are `base` and `traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded
+cycle, disconnected, edge-kind-selective, and multi-path shortest-path traversal shapes. Scenarios with declared
+expected row counts fail before reporting timings if a query returns the wrong result shape.
 
 ## Example: Neo4j on local/phantom
 
