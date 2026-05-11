@@ -41,6 +41,7 @@ func TestRewriteFrameBindings(t *testing.T) {
 	frame.Export(a.Identifier)
 
 	a.MaterializedBy(frame)
+	rewrittenA := pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}
 
 	// Cases
 	testCases := []testCase{{
@@ -48,20 +49,39 @@ func TestRewriteFrameBindings(t *testing.T) {
 			Expression: a.Identifier,
 		},
 		Expected: &pgsql.Parenthetical{
-			Expression: pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier},
+			Expression: rewrittenA,
 		},
 	}, {
 		Case:     pgsql.NewBinaryExpression(a.Identifier, pgsql.OperatorEquals, a.Identifier),
-		Expected: pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}),
+		Expected: pgsql.NewBinaryExpression(rewrittenA, pgsql.OperatorEquals, rewrittenA),
 	}, {
 		Case: &pgsql.AliasedExpression{
 			Expression: a.Identifier,
 			Alias:      pgsql.AsOptionalIdentifier("name"),
 		},
 		Expected: &pgsql.AliasedExpression{
-			Expression: pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier},
+			Expression: rewrittenA,
 			Alias:      pgsql.AsOptionalIdentifier("name"),
 		},
+	}, {
+		Case: pgsql.NewBinaryExpression(
+			pgsql.ArraySlice{
+				Expression: a.Identifier,
+				Lower:      a.Identifier,
+				Upper:      a.Identifier,
+			},
+			pgsql.OperatorEquals,
+			a.Identifier,
+		),
+		Expected: pgsql.NewBinaryExpression(
+			pgsql.ArraySlice{
+				Expression: rewrittenA,
+				Lower:      rewrittenA,
+				Upper:      rewrittenA,
+			},
+			pgsql.OperatorEquals,
+			rewrittenA,
+		),
 	}}
 
 	for _, nextTestCase := range testCases {
