@@ -217,6 +217,10 @@
         "nodes": [
           {"id": "gpo-enforced", "kinds": ["GPO"]},
           {"id": "base-enforced", "kinds": ["Base"]},
+          {"id": "gpo-enforced-blocked", "kinds": ["GPO"]},
+          {"id": "ou-enforced-first", "kinds": ["OU"], "properties": {"blocksinheritance": false}},
+          {"id": "ou-enforced-blocked", "kinds": ["OU"], "properties": {"blocksinheritance": true}},
+          {"id": "base-enforced-blocked", "kinds": ["Base"]},
           {"id": "gpo-open", "kinds": ["GPO"]},
           {"id": "ou-open", "kinds": ["OU"], "properties": {"blocksinheritance": false}},
           {"id": "base-open", "kinds": ["Base"]},
@@ -227,6 +231,9 @@
         ],
         "edges": [
           {"start_id": "gpo-enforced", "end_id": "base-enforced", "kind": "GPLink", "properties": {"enforced": true}},
+          {"start_id": "gpo-enforced-blocked", "end_id": "ou-enforced-first", "kind": "GPLink", "properties": {"enforced": true}},
+          {"start_id": "ou-enforced-first", "end_id": "ou-enforced-blocked", "kind": "Contains"},
+          {"start_id": "ou-enforced-blocked", "end_id": "base-enforced-blocked", "kind": "Contains"},
           {"start_id": "gpo-open", "end_id": "ou-open", "kind": "GPLink", "properties": {"enforced": false}},
           {"start_id": "ou-open", "end_id": "base-open", "kind": "Contains"},
           {"start_id": "gpo-blocked", "end_id": "ou-first", "kind": "GPLink", "properties": {"enforced": false}},
@@ -235,8 +242,8 @@
         ]
       },
       "assert": {
-        "path_node_ids": [["gpo-enforced", "base-enforced"], ["gpo-open", "ou-open", "base-open"]],
-        "path_edge_kinds": [["GPLink"], ["GPLink", "Contains"]]
+        "path_node_ids": [["gpo-enforced", "base-enforced"], ["gpo-enforced-blocked", "ou-enforced-first", "ou-enforced-blocked", "base-enforced-blocked"], ["gpo-open", "ou-open", "base-open"]],
+        "path_edge_kinds": [["GPLink"], ["GPLink", "Contains", "Contains"], ["GPLink", "Contains"]]
       }
     }
   ]
