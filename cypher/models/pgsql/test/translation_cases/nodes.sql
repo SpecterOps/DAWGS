@@ -109,10 +109,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = current_date::date)) select s0.n0 as s from s0;
 
 -- case: match (s) where s.created_at = date() - duration('P1D') return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = current_date::date - interval 'P1D')) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::timestamp without time zone = current_date::date - interval 'P1D')) select s0.n0 as s from s0;
 
 -- case: match (s) where s.created_at = date() + duration('PT4H') return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = current_date::date + interval 'PT4H')) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::timestamp without time zone = current_date::date + interval 'PT4H')) select s0.n0 as s from s0;
 
 -- case: match (s) where s.created_at = date('2023-4-4') return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> 'created_at'))::date = ('2023-4-4')::date)) select s0.n0 as s from s0;

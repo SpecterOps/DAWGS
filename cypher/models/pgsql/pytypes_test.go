@@ -280,6 +280,27 @@ func TestDataType_OperatorResultTypeTemporalArithmetic(t *testing.T) {
 		Expected: TimeWithoutTimeZone,
 		Valid:    true,
 	}, {
+		Name:     "date minus interval",
+		Left:     Date,
+		Operator: OperatorSubtract,
+		Right:    Interval,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "date plus interval",
+		Left:     Date,
+		Operator: OperatorAdd,
+		Right:    Interval,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "interval plus date",
+		Left:     Interval,
+		Operator: OperatorAdd,
+		Right:    Date,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
 		Name:     "timestamp with time zone multiplied by interval",
 		Left:     TimestampWithTimeZone,
 		Operator: OperatorMultiply,

@@ -126,6 +126,14 @@ func (s DataType) IsTemporalType() bool {
 	}
 }
 
+func (s DataType) TemporalIntervalArithmeticResultType() DataType {
+	if s == Date {
+		return TimestampWithoutTimeZone
+	}
+
+	return s
+}
+
 func (s DataType) IsComparable(other DataType, operator Operator) bool {
 	switch operator {
 	case OperatorPGArrayOverlap, OperatorArrayOverlap, OperatorPGArrayLHSContainsRHS:
@@ -278,16 +286,16 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 		switch operator {
 		case OperatorAdd:
 			if s.IsTemporalType() && other == Interval {
-				return s, true
+				return s.TemporalIntervalArithmeticResultType(), true
 			}
 
 			if s == Interval && other.IsTemporalType() {
-				return other, true
+				return other.TemporalIntervalArithmeticResultType(), true
 			}
 
 		case OperatorSubtract:
 			if s.IsTemporalType() && other == Interval {
-				return s, true
+				return s.TemporalIntervalArithmeticResultType(), true
 			}
 		}
 
