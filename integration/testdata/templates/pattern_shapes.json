@@ -102,6 +102,13 @@
             "query": "match p=shortestPath((s:TemplateNodeKind1)-[:TemplateEdgeKind1|HasSession*1..]->(d:TemplateNodeKind1)) where s.name = 'path-filter-src' and d.name = 'path-filter-dst' and none(r in relationships(p) where type(r) = 'HasSession' and startNode(r).name = 'blocked-session-host') return p"
           },
           "assert": "empty"
+        },
+        {
+          "name": "path relationship type() supports string prefix predicates",
+          "vars": {
+            "query": "match p=(s:TemplateNodeKind1)-[:TemplateEdgeKind1|HasSession*1..1]->(n:TemplateNodeKind2) where s.name = 'path-filter-src' and n.name = 'blocked-session-host' and any(r in relationships(p) where type(r) STARTS WITH 'TemplateEdge') return p"
+          },
+          "assert": {"path_node_ids": [["src", "blocked"]], "path_edge_kinds": [["TemplateEdgeKind1"]]}
         }
       ]
     }

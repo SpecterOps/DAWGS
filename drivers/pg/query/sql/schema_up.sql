@@ -206,6 +206,18 @@ $$
 $$;
 
 -- Database helper functions
+create or replace function public.kind_name(_kind_id smallint) returns text as
+$$
+select k.name::text
+from kind k
+where k.id = _kind_id
+limit 1;
+$$
+  language sql
+  stable
+  parallel safe
+  strict;
+
 create or replace function public.start_node(rel edgeComposite) returns nodeComposite as
 $$
 select (n.id, n.kind_ids, n.properties)::nodeComposite

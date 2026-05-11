@@ -20,6 +20,18 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 -- case: match ()-[r]->() where type(r) = 'EdgeKind1' return r
 with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (e0.kind_id = 3)) select s0.e0 as r from s0;
 
+-- case: match ()-[r]->() return type(r) order by type(r)
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id) select kind_name((s0.e0).kind_id)::text from s0 order by kind_name((s0.e0).kind_id)::text;
+
+-- case: match ()-[r]->() where type(r) <> 'EdgeKind1' return type(r) order by type(r)
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (e0.kind_id <> 3)) select kind_name((s0.e0).kind_id)::text from s0 order by kind_name((s0.e0).kind_id)::text;
+
+-- case: match ()-[r]->() where type(r) in ['EdgeKind2'] return type(r) order by type(r)
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (kind_name(e0.kind_id)::text = any (array ['EdgeKind2']::text[]))) select kind_name((s0.e0).kind_id)::text from s0 order by kind_name((s0.e0).kind_id)::text;
+
+-- case: match ()-[r]->() where type(r) STARTS WITH 'EdgeKind' return type(r) order by type(r)
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (kind_name(e0.kind_id)::text like 'EdgeKind%')) select kind_name((s0.e0).kind_id)::text from s0 order by kind_name((s0.e0).kind_id)::text;
+
 -- case: match ()-[r]->() where 'EdgeKind1' = type(r) return r
 with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (3 = e0.kind_id)) select s0.e0 as r from s0;
 
@@ -89,7 +101,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1
 with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb and e0.kind_id = any (array [3]::int2[])) select s0.n0 as s from s0 where ((with s1 as (select s0.e0 as e0, s0.n0 as n0 from s0 join edge e0 on (s0.n0).id = (s0.e0).start_id join node n2 on n2.id = (s0.e0).end_id) select count(*) > 0 from s1));
 
 -- case: match (s)-[r:EdgeKind1]->(e) where not (s.system_tags contains 'admin_tier_0') and id(e) = 1 return id(s), labels(s), id(r), type(r)
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = 1) and n1.id = e0.end_id join node n0 on (not (coalesce((n0.properties ->> 'system_tags'), '')::text like '%admin\_tier\_0%')) and n0.id = e0.start_id where e0.kind_id = any (array [3]::int2[])) select (s0.n0).id, (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[], (s0.e0).id, (s0.e0).kind_id from s0;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = 1) and n1.id = e0.end_id join node n0 on (not (coalesce((n0.properties ->> 'system_tags'), '')::text like '%admin\_tier\_0%')) and n0.id = e0.start_id where e0.kind_id = any (array [3]::int2[])) select (s0.n0).id, (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[], (s0.e0).id, kind_name((s0.e0).kind_id)::text from s0;
 
 -- case: match (s)-[r]->(e) where s:NodeKind1 and toLower(s.name) starts with 'test' and r:EdgeKind1 and id(e) in [1, 2] return r limit 1
 with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and lower((n0.properties ->> 'name'))::text like 'test%') and n0.id = e0.start_id join node n1 on (n1.id = any (array [1, 2]::int8[])) and n1.id = e0.end_id where (e0.kind_id = any (array [3]::int2[])) limit 1) select s0.e0 as r from s0 limit 1;

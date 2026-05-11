@@ -372,7 +372,13 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 		} else if identifier, isIdentifier := argument.(pgsql.Identifier); !isIdentifier {
 			s.SetErrorf("expected an identifier for the cypher function: %s but received %T", typedExpression.Name, argument)
 		} else {
-			s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindID})
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function: pgsql.FunctionKindName,
+				Parameters: []pgsql.Expression{
+					pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindID},
+				},
+				CastType: pgsql.Text,
+			})
 		}
 
 	case cypher.RelationshipsFunction:

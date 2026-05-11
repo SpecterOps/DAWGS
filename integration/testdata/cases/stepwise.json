@@ -12,6 +12,26 @@
       "assert": "non_empty"
     },
     {
+      "name": "return relationship type() string names",
+      "cypher": "match ()-[r]->() return type(r) order by type(r)",
+      "assert": {"ordered_scalar_values": ["EdgeKind1", "EdgeKind2"]}
+    },
+    {
+      "name": "filter edges by type() inequality and return string names",
+      "cypher": "match ()-[r]->() where type(r) <> 'EdgeKind1' return type(r)",
+      "assert": {"ordered_scalar_values": ["EdgeKind2"]}
+    },
+    {
+      "name": "filter edges by type() list membership and return string names",
+      "cypher": "match ()-[r]->() where type(r) in ['EdgeKind2'] return type(r)",
+      "assert": {"ordered_scalar_values": ["EdgeKind2"]}
+    },
+    {
+      "name": "filter edges by type() string prefix and return string names",
+      "cypher": "match ()-[r]->() where type(r) STARTS WITH 'EdgeKind' return type(r) order by type(r)",
+      "assert": {"ordered_scalar_values": ["EdgeKind1", "EdgeKind2"]}
+    },
+    {
       "name": "count edges of a specific kind",
       "cypher": "match ()-[r:EdgeKind1]->() return count(r) as the_count",
       "assert": {"at_least_int": 1}
