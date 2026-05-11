@@ -1,4 +1,5 @@
 {
+  "dataset": "empty",
   "cases": [
     {
       "name": "regression: incoming negated pattern with contains predicate (left-directed form)",
