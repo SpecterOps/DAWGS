@@ -55,3 +55,26 @@ export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 ```
 
 Use `make test` for unit tests only and `make test_integration` for integration tests only.
+
+### Benchmarking
+
+Run the package benchmark suite with:
+
+```bash
+make test_bench
+```
+
+Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
+
+```bash
+go run ./cmd/benchdiff -base main -target HEAD -kind unit
+```
+
+For integration benchmark comparisons, provide the same `CONNECTION_STRING` used by integration tests:
+
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+go run ./cmd/benchdiff -base main -target HEAD -kind all -driver pg -fail-regression 10%
+```
+
+The harness writes raw outputs and a Markdown report under `.bench/runs/` by default.

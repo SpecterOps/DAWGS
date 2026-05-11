@@ -3,6 +3,12 @@ THIS_FILE := $(lastword $(MAKEFILE_LIST))
 # Go configuration
 GO_CMD ?= go
 CGO_ENABLED ?= 0
+BENCH ?= .
+BENCH_COUNT ?= 10
+BENCH_TIME ?= 1s
+BENCH_BASE ?= main
+BENCH_TARGET ?= HEAD
+BENCH_KIND ?= all
 
 # Main packages to test/build
 MAIN_PACKAGES := $(shell $(GO_CMD) list ./...)
@@ -44,6 +50,14 @@ test_all: test test_integration
 test_integration:
 	@echo "Running all integration tests..."
 	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
+
+test_bench:
+	@echo "Running benchmarks..."
+	@$(GO_CMD) test -run '^$$' -bench '$(BENCH)' -benchmem -count=$(BENCH_COUNT) -benchtime=$(BENCH_TIME) $(MAIN_PACKAGES)
+
+bench_diff:
+	@echo "Running benchmark diff..."
+	@$(GO_CMD) run ./cmd/benchdiff --base '$(BENCH_BASE)' --target '$(BENCH_TARGET)' --kind '$(BENCH_KIND)' --bench '$(BENCH)' --bench-count '$(BENCH_COUNT)' --benchtime '$(BENCH_TIME)' $(BENCHDIFF_ARGS)
 
 test_neo4j:
 	@echo "Running Neo4j integration tests..."
@@ -96,6 +110,7 @@ help:
 	@echo "  test_all    - Run all tests including integration tests"
 	@echo "  test_integration - Run all integration tests"
 	@echo "  test_bench  - Run benchmark test"
+	@echo "  bench_diff  - Compare benchmarks between commits"
 	@echo "  test_neo4j  - Run Neo4j integration tests"
 	@echo "  test_pg     - Run PostgreSQL integration tests"
 	@echo "  test_update - Update test cases"

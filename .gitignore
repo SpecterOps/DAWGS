@@ -6,3 +6,6 @@
 
 # Local integration test datasets
 integration/testdata/local/
+
+# Local benchmark comparison output
+.bench/
