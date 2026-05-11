@@ -50,6 +50,7 @@ type ExpansionBuilder struct {
 	PrimerStatement     pgsql.Select
 	RecursiveStatement  pgsql.Select
 	ProjectionStatement pgsql.Select
+	ZeroDepthStatement  *pgsql.Select
 	UseUnionAll         bool
 
 	queryParameters map[string]any
@@ -527,6 +528,79 @@ func frontPrimerQuery(seed *expansionSeed, primer pgsql.Select) pgsql.Query {
 	}
 
 	return seededFrontPrimerQuery(*seed, primer)
+}
+
+func expansionAllowsZeroDepth(expansionModel *Expansion) bool {
+	return expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value == 0
+}
+
+func zeroDepthNodeJoin(nodeIdentifier pgsql.Identifier, nodeID pgsql.Expression) pgsql.Join {
+	return pgsql.Join{
+		Table: expansionNodeTableReference(nodeIdentifier),
+		JoinOperator: pgsql.JoinOperator{
+			JoinType:   pgsql.JoinTypeInner,
+			Constraint: pgd.Equals(pgd.EntityID(nodeIdentifier), nodeID),
+		},
+	}
+}
+
+func (s *ExpansionBuilder) buildZeroDepthExpansionSelect(seed *expansionSeed) (pgsql.Select, error) {
+	var (
+		expansionModel      = s.traversalStep.Expansion
+		rootIDExpression    pgsql.Expression
+		fromClause          pgsql.FromClause
+		satisfiedExpression pgsql.Expression = pgsql.NewLiteral(false, pgsql.Boolean)
+	)
+
+	if seed != nil {
+		rootIDExpression = seed.rootID()
+		fromClause = seed.fromClause()
+	} else {
+		rootIDExpression = pgd.EntityID(s.traversalStep.LeftNode.Identifier)
+		fromClause = pgsql.FromClause{
+			Source: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier),
+		}
+	}
+
+	if expansionModel.TerminalNodeSatisfactionProjection != nil {
+		localSatisfaction, _ := expansionTerminalSatisfactionLocality(s.traversalStep)
+		if localSatisfaction == nil {
+			localSatisfaction = pgsql.NewLiteral(true, pgsql.Boolean)
+		}
+
+		satisfiedExpression = localSatisfaction
+
+		if seed != nil && referencesIdentifier(localSatisfaction, s.traversalStep.LeftNode.Identifier) {
+			fromClause.Joins = append(fromClause.Joins, zeroDepthNodeJoin(s.traversalStep.LeftNode.Identifier, rootIDExpression))
+		}
+
+		if s.traversalStep.RightNode.Identifier != s.traversalStep.LeftNode.Identifier &&
+			referencesIdentifier(localSatisfaction, s.traversalStep.RightNode.Identifier) {
+			fromClause.Joins = append(fromClause.Joins, zeroDepthNodeJoin(s.traversalStep.RightNode.Identifier, rootIDExpression))
+		}
+	}
+
+	satisfiedSelectItem, err := pgsql.As[pgsql.SelectItem](satisfiedExpression)
+	if err != nil {
+		return pgsql.Select{}, err
+	}
+
+	rootIDSelectItem, err := pgsql.As[pgsql.SelectItem](rootIDExpression)
+	if err != nil {
+		return pgsql.Select{}, err
+	}
+
+	return pgsql.Select{
+		Projection: []pgsql.SelectItem{
+			rootIDSelectItem,
+			rootIDSelectItem,
+			pgsql.NewLiteral(0, pgsql.Int),
+			satisfiedSelectItem,
+			pgsql.NewLiteral(false, pgsql.Boolean),
+			pgsql.ArrayLiteral{CastType: pgsql.Int8Array},
+		},
+		From: []pgsql.FromClause{fromClause},
+	}, nil
 }
 
 func (s *ExpansionBuilder) usesBoundRootIDs() bool {
@@ -1765,6 +1839,22 @@ func (s *ExpansionBuilder) bidirectionalAllShortestPathsParameters(expansionMode
 }
 
 func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTableExpressions ...pgsql.CommonTableExpression) pgsql.Query {
+	expansionBody := pgsql.SetExpression(pgsql.SetOperation{
+		LOperand: s.PrimerStatement,
+		ROperand: s.RecursiveStatement,
+		Operator: pgsql.OperatorUnion,
+		All:      s.UseUnionAll,
+	})
+
+	if s.ZeroDepthStatement != nil {
+		expansionBody = pgsql.SetOperation{
+			LOperand: *s.ZeroDepthStatement,
+			ROperand: expansionBody,
+			Operator: pgsql.OperatorUnion,
+			All:      s.UseUnionAll,
+		}
+	}
+
 	query := pgsql.Query{
 		CommonTableExpressions: &pgsql.With{
 			Recursive: true,
@@ -1782,12 +1872,7 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTab
 			Shape: expansionColumns(),
 		},
 		Query: pgsql.Query{
-			Body: pgsql.SetOperation{
-				LOperand: s.PrimerStatement,
-				ROperand: s.RecursiveStatement,
-				Operator: pgsql.OperatorUnion,
-				All:      s.UseUnionAll,
-			},
+			Body: expansionBody,
 		},
 	})
 
@@ -1873,6 +1958,15 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 	}
 
 	expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, nextQueryFrom)
+
+	if expansionAllowsZeroDepth(expansionModel) {
+		zeroDepthStatement, err := expansion.buildZeroDepthExpansionSelect(seed)
+		if err != nil {
+			return pgsql.Query{}, err
+		}
+
+		expansion.ZeroDepthStatement = &zeroDepthStatement
+	}
 
 	// Build recursive step joins. The terminal node join is only added when the
 	// expansion carries terminal-node constraints, which are the only cases where
@@ -1995,6 +2089,15 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 	}
 
 	expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, seed.fromClause(primerJoins...))
+
+	if expansionAllowsZeroDepth(expansionModel) {
+		zeroDepthStatement, err := expansion.buildZeroDepthExpansionSelect(&seed)
+		if err != nil {
+			return pgsql.Query{}, err
+		}
+
+		expansion.ZeroDepthStatement = &zeroDepthStatement
+	}
 
 	// Build recursive step joins. The terminal node join is only added when the
 	// expansion carries terminal-node constraints, which are the only cases where

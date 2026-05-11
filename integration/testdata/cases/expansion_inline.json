@@ -127,6 +127,32 @@
       "assert": {"path_node_ids": [["src", "dst"]], "path_edge_kinds": [["EdgeKind1"]]}
     },
     {
+      "name": "zero hop expansion pairs unbound endpoints on the same node",
+      "cypher": "match (a:NodeKind1)-[:EdgeKind1*0..]->(b:NodeKind1) where a.name = 'solo' and b.name = 'solo' return a.name, b.name",
+      "fixture": {
+        "nodes": [
+          {"id": "solo", "kinds": ["NodeKind1"], "properties": {"name": "solo"}},
+          {"id": "other-a", "kinds": ["NodeKind1"], "properties": {"name": "other-a"}},
+          {"id": "other-b", "kinds": ["NodeKind1"], "properties": {"name": "other-b"}}
+        ],
+        "edges": [{"start_id": "other-a", "end_id": "other-b", "kind": "EdgeKind1"}]
+      },
+      "assert": {"row_values": [["solo", "solo"]]}
+    },
+    {
+      "name": "zero hop expansion pairs a bound root with itself",
+      "cypher": "match (a:NodeKind1) where a.name = 'solo' match (a)-[:EdgeKind1*0..]->(b:NodeKind1) return b.name",
+      "fixture": {
+        "nodes": [
+          {"id": "solo", "kinds": ["NodeKind1"], "properties": {"name": "solo"}},
+          {"id": "other-a", "kinds": ["NodeKind1"], "properties": {"name": "other-a"}},
+          {"id": "other-b", "kinds": ["NodeKind1"], "properties": {"name": "other-b"}}
+        ],
+        "edges": [{"start_id": "other-a", "end_id": "other-b", "kind": "EdgeKind1"}]
+      },
+      "assert": {"ordered_scalar_values": ["solo"]}
+    },
+    {
       "name": "bind expansion path filtering both endpoints using ends-with on objectid",
       "cypher": "match p = (g:NodeKind1)-[:EdgeKind1|EdgeKind2*]->(target:NodeKind1) where g.objectid ends with '-src' and target.objectid ends with '-tgt' return p",
       "fixture": {
