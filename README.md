@@ -78,7 +78,8 @@ go run ./cmd/benchdiff -base main -target HEAD -kind all -driver pg -fail-regres
 ```
 
 The harness writes raw outputs and a Markdown report under `.bench/runs/` by default. The report begins with comparison
-findings before listing the raw `benchstat` output for each benchmark suite.
+findings, includes the raw `benchstat` output for each benchmark suite, and ends with a table of all captured benchmark
+numbers.
 
 The integration benchmark runner includes committed `base` and `traversal_shapes` datasets by default. The traversal
 shape suite checks expected result counts for chain, fanout, bounded cycle, disconnected, edge-kind-selective, and

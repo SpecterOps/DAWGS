@@ -70,6 +70,40 @@ func TestWriteRunReportIncludesTopLevelFindings(t *testing.T) {
 				}},
 				OnlyBase:   []string{"BenchmarkRemoved-12"},
 				OnlyTarget: []string{"BenchmarkAdded-12"},
+				Results: []benchmarkResult{
+					{
+						Name:           "BenchmarkAdded-12",
+						TargetMedianNS: 75,
+						TargetSamples:  1,
+						HasTarget:      true,
+					},
+					{
+						Name:           "BenchmarkFast-12",
+						BaseMedianNS:   200,
+						TargetMedianNS: 100,
+						DeltaPercent:   -50,
+						BaseSamples:    3,
+						TargetSamples:  3,
+						HasBase:        true,
+						HasTarget:      true,
+					},
+					{
+						Name:         "BenchmarkRemoved-12",
+						BaseMedianNS: 50,
+						BaseSamples:  1,
+						HasBase:      true,
+					},
+					{
+						Name:           "BenchmarkSlow-12",
+						BaseMedianNS:   100,
+						TargetMedianNS: 150,
+						DeltaPercent:   50,
+						BaseSamples:    3,
+						TargetSamples:  3,
+						HasBase:        true,
+						HasTarget:      true,
+					},
+				},
 			},
 			Regressions: []regression{{
 				Name:           "BenchmarkSlow-12",
@@ -98,4 +132,10 @@ func TestWriteRunReportIncludesTopLevelFindings(t *testing.T) {
 	require.Contains(t, output, "| `BenchmarkFast-12` | 200ns | 100ns | -50.00% |")
 	require.Contains(t, output, "## Unit Benchmarks")
 	require.Contains(t, output, "benchstat output")
+	require.Contains(t, output, "## All Executed Benchmark Numbers")
+	require.Contains(t, output, "| Benchmark | Base Median | Target Median | Change | Base Samples | Target Samples |")
+	require.Contains(t, output, "| `BenchmarkSlow-12` | 100ns | 150ns | +50.00% | 3 | 3 |")
+	require.Contains(t, output, "| `BenchmarkFast-12` | 200ns | 100ns | -50.00% | 3 | 3 |")
+	require.Contains(t, output, "| `BenchmarkRemoved-12` | 50ns | - | - | 1 | - |")
+	require.Contains(t, output, "| `BenchmarkAdded-12` | - | 75ns | - | - | 1 |")
 }

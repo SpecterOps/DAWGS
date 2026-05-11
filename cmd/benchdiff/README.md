@@ -18,8 +18,9 @@ go run ./cmd/benchdiff -base main -target HEAD -kind unit -fail-regression 10%
 
 `benchdiff` creates detached worktrees under `.bench/`, runs each selected benchmark suite, writes raw output, and
 produces a Markdown report. The report starts with comparison findings, including median regressions, improvements,
-unchanged counts, and benchmark names that only appeared in one ref. Worktrees are removed by default after the run;
-pass `-keep-worktrees` to preserve them.
+unchanged counts, and benchmark names that only appeared in one ref. It ends with an `All Executed Benchmark Numbers`
+section that lists the median, percent change, and sample counts for every benchmark captured in either ref. Worktrees
+are removed by default after the run; pass `-keep-worktrees` to preserve them.
 
 ## Flags
 

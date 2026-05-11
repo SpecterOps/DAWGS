@@ -86,11 +86,47 @@ func writeRunReport(path string, summary runSummary) error {
 		writeRegressionSection(&out, comparison, cfg.Threshold)
 	}
 
+	writeAllExecutedNumbers(&out, summary)
+
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
 
 	return os.WriteFile(path, out.Bytes(), 0644)
+}
+
+func writeAllExecutedNumbers(out *bytes.Buffer, summary runSummary) {
+	fmt.Fprintln(out, "## All Executed Benchmark Numbers")
+	fmt.Fprintln(out)
+
+	if len(summary.Comparisons) == 0 {
+		fmt.Fprintln(out, "No benchmark numbers were captured.")
+		fmt.Fprintln(out)
+		return
+	}
+
+	for _, comparison := range summary.Comparisons {
+		fmt.Fprintf(out, "### %s\n\n", comparison.Name)
+		if len(comparison.Findings.Results) == 0 {
+			fmt.Fprintln(out, "No benchmark numbers were captured.")
+			fmt.Fprintln(out)
+			continue
+		}
+
+		fmt.Fprintln(out, "| Benchmark | Base Median | Target Median | Change | Base Samples | Target Samples |")
+		fmt.Fprintln(out, "|-----------|------------:|--------------:|-------:|-------------:|---------------:|")
+		for _, result := range comparison.Findings.Results {
+			fmt.Fprintf(out, "| `%s` | %s | %s | %s | %s | %s |\n",
+				result.Name,
+				formatOptionalNS(result.HasBase, result.BaseMedianNS),
+				formatOptionalNS(result.HasTarget, result.TargetMedianNS),
+				formatOptionalPercent(result.HasBase && result.HasTarget, result.DeltaPercent),
+				formatOptionalInt(result.HasBase, result.BaseSamples),
+				formatOptionalInt(result.HasTarget, result.TargetSamples),
+			)
+		}
+		fmt.Fprintln(out)
+	}
 }
 
 func writeFindingsSummary(out *bytes.Buffer, summary runSummary) {
@@ -195,6 +231,30 @@ func formatNS(value float64) string {
 	default:
 		return fmt.Sprintf("%.0fns", value)
 	}
+}
+
+func formatOptionalNS(ok bool, value float64) string {
+	if !ok {
+		return "-"
+	}
+
+	return formatNS(value)
+}
+
+func formatOptionalPercent(ok bool, value float64) string {
+	if !ok {
+		return "-"
+	}
+
+	return fmt.Sprintf("%+.2f%%", value)
+}
+
+func formatOptionalInt(ok bool, value int) string {
+	if !ok {
+		return "-"
+	}
+
+	return fmt.Sprintf("%d", value)
 }
 
 func writeRegressionSection(out *bytes.Buffer, comparison comparison, threshold float64) {

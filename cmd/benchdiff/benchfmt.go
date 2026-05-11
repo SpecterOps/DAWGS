@@ -43,6 +43,7 @@ type comparisonFindings struct {
 	Unchanged    int
 	OnlyBase     []string
 	OnlyTarget   []string
+	Results      []benchmarkResult
 }
 
 type benchmarkFinding struct {
@@ -50,6 +51,17 @@ type benchmarkFinding struct {
 	BaseMedianNS   float64
 	TargetMedianNS float64
 	DeltaPercent   float64
+}
+
+type benchmarkResult struct {
+	Name           string
+	BaseMedianNS   float64
+	TargetMedianNS float64
+	DeltaPercent   float64
+	BaseSamples    int
+	TargetSamples  int
+	HasBase        bool
+	HasTarget      bool
 }
 
 type regression struct {
@@ -103,12 +115,23 @@ func summarizeFindings(base, target benchmarkSamples) comparisonFindings {
 	for name := range names {
 		baseValues := base[name]
 		targetValues := target[name]
+		result := benchmarkResult{
+			Name:          name,
+			BaseSamples:   len(baseValues),
+			TargetSamples: len(targetValues),
+			HasBase:       len(baseValues) > 0,
+			HasTarget:     len(targetValues) > 0,
+		}
 
 		switch {
 		case len(baseValues) == 0:
+			result.TargetMedianNS = median(targetValues)
+			findings.Results = append(findings.Results, result)
 			findings.OnlyTarget = append(findings.OnlyTarget, name)
 			continue
 		case len(targetValues) == 0:
+			result.BaseMedianNS = median(baseValues)
+			findings.Results = append(findings.Results, result)
 			findings.OnlyBase = append(findings.OnlyBase, name)
 			continue
 		}
@@ -116,11 +139,17 @@ func summarizeFindings(base, target benchmarkSamples) comparisonFindings {
 		baseMedian := median(baseValues)
 		targetMedian := median(targetValues)
 		if baseMedian <= 0 {
+			findings.Results = append(findings.Results, result)
 			continue
 		}
 
+		result.BaseMedianNS = baseMedian
+		result.TargetMedianNS = targetMedian
 		findings.Compared++
 		deltaPercent := ((targetMedian - baseMedian) / baseMedian) * 100
+		result.DeltaPercent = deltaPercent
+		findings.Results = append(findings.Results, result)
+
 		finding := benchmarkFinding{
 			Name:           name,
 			BaseMedianNS:   baseMedian,
@@ -146,6 +175,9 @@ func summarizeFindings(base, target benchmarkSamples) comparisonFindings {
 	})
 	sort.Strings(findings.OnlyBase)
 	sort.Strings(findings.OnlyTarget)
+	sort.Slice(findings.Results, func(i, j int) bool {
+		return findings.Results[i].Name < findings.Results[j].Name
+	})
 
 	return findings
 }

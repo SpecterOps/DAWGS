@@ -56,6 +56,7 @@ func TestSummarizeFindings(t *testing.T) {
 	require.Equal(t, 1, findings.Unchanged)
 	require.Equal(t, []string{"BenchmarkOnlyBase-12"}, findings.OnlyBase)
 	require.Equal(t, []string{"BenchmarkOnlyTarget-12"}, findings.OnlyTarget)
+	require.Len(t, findings.Results, 5)
 	require.Len(t, findings.Regressions, 1)
 	require.Equal(t, "BenchmarkRegression-12", findings.Regressions[0].Name)
 	require.InDelta(t, 36.36, findings.Regressions[0].DeltaPercent, 0.01)
@@ -67,6 +68,18 @@ func TestSummarizeFindings(t *testing.T) {
 	require.Len(t, regressions, 1)
 	require.Equal(t, "BenchmarkRegression-12", regressions[0].Name)
 	require.InDelta(t, 36.36, regressions[0].Percent, 0.01)
+
+	onlyBase := requireBenchmarkResult(t, findings.Results, "BenchmarkOnlyBase-12")
+	require.True(t, onlyBase.HasBase)
+	require.False(t, onlyBase.HasTarget)
+	require.Equal(t, 1, onlyBase.BaseSamples)
+	require.Equal(t, 50.0, onlyBase.BaseMedianNS)
+
+	onlyTarget := requireBenchmarkResult(t, findings.Results, "BenchmarkOnlyTarget-12")
+	require.False(t, onlyTarget.HasBase)
+	require.True(t, onlyTarget.HasTarget)
+	require.Equal(t, 1, onlyTarget.TargetSamples)
+	require.Equal(t, 75.0, onlyTarget.TargetMedianNS)
 }
 
 func TestParseBenchmarkMarkdown(t *testing.T) {
@@ -114,4 +127,17 @@ func TestValidateBenchtime(t *testing.T) {
 	require.NoError(t, validateBenchtime("100x"))
 	require.Error(t, validateBenchtime("0x"))
 	require.Error(t, validateBenchtime("soon"))
+}
+
+func requireBenchmarkResult(t *testing.T, results []benchmarkResult, name string) benchmarkResult {
+	t.Helper()
+
+	for _, result := range results {
+		if result.Name == name {
+			return result
+		}
+	}
+
+	require.Failf(t, "benchmark result not found", "%s", name)
+	return benchmarkResult{}
 }
