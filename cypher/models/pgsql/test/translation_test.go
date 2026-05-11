@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
@@ -20,6 +21,9 @@ func newKindMapper() pgsql.KindMapper {
 	mapper.Put(NodeKind2)
 	mapper.Put(EdgeKind1)
 	mapper.Put(EdgeKind2)
+	mapper.Put(graph.StringKind("Computer"))
+	mapper.Put(graph.StringKind("User"))
+	mapper.Put(graph.StringKind("HasSession"))
 
 	return mapper
 }

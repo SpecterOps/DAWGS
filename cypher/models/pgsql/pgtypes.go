@@ -114,6 +114,16 @@ func (s DataType) IsKnown() bool {
 	}
 }
 
+func (s DataType) IsTemporalType() bool {
+	switch s {
+	case Date, TimeWithTimeZone, TimeWithoutTimeZone, TimestampWithTimeZone, TimestampWithoutTimeZone:
+		return true
+
+	default:
+		return false
+	}
+}
+
 func (s DataType) IsComparable(other DataType, operator Operator) bool {
 	switch operator {
 	case OperatorPGArrayOverlap, OperatorArrayOverlap, OperatorPGArrayLHSContainsRHS:
@@ -263,6 +273,22 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 		}
 
 		// Other special cases for arithmetic
+		switch operator {
+		case OperatorAdd:
+			if s.IsTemporalType() && other == Interval {
+				return s, true
+			}
+
+			if s == Interval && other.IsTemporalType() {
+				return other, true
+			}
+
+		case OperatorSubtract:
+			if s.IsTemporalType() && other == Interval {
+				return s, true
+			}
+		}
+
 		switch s {
 		case Date:
 			switch other {
