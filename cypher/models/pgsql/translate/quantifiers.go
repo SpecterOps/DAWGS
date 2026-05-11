@@ -84,27 +84,57 @@ func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) err
 	} else if array, bound := s.scope.AliasedLookup(identifier); !bound {
 		return fmt.Errorf("filter expression variable must be bound")
 	} else {
-		var functionParameters []pgsql.Expression
-		switch quantifierArrayExpression := quantifierArray.AsExpression().(type) {
-		// Property lookup, n.properties -> usedencryptionkey
-		case pgsql.BinaryExpression:
-			// All property look-up operators are converted to JSON Text field Operators during translation,
-			// this needs to be changed back so we can properly convert it to a Postgres text array which can then be used in an unnest function
-			quantifierArrayExpression.Operator = pgsql.OperatorJSONField
+		var (
+			functionParameters []pgsql.Expression
+			collectionType     pgsql.DataType
+		)
+
+		quantifierArrayExpression := quantifierArray.AsExpression()
+		switch typedQuantifierArrayExpression := quantifierArrayExpression.(type) {
+		case *pgsql.BinaryExpression:
+			if !pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
+				return fmt.Errorf("unknown cypher array type %s", quantifierArrayExpression)
+			}
+
+			// Property look-up operators are converted to JSON text field operators during translation.
+			// Change this back so the JSON array can be converted to a Postgres text array for unnest(...).
+			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
 			functionParameters = []pgsql.Expression{
 				pgsql.FunctionCall{
 					Function: pgsql.FunctionJSONBToTextArray,
 					Parameters: []pgsql.Expression{
-						quantifierArrayExpression,
+						typedQuantifierArrayExpression,
 					},
 				},
 			}
-		// native postgres array eg: collect(x) as quantifier_array ... ANY(y in quantifier_array...
-		case pgsql.Identifier:
-			functionParameters = []pgsql.Expression{quantifierArrayExpression}
+			collectionType = pgsql.TextArray
+
+		case pgsql.BinaryExpression:
+			if !pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
+				return fmt.Errorf("unknown cypher array type %s", quantifierArrayExpression)
+			}
+
+			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
+			functionParameters = []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function: pgsql.FunctionJSONBToTextArray,
+					Parameters: []pgsql.Expression{
+						typedQuantifierArrayExpression,
+					},
+				},
+			}
+			collectionType = pgsql.TextArray
+
 		default:
-			return fmt.Errorf("unknown cypher array type %s", quantifierArrayExpression)
+			if inferredCollectionType, err := s.inferArrayExpressionType(quantifierArrayExpression); err != nil {
+				return err
+			} else {
+				functionParameters = []pgsql.Expression{quantifierArrayExpression}
+				collectionType = inferredCollectionType
+			}
 		}
+
+		array.DataType = collectionType.ArrayBaseType()
 
 		fromClause := pgsql.FromClause{
 			Source: pgsql.AliasedExpression{

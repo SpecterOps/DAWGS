@@ -434,6 +434,25 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 		case *pgsql.ArrayIndex:
 			exprStack = append(exprStack, *typedNextExpr)
 
+		case pgsql.ArraySlice:
+			exprStack = append(exprStack, pgsql.FormattingLiteral("]"))
+
+			if typedNextExpr.Upper != nil {
+				exprStack = append(exprStack, typedNextExpr.Upper)
+			}
+
+			exprStack = append(exprStack, pgsql.FormattingLiteral(":"))
+
+			if typedNextExpr.Lower != nil {
+				exprStack = append(exprStack, typedNextExpr.Lower)
+			}
+
+			exprStack = append(exprStack, pgsql.FormattingLiteral("["))
+			exprStack = append(exprStack, typedNextExpr.Expression)
+
+		case *pgsql.ArraySlice:
+			exprStack = append(exprStack, *typedNextExpr)
+
 		case pgsql.TypeCast:
 			switch typedCastedExpr := typedNextExpr.Expression.(type) {
 			case *pgsql.BinaryExpression:

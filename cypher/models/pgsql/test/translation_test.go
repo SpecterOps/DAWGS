@@ -24,6 +24,11 @@ func newKindMapper() pgsql.KindMapper {
 	mapper.Put(graph.StringKind("Computer"))
 	mapper.Put(graph.StringKind("User"))
 	mapper.Put(graph.StringKind("HasSession"))
+	mapper.Put(graph.StringKind("GPO"))
+	mapper.Put(graph.StringKind("OU"))
+	mapper.Put(graph.StringKind("Base"))
+	mapper.Put(graph.StringKind("GPLink"))
+	mapper.Put(graph.StringKind("Contains"))
 
 	return mapper
 }

@@ -53,6 +53,181 @@ func GetAggregatedFunctionParameterSymbols(call pgsql.FunctionCall) (*pgsql.Symb
 	return symbolTable, nil
 }
 
+func bindingExpressionType(binding *BoundIdentifier) pgsql.DataType {
+	switch binding.DataType {
+	case pgsql.ExpansionEdge:
+		return pgsql.EdgeCompositeArray
+
+	case pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
+		return pgsql.NodeComposite
+
+	default:
+		return binding.DataType
+	}
+}
+
+func inferRowColumnReferenceType(expression pgsql.RowColumnReference) pgsql.DataType {
+	switch expression.Column {
+	case pgsql.ColumnGraphID, pgsql.ColumnID, pgsql.ColumnStartID, pgsql.ColumnEndID:
+		return pgsql.Int8
+
+	case pgsql.ColumnKindID:
+		return pgsql.Int2
+
+	case pgsql.ColumnKindIDs:
+		return pgsql.Int2Array
+
+	case pgsql.ColumnProperties:
+		return pgsql.JSONB
+
+	case pgsql.ColumnNodes:
+		return pgsql.NodeCompositeArray
+
+	case pgsql.ColumnEdges:
+		return pgsql.EdgeCompositeArray
+
+	default:
+		return pgsql.UnknownDataType
+	}
+}
+
+func (s *Translator) inferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
+	switch typedExpression := unwrapParenthetical(expression).(type) {
+	case pgsql.Identifier:
+		if binding, bound := s.scope.Lookup(typedExpression); bound {
+			return bindingExpressionType(binding), nil
+		}
+
+		if binding, bound := s.scope.AliasedLookup(typedExpression); bound {
+			return bindingExpressionType(binding), nil
+		}
+
+	case pgsql.CompoundIdentifier:
+		if len(typedExpression) == 2 {
+			return inferRowColumnReferenceType(pgsql.RowColumnReference{
+				Identifier: typedExpression[0],
+				Column:     typedExpression[1],
+			}), nil
+		}
+
+	case pgsql.RowColumnReference:
+		return inferRowColumnReferenceType(typedExpression), nil
+	}
+
+	return InferExpressionType(expression)
+}
+
+func (s *Translator) inferArrayExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
+	if expressionType, err := s.inferExpressionType(expression); err != nil {
+		return pgsql.UnsetDataType, err
+	} else if expressionType == pgsql.ExpansionEdge {
+		return pgsql.EdgeCompositeArray, nil
+	} else if !expressionType.IsArrayType() {
+		return pgsql.UnsetDataType, fmt.Errorf("expected array expression but received %s", expressionType)
+	} else {
+		return expressionType, nil
+	}
+}
+
+func (s *Translator) expressionForPath(expression pgsql.Expression) (pgsql.Expression, error) {
+	switch typedExpression := unwrapParenthetical(expression).(type) {
+	case pgsql.Identifier:
+		if binding, bound := s.scope.Lookup(typedExpression); !bound {
+			return nil, fmt.Errorf("unable to resolve path identifier %s", typedExpression)
+		} else if binding.DataType != pgsql.PathComposite {
+			return nil, fmt.Errorf("expected path expression but received %s", binding.DataType)
+		} else {
+			return expressionForPathComposite(binding, s.scope)
+		}
+
+	default:
+		if expressionType, err := s.inferExpressionType(expression); err != nil {
+			return nil, err
+		} else if expressionType != pgsql.PathComposite {
+			return nil, fmt.Errorf("expected path expression but received %s", expressionType)
+		}
+
+		return expression, nil
+	}
+}
+
+func (s *Translator) translateHeadFunction(functionInvocation *cypher.FunctionInvocation) error {
+	if functionInvocation.NumArguments() != 1 {
+		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
+	}
+
+	if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		return err
+	} else if arrayType, err := s.inferArrayExpressionType(argument); err != nil {
+		return err
+	} else {
+		s.treeTranslator.PushOperand(&pgsql.ArrayIndex{
+			Expression: pgsql.NewParenthetical(argument),
+			Indexes: []pgsql.Expression{
+				pgsql.NewLiteral(1, pgsql.Int),
+			},
+			CastType: arrayType.ArrayBaseType(),
+		})
+	}
+
+	return nil
+}
+
+func (s *Translator) translateTailFunction(functionInvocation *cypher.FunctionInvocation) error {
+	if functionInvocation.NumArguments() != 1 {
+		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
+	}
+
+	if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		return err
+	} else if arrayType, err := s.inferArrayExpressionType(argument); err != nil {
+		return err
+	} else {
+		s.treeTranslator.PushOperand(pgsql.FunctionCall{
+			Function: pgsql.FunctionCoalesce,
+			Parameters: []pgsql.Expression{
+				&pgsql.ArraySlice{
+					Expression: pgsql.NewParenthetical(argument),
+					Lower:      pgsql.NewLiteral(2, pgsql.Int),
+					Upper: pgsql.FunctionCall{
+						Function: pgsql.FunctionCardinality,
+						Parameters: []pgsql.Expression{
+							argument,
+						},
+						CastType: pgsql.Int,
+					},
+					CastType: arrayType,
+				},
+				pgsql.ArrayLiteral{
+					CastType: arrayType,
+				},
+			},
+			CastType: arrayType,
+		})
+	}
+
+	return nil
+}
+
+func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.FunctionInvocation, column pgsql.Identifier, castType pgsql.DataType) error {
+	if functionInvocation.NumArguments() != 1 {
+		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
+	}
+
+	if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		return err
+	} else if pathExpression, err := s.expressionForPath(argument); err != nil {
+		return err
+	} else {
+		s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
+			Identifier: pathExpression,
+			Column:     column,
+		}, castType))
+	}
+
+	return nil
+}
+
 func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocation) {
 	switch formattedName := strings.ToLower(typedExpression.Name); formattedName {
 	case cypher.DurationFunction:
@@ -213,6 +388,26 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			}
 
 			s.treeTranslator.PushOperand(functionCall)
+		}
+
+	case cypher.HeadFunction:
+		if err := s.translateHeadFunction(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case cypher.TailFunction:
+		if err := s.translateTailFunction(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case cypher.NodesFunction:
+		if err := s.translatePathComponentFunction(typedExpression, pgsql.ColumnNodes, pgsql.NodeCompositeArray); err != nil {
+			s.SetError(err)
+		}
+
+	case cypher.RelationshipsFunction:
+		if err := s.translatePathComponentFunction(typedExpression, pgsql.ColumnEdges, pgsql.EdgeCompositeArray); err != nil {
+			s.SetError(err)
 		}
 
 	case cypher.ToUpperFunction:

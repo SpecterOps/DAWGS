@@ -617,6 +617,7 @@ func (s Identifier) Matches(others ...Identifier) bool {
 type ArrayIndex struct {
 	Expression Expression
 	Indexes    []Expression
+	CastType   DataType
 }
 
 func (s ArrayIndex) NodeType() string {
@@ -625,6 +626,37 @@ func (s ArrayIndex) NodeType() string {
 
 func (s ArrayIndex) AsExpression() Expression {
 	return s
+}
+
+func (s ArrayIndex) TypeHint() DataType {
+	if s.CastType == UnsetDataType {
+		return UnknownDataType
+	}
+
+	return s.CastType
+}
+
+type ArraySlice struct {
+	Expression Expression
+	Lower      Expression
+	Upper      Expression
+	CastType   DataType
+}
+
+func (s ArraySlice) NodeType() string {
+	return "array_slice"
+}
+
+func (s ArraySlice) AsExpression() Expression {
+	return s
+}
+
+func (s ArraySlice) TypeHint() DataType {
+	if s.CastType == UnsetDataType {
+		return UnknownDataType
+	}
+
+	return s.CastType
 }
 
 type RowColumnReference struct {

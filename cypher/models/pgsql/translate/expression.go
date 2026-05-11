@@ -26,6 +26,16 @@ func unwrapParenthetical(parenthetical pgsql.Expression) pgsql.Expression {
 	return parenthetical
 }
 
+func expressionHasCompositeProperties(expressionType pgsql.DataType) bool {
+	switch expressionType {
+	case pgsql.NodeComposite, pgsql.EdgeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionEdge, pgsql.ExpansionTerminalNode:
+		return true
+
+	default:
+		return false
+	}
+}
+
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
 	if translatedAtom, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
@@ -36,6 +46,25 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 				return err
 			} else {
 				s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{typedTranslatedAtom, pgsql.ColumnProperties})
+				s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+
+				if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup); err != nil {
+					return err
+				}
+			}
+
+		default:
+			if expressionType, err := s.inferExpressionType(translatedAtom); err != nil {
+				return err
+			} else if !expressionHasCompositeProperties(expressionType) {
+				return nil
+			} else if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
+				return err
+			} else {
+				s.treeTranslator.PushOperand(pgsql.RowColumnReference{
+					Identifier: translatedAtom,
+					Column:     pgsql.ColumnProperties,
+				})
 				s.treeTranslator.PushOperand(fieldIdentifierLiteral)
 
 				if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup); err != nil {

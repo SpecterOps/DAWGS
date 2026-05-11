@@ -27,6 +27,8 @@ const (
 	ColumnGraphID    Identifier = "graph_id"
 	ColumnStartID    Identifier = "start_id"
 	ColumnEndID      Identifier = "end_id"
+	ColumnNodes      Identifier = "nodes"
+	ColumnEdges      Identifier = "edges"
 )
 
 var (

@@ -433,6 +433,7 @@ func rewriteBoundEndpointSeedReference(expression pgsql.Expression, previousFram
 		return pgsql.ArrayIndex{
 			Expression: rewriteBoundEndpointSeedReference(typedExpression.Expression, previousFrameIdentifier, nodeIdentifier),
 			Indexes:    indexes,
+			CastType:   typedExpression.CastType,
 		}
 
 	case *pgsql.ArrayIndex:
@@ -441,6 +442,30 @@ func rewriteBoundEndpointSeedReference(expression pgsql.Expression, previousFram
 		}
 
 		rewritten := rewriteBoundEndpointSeedReference(*typedExpression, previousFrameIdentifier, nodeIdentifier).(pgsql.ArrayIndex)
+		return &rewritten
+
+	case pgsql.ArraySlice:
+		var lower, upper pgsql.Expression
+		if typedExpression.Lower != nil {
+			lower = rewriteBoundEndpointSeedReference(typedExpression.Lower, previousFrameIdentifier, nodeIdentifier)
+		}
+		if typedExpression.Upper != nil {
+			upper = rewriteBoundEndpointSeedReference(typedExpression.Upper, previousFrameIdentifier, nodeIdentifier)
+		}
+
+		return pgsql.ArraySlice{
+			Expression: rewriteBoundEndpointSeedReference(typedExpression.Expression, previousFrameIdentifier, nodeIdentifier),
+			Lower:      lower,
+			Upper:      upper,
+			CastType:   typedExpression.CastType,
+		}
+
+	case *pgsql.ArraySlice:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := rewriteBoundEndpointSeedReference(*typedExpression, previousFrameIdentifier, nodeIdentifier).(pgsql.ArraySlice)
 		return &rewritten
 
 	case pgsql.AnyExpression:

@@ -179,6 +179,55 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 			}
 		}
 
+	case *pgsql.ArraySlice:
+		switch typedArraySliceInnerExpression := typedExpression.Expression.(type) {
+		case pgsql.Identifier:
+			if rewritten, err := rewriteIdentifierScopeReference(s.scope, typedArraySliceInnerExpression); err != nil {
+				return err
+			} else {
+				typedExpression.Expression = rewritten
+			}
+
+		case pgsql.CompoundIdentifier:
+			if rewritten, err := rewriteCompoundIdentifierScopeReference(s.scope, typedArraySliceInnerExpression); err != nil {
+				return err
+			} else {
+				typedExpression.Expression = rewritten
+			}
+		}
+
+		switch typedLowerExpression := typedExpression.Lower.(type) {
+		case pgsql.Identifier:
+			if rewritten, err := rewriteIdentifierScopeReference(s.scope, typedLowerExpression); err != nil {
+				return err
+			} else {
+				typedExpression.Lower = rewritten
+			}
+
+		case pgsql.CompoundIdentifier:
+			if rewritten, err := rewriteCompoundIdentifierScopeReference(s.scope, typedLowerExpression); err != nil {
+				return err
+			} else {
+				typedExpression.Lower = rewritten
+			}
+		}
+
+		switch typedUpperExpression := typedExpression.Upper.(type) {
+		case pgsql.Identifier:
+			if rewritten, err := rewriteIdentifierScopeReference(s.scope, typedUpperExpression); err != nil {
+				return err
+			} else {
+				typedExpression.Upper = rewritten
+			}
+
+		case pgsql.CompoundIdentifier:
+			if rewritten, err := rewriteCompoundIdentifierScopeReference(s.scope, typedUpperExpression); err != nil {
+				return err
+			} else {
+				typedExpression.Upper = rewritten
+			}
+		}
+
 	case *pgsql.Parenthetical:
 		switch typedInnerExpression := typedExpression.Expression.(type) {
 		case pgsql.Identifier:

@@ -302,6 +302,34 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 			}, nil
 		}
 
+	case pgsql.ArraySlice:
+		branches := []pgsql.SyntaxNode{typedNode.Expression}
+		if typedNode.Lower != nil {
+			branches = append(branches, typedNode.Lower)
+		}
+		if typedNode.Upper != nil {
+			branches = append(branches, typedNode.Upper)
+		}
+
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: branches,
+		}, nil
+
+	case *pgsql.ArraySlice:
+		branches := []pgsql.SyntaxNode{typedNode.Expression}
+		if typedNode.Lower != nil {
+			branches = append(branches, typedNode.Lower)
+		}
+		if typedNode.Upper != nil {
+			branches = append(branches, typedNode.Upper)
+		}
+
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: branches,
+		}, nil
+
 	case pgsql.ExistsExpression:
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
