@@ -17,9 +17,19 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"runtime"
+	"strings"
 	"time"
+	"unicode"
+)
+
+const (
+	reportFormatBenchfmt = "benchfmt"
+	reportFormatJSON     = "json"
+	reportFormatMarkdown = "markdown"
 )
 
 // Report holds all benchmark results and metadata.
@@ -29,6 +39,36 @@ type Report struct {
 	Date       string
 	Iterations int
 	Results    []Result
+}
+
+func writeReport(w io.Writer, r Report, format string) error {
+	if !isReportFormat(format) {
+		return fmt.Errorf("unsupported output format %q", format)
+	}
+
+	switch format {
+	case reportFormatBenchfmt:
+		return writeBenchfmt(w, r)
+	case reportFormatJSON:
+		return writeJSON(w, r)
+	default:
+		return writeMarkdown(w, r)
+	}
+}
+
+func isReportFormat(format string) bool {
+	switch format {
+	case reportFormatBenchfmt, reportFormatJSON, reportFormatMarkdown:
+		return true
+	default:
+		return false
+	}
+}
+
+func writeJSON(w io.Writer, r Report) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(r)
 }
 
 func writeMarkdown(w io.Writer, r Report) error {
@@ -53,6 +93,77 @@ func writeMarkdown(w io.Writer, r Report) error {
 
 	fmt.Fprintln(w)
 	return nil
+}
+
+func writeBenchfmt(w io.Writer, r Report) error {
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	procs := runtime.GOMAXPROCS(0)
+
+	fmt.Fprintf(w, "goos: %s\n", goos)
+	fmt.Fprintf(w, "goarch: %s\n", goarch)
+	fmt.Fprintf(w, "pkg: github.com/specterops/dawgs/cmd/benchmark\n")
+
+	for _, res := range r.Results {
+		benchName := benchName(r.Driver, res)
+
+		for _, sample := range res.Samples {
+			fmt.Fprintf(w, "%s-%d\t1\t%d ns/op\n", benchName, procs, sample.Nanoseconds())
+		}
+	}
+
+	return nil
+}
+
+func benchName(driver string, res Result) string {
+	parts := []string{
+		"BenchmarkDawgsIntegration",
+		sanitizeBenchNamePart(driver),
+		sanitizeBenchNamePart(res.Dataset),
+		sanitizeBenchNamePart(res.Section),
+		sanitizeBenchNamePart(res.Label),
+	}
+
+	return strings.Join(parts, "/")
+}
+
+func sanitizeBenchNamePart(value string) string {
+	var builder strings.Builder
+	lastUnderscore := false
+
+	for _, char := range value {
+		switch {
+		case char == '/' || char == '-' || char == '_':
+			if char == '_' {
+				if !lastUnderscore {
+					builder.WriteRune(char)
+				}
+				lastUnderscore = true
+			} else {
+				builder.WriteRune(char)
+				lastUnderscore = false
+			}
+		case unicode.IsLetter(char) || unicode.IsDigit(char):
+			builder.WriteRune(char)
+			lastUnderscore = false
+		case unicode.IsSpace(char):
+			if !lastUnderscore {
+				builder.WriteByte('_')
+			}
+			lastUnderscore = true
+		default:
+			if !lastUnderscore {
+				builder.WriteByte('_')
+			}
+			lastUnderscore = true
+		}
+	}
+
+	if builder.Len() == 0 {
+		return "unknown"
+	}
+
+	return builder.String()
 }
 
 func fmtDuration(d time.Duration) string {

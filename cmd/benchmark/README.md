@@ -19,6 +19,9 @@ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:password@localho
 
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
+
+# Emit benchfmt for benchstat
+go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 ```
 
 ## Flags
@@ -31,7 +34,11 @@ go run ./cmd/benchmark -connection "..." -output report.md
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
-| `-output` | stdout | Markdown output file |
+| `-format` | `markdown` | Output format (`markdown`, `json`, `benchfmt`) |
+| `-output` | stdout | Output file |
+
+Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a
+separate `ns/op` sample so two benchmark runs can be compared directly.
 
 ## Example: Neo4j on local/phantom
 

@@ -37,6 +37,7 @@ type Result struct {
 	Dataset string
 	Label   string
 	Stats   Stats
+	Samples []time.Duration
 }
 
 // runScenario executes a scenario N times and returns timing stats.
@@ -61,6 +62,7 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 		Dataset: s.Dataset,
 		Label:   s.Label,
 		Stats:   computeStats(durations),
+		Samples: durations,
 	}, nil
 }
 

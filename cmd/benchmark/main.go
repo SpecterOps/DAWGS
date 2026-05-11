@@ -41,6 +41,7 @@ func main() {
 		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
 		output       = flag.String("output", "", "markdown output file (default: stdout)")
+		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
@@ -48,6 +49,13 @@ func main() {
 	)
 
 	flag.Parse()
+
+	if *iterations < 1 {
+		fatal("iterations must be at least 1")
+	}
+	if !isReportFormat(*format) {
+		fatal("unsupported output format %q", *format)
+	}
 
 	conn := *connStr
 	if conn == "" {
@@ -153,7 +161,7 @@ func main() {
 		}
 	}
 
-	// Write markdown
+	// Write report
 	var mdOut *os.File
 	if *output != "" {
 		var err error
@@ -166,8 +174,8 @@ func main() {
 		mdOut = os.Stdout
 	}
 
-	if err := writeMarkdown(mdOut, report); err != nil {
-		fatal("failed to write markdown: %v", err)
+	if err := writeReport(mdOut, report, *format); err != nil {
+		fatal("failed to write report: %v", err)
 	}
 
 	if *output != "" {
