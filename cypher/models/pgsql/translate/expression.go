@@ -57,7 +57,7 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 			if expressionType, err := s.inferExpressionType(translatedAtom); err != nil {
 				return err
 			} else if !expressionHasCompositeProperties(expressionType) {
-				return nil
+				return fmt.Errorf("unsupported property lookup %s on expression type %s", lookup.Symbol, expressionType)
 			} else if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
 				return err
 			} else {

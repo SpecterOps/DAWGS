@@ -29,3 +29,14 @@ func TestTranslatorRejectsNeo4jAuthoritativeInvalidShapes(t *testing.T) {
 		})
 	}
 }
+
+func TestTranslatorRejectsUnsupportedPropertyLookupSourcesDirectly(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `RETURN [1, 2, 3].prop`)
+	require.NoError(t, err)
+
+	_, err = Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported property lookup prop on expression type int8[]")
+}
