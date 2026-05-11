@@ -75,6 +75,35 @@
           "assert": {"path_node_ids": [["a", "b"]], "path_edge_kinds": [["TemplateEdgeKind1"]]}
         }
       ]
+    },
+    {
+      "name": "shortest path relationship predicate functions",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["TemplateNodeKind1"], "properties": {"name": "path-filter-src"}},
+          {"id": "blocked", "kinds": ["TemplateNodeKind2"], "properties": {"name": "blocked-session-host"}},
+          {"id": "allowed", "kinds": ["TemplateNodeKind2"], "properties": {"name": "allowed-session-host"}},
+          {"id": "long", "kinds": ["TemplateNodeKind2"], "properties": {"name": "longer-route"}},
+          {"id": "dst", "kinds": ["TemplateNodeKind1"], "properties": {"name": "path-filter-dst"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "blocked", "kind": "TemplateEdgeKind1"},
+          {"start_id": "blocked", "end_id": "dst", "kind": "HasSession"},
+          {"start_id": "src", "end_id": "allowed", "kind": "TemplateEdgeKind1"},
+          {"start_id": "allowed", "end_id": "long", "kind": "TemplateEdgeKind1"},
+          {"start_id": "long", "end_id": "dst", "kind": "TemplateEdgeKind1"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "post-filtered shortest path is not replaced by longer path",
+          "vars": {
+            "query": "match p=shortestPath((s:TemplateNodeKind1)-[:TemplateEdgeKind1|HasSession*1..]->(d:TemplateNodeKind1)) where s.name = 'path-filter-src' and d.name = 'path-filter-dst' and none(r in relationships(p) where type(r) = 'HasSession' and startNode(r).name = 'blocked-session-host') return p"
+          },
+          "assert": "empty"
+        }
+      ]
     }
   ]
 }

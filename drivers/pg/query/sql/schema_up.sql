@@ -206,6 +206,30 @@ $$
 $$;
 
 -- Database helper functions
+create or replace function public.start_node(rel edgeComposite) returns nodeComposite as
+$$
+select (n.id, n.kind_ids, n.properties)::nodeComposite
+from node n
+where n.id = (rel).start_id
+limit 1;
+$$
+  language sql
+  stable
+  parallel safe
+  strict;
+
+create or replace function public.end_node(rel edgeComposite) returns nodeComposite as
+$$
+select (n.id, n.kind_ids, n.properties)::nodeComposite
+from node n
+where n.id = (rel).end_id
+limit 1;
+$$
+  language sql
+  stable
+  parallel safe
+  strict;
+
 create or replace function public.lock_details()
   returns table
           (

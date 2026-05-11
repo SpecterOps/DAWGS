@@ -42,6 +42,8 @@ const (
 	FunctionEdgesToPath                   Identifier = "edges_to_path"
 	FunctionOrderedEdgesToPath            Identifier = "ordered_edges_to_path"
 	FunctionNodesToPath                   Identifier = "nodes_to_path"
+	FunctionStartNode                     Identifier = "start_node"
+	FunctionEndNode                       Identifier = "end_node"
 	FunctionExtract                       Identifier = "extract"
 	FunctionGenerateSubscripts            Identifier = "generate_subscripts"
 )

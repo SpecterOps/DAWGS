@@ -11,6 +11,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/graph"
 )
 
 func newKindMapper() pgsql.KindMapper {
@@ -29,6 +30,32 @@ func newKindMapper() pgsql.KindMapper {
 	mapper.Put(graph.StringKind("Base"))
 	mapper.Put(graph.StringKind("GPLink"))
 	mapper.Put(graph.StringKind("Contains"))
+
+	for _, kind := range []string{
+		"Group",
+		"AddAllowedToAct",
+		"AddMember",
+		"AdminTo",
+		"AllExtendedRights",
+		"AllowedToDelegate",
+		"CanRDP",
+		"Contains",
+		"ForceChangePassword",
+		"GenericAll",
+		"GenericWrite",
+		"GetChangesAll",
+		"GetChanges",
+		"HasSession",
+		"MemberOf",
+		"Owns",
+		"ReadLAPSPassword",
+		"SQLAdmin",
+		"TrustedBy",
+		"WriteAccountRestrictions",
+		"WriteOwner",
+	} {
+		mapper.Put(graph.StringKind(kind))
+	}
 
 	return mapper
 }

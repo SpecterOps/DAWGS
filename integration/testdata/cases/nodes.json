@@ -32,6 +32,16 @@
       "assert": {"ordered_row_values": [[1, "NodeKind1"], [1, "NodeKind2"]]}
     },
     {
+      "name": "filter nodes using ANY over labels()",
+      "cypher": "match (n) where any(label in labels(n) where label = 'NodeKind2') return n",
+      "assert": {"node_ids": ["n2", "n3"]}
+    },
+    {
+      "name": "filter nodes using NONE over labels()",
+      "cypher": "match (n) where none(label in labels(n) where label = 'NodeKind2') return n",
+      "assert": {"node_ids": ["n1"]}
+    },
+    {
       "name": "filter any node by string property equality",
       "cypher": "match (n) where n.name = '1234' return n",
       "assert": {"node_ids": ["n2"]}

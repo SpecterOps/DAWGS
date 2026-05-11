@@ -36,6 +36,24 @@ func expressionHasCompositeProperties(expressionType pgsql.DataType) bool {
 	}
 }
 
+func isCompositePropertyLookupTarget(expression pgsql.TypeHinted) bool {
+	return expressionHasCompositeProperties(expression.TypeHint())
+}
+
+func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, lookup *cypher.PropertyLookup) error {
+	if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
+		return err
+	} else {
+		s.treeTranslator.PushOperand(pgsql.RowColumnReference{
+			Identifier: target,
+			Column:     pgsql.ColumnProperties,
+		})
+		s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+
+		return s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup)
+	}
+}
+
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
 	if translatedAtom, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
@@ -73,6 +91,10 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 			}
 
 		case pgsql.FunctionCall:
+			if isCompositePropertyLookupTarget(typedTranslatedAtom) {
+				return s.translateCompositePropertyLookup(typedTranslatedAtom, lookup)
+			}
+
 			if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
 				return err
 			} else if componentName, typeOK := fieldIdentifierLiteral.Value.(string); !typeOK {
@@ -120,6 +142,11 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 				default:
 					return fmt.Errorf("unsupported instant type component %s from function call %s", componentName, typedTranslatedAtom.Function)
 				}
+			}
+
+		case pgsql.TypeCast:
+			if isCompositePropertyLookupTarget(typedTranslatedAtom) {
+				return s.translateCompositePropertyLookup(typedTranslatedAtom, lookup)
 			}
 		}
 	}
@@ -687,6 +714,7 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 					}
 				}
 			}
+
 		}
 	}
 

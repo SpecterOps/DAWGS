@@ -67,6 +67,12 @@ func buildExternalProjection(scope *Scope, projections []*Projection) (pgsql.Pro
 		}
 	}
 
+	if resolvedProjection, err := resolvePathCompositeFieldReferencesInProjection(scope, sqlProjection); err != nil {
+		return nil, err
+	} else {
+		sqlProjection = resolvedProjection
+	}
+
 	if err := RewriteFrameBindings(scope, sqlProjection); err != nil {
 		return nil, err
 	}
@@ -517,6 +523,18 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 		for _, groupBy := range part.projections.GroupBy {
 			sqlSelect.GroupBy = append(sqlSelect.GroupBy, groupBy)
 		}
+	}
+
+	if resolvedWhere, err := resolvePathCompositeFieldReferences(s.scope, sqlSelect.Where); err != nil {
+		return pgsql.Select{}, err
+	} else {
+		sqlSelect.Where = resolvedWhere
+	}
+
+	if resolvedProjection, err := resolvePathCompositeFieldReferencesInProjection(s.scope, sqlSelect.Projection); err != nil {
+		return pgsql.Select{}, err
+	} else {
+		sqlSelect.Projection = resolvedProjection
 	}
 
 	return sqlSelect, nil
@@ -973,11 +991,13 @@ func (s *Translator) buildTailProjection() error {
 		return err
 	} else if projection, err := buildExternalProjection(s.scope, currentPart.projections.Items); err != nil {
 		return err
-	} else if err := RewriteFrameBindings(s.scope, projectionConstraint.Expression); err != nil {
+	} else if resolvedConstraint, err := resolvePathCompositeFieldReferences(s.scope, projectionConstraint.Expression); err != nil {
+		return err
+	} else if err := RewriteFrameBindings(s.scope, resolvedConstraint); err != nil {
 		return err
 	} else {
 		singlePartQuerySelect.Projection = projection
-		singlePartQuerySelect.Where = projectionConstraint.Expression
+		singlePartQuerySelect.Where = resolvedConstraint
 
 		// Apply GROUP BY logic after projections are built and frame bindings are rewritten
 		if currentPart.HasProjections() {

@@ -56,6 +56,9 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: MATCH (n) RETURN size(collect(n.name))
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cardinality(array_remove(coalesce(array_agg(((s0.n0).properties ->> 'name'))::anyarray, array []::text[])::anyarray, null)::anyarray)::int from s0;
 
+-- case: MATCH (n) WITH collect(labels(n)) as label_sets RETURN size(label_sets)
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_remove(coalesce(array_agg(to_jsonb((array(select _kind.name from generate_subscripts((s1.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s1.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[])::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s1) select cardinality(s0.i0)::int from s0;
+
 -- case: MATCH (n) WHERE size(n.permissions) > 2 RETURN n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (jsonb_array_length((n0.properties -> 'permissions'))::int > 2)) select s0.n0 as n from s0;
 

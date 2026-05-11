@@ -10,6 +10,8 @@ drop function if exists jsonb_to_text_array;
 drop function if exists cypher_contains(text, text);
 drop function if exists cypher_starts_with(text, text);
 drop function if exists cypher_ends_with(text, text);
+drop function if exists start_node(edgeComposite);
+drop function if exists end_node(edgeComposite);
 drop function if exists get_node;
 drop function if exists node_prop;
 drop function if exists kinds;

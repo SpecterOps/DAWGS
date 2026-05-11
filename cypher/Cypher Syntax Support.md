@@ -241,6 +241,32 @@ Type checks utilizing this function will not be index accelerated and may exhibi
 match ()-[r]->() where type(r) = 'EdgeKind1' return r
 ```
 
+### `relationships`
+
+Returns the ordered relationship list for a path.
+
+```
+match p = (a)-[*1..]->(b) return relationships(p)
+```
+
+### `startNode`
+
+Returns the start node for a relationship reference.
+
+```
+match p = (a)-[*1..]->(b)
+where none(r in relationships(p) where startNode(r).name = 'blocked')
+return p
+```
+
+### `endNode`
+
+Returns the end node for a relationship reference.
+
+```
+match ()-[r]->() return endNode(r)
+```
+
 ### `split`
 
 Takes a given expression and text delimiter and returns a text array containing split components, if any. If the

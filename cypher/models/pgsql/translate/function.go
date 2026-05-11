@@ -233,6 +233,37 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 	return nil
 }
 
+func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression, functionName string) (pgsql.Expression, pgsql.DataType, error) {
+	castType := pgsql.AnyArray
+
+	switch typedArgument := unwrapParenthetical(collectedExpression).(type) {
+	case pgsql.Identifier:
+		if binding, bound := scope.Lookup(typedArgument); !bound {
+			return nil, pgsql.UnsetDataType, fmt.Errorf("binding not found for collect function argument %s", functionName)
+		} else if bindingArrayType, err := binding.DataType.ToArrayType(); err != nil {
+			return nil, pgsql.UnsetDataType, err
+		} else {
+			castType = bindingArrayType
+		}
+
+	case pgsql.TypeHinted:
+		typeHint := typedArgument.TypeHint()
+		if typeHint.IsArrayType() {
+			return pgsql.FunctionCall{
+				Function:   pgsql.FunctionToJSONB,
+				Parameters: []pgsql.Expression{collectedExpression},
+				CastType:   pgsql.JSONB,
+			}, pgsql.JSONBArray, nil
+		}
+
+		if arrayType, err := typeHint.ToArrayType(); err == nil {
+			castType = arrayType
+		}
+	}
+
+	return collectedExpression, castType, nil
+}
+
 func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted {
 	const (
 		kindAlias      pgsql.Identifier = "_kind"
@@ -342,6 +373,44 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetErrorf("expected an identifier for the cypher function: %s but received %T", typedExpression.Name, argument)
 		} else {
 			s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindID})
+		}
+
+	case cypher.RelationshipsFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
+				Identifier: argument,
+				Column:     pgsql.ColumnEdges,
+			}, pgsql.EdgeCompositeArray))
+		}
+
+	case cypher.StartNodeFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function:   pgsql.FunctionStartNode,
+				Parameters: []pgsql.Expression{argument},
+				CastType:   pgsql.NodeComposite,
+			})
+		}
+
+	case cypher.EndNodeFunction:
+		if typedExpression.NumArguments() != 1 {
+			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
+		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.FunctionCall{
+				Function:   pgsql.FunctionEndNode,
+				Parameters: []pgsql.Expression{argument},
+				CastType:   pgsql.NodeComposite,
+			})
 		}
 
 	case cypher.NodeLabelsFunction:
@@ -512,22 +581,11 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if collectedExpression, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
+		} else if preparedExpression, castType, err := prepareCollectExpression(s.scope, collectedExpression, typedExpression.Name); err != nil {
+			s.SetError(err)
 		} else {
-			castType := pgsql.AnyArray
-
-			switch typedArgument := unwrapParenthetical(collectedExpression).(type) {
-			case pgsql.Identifier:
-				if binding, bound := s.scope.Lookup(typedArgument); !bound {
-					s.SetError(fmt.Errorf("binding not found for collect function argument %s", typedExpression.Name))
-				} else if bindingArrayType, err := binding.DataType.ToArrayType(); err != nil {
-					s.SetError(err)
-				} else {
-					castType = bindingArrayType
-				}
-			}
-
 			s.treeTranslator.PushOperand(
-				functionWrapCollectToArray(typedExpression.Distinct, collectedExpression, castType),
+				functionWrapCollectToArray(typedExpression.Distinct, preparedExpression, castType),
 			)
 		}
 
@@ -613,9 +671,8 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 // Current semantic issues:
 // * `null` values are stripped during aggregation. This may not be the case in Neo4j's query execution pipeline.
 func functionWrapCollectToArray(distinct bool, collectedExpression pgsql.Expression, castType pgsql.DataType) pgsql.FunctionCall {
-	// TODO: Review this potential bug, nodecomposite array cant be coalesced with text array
 	var coalesceType = pgsql.TextArray
-	if castType == pgsql.NodeCompositeArray {
+	if castType != pgsql.AnyArray {
 		coalesceType = castType
 	}
 

@@ -54,10 +54,12 @@ func (s *Translator) translateWith() error {
 		}
 		if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
-		} else if err := RewriteFrameBindings(s.scope, projectionConstraint.Expression); err != nil {
+		} else if resolvedConstraint, err := resolvePathCompositeFieldReferences(s.scope, projectionConstraint.Expression); err != nil {
+			return err
+		} else if err := RewriteFrameBindings(s.scope, resolvedConstraint); err != nil {
 			return err
 		} else {
-			currentPart.projections.Constraints = projectionConstraint.Expression
+			currentPart.projections.Constraints = resolvedConstraint
 		}
 
 		for idx, projectionItem := range currentPart.projections.Items {
