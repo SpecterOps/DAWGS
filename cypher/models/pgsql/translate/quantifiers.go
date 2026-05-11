@@ -74,6 +74,50 @@ func (s *Translator) translateFilterExpression(filterExpression *cypher.FilterEx
 	return nil
 }
 
+func (s *Translator) translateQuantifierArrayExpression(quantifierArrayExpression pgsql.Expression) ([]pgsql.Expression, pgsql.DataType, error) {
+	switch typedQuantifierArrayExpression := quantifierArrayExpression.(type) {
+	case *pgsql.BinaryExpression:
+		if pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
+			// Property look-up operators are converted to JSON text field operators during translation.
+			// Change this back so the JSON array can be converted to a Postgres text array for unnest(...).
+			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
+			return []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function: pgsql.FunctionJSONBToTextArray,
+					Parameters: []pgsql.Expression{
+						typedQuantifierArrayExpression,
+					},
+				},
+			}, pgsql.TextArray, nil
+		}
+
+	case pgsql.BinaryExpression:
+		if pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
+			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
+			return []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function: pgsql.FunctionJSONBToTextArray,
+					Parameters: []pgsql.Expression{
+						typedQuantifierArrayExpression,
+					},
+				},
+			}, pgsql.TextArray, nil
+		}
+
+		if inferredCollectionType, err := s.inferArrayExpressionType(&typedQuantifierArrayExpression); err != nil {
+			return nil, pgsql.UnsetDataType, err
+		} else {
+			return []pgsql.Expression{typedQuantifierArrayExpression}, inferredCollectionType, nil
+		}
+	}
+
+	if inferredCollectionType, err := s.inferArrayExpressionType(quantifierArrayExpression); err != nil {
+		return nil, pgsql.UnsetDataType, err
+	} else {
+		return []pgsql.Expression{quantifierArrayExpression}, inferredCollectionType, nil
+	}
+}
+
 func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) error {
 	if quantifierArray, err := s.treeTranslator.PopOperand(); err != nil {
 		s.SetError(err)
@@ -90,48 +134,11 @@ func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) err
 		)
 
 		quantifierArrayExpression := quantifierArray.AsExpression()
-		switch typedQuantifierArrayExpression := quantifierArrayExpression.(type) {
-		case *pgsql.BinaryExpression:
-			if !pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
-				return fmt.Errorf("unknown cypher array type %s", quantifierArrayExpression)
-			}
-
-			// Property look-up operators are converted to JSON text field operators during translation.
-			// Change this back so the JSON array can be converted to a Postgres text array for unnest(...).
-			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
-			functionParameters = []pgsql.Expression{
-				pgsql.FunctionCall{
-					Function: pgsql.FunctionJSONBToTextArray,
-					Parameters: []pgsql.Expression{
-						typedQuantifierArrayExpression,
-					},
-				},
-			}
-			collectionType = pgsql.TextArray
-
-		case pgsql.BinaryExpression:
-			if !pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
-				return fmt.Errorf("unknown cypher array type %s", quantifierArrayExpression)
-			}
-
-			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
-			functionParameters = []pgsql.Expression{
-				pgsql.FunctionCall{
-					Function: pgsql.FunctionJSONBToTextArray,
-					Parameters: []pgsql.Expression{
-						typedQuantifierArrayExpression,
-					},
-				},
-			}
-			collectionType = pgsql.TextArray
-
-		default:
-			if inferredCollectionType, err := s.inferArrayExpressionType(quantifierArrayExpression); err != nil {
-				return err
-			} else {
-				functionParameters = []pgsql.Expression{quantifierArrayExpression}
-				collectionType = inferredCollectionType
-			}
+		if translatedParameters, inferredCollectionType, err := s.translateQuantifierArrayExpression(quantifierArrayExpression); err != nil {
+			return err
+		} else {
+			functionParameters = translatedParameters
+			collectionType = inferredCollectionType
 		}
 
 		array.DataType = collectionType.ArrayBaseType()

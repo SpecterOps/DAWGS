@@ -38,6 +38,17 @@
         "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
       },
       "assert": {"node_ids": ["m"]}
+    },
+    {
+      "name": "ANY quantifier over a concatenated array expression",
+      "cypher": "WITH [1, 2] AS nums MATCH (n:NodeKind1) WHERE ANY(num IN nums + [3] WHERE num = 3) RETURN n",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"name": "quantifier-array"}}
+        ],
+        "edges": []
+      },
+      "assert": {"node_ids": ["n"]}
     }
   ]
 }
