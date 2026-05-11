@@ -153,6 +153,18 @@
       "assert": {"ordered_scalar_values": ["solo"]}
     },
     {
+      "name": "zero hop expansion does not duplicate one hop paths",
+      "cypher": "match (a:NodeKind1)-[:EdgeKind1*0..]->(b:NodeKind1) where a.name = 'zero-source' and b.name = 'zero-target' return count(b)",
+      "fixture": {
+        "nodes": [
+          {"id": "zero-source", "kinds": ["NodeKind1"], "properties": {"name": "zero-source"}},
+          {"id": "zero-target", "kinds": ["NodeKind1"], "properties": {"name": "zero-target"}}
+        ],
+        "edges": [{"start_id": "zero-source", "end_id": "zero-target", "kind": "EdgeKind1"}]
+      },
+      "assert": {"exact_int": 1}
+    },
+    {
       "name": "bind expansion path filtering both endpoints using ends-with on objectid",
       "cypher": "match p = (g:NodeKind1)-[:EdgeKind1|EdgeKind2*]->(target:NodeKind1) where g.objectid ends with '-src' and target.objectid ends with '-tgt' return p",
       "fixture": {

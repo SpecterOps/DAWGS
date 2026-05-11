@@ -1874,7 +1874,7 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTab
 	if s.ZeroDepthStatement != nil {
 		expansionBody = pgsql.SetOperation{
 			LOperand: *s.ZeroDepthStatement,
-			ROperand: expansionBody,
+			ROperand: s.RecursiveStatement,
 			Operator: pgsql.OperatorUnion,
 			All:      s.UseUnionAll,
 		}
