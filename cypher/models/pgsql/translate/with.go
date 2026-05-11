@@ -73,6 +73,23 @@ func (s *Translator) translateWith() error {
 					return fmt.Errorf("unable to lookup identifer %s for with statement", typedSelectItem)
 				} else {
 					var selectItem pgsql.SelectItem
+					projectedBinding := binding
+
+					if projectionItem.Alias.Set {
+						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || aliasBinding.Identifier != binding.Identifier {
+							var err error
+
+							if projectedBinding, err = s.scope.DefineNew(binding.DataType); err != nil {
+								return err
+							}
+
+							projectedBinding.Dependencies = binding.Dependencies
+							s.scope.Alias(projectionItem.Alias.Value, projectedBinding)
+						} else {
+							projectedBinding = aliasBinding
+						}
+					}
+
 					if binding.LastProjection != nil {
 						selectItem = pgsql.CompoundIdentifier{
 							binding.LastProjection.Binding.Identifier, typedSelectItem,
@@ -84,20 +101,20 @@ func (s *Translator) translateWith() error {
 					}
 
 					// Track this projected item for scope pruning
-					projectedItems.Add(binding.Identifier)
+					projectedItems.Add(projectedBinding.Identifier)
 
 					// Create a new projection that maps the identifier
 					currentPart.projections.Items[idx] = &Projection{
 						SelectItem: selectItem,
-						Alias:      pgsql.AsOptionalIdentifier(binding.Identifier),
+						Alias:      pgsql.AsOptionalIdentifier(projectedBinding.Identifier),
 					}
 
 					// Assign the frame to the binding's last projection backref
-					binding.MaterializedBy(currentPart.Frame)
+					projectedBinding.MaterializedBy(currentPart.Frame)
 
 					// Reveal and export the identifier in the current multipart query part's frame
-					currentPart.Frame.Reveal(binding.Identifier)
-					currentPart.Frame.Export(binding.Identifier)
+					currentPart.Frame.Reveal(projectedBinding.Identifier)
+					currentPart.Frame.Export(projectedBinding.Identifier)
 				}
 
 			default:

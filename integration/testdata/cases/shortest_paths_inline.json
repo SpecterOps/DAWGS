@@ -89,6 +89,25 @@
         ]
       },
       "assert": {"row_count": 1, "path_node_ids": [["a", "b", "c"]]}
+    },
+    {
+      "name": "shortest path with aliased group aggregation orders by user count",
+      "cypher": "MATCH p=shortestPath((u:User)-[:MemberOf*1..]->(g:Group)) WITH DISTINCT g AS Group, COUNT(u) AS UserCount RETURN Group.name, UserCount ORDER BY UserCount DESC LIMIT 5",
+      "fixture": {
+        "nodes": [
+          {"id": "u1", "kinds": ["User"], "properties": {"name": "u1"}},
+          {"id": "u2", "kinds": ["User"], "properties": {"name": "u2"}},
+          {"id": "u3", "kinds": ["User"], "properties": {"name": "u3"}},
+          {"id": "admins", "kinds": ["Group"], "properties": {"name": "admins"}},
+          {"id": "staff", "kinds": ["Group"], "properties": {"name": "staff"}}
+        ],
+        "edges": [
+          {"start_id": "u1", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "u2", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "u3", "end_id": "staff", "kind": "MemberOf"}
+        ]
+      },
+      "assert": {"ordered_row_values": [["admins", 2], ["staff", 1]]}
     }
   ]
 }
