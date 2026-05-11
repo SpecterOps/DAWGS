@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -43,7 +44,7 @@ type Result struct {
 // runScenario executes a scenario N times and returns timing stats.
 func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int) (Result, error) {
 	// Warm-up: one untimed run.
-	if err := db.ReadTransaction(ctx, s.Query); err != nil {
+	if err := runScenarioOnce(ctx, db, s); err != nil {
 		return Result{}, err
 	}
 
@@ -51,7 +52,7 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 
 	for i := range iterations {
 		start := time.Now()
-		if err := db.ReadTransaction(ctx, s.Query); err != nil {
+		if err := runScenarioOnce(ctx, db, s); err != nil {
 			return Result{}, err
 		}
 		durations[i] = time.Since(start)
@@ -64,6 +65,25 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 		Stats:   computeStats(durations),
 		Samples: durations,
 	}, nil
+}
+
+func runScenarioOnce(ctx context.Context, db graph.Database, s Scenario) error {
+	return db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		rows, err := s.Query(tx)
+		if err != nil {
+			return err
+		}
+
+		return validateScenarioRows(s, rows)
+	})
+}
+
+func validateScenarioRows(s Scenario, actualRows int) error {
+	if s.ExpectedRows == nil || *s.ExpectedRows == actualRows {
+		return nil
+	}
+
+	return fmt.Errorf("%s/%s on %s expected %d rows, got %d", s.Section, s.Label, s.Dataset, *s.ExpectedRows, actualRows)
 }
 
 func computeStats(durations []time.Duration) Stats {

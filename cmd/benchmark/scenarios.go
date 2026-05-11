@@ -25,10 +25,11 @@ import (
 
 // Scenario defines a single benchmark query to run against a loaded dataset.
 type Scenario struct {
-	Section string // grouping key in the report (e.g. "Match Nodes")
-	Dataset string
-	Label   string // human-readable row label
-	Query   func(tx graph.Transaction) error
+	Section      string // grouping key in the report (e.g. "Match Nodes")
+	Dataset      string
+	Label        string // human-readable row label
+	ExpectedRows *int
+	Query        func(tx graph.Transaction) (int, error)
 }
 
 // defaultDatasets is the set of datasets committed to the repo.
@@ -46,23 +47,31 @@ func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	}
 }
 
-func countNodes(tx graph.Transaction) error {
-	_, err := tx.Nodes().Count()
-	return err
+func expectRows(rows int) *int {
+	return &rows
 }
 
-func countEdges(tx graph.Transaction) error {
-	_, err := tx.Relationships().Count()
-	return err
+func countNodes(tx graph.Transaction) (int, error) {
+	count, err := tx.Nodes().Count()
+	return int(count), err
 }
 
-func cypherQuery(cypher string) func(tx graph.Transaction) error {
-	return func(tx graph.Transaction) error {
+func countEdges(tx graph.Transaction) (int, error) {
+	count, err := tx.Relationships().Count()
+	return int(count), err
+}
+
+func cypherQuery(cypher string) func(tx graph.Transaction) (int, error) {
+	return func(tx graph.Transaction) (int, error) {
 		result := tx.Query(cypher, nil)
 		defer result.Close()
+
+		rows := 0
 		for result.Next() {
+			rows++
 		}
-		return result.Error()
+
+		return rows, result.Error()
 	}
 }
 
@@ -71,22 +80,22 @@ func cypherQuery(cypher string) func(tx graph.Transaction) error {
 func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := "base"
 	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "n1 -> n3", Query: cypherQuery(fmt.Sprintf(
+		{Section: "Match Nodes", Dataset: ds, Label: ds, ExpectedRows: expectRows(3), Query: countNodes},
+		{Section: "Match Edges", Dataset: ds, Label: ds, ExpectedRows: expectRows(2), Query: countEdges},
+		{Section: "Shortest Paths", Dataset: ds, Label: "n1 -> n3", ExpectedRows: expectRows(1), Query: cypherQuery(fmt.Sprintf(
 			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
 			idMap["n1"], idMap["n3"],
 		))},
-		{Section: "Traversal", Dataset: ds, Label: "n1", Query: cypherQuery(fmt.Sprintf(
+		{Section: "Traversal", Dataset: ds, Label: "n1", ExpectedRows: expectRows(2), Query: cypherQuery(fmt.Sprintf(
 			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
 			idMap["n1"],
 		))},
-		{Section: "Match Return", Dataset: ds, Label: "n1", Query: cypherQuery(fmt.Sprintf(
+		{Section: "Match Return", Dataset: ds, Label: "n1", ExpectedRows: expectRows(1), Query: cypherQuery(fmt.Sprintf(
 			"MATCH (s)-[]->(e) WHERE id(s) = %d RETURN e",
 			idMap["n1"],
 		))},
-		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind1", Query: cypherQuery("MATCH (n:NodeKind1) RETURN n")},
-		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind2", Query: cypherQuery("MATCH (n:NodeKind2) RETURN n")},
+		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind1", ExpectedRows: expectRows(2), Query: cypherQuery("MATCH (n:NodeKind1) RETURN n")},
+		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind2", ExpectedRows: expectRows(2), Query: cypherQuery("MATCH (n:NodeKind2) RETURN n")},
 	}
 }
 
