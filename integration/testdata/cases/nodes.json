@@ -3,8 +3,8 @@
   "cases": [
     {
       "name": "return kind labels for all nodes",
-      "cypher": "match (n) return labels(n) order by n.name",
-      "assert": {"ordered_scalar_values": [["NodeKind2"], ["NodeKind1"], ["NodeKind1", "NodeKind2"]]}
+      "cypher": "match (n) return labels(n) order by n.value",
+      "assert": {"ordered_scalar_values": [["NodeKind1"], ["NodeKind2"], ["NodeKind1", "NodeKind2"]]}
     },
     {
       "name": "return string kind labels from labels()",
