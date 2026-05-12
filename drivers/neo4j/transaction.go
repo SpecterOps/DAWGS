@@ -50,7 +50,7 @@ func (s *neo4jTransaction) WithGraph(graphSchema graph.Graph) graph.Transaction 
 }
 
 func (s *neo4jTransaction) Query(query string, parameters map[string]any) graph.Result {
-	if rewrittenQuery, rewrittenParameters, err := rewritePatternPropertyParameters(query, parameters); err != nil {
+	if rewrittenQuery, rewrittenParameters, err := rewriteQuery(query, parameters); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
 		return s.Raw(rewrittenQuery, rewrittenParameters)
