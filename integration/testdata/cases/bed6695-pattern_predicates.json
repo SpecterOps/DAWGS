@@ -1,0 +1,61 @@
+{
+  "dataset": "bed6695",
+  "cases": [
+    {
+      "name": "BED-6695 negated incoming pattern predicate with contains filter remains row-correlated",
+      "cypher": "match (g:NodeKind1) where g.name contains 'BED-6695 KEY ADMINS' and not ((g)<-[:EdgeKind1]-(:NodeKind2)) return count(g)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-6695 flipped equivalent pattern predicate returns the same count",
+      "cypher": "match (g:NodeKind1) where g.name contains 'BED-6695 KEY ADMINS' and not ((:NodeKind2)-[:EdgeKind1]->(g)) return count(g)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-6695 positive incoming pattern predicate with contains filter remains row-correlated",
+      "cypher": "match (g:NodeKind1) where g.name contains 'BED-6695 KEY ADMINS' and (g)<-[:EdgeKind1]-(:NodeKind2) return count(g)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-6695 negated incoming pattern predicate without property filter remains row-correlated",
+      "cypher": "match (g:NodeKind1) where not ((g)<-[:EdgeKind1]-(:NodeKind2)) return count(g)",
+      "assert": {
+        "exact_int": 3
+      }
+    },
+    {
+      "name": "BED-6695 incoming negated pattern without outer selectivity (left-directed form)",
+      "cypher": "match (g:NodeKind2) where not ((g)<-[:EdgeKind1]-(:NodeKind1)) return g",
+      "assert": {
+        "row_count": 3
+      }
+    },
+    {
+      "name": "BED-6695 incoming negated pattern without outer selectivity (right-directed equivalent)",
+      "cypher": "match (g:NodeKind2) where not ((:NodeKind1)-[:EdgeKind1]->(g)) return g",
+      "assert": {
+        "row_count": 3
+      }
+    },
+    {
+      "name": "BED-6695 connected key admins group should be excluded by negated incoming pattern (left-directed)",
+      "cypher": "match (g:NodeKind2) where g.name = 'KEY ADMINS BETA' and not ((g)<-[:EdgeKind1]-(:NodeKind1)) return g",
+      "assert": {
+        "row_count": 0
+      }
+    },
+    {
+      "name": "BED-6695 connected key admins group should be excluded by negated incoming pattern (right-directed equivalent)",
+      "cypher": "match (g:NodeKind2) where g.name = 'KEY ADMINS BETA' and not ((:NodeKind1)-[:EdgeKind1]->(g)) return g",
+      "assert": {
+        "row_count": 0
+      }
+    }
+  ]
+}

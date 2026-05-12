@@ -338,3 +338,6 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where n.name = "alpha' || (SELECT inet_server_addr()::text::int) || '" return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'name'))::jsonb = to_jsonb(('alpha'' || (SELECT inet_server_addr()::text::int) || ''')::text)::jsonb)) select s0.n0 as n from s0;
+
+-- case: match (g:NodeKind2) where not ((g)<-[:EdgeKind1]-(:NodeKind1)) return g
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s0.n0 as g from s0 where (not ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.kind_ids operator (pg_catalog.@>) array [1]::int2[] and n1.id = e0.start_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.end_id) select count(*) > 0 from s1)));
