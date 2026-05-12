@@ -297,6 +297,67 @@ func TestInferWrappedExpressionType(t *testing.T) {
 	}
 }
 
+func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
+	propertyLookup := func(property string) *pgsql.BinaryExpression {
+		return pgsql.NewPropertyLookup(
+			pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
+			mustAsLiteral(property),
+		)
+	}
+
+	renderEquality := func(t *testing.T, lOperand, rOperand pgsql.Expression) string {
+		t.Helper()
+
+		treeTranslator := translate.NewExpressionTreeTranslator(nil)
+		treeTranslator.PushOperand(lOperand)
+		treeTranslator.PushOperand(rOperand)
+		require.NoError(t, treeTranslator.CompleteBinaryExpression(translate.NewScope(), pgsql.OperatorEquals))
+
+		formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
+		require.NoError(t, err)
+
+		return formatted
+	}
+
+	testCases := []struct {
+		Name     string
+		LOperand pgsql.Expression
+		ROperand pgsql.Expression
+		Expected string
+	}{{
+		Name:     "text literal keeps text property lookup",
+		LOperand: propertyLookup("isassignabletorole"),
+		ROperand: mustAsLiteral("true"),
+		Expected: "(n.properties ->> 'isassignabletorole') = 'true'",
+	}, {
+		Name:     "text literal keeps text property lookup when reversed",
+		LOperand: mustAsLiteral("true"),
+		ROperand: propertyLookup("isassignabletorole"),
+		Expected: "'true' = (n.properties ->> 'isassignabletorole')",
+	}, {
+		Name:     "boolean literal keeps jsonb scalar equality",
+		LOperand: propertyLookup("isassignabletorole"),
+		ROperand: mustAsLiteral(true),
+		Expected: "((n.properties -> 'isassignabletorole'))::jsonb = to_jsonb((true)::bool)::jsonb",
+	}, {
+		Name:     "numeric literal keeps jsonb scalar equality",
+		LOperand: propertyLookup("count"),
+		ROperand: mustAsLiteral(1),
+		Expected: "((n.properties -> 'count'))::jsonb = to_jsonb((1)::int8)::jsonb",
+	}, {
+		Name:     "property to property equality keeps jsonb operands",
+		LOperand: propertyLookup("left"),
+		ROperand: propertyLookup("right"),
+		Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			require.Equal(t, testCase.Expected, renderEquality(t, testCase.LOperand, testCase.ROperand))
+		})
+	}
+}
+
 func TestExpressionTreeTranslator(t *testing.T) {
 	// Tree translator is a stack oriented expression tree builder
 	var (

@@ -48,4 +48,4 @@ with s0 as (select array [1, 2, 3]::int8[] as i0) select i1 as x from s0, unnest
 select i0 as x from unnest(array [1, 2, 3]::int8[]) as i0;
 
 -- case: MATCH (n) WHERE n.environmentid = '1234' UNWIND labels(n) AS kind RETURN kind, count(n) AS count
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'environmentid'))::jsonb = to_jsonb(('1234')::text)::jsonb)) select i0 as kind, count(s0.n0)::int8 as count from s0, unnest((array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[]) as i0 group by i0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'environmentid') = '1234')) select i0 as kind, count(s0.n0)::int8 as count from s0, unnest((array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[]) as i0 group by i0;

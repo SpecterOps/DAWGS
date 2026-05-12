@@ -240,7 +240,9 @@ func rewritePropertyLookupOperator(propertyLookup *pgsql.BinaryExpression, dataT
 
 func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
 	switch dataType {
-	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric, pgsql.Text:
+	// Text operands intentionally keep the legacy JSON text extraction path. Existing callers rely on string
+	// equality matching the text representation of JSON scalar properties, such as JSON boolean true == "true".
+	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric:
 		return true
 
 	default:
