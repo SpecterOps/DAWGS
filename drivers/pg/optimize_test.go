@@ -14,7 +14,8 @@ var _ graph.Optimizer = (*Driver)(nil)
 // TestNeedsReindex exercises the threshold logic that decides whether a
 // measured index is flagged as a rebuild candidate. The function is pure;
 // integration coverage of the surrounding pg_extension / pg_inherits /
-// pgstatindex queries lands with the Phase 5 REINDEX work.
+// pgstatindex queries and the REINDEX execution itself is exercised under
+// make test_integration against a real Postgres backend.
 func TestNeedsReindex(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -110,4 +111,67 @@ func TestThresholdsAreOrdered(t *testing.T) {
 	assert.Less(t, bloatedIndexLeafDensityThreshold, 100.0, "leaf density threshold must be a percentage")
 	assert.Greater(t, highIndexFragmentationThreshold, 0.0, "fragmentation threshold must be positive")
 	assert.Less(t, highIndexFragmentationThreshold, 100.0, "fragmentation threshold must be a percentage")
+}
+
+// TestBuildReindexSQL verifies the REINDEX statement is produced with both
+// schema and index name quoted via pgx.Identifier.Sanitize, including the
+// edge case where an identifier itself contains a double quote.
+func TestBuildReindexSQL(t *testing.T) {
+	cases := []struct {
+		name   string
+		schema string
+		index  string
+		want   string
+	}{
+		{
+			name:   "ordinary identifiers are double-quoted",
+			schema: "graph",
+			index:  "edge_1_pkey",
+			want:   `reindex index concurrently "graph"."edge_1_pkey"`,
+		},
+		{
+			name:   "mixed-case identifiers preserve case under quoting",
+			schema: "Graph",
+			index:  "Edge_1_PKey",
+			want:   `reindex index concurrently "Graph"."Edge_1_PKey"`,
+		},
+		{
+			name:   "embedded double quote is escaped by doubling",
+			schema: `evil"schema`,
+			index:  "edge_1_pkey",
+			want:   `reindex index concurrently "evil""schema"."edge_1_pkey"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, buildReindexSQL(tc.schema, tc.index))
+		})
+	}
+}
+
+// TestBuildDropInvalidIndexSQL verifies the orphan cleanup statement is
+// produced with IF EXISTS and CONCURRENTLY guarding identifier handling.
+func TestBuildDropInvalidIndexSQL(t *testing.T) {
+	got := buildDropInvalidIndexSQL("graph", "edge_1_pkey_ccnew")
+	assert.Equal(t, `drop index concurrently if exists "graph"."edge_1_pkey_ccnew"`, got)
+
+	// Identifier sanitization must apply to the orphan name as well, since
+	// _ccnew suffixes are read directly from pg_class.relname.
+	got = buildDropInvalidIndexSQL("graph", `weird"_ccnew`)
+	assert.Equal(t, `drop index concurrently if exists "graph"."weird""_ccnew"`, got)
+}
+
+// TestOrphanedReindexArtifactQuery_FiltersByValidityAndNameAndAm guards the
+// SQL string that scans for cleanup candidates against accidental loosening
+// of its filters, since this query controls the blast radius of DROP INDEX.
+func TestOrphanedReindexArtifactQuery_FiltersByValidityAndNameAndAm(t *testing.T) {
+	for _, fragment := range []string{
+		"x.indisvalid = false",
+		"a.amname = 'btree'",
+		"i.relname ~ '_ccnew[0-9]*$'",
+		"p.relname in ('node', 'edge')",
+	} {
+		assert.Contains(t, sqlSelectOrphanedReindexArtifacts, fragment,
+			"orphan-cleanup SQL is missing required filter %q; relaxing this filter risks dropping unrelated indexes", fragment)
+	}
 }
