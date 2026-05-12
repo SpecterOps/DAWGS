@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/stretchr/testify/require"
 )
@@ -22,4 +24,12 @@ func TestPathComponentFunctionsResolvePathAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, formatted, ".nodes")
 	require.Contains(t, formatted, ".edges")
+}
+
+func TestPrepareCollectExpressionMissingBindingErrorNamesArgument(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := prepareCollectExpression(NewScope(), pgsql.Identifier("missing"), cypher.CollectFunction)
+
+	require.EqualError(t, err, "binding not found for collect function argument missing")
 }

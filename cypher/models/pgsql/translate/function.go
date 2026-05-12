@@ -221,13 +221,36 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 
 	if argument, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
-	} else if pathExpression, err := s.expressionForPath(argument); err != nil {
-		return err
 	} else {
-		s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
-			Identifier: pathExpression,
-			Column:     column,
-		}, castType))
+		if column == pgsql.ColumnEdges {
+			if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
+				binding, bound := s.scope.Lookup(identifier)
+				if !bound {
+					binding, bound = s.scope.AliasedLookup(identifier)
+				}
+
+				if !bound {
+					return fmt.Errorf("unable to resolve path identifier %s", identifier)
+				} else if binding.DataType != pgsql.PathComposite {
+					return fmt.Errorf("expected path expression but received %s", binding.DataType)
+				}
+
+				s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
+					Identifier: argument,
+					Column:     column,
+				}, castType))
+				return nil
+			}
+		}
+
+		if pathExpression, err := s.expressionForPath(argument); err != nil {
+			return err
+		} else {
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
+				Identifier: pathExpression,
+				Column:     column,
+			}, castType))
+		}
 	}
 
 	return nil
@@ -239,7 +262,7 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 	switch typedArgument := unwrapParenthetical(collectedExpression).(type) {
 	case pgsql.Identifier:
 		if binding, bound := scope.Lookup(typedArgument); !bound {
-			return nil, pgsql.UnsetDataType, fmt.Errorf("binding not found for collect function argument %s", functionName)
+			return nil, pgsql.UnsetDataType, fmt.Errorf("binding not found for %s function argument %s", functionName, typedArgument)
 		} else if bindingArrayType, err := binding.DataType.ToArrayType(); err != nil {
 			return nil, pgsql.UnsetDataType, err
 		} else {
@@ -379,18 +402,6 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 				},
 				CastType: pgsql.Text,
 			})
-		}
-
-	case cypher.RelationshipsFunction:
-		if typedExpression.NumArguments() != 1 {
-			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
-		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
-			s.SetError(err)
-		} else {
-			s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
-				Identifier: argument,
-				Column:     pgsql.ColumnEdges,
-			}, pgsql.EdgeCompositeArray))
 		}
 
 	case cypher.StartNodeFunction:

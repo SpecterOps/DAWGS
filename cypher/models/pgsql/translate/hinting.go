@@ -196,6 +196,9 @@ func literalKindID(kindMapper *contextAwareKindMapper, literal pgsql.Literal) (p
 	if err != nil {
 		return pgsql.Literal{}, false, err
 	}
+	if len(kindIDs) == 0 {
+		return pgsql.Literal{}, false, nil
+	}
 
 	return pgsql.NewLiteral(kindIDs[0], pgsql.Int2), true, nil
 }

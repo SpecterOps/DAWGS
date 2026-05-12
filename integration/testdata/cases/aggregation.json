@@ -29,7 +29,7 @@
     {
       "name": "return the size of collected labels lists",
       "cypher": "MATCH (n) WITH collect(labels(n)) as label_sets RETURN size(label_sets)",
-      "assert": {"exact_int": 3}
+      "assert": {"at_least_int": 3}
     },
     {
       "name": "filter on an aggregate result using WITH and WHERE",

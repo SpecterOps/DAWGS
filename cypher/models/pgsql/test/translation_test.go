@@ -7,10 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specterops/dawgs/drivers/pg/pgutil"
-	"github.com/specterops/dawgs/graph"
-
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/specterops/dawgs/graph"
 )
 

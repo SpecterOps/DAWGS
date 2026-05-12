@@ -44,6 +44,9 @@ func resolvePathCompositeFieldReference(scope *Scope, reference pgsql.RowColumnR
 	}
 
 	binding, bound := scope.Lookup(identifier)
+	if !bound {
+		binding, bound = scope.AliasedLookup(identifier)
+	}
 	if !bound || binding.DataType != pgsql.PathComposite {
 		return nil, false, nil
 	}

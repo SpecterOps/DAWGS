@@ -13,7 +13,6 @@ const (
 	ToUpperFunction            = "toupper"
 	NodeLabelsFunction         = "labels"
 	EdgeTypeFunction           = "type"
-	RelationshipsFunction      = "relationships"
 	StartNodeFunction          = "startnode"
 	EndNodeFunction            = "endnode"
 	StringSplitToArrayFunction = "split"
