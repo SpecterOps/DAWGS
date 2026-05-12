@@ -49,6 +49,10 @@ func rewritePatternPropertyParameters(query string, parameters map[string]any) (
 }
 
 func rewriteQuery(query string, parameters map[string]any) (string, map[string]any, error) {
+	if !queryMayNeedRewrite(query) {
+		return query, parameters, nil
+	}
+
 	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 	if err != nil {
 		return query, parameters, nil
@@ -90,6 +94,69 @@ func rewriteQuery(query string, parameters map[string]any) (string, map[string]a
 	}
 
 	return rewrittenQuery, rewrittenParameters, nil
+}
+
+func queryMayNeedRewrite(query string) bool {
+	return strings.Contains(query, "$") || queryMayContainTemporalFunctionCall(query)
+}
+
+func queryMayContainTemporalFunctionCall(query string) bool {
+	query = strings.ToLower(query)
+
+	for _, functionName := range []string{
+		cypher.DateFunction,
+		cypher.TimeFunction,
+		cypher.LocalTimeFunction,
+		cypher.DateTimeFunction,
+		cypher.LocalDateTimeFunction,
+	} {
+		if containsFunctionCall(query, functionName) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsFunctionCall(query, functionName string) bool {
+	for searchOffset := 0; searchOffset < len(query); {
+		functionOffset := strings.Index(query[searchOffset:], functionName)
+		if functionOffset == -1 {
+			return false
+		}
+
+		functionOffset += searchOffset
+		if functionOffset > 0 && isCypherIdentifierCharacter(query[functionOffset-1]) {
+			searchOffset = functionOffset + 1
+			continue
+		}
+
+		nextOffset := functionOffset + len(functionName)
+		for nextOffset < len(query) && isCypherWhitespace(query[nextOffset]) {
+			nextOffset++
+		}
+
+		if nextOffset < len(query) && query[nextOffset] == '(' {
+			return true
+		}
+
+		searchOffset = functionOffset + 1
+	}
+
+	return false
+}
+
+func isCypherIdentifierCharacter(value byte) bool {
+	return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '_'
+}
+
+func isCypherWhitespace(value byte) bool {
+	switch value {
+	case ' ', '\t', '\n', '\r':
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *patternPropertyParameterRewriter) rewriteRegularQuery(query *cypher.RegularQuery) error {

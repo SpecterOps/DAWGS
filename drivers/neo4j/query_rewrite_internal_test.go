@@ -48,6 +48,44 @@ func TestRewritePatternPropertyParameters_LeavesRawUnsupportedQueryAlone(t *test
 	require.Equal(t, map[string]any{"prop": "name"}, rewrittenParams)
 }
 
+func TestQueryMayNeedRewrite(t *testing.T) {
+	testCases := []struct {
+		name  string
+		query string
+		want  bool
+	}{{
+		name:  "plain query",
+		query: "match (n) return n",
+		want:  false,
+	}, {
+		name:  "pattern property parameter candidate",
+		query: "match (n:TemplateNodeKind1 $props) return n",
+		want:  true,
+	}, {
+		name:  "datetime function candidate",
+		query: "match (n) where n.lastseen >= datetime() return n",
+		want:  true,
+	}, {
+		name:  "temporal function is case insensitive and allows whitespace",
+		query: "match (n) where DateTime \n () <= n.lastseen return n",
+		want:  true,
+	}, {
+		name:  "property names containing date are not temporal function calls",
+		query: "match (n) where n.updated_at is not null return n",
+		want:  false,
+	}, {
+		name:  "identifier suffix is not temporal function call",
+		query: "match (n) where candidate() return n",
+		want:  false,
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.want, queryMayNeedRewrite(testCase.query))
+		})
+	}
+}
+
 func TestRewriteQuery_WrapsTemporalPropertyComparison(t *testing.T) {
 	query, rewrittenParams, err := rewriteQuery(
 		"MATCH p=(:Computer)-[r:HasSession]->(:User) WHERE r.lastseen >= datetime() - duration('P3D') RETURN p LIMIT 100",
