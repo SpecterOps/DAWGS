@@ -9,3 +9,6 @@ integration/testdata/local/
 
 # Local test and metric artifacts
 .coverage/
+
+# Mac DS Store
+.DS_Store
