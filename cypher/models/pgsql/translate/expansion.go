@@ -1109,7 +1109,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	if !expansionModel.HasExplicitEndpointInequality {
 		nextQuery.Where = pgsql.OptionalAnd(
 			nextQuery.Where,
-			shortestPathTerminalFilterSelfEndpointGuard(s.model.EdgeStartColumn),
+			shortestPathSeedSelfEndpointGuard(s.model.EdgeStartColumn, expansionModel.UseMaterializedEndpointPairFilter),
 		)
 	}
 
@@ -1458,9 +1458,17 @@ func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expres
 }
 
 func shortestPathSelfEndpointGuardCase(rootID, terminalID pgsql.Expression) pgsql.Expression {
+	return shortestPathSelfEndpointConditionGuard(
+		pgsql.NewBinaryExpression(rootID, pgsql.OperatorNotEquals, terminalID),
+		rootID,
+		terminalID,
+	)
+}
+
+func shortestPathSelfEndpointConditionGuard(condition pgsql.Expression, rootID, terminalID pgsql.Expression) pgsql.Expression {
 	return &pgsql.Case{
 		Conditions: []pgsql.Expression{
-			pgsql.NewBinaryExpression(rootID, pgsql.OperatorNotEquals, terminalID),
+			condition,
 		},
 		Then: []pgsql.Expression{
 			pgsql.NewLiteral(true, pgsql.Boolean),
@@ -1523,6 +1531,59 @@ func shortestPathTerminalFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.
 			},
 		},
 	}
+}
+
+func shortestPathEndpointPairFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.Expression {
+	matchingEndpointPairCount := pgsql.Subquery{
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: []pgsql.SelectItem{
+					pgsql.FunctionCall{
+						Function: pgsql.FunctionCount,
+						Parameters: []pgsql.Expression{
+							pgsql.Wildcard{},
+						},
+						CastType: pgsql.Int8,
+					},
+				},
+				From: []pgsql.FromClause{{
+					Source: pgsql.TableReference{
+						Name: pgsql.CompoundIdentifier{expansionPairFilter},
+					},
+				}},
+				Where: pgsql.OptionalAnd(
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{expansionPairFilter, expansionRootID},
+						pgsql.OperatorEquals,
+						rootID,
+					),
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{expansionPairFilter, expansionTerminalID},
+						pgsql.OperatorEquals,
+						rootID,
+					),
+				),
+			},
+		},
+	}
+
+	return shortestPathSelfEndpointConditionGuard(
+		pgsql.NewBinaryExpression(
+			matchingEndpointPairCount,
+			pgsql.OperatorEquals,
+			pgsql.NewLiteral(0, pgsql.Int8),
+		),
+		rootID,
+		rootID,
+	)
+}
+
+func shortestPathSeedSelfEndpointGuard(rootID pgsql.Expression, useEndpointPairFilter bool) pgsql.Expression {
+	if useEndpointPairFilter {
+		return shortestPathEndpointPairFilterSelfEndpointGuard(rootID)
+	}
+
+	return shortestPathTerminalFilterSelfEndpointGuard(rootID)
 }
 
 func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *pgsql.Select, expansionModel *Expansion) {

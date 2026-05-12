@@ -98,12 +98,20 @@ func TestShortestPathSelfEndpointGuardsUseCaseErrorHelper(t *testing.T) {
 	require.NotContains(t, projectionGuard, " / ")
 
 	terminalFilterGuard, err := format.Expression(
-		shortestPathTerminalFilterSelfEndpointGuard(pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID}),
+		shortestPathSeedSelfEndpointGuard(pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID}, false),
 		format.NewOutputBuilder(),
 	)
 	require.NoError(t, err)
 	require.Contains(t, terminalFilterGuard, "case when (select count(*)::int8 from traversal_terminal_filter where traversal_terminal_filter.id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
 	require.NotContains(t, terminalFilterGuard, " / ")
+
+	endpointPairFilterGuard, err := format.Expression(
+		shortestPathSeedSelfEndpointGuard(pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID}, true),
+		format.NewOutputBuilder(),
+	)
+	require.NoError(t, err)
+	require.Contains(t, endpointPairFilterGuard, "case when (select count(*)::int8 from traversal_pair_filter where traversal_pair_filter.root_id = e0.start_id and traversal_pair_filter.terminal_id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
+	require.NotContains(t, endpointPairFilterGuard, " / ")
 }
 
 func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) {
