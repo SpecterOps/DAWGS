@@ -21,6 +21,11 @@ create extension if not exists pg_trgm;
 -- arrays for nodes.
 create extension if not exists intarray;
 
+-- We need the pgstattuple extension to measure btree leaf density and fragmentation on node and edge indexes
+-- during driver-managed index optimization. If this extension cannot be installed (e.g. a managed Postgres that
+-- does not expose it), the optimizer logs a warning and skips the assessment rather than failing.
+create extension if not exists pgstattuple;
+
 -- This is an optional but useful extension for validating performance of queries
 -- create extension if not exists pg_stat_statements;
 --
