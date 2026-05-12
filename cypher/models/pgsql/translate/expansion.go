@@ -1945,9 +1945,24 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTab
 	})
 
 	if s.ZeroDepthStatement != nil {
+		recursiveStatement := s.RecursiveStatement
+		recursiveStatement.Where = pgsql.OptionalAnd(
+			recursiveStatement.Where,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{expansionIdentifier, expansionDepth},
+				pgsql.OperatorGreaterThan,
+				pgsql.NewLiteral(0, pgsql.Int),
+			),
+		)
+
 		expansionBody = pgsql.SetOperation{
-			LOperand: *s.ZeroDepthStatement,
-			ROperand: s.RecursiveStatement,
+			LOperand: pgsql.SetOperation{
+				LOperand: *s.ZeroDepthStatement,
+				ROperand: s.PrimerStatement,
+				Operator: pgsql.OperatorUnion,
+				All:      s.UseUnionAll,
+			},
+			ROperand: recursiveStatement,
 			Operator: pgsql.OperatorUnion,
 			All:      s.UseUnionAll,
 		}

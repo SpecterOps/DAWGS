@@ -1,6 +1,7 @@
 package translate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -187,4 +188,67 @@ func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T
 	require.NoError(t, err)
 	require.Contains(t, formattedQuery, "select s1_seed.root_id, s1_seed.root_id, 0, false, false")
 	require.NotContains(t, formattedQuery, "e0")
+}
+
+func TestZeroDepthExpansionBuildKeepsPrimerBranch(t *testing.T) {
+	expansionSelect := func(root, next, depth int64, isCycle pgsql.SelectItem, edgeID int64) pgsql.Select {
+		return pgsql.Select{
+			Projection: []pgsql.SelectItem{
+				pgsql.NewLiteral(root, pgsql.Int8),
+				pgsql.NewLiteral(next, pgsql.Int8),
+				pgsql.NewLiteral(depth, pgsql.Int),
+				pgsql.NewLiteral(true, pgsql.Boolean),
+				isCycle,
+				pgsql.ArrayLiteral{
+					Values: []pgsql.Expression{
+						pgsql.NewLiteral(edgeID, pgsql.Int8),
+					},
+				},
+			},
+		}
+	}
+
+	zeroDepthStatement := pgsql.Select{
+		Projection: []pgsql.SelectItem{
+			pgsql.NewLiteral(int64(1), pgsql.Int8),
+			pgsql.NewLiteral(int64(1), pgsql.Int8),
+			pgsql.NewLiteral(int64(0), pgsql.Int),
+			pgsql.NewLiteral(true, pgsql.Boolean),
+			pgsql.NewLiteral(false, pgsql.Boolean),
+			pgsql.ArrayLiteral{CastType: pgsql.Int8Array},
+		},
+	}
+
+	builder := ExpansionBuilder{
+		PrimerStatement: expansionSelect(
+			1,
+			2,
+			1,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnEndID},
+			),
+			7,
+		),
+		RecursiveStatement:  expansionSelect(1, 3, 2, pgsql.NewLiteral(false, pgsql.Boolean), 8),
+		ProjectionStatement: pgsql.Select{Projection: []pgsql.SelectItem{pgsql.NewLiteral(1, pgsql.Int)}},
+		ZeroDepthStatement:  &zeroDepthStatement,
+		UseUnionAll:         true,
+	}
+
+	query := builder.Build(shortestPathSeedTestFrame)
+	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
+	require.NoError(t, err)
+
+	zeroDepthBranch := "select 1, 1, 0, true, false, array []::int8[]"
+	primerBranch := "select 1, 2, 1, true, e0.start_id = e0.end_id, array [7]"
+	recursiveBranch := "select 1, 3, 2, true, false, array [8]"
+
+	require.Contains(t, formattedQuery, zeroDepthBranch)
+	require.Contains(t, formattedQuery, primerBranch)
+	require.Contains(t, formattedQuery, recursiveBranch)
+	require.Contains(t, formattedQuery, "where s1.depth > 0")
+	require.Less(t, strings.Index(formattedQuery, zeroDepthBranch), strings.Index(formattedQuery, primerBranch))
+	require.Less(t, strings.Index(formattedQuery, primerBranch), strings.Index(formattedQuery, recursiveBranch))
 }
