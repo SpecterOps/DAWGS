@@ -92,8 +92,71 @@ func (s *FrameBindingRewriter) rewriteArraySlice(slice *pgsql.ArraySlice) error 
 	return nil
 }
 
+func (s *FrameBindingRewriter) rewriteExpression(expression *pgsql.Expression) error {
+	if expression == nil || *expression == nil {
+		return nil
+	}
+
+	switch typedExpression := (*expression).(type) {
+	case pgsql.Identifier:
+		if rewritten, err := rewriteIdentifierScopeReference(s.scope, typedExpression); err != nil {
+			return err
+		} else {
+			*expression = rewritten
+		}
+
+	case pgsql.CompoundIdentifier:
+		if rewritten, err := rewriteCompoundIdentifierScopeReference(s.scope, typedExpression); err != nil {
+			return err
+		} else {
+			*expression = rewritten
+		}
+
+	case pgsql.ArraySlice:
+		if err := s.rewriteArraySlice(&typedExpression); err != nil {
+			return err
+		}
+		*expression = typedExpression
+
+	case *pgsql.ArraySlice:
+		return s.rewriteArraySlice(typedExpression)
+	}
+
+	return nil
+}
+
+func (s *FrameBindingRewriter) rewriteCase(caseExpression *pgsql.Case) error {
+	if caseExpression == nil {
+		return nil
+	}
+
+	if err := s.rewriteExpression(&caseExpression.Operand); err != nil {
+		return err
+	}
+
+	for idx := range caseExpression.Conditions {
+		if err := s.rewriteExpression(&caseExpression.Conditions[idx]); err != nil {
+			return err
+		}
+	}
+
+	for idx := range caseExpression.Then {
+		if err := s.rewriteExpression(&caseExpression.Then[idx]); err != nil {
+			return err
+		}
+	}
+
+	return s.rewriteExpression(&caseExpression.Else)
+}
+
 func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 	switch typedExpression := node.(type) {
+	case pgsql.Case:
+		return s.rewriteCase(&typedExpression)
+
+	case *pgsql.Case:
+		return s.rewriteCase(typedExpression)
+
 	case pgsql.Projection:
 		for idx, projection := range typedExpression {
 			switch typedProjection := projection.(type) {

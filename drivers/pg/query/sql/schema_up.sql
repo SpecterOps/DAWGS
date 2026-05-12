@@ -677,6 +677,23 @@ $$
   volatile
   strict;
 
+create or replace function public.shortest_path_self_endpoint_error(root_id int8, terminal_id int8)
+  returns bool as
+$$
+begin
+  raise exception using
+    errcode = '22023',
+    message = format('shortest path endpoints must not resolve to the same node: root_id=%s terminal_id=%s',
+                     root_id,
+                     terminal_id);
+
+  return false;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;
+
 create or replace function public.create_bidirectional_pathspace_tables()
   returns void as
 $$

@@ -82,6 +82,27 @@ func TestRewriteFrameBindings(t *testing.T) {
 			pgsql.OperatorEquals,
 			rewrittenA,
 		),
+	}, {
+		Case: &pgsql.Case{
+			Operand: a.Identifier,
+			Conditions: []pgsql.Expression{
+				a.Identifier,
+			},
+			Then: []pgsql.Expression{
+				a.Identifier,
+			},
+			Else: a.Identifier,
+		},
+		Expected: &pgsql.Case{
+			Operand: rewrittenA,
+			Conditions: []pgsql.Expression{
+				rewrittenA,
+			},
+			Then: []pgsql.Expression{
+				rewrittenA,
+			},
+			Else: rewrittenA,
+		},
 	}}
 
 	for _, nextTestCase := range testCases {

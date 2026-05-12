@@ -23,6 +23,7 @@ drop function if exists create_traversal_filter_tables;
 drop function if exists create_traversal_filter_tables(text, text, text);
 drop function if exists create_traversal_filter_tables(text, text);
 drop function if exists create_traversal_filter_tables(int8[], int8[]);
+drop function if exists shortest_path_self_endpoint_error(int8, int8);
 drop function if exists unidirectional_sp_harness(text, text, int4);
 drop function if exists unidirectional_sp_harness(text, text, int4, int8);
 drop function if exists unidirectional_sp_harness(text, text, int4, text, text);

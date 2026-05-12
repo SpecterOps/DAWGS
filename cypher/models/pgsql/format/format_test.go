@@ -26,6 +26,31 @@ func TestFormat_TypeCastedParenthetical(t *testing.T) {
 	require.Equal(t, "('str')::text", formattedQuery)
 }
 
+func TestFormat_Case(t *testing.T) {
+	formattedQuery, err := format.Expression(pgsql.Case{
+		Conditions: []pgsql.Expression{
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{"s0", "root_id"},
+				pgsql.OperatorNotEquals,
+				pgsql.CompoundIdentifier{"s0", "next_id"},
+			),
+		},
+		Then: []pgsql.Expression{
+			pgsql.NewLiteral(true, pgsql.Boolean),
+		},
+		Else: pgsql.FunctionCall{
+			Function: "shortest_path_self_endpoint_error",
+			Parameters: []pgsql.Expression{
+				pgsql.CompoundIdentifier{"s0", "root_id"},
+				pgsql.CompoundIdentifier{"s0", "next_id"},
+			},
+		},
+	}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "case when s0.root_id != s0.next_id then true else shortest_path_self_endpoint_error(s0.root_id, s0.next_id) end", formattedQuery)
+}
+
 func TestFormat_SelectDistinct(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Query{
 		Body: pgsql.Select{

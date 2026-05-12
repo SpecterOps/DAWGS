@@ -1451,27 +1451,32 @@ func (s *ExpansionBuilder) applyShortestPathSeedProjectionConstraints(projection
 // Match Neo4j's shortest-path behavior by surfacing an error for result rows
 // where the resolved root and terminal endpoints are the same node.
 func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expression {
-	endpointDifference := func() pgsql.Expression {
-		return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{expansionFrame, expansionRootID},
-			pgsql.OperatorSubtract,
-			pgsql.CompoundIdentifier{expansionFrame, expansionNextID},
-		))
-	}
+	rootID := pgsql.CompoundIdentifier{expansionFrame, expansionRootID}
+	terminalID := pgsql.CompoundIdentifier{expansionFrame, expansionNextID}
 
-	return pgsql.NewBinaryExpression(
-		pgsql.NewBinaryExpression(
-			endpointDifference(),
-			pgsql.OperatorDivide,
-			endpointDifference(),
-		),
-		pgsql.OperatorEquals,
-		pgsql.NewLiteral(1, pgsql.Int),
-	)
+	return shortestPathSelfEndpointGuardCase(rootID, terminalID)
 }
 
-// PostgreSQL has no portable expression-level RAISE; the denominator becomes
-// zero when the shortest-path root is also present in the terminal filter.
+func shortestPathSelfEndpointGuardCase(rootID, terminalID pgsql.Expression) pgsql.Expression {
+	return &pgsql.Case{
+		Conditions: []pgsql.Expression{
+			pgsql.NewBinaryExpression(rootID, pgsql.OperatorNotEquals, terminalID),
+		},
+		Then: []pgsql.Expression{
+			pgsql.NewLiteral(true, pgsql.Boolean),
+		},
+		Else: pgsql.FunctionCall{
+			Function: pgsql.FunctionShortestPathSelfEndpointError,
+			Parameters: []pgsql.Expression{
+				rootID,
+				terminalID,
+			},
+		},
+	}
+}
+
+// PostgreSQL has no portable expression-level RAISE. Keep the normal path
+// visible in generated SQL and call the schema helper only for the error path.
 func shortestPathTerminalFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.Expression {
 	matchingTerminalCount := pgsql.Subquery{
 		Query: pgsql.Query{
@@ -1499,28 +1504,25 @@ func shortestPathTerminalFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.
 		},
 	}
 
-	denominator := pgsql.NewParenthetical(pgsql.NewBinaryExpression(
-		pgsql.NewLiteral(1, pgsql.Int8),
-		pgsql.OperatorSubtract,
-		pgsql.FunctionCall{
-			Function: pgsql.Identifier("least"),
-			Parameters: []pgsql.Expression{
-				pgsql.NewLiteral(1, pgsql.Int8),
+	return &pgsql.Case{
+		Conditions: []pgsql.Expression{
+			pgsql.NewBinaryExpression(
 				matchingTerminalCount,
-			},
-			CastType: pgsql.Int8,
+				pgsql.OperatorEquals,
+				pgsql.NewLiteral(0, pgsql.Int8),
+			),
 		},
-	))
-
-	return pgsql.NewBinaryExpression(
-		pgsql.NewBinaryExpression(
-			pgsql.NewLiteral(1, pgsql.Int8),
-			pgsql.OperatorDivide,
-			denominator,
-		),
-		pgsql.OperatorEquals,
-		pgsql.NewLiteral(1, pgsql.Int8),
-	)
+		Then: []pgsql.Expression{
+			pgsql.NewLiteral(true, pgsql.Boolean),
+		},
+		Else: pgsql.FunctionCall{
+			Function: pgsql.FunctionShortestPathSelfEndpointError,
+			Parameters: []pgsql.Expression{
+				rootID,
+				rootID,
+			},
+		},
+	}
 }
 
 func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *pgsql.Select, expansionModel *Expansion) {

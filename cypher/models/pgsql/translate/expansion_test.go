@@ -91,6 +91,21 @@ func newShortestPathSeedTestBuilder(leftBound, rightBound bool) (*ExpansionBuild
 	}, expansionModel
 }
 
+func TestShortestPathSelfEndpointGuardsUseCaseErrorHelper(t *testing.T) {
+	projectionGuard, err := format.Expression(shortestPathSelfEndpointGuard(shortestPathSeedTestFrame), format.NewOutputBuilder())
+	require.NoError(t, err)
+	require.Equal(t, "case when s1.root_id != s1.next_id then true else shortest_path_self_endpoint_error(s1.root_id, s1.next_id) end", projectionGuard)
+	require.NotContains(t, projectionGuard, " / ")
+
+	terminalFilterGuard, err := format.Expression(
+		shortestPathTerminalFilterSelfEndpointGuard(pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID}),
+		format.NewOutputBuilder(),
+	)
+	require.NoError(t, err)
+	require.Contains(t, terminalFilterGuard, "case when (select count(*)::int8 from traversal_terminal_filter where traversal_terminal_filter.id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
+	require.NotContains(t, terminalFilterGuard, " / ")
+}
+
 func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) {
 	builder, expansionModel := newShortestPathSeedTestBuilder(true, false)
 	expansionModel.PrimerNodeConstraints = pgsql.NewBinaryExpression(

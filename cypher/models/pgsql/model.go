@@ -93,6 +93,18 @@ type Case struct {
 	Else       Expression
 }
 
+func (s Case) NodeType() string {
+	return "case"
+}
+
+func (s Case) AsExpression() Expression {
+	return s
+}
+
+func (s Case) AsSelectItem() SelectItem {
+	return s
+}
+
 // InExpression represents a contains operation against a list of evaluated expressions:
 // m.identifier in (val1, val2, ...)
 type InExpression struct {

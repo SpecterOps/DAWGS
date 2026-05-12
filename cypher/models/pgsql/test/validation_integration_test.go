@@ -342,6 +342,13 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 		require.Equal(t, 0, bidirectionalCount)
 	})
 
+	t.Run("shortest path self endpoint helper reports clear error", func(t *testing.T) {
+		var ok bool
+		err := pgxPool.QueryRow(testCtx, "select shortest_path_self_endpoint_error(1::int8, 1::int8)").Scan(&ok)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "shortest path endpoints must not resolve to the same node")
+	})
+
 	t.Run("pair-aware shortest path harness resolves all explicit pairs", func(t *testing.T) {
 		tx, err := pgxPool.Begin(testCtx)
 		require.NoError(t, err)

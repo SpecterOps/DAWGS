@@ -10,6 +10,30 @@ func pgsqlSyntaxNodeSliceTypeConvert[F any, FS []F](fs FS) ([]pgsql.SyntaxNode, 
 	return ConvertSliceType[pgsql.SyntaxNode](fs)
 }
 
+func newSQLCaseWalkCursor(node pgsql.SyntaxNode, caseExpr pgsql.Case) (*Cursor[pgsql.SyntaxNode], error) {
+	if len(caseExpr.Conditions) != len(caseExpr.Then) {
+		return nil, fmt.Errorf("case expression has %d conditions and %d then expressions", len(caseExpr.Conditions), len(caseExpr.Then))
+	}
+
+	nextCursor := &Cursor[pgsql.SyntaxNode]{
+		Node: node,
+	}
+
+	if caseExpr.Operand != nil {
+		nextCursor.AddBranches(caseExpr.Operand)
+	}
+
+	for idx, condition := range caseExpr.Conditions {
+		nextCursor.AddBranches(condition, caseExpr.Then[idx])
+	}
+
+	if caseExpr.Else != nil {
+		nextCursor.AddBranches(caseExpr.Else)
+	}
+
+	return nextCursor, nil
+}
+
 func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) {
 	switch typedNode := node.(type) {
 	case pgsql.Query:
@@ -45,6 +69,12 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 			Node:     node,
 			Branches: typedNode.AsSyntaxNodes(),
 		}, nil
+
+	case pgsql.Case:
+		return newSQLCaseWalkCursor(node, typedNode)
+
+	case *pgsql.Case:
+		return newSQLCaseWalkCursor(node, *typedNode)
 
 	case *pgsql.OrderBy:
 		return &Cursor[pgsql.SyntaxNode]{
