@@ -99,7 +99,7 @@
         {
           "name": "post-filtered shortest path is not replaced by longer path",
           "vars": {
-            "query": "match p=shortestPath((s:TemplateNodeKind1)-[:TemplateEdgeKind1|HasSession*1..]->(d:TemplateNodeKind1)) where s.name = 'path-filter-src' and d.name = 'path-filter-dst' and none(r in relationships(p) where type(r) = 'HasSession' and startNode(r).name = 'blocked-session-host') return p"
+            "query": "match p=shortestPath((s:TemplateNodeKind1)-[:TemplateEdgeKind1|HasSession*1..]->(d:TemplateNodeKind1)) where s.name = 'path-filter-src' and d.name = 'path-filter-dst' with p where none(r in relationships(p) where type(r) = 'HasSession' and startNode(r).name = 'blocked-session-host') return p"
           },
           "assert": "empty"
         },

@@ -96,6 +96,15 @@ func (s *Translator) translateWith() error {
 						selectItem = pgsql.CompoundIdentifier{
 							binding.LastProjection.Binding.Identifier, typedSelectItem,
 						}
+					} else if projectedBinding.DataType == pgsql.PathComposite {
+						builtProjection, err := buildProjection(projectedBinding.Identifier, projectedBinding, s.scope, nil)
+						if err != nil {
+							return err
+						}
+						if len(builtProjection) != 1 {
+							return fmt.Errorf("expected path projection %s to produce one select item, got %d", projectedBinding.Identifier, len(builtProjection))
+						}
+						selectItem = builtProjection[0]
 					} else {
 						// A WITH can project bindings introduced in the same query
 						// part before they have a materialized frame back-reference.
@@ -108,7 +117,9 @@ func (s *Translator) translateWith() error {
 					// Create a new projection that maps the identifier
 					currentPart.projections.Items[idx] = &Projection{
 						SelectItem: selectItem,
-						Alias:      pgsql.AsOptionalIdentifier(projectedBinding.Identifier),
+					}
+					if projectedBinding.DataType != pgsql.PathComposite || binding.LastProjection != nil {
+						currentPart.projections.Items[idx].Alias = pgsql.AsOptionalIdentifier(projectedBinding.Identifier)
 					}
 
 					// Assign the frame to the binding's last projection backref
