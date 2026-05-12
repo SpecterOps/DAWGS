@@ -152,6 +152,151 @@ func TestInferExpressionType(t *testing.T) {
 	}
 }
 
+func TestInferUnaryExpressionType(t *testing.T) {
+	testCases := []struct {
+		Name         string
+		ExpectedType pgsql.DataType
+		Expression   pgsql.Expression
+	}{{
+		Name:         "not",
+		ExpectedType: pgsql.Boolean,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorNot,
+			pgsql.NewBinaryExpression(
+				mustAsLiteral("a"),
+				pgsql.OperatorEquals,
+				mustAsLiteral("a"),
+			),
+		),
+	}, {
+		Name:         "negative numeric",
+		ExpectedType: pgsql.Int4,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorSubtract,
+			mustAsLiteral(int32(1)),
+		),
+	}, {
+		Name:         "positive numeric value",
+		ExpectedType: pgsql.Int2,
+		Expression: pgsql.UnaryExpression{
+			Operator: pgsql.OperatorAdd,
+			Operand:  mustAsLiteral(int16(1)),
+		},
+	}, {
+		Name:         "unknown numeric operand",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorSubtract,
+			pgsql.Identifier("x"),
+		),
+	}, {
+		Name:         "non-numeric operand",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorSubtract,
+			mustAsLiteral("text"),
+		),
+	}, {
+		Name:         "is null",
+		ExpectedType: pgsql.Boolean,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorIs,
+			pgsql.Identifier("x"),
+		),
+	}, {
+		Name:         "is not null",
+		ExpectedType: pgsql.Boolean,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorIsNot,
+			pgsql.Identifier("x"),
+		),
+	}, {
+		Name:         "nil pointer",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   (*pgsql.UnaryExpression)(nil),
+	}}
+
+	for _, nextCase := range testCases {
+		t.Run(nextCase.Name, func(t *testing.T) {
+			inferredType, err := translate.InferExpressionType(nextCase.Expression)
+
+			require.NoError(t, err)
+			require.Equal(t, nextCase.ExpectedType, inferredType)
+		})
+	}
+}
+
+func TestInferWrappedExpressionType(t *testing.T) {
+	testCases := []struct {
+		Name         string
+		ExpectedType pgsql.DataType
+		Expression   pgsql.Expression
+	}{{
+		Name:         "composite value",
+		ExpectedType: pgsql.PathComposite,
+		Expression: pgsql.CompositeValue{
+			DataType: pgsql.PathComposite,
+		},
+	}, {
+		Name:         "empty composite value",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   pgsql.CompositeValue{},
+	}, {
+		Name:         "aliased expression",
+		ExpectedType: pgsql.Text,
+		Expression: pgsql.AliasedExpression{
+			Expression: mustAsLiteral("text"),
+			Alias:      pgsql.AsOptionalIdentifier("alias"),
+		},
+	}, {
+		Name:         "aliased expression pointer",
+		ExpectedType: pgsql.Int8,
+		Expression: &pgsql.AliasedExpression{
+			Expression: mustAsLiteral(int64(1)),
+			Alias:      pgsql.AsOptionalIdentifier("alias"),
+		},
+	}, {
+		Name:         "exists expression",
+		ExpectedType: pgsql.Boolean,
+		Expression:   pgsql.ExistsExpression{},
+	}, {
+		Name:         "negated exists expression",
+		ExpectedType: pgsql.Boolean,
+		Expression:   pgsql.ExistsExpression{Negated: true},
+	}, {
+		Name:         "variadic expression",
+		ExpectedType: pgsql.Int8Array,
+		Expression: pgsql.Variadic{
+			Expression: pgsql.ArrayLiteral{
+				CastType: pgsql.Int8Array,
+			},
+		},
+	}, {
+		Name:         "all expression",
+		ExpectedType: pgsql.Int8,
+		Expression: pgsql.NewAllExpression(pgsql.ArrayLiteral{
+			CastType: pgsql.Int8Array,
+		}),
+	}, {
+		Name:         "unknown all expression",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   pgsql.NewAllExpression(pgsql.Identifier("path")),
+	}, {
+		Name:         "all expression over scalar",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   pgsql.NewAllExpression(mustAsLiteral(int64(1))),
+	}}
+
+	for _, nextCase := range testCases {
+		t.Run(nextCase.Name, func(t *testing.T) {
+			inferredType, err := translate.InferExpressionType(nextCase.Expression)
+
+			require.NoError(t, err)
+			require.Equal(t, nextCase.ExpectedType, inferredType)
+		})
+	}
+}
+
 func TestExpressionTreeTranslator(t *testing.T) {
 	// Tree translator is a stack oriented expression tree builder
 	var (

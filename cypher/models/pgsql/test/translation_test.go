@@ -12,38 +12,34 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-func newKindMapper() pgsql.KindMapper {
-	mapper := pgutil.NewInMemoryKindMapper()
-
-	// This is here to make SQL output a little more predictable for test cases
-	mapper.Put(NodeKind1)
-	mapper.Put(NodeKind2)
-	mapper.Put(EdgeKind1)
-	mapper.Put(EdgeKind2)
-	mapper.Put(graph.StringKind("Computer"))
-	mapper.Put(graph.StringKind("User"))
-	mapper.Put(graph.StringKind("HasSession"))
-	mapper.Put(graph.StringKind("GPO"))
-	mapper.Put(graph.StringKind("OU"))
-	mapper.Put(graph.StringKind("Base"))
-	mapper.Put(graph.StringKind("GPLink"))
-	mapper.Put(graph.StringKind("Contains"))
-
-	for _, kind := range []string{
-		"Group",
+func translationTestKinds() graph.Kinds {
+	// Keep this order stable. Translation case SQL fixtures depend on these IDs.
+	return graph.Kinds{
+		NodeKind1,
+		NodeKind2,
+		EdgeKind1,
+		EdgeKind2,
+		graph.StringKind("Computer"),
+		graph.StringKind("User"),
+		graph.StringKind("HasSession"),
+		graph.StringKind("GPO"),
+		graph.StringKind("OU"),
+		graph.StringKind("Base"),
+		graph.StringKind("GPLink"),
+		graph.StringKind("Contains"),
+		graph.StringKind("Group"),
+	}.Add(graph.StringsToKinds([]string{
 		"AddAllowedToAct",
 		"AddMember",
 		"AdminTo",
 		"AllExtendedRights",
 		"AllowedToDelegate",
 		"CanRDP",
-		"Contains",
 		"ForceChangePassword",
 		"GenericAll",
 		"GenericWrite",
 		"GetChangesAll",
 		"GetChanges",
-		"HasSession",
 		"MemberOf",
 		"Owns",
 		"ReadLAPSPassword",
@@ -51,8 +47,14 @@ func newKindMapper() pgsql.KindMapper {
 		"TrustedBy",
 		"WriteAccountRestrictions",
 		"WriteOwner",
-	} {
-		mapper.Put(graph.StringKind(kind))
+	})...)
+}
+
+func newKindMapper() pgsql.KindMapper {
+	mapper := pgutil.NewInMemoryKindMapper()
+
+	for _, kind := range translationTestKinds() {
+		mapper.Put(kind)
 	}
 
 	return mapper

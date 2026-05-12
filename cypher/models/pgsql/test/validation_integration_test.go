@@ -58,6 +58,21 @@ func pairFilterValues(rows ...string) string {
 	)
 }
 
+func translationValidationGraphSchema() graph.Schema {
+	kinds := translationTestKinds()
+
+	return graph.Schema{
+		Graphs: []graph.Graph{{
+			Name:  "test",
+			Nodes: kinds,
+			Edges: kinds,
+		}},
+		DefaultGraph: graph.Graph{
+			Name: "test",
+		},
+	}
+}
+
 func TestTranslationTestCases(t *testing.T) {
 	testCtx, done := context.WithCancel(context.Background())
 	defer done()
@@ -81,24 +96,7 @@ func TestTranslationTestCases(t *testing.T) {
 	} else {
 		defer connection.Close(testCtx)
 
-		graphSchema := graph.Schema{
-			Graphs: []graph.Graph{{
-				Name: "test",
-				Nodes: graph.Kinds{
-					graph.StringKind("NodeKind1"),
-					graph.StringKind("NodeKind2"),
-				},
-				Edges: graph.Kinds{
-					graph.StringKind("EdgeKind1"),
-					graph.StringKind("EdgeKind2"),
-				},
-			}},
-			DefaultGraph: graph.Graph{
-				Name: "test",
-			},
-		}
-
-		if err := connection.AssertSchema(testCtx, graphSchema); err != nil {
+		if err := connection.AssertSchema(testCtx, translationValidationGraphSchema()); err != nil {
 			t.Fatalf("Failed asserting graph schema: %v", err)
 		}
 
@@ -151,24 +149,7 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 	require.NoError(t, err)
 	defer connection.Close(testCtx)
 
-	graphSchema := graph.Schema{
-		Graphs: []graph.Graph{{
-			Name: "test",
-			Nodes: graph.Kinds{
-				graph.StringKind("NodeKind1"),
-				graph.StringKind("NodeKind2"),
-			},
-			Edges: graph.Kinds{
-				graph.StringKind("EdgeKind1"),
-				graph.StringKind("EdgeKind2"),
-			},
-		}},
-		DefaultGraph: graph.Graph{
-			Name: "test",
-		},
-	}
-
-	require.NoError(t, connection.AssertSchema(testCtx, graphSchema))
+	require.NoError(t, connection.AssertSchema(testCtx, translationValidationGraphSchema()))
 
 	t.Run("array overload does not require pair filter", func(t *testing.T) {
 		tx, err := pgxPool.Begin(testCtx)

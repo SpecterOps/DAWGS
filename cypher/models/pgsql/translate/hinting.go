@@ -93,6 +93,35 @@ func inferBinaryExpressionType(expression *pgsql.BinaryExpression) (pgsql.DataTy
 	}
 }
 
+func inferUnaryExpressionType(expression pgsql.UnaryExpression) (pgsql.DataType, error) {
+	switch expression.Operator {
+	case pgsql.OperatorNot, pgsql.OperatorIs, pgsql.OperatorIsNot:
+		return pgsql.Boolean, nil
+	case pgsql.OperatorAdd, pgsql.OperatorSubtract:
+		if operandType, err := InferExpressionType(expression.Operand); err != nil {
+			return pgsql.UnsetDataType, err
+		} else if !operandType.IsKnown() {
+			return pgsql.UnknownDataType, nil
+		} else if operandType.MatchesOneOf(pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Float4, pgsql.Float8, pgsql.Numeric) {
+			return operandType, nil
+		} else {
+			return pgsql.UnknownDataType, nil
+		}
+	default:
+		return pgsql.UnknownDataType, nil
+	}
+}
+
+func inferAllExpressionType(expression pgsql.AllExpression) (pgsql.DataType, error) {
+	if expressionType, err := InferExpressionType(expression.Expression); err != nil {
+		return pgsql.UnsetDataType, err
+	} else if expressionType.IsArrayType() {
+		return expressionType.ArrayBaseType(), nil
+	} else {
+		return pgsql.UnknownDataType, nil
+	}
+}
+
 func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	switch typedExpression := expression.(type) {
 	case pgsql.Identifier, pgsql.RowColumnReference:
@@ -143,6 +172,42 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 		default:
 			return inferBinaryExpressionType(typedExpression)
 		}
+
+	case *pgsql.UnaryExpression:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return inferUnaryExpressionType(*typedExpression)
+
+	case pgsql.UnaryExpression:
+		return inferUnaryExpressionType(typedExpression)
+
+	case *pgsql.AllExpression:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return inferAllExpressionType(*typedExpression)
+
+	case pgsql.AllExpression:
+		return inferAllExpressionType(typedExpression)
+
+	case *pgsql.AliasedExpression:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return InferExpressionType(typedExpression.Expression)
+
+	case pgsql.AliasedExpression:
+		return InferExpressionType(typedExpression.Expression)
+
+	case pgsql.ExistsExpression:
+		return pgsql.Boolean, nil
+
+	case pgsql.Variadic:
+		return InferExpressionType(typedExpression.Expression)
 
 	case *pgsql.Parenthetical:
 		return InferExpressionType(typedExpression.Expression)

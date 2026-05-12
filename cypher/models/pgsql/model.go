@@ -375,6 +375,14 @@ func (s CompositeValue) AsSelectItem() SelectItem {
 	return s
 }
 
+func (s CompositeValue) TypeHint() DataType {
+	if !s.DataType.IsKnown() {
+		return UnknownDataType
+	}
+
+	return s.DataType
+}
+
 // (<expr>)
 type Parenthetical struct {
 	Expression Expression
