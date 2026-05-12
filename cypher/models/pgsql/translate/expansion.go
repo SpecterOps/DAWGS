@@ -569,6 +569,21 @@ func zeroDepthNodeJoin(nodeIdentifier pgsql.Identifier, nodeID pgsql.Expression)
 	}
 }
 
+func zeroDepthTerminalSatisfaction(traversalStep *TraversalStep) pgsql.Expression {
+	localSatisfaction, _ := expansionTerminalSatisfactionLocality(traversalStep)
+	if localSatisfaction == nil {
+		return pgsql.NewLiteral(true, pgsql.Boolean)
+	}
+
+	// Depth 0 has no relationship row in scope, so edge-dependent terminal
+	// satisfaction can only be met by a later recursive step.
+	if referencesIdentifier(localSatisfaction, traversalStep.Edge.Identifier) {
+		return pgsql.NewLiteral(false, pgsql.Boolean)
+	}
+
+	return localSatisfaction
+}
+
 func (s *ExpansionBuilder) buildZeroDepthExpansionSelect(seed *expansionSeed) (pgsql.Select, error) {
 	var (
 		expansionModel      = s.traversalStep.Expansion
@@ -588,19 +603,14 @@ func (s *ExpansionBuilder) buildZeroDepthExpansionSelect(seed *expansionSeed) (p
 	}
 
 	if expansionModel.TerminalNodeSatisfactionProjection != nil {
-		localSatisfaction, _ := expansionTerminalSatisfactionLocality(s.traversalStep)
-		if localSatisfaction == nil {
-			localSatisfaction = pgsql.NewLiteral(true, pgsql.Boolean)
-		}
+		satisfiedExpression = zeroDepthTerminalSatisfaction(s.traversalStep)
 
-		satisfiedExpression = localSatisfaction
-
-		if seed != nil && referencesIdentifier(localSatisfaction, s.traversalStep.LeftNode.Identifier) {
+		if seed != nil && referencesIdentifier(satisfiedExpression, s.traversalStep.LeftNode.Identifier) {
 			fromClause.Joins = append(fromClause.Joins, zeroDepthNodeJoin(s.traversalStep.LeftNode.Identifier, rootIDExpression))
 		}
 
 		if s.traversalStep.RightNode.Identifier != s.traversalStep.LeftNode.Identifier &&
-			referencesIdentifier(localSatisfaction, s.traversalStep.RightNode.Identifier) {
+			referencesIdentifier(satisfiedExpression, s.traversalStep.RightNode.Identifier) {
 			fromClause.Joins = append(fromClause.Joins, zeroDepthNodeJoin(s.traversalStep.RightNode.Identifier, rootIDExpression))
 		}
 	}

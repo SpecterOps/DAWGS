@@ -145,6 +145,10 @@ func (s TypeCast) AsExpression() Expression {
 	return s
 }
 
+func (s TypeCast) AsSelectItem() SelectItem {
+	return s
+}
+
 func (s TypeCast) TypeHint() DataType {
 	return s.CastType
 }

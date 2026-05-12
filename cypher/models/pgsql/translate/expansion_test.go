@@ -138,3 +138,30 @@ func TestBoundTerminalShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing
 	require.Contains(t, formattedQuery, "n1.id = (s0.x).id")
 	require.Contains(t, formattedQuery, "(s0.n1).id = s1.next_id")
 }
+
+func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T) {
+	builder, expansionModel := newShortestPathSeedTestBuilder(false, false)
+	seed := newExpansionNodeSeed(expansionSeedIdentifier(shortestPathSeedTestFrame), shortestPathSeedTestRoot, nil)
+	expansionModel.TerminalNodeSatisfactionProjection = pgsql.NewBinaryExpression(
+		pgsql.RowColumnReference{
+			Identifier: &pgsql.ArrayIndex{
+				Expression: pgsql.NewParenthetical(shortestPathSeedTestEdge),
+				Indexes: []pgsql.Expression{
+					pgd.IntLiteral(1),
+				},
+				CastType: pgsql.EdgeComposite,
+			},
+			Column: pgsql.ColumnProperties,
+		},
+		pgsql.OperatorJSONTextField,
+		pgd.TextLiteral("enforced"),
+	)
+
+	zeroDepthSelect, err := builder.buildZeroDepthExpansionSelect(&seed)
+	require.NoError(t, err)
+
+	formattedQuery, err := format.Statement(pgsql.Query{Body: zeroDepthSelect}, format.NewOutputBuilder())
+	require.NoError(t, err)
+	require.Contains(t, formattedQuery, "select s1_seed.root_id, s1_seed.root_id, 0, false, false")
+	require.NotContains(t, formattedQuery, "e0")
+}

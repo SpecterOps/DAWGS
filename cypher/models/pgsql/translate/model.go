@@ -205,11 +205,26 @@ func referencesIdentifier(expression pgsql.Expression, identifier pgsql.Identifi
 
 	_ = walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
 		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
-			if compoundIdentifier, isCompoundIdentifier := node.(pgsql.CompoundIdentifier); isCompoundIdentifier &&
-				len(compoundIdentifier) > 0 &&
-				compoundIdentifier[0] == identifier {
-				references = true
-				handler.SetDone()
+			switch typedNode := node.(type) {
+			case pgsql.CompoundIdentifier:
+				if len(typedNode) > 0 && typedNode[0] == identifier {
+					references = true
+					handler.SetDone()
+				}
+
+			case pgsql.Identifier:
+				if typedNode == identifier {
+					references = true
+					handler.SetDone()
+				}
+
+			case pgsql.RowColumnReference:
+				if referencesIdentifier(typedNode.Identifier, identifier) {
+					references = true
+					handler.SetDone()
+				} else {
+					handler.Consume()
+				}
 			}
 		},
 	))
@@ -335,17 +350,32 @@ func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
 	}
 }
 
-// isLocalToScope returns true only when every compound-identifier root found
-// in the expression is a member of localScope.
-func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+// expressionReferencesOnlyLocalIdentifiers returns true only when every binding
+// reference found in the expression is a member of localScope.
+func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
 	isLocal := true
 
 	walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
 		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
-			if ci, ok := node.(pgsql.CompoundIdentifier); ok && len(ci) > 0 {
-				if !localScope.Contains(ci[0]) {
+			switch typedNode := node.(type) {
+			case pgsql.CompoundIdentifier:
+				if len(typedNode) > 0 && !localScope.Contains(typedNode[0]) {
 					isLocal = false
 					handler.SetDone()
+				}
+
+			case pgsql.Identifier:
+				if !localScope.Contains(typedNode) {
+					isLocal = false
+					handler.SetDone()
+				}
+
+			case pgsql.RowColumnReference:
+				if !expressionReferencesOnlyLocalIdentifiers(typedNode.Identifier, localScope) {
+					isLocal = false
+					handler.SetDone()
+				} else {
+					handler.Consume()
 				}
 			}
 		},
@@ -354,10 +384,18 @@ func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet
 	return isLocal
 }
 
+func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+	if expression == nil {
+		return true
+	}
+
+	return expressionReferencesOnlyLocalIdentifiers(expression, localScope)
+}
+
 // partitionConstraintByLocality splits a conjunction (A AND B AND ...) into
-// two expressions: one whose every compound-identifier root is contained in
-// localScope (safe for JOIN ON), and one whose roots reference outside
-// identifiers (must stay in WHERE).
+// two expressions: one whose every binding reference is contained in
+// localScope (safe for JOIN ON), and one that references outside identifiers
+// (must stay in WHERE).
 //
 // Only top-level AND operands are split. If an expression is not a
 // BinaryExpression with OperatorAnd, the whole expression is tested as a unit.

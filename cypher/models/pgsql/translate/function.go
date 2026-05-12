@@ -132,7 +132,12 @@ func (s *Translator) inferArrayExpressionType(expression pgsql.Expression) (pgsq
 func (s *Translator) expressionForPath(expression pgsql.Expression) (pgsql.Expression, error) {
 	switch typedExpression := unwrapParenthetical(expression).(type) {
 	case pgsql.Identifier:
-		if binding, bound := s.scope.Lookup(typedExpression); !bound {
+		binding, bound := s.scope.Lookup(typedExpression)
+		if !bound {
+			binding, bound = s.scope.AliasedLookup(typedExpression)
+		}
+
+		if !bound {
 			return nil, fmt.Errorf("unable to resolve path identifier %s", typedExpression)
 		} else if binding.DataType != pgsql.PathComposite {
 			return nil, fmt.Errorf("expected path expression but received %s", binding.DataType)
