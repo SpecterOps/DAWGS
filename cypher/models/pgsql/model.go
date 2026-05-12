@@ -655,6 +655,10 @@ func (s ArraySlice) AsExpression() Expression {
 	return s
 }
 
+func (s ArraySlice) AsSelectItem() SelectItem {
+	return s
+}
+
 func (s ArraySlice) TypeHint() DataType {
 	if s.CastType == UnsetDataType {
 		return UnknownDataType

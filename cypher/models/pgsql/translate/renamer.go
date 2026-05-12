@@ -110,6 +110,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 				} else {
 					typedExpression[idx] = rewritten
 				}
+
+			case pgsql.ArraySlice:
+				if err := s.rewriteArraySlice(&typedProjection); err != nil {
+					return err
+				}
+				typedExpression[idx] = typedProjection
+
+			case *pgsql.ArraySlice:
+				if err := s.rewriteArraySlice(typedProjection); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -208,6 +219,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 				return err
 			} else {
 				typedExpression.Expression = rewritten
+			}
+
+		case pgsql.ArraySlice:
+			if err := s.rewriteArraySlice(&typedOrderByExpression); err != nil {
+				return err
+			}
+			typedExpression.Expression = typedOrderByExpression
+
+		case *pgsql.ArraySlice:
+			if err := s.rewriteArraySlice(typedOrderByExpression); err != nil {
+				return err
 			}
 		}
 

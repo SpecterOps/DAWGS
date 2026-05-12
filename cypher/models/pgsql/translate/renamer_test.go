@@ -100,3 +100,86 @@ func TestRewriteFrameBindings(t *testing.T) {
 		})
 	}
 }
+
+func TestRewriteFrameBindings_ArraySliceDirectParents(t *testing.T) {
+	var (
+		scope = translate.NewScope()
+		frame = mustPushFrame(t, scope)
+		a     = mustDefineNew(t, scope, pgsql.Int)
+	)
+
+	frame.Reveal(a.Identifier)
+	frame.Export(a.Identifier)
+
+	a.MaterializedBy(frame)
+	rewrittenA := pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}
+
+	newSlice := func(expression pgsql.Expression) pgsql.ArraySlice {
+		return pgsql.ArraySlice{
+			Expression: expression,
+			Lower:      expression,
+			Upper:      expression,
+		}
+	}
+
+	testCases := []struct {
+		name     string
+		actual   pgsql.Expression
+		expected pgsql.Expression
+	}{{
+		name: "projection value",
+		actual: pgsql.Projection{
+			newSlice(a.Identifier),
+		},
+		expected: pgsql.Projection{
+			newSlice(rewrittenA),
+		},
+	}, {
+		name: "projection pointer",
+		actual: pgsql.Projection{
+			func() *pgsql.ArraySlice {
+				value := newSlice(a.Identifier)
+				return &value
+			}(),
+		},
+		expected: pgsql.Projection{
+			func() *pgsql.ArraySlice {
+				value := newSlice(rewrittenA)
+				return &value
+			}(),
+		},
+	}, {
+		name: "order by value",
+		actual: &pgsql.OrderBy{
+			Expression: newSlice(a.Identifier),
+			Ascending:  true,
+		},
+		expected: &pgsql.OrderBy{
+			Expression: newSlice(rewrittenA),
+			Ascending:  true,
+		},
+	}, {
+		name: "order by pointer",
+		actual: &pgsql.OrderBy{
+			Expression: func() *pgsql.ArraySlice {
+				value := newSlice(a.Identifier)
+				return &value
+			}(),
+			Ascending: true,
+		},
+		expected: &pgsql.OrderBy{
+			Expression: func() *pgsql.ArraySlice {
+				value := newSlice(rewrittenA)
+				return &value
+			}(),
+			Ascending: true,
+		},
+	}}
+
+	for _, nextTestCase := range testCases {
+		t.Run(nextTestCase.name, func(t *testing.T) {
+			require.NoError(t, translate.RewriteFrameBindings(scope, nextTestCase.actual))
+			assert.Equal(t, nextTestCase.expected, nextTestCase.actual)
+		})
+	}
+}
