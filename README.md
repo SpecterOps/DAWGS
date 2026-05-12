@@ -86,3 +86,22 @@ make metrics_check
 ```
 
 The defaults can be adjusted with `CYCLO_TOP`, `CYCLO_OVER`, `CRAP_TOP`, and `CRAP_OVER`.
+## PostgreSQL Extensions
+
+The PostgreSQL driver's schema bootstrap (`drivers/pg/query/sql/schema_up.sql`) installs the following extensions:
+
+| Extension     | Required | Purpose                                                                                                  |
+|---------------|----------|----------------------------------------------------------------------------------------------------------|
+| `pg_trgm`     | yes      | GIN trigram indexes for `contains` / `starts with` / `ends with` lookups on graph entity properties.     |
+| `intarray`    | yes      | Extended integer array operations used when maintaining node kind arrays.                                |
+| `pgstattuple` | no       | Measures btree leaf density and fragmentation for the driver-managed index optimization assessment.      |
+
+`pgstattuple` is treated as best-effort. Installing it typically requires a superuser role and on some managed
+Postgres deployments the contrib package is not exposed at all. Bootstrap wraps the install in an exception
+handler that downgrades any failure to a `WARNING`, and the driver's `Optimize` implementation re-checks for the
+extension at runtime and logs a warning when it is missing rather than failing the caller. To enable index
+optimization in such environments, have an administrator install the extension out-of-band:
+
+```sql
+create extension if not exists pgstattuple;
+```
