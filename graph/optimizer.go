@@ -17,6 +17,12 @@ import "context"
 //
 // Drivers that do not have a meaningful notion of optimization should simply
 // not implement this interface; consumers must type-assert before calling.
+//
+// Note that *DatabaseSwitch implements Optimizer as a transparent delegate:
+// its Optimize method forwards to the currently active driver when that
+// driver implements Optimizer, and is a no-op otherwise. As a consequence,
+// a successful type assertion to Optimizer against a *DatabaseSwitch does
+// not by itself imply that the underlying driver supports optimization.
 type Optimizer interface {
 	Optimize(ctx context.Context) error
 }

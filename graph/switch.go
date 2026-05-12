@@ -115,6 +115,21 @@ func (s *DatabaseSwitch) retireInternalContext(ctx context.Context) {
 	}
 }
 
+// Optimize satisfies the optional Optimizer capability by delegating to the
+// currently active driver when it implements Optimizer; otherwise it returns
+// nil. This keeps the wrapper transparent so callers can use the standard
+// Optimizer type-assertion against a *DatabaseSwitch without having to peek
+// through it manually.
+func (s *DatabaseSwitch) Optimize(ctx context.Context) error {
+	s.currentDBLock.RLock()
+	defer s.currentDBLock.RUnlock()
+
+	if optimizer, ok := s.currentDB.(Optimizer); ok {
+		return optimizer.Optimize(ctx)
+	}
+	return nil
+}
+
 func (s *DatabaseSwitch) ReadTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
 	if internalCtx, err := s.newInternalContext(ctx); err != nil {
 		return err
