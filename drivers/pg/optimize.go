@@ -182,17 +182,25 @@ type indexCandidate struct {
 // precedes btree reindex so reclaimed space is reflected in the bloat
 // measurement that drives the rebuild decision.
 func (s *Driver) Optimize(ctx context.Context) error {
-	if installed, err := s.pgstattupleInstalled(ctx); err != nil {
+	return optimize(ctx, s.pool)
+}
+
+// optimize is the package-level implementation that the four maintenance
+// phases dispatch through. Splitting Optimize from its receiver lets unit
+// tests drive the phase wiring against a fake driver without standing up a
+// real *pgxpool.Pool; the *Driver method is a forwarder.
+func optimize(ctx context.Context, db driver) error {
+	if installed, err := pgstattupleInstalled(ctx, db); err != nil {
 		return fmt.Errorf("checking pgstattuple extension: %w", err)
 	} else if !installed {
 		slog.WarnContext(ctx, "Index optimization skipped: pgstattuple extension is not installed; verify the DAWGS schema bootstrap completed successfully")
 		return nil
 	}
 
-	s.cleanupOrphanedReindexArtifacts(ctx)
-	s.flushGinPendingLists(ctx)
-	s.vacuumGraphPartitions(ctx)
-	s.reindexBloatedBtreeIndexes(ctx)
+	cleanupOrphanedReindexArtifacts(ctx, db)
+	flushGinPendingLists(ctx, db)
+	vacuumGraphPartitions(ctx, db)
+	reindexBloatedBtreeIndexes(ctx, db)
 	return nil
 }
 
@@ -216,8 +224,8 @@ func needsReindex(c indexCandidate) (string, bool) {
 // fatal; the loop honors ctx cancellation between candidates. Candidates are
 // processed smallest first so that an early cancellation still produces the
 // maximum number of completed rebuilds.
-func (s *Driver) reindexBloatedBtreeIndexes(ctx context.Context) {
-	indexes, err := s.listGraphPartitionBtreeIndexes(ctx)
+func reindexBloatedBtreeIndexes(ctx context.Context, db driver) {
+	indexes, err := listGraphPartitionBtreeIndexes(ctx, db)
 	if err != nil {
 		slog.WarnContext(ctx, fmt.Sprintf("Btree reindex scan failed; continuing: %v", err))
 		return
@@ -230,7 +238,7 @@ func (s *Driver) reindexBloatedBtreeIndexes(ctx context.Context) {
 		totalBytes int64
 	)
 	for _, idx := range indexes {
-		density, fragmentation, err := s.measureIndexBloat(ctx, idx.oid)
+		density, fragmentation, err := measureIndexBloat(ctx, db, idx.oid)
 		if err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf("Skipping bloat assessment for index %s.%s: %v", idx.schema, idx.index, err))
 			continue
@@ -258,19 +266,19 @@ func (s *Driver) reindexBloatedBtreeIndexes(ctx context.Context) {
 		return candidates[i].sizeBytes < candidates[j].sizeBytes
 	})
 
-	s.reindexCandidates(ctx, candidates)
+	reindexCandidates(ctx, db, candidates)
 }
 
-func (s *Driver) pgstattupleInstalled(ctx context.Context) (bool, error) {
+func pgstattupleInstalled(ctx context.Context, db driver) (bool, error) {
 	var installed bool
-	if err := s.pool.QueryRow(ctx, sqlPgstattupleInstalled).Scan(&installed); err != nil {
+	if err := db.QueryRow(ctx, sqlPgstattupleInstalled).Scan(&installed); err != nil {
 		return false, err
 	}
 	return installed, nil
 }
 
-func (s *Driver) listGraphPartitionBtreeIndexes(ctx context.Context) ([]indexRow, error) {
-	rows, err := s.pool.Query(ctx, sqlSelectGraphPartitionBtreeIndexes)
+func listGraphPartitionBtreeIndexes(ctx context.Context, db driver) ([]indexRow, error) {
+	rows, err := db.Query(ctx, sqlSelectGraphPartitionBtreeIndexes)
 	if err != nil {
 		return nil, err
 	}
@@ -287,9 +295,9 @@ func (s *Driver) listGraphPartitionBtreeIndexes(ctx context.Context) ([]indexRow
 	return out, rows.Err()
 }
 
-func (s *Driver) measureIndexBloat(ctx context.Context, indexOID uint32) (float64, float64, error) {
+func measureIndexBloat(ctx context.Context, db driver, indexOID uint32) (float64, float64, error) {
 	var density, fragmentation float64
-	if err := s.pool.QueryRow(ctx, sqlSelectIndexBloatMetrics, indexOID).Scan(&density, &fragmentation); err != nil {
+	if err := db.QueryRow(ctx, sqlSelectIndexBloatMetrics, indexOID).Scan(&density, &fragmentation); err != nil {
 		return 0, 0, err
 	}
 	return density, fragmentation, nil
@@ -306,8 +314,8 @@ type orphanedReindexArtifact struct {
 // left behind by previously aborted REINDEX CONCURRENTLY runs. Failures are
 // logged at WARN and never fatal: an orphan wastes disk but does not block
 // productive rebuilds, so a stuck cleanup must not gate the rest of the pass.
-func (s *Driver) cleanupOrphanedReindexArtifacts(ctx context.Context) {
-	orphans, err := s.listOrphanedReindexArtifacts(ctx)
+func cleanupOrphanedReindexArtifacts(ctx context.Context, db driver) {
+	orphans, err := listOrphanedReindexArtifacts(ctx, db)
 	if err != nil {
 		slog.WarnContext(ctx, fmt.Sprintf("Index optimization cleanup: failed to scan for orphaned reindex artifacts; continuing: %v", err))
 		return
@@ -321,7 +329,7 @@ func (s *Driver) cleanupOrphanedReindexArtifacts(ctx context.Context) {
 
 	slog.InfoContext(ctx, fmt.Sprintf("Orphan reindex cleanup assessment complete: %d artifact(s) to drop", len(orphans)))
 	for _, o := range orphans {
-		if _, err := s.pool.Exec(ctx, buildDropInvalidIndexSQL(o.schema, o.name)); err != nil {
+		if _, err := db.Exec(ctx, buildDropInvalidIndexSQL(o.schema, o.name)); err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf("Index optimization cleanup: failed to drop orphaned reindex artifact %s.%s; continuing: %v", o.schema, o.name, err))
 			continue
 		}
@@ -329,8 +337,8 @@ func (s *Driver) cleanupOrphanedReindexArtifacts(ctx context.Context) {
 	}
 }
 
-func (s *Driver) listOrphanedReindexArtifacts(ctx context.Context) ([]orphanedReindexArtifact, error) {
-	rows, err := s.pool.Query(ctx, sqlSelectOrphanedReindexArtifacts)
+func listOrphanedReindexArtifacts(ctx context.Context, db driver) ([]orphanedReindexArtifact, error) {
+	rows, err := db.Query(ctx, sqlSelectOrphanedReindexArtifacts)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +360,7 @@ func (s *Driver) listOrphanedReindexArtifacts(ctx context.Context) ([]orphanedRe
 // Per-candidate failures are logged at WARN and the loop continues; ctx
 // cancellation aborts further candidates but in-flight REINDEX statements
 // must run to completion in Postgres to avoid leaving _ccnew artifacts.
-func (s *Driver) reindexCandidates(ctx context.Context, candidates []indexCandidate) {
+func reindexCandidates(ctx context.Context, db driver, candidates []indexCandidate) {
 	for _, c := range candidates {
 		if err := ctx.Err(); err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf("Index optimization rebuild cancelled before processing %s.%s: %v", c.schema, c.index, err))
@@ -365,7 +373,7 @@ func (s *Driver) reindexCandidates(ctx context.Context, candidates []indexCandid
 		))
 
 		started := time.Now()
-		if _, err := s.pool.Exec(ctx, buildReindexSQL(c.schema, c.index)); err != nil {
+		if _, err := db.Exec(ctx, buildReindexSQL(c.schema, c.index)); err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf(
 				"Index optimization rebuild failed for %s.%s after %s; continuing with next candidate: %v",
 				c.schema, c.index, time.Since(started), err,
@@ -432,8 +440,8 @@ func needsGinFlush(c ginFlushCandidate) (string, bool) {
 // threshold. Per-candidate failures are logged at WARN and never fatal: a
 // stuck flush wastes time on the next pass but does not block the rest of
 // the optimization phases.
-func (s *Driver) flushGinPendingLists(ctx context.Context) {
-	indexes, err := s.listGraphPartitionGinIndexes(ctx)
+func flushGinPendingLists(ctx context.Context, db driver) {
+	indexes, err := listGraphPartitionGinIndexes(ctx, db)
 	if err != nil {
 		slog.WarnContext(ctx, fmt.Sprintf("Index optimization GIN scan failed; continuing: %v", err))
 		return
@@ -446,7 +454,7 @@ func (s *Driver) flushGinPendingLists(ctx context.Context) {
 		totalPendingPages int64
 	)
 	for _, idx := range indexes {
-		pages, tuples, err := s.measureGinPending(ctx, idx.oid)
+		pages, tuples, err := measureGinPending(ctx, db, idx.oid)
 		if err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf("Skipping GIN pending-list assessment for index %s.%s: %v", idx.schema, idx.index, err))
 			continue
@@ -480,7 +488,7 @@ func (s *Driver) flushGinPendingLists(ctx context.Context) {
 		}
 
 		started := time.Now()
-		if _, err := s.pool.Exec(ctx, sqlCleanGinPendingList, c.oid); err != nil {
+		if _, err := db.Exec(ctx, sqlCleanGinPendingList, c.oid); err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf(
 				"GIN flush failed for %s.%s after %s; continuing with next candidate: %v",
 				c.schema, c.index, time.Since(started), err,
@@ -495,8 +503,8 @@ func (s *Driver) flushGinPendingLists(ctx context.Context) {
 	}
 }
 
-func (s *Driver) listGraphPartitionGinIndexes(ctx context.Context) ([]ginIndexRow, error) {
-	rows, err := s.pool.Query(ctx, sqlSelectGraphPartitionGinIndexes)
+func listGraphPartitionGinIndexes(ctx context.Context, db driver) ([]ginIndexRow, error) {
+	rows, err := db.Query(ctx, sqlSelectGraphPartitionGinIndexes)
 	if err != nil {
 		return nil, err
 	}
@@ -513,9 +521,9 @@ func (s *Driver) listGraphPartitionGinIndexes(ctx context.Context) ([]ginIndexRo
 	return out, rows.Err()
 }
 
-func (s *Driver) measureGinPending(ctx context.Context, indexOID uint32) (int64, int64, error) {
+func measureGinPending(ctx context.Context, db driver, indexOID uint32) (int64, int64, error) {
 	var pendingPages, pendingTuples int64
-	if err := s.pool.QueryRow(ctx, sqlSelectGinPendingMetrics, indexOID).Scan(&pendingPages, &pendingTuples); err != nil {
+	if err := db.QueryRow(ctx, sqlSelectGinPendingMetrics, indexOID).Scan(&pendingPages, &pendingTuples); err != nil {
 		return 0, 0, err
 	}
 	return pendingPages, pendingTuples, nil
@@ -592,8 +600,8 @@ func vacuumAssessment(r vacuumStatsRow, now time.Time) (vacuumCandidate, bool) {
 // flagged by vacuumAssessment. Per-candidate failures are logged at WARN and
 // never fatal. The loop honors ctx cancellation between partitions; an
 // in-flight VACUUM aborts at the next safe point when ctx is cancelled.
-func (s *Driver) vacuumGraphPartitions(ctx context.Context) {
-	stats, err := s.listGraphPartitionVacuumStats(ctx)
+func vacuumGraphPartitions(ctx context.Context, db driver) {
+	stats, err := listGraphPartitionVacuumStats(ctx, db)
 	if err != nil {
 		slog.WarnContext(ctx, fmt.Sprintf("Vacuum assessment scan failed; continuing: %v", err))
 		return
@@ -639,7 +647,7 @@ func (s *Driver) vacuumGraphPartitions(ctx context.Context) {
 		}
 
 		started := time.Now()
-		if _, err := s.pool.Exec(ctx, buildVacuumSQL(c.schema, c.table)); err != nil {
+		if _, err := db.Exec(ctx, buildVacuumSQL(c.schema, c.table)); err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf(
 				"Vacuum failed for %s.%s after %s; continuing with next candidate: %v",
 				c.schema, c.table, time.Since(started), err,
@@ -654,8 +662,8 @@ func (s *Driver) vacuumGraphPartitions(ctx context.Context) {
 	}
 }
 
-func (s *Driver) listGraphPartitionVacuumStats(ctx context.Context) ([]vacuumStatsRow, error) {
-	rows, err := s.pool.Query(ctx, sqlSelectGraphPartitionVacuumStats)
+func listGraphPartitionVacuumStats(ctx context.Context, db driver) ([]vacuumStatsRow, error) {
+	rows, err := db.Query(ctx, sqlSelectGraphPartitionVacuumStats)
 	if err != nil {
 		return nil, err
 	}
