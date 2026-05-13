@@ -94,7 +94,7 @@ The PostgreSQL driver's schema bootstrap (`drivers/pg/query/sql/schema_up.sql`) 
 |---------------|----------|----------------------------------------------------------------------------------------------------------|
 | `pg_trgm`     | yes      | GIN trigram indexes for `contains` / `starts with` / `ends with` lookups on graph entity properties.     |
 | `intarray`    | yes      | Extended integer array operations used when maintaining node kind arrays.                                |
-| `pgstattuple` | no       | Measures btree leaf density and fragmentation for the driver-managed index optimization.                 |
+| `pgstattuple` | no       | Measures btree leaf density / fragmentation and GIN pending-list size for driver-managed optimization.   |
 
 `pgstattuple` is treated as best-effort. Installing it typically requires a superuser role and on some managed
 Postgres deployments the contrib package is not exposed at all. Bootstrap wraps the install in an exception
@@ -106,23 +106,33 @@ optimization in such environments, have an administrator install the extension o
 create extension if not exists pgstattuple;
 ```
 
-### Index Optimization
+### Index and Table Optimization
 
 When `pgstattuple` is available the driver's `Optimize` method (exposed through the optional `graph.Optimizer`
-interface) performs the following on each invocation against btree indexes on partitions of the `node` and `edge`
-tables:
+interface) runs four phases on each invocation, scoped to partitions of the `node` and `edge` tables:
 
-1. Drops any `INVALID` indexes whose name matches the `_ccnew[N]` pattern, which Postgres leaves behind when a
-   prior `REINDEX CONCURRENTLY` was aborted. Cleanup failures are logged at `WARN` and never fatal; an orphan
-   wastes disk but does not block productive rebuilds.
-2. Measures every candidate index with `pgstatindex` and flags those whose average leaf density falls below
-   `60%` or whose leaf-page fragmentation reaches `40%`. Thresholds are calibrated against production samples
-   and a freshly rebuilt baseline (~73.8% density).
-3. Rebuilds each flagged index with `REINDEX INDEX CONCURRENTLY`, smallest first so that an early cancellation
-   still produces the maximum number of completed rebuilds. Per-index failures are logged at `WARN` and the
-   loop continues with the next candidate. Context cancellation aborts before the next candidate; an in-flight
-   `REINDEX CONCURRENTLY` runs to completion (interrupting it would leave a `_ccnew` artifact for the next pass
-   to reap).
+1. **Orphan cleanup.** Drops any `INVALID` indexes whose name matches the `_ccnew[N]` pattern, which Postgres
+   leaves behind when a prior `REINDEX CONCURRENTLY` was aborted. Cleanup failures are logged at `WARN` and
+   never fatal; an orphan wastes disk but does not block productive rebuilds.
+2. **GIN pending-list flush.** Measures every GIN index with `pgstatginindex` and flags those whose pending
+   list reaches `2048` pages (`16 MiB`, four times the default `gin_pending_list_limit`). Flagged indexes are
+   flushed with `gin_clean_pending_list`. The threshold is a starting default and may be tightened or relaxed
+   once fleet samples have been collected.
+3. **Vacuum / analyze.** Reads `pg_stat_user_tables` for each partition. A partition is flagged for
+   `VACUUM (ANALYZE)` when its dead-tuple ratio reaches `20%` and dead-tuple count reaches `10000`, or when
+   `n_mod_since_analyze` reaches `50000` and the most recent (auto)analyze is older than `24h`. The dead-tuple
+   ratio mirrors Postgres's default `autovacuum_vacuum_scale_factor`; the analyze staleness window is aligned
+   with the typical pipeline-level optimization cooldown. `VACUUM FULL` is never emitted.
+4. **Btree reindex.** Measures every candidate btree index with `pgstatindex` and flags those whose average
+   leaf density falls below `60%` or whose leaf-page fragmentation reaches `40%`. Thresholds are calibrated
+   against production samples and a freshly rebuilt baseline (~73.8% density). Rebuilds run with
+   `REINDEX INDEX CONCURRENTLY`, smallest first so that an early cancellation still produces the maximum
+   number of completed rebuilds.
+
+Phases run in the order above so that vacuum has a chance to reclaim index space before the btree assessment
+quantifies bloat. Per-candidate failures within any phase are logged at `WARN` and the loop continues with the
+next candidate. Context cancellation aborts before the next candidate; in-flight `REINDEX CONCURRENTLY` and
+`VACUUM` statements run to a safe stopping point in Postgres.
 
 The pass is not bounded by wall-clock time or candidate count. Callers should serialize `Optimize` against
 their own scheduling loop.
