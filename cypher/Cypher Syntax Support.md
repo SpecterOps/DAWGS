@@ -428,10 +428,10 @@ This indicates that there is a node with a value for `n.name` that is not parsab
 
 In the future, CySQL translation will cover most of the strict typing requirements automatically for users.
 
-Property equality against a string literal or string parameter is translated through PostgreSQL JSON text extraction for
-backwards compatibility. This means a JSON boolean property value of `true` compares equal to the string literal
-`'true'`. Use boolean or numeric literals, such as `n.enabled = true` or `n.count = 1`, when strict JSON scalar equality
-is required.
+Property equality against the string literal or string parameter `'true'` or `'false'` is translated through PostgreSQL
+JSON text extraction for backwards compatibility. This means a JSON boolean property value of `true` compares equal to
+the string literal `'true'`. Other string equality operands use strict JSON scalar equality; use boolean or numeric
+literals, such as `n.enabled = true` or `n.count = 1`, when typed JSON scalar equality is required.
 
 ### Index Utilization
 

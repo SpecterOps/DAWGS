@@ -221,12 +221,14 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 type contextAwareKindMapper struct {
 	ctx        context.Context
 	kindMapper pgsql.KindMapper
+	parameters map[string]any
 }
 
-func newContextAwareKindMapper(ctx context.Context, kindMapper pgsql.KindMapper) *contextAwareKindMapper {
+func newContextAwareKindMapper(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *contextAwareKindMapper {
 	return &contextAwareKindMapper{
 		ctx:        ctx,
 		kindMapper: kindMapper,
+		parameters: parameters,
 	}
 }
 
@@ -433,7 +435,7 @@ func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expressi
 		return nil
 	}
 
-	if err := rewritePropertyLookupOperands(expression); err != nil {
+	if err := rewritePropertyLookupOperands(kindMapper, expression); err != nil {
 		return err
 	}
 

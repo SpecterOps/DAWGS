@@ -40,12 +40,13 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		inputParameters[key] = value
 	}
 
-	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper)
+	translatedParameters := map[string]any{}
+	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
 
 	return &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
-			Parameters: map[string]any{},
+			Parameters: translatedParameters,
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,

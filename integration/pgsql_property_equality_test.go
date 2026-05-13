@@ -144,10 +144,10 @@ func TestPostgreSQLPropertyTextEqualityCompatibility(t *testing.T) {
 		value:    false,
 		expected: []graph.ID{boolFalse.ID},
 	}, {
-		name:     "text number matches numeric and string JSON scalars",
+		name:     "text number remains strict",
 		property: "rank",
 		value:    "1",
-		expected: []graph.ID{boolTrue.ID, stringTrue.ID},
+		expected: []graph.ID{stringTrue.ID},
 	}, {
 		name:     "numeric literal remains strict",
 		property: "rank",

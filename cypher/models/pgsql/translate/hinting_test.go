@@ -23,7 +23,7 @@ func TestLiteralKindIDEmptyMappedKindsIsNotConverted(t *testing.T) {
 	t.Parallel()
 
 	literal, converted, err := literalKindID(
-		newContextAwareKindMapper(context.Background(), emptyKindMapper{}),
+		newContextAwareKindMapper(context.Background(), emptyKindMapper{}, nil),
 		pgsql.NewLiteral("MissingKind", pgsql.Text),
 	)
 

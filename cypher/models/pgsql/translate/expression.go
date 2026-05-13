@@ -240,9 +240,7 @@ func rewritePropertyLookupOperator(propertyLookup *pgsql.BinaryExpression, dataT
 
 func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
 	switch dataType {
-	// Text operands intentionally keep the legacy JSON text extraction path. Existing callers rely on string
-	// equality matching the text representation of JSON scalar properties, such as JSON boolean true == "true".
-	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric:
+	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric, pgsql.Text:
 		return true
 
 	default:
@@ -250,8 +248,50 @@ func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
 	}
 }
 
-func rewriteJSONScalarEqualityOperand(expression pgsql.Expression) (pgsql.Expression, bool) {
+func isBooleanTextCompatibilityValue(value any) bool {
+	switch value {
+	case "true", "false":
+		return true
+
+	default:
+		return false
+	}
+}
+
+func isBooleanTextCompatibilityParameter(kindMapper *contextAwareKindMapper, parameter pgsql.Parameter) bool {
+	if kindMapper == nil || parameter.TypeHint() != pgsql.Text {
+		return false
+	}
+
+	value, hasValue := kindMapper.parameters[parameter.Identifier.String()]
+	return hasValue && isBooleanTextCompatibilityValue(value)
+}
+
+func isBooleanTextCompatibilityOperand(kindMapper *contextAwareKindMapper, expression pgsql.Expression) bool {
+	switch typedExpression := expression.(type) {
+	case pgsql.Literal:
+		return typedExpression.TypeHint() == pgsql.Text && isBooleanTextCompatibilityValue(typedExpression.Value)
+
+	case pgsql.Parameter:
+		return isBooleanTextCompatibilityParameter(kindMapper, typedExpression)
+
+	case *pgsql.Parameter:
+		if typedExpression == nil {
+			return false
+		}
+
+		return isBooleanTextCompatibilityParameter(kindMapper, *typedExpression)
+
+	default:
+		return false
+	}
+}
+
+func rewriteJSONScalarEqualityOperand(kindMapper *contextAwareKindMapper, expression pgsql.Expression) (pgsql.Expression, bool) {
 	if literal, isLiteral := expression.(pgsql.Literal); isLiteral && literal.Null {
+		return nil, false
+	} else if isBooleanTextCompatibilityOperand(kindMapper, expression) {
+		// Preserve compatibility for existing callers that compare JSON boolean properties to stringified booleans.
 		return nil, false
 	}
 
@@ -301,7 +341,7 @@ func TypeCastExpression(expression pgsql.Expression, dataType pgsql.DataType) (p
 	return pgsql.NewTypeCast(expression, dataType), nil
 }
 
-func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
+func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
 	var (
 		leftPropertyLookup, hasLeftPropertyLookup   = expressionToPropertyLookupBinaryExpression(expression.LOperand)
 		rightPropertyLookup, hasRightPropertyLookup = expressionToPropertyLookupBinaryExpression(expression.ROperand)
@@ -341,7 +381,7 @@ func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
 				}
 
 			case pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals:
-				if rewrittenROperand, rewritten := rewriteJSONScalarEqualityOperand(expression.ROperand); rewritten {
+				if rewrittenROperand, rewritten := rewriteJSONScalarEqualityOperand(kindMapper, expression.ROperand); rewritten {
 					leftPropertyLookup.Operator = pgsql.OperatorJSONField
 					expression.ROperand = rewrittenROperand
 				} else if rOperandTypeHint == pgsql.AnyArray {
@@ -375,7 +415,7 @@ func rewritePropertyLookupOperands(expression *pgsql.BinaryExpression) error {
 				// for special (like, ilike, etc.) character classes
 
 			case pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals:
-				if rewrittenLOperand, rewritten := rewriteJSONScalarEqualityOperand(expression.LOperand); rewritten {
+				if rewrittenLOperand, rewritten := rewriteJSONScalarEqualityOperand(kindMapper, expression.LOperand); rewritten {
 					expression.LOperand = rewrittenLOperand
 					rightPropertyLookup.Operator = pgsql.OperatorJSONField
 				} else if lOperandTypeHint == pgsql.AnyArray {

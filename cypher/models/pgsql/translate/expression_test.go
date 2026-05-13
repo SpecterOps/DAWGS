@@ -304,7 +304,6 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			mustAsLiteral(property),
 		)
 	}
-
 	renderEquality := func(t *testing.T, lOperand, rOperand pgsql.Expression) string {
 		t.Helper()
 
@@ -325,15 +324,20 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 		ROperand pgsql.Expression
 		Expected string
 	}{{
-		Name:     "text literal keeps text property lookup",
+		Name:     "boolean string literal keeps text property lookup",
 		LOperand: propertyLookup("isassignabletorole"),
 		ROperand: mustAsLiteral("true"),
 		Expected: "(n.properties ->> 'isassignabletorole') = 'true'",
 	}, {
-		Name:     "text literal keeps text property lookup when reversed",
+		Name:     "boolean string literal keeps text property lookup when reversed",
 		LOperand: mustAsLiteral("true"),
 		ROperand: propertyLookup("isassignabletorole"),
 		Expected: "'true' = (n.properties ->> 'isassignabletorole')",
+	}, {
+		Name:     "non-boolean string literal keeps jsonb scalar equality",
+		LOperand: propertyLookup("rank"),
+		ROperand: mustAsLiteral("1"),
+		Expected: "((n.properties -> 'rank'))::jsonb = to_jsonb(('1')::text)::jsonb",
 	}, {
 		Name:     "boolean literal keeps jsonb scalar equality",
 		LOperand: propertyLookup("isassignabletorole"),
