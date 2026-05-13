@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/assert"
@@ -92,6 +93,52 @@ func TestDatabaseSwitch_Optimize_FollowsActiveDriverAfterSwitch(t *testing.T) {
 	require.NoError(t, dbSwitch.Optimize(ctx))
 	assert.Equal(t, 1, first.calls, "first driver should not be invoked after Switch")
 	assert.Equal(t, 1, second.calls, "Optimize should be routed to the new active driver")
+}
+
+// blockingOptimizingStubDatabase is a stubDatabase whose Optimize method
+// blocks until its context is cancelled, allowing tests to exercise the
+// cancellation path without relying on real driver behavior.
+type blockingOptimizingStubDatabase struct {
+	stubDatabase
+	started chan struct{}
+}
+
+func (s *blockingOptimizingStubDatabase) Optimize(ctx context.Context) error {
+	close(s.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// TestDatabaseSwitch_Optimize_SwitchCancelsInFlight verifies that an
+// authoritative database swap aborts an in-flight Optimize call by cancelling
+// its internal context, allowing the swap to acquire the write lock once the
+// optimizer returns.
+func TestDatabaseSwitch_Optimize_SwitchCancelsInFlight(t *testing.T) {
+	ctx := context.Background()
+
+	driver := &blockingOptimizingStubDatabase{started: make(chan struct{})}
+	dbSwitch := graph.NewDatabaseSwitch(ctx, driver)
+
+	optimizeErr := make(chan error, 1)
+	go func() {
+		optimizeErr <- dbSwitch.Optimize(ctx)
+	}()
+
+	select {
+	case <-driver.started:
+	case <-time.After(time.Second):
+		t.Fatal("Optimize did not start within timeout")
+	}
+
+	dbSwitch.Switch(stubDatabase{})
+
+	select {
+	case err := <-optimizeErr:
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("Optimize did not return after Switch cancelled it")
+	}
 }
 
 // Compile-time assertion that *graph.DatabaseSwitch satisfies graph.Optimizer.

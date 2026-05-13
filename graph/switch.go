@@ -120,14 +120,25 @@ func (s *DatabaseSwitch) retireInternalContext(ctx context.Context) {
 // nil. This keeps the wrapper transparent so callers can use the standard
 // Optimizer type-assertion against a *DatabaseSwitch without having to peek
 // through it manually.
+//
+// The call is registered as an internal context so that Switch can cancel
+// any in-flight optimization and unblock authoritative database swaps. A
+// driver whose Optimize implementation honors ctx cancellation will abort
+// promptly and release the read lock guarding the active driver.
 func (s *DatabaseSwitch) Optimize(ctx context.Context) error {
-	s.currentDBLock.RLock()
-	defer s.currentDBLock.RUnlock()
+	if internalCtx, err := s.newInternalContext(ctx); err != nil {
+		return err
+	} else {
+		defer s.retireInternalContext(internalCtx)
 
-	if optimizer, ok := s.currentDB.(Optimizer); ok {
-		return optimizer.Optimize(ctx)
+		s.currentDBLock.RLock()
+		defer s.currentDBLock.RUnlock()
+
+		if optimizer, ok := s.currentDB.(Optimizer); ok {
+			return optimizer.Optimize(internalCtx)
+		}
+		return nil
 	}
-	return nil
 }
 
 func (s *DatabaseSwitch) ReadTransaction(ctx context.Context, txDelegate TransactionDelegate, options ...TransactionOption) error {
