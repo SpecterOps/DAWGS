@@ -26,6 +26,36 @@ func TestPathComponentFunctionsResolvePathAliases(t *testing.T) {
 	require.Contains(t, formatted, ".edges")
 }
 
+func TestNodesFunctionTranslatesBoundPathToNodeArray(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = ()-[]->() RETURN nodes(p)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "nodecomposite[]")
+	require.Contains(t, formatted, ".nodes")
+}
+
+func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `RETURN nodes(null), relationships(null)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "(null)::nodecomposite[]")
+	require.Contains(t, formatted, "(null)::edgecomposite[]")
+}
+
 func TestPrepareCollectExpressionMissingBindingErrorNamesArgument(t *testing.T) {
 	t.Parallel()
 

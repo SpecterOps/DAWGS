@@ -27,6 +27,12 @@ func Test_mapValue(t *testing.T) {
 		stringSlice    = []string{"a", "b", "c"}
 		kindSlice      = []graph.Kind{graph.StringKind("a"), graph.StringKind("b"), graph.StringKind("c")}
 		kinds          = graph.Kinds{graph.StringKind("a"), graph.StringKind("b"), graph.StringKind("c")}
+		rawNodeA       = dbtype.Node{Id: 1, Labels: []string{"NodeKindA"}, Props: map[string]any{"name": "a"}}
+		rawNodeB       = dbtype.Node{Id: 2, Labels: []string{"NodeKindB"}, Props: map[string]any{"name": "b"}}
+		nodeA          = graph.NewNode(1, graph.AsProperties(map[string]any{"name": "a"}), graph.StringKind("NodeKindA"))
+		nodeB          = graph.NewNode(2, graph.AsProperties(map[string]any{"name": "b"}), graph.StringKind("NodeKindB"))
+		rawRel         = dbtype.Relationship{Id: 3, StartId: 1, EndId: 2, Type: "EdgeKind", Props: map[string]any{"label": "first"}}
+		rel            = graph.NewRelationship(3, 1, 2, graph.AsProperties(map[string]any{"label": "first"}), graph.StringKind("EdgeKind"))
 	)
 
 	mapTestCase[uint, uint](t, 0, 0)
@@ -59,6 +65,11 @@ func Test_mapValue(t *testing.T) {
 	mapTestCase(t, anyStringSlice, stringSlice)
 	mapTestCase(t, anyStringSlice, kindSlice)
 	mapTestCase(t, anyStringSlice, kinds)
+
+	mapTestCase(t, []any{rawNodeA, rawNodeB}, []*graph.Node{nodeA, nodeB})
+	mapTestCase(t, []any{rawNodeA, rawNodeB}, []graph.Node{*nodeA, *nodeB})
+	mapTestCase(t, []any{rawRel}, []*graph.Relationship{rel})
+	mapTestCase(t, []any{rawRel}, []graph.Relationship{*rel})
 }
 
 func TestInternalResult_NextWithRunError(t *testing.T) {

@@ -83,3 +83,60 @@ func TestValueMapperMapsStringArraysByTargetType(t *testing.T) {
 	require.True(t, valueMapper.Map([]any{"Alice", "Bob"}, &stringTarget))
 	require.Equal(t, []string{"Alice", "Bob"}, stringTarget)
 }
+
+func TestValueMapperMapsCompositeArrays(t *testing.T) {
+	ctx := context.Background()
+	mapper := pgutil.NewInMemoryKindMapper()
+	userKindID := mapper.Put(graph.StringKind("User"))
+	memberOfKindID := mapper.Put(graph.StringKind("MemberOf"))
+	valueMapper := NewValueMapper(ctx, mapper)
+
+	t.Run("node array preserves order", func(t *testing.T) {
+		rawNodes := []any{
+			map[string]any{
+				"id":         int64(1),
+				"kind_ids":   []any{userKindID},
+				"properties": map[string]any{"name": "Alice"},
+			},
+			map[string]any{
+				"id":         int64(2),
+				"kind_ids":   []any{userKindID},
+				"properties": map[string]any{"name": "Bob"},
+			},
+		}
+
+		var nodes []*graph.Node
+		require.True(t, valueMapper.Map(rawNodes, &nodes))
+		require.Len(t, nodes, 2)
+		require.Equal(t, graph.ID(1), nodes[0].ID)
+		require.Equal(t, graph.ID(2), nodes[1].ID)
+		require.Equal(t, graph.StringKind("User"), nodes[0].Kinds[0])
+		require.Equal(t, "Alice", nodes[0].Properties.Get("name").Any())
+	})
+
+	t.Run("relationship array preserves order", func(t *testing.T) {
+		rawRelationships := []any{
+			map[string]any{
+				"id":         int64(10),
+				"start_id":   int64(1),
+				"end_id":     int64(2),
+				"kind_id":    memberOfKindID,
+				"properties": map[string]any{"ordinal": int64(1)},
+			},
+			map[string]any{
+				"id":         int64(11),
+				"start_id":   int64(2),
+				"end_id":     int64(3),
+				"kind_id":    memberOfKindID,
+				"properties": map[string]any{"ordinal": int64(2)},
+			},
+		}
+
+		var relationships []*graph.Relationship
+		require.True(t, valueMapper.Map(rawRelationships, &relationships))
+		require.Len(t, relationships, 2)
+		require.Equal(t, graph.ID(10), relationships[0].ID)
+		require.Equal(t, graph.ID(11), relationships[1].ID)
+		require.Equal(t, graph.StringKind("MemberOf"), relationships[0].Kind)
+	})
+}

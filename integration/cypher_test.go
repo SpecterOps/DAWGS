@@ -140,6 +140,7 @@ func TestCypher(t *testing.T) {
 //	{"node_ids": ["a", "b"]}              — exact multiset of returned fixture node IDs, order-independent
 //	{"node_id_set": ["a", "b"]}           — exact set of returned fixture node IDs, order-independent
 //	{"ordered_node_ids": ["a", "b"]}      — first returned node ID per row, preserving row order
+//	{"node_list_ids": [["a", "b"]]}       — exact multiset of returned node-list ID sequences
 //	{"path_node_ids": [["a", "b"]]}       — exact multiset of returned path node ID sequences
 //	{"path_lengths": [N...]}              — exact multiset of returned path edge counts
 //	{"path_edge_kinds": [["K"...]]}       — exact multiset of returned path edge kind sequences
@@ -213,6 +214,9 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 
 		case "ordered_node_ids":
 			assertions = append(assertions, assertOrderedNodeIDs(decodeAssertionValue[[]string](t, key, val)))
+
+		case "node_list_ids":
+			assertions = append(assertions, assertNodeListIDs(decodeAssertionValue[[][]string](t, key, val)))
 
 		case "path_node_ids":
 			assertions = append(assertions, assertPathNodeIDs(decodeAssertionValue[[][]string](t, key, val)))
@@ -737,6 +741,29 @@ func assertOrderedNodeIDs(expected []string) resultAssertion {
 	}
 }
 
+func assertNodeListIDs(expected [][]string) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for _, row := range result.rows {
+			for _, rawVal := range row.values {
+				var nodes []*graph.Node
+				if result.mapper.Map(rawVal, &nodes) {
+					got = append(got, nodeListIDSignature(t, nodes, ctx))
+				}
+			}
+		}
+
+		want := make([]string, len(expected))
+		for idx, nodeIDs := range expected {
+			want[idx] = strings.Join(nodeIDs, "->")
+		}
+
+		assertStringMultiset(t, got, want, "node-list ID sequences")
+	}
+}
+
 func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, unique bool) []string {
 	t.Helper()
 
@@ -761,6 +788,21 @@ func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, uniq
 	}
 
 	return ids
+}
+
+func nodeListIDSignature(t *testing.T, nodes []*graph.Node, ctx assertionContext) string {
+	t.Helper()
+
+	nodeIDs := make([]string, len(nodes))
+	for idx, node := range nodes {
+		if node == nil {
+			t.Fatalf("node list contains nil node at index %d", idx)
+		}
+
+		nodeIDs[idx] = ctx.fixtureID(t, node.ID)
+	}
+
+	return strings.Join(nodeIDs, "->")
 }
 
 func assertPathNodeIDs(expected [][]string) resultAssertion {

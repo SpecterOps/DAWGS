@@ -128,6 +128,44 @@ func mapKinds(ctx context.Context, kindMapper KindMapper, untypedValue any) (gra
 	return nil, false
 }
 
+func mapNodeCompositeArray(ctx context.Context, kindMapper KindMapper, value any) ([]*graph.Node, bool) {
+	nodeComposites, err := nodeCompositesFromRaw(value)
+	if err != nil {
+		return nil, false
+	}
+
+	nodes := make([]*graph.Node, len(nodeComposites))
+	for idx, nodeComposite := range nodeComposites {
+		node := &graph.Node{}
+		if err := nodeComposite.ToNode(ctx, kindMapper, node); err != nil {
+			return nil, false
+		}
+
+		nodes[idx] = node
+	}
+
+	return nodes, true
+}
+
+func mapEdgeCompositeArray(ctx context.Context, kindMapper KindMapper, value any) ([]*graph.Relationship, bool) {
+	edgeComposites, err := edgeCompositesFromRaw(value)
+	if err != nil {
+		return nil, false
+	}
+
+	relationships := make([]*graph.Relationship, len(edgeComposites))
+	for idx, edgeComposite := range edgeComposites {
+		relationship := &graph.Relationship{}
+		if err := edgeComposite.ToRelationship(ctx, kindMapper, relationship); err != nil {
+			return nil, false
+		}
+
+		relationships[idx] = relationship
+	}
+
+	return relationships, true
+}
+
 func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 	return func(value, target any) bool {
 		switch typedTarget := target.(type) {
@@ -142,6 +180,25 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 				}
 			}
 
+		case *[]*graph.Relationship:
+			if relationships, ok := mapEdgeCompositeArray(ctx, kindMapper, value); ok {
+				*typedTarget = relationships
+				return true
+			}
+
+		case *[]graph.Relationship:
+			if relationships, ok := mapEdgeCompositeArray(ctx, kindMapper, value); ok {
+				relationshipValues := make([]graph.Relationship, len(relationships))
+				for idx, relationship := range relationships {
+					if relationship != nil {
+						relationshipValues[idx] = *relationship
+					}
+				}
+
+				*typedTarget = relationshipValues
+				return true
+			}
+
 		case *graph.Node:
 			if compositeMap, typeOK := value.(map[string]any); typeOK {
 				node := nodeComposite{}
@@ -151,6 +208,25 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 						return true
 					}
 				}
+			}
+
+		case *[]*graph.Node:
+			if nodes, ok := mapNodeCompositeArray(ctx, kindMapper, value); ok {
+				*typedTarget = nodes
+				return true
+			}
+
+		case *[]graph.Node:
+			if nodes, ok := mapNodeCompositeArray(ctx, kindMapper, value); ok {
+				nodeValues := make([]graph.Node, len(nodes))
+				for idx, node := range nodes {
+					if node != nil {
+						nodeValues[idx] = *node
+					}
+				}
+
+				*typedTarget = nodeValues
+				return true
 			}
 
 		case *graph.Path:

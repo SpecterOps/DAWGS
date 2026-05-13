@@ -221,6 +221,8 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 
 	if argument, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
+	} else if literal, isLiteral := argument.(pgsql.Literal); isLiteral && literal.Null {
+		s.treeTranslator.PushOperand(pgsql.NewTypeCast(literal, castType))
 	} else {
 		if column == pgsql.ColumnEdges {
 			if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
