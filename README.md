@@ -55,3 +55,34 @@ export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 ```
 
 Use `make test` for unit tests only and `make test_integration` for integration tests only.
+
+### Test Metrics
+
+`make test` writes unit test coverage artifacts under `.coverage/`:
+
+```bash
+make test
+```
+
+The stable coverage profile is `.coverage/unit.out`, and the function coverage summary is `.coverage/coverage.txt`.
+
+Cyclomatic complexity and CRAP reports are available through dedicated metric targets:
+
+```bash
+make complexity
+make crap
+make metrics
+```
+
+`make complexity` writes `.coverage/cyclomatic.txt`. `make crap` reruns unit tests for a fresh coverage profile, then
+writes `.coverage/crap.txt`, `.coverage/crap.json`, and a standalone HTML report at `.coverage/metrics.html`.
+Generated parser files, tests, vendor code, and testdata are excluded from these reports. The HTML report embeds its CSS
+and JavaScript directly in the document, so it can be opened without network access.
+
+Thresholds are report-only by default. To enforce the configured thresholds, run:
+
+```bash
+make metrics_check
+```
+
+The defaults can be adjusted with `CYCLO_TOP`, `CYCLO_OVER`, `CRAP_TOP`, and `CRAP_OVER`.

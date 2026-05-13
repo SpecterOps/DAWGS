@@ -11,11 +11,13 @@ require (
 	github.com/axiomhq/hyperloglog v0.2.6
 	github.com/bits-and-blooms/bitset v1.24.4
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/fzipp/gocyclo v0.6.0
 	github.com/gammazero/deque v1.2.1
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/tools v0.43.0
 )
 
 // Dawgrun requirements
@@ -100,7 +102,6 @@ require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/firefart/nonamedreturns v1.0.6 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
-	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.20 // indirect
 	github.com/go-critic/go-critic v0.14.3 // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
@@ -248,7 +249,6 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/tools v0.43.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
@@ -259,6 +259,8 @@ require (
 )
 
 tool (
+	github.com/fzipp/gocyclo/cmd/gocyclo
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	github.com/specterops/dawgs/tools/dawgrun/cmd/dawgrun
+	github.com/specterops/dawgs/tools/metrics/cmd/dawgs-metrics
 )
