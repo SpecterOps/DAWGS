@@ -20,9 +20,10 @@ import (
 )
 
 type Options struct {
-	SourceRoot   string
-	CoverProfile string
-	Ignore       string
+	SourceRoot     string
+	CoverProfile   string
+	Ignore         string
+	QualityOptions QualityOptions
 }
 
 type TextOptions struct {
@@ -37,6 +38,7 @@ type Report struct {
 	AverageComplexity float64          `json:"average_complexity"`
 	AverageCRAP       float64          `json:"average_crap"`
 	Records           []FunctionMetric `json:"records"`
+	Quality           QualityReport    `json:"quality"`
 }
 
 type FunctionMetric struct {
@@ -131,6 +133,8 @@ func Analyze(options Options) (Report, error) {
 		report.AverageComplexity = float64(totalComplexity) / float64(report.FunctionCount)
 		report.AverageCRAP = totalCRAP / float64(report.FunctionCount)
 	}
+
+	report.Quality = AnalyzeQuality(absoluteSourceRoot, options.QualityOptions)
 
 	return report, nil
 }

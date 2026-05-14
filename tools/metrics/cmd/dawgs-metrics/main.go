@@ -4,23 +4,33 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/specterops/dawgs/tools/metrics/internal/metrics"
 )
 
 func main() {
 	var (
-		sourceRoot     string
-		coverProfile   string
-		ignorePattern  string
-		textOutputPath string
-		jsonOutputPath string
-		htmlOutputPath string
-		topRecords     int
-		crapOver       float64
-		cycloOver      int
-		failCRAPOver   float64
-		printStdout    bool
+		sourceRoot                  string
+		coverProfile                string
+		ignorePattern               string
+		textOutputPath              string
+		jsonOutputPath              string
+		htmlOutputPath              string
+		qualityTextOutputPath       string
+		qualityJSONOutputPath       string
+		benchmarkReportPath         string
+		benchmarkBaselinePath       string
+		benchmarkRegressionFraction float64
+		fuzzReportPath              string
+		mutationReportPath          string
+		backendResults              namedPathFlags
+		topRecords                  int
+		crapOver                    float64
+		cycloOver                   int
+		failCRAPOver                float64
+		failQuality                 bool
+		printStdout                 bool
 	)
 
 	flag.StringVar(&sourceRoot, "source-root", ".", "source root to scan for Go functions")
@@ -29,10 +39,19 @@ func main() {
 	flag.StringVar(&textOutputPath, "text", "", "path to write the text CRAP report")
 	flag.StringVar(&jsonOutputPath, "json", "", "path to write the JSON CRAP report")
 	flag.StringVar(&htmlOutputPath, "html", "", "path to write the standalone HTML metrics report")
+	flag.StringVar(&qualityTextOutputPath, "quality-text", "", "path to write the text quality signal report")
+	flag.StringVar(&qualityJSONOutputPath, "quality-json", "", "path to write the JSON quality signal report")
+	flag.Var(&backendResults, "backend-result", "backend go test -json result as driver=path; may be repeated")
+	flag.StringVar(&benchmarkReportPath, "benchmark-report", "", "benchmark JSON report to compare")
+	flag.StringVar(&benchmarkBaselinePath, "benchmark-baseline", "", "benchmark JSON baseline to compare")
+	flag.Float64Var(&benchmarkRegressionFraction, "benchmark-regression", 0.20, "fractional benchmark regression threshold")
+	flag.StringVar(&fuzzReportPath, "fuzz-report", "", "fuzz go test -json result to summarize")
+	flag.StringVar(&mutationReportPath, "mutation-report", "", "mutation report JSON to summarize")
 	flag.IntVar(&topRecords, "top", 20, "maximum number of CRAP records to print in the text report; 0 prints all")
 	flag.Float64Var(&crapOver, "over", 0, "only print functions with CRAP greater than this value in the text report")
 	flag.IntVar(&cycloOver, "cyclo-over", 0, "complexity threshold used by the HTML report")
 	flag.Float64Var(&failCRAPOver, "fail-over", 0, "fail if any function has CRAP greater than this value; 0 disables enforcement")
+	flag.BoolVar(&failQuality, "fail-quality", false, "fail if any quality signal is in watch status")
 	flag.BoolVar(&printStdout, "stdout", true, "print the text report to stdout")
 	flag.Parse()
 
@@ -40,6 +59,14 @@ func main() {
 		SourceRoot:   sourceRoot,
 		CoverProfile: coverProfile,
 		Ignore:       ignorePattern,
+		QualityOptions: metrics.QualityOptions{
+			BackendResults:              backendResults.values,
+			BenchmarkReportPath:         benchmarkReportPath,
+			BenchmarkBaselinePath:       benchmarkBaselinePath,
+			BenchmarkRegressionFraction: benchmarkRegressionFraction,
+			FuzzReportPath:              fuzzReportPath,
+			MutationReportPath:          mutationReportPath,
+		},
 	})
 	if err != nil {
 		fatal(err)
@@ -58,6 +85,18 @@ func main() {
 
 	if jsonOutputPath != "" {
 		if err := writeJSONReport(jsonOutputPath, report); err != nil {
+			fatal(err)
+		}
+	}
+
+	if qualityTextOutputPath != "" {
+		if err := writeQualityTextReport(qualityTextOutputPath, report.Quality); err != nil {
+			fatal(err)
+		}
+	}
+
+	if qualityJSONOutputPath != "" {
+		if err := writeQualityJSONReport(qualityJSONOutputPath, report.Quality); err != nil {
 			fatal(err)
 		}
 	}
@@ -92,6 +131,38 @@ func main() {
 
 		os.Exit(1)
 	}
+
+	if failQuality && report.Quality.Summary.WatchSignals > 0 {
+		fmt.Fprintf(os.Stderr, "quality status %s has %d watch signals\n", report.Quality.Summary.Status, report.Quality.Summary.WatchSignals)
+		os.Exit(1)
+	}
+}
+
+type namedPathFlags struct {
+	values []metrics.NamedPath
+}
+
+func (s *namedPathFlags) String() string {
+	var values []string
+	for _, value := range s.values {
+		values = append(values, value.Name+"="+value.Path)
+	}
+
+	return strings.Join(values, ",")
+}
+
+func (s *namedPathFlags) Set(value string) error {
+	name, path, found := strings.Cut(value, "=")
+	if !found || strings.TrimSpace(name) == "" || strings.TrimSpace(path) == "" {
+		return fmt.Errorf("expected name=path")
+	}
+
+	s.values = append(s.values, metrics.NamedPath{
+		Name: strings.TrimSpace(name),
+		Path: strings.TrimSpace(path),
+	})
+
+	return nil
 }
 
 func writeTextReport(path string, report metrics.Report, options metrics.TextOptions) error {
@@ -112,6 +183,26 @@ func writeJSONReport(path string, report metrics.Report) error {
 	defer output.Close()
 
 	return metrics.WriteJSON(output, report)
+}
+
+func writeQualityTextReport(path string, report metrics.QualityReport) error {
+	output, err := metrics.CreateOutput(path)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	return metrics.WriteQualityText(output, report)
+}
+
+func writeQualityJSONReport(path string, report metrics.QualityReport) error {
+	output, err := metrics.CreateOutput(path)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	return metrics.WriteQualityJSON(output, report)
 }
 
 func writeHTMLReport(path string, report metrics.Report, options metrics.HTMLReportOptions) error {

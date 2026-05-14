@@ -41,6 +41,7 @@ func main() {
 		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
 		output       = flag.String("output", "", "markdown output file (default: stdout)")
+		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
@@ -172,6 +173,19 @@ func main() {
 
 	if *output != "" {
 		fmt.Fprintf(os.Stderr, "wrote %s\n", *output)
+	}
+
+	if *jsonOutput != "" {
+		jsonOut, err := os.Create(*jsonOutput)
+		if err != nil {
+			fatal("failed to create JSON output: %v", err)
+		}
+		defer jsonOut.Close()
+
+		if err := writeJSON(jsonOut, report); err != nil {
+			fatal("failed to write JSON output: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "wrote %s\n", *jsonOutput)
 	}
 }
 

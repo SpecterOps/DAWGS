@@ -26,17 +26,17 @@ import (
 
 // Stats holds computed timing statistics for a scenario.
 type Stats struct {
-	Median time.Duration
-	P95    time.Duration
-	Max    time.Duration
+	Median time.Duration `json:"median"`
+	P95    time.Duration `json:"p95"`
+	Max    time.Duration `json:"max"`
 }
 
 // Result is one row in the report.
 type Result struct {
-	Section string
-	Dataset string
-	Label   string
-	Stats   Stats
+	Section string `json:"section"`
+	Dataset string `json:"dataset"`
+	Label   string `json:"label"`
+	Stats   Stats  `json:"stats"`
 }
 
 // runScenario executes a scenario N times and returns timing stats.

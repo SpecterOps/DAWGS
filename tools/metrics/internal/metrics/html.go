@@ -18,6 +18,8 @@ type htmlReportData struct {
 	Records              []FunctionMetric
 	TopCRAP              []FunctionMetric
 	TopComplexity        []FunctionMetric
+	QualitySignals       []qualitySignalSummary
+	QualityFindings      []QualityFinding
 	SeverityCounts       severityCounts
 	TotalStatements      int
 	CoveredStatements    int
@@ -33,6 +35,13 @@ type severityCounts struct {
 	High     int
 	Watch    int
 	Ok       int
+}
+
+type qualitySignalSummary struct {
+	Name    string
+	Status  string
+	Summary string
+	Detail  string
 }
 
 func WriteHTML(output io.Writer, report Report, options HTMLReportOptions) error {
@@ -86,6 +95,8 @@ func newHTMLReportData(report Report, options HTMLReportOptions) htmlReportData 
 		Records:              records,
 		TopCRAP:              topCRAPRecords(records, options),
 		TopComplexity:        topComplexityRecords(records, options),
+		QualitySignals:       qualitySignals(report.Quality),
+		QualityFindings:      topQualityFindings(report.Quality, options.Top),
 		SeverityCounts:       counts,
 		TotalStatements:      totalStatements,
 		CoveredStatements:    coveredStatements,
@@ -119,6 +130,9 @@ func htmlTemplateFuncs() template.FuncMap {
 		"statements": func(record FunctionMetric) string {
 			return fmt.Sprintf("%d/%d", record.CoveredStatements, record.Statements)
 		},
+		"qualityStatusClass":   qualityStatusClass,
+		"qualityStatusLabel":   qualityStatusLabel,
+		"qualitySeverityClass": qualitySeverityClass,
 	}
 }
 
@@ -191,6 +205,93 @@ func severityLabel(record FunctionMetric) string {
 	}
 }
 
+func qualitySignals(report QualityReport) []qualitySignalSummary {
+	return []qualitySignalSummary{
+		{
+			Name:    "Semantic Drift",
+			Status:  report.SemanticDrift.Status,
+			Summary: fmt.Sprintf("%d artifact changes", report.SemanticDrift.GeneratedArtifactChanges),
+			Detail:  fmt.Sprintf("%d cases, %d template variants, %d metamorphic families", report.SemanticDrift.CoreCases, report.SemanticDrift.TemplateVariants, report.SemanticDrift.MetamorphicFamilies),
+		},
+		{
+			Name:    "Backend Equivalence",
+			Status:  report.BackendEquivalence.Status,
+			Summary: fmt.Sprintf("%d mismatches", report.BackendEquivalence.Mismatches),
+			Detail:  fmt.Sprintf("%d common tests, %d missing tests", report.BackendEquivalence.CommonTests, report.BackendEquivalence.MissingTests),
+		},
+		{
+			Name:    "Invariants",
+			Status:  report.Invariants.Status,
+			Summary: fmt.Sprintf("%d violations", report.Invariants.Violations),
+			Detail:  fmt.Sprintf("%d checked, %d low-oracle assertions", report.Invariants.Checked, report.Invariants.LowOracle),
+		},
+		{
+			Name:    "Fuzz Health",
+			Status:  report.Fuzz.Status,
+			Summary: fmt.Sprintf("%d targets", report.Fuzz.TargetCount),
+			Detail:  fmt.Sprintf("%d corpus files, %d crashes, %d timeouts", report.Fuzz.CorpusFiles, report.Fuzz.CrashCount, report.Fuzz.TimeoutCount),
+		},
+		{
+			Name:    "Mutation Score",
+			Status:  report.Mutation.Status,
+			Summary: fmt.Sprintf("%.2f%% score", report.Mutation.Score*100),
+			Detail:  fmt.Sprintf("%d killed, %d survived, %d timed out", report.Mutation.Killed, report.Mutation.Survived, report.Mutation.TimedOut),
+		},
+		{
+			Name:    "Benchmark Drift",
+			Status:  report.BenchmarkDrift.Status,
+			Summary: fmt.Sprintf("%d regressions", len(report.BenchmarkDrift.Regressions)),
+			Detail:  fmt.Sprintf("%d results, %d improvements", report.BenchmarkDrift.Results, len(report.BenchmarkDrift.Improvements)),
+		},
+	}
+}
+
+func topQualityFindings(report QualityReport, top int) []QualityFinding {
+	findings := qualityFindings(report)
+	if top > 0 && len(findings) > top {
+		return findings[:top]
+	}
+
+	return findings
+}
+
+func qualityStatusClass(status string) string {
+	switch status {
+	case QualityStatusPass:
+		return "ok"
+	case QualityStatusWatch:
+		return "watch"
+	default:
+		return "pending"
+	}
+}
+
+func qualityStatusLabel(status string) string {
+	switch status {
+	case QualityStatusPass:
+		return "Pass"
+	case QualityStatusWatch:
+		return "Watch"
+	case QualityStatusPending:
+		return "Pending"
+	default:
+		return "Pending"
+	}
+}
+
+func qualitySeverityClass(finding QualityFinding) string {
+	switch finding.Severity {
+	case "critical":
+		return "critical"
+	case "high":
+		return "high"
+	case "watch":
+		return "watch"
+	default:
+		return "pending"
+	}
+}
+
 const htmlReportTemplate = `<!doctype html>
 <html lang="en">
 <head>
@@ -215,6 +316,8 @@ const htmlReportTemplate = `<!doctype html>
       --watch-soft: #fff7c9;
       --ok: #1f7a4d;
       --ok-soft: #dff5e9;
+      --pending: #54606d;
+      --pending-soft: #eef1f4;
       --shadow: 0 8px 24px rgba(25, 36, 51, 0.08);
     }
 
@@ -257,7 +360,7 @@ const htmlReportTemplate = `<!doctype html>
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(160px, 1fr));
+      grid-template-columns: repeat(6, minmax(150px, 1fr));
       gap: 12px;
       margin-bottom: 18px;
     }
@@ -291,6 +394,22 @@ const htmlReportTemplate = `<!doctype html>
       color: var(--muted);
       display: block;
       margin-top: 8px;
+    }
+
+    .metric strong.status-text {
+      font-size: 24px;
+    }
+
+    .status-text.ok {
+      color: var(--ok);
+    }
+
+    .status-text.watch {
+      color: var(--watch);
+    }
+
+    .status-text.pending {
+      color: var(--pending);
     }
 
     .band {
@@ -456,6 +575,11 @@ const htmlReportTemplate = `<!doctype html>
       color: var(--ok);
     }
 
+    .pill.pending {
+      background: var(--pending-soft);
+      color: var(--pending);
+    }
+
     .coverage {
       align-items: center;
       display: grid;
@@ -587,7 +711,7 @@ const htmlReportTemplate = `<!doctype html>
 <body>
   <header>
     <h1>DAWGS Metrics Report</h1>
-    <p>{{.ReportSummaryComment}}. Coverage is Go statement coverage from {{.Report.CoverProfile}}.</p>
+    <p>{{.ReportSummaryComment}}. Coverage is Go statement coverage from {{.Report.CoverProfile}}. Quality signals summarize drift, backend equivalence, invariants, fuzzing, mutation, and benchmark drift.</p>
   </header>
 
   <main>
@@ -617,6 +741,11 @@ const htmlReportTemplate = `<!doctype html>
         <strong>{{score .CRAPThreshold}}</strong>
         <small>CRAP over threshold, cyclo over {{.ComplexityThreshold}}</small>
       </div>
+      <div class="metric">
+        <span>Quality Status</span>
+        <strong class="status-text {{qualityStatusClass .Report.Quality.Summary.Status}}">{{qualityStatusLabel .Report.Quality.Summary.Status}}</strong>
+        <small>{{.Report.Quality.Summary.WatchSignals}} watch, {{.Report.Quality.Summary.PendingSignals}} pending signals</small>
+      </div>
     </section>
 
     <section class="band" aria-label="Severity distribution">
@@ -631,6 +760,72 @@ const htmlReportTemplate = `<!doctype html>
         <div class="severity high"><b>{{.SeverityCounts.High}}</b><span>High</span></div>
         <div class="severity watch"><b>{{.SeverityCounts.Watch}}</b><span>Watch</span></div>
         <div class="severity ok"><b>{{.SeverityCounts.Ok}}</b><span>OK</span></div>
+      </div>
+    </section>
+
+    <section class="band" aria-label="Quality signals">
+      <div class="band-header">
+        <div>
+          <h2>Quality Signals</h2>
+          <p>Report-only safety and correctness signals beyond CRAP and cyclomatic complexity.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Signal</th>
+              <th>Status</th>
+              <th>Summary</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .QualitySignals}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td><span class="pill {{qualityStatusClass .Status}}">{{qualityStatusLabel .Status}}</span></td>
+              <td>{{.Summary}}</td>
+              <td class="muted">{{.Detail}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="band" aria-label="Quality findings">
+      <div class="band-header">
+        <div>
+          <h2>Quality Findings</h2>
+          <p>Top {{.TopCount}} findings from quality signals, sorted by severity.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Signal</th>
+              <th>ID</th>
+              <th>Message</th>
+              <th>Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .QualityFindings}}
+            <tr>
+              <td><span class="pill {{qualitySeverityClass .}}">{{.Severity}}</span></td>
+              <td>{{.Signal}}</td>
+              <td class="function-name" title="{{.ID}}">{{.ID}}</td>
+              <td>{{.Message}}</td>
+              <td class="location" title="{{.File}}">{{.File}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="empty">No quality findings.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
       </div>
     </section>
 

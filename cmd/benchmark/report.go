@@ -17,6 +17,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -24,11 +25,17 @@ import (
 
 // Report holds all benchmark results and metadata.
 type Report struct {
-	Driver     string
-	GitRef     string
-	Date       string
-	Iterations int
-	Results    []Result
+	Driver     string   `json:"driver"`
+	GitRef     string   `json:"git_ref"`
+	Date       string   `json:"date"`
+	Iterations int      `json:"iterations"`
+	Results    []Result `json:"results"`
+}
+
+func writeJSON(w io.Writer, r Report) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(r)
 }
 
 func writeMarkdown(w io.Writer, r Report) error {

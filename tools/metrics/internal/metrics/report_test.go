@@ -179,6 +179,7 @@ func TestWriteHTMLProducesStandaloneReport(t *testing.T) {
 		"<style>",
 		"<script>",
 		"DAWGS Metrics Report",
+		"Quality Signals",
 		"sample.Highest",
 		"other.Complex",
 		"CRAP = complexity",

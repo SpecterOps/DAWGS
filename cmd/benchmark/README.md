@@ -19,6 +19,9 @@ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:password@localho
 
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
+
+# Save markdown and JSON for quality baseline comparison
+go run ./cmd/benchmark -connection "..." -output report.md -json-output report.json
 ```
 
 ## Flags
@@ -32,6 +35,7 @@ go run ./cmd/benchmark -connection "..." -output report.md
 | `-local-dataset` | | Add a local dataset to the default set |
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
 | `-output` | stdout | Markdown output file |
+| `-json-output` | | JSON output file for baseline comparison |
 
 ## Example: Neo4j on local/phantom
 
