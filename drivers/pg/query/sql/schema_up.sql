@@ -21,6 +21,21 @@ create extension if not exists pg_trgm;
 -- arrays for nodes.
 create extension if not exists intarray;
 
+-- We need the pgstattuple extension to measure btree leaf density and fragmentation on node and edge indexes
+-- during driver-managed index optimization. Installing pgstattuple typically requires a superuser role, and on
+-- locked-down managed Postgres deployments (e.g. some RDS or Cloud SQL configurations) the contrib package may
+-- not be exposed at all. We wrap the install in a DO block that downgrades any failure to a WARNING so schema
+-- bootstrap continues to succeed; the optimizer performs its own runtime extension check and will skip the
+-- assessment with a logged warning when pgstattuple is unavailable.
+do $$
+begin
+    create extension if not exists pgstattuple;
+exception
+    when others then
+        raise warning 'pgstattuple extension could not be installed (%); index optimization will be skipped at runtime', sqlerrm;
+end
+$$;
+
 -- This is an optional but useful extension for validating performance of queries
 -- create extension if not exists pg_stat_statements;
 --
