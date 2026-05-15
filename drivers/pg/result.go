@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -86,8 +87,19 @@ func decodeJSONValue(value any) (any, bool) {
 		}
 
 	case string:
+		trimmedValue := strings.TrimSpace(typedValue)
+		if len(trimmedValue) == 0 {
+			return nil, false
+		}
+
+		switch trimmedValue[0] {
+		case '{', '[', '"':
+		default:
+			return nil, false
+		}
+
 		var decoded any
-		if err := json.Unmarshal([]byte(typedValue), &decoded); err == nil {
+		if err := json.Unmarshal([]byte(trimmedValue), &decoded); err == nil {
 			return decoded, true
 		}
 	}

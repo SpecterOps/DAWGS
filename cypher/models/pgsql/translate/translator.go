@@ -230,6 +230,51 @@ func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
 	return parameter.Value
 }
 
+func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Expression {
+	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
+		return pgsql.FunctionCall{
+			Function: pgsql.FunctionCoalesce,
+			Parameters: []pgsql.Expression{
+				propertyLookup,
+				pgsql.NewLiteral("", pgsql.Text),
+			},
+			CastType: pgsql.Text,
+		}
+	}
+
+	return expression
+}
+
+func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.Expression {
+	switch typedExpression := expression.(type) {
+	case *pgsql.Parenthetical:
+		typedExpression.Expression = rewriteNegatedStringPredicateExpression(typedExpression.Expression)
+		return typedExpression
+
+	case *pgsql.BinaryExpression:
+		switch typedExpression.Operator {
+		case pgsql.OperatorLike, pgsql.OperatorILike:
+			// If this is a string comparison operation then the negation requires wrapping the
+			// operand references in coalesce functions. While this will kick out index acceleration
+			// the negation will already damage the query planner's ability to utilize an index lookup.
+			typedExpression.LOperand = coalescePropertyLookupExpression(typedExpression.LOperand)
+			typedExpression.ROperand = coalescePropertyLookupExpression(typedExpression.ROperand)
+		}
+
+	case pgsql.FunctionCall:
+		switch typedExpression.Function {
+		case pgsql.FunctionCypherContains, pgsql.FunctionCypherStartsWith, pgsql.FunctionCypherEndsWith:
+			for idx, parameter := range typedExpression.Parameters {
+				typedExpression.Parameters[idx] = coalescePropertyLookupExpression(parameter)
+			}
+		}
+
+		return typedExpression
+	}
+
+	return expression
+}
+
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 
@@ -389,50 +434,9 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		if operand, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
 		} else {
-			for cursor := operand; cursor != nil; {
-				switch typedCursor := cursor.(type) {
-				case *pgsql.Parenthetical:
-					// Unwrap parentheticals
-					cursor = typedCursor.Expression
-					continue
-
-				case *pgsql.BinaryExpression:
-					switch typedCursor.Operator {
-					case pgsql.OperatorLike, pgsql.OperatorILike:
-						// If this is a string comparison operation then the negation requires wrapping the
-						// operand references in coalesce functions. While this will kick out index acceleration
-						// the negation will already damage the query planner's ability to utilize an index lookup.
-
-						if leftPropertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(typedCursor.LOperand); isPropertyLookup {
-							typedCursor.LOperand = pgsql.FunctionCall{
-								Function: pgsql.FunctionCoalesce,
-								Parameters: []pgsql.Expression{
-									leftPropertyLookup,
-									pgsql.NewLiteral("", pgsql.Text),
-								},
-								CastType: pgsql.Text,
-							}
-						}
-
-						if rightPropertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(typedCursor.ROperand); isPropertyLookup {
-							typedCursor.ROperand = pgsql.FunctionCall{
-								Function: pgsql.FunctionCoalesce,
-								Parameters: []pgsql.Expression{
-									rightPropertyLookup,
-									pgsql.NewLiteral("", pgsql.Text),
-								},
-								CastType: pgsql.Text,
-							}
-						}
-					}
-				}
-
-				break
-			}
-
 			s.treeTranslator.PushOperand(&pgsql.UnaryExpression{
 				Operator: pgsql.OperatorNot,
-				Operand:  operand,
+				Operand:  rewriteNegatedStringPredicateExpression(operand),
 			})
 		}
 

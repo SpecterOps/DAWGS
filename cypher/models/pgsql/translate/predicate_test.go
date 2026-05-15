@@ -100,3 +100,42 @@ func TestLiteralStringPredicatesKeepLikePatterns(t *testing.T) {
 	require.NotContains(t, formatted, "cypher_contains(")
 	require.Equal(t, 1, strings.Count(formatted, " like "))
 }
+
+func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		query      string
+		parameters map[string]any
+		expected   string
+	}{
+		{
+			name:       "contains parameter",
+			query:      `MATCH (n:NodeKind1) WHERE not n.name CONTAINS $needle RETURN n`,
+			parameters: map[string]any{"needle": "needle"},
+			expected:   "not cypher_contains(coalesce((n0.properties ->> 'name'), '')::text, (@pi0::text)::text)::bool",
+		},
+		{
+			name:     "contains property",
+			query:    `MATCH (n:NodeKind1) WHERE not n.name CONTAINS n.other RETURN n`,
+			expected: "not cypher_contains(coalesce((n0.properties ->> 'name'), '')::text, coalesce((n0.properties ->> 'other'), '')::text)::bool",
+		},
+		{
+			name:       "starts with parameter",
+			query:      `MATCH (n:NodeKind1) WHERE not n.name STARTS WITH $prefix RETURN n`,
+			parameters: map[string]any{"prefix": "prefix"},
+			expected:   "not cypher_starts_with(coalesce((n0.properties ->> 'name'), '')::text, (@pi0::text)::text)::bool",
+		},
+		{
+			name:       "ends with parameter",
+			query:      `MATCH (n:NodeKind1) WHERE not n.name ENDS WITH $suffix RETURN n`,
+			parameters: map[string]any{"suffix": "suffix"},
+			expected:   "not cypher_ends_with(coalesce((n0.properties ->> 'name'), '')::text, (@pi0::text)::text)::bool",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, testCase.query, testCase.parameters)
+
+			require.Contains(t, formatted, testCase.expected)
+		})
+	}
+}

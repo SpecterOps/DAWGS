@@ -21,10 +21,16 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select avg((((s0.n0).properties ->> 'salary'))::float8)::numeric from s0;
 
 -- case: MATCH (n) RETURN min(n.created_date)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select min((((s0.n0).properties ->> 'created_date'))::float8)::float8 from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_min(((s0.n0).properties -> 'created_date'))::jsonb from s0;
 
 -- case: MATCH (n) RETURN max(n.updated_date)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select max((((s0.n0).properties ->> 'updated_date'))::float8)::float8 from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_max(((s0.n0).properties -> 'updated_date'))::jsonb from s0;
+
+-- case: MATCH (n) RETURN min(n.name)
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_min(((s0.n0).properties -> 'name'))::jsonb from s0;
+
+-- case: MATCH (n) RETURN max(n.name)
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_max(((s0.n0).properties -> 'name'))::jsonb from s0;
 
 -- case: MATCH (n) RETURN n.department, sum(n.salary)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> 'department'), sum((((s0.n0).properties ->> 'salary'))::float8)::numeric from s0 group by ((s0.n0).properties -> 'department');
@@ -33,7 +39,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> 'department'), avg((((s0.n0).properties ->> 'age'))::float8)::numeric from s0 group by ((s0.n0).properties -> 'department');
 
 -- case: MATCH (n) RETURN count(n), sum(n.age), avg(n.age), min(n.age), max(n.age)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8, sum((((s0.n0).properties ->> 'age'))::float8)::numeric, avg((((s0.n0).properties ->> 'age'))::float8)::numeric, min((((s0.n0).properties ->> 'age'))::float8)::float8, max((((s0.n0).properties ->> 'age'))::float8)::float8 from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8, sum((((s0.n0).properties ->> 'age'))::float8)::numeric, avg((((s0.n0).properties ->> 'age'))::float8)::numeric, cypher_min(((s0.n0).properties -> 'age'))::jsonb, cypher_max(((s0.n0).properties -> 'age'))::jsonb from s0;
 
 -- case: RETURN 'hello world'
 select 'hello world';
