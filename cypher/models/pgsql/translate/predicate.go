@@ -22,17 +22,72 @@ func (s *Translator) preparePatternPredicate() error {
 }
 
 func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart, traversalStep *TraversalStep) (pgsql.Expression, error) {
-	whereClause := pgsql.NewBinaryExpression(
-		pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-			pgsql.OperatorEquals,
-			pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-		pgsql.OperatorOr,
-		pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
-			pgsql.OperatorEquals,
-			pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-	)
+	var whereClause pgsql.Expression
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		// Pair-wise bounds on the directionless relationship
+		whereClause = pgsql.NewBinaryExpression(
+			pgsql.NewParenthetical(
+				pgsql.NewBinaryExpression(
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+					),
+					pgsql.OperatorAnd,
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+					),
+				),
+			),
+			pgsql.OperatorOr,
+			pgsql.NewParenthetical(
+				pgsql.NewBinaryExpression(
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+					),
+					pgsql.OperatorAnd,
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+					),
+				),
+			),
+		)
+	} else if traversalStep.RightNodeBound {
+		whereClause = pgsql.NewBinaryExpression(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+			),
+			pgsql.OperatorOr,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+			),
+		)
+	} else {
+		// Left-side node is bound OR neither is bound
+		whereClause = pgsql.NewBinaryExpression(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+			),
+			pgsql.OperatorOr,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+			),
+		)
+	}
 
 	if err := RewriteFrameBindings(s.scope, whereClause); err != nil {
 		return nil, err
@@ -96,6 +151,8 @@ func (s *Translator) buildPatternPredicates() error {
 			}
 		)
 
+		// Single-step traversals can use an optimized relationship-exists step instead of
+		// following the "long" traversal step building process.
 		if len(patternPart.TraversalSteps) == 1 {
 			var (
 				traversalStep            = patternPart.TraversalSteps[0]
@@ -148,7 +205,9 @@ func (s *Translator) buildPatternPredicates() error {
 					traversalStepQuery pgsql.Query
 					err                error
 				)
-				if traversalStep.Direction != graph.DirectionBoth && (traversalStep.LeftNodeBound || traversalStep.RightNodeBound) {
+				// We also want to be able to build correlated root steps for undirected traversals
+				// if traversalStep.Direction != graph.DirectionBoth && (traversalStep.LeftNodeBound || traversalStep.RightNodeBound) {
+				if traversalStep.LeftNodeBound || traversalStep.RightNodeBound {
 					traversalStepQuery, err = s.buildTraversalPatternRootWithOuterCorrelation(traversalStep.Frame, traversalStep)
 				} else {
 					traversalStepQuery, err = s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep)
