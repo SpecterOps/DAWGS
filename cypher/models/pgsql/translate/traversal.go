@@ -160,7 +160,27 @@ func (s *Translator) buildTraversalPatternRootWithOuterCorrelation(partFrame *Fr
 		}
 	)
 
-	if traversalStep.LeftNodeBound {
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+		})
+
+		// Both nodes of the traversal are fully bound by the outer query and the frame bindings
+		// will have been rewritten to reference the outer CTEs here, so we don't need any JOINs
+		// and can use those conditions inside of the inner WHERE to correlate the result set.
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	} else if traversalStep.LeftNodeBound {
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},

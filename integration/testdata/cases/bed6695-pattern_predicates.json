@@ -56,6 +56,34 @@
       "assert": {
         "row_count": 0
       }
+    },
+    {
+      "name": "BED-6695 directed both-bound pattern predicate accepts connected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS BETA' and (a)-[:EdgeKind1]->(b) return count(a)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-6695 directed both-bound pattern predicate rejects disconnected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS GAMMA' and (a)-[:EdgeKind1]->(b) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "BED-6695 directed both-bound pattern predicate rejects wrong edge kind",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS ALPHA' and (a)-[:EdgeKind1]->(b) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "BED-6695 directed both-bound pattern predicate rejects reversed pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS BETA' and (b)-[:EdgeKind1]->(a) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
     }
   ]
 }
