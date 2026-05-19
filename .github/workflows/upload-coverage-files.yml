@@ -21,7 +21,7 @@ on:
     outputs:
       coverage-artifact-id:
         description: Coverage artifact id for the main branch baseline
-        value: ${{ jobs.upload-coverage-files.outputs.coverage-artifact-id }}
+        value: ${{ jobs.upload-main-coverage-files.outputs.coverage-artifact-id }}
 
 jobs:
   upload-main-coverage-files:
