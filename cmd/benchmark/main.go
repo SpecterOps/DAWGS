@@ -40,8 +40,9 @@ func main() {
 		driver       = flag.String("driver", "pg", "database driver (pg, neo4j)")
 		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
-		output       = flag.String("output", "", "markdown output file (default: stdout)")
+		output       = flag.String("output", "", "output file (default: stdout)")
 		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
+		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
@@ -161,25 +162,38 @@ func main() {
 		}
 	}
 
-	// Write report
-	var mdOut *os.File
+	// Write primary report.
+	var out *os.File
 	if *output != "" {
 		var err error
-		mdOut, err = os.Create(*output)
+		out, err = os.Create(*output)
 		if err != nil {
 			fatal("failed to create output: %v", err)
 		}
-		defer mdOut.Close()
+		defer out.Close()
 	} else {
-		mdOut = os.Stdout
+		out = os.Stdout
 	}
 
-	if err := writeReport(mdOut, report, *format); err != nil {
+	if err := writeReport(out, report, *format); err != nil {
 		fatal("failed to write report: %v", err)
 	}
 
 	if *output != "" {
 		fmt.Fprintf(os.Stderr, "wrote %s\n", *output)
+	}
+
+	if *jsonOutput != "" {
+		jsonOut, err := os.Create(*jsonOutput)
+		if err != nil {
+			fatal("failed to create JSON output: %v", err)
+		}
+		defer jsonOut.Close()
+
+		if err := writeJSON(jsonOut, report); err != nil {
+			fatal("failed to write JSON output: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "wrote %s\n", *jsonOutput)
 	}
 }
 

@@ -34,11 +34,11 @@ const (
 
 // Report holds all benchmark results and metadata.
 type Report struct {
-	Driver     string
-	GitRef     string
-	Date       string
-	Iterations int
-	Results    []Result
+	Driver     string   `json:"driver"`
+	GitRef     string   `json:"git_ref"`
+	Date       string   `json:"date"`
+	Iterations int      `json:"iterations"`
+	Results    []Result `json:"results"`
 }
 
 func writeReport(w io.Writer, r Report, format string) error {

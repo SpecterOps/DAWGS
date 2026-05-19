@@ -1,6 +1,6 @@
 # Benchmark
 
-Runs query scenarios against a real database and outputs a markdown timing table.
+Runs query scenarios against a real database and outputs markdown, JSON, or benchfmt timing data.
 
 ## Usage
 
@@ -25,6 +25,9 @@ go run ./cmd/benchmark -connection "..." -output report.md
 
 # Emit benchfmt for benchstat
 go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
+
+# Save markdown and JSON for quality baseline comparison
+go run ./cmd/benchmark -connection "..." -output report.md -json-output report.json
 ```
 
 ## Flags
@@ -39,6 +42,7 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
 | `-format` | `markdown` | Output format (`markdown`, `json`, `benchfmt`) |
 | `-output` | stdout | Output file |
+| `-json-output` | | JSON output file for baseline comparison |
 
 Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a
 separate `ns/op` sample so two benchmark runs can be compared directly.

@@ -137,6 +137,17 @@
       "assert": {"node_ids": ["a"]}
     },
     {
+      "name": "return token-like string property projections without scalar reinterpretation",
+      "cypher": "match (n:NodeKind1) where toLower(n.name) = 'bob' return n.objectid, n.boolstring, n.falsestring, n.nullstring, n.numbervalue, n.boolvalue",
+      "fixture": {
+        "nodes": [
+          {"id": "bob", "kinds": ["NodeKind1"], "properties": {"name": "BOB", "objectid": "1234", "boolstring": "true", "falsestring": "false", "nullstring": "null", "numbervalue": 1234, "boolvalue": true}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [["1234", "true", "false", "null", 1234, true]]}
+    },
+    {
       "name": "return ordered property projections from typed nodes",
       "cypher": "match (n:NodeKind1) where n.tag = 'ordered_projection' return n.name order by n.name",
       "fixture": {

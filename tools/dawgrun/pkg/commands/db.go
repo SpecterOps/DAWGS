@@ -48,7 +48,12 @@ func openCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("open", flag.ContinueOnError)
 
 	driverOverride := ""
+	defaultGraphName := "default"
+	initGraphOnFail := false
+
 	flagSet.StringVar(&driverOverride, "driver", "", "Driver override: pg or neo4j (default: infer from connection string scheme)")
+	flagSet.StringVar(&defaultGraphName, "default-graph", "default", "Graph that should be referenced in graph operations")
+	flagSet.BoolVar(&initGraphOnFail, "init-graph", false, "Whether the specified default graph should be created if opening it fails")
 
 	return CommandDesc{
 		args:  []string{"[flags]", "<name>", "<connection string>"},
@@ -58,6 +63,8 @@ func openCmd() CommandDesc {
 
 		ClearFlagsFn: func() {
 			driverOverride = ""
+			defaultGraphName = "default"
+			initGraphOnFail = false
 		},
 
 		Fn: func(ctx *CommandContext, fields []string) error {
@@ -112,6 +119,21 @@ func openCmd() CommandDesc {
 			querier, err := dawgs.Open(ctx, driverName, config)
 			if err != nil {
 				return fmt.Errorf("error opening %s database connection '%s': %w", driverName, connStr, err)
+			}
+
+			defaultGraph := graph.Graph{Name: defaultGraphName}
+			if err := querier.SetDefaultGraph(ctx, defaultGraph); err != nil {
+				if !initGraphOnFail {
+					return fmt.Errorf("could not set default graph: %w", err)
+				}
+
+				graphSchema := graph.Schema{
+					Graphs:       []graph.Graph{defaultGraph},
+					DefaultGraph: defaultGraph,
+				}
+				if err := querier.AssertSchema(ctx, graphSchema); err != nil {
+					return fmt.Errorf("could not initialize graph schema: %w", err)
+				}
 			}
 
 			if existingConn, ok := ctx.scope.GetConnection(name); ok {

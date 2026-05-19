@@ -214,6 +214,33 @@ func (s *Translator) translateTailFunction(functionInvocation *cypher.FunctionIn
 	return nil
 }
 
+func cypherMinMaxFunction(function pgsql.Identifier, argument pgsql.Expression) pgsql.FunctionCall {
+	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(argument); isPropertyLookup {
+		propertyLookup.Operator = pgsql.OperatorJSONField
+
+		switch function {
+		case pgsql.FunctionMin:
+			return pgsql.FunctionCall{
+				Function:   pgsql.FunctionCypherMin,
+				Parameters: []pgsql.Expression{propertyLookup},
+				CastType:   pgsql.JSONB,
+			}
+
+		case pgsql.FunctionMax:
+			return pgsql.FunctionCall{
+				Function:   pgsql.FunctionCypherMax,
+				Parameters: []pgsql.Expression{propertyLookup},
+				CastType:   pgsql.JSONB,
+			}
+		}
+	}
+
+	return pgsql.FunctionCall{
+		Function:   function,
+		Parameters: []pgsql.Expression{argument},
+	}
+}
+
 func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.FunctionInvocation, column pgsql.Identifier, castType pgsql.DataType) error {
 	if functionInvocation.NumArguments() != 1 {
 		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
@@ -221,6 +248,8 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 
 	if argument, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
+	} else if literal, isLiteral := argument.(pgsql.Literal); isLiteral && literal.Null {
+		s.treeTranslator.PushOperand(pgsql.NewTypeCast(literal, castType))
 	} else {
 		if column == pgsql.ColumnEdges {
 			if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
@@ -641,14 +670,8 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
-		} else if typeCastNumericArg, err := TypeCastExpression(argument, pgsql.Float8); err != nil {
-			s.SetError(err)
 		} else {
-			s.treeTranslator.PushOperand(pgsql.FunctionCall{
-				Function:   pgsql.FunctionMin,
-				Parameters: []pgsql.Expression{typeCastNumericArg},
-				CastType:   pgsql.Float8,
-			})
+			s.treeTranslator.PushOperand(cypherMinMaxFunction(pgsql.FunctionMin, argument))
 		}
 
 	case cypher.MaxFunction:
@@ -656,14 +679,8 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
-		} else if typeCastNumericArg, err := TypeCastExpression(argument, pgsql.Float8); err != nil {
-			s.SetError(err)
 		} else {
-			s.treeTranslator.PushOperand(pgsql.FunctionCall{
-				Function:   pgsql.FunctionMax,
-				Parameters: []pgsql.Expression{typeCastNumericArg},
-				CastType:   pgsql.Float8,
-			})
+			s.treeTranslator.PushOperand(cypherMinMaxFunction(pgsql.FunctionMax, argument))
 		}
 
 	default:

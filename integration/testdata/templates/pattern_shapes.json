@@ -77,6 +77,40 @@
       ]
     },
     {
+      "name": "path node-list functions",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "src"}},
+          {"id": "b", "kinds": ["TemplateNodeKind2"], "properties": {"name": "mid"}},
+          {"id": "c", "kinds": ["TemplateNodeKind1"], "properties": {"name": "dst"}},
+          {"id": "d", "kinds": ["TemplateNodeKind2"], "properties": {"name": "inbound-src"}},
+          {"id": "e", "kinds": ["TemplateNodeKind1"], "properties": {"name": "inbound"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "TemplateEdgeKind1", "properties": {"label": "first"}},
+          {"start_id": "b", "end_id": "c", "kind": "TemplateEdgeKind2", "properties": {"label": "second"}},
+          {"start_id": "d", "end_id": "e", "kind": "TemplateEdgeKind1", "properties": {"label": "inbound"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "nodes function returns path traversal order",
+          "vars": {
+            "query": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) where a.name = 'src' return nodes(p)"
+          },
+          "assert": {"node_list_ids": [["a", "b", "c"]]}
+        },
+        {
+          "name": "nodes function follows inbound path order",
+          "vars": {
+            "query": "match p=(e:TemplateNodeKind1)<-[:TemplateEdgeKind1]-(d:TemplateNodeKind2) where e.name = 'inbound' return nodes(p)"
+          },
+          "assert": {"node_list_ids": [["e", "d"]]}
+        }
+      ]
+    },
+    {
       "name": "shortest path relationship predicate functions",
       "template": "{{query}}",
       "fixture": {

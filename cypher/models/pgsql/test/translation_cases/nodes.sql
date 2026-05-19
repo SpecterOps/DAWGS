@@ -238,6 +238,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- pgsql_params:{"pi0":null}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_contains((n0.properties ->> 'system_tags'), (@pi0)::text)::bool)) select s0.n0 as n from s0;
 
+-- case: match (n) where not n.system_tags contains ($param) return n
+-- pgsql_params:{"pi0":null}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not cypher_contains(coalesce((n0.properties ->> 'system_tags'), '')::text, (@pi0)::text)::bool)) select s0.n0 as n from s0;
+
 -- case: match (n) where n.system_tags starts with (1) return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_starts_with((n0.properties ->> 'system_tags'), (1)::text)::bool)) select s0.n0 as n from s0;
 
@@ -280,7 +284,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (1 = coalesce((n0.properties ->> 'a'), (n0.properties ->> 'b'))::int8) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.hasspn = true and u.enabled = true and not '-502' ends with u.objectid and not coalesce(u.gmsa, false) = true and not coalesce(u.msa, false) = true return u limit 10
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'hasspn'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> 'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb and not cypher_ends_with(('-502')::text, (n0.properties ->> 'objectid'))::bool and not coalesce(((n0.properties ->> 'gmsa'))::bool, false)::bool = true and not coalesce(((n0.properties ->> 'msa'))::bool, false)::bool = true) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 10;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'hasspn'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> 'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb and not cypher_ends_with(('-502')::text, coalesce((n0.properties ->> 'objectid'), '')::text)::bool and not coalesce(((n0.properties ->> 'gmsa'))::bool, false)::bool = true and not coalesce(((n0.properties ->> 'msa'))::bool, false)::bool = true) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 10;
 
 -- case: match (n:NodeKind1) where coalesce(n.name, '') = coalesce(n.migrated_name, '') return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce((n0.properties ->> 'name'), '')::text = coalesce((n0.properties ->> 'migrated_name'), '')::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;

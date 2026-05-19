@@ -36,8 +36,8 @@ func TestWriteJSON(t *testing.T) {
 
 	require.NoError(t, writeReport(&out, report, reportFormatJSON))
 
-	require.Contains(t, out.String(), `"Driver": "pg"`)
-	require.Contains(t, out.String(), `"Samples": [`)
+	require.Contains(t, out.String(), `"driver": "pg"`)
+	require.Contains(t, out.String(), `"samples": [`)
 	require.Contains(t, out.String(), `1000000`)
 }
 
@@ -94,5 +94,41 @@ func testReport() Report {
 				2 * time.Millisecond,
 			},
 		}},
+	}
+}
+
+func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
+	report := Report{
+		Driver:     "pg",
+		GitRef:     "abc123",
+		Date:       "2026-05-14",
+		Iterations: 3,
+		Results: []Result{{
+			Section: "Traversal",
+			Dataset: "base",
+			Label:   "depth 1",
+			Stats: Stats{
+				Median: 10 * time.Millisecond,
+				P95:    20 * time.Millisecond,
+				Max:    30 * time.Millisecond,
+			},
+		}},
+	}
+
+	var output bytes.Buffer
+	if err := writeJSON(&output, report); err != nil {
+		t.Fatalf("write JSON: %v", err)
+	}
+
+	text := output.String()
+	for _, expected := range []string{
+		`"driver": "pg"`,
+		`"git_ref": "abc123"`,
+		`"median": 10000000`,
+		`"section": "Traversal"`,
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("JSON report missing %q:\n%s", expected, text)
+		}
 	}
 }
