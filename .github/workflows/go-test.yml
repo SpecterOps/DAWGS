@@ -28,7 +28,7 @@ on:
 
 jobs:
   call-run-upload-main-coverage-files:
-    uses: ./.github/workflows/upload-main-coverage-files.yml
+    uses: ./.github/workflows/upload-coverage-files.yml
   test:
     runs-on: ubuntu-latest
     needs: call-run-upload-main-coverage-files
