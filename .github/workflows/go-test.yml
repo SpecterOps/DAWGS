@@ -78,7 +78,7 @@ jobs:
 
       - name: Coverage Evaluation
         run: |
-          if (( echo "$current_coverage < $main_coverage" | bc -l)); then
+          if (( $(echo "$current_coverage < $main_coverage" | bc -l))); then
             echo "Failing the workflow. Coverage on feature branch ($current_coverage%) is below main branch ($main_coverage%)"
             exit 1
           else
