@@ -202,7 +202,20 @@
       }
     },
     {
-      "name": "add grouped property expression to aggregate count",
+      "name": "add grouped property expression to aggregate count inline",
+      "cypher": "MATCH (n) RETURN toint(n.value) + count(n)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "add grouped property expression to aggregate count through aliases",
       "cypher": "MATCH (n) WITH toInteger(n.value) AS value, count(n) AS node_count RETURN value + node_count",
       "fixture": {
         "nodes": [
@@ -215,7 +228,20 @@
       "assert": {"scalar_values": [12, 21]}
     },
     {
-      "name": "project grouped property plus aggregate through with",
+      "name": "project grouped property plus aggregate through with inline expression",
+      "cypher": "MATCH (n) WITH toint(n.value) + count(n) AS score RETURN score",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "project grouped property plus aggregate through with aliases",
       "cypher": "MATCH (n) WITH toInteger(n.value) AS value, count(n) AS node_count WITH value + node_count AS score RETURN score",
       "fixture": {
         "nodes": [
