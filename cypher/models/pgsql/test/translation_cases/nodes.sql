@@ -208,13 +208,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not exists (select 1 from edge e0 where e0.start_id = (s0.n0).id or e0.end_id = (s0.n0).id));
 
 -- case: match (s) where not (s)-[]->()-[]->() return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0 join edge e0 on (s0.n0).id = e0.start_id join node n1 on n1.id = e0.end_id), s2 as (select s1.n0 as n0, s1.n1 as n1 from s1 join edge e1 on (s1.n1).id = e1.start_id join node n2 on n2.id = e1.end_id) select count(*) > 0 from s2));
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on n1.id = e0.end_id where (s0.n0).id = e0.start_id), s2 as (select s1.n0 as n0, s1.n1 as n1 from s1 join edge e1 on (s1.n1).id = e1.start_id join node n2 on n2.id = e1.end_id) select count(*) > 0 from s2));
 
 -- case: match (s) where not (s)-[{prop: 'a'}]-({name: 'n3'}) return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from s0 join edge e0 on ((s0.n0).id = e0.end_id or (s0.n0).id = e0.start_id) join node n1 on ((n1.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb and (n1.id = e0.end_id or n1.id = e0.start_id) where ((s0.n0).id <> n1.id) and ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb) select count(*) > 0 from s1));
 
 -- case: match (s) where not (s)<-[{prop: 'a'}]-({name: 'n3'}) return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from s0 join edge e0 on (s0.n0).id = e0.end_id join node n1 on ((n1.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb and n1.id = e0.start_id where ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb) select count(*) > 0 from s1));
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from edge e0 join node n1 on ((n1.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb and n1.id = e0.start_id where ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb and (s0.n0).id = e0.end_id) select count(*) > 0 from s1));
 
 -- case: match (n:NodeKind1) where n.distinguishedname = toUpper('admin') return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'distinguishedname'))::jsonb = to_jsonb((upper('admin')::text)::text)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
@@ -229,7 +229,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_ends_with((n0.properties ->> 'distinguishedname'), (upper('admin')::text)::text)::bool) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (s) where not (s)-[{prop: 'a'}]->({name: 'n3'}) return s
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from s0 join edge e0 on (s0.n0).id = e0.start_id join node n1 on ((n1.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb and n1.id = e0.end_id where ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb) select count(*) > 0 from s1));
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from edge e0 join node n1 on ((n1.properties -> 'name'))::jsonb = to_jsonb(('n3')::text)::jsonb and n1.id = e0.end_id where ((e0.properties -> 'prop'))::jsonb = to_jsonb(('a')::text)::jsonb and (s0.n0).id = e0.start_id) select count(*) > 0 from s1));
 
 -- case: match (s) where not (s)-[]-() return id(s)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (s0.n0).id from s0 where (not exists (select 1 from edge e0 where e0.start_id = (s0.n0).id or e0.end_id = (s0.n0).id));
@@ -342,3 +342,6 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where n.name = "alpha' || (SELECT inet_server_addr()::text::int) || '" return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'name'))::jsonb = to_jsonb(('alpha'' || (SELECT inet_server_addr()::text::int) || ''')::text)::jsonb)) select s0.n0 as n from s0;
+
+-- case: match (g:NodeKind2) where not ((g)<-[:EdgeKind1]-(:NodeKind1)) return g
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s0.n0 as g from s0 where (not ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.kind_ids operator (pg_catalog.@>) array [1]::int2[] and n1.id = e0.start_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.end_id) select count(*) > 0 from s1)));
