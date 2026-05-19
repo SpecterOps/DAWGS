@@ -14,7 +14,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Run Code Static Analysis
+name: Build DAWGS PKGS
 
 on:
   pull_request:
@@ -26,7 +26,7 @@ on:
       - "synchronize"
 
 jobs:
-  static_analysis:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code for this repository
@@ -39,11 +39,6 @@ jobs:
           cache: true
           check-latest: true
 
-      - name: Vet source code
+      - name: Run Make Build Cmd
         run: |
-          go vet $(go list ./... | grep -v github.com/specterops/dawgs/cypher/parser)
-
-      - name: Run Analysis
-        continue-on-error: true
-        run: |
-          go tool golangci-lint run ./...
+          make build
