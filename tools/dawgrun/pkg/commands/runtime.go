@@ -14,6 +14,11 @@ func quitCmd() CommandDesc {
 		desc: "Exits the REPL session",
 
 		Fn: func(ctx *CommandContext, fields []string) error {
+			if ctx.instance == nil {
+				// Bail, it's CLI mode
+				return nil
+			}
+
 			ctx.instance.Quit()
 			return nil
 		},

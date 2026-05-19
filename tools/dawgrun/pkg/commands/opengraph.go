@@ -39,9 +39,9 @@ func saveOpenGraphCmd() CommandDesc {
 			}
 
 			connName := fields[0]
-			conn, ok := ctx.scope.GetConnection(connName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
+			conn, err := ctx.EnsureConnection(connName)
+			if err != nil {
+				return err
 			}
 
 			exportBuffer := new(bytes.Buffer)
@@ -89,9 +89,9 @@ func loadOpenGraphCmd() CommandDesc {
 			connName := fields[0]
 			inputFilePath := fields[1]
 
-			conn, ok := ctx.scope.GetConnection(connName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", connName)
+			conn, err := ctx.EnsureConnection(connName)
+			if err != nil {
+				return err
 			}
 
 			inputFile, err := os.Open(inputFilePath)
@@ -132,14 +132,14 @@ func copyOpenGraphCmd() CommandDesc {
 				return fmt.Errorf("source and destination connections must differ")
 			}
 
-			fromConn, ok := ctx.scope.GetConnection(fromConnName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", fromConnName)
+			fromConn, err := ctx.EnsureConnection(fromConnName)
+			if err != nil {
+				return err
 			}
 
-			toConn, ok := ctx.scope.GetConnection(toConnName)
-			if !ok {
-				return fmt.Errorf("connection %s not found; did you `open` it?", toConnName)
+			toConn, err := ctx.EnsureConnection(toConnName)
+			if err != nil {
+				return err
 			}
 
 			pipeReader, pipeWriter := io.Pipe()

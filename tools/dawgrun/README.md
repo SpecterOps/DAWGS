@@ -28,9 +28,10 @@
 `dawgrun` is a work-in-progress developer tool for interacting with
 `DAWGS` and the data structures it produces.
 
-It currently runs as a REPL for introspecting a `DAWGS`-compatible
-graph backend (Postgres or Neo4j), parsing and translating Cypher
-queries, and executing queries against a live connection.
+It runs as a REPL or one-shot CLI for introspecting a
+`DAWGS`-compatible graph backend (Postgres or Neo4j), parsing and
+translating Cypher queries, and executing queries against a live
+connection.
 
 ## Building
 
@@ -50,9 +51,17 @@ To switch the build back to mainline:
 
 ## Running
 
-You are dropped into a prompt:
+Run without arguments to start the REPL:
 
     dawgrun >
+
+Pass a command and its arguments to execute that command once and exit:
+
+    dawgrun parse "match (n) return n limit 1"
+
+CLI mode reads `$XDG_CONFIG_HOME/dawgrun/config.json` (or the platform
+equivalent) if it exists, so commands can refer to configured
+connection names without an interactive `open` first.
 
 At any time, run `help` to list commands or `help <command>` for
 detailed usage, flag defaults, and description.
@@ -68,9 +77,10 @@ Available commands:
     exit                            Quit
     explain-psql                    Explains a translated query over an active PG connection
     help                            This help message, but also more detailed help for individual commands
-    list-connections                Lists currently open named connections
-    load-opengraph                  Loads an OpenGraph JSON file into a connection
+    list-connections                Lists open and configured named connections
+    load-connections                Loads named backend connections from dawgrun config
     load-db-kinds                   Loads/shows the kind mapping from the specified DB into the 'active set'
+    load-opengraph                  Loads an OpenGraph JSON file into a connection
     lookup-kind                     Looks up a kind from database based on kind name
     lookup-kind-id                  Looks up a kind from database based on kind ID
     open                            Connects to a named DAWGS-compatible backend using a connection string.
@@ -78,6 +88,7 @@ Available commands:
     query-cypher                    Executes a Cypher query and renders table or JSON output
     quit                            Quit
     runtime-trace                   Manage runtime tracing
+    save-connections                Saves open named backend connections to dawgrun config
     save-opengraph                  Dumps all data from a connection as OpenGraph JSON
     translate-psql                  Parses a query and converts it to the underlying PostgreSQL query
 ```
@@ -89,9 +100,25 @@ first argument. Names are assigned when you open the connection and
 are reused for the remainder of the session. The bottom-right status
 widget shows the current number of open connections.
 
-To list their names directly:
+To list open and configured connection names directly:
 
     dawgrun > list-connections
+
+Configured connections loaded in CLI mode are listed as unopened until
+a command needs to use them.
+
+Save the currently open connections to the default config file:
+
+    dawgrun > save-connections
+
+Load and open connections from the default config file:
+
+    dawgrun > load-connections
+
+Both commands accept an optional config path:
+
+    dawgrun > save-connections ./dawgrun.local.json
+    dawgrun > load-connections ./dawgrun.local.json
 
 A "kind map" is the mapping between a graph's kind names (e.g.
 `User`, `Group`) and the numeric IDs they are stored under in
@@ -222,6 +249,34 @@ The REPL persists command history to
 `$XDG_CONFIG_HOME/dawgrun/history.txt` (or the platform equivalent),
 capped at 1000 lines, so recent commands are available via the
 arrow keys across sessions.
+
+## Configuration
+
+The default config file is `$XDG_CONFIG_HOME/dawgrun/config.json` (or
+the platform equivalent). It currently stores named connection entries:
+
+```json
+{
+  "connections": {
+    "local": {
+      "driver": "pg",
+      "connection_string": "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable"
+    },
+    "neo": {
+      "driver": "neo4j",
+      "connection_string": "neo4j://neo4j:password@localhost:7687"
+    }
+  }
+}
+```
+
+The `driver` field is optional when the connection string scheme can be
+autodetected, but it is required for connection strings without a
+scheme.
+
+REPL mode loads these connections only when `load-connections` is run.
+CLI mode reads the default config at startup and lazily opens a
+configured connection the first time a command needs it.
 
 ## Styling
 

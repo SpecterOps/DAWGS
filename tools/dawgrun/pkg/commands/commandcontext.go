@@ -5,17 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"os"
-	"slices"
 	"strings"
-	"sync"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/texttools"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
 	"github.com/specterops/go-repl"
-
-	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
 )
 
 type (
@@ -29,6 +26,8 @@ type (
 		instance *repl.Repl
 		// output is a convenience type to make issuing warnings and formatting outputs easier
 		output *CommandOutput
+		// appConfigBaseDir is the root directory for dawgrun user configuration.
+		appConfigBaseDir string
 
 		// scope is a singleton instance held by the command manager that holds any persistent state for a command.
 		scope *Scope
@@ -50,22 +49,21 @@ type (
 		warnings      []string
 		outputBuilder strings.Builder
 	}
-	// Scope holds persistent command state that can be shared across invocations.
-	Scope struct {
-		mu           sync.RWMutex
-		connections  map[string]graph.Database
-		connKindMaps map[string]stubs.KindMap
-	}
 )
 
 // NewCommandContext creates a command context with a fresh output buffer.
-func NewCommandContext(ctx context.Context, instance *repl.Repl, scope *Scope) *CommandContext {
+func NewCommandContext(ctx context.Context, instance *repl.Repl, scope *Scope, appConfigBaseDir string) *CommandContext {
 	return &CommandContext{
-		Context:  ctx,
-		output:   new(CommandOutput),
-		instance: instance,
-		scope:    scope,
+		Context:          ctx,
+		output:           new(CommandOutput),
+		instance:         instance,
+		appConfigBaseDir: appConfigBaseDir,
+		scope:            scope,
 	}
+}
+
+func (cc *CommandContext) defaultConfigPath() string {
+	return types.DefaultConfigPath(cc.appConfigBaseDir)
 }
 
 func (cc *CommandContext) warningStyle(text string) string {
@@ -106,7 +104,7 @@ func (co *CommandOutput) Write(p []byte) (n int, err error) {
 
 // WriteIndented writes text after applying tab-based indentation per line.
 func (co *CommandOutput) WriteIndented(text string, indentCount int) {
-	co.outputBuilder.WriteString(indentLines(text, indentCount))
+	co.outputBuilder.WriteString(texttools.IndentLines(text, indentCount))
 }
 
 // WriteHighlighted writes syntax-highlighted text using the configured style.
@@ -121,7 +119,7 @@ func (co *CommandOutput) WriteHighlighted(text, lexer string) {
 
 // WriteHighlightedWithStyle writes syntax-highlighted text with an explicit style.
 func (co *CommandOutput) WriteHighlightedWithStyle(text, lexer, style string) {
-	highlighted, err := highlightText(text, lexer, style)
+	highlighted, err := texttools.HighlightText(text, lexer, style)
 	if err != nil {
 		co.Warnf("Could not highlight source text: %#v", err)
 		co.outputBuilder.WriteString(text)
@@ -130,51 +128,57 @@ func (co *CommandOutput) WriteHighlightedWithStyle(text, lexer, style string) {
 	}
 }
 
-// NewScope creates an empty shared scope for command state.
-func NewScope() *Scope {
-	return &Scope{
-		connections:  make(map[string]graph.Database),
-		connKindMaps: make(map[string]stubs.KindMap),
+// EnsureConnection checks for a currently open connection or fully opens a lazy-loaded connection for a command to operate on
+func (cc *CommandContext) EnsureConnection(connName string) (graph.Database, error) {
+	if conn, ok := cc.scope.GetConnection(connName); ok {
+		return conn, nil
 	}
+
+	connConfig, ok := cc.scope.GetConnectionConfig(connName)
+	if !ok {
+		return nil, fmt.Errorf("connection %s not found; did you `open` it?", connName)
+	}
+
+	if _, err := cc.OpenConnection(connName, connConfig.ConnectionString, openConnectionOptions{
+		driverName:       connConfig.Driver,
+		defaultGraphName: "default",
+		quiet:            true,
+	}); err != nil {
+		return nil, fmt.Errorf("could not open configured connection %s: %w", connName, err)
+	}
+
+	conn, ok := cc.scope.GetConnection(connName)
+	if !ok {
+		return nil, fmt.Errorf("configured connection %s did not open", connName)
+	}
+
+	return conn, nil
 }
 
-// GetNumConnections returns the number of tracked database connections.
-func (s *Scope) GetNumConnections() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// OpenConnection fully opens a database connection on behalf of a command
+func (cc *CommandContext) OpenConnection(name string, connStr string, options openConnectionOptions) (string, error) {
+	querier, driverName, err := cc.scope.openDatabase(cc, connStr, options)
+	if err != nil {
+		return "", err
+	}
 
-	return len(s.connections)
-}
+	if existingConn, ok := cc.scope.GetConnection(name); ok {
+		cc.output.Warnf("Discarding previous connection for '%s'", name)
+		if err := existingConn.Close(cc); err != nil {
+			_ = querier.Close(cc)
+			return "", fmt.Errorf("could not close previous connection '%s' for overwriting: %w", name, err)
+		}
 
-// GetConnectionNames returns sorted names for tracked database connections.
-func (s *Scope) GetConnectionNames() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+		cc.scope.DropConnection(name)
+	}
 
-	return slices.Sorted(maps.Keys(s.connections))
-}
+	cc.scope.AddConnection(name, querier, types.ConnectionConfig{
+		Driver:           driverName,
+		ConnectionString: connStr,
+	})
+	if !options.quiet {
+		fmt.Fprintf(cc.output, "Opened %s connection '%s'\n", driverName, name)
+	}
 
-// AddConnection stores or replaces a named database connection in scope.
-func (s *Scope) AddConnection(name string, querier graph.Database) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.connections[name] = querier
-}
-
-// DropConnection removes a named connection and any cached kind map.
-func (s *Scope) DropConnection(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.connections, name)
-	delete(s.connKindMaps, name)
-}
-
-func (s *Scope) GetConnection(name string) (graph.Database, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	conn, ok := s.connections[name]
-	return conn, ok
+	return driverName, nil
 }
