@@ -24,6 +24,7 @@ on:
     types:
       - "opened"
       - "synchronize"
+      - "reopened"
 
 jobs:
   call-run-upload-main-coverage-files:
@@ -33,7 +34,7 @@ jobs:
     needs: call-run-upload-main-coverage-files
     steps:
       - env:
-          COV_FILE_ID: ${{ needs.upload-main-coverage-file.outputs.coverage-artifact-id }}
+          COV_FILE_ID: ${{ needs.call-run-upload-main-coverage-files.outputs.coverage-artifact-id }}
         run: echo "Artifact ID from previous job is $COV_FILE_ID"
 
       - name: Checkout source code for this repository
@@ -61,7 +62,7 @@ jobs:
       - name: Download Main Coverage
         uses: actions/download-artifact@v8
         with:
-          artifact-ids: ${{ needs.upload-main-coverage-file.outputs.coverage-artifact-id }}
+          artifact-ids: ${{ needs.call-run-upload-main-coverage-files.outputs.coverage-artifact-id }}
           path: tmp/
 
       - name: Display structure of downloaded files
