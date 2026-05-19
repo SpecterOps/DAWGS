@@ -26,7 +26,7 @@ on:
       - "synchronize"
 
 jobs:
-  upload-main-coverage-file:
+  upload-main-coverage-files:
     runs-on: ubuntu-latest
     outputs:
       coverage-artifact-id: ${{ steps.upload-coverage-artifact-step.outputs.artifact-id }}
