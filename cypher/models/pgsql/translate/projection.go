@@ -1008,35 +1008,21 @@ func (s *Translator) buildTailProjection() error {
 
 			// Check if any projections contain aggregate functions
 			for _, projectionItem := range currentPart.projections.Items {
-				if typedSelectItem, ok := projectionItem.SelectItem.(pgsql.FunctionCall); ok {
-					if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbols(typedSelectItem); err != nil {
-						return err
-					} else if !aggregatedFunctionSymbols.IsEmpty() {
-						hasAggregates = true
-						continue
-					}
+				if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbolsIn(projectionItem.SelectItem); err != nil {
+					return err
+				} else if !aggregatedFunctionSymbols.IsEmpty() {
+					hasAggregates = true
+					continue
 				}
 			}
 
 			// If aggregates are present, collect non-aggregate expressions for GROUP BY
 			if hasAggregates {
-				for i, projectionItem := range currentPart.projections.Items {
-					if typedSelectItem, ok := projectionItem.SelectItem.(pgsql.FunctionCall); ok {
-						if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbols(typedSelectItem); err != nil {
-							return err
-						} else if !aggregatedFunctionSymbols.IsEmpty() {
-							// This is an aggregate function, skip it
-							continue
-						}
-					}
-
-					// Use the final processed projection expression for GROUP BY
-					// This ensures the GROUP BY uses the same fully-qualified expressions as SELECT
-					projExpr := projection[i]
-					if aliasedExpr, isAliased := projExpr.(*pgsql.AliasedExpression); isAliased {
-						nonAggregateExprs = append(nonAggregateExprs, aliasedExpr.Expression)
+				for _, projectionItem := range projection {
+					if groupByExpressions, err := NonAggregateGroupByExpressions(projectionItem); err != nil {
+						return err
 					} else {
-						nonAggregateExprs = append(nonAggregateExprs, projExpr)
+						nonAggregateExprs = append(nonAggregateExprs, groupByExpressions...)
 					}
 				}
 
@@ -1070,6 +1056,25 @@ func (s *Translator) buildTailProjection() error {
 		currentPart.Model.OrderBy = currentPart.SortItems
 	}
 
+	return nil
+}
+
+func (s *Translator) ensureProjectionAliasBinding(alias pgsql.Identifier, selectItem pgsql.SelectItem) error {
+	if _, isBound := s.scope.AliasedLookup(alias); isBound {
+		return nil
+	}
+
+	inferredType, err := s.inferExpressionType(selectItem)
+	if err != nil {
+		return err
+	}
+
+	newBinding, err := s.scope.DefineNew(inferredType)
+	if err != nil {
+		return err
+	}
+
+	s.scope.Alias(alias, newBinding)
 	return nil
 }
 
@@ -1108,17 +1113,16 @@ func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cyphe
 				propertyLookup.Operator = pgsql.OperatorJSONField
 			}
 
+			if hasAlias {
+				if err := s.ensureProjectionAliasBinding(alias, selectItem); err != nil {
+					return err
+				}
+			}
+
 		default:
 			if hasAlias {
-				if inferredType, err := InferExpressionType(typedSelectItem); err != nil {
+				if err := s.ensureProjectionAliasBinding(alias, selectItem); err != nil {
 					return err
-				} else if _, isBound := s.scope.AliasedLookup(alias); !isBound {
-					if newBinding, err := s.scope.DefineNew(inferredType); err != nil {
-						return err
-					} else {
-						// This binding is its own alias
-						s.scope.Alias(alias, newBinding)
-					}
 				}
 			}
 		}

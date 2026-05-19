@@ -326,6 +326,38 @@ func TestDataType_OperatorResultTypeTemporalArithmetic(t *testing.T) {
 	}
 }
 
+func TestDataType_OperatorResultTypeAnyArrayConcatenation(t *testing.T) {
+	testCases := []struct {
+		Name     string
+		Left     DataType
+		Right    DataType
+		Expected DataType
+	}{{
+		Name:     "anyarray left concrete array right",
+		Left:     AnyArray,
+		Right:    TextArray,
+		Expected: TextArray,
+	}, {
+		Name:     "concrete array left anyarray right",
+		Left:     TextArray,
+		Right:    AnyArray,
+		Expected: TextArray,
+	}, {
+		Name:     "anyarray left anyarray right",
+		Left:     AnyArray,
+		Right:    AnyArray,
+		Expected: AnyArray,
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			resultType, valid := testCase.Left.OperatorResultType(testCase.Right, OperatorConcatenate)
+			require.True(t, valid)
+			require.Equal(t, testCase.Expected, resultType)
+		})
+	}
+}
+
 func TestValueToDataType(t *testing.T) {
 	testCases := []struct {
 		Value        any

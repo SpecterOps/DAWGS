@@ -160,6 +160,81 @@
         "edges": []
       },
       "assert": {"exact_int": 2}
+    },
+    {
+      "name": "add two aggregate counts inside one projection",
+      "cypher": "MATCH (n) RETURN count(n) + count(n)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {"exact_int": 4}
+    },
+    {
+      "name": "multiply an aggregate count by a literal inside one projection",
+      "cypher": "MATCH (n) RETURN count(n) * 2",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {"exact_int": 6}
+    },
+    {
+      "name": "add grouped property expression to aggregate count",
+      "cypher": "MATCH (n) RETURN toint(n.value) + count(n)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "project grouped property plus aggregate through with",
+      "cypher": "MATCH (n) WITH toint(n.value) + count(n) AS score RETURN score",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "compare aggregate count inside with projection",
+      "cypher": "MATCH (n) WITH count(n) > 1 AS many RETURN many",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [true]}
+    },
+    {
+      "name": "divide aggregate sum by aggregate count inside with projection",
+      "cypher": "MATCH (n) WITH sum(n.age) / count(n) AS avg_age RETURN avg_age",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"age": 30}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"age": 50}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [40]}
     }
   ]
 }

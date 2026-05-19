@@ -82,3 +82,22 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 
 -- case: MATCH (n) WITH count(n) as lim MATCH (o) RETURN o
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s1.n0)::int8 as i0 from s1), s2 as (select s0.i0 as i0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, node n1) select s2.n1 as o from s2;
+
+-- case: MATCH (n) RETURN count(n) + count(n)
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 + count(s0.n0)::int8 from s0;
+
+-- case: MATCH (n) RETURN count(n) * 2
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 * 2 from s0;
+
+-- case: MATCH (n) RETURN toint(n.value) + count(n)
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (((s0.n0).properties ->> 'value'))::int8 + count(s0.n0)::int8 from s0 group by (((s0.n0).properties ->> 'value'))::int8;
+
+-- case: MATCH (n) WITH toint(n.value) + count(n) AS score RETURN score
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (((s1.n0).properties ->> 'value'))::int8 + count(s1.n0)::int8 as i0 from s1 group by (((s1.n0).properties ->> 'value'))::int8) select s0.i0 as score from s0;
+
+-- case: MATCH (n) WITH count(n) > 1 AS many RETURN many
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s1.n0)::int8 > 1 as i0 from s1) select s0.i0 as many from s0;
+
+-- case: MATCH (n) WITH sum(n.age) / count(n) AS avg_age RETURN avg_age
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum((((s1.n0).properties ->> 'age'))::float8)::numeric / count(s1.n0)::int8 as i0 from s1) select s0.i0 as avg_age from s0;
+

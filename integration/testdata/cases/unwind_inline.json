@@ -68,6 +68,31 @@
         "edges": []
       },
       "assert": {"row_values": [["NodeKind1", 1], ["NodeKind2", 1]]}
+    },
+    {
+      "name": "unwind concatenated collected names from two matches",
+      "cypher": "MATCH (au:AZUser) WHERE au.name CONTAINS 'ADMIN' MATCH (u:User) WHERE u.name CONTAINS 'ADMIN' WITH collect(u.name) + collect(au.azname) AS temp UNWIND temp AS usernames RETURN usernames",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["AZUser"], "properties": {"name": "ADMIN_ONE", "azname": "az-alpha"}},
+          {"id": "b", "kinds": ["User"], "properties": {"name": "ADMIN_TWO"}},
+          {"id": "c", "kinds": ["User"], "properties": {"name": "plain"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["ADMIN_TWO", "az-alpha"]}
+    },
+    {
+      "name": "unwind collected names concatenated with a literal array",
+      "cypher": "MATCH (n:NodeKind1) WITH collect(n.name) + ['tail'] AS names UNWIND names AS name RETURN name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "alpha"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "beta"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["alpha", "beta", "tail"]}
     }
   ]
 }
