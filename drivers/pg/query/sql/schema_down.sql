@@ -3,10 +3,16 @@ drop trigger if exists delete_node_edges on node;
 drop function if exists delete_node_edges;
 
 -- Drop functions
+drop aggregate if exists cypher_min(jsonb);
+drop aggregate if exists cypher_max(jsonb);
 drop function if exists query_perf;
 drop function if exists lock_details;
 drop function if exists table_sizes;
 drop function if exists jsonb_to_text_array;
+drop function if exists cypher_min_transition(jsonb, jsonb);
+drop function if exists cypher_max_transition(jsonb, jsonb);
+drop function if exists cypher_value_compare(jsonb, jsonb);
+drop function if exists cypher_jsonb_type_rank(jsonb);
 drop function if exists cypher_contains(text, text);
 drop function if exists cypher_starts_with(text, text);
 drop function if exists cypher_ends_with(text, text);

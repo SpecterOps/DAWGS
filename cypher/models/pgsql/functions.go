@@ -16,6 +16,8 @@ const (
 	FunctionCypherContains                Identifier = "cypher_contains"
 	FunctionCypherStartsWith              Identifier = "cypher_starts_with"
 	FunctionCypherEndsWith                Identifier = "cypher_ends_with"
+	FunctionCypherMin                     Identifier = "cypher_min"
+	FunctionCypherMax                     Identifier = "cypher_max"
 	FunctionArrayLength                   Identifier = "array_length"
 	FunctionCardinality                   Identifier = "cardinality"
 	FunctionArrayAggregate                Identifier = "array_agg"
@@ -51,7 +53,7 @@ const (
 
 func IsAggregateFunction(function Identifier) bool {
 	switch function {
-	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionSum, FunctionAvg:
+	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionCypherMin, FunctionCypherMax, FunctionSum, FunctionAvg:
 		return true
 
 	default:

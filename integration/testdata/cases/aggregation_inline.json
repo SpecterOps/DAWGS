@@ -38,6 +38,81 @@
       "assert": "non_empty"
     },
     {
+      "name": "max string property remains textual",
+      "cypher": "MATCH (n) RETURN max(n.name)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "ALICE"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "BOB"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["BOB"]}
+    },
+    {
+      "name": "max string property with literals and count",
+      "cypher": "MATCH (n) WHERE n.name = 'ALICE' RETURN 7 - 6 = 1, count(n), max(n.name)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "ALICE"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [[true, 1, "ALICE"]]}
+    },
+    {
+      "name": "min and max string properties remain textual",
+      "cypher": "MATCH (n) RETURN min(n.name), max(n.name)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "ALICE"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "BOB"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [["ALICE", "BOB"]]}
+    },
+    {
+      "name": "min and max numeric properties preserve numeric ordering",
+      "cypher": "MATCH (n) RETURN min(n.score), max(n.score)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"score": 2}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"score": 10}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [[2, 10]]}
+    },
+    {
+      "name": "min and max mixed property values use cypher type ordering",
+      "cypher": "MATCH (n) RETURN min(n.value), max(n.value)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 1}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": "99"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 0.2}},
+          {"id": "d", "kinds": ["NodeKind1"], "properties": {"value": "1"}},
+          {"id": "e", "kinds": ["NodeKind1"], "properties": {"value": [1, 2]}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [[[1, 2], 1]]}
+    },
+    {
+      "name": "min and max ignore null and missing property values",
+      "cypher": "MATCH (n) RETURN min(n.value), max(n.value)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": null}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 4}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [[4, 4]]}
+    },
+    {
       "name": "group nodes by a property and collect names per group",
       "cypher": "MATCH (n) RETURN n.department, collect(n.name)",
       "fixture": {

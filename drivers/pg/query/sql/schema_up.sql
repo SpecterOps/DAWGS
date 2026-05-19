@@ -363,6 +363,245 @@ $$
   parallel safe
   strict;
 
+drop aggregate if exists public.cypher_min(jsonb);
+drop aggregate if exists public.cypher_max(jsonb);
+
+create or replace function public.cypher_jsonb_type_rank(value jsonb)
+  returns int
+as
+$$
+select case jsonb_typeof(value)
+         when 'object' then 1
+         when 'array' then 2
+         when 'string' then 3
+         when 'boolean' then 4
+         when 'number' then 5
+         when 'null' then 6
+         else 7
+       end;
+$$
+  language sql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.cypher_value_compare(left_value jsonb, right_value jsonb)
+  returns int
+as
+$$
+declare
+  left_type text;
+  right_type text;
+  left_rank int;
+  right_rank int;
+  left_number numeric;
+  right_number numeric;
+  left_text text;
+  right_text text;
+  left_bool bool;
+  right_bool bool;
+  left_len int;
+  right_len int;
+  left_keys text[];
+  right_keys text[];
+  idx int;
+  comparison int;
+begin
+  if left_value = right_value then
+    return 0;
+  end if;
+
+  if left_value = 'null'::jsonb then
+    return 1;
+  end if;
+
+  if right_value = 'null'::jsonb then
+    return -1;
+  end if;
+
+  left_type := jsonb_typeof(left_value);
+  right_type := jsonb_typeof(right_value);
+
+  if left_type != right_type then
+    left_rank := public.cypher_jsonb_type_rank(left_value);
+    right_rank := public.cypher_jsonb_type_rank(right_value);
+
+    if left_rank < right_rank then
+      return -1;
+    end if;
+
+    return 1;
+  end if;
+
+  case left_type
+    when 'number' then
+      left_number := (left_value #>> '{}')::numeric;
+      right_number := (right_value #>> '{}')::numeric;
+
+      if left_number < right_number then
+        return -1;
+      elsif left_number > right_number then
+        return 1;
+      end if;
+
+      return 0;
+
+    when 'string' then
+      left_text := left_value #>> '{}';
+      right_text := right_value #>> '{}';
+
+      if left_text < right_text then
+        return -1;
+      elsif left_text > right_text then
+        return 1;
+      end if;
+
+      return 0;
+
+    when 'boolean' then
+      left_bool := (left_value #>> '{}')::bool;
+      right_bool := (right_value #>> '{}')::bool;
+
+      if left_bool = right_bool then
+        return 0;
+      elsif not left_bool and right_bool then
+        return -1;
+      end if;
+
+      return 1;
+
+    when 'array' then
+      left_len := jsonb_array_length(left_value);
+      right_len := jsonb_array_length(right_value);
+      idx := 0;
+
+      while idx < least(left_len, right_len) loop
+        comparison := public.cypher_value_compare(left_value -> idx, right_value -> idx);
+
+        if comparison != 0 then
+          return comparison;
+        end if;
+
+        idx := idx + 1;
+      end loop;
+
+      if left_len = right_len then
+        return 0;
+      elsif left_len < right_len then
+        return -1;
+      end if;
+
+      return 1;
+
+    when 'object' then
+      select count(*)::int into left_len from jsonb_object_keys(left_value);
+      select count(*)::int into right_len from jsonb_object_keys(right_value);
+
+      if left_len < right_len then
+        return -1;
+      elsif left_len > right_len then
+        return 1;
+      end if;
+
+      select array_agg(key order by key) into left_keys from jsonb_object_keys(left_value) as left_object_keys(key);
+      select array_agg(key order by key) into right_keys from jsonb_object_keys(right_value) as right_object_keys(key);
+
+      for idx in 1..left_len loop
+        if left_keys[idx] < right_keys[idx] then
+          return -1;
+        elsif left_keys[idx] > right_keys[idx] then
+          return 1;
+        end if;
+      end loop;
+
+      for idx in 1..left_len loop
+        comparison := public.cypher_value_compare(left_value -> left_keys[idx], right_value -> right_keys[idx]);
+
+        if comparison != 0 then
+          return comparison;
+        end if;
+      end loop;
+
+      return 0;
+
+    else
+      if left_value::text < right_value::text then
+        return -1;
+      elsif left_value::text > right_value::text then
+        return 1;
+      end if;
+
+      return 0;
+  end case;
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.cypher_min_transition(state jsonb, value jsonb)
+  returns jsonb
+as
+$$
+begin
+  if value is null or value = 'null'::jsonb then
+    return state;
+  end if;
+
+  if state is null then
+    return value;
+  end if;
+
+  if public.cypher_value_compare(value, state) < 0 then
+    return value;
+  end if;
+
+  return state;
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe;
+
+create or replace function public.cypher_max_transition(state jsonb, value jsonb)
+  returns jsonb
+as
+$$
+begin
+  if value is null or value = 'null'::jsonb then
+    return state;
+  end if;
+
+  if state is null then
+    return value;
+  end if;
+
+  if public.cypher_value_compare(value, state) > 0 then
+    return value;
+  end if;
+
+  return state;
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe;
+
+create aggregate public.cypher_min(jsonb)
+(
+  sfunc = public.cypher_min_transition,
+  stype = jsonb,
+  parallel = safe
+);
+
+create aggregate public.cypher_max(jsonb)
+(
+  sfunc = public.cypher_max_transition,
+  stype = jsonb,
+  parallel = safe
+);
+
 create or replace function public.cypher_contains(haystack text, needle text)
   returns bool as
 $$
