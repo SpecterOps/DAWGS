@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -33,6 +34,8 @@ func loadConnectionsCmd() CommandDesc {
 				return nil
 			}
 
+			var connErrs error
+			openedConns := 0
 			for _, connName := range slices.Sorted(maps.Keys(config.Connections)) {
 				connConfig := config.Connections[connName]
 				driverName, err := openConnection(ctx, connName, connConfig.ConnectionString, openConnectionOptions{
@@ -41,14 +44,16 @@ func loadConnectionsCmd() CommandDesc {
 					quiet:            true,
 				})
 				if err != nil {
-					return fmt.Errorf("could not load connection %s from %s: %w", connName, configPath, err)
+					connErrs = errors.Join(connErrs, fmt.Errorf("could not load connection %s from %s: %w", connName, configPath, err))
+					continue
 				}
 
 				fmt.Fprintf(ctx.output, "Loaded %s connection '%s'\n", driverName, connName)
+				openedConns += 1
 			}
 
-			fmt.Fprintf(ctx.output, "Loaded %d connection(s) from %s\n", len(config.Connections), configPath)
-			return nil
+			fmt.Fprintf(ctx.output, "Loaded %d connection(s) from %s\n", openedConns, configPath)
+			return connErrs
 		},
 	}
 }

@@ -183,7 +183,7 @@ func openDAWGSDatabase(ctx context.Context, connStr string, options openConnecti
 
 	querier, err := dawgs.Open(ctx, driverName, config)
 	if err != nil {
-		return nil, "", fmt.Errorf("error opening %s database connection '%s': %w", driverName, connStr, err)
+		return nil, "", fmt.Errorf("error opening %s database connection: %w", driverName, err)
 	}
 	poolOwnedByDriver = true
 
