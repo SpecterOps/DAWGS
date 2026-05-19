@@ -283,3 +283,5 @@ configured connection the first time a command needs it.
 Syntax highlighting style defaults to `monokai`, but can be configured via
 the `DAWGRUN_STYLE` environment variable. 
 Any styles in [Chroma](https://github.com/alecthomas/chroma/tree/master/styles) are available for use as a syntax highlighting style. 
+CLI mode disables all terminal styling, including syntax highlighting
+and styled warnings, when stdout is not a terminal.

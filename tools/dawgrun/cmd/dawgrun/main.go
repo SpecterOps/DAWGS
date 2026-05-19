@@ -18,6 +18,7 @@ import (
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/commands"
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
+	"golang.org/x/term"
 )
 
 var (
@@ -63,7 +64,9 @@ func cliMain(appConfigBaseDir string, args []string) int {
 		return 1
 	}
 
-	output, err := runCommand(context.Background(), nil, scope, appConfigBaseDir, args)
+	output, err := runCommandWithOptions(context.Background(), nil, scope, appConfigBaseDir, args, runCommandOptions{
+		styledOutputEnabled: term.IsTerminal(int(os.Stdout.Fd())),
+	})
 	if output != "" {
 		fmt.Print(output)
 	}
@@ -222,6 +225,16 @@ func (h *handler) Eval(line string) string {
 }
 
 func runCommand(ctx context.Context, instance *repl.Repl, scope *commands.Scope, appConfigBaseDir string, fields []string) (string, error) {
+	return runCommandWithOptions(ctx, instance, scope, appConfigBaseDir, fields, runCommandOptions{
+		styledOutputEnabled: true,
+	})
+}
+
+type runCommandOptions struct {
+	styledOutputEnabled bool
+}
+
+func runCommandWithOptions(ctx context.Context, instance *repl.Repl, scope *commands.Scope, appConfigBaseDir string, fields []string, options runCommandOptions) (string, error) {
 	if len(fields) == 0 {
 		return "", fmt.Errorf("no command provided")
 	}
@@ -230,6 +243,7 @@ func runCommand(ctx context.Context, instance *repl.Repl, scope *commands.Scope,
 	rest := fields[1:]
 	if cmd, ok := commands.Registry()[command]; ok {
 		cmdCtx := commands.NewCommandContext(ctx, instance, scope, appConfigBaseDir)
+		cmdCtx.SetStyledOutputEnabled(options.styledOutputEnabled)
 		defer trace.StartRegion(cmdCtx, fmt.Sprintf("command-%s", command)).End()
 		err := cmd.Fn(cmdCtx, rest)
 		// Reset command's associated flags after exec

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,8 +58,8 @@ func (s *fakeDatabase) RefreshKinds(context.Context) error {
 
 func TestConfigRoundTrip(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	expected := Config{
-		Connections: map[string]ConnectionConfig{
+	expected := types.Config{
+		Connections: map[string]types.ConnectionConfig{
 			"local": {
 				Driver:           "pg",
 				ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
@@ -70,9 +71,9 @@ func TestConfigRoundTrip(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, SaveConfig(configPath, expected))
+	require.NoError(t, expected.Save(configPath))
 
-	actual, err := LoadConfig(configPath)
+	actual, err := types.LoadConfig(configPath)
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
 }
@@ -81,9 +82,9 @@ func TestLoadConfigLegacyStringConnections(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	require.NoError(t, os.WriteFile(configPath, []byte(`{"connections":{"local":"postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable"}}`), 0o600))
 
-	actual, err := LoadConfig(configPath)
+	actual, err := types.LoadConfig(configPath)
 	require.NoError(t, err)
-	require.Equal(t, map[string]ConnectionConfig{
+	require.Equal(t, map[string]types.ConnectionConfig{
 		"local": {
 			ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 		},
@@ -91,7 +92,7 @@ func TestLoadConfigLegacyStringConnections(t *testing.T) {
 }
 
 func TestDefaultConfigPath(t *testing.T) {
-	require.Equal(t, filepath.Join("base", "config.json"), DefaultConfigPath("base"))
+	require.Equal(t, filepath.Join("base", "config.json"), types.DefaultConfigPath("base"))
 }
 
 func TestListConnectionsCommandShowsNoConnections(t *testing.T) {
@@ -120,7 +121,7 @@ func TestListConnectionsCommandShowsOpenAndConfiguredUnopenedConnections(t *test
 		"local": "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 		"prod":  "postgres://dawgs:dawgs@prod:5432/dawgs?sslmode=disable",
 	})
-	scope.AddConnection("local", &fakeDatabase{}, ConnectionConfig{
+	scope.AddConnection("local", &fakeDatabase{}, types.ConnectionConfig{
 		Driver:           "pg",
 		ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 	})
@@ -136,7 +137,7 @@ func TestSaveConnectionsCommandWritesOpenConnections(t *testing.T) {
 	scope.SetConnectionStrings(map[string]string{
 		"configured-only": "neo4j://neo4j:password@localhost:7687",
 	})
-	scope.AddConnection("local", &fakeDatabase{}, ConnectionConfig{
+	scope.AddConnection("local", &fakeDatabase{}, types.ConnectionConfig{
 		Driver:           "pg",
 		ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 	})
@@ -144,9 +145,9 @@ func TestSaveConnectionsCommandWritesOpenConnections(t *testing.T) {
 
 	require.NoError(t, saveConnectionsCmd().Fn(ctx, []string{configPath}))
 
-	config, err := LoadConfig(configPath)
+	config, err := types.LoadConfig(configPath)
 	require.NoError(t, err)
-	require.Equal(t, map[string]ConnectionConfig{
+	require.Equal(t, map[string]types.ConnectionConfig{
 		"local": {
 			Driver:           "pg",
 			ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
@@ -169,9 +170,9 @@ func TestSaveConnectionsCommandWritesDriverOverride(t *testing.T) {
 	require.NoError(t, openCmd().Fn(ctx, []string{"-driver", "pg", "schemeless", "host=localhost user=dawgs dbname=dawgs"}))
 	require.NoError(t, saveConnectionsCmd().Fn(ctx, []string{configPath}))
 
-	config, err := LoadConfig(configPath)
+	config, err := types.LoadConfig(configPath)
 	require.NoError(t, err)
-	require.Equal(t, map[string]ConnectionConfig{
+	require.Equal(t, map[string]types.ConnectionConfig{
 		"schemeless": {
 			Driver:           "pg",
 			ConnectionString: "host=localhost user=dawgs dbname=dawgs",
@@ -181,8 +182,8 @@ func TestSaveConnectionsCommandWritesDriverOverride(t *testing.T) {
 
 func TestLoadConnectionsCommandOpensConfiguredConnections(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	require.NoError(t, SaveConfig(configPath, Config{
-		Connections: map[string]ConnectionConfig{
+	require.NoError(t, (types.Config{
+		Connections: map[string]types.ConnectionConfig{
 			"local": {
 				ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 			},
@@ -191,7 +192,7 @@ func TestLoadConnectionsCommandOpensConfiguredConnections(t *testing.T) {
 				ConnectionString: "neo4j://neo4j:password@localhost:7687",
 			},
 		},
-	}))
+	}).Save(configPath))
 
 	scope := NewScope()
 	scope.openDatabase = func(_ context.Context, connStr string, options openConnectionOptions) (graph.Database, string, error) {
@@ -209,7 +210,7 @@ func TestLoadConnectionsCommandOpensConfiguredConnections(t *testing.T) {
 	require.NoError(t, loadConnectionsCmd().Fn(ctx, []string{configPath}))
 
 	require.Equal(t, 2, scope.GetNumConnections())
-	require.Equal(t, map[string]ConnectionConfig{
+	require.Equal(t, map[string]types.ConnectionConfig{
 		"local": {
 			Driver:           "pg",
 			ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
@@ -224,14 +225,14 @@ func TestLoadConnectionsCommandOpensConfiguredConnections(t *testing.T) {
 
 func TestLoadConnectionsCommandPassesStoredDriver(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	require.NoError(t, SaveConfig(configPath, Config{
-		Connections: map[string]ConnectionConfig{
+	require.NoError(t, (types.Config{
+		Connections: map[string]types.ConnectionConfig{
 			"schemeless": {
 				Driver:           "pg",
 				ConnectionString: "host=localhost user=dawgs dbname=dawgs",
 			},
 		},
-	}))
+	}).Save(configPath))
 
 	scope := NewScope()
 	scope.openDatabase = func(_ context.Context, connStr string, options openConnectionOptions) (graph.Database, string, error) {
@@ -243,7 +244,7 @@ func TestLoadConnectionsCommandPassesStoredDriver(t *testing.T) {
 	ctx := NewCommandContext(context.Background(), nil, scope, t.TempDir())
 
 	require.NoError(t, loadConnectionsCmd().Fn(ctx, []string{configPath}))
-	require.Equal(t, map[string]ConnectionConfig{
+	require.Equal(t, map[string]types.ConnectionConfig{
 		"schemeless": {
 			Driver:           "pg",
 			ConnectionString: "host=localhost user=dawgs dbname=dawgs",
@@ -253,7 +254,7 @@ func TestLoadConnectionsCommandPassesStoredDriver(t *testing.T) {
 
 func TestEnsureConnectionOpensConfiguredConnection(t *testing.T) {
 	scope := NewScope()
-	scope.SetConnectionConfigs(map[string]ConnectionConfig{
+	scope.SetConnectionConfigs(map[string]types.ConnectionConfig{
 		"local": {
 			Driver:           "pg",
 			ConnectionString: "host=localhost user=dawgs dbname=dawgs",

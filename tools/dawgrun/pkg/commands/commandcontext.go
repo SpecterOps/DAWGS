@@ -46,8 +46,9 @@ type (
 	}
 	// CommandOutput accumulates output text and warnings for a command.
 	CommandOutput struct {
-		warnings      []string
-		outputBuilder strings.Builder
+		warnings            []string
+		outputBuilder       strings.Builder
+		styledOutputEnabled bool
 	}
 )
 
@@ -55,11 +56,21 @@ type (
 func NewCommandContext(ctx context.Context, instance *repl.Repl, scope *Scope, appConfigBaseDir string) *CommandContext {
 	return &CommandContext{
 		Context:          ctx,
-		output:           new(CommandOutput),
+		output:           NewCommandOutput(true),
 		instance:         instance,
 		appConfigBaseDir: appConfigBaseDir,
 		scope:            scope,
 	}
+}
+
+func NewCommandOutput(styledOutputEnabled bool) *CommandOutput {
+	return &CommandOutput{
+		styledOutputEnabled: styledOutputEnabled,
+	}
+}
+
+func (cc *CommandContext) SetStyledOutputEnabled(enabled bool) {
+	cc.output.styledOutputEnabled = enabled
 }
 
 func (cc *CommandContext) defaultConfigPath() string {
@@ -67,6 +78,10 @@ func (cc *CommandContext) defaultConfigPath() string {
 }
 
 func (cc *CommandContext) warningStyle(text string) string {
+	if !cc.output.styledOutputEnabled {
+		return text
+	}
+
 	return lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("202")).
@@ -119,6 +134,11 @@ func (co *CommandOutput) WriteHighlighted(text, lexer string) {
 
 // WriteHighlightedWithStyle writes syntax-highlighted text with an explicit style.
 func (co *CommandOutput) WriteHighlightedWithStyle(text, lexer, style string) {
+	if !co.styledOutputEnabled {
+		co.outputBuilder.WriteString(text)
+		return
+	}
+
 	highlighted, err := texttools.HighlightText(text, lexer, style)
 	if err != nil {
 		co.Warnf("Could not highlight source text: %#v", err)

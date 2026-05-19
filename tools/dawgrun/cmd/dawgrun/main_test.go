@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/commands"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,16 +17,26 @@ func TestRunCommandExecutesCommand(t *testing.T) {
 	require.Contains(t, output, "HELP: save-connections")
 }
 
+func TestRunCommandWithOptionsDisablesStyledOutput(t *testing.T) {
+	output, err := runCommandWithOptions(context.Background(), nil, commands.NewScope(), t.TempDir(), []string{"parse", "return", "1"}, runCommandOptions{
+		styledOutputEnabled: false,
+	})
+
+	require.NoError(t, err)
+	require.NotContains(t, output, "\x1b[")
+	require.Contains(t, output, "RegularQuery")
+}
+
 func TestLoadDefaultConfigConnectionStrings(t *testing.T) {
 	appConfigBaseDir := t.TempDir()
-	require.NoError(t, commands.SaveConfig(filepath.Join(appConfigBaseDir, "config.json"), commands.Config{
-		Connections: map[string]commands.ConnectionConfig{
+	require.NoError(t, (types.Config{
+		Connections: map[string]types.ConnectionConfig{
 			"local": {
 				Driver:           "pg",
 				ConnectionString: "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 			},
 		},
-	}))
+	}).Save(filepath.Join(appConfigBaseDir, "config.json")))
 
 	scope := commands.NewScope()
 	require.NoError(t, loadDefaultConfigConnectionStrings(scope, appConfigBaseDir))
