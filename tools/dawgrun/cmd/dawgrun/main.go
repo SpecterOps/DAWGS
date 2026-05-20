@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/trace"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -52,7 +53,7 @@ func main() {
 }
 
 func cliMain(appConfigBaseDir string, args []string) int {
-	scope := commands.NewScope()
+	scope := commands.NewScope(commands.RunModeCLI)
 	defer func() {
 		if err := scope.CloseConnections(context.Background()); err != nil {
 			slog.Error("could not close cli connections", slog.String("error", err.Error()))
@@ -88,7 +89,7 @@ func replMain(appConfigBaseDir string) {
 
 	handler := new(handler)
 	handler.appConfigBaseDir = appConfigBaseDir
-	handler.cmdScope = commands.NewScope()
+	handler.cmdScope = commands.NewScope(commands.RunModeREPL)
 	handler.r = repl.NewRepl(handler, &repl.Options{
 		HistoryFilePath: filepath.Join(appConfigBaseDir, "history.txt"),
 		HistoryMaxLines: 1000,
@@ -241,7 +242,9 @@ func runCommandWithOptions(ctx context.Context, instance *repl.Repl, scope *comm
 
 	command := strings.ToLower(fields[0])
 	rest := fields[1:]
-	if cmd, ok := commands.Registry()[command]; ok {
+
+	cmd, ok := commands.Registry()[command]
+	if ok && !slices.Contains(cmd.DisallowRunModes, scope.GetRunMode()) {
 		cmdCtx := commands.NewCommandContext(ctx, instance, scope, appConfigBaseDir)
 		cmdCtx.SetStyledOutputEnabled(options.styledOutputEnabled)
 		defer trace.StartRegion(cmdCtx, fmt.Sprintf("command-%s", command)).End()

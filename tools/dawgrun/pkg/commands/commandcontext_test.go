@@ -18,7 +18,7 @@ func TestCommandOutputWriteHighlightedHonorsStyledOutput(t *testing.T) {
 }
 
 func TestCommandContextWarningStyleHonorsStyledOutput(t *testing.T) {
-	ctx := NewCommandContext(context.Background(), nil, NewScope(), t.TempDir())
+	ctx := NewCommandContext(context.Background(), nil, NewScope(RunModeREPL), t.TempDir())
 	ctx.SetStyledOutputEnabled(false)
 	ctx.output.Warn("watch out")
 	require.Equal(t, " * watch out\n\n", ctx.OutputString())

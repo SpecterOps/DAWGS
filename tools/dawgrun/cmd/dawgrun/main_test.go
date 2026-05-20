@@ -11,14 +11,14 @@ import (
 )
 
 func TestRunCommandExecutesCommand(t *testing.T) {
-	output, err := runCommand(context.Background(), nil, commands.NewScope(), t.TempDir(), []string{"help", "save-connections"})
+	output, err := runCommand(context.Background(), nil, commands.NewScope(commands.RunModeREPL), t.TempDir(), []string{"help", "save-connections"})
 
 	require.NoError(t, err)
 	require.Contains(t, output, "HELP: save-connections")
 }
 
 func TestRunCommandWithOptionsDisablesStyledOutput(t *testing.T) {
-	output, err := runCommandWithOptions(context.Background(), nil, commands.NewScope(), t.TempDir(), []string{"parse", "return", "1"}, runCommandOptions{
+	output, err := runCommandWithOptions(context.Background(), nil, commands.NewScope(commands.RunModeCLI), t.TempDir(), []string{"parse", "return", "1"}, runCommandOptions{
 		styledOutputEnabled: false,
 	})
 
@@ -38,7 +38,7 @@ func TestLoadDefaultConfigConnectionStrings(t *testing.T) {
 		},
 	}).Save(filepath.Join(appConfigBaseDir, "config.json")))
 
-	scope := commands.NewScope()
+	scope := commands.NewScope(commands.RunModeCLI)
 	require.NoError(t, loadDefaultConfigConnectionStrings(scope, appConfigBaseDir))
 
 	connStr, ok := scope.GetConnectionString("local")
@@ -51,7 +51,7 @@ func TestLoadDefaultConfigConnectionStrings(t *testing.T) {
 }
 
 func TestLoadDefaultConfigConnectionStringsIgnoresMissingConfig(t *testing.T) {
-	scope := commands.NewScope()
+	scope := commands.NewScope(commands.RunModeCLI)
 
 	require.NoError(t, loadDefaultConfigConnectionStrings(scope, t.TempDir()))
 	require.Zero(t, scope.GetNumConnections())

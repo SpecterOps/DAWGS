@@ -9,13 +9,13 @@ import (
 
 func quitCmd() CommandDesc {
 	return CommandDesc{
-		args: []string{},
-		help: "Quit",
-		desc: "Exits the REPL session",
+		args:             []string{},
+		help:             "Quit",
+		desc:             "Exits the REPL session",
+		DisallowRunModes: []RunMode{RunModeCLI},
 
 		Fn: func(ctx *CommandContext, fields []string) error {
 			if ctx.instance == nil {
-				// Bail, it's CLI mode
 				return nil
 			}
 
@@ -37,6 +37,7 @@ func runtimeTraceCmd() CommandDesc {
 		help: "Manage runtime tracing",
 		desc: `start [tracefile] - Start tracing with output to [tracefile] if provided, otherwise trace.out
 stop - Stop runtime tracing and close the trace file`,
+		DisallowRunModes: []RunMode{RunModeCLI},
 
 		Fn: func(ctx *CommandContext, fields []string) error {
 			if len(fields) == 0 {

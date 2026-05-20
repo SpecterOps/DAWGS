@@ -13,6 +13,13 @@ import (
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
 )
 
+type RunMode int
+
+const (
+	RunModeREPL RunMode = iota
+	RunModeCLI
+)
+
 type (
 	// Scope holds persistent command state that can be shared across invocations.
 	Scope struct {
@@ -21,6 +28,7 @@ type (
 		connectionConfigs map[string]types.ConnectionConfig
 		connKindMaps      map[string]stubs.KindMap
 		openDatabase      databaseOpener
+		runMode           RunMode
 	}
 
 	databaseOpener        func(context.Context, string, openConnectionOptions) (graph.Database, string, error)
@@ -33,12 +41,13 @@ type (
 )
 
 // NewScope creates an empty shared scope for command state.
-func NewScope() *Scope {
+func NewScope(runMode RunMode) *Scope {
 	return &Scope{
 		connections:       make(map[string]graph.Database),
 		connectionConfigs: make(map[string]types.ConnectionConfig),
 		connKindMaps:      make(map[string]stubs.KindMap),
 		openDatabase:      openDAWGSDatabase,
+		runMode:           runMode,
 	}
 }
 
@@ -174,4 +183,8 @@ func (s *Scope) CloseConnections(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Scope) GetRunMode() RunMode {
+	return s.runMode
 }

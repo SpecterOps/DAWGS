@@ -40,26 +40,35 @@ func helpCmd() CommandDesc {
 
 				sortedCommands := slices.Sorted(maps.Keys(cmdRegistry))
 				for _, name := range sortedCommands {
+					cmd := cmdRegistry[name]
+					if slices.Contains(cmd.DisallowRunModes, ctx.scope.GetRunMode()) {
+						continue
+					}
+
 					commandLeft := fmt.Sprintf(
 						"%s%s%s",
 						strings.Repeat(" ", 4),
 						name,
 						strings.Repeat(" ", maxNameLength-(len(name))),
 					)
-					cmd := cmdRegistry[name]
 					spacerPad := strings.Repeat(" ", len(commandLeft))
 					fmt.Fprintf(ctx.output, "%s%s%s\n", commandLeft, spacerPad, cmd.help)
 				}
 			} else if strings.ToLower(fields[0]) == "all" {
 				// ALL COMMAND HELP
 				for name, cmd := range cmdRegistry {
+					// skip commands that are disabled for this run mode
+					if slices.Contains(cmd.DisallowRunModes, ctx.scope.GetRunMode()) {
+						continue
+					}
+
 					fmt.Fprintf(ctx.output, "%s", renderHelp(name, cmd))
 				}
 			} else {
 				// INDIVIDUAL COMMAND HELP
 				name := fields[0]
 				cmd, ok := cmdRegistry[name]
-				if !ok {
+				if !ok || slices.Contains(cmd.DisallowRunModes, ctx.scope.GetRunMode()) {
 					return fmt.Errorf("unknown command: %s", name)
 				}
 

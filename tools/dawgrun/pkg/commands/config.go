@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -14,9 +15,10 @@ const configFileName = "config.json"
 
 func loadConnectionsCmd() CommandDesc {
 	return CommandDesc{
-		args: []string{"[config-file]"},
-		help: "Loads named backend connections from dawgrun config",
-		desc: "Reads the connections object from config.json, then opens each named connection in the current session.",
+		args:             []string{"[config-file]"},
+		help:             "Loads named backend connections from dawgrun config",
+		desc:             "Reads the connections object from config.json, then opens each named connection in the current session.",
+		DisallowRunModes: []RunMode{RunModeCLI},
 
 		Fn: func(ctx *CommandContext, fields []string) error {
 			configPath, err := resolveConfigPath(ctx, fields, "load-connections [config-file]")
@@ -60,9 +62,10 @@ func loadConnectionsCmd() CommandDesc {
 
 func saveConnectionsCmd() CommandDesc {
 	return CommandDesc{
-		args: []string{"[config-file]"},
-		help: "Saves open named backend connections to dawgrun config",
-		desc: "Writes the currently open connection names and connection strings to config.json.",
+		args:             []string{"[config-file]"},
+		help:             "Saves open named backend connections to dawgrun config",
+		desc:             "Writes the currently open connection names and connection strings to config.json.",
+		DisallowRunModes: []RunMode{RunModeCLI},
 
 		Fn: func(ctx *CommandContext, fields []string) error {
 			configPath, err := resolveConfigPath(ctx, fields, "save-connections [config-file]")
@@ -70,8 +73,15 @@ func saveConnectionsCmd() CommandDesc {
 				return err
 			}
 
+			openConnectionConfigs := ctx.scope.GetOpenConnectionConfigs()
+			if len(openConnectionConfigs) == 0 {
+				if err := validateEmptyConnectionSave(configPath); err != nil {
+					return err
+				}
+			}
+
 			config := types.Config{
-				Connections: ctx.scope.GetOpenConnectionConfigs(),
+				Connections: openConnectionConfigs,
 			}
 			if err := config.Save(configPath); err != nil {
 				return err
@@ -81,6 +91,23 @@ func saveConnectionsCmd() CommandDesc {
 			return nil
 		},
 	}
+}
+
+func validateEmptyConnectionSave(configPath string) error {
+	existingConfig, err := types.LoadConfig(configPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+
+		return err
+	}
+
+	if len(existingConfig.Connections) > 0 {
+		return fmt.Errorf("refusing to overwrite %s with no open connections", configPath)
+	}
+
+	return nil
 }
 
 func resolveConfigPath(ctx *CommandContext, fields []string, usage string) (string, error) {

@@ -111,6 +111,9 @@ Save the currently open connections to the default config file:
 
     dawgrun > save-connections
 
+If no connections are open, `save-connections` refuses to overwrite an
+existing config that already contains saved connections.
+
 Load and open connections from the default config file:
 
     dawgrun > load-connections

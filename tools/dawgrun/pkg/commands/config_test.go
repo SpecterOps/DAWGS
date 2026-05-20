@@ -96,14 +96,14 @@ func TestDefaultConfigPath(t *testing.T) {
 }
 
 func TestListConnectionsCommandShowsNoConnections(t *testing.T) {
-	ctx := NewCommandContext(context.Background(), nil, NewScope(), t.TempDir())
+	ctx := NewCommandContext(context.Background(), nil, NewScope(RunModeREPL), t.TempDir())
 
 	require.NoError(t, listConnectionsCmd().Fn(ctx, nil))
 	require.Equal(t, "No connections\n", ctx.OutputString())
 }
 
 func TestListConnectionsCommandShowsConfiguredUnopenedConnections(t *testing.T) {
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.SetConnectionStrings(map[string]string{
 		"prod":    "postgres://dawgs:dawgs@prod:5432/dawgs?sslmode=disable",
 		"staging": "postgres://dawgs:dawgs@staging:5432/dawgs?sslmode=disable",
@@ -116,7 +116,7 @@ func TestListConnectionsCommandShowsConfiguredUnopenedConnections(t *testing.T) 
 }
 
 func TestListConnectionsCommandShowsOpenAndConfiguredUnopenedConnections(t *testing.T) {
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.SetConnectionStrings(map[string]string{
 		"local": "postgres://dawgs:dawgs@localhost:5432/dawgs?sslmode=disable",
 		"prod":  "postgres://dawgs:dawgs@prod:5432/dawgs?sslmode=disable",
@@ -133,7 +133,7 @@ func TestListConnectionsCommandShowsOpenAndConfiguredUnopenedConnections(t *test
 
 func TestSaveConnectionsCommandWritesOpenConnections(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.SetConnectionStrings(map[string]string{
 		"configured-only": "neo4j://neo4j:password@localhost:7687",
 	})
@@ -156,9 +156,33 @@ func TestSaveConnectionsCommandWritesOpenConnections(t *testing.T) {
 	require.Contains(t, ctx.OutputString(), "Saved 1 connection(s)")
 }
 
+func TestSaveConnectionsCommandDoesNotOverwriteExistingConfigWithoutOpenConnections(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	expected := types.Config{
+		Connections: map[string]types.ConnectionConfig{
+			"configured-only": {
+				Driver:           "neo4j",
+				ConnectionString: "neo4j://neo4j:password@localhost:7687",
+			},
+		},
+	}
+	require.NoError(t, expected.Save(configPath))
+
+	scope := NewScope(RunModeREPL)
+	scope.SetConnectionConfigs(expected.Connections)
+	ctx := NewCommandContext(context.Background(), nil, scope, t.TempDir())
+
+	err := saveConnectionsCmd().Fn(ctx, []string{configPath})
+	require.ErrorContains(t, err, "refusing to overwrite")
+
+	config, err := types.LoadConfig(configPath)
+	require.NoError(t, err)
+	require.Equal(t, expected, config)
+}
+
 func TestSaveConnectionsCommandWritesDriverOverride(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.openDatabase = func(_ context.Context, connStr string, options openConnectionOptions) (graph.Database, string, error) {
 		require.Equal(t, "host=localhost user=dawgs dbname=dawgs", connStr)
 		require.Equal(t, "pg", options.driverName)
@@ -194,7 +218,7 @@ func TestLoadConnectionsCommandOpensConfiguredConnections(t *testing.T) {
 		},
 	}).Save(configPath))
 
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.openDatabase = func(_ context.Context, connStr string, options openConnectionOptions) (graph.Database, string, error) {
 		driverName := options.driverName
 		if driverName == "" {
@@ -234,7 +258,7 @@ func TestLoadConnectionsCommandPassesStoredDriver(t *testing.T) {
 		},
 	}).Save(configPath))
 
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.openDatabase = func(_ context.Context, connStr string, options openConnectionOptions) (graph.Database, string, error) {
 		require.Equal(t, "host=localhost user=dawgs dbname=dawgs", connStr)
 		require.Equal(t, "pg", options.driverName)
@@ -253,7 +277,7 @@ func TestLoadConnectionsCommandPassesStoredDriver(t *testing.T) {
 }
 
 func TestEnsureConnectionOpensConfiguredConnection(t *testing.T) {
-	scope := NewScope()
+	scope := NewScope(RunModeREPL)
 	scope.SetConnectionConfigs(map[string]types.ConnectionConfig{
 		"local": {
 			Driver:           "pg",

@@ -38,11 +38,16 @@ type (
 		Fn CommandFn
 		// ClearFlagsFn is used to clear a command's flags after execution
 		ClearFlagsFn func()
-		args         []string
-		flags        *flag.FlagSet
-		desc         string
-		help         string
-		state        map[string]any
+		// DisallowRunModes specifies which run modes a command must not be allowed in
+		DisallowRunModes []RunMode
+		// args is a textual representation of the positional args a command accepts
+		args []string
+		// flags is the stdlib FlagSet the command parses flags with
+		flags *flag.FlagSet
+		// desc is a brief description of what the command does
+		desc string
+		// help is a long description of what the command does
+		help string
 	}
 	// CommandOutput accumulates output text and warnings for a command.
 	CommandOutput struct {
