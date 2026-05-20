@@ -10,6 +10,8 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+const legacyToIntegerFunction = "toint"
+
 func SymbolsFor(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
 	instance := pgsql.NewSymbolTable()
 
@@ -824,7 +826,7 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.treeTranslator.PushOperand(pgsql.NewTypeCast(argument, pgsql.Text))
 		}
 
-	case cypher.ToIntegerFunction, cypher.ToIntegerAliasFunction:
+	case cypher.ToIntegerFunction, legacyToIntegerFunction:
 		if typedExpression.NumArguments() != 1 {
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
