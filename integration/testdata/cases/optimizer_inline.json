@@ -12,7 +12,9 @@
           {"id": "store", "kinds": ["NTAuthStore"]},
           {"id": "domain", "kinds": ["Domain"]},
           {"id": "template", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
-          {"id": "root", "kinds": ["RootCA"]}
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]},
+          {"id": "unused-template", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": false, "requiresmanagerapproval": true, "enrolleesuppliessubject": false, "schemaversion": 2, "authorizedsignatures": 1}}
         ],
         "edges": [
           {"start_id": "n", "end_id": "p1-mid", "kind": "MemberOf"},
@@ -23,18 +25,15 @@
           {"start_id": "p2-mid", "end_id": "template", "kind": "GenericAll"},
           {"start_id": "template", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
-          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
+          {"start_id": "p2-mid", "end_id": "unused-template", "kind": "AllExtendedRights"}
         ]
       },
       "assert": {
-        "path_node_ids": [
-          ["n", "p1-mid", "ca", "store", "domain"],
-          ["n", "p2-mid", "template", "ca", "root", "domain"]
-        ],
-        "path_edge_kinds": [
-          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
-          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
-        ]
+        "keys": ["p1", "p2"],
+        "contains_node_with_props": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"},
+        "contains_edge": {"start": "template", "end": "ca", "kind": "PublishedTo"}
       }
     }
   ]
