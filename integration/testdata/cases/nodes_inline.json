@@ -158,6 +158,21 @@
         "edges": []
       },
       "assert": {"ordered_scalar_values": ["alpha", "beta"]}
+    },
+    {
+      "name": "order by aliased property projection",
+      "cypher": "match (n:NodeKind1) where n.tag = 'ordered_projection_alias' return n.name as displayname order by displayname",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "ordered_projection_alias"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "ordered_projection_alias"}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["displayname"],
+        "ordered_scalar_values": ["alpha", "beta"]
+      }
     }
   ]
 }

@@ -89,6 +89,9 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: MATCH (n) RETURN count(n) * 2
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 * 2 from s0;
 
+-- case: MATCH (n) RETURN count(n) AS total ORDER BY total DESC
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 as total from s0 order by total desc;
+
 -- case: MATCH (n) RETURN toint(n.value) + count(n)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (((s0.n0).properties ->> 'value'))::int8 + count(s0.n0)::int8 from s0 group by (((s0.n0).properties ->> 'value'))::int8;
 
@@ -100,4 +103,3 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 
 -- case: MATCH (n) WITH sum(n.age) / count(n) AS avg_age RETURN avg_age
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum((((s1.n0).properties ->> 'age'))::float8)::numeric / count(s1.n0)::int8 as i0 from s1) select s0.i0 as avg_age from s0;
-

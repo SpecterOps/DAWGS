@@ -29,6 +29,9 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 -- case: match (n) with 1 as _kind_idx, n return labels(n), _kind_idx
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select 1 as i0, s1.n0 as n0 from s1) select (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[], s0.i0 as _kind_idx from s0;
 
+-- case: match (n:NodeKind1) return n.name as displayname order by displayname
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s0.n0).properties -> 'name') as displayname from s0 order by displayname;
+
 -- case: match (n) where any(label in labels(n) where label = 'NodeKind2') return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where (((select count(*)::int from unnest((array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[]) as i0 where (i0 = 'NodeKind2')) >= 1)::bool);
 

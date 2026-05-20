@@ -976,6 +976,33 @@ func pushDownTraversalLimit(currentPart *QueryPart, tailSelect pgsql.Select) {
 	applyLimitToCTE(currentPart.Model, sourceFrame, currentPart.Limit)
 }
 
+func projectionAliasBindings(scope *Scope, projections []*Projection) map[pgsql.Identifier]pgsql.Identifier {
+	aliases := map[pgsql.Identifier]pgsql.Identifier{}
+
+	for _, projection := range projections {
+		if !projection.Alias.Set {
+			continue
+		}
+
+		if binding, bound := scope.AliasedLookup(projection.Alias.Value); bound {
+			aliases[binding.Identifier] = projection.Alias.Value
+		}
+	}
+
+	return aliases
+}
+
+func rewriteOrderByProjectionAlias(orderBy *pgsql.OrderBy, aliases map[pgsql.Identifier]pgsql.Identifier) {
+	identifier, isIdentifier := orderBy.Expression.(pgsql.Identifier)
+	if !isIdentifier {
+		return
+	}
+
+	if alias, isProjectionAlias := aliases[identifier]; isProjectionAlias {
+		orderBy.Expression = alias
+	}
+}
+
 func (s *Translator) buildTailProjection() error {
 	var (
 		currentPart           = s.query.CurrentPart()
@@ -1045,12 +1072,16 @@ func (s *Translator) buildTailProjection() error {
 	}
 
 	if len(currentPart.SortItems) > 0 {
+		projectionAliases := projectionAliasBindings(s.scope, currentPart.projections.Items)
+
 		// If there are expressions in the order by of the current query part they will need to be visited to ensure
 		// that frame references are rewritten
 		for _, orderByExpression := range currentPart.SortItems {
 			if err := RewriteFrameBindings(s.scope, orderByExpression); err != nil {
 				return err
 			}
+
+			rewriteOrderByProjectionAlias(orderByExpression, projectionAliases)
 		}
 
 		currentPart.Model.OrderBy = currentPart.SortItems
@@ -1075,6 +1106,29 @@ func (s *Translator) ensureProjectionAliasBinding(alias pgsql.Identifier, select
 	}
 
 	s.scope.Alias(alias, newBinding)
+	return nil
+}
+
+func (s *Translator) ensureSortItemProjectionAliases() error {
+	currentPart := s.query.CurrentPart()
+	if currentPart.projections == nil {
+		return nil
+	}
+
+	for _, projection := range currentPart.projections.Items {
+		if !projection.Alias.Set {
+			continue
+		}
+
+		if _, isIdentifier := unwrapParenthetical(projection.SelectItem).(pgsql.Identifier); !isIdentifier {
+			continue
+		}
+
+		if err := s.ensureProjectionAliasBinding(projection.Alias.Value, projection.SelectItem); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

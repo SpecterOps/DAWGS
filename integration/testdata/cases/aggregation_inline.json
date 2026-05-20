@@ -187,6 +187,21 @@
       "assert": {"exact_int": 6}
     },
     {
+      "name": "order by aliased aggregate projection",
+      "cypher": "MATCH (n) RETURN count(n) AS total ORDER BY total DESC",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["total"],
+        "ordered_row_values": [[2]]
+      }
+    },
+    {
       "name": "add grouped property expression to aggregate count",
       "cypher": "MATCH (n) RETURN toint(n.value) + count(n)",
       "fixture": {

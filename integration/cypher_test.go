@@ -127,6 +127,7 @@ func TestCypher(t *testing.T) {
 //	"empty"                               — zero rows
 //	"no_error"                            — drains result, checks no error
 //	"query_error"                         — drains result, expects an error
+//	{"keys": ["a", "b"]}                  — every returned row has exactly these result keys, preserving order
 //	{"row_count": N}                      — exactly N rows
 //	{"at_least_int": N}                   — first scalar >= N
 //	{"exact_int": N}                      — first scalar == N
@@ -175,6 +176,9 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 	var assertions []resultAssertion
 	for key, val := range obj {
 		switch key {
+		case "keys":
+			assertions = append(assertions, assertKeys(decodeAssertionValue[[]string](t, key, val)))
+
 		case "row_count":
 			assertions = append(assertions, assertRowCount(decodeAssertionValue[int](t, key, val)))
 
@@ -428,6 +432,23 @@ func assertEmpty(t *testing.T, result queryResult, _ assertionContext) {
 
 func assertNoError(t *testing.T, _ queryResult, _ assertionContext) {
 	t.Helper()
+}
+
+func assertKeys(expected []string) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		if len(result.rows) == 0 {
+			t.Fatal("key assertion expected at least one row")
+		}
+
+		want := strings.Join(expected, "\x00")
+		for rowIdx, row := range result.rows {
+			if got := strings.Join(row.keys, "\x00"); got != want {
+				t.Fatalf("row %d keys mismatch:\n  got:  %v\n  want: %v", rowIdx, row.keys, expected)
+			}
+		}
+	}
 }
 
 func assertRowCount(n int) resultAssertion {
