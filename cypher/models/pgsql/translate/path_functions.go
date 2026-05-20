@@ -25,6 +25,9 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 				CastType: pgsql.EdgeCompositeArray,
 			})
 
+		case pgsql.PathEdge:
+			edgeArrayReferences = append(edgeArrayReferences, pathEdgeArrayExpression(scope, dependency))
+
 		default:
 			// Path bindings also depend on their node endpoints. Those are not part of relationships(p).
 		}

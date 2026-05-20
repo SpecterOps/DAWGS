@@ -68,5 +68,30 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "s5.ep0 as ep0")
 	require.NotContains(t, normalizedQuery, "s5.e0 as e0")
 	require.Contains(t, normalizedQuery, "from unnest(s12.ep0)")
+	require.Contains(t, normalizedQuery, "from unnest(array [s12.e1]::int8[])")
+	require.NotContains(t, normalizedQuery, "array [s12.e1]::edgecomposite[]")
 	require.Contains(t, normalizedQuery, "from s5, s7")
+}
+
+func TestOptimizerSafetyReferencedRelationshipStaysComposite(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+MATCH p = (n:Group)-[r:MemberOf]->(m:Group)
+RETURN p, r
+`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "(e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0")
+	require.Contains(t, normalizedQuery, "array [s0.e0]::edgecomposite[]")
+	require.NotContains(t, normalizedQuery, "e0.id as e0")
+	require.NotContains(t, normalizedQuery, "array [s0.e0]::int8[]")
 }

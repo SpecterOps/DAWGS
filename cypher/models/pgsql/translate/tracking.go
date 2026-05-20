@@ -26,6 +26,8 @@ func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Ident
 		prefixStr = "n"
 	case pgsql.EdgeComposite:
 		prefixStr = "e"
+	case pgsql.PathEdge:
+		prefixStr = "e"
 	case pgsql.Scope:
 		prefixStr = "s"
 	case pgsql.ParameterIdentifier:

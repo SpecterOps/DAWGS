@@ -201,6 +201,25 @@ func pathCompositeColumnReference(scope *Scope, binding *BoundIdentifier, column
 	return pgsql.CompoundIdentifier{binding.Identifier, column}
 }
 
+func pathEdgeIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
+	if binding.LastProjection != nil || scope.CurrentFrameBinding() != nil {
+		return pathBindingReference(scope, binding)
+	}
+
+	return pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnID}
+}
+
+func pathEdgeArrayExpression(scope *Scope, edge *BoundIdentifier) pgsql.Expression {
+	return &pgsql.EdgeArrayFromPathIDs{
+		PathIDs: pgsql.ArrayLiteral{
+			Values: []pgsql.Expression{
+				pathEdgeIDReference(scope, edge),
+			},
+			CastType: pgsql.Int8Array,
+		},
+	}
+}
+
 func expansionPathEdgeArrayExpression(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
 	return &pgsql.EdgeArrayFromPathIDs{
 		PathIDs: pathBindingReference(scope, expansionPath),
@@ -218,6 +237,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		directNodeReferences []pgsql.Expression
 		directEdgeReferences []pgsql.Expression
 		seenExpansionPath    = false
+		seenPathEdge         = false
 	)
 
 	// Path composite components are encoded as dependencies on the bound identifier representing the
@@ -242,6 +262,10 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 				CastType: pgsql.EdgeCompositeArray,
 			})
 
+		case pgsql.PathEdge:
+			seenPathEdge = true
+			edgeArrayReferences = append(edgeArrayReferences, pathEdgeArrayExpression(scope, dependency))
+
 		case pgsql.NodeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
 			directNodeReferences = append(directNodeReferences, pathCompositeReference(scope, dependency, pgsql.NodeTableColumns))
 			nodeReferences = append(nodeReferences, pathCompositeColumnReference(scope, dependency, pgsql.ColumnID))
@@ -255,7 +279,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 	// those explicit components instead of reconstructing the path from edge IDs: this preserves path
 	// order and duplicate nodes, and it also works for rows produced by data-modifying CTEs where
 	// re-reading node/edge tables in the same statement may not see the RETURNING values.
-	if !seenExpansionPath && len(directNodeReferences) > 0 {
+	if !seenExpansionPath && !seenPathEdge && len(directNodeReferences) > 0 {
 		return pgsql.CompositeValue{
 			DataType: pgsql.PathComposite,
 			Values: []pgsql.Expression{
@@ -271,7 +295,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		}, nil
 	}
 
-	if seenExpansionPath {
+	if seenExpansionPath || seenPathEdge {
 		if len(directNodeReferences) == 0 {
 			return nil, fmt.Errorf("expansion path %s does not contain a root node reference", projected.Identifier)
 		}
@@ -426,6 +450,27 @@ func buildProjectionForEdgeComposite(alias pgsql.Identifier, projected *BoundIde
 	}, nil
 }
 
+func buildProjectionForPathEdge(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	var expression pgsql.Expression
+
+	if projected.LastProjection != nil {
+		if referenceFrame == nil {
+			referenceFrame = projected.LastProjection
+		}
+
+		expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+	} else {
+		expression = pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID}
+	}
+
+	return []pgsql.SelectItem{
+		&pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		},
+	}, nil
+}
+
 func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
 	switch projected.DataType {
 	case pgsql.ExpansionPath:
@@ -445,6 +490,9 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 
 	case pgsql.EdgeComposite:
 		return buildProjectionForEdgeComposite(alias, projected, referenceFrame)
+
+	case pgsql.PathEdge:
+		return buildProjectionForPathEdge(alias, projected, referenceFrame)
 
 	default:
 		// If this isn't a type that requires a unique projection, reflect the identifier as-is with its alias

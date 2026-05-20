@@ -106,6 +106,7 @@ const (
 	ExpansionRootNode     DataType = "expansion_root_node"
 	ExpansionEdge         DataType = "expansion_edge"
 	ExpansionTerminalNode DataType = "expansion_terminal_node"
+	PathEdge              DataType = "path_edge"
 )
 
 func (s DataType) IsKnown() bool {

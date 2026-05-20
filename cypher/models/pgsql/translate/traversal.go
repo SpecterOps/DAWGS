@@ -582,6 +582,13 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 		traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
 	}
 
+	if traversalStep.Edge != nil &&
+		traversalStep.Edge.DataType == pgsql.EdgeComposite &&
+		!queryPart.ReferencesBinding(traversalStep.Edge) &&
+		patternBindingDependsOn(queryPart, part, traversalStep.Edge) {
+		traversalStep.Edge.DataType = pgsql.PathEdge
+	}
+
 	if !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.Edge) {
 		traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
 	}

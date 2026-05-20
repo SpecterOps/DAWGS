@@ -279,6 +279,9 @@ func bindingExpressionType(binding *BoundIdentifier) pgsql.DataType {
 	case pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
 		return pgsql.NodeComposite
 
+	case pgsql.PathEdge:
+		return pgsql.Int8
+
 	default:
 		return binding.DataType
 	}
