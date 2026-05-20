@@ -12,10 +12,28 @@ type RuleResult struct {
 	Applied bool
 }
 
+type PredicateAttachmentScope string
+
+const (
+	PredicateAttachmentScopeBinding PredicateAttachmentScope = "binding"
+	PredicateAttachmentScopeRegion  PredicateAttachmentScope = "region"
+)
+
+type PredicateAttachment struct {
+	QueryPartIndex  int
+	RegionIndex     int
+	ClauseIndex     int
+	ExpressionIndex int
+	Scope           PredicateAttachmentScope
+	BindingSymbols  []string
+	Dependencies    []string
+}
+
 type Plan struct {
-	Query    *cypher.RegularQuery
-	Analysis Analysis
-	Rules    []RuleResult
+	Query                *cypher.RegularQuery
+	Analysis             Analysis
+	Rules                []RuleResult
+	PredicateAttachments []PredicateAttachment
 }
 
 type Optimizer struct {
@@ -28,8 +46,14 @@ func NewOptimizer(rules ...Rule) Optimizer {
 	}
 }
 
+func DefaultRules() []Rule {
+	return []Rule{
+		PredicateAttachmentRule{},
+	}
+}
+
 func Optimize(query *cypher.RegularQuery) (Plan, error) {
-	return NewOptimizer().Optimize(query)
+	return NewOptimizer(DefaultRules()...).Optimize(query)
 }
 
 func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
@@ -55,4 +79,68 @@ func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
 	}
 
 	return plan, nil
+}
+
+type PredicateAttachmentRule struct{}
+
+func (s PredicateAttachmentRule) Name() string {
+	return "PredicateAttachment"
+}
+
+func (s PredicateAttachmentRule) Apply(plan *Plan) error {
+	plan.PredicateAttachments = AttachPredicates(plan.Analysis)
+	return nil
+}
+
+func AttachPredicates(analysis Analysis) []PredicateAttachment {
+	var attachments []PredicateAttachment
+
+	for _, queryPart := range analysis.QueryParts {
+		for regionIndex, region := range queryPart.Regions {
+			regionBindings := regionBindingSymbols(region)
+
+			for _, predicate := range region.Predicates {
+				bindingSymbols := predicateBindingSymbols(predicate, regionBindings)
+				scope := PredicateAttachmentScopeRegion
+
+				if len(bindingSymbols) == 1 && len(predicate.Dependencies) == 1 {
+					scope = PredicateAttachmentScopeBinding
+				}
+
+				attachments = append(attachments, PredicateAttachment{
+					QueryPartIndex:  region.QueryPartIndex,
+					RegionIndex:     regionIndex,
+					ClauseIndex:     predicate.ClauseIndex,
+					ExpressionIndex: predicate.ExpressionIndex,
+					Scope:           scope,
+					BindingSymbols:  bindingSymbols,
+					Dependencies:    predicate.Dependencies,
+				})
+			}
+		}
+	}
+
+	return attachments
+}
+
+func regionBindingSymbols(region Region) map[string]struct{} {
+	bindings := map[string]struct{}{}
+
+	for _, binding := range region.Bindings {
+		bindings[binding.Symbol] = struct{}{}
+	}
+
+	return bindings
+}
+
+func predicateBindingSymbols(predicate Predicate, regionBindings map[string]struct{}) []string {
+	var bindingSymbols []string
+
+	for _, dependency := range predicate.Dependencies {
+		if _, isRegionBinding := regionBindings[dependency]; isRegionBinding {
+			bindingSymbols = append(bindingSymbols, dependency)
+		}
+	}
+
+	return bindingSymbols
 }
