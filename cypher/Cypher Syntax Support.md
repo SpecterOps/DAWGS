@@ -303,13 +303,13 @@ text this function will raise an error.
 match (u:User) return tostring(n.num_active_logins)
 ```
 
-### `toint`
+### `toInteger`
 
 Returns the integer value of a given expression. If the given expression represents a type that can not be converted or
 parsed to an integer this function will raise an error.
 
 ```
-match (u:User) return toint(n.integer_in_text_property)
+match (u:User) return toInteger(n.integer_in_text_property)
 ```
 
 ### `coalesce`

@@ -895,7 +895,7 @@ type Projections struct {
 	Frame       *Frame
 	Constraints pgsql.Expression
 	Items       []*Projection
-	GroupBy     []pgsql.SelectItem
+	GroupBy     []pgsql.Expression
 }
 
 func (s *Projections) Add(projection *Projection) {

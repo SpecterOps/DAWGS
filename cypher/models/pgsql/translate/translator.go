@@ -176,6 +176,10 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushParenthetical()
 
 	case *cypher.SortItem:
+		if err := s.ensureSortItemProjectionAliases(); err != nil {
+			s.SetError(err)
+		}
+
 		s.query.CurrentPart().SortItems = append(s.query.CurrentPart().SortItems, pgsql.NewOrderBy(typedExpression.Ascending))
 
 	case *cypher.Projection:

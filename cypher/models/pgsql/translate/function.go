@@ -10,6 +10,8 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+const legacyToIntegerFunction = "toint"
+
 func SymbolsFor(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
 	instance := pgsql.NewSymbolTable()
 
@@ -24,33 +26,249 @@ func SymbolsFor(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
 	}))
 }
 
+func asFunctionCall(node pgsql.SyntaxNode) (pgsql.FunctionCall, bool) {
+	switch typedNode := node.(type) {
+	case pgsql.FunctionCall:
+		return typedNode, true
+
+	case *pgsql.FunctionCall:
+		if typedNode == nil {
+			return pgsql.FunctionCall{}, false
+		}
+
+		return *typedNode, true
+
+	default:
+		return pgsql.FunctionCall{}, false
+	}
+}
+
 func GetAggregatedFunctionParameterSymbols(call pgsql.FunctionCall) (*pgsql.SymbolTable, error) {
+	return GetAggregatedFunctionParameterSymbolsIn(call)
+}
+
+func GetAggregatedFunctionParameterSymbolsIn(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
 	var (
 		symbolTable = pgsql.NewSymbolTable()
-		callStack   = []pgsql.FunctionCall{call}
 	)
 
-	for len(callStack) > 0 {
-		nextCall := callStack[len(callStack)-1]
-		callStack = callStack[:len(callStack)-1]
-
+	return symbolTable, walk.PgSQL(node, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, visitorHandler walk.VisitorHandler) {
+		nextCall, isFunctionCall := asFunctionCall(node)
+		if !isFunctionCall {
+			return
+		}
 		if pgsql.IsAggregateFunction(nextCall.Function) {
 			if functionParameterSymbols, err := SymbolsFor(nextCall); err != nil {
-				return nil, err
+				visitorHandler.SetError(err)
+				return
 			} else {
 				symbolTable.AddTable(functionParameterSymbols)
 			}
-		} else {
-			for _, parameter := range nextCall.Parameters {
-				switch typedParameter := parameter.(type) {
-				case pgsql.FunctionCall:
-					callStack = append(callStack, typedParameter)
-				}
-			}
+
+			visitorHandler.Consume()
 		}
+	}))
+}
+
+func GetNonAggregatedSymbols(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
+	instance := pgsql.NewSymbolTable()
+
+	return instance, walk.PgSQL(node, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, visitorHandler walk.VisitorHandler) {
+		if functionCall, isFunctionCall := asFunctionCall(node); isFunctionCall && pgsql.IsAggregateFunction(functionCall.Function) {
+			visitorHandler.Consume()
+			return
+		}
+
+		switch typedNode := node.(type) {
+		case pgsql.RowColumnReference:
+			if symbols, err := SymbolsFor(typedNode.Identifier); err != nil {
+				visitorHandler.SetError(err)
+			} else {
+				instance.AddTable(symbols)
+			}
+
+			visitorHandler.Consume()
+
+		case pgsql.Identifier:
+			instance.AddIdentifier(typedNode)
+
+		case pgsql.CompoundIdentifier:
+			instance.AddCompoundIdentifier(typedNode)
+		}
+	}))
+}
+
+func ContainsAggregateFunction(node pgsql.SyntaxNode) (bool, error) {
+	containsAggregate := false
+
+	return containsAggregate, walk.PgSQL(node, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, visitorHandler walk.VisitorHandler) {
+		if functionCall, isFunctionCall := asFunctionCall(node); isFunctionCall && pgsql.IsAggregateFunction(functionCall.Function) {
+			containsAggregate = true
+			visitorHandler.Consume()
+		}
+	}))
+}
+
+func appendIfReferencedGroupByExpression(groupByExpressions []pgsql.Expression, expression pgsql.Expression) ([]pgsql.Expression, error) {
+	if references, err := ExtractSyntaxNodeReferences(expression); err != nil {
+		return nil, err
+	} else if references.Len() == 0 {
+		return groupByExpressions, nil
+	} else {
+		return append(groupByExpressions, expression), nil
+	}
+}
+
+func appendNonAggregateGroupByExpressions(groupByExpressions []pgsql.Expression, expressions ...pgsql.Expression) ([]pgsql.Expression, error) {
+	for _, expression := range expressions {
+		nextGroupByExpressions, err := NonAggregateGroupByExpressions(expression)
+		if err != nil {
+			return nil, err
+		}
+
+		groupByExpressions = append(groupByExpressions, nextGroupByExpressions...)
 	}
 
-	return symbolTable, nil
+	return groupByExpressions, nil
+}
+
+func NonAggregateGroupByExpressions(expression pgsql.Expression) ([]pgsql.Expression, error) {
+	if expression == nil {
+		return nil, nil
+	}
+
+	switch typedExpression := expression.(type) {
+	case *pgsql.AliasedExpression:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		return NonAggregateGroupByExpressions(typedExpression.Expression)
+
+	case pgsql.AliasedExpression:
+		return NonAggregateGroupByExpressions(typedExpression.Expression)
+	}
+
+	if functionCall, isFunctionCall := asFunctionCall(expression); isFunctionCall && pgsql.IsAggregateFunction(functionCall.Function) {
+		return nil, nil
+	}
+
+	if containsAggregate, err := ContainsAggregateFunction(expression); err != nil {
+		return nil, err
+	} else if !containsAggregate {
+		return appendIfReferencedGroupByExpression(nil, expression)
+	}
+
+	var groupByExpressions []pgsql.Expression
+
+	switch typedExpression := expression.(type) {
+	case *pgsql.BinaryExpression:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.LOperand, typedExpression.ROperand)
+
+	case pgsql.BinaryExpression:
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.LOperand, typedExpression.ROperand)
+
+	case *pgsql.UnaryExpression:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		return NonAggregateGroupByExpressions(typedExpression.Operand)
+
+	case pgsql.UnaryExpression:
+		return NonAggregateGroupByExpressions(typedExpression.Operand)
+
+	case *pgsql.Parenthetical:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		return NonAggregateGroupByExpressions(typedExpression.Expression)
+
+	case pgsql.TypeCast:
+		return NonAggregateGroupByExpressions(typedExpression.Expression)
+
+	case *pgsql.FunctionCall:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Parameters...)
+
+	case pgsql.FunctionCall:
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Parameters...)
+
+	case pgsql.ArrayLiteral:
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Values...)
+
+	case *pgsql.ArrayIndex:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		groupByExpressions, err := appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Expression)
+		if err != nil {
+			return nil, err
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Indexes...)
+
+	case pgsql.ArrayIndex:
+		groupByExpressions, err := appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Expression)
+		if err != nil {
+			return nil, err
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Indexes...)
+
+	case *pgsql.ArraySlice:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		groupByExpressions, err := appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Expression)
+		if err != nil {
+			return nil, err
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Lower, typedExpression.Upper)
+
+	case pgsql.ArraySlice:
+		groupByExpressions, err := appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Expression)
+		if err != nil {
+			return nil, err
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Lower, typedExpression.Upper)
+
+	case pgsql.Case:
+		if typedExpression.Operand != nil {
+			var err error
+			groupByExpressions, err = appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Operand)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		groupByExpressions, err := appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Conditions...)
+		if err != nil {
+			return nil, err
+		}
+
+		groupByExpressions, err = appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Then...)
+		if err != nil {
+			return nil, err
+		}
+
+		return appendNonAggregateGroupByExpressions(groupByExpressions, typedExpression.Else)
+
+	default:
+		return nil, fmt.Errorf("aggregate grouping expression has unsupported type %T", expression)
+	}
 }
 
 func bindingExpressionType(binding *BoundIdentifier) pgsql.DataType {
@@ -608,7 +826,7 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.treeTranslator.PushOperand(pgsql.NewTypeCast(argument, pgsql.Text))
 		}
 
-	case cypher.ToIntegerFunction, cypher.ToIntegerAliasFunction:
+	case cypher.ToIntegerFunction, legacyToIntegerFunction:
 		if typedExpression.NumArguments() != 1 {
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
