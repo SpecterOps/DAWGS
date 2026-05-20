@@ -50,7 +50,7 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 	return mapper
 }
 
-func TestOptimizerSafetyADCSQueryDocumentsCurrentCarryShape(t *testing.T) {
+func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	t.Parallel()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), optimizerADCSQuery)
@@ -66,6 +66,7 @@ func TestOptimizerSafetyADCSQueryDocumentsCurrentCarryShape(t *testing.T) {
 
 	require.Contains(t, normalizedQuery, "select distinct (s5.n0).id as root_id from s5")
 	require.Contains(t, normalizedQuery, "s5.ep0 as ep0")
-	require.Contains(t, normalizedQuery, "s5.e0 as e0")
+	require.NotContains(t, normalizedQuery, "s5.e0 as e0")
+	require.Contains(t, normalizedQuery, "from unnest(s12.ep0)")
 	require.Contains(t, normalizedQuery, "from s5, s7")
 }

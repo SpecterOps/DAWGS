@@ -533,6 +533,18 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			exprStack = append(exprStack, typedNextExpr.Expression)
 			exprStack = append(exprStack, pgsql.FormattingLiteral("("))
 
+		case *pgsql.EdgeArrayFromPathIDs:
+			if typedNextExpr.PathIDs == nil {
+				return fmt.Errorf("edge array from path IDs has no path expression")
+			}
+
+			exprStack = append(
+				exprStack,
+				pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id)"),
+				typedNextExpr.PathIDs,
+				pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
+			)
+
 		case pgsql.Parameter:
 			if builder.MaterializeParameters {
 				if parameterValue, hasParameter := builder.parameters[typedNextExpr.Identifier.String()]; !hasParameter {

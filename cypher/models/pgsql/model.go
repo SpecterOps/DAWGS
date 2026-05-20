@@ -406,6 +406,18 @@ func (s *Parenthetical) AsExpression() Expression {
 	return s
 }
 
+type EdgeArrayFromPathIDs struct {
+	PathIDs Expression
+}
+
+func (s *EdgeArrayFromPathIDs) NodeType() string {
+	return "edge_array_from_path_ids"
+}
+
+func (s *EdgeArrayFromPathIDs) AsExpression() Expression {
+	return s
+}
+
 type JoinType int
 
 const (

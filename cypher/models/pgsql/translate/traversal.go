@@ -519,7 +519,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 
 		if traversalStep.Expansion != nil {
-			if err := s.translateTraversalPatternPartWithExpansion(idx == 0, traversalStep); err != nil {
+			if err := s.translateTraversalPatternPartWithExpansion(part, idx == 0, traversalStep); err != nil {
 				return err
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {
@@ -588,6 +588,25 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 
 	if !traversalStep.RightNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.RightNode) {
 		traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
+	}
+}
+
+func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep) {
+	if traversalStep == nil || traversalStep.Expansion == nil {
+		return
+	}
+
+	// Variable-length relationship bindings materialize to edge-composite
+	// arrays. A path binding can be rebuilt later from the compact expansion
+	// path ID array, so keep the edge array only when the relationship binding
+	// itself is observable.
+	if traversalStep.Edge != nil && !queryPart.ReferencesBinding(traversalStep.Edge) {
+		traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+	}
+
+	pathBinding := traversalStep.Expansion.PathBinding
+	if pathBinding != nil && !patternBindingDependsOn(queryPart, part, pathBinding) {
+		traversalStep.Frame.Unexport(pathBinding.Identifier)
 	}
 }
 

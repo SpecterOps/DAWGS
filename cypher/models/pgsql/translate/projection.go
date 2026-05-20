@@ -162,14 +162,6 @@ func bindingFrameReference(scope *Scope, binding *BoundIdentifier) pgsql.Compoun
 	return pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier}
 }
 
-func expansionPathEdgeArrayReference(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
-	for _, dependency := range expansionPath.Dependencies {
-		return bindingFrameReference(scope, dependency), nil
-	}
-
-	return nil, fmt.Errorf("expansion path %s does not reference an expansion edge binding", expansionPath.Identifier)
-}
-
 func pathBindingReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
 	if binding.LastProjection != nil {
 		return pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier}
@@ -210,15 +202,9 @@ func pathCompositeColumnReference(scope *Scope, binding *BoundIdentifier, column
 }
 
 func expansionPathEdgeArrayExpression(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
-	if scope.CurrentFrameBinding() != nil || expansionPath.LastProjection != nil {
-		return expansionPathEdgeArrayReference(scope, expansionPath)
-	}
-
-	for _, dependency := range expansionPath.Dependencies {
-		return dependency.Identifier, nil
-	}
-
-	return nil, fmt.Errorf("expansion path %s does not reference an expansion edge binding", expansionPath.Identifier)
+	return &pgsql.EdgeArrayFromPathIDs{
+		PathIDs: pathBindingReference(scope, expansionPath),
+	}, nil
 }
 
 func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql.Expression, error) {
@@ -402,12 +388,11 @@ func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIde
 	// Create a new final projection that's aliased to the visible binding's identifier
 	return []pgsql.SelectItem{
 		&pgsql.AliasedExpression{
-			Expression: &pgsql.Parenthetical{
-				Expression: pgsql.FormattingLiteral(fmt.Sprintf(
-					"select coalesce(array_agg((%[1]s.id, %[1]s.start_id, %[1]s.end_id, %[1]s.kind_id, %[1]s.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest(%[2]s.path) with ordinality as _path(id, ordinality) join edge %[1]s on %[1]s.id = _path.id",
-					projected.Identifier,
+			Expression: &pgsql.EdgeArrayFromPathIDs{
+				PathIDs: pgsql.CompoundIdentifier{
 					scope.CurrentFrame().Binding.Identifier,
-				)),
+					pgsql.ColumnPath,
+				},
 			},
 			Alias: pgsql.AsOptionalIdentifier(alias),
 		},
