@@ -110,6 +110,18 @@ func Copy[T any](value T, extensions ...CopyExtension[T]) T {
 	case *Literal:
 		return any(typedValue.copy()).(T)
 
+	case *Properties:
+		return any(typedValue.copy()).(T)
+
+	case MapLiteral:
+		return any(typedValue.copy()).(T)
+
+	case *ListLiteral:
+		return any(typedValue.copy()).(T)
+
+	case *MapItem:
+		return any(typedValue.copy()).(T)
+
 	case *ReadingClause:
 		return any(typedValue.copy()).(T)
 

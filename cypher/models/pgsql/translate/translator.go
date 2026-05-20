@@ -7,6 +7,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
@@ -524,9 +525,14 @@ type Result struct {
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
+	optimizedPlan, err := optimize.Optimize(cypherQuery)
+	if err != nil {
+		return Result{}, err
+	}
+
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 
-	if err := walk.Cypher(cypherQuery, translator); err != nil {
+	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
 		return Result{}, err
 	}
 
