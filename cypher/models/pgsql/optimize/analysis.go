@@ -47,19 +47,20 @@ type QueryPart struct {
 }
 
 type Region struct {
-	QueryPartIndex int
-	StartClause    int
-	EndClause      int
-	Clauses        []MatchClause
-	Bindings       []Binding
-	PathVariables  []PathVariable
-	Predicates     []Predicate
+	QueryPartIndex     int
+	StartClause        int
+	EndClause          int
+	Clauses            []MatchClause
+	Bindings           []Binding
+	BindingOccurrences []Binding
+	PathVariables      []PathVariable
+	Predicates         []Predicate
 }
 
 type MatchClause struct {
-	Index          int
-	PatternCount   int
-	WherePredicate int
+	Index           int
+	PatternCount    int
+	WherePredicates int
 }
 
 type Barrier struct {
@@ -176,6 +177,10 @@ func analyzeMultiPartQueryPart(index int, part *cypher.MultiPartQueryPart) Query
 		Kind:  QueryPartKindMulti,
 	}
 
+	if part == nil {
+		return queryPart
+	}
+
 	queryPart.Regions, queryPart.Barriers = analyzeReadingClauses(index, part.ReadingClauses)
 
 	if len(part.UpdatingClauses) > 0 {
@@ -203,6 +208,10 @@ func analyzeSinglePartQuery(index int, kind QueryPartKind, part *cypher.SinglePa
 	queryPart := QueryPart{
 		Index: index,
 		Kind:  kind,
+	}
+
+	if part == nil {
+		return queryPart
 	}
 
 	queryPart.Regions, queryPart.Barriers = analyzeReadingClauses(index, part.ReadingClauses)
@@ -280,11 +289,14 @@ func analyzeReadingClauses(queryPartIndex int, readingClauses []*cypher.ReadingC
 
 		currentRegion.EndClause = clauseIndex
 		currentRegion.Clauses = append(currentRegion.Clauses, MatchClause{
-			Index:          clauseIndex,
-			PatternCount:   len(match.Pattern),
-			WherePredicate: wherePredicateCount(match.Where),
+			Index:           clauseIndex,
+			PatternCount:    len(match.Pattern),
+			WherePredicates: wherePredicateCount(match.Where),
 		})
-		currentRegion.Bindings = mergeBindings(currentRegion.Bindings, bindingsForMatch(clauseIndex, match))
+
+		nextBindings := bindingsForMatch(clauseIndex, match)
+		currentRegion.BindingOccurrences = append(currentRegion.BindingOccurrences, nextBindings...)
+		currentRegion.Bindings = mergeBindings(currentRegion.Bindings, nextBindings)
 		currentRegion.PathVariables = mergePathVariables(currentRegion.PathVariables, pathVariablesForMatch(clauseIndex, match))
 		currentRegion.Predicates = append(currentRegion.Predicates, predicatesForWhere(clauseIndex, match.Where)...)
 	}
@@ -342,6 +354,10 @@ func bindingsForMatch(clauseIndex int, match *cypher.Match) []Binding {
 		}
 
 		for _, element := range pattern.PatternElements {
+			if element == nil {
+				continue
+			}
+
 			if nodePattern, isNodePattern := element.AsNodePattern(); isNodePattern {
 				if nodePattern.Variable != nil && nodePattern.Variable.Symbol != "" {
 					bindings = append(bindings, Binding{
@@ -383,6 +399,10 @@ func pathVariablesForMatch(clauseIndex int, match *cypher.Match) []PathVariable 
 		}
 
 		for _, element := range pattern.PatternElements {
+			if element == nil {
+				continue
+			}
+
 			if element.IsNodePattern() {
 				pathVariable.NodeCount++
 			} else if relationshipPattern, isRelationshipPattern := element.AsRelationshipPattern(); isRelationshipPattern {
@@ -404,6 +424,10 @@ func patternDependencies(pattern *cypher.PatternPart) []string {
 	var dependencies []string
 
 	for _, element := range pattern.PatternElements {
+		if element == nil {
+			continue
+		}
+
 		if nodePattern, isNodePattern := element.AsNodePattern(); isNodePattern {
 			if nodePattern.Variable != nil && nodePattern.Variable.Symbol != "" {
 				dependencies = append(dependencies, nodePattern.Variable.Symbol)

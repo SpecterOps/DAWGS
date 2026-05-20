@@ -74,6 +74,7 @@ func TestAnalyzeIdentifiesEligibleADCSRegion(t *testing.T) {
 	require.Equal(t, 0, region.StartClause)
 	require.Equal(t, 2, region.EndClause)
 	require.Len(t, region.Clauses, 3)
+	require.Len(t, region.BindingOccurrences, 10)
 	require.Len(t, region.Predicates, 2)
 	require.Equal(t, []string{"n"}, region.Predicates[0].Dependencies)
 	require.Equal(t, []string{"ct"}, region.Predicates[1].Dependencies)

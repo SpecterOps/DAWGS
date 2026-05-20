@@ -1322,6 +1322,10 @@ func (s *PatternElement) IsNodePattern() bool {
 }
 
 func (s *PatternElement) AsNodePattern() (*NodePattern, bool) {
+	if s == nil {
+		return nil, false
+	}
+
 	nodePattern, isNodePattern := s.Element.(*NodePattern)
 	return nodePattern, isNodePattern
 }
@@ -1332,6 +1336,10 @@ func (s *PatternElement) IsRelationshipPattern() bool {
 }
 
 func (s *PatternElement) AsRelationshipPattern() (*RelationshipPattern, bool) {
+	if s == nil {
+		return nil, false
+	}
+
 	relationshipPattern, isRelationshipPattern := s.Element.(*RelationshipPattern)
 	return relationshipPattern, isRelationshipPattern
 }
@@ -1517,7 +1525,7 @@ func (s *Return) copy() *Return {
 	}
 
 	return &Return{
-		Projection: s.Projection.copy(),
+		Projection: Copy(s.Projection),
 	}
 }
 

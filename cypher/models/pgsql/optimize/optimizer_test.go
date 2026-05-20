@@ -15,8 +15,8 @@ func (s testRule) Name() string {
 	return s.name
 }
 
-func (s testRule) Apply(plan *Plan) error {
-	return nil
+func (s testRule) Apply(plan *Plan) (bool, error) {
+	return false, nil
 }
 
 func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
@@ -43,9 +43,21 @@ func TestOptimizerRunsRulesAndRefreshesAnalysis(t *testing.T) {
 
 	plan, err := NewOptimizer(testRule{name: "test"}).Optimize(regularQuery)
 	require.NoError(t, err)
-	require.Equal(t, []RuleResult{{Name: "test", Applied: true}}, plan.Rules)
+	require.Equal(t, []RuleResult{{Name: "test", Applied: false}}, plan.Rules)
 	require.Len(t, plan.Analysis.QueryParts, 1)
 	require.Len(t, plan.Analysis.QueryParts[0].Regions, 1)
+}
+
+func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n) RETURN n`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []RuleResult{{Name: "PredicateAttachment", Applied: false}}, plan.Rules)
+	require.Empty(t, plan.PredicateAttachments)
 }
 
 func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {

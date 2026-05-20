@@ -4,7 +4,7 @@ import "github.com/specterops/dawgs/cypher/models/cypher"
 
 type Rule interface {
 	Name() string
-	Apply(*Plan) error
+	Apply(*Plan) (bool, error)
 }
 
 type RuleResult struct {
@@ -67,13 +67,14 @@ func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
 	plan.Analysis = Analyze(plan.Query)
 
 	for _, rule := range s.rules {
-		if err := rule.Apply(&plan); err != nil {
+		applied, err := rule.Apply(&plan)
+		if err != nil {
 			return Plan{}, err
 		}
 
 		plan.Rules = append(plan.Rules, RuleResult{
 			Name:    rule.Name(),
-			Applied: true,
+			Applied: applied,
 		})
 		plan.Analysis = Analyze(plan.Query)
 	}
@@ -87,9 +88,9 @@ func (s PredicateAttachmentRule) Name() string {
 	return "PredicateAttachment"
 }
 
-func (s PredicateAttachmentRule) Apply(plan *Plan) error {
+func (s PredicateAttachmentRule) Apply(plan *Plan) (bool, error) {
 	plan.PredicateAttachments = AttachPredicates(plan.Analysis)
-	return nil
+	return len(plan.PredicateAttachments) > 0, nil
 }
 
 func AttachPredicates(analysis Analysis) []PredicateAttachment {
@@ -113,8 +114,8 @@ func AttachPredicates(analysis Analysis) []PredicateAttachment {
 					ClauseIndex:     predicate.ClauseIndex,
 					ExpressionIndex: predicate.ExpressionIndex,
 					Scope:           scope,
-					BindingSymbols:  bindingSymbols,
-					Dependencies:    predicate.Dependencies,
+					BindingSymbols:  copyStrings(bindingSymbols),
+					Dependencies:    copyStrings(predicate.Dependencies),
 				})
 			}
 		}
@@ -143,4 +144,12 @@ func predicateBindingSymbols(predicate Predicate, regionBindings map[string]stru
 	}
 
 	return bindingSymbols
+}
+
+func copyStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+
+	return append([]string(nil), values...)
 }

@@ -121,6 +121,7 @@ func TestCopy(t *testing.T) {
 		Distinct: true,
 		All:      true,
 	})
+	validateCopy(t, &model2.Return{})
 	validateCopy(t, &model2.ProjectionItem{})
 	validateCopy(t, &model2.PropertyLookup{
 		Symbol: "a",
@@ -197,4 +198,16 @@ func TestCopyPatternVariablesAreIndependent(t *testing.T) {
 	require.Equal(t, "p", original.Variable.Symbol)
 	require.Equal(t, "n", originalNode.Variable.Symbol)
 	require.Equal(t, "r", originalRelationship.Variable.Symbol)
+}
+
+func TestNilPatternElementHelpers(t *testing.T) {
+	var element *model2.PatternElement
+
+	nodePattern, isNodePattern := element.AsNodePattern()
+	require.Nil(t, nodePattern)
+	require.False(t, isNodePattern)
+
+	relationshipPattern, isRelationshipPattern := element.AsRelationshipPattern()
+	require.Nil(t, relationshipPattern)
+	require.False(t, isRelationshipPattern)
 }
