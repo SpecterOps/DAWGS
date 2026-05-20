@@ -92,13 +92,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: MATCH (n) RETURN count(n) AS total ORDER BY total DESC
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 as total from s0 order by total desc;
 
--- case: MATCH (n) RETURN toint(n.value) + count(n)
+-- case: MATCH (n) RETURN toInteger(n.value) + count(n)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (((s0.n0).properties ->> 'value'))::int8 + count(s0.n0)::int8 from s0 group by (((s0.n0).properties ->> 'value'))::int8;
 
 -- case: MATCH (n) WITH toInteger(n.value) AS value, count(n) AS node_count RETURN value + node_count
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (((s1.n0).properties ->> 'value'))::int8 as i0, count(s1.n0)::int8 as i1 from s1 group by (((s1.n0).properties ->> 'value'))::int8) select s0.i0 + s0.i1 from s0;
 
--- case: MATCH (n) WITH toint(n.value) + count(n) AS score RETURN score
+-- case: MATCH (n) WITH toInteger(n.value) + count(n) AS score RETURN score
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select (((s1.n0).properties ->> 'value'))::int8 + count(s1.n0)::int8 as i0 from s1 group by (((s1.n0).properties ->> 'value'))::int8) select s0.i0 as score from s0;
 
 -- case: MATCH (n) WITH toInteger(n.value) AS value, count(n) AS node_count WITH value + node_count AS score RETURN score
