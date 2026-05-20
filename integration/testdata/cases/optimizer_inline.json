@@ -1,0 +1,41 @@
+{
+  "cases": [
+    {
+      "name": "return two ADCS-style paths with shared CA and domain endpoints",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'S-1-5-21-2643190041-1319121918-239771340-513' MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN p1, p2",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"}},
+          {"id": "p1-mid", "kinds": ["Group"]},
+          {"id": "p2-mid", "kinds": ["Group"]},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "store", "kinds": ["NTAuthStore"]},
+          {"id": "domain", "kinds": ["Domain"]},
+          {"id": "template", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+          {"id": "root", "kinds": ["RootCA"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "p1-mid", "kind": "MemberOf"},
+          {"start_id": "p1-mid", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+          {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+          {"start_id": "n", "end_id": "p2-mid", "kind": "MemberOf"},
+          {"start_id": "p2-mid", "end_id": "template", "kind": "GenericAll"},
+          {"start_id": "template", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {
+        "path_node_ids": [
+          ["n", "p1-mid", "ca", "store", "domain"],
+          ["n", "p2-mid", "template", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ]
+      }
+    }
+  ]
+}
