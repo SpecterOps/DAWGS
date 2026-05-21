@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/url"
@@ -15,28 +16,43 @@ import (
 	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
 )
 
 func listConnectionsCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{},
-		help: "Lists currently open named connections",
-		desc: "Prints all active connection names for this REPL session.",
+		help: "Lists open and configured named connections",
+		desc: "Prints open connection names and configured connection names that have not been opened yet.",
 
 		Fn: func(ctx *CommandContext, fields []string) error {
 			if len(fields) != 0 {
 				return fmt.Errorf("invalid usage: list-connections")
 			}
 
-			connNames := ctx.scope.GetConnectionNames()
-			if len(connNames) == 0 {
-				fmt.Fprintln(ctx.output, "No open connections")
+			openConnNames := ctx.scope.GetConnectionNames()
+			unopenedConnNames := ctx.scope.GetUnopenedConnectionNames()
+			if len(openConnNames) == 0 && len(unopenedConnNames) == 0 {
+				fmt.Fprintln(ctx.output, "No connections")
 				return nil
 			}
 
-			fmt.Fprintf(ctx.output, "Open connections (%d):\n", len(connNames))
-			for _, connName := range connNames {
-				fmt.Fprintf(ctx.output, "  %s\n", connName)
+			if len(openConnNames) > 0 {
+				fmt.Fprintf(ctx.output, "Open connections (%d):\n", len(openConnNames))
+				for _, connName := range openConnNames {
+					fmt.Fprintf(ctx.output, "  %s\n", connName)
+				}
+			}
+
+			if len(openConnNames) > 0 && len(unopenedConnNames) > 0 {
+				fmt.Fprint(ctx.output, "\n")
+			}
+
+			if len(unopenedConnNames) > 0 {
+				fmt.Fprintf(ctx.output, "Configured connections (%d, unopened):\n", len(unopenedConnNames))
+				for _, connName := range unopenedConnNames {
+					fmt.Fprintf(ctx.output, "  %s\n", connName)
+				}
 			}
 
 			return nil
@@ -81,79 +97,120 @@ func openCmd() CommandDesc {
 			name := fields[0]
 			connStr := fields[1]
 
-			driverName := ""
 			if strings.TrimSpace(driverOverride) != "" {
-				driverName = strings.ToLower(strings.TrimSpace(driverOverride))
-			} else if detectedDriverName, err := driverFromConnectionString(connStr); err != nil {
-				return err
-			} else {
-				driverName = detectedDriverName
+				driverOverride = strings.ToLower(strings.TrimSpace(driverOverride))
 			}
 
-			config := dawgs.Config{
-				ConnectionString: connStr,
-			}
-
-			openSuccess := false
-			switch driverName {
-			case pg.DriverName:
-				connPool, err := pg.NewPool(drivers.DatabaseConfiguration{
-					Connection: connStr,
-				})
-				if err != nil {
-					return fmt.Errorf("error opening connection pool: %w", err)
-				}
-				defer func() {
-					if !openSuccess {
-						connPool.Close()
-					}
-				}()
-
-				config.Pool = connPool
-			case neo4j.DriverName:
-				// No additional setup required for Neo4j before dawgs.Open.
-			default:
-				return fmt.Errorf("unsupported driver %q; expected one of: %s, %s", driverName, pg.DriverName, neo4j.DriverName)
-			}
-
-			querier, err := dawgs.Open(ctx, driverName, config)
+			_, err := openConnection(ctx, name, connStr, openConnectionOptions{
+				driverName:       driverOverride,
+				defaultGraphName: defaultGraphName,
+				initGraphOnFail:  initGraphOnFail,
+			})
 			if err != nil {
-				return fmt.Errorf("error opening %s database connection '%s': %w", driverName, connStr, err)
+				return err
 			}
-
-			defaultGraph := graph.Graph{Name: defaultGraphName}
-			if err := querier.SetDefaultGraph(ctx, defaultGraph); err != nil {
-				if !initGraphOnFail {
-					return fmt.Errorf("could not set default graph: %w", err)
-				}
-
-				graphSchema := graph.Schema{
-					Graphs:       []graph.Graph{defaultGraph},
-					DefaultGraph: defaultGraph,
-				}
-				if err := querier.AssertSchema(ctx, graphSchema); err != nil {
-					return fmt.Errorf("could not initialize graph schema: %w", err)
-				}
-			}
-
-			if existingConn, ok := ctx.scope.GetConnection(name); ok {
-				// Warn+close existing connection before overwriting it
-				ctx.output.Warnf("Discarding previous connection for '%s'", name)
-				if err := existingConn.Close(ctx); err != nil {
-					return fmt.Errorf("could not close previous connection '%s' for overwriting: %w", name, err)
-				}
-
-				// Wipe out handles and resources for this connection
-				ctx.scope.DropConnection(name)
-			}
-
-			fmt.Fprintf(ctx.output, "Opened %s connection '%s'\n", driverName, name)
-			ctx.scope.AddConnection(name, querier)
-			openSuccess = true
 
 			return nil
 		},
 	}
+}
+
+func openConnection(ctx *CommandContext, name string, connStr string, options openConnectionOptions) (string, error) {
+	querier, driverName, err := ctx.scope.openDatabase(ctx, connStr, options)
+	if err != nil {
+		return "", err
+	}
+	if existingConn, ok := ctx.scope.GetConnection(name); ok {
+		ctx.output.Warnf("Discarding previous connection for '%s'", name)
+		if err := existingConn.Close(ctx); err != nil {
+			_ = querier.Close(ctx)
+			return "", fmt.Errorf("could not close previous connection '%s' for overwriting: %w", name, err)
+		}
+		ctx.scope.DropConnection(name)
+	}
+
+	ctx.scope.AddConnection(name, querier, types.ConnectionConfig{
+		Driver:           driverName,
+		ConnectionString: connStr,
+	})
+	if !options.quiet {
+		fmt.Fprintf(ctx.output, "Opened %s connection '%s'\n", driverName, name)
+	}
+
+	return driverName, nil
+}
+
+func openDAWGSDatabase(ctx context.Context, connStr string, options openConnectionOptions) (graph.Database, string, error) {
+	driverName := strings.TrimSpace(options.driverName)
+	if driverName == "" {
+		detectedDriverName, err := driverFromConnectionString(connStr)
+		if err != nil {
+			return nil, "", err
+		}
+
+		driverName = detectedDriverName
+	}
+
+	if options.defaultGraphName == "" {
+		options.defaultGraphName = "default"
+	}
+
+	config := dawgs.Config{
+		ConnectionString: connStr,
+	}
+
+	poolOwnedByDriver := false
+	switch driverName {
+	case pg.DriverName:
+		connPool, err := pg.NewPool(drivers.DatabaseConfiguration{
+			Connection: connStr,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("error opening connection pool: %w", err)
+		}
+		defer func() {
+			if !poolOwnedByDriver {
+				connPool.Close()
+			}
+		}()
+
+		config.Pool = connPool
+	case neo4j.DriverName:
+		// No additional setup required for Neo4j before dawgs.Open.
+	default:
+		return nil, "", fmt.Errorf("unsupported driver %q; expected one of: %s, %s", driverName, pg.DriverName, neo4j.DriverName)
+	}
+
+	querier, err := dawgs.Open(ctx, driverName, config)
+	if err != nil {
+		return nil, "", fmt.Errorf("error opening %s database connection: %w", driverName, err)
+	}
+	poolOwnedByDriver = true
+
+	openSuccess := false
+	defer func() {
+		if !openSuccess {
+			_ = querier.Close(ctx)
+		}
+	}()
+
+	defaultGraph := graph.Graph{Name: options.defaultGraphName}
+	if err := querier.SetDefaultGraph(ctx, defaultGraph); err != nil {
+		if !options.initGraphOnFail {
+			return nil, "", fmt.Errorf("could not set default graph: %w", err)
+		}
+
+		graphSchema := graph.Schema{
+			Graphs:       []graph.Graph{defaultGraph},
+			DefaultGraph: defaultGraph,
+		}
+		if err := querier.AssertSchema(ctx, graphSchema); err != nil {
+			return nil, "", fmt.Errorf("could not initialize graph schema: %w", err)
+		}
+	}
+
+	openSuccess = true
+	return querier, driverName, nil
 }
 
 func driverFromConnectionString(connStr string) (string, error) {
@@ -197,9 +254,9 @@ func getPGDBKinds() CommandDesc {
 }
 
 func loadKindMap(ctx *CommandContext, connName string) (stubs.KindMap, error) {
-	conn, ok := ctx.scope.GetConnection(connName)
-	if !ok {
-		return nil, fmt.Errorf("unknown connection %s; did you `open` it?", connName)
+	conn, err := ctx.EnsureConnection(connName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Force a refresh from the database backend
