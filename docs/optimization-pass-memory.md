@@ -158,3 +158,23 @@ Broader benchmark suites and real-world query collections are deferred until aft
 Implement phases 1 through 6 first.
 
 That milestone establishes the PostgreSQL optimizer framework, test bar, predicate ownership, projection and path pruning, and late path materialization. It should improve the reported query shape without taking on endpoint-aware expansion, suffix semi-joins, schema statistics, or a full cost-based planner.
+
+## Quality Review Follow-Up Plan
+
+The first optimizer milestone introduced the PostgreSQL optimizer hook, predicate attachment diagnostics, projection pruning, and late path materialization. Before moving on to endpoint-aware expansion or pattern reordering, close the review gaps in this order:
+
+### Step 1: Preserve The Optional-Match Barrier
+
+Keep projection pruning and late path materialization scoped to plain `MATCH` translation until optional path semantics have dedicated coverage. `OPTIONAL MATCH` already acts as an optimization-region barrier in the analysis pass; translator-side lowering should respect the same boundary.
+
+### Step 2: Assert Path Semantics, Not Only SQL Shape
+
+Expand integration coverage for optimized path returns so tests assert path node order, relationship order, and path length for mixed fixed-hop and variable-length paths. Include `relationships(p)` on paths that are eligible for late materialization.
+
+### Step 3: Harden Direct Relationship References
+
+Add focused translation tests proving direct relationship references keep edge composites when used in returned values, predicates, relationship properties, `type(r)`, and endpoint functions such as `startNode(r)`.
+
+### Step 4: Document Performance Measurement Needs
+
+Keep the current shape tests as guardrails, but add an explicit measurement task for high-fanout ADCS-style data before expanding the optimizer into endpoint-aware expansion, suffix semi-joins, or deterministic reordering.
