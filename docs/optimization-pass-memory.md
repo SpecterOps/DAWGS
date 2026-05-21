@@ -250,3 +250,15 @@ Before implementing expand-into detection, capture the following for the motivat
 - Comparison with Neo4j result cardinality for the same fixture.
 
 Projection pruning and late path materialization currently live in PostgreSQL translator lowering. If later phases need richer rule-level ordering or barrier enforcement, promote these decisions into explicit optimizer rule metadata instead of adding more hidden translator-side state.
+
+## Gap Closure Completion Notes
+
+The gap-closure pass has been completed enough to return to the original phase sequence without broadening into Phase 10.
+
+- The benchmark harness includes the committed `adcs_fanout` dataset by default and has scenarios for `p1` alone, `p2` alone, and the combined `RETURN p1,p2` form.
+- ADCS path scenarios now record warm-up row count, distinct returned path-row count, and duplicate returned path-row count.
+- PostgreSQL benchmark runs can opt into `EXPLAIN (ANALYZE, BUFFERS)` capture with `-explain`; JSON output includes the translated SQL and plan text.
+- The small ADCS integration fixture now asserts exact returned path shape and row count. The larger fanout fixture remains a measurement fixture rather than an exact cardinality oracle.
+- Translation metadata reports optimizer rules, predicate attachments, and named lowerings, including `ExpansionSuffixPushdown`.
+- Phase 9 suffix coverage includes zero-hop expansions, fixed suffix chains, suffixes ending at already-bound nodes, inbound suffixes, and the ADCS root-to-domain suffix shape.
+- Directionless suffix pushdown remains deliberately unimplemented; those suffixes stay as normal translated pattern steps.

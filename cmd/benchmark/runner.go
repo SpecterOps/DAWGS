@@ -24,6 +24,18 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+type ExplainFunc func(ctx context.Context, tx graph.Transaction, cypher string) (*ExplainResult, error)
+
+type RunOptions struct {
+	Explain ExplainFunc
+}
+
+// ExplainResult captures PostgreSQL-specific plan diagnostics for a scenario.
+type ExplainResult struct {
+	SQL  string   `json:"sql"`
+	Plan []string `json:"plan"`
+}
+
 // Stats holds computed timing statistics for a scenario.
 type Stats struct {
 	Median time.Duration `json:"median"`
@@ -33,20 +45,23 @@ type Stats struct {
 
 // Result is one row in the report.
 type Result struct {
-	Section  string `json:"section"`
-	Dataset  string `json:"dataset"`
-	Label    string `json:"label"`
-	RowCount int64  `json:"row_count"`
-	Stats    Stats  `json:"stats"`
+	Section           string         `json:"section"`
+	Dataset           string         `json:"dataset"`
+	Label             string         `json:"label"`
+	RowCount          int64          `json:"row_count"`
+	DistinctRowCount  *int64         `json:"distinct_row_count,omitempty"`
+	DuplicateRowCount *int64         `json:"duplicate_row_count,omitempty"`
+	Explain           *ExplainResult `json:"explain,omitempty"`
+	Stats             Stats          `json:"stats"`
 }
 
 // runScenario executes a scenario N times and returns timing stats.
-func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int) (Result, error) {
+func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int, options RunOptions) (Result, error) {
 	// Warm-up: one untimed run.
-	var rowCount int64
+	var measurement Measurement
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		count, err := s.Query(tx)
-		rowCount = count
+		nextMeasurement, err := s.Query(tx)
+		measurement = nextMeasurement
 		return err
 	}); err != nil {
 		return Result{}, err
@@ -65,13 +80,27 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 		durations[i] = time.Since(start)
 	}
 
-	return Result{
-		Section:  s.Section,
-		Dataset:  s.Dataset,
-		Label:    s.Label,
-		RowCount: rowCount,
-		Stats:    computeStats(durations),
-	}, nil
+	result := Result{
+		Section:           s.Section,
+		Dataset:           s.Dataset,
+		Label:             s.Label,
+		RowCount:          measurement.RowCount,
+		DistinctRowCount:  measurement.DistinctRowCount,
+		DuplicateRowCount: measurement.DuplicateRowCount,
+		Stats:             computeStats(durations),
+	}
+
+	if options.Explain != nil && s.Cypher != "" {
+		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			explain, err := options.Explain(ctx, tx, s.Cypher)
+			result.Explain = explain
+			return err
+		}); err != nil {
+			return Result{}, err
+		}
+	}
+
+	return result, nil
 }
 
 func computeStats(durations []time.Duration) Stats {

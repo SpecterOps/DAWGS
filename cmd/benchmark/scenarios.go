@@ -18,17 +18,27 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
 )
+
+// Measurement captures the warm-up result shape for a benchmark scenario.
+type Measurement struct {
+	RowCount          int64
+	DistinctRowCount  *int64
+	DuplicateRowCount *int64
+}
 
 // Scenario defines a single benchmark query to run against a loaded dataset.
 type Scenario struct {
 	Section string // grouping key in the report (e.g. "Match Nodes")
 	Dataset string
 	Label   string // human-readable row label
-	Query   func(tx graph.Transaction) (int64, error)
+	Cypher  string
+	Query   func(tx graph.Transaction) (Measurement, error)
 }
 
 // defaultDatasets is the set of datasets committed to the repo.
@@ -56,8 +66,8 @@ func countEdges(tx graph.Transaction) (int64, error) {
 	return tx.Relationships().Count()
 }
 
-func cypherQuery(cypher string) func(tx graph.Transaction) (int64, error) {
-	return func(tx graph.Transaction) (int64, error) {
+func cypherQuery(cypher string) func(tx graph.Transaction) (Measurement, error) {
+	return func(tx graph.Transaction) (Measurement, error) {
 		result := tx.Query(cypher, nil)
 		defer result.Close()
 
@@ -66,8 +76,120 @@ func cypherQuery(cypher string) func(tx graph.Transaction) (int64, error) {
 			rowCount++
 		}
 
-		return rowCount, result.Error()
+		return Measurement{RowCount: rowCount}, result.Error()
 	}
+}
+
+func countQuery(query func(tx graph.Transaction) (int64, error)) func(tx graph.Transaction) (Measurement, error) {
+	return func(tx graph.Transaction) (Measurement, error) {
+		rowCount, err := query(tx)
+		if err != nil {
+			return Measurement{}, err
+		}
+
+		return Measurement{RowCount: rowCount}, nil
+	}
+}
+
+func cypherScenario(section, dataset, label, cypher string) Scenario {
+	return Scenario{
+		Section: section,
+		Dataset: dataset,
+		Label:   label,
+		Cypher:  cypher,
+		Query:   cypherQuery(cypher),
+	}
+}
+
+func cypherPathScenario(section, dataset, label, cypher string, pathColumns int) Scenario {
+	return Scenario{
+		Section: section,
+		Dataset: dataset,
+		Label:   label,
+		Cypher:  cypher,
+		Query:   cypherPathQuery(cypher, pathColumns),
+	}
+}
+
+func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) (Measurement, error) {
+	return func(tx graph.Transaction) (Measurement, error) {
+		result := tx.Query(cypher, nil)
+		defer result.Close()
+
+		var (
+			rowCount int64
+			seen     = map[string]struct{}{}
+		)
+
+		for result.Next() {
+			rowCount++
+
+			values := make([]graph.Path, pathColumns)
+			targets := make([]any, pathColumns)
+			for idx := range values {
+				targets[idx] = &values[idx]
+			}
+
+			if err := result.Scan(targets...); err != nil {
+				return Measurement{}, err
+			}
+
+			seen[pathRowKey(values)] = struct{}{}
+		}
+
+		if err := result.Error(); err != nil {
+			return Measurement{}, err
+		}
+
+		distinctRowCount := int64(len(seen))
+		duplicateRowCount := rowCount - distinctRowCount
+
+		return Measurement{
+			RowCount:          rowCount,
+			DistinctRowCount:  &distinctRowCount,
+			DuplicateRowCount: &duplicateRowCount,
+		}, nil
+	}
+}
+
+func pathRowKey(paths []graph.Path) string {
+	var builder strings.Builder
+
+	for pathIdx, path := range paths {
+		if pathIdx > 0 {
+			builder.WriteByte('|')
+		}
+
+		builder.WriteByte('n')
+		for _, node := range path.Nodes {
+			builder.WriteByte(':')
+			if node == nil {
+				builder.WriteString("nil")
+				continue
+			}
+
+			builder.WriteString(strconv.FormatUint(node.ID.Uint64(), 10))
+		}
+
+		builder.WriteString(";e")
+		for _, edge := range path.Edges {
+			builder.WriteByte(':')
+			if edge == nil {
+				builder.WriteString("nil")
+				continue
+			}
+
+			builder.WriteString(strconv.FormatUint(edge.ID.Uint64(), 10))
+			builder.WriteByte(',')
+			builder.WriteString(strconv.FormatUint(edge.StartID.Uint64(), 10))
+			builder.WriteByte(',')
+			builder.WriteString(strconv.FormatUint(edge.EndID.Uint64(), 10))
+			builder.WriteByte(',')
+			builder.WriteString(edge.Kind.String())
+		}
+	}
+
+	return builder.String()
 }
 
 // --- Base dataset scenarios (n1 -> n2 -> n3) ---
@@ -75,22 +197,22 @@ func cypherQuery(cypher string) func(tx graph.Transaction) (int64, error) {
 func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := "base"
 	return []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
-		{Section: "Shortest Paths", Dataset: ds, Label: "n1 -> n3", Query: cypherQuery(fmt.Sprintf(
+		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countQuery(countNodes)},
+		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countQuery(countEdges)},
+		cypherScenario("Shortest Paths", ds, "n1 -> n3", fmt.Sprintf(
 			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
 			idMap["n1"], idMap["n3"],
-		))},
-		{Section: "Traversal", Dataset: ds, Label: "n1", Query: cypherQuery(fmt.Sprintf(
+		)),
+		cypherScenario("Traversal", ds, "n1", fmt.Sprintf(
 			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
 			idMap["n1"],
-		))},
-		{Section: "Match Return", Dataset: ds, Label: "n1", Query: cypherQuery(fmt.Sprintf(
+		)),
+		cypherScenario("Match Return", ds, "n1", fmt.Sprintf(
 			"MATCH (s)-[]->(e) WHERE id(s) = %d RETURN e",
 			idMap["n1"],
-		))},
-		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind1", Query: cypherQuery("MATCH (n:NodeKind1) RETURN n")},
-		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind2", Query: cypherQuery("MATCH (n:NodeKind2) RETURN n")},
+		)),
+		cypherScenario("Filter By Kind", ds, "NodeKind1", "MATCH (n:NodeKind1) RETURN n"),
+		cypherScenario("Filter By Kind", ds, "NodeKind2", "MATCH (n:NodeKind2) RETURN n"),
 	}
 }
 
@@ -126,9 +248,9 @@ AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
 `, adcsFanoutObjectID)
 
 	return []Scenario{
-		{Section: "ADCS Fanout", Dataset: ds, Label: "p1 only", Query: cypherQuery(p1)},
-		{Section: "ADCS Fanout", Dataset: ds, Label: "p2 only", Query: cypherQuery(p2)},
-		{Section: "ADCS Fanout", Dataset: ds, Label: "combined", Query: cypherQuery(combinedMatch + "RETURN p1,p2")},
+		cypherPathScenario("ADCS Fanout", ds, "p1 only", p1, 1),
+		cypherPathScenario("ADCS Fanout", ds, "p2 only", p2, 1),
+		cypherPathScenario("ADCS Fanout", ds, "combined", combinedMatch+"RETURN p1,p2", 2),
 	}
 }
 
@@ -138,59 +260,54 @@ func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := "local/phantom"
 
 	scenarios := []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countNodes},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countEdges},
+		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countQuery(countNodes)},
+		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countQuery(countEdges)},
 	}
 
 	for _, kind := range []string{"User", "Group", "Computer"} {
 		k := kind
-		scenarios = append(scenarios, Scenario{
-			Section: "Filter By Kind",
-			Dataset: ds,
-			Label:   k,
-			Query:   cypherQuery(fmt.Sprintf("MATCH (n:%s) RETURN n", k)),
-		})
+		scenarios = append(scenarios, cypherScenario("Filter By Kind", ds, k, fmt.Sprintf("MATCH (n:%s) RETURN n", k)))
 	}
 
 	if _, ok := idMap["41"]; ok {
 		for _, depth := range []int{1, 2, 3} {
 			d := depth
-			scenarios = append(scenarios, Scenario{
-				Section: "Traversal Depth",
-				Dataset: ds,
-				Label:   fmt.Sprintf("depth %d", d),
-				Query: cypherQuery(fmt.Sprintf(
+			scenarios = append(scenarios, cypherScenario(
+				"Traversal Depth",
+				ds,
+				fmt.Sprintf("depth %d", d),
+				fmt.Sprintf(
 					"MATCH (s)-[*1..%d]->(e) WHERE id(s) = %d RETURN e",
 					d, idMap["41"],
-				)),
-			})
+				),
+			))
 		}
 
 		for _, ek := range []string{"MemberOf", "GenericAll", "HasSession"} {
 			edgeKind := ek
-			scenarios = append(scenarios, Scenario{
-				Section: "Edge Kind Traversal",
-				Dataset: ds,
-				Label:   edgeKind,
-				Query: cypherQuery(fmt.Sprintf(
+			scenarios = append(scenarios, cypherScenario(
+				"Edge Kind Traversal",
+				ds,
+				edgeKind,
+				fmt.Sprintf(
 					"MATCH (s)-[:%s*1..]->(e) WHERE id(s) = %d RETURN e",
 					edgeKind, idMap["41"],
-				)),
-			})
+				),
+			))
 		}
 	}
 
 	if _, ok := idMap["41"]; ok {
 		if _, ok := idMap["587"]; ok {
-			scenarios = append(scenarios, Scenario{
-				Section: "Shortest Paths",
-				Dataset: ds,
-				Label:   "41 -> 587",
-				Query: cypherQuery(fmt.Sprintf(
+			scenarios = append(scenarios, cypherScenario(
+				"Shortest Paths",
+				ds,
+				"41 -> 587",
+				fmt.Sprintf(
 					"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
 					idMap["41"], idMap["587"],
-				)),
-			})
+				),
+			))
 		}
 	}
 

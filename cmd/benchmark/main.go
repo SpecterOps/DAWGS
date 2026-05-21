@@ -43,6 +43,7 @@ func main() {
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
 		output       = flag.String("output", "", "markdown output file (default: stdout)")
 		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
+		explain      = flag.Bool("explain", false, "capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS) for Cypher scenarios")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
@@ -110,6 +111,19 @@ func main() {
 		fatal("failed to assert schema: %v", err)
 	}
 
+	var runOptions RunOptions
+	if *explain {
+		if *driver != pg.DriverName {
+			fmt.Fprintf(os.Stderr, "  explain capture is only supported for pg; continuing without plans\n")
+		} else if pgDB, ok := db.(*pg.Driver); !ok {
+			fmt.Fprintf(os.Stderr, "  explain capture unavailable for %T; continuing without plans\n", db)
+		} else if defaultGraph, hasDefaultGraph := pgDB.DefaultGraph(); !hasDefaultGraph {
+			fatal("failed to resolve default graph for explain capture")
+		} else {
+			runOptions.Explain = newPostgresExplainer(pgDB.KindMapper(), defaultGraph.ID)
+		}
+	}
+
 	report := Report{
 		Driver:     *driver,
 		GitRef:     gitRef(),
@@ -140,19 +154,22 @@ func main() {
 
 		// Run scenarios
 		for _, s := range scenariosForDataset(ds, idMap) {
-			result, err := runScenario(ctx, db, s, *iterations)
+			result, err := runScenario(ctx, db, s, *iterations, runOptions)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  %s/%s failed: %v\n", s.Section, s.Label, err)
 				continue
 			}
 
 			report.Results = append(report.Results, result)
-			fmt.Fprintf(os.Stderr, "  %s/%s: rows=%d median=%s p95=%s max=%s\n",
+			fmt.Fprintf(os.Stderr, "  %s/%s: rows=%d distinct=%s duplicates=%s median=%s p95=%s max=%s explain=%s\n",
 				s.Section, s.Label,
 				result.RowCount,
+				fmtOptionalInt64(result.DistinctRowCount),
+				fmtOptionalInt64(result.DuplicateRowCount),
 				fmtDuration(result.Stats.Median),
 				fmtDuration(result.Stats.P95),
 				fmtDuration(result.Stats.Max),
+				fmtExplainStatus(result.Explain),
 			)
 		}
 	}

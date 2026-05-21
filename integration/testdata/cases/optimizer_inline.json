@@ -32,6 +32,16 @@
       },
       "assert": {
         "keys": ["p1", "p2"],
+        "row_count": 1,
+        "path_lengths": [4, 5],
+        "path_node_ids": [
+          ["n", "p1-mid", "ca", "store", "domain"],
+          ["n", "p2-mid", "template", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ],
         "contains_node_with_props": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"},
         "contains_edge": {"start": "template", "end": "ca", "kind": "PublishedTo"}
       }

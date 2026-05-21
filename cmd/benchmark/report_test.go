@@ -24,16 +24,25 @@ import (
 )
 
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
+	distinctRows := int64(2)
+	duplicateRows := int64(0)
+
 	report := Report{
 		Driver:     "pg",
 		GitRef:     "abc123",
 		Date:       "2026-05-14",
 		Iterations: 3,
 		Results: []Result{{
-			Section:  "Traversal",
-			Dataset:  "base",
-			Label:    "depth 1",
-			RowCount: 2,
+			Section:           "Traversal",
+			Dataset:           "base",
+			Label:             "depth 1",
+			RowCount:          2,
+			DistinctRowCount:  &distinctRows,
+			DuplicateRowCount: &duplicateRows,
+			Explain: &ExplainResult{
+				SQL:  "select 1;",
+				Plan: []string{"Result  (actual rows=1 loops=1)"},
+			},
 			Stats: Stats{
 				Median: 10 * time.Millisecond,
 				P95:    20 * time.Millisecond,
@@ -53,10 +62,55 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		`"git_ref": "abc123"`,
 		`"median": 10000000`,
 		`"row_count": 2`,
+		`"distinct_row_count": 2`,
+		`"duplicate_row_count": 0`,
+		`"sql": "select 1;"`,
 		`"section": "Traversal"`,
 	} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("JSON report missing %q:\n%s", expected, text)
+		}
+	}
+}
+
+func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
+	distinctRows := int64(2)
+	duplicateRows := int64(0)
+
+	report := Report{
+		Driver:     "pg",
+		GitRef:     "abc123",
+		Date:       "2026-05-14",
+		Iterations: 3,
+		Results: []Result{{
+			Section:           "ADCS Fanout",
+			Dataset:           "adcs_fanout",
+			Label:             "combined",
+			RowCount:          2,
+			DistinctRowCount:  &distinctRows,
+			DuplicateRowCount: &duplicateRows,
+			Explain:           &ExplainResult{Plan: []string{"Result"}},
+			Stats: Stats{
+				Median: 10 * time.Millisecond,
+				P95:    20 * time.Millisecond,
+				Max:    30 * time.Millisecond,
+			},
+		}},
+	}
+
+	var output bytes.Buffer
+	if err := writeMarkdown(&output, report); err != nil {
+		t.Fatalf("write markdown: %v", err)
+	}
+
+	text := output.String()
+	for _, expected := range []string{
+		"Distinct Rows",
+		"Duplicate Rows",
+		"| ADCS Fanout / combined | adcs_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("markdown report missing %q:\n%s", expected, text)
 		}
 	}
 }

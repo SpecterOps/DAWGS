@@ -264,6 +264,22 @@ RETURN p
 	require.Contains(t, normalizedQuery, "e2.end_id = (s0.n0).id")
 }
 
+func TestOptimizerSafetyExpansionTerminalPushdownForBoundDomainSuffix(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH (d:Domain {name: 'target'})
+MATCH p = (ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(root:RootCA)-[:RootCAFor]->(d)
+RETURN p
+`)
+
+	require.Contains(t, normalizedQuery, "exists (select 1 from edge e1")
+	require.Contains(t, normalizedQuery, "e1.kind_id = any")
+	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>)")
+	require.Contains(t, normalizedQuery, "n2.id = e1.start_id")
+	require.Contains(t, normalizedQuery, "e1.end_id = (s0.n0).id")
+}
+
 func TestOptimizerSafetyExpansionTerminalPushdownForInboundFixedSuffix(t *testing.T) {
 	t.Parallel()
 
