@@ -16,7 +16,7 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 				return err
 			}
 		} else {
-			if err := s.translateTraversalPatternPart(part, false); err != nil {
+			if err := s.translateTraversalPatternPart(part, false, !match.Optional); err != nil {
 				return err
 			}
 		}

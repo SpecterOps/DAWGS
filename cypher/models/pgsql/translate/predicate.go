@@ -123,7 +123,7 @@ func (s *Translator) buildPatternPredicates() error {
 			}
 		}
 
-		if err := s.translateTraversalPatternPart(patternPart, true); err != nil {
+		if err := s.translateTraversalPatternPart(patternPart, true, true); err != nil {
 			return err
 		}
 

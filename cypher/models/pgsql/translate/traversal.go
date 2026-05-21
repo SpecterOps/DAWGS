@@ -503,7 +503,7 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 	}, nil
 }
 
-func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedProjection bool) error {
+func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedProjection bool, allowProjectionPruning bool) error {
 	var scopeSnapshot *Scope
 
 	if isolatedProjection {
@@ -519,12 +519,12 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 
 		if traversalStep.Expansion != nil {
-			if err := s.translateTraversalPatternPartWithExpansion(part, idx == 0, traversalStep); err != nil {
+			if err := s.translateTraversalPatternPartWithExpansion(part, idx == 0, traversalStep, allowProjectionPruning); err != nil {
 				return err
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {
 			return fmt.Errorf("expected shortest path search to utilize variable expansion: ()-[*..]->()")
-		} else if err := s.translateTraversalPatternPartWithoutExpansion(part, idx, traversalStep); err != nil {
+		} else if err := s.translateTraversalPatternPartWithoutExpansion(part, idx, traversalStep, allowProjectionPruning); err != nil {
 			return err
 		}
 	}
@@ -617,7 +617,7 @@ func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart
 	}
 }
 
-func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *PatternPart, stepIndex int, traversalStep *TraversalStep) error {
+func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *PatternPart, stepIndex int, traversalStep *TraversalStep, allowProjectionPruning bool) error {
 	isFirstTraversalStep := stepIndex == 0
 
 	if constraints, err := consumePatternConstraints(isFirstTraversalStep, nonRecursivePattern, traversalStep, s.treeTranslator); err != nil {
@@ -694,7 +694,9 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		}
 	}
 
-	pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep)
+	if allowProjectionPruning {
+		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep)
+	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {
 		return err

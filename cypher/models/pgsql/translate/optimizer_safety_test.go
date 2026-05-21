@@ -95,3 +95,25 @@ RETURN p, r
 	require.NotContains(t, normalizedQuery, "e0.id as e0")
 	require.NotContains(t, normalizedQuery, "array [s0.e0]::int8[]")
 }
+
+func TestOptimizerSafetyOptionalMatchPathStaysComposite(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+MATCH (n:Group)
+OPTIONAL MATCH p = (n)-[:MemberOf]->(m:Group)
+RETURN n, p
+`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "::edgecomposite[]")
+	require.NotContains(t, normalizedQuery, "::int8[]")
+}
