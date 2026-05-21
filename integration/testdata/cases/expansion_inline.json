@@ -49,6 +49,24 @@
       "assert": {"node_ids": ["leaf"]}
     },
     {
+      "name": "bind expansion path through only terminals that satisfy a fixed suffix",
+      "cypher": "match p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) where src.name = 'terminal-pushdown-src' return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "terminal-pushdown-src"}},
+          {"id": "good-mid", "kinds": ["NodeKind1"]},
+          {"id": "dead-mid", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "good-mid", "kind": "EdgeKind1"},
+          {"start_id": "src", "end_id": "dead-mid", "kind": "EdgeKind1"},
+          {"start_id": "good-mid", "end_id": "dst", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"path_lengths": [2], "path_node_ids": [["src", "good-mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
+    },
+    {
       "name": "fixed step followed by a bounded variable-length expansion",
       "cypher": "match (n)-[]->(e:NodeKind1)-[*2..3]->(l) where n.name = 'start' return l",
       "fixture": {

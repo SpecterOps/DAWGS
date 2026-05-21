@@ -601,6 +601,10 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 	}
 
+	if err := applyExpansionSuffixPushdown(part); err != nil {
+		return err
+	}
+
 	if isolatedProjection {
 		s.scope = scopeSnapshot
 	}

@@ -215,3 +215,26 @@ RETURN p
 	require.Contains(t, normalizedQuery, "(s1.n1).id = e0.start_id")
 	require.Contains(t, normalizedQuery, "(s1.n0).id = e0.end_id")
 }
+
+func TestOptimizerSafetyExpansionTerminalPushdownForFixedSuffix(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+RETURN p
+`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "exists (select 1 from edge e1 join node n2")
+	require.Contains(t, normalizedQuery, "n1.id = e1.start_id")
+	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [4]::int2[])")
+	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
+}

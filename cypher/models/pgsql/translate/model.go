@@ -358,6 +358,14 @@ func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, local
 	walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
 		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
 			switch typedNode := node.(type) {
+			case pgsql.ExistsExpression:
+				if !subqueryReferencesOnlyLocalIdentifiers(typedNode.Subquery, localScope) {
+					isLocal = false
+					handler.SetDone()
+				} else {
+					handler.Consume()
+				}
+
 			case pgsql.CompoundIdentifier:
 				if len(typedNode) > 0 && !localScope.Contains(typedNode[0]) {
 					isLocal = false
@@ -382,6 +390,105 @@ func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, local
 	))
 
 	return isLocal
+}
+
+func subqueryReferencesOnlyLocalIdentifiers(subquery pgsql.Subquery, localScope *pgsql.IdentifierSet) bool {
+	return queryReferencesOnlyLocalIdentifiers(subquery.Query, localScope)
+}
+
+func queryReferencesOnlyLocalIdentifiers(query pgsql.Query, localScope *pgsql.IdentifierSet) bool {
+	if query.CommonTableExpressions != nil {
+		return false
+	}
+
+	selectBody, isSelect := query.Body.(pgsql.Select)
+	if !isSelect {
+		return false
+	}
+
+	if !selectReferencesOnlyLocalIdentifiers(selectBody, localScope) {
+		return false
+	}
+
+	for _, orderBy := range query.OrderBy {
+		if orderBy != nil && !expressionReferencesOnlyLocalIdentifiers(orderBy.Expression, localScope) {
+			return false
+		}
+	}
+
+	return (query.Offset == nil || expressionReferencesOnlyLocalIdentifiers(query.Offset, localScope)) &&
+		(query.Limit == nil || expressionReferencesOnlyLocalIdentifiers(query.Limit, localScope))
+}
+
+func addFromClauseBindings(localScope *pgsql.IdentifierSet, fromClauses []pgsql.FromClause) {
+	for _, fromClause := range fromClauses {
+		addFromExpressionBinding(localScope, fromClause.Source)
+
+		for _, join := range fromClause.Joins {
+			addFromExpressionBinding(localScope, join.Table)
+		}
+	}
+}
+
+func addFromExpressionBinding(localScope *pgsql.IdentifierSet, expression pgsql.Expression) {
+	switch typedExpression := expression.(type) {
+	case pgsql.TableReference:
+		if typedExpression.Binding.Set {
+			localScope.Add(typedExpression.Binding.Value)
+		}
+
+	case pgsql.LateralSubquery:
+		if typedExpression.Binding.Set {
+			localScope.Add(typedExpression.Binding.Value)
+		}
+	}
+}
+
+func selectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *pgsql.IdentifierSet) bool {
+	scopedIdentifiers := localScope.Copy()
+	addFromClauseBindings(scopedIdentifiers, selectBody.From)
+
+	for _, projection := range selectBody.Projection {
+		if !expressionReferencesOnlyLocalIdentifiers(projection, scopedIdentifiers) {
+			return false
+		}
+	}
+
+	for _, fromClause := range selectBody.From {
+		if !fromExpressionReferencesOnlyLocalIdentifiers(fromClause.Source) {
+			return false
+		}
+
+		for _, join := range fromClause.Joins {
+			if !fromExpressionReferencesOnlyLocalIdentifiers(join.Table) {
+				return false
+			}
+
+			if join.JoinOperator.Constraint != nil &&
+				!expressionReferencesOnlyLocalIdentifiers(join.JoinOperator.Constraint, scopedIdentifiers) {
+				return false
+			}
+		}
+	}
+
+	for _, groupByExpression := range selectBody.GroupBy {
+		if !expressionReferencesOnlyLocalIdentifiers(groupByExpression, scopedIdentifiers) {
+			return false
+		}
+	}
+
+	return (selectBody.Where == nil || expressionReferencesOnlyLocalIdentifiers(selectBody.Where, scopedIdentifiers)) &&
+		(selectBody.Having == nil || expressionReferencesOnlyLocalIdentifiers(selectBody.Having, scopedIdentifiers))
+}
+
+func fromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression) bool {
+	switch expression.(type) {
+	case pgsql.TableReference:
+		return true
+
+	default:
+		return false
+	}
 }
 
 func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {

@@ -8,6 +8,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
+	"github.com/specterops/dawgs/graph"
 )
 
 const translateDefaultMaxTraversalDepth int64 = 15
@@ -2283,6 +2284,103 @@ func expansionTerminalSatisfactionLocality(traversalStep *TraversalStep) (pgsql.
 			traversalStep.RightNode.Identifier,
 		),
 	)
+}
+
+func applyExpansionSuffixPushdown(part *PatternPart) error {
+	for idx := 0; idx+1 < len(part.TraversalSteps); idx++ {
+		var (
+			currentStep = part.TraversalSteps[idx]
+			nextStep    = part.TraversalSteps[idx+1]
+		)
+
+		if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, nextStep); satisfied {
+			currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
+				currentStep.Expansion.TerminalNodeConstraints,
+				suffixSatisfaction,
+			)
+
+			if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
+				return err
+			} else {
+				currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
+			}
+		}
+	}
+
+	return nil
+}
+
+func expansionSuffixTerminalSatisfaction(currentStep, nextStep *TraversalStep) (pgsql.Expression, bool) {
+	if currentStep == nil ||
+		currentStep.Expansion == nil ||
+		currentStep.RightNode == nil ||
+		nextStep == nil ||
+		nextStep.Expansion != nil ||
+		nextStep.LeftNode == nil ||
+		nextStep.Edge == nil ||
+		nextStep.RightNode == nil ||
+		nextStep.RightNodeBound ||
+		nextStep.Direction == graph.DirectionBoth ||
+		currentStep.RightNode.Identifier != nextStep.LeftNode.Identifier {
+		return nil, false
+	}
+
+	var edgeConstraints pgsql.Expression
+	if nextStep.EdgeConstraints != nil {
+		edgeConstraints = nextStep.EdgeConstraints.Expression
+	}
+
+	localScope := pgsql.AsIdentifierSet(
+		currentStep.RightNode.Identifier,
+		nextStep.Edge.Identifier,
+		nextStep.RightNode.Identifier,
+	)
+
+	edgeLocal, edgeExternal := partitionConstraintByLocality(edgeConstraints, localScope)
+	if edgeExternal != nil {
+		return nil, false
+	}
+
+	rightNodeLocal, rightNodeExternal := partitionConstraintByLocality(nextStep.RightNodeConstraints, localScope)
+	if rightNodeExternal != nil {
+		return nil, false
+	}
+
+	terminalJoin, err := leftNodeConstraint(
+		nextStep.Edge.Identifier,
+		currentStep.RightNode.Identifier,
+		nextStep.Direction,
+	)
+	if err != nil {
+		return nil, false
+	}
+
+	return pgsql.ExistsExpression{
+		Subquery: pgsql.Subquery{
+			Query: pgsql.Query{
+				Body: pgsql.Select{
+					Projection: pgsql.Projection{pgd.IntLiteral(1)},
+					From: []pgsql.FromClause{{
+						Source: expansionEdgeTableReference(nextStep.Edge.Identifier),
+						Joins: []pgsql.Join{{
+							Table: expansionNodeTableReference(nextStep.RightNode.Identifier),
+							JoinOperator: pgsql.JoinOperator{
+								JoinType: pgsql.JoinTypeInner,
+								Constraint: pgsql.OptionalAnd(
+									rightNodeLocal,
+									nextStep.RightNodeJoinCondition,
+								),
+							},
+						}},
+					}},
+					Where: pgsql.OptionalAnd(
+						terminalJoin,
+						edgeLocal,
+					),
+				},
+			},
+		},
+	}, true
 }
 
 func expansionLocalTerminalSatisfactionProjection(traversalStep *TraversalStep) (pgsql.SelectItem, error) {
