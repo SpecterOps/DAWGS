@@ -81,7 +81,7 @@ func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
 		plan.Analysis = Analyze(plan.Query)
 	}
 
-	if loweringPlan, err := BuildLoweringPlan(plan.Query, plan.Analysis, plan.PredicateAttachments); err != nil {
+	if loweringPlan, err := BuildLoweringPlan(plan.Query, plan.PredicateAttachments); err != nil {
 		return Plan{}, err
 	} else {
 		plan.LoweringPlan = loweringPlan

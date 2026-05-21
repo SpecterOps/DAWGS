@@ -11,7 +11,7 @@ type sourceTraversalStep struct {
 	RightNode    *cypher.NodePattern
 }
 
-func BuildLoweringPlan(query *cypher.RegularQuery, _ Analysis, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
+func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
 	if query == nil || query.SingleQuery == nil {
 		return LoweringPlan{}, nil
 	}

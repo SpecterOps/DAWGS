@@ -7,6 +7,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
 	"github.com/specterops/dawgs/graph"
 )
@@ -2295,23 +2296,33 @@ func applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
 			suffixSteps = part.TraversalSteps[idx+1:]
 		)
 
-		if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
-			currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
-				currentStep.Expansion.TerminalNodeConstraints,
-				suffixSatisfaction,
-			)
-
-			if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
-				return applied, err
-			} else {
-				currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
-			}
-
+		if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
+			return applied, err
+		} else if candidateApplied {
 			applied++
 		}
 	}
 
 	return applied, nil
+}
+
+func applyExpansionSuffixPushdownCandidate(currentStep *TraversalStep, suffixSteps []*TraversalStep) (bool, error) {
+	if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
+		currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
+			currentStep.Expansion.TerminalNodeConstraints,
+			suffixSatisfaction,
+		)
+
+		if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
+			return false, err
+		} else {
+			currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func suffixEdgeLeftEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
@@ -2654,8 +2665,10 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	traversalStep.Frame.Export(expansionModel.PathBinding.Identifier)
 	if allowProjectionPruning {
 		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
-		allowFallback := !s.hasOptimizationPlan || !part.HasTarget
-		pruneExpansionStepProjectionExports(s.query.CurrentPart(), part, traversalStep, decision, hasDecision, allowFallback)
+		allowFallback := !hasDecision
+		if pruneExpansionStepProjectionExports(s.query.CurrentPart(), part, traversalStep, decision, hasDecision, allowFallback) {
+			s.recordLowering(optimize.LoweringProjectionPruning)
+		}
 	}
 
 	// Push a new frame that contains currently projected scope from the expansion recursive CTE

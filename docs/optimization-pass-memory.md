@@ -259,7 +259,7 @@ The gap-closure pass has been completed enough to return to the original phase s
 - ADCS path scenarios now record warm-up row count, distinct returned path-row count, and duplicate returned path-row count.
 - PostgreSQL benchmark runs can opt into `EXPLAIN (ANALYZE, BUFFERS)` capture with `-explain`; JSON output includes the translated SQL and plan text.
 - The small ADCS integration fixture now asserts exact returned path shape and row count. The larger fanout fixture remains a measurement fixture rather than an exact cardinality oracle.
-- Translation metadata reports optimizer rules, predicate attachments, and named lowerings, including `ExpansionSuffixPushdown`.
+- Translation metadata reports optimizer rules, predicate attachments, planned lowerings, and applied lowerings, including `ExpansionSuffixPushdown`.
 - Phase 9 suffix coverage includes zero-hop expansions, fixed suffix chains, suffixes ending at already-bound nodes, inbound suffixes, and the ADCS root-to-domain suffix shape.
 - Directionless suffix pushdown remains deliberately unimplemented; those suffixes stay as normal translated pattern steps.
 
@@ -277,4 +277,4 @@ Phase 10 starts by making local measurements repeatable for the optimizer rules 
 
 The translator now consumes optimizer-owned lowering metadata for projection pruning, late path materialization, fixed-hop expand-into detection, expansion suffix pushdown, and predicate placement. PostgreSQL SQL construction remains in the translator, but rule ownership and benchmark-visible diagnostics live in the optimizer lowering plan.
 
-Translator-local eligibility checks remain only as conservative fallbacks for untargeted internal patterns. Benchmark JSON includes both named lowerings and the structured lowering plan so future reviews can assert the optimizer decision that caused a SQL shape change.
+Translator-local eligibility checks remain as conservative fallbacks for traversal steps that do not have an optimizer decision. Benchmark JSON includes planned lowerings, applied lowerings, and the structured lowering plan so future reviews can distinguish optimizer intent from SQL-shape changes that actually happened.

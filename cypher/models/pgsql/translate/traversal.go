@@ -606,7 +606,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 	if applied, err := s.applyExpansionSuffixPushdown(part); err != nil {
 		return err
 	} else if applied > 0 {
-		s.recordLowering("ExpansionSuffixPushdown")
+		s.recordLowering(optimize.LoweringExpansionSuffixPushdown)
 	}
 
 	if isolatedProjection {
@@ -624,25 +624,33 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 	var applied int
 	for stepIndex := range part.TraversalSteps {
 		target := part.Target.TraversalStep(stepIndex)
-		for _, decision := range s.suffixPushdownDecisions[target] {
+		decisions := s.suffixPushdownDecisions[target]
+		if len(decisions) == 0 {
+			if stepIndex+1 >= len(part.TraversalSteps) {
+				continue
+			}
+
+			currentStep := part.TraversalSteps[stepIndex]
+			suffixSteps := part.TraversalSteps[stepIndex+1:]
+			if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
+				return applied, err
+			} else if candidateApplied {
+				applied++
+			}
+
+			continue
+		}
+
+		for _, decision := range decisions {
 			if decision.SuffixLength <= 0 || stepIndex+decision.SuffixLength >= len(part.TraversalSteps) {
 				continue
 			}
 
 			currentStep := part.TraversalSteps[stepIndex]
 			suffixSteps := part.TraversalSteps[stepIndex+1 : stepIndex+1+decision.SuffixLength]
-			if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
-				currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
-					currentStep.Expansion.TerminalNodeConstraints,
-					suffixSatisfaction,
-				)
-
-				if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
-					return applied, err
-				} else {
-					currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
-				}
-
+			if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
+				return applied, err
+			} else if candidateApplied {
 				applied++
 			}
 		}
@@ -763,31 +771,43 @@ func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepI
 	return false
 }
 
-func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) {
+func unexportFrameBinding(frame *Frame, identifier pgsql.Identifier) bool {
+	if frame == nil {
+		return false
+	}
+
+	exported := frame.Exported.Contains(identifier)
+	frame.Unexport(identifier)
+	return exported
+}
+
+func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) bool {
+	var applied bool
+
 	if hasDecision {
 		if traversalStep.LeftNode != nil && !traversalStep.LeftNodeBound && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.LeftNode, decision) {
-			traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.LeftNode.Identifier) || applied
 		}
 
 		if traversalStep.Edge != nil && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.Edge, decision) {
-			traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Edge.Identifier) || applied
 		}
 
 		if traversalStep.RightNode != nil && !traversalStep.RightNodeBound && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.RightNode, decision) {
-			traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.RightNode.Identifier) || applied
 		}
 
-		return
+		return applied
 	}
 
 	if !allowFallback {
-		return
+		return false
 	}
 
 	// Bound endpoints already exist in an outer frame. Only unexport unbound
 	// values that later clauses and continuation steps cannot observe.
-	if !traversalStep.LeftNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.LeftNode) {
-		traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
+	if traversalStep.LeftNode != nil && !traversalStep.LeftNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.LeftNode) {
+		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.LeftNode.Identifier) || applied
 	}
 
 	if traversalStep.Edge != nil &&
@@ -795,36 +815,40 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 		!queryPart.ReferencesBinding(traversalStep.Edge) &&
 		patternBindingDependsOn(queryPart, part, traversalStep.Edge) {
 		traversalStep.Edge.DataType = pgsql.PathEdge
+		applied = true
 	}
 
-	if !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.Edge) {
-		traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+	if traversalStep.Edge != nil && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.Edge) {
+		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Edge.Identifier) || applied
 	}
 
-	if !traversalStep.RightNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.RightNode) {
-		traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
+	if traversalStep.RightNode != nil && !traversalStep.RightNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.RightNode) {
+		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.RightNode.Identifier) || applied
 	}
+
+	return applied
 }
 
-func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) {
+func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) bool {
 	if traversalStep == nil || traversalStep.Expansion == nil {
-		return
+		return false
 	}
 
+	var applied bool
 	if hasDecision {
 		if traversalStep.Edge != nil && !projectionPruningDecisionReferencesBinding(decision, traversalStep.Edge) {
-			traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Edge.Identifier) || applied
 		}
 
 		if traversalStep.Expansion.PathBinding != nil && !projectionPruningDecisionPatternDependsOn(part, traversalStep.Expansion.PathBinding, decision) {
-			traversalStep.Frame.Unexport(traversalStep.Expansion.PathBinding.Identifier)
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Expansion.PathBinding.Identifier) || applied
 		}
 
-		return
+		return applied
 	}
 
 	if !allowFallback {
-		return
+		return false
 	}
 
 	// Variable-length relationship bindings materialize to edge-composite
@@ -832,13 +856,15 @@ func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart
 	// path ID array, so keep the edge array only when the relationship binding
 	// itself is observable.
 	if traversalStep.Edge != nil && !queryPart.ReferencesBinding(traversalStep.Edge) {
-		traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Edge.Identifier) || applied
 	}
 
 	pathBinding := traversalStep.Expansion.PathBinding
 	if pathBinding != nil && !patternBindingDependsOn(queryPart, part, pathBinding) {
-		traversalStep.Frame.Unexport(pathBinding.Identifier)
+		applied = unexportFrameBinding(traversalStep.Frame, pathBinding.Identifier) || applied
 	}
+
+	return applied
 }
 
 func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *PatternPart, stepIndex int, traversalStep *TraversalStep, allowProjectionPruning bool) error {
@@ -923,11 +949,14 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 			traversalStep.Edge.DataType == pgsql.EdgeComposite &&
 			s.hasLatePathMaterialization(part, stepIndex, optimize.LatePathMaterializationPathEdgeID) {
 			traversalStep.Edge.DataType = pgsql.PathEdge
+			s.recordLowering(optimize.LoweringLatePathMaterialization)
 		}
 
 		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
-		allowFallback := !s.hasOptimizationPlan || !part.HasTarget
-		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision, allowFallback)
+		allowFallback := !hasDecision
+		if pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision, allowFallback) {
+			s.recordLowering(optimize.LoweringProjectionPruning)
+		}
 	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {

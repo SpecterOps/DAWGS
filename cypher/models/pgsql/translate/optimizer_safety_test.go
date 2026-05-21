@@ -77,6 +77,26 @@ func requireOptimizationLowering(t *testing.T, summary OptimizationSummary, name
 	require.Failf(t, "missing optimization lowering", "expected lowering %q in %#v", name, summary.Lowerings)
 }
 
+func requireNoOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
+	t.Helper()
+
+	for _, lowering := range summary.Lowerings {
+		require.NotEqualf(t, name, lowering.Name, "unexpected applied lowering %q in %#v", name, summary.Lowerings)
+	}
+}
+
+func requirePlannedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
+	t.Helper()
+
+	for _, lowering := range summary.PlannedLowerings {
+		if lowering.Name == name {
+			return
+		}
+	}
+
+	require.Failf(t, "missing planned optimization lowering", "expected planned lowering %q in %#v", name, summary.PlannedLowerings)
+}
+
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 	t.Helper()
 
@@ -198,7 +218,8 @@ RETURN p
 	require.NotContains(t, normalizedQuery, "join node")
 	require.NotNil(t, translation.Optimization.LoweringPlan)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ExpandInto)
-	requireOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
+	requireNoOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
 }
 
 func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
@@ -254,10 +275,13 @@ RETURN p
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.LatePathMaterialization)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ExpansionSuffixPushdown)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.PredicatePlacement)
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 	requireOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
-	requireOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
 	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
-	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
+	requireNoOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 }
 
 func TestOptimizerSafetyExpansionTerminalPushdownForZeroDepthExpansion(t *testing.T) {

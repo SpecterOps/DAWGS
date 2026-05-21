@@ -30,7 +30,6 @@ type Translator struct {
 	scope          *Scope
 	unwindTargets  map[*cypher.Variable]struct{}
 
-	hasOptimizationPlan        bool
 	patternTargets             map[*cypher.PatternPart]optimize.PatternTarget
 	projectionPruningDecisions map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
 	latePathDecisions          map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
@@ -68,7 +67,6 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 }
 
 func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
-	s.hasOptimizationPlan = true
 	s.patternTargets = optimize.IndexPatternTargets(plan.Query)
 	s.projectionPruningDecisions = map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision{}
 	s.latePathDecisions = map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision{}
@@ -560,6 +558,7 @@ type Result struct {
 type OptimizationSummary struct {
 	Rules                []optimize.RuleResult          `json:"rules,omitempty"`
 	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
+	PlannedLowerings     []optimize.LoweringDecision    `json:"planned_lowerings,omitempty"`
 	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
 	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
 }
@@ -587,9 +586,7 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	if !optimizedPlan.LoweringPlan.Empty() {
 		loweringPlan := optimizedPlan.LoweringPlan
 		translator.translation.Optimization.LoweringPlan = &loweringPlan
-		for _, lowering := range loweringPlan.Decisions() {
-			translator.recordLowering(lowering.Name)
-		}
+		translator.translation.Optimization.PlannedLowerings = loweringPlan.Decisions()
 	}
 
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
