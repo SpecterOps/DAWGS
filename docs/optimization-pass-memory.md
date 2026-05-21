@@ -189,6 +189,56 @@ The review follow-up should leave the first optimizer milestone in a measured st
 - Direct relationship bindings referenced by return expressions, predicates, `type(r)`, or endpoint functions must keep edge composites and must not be narrowed to path-edge IDs.
 - The ADCS fixture currently has SQL-shape and containment coverage. Stricter path cardinality assertions on PostgreSQL exposed duplicated returned path rows during review, so exact cardinality for that fixture should be investigated as part of the high-fanout measurement work rather than added as a passing oracle prematurely.
 
+## Current Gap Closure Plan
+
+The optimizer branch now has enough implementation to expose the next set of risks. Close those risks in this order so each later rule has a stronger correctness and measurement base.
+
+### Step 1: Establish A Performance Baseline
+
+Add a synthetic ADCS fanout scenario before broadening suffix or endpoint-aware expansion rules. Capture `p1` alone, `p2` alone, and the combined query with row counts, distinct `(p1, p2)` counts, duplicate counts, and PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)`.
+
+This should be the first step because the original report is a timeout, and the current branch is still defended mostly by SQL shape and semantic equivalence tests.
+
+### Step 2: Strengthen Semantic Oracles
+
+Add exact-result integration coverage on smaller fixtures before relying on the larger ADCS fixture as an oracle. Assertions should include path node IDs, relationship IDs or kinds in order, path lengths, row count, and `relationships(p)` output for optimized paths.
+
+Keep the existing ADCS containment test, but treat exact ADCS cardinality as part of the fanout investigation until duplicate-row behavior is understood.
+
+### Step 3: Make Optimizer Rule Ownership Explicit
+
+Projection pruning, late path materialization, fixed-hop lowering, and suffix pushdown currently live in PostgreSQL translator lowering instead of explicit optimizer rules. Either promote these decisions into optimizer metadata consumed by the translator, or record them as named lowering decisions so tests and diagnostics can identify which rule changed the SQL shape.
+
+This step should happen before adding more hidden translator-side rewrites.
+
+### Step 4: Wire Predicate Attachment Into Translation
+
+Predicate attachment currently records ownership but does not change translation. Feed attachment metadata into PostgreSQL lowering so local predicates can move into the earliest safe binding, terminal, or suffix check.
+
+Add SQL shape tests proving `ct` predicates in the motivating query are applied at the intended terminal or suffix point, plus PostgreSQL and Neo4j equivalence coverage.
+
+### Step 5: Broaden Phase 9 Coverage Before Broadening Phase 9 Behavior
+
+Add tests for the suffix shapes the motivating query actually depends on:
+
+- `*0..` variable expansions followed by suffix checks
+- chained fixed suffixes after a variable expansion
+- suffixes that end at already-bound nodes such as `ca` and `d`
+- inbound suffixes
+- directionless suffixes that should remain unoptimized until they are implemented deliberately
+
+These tests should include both SQL shape assertions and integration equivalence.
+
+### Step 6: Implement Endpoint-Aware Suffix Semi-Joins
+
+Extend suffix pushdown from the current immediate one-hop local check to endpoint-aware semi-joins that can reason about fixed suffix chains and already-bound endpoints. For the motivating query, this means pruning `MemberOf*0..` endpoints that cannot reach eligible certificate template paths tied to the bound `ca`, and pruning root paths that cannot connect back to the bound `d`.
+
+Keep path materialization late: use the suffix checks to constrain candidate endpoints, then materialize returned paths only after the result frame is narrowed.
+
+### Step 7: Re-Measure And Lock The Regression
+
+After each new suffix or predicate-placement rule, rerun the synthetic fanout measurements and record the before/after SQL shape and runtime characteristics. Promote the final motivating query shape into a benchmark or regression scenario once its cardinality and duplicate behavior are fully understood.
+
 ## Measurement Checklist Before Phase 7
 
 Before implementing expand-into detection, capture the following for the motivating ADCS query and a synthetic fanout variant:
