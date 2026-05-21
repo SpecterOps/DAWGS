@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/pool"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 
@@ -44,7 +44,7 @@ func main() {
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
-		dbcfg        = drivers.DatabaseConfiguration{}
+		dbcfg        = pool.DatabaseConfiguration{}
 	)
 
 	flag.Parse()
@@ -67,7 +67,7 @@ func main() {
 	}
 
 	if *driver == pg.DriverName {
-		pool, err := pg.NewPool(dbcfg)
+		pool, err := pool.NewPool(dbcfg)
 		if err != nil {
 			fatal("failed to create pool: %v", err)
 		}

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/internal/pool"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 )
@@ -17,10 +17,10 @@ func main() {
 		connStr = "postgresql://bloodhound:bloodhoundcommunityedition@localhost:5432/bloodhound"
 	}
 
-	dbcfg := drivers.DatabaseConfiguration{}
+	dbcfg := pool.DatabaseConfiguration{}
 	dbcfg.Connection = connStr
 
-	pool, err := pg.NewPool(dbcfg)
+	pool, err := pool.NewPool(dbcfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to connect: %v\n", err)
 		os.Exit(1)
