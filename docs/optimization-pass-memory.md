@@ -178,3 +178,25 @@ Add focused translation tests proving direct relationship references keep edge c
 ### Step 4: Document Performance Measurement Needs
 
 Keep the current shape tests as guardrails, but add an explicit measurement task for high-fanout ADCS-style data before expanding the optimizer into endpoint-aware expansion, suffix semi-joins, or deterministic reordering.
+
+## Quality Review Status Notes
+
+The review follow-up should leave the first optimizer milestone in a measured state before the next rule is attempted.
+
+- `OPTIONAL MATCH` must remain a translator pruning barrier until optional path returns and optional path functions have semantic integration coverage.
+- Mixed fixed-hop plus variable-length path returns should assert exact node order, relationship order, and path length. These cases exercise the same late-materialization mechanics as the motivating query with a smaller result surface.
+- `relationships(p)` should have relationship-list assertions so path component functions are checked directly instead of indirectly through SQL shape.
+- Direct relationship bindings referenced by return expressions, predicates, `type(r)`, or endpoint functions must keep edge composites and must not be narrowed to path-edge IDs.
+- The ADCS fixture currently has SQL-shape and containment coverage. Stricter path cardinality assertions on PostgreSQL exposed duplicated returned path rows during review, so exact cardinality for that fixture should be investigated as part of the high-fanout measurement work rather than added as a passing oracle prematurely.
+
+## Measurement Checklist Before Phase 7
+
+Before implementing expand-into detection, capture the following for the motivating ADCS query and a synthetic fanout variant:
+
+- `EXPLAIN (ANALYZE, BUFFERS)` for `p1` alone, `p2` alone, and the combined query.
+- Result row count, distinct `(p1, p2)` count, and duplicate-row count.
+- Intermediate row counts for expansion CTEs before and after projection pruning.
+- Final path reconstruction cost when paths are returned versus when only endpoint keys are returned.
+- Comparison with Neo4j result cardinality for the same fixture.
+
+Projection pruning and late path materialization currently live in PostgreSQL translator lowering. If later phases need richer rule-level ordering or barrier enforcement, promote these decisions into explicit optimizer rule metadata instead of adding more hidden translator-side state.
