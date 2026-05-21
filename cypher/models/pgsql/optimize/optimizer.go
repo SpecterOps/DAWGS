@@ -32,6 +32,7 @@ type PredicateAttachment struct {
 type Plan struct {
 	Query                *cypher.RegularQuery
 	Analysis             Analysis
+	LoweringPlan         LoweringPlan
 	Rules                []RuleResult
 	PredicateAttachments []PredicateAttachment
 }

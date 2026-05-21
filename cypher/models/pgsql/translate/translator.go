@@ -528,11 +528,8 @@ type Result struct {
 type OptimizationSummary struct {
 	Rules                []optimize.RuleResult          `json:"rules,omitempty"`
 	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
-	Lowerings            []LoweringDecision             `json:"lowerings,omitempty"`
-}
-
-type LoweringDecision struct {
-	Name string `json:"name"`
+	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
+	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
 }
 
 func (s *Translator) recordLowering(name string) {
@@ -542,7 +539,7 @@ func (s *Translator) recordLowering(name string) {
 		}
 	}
 
-	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, LoweringDecision{Name: name})
+	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
@@ -554,6 +551,13 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 	translator.translation.Optimization.Rules = optimizedPlan.Rules
 	translator.translation.Optimization.PredicateAttachments = optimizedPlan.PredicateAttachments
+	if !optimizedPlan.LoweringPlan.Empty() {
+		loweringPlan := optimizedPlan.LoweringPlan
+		translator.translation.Optimization.LoweringPlan = &loweringPlan
+		for _, lowering := range loweringPlan.Decisions() {
+			translator.recordLowering(lowering.Name)
+		}
+	}
 
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
 		return Result{}, err
