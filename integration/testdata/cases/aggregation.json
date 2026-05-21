@@ -27,6 +27,11 @@
       "assert": "non_empty"
     },
     {
+      "name": "return the size of collected labels lists",
+      "cypher": "MATCH (n) WITH collect(labels(n)) as label_sets RETURN size(label_sets)",
+      "assert": {"at_least_int": 3}
+    },
+    {
       "name": "filter on an aggregate result using WITH and WHERE",
       "cypher": "MATCH (n) WITH count(n) as cnt WHERE cnt > 1 RETURN cnt",
       "assert": "non_empty"

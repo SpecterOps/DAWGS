@@ -9,25 +9,29 @@ import (
 )
 
 type liveQuery struct {
-	ctx          context.Context
-	tx           graph.Transaction
-	kindMapper   KindMapper
-	queryBuilder *query.Builder
+	ctx             context.Context
+	tx              graph.Transaction
+	kindMapper      KindMapper
+	graphIDResolver func() (int32, error)
+	queryBuilder    *query.Builder
 }
 
-func newLiveQuery(ctx context.Context, tx graph.Transaction, kindMapper KindMapper) liveQuery {
+func newLiveQuery(ctx context.Context, tx graph.Transaction, kindMapper KindMapper, graphIDResolver func() (int32, error)) liveQuery {
 	return liveQuery{
-		ctx:          ctx,
-		tx:           tx,
-		kindMapper:   kindMapper,
-		queryBuilder: query.NewBuilder(nil),
+		ctx:             ctx,
+		tx:              tx,
+		kindMapper:      kindMapper,
+		graphIDResolver: graphIDResolver,
+		queryBuilder:    query.NewBuilder(nil),
 	}
 }
 
 func (s *liveQuery) runRegularQuery(allShortestPaths bool) graph.Result {
 	if regularQuery, err := s.queryBuilder.Build(allShortestPaths); err != nil {
 		return graph.NewErrorResult(err)
-	} else if translation, err := translate.FromCypher(s.ctx, regularQuery, s.kindMapper, false); err != nil {
+	} else if graphID, err := s.graphIDResolver(); err != nil {
+		return graph.NewErrorResult(err)
+	} else if translation, err := translate.FromCypher(s.ctx, regularQuery, s.kindMapper, false, graphID); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
 		return s.tx.Raw(translation.Statement, translation.Parameters)

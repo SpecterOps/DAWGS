@@ -18,7 +18,7 @@ func TestGraphToPUMLDigraph(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "match (s), (e) where s.name = s.other + 1 / s.last return s")
 	require.Nil(t, err)
 
-	translation, err := translate.Translate(context.Background(), regularQuery, kindMapper, nil)
+	translation, err := translate.Translate(context.Background(), regularQuery, kindMapper, nil, translate.DefaultGraphID)
 	require.Nil(t, err)
 
 	graph, err := SQLToDigraph(translation.Statement)

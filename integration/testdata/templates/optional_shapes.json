@@ -1,0 +1,100 @@
+{
+  "families": [
+    {
+      "name": "optional match null row semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "linked", "kinds": ["TemplateNodeKind1"], "properties": {"name": "linked", "group": "optional"}},
+          {"id": "unlinked", "kinds": ["TemplateNodeKind1"], "properties": {"name": "unlinked", "group": "optional"}},
+          {"id": "target", "kinds": ["TemplateNodeKind2"], "properties": {"name": "target"}}
+        ],
+        "edges": [
+          {"start_id": "linked", "end_id": "target", "kind": "TemplateEdgeKind1"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "optional relationship preserves unmatched source rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) return a.name, b.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["linked", "target"], ["unlinked", null]]}
+        },
+        {
+          "name": "chained optional match preserves null second-hop rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) optional match (b)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) return a.name, b.name, c.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["linked", "target", null], ["unlinked", null, null]]}
+        }
+      ]
+    },
+    {
+      "name": "optional match where null row semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "linked", "kinds": ["TemplateNodeKind1"], "properties": {"name": "linked", "group": "optional-filter"}},
+          {"id": "filtered", "kinds": ["TemplateNodeKind1"], "properties": {"name": "filtered", "group": "optional-filter"}},
+          {"id": "unlinked", "kinds": ["TemplateNodeKind1"], "properties": {"name": "unlinked", "group": "optional-filter"}},
+          {"id": "target", "kinds": ["TemplateNodeKind2"], "properties": {"name": "target"}},
+          {"id": "wrong", "kinds": ["TemplateNodeKind2"], "properties": {"name": "wrong"}},
+          {"id": "tail", "kinds": ["TemplateNodeKind1"], "properties": {"name": "tail"}}
+        ],
+        "edges": [
+          {"start_id": "linked", "end_id": "target", "kind": "TemplateEdgeKind1", "properties": {"label": "accepted"}},
+          {"start_id": "filtered", "end_id": "wrong", "kind": "TemplateEdgeKind1", "properties": {"label": "rejected"}},
+          {"start_id": "target", "end_id": "tail", "kind": "TemplateEdgeKind2", "properties": {"label": "tail"}},
+          {"start_id": "wrong", "end_id": "tail", "kind": "TemplateEdgeKind2", "properties": {"label": "tail"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "optional where preserves rows when optional binding is rejected",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name = 'target' return a.name, b.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["filtered", null], ["linked", "target"], ["unlinked", null]]}
+        },
+        {
+          "name": "parameterized optional where preserves rejected optional rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name in $allowed return a.name, b.name order by a.name"
+          },
+          "params": {"allowed": ["target"]},
+          "assert": {"ordered_row_values": [["filtered", null], ["linked", "target"], ["unlinked", null]]}
+        },
+        {
+          "name": "optional where with null parameter list preserves source rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name in $allowed return a.name, b.name order by a.name"
+          },
+          "params": {"allowed": null},
+          "assert": {"ordered_row_values": [["filtered", null], ["linked", null], ["unlinked", null]]}
+        },
+        {
+          "name": "optional relationship property filter preserves rejected source rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) where r.label = 'accepted' return a.name, r.label, b.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["filtered", null, null], ["linked", "accepted", "target"], ["unlinked", null, null]]}
+        },
+        {
+          "name": "chained optional where preserves null first-hop rows",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name = 'target' optional match (b)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) where c.name = 'tail' return a.name, b.name, c.name order by a.name"
+          },
+          "assert": {"ordered_row_values": [["filtered", null, null], ["linked", "target", "tail"], ["unlinked", null, null]]}
+        },
+        {
+          "name": "optional where aggregate counts only accepted optional bindings",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1) where a.group = 'optional-filter' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) where b.name = 'target' return a.name, count(b) order by a.name"
+          },
+          "assert": {"ordered_row_values": [["filtered", 0], ["linked", 1], ["unlinked", 0]]}
+        }
+      ]
+    }
+  ]
+}

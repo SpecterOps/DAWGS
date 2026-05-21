@@ -9,11 +9,26 @@ require (
 	github.com/axiomhq/hyperloglog v0.2.6
 	github.com/bits-and-blooms/bitset v1.24.4
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/fzipp/gocyclo v0.6.0
 	github.com/gammazero/deque v1.2.1
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/tools v0.43.0
+)
+
+// Dawgrun requirements
+require (
+	github.com/alecthomas/chroma/v2 v2.23.1
+	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/davecgh/go-spew v1.1.1
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/jedib0t/go-pretty/v6 v6.7.8
+	github.com/kanmu/go-sqlfmt v0.0.2-0.20200215095417-d1e63e2ee5eb
+	github.com/mitchellh/go-wordwrap v1.0.1
+	github.com/specterops/go-repl v1.0.1
+	golang.org/x/term v0.39.0
 )
 
 require (
@@ -35,7 +50,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/MirrexOne/unqueryvet v1.5.4 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
-	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
 	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
 	github.com/alexkohler/nakedret/v2 v2.0.6 // indirect
 	github.com/alexkohler/prealloc v1.1.0 // indirect
@@ -58,7 +72,6 @@ require (
 	github.com/ccojocar/zxcvbn-go v1.0.4 // indirect
 	github.com/charithe/durationcheck v0.0.11 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
-	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
@@ -227,4 +240,9 @@ require (
 	mvdan.cc/unparam v0.0.0-20251027182757-5beb8c8f8f15 // indirect
 )
 
-tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+tool (
+	github.com/fzipp/gocyclo/cmd/gocyclo
+	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	github.com/specterops/dawgs/tools/dawgrun/cmd/dawgrun
+	github.com/specterops/dawgs/tools/metrics/cmd/dawgs-metrics
+)

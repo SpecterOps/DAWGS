@@ -19,6 +19,9 @@ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:password@localho
 
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
+
+# Save markdown and JSON for quality baseline comparison
+go run ./cmd/benchmark -connection "..." -output report.md -json-output report.json
 ```
 
 ## Flags
@@ -26,12 +29,13 @@ go run ./cmd/benchmark -connection "..." -output report.md
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-driver` | `pg` | Database driver (`pg`, `neo4j`) |
-| `-connection` | | Connection string (or `PG_CONNECTION_STRING` env) |
+| `-connection` | | Connection string (or `CONNECTION_STRING` env) |
 | `-iterations` | `10` | Timed iterations per scenario |
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
 | `-output` | stdout | Markdown output file |
+| `-json-output` | | JSON output file for baseline comparison |
 
 ## Example: Neo4j on local/phantom
 
@@ -57,7 +61,7 @@ $ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:testpassword@l
 ## Example: PG on local/phantom
 
 ```
-$ export PG_CONNECTION_STRING="postgresql://dawgs:dawgs@localhost:5432/dawgs"
+$ export CONNECTION_STRING="postgresql://dawgs:dawgs@localhost:5432/dawgs"
 $ go run ./cmd/benchmark -dataset local/phantom
 ```
 

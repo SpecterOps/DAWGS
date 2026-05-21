@@ -241,6 +241,32 @@ Type checks utilizing this function will not be index accelerated and may exhibi
 match ()-[r]->() where type(r) = 'EdgeKind1' return r
 ```
 
+### `relationships`
+
+Returns the ordered relationship list for a path.
+
+```
+match p = (a)-[*1..]->(b) return relationships(p)
+```
+
+### `startNode`
+
+Returns the start node for a relationship reference.
+
+```
+match p = (a)-[*1..]->(b)
+where none(r in relationships(p) where startNode(r).name = 'blocked')
+return p
+```
+
+### `endNode`
+
+Returns the end node for a relationship reference.
+
+```
+match ()-[r]->() return endNode(r)
+```
+
 ### `split`
 
 Takes a given expression and text delimiter and returns a text array containing split components, if any. If the
@@ -277,13 +303,13 @@ text this function will raise an error.
 match (u:User) return tostring(n.num_active_logins)
 ```
 
-### `toint`
+### `toInteger`
 
 Returns the integer value of a given expression. If the given expression represents a type that can not be converted or
 parsed to an integer this function will raise an error.
 
 ```
-match (u:User) return toint(n.integer_in_text_property)
+match (u:User) return toInteger(n.integer_in_text_property)
 ```
 
 ### `coalesce`
@@ -401,6 +427,11 @@ The translated SQL, when executed, results in the following error:
 This indicates that there is a node with a value for `n.name` that is not parsable as an integer.
 
 In the future, CySQL translation will cover most of the strict typing requirements automatically for users.
+
+Property equality against the string literal or string parameter `'true'` or `'false'` is translated through PostgreSQL
+JSON text extraction for backwards compatibility. This means a JSON boolean property value of `true` compares equal to
+the string literal `'true'`. Other string equality operands use strict JSON scalar equality; use boolean or numeric
+literals, such as `n.enabled = true` or `n.count = 1`, when typed JSON scalar equality is required.
 
 ### Index Utilization
 

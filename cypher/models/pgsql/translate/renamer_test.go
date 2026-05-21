@@ -41,6 +41,7 @@ func TestRewriteFrameBindings(t *testing.T) {
 	frame.Export(a.Identifier)
 
 	a.MaterializedBy(frame)
+	rewrittenA := pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}
 
 	// Cases
 	testCases := []testCase{{
@@ -48,19 +49,59 @@ func TestRewriteFrameBindings(t *testing.T) {
 			Expression: a.Identifier,
 		},
 		Expected: &pgsql.Parenthetical{
-			Expression: pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier},
+			Expression: rewrittenA,
 		},
 	}, {
 		Case:     pgsql.NewBinaryExpression(a.Identifier, pgsql.OperatorEquals, a.Identifier),
-		Expected: pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}),
+		Expected: pgsql.NewBinaryExpression(rewrittenA, pgsql.OperatorEquals, rewrittenA),
 	}, {
 		Case: &pgsql.AliasedExpression{
 			Expression: a.Identifier,
 			Alias:      pgsql.AsOptionalIdentifier("name"),
 		},
 		Expected: &pgsql.AliasedExpression{
-			Expression: pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier},
+			Expression: rewrittenA,
 			Alias:      pgsql.AsOptionalIdentifier("name"),
+		},
+	}, {
+		Case: pgsql.NewBinaryExpression(
+			pgsql.ArraySlice{
+				Expression: a.Identifier,
+				Lower:      a.Identifier,
+				Upper:      a.Identifier,
+			},
+			pgsql.OperatorEquals,
+			a.Identifier,
+		),
+		Expected: pgsql.NewBinaryExpression(
+			pgsql.ArraySlice{
+				Expression: rewrittenA,
+				Lower:      rewrittenA,
+				Upper:      rewrittenA,
+			},
+			pgsql.OperatorEquals,
+			rewrittenA,
+		),
+	}, {
+		Case: &pgsql.Case{
+			Operand: a.Identifier,
+			Conditions: []pgsql.Expression{
+				a.Identifier,
+			},
+			Then: []pgsql.Expression{
+				a.Identifier,
+			},
+			Else: a.Identifier,
+		},
+		Expected: &pgsql.Case{
+			Operand: rewrittenA,
+			Conditions: []pgsql.Expression{
+				rewrittenA,
+			},
+			Then: []pgsql.Expression{
+				rewrittenA,
+			},
+			Else: rewrittenA,
 		},
 	}}
 
@@ -77,6 +118,89 @@ func TestRewriteFrameBindings(t *testing.T) {
 			assert.NoError(t, formattedExpectedErr)
 
 			assert.Equal(t, formattedExpected, formattedCase)
+		})
+	}
+}
+
+func TestRewriteFrameBindings_ArraySliceDirectParents(t *testing.T) {
+	var (
+		scope = translate.NewScope()
+		frame = mustPushFrame(t, scope)
+		a     = mustDefineNew(t, scope, pgsql.Int)
+	)
+
+	frame.Reveal(a.Identifier)
+	frame.Export(a.Identifier)
+
+	a.MaterializedBy(frame)
+	rewrittenA := pgsql.CompoundIdentifier{frame.Binding.Identifier, a.Identifier}
+
+	newSlice := func(expression pgsql.Expression) pgsql.ArraySlice {
+		return pgsql.ArraySlice{
+			Expression: expression,
+			Lower:      expression,
+			Upper:      expression,
+		}
+	}
+
+	testCases := []struct {
+		name     string
+		actual   pgsql.Expression
+		expected pgsql.Expression
+	}{{
+		name: "projection value",
+		actual: pgsql.Projection{
+			newSlice(a.Identifier),
+		},
+		expected: pgsql.Projection{
+			newSlice(rewrittenA),
+		},
+	}, {
+		name: "projection pointer",
+		actual: pgsql.Projection{
+			func() *pgsql.ArraySlice {
+				value := newSlice(a.Identifier)
+				return &value
+			}(),
+		},
+		expected: pgsql.Projection{
+			func() *pgsql.ArraySlice {
+				value := newSlice(rewrittenA)
+				return &value
+			}(),
+		},
+	}, {
+		name: "order by value",
+		actual: &pgsql.OrderBy{
+			Expression: newSlice(a.Identifier),
+			Ascending:  true,
+		},
+		expected: &pgsql.OrderBy{
+			Expression: newSlice(rewrittenA),
+			Ascending:  true,
+		},
+	}, {
+		name: "order by pointer",
+		actual: &pgsql.OrderBy{
+			Expression: func() *pgsql.ArraySlice {
+				value := newSlice(a.Identifier)
+				return &value
+			}(),
+			Ascending: true,
+		},
+		expected: &pgsql.OrderBy{
+			Expression: func() *pgsql.ArraySlice {
+				value := newSlice(rewrittenA)
+				return &value
+			}(),
+			Ascending: true,
+		},
+	}}
+
+	for _, nextTestCase := range testCases {
+		t.Run(nextTestCase.name, func(t *testing.T) {
+			require.NoError(t, translate.RewriteFrameBindings(scope, nextTestCase.actual))
+			assert.Equal(t, nextTestCase.expected, nextTestCase.actual)
 		})
 	}
 }

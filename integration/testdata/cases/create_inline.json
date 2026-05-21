@@ -1,0 +1,100 @@
+{
+  "cases": [
+    {
+      "name": "create a node with a kind label and string property",
+      "cypher": "CREATE (n:NodeKind1 {name: 'Bob'}) RETURN n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1, "contains_node_with_prop": ["name", "Bob"]}
+    },
+    {
+      "name": "create a node with a kind label and no return",
+      "cypher": "CREATE (n:NodeKind1)",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": "no_error"
+    },
+    {
+      "name": "create an unlabeled node",
+      "cypher": "CREATE (n) RETURN n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1}
+    },
+    {
+      "name": "create two nodes from consecutive create clauses",
+      "cypher": "CREATE (a:NodeKind1 {name: 'first'}) CREATE (b:NodeKind2 {name: 'second'}) RETURN a, b",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1, "contains_node_with_prop": ["name", "second"]}
+    },
+    {
+      "name": "create two typed nodes connected by a directed edge",
+      "cypher": "CREATE (a:NodeKind1)-[r:EdgeKind1]->(b:NodeKind2) RETURN r",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1}
+    },
+    {
+      "name": "create two typed nodes connected by a reverse edge",
+      "cypher": "CREATE (a:NodeKind1)<-[r:EdgeKind1]-(b:NodeKind2) RETURN r",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1}
+    },
+    {
+      "name": "match two rows then create one node per row",
+      "cypher": "MATCH (a:NodeKind1) WHERE a.tag = 'create_row_test' WITH a CREATE (b:NodeKind2 {source: a.name}) RETURN b",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "source-a", "tag": "create_row_test"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "source-b", "tag": "create_row_test"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_count": 2}
+    },
+    {
+      "name": "carry a matched property into a created node",
+      "cypher": "MATCH (a:NodeKind1) WHERE a.name = 'source-a' WITH a CREATE (b:NodeKind2 {source: a.name}) RETURN b",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "source-a"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "source-b"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_count": 1, "contains_node_with_prop": ["source", "source-a"]}
+    },
+    {
+      "name": "match two rows then create one edge per row",
+      "cypher": "MATCH (a:NodeKind1) WHERE a.tag = 'create_edge_row_test' WITH a CREATE (a)-[r:EdgeKind1]->(b:NodeKind2) RETURN r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "source-a", "tag": "create_edge_row_test"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "source-b", "tag": "create_edge_row_test"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_count": 2}
+    },
+    {
+      "name": "unwind values then create one node per value",
+      "cypher": "UNWIND ['a', 'b', 'c'] AS name CREATE (n:NodeKind1 {name: name}) RETURN n",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "carry matched row values into created node properties and return them in order",
+      "cypher": "MATCH (a:NodeKind1) WHERE a.tag = 'create_scalar_source' WITH a CREATE (b:NodeKind2 {source: a.name}) RETURN b.source ORDER BY b.source",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "create_scalar_source"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "create_scalar_source"}}
+        ],
+        "edges": []
+      },
+      "assert": {"ordered_scalar_values": ["alpha", "beta"]}
+    },
+    {
+      "name": "create a named path and return it",
+      "cypher": "CREATE p = (:NodeKind1 {name: 'abc'})-[:EdgeKind1 {prop: 123}]->(:NodeKind2 {name: 'test'}) RETURN p",
+      "fixture": {"nodes": [], "edges": []},
+      "assert": {"row_count": 1, "path_lengths": [1], "path_edge_kinds": [["EdgeKind1"]], "contains_edge": {"kind": "EdgeKind1", "props": {"prop": 123}}}
+    }
+  ]
+}

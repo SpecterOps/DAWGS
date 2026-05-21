@@ -74,6 +74,50 @@ func (s *Translator) translateFilterExpression(filterExpression *cypher.FilterEx
 	return nil
 }
 
+func (s *Translator) translateQuantifierArrayExpression(quantifierArrayExpression pgsql.Expression) ([]pgsql.Expression, pgsql.DataType, error) {
+	switch typedQuantifierArrayExpression := quantifierArrayExpression.(type) {
+	case *pgsql.BinaryExpression:
+		if pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
+			// Property look-up operators are converted to JSON text field operators during translation.
+			// Change this back so the JSON array can be converted to a Postgres text array for unnest(...).
+			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
+			return []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function: pgsql.FunctionJSONBToTextArray,
+					Parameters: []pgsql.Expression{
+						typedQuantifierArrayExpression,
+					},
+				},
+			}, pgsql.TextArray, nil
+		}
+
+	case pgsql.BinaryExpression:
+		if pgsql.OperatorIsPropertyLookup(typedQuantifierArrayExpression.Operator) {
+			typedQuantifierArrayExpression.Operator = pgsql.OperatorJSONField
+			return []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function: pgsql.FunctionJSONBToTextArray,
+					Parameters: []pgsql.Expression{
+						typedQuantifierArrayExpression,
+					},
+				},
+			}, pgsql.TextArray, nil
+		}
+
+		if inferredCollectionType, err := s.inferArrayExpressionType(&typedQuantifierArrayExpression); err != nil {
+			return nil, pgsql.UnsetDataType, err
+		} else {
+			return []pgsql.Expression{typedQuantifierArrayExpression}, inferredCollectionType, nil
+		}
+	}
+
+	if inferredCollectionType, err := s.inferArrayExpressionType(quantifierArrayExpression); err != nil {
+		return nil, pgsql.UnsetDataType, err
+	} else {
+		return []pgsql.Expression{quantifierArrayExpression}, inferredCollectionType, nil
+	}
+}
+
 func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) error {
 	if quantifierArray, err := s.treeTranslator.PopOperand(); err != nil {
 		s.SetError(err)
@@ -84,27 +128,20 @@ func (s *Translator) translateIDInCollection(idInCol *cypher.IDInCollection) err
 	} else if array, bound := s.scope.AliasedLookup(identifier); !bound {
 		return fmt.Errorf("filter expression variable must be bound")
 	} else {
-		var functionParameters []pgsql.Expression
-		switch quantifierArrayExpression := quantifierArray.AsExpression().(type) {
-		// Property lookup, n.properties -> usedencryptionkey
-		case pgsql.BinaryExpression:
-			// All property look-up operators are converted to JSON Text field Operators during translation,
-			// this needs to be changed back so we can properly convert it to a Postgres text array which can then be used in an unnest function
-			quantifierArrayExpression.Operator = pgsql.OperatorJSONField
-			functionParameters = []pgsql.Expression{
-				pgsql.FunctionCall{
-					Function: pgsql.FunctionJSONBToTextArray,
-					Parameters: []pgsql.Expression{
-						quantifierArrayExpression,
-					},
-				},
-			}
-		// native postgres array eg: collect(x) as quantifier_array ... ANY(y in quantifier_array...
-		case pgsql.Identifier:
-			functionParameters = []pgsql.Expression{quantifierArrayExpression}
-		default:
-			return fmt.Errorf("unknown cypher array type %s", quantifierArrayExpression)
+		var (
+			functionParameters []pgsql.Expression
+			collectionType     pgsql.DataType
+		)
+
+		quantifierArrayExpression := quantifierArray.AsExpression()
+		if translatedParameters, inferredCollectionType, err := s.translateQuantifierArrayExpression(quantifierArrayExpression); err != nil {
+			return err
+		} else {
+			functionParameters = translatedParameters
+			collectionType = inferredCollectionType
 		}
+
+		array.DataType = collectionType.ArrayBaseType()
 
 		fromClause := pgsql.FromClause{
 			Source: pgsql.AliasedExpression{
@@ -127,6 +164,7 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 		fullQuantifierBinaryExpression *pgsql.BinaryExpression
 		quantifierExpression           pgsql.Expression
 		quantifierOperator             pgsql.Operator
+		nullInputCheck                 pgsql.Expression
 	)
 	if filterExpression, err := s.treeTranslator.PopOperand(); err != nil {
 		s.SetError(err)
@@ -138,13 +176,18 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 		case cypher.QuantifierTypeNone:
 			quantifierExpression = pgsql.Literal{Value: 0, CastType: pgsql.Int}
 			quantifierOperator = pgsql.OperatorEquals
+			nullInputCheck = pgsql.NewBinaryExpression(
+				s.query.CurrentPart().stashedQuantifierArray[0],
+				pgsql.OperatorIsNot,
+				pgsql.NullLiteral(),
+			)
 		case cypher.QuantifierTypeSingle:
 			quantifierExpression = pgsql.Literal{Value: 1, CastType: pgsql.Int}
 			quantifierOperator = pgsql.OperatorEquals
 		case cypher.QuantifierTypeAll:
 			quantifierExpression = pgsql.FunctionCall{
-				Function:   pgsql.FunctionArrayLength,
-				Parameters: []pgsql.Expression{s.query.CurrentPart().stashedQuantifierArray[0], pgsql.Literal{Value: 1, CastType: pgsql.Int}},
+				Function:   pgsql.FunctionCardinality,
+				Parameters: []pgsql.Expression{s.query.CurrentPart().stashedQuantifierArray[0]},
 			}
 			quantifierOperator = pgsql.OperatorEquals
 		default:
@@ -155,6 +198,14 @@ func (s *Translator) buildQuantifier(cypherQuantifierExpression *cypher.Quantifi
 			Operator: quantifierOperator,
 			LOperand: filterExpression,
 			ROperand: quantifierExpression,
+		}
+
+		if nullInputCheck != nil {
+			fullQuantifierBinaryExpression = pgsql.NewBinaryExpression(
+				fullQuantifierBinaryExpression,
+				pgsql.OperatorAnd,
+				nullInputCheck,
+			)
 		}
 
 		s.treeTranslator.PushOperand(pgsql.NewTypeCast(fullQuantifierBinaryExpression, pgsql.Boolean))

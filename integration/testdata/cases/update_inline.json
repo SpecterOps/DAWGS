@@ -7,7 +7,7 @@
         "nodes": [{"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "updateme"}}],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "node_ids": ["a"]}
     },
     {
       "name": "add multiple kind labels to a node",
@@ -16,7 +16,7 @@
         "nodes": [{"id": "a", "kinds": ["NodeKind1"]}],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "node_ids": ["a"]}
     },
     {
       "name": "remove multiple kind labels from a node",
@@ -25,7 +25,7 @@
         "nodes": [{"id": "a", "kinds": ["NodeKind1", "NodeKind2"]}],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "node_ids": ["a"]}
     },
     {
       "name": "set a boolean property on a filtered node",
@@ -46,7 +46,7 @@
         ],
         "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1}
     },
     {
       "name": "add one kind label and remove another in the same statement",
@@ -55,7 +55,7 @@
         "nodes": [{"id": "a", "kinds": ["NodeKind1", "NodeKind2"]}],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "node_ids": ["a"]}
     },
     {
       "name": "add a kind label and set a property in the same statement",
@@ -64,7 +64,7 @@
         "nodes": [{"id": "a", "kinds": ["NodeKind2"]}],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "node_ids": ["a"]}
     },
     {
       "name": "remove a kind label and a property in the same statement",
@@ -73,7 +73,7 @@
         "nodes": [{"id": "a", "kinds": ["NodeKind1"], "properties": {"prop": "val"}}],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 1, "node_ids": ["a"]}
     },
     {
       "name": "remove a single node property",
@@ -107,6 +107,27 @@
         "edges": [{"start_id": "src", "end_id": "dst", "kind": "EdgeKind1"}]
       },
       "assert": "no_error"
+    },
+    {
+      "name": "return a node after setting multiple scalar properties",
+      "cypher": "match (n:NodeKind1) where n.name = 'set-props' set n.flag = true, n.score = 42 return n",
+      "fixture": {
+        "nodes": [{"id": "n", "kinds": ["NodeKind1"], "properties": {"name": "set-props"}}],
+        "edges": []
+      },
+      "assert": {"row_count": 1, "contains_node_with_props": {"flag": true, "score": 42}}
+    },
+    {
+      "name": "return an edge after setting a relationship property",
+      "cypher": "match (a)-[r:EdgeKind1]->(b) where a.name = 'edge-source' set r.visited = true return r",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "edge-source"}},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
+      },
+      "assert": {"row_count": 1, "contains_edge": {"start": "a", "end": "b", "kind": "EdgeKind1", "props": {"visited": true}}}
     }
   ]
 }

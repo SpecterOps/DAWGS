@@ -60,6 +60,7 @@ type Frame struct {
 	stashedVisible  *pgsql.IdentifierSet
 	Exported        *pgsql.IdentifierSet
 	stashedExported *pgsql.IdentifierSet
+	Synthetic       bool
 }
 
 func (s *Frame) RestoreStashed() {
@@ -166,6 +167,20 @@ func (s *Scope) Snapshot() *Scope {
 	definitionsCopy := make(map[pgsql.Identifier]*BoundIdentifier)
 	for k, v := range s.definitions {
 		definitionsCopy[k] = v.Copy()
+	}
+
+	for _, definition := range definitionsCopy {
+		for idx, dependency := range definition.Dependencies {
+			if dependency == nil {
+				continue
+			}
+
+			if copiedDependency, found := definitionsCopy[dependency.Identifier]; found {
+				definition.Dependencies[idx] = copiedDependency
+			} else {
+				definition.Dependencies[idx] = dependency.Copy()
+			}
+		}
 	}
 
 	return &Scope{

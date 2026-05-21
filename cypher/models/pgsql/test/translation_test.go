@@ -7,19 +7,56 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specterops/dawgs/drivers/pg/pgutil"
-
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/graph"
 )
+
+func translationTestKinds() graph.Kinds {
+	// Keep this order stable. Translation case SQL fixtures depend on these IDs.
+	return graph.Kinds{
+		NodeKind1,
+		NodeKind2,
+		EdgeKind1,
+		EdgeKind2,
+		graph.StringKind("Computer"),
+		graph.StringKind("User"),
+		graph.StringKind("HasSession"),
+		graph.StringKind("GPO"),
+		graph.StringKind("OU"),
+		graph.StringKind("Base"),
+		graph.StringKind("GPLink"),
+		graph.StringKind("Contains"),
+		graph.StringKind("Group"),
+	}.Add(graph.StringsToKinds([]string{
+		"AddAllowedToAct",
+		"AddMember",
+		"AdminTo",
+		"AllExtendedRights",
+		"AllowedToDelegate",
+		"CanRDP",
+		"ForceChangePassword",
+		"GenericAll",
+		"GenericWrite",
+		"GetChangesAll",
+		"GetChanges",
+		"MemberOf",
+		"Owns",
+		"ReadLAPSPassword",
+		"SQLAdmin",
+		"TrustedBy",
+		"WriteAccountRestrictions",
+		"WriteOwner",
+		"AZUser",
+	})...)
+}
 
 func newKindMapper() pgsql.KindMapper {
 	mapper := pgutil.NewInMemoryKindMapper()
 
-	// This is here to make SQL output a little more predictable for test cases
-	mapper.Put(NodeKind1)
-	mapper.Put(NodeKind2)
-	mapper.Put(EdgeKind1)
-	mapper.Put(EdgeKind2)
+	for _, kind := range translationTestKinds() {
+		mapper.Put(kind)
+	}
 
 	return mapper
 }

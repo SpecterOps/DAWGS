@@ -50,7 +50,11 @@ func (s *neo4jTransaction) WithGraph(graphSchema graph.Graph) graph.Transaction 
 }
 
 func (s *neo4jTransaction) Query(query string, parameters map[string]any) graph.Result {
-	return s.Raw(query, parameters)
+	if rewrittenQuery, rewrittenParameters, err := rewriteQuery(query, parameters); err != nil {
+		return graph.NewErrorResult(err)
+	} else {
+		return s.Raw(rewrittenQuery, rewrittenParameters)
+	}
 }
 
 func (s *neo4jTransaction) updateRelationshipsBy(updates ...graph.RelationshipUpdate) error {

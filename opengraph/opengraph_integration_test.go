@@ -22,28 +22,40 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
 )
 
+const connectionStringEnv = "CONNECTION_STRING"
+
+func isNeo4jConnectionString(connStr string) bool {
+	u, err := url.Parse(connStr)
+	return err == nil && (u.Scheme == "neo4j" || strings.HasPrefix(u.Scheme, "neo4j+"))
+}
+
 func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 	t.Helper()
 
 	ctx := context.Background()
-	connStr := os.Getenv("PG_CONNECTION_STRING")
+	connStr := os.Getenv(connectionStringEnv)
 
 	if connStr == "" {
-		t.Skip("PG_CONNECTION_STRING not set")
+		t.Skipf("%s not set", connectionStringEnv)
+	}
+	if isNeo4jConnectionString(connStr) {
+		t.Skipf("%s is not a PostgreSQL connection string", connectionStringEnv)
 	}
 
-	pool, err := pg.NewPool(connStr)
+	pool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: connStr})
 	if err != nil {
 		t.Fatalf("Failed to create pool: %v", err)
 	}

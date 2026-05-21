@@ -14,7 +14,7 @@ func Translated(translation Result) (string, error) {
 	return format.Statement(translation.Statement, format.NewOutputBuilder())
 }
 
-func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, stripLiterals bool) (format.Formatted, error) {
+func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, stripLiterals bool, graphID int32) (format.Formatted, error) {
 	var (
 		output  = &bytes.Buffer{}
 		emitter = cypherFormat.NewCypherEmitter(stripLiterals)
@@ -28,7 +28,7 @@ func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapp
 
 	output.WriteString("\n")
 
-	if translation, err := Translate(ctx, regularQuery, kindMapper, nil); err != nil {
+	if translation, err := Translate(ctx, regularQuery, kindMapper, nil, graphID); err != nil {
 		return format.Formatted{}, err
 	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder()); err != nil {
 		return format.Formatted{}, err

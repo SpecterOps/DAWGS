@@ -1,0 +1,153 @@
+{
+  "families": [
+    {
+      "name": "parameterized predicate shapes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "alpha", "kinds": ["TemplateNodeKind1"], "properties": {"name": "alpha", "score": 1, "objectid": "S-1-500"}},
+          {"id": "beta", "kinds": ["TemplateNodeKind1"], "properties": {"name": "beta", "score": 2, "objectid": "S-2-501"}},
+          {"id": "gamma", "kinds": ["TemplateNodeKind1"], "properties": {"name": "gamma", "score": 3, "objectid": "S-3-500"}},
+          {"id": "percent", "kinds": ["TemplateNodeKind1"], "properties": {"name": "has%percent", "group": "wildcard"}},
+          {"id": "percent-decoy", "kinds": ["TemplateNodeKind1"], "properties": {"name": "hasXpercent", "group": "wildcard"}},
+          {"id": "underscore", "kinds": ["TemplateNodeKind1"], "properties": {"name": "under_score", "group": "wildcard"}},
+          {"id": "underscore-decoy", "kinds": ["TemplateNodeKind1"], "properties": {"name": "underXscore", "group": "wildcard"}},
+          {"id": "target", "kinds": ["TemplateNodeKind2"], "properties": {"name": "target"}}
+        ],
+        "edges": [
+          {"start_id": "alpha", "end_id": "target", "kind": "TemplateEdgeKind1", "properties": {"label": "linked"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "property equality parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name = $name return n.name"
+          },
+          "params": {"name": "alpha"},
+          "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "literal property in parameter list",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name order by n.name"
+          },
+          "params": {"names": ["alpha", "gamma"]},
+          "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
+        },
+        {
+          "name": "null equality parameter returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name = $name return n.name"
+          },
+          "params": {"name": null},
+          "assert": "empty"
+        },
+        {
+          "name": "null parameter list membership returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name"
+          },
+          "params": {"names": null},
+          "assert": "empty"
+        },
+        {
+          "name": "empty parameter list membership returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.name in $names return n.name"
+          },
+          "params": {"names": []},
+          "assert": "empty"
+        },
+        {
+          "name": "empty parameter list size is zero",
+          "vars": {
+            "query": "return size($names)"
+          },
+          "params": {"names": []},
+          "assert": {"scalar_values": [0]}
+        },
+        {
+          "name": "string contains parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.name) contains $needle return n.name"
+          },
+          "params": {"needle": "alp"},
+          "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "contains percent parameter treats percent as a literal character",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name contains $needle return n.name"
+          },
+          "params": {"needle": "%"},
+          "assert": {"scalar_values": ["has%percent"]}
+        },
+        {
+          "name": "starts with underscore parameter treats underscore as a literal character",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name starts with $prefix return n.name"
+          },
+          "params": {"prefix": "under_"},
+          "assert": {"scalar_values": ["under_score"]}
+        },
+        {
+          "name": "numeric comparison parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score >= $minimum return n.name order by n.name"
+          },
+          "params": {"minimum": 2},
+          "assert": {"ordered_scalar_values": ["beta", "gamma"]}
+        },
+        {
+          "name": "numeric range predicate parameters",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score >= $minimum and n.score < $maximum return n.name"
+          },
+          "params": {"minimum": 2, "maximum": 3},
+          "assert": {"scalar_values": ["beta"]}
+        },
+        {
+          "name": "ends with parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.objectid) ends with $suffix return n.name order by n.name"
+          },
+          "params": {"suffix": "-500"},
+          "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
+        },
+        {
+          "name": "negated parameter list predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score is not null and not n.name in $excluded return n.name order by n.name"
+          },
+          "params": {"excluded": ["alpha", "gamma"]},
+          "assert": {"ordered_scalar_values": ["beta"]}
+        },
+        {
+          "name": "relationship property equality parameter",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) where r.label = $label return a.name, b.name"
+          },
+          "params": {"label": "linked"},
+          "assert": {"row_values": [["alpha", "target"]]}
+        },
+        {
+          "name": "node pattern property map parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1 $props) return n.name"
+          },
+          "params": {"props": {"name": "beta", "score": 2}},
+          "assert": {"scalar_values": ["beta"]}
+        },
+        {
+          "name": "relationship pattern property map parameter",
+          "vars": {
+            "query": "match (a:TemplateNodeKind1)-[r:TemplateEdgeKind1 $props]->(b:TemplateNodeKind2) return a.name, b.name"
+          },
+          "params": {"props": {"label": "linked"}},
+          "assert": {"row_values": [["alpha", "target"]]}
+        }
+      ]
+    }
+  ]
+}

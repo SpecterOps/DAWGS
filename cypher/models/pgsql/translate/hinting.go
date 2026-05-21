@@ -93,6 +93,35 @@ func inferBinaryExpressionType(expression *pgsql.BinaryExpression) (pgsql.DataTy
 	}
 }
 
+func inferUnaryExpressionType(expression pgsql.UnaryExpression) (pgsql.DataType, error) {
+	switch expression.Operator {
+	case pgsql.OperatorNot, pgsql.OperatorIs, pgsql.OperatorIsNot:
+		return pgsql.Boolean, nil
+	case pgsql.OperatorAdd, pgsql.OperatorSubtract:
+		if operandType, err := InferExpressionType(expression.Operand); err != nil {
+			return pgsql.UnsetDataType, err
+		} else if !operandType.IsKnown() {
+			return pgsql.UnknownDataType, nil
+		} else if operandType.MatchesOneOf(pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Float4, pgsql.Float8, pgsql.Numeric) {
+			return operandType, nil
+		} else {
+			return pgsql.UnknownDataType, nil
+		}
+	default:
+		return pgsql.UnknownDataType, nil
+	}
+}
+
+func inferAllExpressionType(expression pgsql.AllExpression) (pgsql.DataType, error) {
+	if expressionType, err := InferExpressionType(expression.Expression); err != nil {
+		return pgsql.UnsetDataType, err
+	} else if expressionType.IsArrayType() {
+		return expressionType.ArrayBaseType(), nil
+	} else {
+		return pgsql.UnknownDataType, nil
+	}
+}
+
 func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	switch typedExpression := expression.(type) {
 	case pgsql.Identifier, pgsql.RowColumnReference:
@@ -144,6 +173,42 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 			return inferBinaryExpressionType(typedExpression)
 		}
 
+	case *pgsql.UnaryExpression:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return inferUnaryExpressionType(*typedExpression)
+
+	case pgsql.UnaryExpression:
+		return inferUnaryExpressionType(typedExpression)
+
+	case *pgsql.AllExpression:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return inferAllExpressionType(*typedExpression)
+
+	case pgsql.AllExpression:
+		return inferAllExpressionType(typedExpression)
+
+	case *pgsql.AliasedExpression:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return InferExpressionType(typedExpression.Expression)
+
+	case pgsql.AliasedExpression:
+		return InferExpressionType(typedExpression.Expression)
+
+	case pgsql.ExistsExpression:
+		return pgsql.Boolean, nil
+
+	case pgsql.Variadic:
+		return InferExpressionType(typedExpression.Expression)
+
 	case *pgsql.Parenthetical:
 		return InferExpressionType(typedExpression.Expression)
 
@@ -156,12 +221,14 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 type contextAwareKindMapper struct {
 	ctx        context.Context
 	kindMapper pgsql.KindMapper
+	parameters map[string]any
 }
 
-func newContextAwareKindMapper(ctx context.Context, kindMapper pgsql.KindMapper) *contextAwareKindMapper {
+func newContextAwareKindMapper(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *contextAwareKindMapper {
 	return &contextAwareKindMapper{
 		ctx:        ctx,
 		kindMapper: kindMapper,
+		parameters: parameters,
 	}
 }
 
@@ -169,25 +236,75 @@ func (s *contextAwareKindMapper) MapKinds(kinds graph.Kinds) ([]int16, error) {
 	return s.kindMapper.MapKinds(s.ctx, kinds)
 }
 
+func (s *contextAwareKindMapper) AssertKinds(kinds graph.Kinds) ([]int16, error) {
+	return s.kindMapper.AssertKinds(s.ctx, kinds)
+}
+
+func relationshipTypeKindIDExpression(expression pgsql.Expression) (pgsql.Expression, bool) {
+	functionCall, isFunctionCall := unwrapParenthetical(expression).(pgsql.FunctionCall)
+	if !isFunctionCall || functionCall.Function != pgsql.FunctionKindName || len(functionCall.Parameters) != 1 {
+		return nil, false
+	}
+
+	return functionCall.Parameters[0], true
+}
+
+func literalKindID(kindMapper *contextAwareKindMapper, literal pgsql.Literal) (pgsql.Literal, bool, error) {
+	if literal.CastType != pgsql.Text {
+		return pgsql.Literal{}, false, nil
+	}
+
+	kinds, err := graph.AsKinds([]any{literal.Value})
+	if err != nil {
+		return pgsql.Literal{}, false, err
+	}
+
+	kindIDs, err := kindMapper.MapKinds(kinds)
+	if err != nil {
+		return pgsql.Literal{}, false, err
+	}
+	if len(kindIDs) == 0 {
+		return pgsql.Literal{}, false, nil
+	}
+
+	return pgsql.NewLiteral(kindIDs[0], pgsql.Int2), true, nil
+}
+
+func mapsRelationshipTypeLiteralToKindID(operator pgsql.Operator) bool {
+	return operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals)
+}
+
 func applyTypeFunctionLikeTypeHints(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
+	mapTypeLiteralToKindID := mapsRelationshipTypeLiteralToKindID(expression.Operator)
+
+	if kindIDExpression, isRelationshipTypeName := relationshipTypeKindIDExpression(expression.LOperand); mapTypeLiteralToKindID && isRelationshipTypeName {
+		switch typedROperand := expression.ROperand.(type) {
+		case pgsql.Literal:
+			if kindIDLiteral, converted, err := literalKindID(kindMapper, typedROperand); err != nil {
+				return err
+			} else if converted {
+				expression.LOperand = kindIDExpression
+				expression.ROperand = kindIDLiteral
+				return nil
+			}
+		}
+	}
+
 	switch typedLOperand := expression.LOperand.(type) {
 	case pgsql.CompoundIdentifier:
 		switch typedLOperand.Field() {
 		case pgsql.ColumnKindID:
-			// In the case where the left operand is a reference to the kind ID column of an edge entity
-			// it is assumed that the query is utilizing the type(...) cypher function. This indicates
-			// a need to look at the right operand to inspect if it must be marshalled from the text
-			// representation of a kind to its associated kind ID.
-			switch typedROperand := expression.ROperand.(type) {
-			case pgsql.Literal:
-				if typedROperand.CastType == pgsql.Text {
-					// Only translate the right operand if it is a text literal
-					if kinds, err := graph.AsKinds([]any{typedROperand.Value}); err != nil {
+			if mapTypeLiteralToKindID {
+				// In the case where the left operand is a reference to the kind ID column of an edge entity
+				// it is assumed that the query is utilizing the type(...) cypher function. This indicates
+				// a need to look at the right operand to inspect if it must be marshalled from the text
+				// representation of a kind to its associated kind ID.
+				switch typedROperand := expression.ROperand.(type) {
+				case pgsql.Literal:
+					if kindIDLiteral, converted, err := literalKindID(kindMapper, typedROperand); err != nil {
 						return err
-					} else if kindIDs, err := kindMapper.MapKinds(kinds); err != nil {
-						return err
-					} else {
-						expression.ROperand = pgsql.NewLiteral(kindIDs[0], pgsql.Int2)
+					} else if converted {
+						expression.ROperand = kindIDLiteral
 					}
 				}
 			}
@@ -232,24 +349,34 @@ func applyTypeFunctionLikeTypeHints(kindMapper *contextAwareKindMapper, expressi
 		}
 	}
 
+	if kindIDExpression, isRelationshipTypeName := relationshipTypeKindIDExpression(expression.ROperand); mapTypeLiteralToKindID && isRelationshipTypeName {
+		switch typedLOperand := expression.LOperand.(type) {
+		case pgsql.Literal:
+			if kindIDLiteral, converted, err := literalKindID(kindMapper, typedLOperand); err != nil {
+				return err
+			} else if converted {
+				expression.LOperand = kindIDLiteral
+				expression.ROperand = kindIDExpression
+				return nil
+			}
+		}
+	}
+
 	switch typedROperand := expression.ROperand.(type) {
 	case pgsql.CompoundIdentifier:
 		switch typedROperand.Field() {
 		case pgsql.ColumnKindID:
-			// In the case where the left operand is a reference to the kind ID column of an edge entity
-			// it is assumed that the query is utilizing the type(...) cypher function. This indicates
-			// a need to look at the right operand to inspect if it must be marshalled from the text
-			// representation of a kind to its associated kind ID.
-			switch typedLOperand := expression.LOperand.(type) {
-			case pgsql.Literal:
-				if typedLOperand.CastType == pgsql.Text {
-					// Only translate the right operand if it is a text literal
-					if kinds, err := graph.AsKinds([]any{typedLOperand.Value}); err != nil {
+			if mapTypeLiteralToKindID {
+				// In the case where the left operand is a reference to the kind ID column of an edge entity
+				// it is assumed that the query is utilizing the type(...) cypher function. This indicates
+				// a need to look at the right operand to inspect if it must be marshalled from the text
+				// representation of a kind to its associated kind ID.
+				switch typedLOperand := expression.LOperand.(type) {
+				case pgsql.Literal:
+					if kindIDLiteral, converted, err := literalKindID(kindMapper, typedLOperand); err != nil {
 						return err
-					} else if kindIDs, err := kindMapper.MapKinds(kinds); err != nil {
-						return err
-					} else {
-						expression.LOperand = pgsql.NewLiteral(kindIDs[0], pgsql.Int2)
+					} else if converted {
+						expression.LOperand = kindIDLiteral
 					}
 				}
 			}
@@ -308,7 +435,7 @@ func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expressi
 		return nil
 	}
 
-	if err := rewritePropertyLookupOperands(expression); err != nil {
+	if err := rewritePropertyLookupOperands(kindMapper, expression); err != nil {
 		return err
 	}
 

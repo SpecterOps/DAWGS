@@ -71,11 +71,16 @@ type Expansion struct {
 	TerminalNodeConstraints            pgsql.Expression
 	TerminalNodeSatisfactionProjection pgsql.SelectItem
 	DeferredNodeSatisfactionConstraint pgsql.Expression
+	UseMaterializedTerminalFilter      bool
+	UseMaterializedEndpointPairFilter  bool
+	HasExplicitEndpointInequality      bool
 
 	PrimerQueryParameter            *BoundIdentifier
 	BackwardPrimerQueryParameter    *BoundIdentifier
 	RecursiveQueryParameter         *BoundIdentifier
 	BackwardRecursiveQueryParameter *BoundIdentifier
+
+	UseBidirectionalSearch bool
 
 	EdgeStartIdentifier pgsql.Identifier
 	EdgeStartColumn     pgsql.CompoundIdentifier
@@ -122,6 +127,220 @@ func (s *Expansion) CanExecuteBidirectionalSearch() bool {
 	return s.PrimerNodeConstraints != nil && s.TerminalNodeConstraints != nil
 }
 
+func (s *TraversalStep) CanExecuteBidirectionalSearch() bool {
+	if s.Expansion == nil {
+		return false
+	}
+
+	return s.Expansion.CanExecuteBidirectionalSearch() ||
+		(s.LeftNodeBound && s.RightNodeBound && s.Frame != nil && s.Frame.Previous != nil)
+}
+
+func (s *TraversalStep) hasPreviousFrameBinding() bool {
+	return s.Frame != nil && s.Frame.Previous != nil
+}
+
+func (s *TraversalStep) usesBoundEndpointPairs() bool {
+	return s.LeftNodeBound && s.RightNodeBound && s.hasPreviousFrameBinding()
+}
+
+func (s *TraversalStep) endpointSelectivity(scope *Scope, expression pgsql.Expression, bound bool) (int, error) {
+	selectivity, err := MeasureSelectivity(scope, expression)
+	if err != nil {
+		return 0, err
+	}
+
+	if bound && s.hasPreviousFrameBinding() {
+		selectivity += selectivityWeightBoundIdentifier
+	}
+
+	return selectivity, nil
+}
+
+func isBidirectionalSearchAnchor(selectivity int) bool {
+	return selectivity >= selectivityBidirectionalAnchorThreshold
+}
+
+func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	for _, term := range flattenConjunction(expression) {
+		binaryExpression, isBinaryExpression := unwrapParenthetical(term).(*pgsql.BinaryExpression)
+		if !isBinaryExpression || binaryExpression.Operator != pgsql.OperatorEquals {
+			continue
+		}
+
+		leftIsID := isIdentifierIDReference(binaryExpression.LOperand, identifier)
+		rightIsID := isIdentifierIDReference(binaryExpression.ROperand, identifier)
+
+		if leftIsID && isStaticIDEqualityOperand(binaryExpression.ROperand) {
+			return true
+		}
+
+		if rightIsID && isStaticIDEqualityOperand(binaryExpression.LOperand) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasLocalIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	if !hasIDEqualityConstraint(expression, identifier) {
+		return false
+	}
+
+	return hasLocalEndpointConstraint(expression, identifier)
+}
+
+func hasLocalEndpointConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	if expression == nil || !referencesIdentifier(expression, identifier) {
+		return false
+	}
+
+	_, externalConstraints := partitionConstraintByLocality(expression, pgsql.AsIdentifierSet(identifier))
+	return externalConstraints == nil
+}
+
+func referencesIdentifier(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	references := false
+
+	_ = walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
+		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
+			switch typedNode := node.(type) {
+			case pgsql.CompoundIdentifier:
+				if len(typedNode) > 0 && typedNode[0] == identifier {
+					references = true
+					handler.SetDone()
+				}
+
+			case pgsql.Identifier:
+				if typedNode == identifier {
+					references = true
+					handler.SetDone()
+				}
+
+			case pgsql.RowColumnReference:
+				if referencesIdentifier(typedNode.Identifier, identifier) {
+					references = true
+					handler.SetDone()
+				} else {
+					handler.Consume()
+				}
+			}
+		},
+	))
+
+	return references
+}
+
+func hasPairAwareEndpointConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	return hasLocalEndpointConstraint(expression, identifier) &&
+		referencesEndpointSearchColumn(expression, identifier)
+}
+
+func referencesEndpointSearchColumn(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	references := false
+
+	_ = walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
+		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
+			// kind_ids constrains labels but not the endpoint ID space the
+			// bidirectional harness uses to enumerate root/terminal pairs.
+			if compoundIdentifier, isCompoundIdentifier := node.(pgsql.CompoundIdentifier); isCompoundIdentifier &&
+				len(compoundIdentifier) > 1 &&
+				compoundIdentifier[0] == identifier &&
+				compoundIdentifier[1] != pgsql.ColumnKindIDs {
+				references = true
+				handler.SetDone()
+			}
+		},
+	))
+
+	return references
+}
+
+func isStaticIDEqualityOperand(expression pgsql.Expression) bool {
+	if expression == nil {
+		return false
+	}
+
+	isStatic := true
+
+	_ = walk.PgSQL(unwrapParenthetical(expression), walk.NewSimpleVisitor[pgsql.SyntaxNode](
+		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
+			switch node.(type) {
+			case pgsql.Identifier, pgsql.CompoundIdentifier, pgsql.RowColumnReference:
+				isStatic = false
+				handler.SetDone()
+			}
+		},
+	))
+
+	return isStatic
+}
+
+func isIdentifierIDReference(expression pgsql.Expression, identifier pgsql.Identifier) bool {
+	compoundIdentifier, isCompoundIdentifier := unwrapParenthetical(expression).(pgsql.CompoundIdentifier)
+	return isCompoundIdentifier && len(compoundIdentifier) == 2 &&
+		compoundIdentifier[0] == identifier &&
+		compoundIdentifier[1] == pgsql.ColumnID
+}
+
+func (s *TraversalStep) CanExecuteSelectiveBidirectionalSearch(scope *Scope) (bool, error) {
+	if s.Expansion == nil {
+		return false, nil
+	}
+
+	if s.usesBoundEndpointPairs() {
+		return true, nil
+	}
+
+	if !s.Expansion.CanExecuteBidirectionalSearch() {
+		return false, nil
+	}
+
+	if s.LeftNode == nil || s.RightNode == nil {
+		return false, nil
+	}
+
+	if hasLocalIDEqualityConstraint(s.Expansion.PrimerNodeConstraints, s.LeftNode.Identifier) &&
+		hasLocalIDEqualityConstraint(s.Expansion.TerminalNodeConstraints, s.RightNode.Identifier) {
+		return true, nil
+	}
+
+	// Bidirectional shortest-path search is only correct for multi-endpoint
+	// queries when the harness knows the complete pair universe. Unbound
+	// endpoint predicates can be selective, but they do not by themselves
+	// define which (root, terminal) pairs must be completed.
+	return false, nil
+}
+
+func (s *TraversalStep) CanExecutePairAwareBidirectionalSearch(scope *Scope) (bool, error) {
+	if canExecute, err := s.CanExecuteSelectiveBidirectionalSearch(scope); canExecute || err != nil {
+		return canExecute, err
+	}
+
+	if s.Expansion == nil ||
+		(!s.Expansion.Options.FindShortestPath && !s.Expansion.Options.FindAllShortestPaths) ||
+		!s.Expansion.CanExecuteBidirectionalSearch() ||
+		s.LeftNode == nil ||
+		s.RightNode == nil ||
+		!hasPairAwareEndpointConstraint(s.Expansion.PrimerNodeConstraints, s.LeftNode.Identifier) ||
+		!hasPairAwareEndpointConstraint(s.Expansion.TerminalNodeConstraints, s.RightNode.Identifier) {
+		return false, nil
+	}
+
+	if primerSelectivity, err := s.endpointSelectivity(scope, s.Expansion.PrimerNodeConstraints, s.LeftNodeBound); err != nil {
+		return false, err
+	} else if !isBidirectionalSearchAnchor(primerSelectivity) {
+		return false, nil
+	}
+
+	if terminalSelectivity, err := s.endpointSelectivity(scope, s.Expansion.TerminalNodeConstraints, s.RightNodeBound); err != nil {
+		return false, err
+	} else {
+		return isBidirectionalSearchAnchor(terminalSelectivity), nil
+	}
+}
+
 // flattenConjunction collects the leaf operands of a left-recursive AND chain.
 func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
 	if bin, typeOK := expr.(*pgsql.BinaryExpression); !typeOK || bin.Operator != pgsql.OperatorAnd {
@@ -131,17 +350,32 @@ func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
 	}
 }
 
-// isLocalToScope returns true only when every compound-identifier root found
-// in the expression is a member of localScope.
-func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+// expressionReferencesOnlyLocalIdentifiers returns true only when every binding
+// reference found in the expression is a member of localScope.
+func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
 	isLocal := true
 
 	walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
 		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
-			if ci, ok := node.(pgsql.CompoundIdentifier); ok && len(ci) > 0 {
-				if !localScope.Contains(ci[0]) {
+			switch typedNode := node.(type) {
+			case pgsql.CompoundIdentifier:
+				if len(typedNode) > 0 && !localScope.Contains(typedNode[0]) {
 					isLocal = false
 					handler.SetDone()
+				}
+
+			case pgsql.Identifier:
+				if !localScope.Contains(typedNode) {
+					isLocal = false
+					handler.SetDone()
+				}
+
+			case pgsql.RowColumnReference:
+				if !expressionReferencesOnlyLocalIdentifiers(typedNode.Identifier, localScope) {
+					isLocal = false
+					handler.SetDone()
+				} else {
+					handler.Consume()
 				}
 			}
 		},
@@ -150,10 +384,18 @@ func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet
 	return isLocal
 }
 
+func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+	if expression == nil {
+		return true
+	}
+
+	return expressionReferencesOnlyLocalIdentifiers(expression, localScope)
+}
+
 // partitionConstraintByLocality splits a conjunction (A AND B AND ...) into
-// two expressions: one whose every compound-identifier root is contained in
-// localScope (safe for JOIN ON), and one whose roots reference outside
-// identifiers (must stay in WHERE).
+// two expressions: one whose every binding reference is contained in
+// localScope (safe for JOIN ON), and one that references outside identifiers
+// (must stay in WHERE).
 //
 // Only top-level AND operands are split. If an expression is not a
 // BinaryExpression with OperatorAnd, the whole expression is tested as a unit.
@@ -179,6 +421,7 @@ type TraversalStep struct {
 	Frame                  *Frame
 	Direction              graph.Direction
 	Expansion              *Expansion
+	PathReversed           bool
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool
 	LeftNodeConstraints    pgsql.Expression
@@ -239,6 +482,8 @@ func (s *TraversalStep) FlipNodes() {
 	case graph.DirectionInbound:
 		s.Direction = graph.DirectionOutbound
 	}
+
+	s.PathReversed = !s.PathReversed
 }
 
 type PatternPart struct {
@@ -317,15 +562,39 @@ type QueryPart struct {
 	// repetition of some of the exported fields above which is intentional and may be a good refactor target
 	// in the future
 	patternPredicates               []*pgsql.Future[*Pattern]
-	properties                      map[string]pgsql.Expression
+	properties                      TranslatedProperties
 	currentPattern                  *Pattern
 	stashedPattern                  *Pattern
 	projections                     *Projections
 	mutations                       *Mutations
 	fromClauses                     []pgsql.FromClause
+	limitPushdownFrames             *pgsql.IdentifierSet
+	referencedIdentifiers           *pgsql.IdentifierSet
 	stashedExpressionTreeTranslator *ExpressionTreeTranslator
 	stashedQuantifierArray          []pgsql.Expression
 	quantifierIdentifiers           *pgsql.IdentifierSet
+	unwindClauses                   []UnwindClause
+	isCreating                      bool
+}
+
+type UnwindClause struct {
+	Expression pgsql.Expression
+	Binding    *BoundIdentifier
+}
+
+type TranslatedProperties struct {
+	Map       map[string]pgsql.Expression
+	Parameter pgsql.Expression
+}
+
+func NewTranslatedProperties() TranslatedProperties {
+	return TranslatedProperties{
+		Map: map[string]pgsql.Expression{},
+	}
+}
+
+func (s TranslatedProperties) IsEmpty() bool {
+	return len(s.Map) == 0 && s.Parameter == nil
 }
 
 func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
@@ -337,7 +606,9 @@ func NewQueryPart(numReadingClauses, numUpdatingClauses int) *QueryPart {
 		numReadingClauses:     numReadingClauses,
 		numUpdatingClauses:    numUpdatingClauses,
 		mutations:             NewMutations(),
-		properties:            map[string]pgsql.Expression{},
+		properties:            NewTranslatedProperties(),
+		limitPushdownFrames:   pgsql.NewIdentifierSet(),
+		referencedIdentifiers: pgsql.NewIdentifierSet(),
 		quantifierIdentifiers: pgsql.NewIdentifierSet(),
 	}
 }
@@ -351,6 +622,24 @@ func (s *QueryPart) ConsumeFromClauses() []pgsql.FromClause {
 	s.fromClauses = nil
 
 	return fromClauses
+}
+
+func (s *QueryPart) AllowLimitPushdown(frameIdentifier pgsql.Identifier) {
+	s.limitPushdownFrames.Add(frameIdentifier)
+}
+
+func (s *QueryPart) CanPushDownLimitTo(frameIdentifier pgsql.Identifier) bool {
+	return s.limitPushdownFrames.Contains(frameIdentifier)
+}
+
+func (s *QueryPart) AddUnwindClause(clause UnwindClause) {
+	s.unwindClauses = append(s.unwindClauses, clause)
+}
+
+func (s *QueryPart) ConsumeUnwindClauses() []UnwindClause {
+	clauses := s.unwindClauses
+	s.unwindClauses = nil
+	return clauses
 }
 
 func (s *QueryPart) RestoreStashedPattern() {
@@ -406,16 +695,24 @@ func (s *QueryPart) CurrentProjection() *Projection {
 }
 
 func (s *QueryPart) HasProperties() bool {
-	return len(s.properties) > 0
+	return !s.properties.IsEmpty()
 }
 
 func (s *QueryPart) AddProperty(key string, expression pgsql.Expression) {
-	s.properties[key] = expression
+	if s.properties.Map == nil {
+		s.properties.Map = map[string]pgsql.Expression{}
+	}
+
+	s.properties.Map[key] = expression
 }
 
-func (s *QueryPart) ConsumeProperties() map[string]pgsql.Expression {
+func (s *QueryPart) AddPropertyParameter(expression pgsql.Expression) {
+	s.properties.Parameter = expression
+}
+
+func (s *QueryPart) ConsumeProperties() TranslatedProperties {
 	properties := s.properties
-	s.properties = map[string]pgsql.Expression{}
+	s.properties = NewTranslatedProperties()
 
 	return properties
 }
@@ -469,15 +766,34 @@ type Delete struct {
 	UpdateBinding *BoundIdentifier
 }
 
+type NodeCreate struct {
+	Binding    *BoundIdentifier
+	Properties TranslatedProperties
+	Kinds      graph.Kinds
+}
+
+type EdgeCreate struct {
+	Binding    *BoundIdentifier
+	Properties TranslatedProperties
+	Kinds      graph.Kinds
+	LeftNode   *BoundIdentifier
+	RightNode  *BoundIdentifier
+	Direction  graph.Direction
+}
+
 type Mutations struct {
-	Deletions *graph.IndexedSlice[pgsql.Identifier, *Delete]
-	Updates   *graph.IndexedSlice[pgsql.Identifier, *Update]
+	Deletions     *graph.IndexedSlice[pgsql.Identifier, *Delete]
+	Updates       *graph.IndexedSlice[pgsql.Identifier, *Update]
+	Creations     *graph.IndexedSlice[pgsql.Identifier, *NodeCreate]
+	EdgeCreations *graph.IndexedSlice[pgsql.Identifier, *EdgeCreate]
 }
 
 func NewMutations() *Mutations {
 	return &Mutations{
-		Deletions: graph.NewIndexedSlice[pgsql.Identifier, *Delete](),
-		Updates:   graph.NewIndexedSlice[pgsql.Identifier, *Update](),
+		Deletions:     graph.NewIndexedSlice[pgsql.Identifier, *Delete](),
+		Updates:       graph.NewIndexedSlice[pgsql.Identifier, *Update](),
+		Creations:     graph.NewIndexedSlice[pgsql.Identifier, *NodeCreate](),
+		EdgeCreations: graph.NewIndexedSlice[pgsql.Identifier, *EdgeCreate](),
 	}
 }
 
@@ -579,7 +895,7 @@ type Projections struct {
 	Frame       *Frame
 	Constraints pgsql.Expression
 	Items       []*Projection
-	GroupBy     []pgsql.SelectItem
+	GroupBy     []pgsql.Expression
 }
 
 func (s *Projections) Add(projection *Projection) {
@@ -625,4 +941,40 @@ func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.
 	}
 
 	return pgsql.Identifier(variableExpression.Symbol), true, nil
+}
+
+type FromClauseBuilder struct {
+	seen        map[pgsql.Identifier]struct{}
+	fromClauses []pgsql.FromClause
+}
+
+func NewFromClauseBuilder() *FromClauseBuilder {
+	return &FromClauseBuilder{
+		seen: make(map[pgsql.Identifier]struct{}),
+	}
+}
+
+func (s *FromClauseBuilder) AddIdentifier(frameID pgsql.Identifier) {
+	if frameID == "" {
+		return
+	}
+
+	if _, already := s.seen[frameID]; !already {
+		s.seen[frameID] = struct{}{}
+		s.fromClauses = append(s.fromClauses, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{frameID},
+			},
+		})
+	}
+}
+
+func (s *FromClauseBuilder) AddBinding(binding *BoundIdentifier) {
+	if binding != nil && binding.LastProjection != nil {
+		s.AddIdentifier(binding.LastProjection.Binding.Identifier)
+	}
+}
+
+func (s *FromClauseBuilder) Clauses() []pgsql.FromClause {
+	return s.fromClauses
 }

@@ -73,6 +73,13 @@ func TestInferExpressionType(t *testing.T) {
 			mustAsLiteral("456"),
 		),
 	}, {
+		ExpectedType: pgsql.Text,
+		Expression: pgsql.NewBinaryExpression(
+			mustAsLiteral("n"),
+			pgsql.OperatorConcatenate,
+			mustAsLiteral(123),
+		),
+	}, {
 		ExpectedType: pgsql.Int8,
 		Expression: pgsql.NewBinaryExpression(
 			mustAsLiteral(123),
@@ -142,6 +149,216 @@ func TestInferExpressionType(t *testing.T) {
 				require.Equal(t, nextCase.ExpectedType, inferredType)
 			})
 		}
+	}
+}
+
+func TestInferUnaryExpressionType(t *testing.T) {
+	testCases := []struct {
+		Name         string
+		ExpectedType pgsql.DataType
+		Expression   pgsql.Expression
+	}{{
+		Name:         "not",
+		ExpectedType: pgsql.Boolean,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorNot,
+			pgsql.NewBinaryExpression(
+				mustAsLiteral("a"),
+				pgsql.OperatorEquals,
+				mustAsLiteral("a"),
+			),
+		),
+	}, {
+		Name:         "negative numeric",
+		ExpectedType: pgsql.Int4,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorSubtract,
+			mustAsLiteral(int32(1)),
+		),
+	}, {
+		Name:         "positive numeric value",
+		ExpectedType: pgsql.Int2,
+		Expression: pgsql.UnaryExpression{
+			Operator: pgsql.OperatorAdd,
+			Operand:  mustAsLiteral(int16(1)),
+		},
+	}, {
+		Name:         "unknown numeric operand",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorSubtract,
+			pgsql.Identifier("x"),
+		),
+	}, {
+		Name:         "non-numeric operand",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorSubtract,
+			mustAsLiteral("text"),
+		),
+	}, {
+		Name:         "is null",
+		ExpectedType: pgsql.Boolean,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorIs,
+			pgsql.Identifier("x"),
+		),
+	}, {
+		Name:         "is not null",
+		ExpectedType: pgsql.Boolean,
+		Expression: pgsql.NewUnaryExpression(
+			pgsql.OperatorIsNot,
+			pgsql.Identifier("x"),
+		),
+	}, {
+		Name:         "nil pointer",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   (*pgsql.UnaryExpression)(nil),
+	}}
+
+	for _, nextCase := range testCases {
+		t.Run(nextCase.Name, func(t *testing.T) {
+			inferredType, err := translate.InferExpressionType(nextCase.Expression)
+
+			require.NoError(t, err)
+			require.Equal(t, nextCase.ExpectedType, inferredType)
+		})
+	}
+}
+
+func TestInferWrappedExpressionType(t *testing.T) {
+	testCases := []struct {
+		Name         string
+		ExpectedType pgsql.DataType
+		Expression   pgsql.Expression
+	}{{
+		Name:         "composite value",
+		ExpectedType: pgsql.PathComposite,
+		Expression: pgsql.CompositeValue{
+			DataType: pgsql.PathComposite,
+		},
+	}, {
+		Name:         "empty composite value",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   pgsql.CompositeValue{},
+	}, {
+		Name:         "aliased expression",
+		ExpectedType: pgsql.Text,
+		Expression: pgsql.AliasedExpression{
+			Expression: mustAsLiteral("text"),
+			Alias:      pgsql.AsOptionalIdentifier("alias"),
+		},
+	}, {
+		Name:         "aliased expression pointer",
+		ExpectedType: pgsql.Int8,
+		Expression: &pgsql.AliasedExpression{
+			Expression: mustAsLiteral(int64(1)),
+			Alias:      pgsql.AsOptionalIdentifier("alias"),
+		},
+	}, {
+		Name:         "exists expression",
+		ExpectedType: pgsql.Boolean,
+		Expression:   pgsql.ExistsExpression{},
+	}, {
+		Name:         "negated exists expression",
+		ExpectedType: pgsql.Boolean,
+		Expression:   pgsql.ExistsExpression{Negated: true},
+	}, {
+		Name:         "variadic expression",
+		ExpectedType: pgsql.Int8Array,
+		Expression: pgsql.Variadic{
+			Expression: pgsql.ArrayLiteral{
+				CastType: pgsql.Int8Array,
+			},
+		},
+	}, {
+		Name:         "all expression",
+		ExpectedType: pgsql.Int8,
+		Expression: pgsql.NewAllExpression(pgsql.ArrayLiteral{
+			CastType: pgsql.Int8Array,
+		}),
+	}, {
+		Name:         "unknown all expression",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   pgsql.NewAllExpression(pgsql.Identifier("path")),
+	}, {
+		Name:         "all expression over scalar",
+		ExpectedType: pgsql.UnknownDataType,
+		Expression:   pgsql.NewAllExpression(mustAsLiteral(int64(1))),
+	}}
+
+	for _, nextCase := range testCases {
+		t.Run(nextCase.Name, func(t *testing.T) {
+			inferredType, err := translate.InferExpressionType(nextCase.Expression)
+
+			require.NoError(t, err)
+			require.Equal(t, nextCase.ExpectedType, inferredType)
+		})
+	}
+}
+
+func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
+	propertyLookup := func(property string) *pgsql.BinaryExpression {
+		return pgsql.NewPropertyLookup(
+			pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
+			mustAsLiteral(property),
+		)
+	}
+	renderEquality := func(t *testing.T, lOperand, rOperand pgsql.Expression) string {
+		t.Helper()
+
+		treeTranslator := translate.NewExpressionTreeTranslator(nil)
+		treeTranslator.PushOperand(lOperand)
+		treeTranslator.PushOperand(rOperand)
+		require.NoError(t, treeTranslator.CompleteBinaryExpression(translate.NewScope(), pgsql.OperatorEquals))
+
+		formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
+		require.NoError(t, err)
+
+		return formatted
+	}
+
+	testCases := []struct {
+		Name     string
+		LOperand pgsql.Expression
+		ROperand pgsql.Expression
+		Expected string
+	}{{
+		Name:     "boolean string literal keeps text property lookup",
+		LOperand: propertyLookup("isassignabletorole"),
+		ROperand: mustAsLiteral("true"),
+		Expected: "(n.properties ->> 'isassignabletorole') = 'true'",
+	}, {
+		Name:     "boolean string literal keeps text property lookup when reversed",
+		LOperand: mustAsLiteral("true"),
+		ROperand: propertyLookup("isassignabletorole"),
+		Expected: "'true' = (n.properties ->> 'isassignabletorole')",
+	}, {
+		Name:     "non-boolean string literal keeps jsonb scalar equality",
+		LOperand: propertyLookup("rank"),
+		ROperand: mustAsLiteral("1"),
+		Expected: "((n.properties -> 'rank'))::jsonb = to_jsonb(('1')::text)::jsonb",
+	}, {
+		Name:     "boolean literal keeps jsonb scalar equality",
+		LOperand: propertyLookup("isassignabletorole"),
+		ROperand: mustAsLiteral(true),
+		Expected: "((n.properties -> 'isassignabletorole'))::jsonb = to_jsonb((true)::bool)::jsonb",
+	}, {
+		Name:     "numeric literal keeps jsonb scalar equality",
+		LOperand: propertyLookup("count"),
+		ROperand: mustAsLiteral(1),
+		Expected: "((n.properties -> 'count'))::jsonb = to_jsonb((1)::int8)::jsonb",
+	}, {
+		Name:     "property to property equality keeps jsonb operands",
+		LOperand: propertyLookup("left"),
+		ROperand: propertyLookup("right"),
+		Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			require.Equal(t, testCase.Expected, renderEquality(t, testCase.LOperand, testCase.ROperand))
+		})
 	}
 }
 

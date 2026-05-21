@@ -14,7 +14,7 @@
           {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["c"]}
     },
     {
       "name": "bind a converging diamond path with endpoint property filters",
@@ -128,7 +128,7 @@
           {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"path_node_ids": [["src", "mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
     },
     {
       "name": "bind a path with one fixed hop then variable expansion filtered by coalesce contains",
@@ -181,6 +181,97 @@
         "edges": [{"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}]
       },
       "assert": "non_empty"
+    },
+    {
+      "name": "return two named paths from the same row",
+      "cypher": "match p=(a:NodeKind1)-[:EdgeKind1]->(b:NodeKind2) match q=(b)-[:EdgeKind2]->(c:NodeKind1) return p, q",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]},
+          {"id": "c", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"path_node_ids": [["a", "b"], ["b", "c"]], "path_edge_kinds": [["EdgeKind1"], ["EdgeKind2"]]}
+    },
+    {
+      "name": "bind an inbound directed path between typed nodes",
+      "cypher": "match p=(a:NodeKind1)<-[:EdgeKind1]-(b:NodeKind2) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"]},
+          {"id": "b", "kinds": ["NodeKind2"]}
+        ],
+        "edges": [{"start_id": "b", "end_id": "a", "kind": "EdgeKind1"}]
+      },
+      "assert": {"path_node_ids": [["a", "b"]], "path_edge_kinds": [["EdgeKind1"]]}
+    },
+    {
+      "name": "filter a bound expansion path using head relationship and tail nodes",
+      "cypher": "MATCH p=(:GPO)-[r:GPLink|Contains*1..]->(:Base) WHERE HEAD(r).enforced OR NONE(n IN TAIL(TAIL(NODES(p))) WHERE (n:OU AND n.blocksinheritance)) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "gpo-enforced", "kinds": ["GPO"]},
+          {"id": "base-enforced", "kinds": ["Base"]},
+          {"id": "gpo-enforced-blocked", "kinds": ["GPO"]},
+          {"id": "ou-enforced-first", "kinds": ["OU"], "properties": {"blocksinheritance": false}},
+          {"id": "ou-enforced-blocked", "kinds": ["OU"], "properties": {"blocksinheritance": true}},
+          {"id": "base-enforced-blocked", "kinds": ["Base"]},
+          {"id": "gpo-open", "kinds": ["GPO"]},
+          {"id": "ou-open", "kinds": ["OU"], "properties": {"blocksinheritance": false}},
+          {"id": "base-open", "kinds": ["Base"]},
+          {"id": "gpo-blocked", "kinds": ["GPO"]},
+          {"id": "ou-first", "kinds": ["OU"], "properties": {"blocksinheritance": false}},
+          {"id": "ou-blocked", "kinds": ["OU"], "properties": {"blocksinheritance": true}},
+          {"id": "base-blocked", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "gpo-enforced", "end_id": "base-enforced", "kind": "GPLink", "properties": {"enforced": true}},
+          {"start_id": "gpo-enforced-blocked", "end_id": "ou-enforced-first", "kind": "GPLink", "properties": {"enforced": true}},
+          {"start_id": "ou-enforced-first", "end_id": "ou-enforced-blocked", "kind": "Contains"},
+          {"start_id": "ou-enforced-blocked", "end_id": "base-enforced-blocked", "kind": "Contains"},
+          {"start_id": "gpo-open", "end_id": "ou-open", "kind": "GPLink", "properties": {"enforced": false}},
+          {"start_id": "ou-open", "end_id": "base-open", "kind": "Contains"},
+          {"start_id": "gpo-blocked", "end_id": "ou-first", "kind": "GPLink", "properties": {"enforced": false}},
+          {"start_id": "ou-first", "end_id": "ou-blocked", "kind": "Contains"},
+          {"start_id": "ou-blocked", "end_id": "base-blocked", "kind": "Contains"}
+        ]
+      },
+      "assert": {
+        "path_node_ids": [["gpo-enforced", "base-enforced"], ["gpo-enforced-blocked", "ou-enforced-first", "ou-enforced-blocked", "base-enforced-blocked"], ["gpo-open", "ou-open", "base-open"]],
+        "path_edge_kinds": [["GPLink"], ["GPLink", "Contains", "Contains"], ["GPLink", "Contains"]]
+      }
+    },
+    {
+      "name": "filter a bound expansion path using tail relationship types",
+      "cypher": "MATCH p=(:GPO)-[r:GPLink|Contains*1..]->(:Base) WHERE NONE(x IN TAIL(r) WHERE NOT type(x) = 'Contains') RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "gpo-direct", "kinds": ["GPO"]},
+          {"id": "base-direct", "kinds": ["Base"]},
+          {"id": "gpo-contained", "kinds": ["GPO"]},
+          {"id": "ou-contained", "kinds": ["OU"]},
+          {"id": "base-contained", "kinds": ["Base"]},
+          {"id": "gpo-bad-tail", "kinds": ["GPO"]},
+          {"id": "ou-bad-tail", "kinds": ["OU"]},
+          {"id": "base-bad-tail", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "gpo-direct", "end_id": "base-direct", "kind": "GPLink"},
+          {"start_id": "gpo-contained", "end_id": "ou-contained", "kind": "GPLink"},
+          {"start_id": "ou-contained", "end_id": "base-contained", "kind": "Contains"},
+          {"start_id": "gpo-bad-tail", "end_id": "ou-bad-tail", "kind": "GPLink"},
+          {"start_id": "ou-bad-tail", "end_id": "base-bad-tail", "kind": "GPLink"}
+        ]
+      },
+      "assert": {
+        "path_node_ids": [["gpo-direct", "base-direct"], ["gpo-contained", "ou-contained", "base-contained"]],
+        "path_edge_kinds": [["GPLink"], ["GPLink", "Contains"]]
+      }
     }
   ]
 }

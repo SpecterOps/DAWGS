@@ -5,6 +5,7 @@ package neo4j_test
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -18,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const Neo4jConnectionStringEnv = "NEO4J_CONNECTION"
+const connectionStringEnv = "CONNECTION_STRING"
 
 var (
 	NodeKind1 = graph.StringKind("NodeKind1")
@@ -39,20 +40,28 @@ func prepareNode(index int) *graph.Node {
 	)
 }
 
+func isNeo4jConnectionString(connStr string) bool {
+	u, err := url.Parse(connStr)
+	return err == nil && u.Scheme == neo4j.DriverName
+}
+
 func TestBatchTransaction_NodeUpdate(t *testing.T) {
 	const (
 		numNodes = 1_000
 	)
 
 	var (
-		neo4jConnectionStr = os.Getenv(Neo4jConnectionStringEnv)
+		neo4jConnectionStr = os.Getenv(connectionStringEnv)
 		ctx, done          = context.WithCancel(context.Background())
 	)
 
 	defer done()
 
 	if neo4jConnectionStr == "" {
-		t.Fatalf("No Neo4j connection string specified. Test requires a valid Neo4j connection string present in the %s environment variable.", Neo4jConnectionStringEnv)
+		t.Fatalf("No Neo4j connection string specified. Test requires a valid Neo4j connection string present in the %s environment variable.", connectionStringEnv)
+	}
+	if !isNeo4jConnectionString(neo4jConnectionStr) {
+		t.Skipf("%s is not a Neo4j connection string", connectionStringEnv)
 	}
 
 	graphDB, err := dawgs.Open(ctx, neo4j.DriverName, dawgs.Config{
@@ -61,7 +70,13 @@ func TestBatchTransaction_NodeUpdate(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	// Regsiter a cleanup step to wipe the database
+	assert.NoError(t,
+		graphDB.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			return tx.Nodes().Filter(query.Kind(query.Node(), NodeKind1)).Delete()
+		}),
+	)
+
+	// Register a cleanup step to wipe the database
 	t.Cleanup(func() {
 		cleanupCtx, done := context.WithTimeout(context.Background(), time.Minute)
 		defer done()

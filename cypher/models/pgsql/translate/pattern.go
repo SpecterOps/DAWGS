@@ -69,12 +69,18 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 		if traversalStepQuery, err := s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep); err != nil {
 			return err
 		} else {
+			if selectBody, ok := traversalStepQuery.Body.(pgsql.Select); ok {
+				selectBody.From = append(selectBody.From, unwindFromClauses(s.query.CurrentPart().ConsumeUnwindClauses())...)
+				traversalStepQuery.Body = selectBody
+			}
+
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
 				Alias: pgsql.TableAlias{
 					Name: traversalStep.Frame.Binding.Identifier,
 				},
 				Query: traversalStepQuery,
 			})
+			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	} else {
 		if traversalStepQuery, err := s.buildTraversalPatternStep(traversalStep.Frame, traversalStep); err != nil {
@@ -86,6 +92,7 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 				},
 				Query: traversalStepQuery,
 			})
+			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	}
 
@@ -105,6 +112,7 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 				},
 				Query: traversalStepQuery,
 			})
+			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	} else {
 		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStepContext, expansion); err != nil {
@@ -116,6 +124,7 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 				},
 				Query: traversalStepQuery,
 			})
+			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	}
 
@@ -127,7 +136,7 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 
 	if traversalStepContext.IsRootStep {
 		if allPaths {
-			if traversalStep.Expansion.CanExecuteBidirectionalSearch() {
+			if traversalStep.Expansion.UseBidirectionalSearch {
 				if traversalStepQuery, err := expansion.BuildBiDirectionalAllShortestPathsRoot(); err != nil {
 					return err
 				} else {
@@ -148,9 +157,22 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 					Query: traversalStepQuery,
 				})
 			}
-		} else if traversalStepQuery, err := expansion.BuildShortestPathsRoot(); err != nil {
-			return err
 		} else {
+			var (
+				traversalStepQuery pgsql.Query
+				err                error
+			)
+
+			if traversalStep.Expansion.UseBidirectionalSearch {
+				traversalStepQuery, err = expansion.BuildBiDirectionalShortestPathsRoot()
+			} else {
+				traversalStepQuery, err = expansion.BuildShortestPathsRoot()
+			}
+
+			if err != nil {
+				return err
+			}
+
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
 				Alias: pgsql.TableAlias{
 					Name: traversalStep.Frame.Binding.Identifier,

@@ -51,6 +51,12 @@ const (
 	// sufficient to clear this bar; a bare AND connector (weight 5) or a range comparison on
 	// an unindexed property (weight 10) is not.
 	selectivityFlipThreshold = selectivityWeightNarrowSearch
+
+	// selectivityBidirectionalAnchorThreshold is the minimum score each endpoint must carry
+	// before shortest-path translation starts a bidirectional search from both sides. This
+	// keeps broad label-only endpoints out of bidirectional BFS; a single kind predicate
+	// scores below this threshold, while a materially narrower property predicate can clear it.
+	selectivityBidirectionalAnchorThreshold = selectivityWeightNarrowSearch * 2
 )
 
 // knownNodePropertySelectivity is a hack to enable the selectivity measurement to take advantage of known property indexes

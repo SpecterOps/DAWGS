@@ -26,6 +26,98 @@ func TestFormat_TypeCastedParenthetical(t *testing.T) {
 	require.Equal(t, "('str')::text", formattedQuery)
 }
 
+func TestFormat_Case(t *testing.T) {
+	formattedQuery, err := format.Expression(pgsql.Case{
+		Conditions: []pgsql.Expression{
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{"s0", "root_id"},
+				pgsql.OperatorNotEquals,
+				pgsql.CompoundIdentifier{"s0", "next_id"},
+			),
+		},
+		Then: []pgsql.Expression{
+			pgsql.NewLiteral(true, pgsql.Boolean),
+		},
+		Else: pgsql.FunctionCall{
+			Function: "shortest_path_self_endpoint_error",
+			Parameters: []pgsql.Expression{
+				pgsql.CompoundIdentifier{"s0", "root_id"},
+				pgsql.CompoundIdentifier{"s0", "next_id"},
+			},
+		},
+	}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "case when s0.root_id != s0.next_id then true else shortest_path_self_endpoint_error(s0.root_id, s0.next_id) end", formattedQuery)
+}
+
+func TestFormat_SelectDistinct(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.Select{
+			Distinct: true,
+			Projection: []pgsql.SelectItem{
+				pgsql.Identifier("id"),
+			},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name: pgsql.CompoundIdentifier{"node"},
+				},
+			}},
+		},
+	}, format.NewOutputBuilder())
+
+	require.Nil(t, err)
+	require.Equal(t, "select distinct id from node;", formattedQuery)
+}
+
+func TestFormat_LateralSubqueryJoin(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.Select{
+			Projection: []pgsql.SelectItem{
+				pgsql.CompoundIdentifier{"n", "id"},
+				pgsql.CompoundIdentifier{"e", "id"},
+			},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{"node"},
+					Binding: pgsql.AsOptionalIdentifier("n"),
+				},
+				Joins: []pgsql.Join{{
+					Table: pgsql.LateralSubquery{
+						Query: pgsql.Query{
+							Body: pgsql.Select{
+								Projection: []pgsql.SelectItem{
+									pgsql.CompoundIdentifier{"e", "id"},
+								},
+								From: []pgsql.FromClause{{
+									Source: pgsql.TableReference{
+										Name:    pgsql.CompoundIdentifier{"edge"},
+										Binding: pgsql.AsOptionalIdentifier("e"),
+									},
+								}},
+								Where: pgsql.NewBinaryExpression(
+									pgsql.CompoundIdentifier{"e", "start_id"},
+									pgsql.OperatorEquals,
+									pgsql.CompoundIdentifier{"n", "id"},
+								),
+							},
+							Offset: pgsql.NewLiteral(0, pgsql.Int),
+						},
+						Binding: pgsql.AsOptionalIdentifier("e"),
+					},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType:   pgsql.JoinTypeInner,
+						Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
+					},
+				}},
+			}},
+		},
+	}, format.NewOutputBuilder())
+
+	require.Nil(t, err)
+	require.Equal(t, "select n.id, e.id from node n join lateral (select e.id from edge e where e.start_id = n.id offset 0) e on true;", formattedQuery)
+}
+
 func TestFormat_Delete(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Delete{
 		From: []pgsql.TableReference{{

@@ -15,26 +15,17 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 
 	if bindingResult, err := s.bindPatternExpression(relationshipPattern, pgsql.EdgeComposite); err != nil {
 		return err
+	} else if currentQueryPart.isCreating {
+		return s.collectCreateEdgePattern(relationshipPattern, patternPart, bindingResult)
 	} else {
 		if err := s.translateRelationshipPatternToStep(bindingResult, patternPart, relationshipPattern); err != nil {
 			return err
 		}
 
 		if currentQueryPart.HasProperties() {
-			var propertyConstraints pgsql.Expression
-
-			for key, value := range currentQueryPart.ConsumeProperties() {
-				s.treeTranslator.PushOperand(pgsql.NewPropertyLookup(pgsql.CompoundIdentifier{bindingResult.Binding.Identifier, pgsql.ColumnProperties}, pgsql.NewLiteral(key, pgsql.Text)))
-				s.treeTranslator.PushOperand(value)
-
-				if newConstraint, err := s.treeTranslator.PopBinaryExpression(pgsql.OperatorEquals); err != nil {
-					return err
-				} else {
-					propertyConstraints = pgsql.OptionalAnd(propertyConstraints, newConstraint)
-				}
-			}
-
-			if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(bindingResult.Binding.Identifier), propertyConstraints); err != nil {
+			if propertyConstraints, err := s.buildPatternPropertyConstraints(bindingResult.Binding, currentQueryPart.ConsumeProperties()); err != nil {
+				return err
+			} else if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(bindingResult.Binding.Identifier), propertyConstraints); err != nil {
 				return err
 			}
 		}
@@ -52,6 +43,49 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 			}
 		}
 	}
+
+	return nil
+}
+
+func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.RelationshipPattern, part *PatternPart, bindingResult BindingResult) error {
+	var (
+		queryPart = s.query.CurrentPart()
+		numSteps  = len(part.TraversalSteps)
+	)
+
+	if numSteps == 0 {
+		return fmt.Errorf("relationship pattern encountered before any left node in CREATE pattern")
+	}
+
+	currentStep := part.TraversalSteps[numSteps-1]
+	if currentStep.Edge != nil {
+		// Multiple relationships in one CREATE pattern share the prior right node
+		// as the next left node, so start a continuation step before collecting
+		// the new edge.
+		part.TraversalSteps = append(part.TraversalSteps, &TraversalStep{
+			LeftNode:      currentStep.RightNode,
+			LeftNodeBound: currentStep.RightNodeBound,
+		})
+
+		currentStep = part.TraversalSteps[len(part.TraversalSteps)-1]
+	}
+
+	currentStep.Edge = bindingResult.Binding
+	currentStep.Direction = relationshipPattern.Direction
+
+	if part.PatternBinding != nil {
+		// Pattern bindings are materialized later from their dependencies; record
+		// the created edge even though the INSERT has not been built yet.
+		part.PatternBinding.DependOn(bindingResult.Binding)
+	}
+
+	queryPart.mutations.EdgeCreations.Put(bindingResult.Binding.Identifier, &EdgeCreate{
+		Binding:    bindingResult.Binding,
+		Properties: queryPart.ConsumeProperties(),
+		Kinds:      relationshipPattern.Kinds,
+		LeftNode:   currentStep.LeftNode,
+		Direction:  relationshipPattern.Direction,
+	})
 
 	return nil
 }
@@ -106,6 +140,7 @@ func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingRes
 
 			// Set the path binding in the expansion struct for easier referencing upstream
 			expansion.PathBinding = expansionPathBinding
+			expansionPathBinding.DependOn(bindingResult.Binding)
 
 			if part.PatternBinding != nil {
 				// If there's a bound pattern track this expansion's path as a dependency of the

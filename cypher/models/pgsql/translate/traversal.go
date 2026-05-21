@@ -28,6 +28,10 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	)
 
 	if traversalStep.LeftNodeBound {
+		if traversalStep.Frame.Previous == nil {
+			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
+		}
+
 		// Left node was already materialized in the previous frame. Promote that frame and join only the terminal node here.
 		//
 		// prevFrame is the join root so LeftNodeConstraints can safely reference it in the edge ON clause without partitioning.
@@ -51,7 +55,8 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 				},
 				JoinOperator: pgsql.JoinOperator{
 					JoinType:   pgsql.JoinTypeInner,
-					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition)},
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
+				},
 			}},
 		})
 
@@ -138,6 +143,116 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	}, nil
 }
 
+// buildTraversalPatternRootWithOuterCorrelation constructs a traversal pattern root, preserving the correlation to
+// the outer query part's context
+func (s *Translator) buildTraversalPatternRootWithOuterCorrelation(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
+	if traversalStep.Direction == graph.DirectionBoth {
+		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
+	}
+
+	var (
+		// Partition right-node constraints: only locally-scoped terms go into JOIN ON.
+		// Constraints that reference comma-connected CTEs (e.g. s0.i0 from a prior WITH)
+		// must remain in WHERE — they are out of scope inside an explicit JOIN chain.
+		rightJoinLocal, rightJoinExternal = partitionConstraintByLocality(
+			traversalStep.RightNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect = pgsql.Select{
+			Projection: traversalStep.Projection,
+		}
+	)
+
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+		})
+
+		// Both nodes of the traversal are fully bound by the outer query and the frame bindings
+		// will have been rewritten to reference the outer CTEs here, so we don't need any JOINs
+		// and can use those conditions inside of the inner WHERE to correlate the result set.
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	} else if traversalStep.LeftNodeBound {
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.RightNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition),
+				},
+			}},
+		})
+
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	} else if traversalStep.RightNodeBound {
+		// Right node was already materialized in a previous frame.
+		//
+		// We have to promote that frame to the explicit JOIN root so that RightNodeJoinCondition can reference
+		// it in the ON clause. PostgreSQL forbids referencing a comma-joined table inside a subsequent
+		// explicit JOIN's ON clause.
+		leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
+				},
+			}},
+		})
+
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinLocal, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
+		return pgsql.Query{
+			Body: nextSelect,
+		}, nil
+	} else {
+		// There is nothing to do to preserve outer bounds correlation - do the unbound traversal step
+		return s.buildTraversalPatternRoot(partFrame, traversalStep)
+	}
+}
+
 func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
 	if traversalStep.Direction == graph.DirectionBoth {
 		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
@@ -158,6 +273,10 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 	)
 
 	if traversalStep.LeftNodeBound {
+		if partFrame.Previous == nil {
+			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
+		}
+
 		// prevFrame is the JOIN root here (not comma-connected), so LeftNodeConstraints
 		// can safely reference it. No partitioning needed for this branch.
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
@@ -184,6 +303,45 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 			}},
 		})
+	} else if traversalStep.RightNodeBound && partFrame.Previous == nil {
+		// Self-referential pattern: the right node reuses the left node's variable (e.g. (u)-[]->(u)).
+		// There is no previous frame to promote as a FROM source. Join only the left node table and
+		// push the right-node join condition into WHERE so that start_id and end_id both reference
+		// the same node.
+		leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
+			nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+				Source: pgsql.TableReference{
+					Name: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier},
+				},
+			})
+		}
+
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
+				},
+			}},
+		})
+
+		// The right node's join condition (e.g. n0.id = e0.end_id) goes to WHERE since
+		// both endpoints reference the same node binding.
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
 	} else if traversalStep.RightNodeBound {
 		// Right node was already materialized in a previous frame.
 		//
@@ -366,7 +524,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {
 			return fmt.Errorf("expected shortest path search to utilize variable expansion: ()-[*..]->()")
-		} else if err := s.translateTraversalPatternPartWithoutExpansion(idx == 0, traversalStep); err != nil {
+		} else if err := s.translateTraversalPatternPartWithoutExpansion(part, idx, traversalStep); err != nil {
 			return err
 		}
 	}
@@ -378,7 +536,64 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 	return nil
 }
 
-func (s *Translator) translateTraversalPatternPartWithoutExpansion(isFirstTraversalStep bool, traversalStep *TraversalStep) error {
+func patternBindingDependsOn(queryPart *QueryPart, part *PatternPart, binding *BoundIdentifier) bool {
+	if queryPart == nil || part == nil || part.PatternBinding == nil || binding == nil {
+		return false
+	}
+
+	if !queryPart.ReferencesBinding(part.PatternBinding) {
+		return false
+	}
+
+	for _, dependency := range part.PatternBinding.Dependencies {
+		if dependency.Identifier == binding.Identifier {
+			return true
+		}
+	}
+
+	return false
+}
+
+func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if binding == nil {
+		return false
+	}
+
+	// Keep aliases referenced by later clauses and bindings needed to materialize
+	// a referenced path pattern. Everything else can stay internal to this step.
+	if (binding.Alias.Set && queryPart.ReferencesBinding(binding)) || patternBindingDependsOn(queryPart, part, binding) {
+		return true
+	}
+
+	if stepIndex+1 < len(part.TraversalSteps) {
+		// A multi-hop pattern needs the right node from this step as the next
+		// step's left node even when the user never projects it.
+		nextStep := part.TraversalSteps[stepIndex+1]
+		return nextStep.LeftNode != nil && nextStep.LeftNode.Identifier == binding.Identifier
+	}
+
+	return false
+}
+
+func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
+	// Bound endpoints already exist in an outer frame. Only unexport unbound
+	// values that later clauses and continuation steps cannot observe.
+	if !traversalStep.LeftNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.LeftNode) {
+		traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
+	}
+
+	if !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.Edge) {
+		traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+	}
+
+	if !traversalStep.RightNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.RightNode) {
+		traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
+	}
+}
+
+func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *PatternPart, stepIndex int, traversalStep *TraversalStep) error {
+	isFirstTraversalStep := stepIndex == 0
+
 	if constraints, err := consumePatternConstraints(isFirstTraversalStep, nonRecursivePattern, traversalStep, s.treeTranslator); err != nil {
 		return err
 	} else {
@@ -452,6 +667,8 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(isFirstTraver
 			traversalStep.RightNodeJoinCondition = rightNodeJoinCondition
 		}
 	}
+
+	pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep)
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {
 		return err

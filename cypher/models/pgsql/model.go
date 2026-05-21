@@ -93,6 +93,18 @@ type Case struct {
 	Else       Expression
 }
 
+func (s Case) NodeType() string {
+	return "case"
+}
+
+func (s Case) AsExpression() Expression {
+	return s
+}
+
+func (s Case) AsSelectItem() SelectItem {
+	return s
+}
+
 // InExpression represents a contains operation against a list of evaluated expressions:
 // m.identifier in (val1, val2, ...)
 type InExpression struct {
@@ -142,6 +154,10 @@ func (s TypeCast) NodeType() string {
 }
 
 func (s TypeCast) AsExpression() Expression {
+	return s
+}
+
+func (s TypeCast) AsSelectItem() SelectItem {
 	return s
 }
 
@@ -359,6 +375,14 @@ func (s CompositeValue) AsSelectItem() SelectItem {
 	return s
 }
 
+func (s CompositeValue) TypeHint() DataType {
+	if !s.DataType.IsKnown() {
+		return UnknownDataType
+	}
+
+	return s.DataType
+}
+
 // (<expr>)
 type Parenthetical struct {
 	Expression Expression
@@ -564,7 +588,7 @@ func (s FunctionCall) TypeHint() DataType {
 }
 
 type Join struct {
-	Table        TableReference
+	Table        Expression
 	JoinOperator JoinOperator
 }
 
@@ -617,6 +641,7 @@ func (s Identifier) Matches(others ...Identifier) bool {
 type ArrayIndex struct {
 	Expression Expression
 	Indexes    []Expression
+	CastType   DataType
 }
 
 func (s ArrayIndex) NodeType() string {
@@ -625,6 +650,41 @@ func (s ArrayIndex) NodeType() string {
 
 func (s ArrayIndex) AsExpression() Expression {
 	return s
+}
+
+func (s ArrayIndex) TypeHint() DataType {
+	if s.CastType == UnsetDataType {
+		return UnknownDataType
+	}
+
+	return s.CastType
+}
+
+type ArraySlice struct {
+	Expression Expression
+	Lower      Expression
+	Upper      Expression
+	CastType   DataType
+}
+
+func (s ArraySlice) NodeType() string {
+	return "array_slice"
+}
+
+func (s ArraySlice) AsExpression() Expression {
+	return s
+}
+
+func (s ArraySlice) AsSelectItem() SelectItem {
+	return s
+}
+
+func (s ArraySlice) TypeHint() DataType {
+	if s.CastType == UnsetDataType {
+		return UnknownDataType
+	}
+
+	return s.CastType
 }
 
 type RowColumnReference struct {
@@ -722,6 +782,19 @@ func (s TableReference) AsExpression() Expression {
 
 func (s TableReference) NodeType() string {
 	return "table_reference"
+}
+
+type LateralSubquery struct {
+	Query   Query
+	Binding models.Optional[Identifier]
+}
+
+func (s LateralSubquery) AsExpression() Expression {
+	return s
+}
+
+func (s LateralSubquery) NodeType() string {
+	return "lateral_subquery"
 }
 
 type FromClause struct {
@@ -954,6 +1027,14 @@ type Insert struct {
 	OnConflict *OnConflict
 	Source     *Query
 	Returning  []SelectItem
+}
+
+func (s Insert) AsExpression() Expression {
+	return s
+}
+
+func (s Insert) AsSetExpression() SetExpression {
+	return s
 }
 
 func (s Insert) AsStatement() Statement {

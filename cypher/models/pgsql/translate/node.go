@@ -16,8 +16,55 @@ func (s *Translator) translateNodePattern(nodePattern *cypher.NodePattern) error
 
 	if bindingResult, err := s.bindPatternExpression(nodePattern, pgsql.NodeComposite); err != nil {
 		return err
+	} else if queryPart.isCreating {
+		return s.collectCreateNodePattern(nodePattern, patternPart, bindingResult)
 	} else if err := s.translateNodePatternToStep(nodePattern, patternPart, bindingResult); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (s *Translator) collectCreateNodePattern(nodePattern *cypher.NodePattern, part *PatternPart, bindingResult BindingResult) error {
+	queryPart := s.query.CurrentPart()
+
+	if !bindingResult.AlreadyBound {
+		queryPart.mutations.Creations.Put(bindingResult.Binding.Identifier, &NodeCreate{
+			Binding:    bindingResult.Binding,
+			Properties: queryPart.ConsumeProperties(),
+			Kinds:      nodePattern.Kinds,
+		})
+	} else {
+		queryPart.ConsumeProperties()
+	}
+
+	if part.IsTraversal {
+		if numSteps := len(part.TraversalSteps); numSteps == 0 {
+			part.TraversalSteps = append(part.TraversalSteps, &TraversalStep{
+				LeftNode:      bindingResult.Binding,
+				LeftNodeBound: bindingResult.AlreadyBound,
+			})
+		} else {
+			currentStep := part.TraversalSteps[numSteps-1]
+			if currentStep.RightNode == nil {
+				currentStep.RightNode = bindingResult.Binding
+				currentStep.RightNodeBound = bindingResult.AlreadyBound
+
+				if currentStep.Edge != nil {
+					// CREATE sees the relationship before the right node. Once the
+					// node arrives, complete the pending edge endpoint.
+					if pendingEdge := queryPart.mutations.EdgeCreations.Get(currentStep.Edge.Identifier); pendingEdge != nil {
+						pendingEdge.RightNode = bindingResult.Binding
+					}
+				}
+			}
+		}
+	} else {
+		part.NodeSelect.Binding = bindingResult.Binding
+	}
+
+	if part.PatternBinding != nil {
+		part.PatternBinding.DependOn(bindingResult.Binding)
 	}
 
 	return nil
@@ -28,20 +75,9 @@ func (s *Translator) translateNodePatternToStep(nodePattern *cypher.NodePattern,
 
 	// Check the IR for any collected properties
 	if currentQueryPart.HasProperties() {
-		var propertyConstraints pgsql.Expression
-
-		for key, value := range currentQueryPart.ConsumeProperties() {
-			s.treeTranslator.PushOperand(pgsql.NewPropertyLookup(pgsql.CompoundIdentifier{bindingResult.Binding.Identifier, pgsql.ColumnProperties}, pgsql.NewLiteral(key, pgsql.Text)))
-			s.treeTranslator.PushOperand(value)
-
-			if newConstraint, err := s.treeTranslator.PopBinaryExpression(pgsql.OperatorEquals); err != nil {
-				return err
-			} else {
-				propertyConstraints = pgsql.OptionalAnd(propertyConstraints, newConstraint)
-			}
-		}
-
-		if err := s.treeTranslator.AddTranslationConstraint(pgsql.AsIdentifierSet(bindingResult.Binding.Identifier), propertyConstraints); err != nil {
+		if propertyConstraints, err := s.buildPatternPropertyConstraints(bindingResult.Binding, currentQueryPart.ConsumeProperties()); err != nil {
+			return err
+		} else if err := s.treeTranslator.AddTranslationConstraint(pgsql.AsIdentifierSet(bindingResult.Binding.Identifier), propertyConstraints); err != nil {
 			return err
 		}
 	}
@@ -119,6 +155,10 @@ func (s *Translator) buildNodePatternPart(part *PatternPart) error {
 		})
 	}
 
+	nextSelect.From = append(nextSelect.From, unwindFromClauses(s.query.CurrentPart().ConsumeUnwindClauses())...)
+
+	// UNWIND clauses collected before the first concrete node lookup become row
+	// sources for the pattern CTE that starts the MATCH pipeline.
 	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name:    pgsql.CompoundIdentifier{pgsql.TableNode},

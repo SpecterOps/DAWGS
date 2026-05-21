@@ -18,9 +18,8 @@ func (s *Translator) translateWith() error {
 			// aggregatedItems contains a set of symbols of projected aggregate functions.
 			aggregatedItems = pgsql.NewSymbolTable()
 
-			// groupByItems is a set of symbols (identifiers and compound identifiers) that the query is expected to
-			// group by. This is built by exclusion of all aggregated items.
-			groupByItems = pgsql.NewSymbolTable()
+			// groupByItems are the non-aggregate projection expressions that the query must group by.
+			groupByItems []pgsql.Expression
 		)
 
 		for _, projectionItem := range currentPart.projections.Items {
@@ -31,20 +30,16 @@ func (s *Translator) translateWith() error {
 
 		// If an aggregation function is being used, this invokes an implicit group by of non-function projections
 		for _, projectionItem := range currentPart.projections.Items {
-			switch typedSelectItem := projectionItem.SelectItem.(type) {
-			case pgsql.FunctionCall:
-				if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbols(typedSelectItem); err != nil {
-					return err
-				} else if !aggregatedFunctionSymbols.IsEmpty() {
-					aggregatedItems.AddTable(aggregatedFunctionSymbols)
-					continue
-				}
+			if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbolsIn(projectionItem.SelectItem); err != nil {
+				return err
+			} else if !aggregatedFunctionSymbols.IsEmpty() {
+				aggregatedItems.AddTable(aggregatedFunctionSymbols)
 			}
 
-			if selectItemSymbols, err := SymbolsFor(projectionItem.SelectItem); err != nil {
+			if selectItemGroupByExpressions, err := NonAggregateGroupByExpressions(projectionItem.SelectItem); err != nil {
 				return err
 			} else {
-				groupByItems.Add(selectItemSymbols.NotIn(aggregatedItems))
+				groupByItems = append(groupByItems, selectItemGroupByExpressions...)
 			}
 		}
 
@@ -54,17 +49,16 @@ func (s *Translator) translateWith() error {
 		}
 		if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
-		} else if err := RewriteFrameBindings(s.scope, projectionConstraint.Expression); err != nil {
+		} else if resolvedConstraint, err := resolvePathCompositeFieldReferences(s.scope, projectionConstraint.Expression); err != nil {
+			return err
+		} else if err := RewriteFrameBindings(s.scope, resolvedConstraint); err != nil {
 			return err
 		} else {
-			currentPart.projections.Constraints = projectionConstraint.Expression
+			currentPart.projections.Constraints = resolvedConstraint
 		}
 
 		for idx, projectionItem := range currentPart.projections.Items {
 			switch typedSelectItem := projectionItem.SelectItem.(type) {
-			case *pgsql.BinaryExpression:
-				return fmt.Errorf("binary expression not supported in with statement")
-
 			case pgsql.CompoundIdentifier:
 				return fmt.Errorf("compound identifier not supported in with statement")
 
@@ -72,23 +66,60 @@ func (s *Translator) translateWith() error {
 				if binding, isBound := s.scope.Lookup(typedSelectItem); !isBound {
 					return fmt.Errorf("unable to lookup identifer %s for with statement", typedSelectItem)
 				} else {
+					var selectItem pgsql.SelectItem
+					projectedBinding := binding
+
+					if projectionItem.Alias.Set {
+						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || aliasBinding.Identifier != binding.Identifier {
+							var err error
+
+							if projectedBinding, err = s.scope.DefineNew(binding.DataType); err != nil {
+								return err
+							}
+
+							projectedBinding.Dependencies = binding.Dependencies
+							s.scope.Alias(projectionItem.Alias.Value, projectedBinding)
+						} else {
+							projectedBinding = aliasBinding
+						}
+					}
+
+					if binding.LastProjection != nil {
+						selectItem = pgsql.CompoundIdentifier{
+							binding.LastProjection.Binding.Identifier, typedSelectItem,
+						}
+					} else if projectedBinding.DataType == pgsql.PathComposite {
+						builtProjection, err := buildProjection(projectedBinding.Identifier, projectedBinding, s.scope, nil)
+						if err != nil {
+							return err
+						}
+						if len(builtProjection) != 1 {
+							return fmt.Errorf("expected path projection %s to produce one select item, got %d", projectedBinding.Identifier, len(builtProjection))
+						}
+						selectItem = builtProjection[0]
+					} else {
+						// A WITH can project bindings introduced in the same query
+						// part before they have a materialized frame back-reference.
+						selectItem = typedSelectItem
+					}
+
 					// Track this projected item for scope pruning
-					projectedItems.Add(binding.Identifier)
+					projectedItems.Add(projectedBinding.Identifier)
 
 					// Create a new projection that maps the identifier
 					currentPart.projections.Items[idx] = &Projection{
-						SelectItem: pgsql.CompoundIdentifier{
-							binding.LastProjection.Binding.Identifier, typedSelectItem,
-						},
-						Alias: pgsql.AsOptionalIdentifier(binding.Identifier),
+						SelectItem: selectItem,
+					}
+					if projectedBinding.DataType != pgsql.PathComposite || binding.LastProjection != nil {
+						currentPart.projections.Items[idx].Alias = pgsql.AsOptionalIdentifier(projectedBinding.Identifier)
 					}
 
 					// Assign the frame to the binding's last projection backref
-					binding.MaterializedBy(currentPart.Frame)
+					projectedBinding.MaterializedBy(currentPart.Frame)
 
 					// Reveal and export the identifier in the current multipart query part's frame
-					currentPart.Frame.Reveal(binding.Identifier)
-					currentPart.Frame.Export(binding.Identifier)
+					currentPart.Frame.Reveal(projectedBinding.Identifier)
+					currentPart.Frame.Export(projectedBinding.Identifier)
 				}
 
 			default:
@@ -117,15 +148,7 @@ func (s *Translator) translateWith() error {
 		}
 
 		if !aggregatedItems.IsEmpty() {
-			groupByItems.EachIdentifier(func(next pgsql.Identifier) bool {
-				currentPart.projections.GroupBy = append(currentPart.projections.GroupBy, next)
-				return true
-			})
-
-			groupByItems.EachCompoundIdentifier(func(next pgsql.CompoundIdentifier) bool {
-				currentPart.projections.GroupBy = append(currentPart.projections.GroupBy, next)
-				return true
-			})
+			currentPart.projections.GroupBy = append(currentPart.projections.GroupBy, groupByItems...)
 		}
 
 		if err := s.scope.PruneDefinitions(projectedItems); err != nil {

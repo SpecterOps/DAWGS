@@ -11,7 +11,7 @@
         ],
         "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["m"]}
     },
     {
       "name": "ALL quantifier over a collected list in a WITH-piped stage",
@@ -24,7 +24,7 @@
         ],
         "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["m"]}
     },
     {
       "name": "ANY quantifier in first stage gates a pipeline where NONE filters the collected output",
@@ -37,7 +37,18 @@
         ],
         "edges": [{"start_id": "n", "end_id": "g", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["m"]}
+    },
+    {
+      "name": "ANY quantifier over a concatenated array expression",
+      "cypher": "WITH [1, 2] AS nums MATCH (n:NodeKind1) WHERE ANY(num IN nums + [3] WHERE num = 3) RETURN n",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["NodeKind1"], "properties": {"name": "quantifier-array"}}
+        ],
+        "edges": []
+      },
+      "assert": {"node_ids": ["n"]}
     }
   ]
 }

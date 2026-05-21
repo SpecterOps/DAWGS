@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "name": "filter relationship timestamp property against datetime minus duration",
+      "cypher": "MATCH p=(:Computer)-[r:HasSession]->(:User) WHERE r.lastseen >= datetime() - duration('P3D') RETURN p LIMIT 100",
+      "fixture": {
+        "nodes": [
+          {"id": "recent-computer", "kinds": ["Computer"], "properties": {"name": "recent-computer"}},
+          {"id": "recent-user", "kinds": ["User"], "properties": {"name": "recent-user"}},
+          {"id": "stale-computer", "kinds": ["Computer"], "properties": {"name": "stale-computer"}},
+          {"id": "stale-user", "kinds": ["User"], "properties": {"name": "stale-user"}}
+        ],
+        "edges": [
+          {"start_id": "recent-computer", "end_id": "recent-user", "kind": "HasSession", "properties": {"lastseen": "2999-01-01T00:00:00Z"}},
+          {"start_id": "stale-computer", "end_id": "stale-user", "kind": "HasSession", "properties": {"lastseen": "2000-01-01T00:00:00Z"}}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_edge": {
+          "start": "recent-computer",
+          "end": "recent-user",
+          "kind": "HasSession",
+          "props": {"lastseen": "2999-01-01T00:00:00Z"}
+        }
+      }
+    }
+  ]
+}

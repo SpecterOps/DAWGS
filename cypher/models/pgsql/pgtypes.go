@@ -18,8 +18,10 @@ const (
 
 	TableNode Identifier = "node"
 	TableEdge Identifier = "edge"
+	TableKind Identifier = "kind"
 
 	ColumnID         Identifier = "id"
+	ColumnName       Identifier = "name"
 	ColumnPath       Identifier = "path"
 	ColumnProperties Identifier = "properties"
 	ColumnKindIDs    Identifier = "kind_ids"
@@ -27,6 +29,8 @@ const (
 	ColumnGraphID    Identifier = "graph_id"
 	ColumnStartID    Identifier = "start_id"
 	ColumnEndID      Identifier = "end_id"
+	ColumnNodes      Identifier = "nodes"
+	ColumnEdges      Identifier = "edges"
 )
 
 var (
@@ -112,6 +116,24 @@ func (s DataType) IsKnown() bool {
 	default:
 		return true
 	}
+}
+
+func (s DataType) IsTemporalType() bool {
+	switch s {
+	case Date, TimeWithTimeZone, TimeWithoutTimeZone, TimestampWithTimeZone, TimestampWithoutTimeZone:
+		return true
+
+	default:
+		return false
+	}
+}
+
+func (s DataType) TemporalIntervalArithmeticResultType() DataType {
+	if s == Date {
+		return TimestampWithoutTimeZone
+	}
+
+	return s
 }
 
 func (s DataType) IsComparable(other DataType, operator Operator) bool {
@@ -263,6 +285,22 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 		}
 
 		// Other special cases for arithmetic
+		switch operator {
+		case OperatorAdd:
+			if s.IsTemporalType() && other == Interval {
+				return s.TemporalIntervalArithmeticResultType(), true
+			}
+
+			if s == Interval && other.IsTemporalType() {
+				return other.TemporalIntervalArithmeticResultType(), true
+			}
+
+		case OperatorSubtract:
+			if s.IsTemporalType() && other == Interval {
+				return s.TemporalIntervalArithmeticResultType(), true
+			}
+		}
+
 		switch s {
 		case Date:
 			switch other {
@@ -282,6 +320,14 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 
 	case OperatorConcatenate:
 		// Array types may only concatenate if their base types match
+		if s == AnyArray && other.IsArrayType() {
+			return other, true
+		}
+
+		if other == AnyArray && s.IsArrayType() {
+			return s, true
+		}
+
 		if s.IsArrayType() {
 			return s, s == other || s.ArrayBaseType() == other
 		}
@@ -296,16 +342,13 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 			return other, true
 
 		case Text:
-			switch other {
-			case UnknownDataType:
-				// Overwrite the unknown data type here and assume that it will resolve to text
-				return s, true
-
-			default:
-				return s, s == other
-			}
+			return s, true
 
 		default:
+			if other == Text {
+				return other, true
+			}
+
 			return UnknownDataType, false
 		}
 	}
@@ -325,7 +368,7 @@ func (s DataType) MatchesOneOf(others ...DataType) bool {
 
 func (s DataType) IsArrayType() bool {
 	switch s {
-	case Int2Array, Int4Array, Int8Array, IntArray, Float4Array, Float8Array, TextArray, JSONBArray,
+	case AnyArray, Int2Array, Int4Array, Int8Array, IntArray, Float4Array, Float8Array, TextArray, JSONBArray,
 		NodeCompositeArray, EdgeCompositeArray, NumericArray:
 		return true
 	}
@@ -407,6 +450,12 @@ func NegotiateValue(value any) (any, error) {
 	case []graph.ID:
 		return graph.IDsToUint64Slice(typedValue), nil
 
+	case map[string]any:
+		return MapStringAnyToJSONB(typedValue)
+
+	case *graph.Properties:
+		return PropertiesToJSONB(typedValue)
+
 	default:
 		return value, nil
 	}
@@ -482,6 +531,9 @@ func ValueToDataType(value any) (DataType, error) {
 		return Int2Array, nil
 
 	case cypher.MapLiteral:
+		return JSONB, nil
+
+	case map[string]any, *graph.Properties:
 		return JSONB, nil
 
 	case *cypher.ListLiteral:

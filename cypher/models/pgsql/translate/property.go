@@ -2,6 +2,7 @@ package translate
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
@@ -57,4 +58,41 @@ func decomposePropertyLookup(expression pgsql.Expression) (PropertyLookup, error
 	} else {
 		return binaryExpressionToPropertyLookup(propertyLookupBinExp)
 	}
+}
+
+func (s *Translator) buildPatternPropertyConstraints(binding *BoundIdentifier, properties TranslatedProperties) (pgsql.Expression, error) {
+	var propertyConstraints pgsql.Expression
+
+	keys := make([]string, 0, len(properties.Map))
+	for key := range properties.Map {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := properties.Map[key]
+
+		s.treeTranslator.PushOperand(pgsql.NewPropertyLookup(pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnProperties}, pgsql.NewLiteral(key, pgsql.Text)))
+		s.treeTranslator.PushOperand(value)
+
+		if newConstraint, err := s.treeTranslator.PopBinaryExpression(pgsql.OperatorEquals); err != nil {
+			return nil, err
+		} else {
+			propertyConstraints = pgsql.OptionalAnd(propertyConstraints, newConstraint)
+		}
+	}
+
+	if properties.Parameter != nil {
+		if err := RewriteFrameBindings(s.scope, properties.Parameter); err != nil {
+			return nil, err
+		}
+
+		propertyConstraints = pgsql.OptionalAnd(propertyConstraints, pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnProperties},
+			pgsql.OperatorPGArrayLHSContainsRHS,
+			properties.Parameter,
+		))
+	}
+
+	return propertyConstraints, nil
 }

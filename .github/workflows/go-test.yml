@@ -24,36 +24,24 @@ on:
     types:
       - "opened"
       - "synchronize"
+      - "reopened"
 
 jobs:
-
-  # TODO: fix existing issues before uncommenting
-  # vet:
-  #   name: Vet source code
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout source code for this repository
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Install Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version-file: go.mod
-  #         cache: true
-  #         check-latest: true
-  #
-  #     - name: Vet Code
-  #       run: |
-  #         go vet ./...
-
+  call-run-upload-main-coverage-files:
+    uses: ./.github/workflows/upload-coverage-files.yml
   test:
     runs-on: ubuntu-latest
+    needs: call-run-upload-main-coverage-files
     steps:
+      - env:
+          COV_FILE_ID: ${{ needs.call-run-upload-main-coverage-files.outputs.coverage-artifact-id }}
+        run: echo "Artifact ID from previous job is $COV_FILE_ID"
+
       - name: Checkout source code for this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
@@ -61,8 +49,41 @@ jobs:
 
       - name: Run Tests
         run: |
-          go test ./...
+          make test
 
+      - name: Parse Coverage Value From Feature Branch
+        run: |
+          echo "current_coverage=$(tail -n 1 .coverage/coverage.txt | awk '{print $3}' | awk 'sub("%", "")')" >> $GITHUB_ENV
+
+      - name: Feature Branch Coverage Value
+        run: |
+          printf 'Coverage Value: %s\n' "$current_coverage"
+
+      - name: Download Main Coverage
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.call-run-upload-main-coverage-files.outputs.coverage-artifact-id }}
+          path: tmp/
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Parse Coverage Value From Main Branch
+        run: |
+          echo "main_coverage=$(tail -n 1 tmp/coverage.txt | awk '{print $3}' | awk 'sub("%", "")')" >> $GITHUB_ENV
+
+      - name: Main Coverage Value
+        run: |
+          printf 'Coverage Value: %s\n' "$main_coverage"
+
+      - name: Coverage Evaluation
+        run: |
+          if (( $(echo "$current_coverage < $main_coverage" | bc -l))); then
+            echo "Failing the workflow. Coverage on feature branch ($current_coverage%) is below main branch ($main_coverage%)"
+            exit 1
+          else
+            echo "Coverage is within the limits"
+          fi
   integration-test-pg:
     name: Run integration tests (pg)
     runs-on: ubuntu-latest
@@ -82,10 +103,10 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout source code for this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
@@ -95,7 +116,7 @@ jobs:
         env:
           CONNECTION_STRING: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
         run: |
-          go test -tags manual_integration ./integration 
+          make test_integration
 
   integration-test-neo4j:
     name: Run integration tests (neo4j)
@@ -115,10 +136,10 @@ jobs:
           --health-start-period 40s
     steps:
       - name: Checkout source code for this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
@@ -128,4 +149,4 @@ jobs:
         env:
           CONNECTION_STRING: neo4j://neo4j:weneedbetterpasswords@localhost:7687
         run: |
-          go test -tags manual_integration ./integration 
+          make test_integration

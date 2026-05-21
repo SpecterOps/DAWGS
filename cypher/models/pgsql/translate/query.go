@@ -21,7 +21,8 @@ func (s *Translator) previousValidFrame(partFrame *Frame) (*Frame, bool) {
 }
 
 func (s *Translator) buildMultiPartSinglePartQuery(singlePartQuery *cypher.SinglePartQuery, cteChain []pgsql.CommonTableExpression) error {
-	// Prepend the CTE chain to the model's
+	// Earlier multipart sections are rendered as CTEs that the final single-part
+	// query can read from.
 	currentPart := s.query.CurrentPart()
 	currentPart.Model.CommonTableExpressions.Expressions = append(cteChain, currentPart.Model.CommonTableExpressions.Expressions...)
 
@@ -54,14 +55,15 @@ func (s *Translator) buildSinglePartQuery(singlePartQuery *cypher.SinglePartQuer
 func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery) error {
 	var multipartCTEChain []pgsql.CommonTableExpression
 
-	// In order to author the multipart query part we first have to wrap it in a
 	for _, part := range s.query.Parts[:len(s.query.Parts)-1] {
 		// If the part has an empty inner CTE, make sure to remove it otherwise the keyword will still render
 		if len(part.Model.CommonTableExpressions.Expressions) == 0 {
 			part.Model.CommonTableExpressions = nil
 		}
 
-		// Author the part as a nested CTE
+		// Each non-final query part is a pipeline boundary. Wrap its inline
+		// projection as a nested CTE so later parts can reference only exported
+		// bindings.
 		nextCTE := pgsql.CommonTableExpression{
 			Query: *part.Model,
 		}
@@ -97,12 +99,26 @@ func (s *Translator) translateMultiPartQueryPart() error {
 }
 
 func (s *Translator) prepareSinglePartQueryPart(singlePartQuery *cypher.SinglePartQuery) error {
-	s.query.AddPart(NewQueryPart(len(singlePartQuery.ReadingClauses), len(singlePartQuery.UpdatingClauses)))
+	newQueryPart := NewQueryPart(len(singlePartQuery.ReadingClauses), len(singlePartQuery.UpdatingClauses))
+
+	if referencedIdentifiers, err := collectReferencedIdentifiers(singlePartQuery); err != nil {
+		return err
+	} else {
+		newQueryPart.SetReferencedIdentifiers(referencedIdentifiers)
+	}
+
+	s.query.AddPart(newQueryPart)
 	return nil
 }
 
 func (s *Translator) prepareMultiPartQueryPart(multiPartQueryPart *cypher.MultiPartQueryPart) error {
 	newQueryPart := NewQueryPart(len(multiPartQueryPart.ReadingClauses), len(multiPartQueryPart.UpdatingClauses))
+
+	if referencedIdentifiers, err := collectReferencedIdentifiers(multiPartQueryPart); err != nil {
+		return err
+	} else {
+		newQueryPart.SetReferencedIdentifiers(referencedIdentifiers)
+	}
 
 	// All multipart query parts must be wrapped in a nested CTE
 	if mpFrame, err := s.scope.PushFrame(); err != nil {

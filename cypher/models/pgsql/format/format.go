@@ -148,6 +148,48 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 	return formatValue(builder, literal.Value)
 }
 
+func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
+	if len(caseExpr.Conditions) != len(caseExpr.Then) {
+		return fmt.Errorf("case expression has %d conditions and %d then expressions", len(caseExpr.Conditions), len(caseExpr.Then))
+	}
+
+	builder.Write("case")
+
+	if caseExpr.Operand != nil {
+		builder.Write(" ")
+
+		if err := formatNode(builder, caseExpr.Operand); err != nil {
+			return err
+		}
+	}
+
+	for idx, condition := range caseExpr.Conditions {
+		builder.Write(" when ")
+
+		if err := formatNode(builder, condition); err != nil {
+			return err
+		}
+
+		builder.Write(" then ")
+
+		if err := formatNode(builder, caseExpr.Then[idx]); err != nil {
+			return err
+		}
+	}
+
+	if caseExpr.Else != nil {
+		builder.Write(" else ")
+
+		if err := formatNode(builder, caseExpr.Else); err != nil {
+			return err
+		}
+	}
+
+	builder.Write(" end")
+
+	return nil
+}
+
 func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 	exprStack := []pgsql.SyntaxNode{
 		rootExpr,
@@ -181,6 +223,16 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 
 		case pgsql.Literal:
 			if err := formatLiteral(builder, typedNextExpr); err != nil {
+				return err
+			}
+
+		case *pgsql.Case:
+			if err := formatCase(builder, *typedNextExpr); err != nil {
+				return err
+			}
+
+		case pgsql.Case:
+			if err := formatCase(builder, typedNextExpr); err != nil {
 				return err
 			}
 
@@ -278,6 +330,13 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			}
 
 			exprStack = append(exprStack, typedNextExpr.Name)
+
+		case pgsql.LateralSubquery:
+			if typedNextExpr.Binding.Set {
+				exprStack = append(exprStack, typedNextExpr.Binding.Value, pgsql.FormattingLiteral(" "))
+			}
+
+			exprStack = append(exprStack, pgsql.FormattingLiteral(")"), typedNextExpr.Query, pgsql.FormattingLiteral("lateral ("))
 
 		case pgsql.Assignment:
 			exprStack = append(exprStack,
@@ -427,6 +486,25 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 		case *pgsql.ArrayIndex:
 			exprStack = append(exprStack, *typedNextExpr)
 
+		case pgsql.ArraySlice:
+			exprStack = append(exprStack, pgsql.FormattingLiteral("]"))
+
+			if typedNextExpr.Upper != nil {
+				exprStack = append(exprStack, typedNextExpr.Upper)
+			}
+
+			exprStack = append(exprStack, pgsql.FormattingLiteral(":"))
+
+			if typedNextExpr.Lower != nil {
+				exprStack = append(exprStack, typedNextExpr.Lower)
+			}
+
+			exprStack = append(exprStack, pgsql.FormattingLiteral("["))
+			exprStack = append(exprStack, typedNextExpr.Expression)
+
+		case *pgsql.ArraySlice:
+			exprStack = append(exprStack, *typedNextExpr)
+
 		case pgsql.TypeCast:
 			switch typedCastedExpr := typedNextExpr.Expression.(type) {
 			case *pgsql.BinaryExpression:
@@ -531,6 +609,10 @@ func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (string, er
 
 func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
 	builder.Write("select ")
+
+	if selectStmt.Distinct {
+		builder.Write("distinct ")
+	}
 
 	for idx, projection := range selectStmt.Projection {
 		if idx > 0 {
@@ -783,6 +865,9 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 	case pgsql.Values:
 		return formatNode(builder, typedSetExpression)
 
+	case pgsql.Insert:
+		return formatInsertStatement(builder, typedSetExpression)
+
 	case pgsql.Update:
 		return formatUpdateStatement(builder, typedSetExpression)
 
@@ -909,7 +994,7 @@ func formatInsertStatement(builder *OutputBuilder, insert pgsql.Insert) error {
 		return err
 	}
 
-	if len(insert.Shape.Columns) > 0 {
+	if insert.Shape != nil && len(insert.Shape.Columns) > 0 {
 		builder.Write(" (")
 
 		for idx, column := range insert.Shape.Columns {

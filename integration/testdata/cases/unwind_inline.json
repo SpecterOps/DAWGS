@@ -1,0 +1,159 @@
+{
+  "cases": [
+    {
+      "name": "unwind integer array and return elements",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN x",
+      "assert": {"ordered_scalar_values": [1, 2, 3]}
+    },
+    {
+      "name": "unwind with distinct removes duplicates",
+      "cypher": "WITH [1, 2, 3, 1, 2] AS ids UNWIND ids AS x RETURN DISTINCT x",
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind with count aggregation",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x RETURN count(x)",
+      "assert": {"exact_int": 3}
+    },
+    {
+      "name": "unwind with where filter",
+      "cypher": "WITH [1, 2, 3] AS ids UNWIND ids AS x WITH x WHERE x > 1 RETURN x",
+      "assert": {"ordered_scalar_values": [2, 3]}
+    },
+    {
+      "name": "standalone unwind without preceding clause",
+      "cypher": "UNWIND [1, 2, 3] AS x RETURN x",
+      "assert": {"ordered_scalar_values": [1, 2, 3]}
+    },
+    {
+      "name": "unwind target cannot shadow source name",
+      "cypher": "WITH [1, 2, 3] AS x UNWIND x AS x RETURN x",
+      "assert": "query_error"
+    },
+    {
+      "name": "unwind collected node names and return them",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.tag = 'unwind_test' WITH collect(n.name) AS names UNWIND names AS name RETURN name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "unwind_test"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "unwind_test"}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": "gamma", "tag": "unwind_test"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_count": 3}
+    },
+    {
+      "name": "unwind collected names then match against another kind",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.tag = 'unwind_xk' WITH collect(n.name) AS names UNWIND names AS name MATCH (m:NodeKind2) WHERE m.name = name RETURN m",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "shared", "tag": "unwind_xk"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "only_kind1", "tag": "unwind_xk"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"name": "shared"}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"name": "only_kind2"}}
+        ],
+        "edges": []
+      },
+      "assert": {"contains_node_with_prop": ["name", "shared"]}
+    },
+    {
+      "name": "unwind labels and aggregate by string kind",
+      "cypher": "MATCH (n) WHERE n.environmentid = '1234' UNWIND labels(n) AS kind RETURN kind, count(n) AS count",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {"environmentid": "1234"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"environmentid": "other"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [["NodeKind1", 1], ["NodeKind2", 1]]}
+    },
+    {
+      "name": "unwind labels and aggregate all nodes by return alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label, count(n) AS count",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["label", "count"],
+        "row_values": [["NodeKind1", 2], ["NodeKind2", 1]]
+      }
+    },
+    {
+      "name": "unwind labels and order aggregate count by alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label, count(n) AS count ORDER BY count DESC",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["label", "count"],
+        "ordered_row_values": [["NodeKind1", 2], ["NodeKind2", 1]]
+      }
+    },
+    {
+      "name": "unwind labels and order label by return alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label, count(n) AS count ORDER BY label",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["label", "count"],
+        "ordered_row_values": [["NodeKind1", 1], ["NodeKind2", 2]]
+      }
+    },
+    {
+      "name": "unwind labels and order explicit label alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label AS kind, count(n) AS count ORDER BY kind",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["kind", "count"],
+        "ordered_row_values": [["NodeKind1", 2], ["NodeKind2", 1]]
+      }
+    },
+    {
+      "name": "unwind concatenated collected names from two matches",
+      "cypher": "MATCH (au:AZUser) WHERE au.name CONTAINS 'ADMIN' MATCH (u:User) WHERE u.name CONTAINS 'ADMIN' WITH collect(u.name) + collect(au.azname) AS temp UNWIND temp AS usernames RETURN usernames",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["AZUser"], "properties": {"name": "ADMIN_ONE", "azname": "az-alpha"}},
+          {"id": "b", "kinds": ["User"], "properties": {"name": "ADMIN_TWO"}},
+          {"id": "c", "kinds": ["User"], "properties": {"name": "plain"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["ADMIN_TWO", "az-alpha"]}
+    },
+    {
+      "name": "unwind collected names concatenated with a literal array",
+      "cypher": "MATCH (n:NodeKind1) WITH collect(n.name) + ['tail'] AS names UNWIND names AS name RETURN name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "alpha"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "beta"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["alpha", "beta", "tail"]}
+    }
+  ]
+}

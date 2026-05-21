@@ -11,20 +11,22 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a", "b"]}
     },
     {
       "name": "cross-product filter where two nodes match different typed properties",
-      "skip_drivers": ["pg"],
       "cypher": "match (s), (e) where s.name = '1234' and e.other = 1234 return s",
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}},
-          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}}
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": 1234}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"other": "1234"}},
+          {"id": "e", "kinds": ["NodeKind2"], "properties": {"other": "not-number"}}
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter node where a scalar value appears in an array property",
@@ -35,7 +37,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter typed node with coalesce equality on both sides",
@@ -47,7 +49,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter node using an arithmetic expression in the WHERE clause",
@@ -59,7 +61,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter typed node using toLower contains with a compound AND predicate",
@@ -70,7 +72,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "filter typed node where a scalar appears in an array property concatenated with a literal list",
@@ -81,7 +83,7 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"node_ids": ["a"]}
     },
     {
       "name": "return source and an aliased property from an unrelated node in a cross-product",
@@ -93,20 +95,22 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 2, "node_ids": ["a", "a"]}
     },
     {
       "name": "filter cross-product where either node satisfies a different property predicate",
-      "skip_drivers": ["pg"],
       "cypher": "match (s), (e) where s.name = '1234' or e.other = 1234 return s",
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "1234"}},
-          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}}
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"other": 1234}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"name": 1234}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"other": "1234"}},
+          {"id": "e", "kinds": ["NodeKind2"], "properties": {"other": "not-number"}}
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"row_count": 9, "node_ids": ["a", "a", "a", "a", "a", "b", "c", "d", "e"]}
     },
     {
       "name": "return a size of an array property in the projection",
@@ -117,7 +121,58 @@
         ],
         "edges": []
       },
-      "assert": "non_empty"
+      "assert": {"exact_int": 2}
+    },
+    {
+      "name": "filter typed nodes with null check and negated boolean property",
+      "cypher": "match (n:NodeKind1) where n.name is not null and not n.disabled return n",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "enabled", "disabled": false}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "disabled", "disabled": true}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"disabled": false}}
+        ],
+        "edges": []
+      },
+      "assert": {"node_ids": ["a"]}
+    },
+    {
+      "name": "return token-like string property projections without scalar reinterpretation",
+      "cypher": "match (n:NodeKind1) where toLower(n.name) = 'bob' return n.objectid, n.boolstring, n.falsestring, n.nullstring, n.numbervalue, n.boolvalue",
+      "fixture": {
+        "nodes": [
+          {"id": "bob", "kinds": ["NodeKind1"], "properties": {"name": "BOB", "objectid": "1234", "boolstring": "true", "falsestring": "false", "nullstring": "null", "numbervalue": 1234, "boolvalue": true}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [["1234", "true", "false", "null", 1234, true]]}
+    },
+    {
+      "name": "return ordered property projections from typed nodes",
+      "cypher": "match (n:NodeKind1) where n.tag = 'ordered_projection' return n.name order by n.name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "ordered_projection"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "ordered_projection"}}
+        ],
+        "edges": []
+      },
+      "assert": {"ordered_scalar_values": ["alpha", "beta"]}
+    },
+    {
+      "name": "order by aliased property projection",
+      "cypher": "match (n:NodeKind1) where n.tag = 'ordered_projection_alias' return n.name as displayname order by displayname",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "beta", "tag": "ordered_projection_alias"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "alpha", "tag": "ordered_projection_alias"}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["displayname"],
+        "ordered_scalar_values": ["alpha", "beta"]
+      }
     }
   ]
 }

@@ -6,42 +6,164 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-func mapKinds(ctx context.Context, kindMapper KindMapper, untypedValue any) (graph.Kinds, bool) {
+const (
+	minKindID = -1 << 15
+	maxKindID = 1<<15 - 1
+)
+
+func mapKindIDs(ctx context.Context, kindMapper KindMapper, kindIDs []int16) (graph.Kinds, bool) {
+	if len(kindIDs) == 0 {
+		return graph.Kinds{}, true
+	}
+
+	if mappedKinds, err := kindMapper.MapKindIDs(ctx, kindIDs); err == nil {
+		return mappedKinds, true
+	}
+
+	return nil, false
+}
+
+func asKindID(value any) (int16, bool) {
+	switch typedValue := value.(type) {
+	case int:
+		if typedValue < minKindID || typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	case int8:
+		return int16(typedValue), true
+	case int16:
+		return typedValue, true
+	case int32:
+		if typedValue < minKindID || typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	case int64:
+		if typedValue < minKindID || typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	case uint:
+		if typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	case uint8:
+		return int16(typedValue), true
+	case uint16:
+		if typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	case uint32:
+		if typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	case uint64:
+		if typedValue > maxKindID {
+			return 0, false
+		}
+
+		return int16(typedValue), true
+	default:
+		return 0, false
+	}
+}
+
+func mapAnyKinds(ctx context.Context, kindMapper KindMapper, values []any) (graph.Kinds, bool) {
+	if len(values) == 0 {
+		return graph.Kinds{}, true
+	}
+
 	var (
-		// Default assumption is that the untyped value contains a type that can be mapped from
-		validType = true
-		kindIDs   []int16
+		kindIDs     []int16
+		kindStrings []string
 	)
 
+	for _, value := range values {
+		if kindString, typeOK := value.(string); typeOK {
+			if kindIDs != nil {
+				return nil, false
+			}
+
+			kindStrings = append(kindStrings, kindString)
+		} else if kindID, typeOK := asKindID(value); typeOK {
+			if kindStrings != nil {
+				return nil, false
+			}
+
+			kindIDs = append(kindIDs, kindID)
+		} else {
+			return nil, false
+		}
+	}
+
+	if kindStrings != nil {
+		return graph.StringsToKinds(kindStrings), true
+	}
+
+	return mapKindIDs(ctx, kindMapper, kindIDs)
+}
+
+func mapKinds(ctx context.Context, kindMapper KindMapper, untypedValue any) (graph.Kinds, bool) {
 	switch typedValue := untypedValue.(type) {
 	case []any:
-		kindIDs = make([]int16, len(typedValue))
-
-		for idx, untypedElement := range typedValue {
-			if typedElement, typeOK := untypedElement.(int16); typeOK {
-				kindIDs[idx] = typedElement
-			}
-		}
+		return mapAnyKinds(ctx, kindMapper, typedValue)
 
 	case []int16:
-		kindIDs = typedValue
+		return mapKindIDs(ctx, kindMapper, typedValue)
 
-	default:
-		// This is not a valid type to map to graph Kinds
-		validType = false
+	case []string:
+		return graph.StringsToKinds(typedValue), true
 	}
 
-	// Guard to prevent unnecessary thrashing of critical sections if there are no kind IDs to resolve
-	if len(kindIDs) > 0 {
-		// Ignoring the error here is intentional. Failure to map the kinds here does not imply a fatal error.
-		if mappedKinds, err := kindMapper.MapKindIDs(ctx, kindIDs); err == nil {
-			return mappedKinds, true
+	return nil, false
+}
+
+func mapNodeCompositeArray(ctx context.Context, kindMapper KindMapper, value any) ([]*graph.Node, bool) {
+	nodeComposites, err := nodeCompositesFromRaw(value)
+	if err != nil {
+		return nil, false
+	}
+
+	nodes := make([]*graph.Node, len(nodeComposites))
+	for idx, nodeComposite := range nodeComposites {
+		node := &graph.Node{}
+		if err := nodeComposite.ToNode(ctx, kindMapper, node); err != nil {
+			return nil, false
 		}
+
+		nodes[idx] = node
 	}
 
-	// Return validType here in case there was a type match (in which case the mapper succeeded) but the type did not
-	// contain a valid kind ID to map to
-	return nil, validType
+	return nodes, true
+}
+
+func mapEdgeCompositeArray(ctx context.Context, kindMapper KindMapper, value any) ([]*graph.Relationship, bool) {
+	edgeComposites, err := edgeCompositesFromRaw(value)
+	if err != nil {
+		return nil, false
+	}
+
+	relationships := make([]*graph.Relationship, len(edgeComposites))
+	for idx, edgeComposite := range edgeComposites {
+		relationship := &graph.Relationship{}
+		if err := edgeComposite.ToRelationship(ctx, kindMapper, relationship); err != nil {
+			return nil, false
+		}
+
+		relationships[idx] = relationship
+	}
+
+	return relationships, true
 }
 
 func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
@@ -58,6 +180,25 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 				}
 			}
 
+		case *[]*graph.Relationship:
+			if relationships, ok := mapEdgeCompositeArray(ctx, kindMapper, value); ok {
+				*typedTarget = relationships
+				return true
+			}
+
+		case *[]graph.Relationship:
+			if relationships, ok := mapEdgeCompositeArray(ctx, kindMapper, value); ok {
+				relationshipValues := make([]graph.Relationship, len(relationships))
+				for idx, relationship := range relationships {
+					if relationship != nil {
+						relationshipValues[idx] = *relationship
+					}
+				}
+
+				*typedTarget = relationshipValues
+				return true
+			}
+
 		case *graph.Node:
 			if compositeMap, typeOK := value.(map[string]any); typeOK {
 				node := nodeComposite{}
@@ -67,6 +208,25 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 						return true
 					}
 				}
+			}
+
+		case *[]*graph.Node:
+			if nodes, ok := mapNodeCompositeArray(ctx, kindMapper, value); ok {
+				*typedTarget = nodes
+				return true
+			}
+
+		case *[]graph.Node:
+			if nodes, ok := mapNodeCompositeArray(ctx, kindMapper, value); ok {
+				nodeValues := make([]graph.Node, len(nodes))
+				for idx, node := range nodes {
+					if node != nil {
+						nodeValues[idx] = *node
+					}
+				}
+
+				*typedTarget = nodeValues
+				return true
 			}
 
 		case *graph.Path:

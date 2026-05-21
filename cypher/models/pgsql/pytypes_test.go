@@ -236,6 +236,128 @@ func TestDataType_Comparable(t *testing.T) {
 	}
 }
 
+func TestDataType_OperatorResultTypeTemporalArithmetic(t *testing.T) {
+	testCases := []struct {
+		Name     string
+		Left     DataType
+		Operator Operator
+		Right    DataType
+		Expected DataType
+		Valid    bool
+	}{{
+		Name:     "timestamp with time zone minus interval",
+		Left:     TimestampWithTimeZone,
+		Operator: OperatorSubtract,
+		Right:    Interval,
+		Expected: TimestampWithTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "timestamp with time zone plus interval",
+		Left:     TimestampWithTimeZone,
+		Operator: OperatorAdd,
+		Right:    Interval,
+		Expected: TimestampWithTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "interval plus timestamp with time zone",
+		Left:     Interval,
+		Operator: OperatorAdd,
+		Right:    TimestampWithTimeZone,
+		Expected: TimestampWithTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "timestamp without time zone minus interval",
+		Left:     TimestampWithoutTimeZone,
+		Operator: OperatorSubtract,
+		Right:    Interval,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "time without time zone plus interval",
+		Left:     TimeWithoutTimeZone,
+		Operator: OperatorAdd,
+		Right:    Interval,
+		Expected: TimeWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "date minus interval",
+		Left:     Date,
+		Operator: OperatorSubtract,
+		Right:    Interval,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "date plus interval",
+		Left:     Date,
+		Operator: OperatorAdd,
+		Right:    Interval,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "interval plus date",
+		Left:     Interval,
+		Operator: OperatorAdd,
+		Right:    Date,
+		Expected: TimestampWithoutTimeZone,
+		Valid:    true,
+	}, {
+		Name:     "timestamp with time zone multiplied by interval",
+		Left:     TimestampWithTimeZone,
+		Operator: OperatorMultiply,
+		Right:    Interval,
+		Valid:    false,
+	}, {
+		Name:     "interval minus timestamp with time zone",
+		Left:     Interval,
+		Operator: OperatorSubtract,
+		Right:    TimestampWithTimeZone,
+		Valid:    false,
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			resultType, valid := testCase.Left.OperatorResultType(testCase.Right, testCase.Operator)
+			require.Equal(t, testCase.Valid, valid)
+
+			if testCase.Valid {
+				require.Equal(t, testCase.Expected, resultType)
+			}
+		})
+	}
+}
+
+func TestDataType_OperatorResultTypeAnyArrayConcatenation(t *testing.T) {
+	testCases := []struct {
+		Name     string
+		Left     DataType
+		Right    DataType
+		Expected DataType
+	}{{
+		Name:     "anyarray left concrete array right",
+		Left:     AnyArray,
+		Right:    TextArray,
+		Expected: TextArray,
+	}, {
+		Name:     "concrete array left anyarray right",
+		Left:     TextArray,
+		Right:    AnyArray,
+		Expected: TextArray,
+	}, {
+		Name:     "anyarray left anyarray right",
+		Left:     AnyArray,
+		Right:    AnyArray,
+		Expected: AnyArray,
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			resultType, valid := testCase.Left.OperatorResultType(testCase.Right, OperatorConcatenate)
+			require.True(t, valid)
+			require.Equal(t, testCase.Expected, resultType)
+		})
+	}
+}
+
 func TestValueToDataType(t *testing.T) {
 	testCases := []struct {
 		Value        any

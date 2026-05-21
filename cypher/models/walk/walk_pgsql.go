@@ -10,6 +10,30 @@ func pgsqlSyntaxNodeSliceTypeConvert[F any, FS []F](fs FS) ([]pgsql.SyntaxNode, 
 	return ConvertSliceType[pgsql.SyntaxNode](fs)
 }
 
+func newSQLCaseWalkCursor(node pgsql.SyntaxNode, caseExpr pgsql.Case) (*Cursor[pgsql.SyntaxNode], error) {
+	if len(caseExpr.Conditions) != len(caseExpr.Then) {
+		return nil, fmt.Errorf("case expression has %d conditions and %d then expressions", len(caseExpr.Conditions), len(caseExpr.Then))
+	}
+
+	nextCursor := &Cursor[pgsql.SyntaxNode]{
+		Node: node,
+	}
+
+	if caseExpr.Operand != nil {
+		nextCursor.AddBranches(caseExpr.Operand)
+	}
+
+	for idx, condition := range caseExpr.Conditions {
+		nextCursor.AddBranches(condition, caseExpr.Then[idx])
+	}
+
+	if caseExpr.Else != nil {
+		nextCursor.AddBranches(caseExpr.Else)
+	}
+
+	return nextCursor, nil
+}
+
 func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) {
 	switch typedNode := node.(type) {
 	case pgsql.Query:
@@ -45,6 +69,12 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 			Node:     node,
 			Branches: typedNode.AsSyntaxNodes(),
 		}, nil
+
+	case pgsql.Case:
+		return newSQLCaseWalkCursor(node, typedNode)
+
+	case *pgsql.Case:
+		return newSQLCaseWalkCursor(node, *typedNode)
 
 	case *pgsql.OrderBy:
 		return &Cursor[pgsql.SyntaxNode]{
@@ -255,8 +285,20 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 	case pgsql.Join:
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
-			Branches: []pgsql.SyntaxNode{typedNode.JoinOperator},
+			Branches: []pgsql.SyntaxNode{typedNode.Table, typedNode.JoinOperator},
 		}, nil
+
+	case pgsql.LateralSubquery:
+		nextCursor := &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: []pgsql.SyntaxNode{typedNode.Query},
+		}
+
+		if typedNode.Binding.Set {
+			nextCursor.AddBranches(typedNode.Binding.Value)
+		}
+
+		return nextCursor, nil
 
 	case pgsql.JoinOperator:
 		return &Cursor[pgsql.SyntaxNode]{
@@ -289,6 +331,34 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 				Branches: append([]pgsql.SyntaxNode{typedNode.Expression}, branches...),
 			}, nil
 		}
+
+	case pgsql.ArraySlice:
+		branches := []pgsql.SyntaxNode{typedNode.Expression}
+		if typedNode.Lower != nil {
+			branches = append(branches, typedNode.Lower)
+		}
+		if typedNode.Upper != nil {
+			branches = append(branches, typedNode.Upper)
+		}
+
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: branches,
+		}, nil
+
+	case *pgsql.ArraySlice:
+		branches := []pgsql.SyntaxNode{typedNode.Expression}
+		if typedNode.Lower != nil {
+			branches = append(branches, typedNode.Lower)
+		}
+		if typedNode.Upper != nil {
+			branches = append(branches, typedNode.Upper)
+		}
+
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: branches,
+		}, nil
 
 	case pgsql.ExistsExpression:
 		return &Cursor[pgsql.SyntaxNode]{

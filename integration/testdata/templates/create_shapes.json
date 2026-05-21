@@ -1,0 +1,78 @@
+{
+  "families": [
+    {
+      "name": "create parameter property maps",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "seed_a", "kinds": ["TemplateNodeKind1"], "properties": {"name": "seed-a"}},
+          {"id": "seed_b", "kinds": ["TemplateNodeKind2"], "properties": {"name": "seed-b"}}
+        ],
+        "edges": [
+          {"start_id": "seed_a", "end_id": "seed_b", "kind": "TemplateEdgeKind1", "properties": {"label": "seed"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "node parameter properties are stored",
+          "vars": {
+            "query": "create (n:TemplateNodeKind1 $props) return n"
+          },
+          "params": {
+            "props": {"name": "created-from-param", "score": 7}
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {"name": "created-from-param", "score": 7}
+          }
+        },
+        {
+          "name": "positional node parameter properties are stored",
+          "vars": {
+            "query": "create (n:TemplateNodeKind1 $1) return n"
+          },
+          "params": {
+            "1": {"name": "created-from-positional-param", "score": 8}
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {"name": "created-from-positional-param", "score": 8}
+          }
+        },
+        {
+          "name": "relationship parameter properties are stored",
+          "vars": {
+            "query": "create (a:TemplateNodeKind1 {name: 'edge-param-a'})-[r:TemplateEdgeKind1 $props]->(b:TemplateNodeKind2 {name: 'edge-param-b'}) return r"
+          },
+          "params": {
+            "props": {"label": "created-from-param", "weight": 2}
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_edge": {
+              "kind": "TemplateEdgeKind1",
+              "props": {"label": "created-from-param", "weight": 2}
+            }
+          }
+        },
+        {
+          "name": "path relationship parameter properties are materialized",
+          "vars": {
+            "query": "create p = (:TemplateNodeKind1 {name: 'path-param-a'})-[:TemplateEdgeKind1 $props]->(:TemplateNodeKind2 {name: 'path-param-b'}) return p"
+          },
+          "params": {
+            "props": {"label": "created-path-param", "weight": 3}
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {"name": "path-param-a"},
+            "contains_edge": {
+              "kind": "TemplateEdgeKind1",
+              "props": {"label": "created-path-param", "weight": 3}
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

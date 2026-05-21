@@ -2,6 +2,8 @@ package translate
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -9,34 +11,51 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// DefaultGraphID is the graph_id used by callers that do not have a specific
+// graph target available (tests, tooling, and visualization passes that only
+// exercise translation output).
+const DefaultGraphID int32 = 0
+
 type Translator struct {
 	walk.Visitor[cypher.SyntaxNode]
 
 	ctx            context.Context
 	kindMapper     *contextAwareKindMapper
+	graphID        int32
+	parameters     map[string]any
 	translation    Result
 	treeTranslator *ExpressionTreeTranslator
 	query          *Query
 	scope          *Scope
+	unwindTargets  map[*cypher.Variable]struct{}
 }
 
-func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *Translator {
+func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
 	if parameters == nil {
 		parameters = map[string]any{}
 	}
 
-	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper)
+	inputParameters := make(map[string]any, len(parameters))
+	for key, value := range parameters {
+		inputParameters[key] = value
+	}
+
+	translatedParameters := map[string]any{}
+	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
 
 	return &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
-			Parameters: parameters,
+			Parameters: translatedParameters,
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
+		graphID:        graphID,
+		parameters:     inputParameters,
 		treeTranslator: NewExpressionTreeTranslator(ctxAwareKindMapper),
 		query:          &Query{},
 		scope:          NewScope(),
+		unwindTargets:  map[*cypher.Variable]struct{}{},
 	}
 }
 
@@ -46,11 +65,26 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.Comparison, *cypher.Skip, *cypher.Limit, cypher.Operator, *cypher.ArithmeticExpression,
 		*cypher.NodePattern, *cypher.RelationshipPattern, *cypher.Remove, *cypher.Set,
 		*cypher.ReadingClause, *cypher.UnaryAddOrSubtractExpression, *cypher.PropertyLookup,
-		*cypher.Negation, *cypher.Create, *cypher.Where, *cypher.ListLiteral,
+		*cypher.Negation, *cypher.Where, *cypher.ListLiteral,
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.Quantifier, *cypher.IDInCollection:
+
+	case *cypher.Unwind:
+		if typedExpression.Variable != nil {
+			// The UNWIND target is declared by the UNWIND clause itself, so later
+			// variable visits for the same syntax node must not resolve through
+			// the normal outer-scope lookup path.
+			s.unwindTargets[typedExpression.Variable] = struct{}{}
+		}
+
+	case *cypher.Create:
+		// CREATE pattern nodes and relationships are collected first, then
+		// translated into mutation CTEs after the full pattern is known.
+		currentQueryPart := s.query.CurrentPart()
+		currentQueryPart.currentPattern = &Pattern{}
+		currentQueryPart.isCreating = true
 
 	case *cypher.MultiPartQueryPart:
 		if err := s.prepareMultiPartQueryPart(typedExpression); err != nil {
@@ -85,10 +119,12 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 					s.scope.Alias(cypherIdentifier, parameterBinding)
 				}
 
+				parameterValue := s.resolveParameterValue(typedExpression)
+
 				// Create a new container for the parameter and its value
-				if newParameter, err := pgsql.AsParameter(parameterBinding.Identifier, typedExpression.Value); err != nil {
+				if newParameter, err := pgsql.AsParameter(parameterBinding.Identifier, parameterValue); err != nil {
 					s.SetError(err)
-				} else if negotiatedValue, err := pgsql.NegotiateValue(typedExpression.Value); err != nil {
+				} else if negotiatedValue, err := pgsql.NegotiateValue(parameterValue); err != nil {
 					s.SetError(err)
 				} else {
 					// Lift the parameter value into the parameters map
@@ -104,20 +140,29 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushOperand(binding.Parameter)
 
 	case *cypher.Variable:
-		identifier := pgsql.Identifier(typedExpression.Symbol)
-
-		if binding, resolved := s.scope.AliasedLookup(identifier); !resolved {
-			s.SetErrorf("unable to resolve or otherwise lookup identifer %s", identifier)
-		} else {
+		if binding, isUnwindTarget, err := s.prepareUnwindTarget(typedExpression); err != nil {
+			s.SetError(err)
+		} else if isUnwindTarget {
 			s.treeTranslator.PushOperand(binding.Identifier)
+		} else {
+			identifier := pgsql.Identifier(typedExpression.Symbol)
+
+			if binding, resolved := s.scope.AliasedLookup(identifier); !resolved {
+				s.SetErrorf("unable to resolve or otherwise lookup identifer %s", identifier)
+			} else {
+				s.treeTranslator.PushOperand(binding.Identifier)
+			}
 		}
 
 	case *cypher.Literal:
 		literalValue := typedExpression.Value
 
 		if stringValue, isString := typedExpression.Value.(string); isString {
-			// Cypher parser wraps string literals with ' characters
-			literalValue = stringValue[1 : len(stringValue)-1]
+			if decoded, err := decodeCypherStringLiteral(stringValue); err != nil {
+				s.SetError(err)
+			} else {
+				literalValue = decoded
+			}
 		}
 
 		if newLiteral, err := pgsql.AsLiteral(literalValue); err != nil {
@@ -131,6 +176,10 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushParenthetical()
 
 	case *cypher.SortItem:
+		if err := s.ensureSortItemProjectionAliases(); err != nil {
+			s.SetError(err)
+		}
+
 		s.query.CurrentPart().SortItems = append(s.query.CurrentPart().SortItems, pgsql.NewOrderBy(typedExpression.Ascending))
 
 	case *cypher.Projection:
@@ -177,6 +226,59 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	}
 }
 
+func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
+	if value, hasValue := s.parameters[parameter.Symbol]; hasValue {
+		return value
+	}
+
+	return parameter.Value
+}
+
+func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Expression {
+	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
+		return pgsql.FunctionCall{
+			Function: pgsql.FunctionCoalesce,
+			Parameters: []pgsql.Expression{
+				propertyLookup,
+				pgsql.NewLiteral("", pgsql.Text),
+			},
+			CastType: pgsql.Text,
+		}
+	}
+
+	return expression
+}
+
+func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.Expression {
+	switch typedExpression := expression.(type) {
+	case *pgsql.Parenthetical:
+		typedExpression.Expression = rewriteNegatedStringPredicateExpression(typedExpression.Expression)
+		return typedExpression
+
+	case *pgsql.BinaryExpression:
+		switch typedExpression.Operator {
+		case pgsql.OperatorLike, pgsql.OperatorILike:
+			// If this is a string comparison operation then the negation requires wrapping the
+			// operand references in coalesce functions. While this will kick out index acceleration
+			// the negation will already damage the query planner's ability to utilize an index lookup.
+			typedExpression.LOperand = coalescePropertyLookupExpression(typedExpression.LOperand)
+			typedExpression.ROperand = coalescePropertyLookupExpression(typedExpression.ROperand)
+		}
+
+	case pgsql.FunctionCall:
+		switch typedExpression.Function {
+		case pgsql.FunctionCypherContains, pgsql.FunctionCypherStartsWith, pgsql.FunctionCypherEndsWith:
+			for idx, parameter := range typedExpression.Parameters {
+				typedExpression.Parameters[idx] = coalescePropertyLookupExpression(parameter)
+			}
+		}
+
+		return typedExpression
+	}
+
+	return expression
+}
+
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 
@@ -212,6 +314,15 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			s.query.CurrentPart().AddProperty(typedExpression.Key, value)
 		}
 
+	case *cypher.Properties:
+		if typedExpression.Parameter != nil {
+			if value, err := s.treeTranslator.PopOperand(); err != nil {
+				s.SetError(err)
+			} else {
+				s.query.CurrentPart().AddPropertyParameter(value)
+			}
+		}
+
 	case *cypher.PatternPredicate:
 		if err := s.translatePatternPredicate(); err != nil {
 			s.SetError(err)
@@ -224,6 +335,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 	case *cypher.Delete:
 		if err := s.translateDelete(s.scope, typedExpression); err != nil {
+			s.SetError(err)
+		}
+
+	case *cypher.Create:
+		if err := s.translateCreate(typedExpression); err != nil {
 			s.SetError(err)
 		}
 
@@ -322,50 +438,9 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		if operand, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
 		} else {
-			for cursor := operand; cursor != nil; {
-				switch typedCursor := cursor.(type) {
-				case *pgsql.Parenthetical:
-					// Unwrap parentheticals
-					cursor = typedCursor.Expression
-					continue
-
-				case *pgsql.BinaryExpression:
-					switch typedCursor.Operator {
-					case pgsql.OperatorLike, pgsql.OperatorILike:
-						// If this is a string comparison operation then the negation requires wrapping the
-						// operand references in coalesce functions. While this will kick out index acceleration
-						// the negation will already damage the query planner's ability to utilize an index lookup.
-
-						if leftPropertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(typedCursor.LOperand); isPropertyLookup {
-							typedCursor.LOperand = pgsql.FunctionCall{
-								Function: pgsql.FunctionCoalesce,
-								Parameters: []pgsql.Expression{
-									leftPropertyLookup,
-									pgsql.NewLiteral("", pgsql.Text),
-								},
-								CastType: pgsql.Text,
-							}
-						}
-
-						if rightPropertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(typedCursor.ROperand); isPropertyLookup {
-							typedCursor.ROperand = pgsql.FunctionCall{
-								Function: pgsql.FunctionCoalesce,
-								Parameters: []pgsql.Expression{
-									rightPropertyLookup,
-									pgsql.NewLiteral("", pgsql.Text),
-								},
-								CastType: pgsql.Text,
-							}
-						}
-					}
-				}
-
-				break
-			}
-
 			s.treeTranslator.PushOperand(&pgsql.UnaryExpression{
 				Operator: pgsql.OperatorNot,
-				Operand:  operand,
+				Operand:  rewriteNegatedStringPredicateExpression(operand),
 			})
 		}
 
@@ -414,6 +489,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			s.SetError(err)
 		}
 
+	case *cypher.Unwind:
+		if err := s.translateUnwind(typedExpression); err != nil {
+			s.SetError(err)
+		}
+
 	case *cypher.With:
 		if err := s.translateWith(); err != nil {
 			s.SetError(err)
@@ -443,12 +523,56 @@ type Result struct {
 	Parameters map[string]any
 }
 
-func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any) (Result, error) {
-	translator := NewTranslator(ctx, kindMapper, parameters)
+func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
+	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 
 	if err := walk.Cypher(cypherQuery, translator); err != nil {
 		return Result{}, err
 	}
 
 	return translator.translation, nil
+}
+
+func decodeCypherStringLiteral(raw string) (string, error) {
+	if len(raw) < 2 {
+		return "", fmt.Errorf("invalid cypher string literal: %q", raw)
+	} else if quote := raw[0]; (quote != '\'' && quote != '"') || raw[len(raw)-1] != quote {
+		return "", fmt.Errorf("invalid cypher string literal: missing or mismatched surrounding quotes: %q", raw)
+	}
+	// Cypher parser wraps string literals with ' characters
+	body := raw[1 : len(raw)-1]
+	var b strings.Builder
+	b.Grow(len(body))
+	for i := 0; i < len(body); i++ {
+		if body[i] != '\\' {
+			b.WriteByte(body[i])
+			continue
+		}
+		if i+1 >= len(body) {
+			return "", fmt.Errorf("dangling escape in string literal")
+		}
+		switch c := body[i+1]; c {
+		case '\\', '\'', '"':
+			b.WriteByte(c)
+			i++
+		case 'b', 'B':
+			b.WriteByte('\b')
+			i++
+		case 'f', 'F':
+			b.WriteByte('\f')
+			i++
+		case 'n', 'N':
+			b.WriteByte('\n')
+			i++
+		case 'r', 'R':
+			b.WriteByte('\r')
+			i++
+		case 't', 'T':
+			b.WriteByte('\t')
+			i++
+		default:
+			return "", fmt.Errorf("invalid escape \\%c", c)
+		}
+	}
+	return b.String(), nil
 }
