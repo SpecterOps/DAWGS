@@ -448,9 +448,16 @@ func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, trav
 	}
 
 	if traversalStep.RightNodeBound {
-		// Right is the tighter anchor by definition; flip once to normalize it to the left.
-		traversalStep.FlipNodes()
-		s.FlipNodes()
+		// Only flip when a previous frame exists to serve as the FROM source for the
+		// now-left bound node.  In self-referential patterns such as (u)-[]->(u) the
+		// right node is "bound" because it reuses the left node's variable, but there
+		// is no preceding CTE to reference.  Flipping in that case would set
+		// LeftNodeBound = true while Frame.Previous is nil, causing a nil-pointer
+		// dereference in buildTraversalPatternRoot.
+		if traversalStep.hasPreviousFrameBinding() {
+			traversalStep.FlipNodes()
+			s.FlipNodes()
+		}
 
 		return nil
 	}

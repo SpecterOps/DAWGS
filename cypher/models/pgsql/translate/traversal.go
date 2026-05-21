@@ -28,6 +28,10 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	)
 
 	if traversalStep.LeftNodeBound {
+		if traversalStep.Frame.Previous == nil {
+			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
+		}
+
 		// Left node was already materialized in the previous frame. Promote that frame and join only the terminal node here.
 		//
 		// prevFrame is the join root so LeftNodeConstraints can safely reference it in the edge ON clause without partitioning.
@@ -269,6 +273,10 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 	)
 
 	if traversalStep.LeftNodeBound {
+		if partFrame.Previous == nil {
+			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
+		}
+
 		// prevFrame is the JOIN root here (not comma-connected), so LeftNodeConstraints
 		// can safely reference it. No partitioning needed for this branch.
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
@@ -295,6 +303,45 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 				},
 			}},
 		})
+	} else if traversalStep.RightNodeBound && partFrame.Previous == nil {
+		// Self-referential pattern: the right node reuses the left node's variable (e.g. (u)-[]->(u)).
+		// There is no previous frame to promote as a FROM source. Join only the left node table and
+		// push the right-node join condition into WHERE so that start_id and end_id both reference
+		// the same node.
+		leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
+			nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+				Source: pgsql.TableReference{
+					Name: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier},
+				},
+			})
+		}
+
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+			Source: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+				Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+			},
+			Joins: []pgsql.Join{{
+				Table: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(traversalStep.LeftNode.Identifier),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition),
+				},
+			}},
+		})
+
+		// The right node's join condition (e.g. n0.id = e0.end_id) goes to WHERE since
+		// both endpoints reference the same node binding.
+		nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
+		nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
 	} else if traversalStep.RightNodeBound {
 		// Right node was already materialized in a previous frame.
 		//

@@ -139,3 +139,40 @@ func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
 		})
 	}
 }
+
+func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	for _, testCase := range []struct {
+		name  string
+		query string
+	}{
+		{
+			name:  "self-referential directed with path binding",
+			query: `match p = (u)-[]->(u) return p`,
+		},
+		{
+			name:  "self-referential directed without path binding",
+			query: `match (u)-[]->(u) return u`,
+		},
+		{
+			name:  "self-referential undirected with path binding",
+			query: `match p = (u)-[]-(u) return p`,
+		},
+		{
+			name:  "self-referential expansion",
+			query: `match p = (u)-[*1..3]->(u) return p`,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			query, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+			require.NoError(t, err)
+
+			translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+			require.NoError(t, err)
+
+			_, err = Translated(translation)
+			require.NoError(t, err)
+		})
+	}
+}
