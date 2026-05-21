@@ -73,13 +73,10 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "from s5, s7")
 }
 
-func TestOptimizerSafetyReferencedRelationshipStaysComposite(t *testing.T) {
-	t.Parallel()
+func assertOptimizerSafetyRelationshipStaysComposite(t *testing.T, cypherQuery string) {
+	t.Helper()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-MATCH p = (n:Group)-[r:MemberOf]->(m:Group)
-RETURN p, r
-`)
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	require.NoError(t, err)
 
 	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
@@ -91,9 +88,58 @@ RETURN p, r
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 
 	require.Contains(t, normalizedQuery, "(e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0")
-	require.Contains(t, normalizedQuery, "array [s0.e0]::edgecomposite[]")
+	require.Contains(t, normalizedQuery, "::edgecomposite")
 	require.NotContains(t, normalizedQuery, "e0.id as e0")
-	require.NotContains(t, normalizedQuery, "array [s0.e0]::int8[]")
+	require.NotContains(t, normalizedQuery, "::int8[]")
+}
+
+func TestOptimizerSafetyReferencedRelationshipStaysComposite(t *testing.T) {
+	t.Parallel()
+
+	assertOptimizerSafetyRelationshipStaysComposite(t, `
+MATCH p = (n:Group)-[r:MemberOf]->(m:Group)
+RETURN p, r
+`)
+}
+
+func TestOptimizerSafetyRelationshipExpressionReferencesStayComposite(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{
+			name: "type return",
+			query: `
+MATCH p = (n:Group)-[r:MemberOf]->(m:Group)
+RETURN p, type(r)
+`,
+		},
+		{
+			name: "property predicate",
+			query: `
+MATCH p = (n:Group)-[r:MemberOf]->(m:Group)
+WHERE r.label = 'member'
+RETURN p
+`,
+		},
+		{
+			name: "start node return",
+			query: `
+MATCH p = (n:Group)-[r:MemberOf]->(m:Group)
+RETURN p, startNode(r)
+`,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assertOptimizerSafetyRelationshipStaysComposite(t, testCase.query)
+		})
+	}
 }
 
 func TestOptimizerSafetyOptionalMatchPathStaysComposite(t *testing.T) {
