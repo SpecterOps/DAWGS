@@ -10,10 +10,10 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/pool"
 
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/stubs"
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
@@ -162,7 +162,7 @@ func openDAWGSDatabase(ctx context.Context, connStr string, options openConnecti
 	poolOwnedByDriver := false
 	switch driverName {
 	case pg.DriverName:
-		connPool, err := pg.NewPool(drivers.DatabaseConfiguration{
+		connPool, err := pool.NewPool(pool.DatabaseConfiguration{
 			Connection: connStr,
 		})
 		if err != nil {
