@@ -763,7 +763,7 @@ func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepI
 	return false
 }
 
-func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool) {
+func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) {
 	if hasDecision {
 		if traversalStep.LeftNode != nil && !traversalStep.LeftNodeBound && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.LeftNode, decision) {
 			traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
@@ -777,6 +777,10 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 			traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
 		}
 
+		return
+	}
+
+	if !allowFallback {
 		return
 	}
 
@@ -802,7 +806,7 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 	}
 }
 
-func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool) {
+func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) {
 	if traversalStep == nil || traversalStep.Expansion == nil {
 		return
 	}
@@ -816,6 +820,10 @@ func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart
 			traversalStep.Frame.Unexport(traversalStep.Expansion.PathBinding.Identifier)
 		}
 
+		return
+	}
+
+	if !allowFallback {
 		return
 	}
 
@@ -918,7 +926,8 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		}
 
 		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
-		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision)
+		allowFallback := !s.hasOptimizationPlan || !part.HasTarget
+		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision, allowFallback)
 	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {
