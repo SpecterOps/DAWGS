@@ -643,6 +643,20 @@ func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int)
 	return decision, hasDecision
 }
 
+func (s *Translator) hasLatePathMaterialization(part *PatternPart, stepIndex int, mode optimize.LatePathMaterializationMode) bool {
+	if part == nil || !part.HasTarget {
+		return false
+	}
+
+	for _, decision := range s.latePathDecisions[part.Target.TraversalStep(stepIndex)] {
+		if decision.Mode == mode {
+			return true
+		}
+	}
+
+	return false
+}
+
 func projectionPruningDecisionReferencesBinding(decision optimize.ProjectionPruningDecision, binding *BoundIdentifier) bool {
 	if binding == nil {
 		return false
@@ -862,6 +876,12 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 	}
 
 	if allowProjectionPruning {
+		if traversalStep.Edge != nil &&
+			traversalStep.Edge.DataType == pgsql.EdgeComposite &&
+			s.hasLatePathMaterialization(part, stepIndex, optimize.LatePathMaterializationPathEdgeID) {
+			traversalStep.Edge.DataType = pgsql.PathEdge
+		}
+
 		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
 		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision)
 	}

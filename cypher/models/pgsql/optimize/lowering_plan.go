@@ -47,6 +47,7 @@ func appendQueryPartLowerings(plan *LoweringPlan, queryPartIndex int, queryPart 
 	}
 
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	return nil
 }
 
@@ -96,6 +97,46 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 
 		if hasPruning {
 			plan.ProjectionPruning = append(plan.ProjectionPruning, decision)
+		}
+	}
+}
+
+func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
+			continue
+		}
+
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			if !referencesSourceIdentifier(sourceReferences, variableSymbol(patternPart.Variable)) {
+				continue
+			}
+
+			for stepIndex, step := range traversalStepsForPattern(patternPart) {
+				target := PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}.TraversalStep(stepIndex)
+
+				if step.Relationship.Range != nil {
+					plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
+						Target: target,
+						Mode:   LatePathMaterializationExpansionPath,
+					})
+					continue
+				}
+
+				mode := LatePathMaterializationPathEdgeID
+				if referencesSourceIdentifier(sourceReferences, variableSymbol(step.Relationship.Variable)) {
+					mode = LatePathMaterializationEdgeComposite
+				}
+
+				plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
+					Target: target,
+					Mode:   mode,
+				})
+			}
 		}
 	}
 }

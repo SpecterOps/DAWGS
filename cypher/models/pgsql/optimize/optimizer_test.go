@@ -90,6 +90,46 @@ func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
 	}}, plan.LoweringPlan.ProjectionPruning)
 }
 
+func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
+	t.Parallel()
+
+	t.Run("path edge id", func(t *testing.T) {
+		t.Parallel()
+
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+			MATCH p = (n)-[r:MemberOf]->(m)
+			RETURN p
+		`)
+		require.NoError(t, err)
+
+		plan, err := Optimize(regularQuery)
+		require.NoError(t, err)
+		require.Equal(t, []LatePathMaterializationDecision{{
+			Target: TraversalStepTarget{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				StepIndex:      0,
+			},
+			Mode: LatePathMaterializationPathEdgeID,
+		}}, plan.LoweringPlan.LatePathMaterialization)
+	})
+
+	t.Run("relationship composite", func(t *testing.T) {
+		t.Parallel()
+
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+			MATCH p = (n)-[r:MemberOf]->(m)
+			RETURN p, r
+		`)
+		require.NoError(t, err)
+
+		plan, err := Optimize(regularQuery)
+		require.NoError(t, err)
+		require.Equal(t, LatePathMaterializationEdgeComposite, plan.LoweringPlan.LatePathMaterialization[0].Mode)
+	})
+}
+
 func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 	t.Parallel()
 

@@ -240,7 +240,9 @@ RETURN p
 	require.NotEmpty(t, translation.Optimization.PredicateAttachments)
 	require.NotNil(t, translation.Optimization.LoweringPlan)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ProjectionPruning)
+	require.NotEmpty(t, translation.Optimization.LoweringPlan.LatePathMaterialization)
 	requireOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
+	requireOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
 	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 }
 
