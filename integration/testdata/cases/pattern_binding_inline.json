@@ -168,7 +168,7 @@
         ],
         "edges": [{"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"path_lengths": [1], "path_node_ids": [["x", "y"]], "path_edge_kinds": [["EdgeKind1"]]}
     },
     {
       "name": "match a node with an inline property map then bind its outgoing path to a second inline-map node",

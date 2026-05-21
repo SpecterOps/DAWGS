@@ -9,7 +9,71 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.RowColumnReference {
+	return pgsql.RowColumnReference{
+		Identifier: pgsql.CompoundIdentifier{frame.Binding.Identifier, binding.Identifier},
+		Column:     pgsql.ColumnID,
+	}
+}
+
+func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.Expression {
+	return pgsql.NewParenthetical(
+		pgsql.NewBinaryExpression(
+			boundEndpointIDReference(frame, traversalStep.LeftNode),
+			pgsql.OperatorCypherNotEquals,
+			boundEndpointIDReference(frame, traversalStep.RightNode),
+		),
+	)
+}
+
+func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
+	if partFrame == nil || partFrame.Previous == nil {
+		return pgsql.Query{}, errors.New("expected previous frame for bound endpoint traversal")
+	}
+
+	var (
+		previousFrame = partFrame.Previous
+		nextSelect    = pgsql.Select{
+			Projection: traversalStep.Projection,
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier},
+				},
+				Joins: []pgsql.Join{{
+					Table: pgsql.TableReference{
+						Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+						Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+					},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.OptionalAnd(
+							traversalStep.EdgeJoinCondition,
+							traversalStep.RightNodeJoinCondition,
+						),
+					},
+				}},
+			}},
+		}
+	)
+
+	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
+
+	if traversalStep.Direction == graph.DirectionBoth && traversalStep.LeftNode.Identifier != traversalStep.RightNode.Identifier {
+		nextSelect.Where = pgsql.OptionalAnd(boundEndpointInequality(previousFrame, traversalStep), nextSelect.Where)
+	}
+
+	return pgsql.Query{
+		Body: nextSelect,
+	}, nil
+}
+
 func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *TraversalStep) (pgsql.Query, error) {
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		return s.buildBoundEndpointTraversalPattern(traversalStep.Frame, traversalStep)
+	}
+
 	var (
 		// Partition node constraints
 		rightJoinLocal, rightJoinExternal = partitionConstraintByLocality(
@@ -258,6 +322,10 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
 	}
 
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
+	}
+
 	var (
 		// Partition right-node constraints: only locally-scoped terms go into JOIN ON.
 		// Constraints that reference comma-connected CTEs (e.g. s0.i0 from a prior WITH)
@@ -440,6 +508,10 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 }
 
 func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
+	}
+
 	nextSelect := pgsql.Select{
 		Projection: traversalStep.Projection,
 	}
