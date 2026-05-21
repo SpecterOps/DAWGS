@@ -2,6 +2,7 @@ package translate
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -2013,6 +2014,10 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 	var seed *expansionSeed
 
 	if traversalStep.LeftNodeBound {
+		if traversalStep.Frame.Previous == nil {
+			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
+		}
+
 		boundSeed := newExpansionBoundNodeSeed(seedIdentifier, traversalStep.Frame.Previous, traversalStep.LeftNode.Identifier, seedConstraints)
 		seed = &boundSeed
 		expansion.UseUnionAll = true
