@@ -1,6 +1,9 @@
 package optimize
 
-import "github.com/specterops/dawgs/cypher/models/cypher"
+import (
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/graph"
+)
 
 type sourceTraversalStep struct {
 	LeftNode     *cypher.NodePattern
@@ -48,6 +51,7 @@ func appendQueryPartLowerings(plan *LoweringPlan, queryPartIndex int, queryPart 
 
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
 	return nil
 }
 
@@ -139,6 +143,132 @@ func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex i
 			}
 		}
 	}
+}
+
+func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
+	declaredSymbols := map[string]struct{}{}
+
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		match := readingClause.Match
+		if match.Optional {
+			declareMatchSymbols(declaredSymbols, match)
+			continue
+		}
+
+		for patternIndex, patternPart := range match.Pattern {
+			steps := traversalStepsForPattern(patternPart)
+			declaredBeforeRightNode := declaredSymbolsBeforeRightNodes(declaredSymbols, steps)
+
+			for stepIndex, step := range steps {
+				if step.Relationship.Range == nil || stepIndex+1 >= len(steps) {
+					continue
+				}
+
+				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:], declaredBeforeRightNode[stepIndex+1:]); suffixLength > 0 {
+					plan.ExpansionSuffixPushdown = append(plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
+						Target: PatternTarget{
+							QueryPartIndex: queryPartIndex,
+							ClauseIndex:    clauseIndex,
+							PatternIndex:   patternIndex,
+						}.TraversalStep(stepIndex),
+						SuffixLength: suffixLength,
+					})
+				}
+			}
+
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+
+		declareWhereSymbols(declaredSymbols, match)
+	}
+}
+
+func expansionSuffixPushdownLength(suffixSteps []sourceTraversalStep, declaredBeforeRightNode []map[string]struct{}) int {
+	var suffixLength int
+
+	for idx, step := range suffixSteps {
+		if step.Relationship.Range != nil || step.Relationship.Direction == graph.DirectionBoth {
+			break
+		}
+
+		if nodeSymbol := variableSymbol(step.RightNode.Variable); nodeSymbol != "" {
+			if _, bound := declaredBeforeRightNode[idx][nodeSymbol]; bound && nodePatternHasConstraints(step.RightNode) {
+				break
+			}
+		}
+
+		suffixLength++
+	}
+
+	return suffixLength
+}
+
+func declaredSymbolsBeforeRightNodes(initial map[string]struct{}, steps []sourceTraversalStep) []map[string]struct{} {
+	declared := copyStringSet(initial)
+	declaredBeforeRightNode := make([]map[string]struct{}, len(steps))
+
+	for idx, step := range steps {
+		addSymbol(declared, variableSymbol(step.LeftNode.Variable))
+		addSymbol(declared, variableSymbol(step.Relationship.Variable))
+		declaredBeforeRightNode[idx] = copyStringSet(declared)
+		addSymbol(declared, variableSymbol(step.RightNode.Variable))
+	}
+
+	return declaredBeforeRightNode
+}
+
+func declareMatchSymbols(declared map[string]struct{}, match *cypher.Match) {
+	if match == nil {
+		return
+	}
+
+	for _, patternPart := range match.Pattern {
+		declarePatternSymbols(declared, patternPart)
+	}
+
+	declareWhereSymbols(declared, match)
+}
+
+func declarePatternSymbols(declared map[string]struct{}, patternPart *cypher.PatternPart) {
+	if patternPart == nil {
+		return
+	}
+
+	addSymbol(declared, variableSymbol(patternPart.Variable))
+	for _, step := range traversalStepsForPattern(patternPart) {
+		addSymbol(declared, variableSymbol(step.LeftNode.Variable))
+		addSymbol(declared, variableSymbol(step.Relationship.Variable))
+		addSymbol(declared, variableSymbol(step.RightNode.Variable))
+	}
+}
+
+func declareWhereSymbols(declared map[string]struct{}, match *cypher.Match) {
+	for _, dependency := range dependenciesForMatch(match) {
+		addSymbol(declared, dependency)
+	}
+}
+
+func nodePatternHasConstraints(nodePattern *cypher.NodePattern) bool {
+	return nodePattern != nil && (len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil)
+}
+
+func addSymbol(symbols map[string]struct{}, symbol string) {
+	if symbol != "" {
+		symbols[symbol] = struct{}{}
+	}
+}
+
+func copyStringSet(values map[string]struct{}) map[string]struct{} {
+	copied := make(map[string]struct{}, len(values))
+	for value := range values {
+		copied[value] = struct{}{}
+	}
+
+	return copied
 }
 
 func traversalStepsForPattern(patternPart *cypher.PatternPart) []sourceTraversalStep {

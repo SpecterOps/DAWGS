@@ -130,6 +130,43 @@ func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 	})
 }
 
+func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpansionSuffixPushdown})
+	require.Equal(t, []ExpansionSuffixPushdownDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		SuffixLength: 1,
+	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
+}
+
+func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]-(ca:EnterpriseCA)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.ExpansionSuffixPushdown)
+}
+
 func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 	t.Parallel()
 

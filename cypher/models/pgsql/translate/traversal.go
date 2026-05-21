@@ -603,7 +603,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 	}
 
-	if applied, err := applyExpansionSuffixPushdown(part); err != nil {
+	if applied, err := s.applyExpansionSuffixPushdown(part); err != nil {
 		return err
 	} else if applied > 0 {
 		s.recordLowering("ExpansionSuffixPushdown")
@@ -614,6 +614,41 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 	}
 
 	return nil
+}
+
+func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
+	if part == nil || !part.HasTarget {
+		return applyExpansionSuffixPushdown(part)
+	}
+
+	var applied int
+	for stepIndex := range part.TraversalSteps {
+		target := part.Target.TraversalStep(stepIndex)
+		for _, decision := range s.suffixPushdownDecisions[target] {
+			if decision.SuffixLength <= 0 || stepIndex+decision.SuffixLength >= len(part.TraversalSteps) {
+				continue
+			}
+
+			currentStep := part.TraversalSteps[stepIndex]
+			suffixSteps := part.TraversalSteps[stepIndex+1 : stepIndex+1+decision.SuffixLength]
+			if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
+				currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
+					currentStep.Expansion.TerminalNodeConstraints,
+					suffixSatisfaction,
+				)
+
+				if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
+					return applied, err
+				} else {
+					currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
+				}
+
+				applied++
+			}
+		}
+	}
+
+	return applied, nil
 }
 
 func patternBindingDependsOn(queryPart *QueryPart, part *PatternPart, binding *BoundIdentifier) bool {
