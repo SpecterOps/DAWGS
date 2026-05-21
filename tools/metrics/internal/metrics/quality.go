@@ -1380,6 +1380,7 @@ var allowedObjectAssertions = map[string]struct{}{
 	"path_edge_kinds":          {},
 	"path_lengths":             {},
 	"path_node_ids":            {},
+	"relationship_list_kinds":  {},
 	"row_count":                {},
 	"row_values":               {},
 	"scalar_values":            {},

@@ -144,7 +144,7 @@
           {"start_id": "b", "end_id": "t", "kind": "EdgeKind2"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"path_lengths": [2], "path_node_ids": [["a", "b", "t"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
     },
     {
       "name": "filter a typed node with WHERE then bind its variable-length expansion path",
