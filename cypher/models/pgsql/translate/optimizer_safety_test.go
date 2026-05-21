@@ -77,6 +77,17 @@ func requireOptimizationLowering(t *testing.T, summary OptimizationSummary, name
 	require.Failf(t, "missing optimization lowering", "expected lowering %q in %#v", name, summary.Lowerings)
 }
 
+func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
+	t.Helper()
+
+	offset := 0
+	for _, part := range parts {
+		nextIndex := strings.Index(sql[offset:], part)
+		require.NotEqualf(t, -1, nextIndex, "expected SQL to contain %q after offset %d:\n%s", part, offset, sql)
+		offset += nextIndex + len(part)
+	}
+}
+
 func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	t.Parallel()
 
@@ -258,10 +269,15 @@ RETURN p
 	require.Contains(t, normalizedQuery, "join edge e2 on n3.id = e2.start_id")
 	require.Contains(t, normalizedQuery, "n2.id = e1.start_id")
 	require.Contains(t, normalizedQuery, "e1.kind_id = any")
-	require.Contains(t, normalizedQuery, "properties -> 'authenticationenabled'")
 	require.Contains(t, normalizedQuery, "n3.kind_ids operator (pg_catalog.@>)")
 	require.Contains(t, normalizedQuery, "e2.kind_id = any")
 	require.Contains(t, normalizedQuery, "e2.end_id = (s0.n0).id")
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"exists (select 1 from edge e1 join node n3",
+		"properties -> 'authenticationenabled'",
+		"join edge e2 on n3.id = e2.start_id",
+		"e2.end_id = (s0.n0).id",
+	)
 }
 
 func TestOptimizerSafetyExpansionTerminalPushdownForBoundDomainSuffix(t *testing.T) {

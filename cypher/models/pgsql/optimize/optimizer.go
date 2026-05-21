@@ -8,8 +8,8 @@ type Rule interface {
 }
 
 type RuleResult struct {
-	Name    string
-	Applied bool
+	Name    string `json:"name"`
+	Applied bool   `json:"applied"`
 }
 
 type PredicateAttachmentScope string
@@ -20,13 +20,13 @@ const (
 )
 
 type PredicateAttachment struct {
-	QueryPartIndex  int
-	RegionIndex     int
-	ClauseIndex     int
-	ExpressionIndex int
-	Scope           PredicateAttachmentScope
-	BindingSymbols  []string
-	Dependencies    []string
+	QueryPartIndex  int                      `json:"query_part_index"`
+	RegionIndex     int                      `json:"region_index"`
+	ClauseIndex     int                      `json:"clause_index"`
+	ExpressionIndex int                      `json:"expression_index"`
+	Scope           PredicateAttachmentScope `json:"scope"`
+	BindingSymbols  []string                 `json:"binding_symbols"`
+	Dependencies    []string                 `json:"dependencies"`
 }
 
 type Plan struct {

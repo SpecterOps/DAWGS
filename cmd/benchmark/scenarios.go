@@ -251,6 +251,7 @@ AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
 		cypherPathScenario("ADCS Fanout", ds, "p1 only", p1, 1),
 		cypherPathScenario("ADCS Fanout", ds, "p2 only", p2, 1),
 		cypherPathScenario("ADCS Fanout", ds, "combined", combinedMatch+"RETURN p1,p2", 2),
+		cypherScenario("ADCS Fanout", ds, "combined endpoints", combinedMatch+"RETURN id(ca), id(d), id(ct)"),
 	}
 }
 

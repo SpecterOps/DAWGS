@@ -21,6 +21,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 )
 
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
@@ -42,6 +45,12 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 			Explain: &ExplainResult{
 				SQL:  "select 1;",
 				Plan: []string{"Result  (actual rows=1 loops=1)"},
+				Optimization: translate.OptimizationSummary{
+					Rules: []optimize.RuleResult{{
+						Name:    "ExpansionSuffixPushdown",
+						Applied: true,
+					}},
+				},
 			},
 			Stats: Stats{
 				Median: 10 * time.Millisecond,
@@ -65,6 +74,9 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		`"distinct_row_count": 2`,
 		`"duplicate_row_count": 0`,
 		`"sql": "select 1;"`,
+		`"optimization": {`,
+		`"name": "ExpansionSuffixPushdown"`,
+		`"applied": true`,
 		`"section": "Traversal"`,
 	} {
 		if !strings.Contains(text, expected) {
@@ -112,5 +124,15 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("markdown report missing %q:\n%s", expected, text)
 		}
+	}
+}
+
+func TestValidateIterationsRejectsZero(t *testing.T) {
+	if err := validateIterations(0); err == nil {
+		t.Fatal("expected zero iterations to be rejected")
+	}
+
+	if err := validateIterations(1); err != nil {
+		t.Fatalf("expected one iteration to be valid: %v", err)
 	}
 }

@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -28,12 +29,6 @@ type ExplainFunc func(ctx context.Context, tx graph.Transaction, cypher string) 
 
 type RunOptions struct {
 	Explain ExplainFunc
-}
-
-// ExplainResult captures PostgreSQL-specific plan diagnostics for a scenario.
-type ExplainResult struct {
-	SQL  string   `json:"sql"`
-	Plan []string `json:"plan"`
 }
 
 // Stats holds computed timing statistics for a scenario.
@@ -57,6 +52,10 @@ type Result struct {
 
 // runScenario executes a scenario N times and returns timing stats.
 func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int, options RunOptions) (Result, error) {
+	if err := validateIterations(iterations); err != nil {
+		return Result{}, err
+	}
+
 	// Warm-up: one untimed run.
 	var measurement Measurement
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -101,6 +100,14 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 	}
 
 	return result, nil
+}
+
+func validateIterations(iterations int) error {
+	if iterations < 1 {
+		return fmt.Errorf("iterations must be at least 1")
+	}
+
+	return nil
 }
 
 func computeStats(durations []time.Duration) Stats {

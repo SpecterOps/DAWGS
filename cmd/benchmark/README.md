@@ -1,6 +1,6 @@
 # Benchmark
 
-Runs query scenarios against a real database and outputs a markdown timing table with warm-up row counts. Path-heavy scenarios can also report distinct returned path rows and duplicate returned path rows.
+Runs query scenarios against a real database and outputs a markdown timing table with warm-up row counts. Path-heavy scenarios can also report distinct returned path rows and duplicate returned path rows. PostgreSQL explain capture includes translated SQL, plan text, and optimizer rule/lowering metadata in JSON output.
 
 ## Usage
 
@@ -23,7 +23,7 @@ go run ./cmd/benchmark -connection "..." -output report.md
 # Save markdown and JSON for quality baseline comparison
 go run ./cmd/benchmark -connection "..." -output report.md -json-output report.json
 
-# Capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS) in the JSON report for Cypher scenarios
+# Capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS), translated SQL, and optimizer metadata in JSON output
 go run ./cmd/benchmark -connection "..." -dataset adcs_fanout -json-output report.json -explain
 ```
 

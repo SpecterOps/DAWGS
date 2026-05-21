@@ -51,6 +51,10 @@ func main() {
 
 	flag.Parse()
 
+	if err := validateIterations(*iterations); err != nil {
+		fatal("%v", err)
+	}
+
 	conn := *connStr
 	if conn == "" {
 		conn = os.Getenv("CONNECTION_STRING")

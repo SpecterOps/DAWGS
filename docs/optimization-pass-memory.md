@@ -262,3 +262,13 @@ The gap-closure pass has been completed enough to return to the original phase s
 - Translation metadata reports optimizer rules, predicate attachments, and named lowerings, including `ExpansionSuffixPushdown`.
 - Phase 9 suffix coverage includes zero-hop expansions, fixed suffix chains, suffixes ending at already-bound nodes, inbound suffixes, and the ADCS root-to-domain suffix shape.
 - Directionless suffix pushdown remains deliberately unimplemented; those suffixes stay as normal translated pattern steps.
+
+## Phase 10 Status Notes
+
+Phase 10 starts by making local measurements repeatable for the optimizer rules already implemented.
+
+- PostgreSQL `-explain` benchmark JSON includes translated SQL, `EXPLAIN (ANALYZE, BUFFERS)` plan text, optimizer rule results, predicate attachments, and translator lowering decisions.
+- The ADCS fanout benchmark includes `p1` alone, `p2` alone, combined path return, and combined endpoint-only return. The endpoint-only scenario gives a local comparison point for final path reconstruction cost.
+- The benchmark runner rejects zero timed iterations so baseline output cannot silently panic while gathering measurements.
+- Representative SQL-shape tests assert that suffix-local predicates are inside the pushed suffix check, not merely present somewhere in the rendered SQL.
+- Broad pass/fail performance thresholds remain deferred. Phase 10 measurements are local evidence and regression artifacts first; cost-based acceptance gates should wait for a larger benchmark corpus and stable environment assumptions.

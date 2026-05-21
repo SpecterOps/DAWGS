@@ -26,6 +26,13 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// ExplainResult captures PostgreSQL-specific plan diagnostics for a scenario.
+type ExplainResult struct {
+	SQL          string                        `json:"sql"`
+	Plan         []string                      `json:"plan"`
+	Optimization translate.OptimizationSummary `json:"optimization"`
+}
+
 func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFunc {
 	return func(ctx context.Context, tx graph.Transaction, cypherQuery string) (*ExplainResult, error) {
 		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
@@ -61,8 +68,9 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 		}
 
 		return &ExplainResult{
-			SQL:  sqlQuery,
-			Plan: plan,
+			SQL:          sqlQuery,
+			Plan:         plan,
+			Optimization: translation.Optimization,
 		}, nil
 	}
 }
