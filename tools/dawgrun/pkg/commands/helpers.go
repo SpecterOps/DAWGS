@@ -8,6 +8,11 @@ import (
 )
 
 func parseQueryArray(fields []string) (*cypherModels.RegularQuery, error) {
+	return ParseQueryText(strings.Join(fields, " "))
+}
+
+// ParseQueryText parses a Cypher query string using dawgrun's default parser settings.
+func ParseQueryText(query string) (*cypherModels.RegularQuery, error) {
 	cypherCtx := cypherFrontend.DefaultCypherContext()
-	return cypherFrontend.ParseCypher(cypherCtx, strings.Join(fields, " "))
+	return cypherFrontend.ParseCypher(cypherCtx, query)
 }

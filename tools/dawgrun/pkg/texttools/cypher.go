@@ -140,6 +140,10 @@ func buildCypherResultColumns(keys []string, numValues int) []string {
 	return columns
 }
 
+func BuildCypherResultColumns(keys []string, numValues int) []string {
+	return buildCypherResultColumns(keys, numValues)
+}
+
 func buildCypherResultHeader(columns []string) table.Row {
 	row := make(table.Row, len(columns))
 	for idx, key := range columns {
@@ -160,6 +164,10 @@ func buildCypherResultJSONRow(columns []string, values []any) map[string]any {
 	}
 
 	return row
+}
+
+func BuildCypherResultJSONRow(columns []string, values []any) map[string]any {
+	return buildCypherResultJSONRow(columns, values)
 }
 
 func formatCypherResultJSONValue(value any) any {

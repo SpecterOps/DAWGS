@@ -56,6 +56,11 @@ export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 
 Use `make test` for unit tests only and `make test_integration` for integration tests only.
 
+### Dawgrun MCP Server
+
+`go tool dawgrun-mcp` runs a stdio MCP server for agent access to dawgrun-backed DAWGS inspection tools. See
+[`tools/dawgrun/README.md`](tools/dawgrun/README.md) for client configuration and the current tool surface.
+
 ### Test Metrics
 
 `make test` writes unit test coverage artifacts under `.coverage/`:

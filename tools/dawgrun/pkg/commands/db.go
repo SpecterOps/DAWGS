@@ -19,6 +19,30 @@ import (
 	"github.com/specterops/dawgs/tools/dawgrun/pkg/types"
 )
 
+type OpenConnectionOptions struct {
+	Name             string
+	ConnectionString string
+	Driver           string
+	DefaultGraph     string
+	InitGraph        bool
+}
+
+// OpenConnection opens a DAWGS backend connection and stores it in the command scope.
+func OpenConnection(ctx *CommandContext, options OpenConnectionOptions) error {
+	name := strings.TrimSpace(options.Name)
+	connStr := strings.TrimSpace(options.ConnectionString)
+	if name == "" || connStr == "" {
+		return fmt.Errorf("connection name and connection string are required")
+	}
+
+	_, err := ctx.OpenConnection(name, connStr, openConnectionOptions{
+		driverName:       strings.ToLower(strings.TrimSpace(options.Driver)),
+		defaultGraphName: options.DefaultGraph,
+		initGraphOnFail:  options.InitGraph,
+	})
+	return err
+}
+
 func listConnectionsCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{},
@@ -292,6 +316,11 @@ func loadKindMap(ctx *CommandContext, connName string) (stubs.KindMap, error) {
 	return kindMap, nil
 }
 
+// LoadKindMap loads and caches the database kind map for an open connection.
+func LoadKindMap(ctx *CommandContext, connName string) (stubs.KindMap, error) {
+	return loadKindMap(ctx, connName)
+}
+
 func lookupKindCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{"<connection name>", "<kind name>"},
@@ -307,7 +336,6 @@ func lookupKindCmd() CommandDesc {
 
 			kindMap, ok := ctx.scope.connKindMaps[connName]
 			if !ok {
-				// Try to fetch the kind map if the connection is open
 				var err error
 				kindMap, err = loadKindMap(ctx, connName)
 				if err != nil {
@@ -347,7 +375,6 @@ func lookupKindIDCmd() CommandDesc {
 
 			kindMap, ok := ctx.scope.connKindMaps[connName]
 			if !ok {
-				// Try to fetch the kind map if the connection is open
 				var err error
 				kindMap, err = loadKindMap(ctx, connName)
 				if err != nil {

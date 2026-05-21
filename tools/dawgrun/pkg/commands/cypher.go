@@ -21,6 +21,61 @@ const (
 	queryCypherOutputFormatJSON  = "json"
 )
 
+type TranslateCypherOptions struct {
+	Connection        string
+	DumpPGAst         bool
+	SQLFormatDistance int
+}
+
+type TranslateCypherOutput struct {
+	SQL   string
+	PGAst string
+}
+
+// TranslateCypherToPsql parses and translates a Cypher query to PostgreSQL SQL.
+func TranslateCypherToPsql(ctx *CommandContext, queryText string, options TranslateCypherOptions) (TranslateCypherOutput, error) {
+	query, err := ParseQueryText(queryText)
+	if err != nil {
+		return TranslateCypherOutput{}, fmt.Errorf("error trying to parse query: %w", err)
+	}
+
+	kindMapper := stubs.EmptyMapper()
+	if strings.TrimSpace(options.Connection) != "" {
+		kindMap, err := loadKindMap(ctx, options.Connection)
+		if err != nil {
+			return TranslateCypherOutput{}, fmt.Errorf("could not load kind map for translation: %w", err)
+		}
+		kindMapper = stubs.MapperFromKindMap(kindMap)
+	}
+
+	result, err := translate.Translate(ctx, query, kindMapper, nil, defaultGraphID(ctx, options.Connection))
+	if err != nil {
+		return TranslateCypherOutput{}, fmt.Errorf("could not translate cypher query to pgsql: %w", err)
+	}
+
+	queryBuilder := format.NewOutputBuilder()
+	if result.Parameters != nil {
+		queryBuilder.WithMaterializedParameters(result.Parameters)
+	}
+
+	sqlQuery, err := format.Statement(result.Statement, queryBuilder)
+	if err != nil {
+		return TranslateCypherOutput{}, fmt.Errorf("could not format translated statement into a string query: %w", err)
+	}
+
+	formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{Distance: options.SQLFormatDistance})
+	if err != nil {
+		formattedQuery = sqlQuery
+	}
+
+	output := TranslateCypherOutput{SQL: formattedQuery}
+	if options.DumpPGAst {
+		output.PGAst = spew.Sdump(result.Statement)
+	}
+
+	return output, nil
+}
+
 func parseCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{"<...query>"},
@@ -65,52 +120,21 @@ func translateToPsqlCmd() CommandDesc {
 			}
 
 			fields = flagSet.Args()
-			query, err := parseQueryArray(fields)
+			output, err := TranslateCypherToPsql(ctx, strings.Join(fields, " "), TranslateCypherOptions{
+				Connection: kindMapperConnRef,
+				DumpPGAst:  dumpTranslatedAst,
+			})
 			if err != nil {
-				return fmt.Errorf("error trying to parse query '%s': %w", fields, err)
+				return err
 			}
 
-			kindMapper := stubs.EmptyMapper()
-			if kindMapperConnRef != "" {
-				// Fetch kinds regardless of if it's already loaded.
-				kindMap, err := loadKindMap(ctx, kindMapperConnRef)
-				if err != nil {
-					return fmt.Errorf("could not load kind map for explain: %w", err)
-				}
-				kindMapper = stubs.MapperFromKindMap(kindMap)
-			}
-
-			result, err := translate.Translate(ctx, query, kindMapper, nil, defaultGraphID(ctx, kindMapperConnRef))
-			if err != nil {
-				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
-			}
-			if dumpTranslatedAst {
+			if output.PGAst != "" {
 				fmt.Fprintf(ctx.output, "TRANSLATOR AST\n\n")
-				ctx.output.WriteHighlighted(spew.Sdump(result.Statement), "golang")
+				ctx.output.WriteHighlighted(output.PGAst, "golang")
 				fmt.Fprintf(ctx.output, "\n")
 			}
 
-			// Certain queries will materialize parameters into the output when translated, so we need to build
-			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
-			if result.Parameters != nil {
-				queryBuilder.WithMaterializedParameters(result.Parameters)
-			}
-
-			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
-			if err != nil {
-				return fmt.Errorf("could not format translated statement into a string query: %w", err)
-			}
-
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
-				Distance: 0,
-			})
-			if err != nil {
-				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
-			}
-
-			ctx.output.WriteHighlighted(formattedQuery, "postgres")
+			ctx.output.WriteHighlighted(output.SQL, "postgres")
 			return nil
 		},
 	}
@@ -133,44 +157,12 @@ func explainAsPsqlCmd() CommandDesc {
 				return err
 			}
 
-			// Fetch kinds regardless of if it's already loaded.
-			kindMap, err := loadKindMap(ctx, connName)
+			translation, err := TranslateCypherToPsql(ctx, strings.Join(fields[1:], " "), TranslateCypherOptions{Connection: connName, SQLFormatDistance: 2})
 			if err != nil {
-				return fmt.Errorf("could not load kind map for explain: %w", err)
+				return err
 			}
 
-			query, err := parseQueryArray(fields[1:])
-			if err != nil {
-				return fmt.Errorf("could not parse query: %w", err)
-			}
-
-			// Populate a DumbKindMapper from the database's kinds table
-			kindMapper := stubs.MapperFromKindMap(kindMap)
-			result, err := translate.Translate(ctx, query, kindMapper, nil, defaultGraphID(ctx, connName))
-			if err != nil {
-				return fmt.Errorf("could not translate cypher query to pgsql: %w", err)
-			}
-
-			// Certain queries will materialize parameters into the output when translated, so we need to build
-			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
-			if result.Parameters != nil {
-				queryBuilder.WithMaterializedParameters(result.Parameters)
-			}
-
-			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
-			if err != nil {
-				return fmt.Errorf("could not format translated statement into a string query: %w", err)
-			}
-
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
-				Distance: 2,
-			})
-			if err != nil {
-				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
-			}
-			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", formattedQuery)
+			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", translation.SQL)
 			ctx.output.WriteHighlighted(explainSQLQuery, "postgres")
 			fmt.Fprint(ctx.output, "\n\n")
 
