@@ -11,7 +11,7 @@ type sourceTraversalStep struct {
 	RightNode    *cypher.NodePattern
 }
 
-func BuildLoweringPlan(query *cypher.RegularQuery, _ Analysis) (LoweringPlan, error) {
+func BuildLoweringPlan(query *cypher.RegularQuery, _ Analysis, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
 	if query == nil || query.SingleQuery == nil {
 		return LoweringPlan{}, nil
 	}
@@ -40,6 +40,8 @@ func BuildLoweringPlan(query *cypher.RegularQuery, _ Analysis) (LoweringPlan, er
 		}
 	}
 
+	appendPredicatePlacementDecisions(&plan, query, predicateAttachments)
+	attachPredicatePlacementsToSuffixPushdowns(&plan)
 	return plan, nil
 }
 
@@ -258,6 +260,119 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 		}
 
 		declareWhereSymbols(declaredSymbols, match)
+	}
+}
+
+type bindingTargetKey struct {
+	QueryPartIndex int
+	Symbol         string
+}
+
+func appendPredicatePlacementDecisions(plan *LoweringPlan, query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) {
+	if len(predicateAttachments) == 0 {
+		return
+	}
+
+	bindingTargets := indexBindingTargets(query)
+	for _, attachment := range predicateAttachments {
+		if attachment.Scope != PredicateAttachmentScopeBinding || len(attachment.BindingSymbols) != 1 {
+			continue
+		}
+
+		target, hasTarget := bindingTargets[bindingTargetKey{
+			QueryPartIndex: attachment.QueryPartIndex,
+			Symbol:         attachment.BindingSymbols[0],
+		}]
+		if !hasTarget {
+			continue
+		}
+
+		plan.PredicatePlacement = append(plan.PredicatePlacement, PredicatePlacementDecision{
+			Target:     target,
+			Attachment: attachment,
+			Placement:  attachment.Scope,
+		})
+	}
+}
+
+func attachPredicatePlacementsToSuffixPushdowns(plan *LoweringPlan) {
+	for suffixIdx := range plan.ExpansionSuffixPushdown {
+		suffix := &plan.ExpansionSuffixPushdown[suffixIdx]
+		for _, placement := range plan.PredicatePlacement {
+			if placement.Target.QueryPartIndex != suffix.Target.QueryPartIndex ||
+				placement.Target.ClauseIndex != suffix.Target.ClauseIndex ||
+				placement.Target.PatternIndex != suffix.Target.PatternIndex {
+				continue
+			}
+
+			if placement.Target.StepIndex > suffix.Target.StepIndex &&
+				placement.Target.StepIndex <= suffix.Target.StepIndex+suffix.SuffixLength {
+				suffix.PredicateAttachments = append(suffix.PredicateAttachments, placement.Attachment)
+			}
+		}
+	}
+}
+
+func indexBindingTargets(query *cypher.RegularQuery) map[bindingTargetKey]TraversalStepTarget {
+	targets := map[bindingTargetKey]TraversalStepTarget{}
+
+	if query == nil || query.SingleQuery == nil {
+		return targets
+	}
+
+	if query.SingleQuery.MultiPartQuery != nil {
+		for queryPartIndex, part := range query.SingleQuery.MultiPartQuery.Parts {
+			if part == nil {
+				continue
+			}
+
+			indexReadingClauseBindingTargets(targets, queryPartIndex, part.ReadingClauses)
+		}
+
+		if finalPart := query.SingleQuery.MultiPartQuery.SinglePartQuery; finalPart != nil {
+			indexReadingClauseBindingTargets(targets, len(query.SingleQuery.MultiPartQuery.Parts), finalPart.ReadingClauses)
+		}
+	} else if query.SingleQuery.SinglePartQuery != nil {
+		indexReadingClauseBindingTargets(targets, 0, query.SingleQuery.SinglePartQuery.ReadingClauses)
+	}
+
+	return targets
+}
+
+func indexReadingClauseBindingTargets(targets map[bindingTargetKey]TraversalStepTarget, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			patternTarget := PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}
+
+			for stepIndex, step := range traversalStepsForPattern(patternPart) {
+				stepTarget := patternTarget.TraversalStep(stepIndex)
+				setBindingTarget(targets, queryPartIndex, variableSymbol(step.LeftNode.Variable), stepTarget)
+				setBindingTarget(targets, queryPartIndex, variableSymbol(step.Relationship.Variable), stepTarget)
+				setBindingTarget(targets, queryPartIndex, variableSymbol(step.RightNode.Variable), stepTarget)
+			}
+		}
+	}
+}
+
+func setBindingTarget(targets map[bindingTargetKey]TraversalStepTarget, queryPartIndex int, symbol string, target TraversalStepTarget) {
+	if symbol == "" {
+		return
+	}
+
+	key := bindingTargetKey{
+		QueryPartIndex: queryPartIndex,
+		Symbol:         symbol,
+	}
+	if _, exists := targets[key]; !exists {
+		targets[key] = target
 	}
 }
 

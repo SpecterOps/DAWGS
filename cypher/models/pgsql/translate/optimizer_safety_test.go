@@ -253,9 +253,11 @@ RETURN p
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ProjectionPruning)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.LatePathMaterialization)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ExpansionSuffixPushdown)
+	require.NotEmpty(t, translation.Optimization.LoweringPlan.PredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
 	requireOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
 	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 }
 
 func TestOptimizerSafetyExpansionTerminalPushdownForZeroDepthExpansion(t *testing.T) {

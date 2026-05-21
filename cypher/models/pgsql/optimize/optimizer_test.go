@@ -153,6 +153,30 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+func TestLoweringPlanPlacesBindingPredicates(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+		WHERE ca.name = 'target'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringPredicatePlacement})
+	require.Len(t, plan.LoweringPlan.PredicatePlacement, 1)
+	require.Equal(t, TraversalStepTarget{
+		QueryPartIndex: 0,
+		ClauseIndex:    0,
+		PatternIndex:   0,
+		StepIndex:      1,
+	}, plan.LoweringPlan.PredicatePlacement[0].Target)
+	require.Equal(t, []string{"ca"}, plan.LoweringPlan.PredicatePlacement[0].Attachment.BindingSymbols)
+	require.Equal(t, []PredicateAttachment{plan.LoweringPlan.PredicatePlacement[0].Attachment}, plan.LoweringPlan.ExpansionSuffixPushdown[0].PredicateAttachments)
+}
+
 func TestLoweringPlanReportsExpandInto(t *testing.T) {
 	t.Parallel()
 
