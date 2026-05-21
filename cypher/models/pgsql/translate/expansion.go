@@ -2641,7 +2641,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 	return projectionConstraints, nil
 }
 
-func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPart, isFirstTraversalStep bool, traversalStep *TraversalStep, allowProjectionPruning bool) error {
+func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPart, stepIndex int, isFirstTraversalStep bool, traversalStep *TraversalStep, allowProjectionPruning bool) error {
 	expansionModel := traversalStep.Expansion
 
 	// Translate the expansion's constraints - this has the side effect of making the pattern identifiers visible in
@@ -2653,7 +2653,8 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	// Export the path from the traversal's scope
 	traversalStep.Frame.Export(expansionModel.PathBinding.Identifier)
 	if allowProjectionPruning {
-		pruneExpansionStepProjectionExports(s.query.CurrentPart(), part, traversalStep)
+		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
+		pruneExpansionStepProjectionExports(s.query.CurrentPart(), part, traversalStep, decision, hasDecision)
 	}
 
 	// Push a new frame that contains currently projected scope from the expansion recursive CTE

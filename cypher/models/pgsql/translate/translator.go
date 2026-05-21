@@ -29,6 +29,10 @@ type Translator struct {
 	query          *Query
 	scope          *Scope
 	unwindTargets  map[*cypher.Variable]struct{}
+
+	hasOptimizationPlan        bool
+	patternTargets             map[*cypher.PatternPart]optimize.PatternTarget
+	projectionPruningDecisions map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
 }
 
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
@@ -57,6 +61,16 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		query:          &Query{},
 		scope:          NewScope(),
 		unwindTargets:  map[*cypher.Variable]struct{}{},
+	}
+}
+
+func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
+	s.hasOptimizationPlan = true
+	s.patternTargets = optimize.IndexPatternTargets(plan.Query)
+	s.projectionPruningDecisions = map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision{}
+
+	for _, decision := range plan.LoweringPlan.ProjectionPruning {
+		s.projectionPruningDecisions[decision.Target] = decision
 	}
 }
 
@@ -549,6 +563,7 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	}
 
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
+	translator.SetOptimizationPlan(optimizedPlan)
 	translator.translation.Optimization.Rules = optimizedPlan.Rules
 	translator.translation.Optimization.PredicateAttachments = optimizedPlan.PredicateAttachments
 	if !optimizedPlan.LoweringPlan.Empty() {

@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
@@ -598,6 +599,8 @@ type PatternPart struct {
 	ShortestPath     bool
 	AllShortestPaths bool
 	PatternBinding   *BoundIdentifier
+	Target           optimize.PatternTarget
+	HasTarget        bool
 	TraversalSteps   []*TraversalStep
 	NodeSelect       NodeSelect
 	Constraints      *ConstraintTracker

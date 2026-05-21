@@ -238,6 +238,9 @@ RETURN p
 
 	require.NotEmpty(t, translation.Optimization.Rules)
 	require.NotEmpty(t, translation.Optimization.PredicateAttachments)
+	require.NotNil(t, translation.Optimization.LoweringPlan)
+	require.NotEmpty(t, translation.Optimization.LoweringPlan.ProjectionPruning)
+	requireOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
 	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 }
 

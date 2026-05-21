@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -591,7 +593,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 
 		if traversalStep.Expansion != nil {
-			if err := s.translateTraversalPatternPartWithExpansion(part, idx == 0, traversalStep, allowProjectionPruning); err != nil {
+			if err := s.translateTraversalPatternPartWithExpansion(part, idx, idx == 0, traversalStep, allowProjectionPruning); err != nil {
 				return err
 			}
 		} else if part.AllShortestPaths || part.ShortestPath {
@@ -632,6 +634,65 @@ func patternBindingDependsOn(queryPart *QueryPart, part *PatternPart, binding *B
 	return false
 }
 
+func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int) (optimize.ProjectionPruningDecision, bool) {
+	if part == nil || !part.HasTarget {
+		return optimize.ProjectionPruningDecision{}, false
+	}
+
+	decision, hasDecision := s.projectionPruningDecisions[part.Target.TraversalStep(stepIndex)]
+	return decision, hasDecision
+}
+
+func projectionPruningDecisionReferencesBinding(decision optimize.ProjectionPruningDecision, binding *BoundIdentifier) bool {
+	if binding == nil {
+		return false
+	}
+
+	sourceIdentifier := binding.Identifier
+	if binding.Alias.Set {
+		sourceIdentifier = binding.Alias.Value
+	}
+
+	for _, symbol := range decision.ReferencedSymbols {
+		if symbol == cypher.TokenLiteralAsterisk || pgsql.Identifier(symbol) == sourceIdentifier {
+			return true
+		}
+	}
+
+	return false
+}
+
+func projectionPruningDecisionPatternDependsOn(part *PatternPart, binding *BoundIdentifier, decision optimize.ProjectionPruningDecision) bool {
+	if !decision.PatternBindingReferenced || part == nil || part.PatternBinding == nil || binding == nil {
+		return false
+	}
+
+	for _, dependency := range part.PatternBinding.Dependencies {
+		if dependency.Identifier == binding.Identifier {
+			return true
+		}
+	}
+
+	return false
+}
+
+func traversalStepProjectsBindingByDecision(part *PatternPart, stepIndex int, binding *BoundIdentifier, decision optimize.ProjectionPruningDecision) bool {
+	if binding == nil {
+		return false
+	}
+
+	if projectionPruningDecisionReferencesBinding(decision, binding) || projectionPruningDecisionPatternDependsOn(part, binding, decision) {
+		return true
+	}
+
+	if stepIndex+1 < len(part.TraversalSteps) {
+		nextStep := part.TraversalSteps[stepIndex+1]
+		return nextStep.LeftNode != nil && nextStep.LeftNode.Identifier == binding.Identifier
+	}
+
+	return false
+}
+
 func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
 	if binding == nil {
 		return false
@@ -653,7 +714,23 @@ func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepI
 	return false
 }
 
-func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
+func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool) {
+	if hasDecision {
+		if traversalStep.LeftNode != nil && !traversalStep.LeftNodeBound && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.LeftNode, decision) {
+			traversalStep.Frame.Unexport(traversalStep.LeftNode.Identifier)
+		}
+
+		if traversalStep.Edge != nil && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.Edge, decision) {
+			traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+		}
+
+		if traversalStep.RightNode != nil && !traversalStep.RightNodeBound && !traversalStepProjectsBindingByDecision(part, stepIndex, traversalStep.RightNode, decision) {
+			traversalStep.Frame.Unexport(traversalStep.RightNode.Identifier)
+		}
+
+		return
+	}
+
 	// Bound endpoints already exist in an outer frame. Only unexport unbound
 	// values that later clauses and continuation steps cannot observe.
 	if !traversalStep.LeftNodeBound && !traversalStepProjectsBinding(queryPart, part, stepIndex, traversalStep.LeftNode) {
@@ -676,8 +753,20 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 	}
 }
 
-func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep) {
+func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool) {
 	if traversalStep == nil || traversalStep.Expansion == nil {
+		return
+	}
+
+	if hasDecision {
+		if traversalStep.Edge != nil && !projectionPruningDecisionReferencesBinding(decision, traversalStep.Edge) {
+			traversalStep.Frame.Unexport(traversalStep.Edge.Identifier)
+		}
+
+		if traversalStep.Expansion.PathBinding != nil && !projectionPruningDecisionPatternDependsOn(part, traversalStep.Expansion.PathBinding, decision) {
+			traversalStep.Frame.Unexport(traversalStep.Expansion.PathBinding.Identifier)
+		}
+
 		return
 	}
 
@@ -773,7 +862,8 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 	}
 
 	if allowProjectionPruning {
-		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep)
+		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
+		pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision)
 	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {

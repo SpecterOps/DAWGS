@@ -37,11 +37,9 @@ type TraversalStepTarget struct {
 }
 
 type ProjectionPruningDecision struct {
-	Target              TraversalStepTarget `json:"target"`
-	UnexportLeftNode    bool                `json:"unexport_left_node,omitempty"`
-	UnexportEdge        bool                `json:"unexport_edge,omitempty"`
-	UnexportRightNode   bool                `json:"unexport_right_node,omitempty"`
-	UnexportExpansionID bool                `json:"unexport_expansion_id,omitempty"`
+	Target                   TraversalStepTarget `json:"target"`
+	ReferencedSymbols        []string            `json:"referenced_symbols,omitempty"`
+	PatternBindingReferenced bool                `json:"pattern_binding_referenced,omitempty"`
 }
 
 type LatePathMaterializationMode string
@@ -114,6 +112,10 @@ func IndexPatternTargets(query *cypher.RegularQuery) map[*cypher.PatternPart]Pat
 
 	if query.SingleQuery.MultiPartQuery != nil {
 		for queryPartIndex, part := range query.SingleQuery.MultiPartQuery.Parts {
+			if part == nil {
+				continue
+			}
+
 			indexReadingClauseTargets(targets, queryPartIndex, part.ReadingClauses)
 		}
 

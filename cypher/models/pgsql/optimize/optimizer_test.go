@@ -67,6 +67,29 @@ func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *te
 	require.Empty(t, plan.PredicateAttachments)
 }
 
+func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n)-[r:MemberOf]->(m)
+		RETURN m
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []LoweringDecision{{Name: LoweringProjectionPruning}}, plan.LoweringPlan.Decisions())
+	require.Equal(t, []ProjectionPruningDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		ReferencedSymbols: []string{"m"},
+	}}, plan.LoweringPlan.ProjectionPruning)
+}
+
 func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 	t.Parallel()
 

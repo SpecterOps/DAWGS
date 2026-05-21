@@ -38,6 +38,10 @@ func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error
 	newPatternPart.IsTraversal = len(patternPart.PatternElements) > 1
 	newPatternPart.ShortestPath = patternPart.ShortestPathPattern
 	newPatternPart.AllShortestPaths = patternPart.AllShortestPathsPattern
+	if target, hasTarget := s.patternTargets[patternPart]; hasTarget {
+		newPatternPart.Target = target
+		newPatternPart.HasTarget = true
+	}
 
 	if cypherBinding, hasCypherSymbol, err := extractIdentifierFromCypherExpression(patternPart); err != nil {
 		return err
