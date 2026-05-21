@@ -272,3 +272,9 @@ Phase 10 starts by making local measurements repeatable for the optimizer rules 
 - The benchmark runner rejects zero timed iterations so baseline output cannot silently panic while gathering measurements.
 - Representative SQL-shape tests assert that suffix-local predicates are inside the pushed suffix check, not merely present somewhere in the rendered SQL.
 - Broad pass/fail performance thresholds remain deferred. Phase 10 measurements are local evidence and regression artifacts first; cost-based acceptance gates should wait for a larger benchmark corpus and stable environment assumptions.
+
+## Lowering Ownership Refactor Notes
+
+The translator now consumes optimizer-owned lowering metadata for projection pruning, late path materialization, fixed-hop expand-into detection, expansion suffix pushdown, and predicate placement. PostgreSQL SQL construction remains in the translator, but rule ownership and benchmark-visible diagnostics live in the optimizer lowering plan.
+
+Translator-local eligibility checks remain only as conservative fallbacks for untargeted internal patterns. Benchmark JSON includes both named lowerings and the structured lowering plan so future reviews can assert the optimizer decision that caused a SQL shape change.

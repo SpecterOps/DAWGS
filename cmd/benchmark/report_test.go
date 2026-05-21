@@ -29,6 +29,17 @@ import (
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	distinctRows := int64(2)
 	duplicateRows := int64(0)
+	loweringPlan := optimize.LoweringPlan{
+		ProjectionPruning: []optimize.ProjectionPruningDecision{{
+			Target: optimize.TraversalStepTarget{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				StepIndex:      0,
+			},
+			ReferencedSymbols: []string{"m"},
+		}},
+	}
 
 	report := Report{
 		Driver:     "pg",
@@ -50,6 +61,8 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 						Name:    "ExpansionSuffixPushdown",
 						Applied: true,
 					}},
+					Lowerings:    loweringPlan.Decisions(),
+					LoweringPlan: &loweringPlan,
 				},
 			},
 			Stats: Stats{
@@ -77,6 +90,11 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		`"optimization": {`,
 		`"name": "ExpansionSuffixPushdown"`,
 		`"applied": true`,
+		`"lowerings": [`,
+		`"name": "ProjectionPruning"`,
+		`"lowering_plan": {`,
+		`"projection_pruning": [`,
+		`"referenced_symbols": [`,
 		`"section": "Traversal"`,
 	} {
 		if !strings.Contains(text, expected) {
