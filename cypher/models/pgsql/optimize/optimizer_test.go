@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +32,10 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	require.Len(t, plan.Analysis.QueryParts, 1)
 	require.Len(t, plan.Analysis.QueryParts[0].Regions, 1)
 	require.Equal(t, []string{"p1", "p2"}, plan.Analysis.QueryParts[0].ProjectionDependencies)
-	require.Equal(t, []RuleResult{{Name: "PredicateAttachment", Applied: true}}, plan.Rules)
+	require.Equal(t, []RuleResult{
+		{Name: "ConservativePatternReordering", Applied: false},
+		{Name: "PredicateAttachment", Applied: true},
+	}, plan.Rules)
 	require.Len(t, plan.PredicateAttachments, 2)
 }
 
@@ -56,7 +60,10 @@ func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *te
 
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
-	require.Equal(t, []RuleResult{{Name: "PredicateAttachment", Applied: false}}, plan.Rules)
+	require.Equal(t, []RuleResult{
+		{Name: "ConservativePatternReordering", Applied: false},
+		{Name: "PredicateAttachment", Applied: false},
+	}, plan.Rules)
 	require.Empty(t, plan.PredicateAttachments)
 }
 
@@ -114,4 +121,64 @@ func TestPredicateAttachmentRuleKeepsMultiBindingPredicatesAtRegionScope(t *test
 		BindingSymbols:  []string{"a", "b"},
 		Dependencies:    []string{"a", "b"},
 	}, plan.PredicateAttachments[0])
+}
+
+func firstNodeSymbol(readingClause *cypher.ReadingClause) string {
+	if readingClause == nil || readingClause.Match == nil || len(readingClause.Match.Pattern) == 0 {
+		return ""
+	}
+
+	nodePattern, ok := singleNodePattern(readingClause.Match.Pattern[0])
+	if !ok || nodePattern.Variable == nil {
+		return ""
+	}
+
+	return nodePattern.Variable.Symbol
+}
+
+func TestConservativePatternReorderingMovesIndependentNodeAnchorsEarlier(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a)
+		MATCH (b:Group {objectid: 'target'})
+		MATCH p = (a)-[:MemberOf]->(b)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []RuleResult{
+		{Name: "ConservativePatternReordering", Applied: true},
+		{Name: "PredicateAttachment", Applied: false},
+	}, plan.Rules)
+
+	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses
+	require.Equal(t, "b", firstNodeSymbol(readingClauses[0]))
+	require.Equal(t, "a", firstNodeSymbol(readingClauses[1]))
+	require.Len(t, readingClauses[2].Match.Pattern[0].PatternElements, 3)
+}
+
+func TestConservativePatternReorderingKeepsDependentAnchorsInPlace(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a)
+		MATCH (b:Group)
+		WHERE b.name = a.name
+		RETURN b
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []RuleResult{
+		{Name: "ConservativePatternReordering", Applied: false},
+		{Name: "PredicateAttachment", Applied: true},
+	}, plan.Rules)
+
+	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses
+	require.Equal(t, "a", firstNodeSymbol(readingClauses[0]))
+	require.Equal(t, "b", firstNodeSymbol(readingClauses[1]))
 }

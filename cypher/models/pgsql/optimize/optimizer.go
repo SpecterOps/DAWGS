@@ -48,6 +48,7 @@ func NewOptimizer(rules ...Rule) Optimizer {
 
 func DefaultRules() []Rule {
 	return []Rule{
+		ConservativePatternReorderingRule{},
 		PredicateAttachmentRule{},
 	}
 }

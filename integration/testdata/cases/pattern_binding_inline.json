@@ -171,6 +171,22 @@
       "assert": {"path_lengths": [1], "path_node_ids": [["x", "y"]], "path_edge_kinds": [["EdgeKind1"]]}
     },
     {
+      "name": "reorder independent node anchor before binding a connecting path",
+      "cypher": "match (x) match (y:NodeKind2 {name: 'target'}) match p=(x)-[:EdgeKind1]->(y) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "x", "kinds": ["NodeKind1"]},
+          {"id": "target", "kinds": ["NodeKind2"], "properties": {"name": "target"}},
+          {"id": "other", "kinds": ["NodeKind2"], "properties": {"name": "other"}}
+        ],
+        "edges": [
+          {"start_id": "x", "end_id": "target", "kind": "EdgeKind1"},
+          {"start_id": "x", "end_id": "other", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"path_lengths": [1], "path_node_ids": [["x", "target"]], "path_edge_kinds": [["EdgeKind1"]]}
+    },
+    {
       "name": "match a node with an inline property map then bind its outgoing path to a second inline-map node",
       "cypher": "match (x:NodeKind1{name:'foo'}) match p=(x)-[:EdgeKind1]->(y:NodeKind2{name:'bar'}) return p",
       "fixture": {

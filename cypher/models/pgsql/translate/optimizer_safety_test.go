@@ -187,3 +187,31 @@ RETURN p
 	require.Contains(t, normalizedQuery, "(s1.n1).id = e0.end_id")
 	require.NotContains(t, normalizedQuery, "join node")
 }
+
+func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+MATCH (a)
+MATCH (b:EnterpriseCA {name: 'target'})
+MATCH p = (a)-[:MemberOf]->(b)
+RETURN p
+`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	enterpriseAnchorIndex := strings.Index(normalizedQuery, "array [5]::int2[]")
+	broadScanIndex := strings.Index(normalizedQuery, "from s0, node n1")
+
+	require.NotEqual(t, -1, enterpriseAnchorIndex)
+	require.NotEqual(t, -1, broadScanIndex)
+	require.Less(t, enterpriseAnchorIndex, broadScanIndex)
+	require.Contains(t, normalizedQuery, "(s1.n1).id = e0.start_id")
+	require.Contains(t, normalizedQuery, "(s1.n0).id = e0.end_id")
+}
