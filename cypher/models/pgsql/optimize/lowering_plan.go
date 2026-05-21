@@ -51,6 +51,7 @@ func appendQueryPartLowerings(plan *LoweringPlan, queryPartIndex int, queryPart 
 
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
 	return nil
 }
@@ -143,6 +144,79 @@ func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex i
 			}
 		}
 	}
+}
+
+func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
+	declaredSymbols := map[string]struct{}{}
+
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		match := readingClause.Match
+		if match.Optional {
+			declareMatchSymbols(declaredSymbols, match)
+			continue
+		}
+
+		for patternIndex, patternPart := range match.Pattern {
+			steps := traversalStepsForPattern(patternPart)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+
+			for stepIndex, step := range steps {
+				if step.Relationship.Range != nil {
+					continue
+				}
+
+				leftSymbol := variableSymbol(step.LeftNode.Variable)
+				rightSymbol := variableSymbol(step.RightNode.Variable)
+				if leftSymbol == "" || rightSymbol == "" {
+					continue
+				}
+
+				if _, leftBound := declaredEndpoints[stepIndex].BeforeLeftNode[leftSymbol]; !leftBound {
+					continue
+				}
+
+				if _, rightBound := declaredEndpoints[stepIndex].BeforeRightNode[rightSymbol]; !rightBound {
+					continue
+				}
+
+				plan.ExpandInto = append(plan.ExpandInto, ExpandIntoDecision{
+					Target: PatternTarget{
+						QueryPartIndex: queryPartIndex,
+						ClauseIndex:    clauseIndex,
+						PatternIndex:   patternIndex,
+					}.TraversalStep(stepIndex),
+				})
+			}
+
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+
+		declareWhereSymbols(declaredSymbols, match)
+	}
+}
+
+type declaredStepEndpoints struct {
+	BeforeLeftNode  map[string]struct{}
+	BeforeRightNode map[string]struct{}
+}
+
+func declaredSymbolsBeforeStepEndpoints(initial map[string]struct{}, steps []sourceTraversalStep) []declaredStepEndpoints {
+	declared := copyStringSet(initial)
+	endpoints := make([]declaredStepEndpoints, len(steps))
+
+	for idx, step := range steps {
+		endpoints[idx].BeforeLeftNode = copyStringSet(declared)
+		addSymbol(declared, variableSymbol(step.LeftNode.Variable))
+		addSymbol(declared, variableSymbol(step.Relationship.Variable))
+		endpoints[idx].BeforeRightNode = copyStringSet(declared)
+		addSymbol(declared, variableSymbol(step.RightNode.Variable))
+	}
+
+	return endpoints
 }
 
 func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
@@ -239,10 +313,16 @@ func declarePatternSymbols(declared map[string]struct{}, patternPart *cypher.Pat
 	}
 
 	addSymbol(declared, variableSymbol(patternPart.Variable))
-	for _, step := range traversalStepsForPattern(patternPart) {
-		addSymbol(declared, variableSymbol(step.LeftNode.Variable))
-		addSymbol(declared, variableSymbol(step.Relationship.Variable))
-		addSymbol(declared, variableSymbol(step.RightNode.Variable))
+	for _, element := range patternPart.PatternElements {
+		if element == nil {
+			continue
+		}
+
+		if nodePattern, isNodePattern := element.AsNodePattern(); isNodePattern {
+			addSymbol(declared, variableSymbol(nodePattern.Variable))
+		} else if relationshipPattern, isRelationshipPattern := element.AsRelationshipPattern(); isRelationshipPattern {
+			addSymbol(declared, variableSymbol(relationshipPattern.Variable))
+		}
 	}
 }
 

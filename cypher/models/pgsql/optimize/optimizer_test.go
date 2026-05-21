@@ -153,6 +153,30 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+func TestLoweringPlanReportsExpandInto(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a:Group)
+		MATCH (b:Group)
+		MATCH p = (a)-[:MemberOf]->(b)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpandIntoDetection})
+	require.Equal(t, []ExpandIntoDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+	}}, plan.LoweringPlan.ExpandInto)
+}
+
 func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 

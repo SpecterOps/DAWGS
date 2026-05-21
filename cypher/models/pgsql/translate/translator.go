@@ -35,6 +35,7 @@ type Translator struct {
 	projectionPruningDecisions map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
 	latePathDecisions          map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
 	suffixPushdownDecisions    map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	expandIntoDecisions        map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
 }
 
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
@@ -72,6 +73,7 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.projectionPruningDecisions = map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision{}
 	s.latePathDecisions = map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision{}
 	s.suffixPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision{}
+	s.expandIntoDecisions = map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -83,6 +85,10 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 
 	for _, decision := range plan.LoweringPlan.ExpansionSuffixPushdown {
 		s.suffixPushdownDecisions[decision.Target] = append(s.suffixPushdownDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.ExpandInto {
+		s.expandIntoDecisions[decision.Target] = decision
 	}
 }
 

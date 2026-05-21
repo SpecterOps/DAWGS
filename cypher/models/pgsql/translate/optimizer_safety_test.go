@@ -178,16 +178,27 @@ RETURN n, p
 func TestOptimizerSafetyFixedHopExpandIntoUsesBoundEndpoints(t *testing.T) {
 	t.Parallel()
 
-	normalizedQuery := optimizerSafetySQL(t, `
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 MATCH (a:Group)
 MATCH (b:Group)
 MATCH p = (a)-[:MemberOf]->(b)
 RETURN p
 `)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 
 	require.Contains(t, normalizedQuery, "(s1.n0).id = e0.start_id")
 	require.Contains(t, normalizedQuery, "(s1.n1).id = e0.end_id")
 	require.NotContains(t, normalizedQuery, "join node")
+	require.NotNil(t, translation.Optimization.LoweringPlan)
+	require.NotEmpty(t, translation.Optimization.LoweringPlan.ExpandInto)
+	requireOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
 }
 
 func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
