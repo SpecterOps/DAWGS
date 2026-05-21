@@ -601,8 +601,10 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		}
 	}
 
-	if err := applyExpansionSuffixPushdown(part); err != nil {
+	if applied, err := applyExpansionSuffixPushdown(part); err != nil {
 		return err
+	} else if applied > 0 {
+		s.recordLowering("ExpansionSuffixPushdown")
 	}
 
 	if isolatedProjection {

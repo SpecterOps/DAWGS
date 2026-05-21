@@ -520,8 +520,29 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 }
 
 type Result struct {
-	Statement  pgsql.Statement
-	Parameters map[string]any
+	Statement    pgsql.Statement
+	Parameters   map[string]any
+	Optimization OptimizationSummary
+}
+
+type OptimizationSummary struct {
+	Rules                []optimize.RuleResult          `json:"rules,omitempty"`
+	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
+	Lowerings            []LoweringDecision             `json:"lowerings,omitempty"`
+}
+
+type LoweringDecision struct {
+	Name string `json:"name"`
+}
+
+func (s *Translator) recordLowering(name string) {
+	for _, lowering := range s.translation.Optimization.Lowerings {
+		if lowering.Name == name {
+			return
+		}
+	}
+
+	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, LoweringDecision{Name: name})
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
@@ -531,6 +552,8 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	}
 
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
+	translator.translation.Optimization.Rules = optimizedPlan.Rules
+	translator.translation.Optimization.PredicateAttachments = optimizedPlan.PredicateAttachments
 
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
 		return Result{}, err

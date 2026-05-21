@@ -1,0 +1,50 @@
+{
+  "graph": {
+    "nodes": [
+      {"id": "n", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"}},
+      {"id": "p1-a", "kinds": ["Group"]},
+      {"id": "p1-b", "kinds": ["Group"]},
+      {"id": "p1-c", "kinds": ["Group"]},
+      {"id": "p2-good", "kinds": ["Group"]},
+      {"id": "p2-disabled", "kinds": ["Group"]},
+      {"id": "p2-wrong-ca", "kinds": ["Group"]},
+      {"id": "ca", "kinds": ["EnterpriseCA"]},
+      {"id": "other-ca", "kinds": ["EnterpriseCA"]},
+      {"id": "store", "kinds": ["NTAuthStore"]},
+      {"id": "domain", "kinds": ["Domain"]},
+      {"id": "other-domain", "kinds": ["Domain"]},
+      {"id": "template-good", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+      {"id": "template-alt", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+      {"id": "template-disabled", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": false, "requiresmanagerapproval": true, "enrolleesuppliessubject": false, "schemaversion": 2, "authorizedsignatures": 1}},
+      {"id": "template-wrong-ca", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+      {"id": "root", "kinds": ["RootCA"]},
+      {"id": "other-root", "kinds": ["RootCA"]}
+    ],
+    "edges": [
+      {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
+      {"start_id": "n", "end_id": "p1-b", "kind": "MemberOf"},
+      {"start_id": "p1-b", "end_id": "p1-c", "kind": "MemberOf"},
+      {"start_id": "n", "end_id": "p2-good", "kind": "MemberOf"},
+      {"start_id": "n", "end_id": "p2-disabled", "kind": "MemberOf"},
+      {"start_id": "n", "end_id": "p2-wrong-ca", "kind": "MemberOf"},
+      {"start_id": "n", "end_id": "ca", "kind": "Enroll"},
+      {"start_id": "p1-a", "end_id": "ca", "kind": "Enroll"},
+      {"start_id": "p1-b", "end_id": "ca", "kind": "Enroll"},
+      {"start_id": "p1-c", "end_id": "ca", "kind": "Enroll"},
+      {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+      {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+      {"start_id": "p2-good", "end_id": "template-good", "kind": "GenericAll"},
+      {"start_id": "p2-good", "end_id": "template-alt", "kind": "Enroll"},
+      {"start_id": "p2-disabled", "end_id": "template-disabled", "kind": "AllExtendedRights"},
+      {"start_id": "p2-wrong-ca", "end_id": "template-wrong-ca", "kind": "GenericAll"},
+      {"start_id": "template-good", "end_id": "ca", "kind": "PublishedTo"},
+      {"start_id": "template-alt", "end_id": "ca", "kind": "PublishedTo"},
+      {"start_id": "template-disabled", "end_id": "ca", "kind": "PublishedTo"},
+      {"start_id": "template-wrong-ca", "end_id": "other-ca", "kind": "PublishedTo"},
+      {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+      {"start_id": "ca", "end_id": "other-root", "kind": "EnterpriseCAFor"},
+      {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"},
+      {"start_id": "other-root", "end_id": "other-domain", "kind": "RootCAFor"}
+    ]
+  }
+}

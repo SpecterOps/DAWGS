@@ -50,10 +50,10 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 	return mapper
 }
 
-func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
-	t.Parallel()
+func optimizerSafetySQL(t *testing.T, cypherQuery string) string {
+	t.Helper()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), optimizerADCSQuery)
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	require.NoError(t, err)
 
 	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
@@ -62,7 +62,25 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	return strings.Join(strings.Fields(formattedQuery), " ")
+}
+
+func requireOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
+	t.Helper()
+
+	for _, lowering := range summary.Lowerings {
+		if lowering.Name == name {
+			return
+		}
+	}
+
+	require.Failf(t, "missing optimization lowering", "expected lowering %q in %#v", name, summary.Lowerings)
+}
+
+func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, optimizerADCSQuery)
 
 	require.Contains(t, normalizedQuery, "select distinct (s5.n0).id as root_id from s5")
 	require.Contains(t, normalizedQuery, "s5.ep0 as ep0")
@@ -76,16 +94,7 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 func assertOptimizerSafetyRelationshipStaysComposite(t *testing.T, cypherQuery string) {
 	t.Helper()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
-	require.NoError(t, err)
-
-	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
-	require.NoError(t, err)
-
-	formattedQuery, err := Translated(translation)
-	require.NoError(t, err)
-
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := optimizerSafetySQL(t, cypherQuery)
 
 	require.Contains(t, normalizedQuery, "(e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0")
 	require.Contains(t, normalizedQuery, "::edgecomposite")
@@ -145,20 +154,11 @@ RETURN p, startNode(r)
 func TestOptimizerSafetyOptionalMatchPathStaysComposite(t *testing.T) {
 	t.Parallel()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+	normalizedQuery := optimizerSafetySQL(t, `
 MATCH (n:Group)
 OPTIONAL MATCH p = (n)-[:MemberOf]->(m:Group)
 RETURN n, p
 `)
-	require.NoError(t, err)
-
-	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
-	require.NoError(t, err)
-
-	formattedQuery, err := Translated(translation)
-	require.NoError(t, err)
-
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 
 	require.Contains(t, normalizedQuery, "::edgecomposite[]")
 	require.NotContains(t, normalizedQuery, "::int8[]")
@@ -167,21 +167,12 @@ RETURN n, p
 func TestOptimizerSafetyFixedHopExpandIntoUsesBoundEndpoints(t *testing.T) {
 	t.Parallel()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+	normalizedQuery := optimizerSafetySQL(t, `
 MATCH (a:Group)
 MATCH (b:Group)
 MATCH p = (a)-[:MemberOf]->(b)
 RETURN p
 `)
-	require.NoError(t, err)
-
-	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
-	require.NoError(t, err)
-
-	formattedQuery, err := Translated(translation)
-	require.NoError(t, err)
-
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 
 	require.Contains(t, normalizedQuery, "(s1.n0).id = e0.start_id")
 	require.Contains(t, normalizedQuery, "(s1.n1).id = e0.end_id")
@@ -191,21 +182,12 @@ RETURN p
 func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
 	t.Parallel()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+	normalizedQuery := optimizerSafetySQL(t, `
 MATCH (a)
 MATCH (b:EnterpriseCA {name: 'target'})
 MATCH p = (a)-[:MemberOf]->(b)
 RETURN p
 `)
-	require.NoError(t, err)
-
-	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
-	require.NoError(t, err)
-
-	formattedQuery, err := Translated(translation)
-	require.NoError(t, err)
-
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 	enterpriseAnchorIndex := strings.Index(normalizedQuery, "array [5]::int2[]")
 	broadScanIndex := strings.Index(normalizedQuery, "from s0, node n1")
 
@@ -219,8 +201,23 @@ RETURN p
 func TestOptimizerSafetyExpansionTerminalPushdownForFixedSuffix(t *testing.T) {
 	t.Parallel()
 
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+RETURN p
+`)
+
+	require.Contains(t, normalizedQuery, "exists (select 1 from edge e1 join node n2")
+	require.Contains(t, normalizedQuery, "n1.id = e1.start_id")
+	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [4]::int2[])")
+	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
+}
+
+func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {
+	t.Parallel()
+
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+WHERE ca.name = 'target'
 RETURN p
 `)
 	require.NoError(t, err)
@@ -228,13 +225,66 @@ RETURN p
 	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
 	require.NoError(t, err)
 
-	formattedQuery, err := Translated(translation)
-	require.NoError(t, err)
+	require.NotEmpty(t, translation.Optimization.Rules)
+	require.NotEmpty(t, translation.Optimization.PredicateAttachments)
+	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+}
 
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+func TestOptimizerSafetyExpansionTerminalPushdownForZeroDepthExpansion(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+RETURN p
+`)
 
 	require.Contains(t, normalizedQuery, "exists (select 1 from edge e1 join node n2")
 	require.Contains(t, normalizedQuery, "n1.id = e1.start_id")
 	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [4]::int2[])")
 	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
+}
+
+func TestOptimizerSafetyExpansionTerminalPushdownForBoundEndpointSuffixChain(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH (ca:EnterpriseCA {name: 'target'})
+MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ct:CertTemplate)-[:PublishedTo]->(ca)
+WHERE ct.authenticationenabled = true
+RETURN p
+`)
+
+	require.Contains(t, normalizedQuery, "exists (select 1 from edge e1 join node n3")
+	require.Contains(t, normalizedQuery, "join edge e2 on n3.id = e2.start_id")
+	require.Contains(t, normalizedQuery, "n2.id = e1.start_id")
+	require.Contains(t, normalizedQuery, "e1.kind_id = any")
+	require.Contains(t, normalizedQuery, "properties -> 'authenticationenabled'")
+	require.Contains(t, normalizedQuery, "n3.kind_ids operator (pg_catalog.@>)")
+	require.Contains(t, normalizedQuery, "e2.kind_id = any")
+	require.Contains(t, normalizedQuery, "e2.end_id = (s0.n0).id")
+}
+
+func TestOptimizerSafetyExpansionTerminalPushdownForInboundFixedSuffix(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH p = (ca:EnterpriseCA)<-[:PublishedTo*1..]-(ct)<-[:Enroll]-(m:Group)
+RETURN p
+`)
+
+	require.Contains(t, normalizedQuery, "exists (select 1 from edge e1 join node n2")
+	require.Contains(t, normalizedQuery, "n1.id = e1.end_id")
+	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [4]::int2[])")
+	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>)")
+}
+
+func TestOptimizerSafetyExpansionTerminalPushdownSkipsDirectionlessSuffix(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]-(ca:EnterpriseCA)
+RETURN p
+`)
+
+	require.NotContains(t, normalizedQuery, "exists (select 1 from edge e1 join node n2")
 }

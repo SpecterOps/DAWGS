@@ -28,17 +28,19 @@ type Scenario struct {
 	Section string // grouping key in the report (e.g. "Match Nodes")
 	Dataset string
 	Label   string // human-readable row label
-	Query   func(tx graph.Transaction) error
+	Query   func(tx graph.Transaction) (int64, error)
 }
 
 // defaultDatasets is the set of datasets committed to the repo.
-var defaultDatasets = []string{"base"}
+var defaultDatasets = []string{"base", "adcs_fanout"}
 
 // scenariosForDataset returns all benchmark scenarios for a given dataset and its loaded ID map.
 func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	switch dataset {
 	case "base":
 		return baseScenarios(idMap)
+	case "adcs_fanout":
+		return adcsFanoutScenarios()
 	case "local/phantom":
 		return phantomScenarios(idMap)
 	default:
@@ -46,23 +48,25 @@ func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	}
 }
 
-func countNodes(tx graph.Transaction) error {
-	_, err := tx.Nodes().Count()
-	return err
+func countNodes(tx graph.Transaction) (int64, error) {
+	return tx.Nodes().Count()
 }
 
-func countEdges(tx graph.Transaction) error {
-	_, err := tx.Relationships().Count()
-	return err
+func countEdges(tx graph.Transaction) (int64, error) {
+	return tx.Relationships().Count()
 }
 
-func cypherQuery(cypher string) func(tx graph.Transaction) error {
-	return func(tx graph.Transaction) error {
+func cypherQuery(cypher string) func(tx graph.Transaction) (int64, error) {
+	return func(tx graph.Transaction) (int64, error) {
 		result := tx.Query(cypher, nil)
 		defer result.Close()
+
+		var rowCount int64
 		for result.Next() {
+			rowCount++
 		}
-		return result.Error()
+
+		return rowCount, result.Error()
 	}
 }
 
@@ -87,6 +91,44 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 		))},
 		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind1", Query: cypherQuery("MATCH (n:NodeKind1) RETURN n")},
 		{Section: "Filter By Kind", Dataset: ds, Label: "NodeKind2", Query: cypherQuery("MATCH (n:NodeKind2) RETURN n")},
+	}
+}
+
+const adcsFanoutObjectID = "S-1-5-21-2643190041-1319121918-239771340-513"
+
+func adcsFanoutScenarios() []Scenario {
+	ds := "adcs_fanout"
+
+	p1 := fmt.Sprintf(`
+MATCH (n:Group) WHERE n.objectid = '%s'
+MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+RETURN p1
+`, adcsFanoutObjectID)
+
+	p2 := fmt.Sprintf(`
+MATCH (n:Group) WHERE n.objectid = '%s'
+MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain)
+WHERE ct.authenticationenabled = true
+AND ct.requiresmanagerapproval = false
+AND ct.enrolleesuppliessubject = true
+AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+RETURN p2
+`, adcsFanoutObjectID)
+
+	combinedMatch := fmt.Sprintf(`
+MATCH (n:Group) WHERE n.objectid = '%s'
+MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
+WHERE ct.authenticationenabled = true
+AND ct.requiresmanagerapproval = false
+AND ct.enrolleesuppliessubject = true
+AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+`, adcsFanoutObjectID)
+
+	return []Scenario{
+		{Section: "ADCS Fanout", Dataset: ds, Label: "p1 only", Query: cypherQuery(p1)},
+		{Section: "ADCS Fanout", Dataset: ds, Label: "p2 only", Query: cypherQuery(p2)},
+		{Section: "ADCS Fanout", Dataset: ds, Label: "combined", Query: cypherQuery(combinedMatch + "RETURN p1,p2")},
 	}
 }
 

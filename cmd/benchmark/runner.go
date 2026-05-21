@@ -33,16 +33,22 @@ type Stats struct {
 
 // Result is one row in the report.
 type Result struct {
-	Section string `json:"section"`
-	Dataset string `json:"dataset"`
-	Label   string `json:"label"`
-	Stats   Stats  `json:"stats"`
+	Section  string `json:"section"`
+	Dataset  string `json:"dataset"`
+	Label    string `json:"label"`
+	RowCount int64  `json:"row_count"`
+	Stats    Stats  `json:"stats"`
 }
 
 // runScenario executes a scenario N times and returns timing stats.
 func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int) (Result, error) {
 	// Warm-up: one untimed run.
-	if err := db.ReadTransaction(ctx, s.Query); err != nil {
+	var rowCount int64
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		count, err := s.Query(tx)
+		rowCount = count
+		return err
+	}); err != nil {
 		return Result{}, err
 	}
 
@@ -50,17 +56,21 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 
 	for i := range iterations {
 		start := time.Now()
-		if err := db.ReadTransaction(ctx, s.Query); err != nil {
+		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			_, err := s.Query(tx)
+			return err
+		}); err != nil {
 			return Result{}, err
 		}
 		durations[i] = time.Since(start)
 	}
 
 	return Result{
-		Section: s.Section,
-		Dataset: s.Dataset,
-		Label:   s.Label,
-		Stats:   computeStats(durations),
+		Section:  s.Section,
+		Dataset:  s.Dataset,
+		Label:    s.Label,
+		RowCount: rowCount,
+		Stats:    computeStats(durations),
 	}, nil
 }
 

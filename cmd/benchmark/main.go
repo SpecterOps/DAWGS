@@ -147,8 +147,9 @@ func main() {
 			}
 
 			report.Results = append(report.Results, result)
-			fmt.Fprintf(os.Stderr, "  %s/%s: median=%s p95=%s max=%s\n",
+			fmt.Fprintf(os.Stderr, "  %s/%s: rows=%d median=%s p95=%s max=%s\n",
 				s.Section, s.Label,
+				result.RowCount,
 				fmtDuration(result.Stats.Median),
 				fmtDuration(result.Stats.P95),
 				fmtDuration(result.Stats.Max),

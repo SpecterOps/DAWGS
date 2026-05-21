@@ -2286,72 +2286,166 @@ func expansionTerminalSatisfactionLocality(traversalStep *TraversalStep) (pgsql.
 	)
 }
 
-func applyExpansionSuffixPushdown(part *PatternPart) error {
+func applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
+	var applied int
+
 	for idx := 0; idx+1 < len(part.TraversalSteps); idx++ {
 		var (
 			currentStep = part.TraversalSteps[idx]
-			nextStep    = part.TraversalSteps[idx+1]
+			suffixSteps = part.TraversalSteps[idx+1:]
 		)
 
-		if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, nextStep); satisfied {
+		if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
 			currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
 				currentStep.Expansion.TerminalNodeConstraints,
 				suffixSatisfaction,
 			)
 
 			if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
-				return err
+				return applied, err
 			} else {
 				currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
 			}
+
+			applied++
 		}
 	}
 
-	return nil
+	return applied, nil
 }
 
-func expansionSuffixTerminalSatisfaction(currentStep, nextStep *TraversalStep) (pgsql.Expression, bool) {
+func suffixEdgeLeftEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
+	switch direction {
+	case graph.DirectionOutbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID}, true
+	case graph.DirectionInbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID}, true
+	default:
+		return nil, false
+	}
+}
+
+func suffixEdgeRightEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
+	switch direction {
+	case graph.DirectionOutbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID}, true
+	case graph.DirectionInbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID}, true
+	default:
+		return nil, false
+	}
+}
+
+func suffixBoundNodeIDReference(currentStep *TraversalStep, node *BoundIdentifier) (pgsql.Expression, bool) {
+	if currentStep == nil ||
+		currentStep.Frame == nil ||
+		currentStep.Frame.Previous == nil ||
+		currentStep.Frame.Previous.Binding == nil ||
+		node == nil ||
+		!currentStep.Frame.Previous.Known().Contains(node.Identifier) {
+		return nil, false
+	}
+
+	return pgsql.RowColumnReference{
+		Identifier: pgsql.CompoundIdentifier{currentStep.Frame.Previous.Binding.Identifier, node.Identifier},
+		Column:     pgsql.ColumnID,
+	}, true
+}
+
+func suffixStepEdgeConstraints(step *TraversalStep) pgsql.Expression {
+	if step == nil || step.EdgeConstraints == nil {
+		return nil
+	}
+
+	return step.EdgeConstraints.Expression
+}
+
+func expansionSuffixTerminalSatisfaction(currentStep *TraversalStep, suffixSteps []*TraversalStep) (pgsql.Expression, bool) {
 	if currentStep == nil ||
 		currentStep.Expansion == nil ||
 		currentStep.RightNode == nil ||
-		nextStep == nil ||
-		nextStep.Expansion != nil ||
-		nextStep.LeftNode == nil ||
-		nextStep.Edge == nil ||
-		nextStep.RightNode == nil ||
-		nextStep.RightNodeBound ||
-		nextStep.Direction == graph.DirectionBoth ||
-		currentStep.RightNode.Identifier != nextStep.LeftNode.Identifier {
+		len(suffixSteps) == 0 ||
+		suffixSteps[0] == nil ||
+		suffixSteps[0].LeftNode == nil ||
+		currentStep.RightNode.Identifier != suffixSteps[0].LeftNode.Identifier {
 		return nil, false
 	}
 
-	var edgeConstraints pgsql.Expression
-	if nextStep.EdgeConstraints != nil {
-		edgeConstraints = nextStep.EdgeConstraints.Expression
-	}
-
-	localScope := pgsql.AsIdentifierSet(
-		currentStep.RightNode.Identifier,
-		nextStep.Edge.Identifier,
-		nextStep.RightNode.Identifier,
+	var (
+		fromClause pgsql.FromClause
+		where      pgsql.Expression
+		previousID pgsql.Expression = pgsql.CompoundIdentifier{currentStep.RightNode.Identifier, pgsql.ColumnID}
 	)
 
-	edgeLocal, edgeExternal := partitionConstraintByLocality(edgeConstraints, localScope)
-	if edgeExternal != nil {
-		return nil, false
+	for idx, step := range suffixSteps {
+		if step == nil ||
+			step.Expansion != nil ||
+			step.LeftNode == nil ||
+			step.Edge == nil ||
+			step.RightNode == nil ||
+			step.Direction == graph.DirectionBoth {
+			break
+		}
+
+		if idx > 0 && suffixSteps[idx-1].RightNode.Identifier != step.LeftNode.Identifier {
+			break
+		}
+
+		leftEndpoint, validDirection := suffixEdgeLeftEndpoint(step.Edge.Identifier, step.Direction)
+		if !validDirection {
+			return nil, false
+		}
+
+		edgeJoin := pgd.Equals(previousID, leftEndpoint)
+		if idx == 0 {
+			fromClause = expansionEdgeFromClause(step.Edge.Identifier)
+			where = pgsql.OptionalAnd(where, edgeJoin)
+		} else {
+			fromClause.Joins = append(fromClause.Joins, pgsql.Join{
+				Table: expansionEdgeTableReference(step.Edge.Identifier),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: edgeJoin,
+				},
+			})
+		}
+
+		where = pgsql.OptionalAnd(where, suffixStepEdgeConstraints(step))
+
+		rightEndpoint, validDirection := suffixEdgeRightEndpoint(step.Edge.Identifier, step.Direction)
+		if !validDirection {
+			return nil, false
+		}
+
+		if step.RightNodeBound {
+			if step.RightNodeConstraints != nil {
+				return nil, false
+			}
+
+			boundRightNodeID, hasBoundRightNodeID := suffixBoundNodeIDReference(currentStep, step.RightNode)
+			if !hasBoundRightNodeID {
+				return nil, false
+			}
+
+			where = pgsql.OptionalAnd(where, pgd.Equals(rightEndpoint, boundRightNodeID))
+			previousID = boundRightNodeID
+		} else {
+			fromClause.Joins = append(fromClause.Joins, pgsql.Join{
+				Table: expansionNodeTableReference(step.RightNode.Identifier),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(
+						step.RightNodeConstraints,
+						pgd.Equals(pgsql.CompoundIdentifier{step.RightNode.Identifier, pgsql.ColumnID}, rightEndpoint),
+					),
+				},
+			})
+
+			previousID = pgsql.CompoundIdentifier{step.RightNode.Identifier, pgsql.ColumnID}
+		}
 	}
 
-	rightNodeLocal, rightNodeExternal := partitionConstraintByLocality(nextStep.RightNodeConstraints, localScope)
-	if rightNodeExternal != nil {
-		return nil, false
-	}
-
-	terminalJoin, err := leftNodeConstraint(
-		nextStep.Edge.Identifier,
-		currentStep.RightNode.Identifier,
-		nextStep.Direction,
-	)
-	if err != nil {
+	if fromClause.Source == nil {
 		return nil, false
 	}
 
@@ -2360,23 +2454,8 @@ func expansionSuffixTerminalSatisfaction(currentStep, nextStep *TraversalStep) (
 			Query: pgsql.Query{
 				Body: pgsql.Select{
 					Projection: pgsql.Projection{pgd.IntLiteral(1)},
-					From: []pgsql.FromClause{{
-						Source: expansionEdgeTableReference(nextStep.Edge.Identifier),
-						Joins: []pgsql.Join{{
-							Table: expansionNodeTableReference(nextStep.RightNode.Identifier),
-							JoinOperator: pgsql.JoinOperator{
-								JoinType: pgsql.JoinTypeInner,
-								Constraint: pgsql.OptionalAnd(
-									rightNodeLocal,
-									nextStep.RightNodeJoinCondition,
-								),
-							},
-						}},
-					}},
-					Where: pgsql.OptionalAnd(
-						terminalJoin,
-						edgeLocal,
-					),
+					From:       []pgsql.FromClause{fromClause},
+					Where:      where,
 				},
 			},
 		},

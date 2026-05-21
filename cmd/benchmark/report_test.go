@@ -30,9 +30,10 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		Date:       "2026-05-14",
 		Iterations: 3,
 		Results: []Result{{
-			Section: "Traversal",
-			Dataset: "base",
-			Label:   "depth 1",
+			Section:  "Traversal",
+			Dataset:  "base",
+			Label:    "depth 1",
+			RowCount: 2,
 			Stats: Stats{
 				Median: 10 * time.Millisecond,
 				P95:    20 * time.Millisecond,
@@ -51,6 +52,7 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 		`"driver": "pg"`,
 		`"git_ref": "abc123"`,
 		`"median": 10000000`,
+		`"row_count": 2`,
 		`"section": "Traversal"`,
 	} {
 		if !strings.Contains(text, expected) {
