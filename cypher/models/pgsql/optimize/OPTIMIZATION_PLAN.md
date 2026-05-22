@@ -31,11 +31,12 @@ Status: completed
 
 ## Phase 3: Path Materialization
 
-Status: pending
+Status: completed
 
 - Share path materialization for repeated path functions.
   - Target `nodes(p)`, `relationships(p)`, `size(relationships(p))`, `startNode`, `endNode`, and `type`.
   - Avoid repeated `SubPlan` and `Function Scan on unnest` work per path binding.
+  - Materialize unprojected paths once through a lateral stage when final projections return a path and its components, or repeat node-bearing component expressions.
 - Expand late path materialization coverage.
   - Ensure paths are built only when needed for projection, filtering, or mutation semantics.
 

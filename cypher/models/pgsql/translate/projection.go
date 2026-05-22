@@ -1093,49 +1093,190 @@ func rewriteOrderByProjectionAlias(orderBy *pgsql.OrderBy, aliases map[pgsql.Ide
 	}
 }
 
-func tailPathCompositeStageBindings(scope *Scope, expression pgsql.Expression) ([]*BoundIdentifier, error) {
-	if expression == nil {
-		return nil, nil
+type pathCompositeReferenceCount struct {
+	binding *BoundIdentifier
+	full    int
+	nodes   int
+	edges   int
+}
+
+func (s pathCompositeReferenceCount) componentReferences() int {
+	return s.nodes + s.edges
+}
+
+func (s pathCompositeReferenceCount) totalReferences() int {
+	return s.full + s.componentReferences()
+}
+
+func pathCompositeBinding(scope *Scope, identifier pgsql.Identifier) (*BoundIdentifier, bool) {
+	binding, bound := scope.Lookup(identifier)
+	if !bound {
+		binding, bound = scope.AliasedLookup(identifier)
 	}
 
+	if !bound || binding.DataType != pgsql.PathComposite || binding.LastProjection != nil {
+		return nil, false
+	}
+
+	return binding, true
+}
+
+func ensurePathCompositeReferenceCount(
+	counts map[pgsql.Identifier]*pathCompositeReferenceCount,
+	orderedCounts *[]*pathCompositeReferenceCount,
+	binding *BoundIdentifier,
+) *pathCompositeReferenceCount {
+	if count, seen := counts[binding.Identifier]; seen {
+		return count
+	}
+
+	count := &pathCompositeReferenceCount{
+		binding: binding,
+	}
+
+	counts[binding.Identifier] = count
+	*orderedCounts = append(*orderedCounts, count)
+
+	return count
+}
+
+func countPathCompositeComponents(scope *Scope, expressions ...pgsql.Expression) ([]*pathCompositeReferenceCount, error) {
 	var (
-		bindings = make([]*BoundIdentifier, 0)
-		seen     = map[pgsql.Identifier]struct{}{}
+		counts        = map[pgsql.Identifier]*pathCompositeReferenceCount{}
+		orderedCounts []*pathCompositeReferenceCount
 	)
 
-	if err := walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, _ walk.VisitorHandler) {
-		reference, isRowColumnReference := node.(pgsql.RowColumnReference)
-		if !isRowColumnReference || reference.Column != pgsql.ColumnNodes {
-			return
+	for _, expression := range expressions {
+		if expression == nil {
+			continue
 		}
 
-		identifier, isIdentifier := unwrapParenthetical(reference.Identifier).(pgsql.Identifier)
+		if err := walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, _ walk.VisitorHandler) {
+			reference, isRowColumnReference := node.(pgsql.RowColumnReference)
+			if !isRowColumnReference || (reference.Column != pgsql.ColumnNodes && reference.Column != pgsql.ColumnEdges) {
+				return
+			}
+
+			identifier, isIdentifier := unwrapParenthetical(reference.Identifier).(pgsql.Identifier)
+			if !isIdentifier {
+				return
+			}
+
+			binding, bound := pathCompositeBinding(scope, identifier)
+			if !bound {
+				return
+			}
+
+			count := ensurePathCompositeReferenceCount(counts, &orderedCounts, binding)
+			switch reference.Column {
+			case pgsql.ColumnNodes:
+				count.nodes += 1
+			case pgsql.ColumnEdges:
+				count.edges += 1
+			}
+		})); err != nil {
+			return nil, err
+		}
+	}
+
+	return orderedCounts, nil
+}
+
+func countPathCompositeProjectionReferences(scope *Scope, projections []*Projection) ([]*pathCompositeReferenceCount, error) {
+	var (
+		counts        = map[pgsql.Identifier]*pathCompositeReferenceCount{}
+		orderedCounts []*pathCompositeReferenceCount
+		expressions   = make([]pgsql.Expression, 0, len(projections))
+	)
+
+	for _, projection := range projections {
+		expressions = append(expressions, projection.SelectItem)
+
+		identifier, isIdentifier := projection.SelectItem.(pgsql.Identifier)
 		if !isIdentifier {
-			return
+			continue
 		}
 
-		binding, bound := scope.Lookup(identifier)
+		binding, bound := pathCompositeBinding(scope, identifier)
 		if !bound {
-			binding, bound = scope.AliasedLookup(identifier)
-		}
-		if !bound || binding.DataType != pgsql.PathComposite || binding.LastProjection != nil {
-			return
+			continue
 		}
 
-		if _, alreadySeen := seen[binding.Identifier]; alreadySeen {
-			return
-		}
+		ensurePathCompositeReferenceCount(counts, &orderedCounts, binding).full += 1
+	}
 
-		seen[binding.Identifier] = struct{}{}
-		bindings = append(bindings, binding)
-	})); err != nil {
+	componentCounts, err := countPathCompositeComponents(scope, expressions...)
+	if err != nil {
 		return nil, err
+	}
+
+	for _, componentCount := range componentCounts {
+		count := ensurePathCompositeReferenceCount(counts, &orderedCounts, componentCount.binding)
+		count.nodes += componentCount.nodes
+		count.edges += componentCount.edges
+	}
+
+	return orderedCounts, nil
+}
+
+func tailPathCompositeStageBindings(scope *Scope, expression pgsql.Expression) ([]*BoundIdentifier, error) {
+	counts, err := countPathCompositeComponents(scope, expression)
+	if err != nil {
+		return nil, err
+	}
+
+	bindings := make([]*BoundIdentifier, 0, len(counts))
+	for _, count := range counts {
+		if count.nodes > 0 {
+			bindings = append(bindings, count.binding)
+		}
 	}
 
 	return bindings, nil
 }
 
-func (s *Translator) stageTailPathCompositeBindings(fromClauses []pgsql.FromClause, bindings []*BoundIdentifier) ([]pgsql.FromClause, error) {
+func projectionPathCompositeStageBindings(scope *Scope, projections []*Projection) ([]*BoundIdentifier, error) {
+	counts, err := countPathCompositeProjectionReferences(scope, projections)
+	if err != nil {
+		return nil, err
+	}
+
+	bindings := make([]*BoundIdentifier, 0, len(counts))
+	for _, count := range counts {
+		switch {
+		case count.full > 0 && count.totalReferences() > count.full:
+			bindings = append(bindings, count.binding)
+		case count.full > 1:
+			bindings = append(bindings, count.binding)
+		case count.nodes > 0 && count.componentReferences() > 1:
+			bindings = append(bindings, count.binding)
+		}
+	}
+
+	return bindings, nil
+}
+
+func mergePathCompositeStageBindings(bindingSets ...[]*BoundIdentifier) []*BoundIdentifier {
+	var (
+		merged = make([]*BoundIdentifier, 0)
+		seen   = map[pgsql.Identifier]struct{}{}
+	)
+
+	for _, bindings := range bindingSets {
+		for _, binding := range bindings {
+			if _, alreadySeen := seen[binding.Identifier]; alreadySeen {
+				continue
+			}
+
+			seen[binding.Identifier] = struct{}{}
+			merged = append(merged, binding)
+		}
+	}
+
+	return merged
+}
+
+func (s *Translator) stagePathCompositeBindings(fromClauses []pgsql.FromClause, bindings []*BoundIdentifier) ([]pgsql.FromClause, error) {
 	for _, binding := range bindings {
 		stageBinding, err := s.scope.DefineNew(pgsql.Scope)
 		if err != nil {
@@ -1187,9 +1328,14 @@ func (s *Translator) buildTailProjection() error {
 
 	if projectionConstraint, err := s.treeTranslator.ConsumeAllConstraints(); err != nil {
 		return err
-	} else if stagedBindings, err := tailPathCompositeStageBindings(s.scope, projectionConstraint.Expression); err != nil {
+	} else if constraintStagedBindings, err := tailPathCompositeStageBindings(s.scope, projectionConstraint.Expression); err != nil {
 		return err
-	} else if stagedFromClauses, err := s.stageTailPathCompositeBindings(singlePartQuerySelect.From, stagedBindings); err != nil {
+	} else if projectionStagedBindings, err := projectionPathCompositeStageBindings(s.scope, currentPart.projections.Items); err != nil {
+		return err
+	} else if stagedFromClauses, err := s.stagePathCompositeBindings(
+		singlePartQuerySelect.From,
+		mergePathCompositeStageBindings(constraintStagedBindings, projectionStagedBindings),
+	); err != nil {
 		return err
 	} else if projection, err := buildExternalProjection(s.scope, currentPart.projections.Items); err != nil {
 		return err
