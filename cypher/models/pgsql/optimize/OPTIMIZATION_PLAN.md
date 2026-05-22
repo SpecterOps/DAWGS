@@ -58,9 +58,11 @@ Status: completed
 
 ## Phase 5: Suffix And Shared Endpoint Rewrites
 
-Status: pending
+Status: completed
 
 - Improve expansion suffix pushdown for fixed suffixes after variable-length traversals.
+  - Include fixed suffix steps that terminate at already-bound endpoints with inline node constraints.
+  - Preserve bound-endpoint constraints in the pushed terminal satisfaction check when present.
 - Improve `ExpandInto` and shared endpoint rewrites for ADCS-style fanout patterns.
   - Constrain earlier using bound endpoint semi-joins or correlated expansion lowering where valid.
 

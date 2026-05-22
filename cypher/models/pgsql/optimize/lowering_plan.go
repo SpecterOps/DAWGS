@@ -708,7 +708,6 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 
 		for patternIndex, patternPart := range match.Pattern {
 			steps := traversalStepsForPattern(patternPart)
-			declaredBeforeRightNode := declaredSymbolsBeforeRightNodes(declaredSymbols, steps)
 			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
 
 			for stepIndex, step := range steps {
@@ -725,7 +724,7 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 					continue
 				}
 
-				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:], declaredBeforeRightNode[stepIndex+1:]); suffixLength > 0 {
+				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:]); suffixLength > 0 {
 					plan.ExpansionSuffixPushdown = append(plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
 						Target:          target,
 						SuffixLength:    suffixLength,
@@ -1019,38 +1018,18 @@ func setBindingTarget(targets map[bindingTargetKey]TraversalStepTarget, queryPar
 	}
 }
 
-func expansionSuffixPushdownLength(suffixSteps []sourceTraversalStep, declaredBeforeRightNode []map[string]struct{}) int {
+func expansionSuffixPushdownLength(suffixSteps []sourceTraversalStep) int {
 	var suffixLength int
 
-	for idx, step := range suffixSteps {
+	for _, step := range suffixSteps {
 		if step.Relationship.Range != nil || step.Relationship.Direction == graph.DirectionBoth {
 			break
-		}
-
-		if nodeSymbol := variableSymbol(step.RightNode.Variable); nodeSymbol != "" {
-			if _, bound := declaredBeforeRightNode[idx][nodeSymbol]; bound && nodePatternHasConstraints(step.RightNode) {
-				break
-			}
 		}
 
 		suffixLength++
 	}
 
 	return suffixLength
-}
-
-func declaredSymbolsBeforeRightNodes(initial map[string]struct{}, steps []sourceTraversalStep) []map[string]struct{} {
-	declared := copyStringSet(initial)
-	declaredBeforeRightNode := make([]map[string]struct{}, len(steps))
-
-	for idx, step := range steps {
-		addSymbol(declared, variableSymbol(step.LeftNode.Variable))
-		addSymbol(declared, variableSymbol(step.Relationship.Variable))
-		declaredBeforeRightNode[idx] = copyStringSet(declared)
-		addSymbol(declared, variableSymbol(step.RightNode.Variable))
-	}
-
-	return declaredBeforeRightNode
 }
 
 func declareMatchSymbols(declared map[string]struct{}, match *cypher.Match) {

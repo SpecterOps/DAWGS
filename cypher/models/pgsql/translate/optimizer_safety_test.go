@@ -590,6 +590,28 @@ RETURN p
 	)
 }
 
+func TestOptimizerSafetyExpansionTerminalPushdownIncludesConstrainedBoundEndpoint(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (ca)
+MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)
+RETURN p
+`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"exists (select 1 from edge e1 join node n3",
+		"join edge e2 on n3.id = e2.start_id",
+		"e2.end_id = (s0.n0).id",
+	)
+	require.Contains(t, normalizedQuery, "(s0.n0).kind_ids operator (pg_catalog.@>)")
+}
+
 func TestOptimizerSafetyExpansionTerminalPushdownForBoundDomainSuffix(t *testing.T) {
 	t.Parallel()
 

@@ -2844,15 +2844,12 @@ func expansionSuffixTerminalSatisfaction(currentStep *TraversalStep, suffixSteps
 		}
 
 		if step.RightNodeBound {
-			if step.RightNodeConstraints != nil {
-				return nil, false
-			}
-
 			boundRightNodeID, hasBoundRightNodeID := suffixBoundNodeIDReference(currentStep, step.RightNode)
 			if !hasBoundRightNodeID {
 				return nil, false
 			}
 
+			where = pgsql.OptionalAnd(where, step.RightNodeConstraints)
 			where = pgsql.OptionalAnd(where, pgd.Equals(rightEndpoint, boundRightNodeID))
 			previousID = boundRightNodeID
 		} else {
