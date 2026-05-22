@@ -49,14 +49,10 @@ func AfterPooledConnectionRelease(conn *pgx.Conn) bool {
 	return true
 }
 
-func NewPool(connString string) (*pgxpool.Pool, error) {
+// pgx pool config
+func NewPool(poolCfg *pgxpool.Config) (*pgxpool.Pool, error) {
 	poolCtx, done := context.WithTimeout(context.Background(), poolInitConnectionTimeout)
 	defer done()
-
-	poolCfg, err := pgxpool.ParseConfig(connString)
-	if err != nil {
-		return nil, err
-	}
 
 	// TODO: Min and Max connections for the pool should be configurable
 	poolCfg.MinConns = 5

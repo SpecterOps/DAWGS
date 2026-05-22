@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
@@ -16,7 +17,11 @@ func main() {
 		connStr = "postgresql://bloodhound:bloodhoundcommunityedition@localhost:5432/bloodhound"
 	}
 
-	pool, err := pg.NewPool(connStr)
+	poolCfg, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		fmt.Errorf("failed to parse pool configuration: %w", err)
+	}
+	pool, err := pg.NewPool(poolCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to connect: %v\n", err)
 		os.Exit(1)

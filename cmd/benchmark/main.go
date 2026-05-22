@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -65,7 +66,11 @@ func main() {
 	}
 
 	if *driver == pg.DriverName {
-		pool, err := pg.NewPool(cfg.ConnectionString)
+		poolCfg, err := pgxpool.ParseConfig(conn)
+		if err != nil {
+			fatal("failed to parse pool configuration: %v", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			fatal("failed to create pool: %v", err)
 		}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -161,17 +162,21 @@ func openDAWGSDatabase(ctx context.Context, connStr string, options openConnecti
 	poolOwnedByDriver := false
 	switch driverName {
 	case pg.DriverName:
-		connPool, err := pg.NewPool(connStr)
+		poolCfg, err := pgxpool.ParseConfig(connStr)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to parse pool configuration: %w", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			return nil, "", fmt.Errorf("error opening connection pool: %w", err)
 		}
 		defer func() {
 			if !poolOwnedByDriver {
-				connPool.Close()
+				pool.Close()
 			}
 		}()
 
-		config.Pool = connPool
+		config.Pool = pool
 	case neo4j.DriverName:
 		// No additional setup required for Neo4j before dawgs.Open.
 	default:
