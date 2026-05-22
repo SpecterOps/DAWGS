@@ -19,7 +19,8 @@ func main() {
 
 	poolCfg, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
-		fmt.Errorf("failed to parse pool configuration: %w", err)
+		fmt.Fprintf(os.Stderr, "failed to parse pool configuration: %v\n", err)
+		os.Exit(1)
 	}
 	pool, err := pg.NewPool(poolCfg)
 	if err != nil {
