@@ -115,6 +115,30 @@ func TestLoweringPlanProjectionPruningKeepsUpdateTargets(t *testing.T) {
 	}}, plan.LoweringPlan.ProjectionPruning)
 }
 
+func TestLoweringPlanReportsPatternPredicateProjectionPruning(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s)
+		WHERE (s)-[]->()
+		RETURN s
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.ProjectionPruning, ProjectionPruningDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			Predicate:      true,
+			StepIndex:      0,
+		},
+		ReferencedSymbols: []string{"s"},
+		OmitRelationship:  true,
+		OmitRightNode:     true,
+	})
+}
+
 func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 	t.Parallel()
 
@@ -152,6 +176,50 @@ func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 		plan, err := Optimize(regularQuery)
 		require.NoError(t, err)
 		require.Equal(t, LatePathMaterializationEdgeComposite, plan.LoweringPlan.LatePathMaterialization[0].Mode)
+	})
+
+	t.Run("continuation relationship id", func(t *testing.T) {
+		t.Parallel()
+
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+			MATCH (n)-[:MemberOf]->(m)-[:Enroll]->(ca)
+			RETURN ca
+		`)
+		require.NoError(t, err)
+
+		plan, err := Optimize(regularQuery)
+		require.NoError(t, err)
+		require.Contains(t, plan.LoweringPlan.LatePathMaterialization, LatePathMaterializationDecision{
+			Target: TraversalStepTarget{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				StepIndex:      0,
+			},
+			Mode: LatePathMaterializationPathEdgeID,
+		})
+	})
+
+	t.Run("pattern predicate continuation relationship id", func(t *testing.T) {
+		t.Parallel()
+
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+			MATCH (s)
+			WHERE (s)-[]->()-[]->()
+			RETURN s
+		`)
+		require.NoError(t, err)
+
+		plan, err := Optimize(regularQuery)
+		require.NoError(t, err)
+		require.Contains(t, plan.LoweringPlan.LatePathMaterialization, LatePathMaterializationDecision{
+			Target: TraversalStepTarget{
+				QueryPartIndex: 0,
+				Predicate:      true,
+				StepIndex:      0,
+			},
+			Mode: LatePathMaterializationPathEdgeID,
+		})
 	})
 }
 

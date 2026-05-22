@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/graph"
 )
 
-func (s *Translator) preparePatternPredicate() error {
+func (s *Translator) preparePatternPredicate(predicate *cypher.PatternPredicate) error {
 	currentQueryPart := s.query.CurrentPart()
 
 	// Stash the match pattern
@@ -17,6 +18,10 @@ func (s *Translator) preparePatternPredicate() error {
 	// All pattern predicates must be relationship patterns
 	newPatternPart := currentQueryPart.currentPattern.NewPart()
 	newPatternPart.IsTraversal = true
+	if target, hasTarget := s.patternPredicateTargets[predicate]; hasTarget {
+		newPatternPart.Target = target
+		newPatternPart.HasTarget = true
+	}
 
 	return nil
 }

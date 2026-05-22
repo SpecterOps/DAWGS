@@ -70,6 +70,7 @@ func appendQueryPartLowerings(
 
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, queryPart, sourceReferences)
 	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
 	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
@@ -132,6 +133,26 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 	}
 }
 
+func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, sourceReferences map[string]struct{}) {
+	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
+		patternPart := patternPartForPredicate(predicate)
+		steps := traversalStepsForPattern(patternPart)
+		if len(steps) == 0 {
+			continue
+		}
+
+		target := PatternTarget{
+			QueryPartIndex: queryPartIndex,
+			PatternIndex:   predicateIndex,
+			Predicate:      true,
+			PredicateIndex: predicateIndex,
+		}
+
+		appendPatternProjectionPruningDecisions(plan, target, patternPart, steps, sourceReferences)
+		appendPatternLatePathMaterializationDecisions(plan, target, patternPart, steps, sourceReferences)
+	}
+}
+
 func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
@@ -139,35 +160,53 @@ func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex i
 		}
 
 		for patternIndex, patternPart := range readingClause.Match.Pattern {
-			if !referencesSourceIdentifier(sourceReferences, variableSymbol(patternPart.Variable)) {
+			steps := traversalStepsForPattern(patternPart)
+			appendPatternLatePathMaterializationDecisions(plan, PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}, patternPart, steps, sourceReferences)
+		}
+	}
+}
+
+func appendPatternLatePathMaterializationDecisions(plan *LoweringPlan, target PatternTarget, patternPart *cypher.PatternPart, steps []sourceTraversalStep, sourceReferences map[string]struct{}) {
+	pathReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(patternPart.Variable))
+
+	for stepIndex, step := range steps {
+		stepTarget := target.TraversalStep(stepIndex)
+
+		if step.Relationship.Range != nil {
+			if !pathReferenced {
 				continue
 			}
 
-			for stepIndex, step := range traversalStepsForPattern(patternPart) {
-				target := PatternTarget{
-					QueryPartIndex: queryPartIndex,
-					ClauseIndex:    clauseIndex,
-					PatternIndex:   patternIndex,
-				}.TraversalStep(stepIndex)
+			plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
+				Target: stepTarget,
+				Mode:   LatePathMaterializationExpansionPath,
+			})
+			continue
+		}
 
-				if step.Relationship.Range != nil {
-					plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
-						Target: target,
-						Mode:   LatePathMaterializationExpansionPath,
-					})
-					continue
-				}
-
-				mode := LatePathMaterializationPathEdgeID
-				if referencesSourceIdentifier(sourceReferences, variableSymbol(step.Relationship.Variable)) {
-					mode = LatePathMaterializationEdgeComposite
-				}
-
-				plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
-					Target: target,
-					Mode:   mode,
-				})
+		edgeReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.Relationship.Variable))
+		if pathReferenced {
+			mode := LatePathMaterializationPathEdgeID
+			if edgeReferenced {
+				mode = LatePathMaterializationEdgeComposite
 			}
+
+			plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
+				Target: stepTarget,
+				Mode:   mode,
+			})
+			continue
+		}
+
+		if !edgeReferenced && stepIndex+1 < len(steps) {
+			plan.LatePathMaterialization = append(plan.LatePathMaterialization, LatePathMaterializationDecision{
+				Target: stepTarget,
+				Mode:   LatePathMaterializationPathEdgeID,
+			})
 		}
 	}
 }

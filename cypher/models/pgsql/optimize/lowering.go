@@ -19,9 +19,11 @@ type LoweringDecision struct {
 }
 
 type PatternTarget struct {
-	QueryPartIndex int `json:"query_part_index"`
-	ClauseIndex    int `json:"clause_index"`
-	PatternIndex   int `json:"pattern_index"`
+	QueryPartIndex int  `json:"query_part_index"`
+	ClauseIndex    int  `json:"clause_index"`
+	PatternIndex   int  `json:"pattern_index"`
+	Predicate      bool `json:"predicate,omitempty"`
+	PredicateIndex int  `json:"predicate_index,omitempty"`
 }
 
 func (s PatternTarget) TraversalStep(stepIndex int) TraversalStepTarget {
@@ -29,15 +31,19 @@ func (s PatternTarget) TraversalStep(stepIndex int) TraversalStepTarget {
 		QueryPartIndex: s.QueryPartIndex,
 		ClauseIndex:    s.ClauseIndex,
 		PatternIndex:   s.PatternIndex,
+		Predicate:      s.Predicate,
+		PredicateIndex: s.PredicateIndex,
 		StepIndex:      stepIndex,
 	}
 }
 
 type TraversalStepTarget struct {
-	QueryPartIndex int `json:"query_part_index"`
-	ClauseIndex    int `json:"clause_index"`
-	PatternIndex   int `json:"pattern_index"`
-	StepIndex      int `json:"step_index"`
+	QueryPartIndex int  `json:"query_part_index"`
+	ClauseIndex    int  `json:"clause_index"`
+	PatternIndex   int  `json:"pattern_index"`
+	Predicate      bool `json:"predicate,omitempty"`
+	PredicateIndex int  `json:"predicate_index,omitempty"`
+	StepIndex      int  `json:"step_index"`
 }
 
 type ProjectionPruningDecision struct {
@@ -196,6 +202,32 @@ func IndexPatternTargets(query *cypher.RegularQuery) map[*cypher.PatternPart]Pat
 	return targets
 }
 
+func IndexPatternPredicateTargets(query *cypher.RegularQuery) map[*cypher.PatternPredicate]PatternTarget {
+	targets := map[*cypher.PatternPredicate]PatternTarget{}
+
+	if query == nil || query.SingleQuery == nil {
+		return targets
+	}
+
+	if query.SingleQuery.MultiPartQuery != nil {
+		for queryPartIndex, part := range query.SingleQuery.MultiPartQuery.Parts {
+			if part == nil {
+				continue
+			}
+
+			indexQueryPartPatternPredicateTargets(targets, queryPartIndex, part)
+		}
+
+		if finalPart := query.SingleQuery.MultiPartQuery.SinglePartQuery; finalPart != nil {
+			indexQueryPartPatternPredicateTargets(targets, len(query.SingleQuery.MultiPartQuery.Parts), finalPart)
+		}
+	} else if query.SingleQuery.SinglePartQuery != nil {
+		indexQueryPartPatternPredicateTargets(targets, 0, query.SingleQuery.SinglePartQuery)
+	}
+
+	return targets
+}
+
 func indexReadingClauseTargets(targets map[*cypher.PatternPart]PatternTarget, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil {
@@ -208,6 +240,17 @@ func indexReadingClauseTargets(targets map[*cypher.PatternPart]PatternTarget, qu
 				ClauseIndex:    clauseIndex,
 				PatternIndex:   patternIndex,
 			}
+		}
+	}
+}
+
+func indexQueryPartPatternPredicateTargets(targets map[*cypher.PatternPredicate]PatternTarget, queryPartIndex int, queryPart cypher.SyntaxNode) {
+	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
+		targets[predicate] = PatternTarget{
+			QueryPartIndex: queryPartIndex,
+			PatternIndex:   predicateIndex,
+			Predicate:      true,
+			PredicateIndex: predicateIndex,
 		}
 	}
 }

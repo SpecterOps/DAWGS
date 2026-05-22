@@ -31,6 +31,7 @@ type Translator struct {
 	unwindTargets  map[*cypher.Variable]struct{}
 
 	patternTargets                map[*cypher.PatternPart]optimize.PatternTarget
+	patternPredicateTargets       map[*cypher.PatternPredicate]optimize.PatternTarget
 	projectionPruningDecisions    map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
 	latePathDecisions             map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
 	suffixPushdownDecisions       map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
@@ -72,6 +73,7 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 
 func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.patternTargets = optimize.IndexPatternTargets(plan.Query)
+	s.patternPredicateTargets = optimize.IndexPatternPredicateTargets(plan.Query)
 	s.projectionPruningDecisions = map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision{}
 	s.latePathDecisions = map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision{}
 	s.suffixPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision{}
@@ -253,7 +255,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.query.CurrentPart().PrepareProjection()
 
 	case *cypher.PatternPredicate:
-		if err := s.preparePatternPredicate(); err != nil {
+		if err := s.preparePatternPredicate(typedExpression); err != nil {
 			s.SetError(err)
 		}
 

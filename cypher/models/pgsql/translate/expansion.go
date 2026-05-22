@@ -2999,9 +2999,8 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	// Export the path from the traversal's scope
 	traversalStep.Frame.Export(expansionModel.PathBinding.Identifier)
 	if allowProjectionPruning {
-		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
-		allowFallback := !hasDecision && (part == nil || !part.HasTarget)
-		if pruneExpansionStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision, allowFallback) {
+		_, hasDecision := s.projectionPruningDecision(part, stepIndex)
+		if hasDecision && pruneExpansionStepProjectionExports(part, stepIndex, traversalStep) {
 			s.recordLowering(optimize.LoweringProjectionPruning)
 		}
 
