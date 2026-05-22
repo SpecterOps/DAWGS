@@ -176,15 +176,14 @@ func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingCl
 
 				leftSymbol := variableSymbol(step.LeftNode.Variable)
 				rightSymbol := variableSymbol(step.RightNode.Variable)
-				if leftSymbol == "" || rightSymbol == "" {
-					continue
+				_, leftBound := declaredEndpoints[stepIndex].BeforeLeftNode[leftSymbol]
+				_, rightBound := declaredEndpoints[stepIndex].BeforeRightNode[rightSymbol]
+
+				if leftSymbol == "" {
+					leftBound = stepIndex > 0
 				}
 
-				if _, leftBound := declaredEndpoints[stepIndex].BeforeLeftNode[leftSymbol]; !leftBound {
-					continue
-				}
-
-				if _, rightBound := declaredEndpoints[stepIndex].BeforeRightNode[rightSymbol]; !rightBound {
+				if rightSymbol == "" || !leftBound || !rightBound {
 					continue
 				}
 

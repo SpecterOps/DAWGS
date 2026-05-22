@@ -228,6 +228,28 @@ func TestLoweringPlanReportsExpandInto(t *testing.T) {
 	}}, plan.LoweringPlan.ExpandInto)
 }
 
+func TestLoweringPlanReportsExpandIntoForAnonymousContinuationEndpoint(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (d:Domain)
+		MATCH p = (ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.ExpandInto, ExpandIntoDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      1,
+		},
+	})
+}
+
 func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 
