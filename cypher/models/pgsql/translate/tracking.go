@@ -344,6 +344,14 @@ func (s *Scope) LookupString(identifierString string) (*BoundIdentifier, bool) {
 	return s.AliasedLookup(pgsql.Identifier(identifierString))
 }
 
+func (s *Scope) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
+	if binding, bound := s.Lookup(identifier); !bound {
+		return "", false
+	} else {
+		return binding.DataType, true
+	}
+}
+
 func (s *Scope) Define(identifier pgsql.Identifier, dataType pgsql.DataType) *BoundIdentifier {
 	boundIdentifier := &BoundIdentifier{
 		Identifier: identifier,

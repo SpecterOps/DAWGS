@@ -186,20 +186,11 @@ func canMaterializeEndpointPairFilterForStep(traversalStep *TraversalStep, expan
 }
 
 func (s *TraversalStep) endpointSelectivity(scope *Scope, expression pgsql.Expression, bound bool) (int, error) {
-	selectivity, err := MeasureSelectivity(scope, expression)
-	if err != nil {
-		return 0, err
-	}
-
-	if bound && s.hasPreviousFrameBinding() {
-		selectivity += selectivityWeightBoundIdentifier
-	}
-
-	return selectivity, nil
+	return optimize.NewSelectivityModel(scope).EndpointSelectivity(expression, bound, s.hasPreviousFrameBinding())
 }
 
 func isBidirectionalSearchAnchor(selectivity int) bool {
-	return selectivity >= selectivityBidirectionalAnchorThreshold
+	return optimize.IsBidirectionalSearchAnchor(selectivity)
 }
 
 func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
@@ -382,187 +373,44 @@ func (s *TraversalStep) CanExecutePairAwareBidirectionalSearch(scope *Scope) (bo
 	}
 }
 
-// flattenConjunction collects the leaf operands of a left-recursive AND chain.
 func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
-	if bin, typeOK := expr.(*pgsql.BinaryExpression); !typeOK || bin.Operator != pgsql.OperatorAnd {
-		return []pgsql.Expression{expr}
-	} else {
-		return append(flattenConjunction(bin.LOperand), flattenConjunction(bin.ROperand)...)
-	}
+	return optimize.FlattenConjunction(expr)
 }
 
-// expressionReferencesOnlyLocalIdentifiers returns true only when every binding
-// reference found in the expression is a member of localScope.
 func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
-	isLocal := true
-
-	walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
-		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
-			switch typedNode := node.(type) {
-			case pgsql.ExistsExpression:
-				if !subqueryReferencesOnlyLocalIdentifiers(typedNode.Subquery, localScope) {
-					isLocal = false
-					handler.SetDone()
-				} else {
-					handler.Consume()
-				}
-
-			case pgsql.CompoundIdentifier:
-				if len(typedNode) > 0 && !localScope.Contains(typedNode[0]) {
-					isLocal = false
-					handler.SetDone()
-				}
-
-			case pgsql.Identifier:
-				if !localScope.Contains(typedNode) {
-					isLocal = false
-					handler.SetDone()
-				}
-
-			case pgsql.RowColumnReference:
-				if !expressionReferencesOnlyLocalIdentifiers(typedNode.Identifier, localScope) {
-					isLocal = false
-					handler.SetDone()
-				} else {
-					handler.Consume()
-				}
-			}
-		},
-	))
-
-	return isLocal
+	return optimize.ExpressionReferencesOnlyLocalIdentifiers(expression, localScope)
 }
 
 func subqueryReferencesOnlyLocalIdentifiers(subquery pgsql.Subquery, localScope *pgsql.IdentifierSet) bool {
-	return queryReferencesOnlyLocalIdentifiers(subquery.Query, localScope)
+	return optimize.SubqueryReferencesOnlyLocalIdentifiers(subquery, localScope)
 }
 
 func queryReferencesOnlyLocalIdentifiers(query pgsql.Query, localScope *pgsql.IdentifierSet) bool {
-	if query.CommonTableExpressions != nil {
-		return false
-	}
-
-	selectBody, isSelect := query.Body.(pgsql.Select)
-	if !isSelect {
-		return false
-	}
-
-	if !selectReferencesOnlyLocalIdentifiers(selectBody, localScope) {
-		return false
-	}
-
-	for _, orderBy := range query.OrderBy {
-		if orderBy != nil && !expressionReferencesOnlyLocalIdentifiers(orderBy.Expression, localScope) {
-			return false
-		}
-	}
-
-	return (query.Offset == nil || expressionReferencesOnlyLocalIdentifiers(query.Offset, localScope)) &&
-		(query.Limit == nil || expressionReferencesOnlyLocalIdentifiers(query.Limit, localScope))
+	return optimize.QueryReferencesOnlyLocalIdentifiers(query, localScope)
 }
 
 func addFromClauseBindings(localScope *pgsql.IdentifierSet, fromClauses []pgsql.FromClause) {
-	for _, fromClause := range fromClauses {
-		addFromExpressionBinding(localScope, fromClause.Source)
-
-		for _, join := range fromClause.Joins {
-			addFromExpressionBinding(localScope, join.Table)
-		}
-	}
+	optimize.AddFromClauseBindings(localScope, fromClauses)
 }
 
 func addFromExpressionBinding(localScope *pgsql.IdentifierSet, expression pgsql.Expression) {
-	switch typedExpression := expression.(type) {
-	case pgsql.TableReference:
-		if typedExpression.Binding.Set {
-			localScope.Add(typedExpression.Binding.Value)
-		}
-
-	case pgsql.LateralSubquery:
-		if typedExpression.Binding.Set {
-			localScope.Add(typedExpression.Binding.Value)
-		}
-	}
+	optimize.AddFromExpressionBinding(localScope, expression)
 }
 
 func selectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *pgsql.IdentifierSet) bool {
-	scopedIdentifiers := localScope.Copy()
-	addFromClauseBindings(scopedIdentifiers, selectBody.From)
-
-	for _, projection := range selectBody.Projection {
-		if !expressionReferencesOnlyLocalIdentifiers(projection, scopedIdentifiers) {
-			return false
-		}
-	}
-
-	for _, fromClause := range selectBody.From {
-		if !fromExpressionReferencesOnlyLocalIdentifiers(fromClause.Source) {
-			return false
-		}
-
-		for _, join := range fromClause.Joins {
-			if !fromExpressionReferencesOnlyLocalIdentifiers(join.Table) {
-				return false
-			}
-
-			if join.JoinOperator.Constraint != nil &&
-				!expressionReferencesOnlyLocalIdentifiers(join.JoinOperator.Constraint, scopedIdentifiers) {
-				return false
-			}
-		}
-	}
-
-	for _, groupByExpression := range selectBody.GroupBy {
-		if !expressionReferencesOnlyLocalIdentifiers(groupByExpression, scopedIdentifiers) {
-			return false
-		}
-	}
-
-	return (selectBody.Where == nil || expressionReferencesOnlyLocalIdentifiers(selectBody.Where, scopedIdentifiers)) &&
-		(selectBody.Having == nil || expressionReferencesOnlyLocalIdentifiers(selectBody.Having, scopedIdentifiers))
+	return optimize.SelectReferencesOnlyLocalIdentifiers(selectBody, localScope)
 }
 
 func fromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression) bool {
-	switch expression.(type) {
-	case pgsql.TableReference:
-		return true
-
-	default:
-		return false
-	}
+	return optimize.FromExpressionReferencesOnlyLocalIdentifiers(expression)
 }
 
 func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
-	if expression == nil {
-		return true
-	}
-
-	return expressionReferencesOnlyLocalIdentifiers(expression, localScope)
+	return optimize.IsLocalToScope(expression, localScope)
 }
 
-// partitionConstraintByLocality splits a conjunction (A AND B AND ...) into
-// two expressions: one whose every binding reference is contained in
-// localScope (safe for JOIN ON), and one that references outside identifiers
-// (must stay in WHERE).
-//
-// Only top-level AND operands are split. If an expression is not a
-// BinaryExpression with OperatorAnd, the whole expression is tested as a unit.
 func partitionConstraintByLocality(expression pgsql.Expression, localScope *pgsql.IdentifierSet) (pgsql.Expression, pgsql.Expression) {
-	var (
-		joinConstraints  pgsql.Expression
-		whereConstraints pgsql.Expression
-		terms            = flattenConjunction(expression)
-	)
-
-	for _, term := range terms {
-		if isLocalToScope(term, localScope) {
-			joinConstraints = pgsql.OptionalAnd(joinConstraints, term)
-		} else {
-			whereConstraints = pgsql.OptionalAnd(whereConstraints, term)
-		}
-	}
-
-	return joinConstraints, whereConstraints
+	return optimize.PartitionConstraintByLocality(expression, localScope)
 }
 
 type ProjectionPruningApplication struct {

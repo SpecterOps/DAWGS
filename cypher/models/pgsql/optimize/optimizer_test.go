@@ -5,6 +5,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,6 +19,13 @@ func (s testRule) Name() string {
 
 func (s testRule) Apply(plan *Plan) (bool, error) {
 	return false, nil
+}
+
+type testBindingLookup map[pgsql.Identifier]pgsql.DataType
+
+func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
+	dataType, found := s[identifier]
+	return dataType, found
 }
 
 func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
@@ -160,6 +168,29 @@ func TestLoweringPlanReportsPatternPredicateExistencePlacement(t *testing.T) {
 		},
 		Mode: PatternPredicatePlacementExistence,
 	}}, plan.LoweringPlan.PatternPredicate)
+}
+
+func TestSelectivityModelPlansTraversalDirection(t *testing.T) {
+	t.Parallel()
+
+	model := NewSelectivityModel(testBindingLookup{})
+	rightIDLookup := pgsql.NewBinaryExpression(
+		pgsql.CompoundIdentifier{pgsql.Identifier("n1"), pgsql.ColumnID},
+		pgsql.OperatorEquals,
+		pgsql.NewLiteral(1, pgsql.Int),
+	)
+
+	shouldFlip, err := model.ShouldFlipTraversalDirection(false, false, nil, rightIDLookup)
+	require.NoError(t, err)
+	require.True(t, shouldFlip)
+
+	shouldFlip, err = model.ShouldFlipTraversalDirection(true, false, nil, rightIDLookup)
+	require.NoError(t, err)
+	require.False(t, shouldFlip)
+
+	shouldFlip, err = model.ShouldFlipTraversalDirection(false, true, nil, nil)
+	require.NoError(t, err)
+	require.True(t, shouldFlip)
 }
 
 func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
