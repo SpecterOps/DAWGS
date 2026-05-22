@@ -668,6 +668,10 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 			if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
 				return applied, err
 			} else if candidateApplied {
+				if len(decision.PredicateAttachments) > 0 {
+					s.recordLowering(optimize.LoweringPredicatePlacement)
+				}
+
 				applied++
 			}
 		}
