@@ -16,6 +16,7 @@ type sourceTraversalStep struct {
 const (
 	traversalDirectionReasonRightBound       = "right_bound"
 	traversalDirectionReasonRightConstrained = "right_constrained"
+	traversalDirectionReasonRightPredicate   = "right_predicate"
 
 	shortestPathStrategyReasonBoundEndpointPairs = "bound_endpoint_pairs"
 	shortestPathStrategyReasonEndpointPredicates = "endpoint_predicates"
@@ -352,6 +353,7 @@ func appendTraversalDirectionDecisions(plan *LoweringPlan, queryPartIndex int, r
 					step,
 					declaredEndpoints[stepIndex],
 					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.LeftNode.Variable)),
+					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.RightNode.Variable)),
 				); shouldFlip {
 					plan.TraversalDirection = append(plan.TraversalDirection, decision)
 				}
@@ -386,6 +388,7 @@ func traversalDirectionDecisionForStep(
 	step sourceTraversalStep,
 	declaredEndpoints declaredStepEndpoints,
 	leftHasAttachedPredicate bool,
+	rightHasAttachedPredicate bool,
 ) (TraversalDirectionDecision, bool) {
 	if leftEndpointBoundForStep(stepIndex, step, declaredEndpoints) {
 		return TraversalDirectionDecision{}, false
@@ -406,11 +409,19 @@ func traversalDirectionDecisionForStep(
 		}
 	}
 
-	if nodePatternHasConstraints(step.RightNode) && !nodePatternHasConstraints(step.LeftNode) && !leftHasAttachedPredicate {
+	leftConstrained := nodePatternHasConstraints(step.LeftNode) || leftHasAttachedPredicate
+	rightConstrained := nodePatternHasConstraints(step.RightNode) || rightHasAttachedPredicate
+
+	if rightConstrained && !leftConstrained {
+		reason := traversalDirectionReasonRightConstrained
+		if !nodePatternHasConstraints(step.RightNode) && rightHasAttachedPredicate {
+			reason = traversalDirectionReasonRightPredicate
+		}
+
 		return TraversalDirectionDecision{
 			Target: target,
 			Flip:   true,
-			Reason: traversalDirectionReasonRightConstrained,
+			Reason: reason,
 		}, true
 	}
 
@@ -732,7 +743,7 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 }
 
 func expansionStepMayFlipForConstraintBalance(stepIndex int, step sourceTraversalStep, declaredEndpoints declaredStepEndpoints) bool {
-	_, mayFlip := traversalDirectionDecisionForStep(TraversalStepTarget{}, stepIndex, step, declaredEndpoints, false)
+	_, mayFlip := traversalDirectionDecisionForStep(TraversalStepTarget{}, stepIndex, step, declaredEndpoints, false, false)
 	return mayFlip
 }
 

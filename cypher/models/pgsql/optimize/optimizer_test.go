@@ -589,6 +589,47 @@ func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasRegionPredicate(t
 	require.Empty(t, plan.LoweringPlan.TraversalDirection)
 }
 
+func TestLoweringPlanReportsTraversalDirectionForRightEndpointPredicate(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(ca)
+		WHERE ca.name = 'target'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Flip:   true,
+		Reason: traversalDirectionReasonRightPredicate,
+	}}, plan.LoweringPlan.TraversalDirection)
+}
+
+func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(ca)-[:TrustedForNTAuth]->(d:Domain)
+		WHERE ca.name = 'target'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Empty(t, plan.LoweringPlan.ExpansionSuffixPushdown)
+}
+
 func TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates(t *testing.T) {
 	t.Parallel()
 

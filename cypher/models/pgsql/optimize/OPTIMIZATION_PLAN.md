@@ -42,7 +42,7 @@ Status: completed
 
 ## Phase 4: Traversal And Recursive CTEs
 
-Status: pending
+Status: completed
 
 - Push predicates into recursive traversal anchors and steps where semantics allow.
   - Endpoint kind/property predicates.
@@ -53,6 +53,7 @@ Status: pending
   - Labels/kinds.
   - Equality predicates.
   - Finite relationship type sets.
+  - Plan direction flips for right-endpoint binding predicates from `WHERE`, not only inline node constraints.
 - Broaden limit pushdown for variable-length path queries when ordering and distinct semantics permit early termination.
 
 ## Phase 5: Suffix And Shared Endpoint Rewrites

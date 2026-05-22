@@ -414,6 +414,24 @@ RETURN p
 	requireNoOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 }
 
+func TestOptimizerSafetyTraversalDirectionUsesRightEndpointPredicate(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (n)-[:MemberOf*1..]->(ca)
+WHERE ca.name = 'target'
+RETURN p
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	require.Contains(t, normalizedQuery, "where (((n1.properties -> 'name'))::jsonb = to_jsonb(('target')::text)::jsonb)")
+	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
+}
+
 func TestOptimizerSafetyShortestPathStrategyUsesPlannedBidirectionalSearch(t *testing.T) {
 	t.Parallel()
 
