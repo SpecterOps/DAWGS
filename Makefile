@@ -50,7 +50,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
@@ -108,6 +108,10 @@ test_update:
 	@rm -rf cypher/analyzer/updated_cases/
 	@cp -fv cypher/models/pgsql/test/updated_cases/* cypher/models/pgsql/test/translation_cases
 	@rm -rf cypher/models/pgsql/test/updated_cases
+
+plan_corpus: $(METRICS_DIR)
+	@echo "Capturing Cypher plan corpus..."
+	@$(GO_CMD) run ./cmd/plancorpus
 
 # Metric targets
 $(METRICS_DIR):
@@ -218,6 +222,7 @@ help:
 	@echo "  test_bench  - Run benchmark test"
 	@echo "  test_neo4j  - Run Neo4j integration tests"
 	@echo "  test_pg     - Run PostgreSQL integration tests"
+	@echo "  plan_corpus - Capture shared corpus query plans for configured backends"
 	@echo "  test_update - Update test cases"
 	@echo "  complexity  - Report cyclomatic complexity"
 	@echo "  crap        - Report CRAP scores from unit test coverage"

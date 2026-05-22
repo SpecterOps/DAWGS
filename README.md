@@ -95,6 +95,10 @@ make quality FUZZ_REPORT=.coverage/fuzz.json MUTATION_REPORT=.coverage/mutation.
 `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING`. `make quality_bench` writes benchmark markdown and JSON captures
 for later baseline comparison.
 
+`make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
+`CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
+writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+
 Thresholds are report-only by default. To enforce the configured thresholds, run:
 
 ```bash
