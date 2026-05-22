@@ -127,15 +127,39 @@ func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	t.Parallel()
 
-	normalizedQuery := optimizerSafetySQL(t, optimizerADCSQuery)
+	translation := optimizerSafetyTranslation(t, optimizerADCSQuery)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
+	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
+	requireOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
+
+	require.Contains(t, normalizedQuery, "select distinct (s0.n0).id as root_id from s0")
 	require.Contains(t, normalizedQuery, "select distinct (s5.n0).id as root_id from s5")
+	require.Contains(t, normalizedQuery, "select distinct (s9.n2).id as root_id from s9")
 	require.Contains(t, normalizedQuery, "s5.ep0 as ep0")
 	require.NotContains(t, normalizedQuery, "s5.e0 as e0")
 	require.Contains(t, normalizedQuery, "from unnest(s12.ep0)")
 	require.Contains(t, normalizedQuery, "from unnest(array [s12.e1]::int8[])")
 	require.NotContains(t, normalizedQuery, "array [s12.e1]::edgecomposite[]")
 	require.Contains(t, normalizedQuery, "from s5, s7")
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"where s7.satisfied and exists (select 1 from edge e5 join node n6",
+		"properties -> 'authenticationenabled'",
+		"join edge e6 on n6.id = e6.start_id",
+		"e6.end_id = (s5.n2).id",
+		"and (s5.n0).id = s7.root_id",
+	)
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"where s11.satisfied and (s9.n2).id = s11.root_id and exists",
+		"from edge e8 where n7.id = e8.start_id",
+		"e8.end_id = (s9.n4).id",
+	)
 }
 
 func assertOptimizerSafetyRelationshipStaysComposite(t *testing.T, cypherQuery string) {

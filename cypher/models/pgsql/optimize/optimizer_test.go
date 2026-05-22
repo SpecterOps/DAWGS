@@ -48,6 +48,93 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	require.Len(t, plan.PredicateAttachments, 2)
 }
 
+func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), adcsQuery)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+
+	ctPredicate := PredicateAttachment{
+		QueryPartIndex:  0,
+		RegionIndex:     0,
+		ClauseIndex:     2,
+		ExpressionIndex: 0,
+		Scope:           PredicateAttachmentScopeBinding,
+		BindingSymbols:  []string{"ct"},
+		Dependencies:    []string{"ct"},
+	}
+
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpansionSuffixPushdown})
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringPredicatePlacement})
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpandIntoDetection})
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringLatePathMaterialization})
+
+	require.Contains(t, plan.LoweringPlan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		SuffixLength:    3,
+		SuffixStartStep: 1,
+		SuffixEndStep:   3,
+	})
+	require.Contains(t, plan.LoweringPlan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		SuffixLength:         2,
+		SuffixStartStep:      1,
+		SuffixEndStep:        2,
+		PredicateAttachments: []PredicateAttachment{ctPredicate},
+	})
+	require.Contains(t, plan.LoweringPlan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      3,
+		},
+		SuffixLength:    1,
+		SuffixStartStep: 4,
+		SuffixEndStep:   4,
+	})
+
+	require.Contains(t, plan.LoweringPlan.ExpandInto, ExpandIntoDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      2,
+		},
+	})
+	require.Contains(t, plan.LoweringPlan.ExpandInto, ExpandIntoDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      4,
+		},
+	})
+	require.Contains(t, plan.LoweringPlan.PredicatePlacement, PredicatePlacementDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      1,
+		},
+		Attachment: ctPredicate,
+		Placement:  PredicateAttachmentScopeBinding,
+	})
+}
+
 func TestOptimizerRunsRulesAndRefreshesAnalysis(t *testing.T) {
 	t.Parallel()
 
