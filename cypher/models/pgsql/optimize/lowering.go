@@ -40,6 +40,10 @@ type ProjectionPruningDecision struct {
 	Target                   TraversalStepTarget `json:"target"`
 	ReferencedSymbols        []string            `json:"referenced_symbols,omitempty"`
 	PatternBindingReferenced bool                `json:"pattern_binding_referenced,omitempty"`
+	OmitLeftNode             bool                `json:"omit_left_node,omitempty"`
+	OmitRelationship         bool                `json:"omit_relationship,omitempty"`
+	OmitRightNode            bool                `json:"omit_right_node,omitempty"`
+	OmitPathBinding          bool                `json:"omit_path_binding,omitempty"`
 }
 
 type LatePathMaterializationMode string

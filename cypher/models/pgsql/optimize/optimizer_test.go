@@ -87,6 +87,8 @@ func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
 			StepIndex:      0,
 		},
 		ReferencedSymbols: []string{"m"},
+		OmitLeftNode:      true,
+		OmitRelationship:  true,
 	}}, plan.LoweringPlan.ProjectionPruning)
 }
 

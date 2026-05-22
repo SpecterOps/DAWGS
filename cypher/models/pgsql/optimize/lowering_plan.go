@@ -92,14 +92,17 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 		edgeReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.Relationship.Variable))
 		var hasPruning bool
 		if step.Relationship.Range != nil {
-			hasPruning = !edgeReferenced || !pathReferenced
+			decision.OmitRelationship = !edgeReferenced
+			decision.OmitPathBinding = !pathReferenced
+			hasPruning = decision.OmitRelationship || decision.OmitPathBinding
 		} else {
 			leftReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.LeftNode.Variable))
 			rightReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.RightNode.Variable))
 
-			hasPruning = !(leftReferenced || pathReferenced) ||
-				!(edgeReferenced || pathReferenced) ||
-				!(rightReferenced || pathReferenced || stepIndex+1 < len(steps))
+			decision.OmitLeftNode = !(leftReferenced || pathReferenced)
+			decision.OmitRelationship = !(edgeReferenced || pathReferenced)
+			decision.OmitRightNode = !(rightReferenced || pathReferenced || stepIndex+1 < len(steps))
+			hasPruning = decision.OmitLeftNode || decision.OmitRelationship || decision.OmitRightNode
 		}
 
 		if hasPruning {
