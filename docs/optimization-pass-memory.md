@@ -278,3 +278,10 @@ Phase 10 starts by making local measurements repeatable for the optimizer rules 
 The translator now consumes optimizer-owned lowering metadata for projection pruning, late path materialization, fixed-hop expand-into detection, expansion suffix pushdown, and predicate placement. PostgreSQL SQL construction remains in the translator, but rule ownership and benchmark-visible diagnostics live in the optimizer lowering plan.
 
 Translator-local eligibility checks remain as conservative fallbacks for traversal steps that do not have an optimizer decision. Benchmark JSON includes planned lowerings, applied lowerings, and the structured lowering plan so future reviews can distinguish optimizer intent from SQL-shape changes that actually happened.
+
+### Lowering Metadata Contract
+
+- `LoweringPlan` is optimizer intent over the Cypher source shape. It may include decisions that the PostgreSQL translator later declines because the lowered SQL shape is no longer eligible.
+- `planned_lowerings` is the compact, benchmark-friendly view of `LoweringPlan.Decisions()`.
+- `lowerings` is translator-applied behavior only. It must be recorded when SQL generation actually changes shape, not when the optimizer merely planned a decision.
+- Optimizer code may describe source-level actions and eligibility. PostgreSQL frame visibility, data-type rewrites, and SQL AST construction remain translator responsibilities.
