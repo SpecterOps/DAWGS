@@ -107,7 +107,7 @@ func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds gra
 	dbcfg.Connection = connStr
 
 	if driver == pg.DriverName {
-		pool, err := pool.NewPool(dbcfg)
+		pool, err := pg.NewPool(cfg.ConnectionString)
 		if err != nil {
 			t.Fatalf("Failed to create PG pool: %v", err)
 		}

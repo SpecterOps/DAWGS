@@ -14,7 +14,6 @@ import (
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/pool"
 	"github.com/specterops/dawgs/util/size"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +83,7 @@ func TestTranslationTestCases(t *testing.T) {
 	// pool connection. Using pgxpool.New directly omits these hooks; after
 	// AssertSchema calls pool.Reset(), new connections would return composite
 	// values as raw []uint8 instead of map[string]any, causing scan failures.
-	if pgxPool, err := pool.NewPool(pool.DatabaseConfiguration{Connection: pgConnectionStr}); err != nil {
+	if pgxPool, err := pg.NewPool(pgConnectionStr); err != nil {
 		t.Fatalf("Failed opening database connection: %v", err)
 	} else if connection, err := dawgs.Open(context.TODO(), pg.DriverName, dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte,
@@ -138,7 +137,7 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 
 	pgConnectionStr := pgConnectionString(t)
 
-	pgxPool, err := pool.NewPool(pool.DatabaseConfiguration{Connection: pgConnectionStr})
+	pgxPool, err := pg.NewPool(pgConnectionStr)
 	require.NoError(t, err)
 	defer pgxPool.Close()
 

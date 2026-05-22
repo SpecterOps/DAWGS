@@ -20,7 +20,7 @@ func main() {
 	dbcfg := pool.DatabaseConfiguration{}
 	dbcfg.Connection = connStr
 
-	pool, err := pool.NewPool(dbcfg)
+	pool, err := pg.NewPool(connStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to connect: %v\n", err)
 		os.Exit(1)

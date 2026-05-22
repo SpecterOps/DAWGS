@@ -68,7 +68,7 @@ func main() {
 	}
 
 	if *driver == pg.DriverName {
-		pool, err := pool.NewPool(dbcfg)
+		pool, err := pg.NewPool(cfg.ConnectionString)
 		if err != nil {
 			fatal("failed to create pool: %v", err)
 		}

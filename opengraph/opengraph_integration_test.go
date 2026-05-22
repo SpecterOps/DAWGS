@@ -55,7 +55,7 @@ func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 		t.Skipf("%s is not a PostgreSQL connection string", connectionStringEnv)
 	}
 
-	pool, err := pool.NewPool(pool.DatabaseConfiguration{Connection: connStr})
+	pool, err := pg.NewPool(connStr)
 	if err != nil {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
