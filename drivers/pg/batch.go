@@ -679,10 +679,10 @@ func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper Kin
 			edgeProperties = edge.Properties.Clone()
 		)
 
-		if edgeKindID, err := kindMapper.MapKind(ctx, edge.Kind); err != nil {
+		if edgeKindIDs, err := kindMapper.AssertKinds(ctx, graph.Kinds{edge.Kind}); err != nil {
 			return err
 		} else {
-			s.relationshipUpdateBatch.Add(startID, endID, edgeKindID)
+			s.relationshipUpdateBatch.Add(startID, endID, edgeKindIDs[0])
 		}
 
 		s.keyToEdgeID[key] = edgeID

@@ -2,7 +2,9 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -17,6 +19,7 @@ type Options struct {
 type Server struct {
 	server      *mcp.Server
 	scope       *commands.Scope
+	commandMu   sync.Mutex
 	allowWrites bool
 }
 
@@ -90,6 +93,26 @@ func (s *Server) commandContext(ctx context.Context) *commands.CommandContext {
 	return cmdCtx
 }
 
+func (s *Server) runCommand(ctx context.Context, name string, args []string) (string, error) {
+	s.commandMu.Lock()
+	defer s.commandMu.Unlock()
+
+	cmd, ok := commands.Registry()[name]
+	if !ok {
+		return "", fmt.Errorf("unknown command %s", name)
+	}
+
+	cmdCtx := s.commandContext(ctx)
+	if cmd.ClearFlagsFn != nil {
+		defer cmd.ClearFlagsFn()
+	}
+	if err := cmd.Fn(cmdCtx, args); err != nil {
+		return "", err
+	}
+
+	return cmdCtx.OutputString(), nil
+}
+
 func (s *Server) registerTools() {
 	mcp.AddTool(s.server, readOnlyTool("list_connections", "List Connections", "List open dawgrun connection names without exposing connection strings."), s.listConnections)
 	mcp.AddTool(s.server, readOnlyTool("open_connection", "Open Connection", "Open a named DAWGS backend connection. Connection strings are treated as sensitive and are not echoed."), s.openConnection)
@@ -132,13 +155,19 @@ func (s *Server) listConnections(context.Context, *mcp.CallToolRequest, ListConn
 
 func (s *Server) openConnection(ctx context.Context, _ *mcp.CallToolRequest, input OpenConnectionInput) (*mcp.CallToolResult, OpenConnectionOutput, error) {
 	name := strings.TrimSpace(input.Name)
-	if err := commands.OpenConnection(s.commandContext(ctx), commands.OpenConnectionOptions{
-		Name:             name,
-		ConnectionString: input.ConnectionString,
-		Driver:           input.Driver,
-		DefaultGraph:     input.DefaultGraph,
-		InitGraph:        input.InitGraph,
-	}); err != nil {
+	args := []string{}
+	if driver := strings.TrimSpace(input.Driver); driver != "" {
+		args = append(args, "-driver", driver)
+	}
+	if defaultGraph := strings.TrimSpace(input.DefaultGraph); defaultGraph != "" {
+		args = append(args, "-default-graph", defaultGraph)
+	}
+	if input.InitGraph {
+		args = append(args, "-init-graph")
+	}
+	args = append(args, name, input.ConnectionString)
+
+	if _, err := s.runCommand(ctx, "open", args); err != nil {
 		return nil, OpenConnectionOutput{}, err
 	}
 
