@@ -254,7 +254,9 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 							ClauseIndex:    clauseIndex,
 							PatternIndex:   patternIndex,
 						}.TraversalStep(stepIndex),
-						SuffixLength: suffixLength,
+						SuffixLength:    suffixLength,
+						SuffixStartStep: stepIndex + 1,
+						SuffixEndStep:   stepIndex + suffixLength,
 					})
 				}
 			}

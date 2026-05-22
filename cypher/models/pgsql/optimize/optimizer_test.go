@@ -151,7 +151,9 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 			PatternIndex:   0,
 			StepIndex:      0,
 		},
-		SuffixLength: 1,
+		SuffixLength:    1,
+		SuffixStartStep: 1,
+		SuffixEndStep:   1,
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 

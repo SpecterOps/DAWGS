@@ -659,12 +659,16 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 		}
 
 		for _, decision := range decisions {
-			if decision.SuffixLength <= 0 || stepIndex+decision.SuffixLength >= len(part.TraversalSteps) {
+			if decision.SuffixLength <= 0 ||
+				decision.SuffixStartStep <= stepIndex ||
+				decision.SuffixEndStep < decision.SuffixStartStep ||
+				decision.SuffixEndStep >= len(part.TraversalSteps) ||
+				decision.SuffixEndStep-decision.SuffixStartStep+1 != decision.SuffixLength {
 				continue
 			}
 
 			currentStep := part.TraversalSteps[stepIndex]
-			suffixSteps := part.TraversalSteps[stepIndex+1 : stepIndex+1+decision.SuffixLength]
+			suffixSteps := part.TraversalSteps[decision.SuffixStartStep : decision.SuffixEndStep+1]
 			if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
 				return applied, err
 			} else if candidateApplied {

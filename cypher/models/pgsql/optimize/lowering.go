@@ -66,6 +66,8 @@ type ExpandIntoDecision struct {
 type ExpansionSuffixPushdownDecision struct {
 	Target               TraversalStepTarget   `json:"target"`
 	SuffixLength         int                   `json:"suffix_length"`
+	SuffixStartStep      int                   `json:"suffix_start_step"`
+	SuffixEndStep        int                   `json:"suffix_end_step"`
 	PredicateAttachments []PredicateAttachment `json:"predicate_attachments,omitempty"`
 }
 
