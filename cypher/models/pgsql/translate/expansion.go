@@ -2669,6 +2669,11 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 		if pruneExpansionStepProjectionExports(s.query.CurrentPart(), part, traversalStep, decision, hasDecision, allowFallback) {
 			s.recordLowering(optimize.LoweringProjectionPruning)
 		}
+
+		if _, hasDecision := s.latePathMaterializationDecision(part, stepIndex, optimize.LatePathMaterializationExpansionPath); hasDecision &&
+			traversalStep.Frame.Exported.Contains(expansionModel.PathBinding.Identifier) {
+			s.recordLowering(optimize.LoweringLatePathMaterialization)
+		}
 	}
 
 	// Push a new frame that contains currently projected scope from the expansion recursive CTE

@@ -280,6 +280,7 @@ RETURN p
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 	requireOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
+	requireOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
 	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requireNoOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 }

@@ -703,18 +703,33 @@ func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int)
 	return decision, hasDecision
 }
 
-func (s *Translator) hasLatePathMaterialization(part *PatternPart, stepIndex int, mode optimize.LatePathMaterializationMode) bool {
+func (s *Translator) latePathMaterializationDecision(part *PatternPart, stepIndex int, mode optimize.LatePathMaterializationMode) (optimize.LatePathMaterializationDecision, bool) {
 	if part == nil || !part.HasTarget {
-		return false
+		return optimize.LatePathMaterializationDecision{}, false
 	}
 
 	for _, decision := range s.latePathDecisions[part.Target.TraversalStep(stepIndex)] {
 		if decision.Mode == mode {
-			return true
+			return decision, true
 		}
 	}
 
-	return false
+	return optimize.LatePathMaterializationDecision{}, false
+}
+
+func (s *Translator) applyPathEdgeIDMaterialization(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
+	if traversalStep == nil ||
+		traversalStep.Edge == nil ||
+		traversalStep.Edge.DataType != pgsql.EdgeComposite {
+		return false
+	}
+
+	if _, hasDecision := s.latePathMaterializationDecision(part, stepIndex, optimize.LatePathMaterializationPathEdgeID); !hasDecision {
+		return false
+	}
+
+	traversalStep.Edge.DataType = pgsql.PathEdge
+	return true
 }
 
 func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
@@ -912,10 +927,7 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 	}
 
 	if allowProjectionPruning {
-		if traversalStep.Edge != nil &&
-			traversalStep.Edge.DataType == pgsql.EdgeComposite &&
-			s.hasLatePathMaterialization(part, stepIndex, optimize.LatePathMaterializationPathEdgeID) {
-			traversalStep.Edge.DataType = pgsql.PathEdge
+		if s.applyPathEdgeIDMaterialization(part, stepIndex, traversalStep) {
 			s.recordLowering(optimize.LoweringLatePathMaterialization)
 		}
 
