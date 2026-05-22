@@ -31,7 +31,6 @@ import (
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/pool"
 	"github.com/specterops/dawgs/util/size"
 )
 
