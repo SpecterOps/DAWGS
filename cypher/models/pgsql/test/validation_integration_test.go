@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -76,7 +76,7 @@ func translationValidationGraphSchema() graph.Schema {
 func TestTranslationTestCases(t *testing.T) {
 	testCtx, done := context.WithCancel(context.Background())
 	defer done()
-
+	pgConnectionStr := pgConnectionString(t)
 	pgxPoolCfg, err := pgxpool.ParseConfig(pgConnectionStr)
 	if err != nil {
 		t.Fatalf("failed to parse pool configuration: %v", err)
@@ -133,6 +133,7 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 	testCtx, done := context.WithCancel(context.Background())
 	defer done()
 
+	pgConnectionStr := pgConnectionString(t)
 	pgxPoolCfg, err := pgxpool.ParseConfig(pgConnectionStr)
 	require.NoError(t, err)
 	pgxPool, err := pg.NewPool(pgxPoolCfg)
