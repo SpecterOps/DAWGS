@@ -29,7 +29,6 @@ import (
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/pool"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 
@@ -102,9 +101,6 @@ func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds gra
 		GraphQueryMemoryLimit: size.Gibibyte,
 		ConnectionString:      connStr,
 	}
-
-	dbcfg := pool.DatabaseConfiguration{}
-	dbcfg.Connection = connStr
 
 	if driver == pg.DriverName {
 		pool, err := pg.NewPool(cfg.ConnectionString)

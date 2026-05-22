@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/specterops/dawgs/drivers/pg"
-	"github.com/specterops/dawgs/internal/pool"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 )
@@ -16,9 +15,6 @@ func main() {
 	if connStr == "" {
 		connStr = "postgresql://bloodhound:bloodhoundcommunityedition@localhost:5432/bloodhound"
 	}
-
-	dbcfg := pool.DatabaseConfiguration{}
-	dbcfg.Connection = connStr
 
 	pool, err := pg.NewPool(connStr)
 	if err != nil {

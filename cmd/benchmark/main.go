@@ -28,7 +28,7 @@ import (
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/pool"
+
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 
@@ -45,7 +45,6 @@ func main() {
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
-		dbcfg        = pool.DatabaseConfiguration{}
 	)
 
 	flag.Parse()
@@ -57,8 +56,6 @@ func main() {
 	if conn == "" {
 		fatal("no connection string: set -connection flag or CONNECTION_STRING env var")
 	}
-
-	dbcfg.Connection = conn
 
 	ctx := context.Background()
 
