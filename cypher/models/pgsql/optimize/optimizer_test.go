@@ -92,6 +92,29 @@ func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
 	}}, plan.LoweringPlan.ProjectionPruning)
 }
 
+func TestLoweringPlanProjectionPruningKeepsUpdateTargets(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a)-[r:MemberOf]->(m)
+		SET a.name = 'updated', r.seen = true
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []ProjectionPruningDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		ReferencedSymbols: []string{"a", "r"},
+		OmitRightNode:     true,
+	}}, plan.LoweringPlan.ProjectionPruning)
+}
+
 func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 	t.Parallel()
 

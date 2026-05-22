@@ -77,6 +77,11 @@ func (s *sourceReferenceCollector) Enter(node cypher.SyntaxNode) {
 			s.addMatchPatternDeclaration(typedNode.Variable)
 		}
 
+	case *cypher.PropertyLookup:
+		if variable, isVariable := typedNode.Atom.(*cypher.Variable); isVariable {
+			s.addVariable(variable)
+		}
+
 	case *cypher.Variable:
 		s.addVariable(typedNode)
 	}

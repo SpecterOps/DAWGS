@@ -525,11 +525,19 @@ func partitionConstraintByLocality(expression pgsql.Expression, localScope *pgsq
 	return joinConstraints, whereConstraints
 }
 
+type ProjectionPruningApplication struct {
+	LeftNode     *BoundIdentifier
+	Relationship *BoundIdentifier
+	RightNode    *BoundIdentifier
+	PathBinding  *BoundIdentifier
+}
+
 type TraversalStep struct {
 	Frame                  *Frame
 	Direction              graph.Direction
 	Expansion              *Expansion
 	PathReversed           bool
+	ProjectionPruning      ProjectionPruningApplication
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool
 	UseExpandInto          bool

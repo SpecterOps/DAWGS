@@ -36,6 +36,8 @@ func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, trave
 		if _, hasDecision := s.expandIntoDecisions[part.Target.TraversalStep(stepIndex)]; hasDecision {
 			return true
 		}
+
+		return false
 	}
 
 	return true
@@ -602,6 +604,8 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 			s.recordLowering(optimize.LoweringExpandIntoDetection)
 		}
 
+		s.prepareProjectionPruning(part, idx, traversalStep)
+
 		if traversalStepFrame, err := s.scope.PushFrame(); err != nil {
 			return err
 		} else {
@@ -643,18 +647,6 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 		target := part.Target.TraversalStep(stepIndex)
 		decisions := s.suffixPushdownDecisions[target]
 		if len(decisions) == 0 {
-			if stepIndex+1 >= len(part.TraversalSteps) {
-				continue
-			}
-
-			currentStep := part.TraversalSteps[stepIndex]
-			suffixSteps := part.TraversalSteps[stepIndex+1:]
-			if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
-				return applied, err
-			} else if candidateApplied {
-				applied++
-			}
-
 			continue
 		}
 
@@ -709,6 +701,29 @@ func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int)
 
 	decision, hasDecision := s.projectionPruningDecisions[part.Target.TraversalStep(stepIndex)]
 	return decision, hasDecision
+}
+
+func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
+	decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
+	if !hasDecision || traversalStep == nil {
+		return
+	}
+
+	if decision.OmitLeftNode {
+		traversalStep.ProjectionPruning.LeftNode = traversalStep.LeftNode
+	}
+
+	if decision.OmitRelationship {
+		traversalStep.ProjectionPruning.Relationship = traversalStep.Edge
+	}
+
+	if decision.OmitRightNode {
+		traversalStep.ProjectionPruning.RightNode = traversalStep.RightNode
+	}
+
+	if decision.OmitPathBinding && traversalStep.Expansion != nil {
+		traversalStep.ProjectionPruning.PathBinding = traversalStep.Expansion.PathBinding
+	}
 }
 
 func (s *Translator) latePathMaterializationDecision(part *PatternPart, stepIndex int, mode optimize.LatePathMaterializationMode) (optimize.LatePathMaterializationDecision, bool) {
@@ -771,22 +786,39 @@ func unexportFrameBinding(frame *Frame, identifier pgsql.Identifier) bool {
 	return exported
 }
 
+func traversalStepBindingBound(traversalStep *TraversalStep, binding *BoundIdentifier) bool {
+	if traversalStep == nil || binding == nil {
+		return false
+	}
+
+	if traversalStep.LeftNode == binding {
+		return traversalStep.LeftNodeBound
+	}
+
+	if traversalStep.RightNode == binding {
+		return traversalStep.RightNodeBound
+	}
+
+	return false
+}
+
+func unexportPrunedNodeBinding(traversalStep *TraversalStep, binding *BoundIdentifier) bool {
+	if binding == nil || traversalStepBindingBound(traversalStep, binding) {
+		return false
+	}
+
+	return unexportFrameBinding(traversalStep.Frame, binding.Identifier)
+}
+
 func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) bool {
 	var applied bool
 
 	if hasDecision {
-		if decision.OmitLeftNode && traversalStep.LeftNode != nil && !traversalStep.LeftNodeBound {
-			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.LeftNode.Identifier) || applied
+		applied = unexportPrunedNodeBinding(traversalStep, traversalStep.ProjectionPruning.LeftNode) || applied
+		if traversalStep.ProjectionPruning.Relationship != nil {
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.Relationship.Identifier) || applied
 		}
-
-		if decision.OmitRelationship && traversalStep.Edge != nil {
-			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Edge.Identifier) || applied
-		}
-
-		if decision.OmitRightNode && traversalStep.RightNode != nil && !traversalStep.RightNodeBound {
-			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.RightNode.Identifier) || applied
-		}
-
+		applied = unexportPrunedNodeBinding(traversalStep, traversalStep.ProjectionPruning.RightNode) || applied
 		return applied
 	}
 
@@ -826,12 +858,12 @@ func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart
 
 	var applied bool
 	if hasDecision {
-		if decision.OmitRelationship && traversalStep.Edge != nil {
-			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Edge.Identifier) || applied
+		if traversalStep.ProjectionPruning.Relationship != nil {
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.Relationship.Identifier) || applied
 		}
 
-		if decision.OmitPathBinding && traversalStep.Expansion.PathBinding != nil {
-			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.Expansion.PathBinding.Identifier) || applied
+		if traversalStep.ProjectionPruning.PathBinding != nil {
+			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.PathBinding.Identifier) || applied
 		}
 
 		return applied
@@ -940,7 +972,7 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		}
 
 		decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
-		allowFallback := !hasDecision
+		allowFallback := !hasDecision && (part == nil || !part.HasTarget)
 		if pruneTraversalStepProjectionExports(s.query.CurrentPart(), part, stepIndex, traversalStep, decision, hasDecision, allowFallback) {
 			s.recordLowering(optimize.LoweringProjectionPruning)
 		}
