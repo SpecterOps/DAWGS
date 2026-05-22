@@ -43,6 +43,134 @@ func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, trave
 	return true
 }
 
+func (s *Translator) traversalDirectionDecision(part *PatternPart, stepIndex int) (optimize.TraversalDirectionDecision, bool) {
+	if part == nil || !part.HasTarget {
+		return optimize.TraversalDirectionDecision{}, false
+	}
+
+	decision, hasDecision := s.traversalDirectionDecisions[part.Target.TraversalStep(stepIndex)]
+	return decision, hasDecision
+}
+
+func (s *Translator) applyPatternConstraintBalance(part *PatternPart, stepIndex int, constraints *PatternConstraints, traversalStep *TraversalStep) error {
+	if decision, hasDecision := s.traversalDirectionDecision(part, stepIndex); hasDecision {
+		if decision.Flip && !traversalStep.LeftNodeBound {
+			if traversalStep.RightNodeBound && !traversalStep.hasPreviousFrameBinding() {
+				return nil
+			}
+
+			traversalStep.FlipNodes()
+			constraints.FlipNodes()
+			s.recordLowering(optimize.LoweringTraversalDirection)
+		}
+
+		return nil
+	}
+
+	if flipped, err := constraints.OptimizePatternConstraintBalance(s.scope, traversalStep); err != nil {
+		return err
+	} else if flipped {
+		s.recordLowering(optimize.LoweringTraversalDirection)
+	}
+
+	return nil
+}
+
+func (s *Translator) shortestPathStrategyDecision(part *PatternPart, stepIndex int) (optimize.ShortestPathStrategyDecision, bool) {
+	if part == nil || !part.HasTarget {
+		return optimize.ShortestPathStrategyDecision{}, false
+	}
+
+	decision, hasDecision := s.shortestPathStrategyDecisions[part.Target.TraversalStep(stepIndex)]
+	return decision, hasDecision
+}
+
+func (s *Translator) useBidirectionalShortestPathStrategy(part *PatternPart, stepIndex int, traversalStep *TraversalStep) (bool, error) {
+	if decision, hasDecision := s.shortestPathStrategyDecision(part, stepIndex); hasDecision {
+		if decision.Strategy != optimize.ShortestPathStrategyBidirectional {
+			return false, nil
+		}
+
+		if canExecute, err := traversalStep.CanExecutePairAwareBidirectionalSearch(s.scope); err != nil {
+			return false, err
+		} else if canExecute {
+			s.recordLowering(optimize.LoweringShortestPathStrategy)
+			return true, nil
+		}
+
+		return false, nil
+	}
+
+	if canExecute, err := traversalStep.CanExecutePairAwareBidirectionalSearch(s.scope); err != nil {
+		return false, err
+	} else if canExecute {
+		s.recordLowering(optimize.LoweringShortestPathStrategy)
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (s *Translator) shortestPathFilterDecisionsForStep(part *PatternPart, stepIndex int) []optimize.ShortestPathFilterDecision {
+	if part == nil || !part.HasTarget {
+		return nil
+	}
+
+	return s.shortestPathFilterDecisions[part.Target.TraversalStep(stepIndex)]
+}
+
+func (s *Translator) applyShortestPathFilterMaterialization(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) {
+	for _, decision := range s.shortestPathFilterDecisionsForStep(part, stepIndex) {
+		switch decision.Mode {
+		case optimize.ShortestPathFilterTerminal:
+			if canMaterializeTerminalFilterForStep(traversalStep, expansionModel) {
+				expansionModel.UseMaterializedTerminalFilter = true
+				s.recordLowering(optimize.LoweringShortestPathFilter)
+			}
+
+		case optimize.ShortestPathFilterEndpointPair:
+			if expansionModel.UseBidirectionalSearch && canMaterializeEndpointPairFilterForStep(traversalStep, expansionModel) {
+				expansionModel.UseMaterializedEndpointPairFilter = true
+				s.recordLowering(optimize.LoweringShortestPathFilter)
+			}
+		}
+	}
+}
+
+func (s *Translator) hasLimitPushdownDecision(part *PatternPart, stepIndex int, mode optimize.LimitPushdownMode) bool {
+	if part == nil || !part.HasTarget {
+		return true
+	}
+
+	for _, decision := range s.limitPushdownDecisions[part.Target.TraversalStep(stepIndex)] {
+		if decision.Mode == mode {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *Translator) allowLimitPushdownForStep(part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
+	if traversalStep == nil || traversalStep.Frame == nil {
+		return
+	}
+	if traversalStep.Expansion != nil && traversalStep.Expansion.Options.FindAllShortestPaths {
+		return
+	}
+
+	mode := optimize.LimitPushdownTraversalCTE
+	if traversalStep.Expansion != nil &&
+		traversalStep.Expansion.Options.FindShortestPath &&
+		!traversalStep.Expansion.Options.FindAllShortestPaths {
+		mode = optimize.LimitPushdownShortestPathHarness
+	}
+
+	if s.hasLimitPushdownDecision(part, stepIndex, mode) {
+		s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
+	}
+}
+
 func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
 	if partFrame == nil || partFrame.Previous == nil {
 		return pgsql.Query{}, errors.New("expected previous frame for bound endpoint traversal")
@@ -694,6 +822,65 @@ func patternBindingDependsOn(queryPart *QueryPart, part *PatternPart, binding *B
 	return false
 }
 
+func traversalStepHasContinuation(part *PatternPart, stepIndex int) bool {
+	return part != nil && stepIndex+1 < len(part.TraversalSteps)
+}
+
+func relationshipIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
+	if binding != nil && binding.DataType == pgsql.EdgeComposite {
+		return pathCompositeColumnReference(scope, binding, pgsql.ColumnID)
+	}
+
+	return pathEdgeIDReference(scope, binding)
+}
+
+func relationshipIDNotInPath(edgeID, pathIDs pgsql.Expression) pgsql.Expression {
+	return pgsql.NewBinaryExpression(
+		edgeID,
+		pgsql.OperatorNotEquals,
+		pgsql.NewAllExpression(pathIDs),
+	)
+}
+
+func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, stepIndex int, traversalStep *TraversalStep) pgsql.Expression {
+	if scope == nil || part == nil || stepIndex <= 0 || traversalStep == nil || traversalStep.Edge == nil {
+		return nil
+	}
+
+	var (
+		currentEdgeID pgsql.Expression = pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID}
+		constraint    pgsql.Expression
+	)
+
+	for _, previousStep := range part.TraversalSteps[:stepIndex] {
+		if previousStep == nil || previousStep.Edge == nil {
+			continue
+		}
+
+		if previousStep.Expansion != nil {
+			if previousStep.Expansion.PathBinding != nil {
+				constraint = pgsql.OptionalAnd(
+					constraint,
+					relationshipIDNotInPath(currentEdgeID, pathBindingReference(scope, previousStep.Expansion.PathBinding)),
+				)
+			}
+
+			continue
+		}
+
+		constraint = pgsql.OptionalAnd(
+			constraint,
+			pgsql.NewBinaryExpression(
+				currentEdgeID,
+				pgsql.OperatorNotEquals,
+				relationshipIDReference(scope, previousStep.Edge),
+			),
+		)
+	}
+
+	return constraint
+}
+
 func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int) (optimize.ProjectionPruningDecision, bool) {
 	if part == nil || !part.HasTarget {
 		return optimize.ProjectionPruningDecision{}, false
@@ -766,7 +953,11 @@ func traversalStepProjectsBinding(queryPart *QueryPart, part *PatternPart, stepI
 		return true
 	}
 
-	if stepIndex+1 < len(part.TraversalSteps) {
+	if traversalStepHasContinuation(part, stepIndex) {
+		if part.TraversalSteps[stepIndex].Edge == binding {
+			return true
+		}
+
 		// A multi-hop pattern needs the right node from this step as the next
 		// step's left node even when the user never projects it.
 		nextStep := part.TraversalSteps[stepIndex+1]
@@ -815,7 +1006,7 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 
 	if hasDecision {
 		applied = unexportPrunedNodeBinding(traversalStep, traversalStep.ProjectionPruning.LeftNode) || applied
-		if traversalStep.ProjectionPruning.Relationship != nil {
+		if traversalStep.ProjectionPruning.Relationship != nil && !traversalStepHasContinuation(part, stepIndex) {
 			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.Relationship.Identifier) || applied
 		}
 		applied = unexportPrunedNodeBinding(traversalStep, traversalStep.ProjectionPruning.RightNode) || applied
@@ -851,7 +1042,7 @@ func pruneTraversalStepProjectionExports(queryPart *QueryPart, part *PatternPart
 	return applied
 }
 
-func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) bool {
+func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart, stepIndex int, traversalStep *TraversalStep, decision optimize.ProjectionPruningDecision, hasDecision bool, allowFallback bool) bool {
 	if traversalStep == nil || traversalStep.Expansion == nil {
 		return false
 	}
@@ -862,7 +1053,7 @@ func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart
 			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.Relationship.Identifier) || applied
 		}
 
-		if traversalStep.ProjectionPruning.PathBinding != nil {
+		if traversalStep.ProjectionPruning.PathBinding != nil && !traversalStepHasContinuation(part, stepIndex) {
 			applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.PathBinding.Identifier) || applied
 		}
 
@@ -882,7 +1073,7 @@ func pruneExpansionStepProjectionExports(queryPart *QueryPart, part *PatternPart
 	}
 
 	pathBinding := traversalStep.Expansion.PathBinding
-	if pathBinding != nil && !patternBindingDependsOn(queryPart, part, pathBinding) {
+	if pathBinding != nil && !traversalStepHasContinuation(part, stepIndex) && !patternBindingDependsOn(queryPart, part, pathBinding) {
 		applied = unexportFrameBinding(traversalStep.Frame, pathBinding.Identifier) || applied
 	}
 
@@ -896,7 +1087,7 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		return err
 	} else {
 		if isFirstTraversalStep {
-			if err := constraints.OptimizePatternConstraintBalance(s.scope, traversalStep); err != nil {
+			if err := s.applyPatternConstraintBalance(part, stepIndex, &constraints, traversalStep); err != nil {
 				return err
 			}
 
@@ -948,6 +1139,10 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		} else {
 			traversalStep.EdgeConstraints = constraints.Edge
 		}
+		traversalStep.EdgeConstraints.Expression = pgsql.OptionalAnd(
+			traversalStep.EdgeConstraints.Expression,
+			previousRelationshipUniquenessConstraint(s.scope, part, stepIndex, traversalStep),
+		)
 
 		traversalStep.Frame.Export(traversalStep.RightNode.Identifier)
 
@@ -967,6 +1162,13 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 	}
 
 	if allowProjectionPruning {
+		if traversalStepHasContinuation(part, stepIndex) &&
+			traversalStep.Edge != nil &&
+			traversalStep.Edge.DataType == pgsql.EdgeComposite &&
+			!s.query.CurrentPart().ReferencesBinding(traversalStep.Edge) {
+			traversalStep.Edge.DataType = pgsql.PathEdge
+		}
+
 		if s.applyPathEdgeIDMaterialization(part, stepIndex, traversalStep) {
 			s.recordLowering(optimize.LoweringLatePathMaterialization)
 		}

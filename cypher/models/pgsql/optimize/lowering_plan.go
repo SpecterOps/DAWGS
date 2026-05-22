@@ -11,6 +11,17 @@ type sourceTraversalStep struct {
 	RightNode    *cypher.NodePattern
 }
 
+const (
+	traversalDirectionReasonRightBound       = "right_bound"
+	traversalDirectionReasonRightConstrained = "right_constrained"
+
+	shortestPathStrategyReasonBoundEndpointPairs = "bound_endpoint_pairs"
+	shortestPathStrategyReasonEndpointPredicates = "endpoint_predicates"
+
+	shortestPathFilterReasonTerminalPredicate      = "terminal_predicate"
+	shortestPathFilterReasonEndpointPairPredicates = "endpoint_pair_predicates"
+)
+
 func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
 	if query == nil || query.SingleQuery == nil {
 		return LoweringPlan{}, nil
@@ -24,18 +35,18 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 				continue
 			}
 
-			if err := appendQueryPartLowerings(&plan, queryPartIndex, part, part.ReadingClauses); err != nil {
+			if err := appendQueryPartLowerings(&plan, queryPartIndex, part, part.ReadingClauses, predicateAttachments); err != nil {
 				return LoweringPlan{}, err
 			}
 		}
 
 		if finalPart := query.SingleQuery.MultiPartQuery.SinglePartQuery; finalPart != nil {
-			if err := appendQueryPartLowerings(&plan, len(query.SingleQuery.MultiPartQuery.Parts), finalPart, finalPart.ReadingClauses); err != nil {
+			if err := appendQueryPartLowerings(&plan, len(query.SingleQuery.MultiPartQuery.Parts), finalPart, finalPart.ReadingClauses, predicateAttachments); err != nil {
 				return LoweringPlan{}, err
 			}
 		}
 	} else if singlePart := query.SingleQuery.SinglePartQuery; singlePart != nil {
-		if err := appendQueryPartLowerings(&plan, 0, singlePart, singlePart.ReadingClauses); err != nil {
+		if err := appendQueryPartLowerings(&plan, 0, singlePart, singlePart.ReadingClauses, predicateAttachments); err != nil {
 			return LoweringPlan{}, err
 		}
 	}
@@ -45,7 +56,13 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	return plan, nil
 }
 
-func appendQueryPartLowerings(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) error {
+func appendQueryPartLowerings(
+	plan *LoweringPlan,
+	queryPartIndex int,
+	queryPart cypher.SyntaxNode,
+	readingClauses []*cypher.ReadingClause,
+	predicateAttachments []PredicateAttachment,
+) error {
 	sourceReferences, err := collectReferencedSourceIdentifiers(queryPart)
 	if err != nil {
 		return err
@@ -54,6 +71,10 @@ func appendQueryPartLowerings(plan *LoweringPlan, queryPartIndex int, queryPart 
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
+	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
+	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
+	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
+	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
 	return nil
 }
@@ -223,6 +244,365 @@ func declaredSymbolsBeforeStepEndpoints(initial map[string]struct{}, steps []sou
 	return endpoints
 }
 
+func appendTraversalDirectionDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
+	declaredSymbols := map[string]struct{}{}
+
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		match := readingClause.Match
+		if match.Optional {
+			declareMatchSymbols(declaredSymbols, match)
+			continue
+		}
+
+		for patternIndex, patternPart := range match.Pattern {
+			steps := traversalStepsForPattern(patternPart)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			patternTarget := PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}
+
+			for stepIndex, step := range steps {
+				if decision, shouldFlip := traversalDirectionDecisionForStep(
+					patternTarget.TraversalStep(stepIndex),
+					stepIndex,
+					step,
+					declaredEndpoints[stepIndex],
+					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.LeftNode.Variable)),
+				); shouldFlip {
+					plan.TraversalDirection = append(plan.TraversalDirection, decision)
+				}
+			}
+
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+
+		declareWhereSymbols(declaredSymbols, match)
+	}
+}
+
+func bindingPredicateSymbols(predicateAttachments []PredicateAttachment, queryPartIndex int) map[string]struct{} {
+	symbols := map[string]struct{}{}
+
+	for _, attachment := range predicateAttachments {
+		if attachment.QueryPartIndex != queryPartIndex {
+			continue
+		}
+
+		for _, symbol := range attachment.BindingSymbols {
+			addSymbol(symbols, symbol)
+		}
+	}
+
+	return symbols
+}
+
+func traversalDirectionDecisionForStep(
+	target TraversalStepTarget,
+	stepIndex int,
+	step sourceTraversalStep,
+	declaredEndpoints declaredStepEndpoints,
+	leftHasAttachedPredicate bool,
+) (TraversalDirectionDecision, bool) {
+	if leftEndpointBoundForStep(stepIndex, step, declaredEndpoints) {
+		return TraversalDirectionDecision{}, false
+	}
+
+	rightSymbol := variableSymbol(step.RightNode.Variable)
+	if rightSymbol != "" {
+		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
+			if rightSymbol == variableSymbol(step.LeftNode.Variable) {
+				return TraversalDirectionDecision{}, false
+			}
+
+			return TraversalDirectionDecision{
+				Target: target,
+				Flip:   true,
+				Reason: traversalDirectionReasonRightBound,
+			}, true
+		}
+	}
+
+	if nodePatternHasConstraints(step.RightNode) && !nodePatternHasConstraints(step.LeftNode) && !leftHasAttachedPredicate {
+		return TraversalDirectionDecision{
+			Target: target,
+			Flip:   true,
+			Reason: traversalDirectionReasonRightConstrained,
+		}, true
+	}
+
+	return TraversalDirectionDecision{}, false
+}
+
+func appendShortestPathStrategyDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
+	declaredSymbols := map[string]struct{}{}
+
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		match := readingClause.Match
+		if match.Optional {
+			declareMatchSymbols(declaredSymbols, match)
+			continue
+		}
+
+		for patternIndex, patternPart := range match.Pattern {
+			if patternPart == nil || (!patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern) {
+				declarePatternSymbols(declaredSymbols, patternPart)
+				continue
+			}
+
+			steps := traversalStepsForPattern(patternPart)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			patternTarget := PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}
+
+			for stepIndex, step := range steps {
+				if step.Relationship.Range == nil {
+					continue
+				}
+
+				if decision, shouldPlan := shortestPathStrategyDecisionForStep(
+					patternTarget.TraversalStep(stepIndex),
+					step,
+					declaredEndpoints[stepIndex],
+					predicateConstrainedSymbols,
+				); shouldPlan {
+					plan.ShortestPathStrategy = append(plan.ShortestPathStrategy, decision)
+				}
+			}
+
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+
+		declareWhereSymbols(declaredSymbols, match)
+	}
+}
+
+func shortestPathStrategyDecisionForStep(
+	target TraversalStepTarget,
+	step sourceTraversalStep,
+	declaredEndpoints declaredStepEndpoints,
+	predicateConstrainedSymbols map[string]struct{},
+) (ShortestPathStrategyDecision, bool) {
+	leftSymbol := variableSymbol(step.LeftNode.Variable)
+	rightSymbol := variableSymbol(step.RightNode.Variable)
+
+	_, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]
+	if leftEndpointBoundForStep(target.StepIndex, step, declaredEndpoints) && rightSymbol != "" && rightBound {
+		return ShortestPathStrategyDecision{
+			Target:   target,
+			Strategy: ShortestPathStrategyBidirectional,
+			Reason:   shortestPathStrategyReasonBoundEndpointPairs,
+		}, true
+	}
+
+	if endpointHasSearchConstraint(step.LeftNode, leftSymbol, predicateConstrainedSymbols) &&
+		endpointHasSearchConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols) {
+		return ShortestPathStrategyDecision{
+			Target:   target,
+			Strategy: ShortestPathStrategyBidirectional,
+			Reason:   shortestPathStrategyReasonEndpointPredicates,
+		}, true
+	}
+
+	return ShortestPathStrategyDecision{}, false
+}
+
+func endpointHasSearchConstraint(nodePattern *cypher.NodePattern, symbol string, predicateConstrainedSymbols map[string]struct{}) bool {
+	if nodePattern == nil {
+		return false
+	}
+
+	return nodePattern.Properties != nil || referencesSourceIdentifier(predicateConstrainedSymbols, symbol)
+}
+
+func appendShortestPathFilterDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
+	declaredSymbols := map[string]struct{}{}
+
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		match := readingClause.Match
+		if match.Optional {
+			declareMatchSymbols(declaredSymbols, match)
+			continue
+		}
+
+		for patternIndex, patternPart := range match.Pattern {
+			if patternPart == nil || (!patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern) {
+				declarePatternSymbols(declaredSymbols, patternPart)
+				continue
+			}
+
+			steps := traversalStepsForPattern(patternPart)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			patternTarget := PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}
+
+			for stepIndex, step := range steps {
+				if step.Relationship.Range == nil {
+					continue
+				}
+
+				if decision, shouldPlan := shortestPathFilterDecisionForStep(
+					plan,
+					patternTarget.TraversalStep(stepIndex),
+					step,
+					declaredEndpoints[stepIndex],
+					predicateConstrainedSymbols,
+				); shouldPlan {
+					plan.ShortestPathFilter = append(plan.ShortestPathFilter, decision)
+				}
+			}
+
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+
+		declareWhereSymbols(declaredSymbols, match)
+	}
+}
+
+func shortestPathFilterDecisionForStep(
+	plan *LoweringPlan,
+	target TraversalStepTarget,
+	step sourceTraversalStep,
+	declaredEndpoints declaredStepEndpoints,
+	predicateConstrainedSymbols map[string]struct{},
+) (ShortestPathFilterDecision, bool) {
+	leftSymbol := variableSymbol(step.LeftNode.Variable)
+	rightSymbol := variableSymbol(step.RightNode.Variable)
+	if rightSymbol != "" {
+		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
+			return ShortestPathFilterDecision{}, false
+		}
+	}
+
+	leftSearchConstrained := endpointHasSearchConstraint(step.LeftNode, leftSymbol, predicateConstrainedSymbols)
+	rightSearchConstrained := endpointHasSearchConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols)
+	if !rightSearchConstrained {
+		return ShortestPathFilterDecision{}, false
+	}
+
+	if hasShortestPathBidirectionalStrategy(plan, target) && leftSearchConstrained {
+		return ShortestPathFilterDecision{
+			Target: target,
+			Mode:   ShortestPathFilterEndpointPair,
+			Reason: shortestPathFilterReasonEndpointPairPredicates,
+		}, true
+	}
+
+	return ShortestPathFilterDecision{
+		Target: target,
+		Mode:   ShortestPathFilterTerminal,
+		Reason: shortestPathFilterReasonTerminalPredicate,
+	}, true
+}
+
+func hasShortestPathBidirectionalStrategy(plan *LoweringPlan, target TraversalStepTarget) bool {
+	if plan == nil {
+		return false
+	}
+
+	for _, decision := range plan.ShortestPathStrategy {
+		if decision.Target == target && decision.Strategy == ShortestPathStrategyBidirectional {
+			return true
+		}
+	}
+
+	return false
+}
+
+func appendLimitPushdownDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
+	if !queryPartAllowsLimitPushdown(queryPart, readingClauses) {
+		return
+	}
+
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			if patternPart == nil {
+				continue
+			}
+			if patternPart.AllShortestPathsPattern {
+				continue
+			}
+
+			patternTarget := PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}
+
+			for stepIndex, step := range traversalStepsForPattern(patternPart) {
+				mode := LimitPushdownTraversalCTE
+				if patternPart.ShortestPathPattern && step.Relationship.Range != nil {
+					mode = LimitPushdownShortestPathHarness
+				}
+
+				plan.LimitPushdown = append(plan.LimitPushdown, LimitPushdownDecision{
+					Target: patternTarget.TraversalStep(stepIndex),
+					Mode:   mode,
+				})
+			}
+		}
+	}
+}
+
+func queryPartAllowsLimitPushdown(queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) bool {
+	projection, updatingClauseCount := queryPartProjection(queryPart)
+	if projection == nil ||
+		projection.Limit == nil ||
+		projection.Skip != nil ||
+		projection.Order != nil ||
+		projection.Distinct ||
+		len(readingClauses) != 1 ||
+		updatingClauseCount > 0 {
+		return false
+	}
+
+	return true
+}
+
+func queryPartProjection(queryPart cypher.SyntaxNode) (*cypher.Projection, int) {
+	switch typedQueryPart := queryPart.(type) {
+	case *cypher.SinglePartQuery:
+		if typedQueryPart.Return == nil {
+			return nil, len(typedQueryPart.UpdatingClauses)
+		}
+
+		return typedQueryPart.Return.Projection, len(typedQueryPart.UpdatingClauses)
+
+	case *cypher.MultiPartQueryPart:
+		if typedQueryPart.With == nil {
+			return nil, len(typedQueryPart.UpdatingClauses)
+		}
+
+		return typedQueryPart.With.Projection, len(typedQueryPart.UpdatingClauses)
+
+	default:
+		return nil, 0
+	}
+}
+
 func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
 	declaredSymbols := map[string]struct{}{}
 
@@ -240,19 +620,25 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 		for patternIndex, patternPart := range match.Pattern {
 			steps := traversalStepsForPattern(patternPart)
 			declaredBeforeRightNode := declaredSymbolsBeforeRightNodes(declaredSymbols, steps)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
 
 			for stepIndex, step := range steps {
 				if step.Relationship.Range == nil || stepIndex+1 >= len(steps) {
 					continue
 				}
 
+				target := PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}.TraversalStep(stepIndex)
+				if hasTraversalDirectionFlip(plan, target) || expansionStepMayFlipForConstraintBalance(stepIndex, step, declaredEndpoints[stepIndex]) {
+					continue
+				}
+
 				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:], declaredBeforeRightNode[stepIndex+1:]); suffixLength > 0 {
 					plan.ExpansionSuffixPushdown = append(plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
-						Target: PatternTarget{
-							QueryPartIndex: queryPartIndex,
-							ClauseIndex:    clauseIndex,
-							PatternIndex:   patternIndex,
-						}.TraversalStep(stepIndex),
+						Target:          target,
 						SuffixLength:    suffixLength,
 						SuffixStartStep: stepIndex + 1,
 						SuffixEndStep:   stepIndex + suffixLength,
@@ -265,6 +651,35 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 
 		declareWhereSymbols(declaredSymbols, match)
 	}
+}
+
+func expansionStepMayFlipForConstraintBalance(stepIndex int, step sourceTraversalStep, declaredEndpoints declaredStepEndpoints) bool {
+	_, mayFlip := traversalDirectionDecisionForStep(TraversalStepTarget{}, stepIndex, step, declaredEndpoints, false)
+	return mayFlip
+}
+
+func leftEndpointBoundForStep(stepIndex int, step sourceTraversalStep, declaredEndpoints declaredStepEndpoints) bool {
+	leftSymbol := variableSymbol(step.LeftNode.Variable)
+	if leftSymbol == "" {
+		return stepIndex > 0
+	}
+
+	_, leftBound := declaredEndpoints.BeforeLeftNode[leftSymbol]
+	return leftBound
+}
+
+func hasTraversalDirectionFlip(plan *LoweringPlan, target TraversalStepTarget) bool {
+	if plan == nil {
+		return false
+	}
+
+	for _, decision := range plan.TraversalDirection {
+		if decision.Target == target && decision.Flip {
+			return true
+		}
+	}
+
+	return false
 }
 
 type bindingTargetKey struct {

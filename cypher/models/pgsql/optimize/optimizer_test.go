@@ -250,6 +250,252 @@ func TestLoweringPlanReportsExpandIntoForAnonymousContinuationEndpoint(t *testin
 	})
 }
 
+func TestLoweringPlanReportsTraversalDirectionForConstrainedRightEndpoint(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(ca:EnterpriseCA)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Flip:   true,
+		Reason: traversalDirectionReasonRightConstrained,
+	}}, plan.LoweringPlan.TraversalDirection)
+}
+
+func TestLoweringPlanReportsTraversalDirectionForBoundRightEndpoint(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (ca:EnterpriseCA)
+		MATCH p = (n)-[:MemberOf*1..]->(ca)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Flip:   true,
+		Reason: traversalDirectionReasonRightBound,
+	}}, plan.LoweringPlan.TraversalDirection)
+}
+
+func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasBindingPredicate(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(ca:EnterpriseCA)
+		WHERE n.name = 'target'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.TraversalDirection)
+}
+
+func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasRegionPredicate(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		WITH 'target' AS name
+		MATCH p = (n)-[:MemberOf]->(ca:EnterpriseCA)
+		WHERE n.name STARTS WITH name
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.TraversalDirection)
+}
+
+func TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = allShortestPaths((s)-[:MemberOf*1..]->(e))
+		WHERE s.name = 'source' AND e.name = 'target'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathStrategy})
+	require.Equal(t, []ShortestPathStrategyDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Strategy: ShortestPathStrategyBidirectional,
+		Reason:   shortestPathStrategyReasonEndpointPredicates,
+	}}, plan.LoweringPlan.ShortestPathStrategy)
+	require.Equal(t, []ShortestPathFilterDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode:   ShortestPathFilterEndpointPair,
+		Reason: shortestPathFilterReasonEndpointPairPredicates,
+	}}, plan.LoweringPlan.ShortestPathFilter)
+}
+
+func TestLoweringPlanReportsShortestPathStrategyForBoundEndpointPairs(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a:Group)
+		MATCH (b:EnterpriseCA)
+		MATCH p = shortestPath((a)-[:MemberOf*1..]->(b))
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathStrategy})
+	require.Equal(t, []ShortestPathStrategyDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    2,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Strategy: ShortestPathStrategyBidirectional,
+		Reason:   shortestPathStrategyReasonBoundEndpointPairs,
+	}}, plan.LoweringPlan.ShortestPathStrategy)
+}
+
+func TestLoweringPlanSkipsShortestPathStrategyForLabelOnlyEndpoints(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = allShortestPaths((s:Group)-[:MemberOf*1..]->(e:EnterpriseCA))
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.ShortestPathStrategy)
+}
+
+func TestLoweringPlanReportsShortestPathTerminalFilter(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s:Group {name: 'source'})
+		MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
+		WHERE e.name = 'target'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathFilter})
+	require.Equal(t, []ShortestPathFilterDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode:   ShortestPathFilterTerminal,
+		Reason: shortestPathFilterReasonTerminalPredicate,
+	}}, plan.LoweringPlan.ShortestPathFilter)
+}
+
+func TestLoweringPlanReportsTraversalLimitPushdown(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n:Group)-[:MemberOf]->(m:Group)
+		RETURN p
+		LIMIT 1
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringLimitPushdown})
+	require.Equal(t, []LimitPushdownDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode: LimitPushdownTraversalCTE,
+	}}, plan.LoweringPlan.LimitPushdown)
+}
+
+func TestLoweringPlanReportsShortestPathLimitPushdown(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
+		WHERE s.name = 'source' AND e.name = 'target'
+		RETURN p
+		LIMIT 1
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringLimitPushdown})
+	require.Contains(t, plan.LoweringPlan.LimitPushdown, LimitPushdownDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode: LimitPushdownShortestPathHarness,
+	})
+}
+
+func TestLoweringPlanSkipsAllShortestPathLimitPushdown(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = allShortestPaths((s)-[:MemberOf*1..]->(e))
+		WHERE s.name = 'source' AND e.name = 'target'
+		RETURN p
+		LIMIT 1
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.LimitPushdown)
+}
+
 func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 

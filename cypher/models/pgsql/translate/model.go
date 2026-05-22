@@ -145,6 +145,46 @@ func (s *TraversalStep) usesBoundEndpointPairs() bool {
 	return s.LeftNodeBound && s.RightNodeBound && s.hasPreviousFrameBinding()
 }
 
+func (s *TraversalStep) usesBoundTerminalIDs() bool {
+	return s.RightNodeBound && s.hasPreviousFrameBinding()
+}
+
+func canMaterializeTerminalFilterForStep(traversalStep *TraversalStep, expansionModel *Expansion) bool {
+	if traversalStep == nil || expansionModel == nil || traversalStep.RightNode == nil ||
+		expansionModel.TerminalNodeConstraints == nil ||
+		traversalStep.usesBoundEndpointPairs() ||
+		traversalStep.usesBoundTerminalIDs() {
+		return false
+	}
+
+	// Terminal filters are only useful as standalone SQL when they depend solely
+	// on the terminal node; external references must stay in the main query.
+	_, externalConstraints := partitionConstraintByLocality(
+		expansionModel.TerminalNodeConstraints,
+		pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier),
+	)
+
+	return externalConstraints == nil
+}
+
+func canMaterializeEndpointPairFilterForStep(traversalStep *TraversalStep, expansionModel *Expansion) bool {
+	// Pair filters enumerate the exact root/terminal combinations the
+	// bidirectional harness must resolve. Kind-only endpoint predicates are not
+	// enough because they do not constrain the search columns used by the harness.
+	if traversalStep == nil || expansionModel == nil ||
+		traversalStep.LeftNode == nil ||
+		traversalStep.RightNode == nil ||
+		traversalStep.usesBoundEndpointPairs() ||
+		expansionModel.PrimerNodeConstraints == nil ||
+		expansionModel.TerminalNodeConstraints == nil ||
+		!hasLocalEndpointConstraint(expansionModel.PrimerNodeConstraints, traversalStep.LeftNode.Identifier) ||
+		!hasLocalEndpointConstraint(expansionModel.TerminalNodeConstraints, traversalStep.RightNode.Identifier) {
+		return false
+	}
+
+	return true
+}
+
 func (s *TraversalStep) endpointSelectivity(scope *Scope, expression pgsql.Expression, bound bool) (int, error) {
 	selectivity, err := MeasureSelectivity(scope, expression)
 	if err != nil {

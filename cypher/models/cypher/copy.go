@@ -53,6 +53,9 @@ func Copy[T any](value T, extensions ...CopyExtension[T]) T {
 	case *Quantifier:
 		return any(typedValue.copy()).(T)
 
+	case *RangeQuantifier:
+		return any(typedValue.copy()).(T)
+
 	case *Where:
 		return any(typedValue.copy()).(T)
 

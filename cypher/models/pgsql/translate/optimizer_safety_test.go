@@ -53,16 +53,24 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 func optimizerSafetySQL(t *testing.T, cypherQuery string) string {
 	t.Helper()
 
+	translation := optimizerSafetyTranslation(t, cypherQuery)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	return strings.Join(strings.Fields(formattedQuery), " ")
+}
+
+func optimizerSafetyTranslation(t *testing.T, cypherQuery string) Result {
+	t.Helper()
+
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	require.NoError(t, err)
 
 	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
 	require.NoError(t, err)
 
-	formattedQuery, err := Translated(translation)
-	require.NoError(t, err)
-
-	return strings.Join(strings.Fields(formattedQuery), " ")
+	return translation
 }
 
 func requireOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
@@ -95,6 +103,14 @@ func requirePlannedOptimizationLowering(t *testing.T, summary OptimizationSummar
 	}
 
 	require.Failf(t, "missing planned optimization lowering", "expected planned lowering %q in %#v", name, summary.PlannedLowerings)
+}
+
+func requireNoPlannedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
+	t.Helper()
+
+	for _, lowering := range summary.PlannedLowerings {
+		require.NotEqualf(t, name, lowering.Name, "unexpected planned lowering %q in %#v", name, summary.PlannedLowerings)
+	}
 }
 
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
@@ -253,6 +269,122 @@ RETURN p
 	require.Contains(t, normalizedQuery, "n1.id = e1.start_id")
 	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [4]::int2[])")
 	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
+}
+
+func TestOptimizerSafetySuffixPredicatePlacementStaysInsideTerminalExists(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := optimizerSafetySQL(t, `
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+WHERE ca.name = 'target'
+RETURN p
+`)
+
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"exists (select 1 from edge e1 join node n2",
+		"properties -> 'name'",
+		"where n1.id = e1.start_id",
+	)
+}
+
+func TestOptimizerSafetyContinuationRelationshipsExcludePriorPathRelationships(t *testing.T) {
+	t.Parallel()
+
+	expandedPrefixQuery := optimizerSafetySQL(t, `
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]-(ca:EnterpriseCA)
+RETURN p
+`)
+
+	require.Contains(t, expandedPrefixQuery, "e1.id != all")
+	require.Contains(t, expandedPrefixQuery, "ep0")
+
+	fixedPrefixQuery := optimizerSafetySQL(t, `
+MATCH p = (n:Group)-[:MemberOf]->(m)-[:Enroll]->(ca:EnterpriseCA)
+RETURN p
+`)
+
+	require.Contains(t, fixedPrefixQuery, "e1.id != s0.e0")
+}
+
+func TestOptimizerSafetyDirectionBalancedExpansionDoesNotPlanStaleSuffixPushdown(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (n)-[:MemberOf*1..]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(d:Domain)
+RETURN p
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireNoPlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+	requireNoOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
+}
+
+func TestOptimizerSafetyShortestPathStrategyUsesPlannedBidirectionalSearch(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = allShortestPaths((s)-[:MemberOf*1..]->(e))
+WHERE s.name = 'source' AND e.name = 'target'
+RETURN p
+	`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "bidirectional_asp_harness")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathStrategySelection")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
+	requireOptimizationLowering(t, translation.Optimization, "ShortestPathStrategySelection")
+	requireOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
+}
+
+func TestOptimizerSafetyShortestPathTerminalFilterUsesPlannedMaterialization(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (s:Group {name: 'source'})
+MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
+WHERE e.name = 'target'
+RETURN p
+	`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
+	require.Contains(t, normalizedQuery, "traversal_terminal_filter")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
+	requireOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
+}
+
+func TestOptimizerSafetyLimitPushdownUsesPlannedTraversalFrame(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (n:Group)-[:MemberOf]->(m:Group)
+RETURN p
+LIMIT 1
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "LimitPushdown")
+	requireOptimizationLowering(t, translation.Optimization, "LimitPushdown")
+}
+
+func TestOptimizerSafetyShortestPathLimitPushdownUsesPlannedHarness(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
+WHERE s.name = 'source' AND e.name = 'target'
+RETURN p
+LIMIT 1
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "LimitPushdown")
+	requireOptimizationLowering(t, translation.Optimization, "LimitPushdown")
 }
 
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {

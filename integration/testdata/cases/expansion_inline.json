@@ -251,6 +251,76 @@
         "edges": [{"start_id": "src", "end_id": "tgt", "kind": "EdgeKind1"}]
       },
       "assert": {"path_node_ids": [["src", "tgt"]], "path_edge_kinds": [["EdgeKind1"]]}
+    },
+    {
+      "name": "expansion followed by fixed suffix cannot reuse an expansion relationship",
+      "cypher": "match p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind1]-(dst:NodeKind1) where src.name = 'reuse-source' and dst.name = 'reuse-source' return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "reuse-source"}},
+          {"id": "mid", "kinds": ["NodeKind1"], "properties": {"name": "reuse-mid"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": "empty"
+    },
+    {
+      "name": "anonymous continuation suffix reaches a bound endpoint after expansion",
+      "cypher": "match (dst:NodeKind2 {name: 'anonymous-bound-dst'}) match p = (src:NodeKind1)-[:EdgeKind1*1..]->(:NodeKind1)-[:EdgeKind2]->(dst) where src.name = 'anonymous-bound-src' return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "anonymous-bound-src"}},
+          {"id": "root", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"name": "anonymous-bound-dst"}},
+          {"id": "decoy", "kinds": ["NodeKind2"], "properties": {"name": "anonymous-decoy-dst"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "root", "kind": "EdgeKind1"},
+          {"start_id": "root", "end_id": "dst", "kind": "EdgeKind2"},
+          {"start_id": "root", "end_id": "decoy", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"row_count": 1, "path_node_ids": [["src", "root", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
+    },
+    {
+      "name": "directionless fixed suffix after expansion preserves path semantics",
+      "cypher": "match p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]-(dst:NodeKind2) where src.name = 'directionless-suffix-src' return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "directionless-suffix-src"}},
+          {"id": "mid", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"]},
+          {"id": "dead", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "src", "end_id": "dead", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"path_node_ids": [["src", "mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
+    },
+    {
+      "name": "inbound expansion suffix preserves path functions",
+      "cypher": "match p = (ca:EnterpriseCA)<-[:PublishedTo*1..]-(ct)<-[:Enroll]-(m:Group) return size(relationships(p)), nodes(p), relationships(p)",
+      "fixture": {
+        "nodes": [
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "template", "kinds": ["CertTemplate"]},
+          {"id": "member", "kinds": ["Group"]}
+        ],
+        "edges": [
+          {"start_id": "template", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "member", "end_id": "template", "kind": "Enroll"}
+        ]
+      },
+      "assert": {
+        "scalar_values": [2],
+        "node_list_ids": [["ca", "template", "member"]],
+        "relationship_list_kinds": [["PublishedTo", "Enroll"]]
+      }
     }
   ]
 }

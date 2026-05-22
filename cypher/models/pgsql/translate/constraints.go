@@ -439,12 +439,12 @@ type PatternConstraints struct {
 //
 // In cases that match this heuristic, it's beneficial to begin the traversal with the most tightly constrained set
 // of nodes. To accomplish this we flip the order of the traversal step.
-func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, traversalStep *TraversalStep) error {
+func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, traversalStep *TraversalStep) (bool, error) {
 	// If the left node is already materialized from a previous step, it is the anchor
 	// for this expansion. Flipping the traversal direction would detach it from the
 	// previous frame and produce invalid SQL (missing FROM-clause entry).
 	if traversalStep.LeftNodeBound {
-		return nil
+		return false, nil
 	}
 
 	if traversalStep.RightNodeBound {
@@ -459,21 +459,22 @@ func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, trav
 			s.FlipNodes()
 		}
 
-		return nil
+		return true, nil
 	}
 
 	if leftNodeSelectivity, err := MeasureSelectivity(scope, s.LeftNode.Expression); err != nil {
-		return err
+		return false, err
 	} else if rightNodeSelectivity, err := MeasureSelectivity(scope, s.RightNode.Expression); err != nil {
-		return err
+		return false, err
 	} else if rightNodeSelectivity-leftNodeSelectivity >= selectivityFlipThreshold {
 		// (a)-[*..]->(b:Constraint)
 		// (a)<-[*..]-(b:Constraint)
 		traversalStep.FlipNodes()
 		s.FlipNodes()
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 func (s *PatternConstraints) FlipNodes() {

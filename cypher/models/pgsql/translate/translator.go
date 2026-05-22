@@ -30,11 +30,15 @@ type Translator struct {
 	scope          *Scope
 	unwindTargets  map[*cypher.Variable]struct{}
 
-	patternTargets             map[*cypher.PatternPart]optimize.PatternTarget
-	projectionPruningDecisions map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
-	latePathDecisions          map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
-	suffixPushdownDecisions    map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
-	expandIntoDecisions        map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
+	patternTargets                map[*cypher.PatternPart]optimize.PatternTarget
+	projectionPruningDecisions    map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
+	latePathDecisions             map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
+	suffixPushdownDecisions       map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	expandIntoDecisions           map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
+	traversalDirectionDecisions   map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
+	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
+	shortestPathFilterDecisions   map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
+	limitPushdownDecisions        map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
 }
 
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
@@ -72,6 +76,10 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.latePathDecisions = map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision{}
 	s.suffixPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision{}
 	s.expandIntoDecisions = map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision{}
+	s.traversalDirectionDecisions = map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision{}
+	s.shortestPathStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision{}
+	s.shortestPathFilterDecisions = map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision{}
+	s.limitPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -88,6 +96,22 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	for _, decision := range plan.LoweringPlan.ExpandInto {
 		s.expandIntoDecisions[decision.Target] = decision
 	}
+
+	for _, decision := range plan.LoweringPlan.TraversalDirection {
+		s.traversalDirectionDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.ShortestPathStrategy {
+		s.shortestPathStrategyDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.ShortestPathFilter {
+		s.shortestPathFilterDecisions[decision.Target] = append(s.shortestPathFilterDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.LimitPushdown {
+		s.limitPushdownDecisions[decision.Target] = append(s.limitPushdownDecisions[decision.Target], decision)
+	}
 }
 
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
@@ -101,6 +125,13 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.Quantifier, *cypher.IDInCollection:
+
+	case *cypher.RangeQuantifier:
+		if typedExpression.Value != string(pgsql.WildcardIdentifier) {
+			s.SetErrorf("unsupported range quantifier expression: %s", typedExpression.Value)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.WildcardIdentifier)
+		}
 
 	case *cypher.Unwind:
 		if typedExpression.Variable != nil {

@@ -25,6 +25,14 @@ func (s *Translator) translateWith() error {
 		for _, projectionItem := range currentPart.projections.Items {
 			if err := RewriteFrameBindings(s.scope, projectionItem.SelectItem); err != nil {
 				return err
+			} else if _, isIdentifier := projectionItem.SelectItem.(pgsql.Identifier); isIdentifier {
+				continue
+			} else if resolvedSelectItem, err := resolvePathCompositeFieldReferences(s.scope, projectionItem.SelectItem); err != nil {
+				return err
+			} else if selectItem, isSelectItem := resolvedSelectItem.(pgsql.SelectItem); !isSelectItem {
+				return fmt.Errorf("resolved with projection item is not selectable: %T", resolvedSelectItem)
+			} else {
+				projectionItem.SelectItem = selectItem
 			}
 		}
 

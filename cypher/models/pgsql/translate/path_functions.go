@@ -144,6 +144,24 @@ func resolvePathCompositeFieldReferences(scope *Scope, expression pgsql.Expressi
 	case nil:
 		return nil, nil
 
+	case pgsql.Identifier:
+		if binding, bound := scope.Lookup(typedExpression); !bound {
+			if aliasedBinding, aliasBound := scope.AliasedLookup(typedExpression); aliasBound {
+				binding = aliasedBinding
+				bound = true
+			}
+
+			if !bound || binding.DataType != pgsql.PathComposite {
+				return expression, nil
+			}
+
+			return expressionForPathComposite(binding, scope)
+		} else if binding.DataType == pgsql.PathComposite {
+			return expressionForPathComposite(binding, scope)
+		}
+
+		return expression, nil
+
 	case pgsql.RowColumnReference:
 		if resolved, rewritten, err := resolvePathCompositeFieldReference(scope, typedExpression); rewritten || err != nil {
 			return resolved, err

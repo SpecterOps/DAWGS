@@ -75,6 +75,7 @@ func limitPushdownTestJoin(nodeAlias, expansionColumn pgsql.Identifier) pgsql.Jo
 func limitPushdownTestPart(harnessFunction pgsql.Identifier) *QueryPart {
 	part := NewQueryPart(1, 0)
 	part.Limit = pgsql.NewLiteral(10, pgsql.Int)
+	part.AllowLimitPushdown(limitPushdownTestSourceFrame)
 	part.Model.AddCTE(pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{Name: limitPushdownTestSourceFrame},
 		Query: pgsql.Query{

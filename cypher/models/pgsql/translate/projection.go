@@ -8,6 +8,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 type BoundProjections struct {
@@ -226,6 +227,55 @@ func expansionPathEdgeArrayExpression(scope *Scope, expansionPath *BoundIdentifi
 	}, nil
 }
 
+func optionalOr(leftOperand, rightOperand pgsql.Expression) pgsql.Expression {
+	if leftOperand == nil {
+		return rightOperand
+	} else if rightOperand == nil {
+		return leftOperand
+	}
+
+	return pgsql.NewBinaryExpression(leftOperand, pgsql.OperatorOr, rightOperand)
+}
+
+func expressionIsNull(expression pgsql.Expression) pgsql.Expression {
+	return pgsql.NewBinaryExpression(expression, pgsql.OperatorIs, pgsql.NullLiteral())
+}
+
+func pathCompositeDependencyNullGuard(scope *Scope, dependency *BoundIdentifier) pgsql.Expression {
+	if dependency == nil {
+		return nil
+	}
+
+	switch dependency.DataType {
+	case pgsql.ExpansionPath:
+		return expressionIsNull(pathBindingReference(scope, dependency))
+
+	case pgsql.EdgeComposite:
+		return expressionIsNull(pathCompositeColumnReference(scope, dependency, pgsql.ColumnID))
+
+	case pgsql.PathEdge:
+		return expressionIsNull(pathEdgeIDReference(scope, dependency))
+
+	case pgsql.NodeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
+		return expressionIsNull(pathCompositeColumnReference(scope, dependency, pgsql.ColumnID))
+
+	default:
+		return nil
+	}
+}
+
+func nullGuardPathCompositeExpression(expression, nullGuard pgsql.Expression) pgsql.Expression {
+	if nullGuard == nil {
+		return expression
+	}
+
+	return pgsql.Case{
+		Conditions: []pgsql.Expression{nullGuard},
+		Then:       []pgsql.Expression{pgsql.NullLiteral()},
+		Else:       expression,
+	}
+}
+
 func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql.Expression, error) {
 	if projected.LastProjection != nil {
 		return pgsql.CompoundIdentifier{projected.LastProjection.Binding.Identifier, projected.Identifier}, nil
@@ -238,12 +288,15 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		directEdgeReferences []pgsql.Expression
 		seenExpansionPath    = false
 		seenPathEdge         = false
+		nullGuard            pgsql.Expression
 	)
 
 	// Path composite components are encoded as dependencies on the bound identifier representing the
 	// path. This is not ideal as it escapes normal translation flow as driven by the structure of the
 	// originating cypher AST.
 	for _, dependency := range projected.Dependencies {
+		nullGuard = optionalOr(nullGuard, pathCompositeDependencyNullGuard(scope, dependency))
+
 		switch dependency.DataType {
 		case pgsql.ExpansionPath:
 			seenExpansionPath = true
@@ -280,7 +333,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 	// order and duplicate nodes, and it also works for rows produced by data-modifying CTEs where
 	// re-reading node/edge tables in the same statement may not see the RETURNING values.
 	if !seenExpansionPath && !seenPathEdge && len(directNodeReferences) > 0 {
-		return pgsql.CompositeValue{
+		return nullGuardPathCompositeExpression(pgsql.CompositeValue{
 			DataType: pgsql.PathComposite,
 			Values: []pgsql.Expression{
 				pgsql.ArrayLiteral{
@@ -292,7 +345,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 					CastType: pgsql.EdgeCompositeArray,
 				},
 			},
-		}, nil
+		}, nullGuard), nil
 	}
 
 	if seenExpansionPath || seenPathEdge {
@@ -305,7 +358,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 			edgeArrayExpression = pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}
 		}
 
-		return pgsql.FunctionCall{
+		return nullGuardPathCompositeExpression(pgsql.FunctionCall{
 			Function: pgsql.FunctionOrderedEdgesToPath,
 			Parameters: []pgsql.Expression{
 				directNodeReferences[0],
@@ -316,9 +369,9 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 				},
 			},
 			CastType: pgsql.PathComposite,
-		}, nil
+		}, nullGuard), nil
 	} else if len(nodeReferences) > 0 {
-		return pgsql.FunctionCall{
+		return nullGuardPathCompositeExpression(pgsql.FunctionCall{
 			Function: pgsql.FunctionNodesToPath,
 			Parameters: []pgsql.Expression{
 				pgsql.Variadic{
@@ -329,7 +382,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 				},
 			},
 			CastType: pgsql.PathComposite,
-		}, nil
+		}, nullGuard), nil
 	}
 
 	return nil, fmt.Errorf("path variable does not contain valid components")
@@ -961,18 +1014,22 @@ func limitPushdownTailSource(currentPart *QueryPart, tailSelect pgsql.Select) (p
 	return sourceFrame, true
 }
 
-func pushDownShortestPathLimit(currentPart *QueryPart, tailSelect pgsql.Select) {
+func pushDownShortestPathLimit(currentPart *QueryPart, tailSelect pgsql.Select) bool {
 	sourceFrame, canPushDown := limitPushdownTailSource(currentPart, tailSelect)
 	if !canPushDown {
-		return
+		return false
 	}
 
 	if sourceCTE := findCTE(currentPart.Model, sourceFrame); sourceCTE != nil &&
+		currentPart.CanPushDownLimitTo(sourceFrame) &&
 		countLimitPushdownShortestPathHarnessCalls(sourceCTE.Query) == 1 {
 		// Multiple harness calls in one source CTE would make one outer LIMIT
 		// ambiguous, so only the single-harness case is rewritten.
 		appendLimitToShortestPathHarness(&sourceCTE.Query, currentPart.Limit)
+		return true
 	}
+
+	return false
 }
 
 func findCTE(query *pgsql.Query, cteName pgsql.Identifier) *pgsql.CommonTableExpression {
@@ -1000,13 +1057,13 @@ func applyLimitToCTE(query *pgsql.Query, cteName pgsql.Identifier, limit pgsql.E
 	return false
 }
 
-func pushDownTraversalLimit(currentPart *QueryPart, tailSelect pgsql.Select) {
+func pushDownTraversalLimit(currentPart *QueryPart, tailSelect pgsql.Select) bool {
 	sourceFrame, canPushDown := limitPushdownTailSource(currentPart, tailSelect)
 	if !canPushDown || !currentPart.CanPushDownLimitTo(sourceFrame) {
-		return
+		return false
 	}
 
-	applyLimitToCTE(currentPart.Model, sourceFrame, currentPart.Limit)
+	return applyLimitToCTE(currentPart.Model, sourceFrame, currentPart.Limit)
 }
 
 func projectionAliasBindings(scope *Scope, projections []*Projection) map[pgsql.Identifier]pgsql.Identifier {
@@ -1093,8 +1150,10 @@ func (s *Translator) buildTailProjection() error {
 	}
 
 	currentPart.Model.Body = singlePartQuerySelect
-	pushDownShortestPathLimit(currentPart, singlePartQuerySelect)
-	pushDownTraversalLimit(currentPart, singlePartQuerySelect)
+	if pushDownShortestPathLimit(currentPart, singlePartQuerySelect) ||
+		pushDownTraversalLimit(currentPart, singlePartQuerySelect) {
+		s.recordLowering(optimize.LoweringLimitPushdown)
+	}
 
 	if currentPart.Skip != nil {
 		currentPart.Model.Offset = currentPart.Skip

@@ -743,6 +743,16 @@ func NewRangeQuantifier(value string) *RangeQuantifier {
 	}
 }
 
+func (s *RangeQuantifier) copy() *RangeQuantifier {
+	if s == nil {
+		return s
+	}
+
+	return &RangeQuantifier{
+		Value: s.Value,
+	}
+}
+
 type KindMatcher struct {
 	Reference Expression
 	Kinds     graph.Kinds

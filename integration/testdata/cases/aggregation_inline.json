@@ -276,6 +276,25 @@
         "edges": []
       },
       "assert": {"scalar_values": [40]}
+    },
+    {
+      "name": "aggregate after optimized expansion groups by terminal node",
+      "cypher": "MATCH p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) WHERE src.name = 'aggregation-expansion-src' WITH dst, count(p) AS path_count RETURN dst.name, path_count",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "aggregation-expansion-src"}},
+          {"id": "mid-a", "kinds": ["NodeKind1"]},
+          {"id": "mid-b", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"name": "aggregation-expansion-dst"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid-a", "kind": "EdgeKind1"},
+          {"start_id": "src", "end_id": "mid-b", "kind": "EdgeKind1"},
+          {"start_id": "mid-a", "end_id": "dst", "kind": "EdgeKind2"},
+          {"start_id": "mid-b", "end_id": "dst", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"row_values": [["aggregation-expansion-dst", 2]]}
     }
   ]
 }

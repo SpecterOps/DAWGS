@@ -6,6 +6,10 @@ const (
 	LoweringProjectionPruning       = "ProjectionPruning"
 	LoweringLatePathMaterialization = "LatePathMaterialization"
 	LoweringExpandIntoDetection     = "ExpandIntoDetection"
+	LoweringTraversalDirection      = "TraversalDirectionSelection"
+	LoweringShortestPathStrategy    = "ShortestPathStrategySelection"
+	LoweringShortestPathFilter      = "ShortestPathFilterMaterialization"
+	LoweringLimitPushdown           = "LimitPushdown"
 	LoweringExpansionSuffixPushdown = "ExpansionSuffixPushdown"
 	LoweringPredicatePlacement      = "PredicatePlacement"
 )
@@ -63,6 +67,50 @@ type ExpandIntoDecision struct {
 	Target TraversalStepTarget `json:"target"`
 }
 
+type TraversalDirectionDecision struct {
+	Target TraversalStepTarget `json:"target"`
+	Flip   bool                `json:"flip,omitempty"`
+	Reason string              `json:"reason,omitempty"`
+}
+
+type ShortestPathStrategy string
+
+const (
+	ShortestPathStrategyBidirectional  ShortestPathStrategy = "bidirectional"
+	ShortestPathStrategyUnidirectional ShortestPathStrategy = "unidirectional"
+)
+
+type ShortestPathStrategyDecision struct {
+	Target   TraversalStepTarget  `json:"target"`
+	Strategy ShortestPathStrategy `json:"strategy"`
+	Reason   string               `json:"reason,omitempty"`
+}
+
+type ShortestPathFilterMode string
+
+const (
+	ShortestPathFilterTerminal     ShortestPathFilterMode = "terminal"
+	ShortestPathFilterEndpointPair ShortestPathFilterMode = "endpoint_pair"
+)
+
+type ShortestPathFilterDecision struct {
+	Target TraversalStepTarget    `json:"target"`
+	Mode   ShortestPathFilterMode `json:"mode"`
+	Reason string                 `json:"reason,omitempty"`
+}
+
+type LimitPushdownMode string
+
+const (
+	LimitPushdownTraversalCTE        LimitPushdownMode = "traversal_cte"
+	LimitPushdownShortestPathHarness LimitPushdownMode = "shortest_path_harness"
+)
+
+type LimitPushdownDecision struct {
+	Target TraversalStepTarget `json:"target"`
+	Mode   LimitPushdownMode   `json:"mode"`
+}
+
 type ExpansionSuffixPushdownDecision struct {
 	Target               TraversalStepTarget   `json:"target"`
 	SuffixLength         int                   `json:"suffix_length"`
@@ -81,6 +129,10 @@ type LoweringPlan struct {
 	ProjectionPruning       []ProjectionPruningDecision       `json:"projection_pruning,omitempty"`
 	LatePathMaterialization []LatePathMaterializationDecision `json:"late_path_materialization,omitempty"`
 	ExpandInto              []ExpandIntoDecision              `json:"expand_into,omitempty"`
+	TraversalDirection      []TraversalDirectionDecision      `json:"traversal_direction,omitempty"`
+	ShortestPathStrategy    []ShortestPathStrategyDecision    `json:"shortest_path_strategy,omitempty"`
+	ShortestPathFilter      []ShortestPathFilterDecision      `json:"shortest_path_filter,omitempty"`
+	LimitPushdown           []LimitPushdownDecision           `json:"limit_pushdown,omitempty"`
 	ExpansionSuffixPushdown []ExpansionSuffixPushdownDecision `json:"expansion_suffix_pushdown,omitempty"`
 	PredicatePlacement      []PredicatePlacementDecision      `json:"predicate_placement,omitempty"`
 }
@@ -89,6 +141,10 @@ func (s LoweringPlan) Empty() bool {
 	return len(s.ProjectionPruning) == 0 &&
 		len(s.LatePathMaterialization) == 0 &&
 		len(s.ExpandInto) == 0 &&
+		len(s.TraversalDirection) == 0 &&
+		len(s.ShortestPathStrategy) == 0 &&
+		len(s.ShortestPathFilter) == 0 &&
+		len(s.LimitPushdown) == 0 &&
 		len(s.ExpansionSuffixPushdown) == 0 &&
 		len(s.PredicatePlacement) == 0
 }
@@ -104,6 +160,10 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringProjectionPruning, len(s.ProjectionPruning) > 0)
 	add(LoweringLatePathMaterialization, len(s.LatePathMaterialization) > 0)
 	add(LoweringExpandIntoDetection, len(s.ExpandInto) > 0)
+	add(LoweringTraversalDirection, len(s.TraversalDirection) > 0)
+	add(LoweringShortestPathStrategy, len(s.ShortestPathStrategy) > 0)
+	add(LoweringShortestPathFilter, len(s.ShortestPathFilter) > 0)
+	add(LoweringLimitPushdown, len(s.LimitPushdown) > 0)
 	add(LoweringExpansionSuffixPushdown, len(s.ExpansionSuffixPushdown) > 0)
 	add(LoweringPredicatePlacement, len(s.PredicatePlacement) > 0)
 

@@ -129,6 +129,40 @@
         "edges": [{"start_id": "a", "end_id": "b", "kind": "EdgeKind1"}]
       },
       "assert": {"row_count": 1, "node_ids": ["a", "b"]}
+    },
+    {
+      "name": "with barrier keeps optimized expansion path semantics",
+      "cypher": "match p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) where src.name = 'with-expansion-src' with p, size(relationships(p)) as hops where hops = 2 return p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "with-expansion-src"}},
+          {"id": "mid", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"]},
+          {"id": "dead", "kinds": ["NodeKind1"]}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"},
+          {"start_id": "src", "end_id": "dead", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"path_node_ids": [["src", "mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
+    },
+    {
+      "name": "optional match barrier preserves anchor row around optimized expansion",
+      "cypher": "match (src:NodeKind1) where src.name = 'optional-expansion-src' optional match p = (src)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) where dst.name = 'missing-dst' return count(p)",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "optional-expansion-src"}},
+          {"id": "mid", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"name": "present-dst"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"exact_int": 0}
     }
   ]
 }

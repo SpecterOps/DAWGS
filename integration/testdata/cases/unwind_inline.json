@@ -154,6 +154,24 @@
         "edges": []
       },
       "assert": {"scalar_values": ["alpha", "beta", "tail"]}
+    },
+    {
+      "name": "unwind barrier feeds an optimized expansion predicate",
+      "cypher": "WITH ['unwind-expansion-dst'] AS names UNWIND names AS name MATCH p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) WHERE src.name = 'unwind-expansion-src' AND dst.name = name RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "unwind-expansion-src"}},
+          {"id": "mid", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"name": "unwind-expansion-dst"}},
+          {"id": "decoy", "kinds": ["NodeKind2"], "properties": {"name": "unwind-expansion-decoy"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"path_node_ids": [["src", "mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
     }
   ]
 }

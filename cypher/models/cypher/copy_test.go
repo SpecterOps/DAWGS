@@ -63,6 +63,7 @@ func TestCopy(t *testing.T) {
 	validateCopy(t, &model2.IDInCollection{})
 	validateCopy(t, &model2.FilterExpression{})
 	validateCopy(t, &model2.Quantifier{})
+	validateCopy(t, &model2.RangeQuantifier{Value: "*"})
 
 	validateCopy(t, &model2.MultiPartQueryPart{})
 	validateCopy(t, &model2.Remove{})

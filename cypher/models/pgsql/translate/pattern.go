@@ -84,7 +84,6 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	} else {
 		if traversalStepQuery, err := s.buildTraversalPatternStep(traversalStep.Frame, traversalStep); err != nil {
@@ -96,7 +95,6 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	}
 
@@ -116,7 +114,6 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	} else {
 		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStepContext, expansion); err != nil {
@@ -128,7 +125,6 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	}
 
@@ -233,6 +229,8 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 		} else if err := s.buildTraversalPattern(traversalStep, isRootStep); err != nil {
 			return err
 		}
+
+		s.allowLimitPushdownForStep(part, idx, traversalStep)
 	}
 
 	return nil

@@ -45,6 +45,142 @@
         "contains_node_with_props": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"},
         "contains_edge": {"start": "template", "end": "ca", "kind": "PublishedTo"}
       }
+    },
+    {
+      "name": "ADCS template predicate accepts both OR branches and rejects false alternatives",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'optimizer-or-source' MATCH p = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "optimizer-or-source"}},
+          {"id": "mid-v1", "kinds": ["Group"]},
+          {"id": "mid-sig", "kinds": ["Group"]},
+          {"id": "mid-bad", "kinds": ["Group"]},
+          {"id": "template-v1", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 2}},
+          {"id": "template-sig", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+          {"id": "template-bad", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 1}},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "domain", "kinds": ["Domain"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "mid-v1", "kind": "MemberOf"},
+          {"start_id": "mid-v1", "end_id": "template-v1", "kind": "GenericAll"},
+          {"start_id": "n", "end_id": "mid-sig", "kind": "MemberOf"},
+          {"start_id": "mid-sig", "end_id": "template-sig", "kind": "Enroll"},
+          {"start_id": "n", "end_id": "mid-bad", "kind": "MemberOf"},
+          {"start_id": "mid-bad", "end_id": "template-bad", "kind": "AllExtendedRights"},
+          {"start_id": "template-v1", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-sig", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-bad", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {
+        "row_count": 2,
+        "path_node_ids": [
+          ["n", "mid-v1", "template-v1", "ca", "root", "domain"],
+          ["n", "mid-sig", "template-sig", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "Enroll", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ]
+      }
+    },
+    {
+      "name": "ADCS fanout returns every p1 and p2 path pair without endpoint collapse",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'optimizer-fanout-source' MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN p1, p2",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "optimizer-fanout-source"}},
+          {"id": "p1-a", "kinds": ["Group"]},
+          {"id": "p1-b", "kinds": ["Group"]},
+          {"id": "p2-a", "kinds": ["Group"]},
+          {"id": "p2-b", "kinds": ["Group"]},
+          {"id": "template-a", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+          {"id": "template-b", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "store", "kinds": ["NTAuthStore"]},
+          {"id": "domain", "kinds": ["Domain"]},
+          {"id": "root", "kinds": ["RootCA"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
+          {"start_id": "p1-a", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "n", "end_id": "p1-b", "kind": "MemberOf"},
+          {"start_id": "p1-b", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+          {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+          {"start_id": "n", "end_id": "p2-a", "kind": "MemberOf"},
+          {"start_id": "p2-a", "end_id": "template-a", "kind": "GenericAll"},
+          {"start_id": "n", "end_id": "p2-b", "kind": "MemberOf"},
+          {"start_id": "p2-b", "end_id": "template-b", "kind": "AllExtendedRights"},
+          {"start_id": "template-a", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-b", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {
+        "row_count": 4,
+        "path_node_ids": [
+          ["n", "p1-a", "ca", "store", "domain"],
+          ["n", "p1-a", "ca", "store", "domain"],
+          ["n", "p1-b", "ca", "store", "domain"],
+          ["n", "p1-b", "ca", "store", "domain"],
+          ["n", "p2-a", "template-a", "ca", "root", "domain"],
+          ["n", "p2-a", "template-a", "ca", "root", "domain"],
+          ["n", "p2-b", "template-b", "ca", "root", "domain"],
+          ["n", "p2-b", "template-b", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "AllExtendedRights", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "AllExtendedRights", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ]
+      }
+    },
+    {
+      "name": "ADCS fanout endpoint projection preserves row multiplicity",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'optimizer-endpoint-fanout-source' MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN count(*) AS rows, count(distinct id(ca)) AS ca_count, count(distinct id(d)) AS domain_count, count(distinct id(ct)) AS template_count",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "optimizer-endpoint-fanout-source"}},
+          {"id": "p1-a", "kinds": ["Group"]},
+          {"id": "p1-b", "kinds": ["Group"]},
+          {"id": "p2-a", "kinds": ["Group"]},
+          {"id": "p2-b", "kinds": ["Group"]},
+          {"id": "template-a", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+          {"id": "template-b", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "store", "kinds": ["NTAuthStore"]},
+          {"id": "domain", "kinds": ["Domain"]},
+          {"id": "root", "kinds": ["RootCA"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
+          {"start_id": "p1-a", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "n", "end_id": "p1-b", "kind": "MemberOf"},
+          {"start_id": "p1-b", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+          {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+          {"start_id": "n", "end_id": "p2-a", "kind": "MemberOf"},
+          {"start_id": "p2-a", "end_id": "template-a", "kind": "GenericAll"},
+          {"start_id": "n", "end_id": "p2-b", "kind": "MemberOf"},
+          {"start_id": "p2-b", "end_id": "template-b", "kind": "AllExtendedRights"},
+          {"start_id": "template-a", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-b", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {"row_values": [[4, 1, 1, 2]]}
     }
   ]
 }
