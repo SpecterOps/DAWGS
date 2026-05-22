@@ -4,7 +4,7 @@ This plan tracks optimization and rewrite work identified by running the shared 
 
 ## Phase 1: Baseline And Tooling
 
-Status: in progress
+Status: completed
 
 - Keep a reproducible plan-capture workflow.
   - Capture PostgreSQL translated SQL, PostgreSQL `EXPLAIN`, Neo4j logical plan operator trees, and optimizer planned/applied lowerings.
@@ -17,15 +17,17 @@ Status: in progress
 
 ## Phase 2: Quick Wins
 
-Status: pending
+Status: completed
 
 - Add count-store fast paths for simple count queries:
   - `MATCH (n) RETURN count(n)`
   - `MATCH ()-[r]->() RETURN count(r)`
   - Typed variants where kind filters map cleanly.
+  - Implemented as `CountStoreFastPath` lowering for exact node and directed-edge count shapes.
 - Audit the planned/applied `PredicatePlacement` gap.
   - Distinguish missing translator consumption from intentional skipped placements.
   - Add explicit skipped-placement reasons when a planned lowering is not applied.
+  - Plan-corpus summaries now report skipped lowerings and skipped-lowering reasons.
 
 ## Phase 3: Path Materialization
 

@@ -292,6 +292,7 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 	record.PGOperators = postgresOperators(plan)
 	record.PlannedLowerings = loweringNames(translation.Optimization.PlannedLowerings)
 	record.AppliedLowerings = loweringNames(translation.Optimization.Lowerings)
+	record.SkippedLowerings = append([]translate.SkippedLowering(nil), translation.Optimization.SkippedLowerings...)
 	record.Optimization = &translation.Optimization
 }
 

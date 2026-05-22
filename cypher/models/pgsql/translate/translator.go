@@ -599,7 +599,14 @@ type OptimizationSummary struct {
 	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
 	PlannedLowerings     []optimize.LoweringDecision    `json:"planned_lowerings,omitempty"`
 	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
+	SkippedLowerings     []SkippedLowering              `json:"skipped_lowerings,omitempty"`
 	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
+}
+
+type SkippedLowering struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+	Count  int    `json:"count,omitempty"`
 }
 
 func (s *Translator) recordLowering(name string) {
@@ -610,6 +617,61 @@ func (s *Translator) recordLowering(name string) {
 	}
 
 	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
+}
+
+func (s *Translator) recordSkippedLowerings() {
+	if s.translation.Optimization.LoweringPlan == nil {
+		return
+	}
+
+	applied := map[string]struct{}{}
+	for _, lowering := range s.translation.Optimization.Lowerings {
+		applied[lowering.Name] = struct{}{}
+	}
+
+	for _, planned := range plannedLoweringCounts(*s.translation.Optimization.LoweringPlan) {
+		if planned.Count == 0 {
+			continue
+		}
+
+		if _, wasApplied := applied[planned.Name]; wasApplied {
+			continue
+		}
+
+		s.translation.Optimization.SkippedLowerings = append(s.translation.Optimization.SkippedLowerings, SkippedLowering{
+			Name:   planned.Name,
+			Reason: skippedLoweringReason(planned.Name, applied),
+			Count:  planned.Count,
+		})
+	}
+}
+
+func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
+	return []SkippedLowering{
+		{Name: optimize.LoweringProjectionPruning, Count: len(plan.ProjectionPruning)},
+		{Name: optimize.LoweringLatePathMaterialization, Count: len(plan.LatePathMaterialization)},
+		{Name: optimize.LoweringExpandIntoDetection, Count: len(plan.ExpandInto)},
+		{Name: optimize.LoweringTraversalDirection, Count: len(plan.TraversalDirection)},
+		{Name: optimize.LoweringShortestPathStrategy, Count: len(plan.ShortestPathStrategy)},
+		{Name: optimize.LoweringShortestPathFilter, Count: len(plan.ShortestPathFilter)},
+		{Name: optimize.LoweringLimitPushdown, Count: len(plan.LimitPushdown)},
+		{Name: optimize.LoweringExpansionSuffixPushdown, Count: len(plan.ExpansionSuffixPushdown)},
+		{Name: optimize.LoweringPredicatePlacement, Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate)},
+		{Name: optimize.LoweringCountStoreFastPath, Count: len(plan.CountStoreFastPath)},
+	}
+}
+
+func skippedLoweringReason(name string, applied map[string]struct{}) string {
+	if _, countFastPathApplied := applied[optimize.LoweringCountStoreFastPath]; countFastPathApplied && name != optimize.LoweringCountStoreFastPath {
+		return "superseded by CountStoreFastPath"
+	}
+
+	switch name {
+	case optimize.LoweringPredicatePlacement:
+		return "planned predicate placements were not consumed by this translation shape"
+	default:
+		return "planned lowering did not change the emitted SQL"
+	}
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
@@ -628,10 +690,18 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 		translator.translation.Optimization.PlannedLowerings = loweringPlan.Decisions()
 	}
 
+	if translated, err := translator.translateCountStoreFastPath(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
+		return Result{}, err
+	} else if translated {
+		translator.recordSkippedLowerings()
+		return translator.translation, nil
+	}
+
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
 		return Result{}, err
 	}
 
+	translator.recordSkippedLowerings()
 	return translator.translation, nil
 }
 

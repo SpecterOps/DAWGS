@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,6 +27,11 @@ func TestBuildSummaryRanksPostgresPlansAndCountsSignals(t *testing.T) {
 		PGOperators:      []string{"Recursive Union", "Function Scan on unnest _path"},
 		PlannedLowerings: []string{"LatePathMaterialization"},
 		AppliedLowerings: []string{"LatePathMaterialization"},
+		SkippedLowerings: []translate.SkippedLowering{{
+			Name:   "PredicatePlacement",
+			Reason: "planned predicate placements were not consumed by this translation shape",
+			Count:  2,
+		}},
 	}, {
 		Driver:         "neo4j",
 		Source:         "cases/a.json",
@@ -58,6 +64,8 @@ func TestBuildSummaryRanksPostgresPlansAndCountsSignals(t *testing.T) {
 	require.Contains(t, summary.PostgresOperators, Count{Name: "Seq Scan", Count: 1})
 	require.Contains(t, summary.Neo4jOperators, Count{Name: "ProduceResults@neo4j", Count: 1})
 	require.Contains(t, summary.PlannedLowerings, Count{Name: "LatePathMaterialization", Count: 1})
+	require.Contains(t, summary.SkippedLowerings, Count{Name: "PredicatePlacement", Count: 1})
+	require.Contains(t, summary.SkippedReasons, Count{Name: "PredicatePlacement: planned predicate placements were not consumed by this translation shape", Count: 1})
 	require.Contains(t, summary.Errors, PlanError{
 		Driver: "pg",
 		Source: "cases/error.json",

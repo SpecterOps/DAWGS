@@ -1,6 +1,8 @@
 package optimize
 
 import (
+	"strings"
+
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/graph"
 )
@@ -53,6 +55,7 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 
 	appendPredicatePlacementDecisions(&plan, query, predicateAttachments)
 	attachPredicatePlacementsToSuffixPushdowns(&plan)
+	appendCountStoreFastPathDecisions(&plan, query)
 	return plan, nil
 }
 
@@ -805,6 +808,141 @@ func attachPredicatePlacementsToSuffixPushdowns(plan *LoweringPlan) {
 			}
 		}
 	}
+}
+
+func appendCountStoreFastPathDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
+	if decision, ok := countStoreFastPathDecision(query); ok {
+		plan.CountStoreFastPath = append(plan.CountStoreFastPath, decision)
+	}
+}
+
+func countStoreFastPathDecision(query *cypher.RegularQuery) (CountStoreFastPathDecision, bool) {
+	if query == nil || query.SingleQuery == nil || query.SingleQuery.SinglePartQuery == nil {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	queryPart := query.SingleQuery.SinglePartQuery
+	if len(queryPart.UpdatingClauses) > 0 || len(queryPart.ReadingClauses) != 1 {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	countArgument, ok := simpleCountProjectionArgument(queryPart.Return)
+	if !ok {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	readingClause := queryPart.ReadingClauses[0]
+	if readingClause == nil || readingClause.Match == nil {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	match := readingClause.Match
+	if match.Optional || match.Where != nil || len(match.Pattern) != 1 {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	patternPart := match.Pattern[0]
+	if patternPart == nil || patternPart.Variable != nil || patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	if len(patternPart.PatternElements) == 1 {
+		nodePattern, ok := patternPart.PatternElements[0].AsNodePattern()
+		if !ok || nodePattern == nil || nodePattern.Properties != nil {
+			return CountStoreFastPathDecision{}, false
+		}
+
+		bindingSymbol := variableSymbol(nodePattern.Variable)
+		if countArgument != cypher.TokenLiteralAsterisk && countArgument != bindingSymbol {
+			return CountStoreFastPathDecision{}, false
+		}
+
+		return CountStoreFastPathDecision{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			BindingSymbol:  bindingSymbol,
+			Target:         CountStoreFastPathNode,
+			KindSymbols:    kindSymbols(nodePattern.Kinds),
+		}, true
+	}
+
+	if len(patternPart.PatternElements) != 3 {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	leftNode, leftOK := patternPart.PatternElements[0].AsNodePattern()
+	relationship, relationshipOK := patternPart.PatternElements[1].AsRelationshipPattern()
+	rightNode, rightOK := patternPart.PatternElements[2].AsNodePattern()
+	if !leftOK || !relationshipOK || !rightOK {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	if constrainedCountFastPathEndpoint(leftNode) || constrainedCountFastPathEndpoint(rightNode) ||
+		relationship == nil || relationship.Range != nil || relationship.Properties != nil ||
+		relationship.Direction == graph.DirectionBoth {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	bindingSymbol := variableSymbol(relationship.Variable)
+	if countArgument != cypher.TokenLiteralAsterisk && countArgument != bindingSymbol {
+		return CountStoreFastPathDecision{}, false
+	}
+
+	return CountStoreFastPathDecision{
+		QueryPartIndex: 0,
+		ClauseIndex:    0,
+		PatternIndex:   0,
+		BindingSymbol:  bindingSymbol,
+		Target:         CountStoreFastPathEdge,
+		KindSymbols:    kindSymbols(relationship.Kinds),
+	}, true
+}
+
+func simpleCountProjectionArgument(returnClause *cypher.Return) (string, bool) {
+	if returnClause == nil || returnClause.Projection == nil {
+		return "", false
+	}
+
+	projection := returnClause.Projection
+	if projection.Distinct || projection.All || projection.Order != nil || projection.Skip != nil || projection.Limit != nil || len(projection.Items) != 1 {
+		return "", false
+	}
+
+	projectionItem, ok := projection.Items[0].(*cypher.ProjectionItem)
+	if !ok || projectionItem == nil {
+		return "", false
+	}
+
+	function, ok := projectionItem.Expression.(*cypher.FunctionInvocation)
+	if !ok || function == nil || !strings.EqualFold(function.Name, cypher.CountFunction) ||
+		function.Distinct || len(function.Namespace) > 0 || len(function.Arguments) != 1 {
+		return "", false
+	}
+
+	variable, ok := function.Arguments[0].(*cypher.Variable)
+	if !ok || variable == nil {
+		return "", false
+	}
+
+	return variable.Symbol, true
+}
+
+func constrainedCountFastPathEndpoint(nodePattern *cypher.NodePattern) bool {
+	return nodePattern == nil || nodePattern.Variable != nil || len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil
+}
+
+func kindSymbols(kinds graph.Kinds) []string {
+	if len(kinds) == 0 {
+		return nil
+	}
+
+	symbols := make([]string, len(kinds))
+	for idx, kind := range kinds {
+		symbols[idx] = kind.String()
+	}
+
+	return symbols
 }
 
 func indexBindingTargets(query *cypher.RegularQuery) map[bindingTargetKey]TraversalStepTarget {

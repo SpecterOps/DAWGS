@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 )
 
 const defaultTopPlans = 25
@@ -21,6 +23,8 @@ type PlanSummary struct {
 	Neo4jOperators    []Count         `json:"neo4j_operators,omitempty"`
 	PlannedLowerings  []Count         `json:"planned_lowerings,omitempty"`
 	AppliedLowerings  []Count         `json:"applied_lowerings,omitempty"`
+	SkippedLowerings  []Count         `json:"skipped_lowerings,omitempty"`
+	SkippedReasons    []Count         `json:"skipped_reasons,omitempty"`
 	FeatureCounts     []Count         `json:"feature_counts,omitempty"`
 	Errors            []PlanError     `json:"errors,omitempty"`
 }
@@ -46,6 +50,7 @@ type CostedPlan struct {
 	PlanRoot         string   `json:"plan_root"`
 	PlannedLowerings []string `json:"planned_lowerings,omitempty"`
 	AppliedLowerings []string `json:"applied_lowerings,omitempty"`
+	SkippedLowerings []string `json:"skipped_lowerings,omitempty"`
 }
 
 type PlanError struct {
@@ -65,6 +70,8 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 	neo4jOperatorCounts := map[string]int{}
 	plannedLoweringCounts := map[string]int{}
 	appliedLoweringCounts := map[string]int{}
+	skippedLoweringCounts := map[string]int{}
+	skippedReasonCounts := map[string]int{}
 	featureCounts := map[string]int{}
 
 	var (
@@ -102,6 +109,10 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 		for _, lowering := range record.AppliedLowerings {
 			appliedLoweringCounts[lowering]++
 		}
+		for _, lowering := range record.SkippedLowerings {
+			skippedLoweringCounts[lowering.Name]++
+			skippedReasonCounts[lowering.Name+": "+lowering.Reason]++
+		}
 
 		for _, line := range record.PGPlan {
 			switch {
@@ -127,6 +138,7 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 				PlanRoot:         record.PGPlan[0],
 				PlannedLowerings: append([]string(nil), record.PlannedLowerings...),
 				AppliedLowerings: append([]string(nil), record.AppliedLowerings...),
+				SkippedLowerings: skippedLoweringLabels(record.SkippedLowerings),
 			})
 		}
 	}
@@ -145,9 +157,24 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 		Neo4jOperators:    sortedCounts(neo4jOperatorCounts),
 		PlannedLowerings:  sortedCounts(plannedLoweringCounts),
 		AppliedLowerings:  sortedCounts(appliedLoweringCounts),
+		SkippedLowerings:  sortedCounts(skippedLoweringCounts),
+		SkippedReasons:    sortedCounts(skippedReasonCounts),
 		FeatureCounts:     sortedCounts(featureCounts),
 		Errors:            errors,
 	}
+}
+
+func skippedLoweringLabels(lowerings []translate.SkippedLowering) []string {
+	if len(lowerings) == 0 {
+		return nil
+	}
+
+	labels := make([]string, len(lowerings))
+	for idx, lowering := range lowerings {
+		labels[idx] = lowering.Name + ": " + lowering.Reason
+	}
+
+	return labels
 }
 
 func postgresEstimatedCost(planRoot string) float64 {
@@ -252,6 +279,8 @@ func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
 	writeCounts("Feature Counts", summary.FeatureCounts, 0)
 	writeCounts("Planned Lowerings", summary.PlannedLowerings, 0)
 	writeCounts("Applied Lowerings", summary.AppliedLowerings, 0)
+	writeCounts("Skipped Lowerings", summary.SkippedLowerings, 0)
+	writeCounts("Skipped Lowering Reasons", summary.SkippedReasons, 0)
 	writeCounts("PostgreSQL Operators", summary.PostgresOperators, 25)
 	writeCounts("Neo4j Operators", summary.Neo4jOperators, 25)
 

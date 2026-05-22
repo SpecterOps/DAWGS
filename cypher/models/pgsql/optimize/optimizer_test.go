@@ -390,6 +390,55 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+func TestLoweringPlanReportsCountStoreFastPath(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		query    string
+		expected CountStoreFastPathDecision
+	}{
+		{
+			name:  "node count",
+			query: "MATCH (n:Group) RETURN count(n)",
+			expected: CountStoreFastPathDecision{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				BindingSymbol:  "n",
+				Target:         CountStoreFastPathNode,
+				KindSymbols:    []string{"Group"},
+			},
+		},
+		{
+			name:  "edge count",
+			query: "MATCH ()-[r:MemberOf]->() RETURN count(r)",
+			expected: CountStoreFastPathDecision{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				BindingSymbol:  "r",
+				Target:         CountStoreFastPathEdge,
+				KindSymbols:    []string{"MemberOf"},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+			require.NoError(t, err)
+
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringCountStoreFastPath})
+			require.Equal(t, []CountStoreFastPathDecision{testCase.expected}, plan.LoweringPlan.CountStoreFastPath)
+		})
+	}
+}
+
 func TestLoweringPlanPlacesBindingPredicates(t *testing.T) {
 	t.Parallel()
 

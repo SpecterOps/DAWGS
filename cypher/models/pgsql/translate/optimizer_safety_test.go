@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
@@ -113,6 +114,19 @@ func requireNoPlannedOptimizationLowering(t *testing.T, summary OptimizationSumm
 	}
 }
 
+func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string, reason string) {
+	t.Helper()
+
+	for _, lowering := range summary.SkippedLowerings {
+		if lowering.Name == name {
+			require.Equal(t, reason, lowering.Reason)
+			return
+		}
+	}
+
+	require.Failf(t, "missing skipped optimization lowering", "expected skipped lowering %q in %#v", name, summary.SkippedLowerings)
+}
+
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 	t.Helper()
 
@@ -122,6 +136,44 @@ func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 		require.NotEqualf(t, -1, nextIndex, "expected SQL to contain %q after offset %d:\n%s", part, offset, sql)
 		offset += nextIndex + len(part)
 	}
+}
+
+func TestOptimizerSafetyCountStoreFastPathUsesBaseNodeCount(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH (n) RETURN count(n)`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	require.Empty(t, translation.Optimization.SkippedLowerings)
+	require.Equal(t, "select count(*)::int8 from node n0;", strings.Join(strings.Fields(formattedQuery), " "))
+}
+
+func TestOptimizerSafetyCountStoreFastPathKeepsKindConstraintAndAlias(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH (n:Group) RETURN count(n) AS total`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery), " "))
+}
+
+func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH ()-[r:MemberOf]->() RETURN count(r)`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
+	require.Equal(t, "select count(*)::int8 from edge e0 where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
 func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {

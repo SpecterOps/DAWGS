@@ -16,6 +16,7 @@ type PlanRecord struct {
 	Neo4jOperators   []string                       `json:"neo4j_operators,omitempty"`
 	PlannedLowerings []string                       `json:"planned_lowerings,omitempty"`
 	AppliedLowerings []string                       `json:"applied_lowerings,omitempty"`
+	SkippedLowerings []translate.SkippedLowering    `json:"skipped_lowerings,omitempty"`
 	Optimization     *translate.OptimizationSummary `json:"optimization,omitempty"`
 	Error            string                         `json:"error,omitempty"`
 }

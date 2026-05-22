@@ -12,6 +12,7 @@ const (
 	LoweringLimitPushdown           = "LimitPushdown"
 	LoweringExpansionSuffixPushdown = "ExpansionSuffixPushdown"
 	LoweringPredicatePlacement      = "PredicatePlacement"
+	LoweringCountStoreFastPath      = "CountStoreFastPath"
 )
 
 type LoweringDecision struct {
@@ -142,6 +143,22 @@ type PatternPredicatePlacementDecision struct {
 	Mode   PatternPredicatePlacementMode `json:"mode"`
 }
 
+type CountStoreFastPathTarget string
+
+const (
+	CountStoreFastPathNode CountStoreFastPathTarget = "node"
+	CountStoreFastPathEdge CountStoreFastPathTarget = "edge"
+)
+
+type CountStoreFastPathDecision struct {
+	QueryPartIndex int                      `json:"query_part_index"`
+	ClauseIndex    int                      `json:"clause_index"`
+	PatternIndex   int                      `json:"pattern_index"`
+	BindingSymbol  string                   `json:"binding_symbol,omitempty"`
+	Target         CountStoreFastPathTarget `json:"target"`
+	KindSymbols    []string                 `json:"kind_symbols,omitempty"`
+}
+
 type LoweringPlan struct {
 	ProjectionPruning       []ProjectionPruningDecision         `json:"projection_pruning,omitempty"`
 	LatePathMaterialization []LatePathMaterializationDecision   `json:"late_path_materialization,omitempty"`
@@ -153,6 +170,7 @@ type LoweringPlan struct {
 	ExpansionSuffixPushdown []ExpansionSuffixPushdownDecision   `json:"expansion_suffix_pushdown,omitempty"`
 	PredicatePlacement      []PredicatePlacementDecision        `json:"predicate_placement,omitempty"`
 	PatternPredicate        []PatternPredicatePlacementDecision `json:"pattern_predicate_placement,omitempty"`
+	CountStoreFastPath      []CountStoreFastPathDecision        `json:"count_store_fast_path,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -165,7 +183,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.LimitPushdown) == 0 &&
 		len(s.ExpansionSuffixPushdown) == 0 &&
 		len(s.PredicatePlacement) == 0 &&
-		len(s.PatternPredicate) == 0
+		len(s.PatternPredicate) == 0 &&
+		len(s.CountStoreFastPath) == 0
 }
 
 func (s LoweringPlan) Decisions() []LoweringDecision {
@@ -185,6 +204,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringLimitPushdown, len(s.LimitPushdown) > 0)
 	add(LoweringExpansionSuffixPushdown, len(s.ExpansionSuffixPushdown) > 0)
 	add(LoweringPredicatePlacement, len(s.PredicatePlacement) > 0 || len(s.PatternPredicate) > 0)
+	add(LoweringCountStoreFastPath, len(s.CountStoreFastPath) > 0)
 
 	return decisions
 }
