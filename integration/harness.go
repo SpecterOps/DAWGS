@@ -26,8 +26,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -103,11 +103,12 @@ func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds gra
 		ConnectionString:      connStr,
 	}
 
-	dbcfg := drivers.DatabaseConfiguration{}
-	dbcfg.Connection = connStr
-
 	if driver == pg.DriverName {
-		pool, err := pg.NewPool(dbcfg)
+		poolCfg, err := pgxpool.ParseConfig(connStr)
+		if err != nil {
+			t.Fatalf("failed to parse pool configuration: %v", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			t.Fatalf("Failed to create PG pool: %v", err)
 		}

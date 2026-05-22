@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
@@ -76,15 +76,12 @@ func translationValidationGraphSchema() graph.Schema {
 func TestTranslationTestCases(t *testing.T) {
 	testCtx, done := context.WithCancel(context.Background())
 	defer done()
-
 	pgConnectionStr := pgConnectionString(t)
-
-	// pg.NewPool installs the AfterConnect and AfterRelease hooks that register
-	// the composite types (nodecomposite, edgecomposite, pathcomposite) on every
-	// pool connection. Using pgxpool.New directly omits these hooks; after
-	// AssertSchema calls pool.Reset(), new connections would return composite
-	// values as raw []uint8 instead of map[string]any, causing scan failures.
-	if pgxPool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: pgConnectionStr}); err != nil {
+	pgxPoolCfg, err := pgxpool.ParseConfig(pgConnectionStr)
+	if err != nil {
+		t.Fatalf("failed to parse pool configuration: %v", err)
+	}
+	if pgxPool, err := pg.NewPool(pgxPoolCfg); err != nil {
 		t.Fatalf("Failed opening database connection: %v", err)
 	} else if connection, err := dawgs.Open(context.TODO(), pg.DriverName, dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte,
@@ -137,8 +134,9 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 	defer done()
 
 	pgConnectionStr := pgConnectionString(t)
-
-	pgxPool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: pgConnectionStr})
+	pgxPoolCfg, err := pgxpool.ParseConfig(pgConnectionStr)
+	require.NoError(t, err)
+	pgxPool, err := pg.NewPool(pgxPoolCfg)
 	require.NoError(t, err)
 	defer pgxPool.Close()
 
