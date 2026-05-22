@@ -465,25 +465,23 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 	} else if literal, isLiteral := argument.(pgsql.Literal); isLiteral && literal.Null {
 		s.treeTranslator.PushOperand(pgsql.NewTypeCast(literal, castType))
 	} else {
-		if column == pgsql.ColumnEdges {
-			if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
-				binding, bound := s.scope.Lookup(identifier)
-				if !bound {
-					binding, bound = s.scope.AliasedLookup(identifier)
-				}
-
-				if !bound {
-					return fmt.Errorf("unable to resolve path identifier %s", identifier)
-				} else if binding.DataType != pgsql.PathComposite {
-					return fmt.Errorf("expected path expression but received %s", binding.DataType)
-				}
-
-				s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
-					Identifier: argument,
-					Column:     column,
-				}, castType))
-				return nil
+		if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
+			binding, bound := s.scope.Lookup(identifier)
+			if !bound {
+				binding, bound = s.scope.AliasedLookup(identifier)
 			}
+
+			if !bound {
+				return fmt.Errorf("unable to resolve path identifier %s", identifier)
+			} else if binding.DataType != pgsql.PathComposite {
+				return fmt.Errorf("expected path expression but received %s", binding.DataType)
+			}
+
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
+				Identifier: identifier,
+				Column:     column,
+			}, castType))
+			return nil
 		}
 
 		if pathExpression, err := s.expressionForPath(argument); err != nil {

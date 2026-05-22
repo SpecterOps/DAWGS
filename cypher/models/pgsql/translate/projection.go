@@ -1093,6 +1093,87 @@ func rewriteOrderByProjectionAlias(orderBy *pgsql.OrderBy, aliases map[pgsql.Ide
 	}
 }
 
+func tailPathCompositeStageBindings(scope *Scope, expression pgsql.Expression) ([]*BoundIdentifier, error) {
+	if expression == nil {
+		return nil, nil
+	}
+
+	var (
+		bindings = make([]*BoundIdentifier, 0)
+		seen     = map[pgsql.Identifier]struct{}{}
+	)
+
+	if err := walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, _ walk.VisitorHandler) {
+		reference, isRowColumnReference := node.(pgsql.RowColumnReference)
+		if !isRowColumnReference || reference.Column != pgsql.ColumnNodes {
+			return
+		}
+
+		identifier, isIdentifier := unwrapParenthetical(reference.Identifier).(pgsql.Identifier)
+		if !isIdentifier {
+			return
+		}
+
+		binding, bound := scope.Lookup(identifier)
+		if !bound {
+			binding, bound = scope.AliasedLookup(identifier)
+		}
+		if !bound || binding.DataType != pgsql.PathComposite || binding.LastProjection != nil {
+			return
+		}
+
+		if _, alreadySeen := seen[binding.Identifier]; alreadySeen {
+			return
+		}
+
+		seen[binding.Identifier] = struct{}{}
+		bindings = append(bindings, binding)
+	})); err != nil {
+		return nil, err
+	}
+
+	return bindings, nil
+}
+
+func (s *Translator) stageTailPathCompositeBindings(fromClauses []pgsql.FromClause, bindings []*BoundIdentifier) ([]pgsql.FromClause, error) {
+	for _, binding := range bindings {
+		stageBinding, err := s.scope.DefineNew(pgsql.Scope)
+		if err != nil {
+			return nil, err
+		}
+
+		stageFrame := &Frame{
+			Binding:         stageBinding,
+			Visible:         pgsql.AsIdentifierSet(binding.Identifier),
+			Exported:        pgsql.AsIdentifierSet(binding.Identifier),
+			stashedVisible:  pgsql.NewIdentifierSet(),
+			stashedExported: pgsql.NewIdentifierSet(),
+			Synthetic:       true,
+		}
+
+		stageProjection, err := buildProjection(binding.Identifier, binding, s.scope, binding.LastProjection)
+		if err != nil {
+			return nil, err
+		}
+
+		fromClauses = append(fromClauses, pgsql.FromClause{
+			Source: pgsql.LateralSubquery{
+				Query: pgsql.Query{
+					Body: pgsql.Select{
+						Projection: stageProjection,
+					},
+					Offset: pgsql.NewLiteral(0, pgsql.Int),
+				},
+				Binding: models.OptionalValue(stageBinding.Identifier),
+			},
+		})
+
+		binding.MaterializedBy(stageFrame)
+	}
+
+	return fromClauses, nil
+}
+
 func (s *Translator) buildTailProjection() error {
 	var (
 		currentPart           = s.query.CurrentPart()
@@ -1106,6 +1187,10 @@ func (s *Translator) buildTailProjection() error {
 
 	if projectionConstraint, err := s.treeTranslator.ConsumeAllConstraints(); err != nil {
 		return err
+	} else if stagedBindings, err := tailPathCompositeStageBindings(s.scope, projectionConstraint.Expression); err != nil {
+		return err
+	} else if stagedFromClauses, err := s.stageTailPathCompositeBindings(singlePartQuerySelect.From, stagedBindings); err != nil {
+		return err
 	} else if projection, err := buildExternalProjection(s.scope, currentPart.projections.Items); err != nil {
 		return err
 	} else if resolvedConstraint, err := resolvePathCompositeFieldReferences(s.scope, projectionConstraint.Expression); err != nil {
@@ -1113,6 +1198,7 @@ func (s *Translator) buildTailProjection() error {
 	} else if err := RewriteFrameBindings(s.scope, resolvedConstraint); err != nil {
 		return err
 	} else {
+		singlePartQuerySelect.From = stagedFromClauses
 		singlePartQuerySelect.Projection = projection
 		singlePartQuerySelect.Where = resolvedConstraint
 
