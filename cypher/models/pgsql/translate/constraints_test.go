@@ -323,3 +323,34 @@ func TestCanExecutePairAwareBidirectionalSearch(t *testing.T) {
 		require.False(t, canExecute)
 	})
 }
+
+func TestCanMaterializeEndpointPairFilterRequiresPairAwareConstraints(t *testing.T) {
+	leftIdentifier := pgsql.Identifier("n0")
+	rightIdentifier := pgsql.Identifier("n1")
+	kindOnlyConstraint := func(identifier pgsql.Identifier) pgsql.Expression {
+		return pgd.Equals(
+			pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs},
+			pgd.IntLiteral(1),
+		)
+	}
+	propertyConstraint := func(identifier pgsql.Identifier) pgsql.Expression {
+		return pgd.Equals(
+			pgd.PropertyLookup(identifier, "name"),
+			pgd.TextLiteral("target"),
+		)
+	}
+
+	step := &TraversalStep{
+		LeftNode:  &BoundIdentifier{Identifier: leftIdentifier},
+		RightNode: &BoundIdentifier{Identifier: rightIdentifier},
+	}
+
+	require.False(t, canMaterializeEndpointPairFilterForStep(step, &Expansion{
+		PrimerNodeConstraints:   kindOnlyConstraint(leftIdentifier),
+		TerminalNodeConstraints: propertyConstraint(rightIdentifier),
+	}))
+	require.True(t, canMaterializeEndpointPairFilterForStep(step, &Expansion{
+		PrimerNodeConstraints:   propertyConstraint(leftIdentifier),
+		TerminalNodeConstraints: propertyConstraint(rightIdentifier),
+	}))
+}

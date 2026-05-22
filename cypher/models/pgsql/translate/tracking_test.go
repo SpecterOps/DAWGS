@@ -3,6 +3,7 @@ package translate
 import (
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,4 +27,15 @@ func TestScope(t *testing.T) {
 
 	require.Nil(t, scope.UnwindToFrame(parent))
 	require.Equal(t, parent.id, scope.CurrentFrame().id)
+}
+
+func TestScopeLookupDataTypeResolvesAliases(t *testing.T) {
+	scope := NewScope()
+	binding := scope.Define(pgsql.Identifier("n0"), pgsql.NodeComposite)
+	scope.Alias(pgsql.Identifier("n"), binding)
+
+	dataType, found := scope.LookupDataType(pgsql.Identifier("n"))
+
+	require.True(t, found)
+	require.Equal(t, pgsql.NodeComposite, dataType)
 }

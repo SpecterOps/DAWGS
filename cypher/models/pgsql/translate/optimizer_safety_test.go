@@ -405,6 +405,28 @@ LIMIT 1
 	requireOptimizationLowering(t, translation.Optimization, "LimitPushdown")
 }
 
+func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+		UNWIND ['source'] AS sourceName
+		MATCH p = shortestPath((s:Group)-[:MemberOf*1..]->(e:Group))
+		WHERE s.name = sourceName AND e.name = 'target'
+		RETURN sourceName, p
+	`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	primerQuery, hasPrimerQuery := translation.Parameters["pi0"].(string)
+
+	require.True(t, hasPrimerQuery)
+	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
+	require.Contains(t, normalizedQuery, "unnest(array ['source']::text[]) as i0")
+	require.Contains(t, primerQuery, "unnest(array ['source']::text[]) as i0")
+	require.Contains(t, primerQuery, "(n0.properties ->> 'name') = i0")
+}
+
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {
 	t.Parallel()
 

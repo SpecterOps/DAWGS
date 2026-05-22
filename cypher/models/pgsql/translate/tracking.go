@@ -345,11 +345,15 @@ func (s *Scope) LookupString(identifierString string) (*BoundIdentifier, bool) {
 }
 
 func (s *Scope) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
-	if binding, bound := s.Lookup(identifier); !bound {
-		return "", false
-	} else {
+	if binding, bound := s.Lookup(identifier); bound {
 		return binding.DataType, true
 	}
+
+	if binding, bound := s.AliasedLookup(identifier); bound {
+		return binding.DataType, true
+	}
+
+	return "", false
 }
 
 func (s *Scope) Define(identifier pgsql.Identifier, dataType pgsql.DataType) *BoundIdentifier {

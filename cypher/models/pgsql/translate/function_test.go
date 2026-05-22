@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -54,6 +55,21 @@ func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, formatted, "(null)::nodecomposite[]")
 	require.Contains(t, formatted, "(null)::edgecomposite[]")
+}
+
+func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = ()-[*1..]->() RETURN tail(tail(nodes(p)))`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(formatted, "ordered_edges_to_path"))
+	require.NotContains(t, formatted, "cardinality(((case when")
 }
 
 func TestPrepareCollectExpressionMissingBindingErrorNamesArgument(t *testing.T) {

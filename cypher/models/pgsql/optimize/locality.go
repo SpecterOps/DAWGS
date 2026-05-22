@@ -108,20 +108,19 @@ func AddFromExpressionBinding(localScope *pgsql.IdentifierSet, expression pgsql.
 	}
 }
 
+func addFromClauseSourceBinding(localScope *pgsql.IdentifierSet, fromClause pgsql.FromClause) {
+	AddFromExpressionBinding(localScope, fromClause.Source)
+}
+
 func SelectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *pgsql.IdentifierSet) bool {
 	scopedIdentifiers := localScope.Copy()
-	AddFromClauseBindings(scopedIdentifiers, selectBody.From)
-
-	for _, projection := range selectBody.Projection {
-		if !ExpressionReferencesOnlyLocalIdentifiers(projection, scopedIdentifiers) {
-			return false
-		}
-	}
 
 	for _, fromClause := range selectBody.From {
 		if !FromExpressionReferencesOnlyLocalIdentifiers(fromClause.Source) {
 			return false
 		}
+
+		addFromClauseSourceBinding(scopedIdentifiers, fromClause)
 
 		for _, join := range fromClause.Joins {
 			if !FromExpressionReferencesOnlyLocalIdentifiers(join.Table) {
@@ -132,6 +131,14 @@ func SelectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *p
 				!ExpressionReferencesOnlyLocalIdentifiers(join.JoinOperator.Constraint, scopedIdentifiers) {
 				return false
 			}
+
+			AddFromExpressionBinding(scopedIdentifiers, join.Table)
+		}
+	}
+
+	for _, projection := range selectBody.Projection {
+		if !ExpressionReferencesOnlyLocalIdentifiers(projection, scopedIdentifiers) {
+			return false
 		}
 	}
 

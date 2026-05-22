@@ -177,8 +177,8 @@ func canMaterializeEndpointPairFilterForStep(traversalStep *TraversalStep, expan
 		traversalStep.usesBoundEndpointPairs() ||
 		expansionModel.PrimerNodeConstraints == nil ||
 		expansionModel.TerminalNodeConstraints == nil ||
-		!hasLocalEndpointConstraint(expansionModel.PrimerNodeConstraints, traversalStep.LeftNode.Identifier) ||
-		!hasLocalEndpointConstraint(expansionModel.TerminalNodeConstraints, traversalStep.RightNode.Identifier) {
+		!hasPairAwareEndpointConstraint(expansionModel.PrimerNodeConstraints, traversalStep.LeftNode.Identifier) ||
+		!hasPairAwareEndpointConstraint(expansionModel.TerminalNodeConstraints, traversalStep.RightNode.Identifier) {
 		return false
 	}
 

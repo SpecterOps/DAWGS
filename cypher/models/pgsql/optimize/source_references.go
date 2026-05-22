@@ -83,7 +83,9 @@ func (s *sourceReferenceCollector) Enter(node cypher.SyntaxNode) {
 		}
 
 	case *cypher.Variable:
-		s.addVariable(typedNode)
+		if s.matchPatternDeclarationDepth == 0 {
+			s.addVariable(typedNode)
+		}
 	}
 }
 

@@ -135,6 +135,8 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 	traversalStep := traversalStepContext.CurrentStep
 
 	if traversalStepContext.IsRootStep {
+		expansion.SetUnwindClauses(s.query.CurrentPart().ConsumeUnwindClauses())
+
 		if allPaths {
 			if traversalStep.Expansion.UseBidirectionalSearch {
 				if traversalStepQuery, err := expansion.BuildBiDirectionalAllShortestPathsRoot(); err != nil {

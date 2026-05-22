@@ -415,14 +415,7 @@ func (s *Translator) translateTailFunction(functionInvocation *cypher.FunctionIn
 				&pgsql.ArraySlice{
 					Expression: pgsql.NewParenthetical(argument),
 					Lower:      pgsql.NewLiteral(2, pgsql.Int),
-					Upper: pgsql.FunctionCall{
-						Function: pgsql.FunctionCardinality,
-						Parameters: []pgsql.Expression{
-							argument,
-						},
-						CastType: pgsql.Int,
-					},
-					CastType: arrayType,
+					CastType:   arrayType,
 				},
 				pgsql.ArrayLiteral{
 					CastType: arrayType,

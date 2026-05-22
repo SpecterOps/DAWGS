@@ -59,6 +59,8 @@ type ExpansionBuilder struct {
 	queryParameters map[string]any
 	traversalStep   *TraversalStep
 	model           *Expansion
+	unwindClauses   []UnwindClause
+	unwindSources   []pgsql.FromClause
 }
 
 func NewExpansionBuilder(queryParameters map[string]any, traversalStep *TraversalStep) (*ExpansionBuilder, error) {
@@ -71,6 +73,11 @@ func NewExpansionBuilder(queryParameters map[string]any, traversalStep *Traversa
 		traversalStep:   traversalStep,
 		model:           traversalStep.Expansion,
 	}, nil
+}
+
+func (s *ExpansionBuilder) SetUnwindClauses(clauses []UnwindClause) {
+	s.unwindClauses = clauses
+	s.unwindSources = unwindFromClauses(clauses)
 }
 
 func nextFrontInsert(body pgsql.SetExpression) pgsql.Insert {
@@ -228,6 +235,39 @@ func expressionReferencesUnwindBinding(expression pgsql.Expression, unwindClause
 	}
 
 	return false, nil
+}
+
+func (s *ExpansionBuilder) seedEndpointConstraintSplit(expression pgsql.Expression, nodeIdentifier pgsql.Identifier, previousFrameIdentifier pgsql.Identifier) (pgsql.Expression, pgsql.Expression) {
+	seedExpression := rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
+	localScope := pgsql.AsIdentifierSet(nodeIdentifier)
+
+	for _, clause := range s.unwindClauses {
+		if clause.Binding != nil {
+			localScope.Add(clause.Binding.Identifier)
+		}
+	}
+
+	return partitionConstraintByLocality(seedExpression, localScope)
+}
+
+func (s *ExpansionBuilder) appendUnwindSourcesIfReferenced(selectBody *pgsql.Select, expression pgsql.Expression) error {
+	if referencesUnwind, err := expressionReferencesUnwindBinding(expression, s.unwindClauses); err != nil {
+		return err
+	} else if referencesUnwind {
+		var previousFrame *Frame
+		if s.traversalStep != nil && s.traversalStep.Frame != nil {
+			previousFrame = s.traversalStep.Frame.Previous
+		}
+
+		selectBody.From = prependFrameSourceIfMissing(selectBody.From, previousFrame)
+		selectBody.From = append(selectBody.From, s.unwindSources...)
+	}
+
+	return nil
+}
+
+func (s *ExpansionBuilder) appendUnwindSources(selectBody *pgsql.Select) {
+	selectBody.From = append(selectBody.From, s.unwindSources...)
 }
 
 func newExpansionRootIDsParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
@@ -575,13 +615,6 @@ func rewriteBoundEndpointSeedReference(expression pgsql.Expression, previousFram
 	default:
 		return expression
 	}
-}
-
-func seedEndpointConstraintSplit(expression pgsql.Expression, nodeIdentifier pgsql.Identifier, previousFrameIdentifier pgsql.Identifier) (pgsql.Expression, pgsql.Expression) {
-	// Harness seed fragments only range over the endpoint node alias and an optional ID filter.
-	// Reframe safe endpoint references first, then leave anything still non-local for the outer projection.
-	seedExpression := rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
-	return partitionConstraintByLocality(seedExpression, pgsql.AsIdentifierSet(nodeIdentifier))
 }
 
 func seededFrontPrimerQuery(seed expansionSeed, primer pgsql.Select) pgsql.Query {
@@ -1072,7 +1105,7 @@ func (s *ExpansionBuilder) backwardTerminalSatisfaction(expansionModel *Expansio
 	return satisfiedSelectItem
 }
 
-func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression) {
+func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
 	var (
 		primerSeedConstraints     pgsql.Expression
 		primerProjectionPredicate pgsql.Expression
@@ -1087,7 +1120,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
 	}
 
-	primerSeedConstraints, primerProjectionPredicate = seedEndpointConstraintSplit(
+	primerSeedConstraints, primerProjectionPredicate = s.seedEndpointConstraintSplit(
 		expansionModel.PrimerNodeConstraints,
 		s.traversalStep.LeftNode.Identifier,
 		previousFrameIdentifier,
@@ -1107,6 +1140,12 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 			primerSeedConstraints,
 		)
 		seed = &nodeSeed
+	}
+
+	if seed != nil {
+		if err := s.appendUnwindSourcesIfReferenced(&seed.query, primerSeedConstraints); err != nil {
+			return pgsql.Query{}, nil, err
+		}
 	}
 
 	// The returned projection predicate is the part of the endpoint predicate
@@ -1151,6 +1190,9 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+		return pgsql.Query{}, nil, err
+	}
 
 	if !expansionModel.HasExplicitEndpointInequality {
 		nextQuery.Where = pgsql.OptionalAnd(
@@ -1159,10 +1201,10 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		)
 	}
 
-	return frontPrimerQuery(seed, nextQuery), primerProjectionPredicate
+	return frontPrimerQuery(seed, nextQuery), primerProjectionPredicate, nil
 }
 
-func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Expansion) pgsql.Select {
+func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Expansion) (pgsql.Select, error) {
 	nextQuery := pgsql.Select{
 		Where: expansionModel.EdgeConstraints,
 	}
@@ -1242,10 +1284,14 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	return nextQuery
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+		return pgsql.Select{}, err
+	}
+
+	return nextQuery, nil
 }
 
-func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression) {
+func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
 	var (
 		terminalSeedConstraints     pgsql.Expression
 		terminalProjectionPredicate pgsql.Expression
@@ -1260,7 +1306,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
 	}
 
-	terminalSeedConstraints, terminalProjectionPredicate = seedEndpointConstraintSplit(
+	terminalSeedConstraints, terminalProjectionPredicate = s.seedEndpointConstraintSplit(
 		expansionModel.TerminalNodeConstraints,
 		s.traversalStep.RightNode.Identifier,
 		previousFrameIdentifier,
@@ -1280,6 +1326,12 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 			terminalSeedConstraints,
 		)
 		seed = &nodeSeed
+	}
+
+	if seed != nil {
+		if err := s.appendUnwindSourcesIfReferenced(&seed.query, terminalSeedConstraints); err != nil {
+			return pgsql.Query{}, nil, err
+		}
 	}
 
 	// The returned projection predicate is applied after the harness materializes
@@ -1321,10 +1373,14 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	return frontPrimerQuery(seed, nextQuery), terminalProjectionPredicate
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+		return pgsql.Query{}, nil, err
+	}
+
+	return frontPrimerQuery(seed, nextQuery), terminalProjectionPredicate, nil
 }
 
-func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Expansion) pgsql.Select {
+func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Expansion) (pgsql.Select, error) {
 	nextQuery := pgsql.Select{
 		Where: expansionModel.EdgeConstraints,
 	}
@@ -1389,7 +1445,11 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	return nextQuery
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+		return pgsql.Select{}, err
+	}
+
+	return nextQuery, nil
 }
 
 func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression) pgsql.CommonTableExpression {
@@ -1651,10 +1711,15 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 
 	expansionModel.UseMaterializedTerminalFilter = s.canMaterializeTerminalFilter(expansionModel)
 
-	var (
-		forwardFrontPrimerQuery, forwardSeedProjectionConstraints = s.prepareForwardFrontPrimerQuery(expansionModel)
-		forwardFrontRecursiveQuery                                = s.prepareForwardFrontRecursiveQuery(expansionModel)
-	)
+	forwardFrontPrimerQuery, forwardSeedProjectionConstraints, err := s.prepareForwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	forwardFrontRecursiveQuery, err := s.prepareForwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 
 	projectionQuery.Projection = expansionModel.Projection
 
@@ -1689,6 +1754,7 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 
 	s.applyBoundEndpointProjectionConstraints(&projectionQuery, expansionModel)
 	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, forwardSeedProjectionConstraints)
+	s.appendUnwindSources(&projectionQuery)
 	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
 	if harnessParameters, err := s.shortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery); err != nil {
@@ -1728,12 +1794,25 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 
 	expansionModel.UseMaterializedEndpointPairFilter = s.canMaterializeEndpointPairFilter(expansionModel)
 
-	var (
-		forwardFrontPrimerQuery, forwardSeedProjectionConstraints   = s.prepareForwardFrontPrimerQuery(expansionModel)
-		forwardFrontRecursiveQuery                                  = s.prepareForwardFrontRecursiveQuery(expansionModel)
-		backwardFrontPrimerQuery, backwardSeedProjectionConstraints = s.prepareBackwardFrontPrimerQuery(expansionModel)
-		backwardFrontRecursiveQuery                                 = s.prepareBackwardFrontRecursiveQuery(expansionModel)
-	)
+	forwardFrontPrimerQuery, forwardSeedProjectionConstraints, err := s.prepareForwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	forwardFrontRecursiveQuery, err := s.prepareForwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	backwardFrontPrimerQuery, backwardSeedProjectionConstraints, err := s.prepareBackwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	backwardFrontRecursiveQuery, err := s.prepareBackwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 
 	projectionQuery.Projection = expansionModel.Projection
 
@@ -1768,6 +1847,7 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 
 	s.applyBoundEndpointProjectionConstraints(&projectionQuery, expansionModel)
 	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, pgsql.OptionalAnd(forwardSeedProjectionConstraints, backwardSeedProjectionConstraints))
+	s.appendUnwindSources(&projectionQuery)
 	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
 	if harnessParameters, err := s.bidirectionalAllShortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery, backwardFrontPrimerQuery, backwardFrontRecursiveQuery); err != nil {

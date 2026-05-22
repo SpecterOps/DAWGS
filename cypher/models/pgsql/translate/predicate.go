@@ -145,7 +145,7 @@ func (s *Translator) buildPatternPredicates() error {
 					s.recordLowering(optimize.LoweringPredicatePlacement)
 				}
 
-				return nil
+				continue
 			}
 		}
 

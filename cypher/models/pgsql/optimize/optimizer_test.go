@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/stretchr/testify/require"
@@ -616,6 +617,85 @@ func TestLoweringPlanSkipsAllShortestPathLimitPushdown(t *testing.T) {
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Empty(t, plan.LoweringPlan.LimitPushdown)
+}
+
+func TestLoweringPlanSkipsOptionalMatchLimitPushdown(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf]->(m:Group)
+		RETURN p
+		LIMIT 1
+	`)
+	require.NoError(t, err)
+	require.Len(t, regularQuery.SingleQuery.SinglePartQuery.ReadingClauses, 1)
+	regularQuery.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Optional = true
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.LimitPushdown)
+}
+
+func TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncrementally(t *testing.T) {
+	t.Parallel()
+
+	tableRef := func(alias pgsql.Identifier) pgsql.TableReference {
+		return pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+			Binding: models.OptionalValue(alias),
+		}
+	}
+
+	selectBody := pgsql.Select{
+		Projection: []pgsql.SelectItem{
+			pgsql.CompoundIdentifier{pgsql.Identifier("a"), pgsql.ColumnID},
+		},
+		From: []pgsql.FromClause{{
+			Source: tableRef(pgsql.Identifier("a")),
+			Joins: []pgsql.Join{{
+				Table: tableRef(pgsql.Identifier("b")),
+				JoinOperator: pgsql.JoinOperator{
+					Constraint: pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{pgsql.Identifier("b"), pgsql.ColumnID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{pgsql.Identifier("c"), pgsql.ColumnID},
+					),
+				},
+			}, {
+				Table: tableRef(pgsql.Identifier("c")),
+			}},
+		}},
+	}
+
+	require.False(t, SelectReferencesOnlyLocalIdentifiers(selectBody, pgsql.NewIdentifierSet()))
+}
+
+func TestMeasureSelectivityPopReturnsTopFrame(t *testing.T) {
+	t.Parallel()
+
+	visitor := newMeasureSelectivityVisitor(NewSelectivityModel(nil))
+	visitor.addSelectivity(7)
+	visitor.pushSelectivity(11)
+	visitor.addSelectivity(13)
+
+	require.Equal(t, 24, visitor.popSelectivity())
+	require.Equal(t, 7, visitor.Selectivity())
+}
+
+func TestCollectReferencedSourceIdentifiersIgnoresMatchDeclarations(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n)-[r:MemberOf]->(m)
+		RETURN m
+	`)
+	require.NoError(t, err)
+
+	references, err := collectReferencedSourceIdentifiers(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, references, "n")
+	require.NotContains(t, references, "r")
+	require.Contains(t, references, "m")
 }
 
 func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {

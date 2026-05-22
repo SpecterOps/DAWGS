@@ -34,6 +34,30 @@ RETURN p`)
 	require.NotContains(t, formatted, "as p from s1 where")
 }
 
+func TestOptimizedPatternPredicatesContinueAfterFirstPlacement(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("Domain"))
+	kindMapper.Put(graph.StringKind("SpoofSIDHistory"))
+	kindMapper.Put(graph.StringKind("AbuseTGTDelegation"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Domain), (m:Domain)
+		WHERE (n)-[:SpoofSIDHistory]-(m)
+		AND (n)-[:AbuseTGTDelegation]-(m)
+		RETURN n
+	`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "array [2]::int2[]")
+	require.Contains(t, formatted, "array [3]::int2[]")
+}
+
 func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[string]any) string {
 	t.Helper()
 

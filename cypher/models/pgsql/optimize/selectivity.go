@@ -110,7 +110,7 @@ func (s *measureSelectivityVisitor) Selectivity() int {
 }
 
 func (s *measureSelectivityVisitor) popSelectivity() int {
-	value := s.Selectivity()
+	value := s.selectivityStack[len(s.selectivityStack)-1]
 	s.selectivityStack = s.selectivityStack[:len(s.selectivityStack)-1]
 
 	return value

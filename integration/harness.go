@@ -90,7 +90,7 @@ func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds gra
 
 	connStr := os.Getenv("CONNECTION_STRING")
 	if connStr == "" {
-		t.Fatal("CONNECTION_STRING env var is not set")
+		t.Skip("CONNECTION_STRING env var is not set")
 	}
 
 	driver, err := driverFromConnStr(connStr)

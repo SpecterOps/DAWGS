@@ -609,7 +609,7 @@ func appendLimitPushdownDecisions(plan *LoweringPlan, queryPartIndex int, queryP
 	}
 
 	for clauseIndex, readingClause := range readingClauses {
-		if readingClause == nil || readingClause.Match == nil {
+		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
 			continue
 		}
 
