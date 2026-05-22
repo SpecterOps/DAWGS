@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -54,7 +55,11 @@ func setupTestDB(t *testing.T) (graph.Database, context.Context) {
 		t.Skipf("%s is not a PostgreSQL connection string", connectionStringEnv)
 	}
 
-	pool, err := pg.NewPool(connStr)
+	poolCfg, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		t.Fatalf("Failed to parse config pool: %v", err)
+	}
+	pool, err := pg.NewPool(poolCfg)
 	if err != nil {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
