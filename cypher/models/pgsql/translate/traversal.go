@@ -28,6 +28,20 @@ func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.E
 	)
 }
 
+func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
+	if traversalStep == nil || traversalStep.Expansion != nil || !traversalStep.LeftNodeBound || !traversalStep.RightNodeBound {
+		return false
+	}
+
+	if part != nil && part.HasTarget {
+		if _, hasDecision := s.expandIntoDecisions[part.Target.TraversalStep(stepIndex)]; hasDecision {
+			return true
+		}
+	}
+
+	return true
+}
+
 func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
 	if partFrame == nil || partFrame.Previous == nil {
 		return pgsql.Query{}, errors.New("expected previous frame for bound endpoint traversal")
@@ -72,7 +86,7 @@ func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traver
 }
 
 func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *TraversalStep) (pgsql.Query, error) {
-	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+	if traversalStep.UseExpandInto {
 		return s.buildBoundEndpointTraversalPattern(traversalStep.Frame, traversalStep)
 	}
 
@@ -324,7 +338,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
 	}
 
-	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+	if traversalStep.UseExpandInto {
 		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
 	}
 
@@ -510,7 +524,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 }
 
 func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
-	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+	if traversalStep.UseExpandInto {
 		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
 	}
 
@@ -585,6 +599,10 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 	}
 
 	for idx, traversalStep := range part.TraversalSteps {
+		if traversalStep.UseExpandInto = s.shouldUseExpandInto(part, idx, traversalStep); traversalStep.UseExpandInto {
+			s.recordLowering(optimize.LoweringExpandIntoDetection)
+		}
+
 		if traversalStepFrame, err := s.scope.PushFrame(); err != nil {
 			return err
 		} else {

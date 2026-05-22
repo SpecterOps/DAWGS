@@ -219,7 +219,7 @@ RETURN p
 	require.NotNil(t, translation.Optimization.LoweringPlan)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ExpandInto)
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
-	requireNoOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
+	requireOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
 }
 
 func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {

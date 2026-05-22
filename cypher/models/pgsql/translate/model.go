@@ -532,6 +532,7 @@ type TraversalStep struct {
 	PathReversed           bool
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool
+	UseExpandInto          bool
 	LeftNodeConstraints    pgsql.Expression
 	LeftNodeJoinCondition  pgsql.Expression
 	Edge                   *BoundIdentifier
