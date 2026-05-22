@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -88,6 +89,37 @@ func (s *Translator) translatePatternPredicate() error {
 	return nil
 }
 
+func (s *Translator) usePatternPredicateExistencePlacement(patternPart *PatternPart, traversalStep *TraversalStep) (bool, error) {
+	if patternPart == nil || !patternPart.HasTarget || traversalStep == nil || traversalStep.Direction != graph.DirectionBoth {
+		return false, nil
+	}
+
+	decision, hasDecision := s.patternPredicateDecisions[patternPart.Target.TraversalStep(0)]
+	if !hasDecision || decision.Mode != optimize.PatternPredicatePlacementExistence {
+		return false, nil
+	}
+
+	traversalStepIdentifiers := pgsql.AsIdentifierSet(
+		traversalStep.LeftNode.Identifier,
+		traversalStep.Edge.Identifier,
+		traversalStep.RightNode.Identifier,
+	)
+
+	if hasGlobalConstraints, err := s.treeTranslator.HasAnyConstraints(traversalStepIdentifiers); err != nil {
+		return false, err
+	} else if hasGlobalConstraints {
+		return false, nil
+	}
+
+	if hasPredicateConstraints, err := patternPart.Constraints.HasConstraints(traversalStepIdentifiers); err != nil {
+		return false, err
+	} else if hasPredicateConstraints {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // buildPatternPredicates is used by translateMatch to resolve deferred pattern predicate
 // futures collected for the current MATCH/OPTIONAL MATCH query part's WHERE expressions
 func (s *Translator) buildPatternPredicates() error {
@@ -102,29 +134,18 @@ func (s *Translator) buildPatternPredicates() error {
 		)
 
 		if len(patternPart.TraversalSteps) == 1 {
-			var (
-				traversalStep            = patternPart.TraversalSteps[0]
-				traversalStepIdentifiers = pgsql.AsIdentifierSet(
-					traversalStep.LeftNode.Identifier,
-					traversalStep.Edge.Identifier,
-					traversalStep.RightNode.Identifier,
-				)
-			)
-
-			if traversalStep.Direction == graph.DirectionBoth {
-				if hasGlobalConstraints, err := s.treeTranslator.HasAnyConstraints(traversalStepIdentifiers); err != nil {
+			traversalStep := patternPart.TraversalSteps[0]
+			if useExistencePlacement, err := s.usePatternPredicateExistencePlacement(patternPart, traversalStep); err != nil {
+				return err
+			} else if useExistencePlacement {
+				if predicateExpression, err := s.buildOptimizedRelationshipExistPredicate(patternPart, traversalStep); err != nil {
 					return err
-				} else if hasPredicateConstraints, err := patternPart.Constraints.HasConstraints(traversalStepIdentifiers); err != nil {
-					return err
-				} else if !hasPredicateConstraints && !hasGlobalConstraints {
-					if predicateExpression, err := s.buildOptimizedRelationshipExistPredicate(patternPart, traversalStep); err != nil {
-						return err
-					} else {
-						predicateFuture.SyntaxNode = predicateExpression
-					}
-
-					return nil
+				} else {
+					predicateFuture.SyntaxNode = predicateExpression
+					s.recordLowering(optimize.LoweringPredicatePlacement)
 				}
+
+				return nil
 			}
 		}
 

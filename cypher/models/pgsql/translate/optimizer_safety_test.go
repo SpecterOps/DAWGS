@@ -287,6 +287,24 @@ RETURN p
 	)
 }
 
+func TestOptimizerSafetyPatternPredicateExistencePlacementIsPlanned(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (s)
+WHERE NOT (s)-[]-()
+RETURN s
+`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "not exists (select 1 from edge e0")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
+	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
+}
+
 func TestOptimizerSafetyContinuationRelationshipsExcludePriorPathRelationships(t *testing.T) {
 	t.Parallel()
 

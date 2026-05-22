@@ -71,6 +71,7 @@ func appendQueryPartLowerings(
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, queryPart, sourceReferences)
+	appendPatternPredicatePlacementDecisions(plan, queryPartIndex, queryPart)
 	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
 	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
@@ -150,6 +151,41 @@ func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartInde
 
 		appendPatternProjectionPruningDecisions(plan, target, patternPart, steps, sourceReferences)
 		appendPatternLatePathMaterializationDecisions(plan, target, patternPart, steps, sourceReferences)
+	}
+}
+
+func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
+	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
+		patternPart := patternPartForPredicate(predicate)
+		steps := traversalStepsForPattern(patternPart)
+		if len(steps) != 1 {
+			continue
+		}
+
+		step := steps[0]
+		if step.Relationship == nil ||
+			step.Relationship.Direction != graph.DirectionBoth ||
+			relationshipPatternHasConstraints(step.Relationship) ||
+			nodePatternHasConstraints(step.LeftNode) ||
+			nodePatternHasConstraints(step.RightNode) {
+			continue
+		}
+
+		if variableSymbol(step.Relationship.Variable) != "" || variableSymbol(step.RightNode.Variable) != "" {
+			continue
+		}
+
+		target := PatternTarget{
+			QueryPartIndex: queryPartIndex,
+			PatternIndex:   predicateIndex,
+			Predicate:      true,
+			PredicateIndex: predicateIndex,
+		}.TraversalStep(0)
+
+		plan.PatternPredicate = append(plan.PatternPredicate, PatternPredicatePlacementDecision{
+			Target: target,
+			Mode:   PatternPredicatePlacementExistence,
+		})
 	}
 }
 
@@ -907,6 +943,10 @@ func declareWhereSymbols(declared map[string]struct{}, match *cypher.Match) {
 
 func nodePatternHasConstraints(nodePattern *cypher.NodePattern) bool {
 	return nodePattern != nil && (len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil)
+}
+
+func relationshipPatternHasConstraints(relationshipPattern *cypher.RelationshipPattern) bool {
+	return relationshipPattern != nil && (len(relationshipPattern.Kinds) > 0 || relationshipPattern.Properties != nil)
 }
 
 func addSymbol(symbols map[string]struct{}, symbol string) {

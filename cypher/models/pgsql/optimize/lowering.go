@@ -131,16 +131,28 @@ type PredicatePlacementDecision struct {
 	Placement  PredicateAttachmentScope `json:"placement"`
 }
 
+type PatternPredicatePlacementMode string
+
+const (
+	PatternPredicatePlacementExistence PatternPredicatePlacementMode = "existence"
+)
+
+type PatternPredicatePlacementDecision struct {
+	Target TraversalStepTarget           `json:"target"`
+	Mode   PatternPredicatePlacementMode `json:"mode"`
+}
+
 type LoweringPlan struct {
-	ProjectionPruning       []ProjectionPruningDecision       `json:"projection_pruning,omitempty"`
-	LatePathMaterialization []LatePathMaterializationDecision `json:"late_path_materialization,omitempty"`
-	ExpandInto              []ExpandIntoDecision              `json:"expand_into,omitempty"`
-	TraversalDirection      []TraversalDirectionDecision      `json:"traversal_direction,omitempty"`
-	ShortestPathStrategy    []ShortestPathStrategyDecision    `json:"shortest_path_strategy,omitempty"`
-	ShortestPathFilter      []ShortestPathFilterDecision      `json:"shortest_path_filter,omitempty"`
-	LimitPushdown           []LimitPushdownDecision           `json:"limit_pushdown,omitempty"`
-	ExpansionSuffixPushdown []ExpansionSuffixPushdownDecision `json:"expansion_suffix_pushdown,omitempty"`
-	PredicatePlacement      []PredicatePlacementDecision      `json:"predicate_placement,omitempty"`
+	ProjectionPruning       []ProjectionPruningDecision         `json:"projection_pruning,omitempty"`
+	LatePathMaterialization []LatePathMaterializationDecision   `json:"late_path_materialization,omitempty"`
+	ExpandInto              []ExpandIntoDecision                `json:"expand_into,omitempty"`
+	TraversalDirection      []TraversalDirectionDecision        `json:"traversal_direction,omitempty"`
+	ShortestPathStrategy    []ShortestPathStrategyDecision      `json:"shortest_path_strategy,omitempty"`
+	ShortestPathFilter      []ShortestPathFilterDecision        `json:"shortest_path_filter,omitempty"`
+	LimitPushdown           []LimitPushdownDecision             `json:"limit_pushdown,omitempty"`
+	ExpansionSuffixPushdown []ExpansionSuffixPushdownDecision   `json:"expansion_suffix_pushdown,omitempty"`
+	PredicatePlacement      []PredicatePlacementDecision        `json:"predicate_placement,omitempty"`
+	PatternPredicate        []PatternPredicatePlacementDecision `json:"pattern_predicate_placement,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -152,7 +164,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.ShortestPathFilter) == 0 &&
 		len(s.LimitPushdown) == 0 &&
 		len(s.ExpansionSuffixPushdown) == 0 &&
-		len(s.PredicatePlacement) == 0
+		len(s.PredicatePlacement) == 0 &&
+		len(s.PatternPredicate) == 0
 }
 
 func (s LoweringPlan) Decisions() []LoweringDecision {
@@ -171,7 +184,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringShortestPathFilter, len(s.ShortestPathFilter) > 0)
 	add(LoweringLimitPushdown, len(s.LimitPushdown) > 0)
 	add(LoweringExpansionSuffixPushdown, len(s.ExpansionSuffixPushdown) > 0)
-	add(LoweringPredicatePlacement, len(s.PredicatePlacement) > 0)
+	add(LoweringPredicatePlacement, len(s.PredicatePlacement) > 0 || len(s.PatternPredicate) > 0)
 
 	return decisions
 }

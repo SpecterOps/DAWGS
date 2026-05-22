@@ -40,6 +40,7 @@ type Translator struct {
 	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
 	shortestPathFilterDecisions   map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
 	limitPushdownDecisions        map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
+	patternPredicateDecisions     map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
 }
 
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
@@ -82,6 +83,7 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.shortestPathStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision{}
 	s.shortestPathFilterDecisions = map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision{}
 	s.limitPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision{}
+	s.patternPredicateDecisions = map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -113,6 +115,10 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 
 	for _, decision := range plan.LoweringPlan.LimitPushdown {
 		s.limitPushdownDecisions[decision.Target] = append(s.limitPushdownDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.PatternPredicate {
+		s.patternPredicateDecisions[decision.Target] = decision
 	}
 }
 
