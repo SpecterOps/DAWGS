@@ -77,6 +77,8 @@ func (s *Translator) buildPatternPropertyConstraints(binding *BoundIdentifier, p
 
 		if newConstraint, err := s.treeTranslator.PopBinaryExpression(pgsql.OperatorEquals); err != nil {
 			return nil, err
+		} else if rewrittenConstraint, rewritten := buildStringPropertyEqualityPredicate(newConstraint); rewritten {
+			propertyConstraints = pgsql.OptionalAnd(propertyConstraints, rewrittenConstraint)
 		} else {
 			propertyConstraints = pgsql.OptionalAnd(propertyConstraints, newConstraint)
 		}

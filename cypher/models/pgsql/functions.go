@@ -12,6 +12,7 @@ const (
 	FunctionJSONBArrayElementsText        Identifier = "jsonb_array_elements_text"
 	FunctionJSONBBuildObject              Identifier = "jsonb_build_object"
 	FunctionJSONBArrayLength              Identifier = "jsonb_array_length"
+	FunctionJSONBTypeof                   Identifier = "jsonb_typeof"
 	FunctionToJSONB                       Identifier = "to_jsonb"
 	FunctionCypherContains                Identifier = "cypher_contains"
 	FunctionCypherStartsWith              Identifier = "cypher_starts_with"
