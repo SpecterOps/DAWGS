@@ -711,6 +711,28 @@ LIMIT 100
 	require.Contains(t, normalizedQuery, "e.end_id = traversal.next_id")
 }
 
+func TestOptimizerSafetyAggregateTraversalCountReturnsCountAlias(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u AS user, adminCount AS privileges
+ORDER BY privileges DESC
+LIMIT 100
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "(source_node.id, source_node.kind_ids, source_node.properties)::nodecomposite as user")
+	require.Contains(t, normalizedQuery, "ranked.admincount as privileges")
+	require.Contains(t, normalizedQuery, "order by ranked.admincount desc")
+}
+
 func TestOptimizerSafetyAggregateTraversalCountSkipsUnsafeWideningCandidates(t *testing.T) {
 	t.Parallel()
 

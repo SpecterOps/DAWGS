@@ -816,6 +816,31 @@ func TestLoweringPlanReportsAggregateTraversalCountForRowCount(t *testing.T) {
 	require.Equal(t, "adminCount", plan.LoweringPlan.AggregateTraversalCount[0].CountAlias)
 }
 
+func TestLoweringPlanReportsAggregateTraversalCountWhenReturningCountAlias(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		WITH DISTINCT u, COUNT(c) AS adminCount
+		RETURN u AS user, adminCount AS privileges
+		ORDER BY privileges DESC
+		LIMIT 100
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
+
+	shape, ok := AggregateTraversalCountShapeForQuery(plan.Query)
+	require.True(t, ok)
+	require.Equal(t, "user", shape.ReturnSourceAlias)
+	require.True(t, shape.ReturnCount)
+	require.Equal(t, "privileges", shape.ReturnCountAlias)
+}
+
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
 	t.Parallel()
 

@@ -178,6 +178,9 @@ type AggregateTraversalCountShape struct {
 	SourceSymbol      string
 	TerminalSymbol    string
 	CountAlias        string
+	ReturnSourceAlias string
+	ReturnCountAlias  string
+	ReturnCount       bool
 	Limit             int64
 	SourceMatch       *cypher.Match
 	SourceKinds       graph.Kinds

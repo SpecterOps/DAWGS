@@ -1214,7 +1214,7 @@ func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (Aggregate
 		return AggregateTraversalCountShape{}, false
 	}
 
-	limit, ok := aggregateTraversalFinalProjection(multiPartQuery.SinglePartQuery, sourceSymbol, countAlias)
+	finalProjection, ok := aggregateTraversalFinalProjection(multiPartQuery.SinglePartQuery, sourceSymbol, countAlias)
 	if !ok {
 		return AggregateTraversalCountShape{}, false
 	}
@@ -1229,7 +1229,10 @@ func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (Aggregate
 		SourceSymbol:      sourceSymbol,
 		TerminalSymbol:    terminalSymbol,
 		CountAlias:        countAlias,
-		Limit:             limit,
+		ReturnSourceAlias: finalProjection.SourceAlias,
+		ReturnCountAlias:  finalProjection.CountAlias,
+		ReturnCount:       finalProjection.ReturnCount,
+		Limit:             finalProjection.Limit,
 		SourceMatch:       sourceMatch,
 		SourceKinds:       sourceNode.Kinds,
 		TerminalKinds:     terminalNode.Kinds,
@@ -1323,29 +1326,72 @@ func aggregateTraversalWithProjection(projection *cypher.Projection, sourceSymbo
 	return countAlias, true
 }
 
-func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, sourceSymbol, countAlias string) (int64, bool) {
+type aggregateTraversalFinalProjectionShape struct {
+	SourceAlias string
+	CountAlias  string
+	ReturnCount bool
+	Limit       int64
+}
+
+func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, sourceSymbol, countAlias string) (aggregateTraversalFinalProjectionShape, bool) {
 	if queryPart == nil || len(queryPart.ReadingClauses) > 0 || len(queryPart.UpdatingClauses) > 0 || queryPart.Return == nil || queryPart.Return.Projection == nil {
-		return 0, false
+		return aggregateTraversalFinalProjectionShape{}, false
 	}
 
 	projection := queryPart.Return.Projection
-	if projection.Distinct || projection.All || projection.Skip != nil || projection.Order == nil || projection.Limit == nil || len(projection.Items) != 1 {
-		return 0, false
+	if projection.Distinct || projection.All || projection.Skip != nil || projection.Order == nil || projection.Limit == nil || len(projection.Items) < 1 || len(projection.Items) > 2 {
+		return aggregateTraversalFinalProjectionShape{}, false
 	}
 
-	if symbol, ok := projectionItemVariableSymbol(projection.Items[0]); !ok || symbol != sourceSymbol {
-		return 0, false
+	finalProjection := aggregateTraversalFinalProjectionShape{
+		SourceAlias: sourceSymbol,
+		CountAlias:  countAlias,
+	}
+
+	sourceSeen := false
+	countSeen := false
+	for _, item := range projection.Items {
+		symbol, alias, ok := projectionItemVariableSymbolAndAlias(item)
+		if !ok {
+			return aggregateTraversalFinalProjectionShape{}, false
+		}
+
+		switch symbol {
+		case sourceSymbol:
+			if sourceSeen {
+				return aggregateTraversalFinalProjectionShape{}, false
+			}
+			sourceSeen = true
+			finalProjection.SourceAlias = alias
+		case countAlias:
+			if countSeen {
+				return aggregateTraversalFinalProjectionShape{}, false
+			}
+			countSeen = true
+			finalProjection.ReturnCount = true
+			finalProjection.CountAlias = alias
+		default:
+			return aggregateTraversalFinalProjectionShape{}, false
+		}
+	}
+	if !sourceSeen {
+		return aggregateTraversalFinalProjectionShape{}, false
 	}
 
 	if len(projection.Order.Items) != 1 || projection.Order.Items[0] == nil || projection.Order.Items[0].Ascending {
-		return 0, false
+		return aggregateTraversalFinalProjectionShape{}, false
 	}
 
-	if orderSymbol, ok := expressionVariableSymbol(projection.Order.Items[0].Expression); !ok || orderSymbol != countAlias {
-		return 0, false
+	if orderSymbol, ok := expressionVariableSymbol(projection.Order.Items[0].Expression); !ok || (orderSymbol != countAlias && orderSymbol != finalProjection.CountAlias) {
+		return aggregateTraversalFinalProjectionShape{}, false
 	}
 
-	return literalInt64(projection.Limit.Value)
+	limit, ok := literalInt64(projection.Limit.Value)
+	if !ok {
+		return aggregateTraversalFinalProjectionShape{}, false
+	}
+	finalProjection.Limit = limit
+	return finalProjection, true
 }
 
 func aggregateTraversalDepthBounds(patternRange *cypher.PatternRange) (int64, int64, bool) {
@@ -1379,6 +1425,29 @@ func projectionItemVariableSymbol(expression cypher.Expression) (string, bool) {
 	}
 
 	return expressionVariableSymbol(projectionItem.Expression)
+}
+
+func projectionItemVariableSymbolAndAlias(expression cypher.Expression) (string, string, bool) {
+	projectionItem, ok := expression.(*cypher.ProjectionItem)
+	if !ok || projectionItem == nil {
+		return "", "", false
+	}
+
+	symbol, ok := expressionVariableSymbol(projectionItem.Expression)
+	if !ok {
+		return "", "", false
+	}
+
+	alias := symbol
+	if projectionItem.Alias != nil {
+		if projectionItem.Alias.Symbol == "" {
+			return "", "", false
+		}
+
+		alias = projectionItem.Alias.Symbol
+	}
+
+	return symbol, alias, true
 }
 
 func expressionVariableSymbol(expression cypher.Expression) (string, bool) {

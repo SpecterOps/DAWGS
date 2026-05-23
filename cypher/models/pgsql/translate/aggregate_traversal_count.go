@@ -70,6 +70,19 @@ func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraver
 		return pgsql.Query{}, err
 	}
 
+	projection := pgsql.Projection{
+		pgsql.AliasedExpression{
+			Expression: aggregateNodeComposite(aggregateSourceAlias),
+			Alias:      pgsql.AsOptionalIdentifier(pgsql.Identifier(shape.ReturnSourceAlias)),
+		},
+	}
+	if shape.ReturnCount {
+		projection = append(projection, pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{aggregateRankedCTE, pgsql.Identifier(shape.CountAlias)},
+			Alias:      pgsql.AsOptionalIdentifier(pgsql.Identifier(shape.ReturnCountAlias)),
+		})
+	}
+
 	return pgsql.Query{
 		CommonTableExpressions: &pgsql.With{
 			Recursive: true,
@@ -82,12 +95,7 @@ func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraver
 			},
 		},
 		Body: pgsql.Select{
-			Projection: pgsql.Projection{
-				pgsql.AliasedExpression{
-					Expression: aggregateNodeComposite(aggregateSourceAlias),
-					Alias:      pgsql.AsOptionalIdentifier(pgsql.Identifier(shape.SourceSymbol)),
-				},
-			},
+			Projection: projection,
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{
 					Name: aggregateRankedCTE.AsCompoundIdentifier(),
