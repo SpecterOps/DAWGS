@@ -1,6 +1,9 @@
 package optimize
 
-import "github.com/specterops/dawgs/cypher/models/cypher"
+import (
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/graph"
+)
 
 const (
 	LoweringProjectionPruning       = "ProjectionPruning"
@@ -14,6 +17,7 @@ const (
 	LoweringPredicatePlacement      = "PredicatePlacement"
 	LoweringCountStoreFastPath      = "CountStoreFastPath"
 	LoweringCollectIDMembership     = "CollectIDMembership"
+	LoweringAggregateTraversalCount = "AggregateTraversalCount"
 )
 
 type LoweringDecision struct {
@@ -160,6 +164,31 @@ type CountStoreFastPathDecision struct {
 	KindSymbols    []string                 `json:"kind_symbols,omitempty"`
 }
 
+type AggregateTraversalCountDecision struct {
+	QueryPartIndex int                 `json:"query_part_index"`
+	SourceSymbol   string              `json:"source_symbol"`
+	TerminalSymbol string              `json:"terminal_symbol"`
+	CountAlias     string              `json:"count_alias"`
+	Limit          int64               `json:"limit,omitempty"`
+	Target         TraversalStepTarget `json:"target"`
+}
+
+type AggregateTraversalCountShape struct {
+	QueryPartIndex    int
+	SourceSymbol      string
+	TerminalSymbol    string
+	CountAlias        string
+	Limit             int64
+	SourceMatch       *cypher.Match
+	SourceKinds       graph.Kinds
+	TerminalKinds     graph.Kinds
+	RelationshipKinds graph.Kinds
+	Direction         graph.Direction
+	MinDepth          int64
+	MaxDepth          int64
+	Target            TraversalStepTarget
+}
+
 type LoweringPlan struct {
 	ProjectionPruning       []ProjectionPruningDecision         `json:"projection_pruning,omitempty"`
 	LatePathMaterialization []LatePathMaterializationDecision   `json:"late_path_materialization,omitempty"`
@@ -172,6 +201,7 @@ type LoweringPlan struct {
 	PredicatePlacement      []PredicatePlacementDecision        `json:"predicate_placement,omitempty"`
 	PatternPredicate        []PatternPredicatePlacementDecision `json:"pattern_predicate_placement,omitempty"`
 	CountStoreFastPath      []CountStoreFastPathDecision        `json:"count_store_fast_path,omitempty"`
+	AggregateTraversalCount []AggregateTraversalCountDecision   `json:"aggregate_traversal_count,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -185,7 +215,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.ExpansionSuffixPushdown) == 0 &&
 		len(s.PredicatePlacement) == 0 &&
 		len(s.PatternPredicate) == 0 &&
-		len(s.CountStoreFastPath) == 0
+		len(s.CountStoreFastPath) == 0 &&
+		len(s.AggregateTraversalCount) == 0
 }
 
 func (s LoweringPlan) Decisions() []LoweringDecision {
@@ -206,6 +237,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringExpansionSuffixPushdown, len(s.ExpansionSuffixPushdown) > 0)
 	add(LoweringPredicatePlacement, len(s.PredicatePlacement) > 0 || len(s.PatternPredicate) > 0)
 	add(LoweringCountStoreFastPath, len(s.CountStoreFastPath) > 0)
+	add(LoweringAggregateTraversalCount, len(s.AggregateTraversalCount) > 0)
 
 	return decisions
 }

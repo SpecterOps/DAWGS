@@ -709,11 +709,8 @@ func TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrained
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (u:User)
 		WHERE u.hasspn = true AND u.enabled = true
-		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
-		WITH DISTINCT u, COUNT(c) AS adminCount
-		RETURN u
-		ORDER BY adminCount DESC
-		LIMIT 100
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer {name: 'target'})
+		RETURN c
 	`)
 	require.NoError(t, err)
 
@@ -730,6 +727,39 @@ func TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrained
 		Flip:   true,
 		Reason: traversalDirectionReasonRightConstrained,
 	}}, plan.LoweringPlan.TraversalDirection)
+}
+
+func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true AND u.enabled = true
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		WITH DISTINCT u, COUNT(c) AS adminCount
+		RETURN u
+		ORDER BY adminCount DESC
+		LIMIT 100
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Empty(t, plan.LoweringPlan.TraversalDirection)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
+	require.Equal(t, []AggregateTraversalCountDecision{{
+		QueryPartIndex: 0,
+		SourceSymbol:   "u",
+		TerminalSymbol: "c",
+		CountAlias:     "adminCount",
+		Limit:          100,
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+	}}, plan.LoweringPlan.AggregateTraversalCount)
 }
 
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {

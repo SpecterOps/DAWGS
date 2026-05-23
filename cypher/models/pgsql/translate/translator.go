@@ -695,12 +695,16 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 		{Name: optimize.LoweringExpansionSuffixPushdown, Count: len(plan.ExpansionSuffixPushdown)},
 		{Name: optimize.LoweringPredicatePlacement, Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate)},
 		{Name: optimize.LoweringCountStoreFastPath, Count: len(plan.CountStoreFastPath)},
+		{Name: optimize.LoweringAggregateTraversalCount, Count: len(plan.AggregateTraversalCount)},
 	}
 }
 
 func skippedLoweringReason(name string, applied map[string]int) string {
 	if applied[optimize.LoweringCountStoreFastPath] > 0 && name != optimize.LoweringCountStoreFastPath {
 		return "superseded by CountStoreFastPath"
+	}
+	if applied[optimize.LoweringAggregateTraversalCount] > 0 && name != optimize.LoweringAggregateTraversalCount {
+		return "superseded by AggregateTraversalCount"
 	}
 
 	switch name {
@@ -733,6 +737,13 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	}
 
 	if translated, err := translator.translateCountStoreFastPath(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
+		return Result{}, err
+	} else if translated {
+		translator.recordSkippedLowerings()
+		return translator.translation, nil
+	}
+
+	if translated, err := translator.translateAggregateTraversalCount(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
 		return Result{}, err
 	} else if translated {
 		translator.recordSkippedLowerings()

@@ -579,7 +579,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
 }
 
-func TestOptimizerSafetyTraversalDirectionUsesBoundLeftExpansionTerminalConstraint(t *testing.T) {
+func TestOptimizerSafetyAggregateTraversalCountUsesIDOnlySourceAnchoredShape(t *testing.T) {
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
@@ -594,11 +594,42 @@ LIMIT 100
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	lowerQuery := strings.ToLower(normalizedQuery)
 
-	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
-	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
-	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s3_seed.root_id")
-	require.Contains(t, normalizedQuery, "(s1.n0).id = s3.next_id")
+	requireNoPlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, lowerQuery, "with recursive candidate_sources(root_id)")
+	require.Contains(t, lowerQuery, "traversal(root_id, next_id, depth, path)")
+	require.Contains(t, lowerQuery, "terminal_nodes(id) as materialized")
+	require.Contains(t, lowerQuery, "terminal_hits(root_id)")
+	require.Contains(t, lowerQuery, "ranked(root_id, admincount)")
+	require.Contains(t, lowerQuery, "join edge e on e.start_id = candidate_sources.root_id")
+	require.Contains(t, lowerQuery, "e.start_id = traversal.next_id")
+	require.Contains(t, lowerQuery, "e.id != all (traversal.path)")
+	require.Contains(t, lowerQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
+	require.Contains(t, lowerQuery, "count(*)::int8 as admincount")
+	require.Contains(t, lowerQuery, "group by terminal_hits.root_id")
+	require.Contains(t, lowerQuery, "from ranked join node source_node on source_node.id = ranked.root_id")
+	require.NotContains(t, lowerQuery, "group by (")
+	require.NotContains(t, lowerQuery, "::nodecomposite as n0 from")
+}
+
+func TestOptimizerSafetyAggregateTraversalCountSkipsObservedTerminal(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true AND u.enabled = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, c, COUNT(c) AS adminCount
+RETURN u, c
+ORDER BY adminCount DESC
+LIMIT 100
+	`)
+
+	requireNoPlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	requireNoOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 }
 
 func TestOptimizerSafetyShortestPathStrategyUsesPlannedBidirectionalSearch(t *testing.T) {

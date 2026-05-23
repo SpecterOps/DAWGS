@@ -57,6 +57,7 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	appendPredicatePlacementDecisions(&plan, query, predicateAttachments)
 	attachPredicatePlacementsToSuffixPushdowns(&plan)
 	appendCountStoreFastPathDecisions(&plan, query)
+	appendAggregateTraversalCountDecisions(&plan, query)
 	return plan, nil
 }
 
@@ -365,6 +366,7 @@ func appendTraversalDirectionDecisions(plan *LoweringPlan, queryPartIndex int, r
 					stepIndex,
 					step,
 					declaredEndpoints[stepIndex],
+					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.RightNode.Variable)),
 				); shouldFlip {
 					plan.TraversalDirection = append(plan.TraversalDirection, decision)
 				}
@@ -543,6 +545,7 @@ func boundLeftExpansionDirectionDecisionForStep(
 	stepIndex int,
 	step sourceTraversalStep,
 	declaredEndpoints declaredStepEndpoints,
+	rightHasAttachedPredicate bool,
 ) (TraversalDirectionDecision, bool) {
 	if patternPart == nil ||
 		patternPart.Variable != nil ||
@@ -556,6 +559,10 @@ func boundLeftExpansionDirectionDecisionForStep(
 		step.Relationship.Variable != nil ||
 		nodePatternHasConstraints(step.LeftNode) ||
 		!nodePatternHasConstraints(step.RightNode) {
+		return TraversalDirectionDecision{}, false
+	}
+
+	if step.RightNode.Properties == nil && !rightHasAttachedPredicate {
 		return TraversalDirectionDecision{}, false
 	}
 
@@ -988,6 +995,266 @@ func attachPredicatePlacementsToSuffixPushdowns(plan *LoweringPlan) {
 func appendCountStoreFastPathDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
 	if decision, ok := countStoreFastPathDecision(query); ok {
 		plan.CountStoreFastPath = append(plan.CountStoreFastPath, decision)
+	}
+}
+
+func appendAggregateTraversalCountDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
+	if shape, ok := AggregateTraversalCountShapeForQuery(query); ok {
+		plan.AggregateTraversalCount = append(plan.AggregateTraversalCount, AggregateTraversalCountDecision{
+			QueryPartIndex: shape.QueryPartIndex,
+			SourceSymbol:   shape.SourceSymbol,
+			TerminalSymbol: shape.TerminalSymbol,
+			CountAlias:     shape.CountAlias,
+			Limit:          shape.Limit,
+			Target:         shape.Target,
+		})
+	}
+}
+
+func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (AggregateTraversalCountShape, bool) {
+	if query == nil || query.SingleQuery == nil || query.SingleQuery.MultiPartQuery == nil {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	multiPartQuery := query.SingleQuery.MultiPartQuery
+	if len(multiPartQuery.Parts) != 1 || multiPartQuery.Parts[0] == nil || multiPartQuery.SinglePartQuery == nil {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	part := multiPartQuery.Parts[0]
+	if len(part.UpdatingClauses) > 0 || len(part.ReadingClauses) != 2 || part.With == nil || part.With.Where != nil {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	sourceMatch, sourceNode, sourceSymbol, ok := aggregateTraversalSourceMatch(part.ReadingClauses[0])
+	if !ok {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	relationship, terminalNode, terminalSymbol, ok := aggregateTraversalMatch(part.ReadingClauses[1], sourceSymbol)
+	if !ok {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	countAlias, ok := aggregateTraversalWithProjection(part.With.Projection, sourceSymbol, terminalSymbol)
+	if !ok {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	limit, ok := aggregateTraversalFinalProjection(multiPartQuery.SinglePartQuery, sourceSymbol, countAlias)
+	if !ok {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	minDepth, maxDepth, ok := aggregateTraversalDepthBounds(relationship.Range)
+	if !ok {
+		return AggregateTraversalCountShape{}, false
+	}
+
+	return AggregateTraversalCountShape{
+		QueryPartIndex:    0,
+		SourceSymbol:      sourceSymbol,
+		TerminalSymbol:    terminalSymbol,
+		CountAlias:        countAlias,
+		Limit:             limit,
+		SourceMatch:       sourceMatch,
+		SourceKinds:       sourceNode.Kinds,
+		TerminalKinds:     terminalNode.Kinds,
+		RelationshipKinds: relationship.Kinds,
+		Direction:         relationship.Direction,
+		MinDepth:          minDepth,
+		MaxDepth:          maxDepth,
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+	}, true
+}
+
+func aggregateTraversalSourceMatch(readingClause *cypher.ReadingClause) (*cypher.Match, *cypher.NodePattern, string, bool) {
+	if readingClause == nil || readingClause.Match == nil {
+		return nil, nil, "", false
+	}
+
+	match := readingClause.Match
+	if match.Optional || len(match.Pattern) != 1 {
+		return nil, nil, "", false
+	}
+
+	patternPart := match.Pattern[0]
+	nodePattern, ok := singleNodePattern(patternPart)
+	if !ok || nodePattern == nil || nodePattern.Variable == nil || nodePattern.Variable.Symbol == "" || nodePattern.Properties != nil {
+		return nil, nil, "", false
+	}
+
+	for _, dependency := range sortedDependencies(match.Where) {
+		if dependency != nodePattern.Variable.Symbol {
+			return nil, nil, "", false
+		}
+	}
+
+	return match, nodePattern, nodePattern.Variable.Symbol, true
+}
+
+func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol string) (*cypher.RelationshipPattern, *cypher.NodePattern, string, bool) {
+	if readingClause == nil || readingClause.Match == nil {
+		return nil, nil, "", false
+	}
+
+	match := readingClause.Match
+	if match.Optional || match.Where != nil || len(match.Pattern) != 1 {
+		return nil, nil, "", false
+	}
+
+	patternPart := match.Pattern[0]
+	if patternPart == nil || patternPart.Variable != nil || patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern || len(patternPart.PatternElements) != 3 {
+		return nil, nil, "", false
+	}
+
+	leftNode, leftOK := patternPart.PatternElements[0].AsNodePattern()
+	relationship, relationshipOK := patternPart.PatternElements[1].AsRelationshipPattern()
+	rightNode, rightOK := patternPart.PatternElements[2].AsNodePattern()
+	if !leftOK || !relationshipOK || !rightOK ||
+		leftNode == nil || relationship == nil || rightNode == nil ||
+		variableSymbol(leftNode.Variable) != sourceSymbol ||
+		leftNode.Properties != nil ||
+		relationship.Variable != nil ||
+		relationship.Range == nil ||
+		relationship.Properties != nil ||
+		relationship.Direction == graph.DirectionBoth ||
+		rightNode.Properties != nil ||
+		rightNode.Variable == nil ||
+		rightNode.Variable.Symbol == "" {
+		return nil, nil, "", false
+	}
+
+	return relationship, rightNode, rightNode.Variable.Symbol, true
+}
+
+func aggregateTraversalWithProjection(projection *cypher.Projection, sourceSymbol, terminalSymbol string) (string, bool) {
+	if projection == nil || projection.All || projection.Order != nil || projection.Skip != nil || projection.Limit != nil || len(projection.Items) != 2 {
+		return "", false
+	}
+
+	if symbol, ok := projectionItemVariableSymbol(projection.Items[0]); !ok || symbol != sourceSymbol {
+		return "", false
+	}
+
+	countAlias, ok := projectionItemCountAlias(projection.Items[1], terminalSymbol)
+	if !ok {
+		return "", false
+	}
+
+	return countAlias, true
+}
+
+func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, sourceSymbol, countAlias string) (int64, bool) {
+	if queryPart == nil || len(queryPart.ReadingClauses) > 0 || len(queryPart.UpdatingClauses) > 0 || queryPart.Return == nil || queryPart.Return.Projection == nil {
+		return 0, false
+	}
+
+	projection := queryPart.Return.Projection
+	if projection.Distinct || projection.All || projection.Skip != nil || projection.Order == nil || projection.Limit == nil || len(projection.Items) != 1 {
+		return 0, false
+	}
+
+	if symbol, ok := projectionItemVariableSymbol(projection.Items[0]); !ok || symbol != sourceSymbol {
+		return 0, false
+	}
+
+	if len(projection.Order.Items) != 1 || projection.Order.Items[0] == nil || projection.Order.Items[0].Ascending {
+		return 0, false
+	}
+
+	if orderSymbol, ok := expressionVariableSymbol(projection.Order.Items[0].Expression); !ok || orderSymbol != countAlias {
+		return 0, false
+	}
+
+	return literalInt64(projection.Limit.Value)
+}
+
+func aggregateTraversalDepthBounds(patternRange *cypher.PatternRange) (int64, int64, bool) {
+	if patternRange == nil {
+		return 0, 0, false
+	}
+
+	minDepth := int64(1)
+	if patternRange.StartIndex != nil {
+		minDepth = *patternRange.StartIndex
+	}
+	if minDepth < 1 {
+		return 0, 0, false
+	}
+
+	maxDepth := int64(15)
+	if patternRange.EndIndex != nil {
+		maxDepth = *patternRange.EndIndex
+	}
+	if maxDepth < minDepth {
+		return 0, 0, false
+	}
+
+	return minDepth, maxDepth, true
+}
+
+func projectionItemVariableSymbol(expression cypher.Expression) (string, bool) {
+	projectionItem, ok := expression.(*cypher.ProjectionItem)
+	if !ok || projectionItem == nil || projectionItem.Alias != nil {
+		return "", false
+	}
+
+	return expressionVariableSymbol(projectionItem.Expression)
+}
+
+func expressionVariableSymbol(expression cypher.Expression) (string, bool) {
+	variable, ok := expression.(*cypher.Variable)
+	if !ok || variable == nil || variable.Symbol == "" {
+		return "", false
+	}
+
+	return variable.Symbol, true
+}
+
+func projectionItemCountAlias(expression cypher.Expression, terminalSymbol string) (string, bool) {
+	projectionItem, ok := expression.(*cypher.ProjectionItem)
+	if !ok || projectionItem == nil || projectionItem.Alias == nil || projectionItem.Alias.Symbol == "" {
+		return "", false
+	}
+
+	function, ok := projectionItem.Expression.(*cypher.FunctionInvocation)
+	if !ok || function == nil || !strings.EqualFold(function.Name, cypher.CountFunction) ||
+		function.Distinct || len(function.Namespace) > 0 || len(function.Arguments) != 1 {
+		return "", false
+	}
+
+	if symbol, ok := expressionVariableSymbol(function.Arguments[0]); !ok || symbol != terminalSymbol {
+		return "", false
+	}
+
+	return projectionItem.Alias.Symbol, true
+}
+
+func literalInt64(expression cypher.Expression) (int64, bool) {
+	literal, ok := expression.(*cypher.Literal)
+	if !ok || literal == nil || literal.Null {
+		return 0, false
+	}
+
+	switch value := literal.Value.(type) {
+	case int:
+		return int64(value), value >= 0
+	case int8:
+		return int64(value), value >= 0
+	case int16:
+		return int64(value), value >= 0
+	case int32:
+		return int64(value), value >= 0
+	case int64:
+		return value, value >= 0
+	default:
+		return 0, false
 	}
 }
 
