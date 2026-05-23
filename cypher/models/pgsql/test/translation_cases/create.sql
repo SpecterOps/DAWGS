@@ -73,3 +73,4 @@ with s0 as (select nextval(pg_get_serial_sequence('node', 'id'))::int8 as n0_id)
 
 -- case: match (a:NodeKind1) with a create (b:NodeKind2 {source: a.name}) return a, b
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s1.n0 as n0 from s1), s2 as (select s0.n0 as n0, nextval(pg_get_serial_sequence('node', 'id'))::int8 as n1_id from s0), s3 as (insert into node (graph_id, id, kind_ids, properties) select 0, s2.n1_id, array [2]::int2[], jsonb_build_object('source', ((s2.n0).properties ->> 'name'))::jsonb from s2 returning id as n1_id, (id, kind_ids, properties)::nodecomposite as n1), s4 as (select s2.n0 as n0, s3.n1 as n1 from s2, s3 where s3.n1_id = s2.n1_id) select s4.n0 as a, s4.n1 as b from s4;
+

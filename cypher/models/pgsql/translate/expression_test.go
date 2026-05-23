@@ -304,13 +304,13 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			mustAsLiteral(property),
 		)
 	}
-	renderEquality := func(t *testing.T, lOperand, rOperand pgsql.Expression) string {
+	renderComparison := func(t *testing.T, lOperand pgsql.Expression, operator pgsql.Operator, rOperand pgsql.Expression) string {
 		t.Helper()
 
 		treeTranslator := translate.NewExpressionTreeTranslator(nil)
 		treeTranslator.PushOperand(lOperand)
 		treeTranslator.PushOperand(rOperand)
-		require.NoError(t, treeTranslator.CompleteBinaryExpression(translate.NewScope(), pgsql.OperatorEquals))
+		require.NoError(t, treeTranslator.CompleteBinaryExpression(translate.NewScope(), operator))
 
 		formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
 		require.NoError(t, err)
@@ -321,43 +321,62 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 	testCases := []struct {
 		Name     string
 		LOperand pgsql.Expression
+		Operator pgsql.Operator
 		ROperand pgsql.Expression
 		Expected string
 	}{{
-		Name:     "boolean string literal keeps text property lookup",
+		Name:     "string literal uses typed text property lookup",
 		LOperand: propertyLookup("isassignabletorole"),
+		Operator: pgsql.OperatorEquals,
 		ROperand: mustAsLiteral("true"),
-		Expected: "(n.properties ->> 'isassignabletorole') = 'true'",
+		Expected: "(jsonb_typeof((n.properties -> 'isassignabletorole')) = 'string' and (n.properties ->> 'isassignabletorole') = 'true')",
 	}, {
-		Name:     "boolean string literal keeps text property lookup when reversed",
+		Name:     "string literal uses typed text property lookup when reversed",
 		LOperand: mustAsLiteral("true"),
+		Operator: pgsql.OperatorEquals,
 		ROperand: propertyLookup("isassignabletorole"),
-		Expected: "'true' = (n.properties ->> 'isassignabletorole')",
+		Expected: "(jsonb_typeof((n.properties -> 'isassignabletorole')) = 'string' and 'true' = (n.properties ->> 'isassignabletorole'))",
 	}, {
-		Name:     "non-boolean string literal keeps jsonb scalar equality",
+		Name:     "numeric-looking string literal remains string typed",
 		LOperand: propertyLookup("rank"),
+		Operator: pgsql.OperatorEquals,
 		ROperand: mustAsLiteral("1"),
-		Expected: "((n.properties -> 'rank'))::jsonb = to_jsonb(('1')::text)::jsonb",
+		Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') = '1')",
+	}, {
+		Name:     "text parameter uses typed text property lookup",
+		LOperand: propertyLookup("objectid"),
+		Operator: pgsql.OperatorEquals,
+		ROperand: pgsql.Parameter{Identifier: "pi0", CastType: pgsql.Text},
+		Expected: "(jsonb_typeof((n.properties -> 'objectid')) = 'string' and (n.properties ->> 'objectid') = @pi0::text)",
+	}, {
+		Name:     "string inequality keeps non-string JSONB branch",
+		LOperand: propertyLookup("rank"),
+		Operator: pgsql.OperatorCypherNotEquals,
+		ROperand: mustAsLiteral("1"),
+		Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') <> '1' or jsonb_typeof((n.properties -> 'rank')) <> 'string' and (n.properties -> 'rank') <> to_jsonb(('1')::text)::jsonb)",
 	}, {
 		Name:     "boolean literal keeps jsonb scalar equality",
 		LOperand: propertyLookup("isassignabletorole"),
+		Operator: pgsql.OperatorEquals,
 		ROperand: mustAsLiteral(true),
 		Expected: "((n.properties -> 'isassignabletorole'))::jsonb = to_jsonb((true)::bool)::jsonb",
 	}, {
 		Name:     "numeric literal keeps jsonb scalar equality",
 		LOperand: propertyLookup("count"),
+		Operator: pgsql.OperatorEquals,
 		ROperand: mustAsLiteral(1),
 		Expected: "((n.properties -> 'count'))::jsonb = to_jsonb((1)::int8)::jsonb",
 	}, {
 		Name:     "property to property equality keeps jsonb operands",
 		LOperand: propertyLookup("left"),
+		Operator: pgsql.OperatorEquals,
 		ROperand: propertyLookup("right"),
 		Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
 	}}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			require.Equal(t, testCase.Expected, renderEquality(t, testCase.LOperand, testCase.ROperand))
+			require.Equal(t, testCase.Expected, renderComparison(t, testCase.LOperand, testCase.Operator, testCase.ROperand))
 		})
 	}
 }
