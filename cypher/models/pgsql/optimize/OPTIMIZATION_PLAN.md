@@ -81,3 +81,12 @@ Status: completed
   - Run plan capture and compare summary deltas.
   - `quality_backend` passes against `postgres://postgres:bhe4eva@localhost/bhe` and `neo4j://neo4j:neo4jj@localhost:7687`.
   - Plan corpus capture records 396 PostgreSQL plans and 396 Neo4j plans; remaining capture errors are expected invalid-query cases surfaced by both systems or Neo4j-specific parameter-map syntax rejection.
+
+## Phase 7: Predicate Placement Accounting
+
+Status: completed
+
+- Record planned binding-scope predicate placements when traversal constraint consumption actually pushes the matching predicate into a fixed traversal step, expansion seed, expansion edge, or expansion terminal constraint.
+- Keep skipped-lowering reports focused on predicates that were not consumed by the emitted translation shape, instead of marking already-pushed traversal predicates as skipped.
+- Add SQL-shape regression tests for fixed traversal and expansion-root predicate consumption.
+- Refreshed plan-corpus capture applies `PredicatePlacement` in 56 of 71 planned PostgreSQL cases, reducing skipped predicate placements from 65 to 15.

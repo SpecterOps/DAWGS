@@ -127,6 +127,14 @@ func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummar
 	require.Failf(t, "missing skipped optimization lowering", "expected skipped lowering %q in %#v", name, summary.SkippedLowerings)
 }
 
+func requireNoSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
+	t.Helper()
+
+	for _, lowering := range summary.SkippedLowerings {
+		require.NotEqualf(t, name, lowering.Name, "unexpected skipped lowering %q in %#v", name, summary.SkippedLowerings)
+	}
+}
+
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 	t.Helper()
 
@@ -360,6 +368,51 @@ RETURN p
 		"exists (select 1 from edge e1 join node n2",
 		"properties -> 'name'",
 		"where n1.id = e1.start_id",
+	)
+}
+
+func TestOptimizerSafetyPredicatePlacementRecordsExpansionRootConstraint(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (src:Group)-[:MemberOf*1..]->(mid)-[:Enroll]->(ca:EnterpriseCA)
+WHERE src.name = 'source'
+RETURN p
+`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"select n0.id as root_id from node n0 where",
+		"properties -> 'name'",
+	)
+}
+
+func TestOptimizerSafetyPredicatePlacementRecordsFixedTraversalConstraint(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (src:Group)-[:MemberOf]->(dst)
+WHERE src.name = 'source'
+RETURN dst
+`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireSQLContainsInOrder(t, normalizedQuery,
+		"join node n0 on",
+		"properties -> 'name'",
+		"join node n1",
 	)
 }
 

@@ -997,7 +997,11 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 			if err := s.applyPatternConstraintBalance(part, stepIndex, &constraints, traversalStep); err != nil {
 				return err
 			}
+		}
 
+		s.recordPredicatePlacementConsumption(part, stepIndex, traversalStep, constraints)
+
+		if isFirstTraversalStep {
 			hasPreviousFrame := traversalStep.Frame.Previous != nil
 
 			if hasPreviousFrame {

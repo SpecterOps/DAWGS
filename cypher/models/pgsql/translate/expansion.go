@@ -3158,6 +3158,8 @@ func (s *Translator) translateExpansionConstraints(part *PatternPart, stepIndex 
 			return err
 		}
 
+		s.recordPredicatePlacementConsumption(part, stepIndex, step, constraints)
+
 		// Left node
 		if leftNodeJoinCondition, err := leftNodeTraversalStepConstraint(step); err != nil {
 			return err

@@ -35,6 +35,7 @@ type Translator struct {
 	projectionPruningDecisions    map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
 	latePathDecisions             map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
 	suffixPushdownDecisions       map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	predicatePlacementDecisions   map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
 	expandIntoDecisions           map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
 	traversalDirectionDecisions   map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
 	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
@@ -78,6 +79,7 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.projectionPruningDecisions = map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision{}
 	s.latePathDecisions = map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision{}
 	s.suffixPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision{}
+	s.predicatePlacementDecisions = map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision{}
 	s.expandIntoDecisions = map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision{}
 	s.traversalDirectionDecisions = map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision{}
 	s.shortestPathStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision{}
@@ -95,6 +97,10 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 
 	for _, decision := range plan.LoweringPlan.ExpansionSuffixPushdown {
 		s.suffixPushdownDecisions[decision.Target] = append(s.suffixPushdownDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.PredicatePlacement {
+		s.predicatePlacementDecisions[decision.Target] = append(s.predicatePlacementDecisions[decision.Target], decision)
 	}
 
 	for _, decision := range plan.LoweringPlan.ExpandInto {
