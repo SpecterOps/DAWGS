@@ -647,6 +647,23 @@ RETURN c
 	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "bound source estimate selective")
 }
 
+func TestOptimizerSafetyTraversalDirectionReportsPriorLimitSourceSkip(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true
+WITH u
+LIMIT 10
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer {name: 'target'})
+RETURN c
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireNoOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "bound source estimate selective")
+}
+
 func TestOptimizerSafetyAggregateTraversalCountAcceptsRowCount(t *testing.T) {
 	t.Parallel()
 

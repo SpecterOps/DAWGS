@@ -31,8 +31,11 @@ const (
 
 const (
 	boundSourceSelectivityNone boundSourceSelectivity = iota
+	boundSourceSelectivityKindOnly
 	boundSourceSelectivityPredicate
 	boundSourceSelectivityUnique
+	boundSourceSelectivityLimited
+	boundSourceSelectivityTopN
 )
 
 func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
@@ -43,23 +46,28 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	var plan LoweringPlan
 
 	if query.SingleQuery.MultiPartQuery != nil {
+		carriedSymbols := map[string]struct{}{}
+		carriedSelectivity := map[string]boundSourceSelectivity{}
+
 		for queryPartIndex, part := range query.SingleQuery.MultiPartQuery.Parts {
 			if part == nil {
 				continue
 			}
 
-			if err := appendQueryPartLowerings(&plan, queryPartIndex, part, part.ReadingClauses, predicateAttachments); err != nil {
+			if err := appendQueryPartLowerings(&plan, queryPartIndex, part, part.ReadingClauses, predicateAttachments, carriedSymbols, carriedSelectivity); err != nil {
 				return LoweringPlan{}, err
 			}
+
+			carriedSymbols, carriedSelectivity = carryProjectionSelectivity(part.With.Projection, carriedSelectivity)
 		}
 
 		if finalPart := query.SingleQuery.MultiPartQuery.SinglePartQuery; finalPart != nil {
-			if err := appendQueryPartLowerings(&plan, len(query.SingleQuery.MultiPartQuery.Parts), finalPart, finalPart.ReadingClauses, predicateAttachments); err != nil {
+			if err := appendQueryPartLowerings(&plan, len(query.SingleQuery.MultiPartQuery.Parts), finalPart, finalPart.ReadingClauses, predicateAttachments, carriedSymbols, carriedSelectivity); err != nil {
 				return LoweringPlan{}, err
 			}
 		}
 	} else if singlePart := query.SingleQuery.SinglePartQuery; singlePart != nil {
-		if err := appendQueryPartLowerings(&plan, 0, singlePart, singlePart.ReadingClauses, predicateAttachments); err != nil {
+		if err := appendQueryPartLowerings(&plan, 0, singlePart, singlePart.ReadingClauses, predicateAttachments, nil, nil); err != nil {
 			return LoweringPlan{}, err
 		}
 	}
@@ -77,6 +85,8 @@ func appendQueryPartLowerings(
 	queryPart cypher.SyntaxNode,
 	readingClauses []*cypher.ReadingClause,
 	predicateAttachments []PredicateAttachment,
+	initialDeclaredSymbols map[string]struct{},
+	initialSelectivity map[string]boundSourceSelectivity,
 ) error {
 	sourceReferences, err := collectReferencedSourceIdentifiers(queryPart)
 	if err != nil {
@@ -88,7 +98,7 @@ func appendQueryPartLowerings(
 	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, queryPart, sourceReferences)
 	appendPatternPredicatePlacementDecisions(plan, queryPartIndex, queryPart)
 	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
-	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
+	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex), initialDeclaredSymbols, initialSelectivity)
 	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
@@ -335,9 +345,16 @@ func declaredSymbolsBeforeStepEndpoints(initial map[string]struct{}, steps []sou
 	return endpoints
 }
 
-func appendTraversalDirectionDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
-	declaredSymbols := map[string]struct{}{}
-	declaredSourceSelectivity := map[string]boundSourceSelectivity{}
+func appendTraversalDirectionDecisions(
+	plan *LoweringPlan,
+	queryPartIndex int,
+	readingClauses []*cypher.ReadingClause,
+	predicateConstrainedSymbols map[string]struct{},
+	initialDeclaredSymbols map[string]struct{},
+	initialSelectivity map[string]boundSourceSelectivity,
+) {
+	declaredSymbols := copyStringSet(initialDeclaredSymbols)
+	declaredSourceSelectivity := copyBoundSourceSelectivity(initialSelectivity)
 
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil {
@@ -378,6 +395,7 @@ func appendTraversalDirectionDecisions(plan *LoweringPlan, queryPartIndex int, r
 					step,
 					declaredEndpoints[stepIndex],
 					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.RightNode.Variable)),
+					nodePatternSelectivity(step.RightNode, referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.RightNode.Variable))),
 					declaredSourceSelectivity[variableSymbol(step.LeftNode.Variable)],
 				); shouldFlip {
 					plan.TraversalDirection = append(plan.TraversalDirection, decision)
@@ -406,6 +424,78 @@ func bindingPredicateSymbols(predicateAttachments []PredicateAttachment, queryPa
 	}
 
 	return symbols
+}
+
+func copyBoundSourceSelectivity(values map[string]boundSourceSelectivity) map[string]boundSourceSelectivity {
+	copied := make(map[string]boundSourceSelectivity, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+
+	return copied
+}
+
+func carryProjectionSelectivity(projection *cypher.Projection, incoming map[string]boundSourceSelectivity) (map[string]struct{}, map[string]boundSourceSelectivity) {
+	carriedSymbols := map[string]struct{}{}
+	carriedSelectivity := map[string]boundSourceSelectivity{}
+
+	if projection == nil {
+		return carriedSymbols, carriedSelectivity
+	}
+
+	projectionSelectivity := projectionCardinalitySelectivity(projection)
+	for _, item := range projection.Items {
+		symbol, alias, ok := projectionItemVariableSymbolAndAlias(item)
+		if !ok {
+			continue
+		}
+
+		addSymbol(carriedSymbols, alias)
+		mergeBoundSourceSelectivity(carriedSelectivity, alias, incoming[symbol])
+		mergeBoundSourceSelectivity(carriedSelectivity, alias, projectionSelectivity)
+	}
+
+	return carriedSymbols, carriedSelectivity
+}
+
+func projectionCardinalitySelectivity(projection *cypher.Projection) boundSourceSelectivity {
+	if projection == nil || projection.Limit == nil {
+		return boundSourceSelectivityNone
+	}
+
+	if projection.Order != nil || projectionHasAggregate(projection) {
+		return boundSourceSelectivityTopN
+	}
+
+	return boundSourceSelectivityLimited
+}
+
+func projectionHasAggregate(projection *cypher.Projection) bool {
+	if projection == nil {
+		return false
+	}
+
+	for _, item := range projection.Items {
+		projectionItem, ok := item.(*cypher.ProjectionItem)
+		if !ok || projectionItem == nil {
+			continue
+		}
+
+		if expressionHasAggregate(projectionItem.Expression) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func expressionHasAggregate(expression cypher.Expression) bool {
+	switch typedExpression := expression.(type) {
+	case *cypher.FunctionInvocation:
+		return typedExpression != nil && strings.EqualFold(typedExpression.Name, cypher.CountFunction)
+	default:
+		return false
+	}
 }
 
 func declareSelectiveMatchSymbols(symbols map[string]boundSourceSelectivity, match *cypher.Match) {
@@ -505,7 +595,7 @@ func propertySelectivity(property string, value cypher.Expression) boundSourceSe
 		return boundSourceSelectivityUnique
 	}
 
-	if expressionIsStringLikeConstant(value) {
+	if expressionIsConstant(value) {
 		return boundSourceSelectivityPredicate
 	}
 
@@ -513,23 +603,9 @@ func propertySelectivity(property string, value cypher.Expression) boundSourceSe
 }
 
 func expressionIsConstant(expression cypher.Expression) bool {
-	switch expression.(type) {
-	case *cypher.Literal, *cypher.Parameter:
-		return true
-	default:
-		return false
-	}
-}
-
-func expressionIsStringLikeConstant(expression cypher.Expression) bool {
 	switch typedExpression := expression.(type) {
 	case *cypher.Literal:
-		if typedExpression == nil || typedExpression.Null {
-			return false
-		}
-
-		_, isString := typedExpression.Value.(string)
-		return isString
+		return typedExpression != nil && !typedExpression.Null
 	case *cypher.Parameter:
 		return typedExpression != nil
 	default:
@@ -553,6 +629,30 @@ func propertyLookupSymbol(expression cypher.Expression) (string, string, bool) {
 
 func nodePatternHasUniquePropertyConstraint(nodePattern *cypher.NodePattern) bool {
 	return nodePattern != nil && propertyConstraintSelectivity(nodePattern.Properties) == boundSourceSelectivityUnique
+}
+
+func nodePatternSelectivity(nodePattern *cypher.NodePattern, hasAttachedPredicate bool) boundSourceSelectivity {
+	if nodePattern == nil {
+		return boundSourceSelectivityNone
+	}
+
+	selectivity := boundSourceSelectivityNone
+	if len(nodePattern.Kinds) > 0 {
+		selectivity = boundSourceSelectivityKindOnly
+	}
+
+	mergeSelectivityValue(&selectivity, propertyConstraintSelectivity(nodePattern.Properties))
+	if hasAttachedPredicate {
+		mergeSelectivityValue(&selectivity, boundSourceSelectivityPredicate)
+	}
+
+	return selectivity
+}
+
+func mergeSelectivityValue(current *boundSourceSelectivity, next boundSourceSelectivity) {
+	if next > *current {
+		*current = next
+	}
 }
 
 func shortestPathSearchPredicateSymbols(readingClauses []*cypher.ReadingClause) map[string]struct{} {
@@ -706,6 +806,7 @@ func boundLeftExpansionDirectionDecisionForStep(
 	step sourceTraversalStep,
 	declaredEndpoints declaredStepEndpoints,
 	rightHasAttachedPredicate bool,
+	rightSelectivity boundSourceSelectivity,
 	leftSourceSelectivity boundSourceSelectivity,
 ) (TraversalDirectionDecision, bool) {
 	if patternPart == nil ||
@@ -739,9 +840,7 @@ func boundLeftExpansionDirectionDecisionForStep(
 		}
 	}
 
-	if leftSourceSelectivity == boundSourceSelectivityUnique &&
-		!nodePatternHasUniquePropertyConstraint(step.RightNode) &&
-		!rightHasAttachedPredicate {
+	if leftSourceSelectivity >= boundSourceSelectivityUnique && rightSelectivity < boundSourceSelectivityUnique {
 		return TraversalDirectionDecision{
 			Target: target,
 			Reason: traversalDirectionReasonBoundSourceSelective,
