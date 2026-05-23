@@ -228,6 +228,38 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
 	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
+func TestOptimizerSafetyCountStoreFastPathUsesSparseEdgeKindCount(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH ()-[r:Enroll]->() RETURN count(r)`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
+	require.NotContains(t, normalizedQuery, "with recursive")
+	require.NotContains(t, normalizedQuery, "ordered_edges_to_path")
+	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [4]::int2[]);", normalizedQuery)
+}
+
+func TestOptimizerSafetyCountStoreFastPathUsesUntypedEdgeCount(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH ()-[r]->() RETURN count(r)`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
+	require.NotContains(t, normalizedQuery, "with recursive")
+	require.NotContains(t, normalizedQuery, "ordered_edges_to_path")
+	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id;", normalizedQuery)
+}
+
 func TestOptimizerSafetyCountStoreFastPathSupportsEdgeCountStar(t *testing.T) {
 	t.Parallel()
 
