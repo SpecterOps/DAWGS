@@ -90,3 +90,11 @@ Status: completed
 - Keep skipped-lowering reports focused on predicates that were not consumed by the emitted translation shape, instead of marking already-pushed traversal predicates as skipped.
 - Add SQL-shape regression tests for fixed traversal and expansion-root predicate consumption.
 - Refreshed plan-corpus capture applies `PredicatePlacement` in 56 of 71 planned PostgreSQL cases, reducing skipped predicate placements from 65 to 15.
+
+## Phase 8: Cross-Clause Predicate Placement Planning
+
+Status: completed
+
+- Stop planning traversal predicate placements for binding predicates owned by a different `MATCH` clause.
+- Preserve same-clause binding predicate placement for traversal and suffix pushdown decisions.
+- Refreshed plan-corpus capture now plans and applies `PredicatePlacement` in the same 56 PostgreSQL cases, removing all skipped predicate-placement reports.

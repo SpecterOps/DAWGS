@@ -489,6 +489,24 @@ func TestLoweringPlanPlacesBindingPredicates(t *testing.T) {
 	require.Equal(t, []PredicateAttachment{plan.LoweringPlan.PredicatePlacement[0].Attachment}, plan.LoweringPlan.ExpansionSuffixPushdown[0].PredicateAttachments)
 }
 
+func TestLoweringPlanDoesNotPlaceCrossClauseBindingPredicates(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Group)
+		WHERE n.objectid = 'S-1-5-21-1'
+		MATCH p = (n)-[:MemberOf*1..]->(ca:EnterpriseCA)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotEmpty(t, plan.PredicateAttachments)
+	require.Empty(t, plan.LoweringPlan.PredicatePlacement)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringPredicatePlacement})
+}
+
 func TestLoweringPlanReportsExpandInto(t *testing.T) {
 	t.Parallel()
 

@@ -793,6 +793,9 @@ func appendPredicatePlacementDecisions(plan *LoweringPlan, query *cypher.Regular
 		if !hasTarget {
 			continue
 		}
+		if target.ClauseIndex != attachment.ClauseIndex {
+			continue
+		}
 
 		plan.PredicatePlacement = append(plan.PredicatePlacement, PredicatePlacementDecision{
 			Target:     target,
