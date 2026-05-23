@@ -30,6 +30,9 @@ type Translator struct {
 	scope          *Scope
 	unwindTargets  map[*cypher.Variable]struct{}
 
+	collectIDMembershipAliases map[pgsql.Identifier]struct{}
+	collectIDProjectionDepth   int
+
 	appliedLoweringCounts         map[string]int
 	patternTargets                map[*cypher.PatternPart]optimize.PatternTarget
 	patternPredicateTargets       map[*cypher.PatternPredicate]optimize.PatternTarget
@@ -265,6 +268,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.ProjectionItem:
+		if typedExpression.Alias != nil {
+			if _, collectIDs := s.collectIDMembershipAliases[pgsql.Identifier(typedExpression.Alias.Symbol)]; collectIDs {
+				s.collectIDProjectionDepth++
+			}
+		}
 		s.query.CurrentPart().PrepareProjection()
 
 	case *cypher.PatternPredicate:
@@ -560,6 +568,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		if err := s.translateProjectionItem(s.scope, typedExpression); err != nil {
 			s.SetError(err)
 		}
+		if typedExpression.Alias != nil {
+			if _, collectIDs := s.collectIDMembershipAliases[pgsql.Identifier(typedExpression.Alias.Symbol)]; collectIDs {
+				s.collectIDProjectionDepth--
+			}
+		}
 
 	case *cypher.Match:
 		if err := s.translateMatch(typedExpression); err != nil {
@@ -705,6 +718,11 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	}
 
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
+	if membershipAliases, err := collectIDMembershipAliases(optimizedPlan.Query); err != nil {
+		return Result{}, err
+	} else {
+		translator.collectIDMembershipAliases = membershipAliases
+	}
 	translator.SetOptimizationPlan(optimizedPlan)
 	translator.translation.Optimization.Rules = optimizedPlan.Rules
 	translator.translation.Optimization.PredicateAttachments = optimizedPlan.PredicateAttachments

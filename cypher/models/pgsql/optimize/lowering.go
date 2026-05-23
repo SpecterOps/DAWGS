@@ -13,6 +13,7 @@ const (
 	LoweringExpansionSuffixPushdown = "ExpansionSuffixPushdown"
 	LoweringPredicatePlacement      = "PredicatePlacement"
 	LoweringCountStoreFastPath      = "CountStoreFastPath"
+	LoweringCollectIDMembership     = "CollectIDMembership"
 )
 
 type LoweringDecision struct {

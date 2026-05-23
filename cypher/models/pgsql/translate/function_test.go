@@ -130,3 +130,51 @@ func TestPrepareCollectExpressionMissingBindingErrorNamesArgument(t *testing.T) 
 
 	require.EqualError(t, err, "binding not found for collect function argument missing")
 }
+
+func TestCollectMembershipOnlyProjectionUsesIDs(t *testing.T) {
+	t.Parallel()
+
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s)
+		WITH collect(s) AS exclude
+		MATCH (c)
+		WHERE NOT c IN exclude
+		RETURN c
+	`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	normalized := strings.Join(strings.Fields(formatted), " ")
+
+	require.Contains(t, normalized, "array_agg((n0).id)")
+	require.Contains(t, normalized, "array []::int8[]")
+	require.Contains(t, normalized, "not n1.id = any (s0.")
+	require.NotContains(t, normalized, "array []::nodecomposite[]")
+	requireOptimizationLowering(t, translation.Optimization, "CollectIDMembership")
+}
+
+func TestReturnedCollectNodeKeepsCompositeArray(t *testing.T) {
+	t.Parallel()
+
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s) RETURN collect(s) AS nodes`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	normalized := strings.Join(strings.Fields(formatted), " ")
+
+	require.Contains(t, normalized, "array []::nodecomposite[]")
+	require.NotContains(t, normalized, "array_agg((n0).id)")
+	requireNoOptimizationLowering(t, translation.Optimization, "CollectIDMembership")
+}

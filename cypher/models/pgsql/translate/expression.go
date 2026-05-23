@@ -682,6 +682,13 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 							newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}
 							newExpression.ROperand = pgsql.CompoundIdentifier{typedROperand, pgsql.ColumnID}
 
+						case pgsql.Int8Array:
+							if newExpression.Operator == pgsql.OperatorIn {
+								newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}
+							} else {
+								return fmt.Errorf("invalid comparison between types %s and %s", boundLOperand.DataType, boundROperand.DataType)
+							}
+
 						case pgsql.NodeCompositeArray:
 							const unnestElemAlias pgsql.Identifier = "_unnest_elem"
 							newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}
@@ -720,6 +727,13 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 							// If this is an edge entity comparison of some kind then the AST must be rewritten to use identity properties
 							newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}
 							newExpression.ROperand = pgsql.CompoundIdentifier{typedROperand, pgsql.ColumnID}
+
+						case pgsql.Int8Array:
+							if newExpression.Operator == pgsql.OperatorIn {
+								newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}
+							} else {
+								return fmt.Errorf("invalid comparison between types %s and %s", boundLOperand.DataType, boundROperand.DataType)
+							}
 
 						case pgsql.EdgeCompositeArray:
 							newExpression.LOperand = pgsql.CompoundIdentifier{typedLOperand, pgsql.ColumnID}

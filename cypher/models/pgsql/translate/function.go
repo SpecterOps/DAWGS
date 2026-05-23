@@ -8,6 +8,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 const legacyToIntegerFunction = "toint"
@@ -528,6 +529,28 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 	return collectedExpression, castType, nil
 }
 
+func prepareCollectIDExpression(scope *Scope, collectedExpression pgsql.Expression) (pgsql.Expression, bool) {
+	identifier, isIdentifier := unwrapParenthetical(collectedExpression).(pgsql.Identifier)
+	if !isIdentifier {
+		return nil, false
+	}
+
+	binding, bound := scope.Lookup(identifier)
+	if !bound {
+		return nil, false
+	}
+
+	switch binding.DataType {
+	case pgsql.NodeComposite, pgsql.EdgeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode, pgsql.ExpansionEdge:
+		return pgsql.RowColumnReference{
+			Identifier: identifier,
+			Column:     pgsql.ColumnID,
+		}, true
+	default:
+		return nil, false
+	}
+}
+
 func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted {
 	const (
 		kindAlias      pgsql.Identifier = "_kind"
@@ -839,6 +862,19 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if collectedExpression, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
+		} else if s.collectIDProjectionDepth > 0 {
+			if idExpression, collectIDs := prepareCollectIDExpression(s.scope, collectedExpression); collectIDs {
+				s.treeTranslator.PushOperand(
+					functionWrapCollectToArray(typedExpression.Distinct, idExpression, pgsql.Int8Array),
+				)
+				s.recordLowering(optimize.LoweringCollectIDMembership)
+			} else if preparedExpression, castType, err := prepareCollectExpression(s.scope, collectedExpression, typedExpression.Name); err != nil {
+				s.SetError(err)
+			} else {
+				s.treeTranslator.PushOperand(
+					functionWrapCollectToArray(typedExpression.Distinct, preparedExpression, castType),
+				)
+			}
 		} else if preparedExpression, castType, err := prepareCollectExpression(s.scope, collectedExpression, typedExpression.Name); err != nil {
 			s.SetError(err)
 		} else {
