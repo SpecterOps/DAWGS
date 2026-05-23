@@ -570,7 +570,8 @@ RETURN p
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
 	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
-	require.Contains(t, normalizedQuery, "where (((n1.properties -> 'name'))::jsonb = to_jsonb(('target')::text)::jsonb)")
+	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
+	require.Contains(t, normalizedQuery, "(n1.properties ->> 'name') = 'target'")
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
 }
 
@@ -659,7 +660,7 @@ func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
 	require.True(t, hasPrimerQuery)
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array ['source']::text[]) as i0")
-	require.Contains(t, primerQuery, "unnest(array ['source']::text[]) as i0")
+	require.Contains(t, primerQuery, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
 	require.Contains(t, primerQuery, "(n0.properties ->> 'name') = i0")
 }
 
