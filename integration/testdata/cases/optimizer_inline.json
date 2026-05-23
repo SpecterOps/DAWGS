@@ -181,6 +181,165 @@
         ]
       },
       "assert": {"row_values": [[4, 1, 1, 2]]}
+    },
+    {
+      "name": "common search domain admins reverse membership source label disjunction",
+      "cypher": "MATCH p = (t:Group)<-[:MemberOf*1..]-(a) WHERE (a:User OR a:Computer) AND t.objectid ENDS WITH '-512' RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "admins", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-512"}},
+          {"id": "user", "kinds": ["User"]},
+          {"id": "computer", "kinds": ["Computer"]},
+          {"id": "mid", "kinds": ["Group"]},
+          {"id": "other", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-513"}},
+          {"id": "ignored", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "user", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "computer", "end_id": "mid", "kind": "MemberOf"},
+          {"start_id": "mid", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "ignored", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "user", "end_id": "other", "kind": "MemberOf"}
+        ]
+      },
+      "assert": {
+        "row_count": 2,
+        "path_node_ids": [["admins", "user"], ["admins", "mid", "computer"]],
+        "path_edge_kinds": [["MemberOf"], ["MemberOf", "MemberOf"]]
+      }
+    },
+    {
+      "name": "common search dangerous domain users privileges exclude memberof relationships",
+      "cypher": "MATCH p=(s:Group)-[r:MemberOf|GenericAll|GenericWrite]->(t:Base) WHERE s.objectid ENDS WITH '-513' AND NOT r:MemberOf RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "domain-users", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-513"}},
+          {"id": "member-target", "kinds": ["Base"]},
+          {"id": "generic-target", "kinds": ["Base"]},
+          {"id": "other-group", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-512"}},
+          {"id": "other-target", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "domain-users", "end_id": "member-target", "kind": "MemberOf"},
+          {"start_id": "domain-users", "end_id": "generic-target", "kind": "GenericAll"},
+          {"start_id": "other-group", "end_id": "other-target", "kind": "GenericWrite"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["domain-users", "generic-target"]],
+        "path_edge_kinds": [["GenericAll"]]
+      }
+    },
+    {
+      "name": "common search domain admins logons excludes domain controllers",
+      "cypher": "MATCH (s)-[:MemberOf*0..]->(g:Group) WHERE g.objectid ENDS WITH '-516' WITH COLLECT(s) AS exclude MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND NOT c IN exclude RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "dc", "kinds": ["Computer"]},
+          {"id": "dc-group", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-516"}},
+          {"id": "workstation", "kinds": ["Computer"]},
+          {"id": "admin-user", "kinds": ["User"]},
+          {"id": "domain-admins", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-512"}}
+        ],
+        "edges": [
+          {"start_id": "dc", "end_id": "dc-group", "kind": "MemberOf"},
+          {"start_id": "workstation", "end_id": "admin-user", "kind": "HasSession"},
+          {"start_id": "dc", "end_id": "admin-user", "kind": "HasSession"},
+          {"start_id": "admin-user", "end_id": "domain-admins", "kind": "MemberOf"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["workstation", "admin-user", "domain-admins"]],
+        "path_edge_kinds": [["HasSession", "MemberOf"]]
+      }
+    },
+    {
+      "name": "common search kerberoastable users ordered by reachable admin privilege count",
+      "cypher": "MATCH (u:User) WHERE u.hasspn = true AND u.enabled = true AND NOT u.objectid ENDS WITH '-502' AND NOT COALESCE(u.gmsa, false) = true AND NOT COALESCE(u.msa, false) = true MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer) WITH DISTINCT u, COUNT(c) AS adminCount RETURN u ORDER BY adminCount DESC LIMIT 100",
+      "fixture": {
+        "nodes": [
+          {"id": "roastable", "kinds": ["User"], "properties": {"objectid": "S-1-5-21-1-1100", "hasspn": true, "enabled": true, "gmsa": false, "msa": false}},
+          {"id": "disabled", "kinds": ["User"], "properties": {"objectid": "S-1-5-21-1-1101", "hasspn": true, "enabled": false}},
+          {"id": "krbtgt", "kinds": ["User"], "properties": {"objectid": "S-1-5-21-1-502", "hasspn": true, "enabled": true}},
+          {"id": "ops-group", "kinds": ["Group"]},
+          {"id": "computer-a", "kinds": ["Computer"]},
+          {"id": "computer-b", "kinds": ["Computer"]},
+          {"id": "computer-c", "kinds": ["Computer"]}
+        ],
+        "edges": [
+          {"start_id": "roastable", "end_id": "computer-a", "kind": "AdminTo"},
+          {"start_id": "roastable", "end_id": "ops-group", "kind": "MemberOf"},
+          {"start_id": "ops-group", "end_id": "computer-b", "kind": "AdminTo"},
+          {"start_id": "disabled", "end_id": "computer-c", "kind": "AdminTo"},
+          {"start_id": "krbtgt", "end_id": "computer-a", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {"node_ids": ["roastable"]}
+    },
+    {
+      "name": "common search shortest path from domain users to tier zero target",
+      "cypher": "MATCH p=shortestPath((s:Group)-[:MemberOf|GenericAll|AdminTo*1..]->(t:Tag_Tier_Zero)) WHERE s.objectid ENDS WITH '-513' AND s<>t RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "domain-users", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-513"}},
+          {"id": "bridge", "kinds": ["Group"]},
+          {"id": "tier-zero", "kinds": ["Base", "Tag_Tier_Zero"]},
+          {"id": "other", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "domain-users", "end_id": "bridge", "kind": "MemberOf"},
+          {"start_id": "bridge", "end_id": "tier-zero", "kind": "GenericAll"},
+          {"start_id": "domain-users", "end_id": "other", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["domain-users", "bridge", "tier-zero"]],
+        "path_edge_kinds": [["MemberOf", "GenericAll"]]
+      }
+    },
+    {
+      "name": "common search cross forest trusts require connected abuse edge",
+      "cypher": "MATCH p=(n:Domain)-[:CrossForestTrust|SpoofSIDHistory|AbuseTGTDelegation]-(m:Domain) WHERE (n)-[:SpoofSIDHistory|AbuseTGTDelegation]-(m) RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "domain-a", "kinds": ["Domain"]},
+          {"id": "domain-b", "kinds": ["Domain"]},
+          {"id": "domain-c", "kinds": ["Domain"]}
+        ],
+        "edges": [
+          {"start_id": "domain-a", "end_id": "domain-b", "kind": "CrossForestTrust"},
+          {"start_id": "domain-a", "end_id": "domain-b", "kind": "SpoofSIDHistory"},
+          {"start_id": "domain-a", "end_id": "domain-c", "kind": "CrossForestTrust"}
+        ]
+      },
+      "assert": "non_empty"
+    },
+    {
+      "name": "common search azure high privileged role bounded membership expansion",
+      "cypher": "MATCH p=(t:AZRole)<-[:AZHasRole|AZMemberOf*1..2]-(a:AZBase) WHERE t.name =~ '(?i)Global Administrator.*' RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "role", "kinds": ["AZRole"], "properties": {"name": "Global Administrator"}},
+          {"id": "direct-user", "kinds": ["AZUser", "AZBase"]},
+          {"id": "delegated-user", "kinds": ["AZUser", "AZBase"]},
+          {"id": "delegated-group", "kinds": ["AZGroup", "AZBase"]},
+          {"id": "other-role", "kinds": ["AZRole"], "properties": {"name": "Reader"}}
+        ],
+        "edges": [
+          {"start_id": "direct-user", "end_id": "role", "kind": "AZHasRole"},
+          {"start_id": "delegated-user", "end_id": "delegated-group", "kind": "AZMemberOf"},
+          {"start_id": "delegated-group", "end_id": "role", "kind": "AZHasRole"},
+          {"start_id": "direct-user", "end_id": "other-role", "kind": "AZHasRole"}
+        ]
+      },
+      "assert": {
+        "row_count": 2,
+        "path_node_ids": [["role", "direct-user"], ["role", "delegated-group", "delegated-user"]],
+        "path_edge_kinds": [["AZHasRole"], ["AZHasRole", "AZMemberOf"]]
+      }
     }
   ]
 }
