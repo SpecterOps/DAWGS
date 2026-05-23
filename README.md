@@ -54,6 +54,8 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 ```
 
+Neo4j connection strings may use `neo4j://`, `neo4j+s://`, or `neo4j+ssc://`; a single path segment selects the Neo4j database name.
+
 Use `make test` for unit tests only and `make test_integration` for integration tests only.
 
 ### Test Metrics

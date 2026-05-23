@@ -32,10 +32,56 @@ func TestDriverFromConnectionString(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "pg", driverName)
 
-	driverName, err = driverFromConnectionString("neo4j://neo4j:password@localhost:7687")
-	require.NoError(t, err)
-	require.Equal(t, "neo4j", driverName)
+	for _, connStr := range []string{
+		"neo4j://neo4j:password@localhost:7687",
+		"neo4j+s://neo4j:password@localhost:7687",
+		"neo4j+ssc://neo4j:password@localhost:7687",
+	} {
+		driverName, err = driverFromConnectionString(connStr)
+		require.NoError(t, err)
+		require.Equal(t, "neo4j", driverName)
+	}
 
 	_, err = driverFromConnectionString("mysql://localhost")
 	require.ErrorContains(t, err, "unknown connection string scheme")
+}
+
+func TestParseNeo4jPlanDriverConfigPreservesURI(t *testing.T) {
+	testCases := []struct {
+		name             string
+		connStr          string
+		expectedTarget   string
+		expectedDatabase string
+	}{{
+		name:             "plain routing",
+		connStr:          "neo4j://neo4j:password@localhost:7687",
+		expectedTarget:   "neo4j://localhost:7687",
+		expectedDatabase: "",
+	}, {
+		name:             "secure routing",
+		connStr:          "neo4j+s://neo4j:password@cluster.example:7687",
+		expectedTarget:   "neo4j+s://cluster.example:7687",
+		expectedDatabase: "",
+	}, {
+		name:             "self signed routing with database and query",
+		connStr:          "neo4j+ssc://neo4j:password@cluster.example:7687/analytics?policy=fast",
+		expectedTarget:   "neo4j+ssc://cluster.example:7687?policy=fast",
+		expectedDatabase: "analytics",
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			cfg, err := parseNeo4jPlanDriverConfig(testCase.connStr)
+			require.NoError(t, err)
+			require.Equal(t, testCase.expectedTarget, cfg.Target)
+			require.Equal(t, "neo4j", cfg.Username)
+			require.Equal(t, "password", cfg.Password)
+			require.Equal(t, testCase.expectedDatabase, cfg.DatabaseName)
+		})
+	}
+}
+
+func TestParseNeo4jPlanDriverConfigRejectsNestedDatabasePath(t *testing.T) {
+	_, err := parseNeo4jPlanDriverConfig("neo4j://neo4j:password@localhost:7687/db/extra")
+	require.ErrorContains(t, err, "single database name")
 }

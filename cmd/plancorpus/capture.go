@@ -35,6 +35,7 @@ type backendCapture struct {
 	pgDriver    *pg.Driver
 	pgGraphID   int32
 	neo4jDriver neo4jcore.Driver
+	neo4jDBName string
 }
 
 func driverFromConnectionString(connStr string) (string, error) {
@@ -210,12 +211,13 @@ func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendC
 		backend.pgGraphID = defaultGraph.ID
 
 	case neo4j.DriverName:
-		neo4jDriver, err := openNeo4jPlanDriver(spec.Connection)
+		neo4jDriver, databaseName, err := openNeo4jPlanDriver(spec.Connection)
 		if err != nil {
 			_ = db.Close(ctx)
 			return nil, err
 		}
 		backend.neo4jDriver = neo4jDriver
+		backend.neo4jDBName = databaseName
 	}
 
 	return backend, nil
@@ -298,7 +300,8 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 
 func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any, record *PlanRecord) {
 	session := s.neo4jDriver.NewSession(neo4jcore.SessionConfig{
-		AccessMode: neo4jcore.AccessModeWrite,
+		AccessMode:   neo4jcore.AccessModeWrite,
+		DatabaseName: s.neo4jDBName,
 	})
 	defer session.Close()
 
@@ -321,21 +324,82 @@ func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any,
 	}
 }
 
-func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, error) {
+type neo4jPlanDriverConfig struct {
+	Target       string
+	Username     string
+	Password     string
+	DatabaseName string
+}
+
+func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	connectionURL, err := url.Parse(connStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse Neo4j connection string: %w", err)
+		return neo4jPlanDriverConfig{}, fmt.Errorf("parse Neo4j connection string: %w", err)
+	}
+
+	if connectionURL.Scheme != neo4j.DriverName && connectionURL.Scheme != "neo4j+s" && connectionURL.Scheme != "neo4j+ssc" {
+		return neo4jPlanDriverConfig{}, fmt.Errorf("expected Neo4j connection string scheme, got %q", connectionURL.Scheme)
 	}
 
 	password, ok := connectionURL.User.Password()
 	if !ok {
-		return nil, fmt.Errorf("no password provided in Neo4j connection string")
+		return neo4jPlanDriverConfig{}, fmt.Errorf("no password provided in Neo4j connection string")
 	}
 
-	return neo4jcore.NewDriver(
-		"bolt://"+connectionURL.Host,
-		neo4jcore.BasicAuth(connectionURL.User.Username(), password, ""),
+	if connectionURL.Host == "" {
+		return neo4jPlanDriverConfig{}, fmt.Errorf("Neo4j connection string host is required")
+	}
+
+	databaseName, err := neo4jDatabaseName(connectionURL)
+	if err != nil {
+		return neo4jPlanDriverConfig{}, err
+	}
+
+	return neo4jPlanDriverConfig{
+		Target: (&url.URL{
+			Scheme:   connectionURL.Scheme,
+			Host:     connectionURL.Host,
+			RawQuery: connectionURL.RawQuery,
+		}).String(),
+		Username:     connectionURL.User.Username(),
+		Password:     password,
+		DatabaseName: databaseName,
+	}, nil
+}
+
+func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
+	databasePath := strings.Trim(connectionURL.EscapedPath(), "/")
+	if databasePath == "" {
+		return "", nil
+	}
+
+	if strings.Contains(databasePath, "/") {
+		return "", fmt.Errorf("Neo4j database path must contain a single database name")
+	}
+
+	databaseName, err := url.PathUnescape(databasePath)
+	if err != nil {
+		return "", fmt.Errorf("parse Neo4j database name: %w", err)
+	}
+
+	return databaseName, nil
+}
+
+func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
+	cfg, err := parseNeo4jPlanDriverConfig(connStr)
+	if err != nil {
+		return nil, "", err
+	}
+
+	driver, err := neo4jcore.NewDriver(
+		cfg.Target,
+		neo4jcore.BasicAuth(cfg.Username, cfg.Password, ""),
 	)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return driver, cfg.DatabaseName, nil
 }
 
 func clearGraph(ctx context.Context, db graph.Database) error {
