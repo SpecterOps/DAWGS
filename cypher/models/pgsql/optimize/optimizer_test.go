@@ -849,6 +849,33 @@ func TestLoweringPlanReportsShortestPathTerminalFilter(t *testing.T) {
 	}}, plan.LoweringPlan.ShortestPathFilter)
 }
 
+func TestLoweringPlanReportsShortestPathTerminalFilterForKindOnlyTerminal(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s:Group)-[:MemberOf|GenericAll|AdminTo*1..]->(t:Tag_Tier_Zero))
+		WHERE s.objectid ENDS WITH '-513' AND s <> t
+		RETURN p
+		LIMIT 1000
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathStrategy})
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathFilter})
+	require.Equal(t, []ShortestPathFilterDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode:   ShortestPathFilterTerminal,
+		Reason: shortestPathFilterReasonTerminalPredicate,
+	}}, plan.LoweringPlan.ShortestPathFilter)
+}
+
 func TestLoweringPlanReportsTraversalLimitPushdown(t *testing.T) {
 	t.Parallel()
 

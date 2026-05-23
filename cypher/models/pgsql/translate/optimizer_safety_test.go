@@ -46,6 +46,7 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 		"TrustedForNTAuth",
 		"AdminTo",
 		"Computer",
+		"Tag_Tier_Zero",
 		"User",
 	}) {
 		mapper.Put(kind)
@@ -628,6 +629,26 @@ MATCH (s:Group {name: 'source'})
 MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
 WHERE e.name = 'target'
 RETURN p
+	`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
+	require.Contains(t, normalizedQuery, "traversal_terminal_filter")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
+	requireOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
+}
+
+func TestOptimizerSafetyShortestPathKindOnlyTerminalFilterUsesPlannedMaterialization(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = shortestPath((s:Group)-[:MemberOf|GenericAll|AdminTo*1..]->(t:Tag_Tier_Zero))
+WHERE s.objectid ENDS WITH '-513' AND s <> t
+RETURN p
+LIMIT 1000
 	`)
 
 	formattedQuery, err := Translated(translation)

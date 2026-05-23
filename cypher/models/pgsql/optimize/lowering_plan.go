@@ -78,8 +78,9 @@ func appendQueryPartLowerings(
 	appendPatternPredicatePlacementDecisions(plan, queryPartIndex, queryPart)
 	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
 	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
-	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
-	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex))
+	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
+	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
+	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
 	return nil
@@ -392,6 +393,102 @@ func bindingPredicateSymbols(predicateAttachments []PredicateAttachment, queryPa
 	return symbols
 }
 
+func shortestPathSearchPredicateSymbols(readingClauses []*cypher.ReadingClause) map[string]struct{} {
+	symbols := map[string]struct{}{}
+
+	for _, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Where == nil {
+			continue
+		}
+
+		for _, expression := range readingClause.Match.Where.Expressions {
+			addShortestPathSearchPredicateSymbols(symbols, expression)
+		}
+	}
+
+	return symbols
+}
+
+func addShortestPathSearchPredicateSymbols(symbols map[string]struct{}, expression cypher.Expression) {
+	for _, term := range cypherConjunctionTerms(expression) {
+		if symbol, ok := shortestPathSearchPredicateSymbol(term); ok {
+			addSymbol(symbols, symbol)
+		}
+	}
+}
+
+func cypherConjunctionTerms(expression cypher.Expression) []cypher.Expression {
+	if conjunction, isConjunction := expression.(*cypher.Conjunction); isConjunction {
+		var terms []cypher.Expression
+		for _, subexpression := range conjunction.Expressions {
+			terms = append(terms, cypherConjunctionTerms(subexpression)...)
+		}
+
+		return terms
+	}
+
+	return []cypher.Expression{expression}
+}
+
+func shortestPathSearchPredicateSymbol(expression cypher.Expression) (string, bool) {
+	comparison, isComparison := expression.(*cypher.Comparison)
+	if !isComparison || len(comparison.Partials) != 1 {
+		return "", false
+	}
+
+	partial := comparison.Partials[0]
+	if !isEndpointSearchOperator(partial.Operator) {
+		return "", false
+	}
+
+	if symbol, ok := propertyLookupVariableSymbol(comparison.Left); ok && !expressionReferencesAnySource(partial.Right) {
+		return symbol, true
+	}
+
+	if symbol, ok := propertyLookupVariableSymbol(partial.Right); ok && !expressionReferencesAnySource(comparison.Left) {
+		return symbol, true
+	}
+
+	return "", false
+}
+
+func isEndpointSearchOperator(operator cypher.Operator) bool {
+	switch operator {
+	case cypher.OperatorEquals,
+		cypher.OperatorRegexMatch,
+		cypher.OperatorGreaterThan,
+		cypher.OperatorGreaterThanOrEqualTo,
+		cypher.OperatorLessThan,
+		cypher.OperatorLessThanOrEqualTo,
+		cypher.OperatorStartsWith,
+		cypher.OperatorEndsWith,
+		cypher.OperatorContains,
+		cypher.OperatorIn:
+		return true
+	default:
+		return false
+	}
+}
+
+func propertyLookupVariableSymbol(expression cypher.Expression) (string, bool) {
+	propertyLookup, isPropertyLookup := expression.(*cypher.PropertyLookup)
+	if !isPropertyLookup || propertyLookup == nil {
+		return "", false
+	}
+
+	variable, isVariable := propertyLookup.Atom.(*cypher.Variable)
+	if !isVariable || variable == nil || variable.Symbol == "" {
+		return "", false
+	}
+
+	return variable.Symbol, true
+}
+
+func expressionReferencesAnySource(expression cypher.Expression) bool {
+	references, err := collectReferencedSourceIdentifiers(expression)
+	return err != nil || len(references) > 0
+}
+
 func traversalDirectionDecisionForStep(
 	target TraversalStepTarget,
 	stepIndex int,
@@ -573,6 +670,14 @@ func endpointHasSearchConstraint(nodePattern *cypher.NodePattern, symbol string,
 	return nodePattern.Properties != nil || referencesSourceIdentifier(predicateConstrainedSymbols, symbol)
 }
 
+func endpointHasTerminalFilterConstraint(nodePattern *cypher.NodePattern, symbol string, predicateConstrainedSymbols map[string]struct{}) bool {
+	if nodePattern == nil {
+		return false
+	}
+
+	return nodePatternHasConstraints(nodePattern) || referencesSourceIdentifier(predicateConstrainedSymbols, symbol)
+}
+
 func appendShortestPathFilterDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
 	declaredSymbols := map[string]struct{}{}
 
@@ -641,11 +746,11 @@ func shortestPathFilterDecisionForStep(
 
 	leftSearchConstrained := endpointHasSearchConstraint(step.LeftNode, leftSymbol, predicateConstrainedSymbols)
 	rightSearchConstrained := endpointHasSearchConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols)
-	if !rightSearchConstrained {
+	if !endpointHasTerminalFilterConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols) {
 		return ShortestPathFilterDecision{}, false
 	}
 
-	if hasShortestPathBidirectionalStrategy(plan, target) && leftSearchConstrained {
+	if hasShortestPathBidirectionalStrategy(plan, target) && leftSearchConstrained && rightSearchConstrained {
 		return ShortestPathFilterDecision{
 			Target: target,
 			Mode:   ShortestPathFilterEndpointPair,
