@@ -336,9 +336,9 @@
         ]
       },
       "assert": {
-        "row_count": 2,
-        "path_node_ids": [["role", "direct-user"], ["role", "delegated-group", "delegated-user"]],
-        "path_edge_kinds": [["AZHasRole"], ["AZHasRole", "AZMemberOf"]]
+        "row_count": 3,
+        "path_node_ids": [["role", "direct-user"], ["role", "delegated-group"], ["role", "delegated-group", "delegated-user"]],
+        "path_edge_kinds": [["AZHasRole"], ["AZHasRole"], ["AZHasRole", "AZMemberOf"]]
       }
     }
   ]
