@@ -181,7 +181,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
-	require.Equal(t, "select count(*)::int8 from edge e0 where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
+	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
 func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {

@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	countStoreNodeAlias pgsql.Identifier = "n0"
-	countStoreEdgeAlias pgsql.Identifier = "e0"
+	countStoreNodeAlias          pgsql.Identifier = "n0"
+	countStoreEdgeAlias          pgsql.Identifier = "e0"
+	countStoreStartEndpointAlias pgsql.Identifier = "n0"
+	countStoreEndEndpointAlias   pgsql.Identifier = "n1"
 )
 
 type countStoreFastPathShape struct {
@@ -78,10 +80,31 @@ func (s *Translator) countStoreFastPathFromAndWhere(shape countStoreFastPathShap
 				Name:    pgsql.TableEdge.AsCompoundIdentifier(),
 				Binding: pgsql.AsOptionalIdentifier(countStoreEdgeAlias),
 			},
+			Joins: []pgsql.Join{
+				countStoreEndpointJoin(countStoreStartEndpointAlias, pgsql.ColumnStartID),
+				countStoreEndpointJoin(countStoreEndEndpointAlias, pgsql.ColumnEndID),
+			},
 		}, where, err
 
 	default:
 		return pgsql.FromClause{}, nil, nil
+	}
+}
+
+func countStoreEndpointJoin(nodeAlias pgsql.Identifier, edgeEndpoint pgsql.Identifier) pgsql.Join {
+	return pgsql.Join{
+		Table: pgsql.TableReference{
+			Name:    pgsql.TableNode.AsCompoundIdentifier(),
+			Binding: pgsql.AsOptionalIdentifier(nodeAlias),
+		},
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{nodeAlias, pgsql.ColumnID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{countStoreEdgeAlias, edgeEndpoint},
+			),
+		},
 	}
 }
 
