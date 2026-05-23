@@ -729,6 +729,31 @@ func TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrained
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+func TestLoweringPlanSkipsBoundLeftDirectionForSelectiveSource(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.objectid = 'S-1-5-21-1-1100'
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer {name: 'target'})
+		RETURN c
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Reason: traversalDirectionReasonBoundSourceSelective,
+	}}, plan.LoweringPlan.TraversalDirection)
+}
+
 func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *testing.T) {
 	t.Parallel()
 

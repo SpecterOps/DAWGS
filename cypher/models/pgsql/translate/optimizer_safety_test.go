@@ -632,6 +632,21 @@ RETURN count(c)
 	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "terminal kind-only estimate too broad")
 }
 
+func TestOptimizerSafetyTraversalDirectionReportsSelectiveSourceSkip(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.objectid = 'S-1-5-21-1-1100'
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer {name: 'target'})
+RETURN c
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireNoOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "bound source estimate selective")
+}
+
 func TestOptimizerSafetyAggregateTraversalCountAcceptsRowCount(t *testing.T) {
 	t.Parallel()
 
