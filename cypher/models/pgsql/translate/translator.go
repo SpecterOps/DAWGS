@@ -30,6 +30,7 @@ type Translator struct {
 	scope          *Scope
 	unwindTargets  map[*cypher.Variable]struct{}
 
+	appliedLoweringCounts         map[string]int
 	patternTargets                map[*cypher.PatternPart]optimize.PatternTarget
 	patternPredicateTargets       map[*cypher.PatternPredicate]optimize.PatternTarget
 	projectionPruningDecisions    map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
@@ -616,6 +617,11 @@ type SkippedLowering struct {
 }
 
 func (s *Translator) recordLowering(name string) {
+	if s.appliedLoweringCounts == nil {
+		s.appliedLoweringCounts = map[string]int{}
+	}
+	s.appliedLoweringCounts[name]++
+
 	for _, lowering := range s.translation.Optimization.Lowerings {
 		if lowering.Name == name {
 			return
@@ -625,29 +631,41 @@ func (s *Translator) recordLowering(name string) {
 	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
 }
 
+func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
+	applied := map[string]int{}
+
+	for _, lowering := range s.translation.Optimization.Lowerings {
+		applied[lowering.Name] = 1
+	}
+
+	for name, count := range s.appliedLoweringCounts {
+		applied[name] = count
+	}
+
+	return applied
+}
+
 func (s *Translator) recordSkippedLowerings() {
 	if s.translation.Optimization.LoweringPlan == nil {
 		return
 	}
 
-	applied := map[string]struct{}{}
-	for _, lowering := range s.translation.Optimization.Lowerings {
-		applied[lowering.Name] = struct{}{}
-	}
+	applied := s.appliedLoweringCountSnapshot()
 
 	for _, planned := range plannedLoweringCounts(*s.translation.Optimization.LoweringPlan) {
 		if planned.Count == 0 {
 			continue
 		}
 
-		if _, wasApplied := applied[planned.Name]; wasApplied {
+		skippedCount := planned.Count - applied[planned.Name]
+		if skippedCount <= 0 {
 			continue
 		}
 
 		s.translation.Optimization.SkippedLowerings = append(s.translation.Optimization.SkippedLowerings, SkippedLowering{
 			Name:   planned.Name,
 			Reason: skippedLoweringReason(planned.Name, applied),
-			Count:  planned.Count,
+			Count:  skippedCount,
 		})
 	}
 }
@@ -667,8 +685,8 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 	}
 }
 
-func skippedLoweringReason(name string, applied map[string]struct{}) string {
-	if _, countFastPathApplied := applied[optimize.LoweringCountStoreFastPath]; countFastPathApplied && name != optimize.LoweringCountStoreFastPath {
+func skippedLoweringReason(name string, applied map[string]int) string {
+	if applied[optimize.LoweringCountStoreFastPath] > 0 && name != optimize.LoweringCountStoreFastPath {
 		return "superseded by CountStoreFastPath"
 	}
 

@@ -127,12 +127,44 @@ func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummar
 	require.Failf(t, "missing skipped optimization lowering", "expected skipped lowering %q in %#v", name, summary.SkippedLowerings)
 }
 
+func requireSkippedOptimizationLoweringCount(t *testing.T, summary OptimizationSummary, name string, count int) {
+	t.Helper()
+
+	for _, lowering := range summary.SkippedLowerings {
+		if lowering.Name == name {
+			require.Equal(t, count, lowering.Count)
+			return
+		}
+	}
+
+	require.Failf(t, "missing skipped optimization lowering", "expected skipped lowering %q in %#v", name, summary.SkippedLowerings)
+}
+
 func requireNoSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
 	t.Helper()
 
 	for _, lowering := range summary.SkippedLowerings {
 		require.NotEqualf(t, name, lowering.Name, "unexpected skipped lowering %q in %#v", name, summary.SkippedLowerings)
 	}
+}
+
+func TestOptimizerSafetyReportsPartiallySkippedLowerings(t *testing.T) {
+	t.Parallel()
+
+	translator := NewTranslator(context.Background(), optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	translator.translation.Optimization.LoweringPlan = &optimize.LoweringPlan{
+		PredicatePlacement: []optimize.PredicatePlacementDecision{
+			{Target: optimize.TraversalStepTarget{StepIndex: 0}},
+			{Target: optimize.TraversalStepTarget{StepIndex: 1}},
+		},
+	}
+
+	translator.recordLowering(optimize.LoweringPredicatePlacement)
+	translator.recordSkippedLowerings()
+
+	requireOptimizationLowering(t, translator.translation.Optimization, optimize.LoweringPredicatePlacement)
+	requireSkippedOptimizationLowering(t, translator.translation.Optimization, optimize.LoweringPredicatePlacement, "planned predicate placements were not consumed by this translation shape")
+	requireSkippedOptimizationLoweringCount(t, translator.translation.Optimization, optimize.LoweringPredicatePlacement, 1)
 }
 
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
