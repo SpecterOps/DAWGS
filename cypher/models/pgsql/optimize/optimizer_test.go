@@ -745,7 +745,16 @@ func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *tes
 
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
-	require.Empty(t, plan.LoweringPlan.TraversalDirection)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Reason: traversalDirectionReasonTerminalKindOnlyEstimateWide,
+	}}, plan.LoweringPlan.TraversalDirection)
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
 	require.Equal(t, []AggregateTraversalCountDecision{{
 		QueryPartIndex: 0,

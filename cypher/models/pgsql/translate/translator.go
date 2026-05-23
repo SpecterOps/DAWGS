@@ -677,7 +677,7 @@ func (s *Translator) recordSkippedLowerings() {
 
 		s.translation.Optimization.SkippedLowerings = append(s.translation.Optimization.SkippedLowerings, SkippedLowering{
 			Name:   planned.Name,
-			Reason: skippedLoweringReason(planned.Name, applied),
+			Reason: skippedLoweringReason(planned.Name, applied, *s.translation.Optimization.LoweringPlan),
 			Count:  skippedCount,
 		})
 	}
@@ -699,7 +699,7 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 	}
 }
 
-func skippedLoweringReason(name string, applied map[string]int) string {
+func skippedLoweringReason(name string, applied map[string]int, plan optimize.LoweringPlan) string {
 	if applied[optimize.LoweringCountStoreFastPath] > 0 && name != optimize.LoweringCountStoreFastPath {
 		return "superseded by CountStoreFastPath"
 	}
@@ -710,9 +710,25 @@ func skippedLoweringReason(name string, applied map[string]int) string {
 	switch name {
 	case optimize.LoweringPredicatePlacement:
 		return "planned predicate placements were not consumed by this translation shape"
+	case optimize.LoweringTraversalDirection:
+		if reason := skippedTraversalDirectionReason(plan); reason != "" {
+			return reason
+		}
 	default:
 		return "planned lowering did not change the emitted SQL"
 	}
+
+	return "planned lowering did not change the emitted SQL"
+}
+
+func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
+	for _, decision := range plan.TraversalDirection {
+		if !decision.Flip && decision.Reason != "" {
+			return decision.Reason
+		}
+	}
+
+	return ""
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {

@@ -596,7 +596,9 @@ LIMIT 100
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
 	lowerQuery := strings.ToLower(normalizedQuery)
 
-	requireNoPlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireNoOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "superseded by AggregateTraversalCount")
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, lowerQuery, "with recursive candidate_sources(root_id)")
@@ -613,6 +615,21 @@ LIMIT 100
 	require.Contains(t, lowerQuery, "from ranked join node source_node on source_node.id = ranked.root_id")
 	require.NotContains(t, lowerQuery, "group by (")
 	require.NotContains(t, lowerQuery, "::nodecomposite as n0 from")
+}
+
+func TestOptimizerSafetyTraversalDirectionReportsKindOnlyTerminalSkip(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+RETURN count(c)
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireNoOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "terminal kind-only estimate too broad")
 }
 
 func TestOptimizerSafetyAggregateTraversalCountSkipsObservedTerminal(t *testing.T) {

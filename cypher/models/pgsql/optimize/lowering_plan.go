@@ -14,9 +14,10 @@ type sourceTraversalStep struct {
 }
 
 const (
-	traversalDirectionReasonRightBound       = "right_bound"
-	traversalDirectionReasonRightConstrained = "right_constrained"
-	traversalDirectionReasonRightPredicate   = "right_predicate"
+	traversalDirectionReasonRightBound                   = "right_bound"
+	traversalDirectionReasonRightConstrained             = "right_constrained"
+	traversalDirectionReasonRightPredicate               = "right_predicate"
+	traversalDirectionReasonTerminalKindOnlyEstimateWide = "terminal kind-only estimate too broad"
 
 	shortestPathStrategyReasonBoundEndpointPairs = "bound_endpoint_pairs"
 	shortestPathStrategyReasonEndpointPredicates = "endpoint_predicates"
@@ -562,10 +563,6 @@ func boundLeftExpansionDirectionDecisionForStep(
 		return TraversalDirectionDecision{}, false
 	}
 
-	if step.RightNode.Properties == nil && !rightHasAttachedPredicate {
-		return TraversalDirectionDecision{}, false
-	}
-
 	leftSymbol := variableSymbol(step.LeftNode.Variable)
 	rightSymbol := variableSymbol(step.RightNode.Variable)
 	if leftSymbol == "" || leftSymbol == rightSymbol {
@@ -580,6 +577,13 @@ func boundLeftExpansionDirectionDecisionForStep(
 		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
 			return TraversalDirectionDecision{}, false
 		}
+	}
+
+	if step.RightNode.Properties == nil && !rightHasAttachedPredicate {
+		return TraversalDirectionDecision{
+			Target: target,
+			Reason: traversalDirectionReasonTerminalKindOnlyEstimateWide,
+		}, true
 	}
 
 	return TraversalDirectionDecision{
