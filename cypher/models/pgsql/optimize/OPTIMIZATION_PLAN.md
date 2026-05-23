@@ -68,13 +68,16 @@ Status: completed
 
 ## Phase 6: Validation
 
-Status: pending
+Status: completed
 
 - Add focused regression tests per optimization.
   - Optimizer/lowering selection tests.
   - SQL shape translation tests.
   - Backend-equivalent integration tests.
+  - Template corpus setup now clears stale graph data before rollback-only fixture cases, keeping repeated PostgreSQL and Neo4j validation runs deterministic.
 - Benchmark after each workstream.
   - Run unit tests.
   - Run backend-specific integration tests.
   - Run plan capture and compare summary deltas.
+  - `quality_backend` passes against `postgres://postgres:bhe4eva@localhost/bhe` and `neo4j://neo4j:neo4jj@localhost:7687`.
+  - Plan corpus capture records 396 PostgreSQL plans and 396 Neo4j plans; remaining capture errors are expected invalid-query cases surfaced by both systems or Neo4j-specific parameter-map syntax rejection.

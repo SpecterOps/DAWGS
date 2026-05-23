@@ -73,6 +73,7 @@ func TestCypherTemplates(t *testing.T) {
 	nodeKinds, edgeKinds := cypherTemplateKinds(templateFiles)
 
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
+	ClearGraph(t, db, ctx)
 
 	for _, templateFile := range templateFiles {
 		fileName := strings.TrimSuffix(filepath.Base(templateFile.path), filepath.Ext(templateFile.path))
