@@ -113,3 +113,20 @@ Status: completed
   endpoint-oriented traversal indexes.
 - Added PG-scoped manual integration coverage for strict string equality and a read-only live-plan check that asserts
   indexed `objectid` lookups use a PostgreSQL index when the connected database exposes the expected expression index.
+
+## Phase 10: Common Search Follow-Up
+
+Status: completed
+
+- Lower typed pattern predicates into correlated relationship `EXISTS` checks when relationship type constraints and
+  both endpoint correlations are sufficient, avoiding fallback CTEs for common typed existence predicates.
+- Lower membership-only `collect(entity)` projections to ID arrays and rewrite membership predicates to `id = any(...)`,
+  keeping full entity arrays only when the collected value is otherwise observed.
+- Flip single-step bound-left variable expansions toward constrained terminal kinds when there is no path binding or
+  continuation step, and preserve the previous-frame endpoint correlation after the flip.
+- Plan shortest-path terminal-filter materialization for kind-only terminal endpoints while keeping endpoint-pair
+  filters limited to property/search predicates that define the pair universe.
+- Defer adding blanket suffix/reverse expression indexes to schema assertion. Live common searches use `objectid`
+  suffix predicates, but the translator still has multiple suffix-preserving forms (`LIKE`, `cypher_ends_with`, and
+  null-coalesced variants). Explicit `TextSearchIndex`/trigram indexes remain available for deployments that need
+  substring acceleration before those semantics are unified.

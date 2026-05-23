@@ -106,6 +106,10 @@ indexes created on expressions such as `properties ->> 'objectid'` and `properti
 anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's
 `kind_id`-first edge index for efficient typed counts.
 
+Substring and suffix predicates are intentionally not promoted to blanket schema indexes. PostgreSQL deployments can
+request explicit `TextSearchIndex`/trigram property indexes for fields that need `CONTAINS`, `STARTS WITH`, or
+`ENDS WITH`, but default schema assertion should wait until all suffix forms share one semantics-preserving lowering.
+
 Thresholds are report-only by default. To enforce the configured thresholds, run:
 
 ```bash
