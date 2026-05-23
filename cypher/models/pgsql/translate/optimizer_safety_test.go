@@ -203,10 +203,35 @@ func TestOptimizerSafetyCountStoreFastPathKeepsKindConstraintAndAlias(t *testing
 	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
+func TestOptimizerSafetyCountStoreFastPathSupportsNodeCountStar(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH (:Group) RETURN count(*) AS total`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery), " "))
+}
+
 func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `MATCH ()-[r:MemberOf]->() RETURN count(r)`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
+	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
+	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
+}
+
+func TestOptimizerSafetyCountStoreFastPathSupportsEdgeCountStar(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `MATCH ()-[:MemberOf]->() RETURN count(*)`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 

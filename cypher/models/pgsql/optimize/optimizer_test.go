@@ -437,6 +437,17 @@ func TestLoweringPlanReportsCountStoreFastPath(t *testing.T) {
 			},
 		},
 		{
+			name:  "node count star",
+			query: "MATCH (:Group) RETURN count(*)",
+			expected: CountStoreFastPathDecision{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				Target:         CountStoreFastPathNode,
+				KindSymbols:    []string{"Group"},
+			},
+		},
+		{
 			name:  "edge count",
 			query: "MATCH ()-[r:MemberOf]->() RETURN count(r)",
 			expected: CountStoreFastPathDecision{
@@ -444,6 +455,17 @@ func TestLoweringPlanReportsCountStoreFastPath(t *testing.T) {
 				ClauseIndex:    0,
 				PatternIndex:   0,
 				BindingSymbol:  "r",
+				Target:         CountStoreFastPathEdge,
+				KindSymbols:    []string{"MemberOf"},
+			},
+		},
+		{
+			name:  "edge count star",
+			query: "MATCH ()-[:MemberOf]->() RETURN count(*)",
+			expected: CountStoreFastPathDecision{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
 				Target:         CountStoreFastPathEdge,
 				KindSymbols:    []string{"MemberOf"},
 			},

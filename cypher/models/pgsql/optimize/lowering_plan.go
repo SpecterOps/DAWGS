@@ -933,12 +933,20 @@ func simpleCountProjectionArgument(returnClause *cypher.Return) (string, bool) {
 		return "", false
 	}
 
-	variable, ok := function.Arguments[0].(*cypher.Variable)
-	if !ok || variable == nil {
-		return "", false
+	switch argument := function.Arguments[0].(type) {
+	case *cypher.Variable:
+		if argument == nil {
+			return "", false
+		}
+
+		return argument.Symbol, true
+	case *cypher.RangeQuantifier:
+		if argument != nil && argument.Value == cypher.TokenLiteralAsterisk {
+			return cypher.TokenLiteralAsterisk, true
+		}
 	}
 
-	return variable.Symbol, true
+	return "", false
 }
 
 func constrainedCountFastPathEndpoint(nodePattern *cypher.NodePattern) bool {

@@ -245,12 +245,20 @@ func simpleCountProjection(returnClause *cypher.Return) (string, string, bool) {
 		return "", "", false
 	}
 
-	variable, ok := function.Arguments[0].(*cypher.Variable)
-	if !ok || variable == nil {
-		return "", "", false
+	switch argument := function.Arguments[0].(type) {
+	case *cypher.Variable:
+		if argument == nil {
+			return "", "", false
+		}
+
+		return argument.Symbol, countStoreVariableSymbol(projectionItem.Alias), true
+	case *cypher.RangeQuantifier:
+		if argument != nil && argument.Value == cypher.TokenLiteralAsterisk {
+			return cypher.TokenLiteralAsterisk, countStoreVariableSymbol(projectionItem.Alias), true
+		}
 	}
 
-	return variable.Symbol, countStoreVariableSymbol(projectionItem.Alias), true
+	return "", "", false
 }
 
 func constrainedCountStoreEndpoint(nodePattern *cypher.NodePattern) bool {

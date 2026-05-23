@@ -22,6 +22,7 @@ Status: completed
 - Add count-store fast paths for simple count queries:
   - `MATCH (n) RETURN count(n)`
   - `MATCH ()-[r]->() RETURN count(r)`
+  - `MATCH (...) RETURN count(*)` for the same exact node and directed-edge shapes.
   - Typed variants where kind filters map cleanly.
   - Implemented as `CountStoreFastPath` lowering for exact node and directed-edge count shapes.
 - Audit the planned/applied `PredicatePlacement` gap.
