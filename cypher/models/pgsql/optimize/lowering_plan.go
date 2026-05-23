@@ -169,13 +169,13 @@ func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex
 		step := steps[0]
 		if step.Relationship == nil ||
 			step.Relationship.Direction != graph.DirectionBoth ||
-			relationshipPatternHasConstraints(step.Relationship) ||
+			relationshipPatternHasProperties(step.Relationship) ||
 			nodePatternHasConstraints(step.LeftNode) ||
 			nodePatternHasConstraints(step.RightNode) {
 			continue
 		}
 
-		if variableSymbol(step.Relationship.Variable) != "" || variableSymbol(step.RightNode.Variable) != "" {
+		if variableSymbol(step.Relationship.Variable) != "" {
 			continue
 		}
 
@@ -1084,8 +1084,8 @@ func nodePatternHasConstraints(nodePattern *cypher.NodePattern) bool {
 	return nodePattern != nil && (len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil)
 }
 
-func relationshipPatternHasConstraints(relationshipPattern *cypher.RelationshipPattern) bool {
-	return relationshipPattern != nil && (len(relationshipPattern.Kinds) > 0 || relationshipPattern.Properties != nil)
+func relationshipPatternHasProperties(relationshipPattern *cypher.RelationshipPattern) bool {
+	return relationshipPattern != nil && relationshipPattern.Properties != nil
 }
 
 func addSymbol(symbols map[string]struct{}, symbol string) {

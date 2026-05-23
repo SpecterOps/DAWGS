@@ -28,7 +28,7 @@ func (s *Translator) preparePatternPredicate(predicate *cypher.PatternPredicate)
 }
 
 func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart, traversalStep *TraversalStep) (pgsql.Expression, error) {
-	whereClause := pgsql.NewBinaryExpression(
+	var whereClause pgsql.Expression = pgsql.NewBinaryExpression(
 		pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
 			pgsql.OperatorEquals,
@@ -39,6 +39,38 @@ func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart,
 			pgsql.OperatorEquals,
 			pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
 	)
+
+	if traversalStep.RightNodeBound {
+		forward := pgsql.NewBinaryExpression(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
+			pgsql.OperatorAnd,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+		)
+		reverse := pgsql.NewBinaryExpression(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
+			pgsql.OperatorAnd,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+		)
+		whereClause = pgsql.NewBinaryExpression(forward, pgsql.OperatorOr, reverse)
+	}
+
+	if constraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(pgsql.AsIdentifierSet(traversalStep.Edge.Identifier)); err != nil {
+		return nil, err
+	} else {
+		whereClause = pgsql.OptionalAnd(constraint.Expression, pgsql.NewParenthetical(whereClause))
+	}
 
 	if err := RewriteFrameBindings(s.scope, whereClause); err != nil {
 		return nil, err
@@ -96,24 +128,6 @@ func (s *Translator) usePatternPredicateExistencePlacement(patternPart *PatternP
 
 	decision, hasDecision := s.patternPredicateDecisions[patternPart.Target.TraversalStep(0)]
 	if !hasDecision || decision.Mode != optimize.PatternPredicatePlacementExistence {
-		return false, nil
-	}
-
-	traversalStepIdentifiers := pgsql.AsIdentifierSet(
-		traversalStep.LeftNode.Identifier,
-		traversalStep.Edge.Identifier,
-		traversalStep.RightNode.Identifier,
-	)
-
-	if hasGlobalConstraints, err := s.treeTranslator.HasAnyConstraints(traversalStepIdentifiers); err != nil {
-		return false, err
-	} else if hasGlobalConstraints {
-		return false, nil
-	}
-
-	if hasPredicateConstraints, err := patternPart.Constraints.HasConstraints(traversalStepIdentifiers); err != nil {
-		return false, err
-	} else if hasPredicateConstraints {
 		return false, nil
 	}
 

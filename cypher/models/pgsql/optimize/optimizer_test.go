@@ -258,6 +258,29 @@ func TestLoweringPlanReportsPatternPredicateExistencePlacement(t *testing.T) {
 	}}, plan.LoweringPlan.PatternPredicate)
 }
 
+func TestLoweringPlanReportsTypedPatternPredicateExistencePlacement(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Domain), (m:Domain)
+		WHERE (n)-[:SpoofSIDHistory|AbuseTGTDelegation]-(m)
+		RETURN n
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringPredicatePlacement})
+	require.Equal(t, []PatternPredicatePlacementDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			Predicate:      true,
+			StepIndex:      0,
+		},
+		Mode: PatternPredicatePlacementExistence,
+	}}, plan.LoweringPlan.PatternPredicate)
+}
+
 func TestSelectivityModelPlansTraversalDirection(t *testing.T) {
 	t.Parallel()
 
