@@ -2555,6 +2555,17 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				),
 			)
 		}
+		if previousProjectionFrameID != "" && traversalStep.RightNodeBound {
+			projectionConstraints = pgsql.OptionalAnd(
+				projectionConstraints,
+				boundEndpointProjectionConstraint(
+					previousProjectionFrameID,
+					traversalStep.RightNode.Identifier,
+					expansionModel.Frame.Binding.Identifier,
+					expansionNextID,
+				),
+			)
+		}
 
 		projectionConstraints = rewriteCurrentFrameProjectionReferences(
 			projectionConstraints,

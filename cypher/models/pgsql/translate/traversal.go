@@ -54,8 +54,12 @@ func (s *Translator) traversalDirectionDecision(part *PatternPart, stepIndex int
 
 func (s *Translator) applyPatternConstraintBalance(part *PatternPart, stepIndex int, constraints *PatternConstraints, traversalStep *TraversalStep) error {
 	if decision, hasDecision := s.traversalDirectionDecision(part, stepIndex); hasDecision {
-		if decision.Flip && !traversalStep.LeftNodeBound {
-			if traversalStep.RightNodeBound && !traversalStep.hasPreviousFrameBinding() {
+		if decision.Flip {
+			if traversalStep.LeftNodeBound {
+				if traversalStep.Expansion == nil || !traversalStep.hasPreviousFrameBinding() {
+					return nil
+				}
+			} else if traversalStep.RightNodeBound && !traversalStep.hasPreviousFrameBinding() {
 				return nil
 			}
 

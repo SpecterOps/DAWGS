@@ -703,6 +703,35 @@ func TestLoweringPlanReportsTraversalDirectionForRightEndpointPredicate(t *testi
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+func TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrainedRightEndpoint(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true AND u.enabled = true
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		WITH DISTINCT u, COUNT(c) AS adminCount
+		RETURN u
+		ORDER BY adminCount DESC
+		LIMIT 100
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Flip:   true,
+		Reason: traversalDirectionReasonRightConstrained,
+	}}, plan.LoweringPlan.TraversalDirection)
+}
+
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
 	t.Parallel()
 

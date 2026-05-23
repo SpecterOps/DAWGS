@@ -44,6 +44,9 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 		"RootCA",
 		"RootCAFor",
 		"TrustedForNTAuth",
+		"AdminTo",
+		"Computer",
+		"User",
 	}) {
 		mapper.Put(kind)
 	}
@@ -573,6 +576,28 @@ RETURN p
 	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
 	require.Contains(t, normalizedQuery, "(n1.properties ->> 'name') = 'target'")
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
+}
+
+func TestOptimizerSafetyTraversalDirectionUsesBoundLeftExpansionTerminalConstraint(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true AND u.enabled = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
+	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s3_seed.root_id")
+	require.Contains(t, normalizedQuery, "(s1.n0).id = s3.next_id")
 }
 
 func TestOptimizerSafetyShortestPathStrategyUsesPlannedBidirectionalSearch(t *testing.T) {

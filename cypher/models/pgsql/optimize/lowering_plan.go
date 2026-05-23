@@ -347,13 +347,23 @@ func appendTraversalDirectionDecisions(plan *LoweringPlan, queryPartIndex int, r
 			}
 
 			for stepIndex, step := range steps {
+				target := patternTarget.TraversalStep(stepIndex)
 				if decision, shouldFlip := traversalDirectionDecisionForStep(
-					patternTarget.TraversalStep(stepIndex),
+					target,
 					stepIndex,
 					step,
 					declaredEndpoints[stepIndex],
 					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.LeftNode.Variable)),
 					referencesSourceIdentifier(predicateConstrainedSymbols, variableSymbol(step.RightNode.Variable)),
+				); shouldFlip {
+					plan.TraversalDirection = append(plan.TraversalDirection, decision)
+				} else if decision, shouldFlip := boundLeftExpansionDirectionDecisionForStep(
+					target,
+					patternPart,
+					steps,
+					stepIndex,
+					step,
+					declaredEndpoints[stepIndex],
 				); shouldFlip {
 					plan.TraversalDirection = append(plan.TraversalDirection, decision)
 				}
@@ -395,9 +405,10 @@ func traversalDirectionDecisionForStep(
 	}
 
 	rightSymbol := variableSymbol(step.RightNode.Variable)
+	leftSymbol := variableSymbol(step.LeftNode.Variable)
 	if rightSymbol != "" {
 		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
-			if rightSymbol == variableSymbol(step.LeftNode.Variable) {
+			if rightSymbol == leftSymbol {
 				return TraversalDirectionDecision{}, false
 			}
 
@@ -426,6 +437,52 @@ func traversalDirectionDecisionForStep(
 	}
 
 	return TraversalDirectionDecision{}, false
+}
+
+func boundLeftExpansionDirectionDecisionForStep(
+	target TraversalStepTarget,
+	patternPart *cypher.PatternPart,
+	steps []sourceTraversalStep,
+	stepIndex int,
+	step sourceTraversalStep,
+	declaredEndpoints declaredStepEndpoints,
+) (TraversalDirectionDecision, bool) {
+	if patternPart == nil ||
+		patternPart.Variable != nil ||
+		patternPart.ShortestPathPattern ||
+		patternPart.AllShortestPathsPattern ||
+		len(steps) != 1 ||
+		stepIndex != 0 ||
+		step.Relationship == nil ||
+		step.Relationship.Range == nil ||
+		step.Relationship.Direction == graph.DirectionBoth ||
+		step.Relationship.Variable != nil ||
+		nodePatternHasConstraints(step.LeftNode) ||
+		!nodePatternHasConstraints(step.RightNode) {
+		return TraversalDirectionDecision{}, false
+	}
+
+	leftSymbol := variableSymbol(step.LeftNode.Variable)
+	rightSymbol := variableSymbol(step.RightNode.Variable)
+	if leftSymbol == "" || leftSymbol == rightSymbol {
+		return TraversalDirectionDecision{}, false
+	}
+
+	if _, leftBound := declaredEndpoints.BeforeLeftNode[leftSymbol]; !leftBound {
+		return TraversalDirectionDecision{}, false
+	}
+
+	if rightSymbol != "" {
+		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
+			return TraversalDirectionDecision{}, false
+		}
+	}
+
+	return TraversalDirectionDecision{
+		Target: target,
+		Flip:   true,
+		Reason: traversalDirectionReasonRightConstrained,
+	}, true
 }
 
 func appendShortestPathStrategyDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
