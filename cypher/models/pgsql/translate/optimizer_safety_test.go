@@ -669,6 +669,122 @@ LIMIT 100
 	require.Contains(t, normalizedQuery, "group by terminal_hits.root_id")
 }
 
+func TestOptimizerSafetyAggregateTraversalCountHonorsExplicitDepthBounds(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*2..4]->(c:Computer)
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "where traversal.depth < 4")
+	require.Contains(t, normalizedQuery, "where traversal.depth >= 2")
+}
+
+func TestOptimizerSafetyAggregateTraversalCountSupportsInboundSourceAnchoring(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)<-[:MemberOf|AdminTo*1..]-(c:Computer)
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "join edge e on e.end_id = candidate_sources.root_id")
+	require.Contains(t, normalizedQuery, "e.end_id = traversal.next_id")
+}
+
+func TestOptimizerSafetyAggregateTraversalCountSkipsUnsafeWideningCandidates(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		query string
+	}{{
+		name: "distinct terminal count",
+		query: `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, COUNT(DISTINCT c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+		`,
+	}, {
+		name: "optional traversal",
+		query: `
+MATCH (u:User)
+WHERE u.hasspn = true
+OPTIONAL MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+		`,
+	}, {
+		name: "path binding observed",
+		query: `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH p = (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, p, COUNT(c) AS adminCount
+RETURN u, p
+ORDER BY adminCount DESC
+LIMIT 100
+		`,
+	}, {
+		name: "relationship binding observed",
+		query: `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[r:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, r, COUNT(c) AS adminCount
+RETURN u, r
+ORDER BY adminCount DESC
+LIMIT 100
+		`,
+	}, {
+		name: "post aggregation filter",
+		query: `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, COUNT(c) AS adminCount
+WHERE adminCount > 1
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+		`,
+	}}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			translation := optimizerSafetyTranslation(t, testCase.query)
+
+			requireNoPlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+			requireNoOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+		})
+	}
+}
+
 func TestOptimizerSafetyAggregateTraversalCountSkipsObservedTerminal(t *testing.T) {
 	t.Parallel()
 
