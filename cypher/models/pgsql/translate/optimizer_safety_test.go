@@ -632,6 +632,28 @@ RETURN count(c)
 	requireSkippedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection", "terminal kind-only estimate too broad")
 }
 
+func TestOptimizerSafetyAggregateTraversalCountAcceptsRowCount(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true AND u.enabled = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WITH DISTINCT u, COUNT(*) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "count(*)::int8 as admincount")
+	require.Contains(t, normalizedQuery, "group by terminal_hits.root_id")
+}
+
 func TestOptimizerSafetyAggregateTraversalCountSkipsObservedTerminal(t *testing.T) {
 	t.Parallel()
 

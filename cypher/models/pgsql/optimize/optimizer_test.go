@@ -771,6 +771,26 @@ func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *tes
 	}}, plan.LoweringPlan.AggregateTraversalCount)
 }
 
+func TestLoweringPlanReportsAggregateTraversalCountForRowCount(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true AND u.enabled = true
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		WITH DISTINCT u, COUNT(*) AS adminCount
+		RETURN u
+		ORDER BY adminCount DESC
+		LIMIT 100
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
+	require.Equal(t, "adminCount", plan.LoweringPlan.AggregateTraversalCount[0].CountAlias)
+}
+
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
 	t.Parallel()
 

@@ -1233,11 +1233,20 @@ func projectionItemCountAlias(expression cypher.Expression, terminalSymbol strin
 		return "", false
 	}
 
-	if symbol, ok := expressionVariableSymbol(function.Arguments[0]); !ok || symbol != terminalSymbol {
+	if !aggregateTraversalCountArgumentMatches(function.Arguments[0], terminalSymbol) {
 		return "", false
 	}
 
 	return projectionItem.Alias.Symbol, true
+}
+
+func aggregateTraversalCountArgumentMatches(expression cypher.Expression, terminalSymbol string) bool {
+	if symbol, ok := expressionVariableSymbol(expression); ok {
+		return symbol == terminalSymbol
+	}
+
+	rangeQuantifier, ok := expression.(*cypher.RangeQuantifier)
+	return ok && rangeQuantifier != nil && rangeQuantifier.Value == cypher.TokenLiteralAsterisk
 }
 
 func literalInt64(expression cypher.Expression) (int64, bool) {
