@@ -328,7 +328,7 @@ func (s *Translator) buildAggregateTerminalHitsCTE(shape optimize.AggregateTrave
 }
 
 func (s *Translator) buildAggregateTerminalNodesCTE(shape optimize.AggregateTraversalCountShape) (pgsql.CommonTableExpression, error) {
-	terminalWhere, err := s.aggregateNodeKindConstraint(aggregateTerminalAlias, shape.TerminalKinds)
+	terminalWhere, err := s.aggregateTerminalWhere(shape)
 	if err != nil {
 		return pgsql.CommonTableExpression{}, err
 	}
@@ -412,20 +412,38 @@ func (s *Translator) aggregateSourceWhere(shape optimize.AggregateTraversalCount
 	return pgsql.OptionalAnd(sourcePredicate, sourceKindConstraint), nil
 }
 
+func (s *Translator) aggregateTerminalWhere(shape optimize.AggregateTraversalCountShape) (pgsql.Expression, error) {
+	terminalKindConstraint, err := s.aggregateNodeKindConstraint(aggregateTerminalAlias, shape.TerminalKinds)
+	if err != nil {
+		return nil, err
+	}
+
+	terminalPredicate, err := s.aggregateBindingPredicate(shape.TerminalMatch, shape.TerminalSymbol, aggregateTerminalAlias)
+	if err != nil {
+		return nil, err
+	}
+
+	return pgsql.OptionalAnd(terminalPredicate, terminalKindConstraint), nil
+}
+
 func (s *Translator) aggregateSourcePredicate(shape optimize.AggregateTraversalCountShape) (pgsql.Expression, error) {
-	if shape.SourceMatch == nil || shape.SourceMatch.Where == nil {
+	return s.aggregateBindingPredicate(shape.SourceMatch, shape.SourceSymbol, aggregateSourceAlias)
+}
+
+func (s *Translator) aggregateBindingPredicate(match *cypher.Match, symbol string, alias pgsql.Identifier) (pgsql.Expression, error) {
+	if match == nil || match.Where == nil {
 		return nil, nil
 	}
 
 	translator := NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
-	sourceBinding := translator.scope.Define(aggregateSourceAlias, pgsql.NodeComposite)
-	translator.scope.Alias(pgsql.Identifier(shape.SourceSymbol), sourceBinding)
+	binding := translator.scope.Define(alias, pgsql.NodeComposite)
+	translator.scope.Alias(pgsql.Identifier(symbol), binding)
 
-	if err := walk.Cypher(shape.SourceMatch.Where, translator); err != nil {
+	if err := walk.Cypher(match.Where, translator); err != nil {
 		return nil, err
 	}
 
-	sourceConstraints, err := translator.treeTranslator.ConsumeConstraintsFromVisibleSet(pgsql.AsIdentifierSet(aggregateSourceAlias))
+	sourceConstraints, err := translator.treeTranslator.ConsumeConstraintsFromVisibleSet(pgsql.AsIdentifierSet(alias))
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +453,7 @@ func (s *Translator) aggregateSourcePredicate(shape optimize.AggregateTraversalC
 		return nil, err
 	}
 	if remainingConstraints.Expression != nil {
-		return nil, fmt.Errorf("unsupported aggregate traversal source predicate dependencies: %v", remainingConstraints.Dependencies.Slice())
+		return nil, fmt.Errorf("unsupported aggregate traversal predicate dependencies: %v", remainingConstraints.Dependencies.Slice())
 	}
 
 	for key, value := range translator.translation.Parameters {

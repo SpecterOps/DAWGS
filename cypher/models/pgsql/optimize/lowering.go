@@ -183,6 +183,7 @@ type AggregateTraversalCountShape struct {
 	ReturnCount       bool
 	Limit             int64
 	SourceMatch       *cypher.Match
+	TerminalMatch     *cypher.Match
 	SourceKinds       graph.Kinds
 	TerminalKinds     graph.Kinds
 	RelationshipKinds graph.Kinds

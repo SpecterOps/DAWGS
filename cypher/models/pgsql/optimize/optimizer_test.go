@@ -896,6 +896,46 @@ func TestLoweringPlanReportsAggregateTraversalCountWhenReturningCountAlias(t *te
 	require.Equal(t, "privileges", shape.ReturnCountAlias)
 }
 
+func TestLoweringPlanReportsAggregateTraversalCountWithTerminalFilter(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		WHERE c.enabled = true
+		WITH DISTINCT u, COUNT(c) AS adminCount
+		RETURN u
+		ORDER BY adminCount DESC
+		LIMIT 100
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
+}
+
+func TestLoweringPlanSkipsAggregateTraversalCountWithCorrelatedTerminalFilter(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		WHERE c.name = u.name
+		WITH DISTINCT u, COUNT(c) AS adminCount
+		RETURN u
+		ORDER BY adminCount DESC
+		LIMIT 100
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
+}
+
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
 	t.Parallel()
 

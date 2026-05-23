@@ -1303,7 +1303,7 @@ func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (Aggregate
 		return AggregateTraversalCountShape{}, false
 	}
 
-	relationship, terminalNode, terminalSymbol, ok := aggregateTraversalMatch(part.ReadingClauses[1], sourceSymbol)
+	terminalMatch, relationship, terminalNode, terminalSymbol, ok := aggregateTraversalMatch(part.ReadingClauses[1], sourceSymbol)
 	if !ok {
 		return AggregateTraversalCountShape{}, false
 	}
@@ -1333,6 +1333,7 @@ func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (Aggregate
 		ReturnCount:       finalProjection.ReturnCount,
 		Limit:             finalProjection.Limit,
 		SourceMatch:       sourceMatch,
+		TerminalMatch:     terminalMatch,
 		SourceKinds:       sourceNode.Kinds,
 		TerminalKinds:     terminalNode.Kinds,
 		RelationshipKinds: relationship.Kinds,
@@ -1373,19 +1374,19 @@ func aggregateTraversalSourceMatch(readingClause *cypher.ReadingClause) (*cypher
 	return match, nodePattern, nodePattern.Variable.Symbol, true
 }
 
-func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol string) (*cypher.RelationshipPattern, *cypher.NodePattern, string, bool) {
+func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol string) (*cypher.Match, *cypher.RelationshipPattern, *cypher.NodePattern, string, bool) {
 	if readingClause == nil || readingClause.Match == nil {
-		return nil, nil, "", false
+		return nil, nil, nil, "", false
 	}
 
 	match := readingClause.Match
-	if match.Optional || match.Where != nil || len(match.Pattern) != 1 {
-		return nil, nil, "", false
+	if match.Optional || len(match.Pattern) != 1 {
+		return nil, nil, nil, "", false
 	}
 
 	patternPart := match.Pattern[0]
 	if patternPart == nil || patternPart.Variable != nil || patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern || len(patternPart.PatternElements) != 3 {
-		return nil, nil, "", false
+		return nil, nil, nil, "", false
 	}
 
 	leftNode, leftOK := patternPart.PatternElements[0].AsNodePattern()
@@ -1402,10 +1403,18 @@ func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol s
 		rightNode.Properties != nil ||
 		rightNode.Variable == nil ||
 		rightNode.Variable.Symbol == "" {
-		return nil, nil, "", false
+		return nil, nil, nil, "", false
 	}
 
-	return relationship, rightNode, rightNode.Variable.Symbol, true
+	if match.Where != nil {
+		for _, dependency := range sortedDependencies(match.Where) {
+			if dependency != rightNode.Variable.Symbol {
+				return nil, nil, nil, "", false
+			}
+		}
+	}
+
+	return match, relationship, rightNode, rightNode.Variable.Symbol, true
 }
 
 func aggregateTraversalWithProjection(projection *cypher.Projection, sourceSymbol, terminalSymbol string) (string, bool) {

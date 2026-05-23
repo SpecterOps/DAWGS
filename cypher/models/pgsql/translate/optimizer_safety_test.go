@@ -750,6 +750,29 @@ LIMIT 100
 	require.Contains(t, normalizedQuery, "order by ranked.admincount desc")
 }
 
+func TestOptimizerSafetyAggregateTraversalCountFoldsTerminalFilter(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WHERE c.enabled = true
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "terminal_nodes(id) as materialized")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
+}
+
 func TestOptimizerSafetyAggregateTraversalCountSkipsUnsafeWideningCandidates(t *testing.T) {
 	t.Parallel()
 
@@ -797,6 +820,18 @@ WHERE u.hasspn = true
 MATCH (u)-[r:MemberOf|AdminTo*1..]->(c:Computer)
 WITH DISTINCT u, r, COUNT(c) AS adminCount
 RETURN u, r
+ORDER BY adminCount DESC
+LIMIT 100
+		`,
+	}, {
+		name: "correlated terminal filter",
+		query: `
+MATCH (u:User)
+WHERE u.hasspn = true
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WHERE c.name = u.name
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
 ORDER BY adminCount DESC
 LIMIT 100
 		`,
