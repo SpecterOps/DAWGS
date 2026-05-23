@@ -101,6 +101,11 @@ for later baseline comparison.
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
 writes JSONL captures and markdown/JSON summaries under `.coverage/`.
 
+PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
+indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective
+anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's
+`kind_id`-first edge index for efficient typed counts.
+
 Thresholds are report-only by default. To enforce the configured thresholds, run:
 
 ```bash

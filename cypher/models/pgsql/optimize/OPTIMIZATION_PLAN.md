@@ -99,3 +99,17 @@ Status: completed
 - Stop planning traversal predicate placements for binding predicates owned by a different `MATCH` clause.
 - Preserve same-clause binding predicate placement for traversal and suffix pushdown decisions.
 - Refreshed plan-corpus capture now plans and applies `PredicatePlacement` in the same 56 PostgreSQL cases, removing all skipped predicate-placement reports.
+
+## Phase 9: Live Dataset Assumption Checks
+
+Status: completed
+
+- Re-vet optimizer assumptions against a large live PostgreSQL graph with `EXPLAIN ANALYZE`.
+- Exact string property anchors now lower to `jsonb_typeof(properties -> key) = 'string'` plus `properties ->> key = value`,
+  allowing existing `->>` expression indexes on selective fields such as `objectid` and `name` to be used without
+  matching JSON booleans or numbers.
+- Relationship count fast paths remain endpoint-preserving for correctness, but the PostgreSQL schema now includes a
+  `kind_id`-first covering edge index so typed relationship counts have a direct access path instead of relying on
+  endpoint-oriented traversal indexes.
+- Added PG-scoped manual integration coverage for strict string equality and a read-only live-plan check that asserts
+  indexed `objectid` lookups use a PostgreSQL index when the connected database exposes the expected expression index.
