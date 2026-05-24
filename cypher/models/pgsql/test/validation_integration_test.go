@@ -33,6 +33,7 @@ func pgConnectionString(t *testing.T) string {
 	connStr := os.Getenv(connectionStringEnv)
 	require.NotEmpty(t, connStr)
 	if isNeo4jConnectionString(connStr) {
+		// CONNECTION_STRING selects one active backend for integration runs.
 		t.Skipf("%s is not a PostgreSQL connection string", connectionStringEnv)
 	}
 
