@@ -33,7 +33,7 @@ import (
 type neo4jRunner struct {
 	datasetDir   string
 	db           graph.Database
-	planDriver   neo4jcore.Driver
+	planDriver   neo4jcore.DriverWithContext
 	databaseName string
 }
 
@@ -74,7 +74,7 @@ func newNeo4jRunner(ctx context.Context, datasetDir, connection string, corpus S
 func (s *neo4jRunner) Close(ctx context.Context) error {
 	var closeErr error
 	if s.planDriver != nil {
-		closeErr = s.planDriver.Close()
+		closeErr = s.planDriver.Close(ctx)
 	}
 	if s.db != nil {
 		if err := s.db.Close(ctx); err != nil && closeErr == nil {
@@ -132,7 +132,7 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 	record.Stats = stats
 	applyRowExpectation(&record)
 
-	plan, operators, err := s.explain(testCase.Cypher, params)
+	plan, operators, err := s.explain(ctx, testCase.Cypher, params)
 	if err != nil {
 		if record.Status == StatusOK {
 			record.Status = StatusError
@@ -146,19 +146,23 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 	return record
 }
 
-func (s *neo4jRunner) explain(cypherQuery string, params map[string]any) (*Neo4jPlanNode, []string, error) {
-	session := s.planDriver.NewSession(neo4jcore.SessionConfig{
+func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any) (plan *Neo4jPlanNode, operators []string, err error) {
+	session := s.planDriver.NewSession(ctx, neo4jcore.SessionConfig{
 		AccessMode:   neo4jcore.AccessModeRead,
 		DatabaseName: s.databaseName,
 	})
-	defer session.Close()
+	defer func() {
+		if closeErr := session.Close(ctx); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
-	result, err := session.Run("EXPLAIN "+cypherWithoutTerminator(cypherQuery), params)
+	result, err := session.Run(ctx, "EXPLAIN "+cypherWithoutTerminator(cypherQuery), params)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	summary, err := result.Consume()
+	summary, err := result.Consume(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -166,8 +170,8 @@ func (s *neo4jRunner) explain(cypherQuery string, params map[string]any) (*Neo4j
 		return nil, nil, nil
 	}
 
-	plan := convertNeo4jPlan(summary.Plan())
-	return &plan, neo4jOperators(plan), nil
+	planNode := convertNeo4jPlan(summary.Plan())
+	return &planNode, neo4jOperators(planNode), nil
 }
 
 type neo4jPlanDriverConfig struct {
@@ -229,13 +233,13 @@ func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	return databaseName, nil
 }
 
-func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
+func openNeo4jPlanDriver(connStr string) (neo4jcore.DriverWithContext, string, error) {
 	cfg, err := parseNeo4jPlanDriverConfig(connStr)
 	if err != nil {
 		return nil, "", err
 	}
 
-	driver, err := neo4jcore.NewDriver(cfg.Target, neo4jcore.BasicAuth(cfg.Username, cfg.Password, ""))
+	driver, err := neo4jcore.NewDriverWithContext(cfg.Target, neo4jcore.BasicAuth(cfg.Username, cfg.Password, ""))
 	if err != nil {
 		return nil, "", err
 	}

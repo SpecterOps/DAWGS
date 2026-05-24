@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
@@ -36,6 +37,10 @@ func countCypherRows(tx graph.Transaction, cypher string, params map[string]any)
 }
 
 func measureCypher(ctx context.Context, db graph.Database, cypher string, params map[string]any, iterations int) (int64, DurationStats, error) {
+	if iterations < 1 {
+		return 0, DurationStats{}, fmt.Errorf("iterations must be at least 1")
+	}
+
 	var warmupRows int64
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
@@ -57,5 +62,10 @@ func measureCypher(ctx context.Context, db graph.Database, cypher string, params
 		durations[idx] = time.Since(start)
 	}
 
-	return warmupRows, computeDurationStats(durations), nil
+	stats, err := computeDurationStats(durations)
+	if err != nil {
+		return 0, DurationStats{}, err
+	}
+
+	return warmupRows, stats, nil
 }

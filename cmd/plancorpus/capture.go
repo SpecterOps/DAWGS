@@ -178,6 +178,9 @@ func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendC
 
 	db, err := dawgs.Open(ctx, spec.DriverName, cfg)
 	if err != nil {
+		if cfg.Pool != nil {
+			cfg.Pool.Close()
+		}
 		return nil, fmt.Errorf("open %s database: %w", spec.DriverName, err)
 	}
 

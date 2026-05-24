@@ -103,18 +103,23 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 	}
 }
 
-func computeDurationStats(durations []time.Duration) DurationStats {
-	sort.Slice(durations, func(i, j int) bool {
-		return durations[i] < durations[j]
+func computeDurationStats(durations []time.Duration) (DurationStats, error) {
+	if len(durations) == 0 {
+		return DurationStats{}, fmt.Errorf("duration stats require at least one duration")
+	}
+
+	sortedDurations := append([]time.Duration(nil), durations...)
+	sort.Slice(sortedDurations, func(i, j int) bool {
+		return sortedDurations[i] < sortedDurations[j]
 	})
 
-	n := len(durations)
+	n := len(sortedDurations)
 	return DurationStats{
 		Iterations: n,
-		Median:     durations[n/2],
-		P95:        durations[n*95/100],
-		Max:        durations[n-1],
-	}
+		Median:     sortedDurations[n/2],
+		P95:        sortedDurations[min(n*95/100, n-1)],
+		Max:        sortedDurations[n-1],
+	}, nil
 }
 
 func applyRowExpectation(result *CaseResult) {
