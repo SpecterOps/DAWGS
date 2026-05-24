@@ -312,6 +312,7 @@
         "edges": [
           {"start_id": "domain-a", "end_id": "domain-b", "kind": "CrossForestTrust"},
           {"start_id": "domain-a", "end_id": "domain-b", "kind": "SpoofSIDHistory"},
+          {"start_id": "domain-a", "end_id": "domain-b", "kind": "AbuseTGTDelegation"},
           {"start_id": "domain-a", "end_id": "domain-c", "kind": "CrossForestTrust"}
         ]
       },
