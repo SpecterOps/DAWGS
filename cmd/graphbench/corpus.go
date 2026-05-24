@@ -95,8 +95,10 @@ func decodeJSONFile(path string, target any) error {
 }
 
 func scaleCorpusDatasets(corpus ScaleCorpus) []string {
-	seen := map[string]struct{}{}
-	datasets := make([]string, 0)
+	var (
+		seen     = map[string]struct{}{}
+		datasets = make([]string, 0)
+	)
 
 	for _, testCase := range corpus.Cases {
 		if _, duplicate := seen[testCase.Dataset]; duplicate {

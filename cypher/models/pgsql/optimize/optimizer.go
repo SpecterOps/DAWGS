@@ -109,8 +109,10 @@ func AttachPredicates(analysis Analysis) []PredicateAttachment {
 			regionBindings := regionBindingSymbols(region)
 
 			for _, predicate := range region.Predicates {
-				bindingSymbols := predicateBindingSymbols(predicate, regionBindings)
-				scope := PredicateAttachmentScopeRegion
+				var (
+					bindingSymbols = predicateBindingSymbols(predicate, regionBindings)
+					scope          = PredicateAttachmentScopeRegion
+				)
 
 				if len(bindingSymbols) == 1 && len(predicate.Dependencies) == 1 {
 					scope = PredicateAttachmentScopeBinding

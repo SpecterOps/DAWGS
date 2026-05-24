@@ -30,8 +30,11 @@ func TestScope(t *testing.T) {
 }
 
 func TestScopeLookupDataTypeResolvesAliases(t *testing.T) {
-	scope := NewScope()
-	binding := scope.Define(pgsql.Identifier("n0"), pgsql.NodeComposite)
+	var (
+		scope   = NewScope()
+		binding = scope.Define(pgsql.Identifier("n0"), pgsql.NodeComposite)
+	)
+
 	scope.Alias(pgsql.Identifier("n"), binding)
 
 	dataType, found := scope.LookupDataType(pgsql.Identifier("n"))

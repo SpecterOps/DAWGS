@@ -68,20 +68,22 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 			continue
 		}
 
-		datasetLoaded := false
-		ensureDatasetLoaded := func() error {
-			if datasetLoaded {
+		var (
+			datasetLoaded       = false
+			ensureDatasetLoaded = func() error {
+				if datasetLoaded {
+					return nil
+				}
+				if err := clearGraph(ctx, backend.db); err != nil {
+					return err
+				}
+				if err := loadDataset(ctx, backend.db, datasetDir, datasetName); err != nil {
+					return err
+				}
+				datasetLoaded = true
 				return nil
 			}
-			if err := clearGraph(ctx, backend.db); err != nil {
-				return err
-			}
-			if err := loadDataset(ctx, backend.db, datasetDir, datasetName); err != nil {
-				return err
-			}
-			datasetLoaded = true
-			return nil
-		}
+		)
 
 		for _, file := range group.files {
 			for _, testCase := range file.Cases {
@@ -490,8 +492,11 @@ func postgresOperators(plan []string) []string {
 }
 
 func neo4jOperators(root Neo4jPlanNode) []string {
-	var operators []string
-	var walk func(Neo4jPlanNode)
+	var (
+		operators []string
+		walk      func(Neo4jPlanNode)
+	)
+
 	walk = func(node Neo4jPlanNode) {
 		operators = append(operators, node.Operator)
 		for _, child := range node.Children {
@@ -507,8 +512,11 @@ func loweringNames(decisions []optimize.LoweringDecision) []string {
 		return nil
 	}
 
-	names := make([]string, 0, len(decisions))
-	seen := make(map[string]struct{}, len(decisions))
+	var (
+		names = make([]string, 0, len(decisions))
+		seen  = make(map[string]struct{}, len(decisions))
+	)
+
 	for _, decision := range decisions {
 		name := decision.Name
 		if _, duplicate := seen[name]; duplicate {

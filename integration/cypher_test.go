@@ -66,8 +66,10 @@ func TestCypher(t *testing.T) {
 		dataset string
 		files   []caseFile
 	}
-	groups := map[string]*group{}
-	var datasetNames []string
+	var (
+		groups       = map[string]*group{}
+		datasetNames []string
+	)
 
 	for _, path := range files {
 		raw, err := os.ReadFile(path)
@@ -262,16 +264,19 @@ var errFixtureRollback = errors.New("fixture rollback")
 func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap opengraph.IDMap, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
-	queryErrorObserved := false
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(tc.Cypher, tc.Params)
-		defer result.Close()
-		assertion.checkResult(t, result, newAssertionContext(idMap))
-		if assertion.expectQueryError {
-			queryErrorObserved = true
-		}
-		return nil
-	})
+	var (
+		queryErrorObserved = false
+		err                = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query(tc.Cypher, tc.Params)
+			defer result.Close()
+			assertion.checkResult(t, result, newAssertionContext(idMap))
+			if assertion.expectQueryError {
+				queryErrorObserved = true
+			}
+			return nil
+		})
+	)
+
 	if err != nil {
 		if assertion.expectQueryError && queryErrorObserved {
 			return
@@ -286,26 +291,28 @@ func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap ope
 func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
-	queryErrorObserved := false
-	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		if err := tx.Nodes().Delete(); err != nil {
-			return fmt.Errorf("clearing graph before fixture: %w", err)
-		}
+	var (
+		queryErrorObserved = false
+		err                = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			if err := tx.Nodes().Delete(); err != nil {
+				return fmt.Errorf("clearing graph before fixture: %w", err)
+			}
 
-		idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
-		if err != nil {
-			return fmt.Errorf("creating fixture: %w", err)
-		}
+			idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
+			if err != nil {
+				return fmt.Errorf("creating fixture: %w", err)
+			}
 
-		result := tx.Query(tc.Cypher, tc.Params)
-		defer result.Close()
-		assertion.checkResult(t, result, newAssertionContext(idMap))
-		if assertion.expectQueryError {
-			queryErrorObserved = true
-		}
+			result := tx.Query(tc.Cypher, tc.Params)
+			defer result.Close()
+			assertion.checkResult(t, result, newAssertionContext(idMap))
+			if assertion.expectQueryError {
+				queryErrorObserved = true
+			}
 
-		return errFixtureRollback
-	})
+			return errFixtureRollback
+		})
+	)
 
 	if assertion.expectQueryError && queryErrorObserved && err != nil {
 		return
@@ -792,8 +799,10 @@ func assertNodeListIDs(expected [][]string) resultAssertion {
 func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, unique bool) []string {
 	t.Helper()
 
-	ids := make([]string, 0, len(result.rows))
-	seen := map[string]bool{}
+	var (
+		ids  = make([]string, 0, len(result.rows))
+		seen = map[string]bool{}
+	)
 
 	for _, row := range result.rows {
 		for _, rawVal := range row.values {

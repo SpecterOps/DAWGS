@@ -200,8 +200,10 @@ func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Ident
 			continue
 		}
 
-		leftIsID := isIdentifierIDReference(binaryExpression.LOperand, identifier)
-		rightIsID := isIdentifierIDReference(binaryExpression.ROperand, identifier)
+		var (
+			leftIsID  = isIdentifierIDReference(binaryExpression.LOperand, identifier)
+			rightIsID = isIdentifierIDReference(binaryExpression.ROperand, identifier)
+		)
 
 		if leftIsID && isStaticIDEqualityOperand(binaryExpression.ROperand) {
 			return true

@@ -430,14 +430,16 @@ RETURN p
 func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
 	t.Parallel()
 
-	normalizedQuery := optimizerSafetySQL(t, `
-MATCH (a)
-MATCH (b:EnterpriseCA {name: 'target'})
-MATCH p = (a)-[:MemberOf]->(b)
-RETURN p
-`)
-	enterpriseAnchorIndex := strings.Index(normalizedQuery, "array [5]::int2[]")
-	broadScanIndex := strings.Index(normalizedQuery, "from s0, node n1")
+	var (
+		normalizedQuery = optimizerSafetySQL(t, `
+		MATCH (a)
+		MATCH (b:EnterpriseCA {name: 'target'})
+		MATCH p = (a)-[:MemberOf]->(b)
+		RETURN p
+		`)
+		enterpriseAnchorIndex = strings.Index(normalizedQuery, "array [5]::int2[]")
+		broadScanIndex        = strings.Index(normalizedQuery, "from s0, node n1")
+	)
 
 	require.NotEqual(t, -1, enterpriseAnchorIndex)
 	require.NotEqual(t, -1, broadScanIndex)
@@ -605,8 +607,10 @@ LIMIT 100
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
-	lowerQuery := strings.ToLower(normalizedQuery)
+	var (
+		normalizedQuery = strings.Join(strings.Fields(formattedQuery), " ")
+		lowerQuery      = strings.ToLower(normalizedQuery)
+	)
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
 	requireNoOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")

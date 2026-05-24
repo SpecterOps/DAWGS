@@ -70,12 +70,13 @@ type BaselineEntry struct {
 }
 
 func buildSummary(records []CaseResult) Summary {
-	summary := Summary{
-		GeneratedAt: time.Now().UTC(),
-	}
-
-	modeSummaries := map[ExecutionMode]*ModeSummary{}
-	caseSummaries := map[string]*CaseSummary{}
+	var (
+		summary = Summary{
+			GeneratedAt: time.Now().UTC(),
+		}
+		modeSummaries = map[ExecutionMode]*ModeSummary{}
+		caseSummaries = map[string]*CaseSummary{}
+	)
 
 	for _, record := range records {
 		modeSummary := modeSummaries[record.ExecutionMode]
@@ -96,8 +97,11 @@ func buildSummary(records []CaseResult) Summary {
 			modeSummary.NotImplemented++
 		}
 
-		caseKey := record.Source + "\x00" + record.Dataset + "\x00" + record.Name
-		caseSummary := caseSummaries[caseKey]
+		var (
+			caseKey     = record.Source + "\x00" + record.Dataset + "\x00" + record.Name
+			caseSummary = caseSummaries[caseKey]
+		)
+
 		if caseSummary == nil {
 			caseSummary = &CaseSummary{
 				Source:   record.Source,

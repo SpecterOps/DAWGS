@@ -32,13 +32,15 @@ func (s *Translator) translateCountStoreFastPath(query *cypher.RegularQuery, pla
 		return false, nil
 	}
 
-	countExpression := pgsql.FunctionCall{
-		Function:   pgsql.FunctionCount,
-		Parameters: []pgsql.Expression{pgsql.Wildcard{}},
-		CastType:   pgsql.Int8,
-	}
+	var (
+		countExpression = pgsql.FunctionCall{
+			Function:   pgsql.FunctionCount,
+			Parameters: []pgsql.Expression{pgsql.Wildcard{}},
+			CastType:   pgsql.Int8,
+		}
+		countProjection pgsql.SelectItem = countExpression
+	)
 
-	var countProjection pgsql.SelectItem = countExpression
 	if shape.Alias != "" {
 		countProjection = pgsql.AliasedExpression{
 			Expression: countExpression,

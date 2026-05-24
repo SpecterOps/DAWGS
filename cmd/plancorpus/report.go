@@ -65,18 +65,17 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 		topN = defaultTopPlans
 	}
 
-	driverCounts := map[string]*DriverSummary{}
-	postgresOperatorCounts := map[string]int{}
-	neo4jOperatorCounts := map[string]int{}
-	plannedLoweringCounts := map[string]int{}
-	appliedLoweringCounts := map[string]int{}
-	skippedLoweringCounts := map[string]int{}
-	skippedReasonCounts := map[string]int{}
-	featureCounts := map[string]int{}
-
 	var (
-		errors []PlanError
-		topPG  []CostedPlan
+		driverCounts           = map[string]*DriverSummary{}
+		postgresOperatorCounts = map[string]int{}
+		neo4jOperatorCounts    = map[string]int{}
+		plannedLoweringCounts  = map[string]int{}
+		appliedLoweringCounts  = map[string]int{}
+		skippedLoweringCounts  = map[string]int{}
+		skippedReasonCounts    = map[string]int{}
+		featureCounts          = map[string]int{}
+		errors                 []PlanError
+		topPG                  []CostedPlan
 	)
 
 	for _, record := range records {

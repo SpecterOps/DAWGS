@@ -284,11 +284,13 @@ func TestLoweringPlanReportsTypedPatternPredicateExistencePlacement(t *testing.T
 func TestSelectivityModelPlansTraversalDirection(t *testing.T) {
 	t.Parallel()
 
-	model := NewSelectivityModel(testBindingLookup{})
-	rightIDLookup := pgsql.NewBinaryExpression(
-		pgsql.CompoundIdentifier{pgsql.Identifier("n1"), pgsql.ColumnID},
-		pgsql.OperatorEquals,
-		pgsql.NewLiteral(1, pgsql.Int),
+	var (
+		model         = NewSelectivityModel(testBindingLookup{})
+		rightIDLookup = pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{pgsql.Identifier("n1"), pgsql.ColumnID},
+			pgsql.OperatorEquals,
+			pgsql.NewLiteral(1, pgsql.Int),
+		)
 	)
 
 	shouldFlip, err := model.ShouldFlipTraversalDirection(false, false, nil, rightIDLookup)
@@ -1192,33 +1194,34 @@ func TestLoweringPlanSkipsOptionalMatchLimitPushdown(t *testing.T) {
 func TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncrementally(t *testing.T) {
 	t.Parallel()
 
-	tableRef := func(alias pgsql.Identifier) pgsql.TableReference {
-		return pgsql.TableReference{
-			Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-			Binding: models.OptionalValue(alias),
+	var (
+		tableRef = func(alias pgsql.Identifier) pgsql.TableReference {
+			return pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+				Binding: models.OptionalValue(alias),
+			}
 		}
-	}
-
-	selectBody := pgsql.Select{
-		Projection: []pgsql.SelectItem{
-			pgsql.CompoundIdentifier{pgsql.Identifier("a"), pgsql.ColumnID},
-		},
-		From: []pgsql.FromClause{{
-			Source: tableRef(pgsql.Identifier("a")),
-			Joins: []pgsql.Join{{
-				Table: tableRef(pgsql.Identifier("b")),
-				JoinOperator: pgsql.JoinOperator{
-					Constraint: pgsql.NewBinaryExpression(
-						pgsql.CompoundIdentifier{pgsql.Identifier("b"), pgsql.ColumnID},
-						pgsql.OperatorEquals,
-						pgsql.CompoundIdentifier{pgsql.Identifier("c"), pgsql.ColumnID},
-					),
-				},
-			}, {
-				Table: tableRef(pgsql.Identifier("c")),
+		selectBody = pgsql.Select{
+			Projection: []pgsql.SelectItem{
+				pgsql.CompoundIdentifier{pgsql.Identifier("a"), pgsql.ColumnID},
+			},
+			From: []pgsql.FromClause{{
+				Source: tableRef(pgsql.Identifier("a")),
+				Joins: []pgsql.Join{{
+					Table: tableRef(pgsql.Identifier("b")),
+					JoinOperator: pgsql.JoinOperator{
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{pgsql.Identifier("b"), pgsql.ColumnID},
+							pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{pgsql.Identifier("c"), pgsql.ColumnID},
+						),
+					},
+				}, {
+					Table: tableRef(pgsql.Identifier("c")),
+				}},
 			}},
-		}},
-	}
+		}
+	)
 
 	require.False(t, SelectReferencesOnlyLocalIdentifiers(selectBody, pgsql.NewIdentifierSet()))
 }

@@ -124,8 +124,11 @@ func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) 
 		for result.Next() {
 			rowCount++
 
-			values := make([]graph.Path, pathColumns)
-			targets := make([]any, pathColumns)
+			var (
+				values  = make([]graph.Path, pathColumns)
+				targets = make([]any, pathColumns)
+			)
+
 			for idx := range values {
 				targets[idx] = &values[idx]
 			}
@@ -141,8 +144,10 @@ func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) 
 			return Measurement{}, err
 		}
 
-		distinctRowCount := int64(len(seen))
-		duplicateRowCount := rowCount - distinctRowCount
+		var (
+			distinctRowCount  = int64(len(seen))
+			duplicateRowCount = rowCount - distinctRowCount
+		)
 
 		return Measurement{
 			RowCount:          rowCount,
@@ -219,33 +224,32 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 const adcsFanoutObjectID = "S-1-5-21-2643190041-1319121918-239771340-513"
 
 func adcsFanoutScenarios() []Scenario {
-	ds := "adcs_fanout"
-
-	p1 := fmt.Sprintf(`
-MATCH (n:Group) WHERE n.objectid = '%s'
-MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-RETURN p1
-`, adcsFanoutObjectID)
-
-	p2 := fmt.Sprintf(`
-MATCH (n:Group) WHERE n.objectid = '%s'
-MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain)
-WHERE ct.authenticationenabled = true
-AND ct.requiresmanagerapproval = false
-AND ct.enrolleesuppliessubject = true
-AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
-RETURN p2
-`, adcsFanoutObjectID)
-
-	combinedMatch := fmt.Sprintf(`
-MATCH (n:Group) WHERE n.objectid = '%s'
-MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
-WHERE ct.authenticationenabled = true
-AND ct.requiresmanagerapproval = false
-AND ct.enrolleesuppliessubject = true
-AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
-`, adcsFanoutObjectID)
+	var (
+		ds = "adcs_fanout"
+		p1 = fmt.Sprintf(`
+		MATCH (n:Group) WHERE n.objectid = '%s'
+		MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN p1
+		`, adcsFanoutObjectID)
+		p2 = fmt.Sprintf(`
+		MATCH (n:Group) WHERE n.objectid = '%s'
+		MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain)
+		WHERE ct.authenticationenabled = true
+		AND ct.requiresmanagerapproval = false
+		AND ct.enrolleesuppliessubject = true
+		AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+		RETURN p2
+		`, adcsFanoutObjectID)
+		combinedMatch = fmt.Sprintf(`
+		MATCH (n:Group) WHERE n.objectid = '%s'
+		MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
+		WHERE ct.authenticationenabled = true
+		AND ct.requiresmanagerapproval = false
+		AND ct.enrolleesuppliessubject = true
+		AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+		`, adcsFanoutObjectID)
+	)
 
 	return []Scenario{
 		cypherPathScenario("ADCS Fanout", ds, "p1 only", p1, 1),
@@ -258,12 +262,13 @@ AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
 // --- Phantom scenarios (hardcoded node IDs from the dataset) ---
 
 func phantomScenarios(idMap opengraph.IDMap) []Scenario {
-	ds := "local/phantom"
-
-	scenarios := []Scenario{
-		{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countQuery(countNodes)},
-		{Section: "Match Edges", Dataset: ds, Label: ds, Query: countQuery(countEdges)},
-	}
+	var (
+		ds        = "local/phantom"
+		scenarios = []Scenario{
+			{Section: "Match Nodes", Dataset: ds, Label: ds, Query: countQuery(countNodes)},
+			{Section: "Match Edges", Dataset: ds, Label: ds, Query: countQuery(countEdges)},
+		}
+	)
 
 	for _, kind := range []string{"User", "Group", "Computer"} {
 		k := kind

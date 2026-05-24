@@ -63,12 +63,13 @@ func main() {
 		fatal("no connection string: set -connection flag or CONNECTION_STRING env var")
 	}
 
-	ctx := context.Background()
-
-	cfg := dawgs.Config{
-		GraphQueryMemoryLimit: size.Gibibyte,
-		ConnectionString:      conn,
-	}
+	var (
+		ctx = context.Background()
+		cfg = dawgs.Config{
+			GraphQueryMemoryLimit: size.Gibibyte,
+			ConnectionString:      conn,
+		}
+	)
 
 	if *driver == pg.DriverName {
 		poolCfg, err := pgxpool.ParseConfig(conn)

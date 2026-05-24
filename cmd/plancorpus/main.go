@@ -115,8 +115,11 @@ func captureSpecs(cfg commandConfig) ([]captureSpec, error) {
 		return nil, fmt.Errorf("no connection string supplied; set CONNECTION_STRING or PG_CONNECTION_STRING/NEO4J_CONNECTION_STRING")
 	}
 
-	orderedDrivers := []string{pgDriverName(), neo4jDriverName()}
-	specs := make([]captureSpec, 0, len(specsByDriver))
+	var (
+		orderedDrivers = []string{pgDriverName(), neo4jDriverName()}
+		specs          = make([]captureSpec, 0, len(specsByDriver))
+	)
+
 	for _, driverName := range orderedDrivers {
 		if spec, found := specsByDriver[driverName]; found {
 			specs = append(specs, spec)

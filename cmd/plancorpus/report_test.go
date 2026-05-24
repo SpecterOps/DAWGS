@@ -9,43 +9,44 @@ import (
 )
 
 func TestBuildSummaryRanksPostgresPlansAndCountsSignals(t *testing.T) {
-	records := []PlanRecord{{
-		Driver:           "pg",
-		Source:           "cases/a.json",
-		Name:             "low",
-		Cypher:           "match (n) return n",
-		PGPlan:           []string{"Seq Scan on node_1  (cost=0.00..10.50 rows=1 width=8)", "Filter: satisfied"},
-		PGOperators:      []string{"Seq Scan on node_1", "Filter: satisfied"},
-		PlannedLowerings: []string{"ProjectionPruning"},
-		AppliedLowerings: []string{"ProjectionPruning"},
-	}, {
-		Driver:           "pg",
-		Source:           "cases/b.json",
-		Name:             "high",
-		Cypher:           "match p=()-[*]->() return p",
-		PGPlan:           []string{"Recursive Union  (cost=0.00..99.25 rows=1 width=8)", "SubPlan 1", "Function Scan on unnest _path"},
-		PGOperators:      []string{"Recursive Union", "Function Scan on unnest _path"},
-		PlannedLowerings: []string{"LatePathMaterialization"},
-		AppliedLowerings: []string{"LatePathMaterialization"},
-		SkippedLowerings: []translate.SkippedLowering{{
-			Name:   "PredicatePlacement",
-			Reason: "planned predicate placements were not consumed by this translation shape",
-			Count:  2,
-		}},
-	}, {
-		Driver:         "neo4j",
-		Source:         "cases/a.json",
-		Name:           "neo",
-		Cypher:         "match (n) return n",
-		Neo4jOperators: []string{"ProduceResults@neo4j", "AllNodesScan@neo4j"},
-	}, {
-		Driver: "pg",
-		Source: "cases/error.json",
-		Name:   "error",
-		Error:  "expected error",
-	}}
-
-	summary := buildSummary(records, 1)
+	var (
+		records = []PlanRecord{{
+			Driver:           "pg",
+			Source:           "cases/a.json",
+			Name:             "low",
+			Cypher:           "match (n) return n",
+			PGPlan:           []string{"Seq Scan on node_1  (cost=0.00..10.50 rows=1 width=8)", "Filter: satisfied"},
+			PGOperators:      []string{"Seq Scan on node_1", "Filter: satisfied"},
+			PlannedLowerings: []string{"ProjectionPruning"},
+			AppliedLowerings: []string{"ProjectionPruning"},
+		}, {
+			Driver:           "pg",
+			Source:           "cases/b.json",
+			Name:             "high",
+			Cypher:           "match p=()-[*]->() return p",
+			PGPlan:           []string{"Recursive Union  (cost=0.00..99.25 rows=1 width=8)", "SubPlan 1", "Function Scan on unnest _path"},
+			PGOperators:      []string{"Recursive Union", "Function Scan on unnest _path"},
+			PlannedLowerings: []string{"LatePathMaterialization"},
+			AppliedLowerings: []string{"LatePathMaterialization"},
+			SkippedLowerings: []translate.SkippedLowering{{
+				Name:   "PredicatePlacement",
+				Reason: "planned predicate placements were not consumed by this translation shape",
+				Count:  2,
+			}},
+		}, {
+			Driver:         "neo4j",
+			Source:         "cases/a.json",
+			Name:           "neo",
+			Cypher:         "match (n) return n",
+			Neo4jOperators: []string{"ProduceResults@neo4j", "AllNodesScan@neo4j"},
+		}, {
+			Driver: "pg",
+			Source: "cases/error.json",
+			Name:   "error",
+			Error:  "expected error",
+		}}
+		summary = buildSummary(records, 1)
+	)
 
 	require.Equal(t, []DriverSummary{{
 		Driver:  "neo4j",
@@ -75,17 +76,19 @@ func TestBuildSummaryRanksPostgresPlansAndCountsSignals(t *testing.T) {
 }
 
 func TestWriteMarkdownSummaryEscapesPipes(t *testing.T) {
-	summary := PlanSummary{
-		Drivers: []DriverSummary{{Driver: "pg", Records: 1}},
-		TopPostgresPlans: []CostedPlan{{
-			Cost:     1.25,
-			Source:   "cases/a.json",
-			Name:     "pipe | name",
-			PlanRoot: "Seq Scan on node_1",
-		}},
-	}
+	var (
+		summary = PlanSummary{
+			Drivers: []DriverSummary{{Driver: "pg", Records: 1}},
+			TopPostgresPlans: []CostedPlan{{
+				Cost:     1.25,
+				Source:   "cases/a.json",
+				Name:     "pipe | name",
+				PlanRoot: "Seq Scan on node_1",
+			}},
+		}
+		out bytes.Buffer
+	)
 
-	var out bytes.Buffer
 	require.NoError(t, writeMarkdownSummary(&out, summary))
 	require.Contains(t, out.String(), "pipe \\| name")
 }

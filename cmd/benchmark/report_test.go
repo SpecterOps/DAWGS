@@ -27,56 +27,57 @@ import (
 )
 
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
-	distinctRows := int64(2)
-	duplicateRows := int64(0)
-	loweringPlan := optimize.LoweringPlan{
-		ProjectionPruning: []optimize.ProjectionPruningDecision{{
-			Target: optimize.TraversalStepTarget{
-				QueryPartIndex: 0,
-				ClauseIndex:    0,
-				PatternIndex:   0,
-				StepIndex:      0,
-			},
-			ReferencedSymbols: []string{"m"},
-		}},
-	}
-
-	report := Report{
-		Driver:     "pg",
-		GitRef:     "abc123",
-		Date:       "2026-05-14",
-		Iterations: 3,
-		Results: []Result{{
-			Section:           "Traversal",
-			Dataset:           "base",
-			Label:             "depth 1",
-			RowCount:          2,
-			DistinctRowCount:  &distinctRows,
-			DuplicateRowCount: &duplicateRows,
-			Explain: &ExplainResult{
-				SQL:  "select 1;",
-				Plan: []string{"Result  (actual rows=1 loops=1)"},
-				Optimization: translate.OptimizationSummary{
-					Rules: []optimize.RuleResult{{
-						Name:    "ExpansionSuffixPushdown",
-						Applied: true,
-					}},
-					PlannedLowerings: loweringPlan.Decisions(),
-					Lowerings: []optimize.LoweringDecision{{
-						Name: "ProjectionPruning",
-					}},
-					LoweringPlan: &loweringPlan,
+	var (
+		distinctRows  = int64(2)
+		duplicateRows = int64(0)
+		loweringPlan  = optimize.LoweringPlan{
+			ProjectionPruning: []optimize.ProjectionPruningDecision{{
+				Target: optimize.TraversalStepTarget{
+					QueryPartIndex: 0,
+					ClauseIndex:    0,
+					PatternIndex:   0,
+					StepIndex:      0,
 				},
-			},
-			Stats: Stats{
-				Median: 10 * time.Millisecond,
-				P95:    20 * time.Millisecond,
-				Max:    30 * time.Millisecond,
-			},
-		}},
-	}
+				ReferencedSymbols: []string{"m"},
+			}},
+		}
+		report = Report{
+			Driver:     "pg",
+			GitRef:     "abc123",
+			Date:       "2026-05-14",
+			Iterations: 3,
+			Results: []Result{{
+				Section:           "Traversal",
+				Dataset:           "base",
+				Label:             "depth 1",
+				RowCount:          2,
+				DistinctRowCount:  &distinctRows,
+				DuplicateRowCount: &duplicateRows,
+				Explain: &ExplainResult{
+					SQL:  "select 1;",
+					Plan: []string{"Result  (actual rows=1 loops=1)"},
+					Optimization: translate.OptimizationSummary{
+						Rules: []optimize.RuleResult{{
+							Name:    "ExpansionSuffixPushdown",
+							Applied: true,
+						}},
+						PlannedLowerings: loweringPlan.Decisions(),
+						Lowerings: []optimize.LoweringDecision{{
+							Name: "ProjectionPruning",
+						}},
+						LoweringPlan: &loweringPlan,
+					},
+				},
+				Stats: Stats{
+					Median: 10 * time.Millisecond,
+					P95:    20 * time.Millisecond,
+					Max:    30 * time.Millisecond,
+				},
+			}},
+		}
+		output bytes.Buffer
+	)
 
-	var output bytes.Buffer
 	if err := writeJSON(&output, report); err != nil {
 		t.Fatalf("write JSON: %v", err)
 	}
@@ -108,31 +109,32 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 }
 
 func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
-	distinctRows := int64(2)
-	duplicateRows := int64(0)
+	var (
+		distinctRows  = int64(2)
+		duplicateRows = int64(0)
+		report        = Report{
+			Driver:     "pg",
+			GitRef:     "abc123",
+			Date:       "2026-05-14",
+			Iterations: 3,
+			Results: []Result{{
+				Section:           "ADCS Fanout",
+				Dataset:           "adcs_fanout",
+				Label:             "combined",
+				RowCount:          2,
+				DistinctRowCount:  &distinctRows,
+				DuplicateRowCount: &duplicateRows,
+				Explain:           &ExplainResult{Plan: []string{"Result"}},
+				Stats: Stats{
+					Median: 10 * time.Millisecond,
+					P95:    20 * time.Millisecond,
+					Max:    30 * time.Millisecond,
+				},
+			}},
+		}
+		output bytes.Buffer
+	)
 
-	report := Report{
-		Driver:     "pg",
-		GitRef:     "abc123",
-		Date:       "2026-05-14",
-		Iterations: 3,
-		Results: []Result{{
-			Section:           "ADCS Fanout",
-			Dataset:           "adcs_fanout",
-			Label:             "combined",
-			RowCount:          2,
-			DistinctRowCount:  &distinctRows,
-			DuplicateRowCount: &duplicateRows,
-			Explain:           &ExplainResult{Plan: []string{"Result"}},
-			Stats: Stats{
-				Median: 10 * time.Millisecond,
-				P95:    20 * time.Millisecond,
-				Max:    30 * time.Millisecond,
-			},
-		}},
-	}
-
-	var output bytes.Buffer
 	if err := writeMarkdown(&output, report); err != nil {
 		t.Fatalf("write markdown: %v", err)
 	}

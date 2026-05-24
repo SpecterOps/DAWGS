@@ -165,8 +165,11 @@ func readJSONLFile(path string) ([]CaseResult, error) {
 	}
 	defer input.Close()
 
-	decoder := json.NewDecoder(input)
-	var records []CaseResult
+	var (
+		decoder = json.NewDecoder(input)
+		records []CaseResult
+	)
+
 	for {
 		var record CaseResult
 		if err := decoder.Decode(&record); err != nil {

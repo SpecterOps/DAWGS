@@ -170,23 +170,25 @@ func TestCopy(t *testing.T) {
 }
 
 func TestCopyPatternVariablesAreIndependent(t *testing.T) {
-	original := &model2.PatternPart{
-		Variable: model2.NewVariableWithSymbol("p"),
-		PatternElements: []*model2.PatternElement{
-			{
-				Element: &model2.NodePattern{
-					Variable: model2.NewVariableWithSymbol("n"),
+	var (
+		original = &model2.PatternPart{
+			Variable: model2.NewVariableWithSymbol("p"),
+			PatternElements: []*model2.PatternElement{
+				{
+					Element: &model2.NodePattern{
+						Variable: model2.NewVariableWithSymbol("n"),
+					},
+				},
+				{
+					Element: &model2.RelationshipPattern{
+						Variable: model2.NewVariableWithSymbol("r"),
+					},
 				},
 			},
-			{
-				Element: &model2.RelationshipPattern{
-					Variable: model2.NewVariableWithSymbol("r"),
-				},
-			},
-		},
-	}
+		}
+		copied = model2.Copy(original)
+	)
 
-	copied := model2.Copy(original)
 	copied.Variable.Symbol = "copied_path"
 	copiedNode, _ := copied.PatternElements[0].AsNodePattern()
 	copiedNode.Variable.Symbol = "copied_node"

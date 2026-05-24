@@ -144,8 +144,10 @@ func newExpansionNodeSeed(identifier, nodeIdentifier pgsql.Identifier, constrain
 }
 
 func newExpansionNodeFilterSeed(identifier, filterIdentifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
-	filterAlias := pgsql.Identifier(string(identifier) + "_filter")
-	filterID := pgsql.CompoundIdentifier{filterAlias, pgsql.ColumnID}
+	var (
+		filterAlias = pgsql.Identifier(string(identifier) + "_filter")
+		filterID    = pgsql.CompoundIdentifier{filterAlias, pgsql.ColumnID}
+	)
 
 	if constraints == nil {
 		return newExpansionSeed(identifier, filterID, []pgsql.FromClause{{
@@ -238,8 +240,10 @@ func expressionReferencesUnwindBinding(expression pgsql.Expression, unwindClause
 }
 
 func (s *ExpansionBuilder) seedEndpointConstraintSplit(expression pgsql.Expression, nodeIdentifier pgsql.Identifier, previousFrameIdentifier pgsql.Identifier) (pgsql.Expression, pgsql.Expression) {
-	seedExpression := rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
-	localScope := pgsql.AsIdentifierSet(nodeIdentifier)
+	var (
+		seedExpression = rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
+		localScope     = pgsql.AsIdentifierSet(nodeIdentifier)
+	)
 
 	for _, clause := range s.unwindClauses {
 		if clause.Binding != nil {
@@ -733,11 +737,13 @@ func (s *ExpansionBuilder) usesBoundEndpointPairs() bool {
 }
 
 func (s *ExpansionBuilder) boundNodeIDsFilterStatement(filterIdentifier pgsql.Identifier, nodeIdentifier pgsql.Identifier) pgsql.Insert {
-	previousFrameIdentifier := s.traversalStep.Frame.Previous.Binding.Identifier
-	nodeIDExpression := pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, nodeIdentifier},
-		Column:     pgsql.ColumnID,
-	}
+	var (
+		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
+		nodeIDExpression        = pgsql.RowColumnReference{
+			Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, nodeIdentifier},
+			Column:     pgsql.ColumnID,
+		}
+	)
 
 	return pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -825,15 +831,17 @@ func (s *ExpansionBuilder) boundEndpointPairFilterStatement() (pgsql.Insert, boo
 		return pgsql.Insert{}, false
 	}
 
-	previousFrameIdentifier := s.traversalStep.Frame.Previous.Binding.Identifier
-	rootIDExpression := pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.LeftNode.Identifier},
-		Column:     pgsql.ColumnID,
-	}
-	terminalIDExpression := pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.RightNode.Identifier},
-		Column:     pgsql.ColumnID,
-	}
+	var (
+		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
+		rootIDExpression        = pgsql.RowColumnReference{
+			Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.LeftNode.Identifier},
+			Column:     pgsql.ColumnID,
+		}
+		terminalIDExpression = pgsql.RowColumnReference{
+			Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.RightNode.Identifier},
+			Column:     pgsql.ColumnID,
+		}
+	)
 
 	return pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -875,9 +883,12 @@ func (s *ExpansionBuilder) materializedEndpointPairFilterStatement() (pgsql.Inse
 		return pgsql.Insert{}, false
 	}
 
-	rootIDExpression := pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}
-	terminalIDExpression := pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}
-	pairConstraints := pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints)
+	var (
+		rootIDExpression     = pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}
+		terminalIDExpression = pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}
+		pairConstraints      = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints)
+	)
+
 	pairConstraints = pgsql.OptionalAnd(pairConstraints, pgsql.NewBinaryExpression(
 		rootIDExpression,
 		pgsql.OperatorIsNot,
@@ -1578,8 +1589,10 @@ func (s *ExpansionBuilder) applyShortestPathSeedProjectionConstraints(projection
 // Match Neo4j's shortest-path behavior by surfacing an error for result rows
 // where the resolved root and terminal endpoints are the same node.
 func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expression {
-	rootID := pgsql.CompoundIdentifier{expansionFrame, expansionRootID}
-	terminalID := pgsql.CompoundIdentifier{expansionFrame, expansionNextID}
+	var (
+		rootID     = pgsql.CompoundIdentifier{expansionFrame, expansionRootID}
+		terminalID = pgsql.CompoundIdentifier{expansionFrame, expansionNextID}
+	)
 
 	return shortestPathSelfEndpointGuardCase(rootID, terminalID)
 }
@@ -2416,8 +2429,10 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		),
 	)
 
-	seedConstraints := pgsql.OptionalAnd(primerLocal, primerExternal)
-	var seed *expansionSeed
+	var (
+		seedConstraints = pgsql.OptionalAnd(primerLocal, primerExternal)
+		seed            *expansionSeed
+	)
 
 	if traversalStep.LeftNodeBound {
 		if traversalStep.Frame.Previous == nil {

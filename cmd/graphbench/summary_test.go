@@ -26,8 +26,11 @@ import (
 )
 
 func TestApplyBaseline(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "baseline.jsonl")
+	var (
+		dir  = t.TempDir()
+		path = filepath.Join(dir, "baseline.jsonl")
+	)
+
 	require.NoError(t, writeJSONLFile(path, []CaseResult{{
 		Dataset:       "base",
 		Name:          "case",
@@ -55,30 +58,32 @@ func TestApplyBaseline(t *testing.T) {
 }
 
 func TestWriteMarkdownSummary(t *testing.T) {
-	summary := buildSummary([]CaseResult{
-		{
-			Dataset:       "base",
-			Name:          "case",
-			Category:      "counts",
-			ExecutionMode: ModePostgresSQL,
-			Status:        StatusOK,
-			RowCount:      1,
-			Stats: DurationStats{
-				Iterations: 1,
-				Median:     2 * time.Millisecond,
+	var (
+		summary = buildSummary([]CaseResult{
+			{
+				Dataset:       "base",
+				Name:          "case",
+				Category:      "counts",
+				ExecutionMode: ModePostgresSQL,
+				Status:        StatusOK,
+				RowCount:      1,
+				Stats: DurationStats{
+					Iterations: 1,
+					Median:     2 * time.Millisecond,
+				},
 			},
-		},
-		{
-			Dataset:        "base",
-			Name:           "case",
-			Category:       "counts",
-			ExecutionMode:  ModeLocalTraversal,
-			Status:         StatusNotImplemented,
-			FallbackReason: localTraversalUnavailableReason,
-		},
-	})
+			{
+				Dataset:        "base",
+				Name:           "case",
+				Category:       "counts",
+				ExecutionMode:  ModeLocalTraversal,
+				Status:         StatusNotImplemented,
+				FallbackReason: localTraversalUnavailableReason,
+			},
+		})
+		output bytes.Buffer
+	)
 
-	var output bytes.Buffer
 	require.NoError(t, writeMarkdownSummary(&output, summary))
 	require.Contains(t, output.String(), "| case | base | counts | 2.0ms; rows=1 | not_implemented; local traversal executor unavailable | - |")
 }

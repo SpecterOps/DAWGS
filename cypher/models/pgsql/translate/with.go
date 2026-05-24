@@ -74,8 +74,10 @@ func (s *Translator) translateWith() error {
 				if binding, isBound := s.scope.Lookup(typedSelectItem); !isBound {
 					return fmt.Errorf("unable to lookup identifer %s for with statement", typedSelectItem)
 				} else {
-					var selectItem pgsql.SelectItem
-					projectedBinding := binding
+					var (
+						selectItem       pgsql.SelectItem
+						projectedBinding = binding
+					)
 
 					if projectionItem.Alias.Set {
 						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || aliasBinding.Identifier != binding.Identifier {

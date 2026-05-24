@@ -125,8 +125,10 @@ func TestAnalyzeSegmentsRegionsAtSemanticBarriers(t *testing.T) {
 func TestAnalysisDiagnosticsAreStable(t *testing.T) {
 	t.Parallel()
 
-	analysis := analyzeCypher(t, adcsQuery)
-	diagnostics := strings.Join(analysis.Diagnostics(), "\n")
+	var (
+		analysis    = analyzeCypher(t, adcsQuery)
+		diagnostics = strings.Join(analysis.Diagnostics(), "\n")
+	)
 
 	require.Contains(t, diagnostics, "query_part[0] kind=single projection_deps=p1,p2")
 	require.Contains(t, diagnostics, "region[0] part=0 clauses=0..2 matches=3")

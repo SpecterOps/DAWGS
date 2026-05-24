@@ -100,8 +100,10 @@ func (s *postgresSQLRunner) Close(ctx context.Context) error {
 }
 
 func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
-	var records []CaseResult
-	casesByDataset := scaleCasesByDataset(corpus)
+	var (
+		records        []CaseResult
+		casesByDataset = scaleCasesByDataset(corpus)
+	)
 
 	for _, datasetName := range scaleCorpusDatasets(corpus) {
 		if err := clearGraph(ctx, s.db); err != nil {

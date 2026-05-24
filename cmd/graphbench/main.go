@@ -77,8 +77,10 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 }
 
 func parseExecutionModes(raw string) ([]ExecutionMode, error) {
-	var modes []ExecutionMode
-	seen := map[ExecutionMode]struct{}{}
+	var (
+		modes []ExecutionMode
+		seen  = map[ExecutionMode]struct{}{}
+	)
 
 	for _, part := range strings.Split(raw, ",") {
 		mode, err := parseExecutionMode(part)
@@ -115,8 +117,10 @@ func main() {
 		fatal("load corpus: %v", err)
 	}
 
-	ctx := context.Background()
-	var records []CaseResult
+	var (
+		ctx     = context.Background()
+		records []CaseResult
+	)
 
 	for _, mode := range cfg.Modes {
 		switch mode {

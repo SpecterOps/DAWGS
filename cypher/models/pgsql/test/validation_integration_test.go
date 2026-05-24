@@ -186,15 +186,17 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		forwardPrimer := nextFrontValues(
-			"(1::int8, 10::int8, 1::int4, false, false, array [101]::int8[])",
-			"(3::int8, 10::int8, 1::int4, false, false, array [103]::int8[])",
+		var (
+			forwardPrimer = nextFrontValues(
+				"(1::int8, 10::int8, 1::int4, false, false, array [101]::int8[])",
+				"(3::int8, 10::int8, 1::int4, false, false, array [103]::int8[])",
+			)
+			backwardPrimer = nextFrontValues(
+				"(2::int8, 10::int8, 1::int4, false, false, array [202]::int8[])",
+				"(4::int8, 10::int8, 1::int4, false, false, array [204]::int8[])",
+			)
+			pairFilter = pairFilterValues("(1::int8, 2::int8)")
 		)
-		backwardPrimer := nextFrontValues(
-			"(2::int8, 10::int8, 1::int4, false, false, array [202]::int8[])",
-			"(4::int8, 10::int8, 1::int4, false, false, array [204]::int8[])",
-		)
-		pairFilter := pairFilterValues("(1::int8, 2::int8)")
 
 		rows, err := tx.Query(testCtx,
 			"select root_id, next_id from bidirectional_asp_harness($1::text, $2::text, $3::text, $4::text, 4, ''::text, ''::text, $5::text) order by root_id, next_id",
@@ -237,18 +239,20 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		forwardPrimer := nextFrontValues(
-			"(1::int8, 2::int8, 1::int4, true, false, array [102]::int8[])",
-			"(1::int8, 2::int8, 1::int4, true, false, array [103]::int8[])",
-			"(3::int8, 30::int8, 1::int4, false, false, array [330]::int8[])",
-		)
-		backwardPrimer := nextFrontValues(
-			"(4::int8, 30::int8, 1::int4, false, false, array [304]::int8[])",
-			"(4::int8, 30::int8, 1::int4, false, false, array [305]::int8[])",
-		)
-		pairFilter := pairFilterValues(
-			"(1::int8, 2::int8)",
-			"(3::int8, 4::int8)",
+		var (
+			forwardPrimer = nextFrontValues(
+				"(1::int8, 2::int8, 1::int4, true, false, array [102]::int8[])",
+				"(1::int8, 2::int8, 1::int4, true, false, array [103]::int8[])",
+				"(3::int8, 30::int8, 1::int4, false, false, array [330]::int8[])",
+			)
+			backwardPrimer = nextFrontValues(
+				"(4::int8, 30::int8, 1::int4, false, false, array [304]::int8[])",
+				"(4::int8, 30::int8, 1::int4, false, false, array [305]::int8[])",
+			)
+			pairFilter = pairFilterValues(
+				"(1::int8, 2::int8)",
+				"(3::int8, 4::int8)",
+			)
 		)
 
 		rows, err := tx.Query(testCtx,
@@ -301,9 +305,11 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 	})
 
 	t.Run("shortest path harnesses avoid output column ambiguity", func(t *testing.T) {
-		frontier := nextFrontValues("(1::int8, 2::int8, 1::int4, false, false, array [101]::int8[])")
+		var (
+			frontier            = nextFrontValues("(1::int8, 2::int8, 1::int4, false, false, array [101]::int8[])")
+			unidirectionalCount int
+		)
 
-		var unidirectionalCount int
 		require.NoError(t, pgxPool.QueryRow(testCtx,
 			"select count(*) from unidirectional_sp_harness($1::text, $2::text, 1, array []::int8[], array []::int8[])",
 			frontier,
@@ -323,8 +329,11 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 	})
 
 	t.Run("shortest path self endpoint helper reports clear error", func(t *testing.T) {
-		var ok bool
-		err := pgxPool.QueryRow(testCtx, "select shortest_path_self_endpoint_error(1::int8, 1::int8)").Scan(&ok)
+		var (
+			ok  bool
+			err = pgxPool.QueryRow(testCtx, "select shortest_path_self_endpoint_error(1::int8, 1::int8)").Scan(&ok)
+		)
+
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "shortest path endpoints must not resolve to the same node")
 	})
@@ -334,14 +343,16 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 		require.NoError(t, err)
 		defer tx.Rollback(testCtx)
 
-		forwardPrimer := nextFrontValues(
-			"(1::int8, 2::int8, 1::int4, true, false, array [102]::int8[])",
-			"(3::int8, 30::int8, 1::int4, false, false, array [330]::int8[])",
-		)
-		backwardPrimer := nextFrontValues("(4::int8, 30::int8, 1::int4, false, false, array [304]::int8[])")
-		pairFilter := pairFilterValues(
-			"(1::int8, 2::int8)",
-			"(3::int8, 4::int8)",
+		var (
+			forwardPrimer = nextFrontValues(
+				"(1::int8, 2::int8, 1::int4, true, false, array [102]::int8[])",
+				"(3::int8, 30::int8, 1::int4, false, false, array [330]::int8[])",
+			)
+			backwardPrimer = nextFrontValues("(4::int8, 30::int8, 1::int4, false, false, array [304]::int8[])")
+			pairFilter     = pairFilterValues(
+				"(1::int8, 2::int8)",
+				"(3::int8, 4::int8)",
+			)
 		)
 
 		rows, err := tx.Query(testCtx,

@@ -61,9 +61,11 @@ func decomposePropertyLookup(expression pgsql.Expression) (PropertyLookup, error
 }
 
 func (s *Translator) buildPatternPropertyConstraints(binding *BoundIdentifier, properties TranslatedProperties) (pgsql.Expression, error) {
-	var propertyConstraints pgsql.Expression
+	var (
+		propertyConstraints pgsql.Expression
+		keys                = make([]string, 0, len(properties.Map))
+	)
 
-	keys := make([]string, 0, len(properties.Map))
 	for key := range properties.Map {
 		keys = append(keys, key)
 	}

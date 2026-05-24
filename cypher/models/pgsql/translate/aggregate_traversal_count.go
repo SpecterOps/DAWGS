@@ -161,15 +161,17 @@ func (s *Translator) buildAggregateTraversalCTE(shape optimize.AggregateTraversa
 	}
 
 	sourceColumn, nextColumn := aggregateTraversalColumns(shape.Direction)
-	primerJoin := pgsql.NewBinaryExpression(
-		pgsql.CompoundIdentifier{aggregateEdgeAlias, sourceColumn},
-		pgsql.OperatorEquals,
-		pgsql.CompoundIdentifier{aggregateCandidateSourcesCTE, aggregateRootID},
-	)
-	recursiveJoin := pgsql.NewBinaryExpression(
-		pgsql.CompoundIdentifier{aggregateEdgeAlias, sourceColumn},
-		pgsql.OperatorEquals,
-		pgsql.CompoundIdentifier{aggregateTraversalCTE, aggregateNextID},
+	var (
+		primerJoin = pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{aggregateEdgeAlias, sourceColumn},
+			pgsql.OperatorEquals,
+			pgsql.CompoundIdentifier{aggregateCandidateSourcesCTE, aggregateRootID},
+		)
+		recursiveJoin = pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{aggregateEdgeAlias, sourceColumn},
+			pgsql.OperatorEquals,
+			pgsql.CompoundIdentifier{aggregateTraversalCTE, aggregateNextID},
+		)
 	)
 
 	return pgsql.CommonTableExpression{
@@ -435,8 +437,11 @@ func (s *Translator) aggregateBindingPredicate(match *cypher.Match, symbol strin
 		return nil, nil
 	}
 
-	translator := NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
-	binding := translator.scope.Define(alias, pgsql.NodeComposite)
+	var (
+		translator = NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
+		binding    = translator.scope.Define(alias, pgsql.NodeComposite)
+	)
+
 	translator.scope.Alias(pgsql.Identifier(symbol), binding)
 
 	if err := walk.Cypher(match.Where, translator); err != nil {

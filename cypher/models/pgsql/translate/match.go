@@ -84,8 +84,11 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame) 
 	// An "aggregation" frame like this will only be triggered after an OPTIONAL MATCH, which should only
 	// take place AFTER `n>=1` previous MATCH expressions. To properly base the aggregation, we need to
 	// join to the origin frame (prior to the OPTIONAL MATCH) based on the OPTIONAL MATCH's frame.
-	optMatchFrame := aggregationFrame.Previous
-	originFrame := optMatchFrame.Previous
+	var (
+		optMatchFrame = aggregationFrame.Previous
+		originFrame   = optMatchFrame.Previous
+	)
+
 	// originFrame could be nil if no previous frame is defined (for ex., leading OPTIONAL MATCH, which is
 	// valid but effectively a plain MATCH)
 	if originFrame == nil {
@@ -112,8 +115,11 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame) 
 	// Construct the projection for this frame. Just take all of the exports for the "origin" frame
 	// and optional match frame and re-export them
 	// TODO: Does there need to be additional logic for visible/defined bindings, instead of only exports?
-	originIDExclusions := map[string]struct{}{}
-	projection := pgsql.Projection{}
+	var (
+		originIDExclusions = map[string]struct{}{}
+		projection         = pgsql.Projection{}
+	)
+
 	for _, exported := range originFrame.Exported.Slice() {
 		projection = append(projection, &pgsql.AliasedExpression{
 			Expression: pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported},

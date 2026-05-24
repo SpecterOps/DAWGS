@@ -110,11 +110,13 @@ func limitPushdownTestTail(where pgsql.Expression) pgsql.Select {
 }
 
 func TestLimitPushdownTailSourceAllowsUnidirectionalShortestPathEndpointInequality(t *testing.T) {
-	part := limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
-	tailSelect := limitPushdownTestTail(limitPushdownTestEndpointInequality(
-		limitPushdownTestRootAlias,
-		limitPushdownTestTerminalAlias,
-	))
+	var (
+		part       = limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
+		tailSelect = limitPushdownTestTail(limitPushdownTestEndpointInequality(
+			limitPushdownTestRootAlias,
+			limitPushdownTestTerminalAlias,
+		))
+	)
 
 	sourceFrame, canPushDown := limitPushdownTailSource(part, tailSelect)
 	require.True(t, canPushDown)
@@ -122,11 +124,13 @@ func TestLimitPushdownTailSourceAllowsUnidirectionalShortestPathEndpointInequali
 }
 
 func TestLimitPushdownTailSourceAllowsReversedUnidirectionalShortestPathEndpointInequality(t *testing.T) {
-	part := limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
-	tailSelect := limitPushdownTestTail(limitPushdownTestEndpointInequality(
-		limitPushdownTestTerminalAlias,
-		limitPushdownTestRootAlias,
-	))
+	var (
+		part       = limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
+		tailSelect = limitPushdownTestTail(limitPushdownTestEndpointInequality(
+			limitPushdownTestTerminalAlias,
+			limitPushdownTestRootAlias,
+		))
+	)
 
 	sourceFrame, canPushDown := limitPushdownTailSource(part, tailSelect)
 	require.True(t, canPushDown)
@@ -134,16 +138,18 @@ func TestLimitPushdownTailSourceAllowsReversedUnidirectionalShortestPathEndpoint
 }
 
 func TestLimitPushdownTailSourceBlocksMixedShortestPathWherePredicate(t *testing.T) {
-	part := limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
-	tailSelect := limitPushdownTestTail(pgsql.NewBinaryExpression(
-		limitPushdownTestEndpointInequality(limitPushdownTestRootAlias, limitPushdownTestTerminalAlias),
-		pgsql.OperatorAnd,
-		pgsql.NewBinaryExpression(
-			limitPushdownTestEndpointRef(limitPushdownTestTerminalAlias),
-			pgsql.OperatorGreaterThan,
-			pgsql.NewLiteral(0, pgsql.Int),
-		),
-	))
+	var (
+		part       = limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
+		tailSelect = limitPushdownTestTail(pgsql.NewBinaryExpression(
+			limitPushdownTestEndpointInequality(limitPushdownTestRootAlias, limitPushdownTestTerminalAlias),
+			pgsql.OperatorAnd,
+			pgsql.NewBinaryExpression(
+				limitPushdownTestEndpointRef(limitPushdownTestTerminalAlias),
+				pgsql.OperatorGreaterThan,
+				pgsql.NewLiteral(0, pgsql.Int),
+			),
+		))
+	)
 
 	_, canPushDown := limitPushdownTailSource(part, tailSelect)
 	require.False(t, canPushDown)
@@ -209,11 +215,13 @@ func TestLimitPushdownTailSourceAllowsBoundEndpointShortestPathSourceWithoutTail
 }
 
 func TestLimitPushdownTailSourceAllowsBidirectionalShortestPathEndpointInequality(t *testing.T) {
-	part := limitPushdownTestPart(pgsql.FunctionBidirectionalSPHarness)
-	tailSelect := limitPushdownTestTail(limitPushdownTestEndpointInequality(
-		limitPushdownTestRootAlias,
-		limitPushdownTestTerminalAlias,
-	))
+	var (
+		part       = limitPushdownTestPart(pgsql.FunctionBidirectionalSPHarness)
+		tailSelect = limitPushdownTestTail(limitPushdownTestEndpointInequality(
+			limitPushdownTestRootAlias,
+			limitPushdownTestTerminalAlias,
+		))
+	)
 
 	sourceFrame, canPushDown := limitPushdownTailSource(part, tailSelect)
 	require.True(t, canPushDown)
@@ -221,11 +229,13 @@ func TestLimitPushdownTailSourceAllowsBidirectionalShortestPathEndpointInequalit
 }
 
 func TestPushDownShortestPathLimitAppendsHarnessLimitWithEndpointInequality(t *testing.T) {
-	part := limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
-	tailSelect := limitPushdownTestTail(limitPushdownTestEndpointInequality(
-		limitPushdownTestRootAlias,
-		limitPushdownTestTerminalAlias,
-	))
+	var (
+		part       = limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
+		tailSelect = limitPushdownTestTail(limitPushdownTestEndpointInequality(
+			limitPushdownTestRootAlias,
+			limitPushdownTestTerminalAlias,
+		))
+	)
 
 	pushDownShortestPathLimit(part, tailSelect)
 
@@ -246,11 +256,13 @@ func TestPushDownShortestPathLimitAppendsHarnessLimitWithEndpointInequality(t *t
 }
 
 func TestPushDownBidirectionalShortestPathLimitAppendsHarnessLimitWithEndpointInequality(t *testing.T) {
-	part := limitPushdownTestPart(pgsql.FunctionBidirectionalSPHarness)
-	tailSelect := limitPushdownTestTail(limitPushdownTestEndpointInequality(
-		limitPushdownTestRootAlias,
-		limitPushdownTestTerminalAlias,
-	))
+	var (
+		part       = limitPushdownTestPart(pgsql.FunctionBidirectionalSPHarness)
+		tailSelect = limitPushdownTestTail(limitPushdownTestEndpointInequality(
+			limitPushdownTestRootAlias,
+			limitPushdownTestTerminalAlias,
+		))
+	)
 
 	pushDownShortestPathLimit(part, tailSelect)
 

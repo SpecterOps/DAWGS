@@ -850,15 +850,17 @@ func jsonEmptyArrayLiteral() pgsql.Expression {
 func rewritePropertyLookupNullCheck(propertyLookup *pgsql.BinaryExpression, isNotNull bool) pgsql.Expression {
 	propertyLookup.Operator = pgsql.OperatorJSONField
 
-	existsExpression := pgsql.NewBinaryExpression(
-		propertyLookup.LOperand,
-		pgsql.OperatorJSONBFieldExists,
-		propertyLookup.ROperand,
-	)
-	jsonNullExpression := pgsql.NewBinaryExpression(
-		propertyLookup,
-		pgsql.OperatorEquals,
-		jsonNullLiteral(),
+	var (
+		existsExpression = pgsql.NewBinaryExpression(
+			propertyLookup.LOperand,
+			pgsql.OperatorJSONBFieldExists,
+			propertyLookup.ROperand,
+		)
+		jsonNullExpression = pgsql.NewBinaryExpression(
+			propertyLookup,
+			pgsql.OperatorEquals,
+			jsonNullLiteral(),
+		)
 	)
 
 	if isNotNull {
@@ -955,15 +957,17 @@ func buildStringPropertyComparisonPredicate(propertyLookup *pgsql.BinaryExpressi
 		))
 	}
 
-	nonStringTypeCheck := pgsql.NewBinaryExpression(
-		jsonbTypeof(jsonFieldPropertyLookup(propertyLookup)),
-		pgsql.OperatorCypherNotEquals,
-		pgsql.NewLiteral("string", pgsql.Text),
-	)
-	nonStringComparison := pgsql.NewBinaryExpression(
-		jsonFieldPropertyLookup(propertyLookup),
-		pgsql.OperatorCypherNotEquals,
-		toJSONBTextOperand(textOperand),
+	var (
+		nonStringTypeCheck = pgsql.NewBinaryExpression(
+			jsonbTypeof(jsonFieldPropertyLookup(propertyLookup)),
+			pgsql.OperatorCypherNotEquals,
+			pgsql.NewLiteral("string", pgsql.Text),
+		)
+		nonStringComparison = pgsql.NewBinaryExpression(
+			jsonFieldPropertyLookup(propertyLookup),
+			pgsql.OperatorCypherNotEquals,
+			toJSONBTextOperand(textOperand),
+		)
 	)
 
 	return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
@@ -978,20 +982,22 @@ func buildStringPropertyComparisonPredicate(propertyLookup *pgsql.BinaryExpressi
 }
 
 func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, negated bool) *pgsql.BinaryExpression {
-	emptyArrayExpression := pgsql.NewBinaryExpression(
-		jsonFieldPropertyLookup(propertyLookup),
-		pgsql.OperatorEquals,
-		jsonEmptyArrayLiteral(),
-	)
-	nullExpression := pgsql.NewBinaryExpression(
-		jsonFieldPropertyLookup(propertyLookup),
-		pgsql.OperatorEquals,
-		jsonNullLiteral(),
-	)
-	nullTaintExpression := pgsql.NewBinaryExpression(
-		nullExpression,
-		pgsql.OperatorAnd,
-		pgsql.NullLiteral(),
+	var (
+		emptyArrayExpression = pgsql.NewBinaryExpression(
+			jsonFieldPropertyLookup(propertyLookup),
+			pgsql.OperatorEquals,
+			jsonEmptyArrayLiteral(),
+		)
+		nullExpression = pgsql.NewBinaryExpression(
+			jsonFieldPropertyLookup(propertyLookup),
+			pgsql.OperatorEquals,
+			jsonNullLiteral(),
+		)
+		nullTaintExpression = pgsql.NewBinaryExpression(
+			nullExpression,
+			pgsql.OperatorAnd,
+			pgsql.NullLiteral(),
+		)
 	)
 
 	if negated {

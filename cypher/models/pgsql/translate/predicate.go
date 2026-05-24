@@ -41,28 +41,31 @@ func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart,
 	)
 
 	if traversalStep.RightNodeBound {
-		forward := pgsql.NewBinaryExpression(
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-			pgsql.OperatorAnd,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+		var (
+			forward = pgsql.NewBinaryExpression(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
+				pgsql.OperatorAnd,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+			)
+			reverse = pgsql.NewBinaryExpression(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
+				pgsql.OperatorAnd,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+			)
 		)
-		reverse := pgsql.NewBinaryExpression(
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-			pgsql.OperatorAnd,
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-				pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
-		)
+
 		whereClause = pgsql.NewBinaryExpression(forward, pgsql.OperatorOr, reverse)
 	}
 

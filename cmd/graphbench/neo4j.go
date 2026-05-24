@@ -86,8 +86,10 @@ func (s *neo4jRunner) Close(ctx context.Context) error {
 }
 
 func (s *neo4jRunner) Run(ctx context.Context, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
-	var records []CaseResult
-	casesByDataset := scaleCasesByDataset(corpus)
+	var (
+		records        []CaseResult
+		casesByDataset = scaleCasesByDataset(corpus)
+	)
 
 	for _, datasetName := range scaleCorpusDatasets(corpus) {
 		if err := clearGraph(ctx, s.db); err != nil {
@@ -285,8 +287,11 @@ func stringifyArguments(arguments map[string]any) map[string]string {
 }
 
 func neo4jOperators(root Neo4jPlanNode) []string {
-	var operators []string
-	var walk func(Neo4jPlanNode)
+	var (
+		operators []string
+		walk      func(Neo4jPlanNode)
+	)
+
 	walk = func(node Neo4jPlanNode) {
 		operators = append(operators, node.Operator+"@neo4j")
 		for _, child := range node.Children {

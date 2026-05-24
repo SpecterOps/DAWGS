@@ -58,8 +58,10 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		inputParameters[key] = value
 	}
 
-	translatedParameters := map[string]any{}
-	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
+	var (
+		translatedParameters = map[string]any{}
+		ctxAwareKindMapper   = newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
+	)
 
 	return &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
@@ -781,8 +783,11 @@ func decodeCypherStringLiteral(raw string) (string, error) {
 		return "", fmt.Errorf("invalid cypher string literal: missing or mismatched surrounding quotes: %q", raw)
 	}
 	// Cypher parser wraps string literals with ' characters
-	body := raw[1 : len(raw)-1]
-	var b strings.Builder
+	var (
+		body = raw[1 : len(raw)-1]
+		b    strings.Builder
+	)
+
 	b.Grow(len(body))
 	for i := 0; i < len(body); i++ {
 		if body[i] != '\\' {

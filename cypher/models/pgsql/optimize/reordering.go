@@ -89,8 +89,10 @@ func reorderReadingClauses(readingClauses []*cypher.ReadingClause, regions []Reg
 }
 
 func reorderRegion(regionClauses []*cypher.ReadingClause) bool {
-	candidates := make([]reorderCandidate, len(regionClauses))
-	declaredBefore := map[string]struct{}{}
+	var (
+		candidates     = make([]reorderCandidate, len(regionClauses))
+		declaredBefore = map[string]struct{}{}
+	)
 
 	for idx, clause := range regionClauses {
 		candidates[idx] = reorderCandidate{

@@ -46,8 +46,10 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	var plan LoweringPlan
 
 	if query.SingleQuery.MultiPartQuery != nil {
-		carriedSymbols := map[string]struct{}{}
-		carriedSelectivity := map[string]boundSourceSelectivity{}
+		var (
+			carriedSymbols     = map[string]struct{}{}
+			carriedSelectivity = map[string]boundSourceSelectivity{}
+		)
 
 		for queryPartIndex, part := range query.SingleQuery.MultiPartQuery.Parts {
 			if part == nil {
@@ -58,8 +60,11 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 				return LoweringPlan{}, err
 			}
 
-			currentSymbols := copyStringSet(carriedSymbols)
-			currentSelectivity := copyBoundSourceSelectivity(carriedSelectivity)
+			var (
+				currentSymbols     = copyStringSet(carriedSymbols)
+				currentSelectivity = copyBoundSourceSelectivity(carriedSelectivity)
+			)
+
 			declareReadingClauseSymbols(currentSymbols, part.ReadingClauses)
 			declareReadingClauseSelectivity(currentSelectivity, part.ReadingClauses)
 
@@ -137,21 +142,25 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 	pathReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(patternPart.Variable))
 
 	for stepIndex, step := range steps {
-		decision := ProjectionPruningDecision{
-			Target:                   target.TraversalStep(stepIndex),
-			ReferencedSymbols:        sortedMapKeys(sourceReferences),
-			PatternBindingReferenced: pathReferenced,
-		}
+		var (
+			decision = ProjectionPruningDecision{
+				Target:                   target.TraversalStep(stepIndex),
+				ReferencedSymbols:        sortedMapKeys(sourceReferences),
+				PatternBindingReferenced: pathReferenced,
+			}
+			edgeReferenced = referencesSourceIdentifier(sourceReferences, variableSymbol(step.Relationship.Variable))
+			hasPruning     bool
+		)
 
-		edgeReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.Relationship.Variable))
-		var hasPruning bool
 		if step.Relationship.Range != nil {
 			decision.OmitRelationship = !edgeReferenced
 			decision.OmitPathBinding = !pathReferenced
 			hasPruning = decision.OmitRelationship || decision.OmitPathBinding
 		} else {
-			leftReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.LeftNode.Variable))
-			rightReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(step.RightNode.Variable))
+			var (
+				leftReferenced  = referencesSourceIdentifier(sourceReferences, variableSymbol(step.LeftNode.Variable))
+				rightReferenced = referencesSourceIdentifier(sourceReferences, variableSymbol(step.RightNode.Variable))
+			)
 
 			decision.OmitLeftNode = !(leftReferenced || pathReferenced)
 			decision.OmitRelationship = !(edgeReferenced || pathReferenced)
@@ -167,8 +176,11 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 
 func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, sourceReferences map[string]struct{}) {
 	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
-		patternPart := patternPartForPredicate(predicate)
-		steps := traversalStepsForPattern(patternPart)
+		var (
+			patternPart = patternPartForPredicate(predicate)
+			steps       = traversalStepsForPattern(patternPart)
+		)
+
 		if len(steps) == 0 {
 			continue
 		}
@@ -187,8 +199,11 @@ func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartInde
 
 func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
 	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
-		patternPart := patternPartForPredicate(predicate)
-		steps := traversalStepsForPattern(patternPart)
+		var (
+			patternPart = patternPartForPredicate(predicate)
+			steps       = traversalStepsForPattern(patternPart)
+		)
+
 		if len(steps) != 1 {
 			continue
 		}
@@ -293,16 +308,21 @@ func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingCl
 		}
 
 		for patternIndex, patternPart := range match.Pattern {
-			steps := traversalStepsForPattern(patternPart)
-			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			var (
+				steps             = traversalStepsForPattern(patternPart)
+				declaredEndpoints = declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			)
 
 			for stepIndex, step := range steps {
 				if step.Relationship.Range != nil {
 					continue
 				}
 
-				leftSymbol := variableSymbol(step.LeftNode.Variable)
-				rightSymbol := variableSymbol(step.RightNode.Variable)
+				var (
+					leftSymbol  = variableSymbol(step.LeftNode.Variable)
+					rightSymbol = variableSymbol(step.RightNode.Variable)
+				)
+
 				_, leftBound := declaredEndpoints[stepIndex].BeforeLeftNode[leftSymbol]
 				_, rightBound := declaredEndpoints[stepIndex].BeforeRightNode[rightSymbol]
 
@@ -336,8 +356,10 @@ type declaredStepEndpoints struct {
 }
 
 func declaredSymbolsBeforeStepEndpoints(initial map[string]struct{}, steps []sourceTraversalStep) []declaredStepEndpoints {
-	declared := copyStringSet(initial)
-	endpoints := make([]declaredStepEndpoints, len(steps))
+	var (
+		declared  = copyStringSet(initial)
+		endpoints = make([]declaredStepEndpoints, len(steps))
+	)
 
 	for idx, step := range steps {
 		endpoints[idx].BeforeLeftNode = copyStringSet(declared)
@@ -358,8 +380,10 @@ func appendTraversalDirectionDecisions(
 	initialDeclaredSymbols map[string]struct{},
 	initialSelectivity map[string]boundSourceSelectivity,
 ) {
-	declaredSymbols := copyStringSet(initialDeclaredSymbols)
-	declaredSourceSelectivity := copyBoundSourceSelectivity(initialSelectivity)
+	var (
+		declaredSymbols           = copyStringSet(initialDeclaredSymbols)
+		declaredSourceSelectivity = copyBoundSourceSelectivity(initialSelectivity)
+	)
 
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil {
@@ -373,13 +397,15 @@ func appendTraversalDirectionDecisions(
 		}
 
 		for patternIndex, patternPart := range match.Pattern {
-			steps := traversalStepsForPattern(patternPart)
-			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
-			patternTarget := PatternTarget{
-				QueryPartIndex: queryPartIndex,
-				ClauseIndex:    clauseIndex,
-				PatternIndex:   patternIndex,
-			}
+			var (
+				steps             = traversalStepsForPattern(patternPart)
+				declaredEndpoints = declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+				patternTarget     = PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}
+			)
 
 			for stepIndex, step := range steps {
 				target := patternTarget.TraversalStep(stepIndex)
@@ -445,8 +471,10 @@ func carryProjectionSelectivity(
 	incomingSymbols map[string]struct{},
 	incomingSelectivity map[string]boundSourceSelectivity,
 ) (map[string]struct{}, map[string]boundSourceSelectivity) {
-	carriedSymbols := map[string]struct{}{}
-	carriedSelectivity := map[string]boundSourceSelectivity{}
+	var (
+		carriedSymbols     = map[string]struct{}{}
+		carriedSelectivity = map[string]boundSourceSelectivity{}
+	)
 
 	if projection == nil {
 		return carriedSymbols, carriedSelectivity
@@ -819,8 +847,11 @@ func traversalDirectionDecisionForStep(
 		return TraversalDirectionDecision{}, false
 	}
 
-	rightSymbol := variableSymbol(step.RightNode.Variable)
-	leftSymbol := variableSymbol(step.LeftNode.Variable)
+	var (
+		rightSymbol = variableSymbol(step.RightNode.Variable)
+		leftSymbol  = variableSymbol(step.LeftNode.Variable)
+	)
+
 	if rightSymbol != "" {
 		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
 			if rightSymbol == leftSymbol {
@@ -835,8 +866,10 @@ func traversalDirectionDecisionForStep(
 		}
 	}
 
-	leftConstrained := nodePatternHasConstraints(step.LeftNode) || leftHasAttachedPredicate
-	rightConstrained := nodePatternHasConstraints(step.RightNode) || rightHasAttachedPredicate
+	var (
+		leftConstrained  = nodePatternHasConstraints(step.LeftNode) || leftHasAttachedPredicate
+		rightConstrained = nodePatternHasConstraints(step.RightNode) || rightHasAttachedPredicate
+	)
 
 	if rightConstrained && !leftConstrained {
 		reason := traversalDirectionReasonRightConstrained
@@ -880,8 +913,11 @@ func boundLeftExpansionDirectionDecisionForStep(
 		return TraversalDirectionDecision{}, false
 	}
 
-	leftSymbol := variableSymbol(step.LeftNode.Variable)
-	rightSymbol := variableSymbol(step.RightNode.Variable)
+	var (
+		leftSymbol  = variableSymbol(step.LeftNode.Variable)
+		rightSymbol = variableSymbol(step.RightNode.Variable)
+	)
+
 	if leftSymbol == "" || leftSymbol == rightSymbol {
 		return TraversalDirectionDecision{}, false
 	}
@@ -937,13 +973,15 @@ func appendShortestPathStrategyDecisions(plan *LoweringPlan, queryPartIndex int,
 				continue
 			}
 
-			steps := traversalStepsForPattern(patternPart)
-			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
-			patternTarget := PatternTarget{
-				QueryPartIndex: queryPartIndex,
-				ClauseIndex:    clauseIndex,
-				PatternIndex:   patternIndex,
-			}
+			var (
+				steps             = traversalStepsForPattern(patternPart)
+				declaredEndpoints = declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+				patternTarget     = PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}
+			)
 
 			for stepIndex, step := range steps {
 				if step.Relationship.Range == nil {
@@ -973,8 +1011,10 @@ func shortestPathStrategyDecisionForStep(
 	declaredEndpoints declaredStepEndpoints,
 	predicateConstrainedSymbols map[string]struct{},
 ) (ShortestPathStrategyDecision, bool) {
-	leftSymbol := variableSymbol(step.LeftNode.Variable)
-	rightSymbol := variableSymbol(step.RightNode.Variable)
+	var (
+		leftSymbol  = variableSymbol(step.LeftNode.Variable)
+		rightSymbol = variableSymbol(step.RightNode.Variable)
+	)
 
 	_, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]
 	if leftEndpointBoundForStep(target.StepIndex, step, declaredEndpoints) && rightSymbol != "" && rightBound {
@@ -1033,13 +1073,15 @@ func appendShortestPathFilterDecisions(plan *LoweringPlan, queryPartIndex int, r
 				continue
 			}
 
-			steps := traversalStepsForPattern(patternPart)
-			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
-			patternTarget := PatternTarget{
-				QueryPartIndex: queryPartIndex,
-				ClauseIndex:    clauseIndex,
-				PatternIndex:   patternIndex,
-			}
+			var (
+				steps             = traversalStepsForPattern(patternPart)
+				declaredEndpoints = declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+				patternTarget     = PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}
+			)
 
 			for stepIndex, step := range steps {
 				if step.Relationship.Range == nil {
@@ -1071,16 +1113,22 @@ func shortestPathFilterDecisionForStep(
 	declaredEndpoints declaredStepEndpoints,
 	predicateConstrainedSymbols map[string]struct{},
 ) (ShortestPathFilterDecision, bool) {
-	leftSymbol := variableSymbol(step.LeftNode.Variable)
-	rightSymbol := variableSymbol(step.RightNode.Variable)
+	var (
+		leftSymbol  = variableSymbol(step.LeftNode.Variable)
+		rightSymbol = variableSymbol(step.RightNode.Variable)
+	)
+
 	if rightSymbol != "" {
 		if _, rightBound := declaredEndpoints.BeforeRightNode[rightSymbol]; rightBound {
 			return ShortestPathFilterDecision{}, false
 		}
 	}
 
-	leftSearchConstrained := endpointHasSearchConstraint(step.LeftNode, leftSymbol, predicateConstrainedSymbols)
-	rightSearchConstrained := endpointHasSearchConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols)
+	var (
+		leftSearchConstrained  = endpointHasSearchConstraint(step.LeftNode, leftSymbol, predicateConstrainedSymbols)
+		rightSearchConstrained = endpointHasSearchConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols)
+	)
+
 	if !endpointHasTerminalFilterConstraint(step.RightNode, rightSymbol, predicateConstrainedSymbols) {
 		return ShortestPathFilterDecision{}, false
 	}
@@ -1204,8 +1252,10 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 		}
 
 		for patternIndex, patternPart := range match.Pattern {
-			steps := traversalStepsForPattern(patternPart)
-			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			var (
+				steps             = traversalStepsForPattern(patternPart)
+				declaredEndpoints = declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
+			)
 
 			for stepIndex, step := range steps {
 				if step.Relationship.Range == nil || stepIndex+1 >= len(steps) {
@@ -1507,13 +1557,15 @@ func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, source
 		return aggregateTraversalFinalProjectionShape{}, false
 	}
 
-	finalProjection := aggregateTraversalFinalProjectionShape{
-		SourceAlias: sourceSymbol,
-		CountAlias:  countAlias,
-	}
+	var (
+		finalProjection = aggregateTraversalFinalProjectionShape{
+			SourceAlias: sourceSymbol,
+			CountAlias:  countAlias,
+		}
+		sourceSeen = false
+		countSeen  = false
+	)
 
-	sourceSeen := false
-	countSeen := false
 	for _, item := range projection.Items {
 		symbol, alias, ok := projectionItemVariableSymbolAndAlias(item)
 		if !ok {

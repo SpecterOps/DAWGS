@@ -331,9 +331,11 @@ func analyzeSemanticDrift(sourceRoot string) SemanticDriftReport {
 }
 
 func countCoreCases(sourceRoot string) (int, int, []QualityFinding) {
-	var files int
-	var cases int
-	var findings []QualityFinding
+	var (
+		files    int
+		cases    int
+		findings []QualityFinding
+	)
 
 	for _, path := range jsonFiles(filepath.Join(sourceRoot, "integration", "testdata", "cases")) {
 		files++
@@ -358,8 +360,10 @@ type templateCount struct {
 }
 
 func countTemplates(sourceRoot string) (templateCount, []QualityFinding) {
-	var counts templateCount
-	var findings []QualityFinding
+	var (
+		counts   templateCount
+		findings []QualityFinding
+	)
 
 	for _, path := range jsonFiles(filepath.Join(sourceRoot, "integration", "testdata", "templates")) {
 		counts.files++
@@ -405,8 +409,11 @@ func changedGeneratedArtifacts(sourceRoot string) ([]string, *QualityFinding) {
 		return nil, &finding
 	}
 
-	var changed []string
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	var (
+		changed []string
+		scanner = bufio.NewScanner(strings.NewReader(string(output)))
+	)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) < 4 {
@@ -472,8 +479,11 @@ func analyzeBackendEquivalence(results []NamedPath) BackendEquivalenceReport {
 	sort.Strings(sortedKeys)
 
 	for _, key := range sortedKeys {
-		statuses := map[string]string{}
-		missing := false
+		var (
+			statuses = map[string]string{}
+			missing  = false
+		)
+
 		for driverName, tests := range driverTests {
 			status, found := tests[key]
 			if !found {
@@ -529,9 +539,11 @@ type goTestEvent struct {
 }
 
 func parseBackendTestResult(result NamedPath) (map[string]string, BackendDriverResult, []QualityFinding) {
-	summary := BackendDriverResult{Name: result.Name, Path: result.Path}
-	findings := []QualityFinding{}
-	tests := map[string]string{}
+	var (
+		summary  = BackendDriverResult{Name: result.Name, Path: result.Path}
+		findings = []QualityFinding{}
+		tests    = map[string]string{}
+	)
 
 	file, err := os.Open(result.Path)
 	if err != nil {
@@ -638,8 +650,10 @@ func analyzeInvariants(sourceRoot string) InvariantReport {
 }
 
 func validateCases(path string, doc qualityCaseFile, report *InvariantReport) []QualityFinding {
-	var findings []QualityFinding
-	seen := map[string]struct{}{}
+	var (
+		findings []QualityFinding
+		seen     = map[string]struct{}{}
+	)
 
 	for _, testCase := range doc.Cases {
 		contextName := testCase.Name
@@ -669,8 +683,10 @@ func validateCases(path string, doc qualityCaseFile, report *InvariantReport) []
 }
 
 func validateTemplateFile(path string, doc qualityTemplateFile, report *InvariantReport) []QualityFinding {
-	var findings []QualityFinding
-	familyNames := map[string]struct{}{}
+	var (
+		findings    []QualityFinding
+		familyNames = map[string]struct{}{}
+	)
 
 	for _, family := range doc.Families {
 		if family.Name == "" {
@@ -687,8 +703,11 @@ func validateTemplateFile(path string, doc qualityTemplateFile, report *Invarian
 			findings = append(findings, fileFinding("invariants", "high", "template_family_missing_template", path, family.Name+" has no template"))
 		}
 
-		placeholders := placeholderNames(family.Template)
-		variantNames := map[string]struct{}{}
+		var (
+			placeholders = placeholderNames(family.Template)
+			variantNames = map[string]struct{}{}
+		)
+
 		for _, variant := range family.Variants {
 			contextName := family.Name + "/" + variant.Name
 			if variant.Name == "" {
@@ -786,54 +805,59 @@ func analyzeFuzz(sourceRoot, resultPath string) FuzzReport {
 }
 
 func discoverFuzzTargets(sourceRoot string) ([]FuzzTarget, []QualityFinding) {
-	var targets []FuzzTarget
-	var findings []QualityFinding
-
-	err := filepath.WalkDir(sourceRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			if shouldSkipDirectory(sourceRoot, path, entry.Name()) {
-				return filepath.SkipDir
+	var (
+		targets  []FuzzTarget
+		findings []QualityFinding
+		err      = filepath.WalkDir(sourceRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
 			}
-			return nil
-		}
-		if !strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-
-		relativePath, err := relativeSlashPath(sourceRoot, path)
-		if err != nil {
-			return err
-		}
-
-		fileSet := token.NewFileSet()
-		parsedFile, err := parser.ParseFile(fileSet, path, nil, 0)
-		if err != nil {
-			findings = append(findings, fileFinding("fuzz", "info", "fuzz_file_parse_error", relativePath, err.Error()))
-			return nil
-		}
-
-		for _, declaration := range parsedFile.Decls {
-			function, ok := declaration.(*ast.FuncDecl)
-			if !ok || !strings.HasPrefix(function.Name.Name, "Fuzz") {
-				continue
+			if entry.IsDir() {
+				if shouldSkipDirectory(sourceRoot, path, entry.Name()) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.HasSuffix(entry.Name(), "_test.go") {
+				return nil
 			}
 
-			position := fileSet.Position(function.Pos())
-			target := FuzzTarget{
-				Package:     parsedFile.Name.Name,
-				Name:        function.Name.Name,
-				File:        relativePath,
-				Line:        position.Line,
-				CorpusFiles: countCorpusFiles(filepath.Join(filepath.Dir(path), "testdata", "fuzz", function.Name.Name)),
+			relativePath, err := relativeSlashPath(sourceRoot, path)
+			if err != nil {
+				return err
 			}
-			targets = append(targets, target)
-		}
 
-		return nil
-	})
+			fileSet := token.NewFileSet()
+			parsedFile, err := parser.ParseFile(fileSet, path, nil, 0)
+			if err != nil {
+				findings = append(findings, fileFinding("fuzz", "info", "fuzz_file_parse_error", relativePath, err.Error()))
+				return nil
+			}
+
+			for _, declaration := range parsedFile.Decls {
+				function, ok := declaration.(*ast.FuncDecl)
+				if !ok || !strings.HasPrefix(function.Name.Name, "Fuzz") {
+					continue
+				}
+
+				var (
+					position = fileSet.Position(function.Pos())
+					target   = FuzzTarget{
+						Package:     parsedFile.Name.Name,
+						Name:        function.Name.Name,
+						File:        relativePath,
+						Line:        position.Line,
+						CorpusFiles: countCorpusFiles(filepath.Join(filepath.Dir(path), "testdata", "fuzz", function.Name.Name)),
+					}
+				)
+
+				targets = append(targets, target)
+			}
+
+			return nil
+		})
+	)
+
 	if err != nil {
 		findings = append(findings, QualityFinding{
 			Signal:   "fuzz",
@@ -845,8 +869,11 @@ func discoverFuzzTargets(sourceRoot string) ([]FuzzTarget, []QualityFinding) {
 	}
 
 	sort.SliceStable(targets, func(leftIndex, rightIndex int) bool {
-		left := targets[leftIndex]
-		right := targets[rightIndex]
+		var (
+			left  = targets[leftIndex]
+			right = targets[rightIndex]
+		)
+
 		if left.File != right.File {
 			return left.File < right.File
 		}
@@ -870,10 +897,13 @@ func parseFuzzResult(path string) (int, int, []QualityFinding) {
 	}
 	defer file.Close()
 
-	var crashes int
-	var timeouts int
-	var findings []QualityFinding
-	scanner := bufio.NewScanner(file)
+	var (
+		crashes  int
+		timeouts int
+		findings []QualityFinding
+		scanner  = bufio.NewScanner(file)
+	)
+
 	for scanner.Scan() {
 		var event goTestEvent
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
@@ -1046,8 +1076,11 @@ func analyzeBenchmarkDrift(options QualityOptions) BenchmarkDriftReport {
 		return report
 	}
 
-	currentByKey := benchmarkResultsByKey(current)
-	baselineByKey := benchmarkResultsByKey(baseline)
+	var (
+		currentByKey  = benchmarkResultsByKey(current)
+		baselineByKey = benchmarkResultsByKey(baseline)
+	)
+
 	report.Results = len(currentByKey)
 	report.BaselineResults = len(baselineByKey)
 
@@ -1093,14 +1126,17 @@ func (s *BenchmarkDriftReport) compareBenchmarkMetric(key, metric string, baseli
 		return
 	}
 
-	delta := (float64(current) - float64(baseline)) / float64(baseline)
-	record := BenchmarkRegression{
-		Key:           key,
-		Metric:        metric,
-		BaselineNanos: baseline,
-		CurrentNanos:  current,
-		DeltaFraction: delta,
-	}
+	var (
+		delta  = (float64(current) - float64(baseline)) / float64(baseline)
+		record = BenchmarkRegression{
+			Key:           key,
+			Metric:        metric,
+			BaselineNanos: baseline,
+			CurrentNanos:  current,
+			DeltaFraction: delta,
+		}
+	)
+
 	if delta > s.RegressionThreshold {
 		s.Regressions = append(s.Regressions, record)
 	} else if delta < -s.RegressionThreshold {
@@ -1128,15 +1164,17 @@ func benchmarkResultsByKey(report benchmarkInputReport) map[string]benchmarkInpu
 }
 
 func summarizeQuality(report QualityReport) QualitySummary {
-	summary := QualitySummary{}
-	statuses := []string{
-		report.SemanticDrift.Status,
-		report.BackendEquivalence.Status,
-		report.Invariants.Status,
-		report.Fuzz.Status,
-		report.Mutation.Status,
-		report.BenchmarkDrift.Status,
-	}
+	var (
+		summary  = QualitySummary{}
+		statuses = []string{
+			report.SemanticDrift.Status,
+			report.BackendEquivalence.Status,
+			report.Invariants.Status,
+			report.Fuzz.Status,
+			report.Mutation.Status,
+			report.BenchmarkDrift.Status,
+		}
+	)
 
 	for _, status := range statuses {
 		switch status {
@@ -1175,8 +1213,11 @@ func qualityFindings(report QualityReport) []QualityFinding {
 	findings = append(findings, report.BenchmarkDrift.Findings...)
 
 	sort.SliceStable(findings, func(leftIndex, rightIndex int) bool {
-		left := findings[leftIndex]
-		right := findings[rightIndex]
+		var (
+			left  = findings[leftIndex]
+			right = findings[rightIndex]
+		)
+
 		if severityRank(left.Severity) != severityRank(right.Severity) {
 			return severityRank(left.Severity) > severityRank(right.Severity)
 		}
@@ -1207,8 +1248,11 @@ func hasFindingAtLeast(findings []QualityFinding, minimum string) bool {
 }
 
 func countFindingsAtLeast(findings []QualityFinding, minimum string) int {
-	minimumRank := severityRank(minimum)
-	var count int
+	var (
+		minimumRank = severityRank(minimum)
+		count       int
+	)
+
 	for _, finding := range findings {
 		if severityRank(finding.Severity) >= minimumRank {
 			count++
