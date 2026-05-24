@@ -316,7 +316,16 @@
           {"start_id": "domain-a", "end_id": "domain-c", "kind": "CrossForestTrust"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {
+        "path_edge_kinds": [
+          ["CrossForestTrust"],
+          ["CrossForestTrust"],
+          ["SpoofSIDHistory"],
+          ["SpoofSIDHistory"],
+          ["AbuseTGTDelegation"],
+          ["AbuseTGTDelegation"]
+        ]
+      }
     },
     {
       "name": "common search azure high privileged role bounded membership expansion",
