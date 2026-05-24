@@ -23,10 +23,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -41,7 +41,11 @@ type postgresSQLRunner struct {
 }
 
 func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus) (*postgresSQLRunner, error) {
-	pool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: connection})
+	poolCfg, err := pgxpool.ParseConfig(connection)
+	if err != nil {
+		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
+	}
+	pool, err := pg.NewPool(poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
 	}

@@ -9,12 +9,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	neo4jcore "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -165,7 +165,11 @@ func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendC
 	}
 
 	if spec.DriverName == pg.DriverName {
-		pool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: spec.Connection})
+		poolCfg, err := pgxpool.ParseConfig(spec.Connection)
+		if err != nil {
+			return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
 		}
