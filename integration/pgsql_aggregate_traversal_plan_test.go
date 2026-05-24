@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -170,9 +171,9 @@ func TestPostgreSQLLiveAggregateTraversalCountPlanShape(t *testing.T) {
 		}
 	}
 
-	limitIndex := strings.Index(plan, "->  Limit")
+	limitMatch := regexp.MustCompile(`(?m)->\s+Limit\b`).FindStringIndex(plan)
 	sourceMaterializationIndex := strings.LastIndex(plan, "Index Scan using node_")
-	if limitIndex < 0 || sourceMaterializationIndex < 0 || sourceMaterializationIndex < limitIndex {
+	if limitMatch == nil || sourceMaterializationIndex < 0 || sourceMaterializationIndex < limitMatch[0] {
 		t.Fatalf("expected source node materialization after top-N limiting, got:\n%s", plan)
 	}
 }

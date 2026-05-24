@@ -82,6 +82,11 @@ func TestParseNeo4jPlanDriverConfigPreservesURI(t *testing.T) {
 }
 
 func TestParseNeo4jPlanDriverConfigRejectsNestedDatabasePath(t *testing.T) {
-	_, err := parseNeo4jPlanDriverConfig("neo4j://neo4j:password@localhost:7687/db/extra")
-	require.ErrorContains(t, err, "single database name")
+	for _, connStr := range []string{
+		"neo4j://neo4j:password@localhost:7687/db/extra",
+		"neo4j://neo4j:password@localhost:7687/db%2Fextra",
+	} {
+		_, err := parseNeo4jPlanDriverConfig(connStr)
+		require.ErrorContains(t, err, "single database name")
+	}
 }

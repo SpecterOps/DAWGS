@@ -48,9 +48,14 @@ func TestNeo4jConnectionTargetPreservesAcceptedSchemes(t *testing.T) {
 }
 
 func TestNeo4jConnectionDatabaseNameRejectsNestedPath(t *testing.T) {
-	connectionURL, err := url.Parse("neo4j://neo4j:password@localhost:7687/db/extra")
-	require.NoError(t, err)
+	for _, connStr := range []string{
+		"neo4j://neo4j:password@localhost:7687/db/extra",
+		"neo4j://neo4j:password@localhost:7687/db%2Fextra",
+	} {
+		connectionURL, err := url.Parse(connStr)
+		require.NoError(t, err)
 
-	_, err = neo4jConnectionDatabaseName(connectionURL)
-	require.ErrorContains(t, err, "single database name")
+		_, err = neo4jConnectionDatabaseName(connectionURL)
+		require.ErrorContains(t, err, "single database name")
+	}
 }

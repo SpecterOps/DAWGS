@@ -34,11 +34,16 @@ func TestParseNeo4jPlanDriverConfig(t *testing.T) {
 }
 
 func TestNeo4jDatabaseNameRejectsNestedPath(t *testing.T) {
-	parsed, err := url.Parse("neo4j://neo4j:secret@example.com:7687/a/b")
-	require.NoError(t, err)
+	for _, connStr := range []string{
+		"neo4j://neo4j:secret@example.com:7687/a/b",
+		"neo4j://neo4j:secret@example.com:7687/a%2Fb",
+	} {
+		parsed, err := url.Parse(connStr)
+		require.NoError(t, err)
 
-	_, err = neo4jDatabaseName(parsed)
-	require.ErrorContains(t, err, "single database name")
+		_, err = neo4jDatabaseName(parsed)
+		require.ErrorContains(t, err, "single database name")
+	}
 }
 
 func TestNeo4jOperatorsAnnotatesOperators(t *testing.T) {

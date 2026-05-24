@@ -77,6 +77,9 @@ func neo4jConnectionDatabaseName(connectionURL *url.URL) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse Neo4j database name: %w", err)
 	}
+	if strings.Contains(databaseName, "/") {
+		return "", fmt.Errorf("Neo4j database path must contain a single database name")
+	}
 
 	return databaseName, nil
 }
