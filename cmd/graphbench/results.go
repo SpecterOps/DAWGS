@@ -114,10 +114,11 @@ func computeDurationStats(durations []time.Duration) (DurationStats, error) {
 	})
 
 	n := len(sortedDurations)
+	p95Index := (95*n+99)/100 - 1
 	return DurationStats{
 		Iterations: n,
 		Median:     sortedDurations[n/2],
-		P95:        sortedDurations[min(n*95/100, n-1)],
+		P95:        sortedDurations[p95Index],
 		Max:        sortedDurations[n-1],
 	}, nil
 }

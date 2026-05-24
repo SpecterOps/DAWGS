@@ -47,3 +47,16 @@ func TestComputeDurationStatsCopiesAndSortsDurations(t *testing.T) {
 	require.Equal(t, 10*time.Millisecond, durations[1])
 	require.Equal(t, 20*time.Millisecond, durations[2])
 }
+
+func TestComputeDurationStatsUsesNearestRankP95(t *testing.T) {
+	durations := make([]time.Duration, 20)
+	for idx := range durations {
+		durations[idx] = time.Duration(idx+1) * time.Millisecond
+	}
+
+	stats, err := computeDurationStats(durations)
+
+	require.NoError(t, err)
+	require.Equal(t, 19*time.Millisecond, stats.P95)
+	require.Equal(t, 20*time.Millisecond, stats.Max)
+}
