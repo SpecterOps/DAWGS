@@ -68,7 +68,11 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 			declareReadingClauseSymbols(currentSymbols, part.ReadingClauses)
 			declareReadingClauseSelectivity(currentSelectivity, part.ReadingClauses)
 
-			carriedSymbols, carriedSelectivity = carryProjectionSelectivity(part.With.Projection, currentSymbols, currentSelectivity)
+			if part.With == nil {
+				carriedSymbols, carriedSelectivity = currentSymbols, currentSelectivity
+			} else {
+				carriedSymbols, carriedSelectivity = carryProjectionSelectivity(part.With.Projection, currentSymbols, currentSelectivity)
+			}
 		}
 
 		if finalPart := query.SingleQuery.MultiPartQuery.SinglePartQuery; finalPart != nil {
@@ -609,9 +613,11 @@ func declareReadingClauseSymbols(symbols map[string]struct{}, readingClauses []*
 
 func declareReadingClauseSelectivity(symbols map[string]boundSourceSelectivity, readingClauses []*cypher.ReadingClause) {
 	for _, readingClause := range readingClauses {
-		if readingClause != nil {
-			declareSelectiveMatchSymbols(symbols, readingClause.Match)
+		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
+			continue
 		}
+
+		declareSelectiveMatchSymbols(symbols, readingClause.Match)
 	}
 }
 

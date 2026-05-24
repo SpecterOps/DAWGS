@@ -810,6 +810,34 @@ func TestLoweringPlanSkipsBoundLeftDirectionAfterGreedyProjectionLimit(t *testin
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+func TestLoweringPlanCarriesBindingsAcrossNilWithPart(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User {objectid: 'S-1-5-21-1-1000'})
+		WITH u
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer {name: 'target'})
+		RETURN c
+	`)
+	require.NoError(t, err)
+	require.NotNil(t, regularQuery.SingleQuery.MultiPartQuery)
+	require.NotEmpty(t, regularQuery.SingleQuery.MultiPartQuery.Parts)
+	regularQuery.SingleQuery.MultiPartQuery.Parts[0].With = nil
+
+	plan, err := BuildLoweringPlan(regularQuery, nil)
+	require.NoError(t, err)
+	require.Contains(t, plan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Contains(t, plan.TraversalDirection, TraversalDirectionDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 1,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Reason: traversalDirectionReasonBoundSourceSelective,
+	})
+}
+
 func TestLoweringPlanAllowsUniqueRightEndpointAfterPriorLimit(t *testing.T) {
 	t.Parallel()
 
@@ -1189,6 +1217,23 @@ func TestLoweringPlanSkipsOptionalMatchLimitPushdown(t *testing.T) {
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Empty(t, plan.LoweringPlan.LimitPushdown)
+}
+
+func TestDeclareReadingClauseSelectivitySkipsOptionalMatch(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n {objectid: 'S-1-5-21-1-1000'})
+		OPTIONAL MATCH (m {objectid: 'S-1-5-21-1-2000'})
+		RETURN n, m
+	`)
+	require.NoError(t, err)
+
+	selectivity := map[string]boundSourceSelectivity{}
+	declareReadingClauseSelectivity(selectivity, regularQuery.SingleQuery.SinglePartQuery.ReadingClauses)
+
+	require.Equal(t, boundSourceSelectivityUnique, selectivity["n"])
+	require.NotContains(t, selectivity, "m")
 }
 
 func TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncrementally(t *testing.T) {
