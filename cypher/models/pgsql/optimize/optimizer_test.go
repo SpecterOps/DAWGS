@@ -1226,6 +1226,47 @@ func TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncremental
 	require.False(t, SelectReferencesOnlyLocalIdentifiers(selectBody, pgsql.NewIdentifierSet()))
 }
 
+func TestFlattenConjunctionHandlesValueBinaryExpressions(t *testing.T) {
+	t.Parallel()
+
+	var (
+		left  = pgsql.NewLiteral(true, pgsql.Boolean)
+		right = pgsql.NewLiteral(false, pgsql.Boolean)
+		expr  = pgsql.BinaryExpression{
+			LOperand: left,
+			Operator: pgsql.OperatorAnd,
+			ROperand: right,
+		}
+	)
+
+	terms := FlattenConjunction(expr)
+
+	require.Len(t, terms, 2)
+	require.Equal(t, left, terms[0])
+	require.Equal(t, right, terms[1])
+}
+
+func TestQueryReferencesOnlyLocalIdentifiersAllowsEmptyWith(t *testing.T) {
+	t.Parallel()
+
+	query := pgsql.Query{
+		CommonTableExpressions: &pgsql.With{},
+		Body: pgsql.Select{
+			Projection: []pgsql.SelectItem{
+				pgsql.CompoundIdentifier{pgsql.Identifier("n0"), pgsql.ColumnID},
+			},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+					Binding: models.OptionalValue(pgsql.Identifier("n0")),
+				},
+			}},
+		},
+	}
+
+	require.True(t, QueryReferencesOnlyLocalIdentifiers(query, pgsql.NewIdentifierSet()))
+}
+
 func TestMeasureSelectivityPopReturnsTopFrame(t *testing.T) {
 	t.Parallel()
 
@@ -1236,6 +1277,31 @@ func TestMeasureSelectivityPopReturnsTopFrame(t *testing.T) {
 
 	require.Equal(t, 24, visitor.popSelectivity())
 	require.Equal(t, 7, visitor.Selectivity())
+}
+
+func TestMeasureSelectivityScoresIDBonusOnlyForPointPredicates(t *testing.T) {
+	t.Parallel()
+
+	var (
+		model    = NewSelectivityModel(nil)
+		idRef    = pgsql.CompoundIdentifier{pgsql.Identifier("n0"), pgsql.ColumnID}
+		literal  = pgsql.NewLiteral(1, pgsql.Int)
+		equality = pgsql.NewBinaryExpression(idRef, pgsql.OperatorEquals, literal)
+		rangeOp  = pgsql.NewBinaryExpression(idRef, pgsql.OperatorGreaterThan, literal)
+		notEqual = pgsql.NewBinaryExpression(idRef, pgsql.OperatorNotEquals, literal)
+	)
+
+	equalityScore, err := model.Measure(equality)
+	require.NoError(t, err)
+	require.Equal(t, selectivityWeightNarrowSearch+selectivityWeightEntityIDReference, equalityScore)
+
+	rangeScore, err := model.Measure(rangeOp)
+	require.NoError(t, err)
+	require.Equal(t, selectivityWeightRangeComparison, rangeScore)
+
+	notEqualScore, err := model.Measure(notEqual)
+	require.NoError(t, err)
+	require.Equal(t, selectivityWeightNotEquals, notEqualScore)
 }
 
 func TestCollectReferencedSourceIdentifiersIgnoresMatchDeclarations(t *testing.T) {

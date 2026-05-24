@@ -173,14 +173,6 @@ func (s *measureSelectivityVisitor) Enter(node pgsql.SyntaxNode) {
 			rOperandIsID = isColumnIDRef(typedNode.ROperand)
 		)
 
-		if lOperandIsID && !rOperandIsID {
-			// Point lookup: n0.id = <literal or param>; highly selective.
-			s.addSelectivity(selectivityWeightEntityIDReference)
-		} else if rOperandIsID && !lOperandIsID {
-			// Canonically unusual, but handle it the same.
-			s.addSelectivity(selectivityWeightEntityIDReference)
-		}
-
 		// If both sides are ID refs, this is a join condition; do not score as a point lookup.
 		switch typedNode.Operator {
 		case pgsql.OperatorOr:
@@ -198,7 +190,13 @@ func (s *measureSelectivityVisitor) Enter(node pgsql.SyntaxNode) {
 		case pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorRegexMatch, pgsql.OperatorSimilarTo:
 			s.addSelectivity(selectivityWeightStringSearch)
 
-		case pgsql.OperatorIn, pgsql.OperatorEquals, pgsql.OperatorIs:
+		case pgsql.OperatorIn, pgsql.OperatorEquals:
+			s.addSelectivity(selectivityWeightNarrowSearch)
+			if (lOperandIsID && !rOperandIsID) || (rOperandIsID && !lOperandIsID) {
+				s.addSelectivity(selectivityWeightEntityIDReference)
+			}
+
+		case pgsql.OperatorIs:
 			s.addSelectivity(selectivityWeightNarrowSearch)
 
 		case pgsql.OperatorPGArrayOverlap, pgsql.OperatorArrayOverlap:

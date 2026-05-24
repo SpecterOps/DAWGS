@@ -7,10 +7,23 @@ import (
 
 // FlattenConjunction collects the leaf operands of a left-recursive AND chain.
 func FlattenConjunction(expr pgsql.Expression) []pgsql.Expression {
-	if bin, typeOK := expr.(*pgsql.BinaryExpression); !typeOK || bin.Operator != pgsql.OperatorAnd {
-		return []pgsql.Expression{expr}
-	} else {
+	switch bin := expr.(type) {
+	case *pgsql.BinaryExpression:
+		if bin == nil || bin.Operator != pgsql.OperatorAnd {
+			return []pgsql.Expression{expr}
+		}
+
 		return append(FlattenConjunction(bin.LOperand), FlattenConjunction(bin.ROperand)...)
+
+	case pgsql.BinaryExpression:
+		if bin.Operator != pgsql.OperatorAnd {
+			return []pgsql.Expression{expr}
+		}
+
+		return append(FlattenConjunction(bin.LOperand), FlattenConjunction(bin.ROperand)...)
+
+	default:
+		return []pgsql.Expression{expr}
 	}
 }
 
@@ -61,7 +74,7 @@ func SubqueryReferencesOnlyLocalIdentifiers(subquery pgsql.Subquery, localScope 
 }
 
 func QueryReferencesOnlyLocalIdentifiers(query pgsql.Query, localScope *pgsql.IdentifierSet) bool {
-	if query.CommonTableExpressions != nil {
+	if query.CommonTableExpressions != nil && len(query.CommonTableExpressions.Expressions) > 0 {
 		return false
 	}
 
