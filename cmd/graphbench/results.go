@@ -18,9 +18,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -74,8 +76,16 @@ type CaseResult struct {
 	Neo4jPlan        *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
 	Neo4jOperators   []string                       `json:"neo4j_operators,omitempty"`
 	Optimization     *translate.OptimizationSummary `json:"optimization,omitempty"`
+	Baseline         *BaselineComparison            `json:"baseline,omitempty"`
 	FallbackReason   string                         `json:"fallback_reason,omitempty"`
 	Error            string                         `json:"error,omitempty"`
+}
+
+type BaselineComparison struct {
+	BaselineMedian time.Duration `json:"baseline_median"`
+	CurrentMedian  time.Duration `json:"current_median"`
+	Change         time.Duration `json:"change"`
+	Ratio          float64       `json:"ratio"`
 }
 
 func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any) CaseResult {
@@ -119,6 +129,10 @@ func writeJSONLFile(path string, records []CaseResult) error {
 		return writeJSONL(os.Stdout, records)
 	}
 
+	if err := ensureOutputDir(path); err != nil {
+		return err
+	}
+
 	output, err := os.Create(path)
 	if err != nil {
 		return err
@@ -137,4 +151,71 @@ func writeJSONL(w io.Writer, records []CaseResult) error {
 	}
 
 	return nil
+}
+
+func readJSONLFile(path string) ([]CaseResult, error) {
+	input, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer input.Close()
+
+	decoder := json.NewDecoder(input)
+	var records []CaseResult
+	for {
+		var record CaseResult
+		if err := decoder.Decode(&record); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			return nil, err
+		}
+
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
+func ensureOutputDir(path string) error {
+	dir := filepath.Dir(path)
+	if dir == "." || dir == "" {
+		return nil
+	}
+
+	return os.MkdirAll(dir, 0o755)
+}
+
+func applyBaseline(path string, records []CaseResult) error {
+	baseline, err := readJSONLFile(path)
+	if err != nil {
+		return err
+	}
+
+	byKey := make(map[string]CaseResult, len(baseline))
+	for _, record := range baseline {
+		byKey[resultKey(record.Dataset, record.Name, record.ExecutionMode)] = record
+	}
+
+	for idx := range records {
+		record := &records[idx]
+		previous, found := byKey[resultKey(record.Dataset, record.Name, record.ExecutionMode)]
+		if !found || previous.Stats.Iterations == 0 || record.Stats.Iterations == 0 || previous.Stats.Median == 0 {
+			continue
+		}
+
+		record.Baseline = &BaselineComparison{
+			BaselineMedian: previous.Stats.Median,
+			CurrentMedian:  record.Stats.Median,
+			Change:         record.Stats.Median - previous.Stats.Median,
+			Ratio:          float64(record.Stats.Median) / float64(previous.Stats.Median),
+		}
+	}
+
+	return nil
+}
+
+func resultKey(dataset, name string, mode ExecutionMode) string {
+	return dataset + "\x00" + name + "\x00" + string(mode)
 }

@@ -34,6 +34,9 @@ type config struct {
 	Modes           []ExecutionMode
 	Iterations      int
 	OutputJSONL     string
+	Summary         string
+	SummaryJSON     string
+	Baseline        string
 }
 
 func parseConfig(args []string, env func(string) string) (config, error) {
@@ -53,6 +56,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&rawModes, "modes", string(ModePostgresSQL), "comma-separated execution modes")
 	flags.IntVar(&cfg.Iterations, "iterations", 3, "timed iterations per case")
 	flags.StringVar(&cfg.OutputJSONL, "jsonl-output", "", "JSONL output path (default: stdout)")
+	flags.StringVar(&cfg.Summary, "summary", "", "markdown summary output path")
+	flags.StringVar(&cfg.SummaryJSON, "summary-json", "", "JSON summary output path")
+	flags.StringVar(&cfg.Baseline, "baseline", "", "previous JSONL output for baseline comparison")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -172,7 +178,25 @@ func main() {
 		}
 	}
 
+	if cfg.Baseline != "" {
+		if err := applyBaseline(cfg.Baseline, records); err != nil {
+			fatal("compare baseline: %v", err)
+		}
+	}
+
 	if err := writeJSONLFile(cfg.OutputJSONL, records); err != nil {
 		fatal("write JSONL: %v", err)
+	}
+
+	summary := buildSummary(records)
+	if cfg.Summary != "" {
+		if err := writeMarkdownSummaryFile(cfg.Summary, summary); err != nil {
+			fatal("write markdown summary: %v", err)
+		}
+	}
+	if cfg.SummaryJSON != "" {
+		if err := writeJSONSummaryFile(cfg.SummaryJSON, summary); err != nil {
+			fatal("write JSON summary: %v", err)
+		}
 	}
 }
