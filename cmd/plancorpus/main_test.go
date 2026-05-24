@@ -1,10 +1,23 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+type closeErrorWriter struct {
+	bytes.Buffer
+	err error
+}
+
+func (s *closeErrorWriter) Close() error {
+	return s.err
+}
 
 func TestCaptureSpecs(t *testing.T) {
 	specs, err := captureSpecs(commandConfig{
@@ -25,6 +38,51 @@ func TestCaptureSpecs(t *testing.T) {
 func TestCaptureSpecsRequiresConnection(t *testing.T) {
 	_, err := captureSpecs(commandConfig{})
 	require.ErrorContains(t, err, "no connection string supplied")
+}
+
+func TestWritePlanRecordsWritesJSONLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "records.jsonl")
+
+	err := writePlanRecords(path, []PlanRecord{{
+		Driver: "pg",
+		Source: "cases/example.json",
+		Name:   "example",
+		Cypher: "MATCH (n) RETURN n",
+	}})
+	require.NoError(t, err)
+
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"driver": "pg",
+		"source": "cases/example.json",
+		"name": "example",
+		"cypher": "MATCH (n) RETURN n"
+	}`, string(bytes.TrimSpace(contents)))
+}
+
+func TestWritePlanRecordsToReturnsCloseError(t *testing.T) {
+	writer := &closeErrorWriter{err: errors.New("close failed")}
+
+	err := writePlanRecordsTo(writer, "records.jsonl", nil)
+
+	require.ErrorContains(t, err, "close records.jsonl")
+	require.ErrorContains(t, err, "close failed")
+}
+
+func TestWritePlanRecordsToClosesAfterEncodeError(t *testing.T) {
+	writer := &closeErrorWriter{err: errors.New("close failed")}
+
+	err := writePlanRecordsTo(writer, "records.jsonl", []PlanRecord{{
+		Driver: "pg",
+		Name:   "bad params",
+		Params: map[string]any{"bad": make(chan int)},
+	}})
+
+	require.ErrorContains(t, err, "write records.jsonl")
+	require.ErrorContains(t, err, "unsupported type")
+	require.ErrorContains(t, err, "close records.jsonl")
+	require.ErrorContains(t, err, "close failed")
 }
 
 func TestDriverFromConnectionString(t *testing.T) {

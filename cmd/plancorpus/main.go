@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -141,13 +142,22 @@ func writePlanRecords(path string, records []PlanRecord) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
-	defer out.Close()
 
+	return writePlanRecordsTo(out, path, records)
+}
+
+func writePlanRecordsTo(out io.WriteCloser, path string, records []PlanRecord) error {
 	encoder := json.NewEncoder(out)
 	for _, record := range records {
 		if err := encoder.Encode(record); err != nil {
+			if closeErr := out.Close(); closeErr != nil {
+				return fmt.Errorf("write %s: %w; close %s: %w", path, err, path, closeErr)
+			}
 			return fmt.Errorf("write %s: %w", path, err)
 		}
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", path, err)
 	}
 	return nil
 }
