@@ -60,6 +60,7 @@
           {"id": "template-bad", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 1}},
           {"id": "ca", "kinds": ["EnterpriseCA"]},
           {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]},
           {"id": "domain", "kinds": ["Domain"]}
         ],
         "edges": [
@@ -73,6 +74,7 @@
           {"start_id": "template-sig", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "template-bad", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
           {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
         ]
       },
@@ -103,7 +105,8 @@
           {"id": "ca", "kinds": ["EnterpriseCA"]},
           {"id": "store", "kinds": ["NTAuthStore"]},
           {"id": "domain", "kinds": ["Domain"]},
-          {"id": "root", "kinds": ["RootCA"]}
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]}
         ],
         "edges": [
           {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
@@ -119,6 +122,7 @@
           {"start_id": "template-a", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "template-b", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
           {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
         ]
       },
@@ -161,7 +165,8 @@
           {"id": "ca", "kinds": ["EnterpriseCA"]},
           {"id": "store", "kinds": ["NTAuthStore"]},
           {"id": "domain", "kinds": ["Domain"]},
-          {"id": "root", "kinds": ["RootCA"]}
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]}
         ],
         "edges": [
           {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
@@ -177,6 +182,7 @@
           {"start_id": "template-a", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "template-b", "end_id": "ca", "kind": "PublishedTo"},
           {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
           {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
         ]
       },
