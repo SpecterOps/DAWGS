@@ -101,6 +101,11 @@ for later baseline comparison.
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
 writes JSONL captures and markdown/JSON summaries under `.coverage/`.
 
+`go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
+current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
+comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
+against a previous JSONL baseline.
+
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective
 anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's
