@@ -118,6 +118,18 @@ func requireNoPlannedOptimizationLowering(t *testing.T, summary OptimizationSumm
 	}
 }
 
+func requirePlanParameterContains(t *testing.T, translation Result, expected string) {
+	t.Helper()
+
+	for _, parameter := range translation.Parameters {
+		if planQuery, ok := parameter.(string); ok && strings.Contains(planQuery, expected) {
+			return
+		}
+	}
+
+	require.Failf(t, "missing plan parameter content", "expected a plan parameter to contain %q in %#v", expected, translation.Parameters)
+}
+
 func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string, reason string) {
 	t.Helper()
 
@@ -976,13 +988,30 @@ func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
-	primerQuery, hasPrimerQuery := translation.Parameters["pi0"].(string)
 
-	require.True(t, hasPrimerQuery)
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array ['source']::text[]) as i0")
-	require.Contains(t, primerQuery, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
-	require.Contains(t, primerQuery, "(n0.properties ->> 'name') = i0")
+	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
+	requirePlanParameterContains(t, translation, "(n0.properties ->> 'name') = i0")
+}
+
+func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+		UNWIND ['target'] AS targetName
+		MATCH p = shortestPath((s:Group)-[:MemberOf*1..]->(e:Group))
+		WHERE s.name = 'source' AND e.name = targetName
+		RETURN targetName, p
+	`)
+
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
+	require.Contains(t, normalizedQuery, "unnest(array ['target']::text[]) as i0")
+	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name') = i0")
 }
 
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {

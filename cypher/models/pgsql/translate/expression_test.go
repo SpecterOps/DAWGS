@@ -349,6 +349,26 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 		ROperand: pgsql.Parameter{Identifier: "pi0", CastType: pgsql.Text},
 		Expected: "(jsonb_typeof((n.properties -> 'objectid')) = 'string' and (n.properties ->> 'objectid') = @pi0::text)",
 	}, {
+		Name:     "text function uses typed text property lookup",
+		LOperand: propertyLookup("distinguishedname"),
+		Operator: pgsql.OperatorEquals,
+		ROperand: pgsql.FunctionCall{
+			Function:   pgsql.FunctionToUpper,
+			Parameters: []pgsql.Expression{mustAsLiteral("admin")},
+			CastType:   pgsql.Text,
+		},
+		Expected: "(jsonb_typeof((n.properties -> 'distinguishedname')) = 'string' and (n.properties ->> 'distinguishedname') = upper('admin')::text)",
+	}, {
+		Name: "text function uses typed text property lookup when reversed",
+		LOperand: pgsql.FunctionCall{
+			Function:   pgsql.FunctionToUpper,
+			Parameters: []pgsql.Expression{mustAsLiteral("admin")},
+			CastType:   pgsql.Text,
+		},
+		Operator: pgsql.OperatorEquals,
+		ROperand: propertyLookup("distinguishedname"),
+		Expected: "(jsonb_typeof((n.properties -> 'distinguishedname')) = 'string' and upper('admin')::text = (n.properties ->> 'distinguishedname'))",
+	}, {
 		Name:     "string inequality keeps non-string JSONB branch",
 		LOperand: propertyLookup("rank"),
 		Operator: pgsql.OperatorCypherNotEquals,

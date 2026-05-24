@@ -220,7 +220,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from edge e0 join node n1 on (jsonb_typeof((n1.properties -> 'name')) = 'string' and (n1.properties ->> 'name') = 'n3') and n1.id = e0.start_id where (jsonb_typeof((e0.properties -> 'prop')) = 'string' and (e0.properties ->> 'prop') = 'a') and (s0.n0).id = e0.end_id) select count(*) > 0 from s1));
 
 -- case: match (n:NodeKind1) where n.distinguishedname = toUpper('admin') return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'distinguishedname') = upper('admin')::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'distinguishedname')) = 'string' and (n0.properties ->> 'distinguishedname') = upper('admin')::text)) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where n.distinguishedname starts with toUpper('admin') return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_starts_with((n0.properties ->> 'distinguishedname'), (upper('admin')::text)::text)::bool) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;

@@ -781,6 +781,33 @@ func TestLoweringPlanSkipsBoundLeftDirectionAfterPriorLimit(t *testing.T) {
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+func TestLoweringPlanSkipsBoundLeftDirectionAfterGreedyProjectionLimit(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.hasspn = true
+		WITH *
+		LIMIT 10
+		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer {name: 'target'})
+		RETURN c
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringTraversalDirection})
+	require.Equal(t, []TraversalDirectionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 1,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Reason: traversalDirectionReasonBoundSourceSelective,
+	}}, plan.LoweringPlan.TraversalDirection)
+}
+
 func TestLoweringPlanAllowsUniqueRightEndpointAfterPriorLimit(t *testing.T) {
 	t.Parallel()
 

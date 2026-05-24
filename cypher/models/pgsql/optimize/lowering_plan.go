@@ -58,7 +58,12 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 				return LoweringPlan{}, err
 			}
 
-			carriedSymbols, carriedSelectivity = carryProjectionSelectivity(part.With.Projection, carriedSelectivity)
+			currentSymbols := copyStringSet(carriedSymbols)
+			currentSelectivity := copyBoundSourceSelectivity(carriedSelectivity)
+			declareReadingClauseSymbols(currentSymbols, part.ReadingClauses)
+			declareReadingClauseSelectivity(currentSelectivity, part.ReadingClauses)
+
+			carriedSymbols, carriedSelectivity = carryProjectionSelectivity(part.With.Projection, currentSymbols, currentSelectivity)
 		}
 
 		if finalPart := query.SingleQuery.MultiPartQuery.SinglePartQuery; finalPart != nil {
@@ -435,7 +440,11 @@ func copyBoundSourceSelectivity(values map[string]boundSourceSelectivity) map[st
 	return copied
 }
 
-func carryProjectionSelectivity(projection *cypher.Projection, incoming map[string]boundSourceSelectivity) (map[string]struct{}, map[string]boundSourceSelectivity) {
+func carryProjectionSelectivity(
+	projection *cypher.Projection,
+	incomingSymbols map[string]struct{},
+	incomingSelectivity map[string]boundSourceSelectivity,
+) (map[string]struct{}, map[string]boundSourceSelectivity) {
 	carriedSymbols := map[string]struct{}{}
 	carriedSelectivity := map[string]boundSourceSelectivity{}
 
@@ -444,18 +453,49 @@ func carryProjectionSelectivity(projection *cypher.Projection, incoming map[stri
 	}
 
 	projectionSelectivity := projectionCardinalitySelectivity(projection)
+	if projectionCarriesAllSymbols(projection) {
+		for symbol := range incomingSymbols {
+			addSymbol(carriedSymbols, symbol)
+			mergeBoundSourceSelectivity(carriedSelectivity, symbol, incomingSelectivity[symbol])
+			mergeBoundSourceSelectivity(carriedSelectivity, symbol, projectionSelectivity)
+		}
+	}
+
 	for _, item := range projection.Items {
 		symbol, alias, ok := projectionItemVariableSymbolAndAlias(item)
 		if !ok {
 			continue
 		}
+		if symbol == cypher.TokenLiteralAsterisk {
+			continue
+		}
 
 		addSymbol(carriedSymbols, alias)
-		mergeBoundSourceSelectivity(carriedSelectivity, alias, incoming[symbol])
+		mergeBoundSourceSelectivity(carriedSelectivity, alias, incomingSelectivity[symbol])
 		mergeBoundSourceSelectivity(carriedSelectivity, alias, projectionSelectivity)
 	}
 
 	return carriedSymbols, carriedSelectivity
+}
+
+func projectionCarriesAllSymbols(projection *cypher.Projection) bool {
+	if projection == nil {
+		return false
+	}
+	if projection.All || len(projection.Items) == 0 {
+		return true
+	}
+
+	for _, item := range projection.Items {
+		if symbol, _, ok := projectionItemVariableSymbolAndAlias(item); ok && symbol == cypher.TokenLiteralAsterisk {
+			return true
+		}
+		if symbol, ok := expressionVariableSymbol(item); ok && symbol == cypher.TokenLiteralAsterisk {
+			return true
+		}
+	}
+
+	return false
 }
 
 func projectionCardinalitySelectivity(projection *cypher.Projection) boundSourceSelectivity {
@@ -527,6 +567,22 @@ func declareSelectiveMatchSymbols(symbols map[string]boundSourceSelectivity, mat
 			if symbol, selectivity, ok := propertyPredicateSelectivity(term); ok {
 				mergeBoundSourceSelectivity(symbols, symbol, selectivity)
 			}
+		}
+	}
+}
+
+func declareReadingClauseSymbols(symbols map[string]struct{}, readingClauses []*cypher.ReadingClause) {
+	for _, readingClause := range readingClauses {
+		if readingClause != nil {
+			declareMatchSymbols(symbols, readingClause.Match)
+		}
+	}
+}
+
+func declareReadingClauseSelectivity(symbols map[string]boundSourceSelectivity, readingClauses []*cypher.ReadingClause) {
+	for _, readingClause := range readingClauses {
+		if readingClause != nil {
+			declareSelectiveMatchSymbols(symbols, readingClause.Match)
 		}
 	}
 }

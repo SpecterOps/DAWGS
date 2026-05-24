@@ -250,17 +250,20 @@ func (s *ExpansionBuilder) seedEndpointConstraintSplit(expression pgsql.Expressi
 	return partitionConstraintByLocality(seedExpression, localScope)
 }
 
-func (s *ExpansionBuilder) appendUnwindSourcesIfReferenced(selectBody *pgsql.Select, expression pgsql.Expression) error {
-	if referencesUnwind, err := expressionReferencesUnwindBinding(expression, s.unwindClauses); err != nil {
-		return err
-	} else if referencesUnwind {
-		var previousFrame *Frame
-		if s.traversalStep != nil && s.traversalStep.Frame != nil {
-			previousFrame = s.traversalStep.Frame.Previous
-		}
+func (s *ExpansionBuilder) appendUnwindSourcesIfReferenced(selectBody *pgsql.Select, expressions ...pgsql.Expression) error {
+	for _, expression := range expressions {
+		if referencesUnwind, err := expressionReferencesUnwindBinding(expression, s.unwindClauses); err != nil {
+			return err
+		} else if referencesUnwind {
+			var previousFrame *Frame
+			if s.traversalStep != nil && s.traversalStep.Frame != nil {
+				previousFrame = s.traversalStep.Frame.Previous
+			}
 
-		selectBody.From = prependFrameSourceIfMissing(selectBody.From, previousFrame)
-		selectBody.From = append(selectBody.From, s.unwindSources...)
+			selectBody.From = prependFrameSourceIfMissing(selectBody.From, previousFrame)
+			selectBody.From = append(selectBody.From, s.unwindSources...)
+			return nil
+		}
 	}
 
 	return nil
@@ -1062,6 +1065,16 @@ func (s *ExpansionBuilder) forwardTerminalSatisfaction(expansionModel *Expansion
 	return satisfiedSelectItem
 }
 
+func forwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expression {
+	if expansionModel.TerminalNodeSatisfactionProjection != nil &&
+		!expansionModel.UseMaterializedTerminalFilter &&
+		!expansionModel.UseMaterializedEndpointPairFilter {
+		return pgsql.Expression(expansionModel.TerminalNodeSatisfactionProjection)
+	}
+
+	return nil
+}
+
 func backwardContinuationSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1103,6 +1116,14 @@ func (s *ExpansionBuilder) backwardTerminalSatisfaction(expansionModel *Expansio
 
 	satisfiedSelectItem, _ := pgsql.As[pgsql.SelectItem](satisfied)
 	return satisfiedSelectItem
+}
+
+func backwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expression {
+	if expansionModel.PrimerNodeSatisfactionProjection != nil && !expansionModel.UseMaterializedEndpointPairFilter {
+		return pgsql.Expression(expansionModel.PrimerNodeSatisfactionProjection)
+	}
+
+	return nil
 }
 
 func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
@@ -1190,7 +1211,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, forwardTerminalSatisfactionProjection(expansionModel)); err != nil {
 		return pgsql.Query{}, nil, err
 	}
 
@@ -1284,7 +1305,7 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, forwardTerminalSatisfactionProjection(expansionModel)); err != nil {
 		return pgsql.Select{}, err
 	}
 
@@ -1373,7 +1394,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, backwardTerminalSatisfactionProjection(expansionModel)); err != nil {
 		return pgsql.Query{}, nil, err
 	}
 
@@ -1445,7 +1466,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints); err != nil {
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, backwardTerminalSatisfactionProjection(expansionModel)); err != nil {
 		return pgsql.Select{}, err
 	}
 
