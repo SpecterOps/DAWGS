@@ -26,13 +26,14 @@ import (
 )
 
 type config struct {
-	CorpusRoot   string
-	DatasetDir   string
-	Connection   string
-	PGConnection string
-	Modes        []ExecutionMode
-	Iterations   int
-	OutputJSONL  string
+	CorpusRoot      string
+	DatasetDir      string
+	Connection      string
+	PGConnection    string
+	Neo4jConnection string
+	Modes           []ExecutionMode
+	Iterations      int
+	OutputJSONL     string
 }
 
 func parseConfig(args []string, env func(string) string) (config, error) {
@@ -48,6 +49,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.DatasetDir, "dataset-dir", "integration/testdata", "dataset root")
 	flags.StringVar(&cfg.Connection, "connection", env("CONNECTION_STRING"), "single backend connection string")
 	flags.StringVar(&cfg.PGConnection, "pg-connection", env("PG_CONNECTION_STRING"), "PostgreSQL connection string")
+	flags.StringVar(&cfg.Neo4jConnection, "neo4j-connection", env("NEO4J_CONNECTION_STRING"), "Neo4j connection string")
 	flags.StringVar(&rawModes, "modes", string(ModePostgresSQL), "comma-separated execution modes")
 	flags.IntVar(&cfg.Iterations, "iterations", 3, "timed iterations per case")
 	flags.StringVar(&cfg.OutputJSONL, "jsonl-output", "", "JSONL output path (default: stdout)")
@@ -133,6 +135,31 @@ func main() {
 			}
 			if closeErr != nil {
 				fatal("close postgres_sql: %v", closeErr)
+			}
+
+			records = append(records, nextRecords...)
+
+		case ModeNeo4j:
+			neo4jConnection := cfg.Neo4jConnection
+			if neo4jConnection == "" {
+				neo4jConnection = cfg.Connection
+			}
+			if neo4jConnection == "" {
+				fatal("neo4j mode requires -neo4j-connection, -connection, NEO4J_CONNECTION_STRING, or CONNECTION_STRING")
+			}
+
+			runner, err := newNeo4jRunner(ctx, cfg.DatasetDir, neo4jConnection, corpus)
+			if err != nil {
+				fatal("open neo4j runner: %v", err)
+			}
+
+			nextRecords, err := runner.Run(ctx, cfg.Iterations, corpus)
+			closeErr := runner.Close(ctx)
+			if err != nil {
+				fatal("run neo4j: %v", err)
+			}
+			if closeErr != nil {
+				fatal("close neo4j: %v", closeErr)
 			}
 
 			records = append(records, nextRecords...)

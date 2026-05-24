@@ -69,6 +69,8 @@ type CaseResult struct {
 	SQL              string                         `json:"sql,omitempty"`
 	PostgresPlan     []string                       `json:"postgres_plan,omitempty"`
 	PostgresMetrics  *PostgresPlanMetrics           `json:"postgres_metrics,omitempty"`
+	Neo4jPlan        *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
+	Neo4jOperators   []string                       `json:"neo4j_operators,omitempty"`
 	Optimization     *translate.OptimizationSummary `json:"optimization,omitempty"`
 	Error            string                         `json:"error,omitempty"`
 }
