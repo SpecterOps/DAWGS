@@ -1,0 +1,143 @@
+{
+  "cases": [
+    {
+      "name": "one_hop_typed_from_bound_id",
+      "dataset": "base",
+      "category": "one_hop",
+      "cypher": "MATCH (s)-[:EdgeKind1]->(e) WHERE id(s) = $start_id RETURN id(e)",
+      "node_params": {
+        "start_id": "n1"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_set"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "root_predicate": "bound_id",
+        "edge_kinds": ["EdgeKind1"],
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["typed-expansion", "id-only"]
+    },
+    {
+      "name": "variable_length_id_only_from_bound_id",
+      "dataset": "base",
+      "category": "variable_length_reachability",
+      "cypher": "MATCH (s)-[*1..]->(e) WHERE id(s) = $start_id RETURN id(e)",
+      "node_params": {
+        "start_id": "n1"
+      },
+      "expected": {
+        "row_count": 2,
+        "result_kind": "id_set"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "root_predicate": "bound_id",
+        "min_depth": 1,
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "local_traversal", "neo4j"],
+      "tags": ["reachability", "id-only", "local-traversal-candidate"],
+      "reference_design": {
+        "age_relevance": ["vle_cost_model"],
+        "notes": "AGE VLE behavior is useful design context for cycle and duplicate handling, but this case is not run against AGE."
+      }
+    },
+    {
+      "name": "variable_length_path_observed_from_bound_id",
+      "dataset": "base",
+      "category": "path_observed_variable_length",
+      "cypher": "MATCH p = (s)-[*1..]->(e) WHERE id(s) = $start_id RETURN p",
+      "node_params": {
+        "start_id": "n1"
+      },
+      "expected": {
+        "row_count": 2,
+        "result_kind": "path_set"
+      },
+      "observes": {
+        "paths": true,
+        "nodes": true,
+        "relationships": true,
+        "properties": true
+      },
+      "shape": {
+        "root_predicate": "bound_id",
+        "min_depth": 1,
+        "path_materialization_required": true
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["path-materialization"]
+    },
+    {
+      "name": "adcs_p1_endpoint_ids",
+      "dataset": "adcs_fanout",
+      "category": "bloodhound_search",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {
+        "objectid": "S-1-5-21-2643190041-1319121918-239771340-513"
+      },
+      "expected": {
+        "row_count": 4,
+        "result_kind": "id_rows"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+        "min_depth": 0,
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "local_traversal", "neo4j"],
+      "tags": ["bloodhound", "adcs", "id-only", "local-traversal-candidate"]
+    },
+    {
+      "name": "adcs_p1_path_observed",
+      "dataset": "adcs_fanout",
+      "category": "bloodhound_search",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {
+        "objectid": "S-1-5-21-2643190041-1319121918-239771340-513"
+      },
+      "expected": {
+        "row_count": 4,
+        "result_kind": "path_set"
+      },
+      "observes": {
+        "paths": true,
+        "nodes": true,
+        "relationships": true,
+        "properties": true
+      },
+      "shape": {
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+        "min_depth": 0,
+        "path_materialization_required": true
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["bloodhound", "adcs", "path-materialization"]
+    }
+  ]
+}
+
