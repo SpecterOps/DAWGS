@@ -28,9 +28,10 @@ import (
 )
 
 const (
-	StatusOK          = "ok"
-	StatusRowMismatch = "row_mismatch"
-	StatusError       = "error"
+	StatusOK             = "ok"
+	StatusRowMismatch    = "row_mismatch"
+	StatusError          = "error"
+	StatusNotImplemented = "not_implemented"
 )
 
 type DurationStats struct {
@@ -63,6 +64,7 @@ type CaseResult struct {
 	Status           string                         `json:"status"`
 	Cypher           string                         `json:"cypher"`
 	Params           map[string]any                 `json:"params,omitempty"`
+	NodeParams       map[string]string              `json:"node_params,omitempty"`
 	ExpectedRowCount *int64                         `json:"expected_row_count,omitempty"`
 	RowCount         int64                          `json:"row_count,omitempty"`
 	Stats            DurationStats                  `json:"stats,omitempty"`
@@ -72,6 +74,7 @@ type CaseResult struct {
 	Neo4jPlan        *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
 	Neo4jOperators   []string                       `json:"neo4j_operators,omitempty"`
 	Optimization     *translate.OptimizationSummary `json:"optimization,omitempty"`
+	FallbackReason   string                         `json:"fallback_reason,omitempty"`
 	Error            string                         `json:"error,omitempty"`
 }
 
@@ -85,6 +88,7 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 		Status:           StatusOK,
 		Cypher:           testCase.Cypher,
 		Params:           params,
+		NodeParams:       testCase.NodeParams,
 		ExpectedRowCount: testCase.Expected.RowCount,
 	}
 }

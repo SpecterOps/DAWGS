@@ -164,6 +164,9 @@ func main() {
 
 			records = append(records, nextRecords...)
 
+		case ModeLocalTraversal:
+			records = append(records, runLocalTraversalPlaceholders(corpus)...)
+
 		default:
 			fatal("execution mode %s is not implemented yet", mode)
 		}
