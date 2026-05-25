@@ -57,7 +57,9 @@ func (s *Translator) newAggregatePredicateTranslator() *Translator {
 }
 
 func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraversalCountShape) (pgsql.Query, error) {
-	candidateSources, err := s.buildAggregateCandidateSourcesCTE(shape)
+	predicateTranslator := s.newAggregatePredicateTranslator()
+
+	candidateSources, err := s.buildAggregateCandidateSourcesCTE(shape, predicateTranslator)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
@@ -67,7 +69,7 @@ func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraver
 		return pgsql.Query{}, err
 	}
 
-	terminalNodes, err := s.buildAggregateTerminalNodesCTE(shape)
+	terminalNodes, err := s.buildAggregateTerminalNodesCTE(shape, predicateTranslator)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
@@ -130,8 +132,8 @@ func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraver
 	}, nil
 }
 
-func (s *Translator) buildAggregateCandidateSourcesCTE(shape optimize.AggregateTraversalCountShape) (pgsql.CommonTableExpression, error) {
-	whereClause, err := s.aggregateSourceWhere(shape)
+func (s *Translator) buildAggregateCandidateSourcesCTE(shape optimize.AggregateTraversalCountShape, predicateTranslator *Translator) (pgsql.CommonTableExpression, error) {
+	whereClause, err := s.aggregateSourceWhere(shape, predicateTranslator)
 	if err != nil {
 		return pgsql.CommonTableExpression{}, err
 	}
@@ -336,8 +338,8 @@ func (s *Translator) buildAggregateTerminalHitsCTE(shape optimize.AggregateTrave
 	}, nil
 }
 
-func (s *Translator) buildAggregateTerminalNodesCTE(shape optimize.AggregateTraversalCountShape) (pgsql.CommonTableExpression, error) {
-	terminalWhere, err := s.aggregateTerminalWhere(shape)
+func (s *Translator) buildAggregateTerminalNodesCTE(shape optimize.AggregateTraversalCountShape, predicateTranslator *Translator) (pgsql.CommonTableExpression, error) {
+	terminalWhere, err := s.aggregateTerminalWhere(shape, predicateTranslator)
 	if err != nil {
 		return pgsql.CommonTableExpression{}, err
 	}
@@ -407,13 +409,13 @@ func (s *Translator) buildAggregateRankedCTE(shape optimize.AggregateTraversalCo
 	}
 }
 
-func (s *Translator) aggregateSourceWhere(shape optimize.AggregateTraversalCountShape) (pgsql.Expression, error) {
+func (s *Translator) aggregateSourceWhere(shape optimize.AggregateTraversalCountShape, predicateTranslator *Translator) (pgsql.Expression, error) {
 	sourceKindConstraint, err := s.aggregateNodeKindConstraint(aggregateSourceAlias, shape.SourceKinds)
 	if err != nil {
 		return nil, err
 	}
 
-	sourcePredicate, err := s.aggregateSourcePredicate(shape)
+	sourcePredicate, err := s.aggregateSourcePredicate(shape, predicateTranslator)
 	if err != nil {
 		return nil, err
 	}
@@ -421,13 +423,13 @@ func (s *Translator) aggregateSourceWhere(shape optimize.AggregateTraversalCount
 	return pgsql.OptionalAnd(sourcePredicate, sourceKindConstraint), nil
 }
 
-func (s *Translator) aggregateTerminalWhere(shape optimize.AggregateTraversalCountShape) (pgsql.Expression, error) {
+func (s *Translator) aggregateTerminalWhere(shape optimize.AggregateTraversalCountShape, predicateTranslator *Translator) (pgsql.Expression, error) {
 	terminalKindConstraint, err := s.aggregateNodeKindConstraint(aggregateTerminalAlias, shape.TerminalKinds)
 	if err != nil {
 		return nil, err
 	}
 
-	terminalPredicate, err := s.aggregateBindingPredicate(shape.TerminalMatch, shape.TerminalSymbol, aggregateTerminalAlias)
+	terminalPredicate, err := s.aggregateBindingPredicate(predicateTranslator, shape.TerminalMatch, shape.TerminalSymbol, aggregateTerminalAlias)
 	if err != nil {
 		return nil, err
 	}
@@ -435,20 +437,16 @@ func (s *Translator) aggregateTerminalWhere(shape optimize.AggregateTraversalCou
 	return pgsql.OptionalAnd(terminalPredicate, terminalKindConstraint), nil
 }
 
-func (s *Translator) aggregateSourcePredicate(shape optimize.AggregateTraversalCountShape) (pgsql.Expression, error) {
-	return s.aggregateBindingPredicate(shape.SourceMatch, shape.SourceSymbol, aggregateSourceAlias)
+func (s *Translator) aggregateSourcePredicate(shape optimize.AggregateTraversalCountShape, predicateTranslator *Translator) (pgsql.Expression, error) {
+	return s.aggregateBindingPredicate(predicateTranslator, shape.SourceMatch, shape.SourceSymbol, aggregateSourceAlias)
 }
 
-func (s *Translator) aggregateBindingPredicate(match *cypher.Match, symbol string, alias pgsql.Identifier) (pgsql.Expression, error) {
+func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cypher.Match, symbol string, alias pgsql.Identifier) (pgsql.Expression, error) {
 	if match == nil || match.Where == nil {
 		return nil, nil
 	}
 
-	var (
-		translator = NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
-		binding    = translator.scope.Define(alias, pgsql.NodeComposite)
-	)
-
+	binding := translator.scope.Define(alias, pgsql.NodeComposite)
 	translator.scope.Alias(pgsql.Identifier(symbol), binding)
 
 	if err := walk.Cypher(match.Where, translator); err != nil {
