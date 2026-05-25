@@ -69,10 +69,16 @@ func optimizerSafetySQL(t *testing.T, cypherQuery string) string {
 func optimizerSafetyTranslation(t *testing.T, cypherQuery string) Result {
 	t.Helper()
 
+	return optimizerSafetyTranslationWithParameters(t, cypherQuery, nil)
+}
+
+func optimizerSafetyTranslationWithParameters(t *testing.T, cypherQuery string, parameters map[string]any) Result {
+	t.Helper()
+
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	require.NoError(t, err)
 
-	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), parameters, DefaultGraphID)
 	require.NoError(t, err)
 
 	return translation
@@ -787,6 +793,63 @@ LIMIT 100
 	require.Contains(t, normalizedQuery, "terminal_nodes(id) as materialized")
 	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
 	require.Contains(t, normalizedQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
+}
+
+func TestOptimizerSafetyAggregateTraversalCountUsesDistinctPredicateParameters(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslationWithParameters(t, `
+MATCH (u:User)
+WHERE u.enabled = $sourceEnabled
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WHERE c.enabled = $terminalEnabled
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`, map[string]any{
+		"sourceEnabled":   true,
+		"terminalEnabled": false,
+	})
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	parameterValues := make([]any, 0, len(translation.Parameters))
+	for _, value := range translation.Parameters {
+		parameterValues = append(parameterValues, value)
+	}
+
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Len(t, translation.Parameters, 2)
+	require.ElementsMatch(t, []any{true, false}, parameterValues)
+}
+
+func TestOptimizerSafetyAggregateTraversalCountReusesPredicateParameter(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslationWithParameters(t, `
+MATCH (u:User)
+WHERE u.enabled = $enabled
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WHERE c.enabled = $enabled
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`, map[string]any{
+		"enabled": true,
+	})
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Len(t, translation.Parameters, 1)
 }
 
 func TestOptimizerSafetyAggregateTraversalCountSkipsUnsafeWideningCandidates(t *testing.T) {
