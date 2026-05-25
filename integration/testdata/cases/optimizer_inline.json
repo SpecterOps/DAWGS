@@ -1,0 +1,361 @@
+{
+  "cases": [
+    {
+      "name": "return two ADCS-style paths with shared CA and domain endpoints",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'S-1-5-21-2643190041-1319121918-239771340-513' MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN p1, p2",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"}},
+          {"id": "p1-mid", "kinds": ["Group"]},
+          {"id": "p2-mid", "kinds": ["Group"]},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "store", "kinds": ["NTAuthStore"]},
+          {"id": "domain", "kinds": ["Domain"]},
+          {"id": "template", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]},
+          {"id": "unused-template", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": false, "requiresmanagerapproval": true, "enrolleesuppliessubject": false, "schemaversion": 2, "authorizedsignatures": 1}}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "p1-mid", "kind": "MemberOf"},
+          {"start_id": "p1-mid", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+          {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+          {"start_id": "n", "end_id": "p2-mid", "kind": "MemberOf"},
+          {"start_id": "p2-mid", "end_id": "template", "kind": "GenericAll"},
+          {"start_id": "template", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
+          {"start_id": "p2-mid", "end_id": "unused-template", "kind": "AllExtendedRights"}
+        ]
+      },
+      "assert": {
+        "keys": ["p1", "p2"],
+        "row_count": 1,
+        "path_lengths": [4, 5],
+        "path_node_ids": [
+          ["n", "p1-mid", "ca", "store", "domain"],
+          ["n", "p2-mid", "template", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ],
+        "contains_node_with_props": {"objectid": "S-1-5-21-2643190041-1319121918-239771340-513"},
+        "contains_edge": {"start": "template", "end": "ca", "kind": "PublishedTo"}
+      }
+    },
+    {
+      "name": "ADCS template predicate accepts both OR branches and rejects false alternatives",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'optimizer-or-source' MATCH p = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "optimizer-or-source"}},
+          {"id": "mid-v1", "kinds": ["Group"]},
+          {"id": "mid-sig", "kinds": ["Group"]},
+          {"id": "mid-bad", "kinds": ["Group"]},
+          {"id": "template-v1", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 2}},
+          {"id": "template-sig", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+          {"id": "template-bad", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 1}},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]},
+          {"id": "domain", "kinds": ["Domain"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "mid-v1", "kind": "MemberOf"},
+          {"start_id": "mid-v1", "end_id": "template-v1", "kind": "GenericAll"},
+          {"start_id": "n", "end_id": "mid-sig", "kind": "MemberOf"},
+          {"start_id": "mid-sig", "end_id": "template-sig", "kind": "Enroll"},
+          {"start_id": "n", "end_id": "mid-bad", "kind": "MemberOf"},
+          {"start_id": "mid-bad", "end_id": "template-bad", "kind": "AllExtendedRights"},
+          {"start_id": "template-v1", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-sig", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-bad", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {
+        "row_count": 2,
+        "path_node_ids": [
+          ["n", "mid-v1", "template-v1", "ca", "root", "domain"],
+          ["n", "mid-sig", "template-sig", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "Enroll", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ]
+      }
+    },
+    {
+      "name": "ADCS fanout returns every p1 and p2 path pair without endpoint collapse",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'optimizer-fanout-source' MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN p1, p2",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "optimizer-fanout-source"}},
+          {"id": "p1-a", "kinds": ["Group"]},
+          {"id": "p1-b", "kinds": ["Group"]},
+          {"id": "p2-a", "kinds": ["Group"]},
+          {"id": "p2-b", "kinds": ["Group"]},
+          {"id": "template-a", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+          {"id": "template-b", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "store", "kinds": ["NTAuthStore"]},
+          {"id": "domain", "kinds": ["Domain"]},
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
+          {"start_id": "p1-a", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "n", "end_id": "p1-b", "kind": "MemberOf"},
+          {"start_id": "p1-b", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+          {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+          {"start_id": "n", "end_id": "p2-a", "kind": "MemberOf"},
+          {"start_id": "p2-a", "end_id": "template-a", "kind": "GenericAll"},
+          {"start_id": "n", "end_id": "p2-b", "kind": "MemberOf"},
+          {"start_id": "p2-b", "end_id": "template-b", "kind": "AllExtendedRights"},
+          {"start_id": "template-a", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-b", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {
+        "row_count": 4,
+        "path_node_ids": [
+          ["n", "p1-a", "ca", "store", "domain"],
+          ["n", "p1-a", "ca", "store", "domain"],
+          ["n", "p1-b", "ca", "store", "domain"],
+          ["n", "p1-b", "ca", "store", "domain"],
+          ["n", "p2-a", "template-a", "ca", "root", "domain"],
+          ["n", "p2-a", "template-a", "ca", "root", "domain"],
+          ["n", "p2-b", "template-b", "ca", "root", "domain"],
+          ["n", "p2-b", "template-b", "ca", "root", "domain"]
+        ],
+        "path_edge_kinds": [
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "GenericAll", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "AllExtendedRights", "PublishedTo", "IssuedSignedBy", "RootCAFor"],
+          ["MemberOf", "AllExtendedRights", "PublishedTo", "IssuedSignedBy", "RootCAFor"]
+        ]
+      }
+    },
+    {
+      "name": "ADCS fanout endpoint projection preserves row multiplicity",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = 'optimizer-endpoint-fanout-source' MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d) WHERE ct.authenticationenabled = true AND ct.requiresmanagerapproval = false AND ct.enrolleesuppliessubject = true AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0) RETURN count(*) AS rows, count(distinct id(ca)) AS ca_count, count(distinct id(d)) AS domain_count, count(distinct id(ct)) AS template_count",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Group"], "properties": {"objectid": "optimizer-endpoint-fanout-source"}},
+          {"id": "p1-a", "kinds": ["Group"]},
+          {"id": "p1-b", "kinds": ["Group"]},
+          {"id": "p2-a", "kinds": ["Group"]},
+          {"id": "p2-b", "kinds": ["Group"]},
+          {"id": "template-a", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 1, "authorizedsignatures": 1}},
+          {"id": "template-b", "kinds": ["CertTemplate"], "properties": {"authenticationenabled": true, "requiresmanagerapproval": false, "enrolleesuppliessubject": true, "schemaversion": 2, "authorizedsignatures": 0}},
+          {"id": "ca", "kinds": ["EnterpriseCA"]},
+          {"id": "store", "kinds": ["NTAuthStore"]},
+          {"id": "domain", "kinds": ["Domain"]},
+          {"id": "root", "kinds": ["RootCA"]},
+          {"id": "unused-root", "kinds": ["RootCA"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "p1-a", "kind": "MemberOf"},
+          {"start_id": "p1-a", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "n", "end_id": "p1-b", "kind": "MemberOf"},
+          {"start_id": "p1-b", "end_id": "ca", "kind": "Enroll"},
+          {"start_id": "ca", "end_id": "store", "kind": "TrustedForNTAuth"},
+          {"start_id": "store", "end_id": "domain", "kind": "NTAuthStoreFor"},
+          {"start_id": "n", "end_id": "p2-a", "kind": "MemberOf"},
+          {"start_id": "p2-a", "end_id": "template-a", "kind": "GenericAll"},
+          {"start_id": "n", "end_id": "p2-b", "kind": "MemberOf"},
+          {"start_id": "p2-b", "end_id": "template-b", "kind": "AllExtendedRights"},
+          {"start_id": "template-a", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "template-b", "end_id": "ca", "kind": "PublishedTo"},
+          {"start_id": "ca", "end_id": "root", "kind": "IssuedSignedBy"},
+          {"start_id": "ca", "end_id": "unused-root", "kind": "EnterpriseCAFor"},
+          {"start_id": "root", "end_id": "domain", "kind": "RootCAFor"}
+        ]
+      },
+      "assert": {"row_values": [[4, 1, 1, 2]]}
+    },
+    {
+      "name": "common search domain admins reverse membership source label disjunction",
+      "cypher": "MATCH p = (t:Group)<-[:MemberOf*1..]-(a) WHERE (a:User OR a:Computer) AND t.objectid ENDS WITH '-512' RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "admins", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-512"}},
+          {"id": "user", "kinds": ["User"]},
+          {"id": "computer", "kinds": ["Computer"]},
+          {"id": "mid", "kinds": ["Group"]},
+          {"id": "other", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-513"}},
+          {"id": "ignored", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "user", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "computer", "end_id": "mid", "kind": "MemberOf"},
+          {"start_id": "mid", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "ignored", "end_id": "admins", "kind": "MemberOf"},
+          {"start_id": "user", "end_id": "other", "kind": "MemberOf"}
+        ]
+      },
+      "assert": {
+        "row_count": 2,
+        "path_node_ids": [["admins", "user"], ["admins", "mid", "computer"]],
+        "path_edge_kinds": [["MemberOf"], ["MemberOf", "MemberOf"]]
+      }
+    },
+    {
+      "name": "common search dangerous domain users privileges exclude memberof relationships",
+      "cypher": "MATCH p=(s:Group)-[r:MemberOf|GenericAll|GenericWrite]->(t:Base) WHERE s.objectid ENDS WITH '-513' AND NOT r:MemberOf RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "domain-users", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-513"}},
+          {"id": "member-target", "kinds": ["Base"]},
+          {"id": "generic-target", "kinds": ["Base"]},
+          {"id": "other-group", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-512"}},
+          {"id": "other-target", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "domain-users", "end_id": "member-target", "kind": "MemberOf"},
+          {"start_id": "domain-users", "end_id": "generic-target", "kind": "GenericAll"},
+          {"start_id": "other-group", "end_id": "other-target", "kind": "GenericWrite"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["domain-users", "generic-target"]],
+        "path_edge_kinds": [["GenericAll"]]
+      }
+    },
+    {
+      "name": "common search domain admins logons excludes domain controllers",
+      "cypher": "MATCH (s)-[:MemberOf*0..]->(g:Group) WHERE g.objectid ENDS WITH '-516' WITH COLLECT(s) AS exclude MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND NOT c IN exclude RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "dc", "kinds": ["Computer"]},
+          {"id": "dc-group", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-516"}},
+          {"id": "workstation", "kinds": ["Computer"]},
+          {"id": "admin-user", "kinds": ["User"]},
+          {"id": "domain-admins", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-512"}}
+        ],
+        "edges": [
+          {"start_id": "dc", "end_id": "dc-group", "kind": "MemberOf"},
+          {"start_id": "workstation", "end_id": "admin-user", "kind": "HasSession"},
+          {"start_id": "dc", "end_id": "admin-user", "kind": "HasSession"},
+          {"start_id": "admin-user", "end_id": "domain-admins", "kind": "MemberOf"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["workstation", "admin-user", "domain-admins"]],
+        "path_edge_kinds": [["HasSession", "MemberOf"]]
+      }
+    },
+    {
+      "name": "common search kerberoastable users ordered by reachable admin privilege count",
+      "cypher": "MATCH (u:User) WHERE u.hasspn = true AND u.enabled = true AND NOT u.objectid ENDS WITH '-502' AND NOT COALESCE(u.gmsa, false) = true AND NOT COALESCE(u.msa, false) = true MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer) WITH DISTINCT u, COUNT(c) AS adminCount RETURN u ORDER BY adminCount DESC LIMIT 100",
+      "fixture": {
+        "nodes": [
+          {"id": "roastable", "kinds": ["User"], "properties": {"objectid": "S-1-5-21-1-1100", "hasspn": true, "enabled": true, "gmsa": false, "msa": false}},
+          {"id": "disabled", "kinds": ["User"], "properties": {"objectid": "S-1-5-21-1-1101", "hasspn": true, "enabled": false}},
+          {"id": "krbtgt", "kinds": ["User"], "properties": {"objectid": "S-1-5-21-1-502", "hasspn": true, "enabled": true}},
+          {"id": "ops-group", "kinds": ["Group"]},
+          {"id": "computer-a", "kinds": ["Computer"]},
+          {"id": "computer-b", "kinds": ["Computer"]},
+          {"id": "computer-c", "kinds": ["Computer"]}
+        ],
+        "edges": [
+          {"start_id": "roastable", "end_id": "computer-a", "kind": "AdminTo"},
+          {"start_id": "roastable", "end_id": "ops-group", "kind": "MemberOf"},
+          {"start_id": "ops-group", "end_id": "computer-b", "kind": "AdminTo"},
+          {"start_id": "disabled", "end_id": "computer-c", "kind": "AdminTo"},
+          {"start_id": "krbtgt", "end_id": "computer-a", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {"node_ids": ["roastable"]}
+    },
+    {
+      "name": "common search shortest path from domain users to tier zero target",
+      "cypher": "MATCH p=shortestPath((s:Group)-[:MemberOf|GenericAll|AdminTo*1..]->(t:Tag_Tier_Zero)) WHERE s.objectid ENDS WITH '-513' AND s<>t RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "domain-users", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-1-513"}},
+          {"id": "bridge", "kinds": ["Group"]},
+          {"id": "tier-zero", "kinds": ["Base", "Tag_Tier_Zero"]},
+          {"id": "other", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "domain-users", "end_id": "bridge", "kind": "MemberOf"},
+          {"start_id": "bridge", "end_id": "tier-zero", "kind": "GenericAll"},
+          {"start_id": "domain-users", "end_id": "other", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["domain-users", "bridge", "tier-zero"]],
+        "path_edge_kinds": [["MemberOf", "GenericAll"]]
+      }
+    },
+    {
+      "name": "common search cross forest trusts require connected abuse edge",
+      "cypher": "MATCH p=(n:Domain)-[:CrossForestTrust|SpoofSIDHistory|AbuseTGTDelegation]-(m:Domain) WHERE (n)-[:SpoofSIDHistory|AbuseTGTDelegation]-(m) RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "domain-a", "kinds": ["Domain"]},
+          {"id": "domain-b", "kinds": ["Domain"]},
+          {"id": "domain-c", "kinds": ["Domain"]}
+        ],
+        "edges": [
+          {"start_id": "domain-a", "end_id": "domain-b", "kind": "CrossForestTrust"},
+          {"start_id": "domain-a", "end_id": "domain-b", "kind": "SpoofSIDHistory"},
+          {"start_id": "domain-a", "end_id": "domain-b", "kind": "AbuseTGTDelegation"},
+          {"start_id": "domain-a", "end_id": "domain-c", "kind": "CrossForestTrust"}
+        ]
+      },
+      "assert": {
+        "path_edge_kinds": [
+          ["CrossForestTrust"],
+          ["CrossForestTrust"],
+          ["SpoofSIDHistory"],
+          ["SpoofSIDHistory"],
+          ["AbuseTGTDelegation"],
+          ["AbuseTGTDelegation"]
+        ]
+      }
+    },
+    {
+      "name": "common search azure high privileged role bounded membership expansion",
+      "cypher": "MATCH p=(t:AZRole)<-[:AZHasRole|AZMemberOf*1..2]-(a:AZBase) WHERE t.name =~ '(?i)Global Administrator.*' RETURN p LIMIT 1000",
+      "fixture": {
+        "nodes": [
+          {"id": "role", "kinds": ["AZRole"], "properties": {"name": "Global Administrator"}},
+          {"id": "direct-user", "kinds": ["AZUser", "AZBase"]},
+          {"id": "delegated-user", "kinds": ["AZUser", "AZBase"]},
+          {"id": "delegated-group", "kinds": ["AZGroup", "AZBase"]},
+          {"id": "other-role", "kinds": ["AZRole"], "properties": {"name": "Reader"}}
+        ],
+        "edges": [
+          {"start_id": "direct-user", "end_id": "role", "kind": "AZHasRole"},
+          {"start_id": "delegated-user", "end_id": "delegated-group", "kind": "AZMemberOf"},
+          {"start_id": "delegated-group", "end_id": "role", "kind": "AZHasRole"},
+          {"start_id": "direct-user", "end_id": "other-role", "kind": "AZHasRole"}
+        ]
+      },
+      "assert": {
+        "row_count": 3,
+        "path_node_ids": [["role", "direct-user"], ["role", "delegated-group"], ["role", "delegated-group", "delegated-user"]],
+        "path_edge_kinds": [["AZHasRole"], ["AZHasRole"], ["AZHasRole", "AZMemberOf"]]
+      }
+    }
+  ]
+}

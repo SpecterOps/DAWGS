@@ -64,6 +64,13 @@ func TestRewriteFrameBindings(t *testing.T) {
 			Alias:      pgsql.AsOptionalIdentifier("name"),
 		},
 	}, {
+		Case: &pgsql.EdgeArrayFromPathIDs{
+			PathIDs: a.Identifier,
+		},
+		Expected: &pgsql.EdgeArrayFromPathIDs{
+			PathIDs: rewrittenA,
+		},
+	}, {
 		Case: pgsql.NewBinaryExpression(
 			pgsql.ArraySlice{
 				Expression: a.Identifier,

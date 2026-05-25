@@ -25,6 +25,14 @@ func (s *Translator) translateWith() error {
 		for _, projectionItem := range currentPart.projections.Items {
 			if err := RewriteFrameBindings(s.scope, projectionItem.SelectItem); err != nil {
 				return err
+			} else if _, isIdentifier := projectionItem.SelectItem.(pgsql.Identifier); isIdentifier {
+				continue
+			} else if resolvedSelectItem, err := resolvePathCompositeFieldReferences(s.scope, projectionItem.SelectItem); err != nil {
+				return err
+			} else if selectItem, isSelectItem := resolvedSelectItem.(pgsql.SelectItem); !isSelectItem {
+				return fmt.Errorf("resolved with projection item is not selectable: %T", resolvedSelectItem)
+			} else {
+				projectionItem.SelectItem = selectItem
 			}
 		}
 
@@ -66,8 +74,10 @@ func (s *Translator) translateWith() error {
 				if binding, isBound := s.scope.Lookup(typedSelectItem); !isBound {
 					return fmt.Errorf("unable to lookup identifer %s for with statement", typedSelectItem)
 				} else {
-					var selectItem pgsql.SelectItem
-					projectedBinding := binding
+					var (
+						selectItem       pgsql.SelectItem
+						projectedBinding = binding
+					)
 
 					if projectionItem.Alias.Set {
 						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || aliasBinding.Identifier != binding.Identifier {

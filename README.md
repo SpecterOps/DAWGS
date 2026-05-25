@@ -54,6 +54,8 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 ```
 
+Neo4j connection strings may use `neo4j://`, `neo4j+s://`, or `neo4j+ssc://`; a single path segment selects the Neo4j database name.
+
 Use `make test` for unit tests only and `make test_integration` for integration tests only.
 
 ### Test Metrics
@@ -94,6 +96,24 @@ make quality FUZZ_REPORT=.coverage/fuzz.json MUTATION_REPORT=.coverage/mutation.
 `make quality_backend` captures PostgreSQL and Neo4j integration results for backend equivalence comparison. It requires
 `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING`. `make quality_bench` writes benchmark markdown and JSON captures
 for later baseline comparison.
+
+`make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
+`CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
+writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+
+`go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
+current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
+comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
+against a previous JSONL baseline.
+
+PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
+indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective
+anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's
+`kind_id`-first edge index for efficient typed counts.
+
+Substring and suffix predicates are intentionally not promoted to blanket schema indexes. PostgreSQL deployments can
+request explicit `TextSearchIndex`/trigram property indexes for fields that need `CONTAINS`, `STARTS WITH`, or
+`ENDS WITH`, but default schema assertion should wait until all suffix forms share one semantics-preserving lowering.
 
 Thresholds are report-only by default. To enforce the configured thresholds, run:
 

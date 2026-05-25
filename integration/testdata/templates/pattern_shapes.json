@@ -77,7 +77,7 @@
       ]
     },
     {
-      "name": "path node-list functions",
+      "name": "path component functions",
       "template": "{{query}}",
       "fixture": {
         "nodes": [
@@ -107,6 +107,13 @@
             "query": "match p=(e:TemplateNodeKind1)<-[:TemplateEdgeKind1]-(d:TemplateNodeKind2) where e.name = 'inbound' return nodes(p)"
           },
           "assert": {"node_list_ids": [["e", "d"]]}
+        },
+        {
+          "name": "relationships function returns path traversal order",
+          "vars": {
+            "query": "match p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2)-[:TemplateEdgeKind2]->(c:TemplateNodeKind1) where a.name = 'src' return relationships(p)"
+          },
+          "assert": {"relationship_list_kinds": [["TemplateEdgeKind1", "TemplateEdgeKind2"]]}
         }
       ]
     },

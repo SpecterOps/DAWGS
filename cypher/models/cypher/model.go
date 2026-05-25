@@ -743,6 +743,16 @@ func NewRangeQuantifier(value string) *RangeQuantifier {
 	}
 }
 
+func (s *RangeQuantifier) copy() *RangeQuantifier {
+	if s == nil {
+		return s
+	}
+
+	return &RangeQuantifier{
+		Value: s.Value,
+	}
+}
+
 type KindMatcher struct {
 	Reference Expression
 	Kinds     graph.Kinds
@@ -881,10 +891,34 @@ type MapItem struct {
 	Value Expression
 }
 
+func (s *MapItem) copy() *MapItem {
+	if s == nil {
+		return nil
+	}
+
+	return &MapItem{
+		Key:   s.Key,
+		Value: Copy(s.Value),
+	}
+}
+
 type MapLiteral map[string]Expression
 
 func NewMapLiteral() MapLiteral {
 	return MapLiteral{}
+}
+
+func (s MapLiteral) copy() MapLiteral {
+	if s == nil {
+		return nil
+	}
+
+	mapCopy := NewMapLiteral()
+	for key, value := range s {
+		mapCopy[key] = Copy(value)
+	}
+
+	return mapCopy
 }
 
 func (s MapLiteral) Items() []*MapItem {
@@ -922,6 +956,17 @@ func (s *ListLiteral) Expressions() []Expression {
 
 func NewListLiteral() *ListLiteral {
 	return &ListLiteral{}
+}
+
+func (s *ListLiteral) copy() *ListLiteral {
+	if s == nil {
+		return nil
+	}
+
+	listCopy := NewListLiteral()
+	*listCopy = Copy([]Expression(*s))
+
+	return listCopy
 }
 
 func NewStringListLiteral(values []string) *ListLiteral {
@@ -1287,6 +1332,10 @@ func (s *PatternElement) IsNodePattern() bool {
 }
 
 func (s *PatternElement) AsNodePattern() (*NodePattern, bool) {
+	if s == nil {
+		return nil, false
+	}
+
 	nodePattern, isNodePattern := s.Element.(*NodePattern)
 	return nodePattern, isNodePattern
 }
@@ -1297,6 +1346,10 @@ func (s *PatternElement) IsRelationshipPattern() bool {
 }
 
 func (s *PatternElement) AsRelationshipPattern() (*RelationshipPattern, bool) {
+	if s == nil {
+		return nil, false
+	}
+
 	relationshipPattern, isRelationshipPattern := s.Element.(*RelationshipPattern)
 	return relationshipPattern, isRelationshipPattern
 }
@@ -1308,6 +1361,17 @@ type Properties struct {
 
 func NewProperties() *Properties {
 	return &Properties{}
+}
+
+func (s *Properties) copy() *Properties {
+	if s == nil {
+		return nil
+	}
+
+	return &Properties{
+		Map:       Copy(s.Map),
+		Parameter: Copy(s.Parameter),
+	}
 }
 
 // NodePattern Type
@@ -1328,7 +1392,7 @@ func (s *NodePattern) copy() *NodePattern {
 	}
 
 	return &NodePattern{
-		Variable:   s.Variable,
+		Variable:   Copy(s.Variable),
 		Kinds:      Copy(s.Kinds),
 		Properties: Copy(s.Properties),
 	}
@@ -1358,7 +1422,7 @@ func (s *RelationshipPattern) copy() *RelationshipPattern {
 	}
 
 	return &RelationshipPattern{
-		Variable:   s.Variable,
+		Variable:   Copy(s.Variable),
 		Kinds:      Copy(s.Kinds),
 		Direction:  s.Direction,
 		Range:      Copy(s.Range),
@@ -1471,7 +1535,7 @@ func (s *Return) copy() *Return {
 	}
 
 	return &Return{
-		Projection: s.Projection.copy(),
+		Projection: Copy(s.Projection),
 	}
 }
 
@@ -1492,7 +1556,7 @@ func (s *PatternPart) copy() *PatternPart {
 	}
 
 	return &PatternPart{
-		Variable:                s.Variable,
+		Variable:                Copy(s.Variable),
 		ShortestPathPattern:     s.ShortestPathPattern,
 		AllShortestPathsPattern: s.AllShortestPathsPattern,
 		PatternElements:         Copy(s.PatternElements),

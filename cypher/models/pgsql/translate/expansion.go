@@ -7,7 +7,9 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
+	"github.com/specterops/dawgs/graph"
 )
 
 const translateDefaultMaxTraversalDepth int64 = 15
@@ -57,6 +59,8 @@ type ExpansionBuilder struct {
 	queryParameters map[string]any
 	traversalStep   *TraversalStep
 	model           *Expansion
+	unwindClauses   []UnwindClause
+	unwindSources   []pgsql.FromClause
 }
 
 func NewExpansionBuilder(queryParameters map[string]any, traversalStep *TraversalStep) (*ExpansionBuilder, error) {
@@ -69,6 +73,11 @@ func NewExpansionBuilder(queryParameters map[string]any, traversalStep *Traversa
 		traversalStep:   traversalStep,
 		model:           traversalStep.Expansion,
 	}, nil
+}
+
+func (s *ExpansionBuilder) SetUnwindClauses(clauses []UnwindClause) {
+	s.unwindClauses = clauses
+	s.unwindSources = unwindFromClauses(clauses)
 }
 
 func nextFrontInsert(body pgsql.SetExpression) pgsql.Insert {
@@ -135,8 +144,10 @@ func newExpansionNodeSeed(identifier, nodeIdentifier pgsql.Identifier, constrain
 }
 
 func newExpansionNodeFilterSeed(identifier, filterIdentifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
-	filterAlias := pgsql.Identifier(string(identifier) + "_filter")
-	filterID := pgsql.CompoundIdentifier{filterAlias, pgsql.ColumnID}
+	var (
+		filterAlias = pgsql.Identifier(string(identifier) + "_filter")
+		filterID    = pgsql.CompoundIdentifier{filterAlias, pgsql.ColumnID}
+	)
 
 	if constraints == nil {
 		return newExpansionSeed(identifier, filterID, []pgsql.FromClause{{
@@ -183,6 +194,87 @@ func newExpansionBoundNodeSeed(identifier pgsql.Identifier, previousFrame *Frame
 
 	seed.query.Distinct = true
 	return seed
+}
+
+func fromClausesContainSource(fromClauses []pgsql.FromClause, identifier pgsql.Identifier) bool {
+	for _, fromClause := range fromClauses {
+		if tableReference, isTableReference := fromClause.Source.(pgsql.TableReference); isTableReference &&
+			len(tableReference.Name) == 1 &&
+			tableReference.Name[0] == identifier {
+			return true
+		}
+	}
+
+	return false
+}
+
+func prependFrameSourceIfMissing(fromClauses []pgsql.FromClause, frame *Frame) []pgsql.FromClause {
+	if frame == nil || fromClausesContainSource(fromClauses, frame.Binding.Identifier) {
+		return fromClauses
+	}
+
+	return append([]pgsql.FromClause{{
+		Source: pgsql.TableReference{
+			Name: pgsql.CompoundIdentifier{frame.Binding.Identifier},
+		},
+	}}, fromClauses...)
+}
+
+func expressionReferencesUnwindBinding(expression pgsql.Expression, unwindClauses []UnwindClause) (bool, error) {
+	if expression == nil || len(unwindClauses) == 0 {
+		return false, nil
+	}
+
+	references, err := ExtractSyntaxNodeReferences(expression)
+	if err != nil {
+		return false, err
+	}
+
+	for _, clause := range unwindClauses {
+		if clause.Binding != nil && references.Contains(clause.Binding.Identifier) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (s *ExpansionBuilder) seedEndpointConstraintSplit(expression pgsql.Expression, nodeIdentifier pgsql.Identifier, previousFrameIdentifier pgsql.Identifier) (pgsql.Expression, pgsql.Expression) {
+	var (
+		seedExpression = rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
+		localScope     = pgsql.AsIdentifierSet(nodeIdentifier)
+	)
+
+	for _, clause := range s.unwindClauses {
+		if clause.Binding != nil {
+			localScope.Add(clause.Binding.Identifier)
+		}
+	}
+
+	return partitionConstraintByLocality(seedExpression, localScope)
+}
+
+func (s *ExpansionBuilder) appendUnwindSourcesIfReferenced(selectBody *pgsql.Select, expressions ...pgsql.Expression) error {
+	for _, expression := range expressions {
+		if referencesUnwind, err := expressionReferencesUnwindBinding(expression, s.unwindClauses); err != nil {
+			return err
+		} else if referencesUnwind {
+			var previousFrame *Frame
+			if s.traversalStep != nil && s.traversalStep.Frame != nil {
+				previousFrame = s.traversalStep.Frame.Previous
+			}
+
+			selectBody.From = prependFrameSourceIfMissing(selectBody.From, previousFrame)
+			selectBody.From = append(selectBody.From, s.unwindSources...)
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (s *ExpansionBuilder) appendUnwindSources(selectBody *pgsql.Select) {
+	selectBody.From = append(selectBody.From, s.unwindSources...)
 }
 
 func newExpansionRootIDsParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
@@ -532,13 +624,6 @@ func rewriteBoundEndpointSeedReference(expression pgsql.Expression, previousFram
 	}
 }
 
-func seedEndpointConstraintSplit(expression pgsql.Expression, nodeIdentifier pgsql.Identifier, previousFrameIdentifier pgsql.Identifier) (pgsql.Expression, pgsql.Expression) {
-	// Harness seed fragments only range over the endpoint node alias and an optional ID filter.
-	// Reframe safe endpoint references first, then leave anything still non-local for the outer projection.
-	seedExpression := rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
-	return partitionConstraintByLocality(seedExpression, pgsql.AsIdentifierSet(nodeIdentifier))
-}
-
 func seededFrontPrimerQuery(seed expansionSeed, primer pgsql.Select) pgsql.Query {
 	return pgsql.Query{
 		CommonTableExpressions: &pgsql.With{
@@ -652,11 +737,13 @@ func (s *ExpansionBuilder) usesBoundEndpointPairs() bool {
 }
 
 func (s *ExpansionBuilder) boundNodeIDsFilterStatement(filterIdentifier pgsql.Identifier, nodeIdentifier pgsql.Identifier) pgsql.Insert {
-	previousFrameIdentifier := s.traversalStep.Frame.Previous.Binding.Identifier
-	nodeIDExpression := pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, nodeIdentifier},
-		Column:     pgsql.ColumnID,
-	}
+	var (
+		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
+		nodeIDExpression        = pgsql.RowColumnReference{
+			Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, nodeIdentifier},
+			Column:     pgsql.ColumnID,
+		}
+	)
 
 	return pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -744,15 +831,17 @@ func (s *ExpansionBuilder) boundEndpointPairFilterStatement() (pgsql.Insert, boo
 		return pgsql.Insert{}, false
 	}
 
-	previousFrameIdentifier := s.traversalStep.Frame.Previous.Binding.Identifier
-	rootIDExpression := pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.LeftNode.Identifier},
-		Column:     pgsql.ColumnID,
-	}
-	terminalIDExpression := pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.RightNode.Identifier},
-		Column:     pgsql.ColumnID,
-	}
+	var (
+		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
+		rootIDExpression        = pgsql.RowColumnReference{
+			Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.LeftNode.Identifier},
+			Column:     pgsql.ColumnID,
+		}
+		terminalIDExpression = pgsql.RowColumnReference{
+			Identifier: pgsql.CompoundIdentifier{previousFrameIdentifier, s.traversalStep.RightNode.Identifier},
+			Column:     pgsql.ColumnID,
+		}
+	)
 
 	return pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -794,9 +883,12 @@ func (s *ExpansionBuilder) materializedEndpointPairFilterStatement() (pgsql.Inse
 		return pgsql.Insert{}, false
 	}
 
-	rootIDExpression := pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}
-	terminalIDExpression := pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}
-	pairConstraints := pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints)
+	var (
+		rootIDExpression     = pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}
+		terminalIDExpression = pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}
+		pairConstraints      = pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints)
+	)
+
 	pairConstraints = pgsql.OptionalAnd(pairConstraints, pgsql.NewBinaryExpression(
 		rootIDExpression,
 		pgsql.OperatorIsNot,
@@ -984,6 +1076,16 @@ func (s *ExpansionBuilder) forwardTerminalSatisfaction(expansionModel *Expansion
 	return satisfiedSelectItem
 }
 
+func forwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expression {
+	if expansionModel.TerminalNodeSatisfactionProjection != nil &&
+		!expansionModel.UseMaterializedTerminalFilter &&
+		!expansionModel.UseMaterializedEndpointPairFilter {
+		return pgsql.Expression(expansionModel.TerminalNodeSatisfactionProjection)
+	}
+
+	return nil
+}
+
 func backwardContinuationSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1027,7 +1129,15 @@ func (s *ExpansionBuilder) backwardTerminalSatisfaction(expansionModel *Expansio
 	return satisfiedSelectItem
 }
 
-func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression) {
+func backwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expression {
+	if expansionModel.PrimerNodeSatisfactionProjection != nil && !expansionModel.UseMaterializedEndpointPairFilter {
+		return pgsql.Expression(expansionModel.PrimerNodeSatisfactionProjection)
+	}
+
+	return nil
+}
+
+func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
 	var (
 		primerSeedConstraints     pgsql.Expression
 		primerProjectionPredicate pgsql.Expression
@@ -1042,7 +1152,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
 	}
 
-	primerSeedConstraints, primerProjectionPredicate = seedEndpointConstraintSplit(
+	primerSeedConstraints, primerProjectionPredicate = s.seedEndpointConstraintSplit(
 		expansionModel.PrimerNodeConstraints,
 		s.traversalStep.LeftNode.Identifier,
 		previousFrameIdentifier,
@@ -1062,6 +1172,12 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 			primerSeedConstraints,
 		)
 		seed = &nodeSeed
+	}
+
+	if seed != nil {
+		if err := s.appendUnwindSourcesIfReferenced(&seed.query, primerSeedConstraints); err != nil {
+			return pgsql.Query{}, nil, err
+		}
 	}
 
 	// The returned projection predicate is the part of the endpoint predicate
@@ -1106,6 +1222,9 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, forwardTerminalSatisfactionProjection(expansionModel)); err != nil {
+		return pgsql.Query{}, nil, err
+	}
 
 	if !expansionModel.HasExplicitEndpointInequality {
 		nextQuery.Where = pgsql.OptionalAnd(
@@ -1114,10 +1233,10 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		)
 	}
 
-	return frontPrimerQuery(seed, nextQuery), primerProjectionPredicate
+	return frontPrimerQuery(seed, nextQuery), primerProjectionPredicate, nil
 }
 
-func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Expansion) pgsql.Select {
+func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Expansion) (pgsql.Select, error) {
 	nextQuery := pgsql.Select{
 		Where: expansionModel.EdgeConstraints,
 	}
@@ -1197,10 +1316,14 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	return nextQuery
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, forwardTerminalSatisfactionProjection(expansionModel)); err != nil {
+		return pgsql.Select{}, err
+	}
+
+	return nextQuery, nil
 }
 
-func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression) {
+func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
 	var (
 		terminalSeedConstraints     pgsql.Expression
 		terminalProjectionPredicate pgsql.Expression
@@ -1215,7 +1338,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
 	}
 
-	terminalSeedConstraints, terminalProjectionPredicate = seedEndpointConstraintSplit(
+	terminalSeedConstraints, terminalProjectionPredicate = s.seedEndpointConstraintSplit(
 		expansionModel.TerminalNodeConstraints,
 		s.traversalStep.RightNode.Identifier,
 		previousFrameIdentifier,
@@ -1235,6 +1358,12 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 			terminalSeedConstraints,
 		)
 		seed = &nodeSeed
+	}
+
+	if seed != nil {
+		if err := s.appendUnwindSourcesIfReferenced(&seed.query, terminalSeedConstraints); err != nil {
+			return pgsql.Query{}, nil, err
+		}
 	}
 
 	// The returned projection predicate is applied after the harness materializes
@@ -1276,10 +1405,14 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	return frontPrimerQuery(seed, nextQuery), terminalProjectionPredicate
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, backwardTerminalSatisfactionProjection(expansionModel)); err != nil {
+		return pgsql.Query{}, nil, err
+	}
+
+	return frontPrimerQuery(seed, nextQuery), terminalProjectionPredicate, nil
 }
 
-func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Expansion) pgsql.Select {
+func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Expansion) (pgsql.Select, error) {
 	nextQuery := pgsql.Select{
 		Where: expansionModel.EdgeConstraints,
 	}
@@ -1344,7 +1477,11 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 	}
 
 	nextQuery.From = []pgsql.FromClause{nextQueryFrom}
-	return nextQuery
+	if err := s.appendUnwindSourcesIfReferenced(&nextQuery, expansionModel.EdgeConstraints, backwardTerminalSatisfactionProjection(expansionModel)); err != nil {
+		return pgsql.Select{}, err
+	}
+
+	return nextQuery, nil
 }
 
 func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression) pgsql.CommonTableExpression {
@@ -1452,8 +1589,10 @@ func (s *ExpansionBuilder) applyShortestPathSeedProjectionConstraints(projection
 // Match Neo4j's shortest-path behavior by surfacing an error for result rows
 // where the resolved root and terminal endpoints are the same node.
 func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expression {
-	rootID := pgsql.CompoundIdentifier{expansionFrame, expansionRootID}
-	terminalID := pgsql.CompoundIdentifier{expansionFrame, expansionNextID}
+	var (
+		rootID     = pgsql.CompoundIdentifier{expansionFrame, expansionRootID}
+		terminalID = pgsql.CompoundIdentifier{expansionFrame, expansionNextID}
+	)
 
 	return shortestPathSelfEndpointGuardCase(rootID, terminalID)
 }
@@ -1606,10 +1745,15 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 
 	expansionModel.UseMaterializedTerminalFilter = s.canMaterializeTerminalFilter(expansionModel)
 
-	var (
-		forwardFrontPrimerQuery, forwardSeedProjectionConstraints = s.prepareForwardFrontPrimerQuery(expansionModel)
-		forwardFrontRecursiveQuery                                = s.prepareForwardFrontRecursiveQuery(expansionModel)
-	)
+	forwardFrontPrimerQuery, forwardSeedProjectionConstraints, err := s.prepareForwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	forwardFrontRecursiveQuery, err := s.prepareForwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 
 	projectionQuery.Projection = expansionModel.Projection
 
@@ -1644,6 +1788,7 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 
 	s.applyBoundEndpointProjectionConstraints(&projectionQuery, expansionModel)
 	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, forwardSeedProjectionConstraints)
+	s.appendUnwindSources(&projectionQuery)
 	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
 	if harnessParameters, err := s.shortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery); err != nil {
@@ -1668,33 +1813,11 @@ func (s *ExpansionBuilder) BuildAllShortestPathsRoot() (pgsql.Query, error) {
 }
 
 func (s *ExpansionBuilder) canMaterializeTerminalFilter(expansionModel *Expansion) bool {
-	if expansionModel.TerminalNodeConstraints == nil || s.usesBoundEndpointPairs() || s.usesBoundTerminalIDs() {
-		return false
-	}
-
-	// Terminal filters are only useful as standalone SQL when they depend solely
-	// on the terminal node; external references must stay in the main query.
-	_, externalConstraints := partitionConstraintByLocality(
-		expansionModel.TerminalNodeConstraints,
-		pgsql.AsIdentifierSet(s.traversalStep.RightNode.Identifier),
-	)
-
-	return externalConstraints == nil
+	return canMaterializeTerminalFilterForStep(s.traversalStep, expansionModel)
 }
 
 func (s *ExpansionBuilder) canMaterializeEndpointPairFilter(expansionModel *Expansion) bool {
-	// Pair filters enumerate the exact root/terminal combinations the
-	// bidirectional harness must resolve. Kind-only endpoint predicates are not
-	// enough because they do not constrain the search columns used by the harness.
-	if s.usesBoundEndpointPairs() ||
-		expansionModel.PrimerNodeConstraints == nil ||
-		expansionModel.TerminalNodeConstraints == nil ||
-		!hasLocalEndpointConstraint(expansionModel.PrimerNodeConstraints, s.traversalStep.LeftNode.Identifier) ||
-		!hasLocalEndpointConstraint(expansionModel.TerminalNodeConstraints, s.traversalStep.RightNode.Identifier) {
-		return false
-	}
-
-	return true
+	return canMaterializeEndpointPairFilterForStep(s.traversalStep, expansionModel)
 }
 
 func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFunctionName pgsql.Identifier) (pgsql.Query, error) {
@@ -1705,12 +1828,25 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 
 	expansionModel.UseMaterializedEndpointPairFilter = s.canMaterializeEndpointPairFilter(expansionModel)
 
-	var (
-		forwardFrontPrimerQuery, forwardSeedProjectionConstraints   = s.prepareForwardFrontPrimerQuery(expansionModel)
-		forwardFrontRecursiveQuery                                  = s.prepareForwardFrontRecursiveQuery(expansionModel)
-		backwardFrontPrimerQuery, backwardSeedProjectionConstraints = s.prepareBackwardFrontPrimerQuery(expansionModel)
-		backwardFrontRecursiveQuery                                 = s.prepareBackwardFrontRecursiveQuery(expansionModel)
-	)
+	forwardFrontPrimerQuery, forwardSeedProjectionConstraints, err := s.prepareForwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	forwardFrontRecursiveQuery, err := s.prepareForwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	backwardFrontPrimerQuery, backwardSeedProjectionConstraints, err := s.prepareBackwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	backwardFrontRecursiveQuery, err := s.prepareBackwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 
 	projectionQuery.Projection = expansionModel.Projection
 
@@ -1745,6 +1881,7 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 
 	s.applyBoundEndpointProjectionConstraints(&projectionQuery, expansionModel)
 	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, pgsql.OptionalAnd(forwardSeedProjectionConstraints, backwardSeedProjectionConstraints))
+	s.appendUnwindSources(&projectionQuery)
 	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
 	if harnessParameters, err := s.bidirectionalAllShortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery, backwardFrontPrimerQuery, backwardFrontRecursiveQuery); err != nil {
@@ -1993,11 +2130,293 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTab
 	return query
 }
 
+func projectionAliasExpressions(projection pgsql.Projection) map[pgsql.Identifier]pgsql.Expression {
+	aliases := make(map[pgsql.Identifier]pgsql.Expression)
+
+	for _, selectItem := range projection {
+		switch typedSelectItem := selectItem.(type) {
+		case *pgsql.AliasedExpression:
+			if typedSelectItem.Alias.Set {
+				aliases[typedSelectItem.Alias.Value] = typedSelectItem.Expression
+			}
+
+		case pgsql.AliasedExpression:
+			if typedSelectItem.Alias.Set {
+				aliases[typedSelectItem.Alias.Value] = typedSelectItem.Expression
+			}
+
+		case pgsql.Identifier:
+			aliases[typedSelectItem] = typedSelectItem
+
+		case pgsql.CompoundIdentifier:
+			if len(typedSelectItem) > 0 {
+				aliases[typedSelectItem[len(typedSelectItem)-1]] = typedSelectItem
+			}
+		}
+	}
+
+	return aliases
+}
+
+func rewriteCurrentFrameProjectionSetExpression(setExpression pgsql.SetExpression, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.SetExpression {
+	switch typedSetExpression := setExpression.(type) {
+	case pgsql.Select:
+		return rewriteCurrentFrameProjectionSelect(typedSetExpression, frameID, aliases)
+
+	case pgsql.SetOperation:
+		typedSetExpression.LOperand = rewriteCurrentFrameProjectionSetExpression(typedSetExpression.LOperand, frameID, aliases)
+		typedSetExpression.ROperand = rewriteCurrentFrameProjectionSetExpression(typedSetExpression.ROperand, frameID, aliases)
+		return typedSetExpression
+
+	default:
+		return setExpression
+	}
+}
+
+func rewriteCurrentFrameProjectionQuery(query pgsql.Query, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Query {
+	query.Body = rewriteCurrentFrameProjectionSetExpression(query.Body, frameID, aliases)
+
+	for idx, orderBy := range query.OrderBy {
+		if orderBy != nil {
+			query.OrderBy[idx].Expression = rewriteCurrentFrameProjectionReferences(orderBy.Expression, frameID, aliases)
+		}
+	}
+
+	query.Offset = rewriteCurrentFrameProjectionReferences(query.Offset, frameID, aliases)
+	query.Limit = rewriteCurrentFrameProjectionReferences(query.Limit, frameID, aliases)
+
+	return query
+}
+
+func rewriteCurrentFrameProjectionSelect(selectBody pgsql.Select, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Select {
+	for idx, selectItem := range selectBody.Projection {
+		if rewritten, isSelectItem := rewriteCurrentFrameProjectionReferences(selectItem, frameID, aliases).(pgsql.SelectItem); isSelectItem {
+			selectBody.Projection[idx] = rewritten
+		}
+	}
+
+	for idx := range selectBody.From {
+		selectBody.From[idx].Source = rewriteCurrentFrameProjectionReferences(selectBody.From[idx].Source, frameID, aliases)
+
+		for joinIdx := range selectBody.From[idx].Joins {
+			selectBody.From[idx].Joins[joinIdx].Table = rewriteCurrentFrameProjectionReferences(selectBody.From[idx].Joins[joinIdx].Table, frameID, aliases)
+			selectBody.From[idx].Joins[joinIdx].JoinOperator.Constraint = rewriteCurrentFrameProjectionReferences(selectBody.From[idx].Joins[joinIdx].JoinOperator.Constraint, frameID, aliases)
+		}
+	}
+
+	selectBody.Where = rewriteCurrentFrameProjectionReferences(selectBody.Where, frameID, aliases)
+
+	for idx, groupByExpression := range selectBody.GroupBy {
+		selectBody.GroupBy[idx] = rewriteCurrentFrameProjectionReferences(groupByExpression, frameID, aliases)
+	}
+
+	selectBody.Having = rewriteCurrentFrameProjectionReferences(selectBody.Having, frameID, aliases)
+
+	return selectBody
+}
+
+func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Expression {
+	if expression == nil {
+		return nil
+	}
+
+	switch typedExpression := expression.(type) {
+	case pgsql.CompoundIdentifier:
+		if len(typedExpression) == 2 && typedExpression[0] == frameID {
+			if replacement, hasReplacement := aliases[typedExpression[1]]; hasReplacement {
+				return replacement
+			}
+		}
+
+		return typedExpression
+
+	case pgsql.RowColumnReference:
+		typedExpression.Identifier = rewriteCurrentFrameProjectionReferences(typedExpression.Identifier, frameID, aliases)
+		return typedExpression
+
+	case pgsql.UnaryExpression:
+		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.UnaryExpression:
+		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
+		return typedExpression
+
+	case pgsql.BinaryExpression:
+		typedExpression.LOperand = rewriteCurrentFrameProjectionReferences(typedExpression.LOperand, frameID, aliases)
+		typedExpression.ROperand = rewriteCurrentFrameProjectionReferences(typedExpression.ROperand, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.BinaryExpression:
+		typedExpression.LOperand = rewriteCurrentFrameProjectionReferences(typedExpression.LOperand, frameID, aliases)
+		typedExpression.ROperand = rewriteCurrentFrameProjectionReferences(typedExpression.ROperand, frameID, aliases)
+		return typedExpression
+
+	case pgsql.FunctionCall:
+		for idx, parameter := range typedExpression.Parameters {
+			typedExpression.Parameters[idx] = rewriteCurrentFrameProjectionReferences(parameter, frameID, aliases)
+		}
+		return typedExpression
+
+	case *pgsql.FunctionCall:
+		for idx, parameter := range typedExpression.Parameters {
+			typedExpression.Parameters[idx] = rewriteCurrentFrameProjectionReferences(parameter, frameID, aliases)
+		}
+		return typedExpression
+
+	case pgsql.TypeCast:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case pgsql.CompositeValue:
+		for idx, value := range typedExpression.Values {
+			typedExpression.Values[idx] = rewriteCurrentFrameProjectionReferences(value, frameID, aliases)
+		}
+		return typedExpression
+
+	case *pgsql.Parenthetical:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.EdgeArrayFromPathIDs:
+		typedExpression.PathIDs = rewriteCurrentFrameProjectionReferences(typedExpression.PathIDs, frameID, aliases)
+		return typedExpression
+
+	case pgsql.ArrayLiteral:
+		for idx, value := range typedExpression.Values {
+			typedExpression.Values[idx] = rewriteCurrentFrameProjectionReferences(value, frameID, aliases)
+		}
+		return typedExpression
+
+	case pgsql.ArrayExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case pgsql.ArrayIndex:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		for idx, index := range typedExpression.Indexes {
+			typedExpression.Indexes[idx] = rewriteCurrentFrameProjectionReferences(index, frameID, aliases)
+		}
+		return typedExpression
+
+	case *pgsql.ArrayIndex:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		for idx, index := range typedExpression.Indexes {
+			typedExpression.Indexes[idx] = rewriteCurrentFrameProjectionReferences(index, frameID, aliases)
+		}
+		return typedExpression
+
+	case pgsql.ArraySlice:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		typedExpression.Lower = rewriteCurrentFrameProjectionReferences(typedExpression.Lower, frameID, aliases)
+		typedExpression.Upper = rewriteCurrentFrameProjectionReferences(typedExpression.Upper, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.ArraySlice:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		typedExpression.Lower = rewriteCurrentFrameProjectionReferences(typedExpression.Lower, frameID, aliases)
+		typedExpression.Upper = rewriteCurrentFrameProjectionReferences(typedExpression.Upper, frameID, aliases)
+		return typedExpression
+
+	case pgsql.AllExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.AllExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case pgsql.AnyExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.AnyExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case pgsql.Case:
+		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
+		for idx, condition := range typedExpression.Conditions {
+			typedExpression.Conditions[idx] = rewriteCurrentFrameProjectionReferences(condition, frameID, aliases)
+		}
+		for idx, then := range typedExpression.Then {
+			typedExpression.Then[idx] = rewriteCurrentFrameProjectionReferences(then, frameID, aliases)
+		}
+		typedExpression.Else = rewriteCurrentFrameProjectionReferences(typedExpression.Else, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.Case:
+		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
+		for idx, condition := range typedExpression.Conditions {
+			typedExpression.Conditions[idx] = rewriteCurrentFrameProjectionReferences(condition, frameID, aliases)
+		}
+		for idx, then := range typedExpression.Then {
+			typedExpression.Then[idx] = rewriteCurrentFrameProjectionReferences(then, frameID, aliases)
+		}
+		typedExpression.Else = rewriteCurrentFrameProjectionReferences(typedExpression.Else, frameID, aliases)
+		return typedExpression
+
+	case pgsql.ExistsExpression:
+		typedExpression.Subquery.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Subquery.Query, frameID, aliases)
+		return typedExpression
+
+	case pgsql.Subquery:
+		typedExpression.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Query, frameID, aliases)
+		return typedExpression
+
+	case pgsql.Query:
+		return rewriteCurrentFrameProjectionQuery(typedExpression, frameID, aliases)
+
+	case pgsql.Select:
+		return rewriteCurrentFrameProjectionSelect(typedExpression, frameID, aliases)
+
+	case pgsql.SetOperation:
+		typedExpression.LOperand = rewriteCurrentFrameProjectionSetExpression(typedExpression.LOperand, frameID, aliases)
+		typedExpression.ROperand = rewriteCurrentFrameProjectionSetExpression(typedExpression.ROperand, frameID, aliases)
+		return typedExpression
+
+	case pgsql.ProjectionFrom:
+		for idx, selectItem := range typedExpression.Projection {
+			if rewritten, isSelectItem := rewriteCurrentFrameProjectionReferences(selectItem, frameID, aliases).(pgsql.SelectItem); isSelectItem {
+				typedExpression.Projection[idx] = rewritten
+			}
+		}
+		for idx := range typedExpression.From {
+			typedExpression.From[idx].Source = rewriteCurrentFrameProjectionReferences(typedExpression.From[idx].Source, frameID, aliases)
+			for joinIdx := range typedExpression.From[idx].Joins {
+				typedExpression.From[idx].Joins[joinIdx].JoinOperator.Constraint = rewriteCurrentFrameProjectionReferences(typedExpression.From[idx].Joins[joinIdx].JoinOperator.Constraint, frameID, aliases)
+			}
+		}
+		return typedExpression
+
+	case pgsql.AliasedExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.AliasedExpression:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case pgsql.Variadic:
+		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return typedExpression
+
+	case pgsql.LateralSubquery:
+		typedExpression.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Query, frameID, aliases)
+		return typedExpression
+
+	default:
+		return expression
+	}
+}
+
 func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
 	var (
 		traversalStep  = traversalStepContext.CurrentStep
 		expansionModel = traversalStep.Expansion
 		seedIdentifier = expansionSeedIdentifier(expansionModel.Frame.Binding.Identifier)
+		unwindClauses  = s.query.CurrentPart().ConsumeUnwindClauses()
+		unwindSources  = unwindFromClauses(unwindClauses)
 	)
 
 	// Determine local scope of the primer: the edge and both nodes.
@@ -2010,8 +2429,10 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		),
 	)
 
-	seedConstraints := pgsql.OptionalAnd(primerLocal, primerExternal)
-	var seed *expansionSeed
+	var (
+		seedConstraints = pgsql.OptionalAnd(primerLocal, primerExternal)
+		seed            *expansionSeed
+	)
 
 	if traversalStep.LeftNodeBound {
 		if traversalStep.Frame.Previous == nil {
@@ -2038,6 +2459,15 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		}
 	} else {
 		expansion.UseUnionAll = true
+	}
+
+	if seed != nil {
+		if seedNeedsUnwind, err := expressionReferencesUnwindBinding(seedConstraints, unwindClauses); err != nil {
+			return pgsql.Query{}, err
+		} else if seedNeedsUnwind {
+			seed.query.From = prependFrameSourceIfMissing(seed.query.From, traversalStep.Frame.Previous)
+			seed.query.From = append(seed.query.From, unwindSources...)
+		}
 	}
 
 	expansion.PrimerStatement.Where = expansionModel.EdgeConstraints
@@ -2076,6 +2506,12 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 	}
 
 	expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, nextQueryFrom)
+	if primerNeedsUnwind, err := expressionReferencesUnwindBinding(expansionModel.EdgeConstraints, unwindClauses); err != nil {
+		return pgsql.Query{}, err
+	} else if primerNeedsUnwind {
+		expansion.PrimerStatement.From = prependFrameSourceIfMissing(expansion.PrimerStatement.From, traversalStep.Frame.Previous)
+		expansion.PrimerStatement.From = append(expansion.PrimerStatement.From, unwindSources...)
+	}
 
 	if expansionAllowsZeroDepth(expansionModel) {
 		zeroDepthStatement, err := expansion.buildZeroDepthExpansionSelect(seed)
@@ -2121,6 +2557,8 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		})
 	}
 
+	expansion.ProjectionStatement.From = append(expansion.ProjectionStatement.From, unwindSources...)
+
 	// Select the expansion components for the projection statement
 	expansion.ProjectionStatement.From = append(expansion.ProjectionStatement.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
@@ -2153,7 +2591,23 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				),
 			)
 		}
+		if previousProjectionFrameID != "" && traversalStep.RightNodeBound {
+			projectionConstraints = pgsql.OptionalAnd(
+				projectionConstraints,
+				boundEndpointProjectionConstraint(
+					previousProjectionFrameID,
+					traversalStep.RightNode.Identifier,
+					expansionModel.Frame.Binding.Identifier,
+					expansionNextID,
+				),
+			)
+		}
 
+		projectionConstraints = rewriteCurrentFrameProjectionReferences(
+			projectionConstraints,
+			traversalStep.Frame.Binding.Identifier,
+			projectionAliasExpressions(expansion.ProjectionStatement.Projection),
+		)
 		expansion.ProjectionStatement.Where = projectionConstraints
 	}
 
@@ -2268,6 +2722,11 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
+		projectionConstraints = rewriteCurrentFrameProjectionReferences(
+			projectionConstraints,
+			traversalStep.Frame.Binding.Identifier,
+			projectionAliasExpressions(expansion.ProjectionStatement.Projection),
+		)
 		expansion.ProjectionStatement.Where = projectionConstraints
 	}
 
@@ -2283,6 +2742,194 @@ func expansionTerminalSatisfactionLocality(traversalStep *TraversalStep) (pgsql.
 			traversalStep.RightNode.Identifier,
 		),
 	)
+}
+
+func applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
+	var applied int
+
+	for idx := 0; idx+1 < len(part.TraversalSteps); idx++ {
+		var (
+			currentStep = part.TraversalSteps[idx]
+			suffixSteps = part.TraversalSteps[idx+1:]
+		)
+
+		if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
+			return applied, err
+		} else if candidateApplied {
+			applied++
+		}
+	}
+
+	return applied, nil
+}
+
+func applyExpansionSuffixPushdownCandidate(currentStep *TraversalStep, suffixSteps []*TraversalStep) (bool, error) {
+	if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
+		currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
+			currentStep.Expansion.TerminalNodeConstraints,
+			suffixSatisfaction,
+		)
+
+		if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](currentStep.Expansion.TerminalNodeConstraints); err != nil {
+			return false, err
+		} else {
+			currentStep.Expansion.TerminalNodeSatisfactionProjection = terminalCriteriaProjection
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func suffixEdgeLeftEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
+	switch direction {
+	case graph.DirectionOutbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID}, true
+	case graph.DirectionInbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID}, true
+	default:
+		return nil, false
+	}
+}
+
+func suffixEdgeRightEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
+	switch direction {
+	case graph.DirectionOutbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnEndID}, true
+	case graph.DirectionInbound:
+		return pgsql.CompoundIdentifier{edgeIdentifier, pgsql.ColumnStartID}, true
+	default:
+		return nil, false
+	}
+}
+
+func suffixBoundNodeIDReference(currentStep *TraversalStep, node *BoundIdentifier) (pgsql.Expression, bool) {
+	if currentStep == nil ||
+		currentStep.Frame == nil ||
+		currentStep.Frame.Previous == nil ||
+		currentStep.Frame.Previous.Binding == nil ||
+		node == nil ||
+		!currentStep.Frame.Previous.Known().Contains(node.Identifier) {
+		return nil, false
+	}
+
+	return pgsql.RowColumnReference{
+		Identifier: pgsql.CompoundIdentifier{currentStep.Frame.Previous.Binding.Identifier, node.Identifier},
+		Column:     pgsql.ColumnID,
+	}, true
+}
+
+func suffixStepEdgeConstraints(step *TraversalStep) pgsql.Expression {
+	if step == nil || step.EdgeConstraints == nil {
+		return nil
+	}
+
+	localConstraints, _ := partitionConstraintByLocality(
+		step.EdgeConstraints.Expression,
+		pgsql.AsIdentifierSet(step.Edge.Identifier),
+	)
+
+	return localConstraints
+}
+
+func expansionSuffixTerminalSatisfaction(currentStep *TraversalStep, suffixSteps []*TraversalStep) (pgsql.Expression, bool) {
+	if currentStep == nil ||
+		currentStep.Expansion == nil ||
+		currentStep.RightNode == nil ||
+		len(suffixSteps) == 0 ||
+		suffixSteps[0] == nil ||
+		suffixSteps[0].LeftNode == nil ||
+		currentStep.RightNode.Identifier != suffixSteps[0].LeftNode.Identifier {
+		return nil, false
+	}
+
+	var (
+		fromClause pgsql.FromClause
+		where      pgsql.Expression
+		previousID pgsql.Expression = pgsql.CompoundIdentifier{currentStep.RightNode.Identifier, pgsql.ColumnID}
+	)
+
+	for idx, step := range suffixSteps {
+		if step == nil ||
+			step.Expansion != nil ||
+			step.LeftNode == nil ||
+			step.Edge == nil ||
+			step.RightNode == nil ||
+			step.Direction == graph.DirectionBoth {
+			break
+		}
+
+		if idx > 0 && suffixSteps[idx-1].RightNode.Identifier != step.LeftNode.Identifier {
+			break
+		}
+
+		leftEndpoint, validDirection := suffixEdgeLeftEndpoint(step.Edge.Identifier, step.Direction)
+		if !validDirection {
+			return nil, false
+		}
+
+		edgeJoin := pgd.Equals(previousID, leftEndpoint)
+		if idx == 0 {
+			fromClause = expansionEdgeFromClause(step.Edge.Identifier)
+			where = pgsql.OptionalAnd(where, edgeJoin)
+		} else {
+			fromClause.Joins = append(fromClause.Joins, pgsql.Join{
+				Table: expansionEdgeTableReference(step.Edge.Identifier),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: edgeJoin,
+				},
+			})
+		}
+
+		where = pgsql.OptionalAnd(where, suffixStepEdgeConstraints(step))
+
+		rightEndpoint, validDirection := suffixEdgeRightEndpoint(step.Edge.Identifier, step.Direction)
+		if !validDirection {
+			return nil, false
+		}
+
+		if step.RightNodeBound {
+			boundRightNodeID, hasBoundRightNodeID := suffixBoundNodeIDReference(currentStep, step.RightNode)
+			if !hasBoundRightNodeID {
+				return nil, false
+			}
+
+			where = pgsql.OptionalAnd(where, step.RightNodeConstraints)
+			where = pgsql.OptionalAnd(where, pgd.Equals(rightEndpoint, boundRightNodeID))
+			previousID = boundRightNodeID
+		} else {
+			fromClause.Joins = append(fromClause.Joins, pgsql.Join{
+				Table: expansionNodeTableReference(step.RightNode.Identifier),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(
+						step.RightNodeConstraints,
+						pgd.Equals(pgsql.CompoundIdentifier{step.RightNode.Identifier, pgsql.ColumnID}, rightEndpoint),
+					),
+				},
+			})
+
+			previousID = pgsql.CompoundIdentifier{step.RightNode.Identifier, pgsql.ColumnID}
+		}
+	}
+
+	if fromClause.Source == nil {
+		return nil, false
+	}
+
+	return pgsql.ExistsExpression{
+		Subquery: pgsql.Subquery{
+			Query: pgsql.Query{
+				Body: pgsql.Select{
+					Projection: pgsql.Projection{pgd.IntLiteral(1)},
+					From:       []pgsql.FromClause{fromClause},
+					Where:      where,
+				},
+			},
+		},
+	}, true
 }
 
 func expansionLocalTerminalSatisfactionProjection(traversalStep *TraversalStep) (pgsql.SelectItem, error) {
@@ -2464,17 +3111,28 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 	return projectionConstraints, nil
 }
 
-func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversalStep bool, traversalStep *TraversalStep) error {
+func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPart, stepIndex int, isFirstTraversalStep bool, traversalStep *TraversalStep, allowProjectionPruning bool) error {
 	expansionModel := traversalStep.Expansion
 
 	// Translate the expansion's constraints - this has the side effect of making the pattern identifiers visible in
 	// the current scope frame
-	if err := s.translateExpansionConstraints(isFirstTraversalStep, traversalStep, expansionModel); err != nil {
+	if err := s.translateExpansionConstraints(part, stepIndex, isFirstTraversalStep, traversalStep, expansionModel); err != nil {
 		return err
 	}
 
 	// Export the path from the traversal's scope
 	traversalStep.Frame.Export(expansionModel.PathBinding.Identifier)
+	if allowProjectionPruning {
+		_, hasDecision := s.projectionPruningDecision(part, stepIndex)
+		if hasDecision && pruneExpansionStepProjectionExports(part, stepIndex, traversalStep) {
+			s.recordLowering(optimize.LoweringProjectionPruning)
+		}
+
+		if _, hasDecision := s.latePathMaterializationDecision(part, stepIndex, optimize.LatePathMaterializationExpansionPath); hasDecision &&
+			traversalStep.Frame.Exported.Contains(expansionModel.PathBinding.Identifier) {
+			s.recordLowering(optimize.LoweringLatePathMaterialization)
+		}
+	}
 
 	// Push a new frame that contains currently projected scope from the expansion recursive CTE
 	if expansionFrame, err := s.scope.PushFrame(); err != nil {
@@ -2529,7 +3187,7 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversal
 	}
 
 	if expansionModel.Options.FindShortestPath || expansionModel.Options.FindAllShortestPaths {
-		if err := s.translateShortestPathTraversal(traversalStep, expansionModel); err != nil {
+		if err := s.translateShortestPathTraversal(part, stepIndex, traversalStep, expansionModel); err != nil {
 			return err
 		}
 	}
@@ -2537,15 +3195,17 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(isFirstTraversal
 	return nil
 }
 
-func (s *Translator) translateExpansionConstraints(isFirstTraversalStep bool, step *TraversalStep, expansionModel *Expansion) error {
+func (s *Translator) translateExpansionConstraints(part *PatternPart, stepIndex int, isFirstTraversalStep bool, step *TraversalStep, expansionModel *Expansion) error {
 	if constraints, err := consumePatternConstraints(isFirstTraversalStep, recursivePattern, step, s.treeTranslator); err != nil {
 		return err
 	} else {
 		// If one side of the expansion has constraints but the other does not this may be an opportunity to reorder the traversal
 		// to start with tighter search bounds
-		if err := constraints.OptimizePatternConstraintBalance(s.scope, step); err != nil {
+		if err := s.applyPatternConstraintBalance(part, stepIndex, &constraints, step); err != nil {
 			return err
 		}
+
+		s.recordPredicatePlacementConsumption(part, stepIndex, step, constraints)
 
 		// Left node
 		if leftNodeJoinCondition, err := leftNodeTraversalStepConstraint(step); err != nil {
@@ -2610,13 +3270,13 @@ func (s *Translator) translateExpansionConstraints(isFirstTraversalStep bool, st
 	return nil
 }
 
-func (s *Translator) translateShortestPathTraversal(traversalStep *TraversalStep, expansionModel *Expansion) error {
+func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) error {
 	var (
 		useBidirectionalSearch bool
 		err                    error
 	)
 
-	useBidirectionalSearch, err = traversalStep.CanExecutePairAwareBidirectionalSearch(s.scope)
+	useBidirectionalSearch, err = s.useBidirectionalShortestPathStrategy(part, stepIndex, traversalStep)
 
 	if err != nil {
 		return err
@@ -2627,6 +3287,7 @@ func (s *Translator) translateShortestPathTraversal(traversalStep *TraversalStep
 		traversalStep.LeftNode.Identifier,
 		traversalStep.RightNode.Identifier,
 	)
+	s.applyShortestPathFilterMaterialization(part, stepIndex, traversalStep, expansionModel)
 
 	// If this query is a shortest-path look up, the translator will have to use a function harness for
 	// traversal. As such, query fragments for the traversal harness will have to be passed by the parameters

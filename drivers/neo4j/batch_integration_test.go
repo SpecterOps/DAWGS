@@ -42,7 +42,7 @@ func prepareNode(index int) *graph.Node {
 
 func isNeo4jConnectionString(connStr string) bool {
 	u, err := url.Parse(connStr)
-	return err == nil && u.Scheme == neo4j.DriverName
+	return err == nil && (u.Scheme == neo4j.DriverName || u.Scheme == "neo4j+s" || u.Scheme == "neo4j+ssc")
 }
 
 func TestBatchTransaction_NodeUpdate(t *testing.T) {

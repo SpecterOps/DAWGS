@@ -38,6 +38,10 @@ func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error
 	newPatternPart.IsTraversal = len(patternPart.PatternElements) > 1
 	newPatternPart.ShortestPath = patternPart.ShortestPathPattern
 	newPatternPart.AllShortestPaths = patternPart.AllShortestPathsPattern
+	if target, hasTarget := s.patternTargets[patternPart]; hasTarget {
+		newPatternPart.Target = target
+		newPatternPart.HasTarget = true
+	}
 
 	if cypherBinding, hasCypherSymbol, err := extractIdentifierFromCypherExpression(patternPart); err != nil {
 		return err
@@ -80,7 +84,6 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	} else {
 		if traversalStepQuery, err := s.buildTraversalPatternStep(traversalStep.Frame, traversalStep); err != nil {
@@ -92,7 +95,6 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	}
 
@@ -112,7 +114,6 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	} else {
 		if traversalStepQuery, err := s.buildExpansionPatternStep(traversalStepContext, expansion); err != nil {
@@ -124,7 +125,6 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 				},
 				Query: traversalStepQuery,
 			})
-			s.query.CurrentPart().AllowLimitPushdown(traversalStep.Frame.Binding.Identifier)
 		}
 	}
 
@@ -135,6 +135,8 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 	traversalStep := traversalStepContext.CurrentStep
 
 	if traversalStepContext.IsRootStep {
+		expansion.SetUnwindClauses(s.query.CurrentPart().ConsumeUnwindClauses())
+
 		if allPaths {
 			if traversalStep.Expansion.UseBidirectionalSearch {
 				if traversalStepQuery, err := expansion.BuildBiDirectionalAllShortestPathsRoot(); err != nil {
@@ -229,6 +231,8 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 		} else if err := s.buildTraversalPattern(traversalStep, isRootStep); err != nil {
 			return err
 		}
+
+		s.allowLimitPushdownForStep(part, idx, traversalStep)
 	}
 
 	return nil

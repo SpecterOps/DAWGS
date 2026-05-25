@@ -8,6 +8,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 const legacyToIntegerFunction = "toint"
@@ -279,6 +280,9 @@ func bindingExpressionType(binding *BoundIdentifier) pgsql.DataType {
 	case pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
 		return pgsql.NodeComposite
 
+	case pgsql.PathEdge:
+		return pgsql.Int8
+
 	default:
 		return binding.DataType
 	}
@@ -412,14 +416,7 @@ func (s *Translator) translateTailFunction(functionInvocation *cypher.FunctionIn
 				&pgsql.ArraySlice{
 					Expression: pgsql.NewParenthetical(argument),
 					Lower:      pgsql.NewLiteral(2, pgsql.Int),
-					Upper: pgsql.FunctionCall{
-						Function: pgsql.FunctionCardinality,
-						Parameters: []pgsql.Expression{
-							argument,
-						},
-						CastType: pgsql.Int,
-					},
-					CastType: arrayType,
+					CastType:   arrayType,
 				},
 				pgsql.ArrayLiteral{
 					CastType: arrayType,
@@ -469,25 +466,23 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 	} else if literal, isLiteral := argument.(pgsql.Literal); isLiteral && literal.Null {
 		s.treeTranslator.PushOperand(pgsql.NewTypeCast(literal, castType))
 	} else {
-		if column == pgsql.ColumnEdges {
-			if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
-				binding, bound := s.scope.Lookup(identifier)
-				if !bound {
-					binding, bound = s.scope.AliasedLookup(identifier)
-				}
-
-				if !bound {
-					return fmt.Errorf("unable to resolve path identifier %s", identifier)
-				} else if binding.DataType != pgsql.PathComposite {
-					return fmt.Errorf("expected path expression but received %s", binding.DataType)
-				}
-
-				s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
-					Identifier: argument,
-					Column:     column,
-				}, castType))
-				return nil
+		if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
+			binding, bound := s.scope.Lookup(identifier)
+			if !bound {
+				binding, bound = s.scope.AliasedLookup(identifier)
 			}
+
+			if !bound {
+				return fmt.Errorf("unable to resolve path identifier %s", identifier)
+			} else if binding.DataType != pgsql.PathComposite {
+				return fmt.Errorf("expected path expression but received %s", binding.DataType)
+			}
+
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(pgsql.RowColumnReference{
+				Identifier: identifier,
+				Column:     column,
+			}, castType))
+			return nil
 		}
 
 		if pathExpression, err := s.expressionForPath(argument); err != nil {
@@ -532,6 +527,28 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 	}
 
 	return collectedExpression, castType, nil
+}
+
+func prepareCollectIDExpression(scope *Scope, collectedExpression pgsql.Expression) (pgsql.Expression, bool) {
+	identifier, isIdentifier := unwrapParenthetical(collectedExpression).(pgsql.Identifier)
+	if !isIdentifier {
+		return nil, false
+	}
+
+	binding, bound := scope.Lookup(identifier)
+	if !bound {
+		return nil, false
+	}
+
+	switch binding.DataType {
+	case pgsql.NodeComposite, pgsql.EdgeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode, pgsql.ExpansionEdge:
+		return pgsql.RowColumnReference{
+			Identifier: identifier,
+			Column:     pgsql.ColumnID,
+		}, true
+	default:
+		return nil, false
+	}
 }
 
 func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted {
@@ -845,6 +862,19 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if collectedExpression, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
+		} else if s.collectIDProjectionDepth > 0 {
+			if idExpression, collectIDs := prepareCollectIDExpression(s.scope, collectedExpression); collectIDs {
+				s.treeTranslator.PushOperand(
+					functionWrapCollectToArray(typedExpression.Distinct, idExpression, pgsql.Int8Array),
+				)
+				s.recordLowering(optimize.LoweringCollectIDMembership)
+			} else if preparedExpression, castType, err := prepareCollectExpression(s.scope, collectedExpression, typedExpression.Name); err != nil {
+				s.SetError(err)
+			} else {
+				s.treeTranslator.PushOperand(
+					functionWrapCollectToArray(typedExpression.Distinct, preparedExpression, castType),
+				)
+			}
 		} else if preparedExpression, castType, err := prepareCollectExpression(s.scope, collectedExpression, typedExpression.Name); err != nil {
 			s.SetError(err)
 		} else {

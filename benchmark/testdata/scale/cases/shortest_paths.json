@@ -1,0 +1,61 @@
+{
+  "cases": [
+    {
+      "name": "shortest_distance_bound_pair",
+      "dataset": "base",
+      "category": "shortest_path",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+      "node_params": {
+        "start_id": "n1",
+        "end_id": "n3"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "scalar"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "root_predicate": "bound_id",
+        "terminal_predicate": "bound_id",
+        "min_depth": 1,
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "local_traversal", "neo4j"],
+      "tags": ["shortest-distance", "local-traversal-candidate"]
+    },
+    {
+      "name": "one_shortest_path_bound_pair",
+      "dataset": "base",
+      "category": "shortest_path",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {
+        "start_id": "n1",
+        "end_id": "n3"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "path_set"
+      },
+      "observes": {
+        "paths": true,
+        "nodes": true,
+        "relationships": true,
+        "properties": true
+      },
+      "shape": {
+        "root_predicate": "bound_id",
+        "terminal_predicate": "bound_id",
+        "min_depth": 1,
+        "path_materialization_required": true
+      },
+      "candidate_modes": ["postgres_sql", "local_traversal", "neo4j"],
+      "tags": ["one-shortest-path", "local-traversal-candidate"]
+    }
+  ]
+}
+
