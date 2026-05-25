@@ -49,6 +49,13 @@ func (s *Translator) translateAggregateTraversalCount(query *cypher.RegularQuery
 	return true, nil
 }
 
+func (s *Translator) newAggregatePredicateTranslator() *Translator {
+	translator := NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
+	translator.scope.generator = s.scope.generator
+
+	return translator
+}
+
 func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraversalCountShape) (pgsql.Query, error) {
 	candidateSources, err := s.buildAggregateCandidateSourcesCTE(shape)
 	if err != nil {
