@@ -938,6 +938,26 @@ LIMIT 100
 	}
 }
 
+func TestOptimizerSafetyAggregateTraversalCountSkipsParameterizedCorrelatedTerminalFilter(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslationWithParameters(t, `
+MATCH (u:User)
+WHERE u.enabled = $enabled
+MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+WHERE c.name = u.name AND c.enabled = $enabled
+WITH DISTINCT u, COUNT(c) AS adminCount
+RETURN u
+ORDER BY adminCount DESC
+LIMIT 100
+	`, map[string]any{
+		"enabled": true,
+	})
+
+	requireNoPlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+	requireNoOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+}
+
 func TestOptimizerSafetyAggregateTraversalCountSkipsObservedTerminal(t *testing.T) {
 	t.Parallel()
 
