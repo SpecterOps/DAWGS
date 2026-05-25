@@ -74,6 +74,10 @@ func (s *Translator) aggregateTraversalCountQuery(shape optimize.AggregateTraver
 		return pgsql.Query{}, err
 	}
 
+	if err := s.mergeAggregatePredicateParameters(predicateTranslator); err != nil {
+		return pgsql.Query{}, err
+	}
+
 	terminalHits, err := s.buildAggregateTerminalHitsCTE(shape)
 	if err != nil {
 		return pgsql.Query{}, err
@@ -423,6 +427,18 @@ func (s *Translator) aggregateSourceWhere(shape optimize.AggregateTraversalCount
 	return pgsql.OptionalAnd(sourcePredicate, sourceKindConstraint), nil
 }
 
+func (s *Translator) mergeAggregatePredicateParameters(translator *Translator) error {
+	for key, value := range translator.translation.Parameters {
+		if existingValue, hasExisting := s.translation.Parameters[key]; hasExisting && !reflect.DeepEqual(existingValue, value) {
+			return fmt.Errorf("aggregate traversal parameter collision for %s", key)
+		}
+
+		s.translation.Parameters[key] = value
+	}
+
+	return nil
+}
+
 func (s *Translator) aggregateTerminalWhere(shape optimize.AggregateTraversalCountShape, predicateTranslator *Translator) (pgsql.Expression, error) {
 	terminalKindConstraint, err := s.aggregateNodeKindConstraint(aggregateTerminalAlias, shape.TerminalKinds)
 	if err != nil {
@@ -464,14 +480,6 @@ func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cy
 	}
 	if remainingConstraints.Expression != nil {
 		return nil, fmt.Errorf("unsupported aggregate traversal predicate dependencies: %v", remainingConstraints.Dependencies.Slice())
-	}
-
-	for key, value := range translator.translation.Parameters {
-		if existingValue, hasExisting := s.translation.Parameters[key]; hasExisting && !reflect.DeepEqual(existingValue, value) {
-			return nil, fmt.Errorf("aggregate traversal parameter collision for %s", key)
-		}
-
-		s.translation.Parameters[key] = value
 	}
 
 	return sourceConstraints.Expression, nil
