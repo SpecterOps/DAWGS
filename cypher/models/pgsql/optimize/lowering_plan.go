@@ -179,8 +179,9 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 }
 
 func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, sourceReferences map[string]struct{}) {
-	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
+	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
 		var (
+			predicate   = indexedPredicate.Predicate
 			patternPart = patternPartForPredicate(predicate)
 			steps       = traversalStepsForPattern(patternPart)
 		)
@@ -191,9 +192,10 @@ func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartInde
 
 		target := PatternTarget{
 			QueryPartIndex: queryPartIndex,
-			PatternIndex:   predicateIndex,
+			ClauseIndex:    indexedPredicate.ClauseIndex,
+			PatternIndex:   indexedPredicate.PredicateIndex,
 			Predicate:      true,
-			PredicateIndex: predicateIndex,
+			PredicateIndex: indexedPredicate.PredicateIndex,
 		}
 
 		appendPatternProjectionPruningDecisions(plan, target, patternPart, steps, sourceReferences)
@@ -202,8 +204,9 @@ func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartInde
 }
 
 func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
-	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
+	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
 		var (
+			predicate   = indexedPredicate.Predicate
 			patternPart = patternPartForPredicate(predicate)
 			steps       = traversalStepsForPattern(patternPart)
 		)
@@ -227,9 +230,10 @@ func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex
 
 		target := PatternTarget{
 			QueryPartIndex: queryPartIndex,
-			PatternIndex:   predicateIndex,
+			ClauseIndex:    indexedPredicate.ClauseIndex,
+			PatternIndex:   indexedPredicate.PredicateIndex,
 			Predicate:      true,
-			PredicateIndex: predicateIndex,
+			PredicateIndex: indexedPredicate.PredicateIndex,
 		}.TraversalStep(0)
 
 		plan.PatternPredicate = append(plan.PatternPredicate, PatternPredicatePlacementDecision{

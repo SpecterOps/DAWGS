@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,13 +42,13 @@ func requireBinding(t *testing.T, bindings []Binding, symbol string, kind Bindin
 	t.Fatalf("expected binding %s:%s in %#v", symbol, kind, bindings)
 }
 
-func requirePathVariable(t *testing.T, pathVariables []PathVariable, symbol string, relationshipCount int) {
+func requirePathVariable(t *testing.T, pathVariables []PathVariable, symbol string, relationshipCount int, expectedVariableLength bool) {
 	t.Helper()
 
 	for _, pathVariable := range pathVariables {
 		if pathVariable.Symbol == symbol {
 			require.Equal(t, relationshipCount, pathVariable.RelationshipCount)
-			require.True(t, pathVariable.VariableLength)
+			require.Equal(t, expectedVariableLength, pathVariable.VariableLength)
 			return
 		}
 	}
@@ -86,8 +87,17 @@ func TestAnalyzeIdentifiesEligibleADCSRegion(t *testing.T) {
 	requireBinding(t, region.Bindings, "p1", BindingKindPath)
 	requireBinding(t, region.Bindings, "p2", BindingKindPath)
 
-	requirePathVariable(t, region.PathVariables, "p1", 4)
-	requirePathVariable(t, region.PathVariables, "p2", 5)
+	requirePathVariable(t, region.PathVariables, "p1", 4, true)
+	requirePathVariable(t, region.PathVariables, "p2", 5, true)
+}
+
+func TestAnalyzeReadingClausesSkipsNilClauses(t *testing.T) {
+	t.Parallel()
+
+	regions, barriers := analyzeReadingClauses(0, []*cypher.ReadingClause{nil})
+
+	require.Empty(t, regions)
+	require.Empty(t, barriers)
 }
 
 func TestAnalyzeSegmentsRegionsAtSemanticBarriers(t *testing.T) {

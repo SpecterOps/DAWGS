@@ -80,7 +80,7 @@ Status: completed
   - Run unit tests.
   - Run backend-specific integration tests.
   - Run plan capture and compare summary deltas.
-  - `quality_backend` passes against `postgres://postgres:bhe4eva@localhost/bhe` and `neo4j://neo4j:neo4jj@localhost:7687`.
+  - `quality_backend` passes against local PostgreSQL and Neo4j instances configured via environment-provided connection strings, without hardcoded credentials in docs.
   - Plan corpus capture records 396 PostgreSQL plans and 396 Neo4j plans; remaining capture errors are expected invalid-query cases surfaced by both systems or Neo4j-specific parameter-map syntax rejection.
 
 ## Phase 7: Predicate Placement Accounting

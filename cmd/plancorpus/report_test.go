@@ -2,11 +2,20 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
+
+type errorWriter struct {
+	err error
+}
+
+func (s errorWriter) Write([]byte) (int, error) {
+	return 0, s.err
+}
 
 func TestBuildSummaryRanksPostgresPlansAndCountsSignals(t *testing.T) {
 	var (
@@ -91,6 +100,19 @@ func TestWriteMarkdownSummaryEscapesPipes(t *testing.T) {
 
 	require.NoError(t, writeMarkdownSummary(&out, summary))
 	require.Contains(t, out.String(), "pipe \\| name")
+}
+
+func TestWriteMarkdownSummaryPropagatesWriterErrors(t *testing.T) {
+	writeErr := errors.New("write failed")
+
+	err := writeMarkdownSummary(errorWriter{err: writeErr}, PlanSummary{
+		Drivers: []DriverSummary{{
+			Driver:  "pg",
+			Records: 1,
+		}},
+	})
+
+	require.ErrorIs(t, err, writeErr)
 }
 
 func TestPostgresEstimatedCost(t *testing.T) {

@@ -241,59 +241,100 @@ func writeJSONSummary(w io.Writer, summary PlanSummary) error {
 }
 
 func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
-	writeCounts := func(title string, counts []Count, limit int) {
+	writef := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(w, format, args...)
+		return err
+	}
+
+	writeln := func(args ...any) error {
+		_, err := fmt.Fprintln(w, args...)
+		return err
+	}
+
+	writeCounts := func(title string, counts []Count, limit int) error {
 		if len(counts) == 0 {
-			return
+			return nil
 		}
-		fmt.Fprintf(w, "\n## %s\n\n| Name | Count |\n| --- | ---: |\n", title)
+		if err := writef("\n## %s\n\n| Name | Count |\n| --- | ---: |\n", title); err != nil {
+			return err
+		}
 		for idx, count := range counts {
 			if limit > 0 && idx >= limit {
 				break
 			}
-			fmt.Fprintf(w, "| %s | %d |\n", markdownCell(count.Name), count.Count)
+			if err := writef("| %s | %d |\n", markdownCell(count.Name), count.Count); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if err := writeln("# Cypher Plan Corpus Summary"); err != nil {
+		return err
+	}
+	if err := writeln("\n## Drivers\n\n| Driver | Records | Errors |\n| --- | ---: | ---: |"); err != nil {
+		return err
+	}
+	for _, driver := range summary.Drivers {
+		if err := writef("| %s | %d | %d |\n", markdownCell(driver.Driver), driver.Records, driver.Errors); err != nil {
+			return err
 		}
 	}
 
-	fmt.Fprintln(w, "# Cypher Plan Corpus Summary")
-	fmt.Fprintln(w, "\n## Drivers\n\n| Driver | Records | Errors |\n| --- | ---: | ---: |")
-	for _, driver := range summary.Drivers {
-		fmt.Fprintf(w, "| %s | %d | %d |\n", markdownCell(driver.Driver), driver.Records, driver.Errors)
-	}
-
 	if len(summary.TopPostgresPlans) > 0 {
-		fmt.Fprintln(w, "\n## Top PostgreSQL Plans\n\n| Cost | Source | Name | Root | Lowerings |\n| ---: | --- | --- | --- | --- |")
+		if err := writeln("\n## Top PostgreSQL Plans\n\n| Cost | Source | Name | Root | Lowerings |\n| ---: | --- | --- | --- | --- |"); err != nil {
+			return err
+		}
 		for _, plan := range summary.TopPostgresPlans {
-			fmt.Fprintf(
-				w,
+			if err := writef(
 				"| %.2f | %s | %s | %s | %s |\n",
 				plan.Cost,
 				markdownCell(plan.Source),
 				markdownCell(plan.Name),
 				markdownCell(plan.PlanRoot),
 				markdownCell(strings.Join(plan.PlannedLowerings, ", ")),
-			)
+			); err != nil {
+				return err
+			}
 		}
 	}
 
-	writeCounts("Feature Counts", summary.FeatureCounts, 0)
-	writeCounts("Planned Lowerings", summary.PlannedLowerings, 0)
-	writeCounts("Applied Lowerings", summary.AppliedLowerings, 0)
-	writeCounts("Skipped Lowerings", summary.SkippedLowerings, 0)
-	writeCounts("Skipped Lowering Reasons", summary.SkippedReasons, 0)
-	writeCounts("PostgreSQL Operators", summary.PostgresOperators, 25)
-	writeCounts("Neo4j Operators", summary.Neo4jOperators, 25)
+	if err := writeCounts("Feature Counts", summary.FeatureCounts, 0); err != nil {
+		return err
+	}
+	if err := writeCounts("Planned Lowerings", summary.PlannedLowerings, 0); err != nil {
+		return err
+	}
+	if err := writeCounts("Applied Lowerings", summary.AppliedLowerings, 0); err != nil {
+		return err
+	}
+	if err := writeCounts("Skipped Lowerings", summary.SkippedLowerings, 0); err != nil {
+		return err
+	}
+	if err := writeCounts("Skipped Lowering Reasons", summary.SkippedReasons, 0); err != nil {
+		return err
+	}
+	if err := writeCounts("PostgreSQL Operators", summary.PostgresOperators, 25); err != nil {
+		return err
+	}
+	if err := writeCounts("Neo4j Operators", summary.Neo4jOperators, 25); err != nil {
+		return err
+	}
 
 	if len(summary.Errors) > 0 {
-		fmt.Fprintln(w, "\n## Capture Errors\n\n| Driver | Source | Name | Error |\n| --- | --- | --- | --- |")
+		if err := writeln("\n## Capture Errors\n\n| Driver | Source | Name | Error |\n| --- | --- | --- | --- |"); err != nil {
+			return err
+		}
 		for _, captureError := range summary.Errors {
-			fmt.Fprintf(
-				w,
+			if err := writef(
 				"| %s | %s | %s | %s |\n",
 				markdownCell(captureError.Driver),
 				markdownCell(captureError.Source),
 				markdownCell(captureError.Name),
 				markdownCell(captureError.Error),
-			)
+			); err != nil {
+				return err
+			}
 		}
 	}
 

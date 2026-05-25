@@ -129,14 +129,14 @@ func SelectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *p
 	scopedIdentifiers := localScope.Copy()
 
 	for _, fromClause := range selectBody.From {
-		if !FromExpressionReferencesOnlyLocalIdentifiers(fromClause.Source) {
+		if !FromExpressionReferencesOnlyLocalIdentifiers(fromClause.Source, scopedIdentifiers) {
 			return false
 		}
 
 		addFromClauseSourceBinding(scopedIdentifiers, fromClause)
 
 		for _, join := range fromClause.Joins {
-			if !FromExpressionReferencesOnlyLocalIdentifiers(join.Table) {
+			if !FromExpressionReferencesOnlyLocalIdentifiers(join.Table, scopedIdentifiers) {
 				return false
 			}
 
@@ -165,10 +165,18 @@ func SelectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *p
 		(selectBody.Having == nil || ExpressionReferencesOnlyLocalIdentifiers(selectBody.Having, scopedIdentifiers))
 }
 
-func FromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression) bool {
-	switch expression.(type) {
+func FromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScopes ...*pgsql.IdentifierSet) bool {
+	switch typedExpression := expression.(type) {
 	case pgsql.TableReference:
 		return true
+
+	case pgsql.LateralSubquery:
+		localScope := pgsql.NewIdentifierSet()
+		if len(localScopes) > 0 && localScopes[0] != nil {
+			localScope = localScopes[0]
+		}
+
+		return QueryReferencesOnlyLocalIdentifiers(typedExpression.Query, localScope)
 
 	default:
 		return false

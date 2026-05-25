@@ -57,6 +57,29 @@ func TestApplyBaseline(t *testing.T) {
 	require.Equal(t, 5*time.Millisecond, records[0].Baseline.Change)
 }
 
+func TestBuildSummarySortsCaseSourceTieBreaker(t *testing.T) {
+	summary := buildSummary([]CaseResult{
+		{
+			Source:        "cases/b.json",
+			Dataset:       "shared",
+			Name:          "duplicate",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+		},
+		{
+			Source:        "cases/a.json",
+			Dataset:       "shared",
+			Name:          "duplicate",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+		},
+	})
+
+	require.Len(t, summary.Cases, 2)
+	require.Equal(t, "cases/a.json", summary.Cases[0].Source)
+	require.Equal(t, "cases/b.json", summary.Cases[1].Source)
+}
+
 func TestWriteMarkdownSummary(t *testing.T) {
 	var (
 		summary = buildSummary([]CaseResult{

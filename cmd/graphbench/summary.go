@@ -154,7 +154,11 @@ func buildSummary(records []CaseResult) Summary {
 			return summary.Cases[i].Dataset < summary.Cases[j].Dataset
 		}
 
-		return summary.Cases[i].Name < summary.Cases[j].Name
+		if summary.Cases[i].Name != summary.Cases[j].Name {
+			return summary.Cases[i].Name < summary.Cases[j].Name
+		}
+
+		return summary.Cases[i].Source < summary.Cases[j].Source
 	})
 
 	sortBaselineEntries(summary.Regressions, true)

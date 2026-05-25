@@ -315,12 +315,13 @@ func indexReadingClauseTargets(targets map[*cypher.PatternPart]PatternTarget, qu
 }
 
 func indexQueryPartPatternPredicateTargets(targets map[*cypher.PatternPredicate]PatternTarget, queryPartIndex int, queryPart cypher.SyntaxNode) {
-	for predicateIndex, predicate := range patternPredicatesInQueryPart(queryPart) {
-		targets[predicate] = PatternTarget{
+	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
+		targets[indexedPredicate.Predicate] = PatternTarget{
 			QueryPartIndex: queryPartIndex,
-			PatternIndex:   predicateIndex,
+			ClauseIndex:    indexedPredicate.ClauseIndex,
+			PatternIndex:   indexedPredicate.PredicateIndex,
 			Predicate:      true,
-			PredicateIndex: predicateIndex,
+			PredicateIndex: indexedPredicate.PredicateIndex,
 		}
 	}
 }

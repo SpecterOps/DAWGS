@@ -403,8 +403,8 @@ func selectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *p
 	return optimize.SelectReferencesOnlyLocalIdentifiers(selectBody, localScope)
 }
 
-func fromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression) bool {
-	return optimize.FromExpressionReferencesOnlyLocalIdentifiers(expression)
+func fromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+	return optimize.FromExpressionReferencesOnlyLocalIdentifiers(expression, localScope)
 }
 
 func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {

@@ -281,6 +281,41 @@ func TestLoweringPlanReportsTypedPatternPredicateExistencePlacement(t *testing.T
 	}}, plan.LoweringPlan.PatternPredicate)
 }
 
+func TestLoweringPlanReportsPatternPredicateClauseIndex(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a)
+		MATCH (s)
+		WHERE NOT (s)-[]-()
+		RETURN s
+	`)
+	require.NoError(t, err)
+
+	plan, err := BuildLoweringPlan(regularQuery, nil)
+	require.NoError(t, err)
+	require.Equal(t, []PatternPredicatePlacementDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			Predicate:      true,
+			StepIndex:      0,
+		},
+		Mode: PatternPredicatePlacementExistence,
+	}}, plan.PatternPredicate)
+	require.Contains(t, plan.ProjectionPruning, ProjectionPruningDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			Predicate:      true,
+			StepIndex:      0,
+		},
+		ReferencedSymbols: []string{"s"},
+		OmitRelationship:  true,
+		OmitRightNode:     true,
+	})
+}
+
 func TestSelectivityModelPlansTraversalDirection(t *testing.T) {
 	t.Parallel()
 
@@ -1310,6 +1345,23 @@ func TestQueryReferencesOnlyLocalIdentifiersAllowsEmptyWith(t *testing.T) {
 	}
 
 	require.True(t, QueryReferencesOnlyLocalIdentifiers(query, pgsql.NewIdentifierSet()))
+}
+
+func TestFromExpressionReferencesOnlyLocalIdentifiersHandlesLateralSubquery(t *testing.T) {
+	t.Parallel()
+
+	lateralSubquery := pgsql.LateralSubquery{
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: []pgsql.SelectItem{
+					pgsql.CompoundIdentifier{pgsql.Identifier("outer"), pgsql.ColumnID},
+				},
+			},
+		},
+	}
+
+	require.True(t, FromExpressionReferencesOnlyLocalIdentifiers(lateralSubquery, pgsql.AsIdentifierSet(pgsql.Identifier("outer"))))
+	require.False(t, FromExpressionReferencesOnlyLocalIdentifiers(lateralSubquery, pgsql.NewIdentifierSet()))
 }
 
 func TestMeasureSelectivityPopReturnsTopFrame(t *testing.T) {

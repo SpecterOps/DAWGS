@@ -130,7 +130,7 @@ func applyRowExpectation(result *CaseResult) {
 	}
 }
 
-func writeJSONLFile(path string, records []CaseResult) error {
+func writeJSONLFile(path string, records []CaseResult) (err error) {
 	if path == "" {
 		return writeJSONL(os.Stdout, records)
 	}
@@ -143,7 +143,11 @@ func writeJSONLFile(path string, records []CaseResult) error {
 	if err != nil {
 		return err
 	}
-	defer output.Close()
+	defer func() {
+		if closeErr := output.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	return writeJSONL(output, records)
 }

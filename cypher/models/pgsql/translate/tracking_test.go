@@ -42,3 +42,18 @@ func TestScopeLookupDataTypeResolvesAliases(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, pgsql.NodeComposite, dataType)
 }
+
+func TestIdentifierGeneratorSharesEdgeNamespaceForPathEdges(t *testing.T) {
+	generator := NewIdentifierGenerator()
+
+	edgeIdentifier, err := generator.NewIdentifier(pgsql.EdgeComposite)
+	require.NoError(t, err)
+	pathEdgeIdentifier, err := generator.NewIdentifier(pgsql.PathEdge)
+	require.NoError(t, err)
+	nextEdgeIdentifier, err := generator.NewIdentifier(pgsql.EdgeComposite)
+	require.NoError(t, err)
+
+	require.Equal(t, pgsql.Identifier("e0"), edgeIdentifier)
+	require.Equal(t, pgsql.Identifier("e1"), pathEdgeIdentifier)
+	require.Equal(t, pgsql.Identifier("e2"), nextEdgeIdentifier)
+}

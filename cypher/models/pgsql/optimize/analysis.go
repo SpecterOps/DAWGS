@@ -252,7 +252,12 @@ func analyzeReadingClauses(queryPartIndex int, readingClauses []*cypher.ReadingC
 	}
 
 	for clauseIndex, readingClause := range readingClauses {
-		if readingClause == nil || readingClause.Unwind != nil {
+		if readingClause == nil {
+			closeRegion()
+			continue
+		}
+
+		if readingClause.Unwind != nil {
 			closeRegion()
 			barriers = append(barriers, Barrier{
 				QueryPartIndex: queryPartIndex,
