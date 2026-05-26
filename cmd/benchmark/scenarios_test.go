@@ -73,6 +73,7 @@ func TestTraversalShapesScenariosDeclareExpectedRows(t *testing.T) {
 
 func TestDefaultDatasetsIncludeTraversalShapes(t *testing.T) {
 	require.Contains(t, defaultDatasets, traversalShapesDataset)
+	require.Contains(t, defaultDatasets, "adcs_fanout")
 }
 
 func TestValidateScenarioRows(t *testing.T) {
@@ -105,7 +106,7 @@ func traversalShapesIDMap() opengraph.IDMap {
 	return idMap
 }
 
-func requireExpectedRows(t *testing.T, scenarios []Scenario, section, label string, expectedRows int) {
+func requireExpectedRows(t *testing.T, scenarios []Scenario, section, label string, expectedRows int64) {
 	t.Helper()
 
 	for _, scenario := range scenarios {
