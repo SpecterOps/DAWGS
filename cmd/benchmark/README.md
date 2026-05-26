@@ -1,15 +1,18 @@
 # Benchmark
 
-Runs query scenarios against a real database and outputs markdown, JSON, or benchfmt timing data.
+Runs query scenarios against a real database and outputs markdown, JSON, or benchfmt timing data. Markdown reports include warm-up row counts, path-heavy scenarios can report distinct and duplicate returned path rows, and PostgreSQL explain capture includes translated SQL, plan text, and optimizer rule/lowering metadata in JSON output.
 
 ## Usage
 
 ```bash
-# Default datasets (base and traversal_shapes)
+# Default datasets (base, traversal_shapes, and adcs_fanout)
 go run ./cmd/benchmark -connection "postgresql://dawgs:dawgs@localhost:5432/dawgs"
 
 # Traversal shape dataset only
 go run ./cmd/benchmark -connection "..." -dataset traversal_shapes
+
+# ADCS fanout dataset with PostgreSQL EXPLAIN diagnostics
+go run ./cmd/benchmark -connection "..." -dataset adcs_fanout -json-output report.json -explain
 
 # Local dataset (not committed to repo)
 go run ./cmd/benchmark -connection "..." -dataset local/phantom
@@ -37,6 +40,7 @@ go run ./cmd/benchmark -connection "..." -output report.md -json-output report.j
 | `-driver` | `pg` | Database driver (`pg`, `neo4j`) |
 | `-connection` | | Connection string (or `CONNECTION_STRING` env) |
 | `-iterations` | `10` | Timed iterations per scenario |
+| `-explain` | `false` | Capture PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` and translated SQL for Cypher scenarios in JSON output |
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
@@ -44,12 +48,9 @@ go run ./cmd/benchmark -connection "..." -output report.md -json-output report.j
 | `-output` | stdout | Output file |
 | `-json-output` | | JSON output file for baseline comparison |
 
-Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a
-separate `ns/op` sample so two benchmark runs can be compared directly.
+Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a separate `ns/op` sample so two benchmark runs can be compared directly.
 
-The committed default datasets are `base` and `traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded
-cycle, disconnected, edge-kind-selective, and multi-path shortest-path traversal shapes. Scenarios with declared
-expected row counts fail before reporting timings if a query returns the wrong result shape.
+The committed default datasets are `base`, `traversal_shapes`, and `adcs_fanout`. `traversal_shapes` covers chain, fanout, bounded cycle, disconnected, edge-kind-selective, and multi-path shortest-path traversal shapes. Scenarios with declared expected row counts fail before reporting timings if a query returns the wrong result shape.
 
 ## Example: Neo4j on local/phantom
 
@@ -57,20 +58,10 @@ expected row counts fail before reporting timings if a query returns the wrong r
 $ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:testpassword@localhost:7687" -dataset local/phantom
 ```
 
-| Query | Dataset | Median | P95 | Max |
-|-------|---------|-------:|----:|----:|
-| Match Nodes | local/phantom | 1.4ms | 2.3ms | 2.3ms |
-| Match Edges | local/phantom | 1.6ms | 1.9ms | 1.9ms |
-| Filter By Kind / User | local/phantom | 2.0ms | 2.6ms | 2.6ms |
-| Filter By Kind / Group | local/phantom | 2.1ms | 2.3ms | 2.3ms |
-| Filter By Kind / Computer | local/phantom | 1.6ms | 2.0ms | 2.0ms |
-| Traversal Depth / depth 1 | local/phantom | 1.4ms | 2.1ms | 2.1ms |
-| Traversal Depth / depth 2 | local/phantom | 1.6ms | 1.9ms | 1.9ms |
-| Traversal Depth / depth 3 | local/phantom | 2.5ms | 3.3ms | 3.3ms |
-| Edge Kind Traversal / MemberOf | local/phantom | 1.2ms | 1.4ms | 1.4ms |
-| Edge Kind Traversal / GenericAll | local/phantom | 1.1ms | 1.5ms | 1.5ms |
-| Edge Kind Traversal / HasSession | local/phantom | 1.1ms | 1.4ms | 1.4ms |
-| Shortest Paths / 41 -> 587 | local/phantom | 1.5ms | 1.9ms | 1.9ms |
+| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |
+|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|
+| Match Nodes | local/phantom | 1000 | - | - | 1.4ms | 2.3ms | 2.3ms | - |
+| Match Edges | local/phantom | 2000 | - | - | 1.6ms | 1.9ms | 1.9ms | - |
 
 ## Example: PG on local/phantom
 
@@ -79,17 +70,7 @@ $ export CONNECTION_STRING="postgresql://dawgs:dawgs@localhost:5432/dawgs"
 $ go run ./cmd/benchmark -dataset local/phantom
 ```
 
-| Query | Dataset | Median | P95 | Max |
-|-------|---------|-------:|----:|----:|
-| Match Nodes | local/phantom | 2.0ms | 6.5ms | 6.5ms |
-| Match Edges | local/phantom | 464ms | 604ms | 604ms |
-| Filter By Kind / User | local/phantom | 4.5ms | 18.3ms | 18.3ms |
-| Filter By Kind / Group | local/phantom | 6.2ms | 28.8ms | 28.8ms |
-| Filter By Kind / Computer | local/phantom | 1.1ms | 5.5ms | 5.5ms |
-| Traversal Depth / depth 1 | local/phantom | 596ms | 636ms | 636ms |
-| Traversal Depth / depth 2 | local/phantom | 639ms | 660ms | 660ms |
-| Traversal Depth / depth 3 | local/phantom | 726ms | 745ms | 745ms |
-| Edge Kind Traversal / MemberOf | local/phantom | 602ms | 627ms | 627ms |
-| Edge Kind Traversal / GenericAll | local/phantom | 676ms | 791ms | 791ms |
-| Edge Kind Traversal / HasSession | local/phantom | 682ms | 778ms | 778ms |
-| Shortest Paths / 41 -> 587 | local/phantom | 708ms | 731ms | 731ms |
+| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |
+|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|
+| Match Nodes | local/phantom | 1000 | - | - | 2.0ms | 6.5ms | 6.5ms | - |
+| Match Edges | local/phantom | 2000 | - | - | 464ms | 604ms | 604ms | - |
