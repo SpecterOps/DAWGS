@@ -80,13 +80,10 @@ func (s Emitter) formatNodePattern(output io.Writer, nodePattern *cypher.NodePat
 
 func (s Emitter) formatRelationshipPattern(output io.Writer, relationshipPattern *cypher.RelationshipPattern) error {
 	switch relationshipPattern.Direction {
-	case graph.DirectionOutbound:
+	case graph.DirectionOutbound, graph.DirectionBoth:
 		if _, err := io.WriteString(output, "-["); err != nil {
 			return err
 		}
-
-	case graph.DirectionBoth:
-		fallthrough
 
 	case graph.DirectionInbound:
 		if _, err := io.WriteString(output, "<-["); err != nil {
@@ -147,13 +144,10 @@ func (s Emitter) formatRelationshipPattern(output io.Writer, relationshipPattern
 	}
 
 	switch relationshipPattern.Direction {
-	case graph.DirectionInbound:
+	case graph.DirectionInbound, graph.DirectionBoth:
 		if _, err := io.WriteString(output, "]-"); err != nil {
 			return err
 		}
-
-	case graph.DirectionBoth:
-		fallthrough
 
 	case graph.DirectionOutbound:
 		if _, err := io.WriteString(output, "]->"); err != nil {
@@ -296,7 +290,7 @@ func (s Emitter) formatProjection(output io.Writer, projection *cypher.Projectio
 }
 
 func (s Emitter) formatReturn(output io.Writer, returnClause *cypher.Return) error {
-	if _, err := io.WriteString(output, " return "); err != nil {
+	if _, err := io.WriteString(output, "return "); err != nil {
 		return err
 	}
 
@@ -1095,6 +1089,12 @@ func (s Emitter) formatSinglePartQuery(writer io.Writer, singlePartQuery *cypher
 	}
 
 	if singlePartQuery.Return != nil {
+		if len(singlePartQuery.ReadingClauses) > 0 || len(singlePartQuery.UpdatingClauses) > 0 {
+			if _, err := io.WriteString(writer, " "); err != nil {
+				return err
+			}
+		}
+
 		return s.formatReturn(writer, singlePartQuery.Return)
 	}
 

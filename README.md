@@ -58,6 +58,35 @@ Neo4j connection strings may use `neo4j://`, `neo4j+s://`, or `neo4j+ssc://`; a 
 
 Use `make test` for unit tests only and `make test_integration` for integration tests only.
 
+### Benchmarking
+
+Run the package benchmark suite with:
+
+```bash
+make test_bench
+```
+
+Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
+
+```bash
+go run ./cmd/benchdiff -base main -target HEAD -kind unit
+```
+
+For integration benchmark comparisons, provide the same `CONNECTION_STRING` used by integration tests:
+
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+go run ./cmd/benchdiff -base main -target HEAD -kind all -driver pg -fail-regression 10%
+```
+
+The harness writes raw outputs and a Markdown report under `.bench/runs/` by default. The report begins with comparison
+findings, includes the raw `benchstat` output for each benchmark suite, and ends with a table of all captured benchmark
+numbers.
+
+The integration benchmark runner includes committed `base` and `traversal_shapes` datasets by default. The traversal
+shape suite checks expected result counts for chain, fanout, bounded cycle, disconnected, edge-kind-selective, and
+multi-path shortest-path scenarios before recording timings.
+
 ### Test Metrics
 
 `make test` writes unit test coverage artifacts under `.coverage/`:

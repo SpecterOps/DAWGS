@@ -189,7 +189,7 @@
       "name": "Specify bi-directional relationship",
       "type": "string_match",
       "details": {
-        "query": "match (p:Person)\u003c-[]-\u003e(m:Movie) return m",
+        "query": "match (p:Person)-[]-(m:Movie) return m",
         "fitness": 0
       }
     },
@@ -437,7 +437,7 @@
       "name": "built-in shortestPaths()",
       "type": "string_match",
       "details": {
-        "query": "match p = shortestPath((p1:Person)\u003c-[*]-\u003e(p2:Person)) where p1.name = 'tom' and p2.name = 'jerry' return p",
+        "query": "match p = shortestPath((p1:Person)-[*]-(p2:Person)) where p1.name = 'tom' and p2.name = 'jerry' return p",
         "fitness": 17
       }
     },
@@ -453,7 +453,7 @@
       "name": "Find nodes with relationships",
       "type": "string_match",
       "details": {
-        "query": "match (b) where (b)\u003c-[]-\u003e() return b",
+        "query": "match (b) where (b)-[]-() return b",
         "fitness": -4
       }
     },
@@ -461,7 +461,7 @@
       "name": "Find nodes with no relationships",
       "type": "string_match",
       "details": {
-        "query": "match (b) where not ((b)\u003c-[]-\u003e()) return b",
+        "query": "match (b) where not ((b)-[]-()) return b",
         "fitness": -5
       }
     },

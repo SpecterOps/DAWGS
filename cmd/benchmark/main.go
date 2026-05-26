@@ -41,7 +41,8 @@ func main() {
 		driver       = flag.String("driver", "pg", "database driver (pg, neo4j)")
 		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
-		output       = flag.String("output", "", "markdown output file (default: stdout)")
+		output       = flag.String("output", "", "output file (default: stdout)")
+		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
 		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
 		explain      = flag.Bool("explain", false, "capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS) for Cypher scenarios")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
@@ -53,6 +54,9 @@ func main() {
 
 	if err := validateIterations(*iterations); err != nil {
 		fatal("%v", err)
+	}
+	if !isReportFormat(*format) {
+		fatal("unsupported output format %q", *format)
 	}
 
 	conn := *connStr
@@ -179,21 +183,21 @@ func main() {
 		}
 	}
 
-	// Write markdown
-	var mdOut *os.File
+	// Write primary report.
+	var out *os.File
 	if *output != "" {
 		var err error
-		mdOut, err = os.Create(*output)
+		out, err = os.Create(*output)
 		if err != nil {
 			fatal("failed to create output: %v", err)
 		}
-		defer mdOut.Close()
+		defer out.Close()
 	} else {
-		mdOut = os.Stdout
+		out = os.Stdout
 	}
 
-	if err := writeMarkdown(mdOut, report); err != nil {
-		fatal("failed to write markdown: %v", err)
+	if err := writeReport(out, report, *format); err != nil {
+		fatal("failed to write report: %v", err)
 	}
 
 	if *output != "" {

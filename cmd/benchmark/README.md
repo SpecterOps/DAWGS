@@ -1,12 +1,18 @@
 # Benchmark
 
-Runs query scenarios against a real database and outputs a markdown timing table with warm-up row counts. Path-heavy scenarios can also report distinct returned path rows and duplicate returned path rows. PostgreSQL explain capture includes translated SQL, plan text, and optimizer rule/lowering metadata in JSON output.
+Runs query scenarios against a real database and outputs markdown, JSON, or benchfmt timing data. Markdown reports include warm-up row counts, path-heavy scenarios can report distinct and duplicate returned path rows, and PostgreSQL explain capture includes translated SQL, plan text, and optimizer rule/lowering metadata in JSON output.
 
 ## Usage
 
 ```bash
-# Default datasets (base and adcs_fanout)
+# Default datasets (base, traversal_shapes, and adcs_fanout)
 go run ./cmd/benchmark -connection "postgresql://dawgs:dawgs@localhost:5432/dawgs"
+
+# Traversal shape dataset only
+go run ./cmd/benchmark -connection "..." -dataset traversal_shapes
+
+# ADCS fanout dataset with PostgreSQL EXPLAIN diagnostics
+go run ./cmd/benchmark -connection "..." -dataset adcs_fanout -json-output report.json -explain
 
 # Local dataset (not committed to repo)
 go run ./cmd/benchmark -connection "..." -dataset local/phantom
@@ -20,11 +26,11 @@ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:password@localho
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
 
+# Emit benchfmt for benchstat
+go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
+
 # Save markdown and JSON for quality baseline comparison
 go run ./cmd/benchmark -connection "..." -output report.md -json-output report.json
-
-# Capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS), translated SQL, and optimizer metadata in JSON output
-go run ./cmd/benchmark -connection "..." -dataset adcs_fanout -json-output report.json -explain
 ```
 
 ## Flags
@@ -38,8 +44,13 @@ go run ./cmd/benchmark -connection "..." -dataset adcs_fanout -json-output repor
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
-| `-output` | stdout | Markdown output file |
+| `-format` | `markdown` | Output format (`markdown`, `json`, `benchfmt`) |
+| `-output` | stdout | Output file |
 | `-json-output` | | JSON output file for baseline comparison |
+
+Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a separate `ns/op` sample so two benchmark runs can be compared directly.
+
+The committed default datasets are `base`, `traversal_shapes`, and `adcs_fanout`. `traversal_shapes` covers chain, fanout, bounded cycle, disconnected, edge-kind-selective, and multi-path shortest-path traversal shapes. Scenarios with declared expected row counts fail before reporting timings if a query returns the wrong result shape.
 
 ## Example: Neo4j on local/phantom
 

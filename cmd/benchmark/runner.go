@@ -40,14 +40,15 @@ type Stats struct {
 
 // Result is one row in the report.
 type Result struct {
-	Section           string         `json:"section"`
-	Dataset           string         `json:"dataset"`
-	Label             string         `json:"label"`
-	RowCount          int64          `json:"row_count"`
-	DistinctRowCount  *int64         `json:"distinct_row_count,omitempty"`
-	DuplicateRowCount *int64         `json:"duplicate_row_count,omitempty"`
-	Explain           *ExplainResult `json:"explain,omitempty"`
-	Stats             Stats          `json:"stats"`
+	Section           string          `json:"section"`
+	Dataset           string          `json:"dataset"`
+	Label             string          `json:"label"`
+	RowCount          int64           `json:"row_count"`
+	DistinctRowCount  *int64          `json:"distinct_row_count,omitempty"`
+	DuplicateRowCount *int64          `json:"duplicate_row_count,omitempty"`
+	Explain           *ExplainResult  `json:"explain,omitempty"`
+	Stats             Stats           `json:"stats"`
+	Samples           []time.Duration `json:"samples,omitempty"`
 }
 
 // runScenario executes a scenario N times and returns timing stats.
@@ -57,12 +58,8 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 	}
 
 	// Warm-up: one untimed run.
-	var measurement Measurement
-	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		nextMeasurement, err := s.Query(tx)
-		measurement = nextMeasurement
-		return err
-	}); err != nil {
+	measurement, err := runScenarioOnce(ctx, db, s)
+	if err != nil {
 		return Result{}, err
 	}
 
@@ -70,10 +67,7 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 
 	for i := range iterations {
 		start := time.Now()
-		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-			_, err := s.Query(tx)
-			return err
-		}); err != nil {
+		if _, err := runScenarioOnce(ctx, db, s); err != nil {
 			return Result{}, err
 		}
 		durations[i] = time.Since(start)
@@ -87,6 +81,7 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 		DistinctRowCount:  measurement.DistinctRowCount,
 		DuplicateRowCount: measurement.DuplicateRowCount,
 		Stats:             computeStats(durations),
+		Samples:           durations,
 	}
 
 	if options.Explain != nil && s.Cypher != "" {
@@ -108,6 +103,29 @@ func validateIterations(iterations int) error {
 	}
 
 	return nil
+}
+
+func runScenarioOnce(ctx context.Context, db graph.Database, s Scenario) (Measurement, error) {
+	var measurement Measurement
+	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		nextMeasurement, err := s.Query(tx)
+		measurement = nextMeasurement
+		if err != nil {
+			return err
+		}
+
+		return validateScenarioRows(s, nextMeasurement.RowCount)
+	})
+
+	return measurement, err
+}
+
+func validateScenarioRows(s Scenario, actualRows int64) error {
+	if s.ExpectedRows == nil || *s.ExpectedRows == actualRows {
+		return nil
+	}
+
+	return fmt.Errorf("%s/%s on %s expected %d rows, got %d", s.Section, s.Label, s.Dataset, *s.ExpectedRows, actualRows)
 }
 
 func computeStats(durations []time.Duration) Stats {
