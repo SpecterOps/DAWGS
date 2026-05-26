@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/graph"
 )
 
-func (s *Translator) preparePatternPredicate() error {
+func (s *Translator) preparePatternPredicate(predicate *cypher.PatternPredicate) error {
 	currentQueryPart := s.query.CurrentPart()
 
 	// Stash the match pattern
@@ -17,12 +19,16 @@ func (s *Translator) preparePatternPredicate() error {
 	// All pattern predicates must be relationship patterns
 	newPatternPart := currentQueryPart.currentPattern.NewPart()
 	newPatternPart.IsTraversal = true
+	if target, hasTarget := s.patternPredicateTargets[predicate]; hasTarget {
+		newPatternPart.Target = target
+		newPatternPart.HasTarget = true
+	}
 
 	return nil
 }
 
 func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart, traversalStep *TraversalStep) (pgsql.Expression, error) {
-	whereClause := pgsql.NewBinaryExpression(
+	var whereClause pgsql.Expression = pgsql.NewBinaryExpression(
 		pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
 			pgsql.OperatorEquals,
@@ -33,6 +39,41 @@ func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart,
 			pgsql.OperatorEquals,
 			pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
 	)
+
+	if traversalStep.RightNodeBound {
+		var (
+			forward = pgsql.NewBinaryExpression(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
+				pgsql.OperatorAnd,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+			)
+			reverse = pgsql.NewBinaryExpression(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
+				pgsql.OperatorAnd,
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
+			)
+		)
+
+		whereClause = pgsql.NewBinaryExpression(forward, pgsql.OperatorOr, reverse)
+	}
+
+	if constraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(pgsql.AsIdentifierSet(traversalStep.Edge.Identifier)); err != nil {
+		return nil, err
+	} else {
+		whereClause = pgsql.OptionalAnd(constraint.Expression, pgsql.NewParenthetical(whereClause))
+	}
 
 	if err := RewriteFrameBindings(s.scope, whereClause); err != nil {
 		return nil, err
@@ -83,6 +124,21 @@ func (s *Translator) translatePatternPredicate() error {
 	return nil
 }
 
+func (s *Translator) usePatternPredicateExistencePlacement(patternPart *PatternPart, traversalStep *TraversalStep) (bool, error) {
+	if patternPart == nil || !patternPart.HasTarget || traversalStep == nil || traversalStep.Direction != graph.DirectionBoth {
+		return false, nil
+	}
+
+	decision, hasDecision := s.patternPredicateDecisions[patternPart.Target.TraversalStep(0)]
+	if !hasDecision || decision.Mode != optimize.PatternPredicatePlacementExistence {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// buildPatternPredicates is used by translateMatch to resolve deferred pattern predicate
+// futures collected for the current MATCH/OPTIONAL MATCH query part's WHERE expressions
 func (s *Translator) buildPatternPredicates() error {
 	for _, predicateFuture := range s.query.CurrentPart().patternPredicates {
 		var (
@@ -95,33 +151,22 @@ func (s *Translator) buildPatternPredicates() error {
 		)
 
 		if len(patternPart.TraversalSteps) == 1 {
-			var (
-				traversalStep            = patternPart.TraversalSteps[0]
-				traversalStepIdentifiers = pgsql.AsIdentifierSet(
-					traversalStep.LeftNode.Identifier,
-					traversalStep.Edge.Identifier,
-					traversalStep.RightNode.Identifier,
-				)
-			)
-
-			if traversalStep.Direction == graph.DirectionBoth {
-				if hasGlobalConstraints, err := s.treeTranslator.HasAnyConstraints(traversalStepIdentifiers); err != nil {
+			traversalStep := patternPart.TraversalSteps[0]
+			if useExistencePlacement, err := s.usePatternPredicateExistencePlacement(patternPart, traversalStep); err != nil {
+				return err
+			} else if useExistencePlacement {
+				if predicateExpression, err := s.buildOptimizedRelationshipExistPredicate(patternPart, traversalStep); err != nil {
 					return err
-				} else if hasPredicateConstraints, err := patternPart.Constraints.HasConstraints(traversalStepIdentifiers); err != nil {
-					return err
-				} else if !hasPredicateConstraints && !hasGlobalConstraints {
-					if predicateExpression, err := s.buildOptimizedRelationshipExistPredicate(patternPart, traversalStep); err != nil {
-						return err
-					} else {
-						predicateFuture.SyntaxNode = predicateExpression
-					}
-
-					return nil
+				} else {
+					predicateFuture.SyntaxNode = predicateExpression
+					s.recordLowering(optimize.LoweringPredicatePlacement)
 				}
+
+				continue
 			}
 		}
 
-		if err := s.translateTraversalPatternPart(patternPart, true); err != nil {
+		if err := s.translateTraversalPatternPart(patternPart, true, true); err != nil {
 			return err
 		}
 
@@ -142,7 +187,17 @@ func (s *Translator) buildPatternPredicates() error {
 					})
 				}
 			} else {
-				if traversalStepQuery, err := s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep); err != nil {
+				var (
+					traversalStepQuery pgsql.Query
+					err                error
+				)
+				if traversalStep.Direction != graph.DirectionBoth && (traversalStep.LeftNodeBound || traversalStep.RightNodeBound) {
+					traversalStepQuery, err = s.buildTraversalPatternRootWithOuterCorrelation(traversalStep.Frame, traversalStep)
+				} else {
+					traversalStepQuery, err = s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep)
+				}
+
+				if err != nil {
 					return err
 				} else {
 					subQuery.AddCTE(pgsql.CommonTableExpression{

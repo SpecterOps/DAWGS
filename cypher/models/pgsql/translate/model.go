@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
@@ -144,21 +145,52 @@ func (s *TraversalStep) usesBoundEndpointPairs() bool {
 	return s.LeftNodeBound && s.RightNodeBound && s.hasPreviousFrameBinding()
 }
 
+func (s *TraversalStep) usesBoundTerminalIDs() bool {
+	return s.RightNodeBound && s.hasPreviousFrameBinding()
+}
+
+func canMaterializeTerminalFilterForStep(traversalStep *TraversalStep, expansionModel *Expansion) bool {
+	if traversalStep == nil || expansionModel == nil || traversalStep.RightNode == nil ||
+		expansionModel.TerminalNodeConstraints == nil ||
+		traversalStep.usesBoundEndpointPairs() ||
+		traversalStep.usesBoundTerminalIDs() {
+		return false
+	}
+
+	// Terminal filters are only useful as standalone SQL when they depend solely
+	// on the terminal node; external references must stay in the main query.
+	_, externalConstraints := partitionConstraintByLocality(
+		expansionModel.TerminalNodeConstraints,
+		pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier),
+	)
+
+	return externalConstraints == nil
+}
+
+func canMaterializeEndpointPairFilterForStep(traversalStep *TraversalStep, expansionModel *Expansion) bool {
+	// Pair filters enumerate the exact root/terminal combinations the
+	// bidirectional harness must resolve. Kind-only endpoint predicates are not
+	// enough because they do not constrain the search columns used by the harness.
+	if traversalStep == nil || expansionModel == nil ||
+		traversalStep.LeftNode == nil ||
+		traversalStep.RightNode == nil ||
+		traversalStep.usesBoundEndpointPairs() ||
+		expansionModel.PrimerNodeConstraints == nil ||
+		expansionModel.TerminalNodeConstraints == nil ||
+		!hasPairAwareEndpointConstraint(expansionModel.PrimerNodeConstraints, traversalStep.LeftNode.Identifier) ||
+		!hasPairAwareEndpointConstraint(expansionModel.TerminalNodeConstraints, traversalStep.RightNode.Identifier) {
+		return false
+	}
+
+	return true
+}
+
 func (s *TraversalStep) endpointSelectivity(scope *Scope, expression pgsql.Expression, bound bool) (int, error) {
-	selectivity, err := MeasureSelectivity(scope, expression)
-	if err != nil {
-		return 0, err
-	}
-
-	if bound && s.hasPreviousFrameBinding() {
-		selectivity += selectivityWeightBoundIdentifier
-	}
-
-	return selectivity, nil
+	return optimize.NewSelectivityModel(scope).EndpointSelectivity(expression, bound, s.hasPreviousFrameBinding())
 }
 
 func isBidirectionalSearchAnchor(selectivity int) bool {
-	return selectivity >= selectivityBidirectionalAnchorThreshold
+	return optimize.IsBidirectionalSearchAnchor(selectivity)
 }
 
 func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
@@ -168,8 +200,10 @@ func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Ident
 			continue
 		}
 
-		leftIsID := isIdentifierIDReference(binaryExpression.LOperand, identifier)
-		rightIsID := isIdentifierIDReference(binaryExpression.ROperand, identifier)
+		var (
+			leftIsID  = isIdentifierIDReference(binaryExpression.LOperand, identifier)
+			rightIsID = isIdentifierIDReference(binaryExpression.ROperand, identifier)
+		)
 
 		if leftIsID && isStaticIDEqualityOperand(binaryExpression.ROperand) {
 			return true
@@ -341,80 +375,51 @@ func (s *TraversalStep) CanExecutePairAwareBidirectionalSearch(scope *Scope) (bo
 	}
 }
 
-// flattenConjunction collects the leaf operands of a left-recursive AND chain.
 func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
-	if bin, typeOK := expr.(*pgsql.BinaryExpression); !typeOK || bin.Operator != pgsql.OperatorAnd {
-		return []pgsql.Expression{expr}
-	} else {
-		return append(flattenConjunction(bin.LOperand), flattenConjunction(bin.ROperand)...)
-	}
+	return optimize.FlattenConjunction(expr)
 }
 
-// expressionReferencesOnlyLocalIdentifiers returns true only when every binding
-// reference found in the expression is a member of localScope.
 func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
-	isLocal := true
+	return optimize.ExpressionReferencesOnlyLocalIdentifiers(expression, localScope)
+}
 
-	walk.PgSQL(expression, walk.NewSimpleVisitor[pgsql.SyntaxNode](
-		func(node pgsql.SyntaxNode, handler walk.VisitorHandler) {
-			switch typedNode := node.(type) {
-			case pgsql.CompoundIdentifier:
-				if len(typedNode) > 0 && !localScope.Contains(typedNode[0]) {
-					isLocal = false
-					handler.SetDone()
-				}
+func subqueryReferencesOnlyLocalIdentifiers(subquery pgsql.Subquery, localScope *pgsql.IdentifierSet) bool {
+	return optimize.SubqueryReferencesOnlyLocalIdentifiers(subquery, localScope)
+}
 
-			case pgsql.Identifier:
-				if !localScope.Contains(typedNode) {
-					isLocal = false
-					handler.SetDone()
-				}
+func queryReferencesOnlyLocalIdentifiers(query pgsql.Query, localScope *pgsql.IdentifierSet) bool {
+	return optimize.QueryReferencesOnlyLocalIdentifiers(query, localScope)
+}
 
-			case pgsql.RowColumnReference:
-				if !expressionReferencesOnlyLocalIdentifiers(typedNode.Identifier, localScope) {
-					isLocal = false
-					handler.SetDone()
-				} else {
-					handler.Consume()
-				}
-			}
-		},
-	))
+func addFromClauseBindings(localScope *pgsql.IdentifierSet, fromClauses []pgsql.FromClause) {
+	optimize.AddFromClauseBindings(localScope, fromClauses)
+}
 
-	return isLocal
+func addFromExpressionBinding(localScope *pgsql.IdentifierSet, expression pgsql.Expression) {
+	optimize.AddFromExpressionBinding(localScope, expression)
+}
+
+func selectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *pgsql.IdentifierSet) bool {
+	return optimize.SelectReferencesOnlyLocalIdentifiers(selectBody, localScope)
+}
+
+func fromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
+	return optimize.FromExpressionReferencesOnlyLocalIdentifiers(expression, localScope)
 }
 
 func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
-	if expression == nil {
-		return true
-	}
-
-	return expressionReferencesOnlyLocalIdentifiers(expression, localScope)
+	return optimize.IsLocalToScope(expression, localScope)
 }
 
-// partitionConstraintByLocality splits a conjunction (A AND B AND ...) into
-// two expressions: one whose every binding reference is contained in
-// localScope (safe for JOIN ON), and one that references outside identifiers
-// (must stay in WHERE).
-//
-// Only top-level AND operands are split. If an expression is not a
-// BinaryExpression with OperatorAnd, the whole expression is tested as a unit.
 func partitionConstraintByLocality(expression pgsql.Expression, localScope *pgsql.IdentifierSet) (pgsql.Expression, pgsql.Expression) {
-	var (
-		joinConstraints  pgsql.Expression
-		whereConstraints pgsql.Expression
-		terms            = flattenConjunction(expression)
-	)
+	return optimize.PartitionConstraintByLocality(expression, localScope)
+}
 
-	for _, term := range terms {
-		if isLocalToScope(term, localScope) {
-			joinConstraints = pgsql.OptionalAnd(joinConstraints, term)
-		} else {
-			whereConstraints = pgsql.OptionalAnd(whereConstraints, term)
-		}
-	}
-
-	return joinConstraints, whereConstraints
+type ProjectionPruningApplication struct {
+	LeftNode     *BoundIdentifier
+	Relationship *BoundIdentifier
+	RightNode    *BoundIdentifier
+	PathBinding  *BoundIdentifier
 }
 
 type TraversalStep struct {
@@ -422,8 +427,10 @@ type TraversalStep struct {
 	Direction              graph.Direction
 	Expansion              *Expansion
 	PathReversed           bool
+	ProjectionPruning      ProjectionPruningApplication
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool
+	UseExpandInto          bool
 	LeftNodeConstraints    pgsql.Expression
 	LeftNodeJoinCondition  pgsql.Expression
 	Edge                   *BoundIdentifier
@@ -491,6 +498,8 @@ type PatternPart struct {
 	ShortestPath     bool
 	AllShortestPaths bool
 	PatternBinding   *BoundIdentifier
+	Target           optimize.PatternTarget
+	HasTarget        bool
 	TraversalSteps   []*TraversalStep
 	NodeSelect       NodeSelect
 	Constraints      *ConstraintTracker
@@ -895,7 +904,7 @@ type Projections struct {
 	Frame       *Frame
 	Constraints pgsql.Expression
 	Items       []*Projection
-	GroupBy     []pgsql.SelectItem
+	GroupBy     []pgsql.Expression
 }
 
 func (s *Projections) Add(projection *Projection) {

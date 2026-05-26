@@ -184,12 +184,14 @@ drop index if exists edge_kind_index;
 drop index if exists edge_start_kind_index;
 drop index if exists edge_end_kind_index;
 
--- Covering indexes for traversal joins. The INCLUDE columns allow index-only scans for the common case where
--- the join needs (id, start_id, end_id, kind_id) without fetching from the heap. The standalone start_id,
--- end_id, and kind_id indexes are intentionally omitted: the composite indexes satisfy left-prefix lookups
--- on start_id or end_id alone, and kind_id is never queried in isolation during traversal.
+-- Covering indexes for traversal joins and relationship counts. The INCLUDE columns allow index-only scans for
+-- the common case where the join needs (id, start_id, end_id, kind_id) without fetching from the heap. The standalone
+-- start_id and end_id indexes are intentionally omitted: the composite indexes satisfy left-prefix lookups on start_id
+-- or end_id alone. Relationship count fast paths query kind_id without an endpoint anchor, so keep a kind_id-first
+-- covering index for those shapes.
 create index if not exists edge_start_id_kind_id_id_end_id_index on edge using btree (start_id, kind_id) include (id, end_id);
 create index if not exists edge_end_id_kind_id_id_start_id_index on edge using btree (end_id, kind_id) include (id, start_id);
+create index if not exists edge_kind_id_id_start_id_end_id_index on edge using btree (kind_id) include (id, start_id, end_id);
 
 -- Path composite type
 do

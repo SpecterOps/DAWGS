@@ -53,6 +53,9 @@ func Copy[T any](value T, extensions ...CopyExtension[T]) T {
 	case *Quantifier:
 		return any(typedValue.copy()).(T)
 
+	case *RangeQuantifier:
+		return any(typedValue.copy()).(T)
+
 	case *Where:
 		return any(typedValue.copy()).(T)
 
@@ -108,6 +111,18 @@ func Copy[T any](value T, extensions ...CopyExtension[T]) T {
 		return any(typedValue.copy()).(T)
 
 	case *Literal:
+		return any(typedValue.copy()).(T)
+
+	case *Properties:
+		return any(typedValue.copy()).(T)
+
+	case MapLiteral:
+		return any(typedValue.copy()).(T)
+
+	case *ListLiteral:
+		return any(typedValue.copy()).(T)
+
+	case *MapItem:
 		return any(typedValue.copy()).(T)
 
 	case *ReadingClause:

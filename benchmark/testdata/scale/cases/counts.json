@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "name": "all_node_count",
+      "dataset": "base",
+      "category": "counts",
+      "cypher": "MATCH (n) RETURN count(n)",
+      "expected": {
+        "row_count": 1,
+        "result_kind": "scalar"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["count", "count-store"]
+    },
+    {
+      "name": "typed_node_count",
+      "dataset": "base",
+      "category": "counts",
+      "cypher": "MATCH (n:NodeKind1) RETURN count(n)",
+      "expected": {
+        "row_count": 1,
+        "result_kind": "scalar"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "terminal_predicate": "node_kind",
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["count", "typed-count", "graph-stats"]
+    },
+    {
+      "name": "typed_edge_count",
+      "dataset": "base",
+      "category": "counts",
+      "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN count(r)",
+      "expected": {
+        "row_count": 1,
+        "result_kind": "scalar"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "edge_kinds": ["EdgeKind1"],
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["count", "typed-count", "graph-stats"]
+    }
+  ]
+}
+

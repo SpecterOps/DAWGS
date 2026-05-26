@@ -18,33 +18,36 @@ func (s *Translator) translateWith() error {
 			// aggregatedItems contains a set of symbols of projected aggregate functions.
 			aggregatedItems = pgsql.NewSymbolTable()
 
-			// groupByItems is a set of symbols (identifiers and compound identifiers) that the query is expected to
-			// group by. This is built by exclusion of all aggregated items.
-			groupByItems = pgsql.NewSymbolTable()
+			// groupByItems are the non-aggregate projection expressions that the query must group by.
+			groupByItems []pgsql.Expression
 		)
 
 		for _, projectionItem := range currentPart.projections.Items {
 			if err := RewriteFrameBindings(s.scope, projectionItem.SelectItem); err != nil {
 				return err
+			} else if _, isIdentifier := projectionItem.SelectItem.(pgsql.Identifier); isIdentifier {
+				continue
+			} else if resolvedSelectItem, err := resolvePathCompositeFieldReferences(s.scope, projectionItem.SelectItem); err != nil {
+				return err
+			} else if selectItem, isSelectItem := resolvedSelectItem.(pgsql.SelectItem); !isSelectItem {
+				return fmt.Errorf("resolved with projection item is not selectable: %T", resolvedSelectItem)
+			} else {
+				projectionItem.SelectItem = selectItem
 			}
 		}
 
 		// If an aggregation function is being used, this invokes an implicit group by of non-function projections
 		for _, projectionItem := range currentPart.projections.Items {
-			switch typedSelectItem := projectionItem.SelectItem.(type) {
-			case pgsql.FunctionCall:
-				if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbols(typedSelectItem); err != nil {
-					return err
-				} else if !aggregatedFunctionSymbols.IsEmpty() {
-					aggregatedItems.AddTable(aggregatedFunctionSymbols)
-					continue
-				}
+			if aggregatedFunctionSymbols, err := GetAggregatedFunctionParameterSymbolsIn(projectionItem.SelectItem); err != nil {
+				return err
+			} else if !aggregatedFunctionSymbols.IsEmpty() {
+				aggregatedItems.AddTable(aggregatedFunctionSymbols)
 			}
 
-			if selectItemSymbols, err := SymbolsFor(projectionItem.SelectItem); err != nil {
+			if selectItemGroupByExpressions, err := NonAggregateGroupByExpressions(projectionItem.SelectItem); err != nil {
 				return err
 			} else {
-				groupByItems.Add(selectItemSymbols.NotIn(aggregatedItems))
+				groupByItems = append(groupByItems, selectItemGroupByExpressions...)
 			}
 		}
 
@@ -64,9 +67,6 @@ func (s *Translator) translateWith() error {
 
 		for idx, projectionItem := range currentPart.projections.Items {
 			switch typedSelectItem := projectionItem.SelectItem.(type) {
-			case *pgsql.BinaryExpression:
-				return fmt.Errorf("binary expression not supported in with statement")
-
 			case pgsql.CompoundIdentifier:
 				return fmt.Errorf("compound identifier not supported in with statement")
 
@@ -74,8 +74,10 @@ func (s *Translator) translateWith() error {
 				if binding, isBound := s.scope.Lookup(typedSelectItem); !isBound {
 					return fmt.Errorf("unable to lookup identifer %s for with statement", typedSelectItem)
 				} else {
-					var selectItem pgsql.SelectItem
-					projectedBinding := binding
+					var (
+						selectItem       pgsql.SelectItem
+						projectedBinding = binding
+					)
 
 					if projectionItem.Alias.Set {
 						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || aliasBinding.Identifier != binding.Identifier {
@@ -156,15 +158,7 @@ func (s *Translator) translateWith() error {
 		}
 
 		if !aggregatedItems.IsEmpty() {
-			groupByItems.EachIdentifier(func(next pgsql.Identifier) bool {
-				currentPart.projections.GroupBy = append(currentPart.projections.GroupBy, next)
-				return true
-			})
-
-			groupByItems.EachCompoundIdentifier(func(next pgsql.CompoundIdentifier) bool {
-				currentPart.projections.GroupBy = append(currentPart.projections.GroupBy, next)
-				return true
-			})
+			currentPart.projections.GroupBy = append(currentPart.projections.GroupBy, groupByItems...)
 		}
 
 		if err := s.scope.PruneDefinitions(projectedItems); err != nil {

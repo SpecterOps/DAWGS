@@ -303,13 +303,13 @@ text this function will raise an error.
 match (u:User) return tostring(n.num_active_logins)
 ```
 
-### `toint`
+### `toInteger`
 
 Returns the integer value of a given expression. If the given expression represents a type that can not be converted or
 parsed to an integer this function will raise an error.
 
 ```
-match (u:User) return toint(n.integer_in_text_property)
+match (u:User) return toInteger(n.integer_in_text_property)
 ```
 
 ### `coalesce`
@@ -428,15 +428,16 @@ This indicates that there is a node with a value for `n.name` that is not parsab
 
 In the future, CySQL translation will cover most of the strict typing requirements automatically for users.
 
-Property equality against the string literal or string parameter `'true'` or `'false'` is translated through PostgreSQL
-JSON text extraction for backwards compatibility. This means a JSON boolean property value of `true` compares equal to
-the string literal `'true'`. Other string equality operands use strict JSON scalar equality; use boolean or numeric
-literals, such as `n.enabled = true` or `n.count = 1`, when typed JSON scalar equality is required.
+Property equality against a string literal or text parameter is translated through PostgreSQL JSON text extraction with
+a JSON string type guard. This keeps strings distinct from JSON booleans and numbers while allowing PostgreSQL
+expression indexes such as `properties ->> 'objectid'` or `properties ->> 'name'` to accelerate exact string anchors.
+Boolean and numeric literals continue to use strict JSON scalar equality; use boolean or numeric literals, such as
+`n.enabled = true` or `n.count = 1`, when typed JSON scalar equality is required.
 
 ### Index Utilization
 
 Indexing in CySQL does not require a label specifier to be utilized. If the node property `name` is indexed in CySQL,
-both:
+exact string equality is emitted in a form compatible with PostgreSQL text expression indexes. Both:
 
 ```
 match (n:User) where n.name = '1234' return n
@@ -449,6 +450,10 @@ match (n) where n.name = '1234' return n
 ```
 
 will use the `name` index regardless of node label.
+
+For substring and suffix searches, PostgreSQL can use explicit `TextSearchIndex`/trigram expression indexes requested
+by schema, but CySQL does not add blanket suffix indexes during default schema assertion. Suffix forms are still being
+kept conservative so `ENDS WITH`, reversed operands, null handling, and string type semantics remain backend-equivalent.
 
 ### null Behavior
 

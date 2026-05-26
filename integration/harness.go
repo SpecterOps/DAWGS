@@ -26,8 +26,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -86,11 +86,13 @@ func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds
 func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
-	ctx := context.Background()
+	var (
+		ctx     = context.Background()
+		connStr = os.Getenv("CONNECTION_STRING")
+	)
 
-	connStr := os.Getenv("CONNECTION_STRING")
 	if connStr == "" {
-		t.Fatal("CONNECTION_STRING env var is not set")
+		t.Skip("CONNECTION_STRING env var is not set")
 	}
 
 	driver, err := driverFromConnStr(connStr)
@@ -103,11 +105,12 @@ func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds gra
 		ConnectionString:      connStr,
 	}
 
-	dbcfg := drivers.DatabaseConfiguration{}
-	dbcfg.Connection = connStr
-
 	if driver == pg.DriverName {
-		pool, err := pg.NewPool(dbcfg)
+		poolCfg, err := pgxpool.ParseConfig(connStr)
+		if err != nil {
+			t.Fatalf("failed to parse pool configuration: %v", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			t.Fatalf("Failed to create PG pool: %v", err)
 		}
@@ -213,22 +216,24 @@ func LoadDataset(t *testing.T, db graph.Database, ctx context.Context, name stri
 func QueryPaths(t *testing.T, ctx context.Context, db graph.Database, cypher string) []graph.Path {
 	t.Helper()
 
-	var paths []graph.Path
+	var (
+		paths []graph.Path
+		err   = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query(cypher, nil)
+			defer result.Close()
 
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(cypher, nil)
-		defer result.Close()
-
-		for result.Next() {
-			var p graph.Path
-			if err := result.Scan(&p); err != nil {
-				return fmt.Errorf("scan error: %w", err)
+			for result.Next() {
+				var p graph.Path
+				if err := result.Scan(&p); err != nil {
+					return fmt.Errorf("scan error: %w", err)
+				}
+				paths = append(paths, p)
 			}
-			paths = append(paths, p)
-		}
 
-		return result.Error()
-	})
+			return result.Error()
+		})
+	)
+
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
@@ -246,25 +251,27 @@ func QueryNodeIDs(t *testing.T, ctx context.Context, db graph.Database, cypher s
 		rev[dbID] = fid
 	}
 
-	var ids []string
-	seen := make(map[string]bool)
+	var (
+		ids  []string
+		seen = make(map[string]bool)
+		err  = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query(cypher, nil)
+			defer result.Close()
 
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(cypher, nil)
-		defer result.Close()
+			for result.Next() {
+				var n graph.Node
+				if err := result.Scan(&n); err != nil {
+					return err
+				}
+				if fid, ok := rev[n.ID]; ok && !seen[fid] {
+					ids = append(ids, fid)
+					seen[fid] = true
+				}
+			}
+			return result.Error()
+		})
+	)
 
-		for result.Next() {
-			var n graph.Node
-			if err := result.Scan(&n); err != nil {
-				return err
-			}
-			if fid, ok := rev[n.ID]; ok && !seen[fid] {
-				ids = append(ids, fid)
-				seen[fid] = true
-			}
-		}
-		return result.Error()
-	})
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
@@ -301,9 +308,11 @@ func AssertPaths(t *testing.T, paths []graph.Path, idMap opengraph.IDMap, expect
 		rev[dbID] = fixtureID
 	}
 
-	toSig := func(ids []string) string { return strings.Join(ids, ",") }
+	var (
+		toSig = func(ids []string) string { return strings.Join(ids, ",") }
+		got   = make([]string, len(paths))
+	)
 
-	got := make([]string, len(paths))
 	for i, p := range paths {
 		ids := make([]string, len(p.Nodes))
 		for j, node := range p.Nodes {

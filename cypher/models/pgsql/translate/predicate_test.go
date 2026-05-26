@@ -30,8 +30,35 @@ RETURN p`)
 	require.NoError(t, err)
 
 	require.Contains(t, formatted, "as p from s0 where")
-	require.Contains(t, formatted, "with s1 as")
-	require.NotContains(t, formatted, "as p from s1 where")
+	require.Contains(t, formatted, "exists (select 1 from edge")
+	require.Contains(t, formatted, "kind_id = any (array [3, 4]::int2[])")
+	require.Contains(t, formatted, "start_id = (s0.n0).id")
+	require.Contains(t, formatted, "end_id = (s0.n1).id")
+	require.NotContains(t, formatted, "with s1 as")
+}
+
+func TestOptimizedPatternPredicatesContinueAfterFirstPlacement(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("Domain"))
+	kindMapper.Put(graph.StringKind("SpoofSIDHistory"))
+	kindMapper.Put(graph.StringKind("AbuseTGTDelegation"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Domain), (m:Domain)
+		WHERE (n)-[:SpoofSIDHistory]-(m)
+		AND (n)-[:AbuseTGTDelegation]-(m)
+		RETURN n
+	`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "array [2]::int2[]")
+	require.Contains(t, formatted, "array [3]::int2[]")
 }
 
 func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[string]any) string {
@@ -136,6 +163,43 @@ func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
 			formatted := translatePredicateQuery(t, testCase.query, testCase.parameters)
 
 			require.Contains(t, formatted, testCase.expected)
+		})
+	}
+}
+
+func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	for _, testCase := range []struct {
+		name  string
+		query string
+	}{
+		{
+			name:  "self-referential directed with path binding",
+			query: `match p = (u)-[]->(u) return p`,
+		},
+		{
+			name:  "self-referential directed without path binding",
+			query: `match (u)-[]->(u) return u`,
+		},
+		{
+			name:  "self-referential undirected with path binding",
+			query: `match p = (u)-[]-(u) return p`,
+		},
+		{
+			name:  "self-referential expansion",
+			query: `match p = (u)-[*1..3]->(u) return p`,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			query, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+			require.NoError(t, err)
+
+			translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+			require.NoError(t, err)
+
+			_, err = Translated(translation)
+			require.NoError(t, err)
 		})
 	}
 }

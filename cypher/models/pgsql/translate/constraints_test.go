@@ -19,16 +19,18 @@ func TestMeasureSelectivity(t *testing.T) {
 }
 
 func TestCanExecuteSelectiveBidirectionalSearch(t *testing.T) {
-	lowSelectivity := pgd.Equals(
-		pgsql.Identifier("123"),
-		pgsql.Identifier("456"),
-	)
-	idLookup := func(identifier pgsql.Identifier, id int64) pgsql.Expression {
-		return pgd.Equals(
-			pgsql.CompoundIdentifier{identifier, pgsql.ColumnID},
-			pgd.IntLiteral(id),
+	var (
+		lowSelectivity = pgd.Equals(
+			pgsql.Identifier("123"),
+			pgsql.Identifier("456"),
 		)
-	}
+		idLookup = func(identifier pgsql.Identifier, id int64) pgsql.Expression {
+			return pgd.Equals(
+				pgsql.CompoundIdentifier{identifier, pgsql.ColumnID},
+				pgd.IntLiteral(id),
+			)
+		}
+	)
 
 	t.Run("rejects low selectivity endpoints", func(t *testing.T) {
 		step := &TraversalStep{
@@ -136,57 +138,61 @@ func TestCanExecuteSelectiveBidirectionalSearch(t *testing.T) {
 }
 
 func TestCanExecutePairAwareBidirectionalSearch(t *testing.T) {
-	scopeWithNodeBindings := func(identifiers ...pgsql.Identifier) *Scope {
-		scope := NewScope()
-		for _, identifier := range identifiers {
-			scope.Define(identifier, pgsql.NodeComposite)
-		}
+	var (
+		scopeWithNodeBindings = func(identifiers ...pgsql.Identifier) *Scope {
+			scope := NewScope()
+			for _, identifier := range identifiers {
+				scope.Define(identifier, pgsql.NodeComposite)
+			}
 
-		return scope
-	}
-	localSelectivePropertyConstraint := func(identifier pgsql.Identifier) pgsql.Expression {
-		return pgd.Equals(
-			pgd.PropertyLookup(identifier, "name"),
-			pgd.TextLiteral("123"),
-		)
-	}
-	localBroadPropertyConstraint := func(identifier pgsql.Identifier) pgsql.Expression {
-		return pgd.Equals(
-			pgsql.CompoundIdentifier{identifier, pgsql.ColumnProperties},
-			pgd.IntLiteral(1),
-		)
-	}
-	localKindConstraint := func(identifier pgsql.Identifier) pgsql.Expression {
-		return pgd.And(
-			pgd.Equals(
-				pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs},
+			return scope
+		}
+		localSelectivePropertyConstraint = func(identifier pgsql.Identifier) pgsql.Expression {
+			return pgd.Equals(
+				pgd.PropertyLookup(identifier, "name"),
+				pgd.TextLiteral("123"),
+			)
+		}
+		localBroadPropertyConstraint = func(identifier pgsql.Identifier) pgsql.Expression {
+			return pgd.Equals(
+				pgsql.CompoundIdentifier{identifier, pgsql.ColumnProperties},
 				pgd.IntLiteral(1),
-			),
-			pgd.Equals(
-				pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs},
-				pgd.IntLiteral(2),
-			),
-		)
-	}
+			)
+		}
+		localKindConstraint = func(identifier pgsql.Identifier) pgsql.Expression {
+			return pgd.And(
+				pgd.Equals(
+					pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs},
+					pgd.IntLiteral(1),
+				),
+				pgd.Equals(
+					pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs},
+					pgd.IntLiteral(2),
+				),
+			)
+		}
+	)
 
 	t.Run("accepts selective property-backed local endpoint constraints for shortest path", func(t *testing.T) {
-		leftIdentifier := pgsql.Identifier("n0")
-		rightIdentifier := pgsql.Identifier("n1")
-		step := &TraversalStep{
-			LeftNode: &BoundIdentifier{
-				Identifier: leftIdentifier,
-			},
-			RightNode: &BoundIdentifier{
-				Identifier: rightIdentifier,
-			},
-			Expansion: &Expansion{
-				Options: ExpansionOptions{
-					FindShortestPath: true,
+		var (
+			leftIdentifier  = pgsql.Identifier("n0")
+			rightIdentifier = pgsql.Identifier("n1")
+			step            = &TraversalStep{
+				LeftNode: &BoundIdentifier{
+					Identifier: leftIdentifier,
 				},
-				PrimerNodeConstraints:   localSelectivePropertyConstraint(leftIdentifier),
-				TerminalNodeConstraints: localSelectivePropertyConstraint(rightIdentifier),
-			},
-		}
+				RightNode: &BoundIdentifier{
+					Identifier: rightIdentifier,
+				},
+				Expansion: &Expansion{
+					Options: ExpansionOptions{
+						FindShortestPath: true,
+					},
+					PrimerNodeConstraints:   localSelectivePropertyConstraint(leftIdentifier),
+					TerminalNodeConstraints: localSelectivePropertyConstraint(rightIdentifier),
+				},
+			}
+		)
 
 		canExecute, err := step.CanExecutePairAwareBidirectionalSearch(scopeWithNodeBindings(leftIdentifier, rightIdentifier))
 
@@ -195,23 +201,25 @@ func TestCanExecutePairAwareBidirectionalSearch(t *testing.T) {
 	})
 
 	t.Run("rejects broad non-kind local endpoint constraints for shortest path", func(t *testing.T) {
-		leftIdentifier := pgsql.Identifier("n0")
-		rightIdentifier := pgsql.Identifier("n1")
-		step := &TraversalStep{
-			LeftNode: &BoundIdentifier{
-				Identifier: leftIdentifier,
-			},
-			RightNode: &BoundIdentifier{
-				Identifier: rightIdentifier,
-			},
-			Expansion: &Expansion{
-				Options: ExpansionOptions{
-					FindShortestPath: true,
+		var (
+			leftIdentifier  = pgsql.Identifier("n0")
+			rightIdentifier = pgsql.Identifier("n1")
+			step            = &TraversalStep{
+				LeftNode: &BoundIdentifier{
+					Identifier: leftIdentifier,
 				},
-				PrimerNodeConstraints:   localBroadPropertyConstraint(leftIdentifier),
-				TerminalNodeConstraints: localBroadPropertyConstraint(rightIdentifier),
-			},
-		}
+				RightNode: &BoundIdentifier{
+					Identifier: rightIdentifier,
+				},
+				Expansion: &Expansion{
+					Options: ExpansionOptions{
+						FindShortestPath: true,
+					},
+					PrimerNodeConstraints:   localBroadPropertyConstraint(leftIdentifier),
+					TerminalNodeConstraints: localBroadPropertyConstraint(rightIdentifier),
+				},
+			}
+		)
 
 		canExecute, err := step.CanExecutePairAwareBidirectionalSearch(scopeWithNodeBindings(leftIdentifier, rightIdentifier))
 
@@ -220,23 +228,25 @@ func TestCanExecutePairAwareBidirectionalSearch(t *testing.T) {
 	})
 
 	t.Run("rejects pair-aware search when only one endpoint is selective", func(t *testing.T) {
-		leftIdentifier := pgsql.Identifier("n0")
-		rightIdentifier := pgsql.Identifier("n1")
-		step := &TraversalStep{
-			LeftNode: &BoundIdentifier{
-				Identifier: leftIdentifier,
-			},
-			RightNode: &BoundIdentifier{
-				Identifier: rightIdentifier,
-			},
-			Expansion: &Expansion{
-				Options: ExpansionOptions{
-					FindShortestPath: true,
+		var (
+			leftIdentifier  = pgsql.Identifier("n0")
+			rightIdentifier = pgsql.Identifier("n1")
+			step            = &TraversalStep{
+				LeftNode: &BoundIdentifier{
+					Identifier: leftIdentifier,
 				},
-				PrimerNodeConstraints:   localSelectivePropertyConstraint(leftIdentifier),
-				TerminalNodeConstraints: localBroadPropertyConstraint(rightIdentifier),
-			},
-		}
+				RightNode: &BoundIdentifier{
+					Identifier: rightIdentifier,
+				},
+				Expansion: &Expansion{
+					Options: ExpansionOptions{
+						FindShortestPath: true,
+					},
+					PrimerNodeConstraints:   localSelectivePropertyConstraint(leftIdentifier),
+					TerminalNodeConstraints: localBroadPropertyConstraint(rightIdentifier),
+				},
+			}
+		)
 
 		canExecute, err := step.CanExecutePairAwareBidirectionalSearch(scopeWithNodeBindings(leftIdentifier, rightIdentifier))
 
@@ -268,23 +278,25 @@ func TestCanExecutePairAwareBidirectionalSearch(t *testing.T) {
 	})
 
 	t.Run("accepts selective property-backed local endpoint constraints for all shortest paths", func(t *testing.T) {
-		leftIdentifier := pgsql.Identifier("n0")
-		rightIdentifier := pgsql.Identifier("n1")
-		step := &TraversalStep{
-			LeftNode: &BoundIdentifier{
-				Identifier: leftIdentifier,
-			},
-			RightNode: &BoundIdentifier{
-				Identifier: rightIdentifier,
-			},
-			Expansion: &Expansion{
-				Options: ExpansionOptions{
-					FindAllShortestPaths: true,
+		var (
+			leftIdentifier  = pgsql.Identifier("n0")
+			rightIdentifier = pgsql.Identifier("n1")
+			step            = &TraversalStep{
+				LeftNode: &BoundIdentifier{
+					Identifier: leftIdentifier,
 				},
-				PrimerNodeConstraints:   localSelectivePropertyConstraint(leftIdentifier),
-				TerminalNodeConstraints: localSelectivePropertyConstraint(rightIdentifier),
-			},
-		}
+				RightNode: &BoundIdentifier{
+					Identifier: rightIdentifier,
+				},
+				Expansion: &Expansion{
+					Options: ExpansionOptions{
+						FindAllShortestPaths: true,
+					},
+					PrimerNodeConstraints:   localSelectivePropertyConstraint(leftIdentifier),
+					TerminalNodeConstraints: localSelectivePropertyConstraint(rightIdentifier),
+				},
+			}
+		)
 
 		canExecute, err := step.CanExecutePairAwareBidirectionalSearch(scopeWithNodeBindings(leftIdentifier, rightIdentifier))
 
@@ -293,33 +305,67 @@ func TestCanExecutePairAwareBidirectionalSearch(t *testing.T) {
 	})
 
 	t.Run("rejects endpoint constraints that reference the other endpoint", func(t *testing.T) {
-		leftIdentifier := pgsql.Identifier("n0")
-		rightIdentifier := pgsql.Identifier("n1")
-		step := &TraversalStep{
-			LeftNode: &BoundIdentifier{
-				Identifier: leftIdentifier,
-			},
-			RightNode: &BoundIdentifier{
-				Identifier: rightIdentifier,
-			},
-			Expansion: &Expansion{
-				Options: ExpansionOptions{
-					FindShortestPath: true,
+		var (
+			leftIdentifier  = pgsql.Identifier("n0")
+			rightIdentifier = pgsql.Identifier("n1")
+			step            = &TraversalStep{
+				LeftNode: &BoundIdentifier{
+					Identifier: leftIdentifier,
 				},
-				PrimerNodeConstraints: pgd.And(
-					localSelectivePropertyConstraint(leftIdentifier),
-					pgd.Equals(
-						pgsql.CompoundIdentifier{leftIdentifier, pgsql.ColumnKindIDs},
-						pgsql.CompoundIdentifier{rightIdentifier, pgsql.ColumnKindIDs},
+				RightNode: &BoundIdentifier{
+					Identifier: rightIdentifier,
+				},
+				Expansion: &Expansion{
+					Options: ExpansionOptions{
+						FindShortestPath: true,
+					},
+					PrimerNodeConstraints: pgd.And(
+						localSelectivePropertyConstraint(leftIdentifier),
+						pgd.Equals(
+							pgsql.CompoundIdentifier{leftIdentifier, pgsql.ColumnKindIDs},
+							pgsql.CompoundIdentifier{rightIdentifier, pgsql.ColumnKindIDs},
+						),
 					),
-				),
-				TerminalNodeConstraints: localSelectivePropertyConstraint(rightIdentifier),
-			},
-		}
+					TerminalNodeConstraints: localSelectivePropertyConstraint(rightIdentifier),
+				},
+			}
+		)
 
 		canExecute, err := step.CanExecutePairAwareBidirectionalSearch(scopeWithNodeBindings(leftIdentifier, rightIdentifier))
 
 		require.NoError(t, err)
 		require.False(t, canExecute)
 	})
+}
+
+func TestCanMaterializeEndpointPairFilterRequiresPairAwareConstraints(t *testing.T) {
+	var (
+		leftIdentifier     = pgsql.Identifier("n0")
+		rightIdentifier    = pgsql.Identifier("n1")
+		kindOnlyConstraint = func(identifier pgsql.Identifier) pgsql.Expression {
+			return pgd.Equals(
+				pgsql.CompoundIdentifier{identifier, pgsql.ColumnKindIDs},
+				pgd.IntLiteral(1),
+			)
+		}
+		propertyConstraint = func(identifier pgsql.Identifier) pgsql.Expression {
+			return pgd.Equals(
+				pgd.PropertyLookup(identifier, "name"),
+				pgd.TextLiteral("target"),
+			)
+		}
+		step = &TraversalStep{
+			LeftNode:  &BoundIdentifier{Identifier: leftIdentifier},
+			RightNode: &BoundIdentifier{Identifier: rightIdentifier},
+		}
+	)
+
+	require.False(t, canMaterializeEndpointPairFilterForStep(step, &Expansion{
+		PrimerNodeConstraints:   kindOnlyConstraint(leftIdentifier),
+		TerminalNodeConstraints: propertyConstraint(rightIdentifier),
+	}))
+	require.True(t, canMaterializeEndpointPairFilterForStep(step, &Expansion{
+		PrimerNodeConstraints:   propertyConstraint(leftIdentifier),
+		TerminalNodeConstraints: propertyConstraint(rightIdentifier),
+	}))
 }

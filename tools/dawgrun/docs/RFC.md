@@ -84,12 +84,14 @@ This section documents the implemented baseline at the time of writing.
 
 ### 4.1 Runtime Model
 
-`dawgrun` currently runs as an interactive REPL with command parsing, persistent session history, and command-name completion.
+`dawgrun` currently runs as an interactive REPL or as a one-shot CLI command executor.
 
 - Prompt: `dawgrun >`
 - History file: `$XDG_CONFIG_HOME/dawgrun/history.txt` (or platform equivalent)
+- Config file: `$XDG_CONFIG_HOME/dawgrun/config.json` (or platform equivalent)
 - Status widget: active connection count
 - Completion: command-name matching with candidate popover
+- CLI mode: `dawgrun <command> [args...]`
 
 ### 4.2 Implemented Command Surface
 
@@ -97,7 +99,9 @@ The current command set includes:
 
 - `copy-opengraph` - copy a full graph from one named connection to another
 - `open` - open a named DAWGS-compatible connection (PostgreSQL or Neo4j)
-- `list-connections` - list currently open named backend connections
+- `list-connections` - list open and configured named backend connections
+- `load-connections` - load and open named backend connections from config
+- `save-connections` - save currently open named backend connections to config
 - `save-opengraph` - export a connection's full graph as OpenGraph JSON
 - `load-opengraph` - load OpenGraph JSON into a named connection
 - `load-db-kinds` - refresh and print kind mappings for a connection
@@ -131,7 +135,7 @@ Named connections and lazily loaded kind maps provide the basis for cross-comman
 
 - Kind ID lookup commands are PostgreSQL-specific because they depend on numeric kind IDs.
 - REPL input uses shell-style tokenization, which affects quoting behavior for Cypher string literals.
-- The tool is interactive-first; scriptability exists only in limited form through command composition and shell invocation patterns.
+- CLI mode executes a single command per process; richer command batching remains future work.
 
 ## 5. Details of the Proposal
 

@@ -73,6 +73,7 @@ func TestCypherTemplates(t *testing.T) {
 	nodeKinds, edgeKinds := cypherTemplateKinds(templateFiles)
 
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
+	ClearGraph(t, db, ctx)
 
 	for _, templateFile := range templateFiles {
 		fileName := strings.TrimSuffix(filepath.Base(templateFile.path), filepath.Ext(templateFile.path))
@@ -81,14 +82,16 @@ func TestCypherTemplates(t *testing.T) {
 				t.Run(family.Name, func(t *testing.T) {
 					for _, variant := range family.Variants {
 						t.Run(variant.Name, func(t *testing.T) {
-							cypher := renderCypherTemplate(t, family.Template, variant.Vars)
-							check := parseAssertion(t, variant.Assert)
-							tc := testCase{
-								Name:    variant.Name,
-								Cypher:  cypher,
-								Params:  mergeParams(family.Params, variant.Params),
-								Fixture: family.Fixture,
-							}
+							var (
+								cypher = renderCypherTemplate(t, family.Template, variant.Vars)
+								check  = parseAssertion(t, variant.Assert)
+								tc     = testCase{
+									Name:    variant.Name,
+									Cypher:  cypher,
+									Params:  mergeParams(family.Params, variant.Params),
+									Fixture: family.Fixture,
+								}
+							)
 
 							runWithTemplateFixture(t, ctx, db, tc, check)
 						})
@@ -197,22 +200,24 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 		t.Fatal("template cases must define an inline fixture")
 	}
 
-	queryErrorObserved := false
-	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
-		if err != nil {
-			return fmt.Errorf("creating fixture: %w", err)
-		}
+	var (
+		queryErrorObserved = false
+		err                = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
+			if err != nil {
+				return fmt.Errorf("creating fixture: %w", err)
+			}
 
-		result := tx.Query(tc.Cypher, tc.Params)
-		defer result.Close()
-		assertion.checkResult(t, result, newAssertionContext(idMap))
-		if assertion.expectQueryError {
-			queryErrorObserved = true
-		}
+			result := tx.Query(tc.Cypher, tc.Params)
+			defer result.Close()
+			assertion.checkResult(t, result, newAssertionContext(idMap))
+			if assertion.expectQueryError {
+				queryErrorObserved = true
+			}
 
-		return errFixtureRollback
-	})
+			return errFixtureRollback
+		})
+	)
 
 	if assertion.expectQueryError && queryErrorObserved && err != nil {
 		return
@@ -240,13 +245,18 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 			return fmt.Errorf("creating fixture: %w", err)
 		}
 
-		assertCtx := newAssertionContext(idMap)
-		var baselineName string
-		var baseline []string
+		var (
+			assertCtx    = newAssertionContext(idMap)
+			baselineName string
+			baseline     []string
+		)
 
 		for _, query := range family.Queries {
-			result := tx.Query(query.Cypher, query.Params)
-			collected := collectResult(t, result)
+			var (
+				result    = tx.Query(query.Cypher, query.Params)
+				collected = collectResult(t, result)
+			)
+
 			result.Close()
 
 			signature := comparisonSignature(t, collected, assertCtx, family.Compare)

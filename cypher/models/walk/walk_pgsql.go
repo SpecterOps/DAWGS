@@ -205,6 +205,12 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 			Branches: []pgsql.SyntaxNode{typedNode.Expression},
 		}, nil
 
+	case *pgsql.EdgeArrayFromPathIDs:
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: []pgsql.SyntaxNode{typedNode.PathIDs},
+		}, nil
+
 	case pgsql.FunctionCall:
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Parameters); err != nil {
 			return nil, err
@@ -247,6 +253,18 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		}
 
 	case pgsql.ArrayExpression:
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: []pgsql.SyntaxNode{typedNode.Expression},
+		}, nil
+
+	case pgsql.AllExpression:
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: []pgsql.SyntaxNode{typedNode.Expression},
+		}, nil
+
+	case *pgsql.AllExpression:
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
 			Branches: []pgsql.SyntaxNode{typedNode.Expression},
@@ -380,6 +398,11 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
 			Branches: []pgsql.SyntaxNode{typedNode.Query},
+		}, nil
+
+	case pgsql.FormattingLiteral:
+		return &Cursor[pgsql.SyntaxNode]{
+			Node: node,
 		}, nil
 
 	case pgsql.SyntaxNodeFuture:

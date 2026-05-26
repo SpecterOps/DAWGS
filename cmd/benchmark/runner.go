@@ -25,6 +25,12 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+type ExplainFunc func(ctx context.Context, tx graph.Transaction, cypher string) (*ExplainResult, error)
+
+type RunOptions struct {
+	Explain ExplainFunc
+}
+
 // Stats holds computed timing statistics for a scenario.
 type Stats struct {
 	Median time.Duration `json:"median"`
@@ -34,17 +40,26 @@ type Stats struct {
 
 // Result is one row in the report.
 type Result struct {
-	Section string          `json:"section"`
-	Dataset string          `json:"dataset"`
-	Label   string          `json:"label"`
-	Stats   Stats           `json:"stats"`
-	Samples []time.Duration `json:"samples,omitempty"`
+	Section           string          `json:"section"`
+	Dataset           string          `json:"dataset"`
+	Label             string          `json:"label"`
+	RowCount          int64           `json:"row_count"`
+	DistinctRowCount  *int64          `json:"distinct_row_count,omitempty"`
+	DuplicateRowCount *int64          `json:"duplicate_row_count,omitempty"`
+	Explain           *ExplainResult  `json:"explain,omitempty"`
+	Stats             Stats           `json:"stats"`
+	Samples           []time.Duration `json:"samples,omitempty"`
 }
 
 // runScenario executes a scenario N times and returns timing stats.
-func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int) (Result, error) {
+func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations int, options RunOptions) (Result, error) {
+	if err := validateIterations(iterations); err != nil {
+		return Result{}, err
+	}
+
 	// Warm-up: one untimed run.
-	if err := runScenarioOnce(ctx, db, s); err != nil {
+	measurement, err := runScenarioOnce(ctx, db, s)
+	if err != nil {
 		return Result{}, err
 	}
 
@@ -52,33 +67,60 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 
 	for i := range iterations {
 		start := time.Now()
-		if err := runScenarioOnce(ctx, db, s); err != nil {
+		if _, err := runScenarioOnce(ctx, db, s); err != nil {
 			return Result{}, err
 		}
 		durations[i] = time.Since(start)
 	}
 
-	return Result{
-		Section: s.Section,
-		Dataset: s.Dataset,
-		Label:   s.Label,
-		Stats:   computeStats(durations),
-		Samples: durations,
-	}, nil
+	result := Result{
+		Section:           s.Section,
+		Dataset:           s.Dataset,
+		Label:             s.Label,
+		RowCount:          measurement.RowCount,
+		DistinctRowCount:  measurement.DistinctRowCount,
+		DuplicateRowCount: measurement.DuplicateRowCount,
+		Stats:             computeStats(durations),
+		Samples:           durations,
+	}
+
+	if options.Explain != nil && s.Cypher != "" {
+		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			explain, err := options.Explain(ctx, tx, s.Cypher)
+			result.Explain = explain
+			return err
+		}); err != nil {
+			return Result{}, err
+		}
+	}
+
+	return result, nil
 }
 
-func runScenarioOnce(ctx context.Context, db graph.Database, s Scenario) error {
-	return db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		rows, err := s.Query(tx)
+func validateIterations(iterations int) error {
+	if iterations < 1 {
+		return fmt.Errorf("iterations must be at least 1")
+	}
+
+	return nil
+}
+
+func runScenarioOnce(ctx context.Context, db graph.Database, s Scenario) (Measurement, error) {
+	var measurement Measurement
+	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		nextMeasurement, err := s.Query(tx)
+		measurement = nextMeasurement
 		if err != nil {
 			return err
 		}
 
-		return validateScenarioRows(s, rows)
+		return validateScenarioRows(s, nextMeasurement.RowCount)
 	})
+
+	return measurement, err
 }
 
-func validateScenarioRows(s Scenario, actualRows int) error {
+func validateScenarioRows(s Scenario, actualRows int64) error {
 	if s.ExpectedRows == nil || *s.ExpectedRows == actualRows {
 		return nil
 	}

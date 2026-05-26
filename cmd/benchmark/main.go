@@ -25,10 +25,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 
@@ -43,16 +44,16 @@ func main() {
 		output       = flag.String("output", "", "output file (default: stdout)")
 		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
 		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
+		explain      = flag.Bool("explain", false, "capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS) for Cypher scenarios")
 		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
 		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
 		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
-		dbcfg        = drivers.DatabaseConfiguration{}
 	)
 
 	flag.Parse()
 
-	if *iterations < 1 {
-		fatal("iterations must be at least 1")
+	if err := validateIterations(*iterations); err != nil {
+		fatal("%v", err)
 	}
 	if !isReportFormat(*format) {
 		fatal("unsupported output format %q", *format)
@@ -66,17 +67,20 @@ func main() {
 		fatal("no connection string: set -connection flag or CONNECTION_STRING env var")
 	}
 
-	dbcfg.Connection = conn
-
-	ctx := context.Background()
-
-	cfg := dawgs.Config{
-		GraphQueryMemoryLimit: size.Gibibyte,
-		ConnectionString:      conn,
-	}
+	var (
+		ctx = context.Background()
+		cfg = dawgs.Config{
+			GraphQueryMemoryLimit: size.Gibibyte,
+			ConnectionString:      conn,
+		}
+	)
 
 	if *driver == pg.DriverName {
-		pool, err := pg.NewPool(dbcfg)
+		poolCfg, err := pgxpool.ParseConfig(conn)
+		if err != nil {
+			fatal("failed to parse pool configuration: %v", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			fatal("failed to create pool: %v", err)
 		}
@@ -116,6 +120,19 @@ func main() {
 		fatal("failed to assert schema: %v", err)
 	}
 
+	var runOptions RunOptions
+	if *explain {
+		if *driver != pg.DriverName {
+			fmt.Fprintf(os.Stderr, "  explain capture is only supported for pg; continuing without plans\n")
+		} else if pgDB, ok := db.(*pg.Driver); !ok {
+			fmt.Fprintf(os.Stderr, "  explain capture unavailable for %T; continuing without plans\n", db)
+		} else if defaultGraph, hasDefaultGraph := pgDB.DefaultGraph(); !hasDefaultGraph {
+			fatal("failed to resolve default graph for explain capture")
+		} else {
+			runOptions.Explain = newPostgresExplainer(pgDB.KindMapper(), defaultGraph.ID)
+		}
+	}
+
 	report := Report{
 		Driver:     *driver,
 		GitRef:     gitRef(),
@@ -146,18 +163,22 @@ func main() {
 
 		// Run scenarios
 		for _, s := range scenariosForDataset(ds, idMap) {
-			result, err := runScenario(ctx, db, s, *iterations)
+			result, err := runScenario(ctx, db, s, *iterations, runOptions)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  %s/%s failed: %v\n", s.Section, s.Label, err)
 				continue
 			}
 
 			report.Results = append(report.Results, result)
-			fmt.Fprintf(os.Stderr, "  %s/%s: median=%s p95=%s max=%s\n",
+			fmt.Fprintf(os.Stderr, "  %s/%s: rows=%d distinct=%s duplicates=%s median=%s p95=%s max=%s explain=%s\n",
 				s.Section, s.Label,
+				result.RowCount,
+				fmtOptionalInt64(result.DistinctRowCount),
+				fmtOptionalInt64(result.DuplicateRowCount),
 				fmtDuration(result.Stats.Median),
 				fmtDuration(result.Stats.P95),
 				fmtDuration(result.Stats.Max),
+				fmtExplainStatus(result.Explain),
 			)
 		}
 	}

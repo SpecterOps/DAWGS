@@ -144,7 +144,7 @@
           {"start_id": "b", "end_id": "t", "kind": "EdgeKind2"}
         ]
       },
-      "assert": "non_empty"
+      "assert": {"path_lengths": [2], "path_node_ids": [["a", "b", "t"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
     },
     {
       "name": "filter a typed node with WHERE then bind its variable-length expansion path",
@@ -168,7 +168,23 @@
         ],
         "edges": [{"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}]
       },
-      "assert": "non_empty"
+      "assert": {"path_lengths": [1], "path_node_ids": [["x", "y"]], "path_edge_kinds": [["EdgeKind1"]]}
+    },
+    {
+      "name": "reorder independent node anchor before binding a connecting path",
+      "cypher": "match (x) match (y:NodeKind2 {name: 'target'}) match p=(x)-[:EdgeKind1]->(y) return p",
+      "fixture": {
+        "nodes": [
+          {"id": "x", "kinds": ["NodeKind1"]},
+          {"id": "target", "kinds": ["NodeKind2"], "properties": {"name": "target"}},
+          {"id": "other", "kinds": ["NodeKind2"], "properties": {"name": "other"}}
+        ],
+        "edges": [
+          {"start_id": "x", "end_id": "target", "kind": "EdgeKind1"},
+          {"start_id": "x", "end_id": "other", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"path_lengths": [1], "path_node_ids": [["x", "target"]], "path_edge_kinds": [["EdgeKind1"]]}
     },
     {
       "name": "match a node with an inline property map then bind its outgoing path to a second inline-map node",
@@ -244,6 +260,33 @@
       "assert": {
         "path_node_ids": [["gpo-enforced", "base-enforced"], ["gpo-enforced-blocked", "ou-enforced-first", "ou-enforced-blocked", "base-enforced-blocked"], ["gpo-open", "ou-open", "base-open"]],
         "path_edge_kinds": [["GPLink"], ["GPLink", "Contains", "Contains"], ["GPLink", "Contains"]]
+      }
+    },
+    {
+      "name": "filter a bound expansion path using tail relationship types",
+      "cypher": "MATCH p=(:GPO)-[r:GPLink|Contains*1..]->(:Base) WHERE NONE(x IN TAIL(r) WHERE NOT type(x) = 'Contains') RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "gpo-direct", "kinds": ["GPO"]},
+          {"id": "base-direct", "kinds": ["Base"]},
+          {"id": "gpo-contained", "kinds": ["GPO"]},
+          {"id": "ou-contained", "kinds": ["OU"]},
+          {"id": "base-contained", "kinds": ["Base"]},
+          {"id": "gpo-bad-tail", "kinds": ["GPO"]},
+          {"id": "ou-bad-tail", "kinds": ["OU"]},
+          {"id": "base-bad-tail", "kinds": ["Base"]}
+        ],
+        "edges": [
+          {"start_id": "gpo-direct", "end_id": "base-direct", "kind": "GPLink"},
+          {"start_id": "gpo-contained", "end_id": "ou-contained", "kind": "GPLink"},
+          {"start_id": "ou-contained", "end_id": "base-contained", "kind": "Contains"},
+          {"start_id": "gpo-bad-tail", "end_id": "ou-bad-tail", "kind": "GPLink"},
+          {"start_id": "ou-bad-tail", "end_id": "base-bad-tail", "kind": "GPLink"}
+        ]
+      },
+      "assert": {
+        "path_node_ids": [["gpo-direct", "base-direct"], ["gpo-contained", "ou-contained", "base-contained"]],
+        "path_edge_kinds": [["GPLink"], ["GPLink", "Contains"]]
       }
     }
   ]

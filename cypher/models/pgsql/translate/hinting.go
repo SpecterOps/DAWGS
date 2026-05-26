@@ -417,7 +417,11 @@ func applyTypeFunctionLikeTypeHints(kindMapper *contextAwareKindMapper, expressi
 				typedROperand.CastType = lOperandTypeHint
 				expression.ROperand = typedROperand
 			} else if !lOperandTypeHint.IsKnown() {
-				expression.LOperand = pgsql.NewTypeCast(expression.LOperand, typedROperand.CastType.ArrayBaseType())
+				if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression.LOperand); isPropertyLookup && typedROperand.CastType == pgsql.Text {
+					expression.LOperand = rewritePropertyLookupOperator(propertyLookup, pgsql.Text)
+				} else {
+					expression.LOperand = pgsql.NewTypeCast(expression.LOperand, typedROperand.CastType.ArrayBaseType())
+				}
 			} else if pgsql.OperatorIsComparator(expression.Operator) && !typedROperand.CastType.IsComparable(lOperandTypeHint, expression.Operator) {
 				return newFunctionCallComparatorError(typedROperand, expression.Operator, lOperandTypeHint)
 			}
@@ -439,5 +443,9 @@ func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expressi
 		return err
 	}
 
-	return applyTypeFunctionLikeTypeHints(kindMapper, expression)
+	if err := applyTypeFunctionLikeTypeHints(kindMapper, expression); err != nil {
+		return err
+	}
+
+	return nil
 }

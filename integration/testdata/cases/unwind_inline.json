@@ -68,6 +68,110 @@
         "edges": []
       },
       "assert": {"row_values": [["NodeKind1", 1], ["NodeKind2", 1]]}
+    },
+    {
+      "name": "unwind labels and aggregate all nodes by return alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label, count(n) AS count",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["label", "count"],
+        "row_values": [["NodeKind1", 2], ["NodeKind2", 1]]
+      }
+    },
+    {
+      "name": "unwind labels and order aggregate count by alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label, count(n) AS count ORDER BY count DESC",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["label", "count"],
+        "ordered_row_values": [["NodeKind1", 2], ["NodeKind2", 1]]
+      }
+    },
+    {
+      "name": "unwind labels and order label by return alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label, count(n) AS count ORDER BY label",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["label", "count"],
+        "ordered_row_values": [["NodeKind1", 1], ["NodeKind2", 2]]
+      }
+    },
+    {
+      "name": "unwind labels and order explicit label alias",
+      "cypher": "MATCH (n) UNWIND labels(n) AS label RETURN label AS kind, count(n) AS count ORDER BY kind",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1", "NodeKind2"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["kind", "count"],
+        "ordered_row_values": [["NodeKind1", 2], ["NodeKind2", 1]]
+      }
+    },
+    {
+      "name": "unwind concatenated collected names from two matches",
+      "cypher": "MATCH (au:AZUser) WHERE au.name CONTAINS 'ADMIN' MATCH (u:User) WHERE u.name CONTAINS 'ADMIN' WITH collect(u.name) + collect(au.azname) AS temp UNWIND temp AS usernames RETURN usernames",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["AZUser"], "properties": {"name": "ADMIN_ONE", "azname": "az-alpha"}},
+          {"id": "b", "kinds": ["User"], "properties": {"name": "ADMIN_TWO"}},
+          {"id": "c", "kinds": ["User"], "properties": {"name": "plain"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["ADMIN_TWO", "az-alpha"]}
+    },
+    {
+      "name": "unwind collected names concatenated with a literal array",
+      "cypher": "MATCH (n:NodeKind1) WITH collect(n.name) + ['tail'] AS names UNWIND names AS name RETURN name",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "alpha"}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"name": "beta"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": ["alpha", "beta", "tail"]}
+    },
+    {
+      "name": "unwind barrier feeds an optimized expansion predicate",
+      "cypher": "WITH ['unwind-expansion-dst'] AS names UNWIND names AS name MATCH p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) WHERE src.name = 'unwind-expansion-src' AND dst.name = name RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "unwind-expansion-src"}},
+          {"id": "mid", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"name": "unwind-expansion-dst"}},
+          {"id": "decoy", "kinds": ["NodeKind2"], "properties": {"name": "unwind-expansion-decoy"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid", "kind": "EdgeKind1"},
+          {"start_id": "mid", "end_id": "dst", "kind": "EdgeKind2"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"path_node_ids": [["src", "mid", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2"]]}
     }
   ]
 }
