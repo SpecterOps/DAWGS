@@ -18,43 +18,24 @@ package integration
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
-	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/testutil/integrationharness"
 	"github.com/specterops/dawgs/opengraph"
-	"github.com/specterops/dawgs/util/size"
-
-	"github.com/specterops/dawgs/drivers/neo4j"
 )
 
 var (
-	localDatasetFlag = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
+	localDatasetFlag = integrationharness.LocalDatasetFlag
 )
 
 // driverFromConnStr returns the dawgs driver name based on the connection string scheme.
 func driverFromConnStr(connStr string) (string, error) {
-	u, err := url.Parse(connStr)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse connection string: %w", err)
-	}
-
-	switch u.Scheme {
-	case "postgresql", "postgres":
-		return pg.DriverName, nil
-	case neo4j.DriverName, "neo4j+s", "neo4j+ssc":
-		return neo4j.DriverName, nil
-	default:
-		return "", fmt.Errorf("unknown connection string scheme %q", u.Scheme)
-	}
+	return integrationharness.DriverFromConnectionString(connStr)
 }
 
 // SetupDB opens a database connection for the selected driver, asserts a schema
@@ -63,7 +44,7 @@ func driverFromConnStr(connStr string) (string, error) {
 func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
-	return setupDB(t, true, nil, nil, datasets...)
+	return setupDB(t, integrationharness.CleanupGraph, nil, nil, datasets...)
 }
 
 // SetupDBWithKinds opens a database connection like SetupDB, then extends the
@@ -71,7 +52,7 @@ func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context)
 func SetupDBWithKinds(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
-	return setupDB(t, true, extraNodeKinds, extraEdgeKinds, datasets...)
+	return setupDB(t, integrationharness.CleanupGraph, extraNodeKinds, extraEdgeKinds, datasets...)
 }
 
 // SetupDBWithKindsNoGraphCleanup opens a database connection like SetupDBWithKinds
@@ -80,72 +61,21 @@ func SetupDBWithKinds(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, 
 func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
-	return setupDB(t, false, extraNodeKinds, extraEdgeKinds, datasets...)
+	return setupDB(t, integrationharness.CloseOnly, extraNodeKinds, extraEdgeKinds, datasets...)
 }
 
-func setupDB(t *testing.T, cleanupGraph bool, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+func setupDB(t *testing.T, cleanupMode integrationharness.CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
-	ctx := context.Background()
-
-	connStr := os.Getenv("CONNECTION_STRING")
-	if connStr == "" {
-		t.Fatal("CONNECTION_STRING env var is not set")
-	}
-
-	driver, err := driverFromConnStr(connStr)
-	if err != nil {
-		t.Fatalf("Failed to detect driver: %v", err)
-	}
-
-	cfg := dawgs.Config{
-		GraphQueryMemoryLimit: size.Gibibyte,
-		ConnectionString:      connStr,
-	}
-
-	dbcfg := drivers.DatabaseConfiguration{}
-	dbcfg.Connection = connStr
-
-	if driver == pg.DriverName {
-		pool, err := pg.NewPool(dbcfg)
-		if err != nil {
-			t.Fatalf("Failed to create PG pool: %v", err)
-		}
-		cfg.Pool = pool
-	}
-
-	db, err := dawgs.Open(ctx, driver, cfg)
-	if err != nil {
-		t.Fatalf("Failed to open database: %v", err)
-	}
-
-	nodeKinds, edgeKinds := collectKinds(t, datasets)
-	nodeKinds = nodeKinds.Add(extraNodeKinds...)
-	edgeKinds = edgeKinds.Add(extraEdgeKinds...)
-
-	schema := graph.Schema{
-		Graphs: []graph.Graph{{
-			Name:  "integration_test",
-			Nodes: nodeKinds,
-			Edges: edgeKinds,
-		}},
-		DefaultGraph: graph.Graph{Name: "integration_test"},
-	}
-
-	if err := db.AssertSchema(ctx, schema); err != nil {
-		t.Fatalf("Failed to assert schema: %v", err)
-	}
-
-	t.Cleanup(func() {
-		if cleanupGraph {
-			_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-				return tx.Nodes().Delete()
-			})
-		}
-		db.Close(ctx)
+	session := integrationharness.Open(t, integrationharness.Options{
+		CleanupMode:    cleanupMode,
+		Datasets:       datasets,
+		ExtraNodeKinds: extraNodeKinds,
+		ExtraEdgeKinds: extraEdgeKinds,
+		DatasetPath:    datasetPath,
 	})
 
-	return db, ctx
+	return session.DB, session.Ctx
 }
 
 // collectKinds parses the given datasets and returns the union of all node and edge kinds.
