@@ -1,6 +1,7 @@
 package walk_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
@@ -382,6 +383,208 @@ func TestCypherWalkSemanticSkipsDeclarationOnlyFields(t *testing.T) {
 	}
 }
 
+func TestCypherWalkVisitsSemanticChildrenByNodeType(t *testing.T) {
+	testCases := map[string]struct {
+		node       cypher.SyntaxNode
+		visited    []string
+		notVisited []string
+	}{
+		"kind matcher visits reference only": {
+			node: &cypher.KindMatcher{
+				Reference: cypher.NewVariableWithSymbol("node"),
+				Kinds:     graph.Kinds{graph.StringKind("NodeKind")},
+			},
+			visited:    []string{"variable:node"},
+			notVisited: []string{"kind:NodeKind"},
+		},
+		"property lookup visits atom": {
+			node:       cypher.NewPropertyLookup("node", "name"),
+			visited:    []string{"variable:node"},
+			notVisited: []string{"variable:name"},
+		},
+		"map item visits value": {
+			node: &cypher.MapItem{
+				Key:   "name",
+				Value: cypher.NewVariableWithSymbol("value"),
+			},
+			visited: []string{"variable:value"},
+		},
+		"properties parameter visits parameter only": {
+			node: &cypher.Properties{
+				Parameter: cypher.NewParameter("props", map[string]any{}),
+				Map: cypher.MapLiteral{
+					"name": cypher.NewVariableWithSymbol("name"),
+				},
+			},
+			visited:    []string{"parameter:props"},
+			notVisited: []string{"mapitem:name", "variable:name"},
+		},
+		"properties map visits map items": {
+			node: &cypher.Properties{
+				Map: cypher.MapLiteral{
+					"name": cypher.NewVariableWithSymbol("name"),
+				},
+			},
+			visited: []string{"mapitem:name", "variable:name"},
+		},
+		"list literal visits expressions": {
+			node: &cypher.ListLiteral{
+				cypher.NewVariableWithSymbol("left"),
+				cypher.NewVariableWithSymbol("right"),
+			},
+			visited: []string{"variable:left", "variable:right"},
+		},
+		"create visits pattern expressions": {
+			node: &cypher.Create{
+				Pattern: []*cypher.PatternPart{{
+					PatternElements: []*cypher.PatternElement{{
+						Element: &cypher.NodePattern{
+							Variable: cypher.NewVariableWithSymbol("node"),
+							Properties: &cypher.Properties{
+								Map: cypher.MapLiteral{
+									"name": cypher.NewVariableWithSymbol("name"),
+								},
+							},
+						},
+					}},
+				}},
+			},
+			visited:    []string{"mapitem:name", "variable:name"},
+			notVisited: []string{"variable:node"},
+		},
+		"unwind visits source and binding variable": {
+			node: &cypher.Unwind{
+				Expression: cypher.NewVariableWithSymbol("items"),
+				Variable:   cypher.NewVariableWithSymbol("item"),
+			},
+			visited: []string{"variable:items", "variable:item"},
+		},
+		"remove item visits property only": {
+			node: &cypher.RemoveItem{
+				KindMatcher: &cypher.KindMatcher{
+					Reference: cypher.NewVariableWithSymbol("node"),
+				},
+				Property: cypher.NewPropertyLookup("target", "name"),
+			},
+			visited:    []string{"variable:target"},
+			notVisited: []string{"variable:node"},
+		},
+		"set item visits both sides": {
+			node: &cypher.SetItem{
+				Left:  cypher.NewPropertyLookup("node", "name"),
+				Right: cypher.NewVariableWithSymbol("value"),
+			},
+			visited: []string{"variable:node", "variable:value"},
+		},
+		"quantifier visits filter expression semantics": {
+			node: &cypher.Quantifier{
+				Filter: &cypher.FilterExpression{
+					Specifier: &cypher.IDInCollection{
+						Variable:   cypher.NewVariableWithSymbol("item"),
+						Expression: cypher.NewVariableWithSymbol("items"),
+					},
+					Where: &cypher.Where{},
+				},
+			},
+			visited:    []string{"variable:items"},
+			notVisited: []string{"variable:item"},
+		},
+		"function invocation visits arguments": {
+			node: cypher.NewSimpleFunctionInvocation(
+				"coalesce",
+				cypher.NewVariableWithSymbol("left"),
+				cypher.NewVariableWithSymbol("right"),
+			),
+			visited: []string{"variable:left", "variable:right"},
+		},
+		"projection visits items order skip and limit nodes": {
+			node: &cypher.Projection{
+				Items: []cypher.Expression{
+					&cypher.ProjectionItem{
+						Expression: cypher.NewVariableWithSymbol("value"),
+						Alias:      cypher.NewVariableWithSymbol("alias"),
+					},
+				},
+				Order: &cypher.Order{
+					Items: []*cypher.SortItem{{
+						Expression: cypher.NewVariableWithSymbol("ordered"),
+					}},
+				},
+				Skip:  &cypher.Skip{Value: cypher.NewLiteral(10, false)},
+				Limit: &cypher.Limit{Value: cypher.NewLiteral(20, false)},
+			},
+			visited:    []string{"variable:value", "variable:ordered"},
+			notVisited: []string{"variable:alias", "literal:10", "literal:20"},
+		},
+		"arithmetic expression visits operators and operands": {
+			node: &cypher.ArithmeticExpression{
+				Left: cypher.NewVariableWithSymbol("left"),
+				Partials: []*cypher.PartialArithmeticExpression{{
+					Operator: cypher.OperatorAdd,
+					Right:    cypher.NewVariableWithSymbol("right"),
+				}},
+			},
+			visited: []string{"variable:left", "operator:+", "variable:right"},
+		},
+		"comparison visits right operands without operators": {
+			node: &cypher.Comparison{
+				Left: cypher.NewVariableWithSymbol("left"),
+				Partials: []*cypher.PartialComparison{{
+					Operator: cypher.OperatorEquals,
+					Right:    cypher.NewVariableWithSymbol("right"),
+				}},
+			},
+			visited:    []string{"variable:left", "variable:right"},
+			notVisited: []string{"operator:="},
+		},
+		"merge visits pattern and actions": {
+			node: &cypher.Merge{
+				PatternPart: &cypher.PatternPart{
+					PatternElements: []*cypher.PatternElement{{
+						Element: &cypher.NodePattern{
+							Properties: &cypher.Properties{
+								Map: cypher.MapLiteral{
+									"id": cypher.NewVariableWithSymbol("id"),
+								},
+							},
+						},
+					}},
+				},
+				MergeActions: []*cypher.MergeAction{{
+					Set: &cypher.Set{
+						Items: []*cypher.SetItem{{
+							Left:  cypher.NewPropertyLookup("node", "name"),
+							Right: cypher.NewVariableWithSymbol("name"),
+						}},
+					},
+				}},
+			},
+			visited: []string{"mapitem:id", "variable:id", "variable:node", "variable:name"},
+		},
+		"unary add or subtract visits right operand only": {
+			node: &cypher.UnaryAddOrSubtractExpression{
+				Operator: cypher.OperatorSubtract,
+				Right:    cypher.NewVariableWithSymbol("value"),
+			},
+			visited:    []string{"variable:value"},
+			notVisited: []string{"operator:-"},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			visited := collectCypherWalkLabels(t, testCase.node, walk.Cypher)
+
+			for _, expectedLabel := range testCase.visited {
+				require.Contains(t, visited, expectedLabel)
+			}
+			for _, unexpectedLabel := range testCase.notVisited {
+				require.NotContains(t, visited, unexpectedLabel)
+			}
+		})
+	}
+}
+
 func TestCypherStructuralWalkVisitsDeclarationAndMetadataFields(t *testing.T) {
 	testCases := map[string]struct {
 		node       cypher.SyntaxNode
@@ -547,6 +750,41 @@ func TestCypherStructuralWalkVisitsDeclarationAndMetadataFields(t *testing.T) {
 			require.Equal(t, testCase.numMapNode, visitedMapNodes)
 		})
 	}
+}
+
+func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func(cypher.SyntaxNode, walk.Visitor[cypher.SyntaxNode]) error) []string {
+	t.Helper()
+
+	var visited []string
+	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		switch typedNode := node.(type) {
+		case *cypher.Variable:
+			visited = append(visited, "variable:"+typedNode.Symbol)
+
+		case *cypher.Parameter:
+			visited = append(visited, "parameter:"+typedNode.Symbol)
+
+		case *cypher.MapItem:
+			visited = append(visited, "mapitem:"+typedNode.Key)
+
+		case *cypher.Literal:
+			visited = append(visited, fmt.Sprintf("literal:%v", typedNode.Value))
+
+		case cypher.Operator:
+			visited = append(visited, "operator:"+typedNode.String())
+
+		case graph.Kinds:
+			for _, kind := range typedNode {
+				visited = append(visited, "kind:"+kind.String())
+			}
+
+		case *cypher.PatternRange:
+			visited = append(visited, "range")
+		}
+	})
+
+	require.NoError(t, walkFunc(node, visitor))
+	return visited
 }
 
 func TestCypherWalkSupportsKnownSyntaxNodeTypes(t *testing.T) {
