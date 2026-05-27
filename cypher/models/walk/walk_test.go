@@ -1,6 +1,7 @@
 package walk_test
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -296,6 +297,70 @@ func TestSimpleVisitorConsumeByOrder(t *testing.T) {
 		require.NoError(t, walk.Cypher(expression, visitor))
 		require.Equal(t, []string{"left", "right", "disjunction"}, visited)
 	})
+}
+
+func TestGenericSetDoneStopsWithoutUnwindingExit(t *testing.T) {
+	t.Run("enter", func(t *testing.T) {
+		root := &genericWalkTestNode{
+			name: "root",
+			children: []*genericWalkTestNode{
+				{name: "child"},
+			},
+		}
+		visitor := newRecordingGenericWalkVisitor()
+
+		visitor.onEnter = func(node *genericWalkTestNode) {
+			if node.name == "root" {
+				visitor.SetDone()
+			}
+		}
+
+		require.NoError(t, walk.Generic(root, visitor, newGenericWalkTestCursor))
+		require.Equal(t, []string{"enter:root"}, visitor.events)
+	})
+
+	t.Run("visit", func(t *testing.T) {
+		root := &genericWalkTestNode{
+			name: "root",
+			children: []*genericWalkTestNode{
+				{name: "left"},
+				{name: "right"},
+			},
+		}
+		visitor := newRecordingGenericWalkVisitor()
+
+		visitor.onVisit = func(node *genericWalkTestNode) {
+			if node.name == "root" {
+				visitor.SetDone()
+			}
+		}
+
+		require.NoError(t, walk.Generic(root, visitor, newGenericWalkTestCursor))
+		require.Equal(t, []string{"enter:root", "enter:left", "exit:left", "visit:root"}, visitor.events)
+	})
+}
+
+func TestGenericSetErrorStopsAndReturnsJoinedError(t *testing.T) {
+	root := &genericWalkTestNode{
+		name: "root",
+		children: []*genericWalkTestNode{
+			{name: "child"},
+		},
+	}
+	visitor := newRecordingGenericWalkVisitor()
+
+	visitor.onEnter = func(node *genericWalkTestNode) {
+		if node.name == "root" {
+			visitor.SetError(errors.New("first failure"))
+			visitor.SetErrorf("second %s", "failure")
+		}
+	}
+
+	err := walk.Generic(root, visitor, newGenericWalkTestCursor)
+	require.ErrorContains(t, err, "first failure")
+	require.ErrorContains(t, err, "second failure")
+	require.True(t, visitor.Done())
+	require.Equal(t, []string{"enter:root"}, visitor.events)
 }
 
 func TestCypherWalkSemanticSkipsDeclarationOnlyFields(t *testing.T) {
@@ -785,6 +850,55 @@ func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func
 
 	require.NoError(t, walkFunc(node, visitor))
 	return visited
+}
+
+type genericWalkTestNode struct {
+	name     string
+	children []*genericWalkTestNode
+}
+
+type recordingGenericWalkVisitor struct {
+	walk.Visitor[*genericWalkTestNode]
+
+	events  []string
+	onEnter func(*genericWalkTestNode)
+	onVisit func(*genericWalkTestNode)
+	onExit  func(*genericWalkTestNode)
+}
+
+func newRecordingGenericWalkVisitor() *recordingGenericWalkVisitor {
+	return &recordingGenericWalkVisitor{
+		Visitor: walk.NewVisitor[*genericWalkTestNode](),
+	}
+}
+
+func (s *recordingGenericWalkVisitor) Enter(node *genericWalkTestNode) {
+	s.events = append(s.events, "enter:"+node.name)
+	if s.onEnter != nil {
+		s.onEnter(node)
+	}
+}
+
+func (s *recordingGenericWalkVisitor) Visit(node *genericWalkTestNode) {
+	s.events = append(s.events, "visit:"+node.name)
+	if s.onVisit != nil {
+		s.onVisit(node)
+	}
+}
+
+func (s *recordingGenericWalkVisitor) Exit(node *genericWalkTestNode) {
+	s.events = append(s.events, "exit:"+node.name)
+	if s.onExit != nil {
+		s.onExit(node)
+	}
+}
+
+func newGenericWalkTestCursor(node *genericWalkTestNode) (*walk.Cursor[*genericWalkTestNode], error) {
+	cursor := &walk.Cursor[*genericWalkTestNode]{
+		Node: node,
+	}
+	cursor.AddBranches(node.children...)
+	return cursor, nil
 }
 
 func TestCypherWalkSupportsKnownSyntaxNodeTypes(t *testing.T) {

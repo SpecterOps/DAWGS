@@ -12,3 +12,5 @@ When adding a Cypher AST element, update both walker modes deliberately:
 - Add tests that assert actual visited children, not only that cursor construction succeeds.
 
 Nil handling is part of the contract. Optional nil pointer children should be skipped without panics, but valid empty syntax nodes such as empty map literals, empty list literals, empty kind lists, and empty identifiers should still be visitable when they are the traversal root.
+
+Visitor cancellation is immediate. `SetDone`, `SetError`, and `SetErrorf` stop traversal after the current callback returns; the walker does not unwind pending `Exit` callbacks for nodes still on the traversal stack. Visitors that need balanced enter/exit state should use `Consume` for subtree pruning and reserve cancellation/error APIs for terminal traversal.
