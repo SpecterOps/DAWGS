@@ -62,6 +62,28 @@ go test -covermode=count -coverprofile=.coverage/walk-upstream.cover ./cypher/mo
 
 `HEAD` does not lower `cypher/models/walk` package coverage.
 
+## PR Description Notes
+
+Behavior changes to call out:
+
+- `cypher.MapLiteral.Keys()` now returns keys in ascending lexical order. It previously returned descending order.
+- `walk.Cypher` now traverses `*cypher.ExclusiveDisjunction`; translator and collector visitors now see XOR operand
+  sub-trees.
+- `walk.Generic` treats nil roots and nil optional branches as skipped traversal inputs instead of reporting a cursor
+  negotiation error.
+- `cancelableVisitorHandler.SetError` now accumulates repeated errors with `errors.Join` in a left-associated chain
+  instead of storing a flat slice before joining.
+
+New exported APIs:
+
+- `walk.CypherStructural`
+- `walk.NewSimpleVisitorWithOrder`
+- `walk.OrderInfix`
+- `walk.OrderPostfix`
+- `cypher.MapLiteral.ForEachItem`
+
+`README.md` has build/test/metric workflow guidance but no walker API summary, so no README API update was needed.
+
 ## Commands
 
 - `go test ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`
