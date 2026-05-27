@@ -298,6 +298,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 			s.treeTranslator.VisitOperator(pgsql.OperatorOr)
 		}
 
+	case *cypher.ExclusiveDisjunction:
+		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+			s.treeTranslator.VisitOperator(pgsql.OperatorNotEquals)
+		}
+
 	case *cypher.Conjunction:
 		for idx := 0; idx < typedExpression.Len()-1; idx++ {
 			s.treeTranslator.VisitOperator(pgsql.OperatorAnd)
@@ -555,6 +560,13 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	case *cypher.Disjunction:
 		for idx := 0; idx < typedExpression.Len()-1; idx++ {
 			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorOr); err != nil {
+				s.SetError(err)
+			}
+		}
+
+	case *cypher.ExclusiveDisjunction:
+		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorNotEquals); err != nil {
 				s.SetError(err)
 			}
 		}

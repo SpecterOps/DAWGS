@@ -12,6 +12,13 @@ This records the validation pass for the Cypher AST tooling test-hardening work.
 - Integration validation will be run separately for the Neo4j and PostgreSQL connection strings provided for this
   remediation pass.
 
+## XOR Traversal Audit
+
+`walk.Cypher` consumers in `cypher/models/pgsql/translate`, `cypher/models/pgsql/optimize`, `query/builder.go`, and
+`query/neo4j` were audited for the newly reachable `*cypher.ExclusiveDisjunction` node. The PostgreSQL translator
+needed an explicit XOR translation path; it now lowers XOR expression-list joins to PostgreSQL boolean inequality.
+Reference and source collectors operate on descendant variables and tolerate the newly visible operand sub-trees.
+
 ## Commands
 
 - `go test ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`
