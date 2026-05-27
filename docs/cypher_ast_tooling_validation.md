@@ -19,6 +19,33 @@ This records the validation pass for the Cypher AST tooling test-hardening work.
 needed an explicit XOR translation path; it now lowers XOR expression-list joins to PostgreSQL boolean inequality.
 Reference and source collectors operate on descendant variables and tolerate the newly visible operand sub-trees.
 
+## Walker Benchmark Comparison
+
+Benchmarks were captured with:
+
+```bash
+go test -run '^$' -bench 'BenchmarkCypher' -benchmem -count=10 ./cypher/models/walk
+```
+
+`upstream/main` does not have `walk.CypherStructural`, so the upstream worktree used the branch benchmark file with the
+structural benchmark omitted. The comparable semantic walker results were:
+
+| Benchmark | `upstream/main` | `HEAD` | Delta |
+| --- | ---: | ---: | ---: |
+| `CypherWalkLargeProjection-20` | 69.72 us/op | 83.54 us/op | +19.83% |
+| `CypherWalkLargeMapLiteral-20` | 43.28 ns/op | 141014 ns/op | +325680.29% |
+
+The map-literal number is not an apples-to-apples traversal comparison: `HEAD` visits map items and values, while
+`upstream/main` treats the same map literal as a near-leaf. The projection benchmark remains slower after replacing the
+post-dequeue reflective nil check with cursor-constructor nil filtering and a leaf fast path in `Generic`; allocations
+are effectively flat at 74.55 KiB/op on `upstream/main` vs. 74.41 KiB/op on `HEAD`.
+
+The branch-only structural benchmark measured:
+
+| Benchmark | `HEAD` |
+| --- | ---: |
+| `CypherStructuralWalkLongPattern-20` | 70.19 us/op, 49.02 KiB/op, 1288 allocs/op |
+
 ## Commands
 
 - `go test ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`

@@ -217,7 +217,17 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 			}
 		}
 
-		if consumed := visitor.WasConsumed(); consumed || !nextNode.HasNext() {
+		if !nextNode.HasNext() {
+			visitor.Exit(nextNode.Node)
+
+			if err := visitor.Error(); err != nil {
+				return err
+			}
+
+			// Clear any consume flag set by Enter or Exit before visiting the next sibling.
+			visitor.WasConsumed()
+			stack = stack[0 : len(stack)-1]
+		} else if visitor.WasConsumed() {
 			visitor.Exit(nextNode.Node)
 
 			if err := visitor.Error(); err != nil {
@@ -253,12 +263,7 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 				}
 			}
 
-			nextBranch := nextNode.NextBranch()
-			if isNilNode(nextBranch) {
-				continue
-			}
-
-			if cursor, err := cursorConstructor(nextBranch); err != nil {
+			if cursor, err := cursorConstructor(nextNode.NextBranch()); err != nil {
 				return err
 			} else {
 				stack = append(stack, cursor)
