@@ -738,6 +738,86 @@ func TestCypherWalkSemanticTraversalSequences(t *testing.T) {
 	}
 }
 
+func TestCypherWalkQueryAndClauseTraversalSequences(t *testing.T) {
+	query := &cypher.MultiPartQuery{
+		Parts: []*cypher.MultiPartQueryPart{{
+			ReadingClauses: []*cypher.ReadingClause{{
+				Match: &cypher.Match{
+					Pattern: []*cypher.PatternPart{{
+						PatternElements: []*cypher.PatternElement{{
+							Element: &cypher.NodePattern{
+								Variable: cypher.NewVariableWithSymbol("read_node"),
+								Properties: &cypher.Properties{
+									Map: cypher.MapLiteral{
+										"read": cypher.NewVariableWithSymbol("read_value"),
+									},
+								},
+							},
+						}},
+					}},
+					Where: newCypherWhere(cypher.NewVariableWithSymbol("match_where")),
+				},
+			}},
+			UpdatingClauses: []*cypher.UpdatingClause{
+				cypher.NewUpdatingClause(&cypher.Set{
+					Items: []*cypher.SetItem{{
+						Left:  cypher.NewPropertyLookup("update_node", "name"),
+						Right: cypher.NewVariableWithSymbol("update_value"),
+					}},
+				}),
+			},
+			With: &cypher.With{
+				Projection: &cypher.Projection{
+					Items: []cypher.Expression{
+						&cypher.ProjectionItem{
+							Expression: cypher.NewVariableWithSymbol("with_projection"),
+						},
+					},
+				},
+				Where: newCypherWhere(cypher.NewVariableWithSymbol("with_where")),
+			},
+		}},
+		SinglePartQuery: &cypher.SinglePartQuery{
+			ReadingClauses: []*cypher.ReadingClause{{
+				Unwind: &cypher.Unwind{
+					Expression: cypher.NewVariableWithSymbol("final_items"),
+					Variable:   cypher.NewVariableWithSymbol("final_item"),
+				},
+			}},
+			UpdatingClauses: []cypher.Expression{
+				cypher.NewUpdatingClause(&cypher.Remove{
+					Items: []*cypher.RemoveItem{
+						cypher.RemoveProperty(cypher.NewPropertyLookup("remove_node", "name")),
+					},
+				}),
+			},
+			Return: &cypher.Return{
+				Projection: &cypher.Projection{
+					Items: []cypher.Expression{
+						&cypher.ProjectionItem{
+							Expression: cypher.NewVariableWithSymbol("returned"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, []string{
+		"mapitem:read",
+		"variable:read_value",
+		"variable:match_where",
+		"variable:update_node",
+		"variable:update_value",
+		"variable:with_projection",
+		"variable:with_where",
+		"variable:final_items",
+		"variable:final_item",
+		"variable:remove_node",
+		"variable:returned",
+	}, collectCypherWalkLabels(t, query, walk.Cypher))
+}
+
 func TestCypherStructuralWalkVisitsDeclarationAndMetadataFields(t *testing.T) {
 	testCases := map[string]struct {
 		node       cypher.SyntaxNode
