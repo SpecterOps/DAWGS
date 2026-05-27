@@ -3,6 +3,7 @@ package walk
 import (
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -160,8 +161,27 @@ func (s *Cursor[N]) NextBranch() N {
 	return nextBranch
 }
 
+func isNilNode[N any](node N) bool {
+	rawNode := any(node)
+	if rawNode == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(rawNode)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
 func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (*Cursor[E], error)) error {
 	var stack []*Cursor[E]
+
+	if isNilNode(node) {
+		return nil
+	}
 
 	if cursor, err := cursorConstructor(node); err != nil {
 		return err
@@ -183,28 +203,46 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 			}
 		}
 
-		if nextNode.HasNext() && !visitor.WasConsumed() {
-			if !isFirstVisit {
-				visitor.Visit(nextNode.Node)
-
-				if err := visitor.Error(); err != nil {
-					return err
-				}
-			}
-
-			if cursor, err := cursorConstructor(nextNode.NextBranch()); err != nil {
-				return err
-			} else {
-				stack = append(stack, cursor)
-			}
-		} else {
+		if consumed := visitor.WasConsumed(); consumed || !nextNode.HasNext() {
 			visitor.Exit(nextNode.Node)
 
 			if err := visitor.Error(); err != nil {
 				return err
 			}
 
+			visitor.WasConsumed()
 			stack = stack[0 : len(stack)-1]
+		} else {
+			if !isFirstVisit {
+				visitor.Visit(nextNode.Node)
+
+				if err := visitor.Error(); err != nil {
+					return err
+				}
+
+				if visitor.WasConsumed() {
+					visitor.Exit(nextNode.Node)
+
+					if err := visitor.Error(); err != nil {
+						return err
+					}
+
+					visitor.WasConsumed()
+					stack = stack[0 : len(stack)-1]
+					continue
+				}
+			}
+
+			nextBranch := nextNode.NextBranch()
+			if isNilNode(nextBranch) {
+				continue
+			}
+
+			if cursor, err := cursorConstructor(nextBranch); err != nil {
+				return err
+			} else {
+				stack = append(stack, cursor)
+			}
 		}
 	}
 

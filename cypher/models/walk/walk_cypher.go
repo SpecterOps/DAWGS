@@ -15,9 +15,21 @@ func cypherSyntaxNodeSliceTypeConvert[F any, FS []F](fs FS) ([]cypher.SyntaxNode
 func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], error) {
 	switch typedNode := node.(type) {
 	// Types with no AST branches
-	case *cypher.RangeQuantifier, cypher.Operator, *cypher.Limit, *cypher.Skip, graph.Kinds, *cypher.Parameter:
+	case *cypher.RangeQuantifier, cypher.Operator, graph.Kinds, *cypher.Parameter:
 		return &Cursor[cypher.SyntaxNode]{
 			Node: node,
+		}, nil
+
+	case *cypher.Limit:
+		return &Cursor[cypher.SyntaxNode]{
+			Node:     node,
+			Branches: []cypher.SyntaxNode{typedNode.Value},
+		}, nil
+
+	case *cypher.Skip:
+		return &Cursor[cypher.SyntaxNode]{
+			Node:     node,
+			Branches: []cypher.SyntaxNode{typedNode.Value},
 		}, nil
 
 	case *cypher.KindMatcher:
@@ -59,9 +71,14 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 		}, nil
 
 	case cypher.MapLiteral:
-		return &Cursor[cypher.SyntaxNode]{
-			Node: node,
-		}, nil
+		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Items()); err != nil {
+			return nil, err
+		} else {
+			return &Cursor[cypher.SyntaxNode]{
+				Node:     node,
+				Branches: branches,
+			}, nil
+		}
 
 	case *cypher.ListLiteral:
 		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions()); err != nil {
@@ -467,6 +484,16 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 		}
 
 	case *cypher.Disjunction:
+		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions); err != nil {
+			return nil, err
+		} else {
+			return &Cursor[cypher.SyntaxNode]{
+				Node:     node,
+				Branches: branches,
+			}, nil
+		}
+
+	case *cypher.ExclusiveDisjunction:
 		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions); err != nil {
 			return nil, err
 		} else {

@@ -921,13 +921,24 @@ func (s MapLiteral) copy() MapLiteral {
 	return mapCopy
 }
 
+func (s MapLiteral) sortedKeys() []string {
+	keys := make([]string, 0, len(s))
+
+	for key := range s {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+	return keys
+}
+
 func (s MapLiteral) Items() []*MapItem {
 	items := make([]*MapItem, 0, len(s))
 
-	for key, value := range s {
+	for _, key := range s.sortedKeys() {
 		items = append(items, &MapItem{
 			Key:   key,
-			Value: value,
+			Value: s[key],
 		})
 	}
 
@@ -935,15 +946,12 @@ func (s MapLiteral) Items() []*MapItem {
 }
 
 func (s MapLiteral) Keys() []any {
-	keys := make([]any, 0, len(s))
+	sortedKeys := s.sortedKeys()
+	keys := make([]any, len(sortedKeys))
 
-	for key := range s {
-		keys = append(keys, key)
+	for idx, key := range sortedKeys {
+		keys[idx] = key
 	}
-
-	sort.Slice(keys, func(i, j int) bool {
-		return strings.Compare(keys[i].(string), keys[j].(string)) > 0
-	})
 
 	return keys
 }
