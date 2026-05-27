@@ -58,26 +58,57 @@ func TestCypherEmitter_MapLiteralPropagatesExpressionError(t *testing.T) {
 
 func TestCypherEmitter_MapLiteralPropagatesWriterError(t *testing.T) {
 	expectedErr := errors.New("write failed")
-	testCases := map[string]int{
-		"opening delimiter": 0,
-		"item separator":    4,
-		"closing delimiter": 4,
+	testCases := map[string]struct {
+		allowedWrites int
+		mapLiteral    cypher.MapLiteral
+	}{
+		"opening delimiter": {
+			allowedWrites: 0,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"key": {
+			allowedWrites: 1,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"colon": {
+			allowedWrites: 2,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"value": {
+			allowedWrites: 3,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"item separator": {
+			allowedWrites: 4,
+			mapLiteral: cypher.MapLiteral{
+				"a": cypher.NewLiteral(1, false),
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"closing delimiter": {
+			allowedWrites: 4,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
 	}
 
-	for name, allowedWrites := range testCases {
+	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			writer := &errorAfterNWrites{
-				remaining: allowedWrites,
+				remaining: testCase.allowedWrites,
 				err:       expectedErr,
 			}
-			mapLiteral := cypher.MapLiteral{
-				"b": cypher.NewLiteral(2, false),
-			}
-			if name == "item separator" {
-				mapLiteral["a"] = cypher.NewLiteral(1, false)
-			}
 
-			err := format.NewCypherEmitter(false).WriteExpression(writer, mapLiteral)
+			err := format.NewCypherEmitter(false).WriteExpression(writer, testCase.mapLiteral)
 
 			require.ErrorIs(t, err, expectedErr)
 		})
