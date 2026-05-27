@@ -4,6 +4,14 @@ Validation date: 2026-05-27.
 
 This records the validation pass for the Cypher AST tooling test-hardening work.
 
+## Review Remediation Preflight
+
+- Branch: `main`, 21 commits ahead of `upstream/main`.
+- Baseline: `upstream/main` resolves locally at `9fe779703362543ce2ef6a46fd93f4c040ac1ac0`.
+- Existing untracked files left untouched during preflight: `review.md` and `docs/cypher_support_v4.md`.
+- Integration validation will be run separately for the Neo4j and PostgreSQL connection strings provided for this
+  remediation pass.
+
 ## Commands
 
 - `go test ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`
