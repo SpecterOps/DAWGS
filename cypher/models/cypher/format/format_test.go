@@ -27,6 +27,21 @@ func TestCypherEmitter_StripLiterals(t *testing.T) {
 	require.Equal(t, "match (n {value: $STRIPPED}) where n.other = $STRIPPED and n.number = $STRIPPED return n.name, n", buffer.String())
 }
 
+func TestCypherEmitter_FormatsMapLiteralInKeyOrder(t *testing.T) {
+	var (
+		buffer  = &bytes.Buffer{}
+		emitter = format.NewCypherEmitter(false)
+	)
+
+	err := emitter.WriteExpression(buffer, cypher.MapLiteral{
+		"b": cypher.NewLiteral(2, false),
+		"a": cypher.NewLiteral(1, false),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "{a: 1, b: 2}", buffer.String())
+}
+
 func TestCypherEmitter_HappyPath(t *testing.T) {
 	test.LoadFixture(t, test.MutationTestCases).Run(t)
 	test.LoadFixture(t, test.PositiveTestCases).Run(t)
