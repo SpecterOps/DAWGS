@@ -30,7 +30,7 @@ type Visitor[N any] interface {
 type cancelableVisitorHandler struct {
 	currentSyntaxNodeConsumed bool
 	done                      bool
-	errs                      []error
+	err                       error
 }
 
 func (s *cancelableVisitorHandler) Done() bool {
@@ -43,7 +43,12 @@ func (s *cancelableVisitorHandler) SetDone() {
 
 func (s *cancelableVisitorHandler) SetError(err error) {
 	if err != nil {
-		s.errs = append(s.errs, err)
+		if s.err == nil {
+			s.err = err
+		} else {
+			s.err = errors.Join(s.err, err)
+		}
+
 		s.done = true
 	}
 }
@@ -53,7 +58,7 @@ func (s *cancelableVisitorHandler) SetErrorf(format string, args ...any) {
 }
 
 func (s *cancelableVisitorHandler) Error() error {
-	return errors.Join(s.errs...)
+	return s.err
 }
 
 func (s *cancelableVisitorHandler) Consume() {
@@ -201,6 +206,10 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 			if err := visitor.Error(); err != nil {
 				return err
 			}
+
+			if visitor.Done() {
+				return nil
+			}
 		}
 
 		if consumed := visitor.WasConsumed(); consumed || !nextNode.HasNext() {
@@ -218,6 +227,10 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 
 				if err := visitor.Error(); err != nil {
 					return err
+				}
+
+				if visitor.Done() {
+					return nil
 				}
 
 				if visitor.WasConsumed() {
