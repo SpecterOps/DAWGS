@@ -817,6 +817,135 @@ func TestCypherStructuralWalkVisitsDeclarationAndMetadataFields(t *testing.T) {
 	}
 }
 
+func TestCypherStructuralWalkVisitsModeledChildFields(t *testing.T) {
+	testCases := map[string]struct {
+		node    cypher.SyntaxNode
+		visited []string
+	}{
+		"limit value": {
+			node:    &cypher.Limit{Value: cypher.NewLiteral(10, false)},
+			visited: []string{"literal:10"},
+		},
+		"skip value": {
+			node:    &cypher.Skip{Value: cypher.NewLiteral(20, false)},
+			visited: []string{"literal:20"},
+		},
+		"kind matcher reference and kinds": {
+			node: &cypher.KindMatcher{
+				Reference: cypher.NewVariableWithSymbol("node"),
+				Kinds:     graph.Kinds{graph.StringKind("NodeKind")},
+			},
+			visited: []string{"variable:node", "kinds", "kind:NodeKind"},
+		},
+		"properties parameter and map": {
+			node: &cypher.Properties{
+				Parameter: cypher.NewParameter("props", map[string]any{}),
+				Map: cypher.MapLiteral{
+					"name": cypher.NewVariableWithSymbol("name"),
+				},
+			},
+			visited: []string{"parameter:props", "mapitem:name", "variable:name"},
+		},
+		"remove item kind matcher and property": {
+			node: &cypher.RemoveItem{
+				KindMatcher: &cypher.KindMatcher{
+					Reference: cypher.NewVariableWithSymbol("node"),
+					Kinds:     graph.Kinds{graph.StringKind("NodeKind")},
+				},
+				Property: cypher.NewPropertyLookup("target", "name"),
+			},
+			visited: []string{"variable:node", "kind:NodeKind", "variable:target"},
+		},
+		"id in collection variable and expression": {
+			node: &cypher.IDInCollection{
+				Variable:   cypher.NewVariableWithSymbol("item"),
+				Expression: cypher.NewVariableWithSymbol("items"),
+			},
+			visited: []string{"variable:item", "variable:items"},
+		},
+		"projection item expression and alias": {
+			node: &cypher.ProjectionItem{
+				Expression: cypher.NewVariableWithSymbol("value"),
+				Alias:      cypher.NewVariableWithSymbol("alias"),
+			},
+			visited: []string{"variable:value", "variable:alias"},
+		},
+		"pattern part variable and elements": {
+			node: &cypher.PatternPart{
+				Variable: cypher.NewVariableWithSymbol("path"),
+				PatternElements: []*cypher.PatternElement{{
+					Element: &cypher.NodePattern{
+						Variable: cypher.NewVariableWithSymbol("node"),
+					},
+				}},
+			},
+			visited: []string{"variable:path", "variable:node"},
+		},
+		"relationship pattern metadata": {
+			node: &cypher.RelationshipPattern{
+				Variable: cypher.NewVariableWithSymbol("rel"),
+				Kinds:    graph.Kinds{graph.StringKind("MemberOf")},
+				Range:    cypher.NewPatternRange(nil, nil),
+				Properties: &cypher.Properties{
+					Map: cypher.MapLiteral{
+						"weight": cypher.NewVariableWithSymbol("weight"),
+					},
+				},
+			},
+			visited: []string{"variable:rel", "kind:MemberOf", "range", "mapitem:weight", "variable:weight"},
+		},
+		"node pattern metadata": {
+			node: &cypher.NodePattern{
+				Variable: cypher.NewVariableWithSymbol("node"),
+				Kinds:    graph.Kinds{graph.StringKind("User")},
+				Properties: &cypher.Properties{
+					Map: cypher.MapLiteral{
+						"name": cypher.NewVariableWithSymbol("name"),
+					},
+				},
+			},
+			visited: []string{"variable:node", "kind:User", "mapitem:name", "variable:name"},
+		},
+		"node pattern empty kind list": {
+			node: &cypher.NodePattern{
+				Kinds: graph.Kinds{},
+			},
+			visited: []string{"kinds"},
+		},
+		"partial comparison operator and right": {
+			node: &cypher.PartialComparison{
+				Operator: cypher.OperatorEquals,
+				Right:    cypher.NewVariableWithSymbol("right"),
+			},
+			visited: []string{"operator:=", "variable:right"},
+		},
+		"partial arithmetic operator and right": {
+			node: &cypher.PartialArithmeticExpression{
+				Operator: cypher.OperatorAdd,
+				Right:    cypher.NewVariableWithSymbol("right"),
+			},
+			visited: []string{"operator:+", "variable:right"},
+		},
+		"unary add or subtract operator and right": {
+			node: &cypher.UnaryAddOrSubtractExpression{
+				Operator: cypher.OperatorSubtract,
+				Right:    cypher.NewVariableWithSymbol("right"),
+			},
+			visited: []string{"operator:-", "variable:right"},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			visited := collectCypherWalkLabels(t, testCase.node, walk.CypherStructural)
+
+			for _, expectedLabel := range testCase.visited {
+				require.Contains(t, visited, expectedLabel)
+			}
+		})
+	}
+}
+
 func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func(cypher.SyntaxNode, walk.Visitor[cypher.SyntaxNode]) error) []string {
 	t.Helper()
 
@@ -839,6 +968,7 @@ func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func
 			visited = append(visited, "operator:"+typedNode.String())
 
 		case graph.Kinds:
+			visited = append(visited, "kinds")
 			for _, kind := range typedNode {
 				visited = append(visited, "kind:"+kind.String())
 			}
