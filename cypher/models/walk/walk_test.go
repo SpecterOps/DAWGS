@@ -1225,6 +1225,134 @@ func TestCypherStructuralWalkVisitsModeledChildFields(t *testing.T) {
 	}
 }
 
+func TestCypherStructuralWalkVisitsFullASTTypeSequence(t *testing.T) {
+	query := &cypher.RegularQuery{
+		SingleQuery: &cypher.SingleQuery{
+			SinglePartQuery: &cypher.SinglePartQuery{
+				ReadingClauses: []*cypher.ReadingClause{{
+					Match: &cypher.Match{
+						Pattern: []*cypher.PatternPart{{
+							Variable: cypher.NewVariableWithSymbol("path"),
+							PatternElements: []*cypher.PatternElement{
+								{
+									Element: &cypher.NodePattern{
+										Variable: cypher.NewVariableWithSymbol("n"),
+										Kinds:    graph.Kinds{graph.StringKind("User")},
+										Properties: &cypher.Properties{
+											Map: cypher.MapLiteral{
+												"name": cypher.NewVariableWithSymbol("name"),
+											},
+										},
+									},
+								},
+								{
+									Element: &cypher.RelationshipPattern{
+										Variable: cypher.NewVariableWithSymbol("r"),
+										Kinds:    graph.Kinds{graph.StringKind("MemberOf")},
+										Range:    cypher.NewPatternRange(nil, nil),
+										Properties: &cypher.Properties{
+											Parameter: cypher.NewParameter("relProps", map[string]any{}),
+										},
+									},
+								},
+								{
+									Element: &cypher.NodePattern{
+										Variable: cypher.NewVariableWithSymbol("m"),
+									},
+								},
+							},
+						}},
+						Where: newCypherWhere(&cypher.Comparison{
+							Left: cypher.NewVariableWithSymbol("n"),
+							Partials: []*cypher.PartialComparison{{
+								Operator: cypher.OperatorEquals,
+								Right:    cypher.NewLiteral(true, false),
+							}},
+						}),
+					},
+				}},
+				UpdatingClauses: []cypher.Expression{
+					cypher.NewUpdatingClause(&cypher.Set{
+						Items: []*cypher.SetItem{{
+							Left:  cypher.NewPropertyLookup("n", "seen"),
+							Right: cypher.NewVariableWithSymbol("seen"),
+						}},
+					}),
+				},
+				Return: &cypher.Return{
+					Projection: &cypher.Projection{
+						Items: []cypher.Expression{
+							&cypher.ProjectionItem{
+								Expression: cypher.NewVariableWithSymbol("n"),
+								Alias:      cypher.NewVariableWithSymbol("alias"),
+							},
+						},
+						Order: &cypher.Order{
+							Items: []*cypher.SortItem{{
+								Expression: cypher.NewVariableWithSymbol("alias"),
+							}},
+						},
+						Skip:  &cypher.Skip{Value: cypher.NewLiteral(1, false)},
+						Limit: &cypher.Limit{Value: cypher.NewLiteral(2, false)},
+					},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, []string{
+		"*cypher.RegularQuery",
+		"*cypher.SingleQuery",
+		"*cypher.SinglePartQuery",
+		"*cypher.ReadingClause",
+		"*cypher.Match",
+		"*cypher.PatternPart",
+		"*cypher.Variable",
+		"*cypher.PatternElement",
+		"*cypher.NodePattern",
+		"*cypher.Variable",
+		"graph.Kinds",
+		"*cypher.Properties",
+		"cypher.MapLiteral",
+		"*cypher.MapItem",
+		"*cypher.Variable",
+		"*cypher.PatternElement",
+		"*cypher.RelationshipPattern",
+		"*cypher.Variable",
+		"graph.Kinds",
+		"*cypher.PatternRange",
+		"*cypher.Properties",
+		"*cypher.Parameter",
+		"*cypher.PatternElement",
+		"*cypher.NodePattern",
+		"*cypher.Variable",
+		"*cypher.Where",
+		"*cypher.Comparison",
+		"*cypher.Variable",
+		"*cypher.PartialComparison",
+		"cypher.Operator",
+		"*cypher.Literal",
+		"*cypher.UpdatingClause",
+		"*cypher.Set",
+		"*cypher.SetItem",
+		"*cypher.PropertyLookup",
+		"*cypher.Variable",
+		"*cypher.Variable",
+		"*cypher.Return",
+		"*cypher.Projection",
+		"*cypher.ProjectionItem",
+		"*cypher.Variable",
+		"*cypher.Variable",
+		"*cypher.Order",
+		"*cypher.SortItem",
+		"*cypher.Variable",
+		"*cypher.Skip",
+		"*cypher.Literal",
+		"*cypher.Limit",
+		"*cypher.Literal",
+	}, collectCypherWalkTypes(t, query, walk.CypherStructural))
+}
+
 func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func(cypher.SyntaxNode, walk.Visitor[cypher.SyntaxNode]) error) []string {
 	t.Helper()
 
@@ -1255,6 +1383,18 @@ func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func
 		case *cypher.PatternRange:
 			visited = append(visited, "range")
 		}
+	})
+
+	require.NoError(t, walkFunc(node, visitor))
+	return visited
+}
+
+func collectCypherWalkTypes(t *testing.T, node cypher.SyntaxNode, walkFunc func(cypher.SyntaxNode, walk.Visitor[cypher.SyntaxNode]) error) []string {
+	t.Helper()
+
+	var visited []string
+	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		visited = append(visited, fmt.Sprintf("%T", node))
 	})
 
 	require.NoError(t, walkFunc(node, visitor))
