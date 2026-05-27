@@ -44,3 +44,31 @@ func TestMapLiteralForEachItemReturnsDelegateError(t *testing.T) {
 	require.ErrorIs(t, err, expectedErr)
 	require.Equal(t, []string{"a", "b"}, visitedKeys)
 }
+
+func TestMapLiteralKeysReturnsSortedKeys(t *testing.T) {
+	testCases := map[string]struct {
+		mapLiteral cypher.MapLiteral
+		expected   []any
+	}{
+		"nil": {
+			expected: []any{},
+		},
+		"empty": {
+			mapLiteral: cypher.MapLiteral{},
+			expected:   []any{},
+		},
+		"sorted": {
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewVariableWithSymbol("b_value"),
+				"a": cypher.NewVariableWithSymbol("a_value"),
+			},
+			expected: []any{"a", "b"},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, testCase.expected, testCase.mapLiteral.Keys())
+		})
+	}
+}
