@@ -269,3 +269,7 @@ func PgSQL(node pgsql.SyntaxNode, visitor Visitor[pgsql.SyntaxNode]) error {
 func Cypher(node cypher.SyntaxNode, visitor Visitor[cypher.SyntaxNode]) error {
 	return Generic(node, visitor, newCypherWalkCursor)
 }
+
+func CypherStructural(node cypher.SyntaxNode, visitor Visitor[cypher.SyntaxNode]) error {
+	return Generic(node, visitor, newCypherStructuralWalkCursor)
+}

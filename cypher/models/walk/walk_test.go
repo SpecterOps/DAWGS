@@ -210,6 +210,173 @@ func TestCypherWalkSemanticSkipsDeclarationOnlyFields(t *testing.T) {
 	}
 }
 
+func TestCypherStructuralWalkVisitsDeclarationAndMetadataFields(t *testing.T) {
+	testCases := map[string]struct {
+		node       cypher.SyntaxNode
+		variables  []string
+		kinds      []string
+		mapKeys    []string
+		literals   []any
+		operators  []cypher.Operator
+		numRanges  int
+		numMapNode int
+	}{
+		"remove kind matcher": {
+			node: &cypher.RemoveItem{
+				KindMatcher: &cypher.KindMatcher{
+					Reference: cypher.NewVariableWithSymbol("node"),
+					Kinds:     graph.Kinds{graph.StringKind("NodeKind")},
+				},
+			},
+			variables: []string{"node"},
+			kinds:     []string{"NodeKind"},
+		},
+		"node pattern": {
+			node: &cypher.NodePattern{
+				Variable: cypher.NewVariableWithSymbol("node"),
+				Kinds:    graph.Kinds{graph.StringKind("User")},
+				Properties: &cypher.Properties{
+					Map: cypher.MapLiteral{
+						"name": cypher.NewVariableWithSymbol("name"),
+					},
+				},
+			},
+			variables:  []string{"node", "name"},
+			kinds:      []string{"User"},
+			mapKeys:    []string{"name"},
+			numMapNode: 1,
+		},
+		"relationship pattern": {
+			node: &cypher.RelationshipPattern{
+				Variable: cypher.NewVariableWithSymbol("rel"),
+				Kinds:    graph.Kinds{graph.StringKind("MemberOf")},
+				Range:    cypher.NewPatternRange(nil, nil),
+				Properties: &cypher.Properties{
+					Map: cypher.MapLiteral{
+						"weight": cypher.NewVariableWithSymbol("weight"),
+					},
+				},
+			},
+			variables:  []string{"rel", "weight"},
+			kinds:      []string{"MemberOf"},
+			mapKeys:    []string{"weight"},
+			numRanges:  1,
+			numMapNode: 1,
+		},
+		"projection alias": {
+			node: &cypher.ProjectionItem{
+				Expression: cypher.NewVariableWithSymbol("value"),
+				Alias:      cypher.NewVariableWithSymbol("alias"),
+			},
+			variables: []string{"value", "alias"},
+		},
+		"id in collection": {
+			node: &cypher.IDInCollection{
+				Variable:   cypher.NewVariableWithSymbol("item"),
+				Expression: cypher.NewVariableWithSymbol("items"),
+			},
+			variables: []string{"item", "items"},
+		},
+		"pattern part variable": {
+			node: &cypher.PatternPart{
+				Variable: cypher.NewVariableWithSymbol("path"),
+				PatternElements: []*cypher.PatternElement{{
+					Element: &cypher.NodePattern{
+						Variable: cypher.NewVariableWithSymbol("node"),
+					},
+				}},
+			},
+			variables: []string{"path", "node"},
+		},
+		"skip limit and operators": {
+			node: &cypher.Projection{
+				Skip: &cypher.Skip{
+					Value: cypher.NewLiteral(5, false),
+				},
+				Limit: &cypher.Limit{
+					Value: cypher.NewLiteral(10, false),
+				},
+				Items: []cypher.Expression{
+					&cypher.ProjectionItem{
+						Expression: &cypher.Comparison{
+							Left: cypher.NewVariableWithSymbol("n"),
+							Partials: []*cypher.PartialComparison{{
+								Operator: cypher.OperatorEquals,
+								Right:    cypher.NewLiteral(1, false),
+							}},
+						},
+					},
+				},
+			},
+			variables: []string{"n"},
+			literals:  []any{1, 5, 10},
+			operators: []cypher.Operator{
+				cypher.OperatorEquals,
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			var (
+				visitedVariables []string
+				visitedKinds     []string
+				visitedMapKeys   []string
+				visitedLiterals  []any
+				visitedOperators []cypher.Operator
+				visitedRanges    int
+				visitedMapNodes  int
+			)
+
+			visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+				switch typedNode := node.(type) {
+				case *cypher.Variable:
+					visitedVariables = append(visitedVariables, typedNode.Symbol)
+
+				case graph.Kinds:
+					for _, kind := range typedNode {
+						visitedKinds = append(visitedKinds, kind.String())
+					}
+
+				case *cypher.MapItem:
+					visitedMapKeys = append(visitedMapKeys, typedNode.Key)
+
+				case cypher.MapLiteral:
+					visitedMapNodes++
+
+				case *cypher.Literal:
+					visitedLiterals = append(visitedLiterals, typedNode.Value)
+
+				case cypher.Operator:
+					visitedOperators = append(visitedOperators, typedNode)
+
+				case *cypher.PatternRange:
+					visitedRanges++
+				}
+			})
+
+			require.NoError(t, walk.CypherStructural(testCase.node, visitor))
+			for _, symbol := range testCase.variables {
+				require.Contains(t, visitedVariables, symbol)
+			}
+			for _, kind := range testCase.kinds {
+				require.Contains(t, visitedKinds, kind)
+			}
+			for _, key := range testCase.mapKeys {
+				require.Contains(t, visitedMapKeys, key)
+			}
+			for _, literal := range testCase.literals {
+				require.Contains(t, visitedLiterals, literal)
+			}
+			for _, operator := range testCase.operators {
+				require.Contains(t, visitedOperators, operator)
+			}
+			require.Equal(t, testCase.numRanges, visitedRanges)
+			require.Equal(t, testCase.numMapNode, visitedMapNodes)
+		})
+	}
+}
+
 func TestCypherWalkSupportsKnownSyntaxNodeTypes(t *testing.T) {
 	testCases := map[string]cypher.SyntaxNode{
 		"arithmetic expression":         &cypher.ArithmeticExpression{},
