@@ -935,14 +935,25 @@ func (s MapLiteral) sortedKeys() []string {
 func (s MapLiteral) Items() []*MapItem {
 	items := make([]*MapItem, 0, len(s))
 
-	for _, key := range s.sortedKeys() {
+	_ = s.ForEachItem(func(key string, value Expression) error {
 		items = append(items, &MapItem{
 			Key:   key,
-			Value: s[key],
+			Value: value,
 		})
-	}
+		return nil
+	})
 
 	return items
+}
+
+func (s MapLiteral) ForEachItem(delegate func(key string, value Expression) error) error {
+	for _, key := range s.sortedKeys() {
+		if err := delegate(key, s[key]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s MapLiteral) Keys() []any {

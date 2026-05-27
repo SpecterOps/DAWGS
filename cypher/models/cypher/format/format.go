@@ -329,7 +329,7 @@ func (s Emitter) formatMapLiteral(output io.Writer, mapLiteral cypher.MapLiteral
 	}
 
 	first := true
-	for _, item := range mapLiteral.Items() {
+	if err := mapLiteral.ForEachItem(func(key string, value cypher.Expression) error {
 		if !first {
 			if _, err := io.WriteString(output, ", "); err != nil {
 				return err
@@ -338,7 +338,7 @@ func (s Emitter) formatMapLiteral(output io.Writer, mapLiteral cypher.MapLiteral
 			first = false
 		}
 
-		if _, err := io.WriteString(output, item.Key); err != nil {
+		if _, err := io.WriteString(output, key); err != nil {
 			return err
 		}
 
@@ -346,9 +346,13 @@ func (s Emitter) formatMapLiteral(output io.Writer, mapLiteral cypher.MapLiteral
 			return err
 		}
 
-		if err := s.WriteExpression(output, item.Value); err != nil {
+		if err := s.WriteExpression(output, value); err != nil {
 			return err
 		}
+
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if _, err := io.WriteString(output, "}"); err != nil {

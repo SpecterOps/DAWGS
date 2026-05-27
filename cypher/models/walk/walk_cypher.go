@@ -29,6 +29,23 @@ func newCypherWalkCursorWithBranchPrefix[F any, FS []F](node cypher.SyntaxNode, 
 	return cursor
 }
 
+func newCypherWalkCursorWithMapItems(node cypher.SyntaxNode, mapLiteral cypher.MapLiteral) *Cursor[cypher.SyntaxNode] {
+	cursor := &Cursor[cypher.SyntaxNode]{
+		Node:     node,
+		Branches: make([]cypher.SyntaxNode, 0, len(mapLiteral)),
+	}
+
+	_ = mapLiteral.ForEachItem(func(key string, value cypher.Expression) error {
+		cursor.AddBranches(&cypher.MapItem{
+			Key:   key,
+			Value: value,
+		})
+		return nil
+	})
+
+	return cursor
+}
+
 func addCypherBranches[F any, FS []F](cursor *Cursor[cypher.SyntaxNode], branches FS) {
 	for _, branch := range branches {
 		cursor.AddBranches(cypher.SyntaxNode(branch))
@@ -164,7 +181,7 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 				Branches: []cypher.SyntaxNode{typedNode.Parameter},
 			}, nil
 		} else {
-			return newCypherWalkCursorWithBranches(node, typedNode.Map.Items()), nil
+			return newCypherWalkCursorWithMapItems(node, typedNode.Map), nil
 		}
 
 	case *cypher.Literal:
@@ -173,7 +190,7 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 		}, nil
 
 	case cypher.MapLiteral:
-		return newCypherWalkCursorWithBranches(node, typedNode.Items()), nil
+		return newCypherWalkCursorWithMapItems(node, typedNode), nil
 
 	case *cypher.ListLiteral:
 		return newCypherWalkCursorWithBranches(typedNode, typedNode.Expressions()), nil
