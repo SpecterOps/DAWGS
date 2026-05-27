@@ -95,10 +95,15 @@ New exported APIs:
   - Result: pass.
   - Wrote `.coverage/coverage.txt`.
 - `make format`
-  - Result: fail in the local environment with `xargs: goimports: Permission denied`.
-  - Touched Go files were formatted with `gofmt`.
-- `make test_all`
-  - Result: not run because `CONNECTION_STRING` was unset. Integration validation requires that variable.
+  - Initial result: fail in the local environment with `xargs: goimports: Permission denied` because the
+    wrapper-managed Go bin directory was not on `PATH`.
+- `PATH="/home/zinic/codex/config/go/bin:$PATH" make format`
+  - Result: pass.
+  - No file changes after formatting.
+- `CONNECTION_STRING=<neo4j connection string> make test_neo4j`
+  - Result: pass.
+- `CONNECTION_STRING=<postgres connection string> make test_pg`
+  - Result: pass.
 
 ## CRAP Snapshot
 
