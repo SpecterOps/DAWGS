@@ -113,8 +113,13 @@ type simpleVisitor[N any] struct {
 }
 
 func NewSimpleVisitor[N any](visitorFunc SimpleVisitorFunc[N]) Visitor[N] {
+	return NewSimpleVisitorWithOrder(OrderPrefix, visitorFunc)
+}
+
+func NewSimpleVisitorWithOrder[N any](order Order, visitorFunc SimpleVisitorFunc[N]) Visitor[N] {
 	return &simpleVisitor[N]{
 		Visitor:     NewVisitor[N](),
+		order:       order,
 		visitorFunc: visitorFunc,
 	}
 }

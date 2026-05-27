@@ -169,6 +169,134 @@ func TestWalkSkipsNilPointersButVisitsTypedNilCollections(t *testing.T) {
 	})
 }
 
+func TestSimpleVisitorOrders(t *testing.T) {
+	expression := cypher.NewDisjunction(
+		cypher.NewVariableWithSymbol("left"),
+		cypher.NewVariableWithSymbol("right"),
+	)
+
+	testCases := []struct {
+		name     string
+		order    walk.Order
+		expected []string
+	}{
+		{
+			name:     "prefix",
+			order:    walk.OrderPrefix,
+			expected: []string{"disjunction", "left", "right"},
+		},
+		{
+			name:     "infix",
+			order:    walk.OrderInfix,
+			expected: []string{"disjunction"},
+		},
+		{
+			name:     "postfix",
+			order:    walk.OrderPostfix,
+			expected: []string{"left", "right", "disjunction"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var visited []string
+			visitor := walk.NewSimpleVisitorWithOrder[cypher.SyntaxNode](testCase.order, func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+				switch typedNode := node.(type) {
+				case *cypher.Disjunction:
+					visited = append(visited, "disjunction")
+
+				case *cypher.Variable:
+					visited = append(visited, typedNode.Symbol)
+				}
+			})
+
+			require.NoError(t, walk.Cypher(expression, visitor))
+			require.Equal(t, testCase.expected, visited)
+		})
+	}
+}
+
+func TestSimpleVisitorConsumeByOrder(t *testing.T) {
+	t.Run("prefix root consume skips children", func(t *testing.T) {
+		expression := cypher.NewDisjunction(
+			cypher.NewVariableWithSymbol("left"),
+			cypher.NewVariableWithSymbol("right"),
+		)
+
+		var visited []string
+		visitor := walk.NewSimpleVisitorWithOrder[cypher.SyntaxNode](walk.OrderPrefix, func(node cypher.SyntaxNode, handler walk.VisitorHandler) {
+			switch typedNode := node.(type) {
+			case *cypher.Disjunction:
+				visited = append(visited, "disjunction")
+				handler.Consume()
+
+			case *cypher.Variable:
+				visited = append(visited, typedNode.Symbol)
+			}
+		})
+
+		require.NoError(t, walk.Cypher(expression, visitor))
+		require.Equal(t, []string{"disjunction"}, visited)
+	})
+
+	t.Run("infix consume skips remaining siblings", func(t *testing.T) {
+		expression := cypher.NewDisjunction(
+			cypher.NewDisjunction(
+				cypher.NewVariableWithSymbol("left_a"),
+				cypher.NewVariableWithSymbol("left_b"),
+			),
+			cypher.NewDisjunction(
+				cypher.NewVariableWithSymbol("right_a"),
+				cypher.NewVariableWithSymbol("right_b"),
+			),
+		)
+
+		var visited []string
+		visitor := walk.NewSimpleVisitorWithOrder[cypher.SyntaxNode](walk.OrderInfix, func(node cypher.SyntaxNode, handler walk.VisitorHandler) {
+			disjunction, isDisjunction := node.(*cypher.Disjunction)
+			if !isDisjunction {
+				return
+			}
+
+			switch disjunction.Expressions[0].(type) {
+			case *cypher.Variable:
+				visited = append(visited, "inner")
+
+			case *cypher.Disjunction:
+				visited = append(visited, "root")
+				handler.Consume()
+			}
+		})
+
+		require.NoError(t, walk.Cypher(expression, visitor))
+		require.Equal(t, []string{"inner", "root"}, visited)
+	})
+
+	t.Run("postfix leaf consume does not skip siblings", func(t *testing.T) {
+		expression := cypher.NewDisjunction(
+			cypher.NewVariableWithSymbol("left"),
+			cypher.NewVariableWithSymbol("right"),
+		)
+
+		var visited []string
+		visitor := walk.NewSimpleVisitorWithOrder[cypher.SyntaxNode](walk.OrderPostfix, func(node cypher.SyntaxNode, handler walk.VisitorHandler) {
+			switch typedNode := node.(type) {
+			case *cypher.Variable:
+				visited = append(visited, typedNode.Symbol)
+				if typedNode.Symbol == "left" {
+					handler.Consume()
+				}
+
+			case *cypher.Disjunction:
+				visited = append(visited, "disjunction")
+			}
+		})
+
+		require.NoError(t, walk.Cypher(expression, visitor))
+		require.Equal(t, []string{"left", "right", "disjunction"}, visited)
+	})
+}
+
 func TestCypherWalkSemanticSkipsDeclarationOnlyFields(t *testing.T) {
 	testCases := map[string]struct {
 		node          cypher.SyntaxNode
