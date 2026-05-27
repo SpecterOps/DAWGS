@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/walk"
+	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/test"
@@ -114,6 +115,76 @@ func TestCypherWalkSkipsNilBranches(t *testing.T) {
 		"unary add/subtract":   &cypher.UnaryAddOrSubtractExpression{},
 		"relationship pattern": &cypher.RelationshipPattern{},
 		"node pattern":         &cypher.NodePattern{},
+	}
+
+	for name, node := range testCases {
+		t.Run(name, func(t *testing.T) {
+			visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(cypher.SyntaxNode, walk.VisitorHandler) {})
+			require.NoError(t, walk.Cypher(node, visitor))
+		})
+	}
+}
+
+func TestCypherWalkSupportsKnownSyntaxNodeTypes(t *testing.T) {
+	testCases := map[string]cypher.SyntaxNode{
+		"arithmetic expression":         &cypher.ArithmeticExpression{},
+		"comparison":                    &cypher.Comparison{},
+		"conjunction":                   cypher.NewConjunction(),
+		"create":                        &cypher.Create{},
+		"delete":                        &cypher.Delete{},
+		"disjunction":                   cypher.NewDisjunction(),
+		"exclusive disjunction":         cypher.NewExclusiveDisjunction(),
+		"filter expression":             &cypher.FilterExpression{},
+		"function invocation":           &cypher.FunctionInvocation{},
+		"graph kinds":                   graph.Kinds{graph.StringKind("NodeKind")},
+		"id in collection":              &cypher.IDInCollection{},
+		"kind matcher":                  &cypher.KindMatcher{},
+		"limit":                         &cypher.Limit{},
+		"list literal":                  cypher.NewListLiteral(),
+		"literal":                       cypher.NewLiteral(1, false),
+		"map item":                      &cypher.MapItem{},
+		"map literal":                   cypher.MapLiteral{"value": cypher.NewLiteral(1, false)},
+		"match":                         &cypher.Match{},
+		"merge":                         &cypher.Merge{},
+		"merge action":                  &cypher.MergeAction{},
+		"multipart query":               &cypher.MultiPartQuery{},
+		"multipart query part":          &cypher.MultiPartQueryPart{},
+		"negation":                      &cypher.Negation{},
+		"node pattern":                  &cypher.NodePattern{},
+		"operator":                      cypher.Operator("="),
+		"order":                         &cypher.Order{},
+		"parameter":                     &cypher.Parameter{},
+		"parenthetical":                 &cypher.Parenthetical{},
+		"partial arithmetic":            &cypher.PartialArithmeticExpression{},
+		"partial comparison":            &cypher.PartialComparison{},
+		"pattern element":               &cypher.PatternElement{},
+		"pattern part":                  &cypher.PatternPart{},
+		"pattern predicate":             &cypher.PatternPredicate{},
+		"pattern range":                 &cypher.PatternRange{},
+		"projection":                    &cypher.Projection{},
+		"projection item":               &cypher.ProjectionItem{},
+		"properties map":                &cypher.Properties{Map: cypher.MapLiteral{"value": cypher.NewLiteral(1, false)}},
+		"properties parameter":          &cypher.Properties{Parameter: cypher.NewParameter("props", map[string]any{})},
+		"quantifier":                    &cypher.Quantifier{},
+		"range quantifier":              &cypher.RangeQuantifier{},
+		"reading clause":                &cypher.ReadingClause{},
+		"regular query":                 &cypher.RegularQuery{},
+		"relationship pattern":          &cypher.RelationshipPattern{},
+		"remove":                        &cypher.Remove{},
+		"remove item":                   &cypher.RemoveItem{},
+		"return":                        &cypher.Return{},
+		"set":                           &cypher.Set{},
+		"set item":                      &cypher.SetItem{},
+		"single part query":             &cypher.SinglePartQuery{},
+		"single query":                  &cypher.SingleQuery{},
+		"skip":                          &cypher.Skip{},
+		"sort item":                     &cypher.SortItem{},
+		"unary add/subtract expression": &cypher.UnaryAddOrSubtractExpression{},
+		"unwind":                        &cypher.Unwind{},
+		"updating clause":               &cypher.UpdatingClause{},
+		"variable":                      &cypher.Variable{},
+		"where":                         &cypher.Where{},
+		"with":                          &cypher.With{},
 	}
 
 	for name, node := range testCases {

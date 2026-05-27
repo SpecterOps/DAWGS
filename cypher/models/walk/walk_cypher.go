@@ -38,21 +38,9 @@ func addCypherBranches[F any, FS []F](cursor *Cursor[cypher.SyntaxNode], branche
 func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], error) {
 	switch typedNode := node.(type) {
 	// Types with no AST branches
-	case *cypher.RangeQuantifier, cypher.Operator, graph.Kinds, *cypher.Parameter:
+	case *cypher.RangeQuantifier, *cypher.PatternRange, cypher.Operator, *cypher.Limit, *cypher.Skip, graph.Kinds, *cypher.Parameter:
 		return &Cursor[cypher.SyntaxNode]{
 			Node: node,
-		}, nil
-
-	case *cypher.Limit:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Value},
-		}, nil
-
-	case *cypher.Skip:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Value},
 		}, nil
 
 	case *cypher.KindMatcher:
