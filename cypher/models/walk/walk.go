@@ -174,7 +174,7 @@ func isNilNode[N any](node N) bool {
 
 	value := reflect.ValueOf(rawNode)
 	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Pointer:
 		return value.IsNil()
 	default:
 		return false

@@ -125,6 +125,50 @@ func TestCypherWalkSkipsNilBranches(t *testing.T) {
 	}
 }
 
+func TestWalkSkipsNilPointersButVisitsTypedNilCollections(t *testing.T) {
+	t.Run("cypher nil pointer root", func(t *testing.T) {
+		var (
+			root    *cypher.Variable
+			visited bool
+		)
+
+		visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(cypher.SyntaxNode, walk.VisitorHandler) {
+			visited = true
+		})
+
+		require.NoError(t, walk.Cypher(root, visitor))
+		require.False(t, visited)
+	})
+
+	t.Run("cypher nil map literal root", func(t *testing.T) {
+		var (
+			root    cypher.MapLiteral
+			visited bool
+		)
+
+		visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+			_, visited = node.(cypher.MapLiteral)
+		})
+
+		require.NoError(t, walk.Cypher(root, visitor))
+		require.True(t, visited)
+	})
+
+	t.Run("pgsql nil slice node root", func(t *testing.T) {
+		var (
+			root    pgsql.CompoundIdentifier
+			visited bool
+		)
+
+		visitor := walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, _ walk.VisitorHandler) {
+			_, visited = node.(pgsql.CompoundIdentifier)
+		})
+
+		require.NoError(t, walk.PgSQL(root, visitor))
+		require.True(t, visited)
+	})
+}
+
 func TestCypherWalkSemanticSkipsDeclarationOnlyFields(t *testing.T) {
 	testCases := map[string]struct {
 		node          cypher.SyntaxNode
