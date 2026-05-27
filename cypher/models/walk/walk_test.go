@@ -650,6 +650,94 @@ func TestCypherWalkVisitsSemanticChildrenByNodeType(t *testing.T) {
 	}
 }
 
+func TestCypherWalkSemanticTraversalSequences(t *testing.T) {
+	testCases := map[string]struct {
+		node     cypher.SyntaxNode
+		expected []string
+	}{
+		"projection walks items then order and skips pagination values": {
+			node: &cypher.Projection{
+				Items: []cypher.Expression{
+					&cypher.ProjectionItem{
+						Expression: cypher.NewVariableWithSymbol("value"),
+						Alias:      cypher.NewVariableWithSymbol("alias"),
+					},
+				},
+				Order: &cypher.Order{
+					Items: []*cypher.SortItem{{
+						Expression: cypher.NewVariableWithSymbol("ordered"),
+					}},
+				},
+				Skip:  &cypher.Skip{Value: cypher.NewLiteral(10, false)},
+				Limit: &cypher.Limit{Value: cypher.NewLiteral(20, false)},
+			},
+			expected: []string{"variable:value", "variable:ordered"},
+		},
+		"comparison walks left then right without operator": {
+			node: &cypher.Comparison{
+				Left: cypher.NewVariableWithSymbol("left"),
+				Partials: []*cypher.PartialComparison{{
+					Operator: cypher.OperatorEquals,
+					Right:    cypher.NewVariableWithSymbol("right"),
+				}},
+			},
+			expected: []string{"variable:left", "variable:right"},
+		},
+		"arithmetic walks left operator then right": {
+			node: &cypher.ArithmeticExpression{
+				Left: cypher.NewVariableWithSymbol("left"),
+				Partials: []*cypher.PartialArithmeticExpression{{
+					Operator: cypher.OperatorAdd,
+					Right:    cypher.NewVariableWithSymbol("right"),
+				}},
+			},
+			expected: []string{"variable:left", "operator:+", "variable:right"},
+		},
+		"merge walks pattern before actions": {
+			node: &cypher.Merge{
+				PatternPart: &cypher.PatternPart{
+					PatternElements: []*cypher.PatternElement{{
+						Element: &cypher.NodePattern{
+							Properties: &cypher.Properties{
+								Map: cypher.MapLiteral{
+									"id": cypher.NewVariableWithSymbol("id"),
+								},
+							},
+						},
+					}},
+				},
+				MergeActions: []*cypher.MergeAction{{
+					Set: &cypher.Set{
+						Items: []*cypher.SetItem{{
+							Left:  cypher.NewPropertyLookup("node", "name"),
+							Right: cypher.NewVariableWithSymbol("name"),
+						}},
+					},
+				}},
+			},
+			expected: []string{"mapitem:id", "variable:id", "variable:node", "variable:name"},
+		},
+		"quantifier walks collection expression then where expression": {
+			node: &cypher.Quantifier{
+				Filter: &cypher.FilterExpression{
+					Specifier: &cypher.IDInCollection{
+						Variable:   cypher.NewVariableWithSymbol("item"),
+						Expression: cypher.NewVariableWithSymbol("items"),
+					},
+					Where: newCypherWhere(cypher.NewVariableWithSymbol("predicate")),
+				},
+			},
+			expected: []string{"variable:items", "variable:predicate"},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, testCase.expected, collectCypherWalkLabels(t, testCase.node, walk.Cypher))
+		})
+	}
+}
+
 func TestCypherStructuralWalkVisitsDeclarationAndMetadataFields(t *testing.T) {
 	testCases := map[string]struct {
 		node       cypher.SyntaxNode
@@ -980,6 +1068,12 @@ func collectCypherWalkLabels(t *testing.T, node cypher.SyntaxNode, walkFunc func
 
 	require.NoError(t, walkFunc(node, visitor))
 	return visited
+}
+
+func newCypherWhere(expressions ...cypher.Expression) *cypher.Where {
+	where := cypher.NewWhere()
+	where.AddSlice(expressions)
+	return where
 }
 
 type genericWalkTestNode struct {
