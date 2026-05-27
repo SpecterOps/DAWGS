@@ -46,6 +46,22 @@ The branch-only structural benchmark measured:
 | --- | ---: |
 | `CypherStructuralWalkLongPattern-20` | 70.19 us/op, 49.02 KiB/op, 1288 allocs/op |
 
+## Walker Coverage Comparison
+
+Package-local coverage was captured with:
+
+```bash
+go test -covermode=count -coverprofile=.coverage/walk-head.cover ./cypher/models/walk
+go test -covermode=count -coverprofile=.coverage/walk-upstream.cover ./cypher/models/walk
+```
+
+| Revision | Coverage |
+| --- | ---: |
+| `upstream/main` | 53.2% |
+| `HEAD` | 81.3% |
+
+`HEAD` does not lower `cypher/models/walk` package coverage.
+
 ## Commands
 
 - `go test ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`
