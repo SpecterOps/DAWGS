@@ -224,6 +224,7 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 				return err
 			}
 
+			// Clear any consume flag set by Exit before visiting the next sibling.
 			visitor.WasConsumed()
 			stack = stack[0 : len(stack)-1]
 		} else {
@@ -245,6 +246,7 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 						return err
 					}
 
+					// Clear any consume flag set by Exit before visiting the next sibling.
 					visitor.WasConsumed()
 					stack = stack[0 : len(stack)-1]
 					continue
