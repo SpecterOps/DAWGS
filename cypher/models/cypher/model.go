@@ -921,29 +921,48 @@ func (s MapLiteral) copy() MapLiteral {
 	return mapCopy
 }
 
-func (s MapLiteral) Items() []*MapItem {
-	items := make([]*MapItem, 0, len(s))
-
-	for key, value := range s {
-		items = append(items, &MapItem{
-			Key:   key,
-			Value: value,
-		})
-	}
-
-	return items
-}
-
-func (s MapLiteral) Keys() []any {
-	keys := make([]any, 0, len(s))
+func (s MapLiteral) sortedKeys() []string {
+	keys := make([]string, 0, len(s))
 
 	for key := range s {
 		keys = append(keys, key)
 	}
 
-	sort.Slice(keys, func(i, j int) bool {
-		return strings.Compare(keys[i].(string), keys[j].(string)) > 0
+	sort.Strings(keys)
+	return keys
+}
+
+func (s MapLiteral) Items() []*MapItem {
+	items := make([]*MapItem, 0, len(s))
+
+	_ = s.ForEachItem(func(key string, value Expression) error {
+		items = append(items, &MapItem{
+			Key:   key,
+			Value: value,
+		})
+		return nil
 	})
+
+	return items
+}
+
+func (s MapLiteral) ForEachItem(delegate func(key string, value Expression) error) error {
+	for _, key := range s.sortedKeys() {
+		if err := delegate(key, s[key]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s MapLiteral) Keys() []any {
+	sortedKeys := s.sortedKeys()
+	keys := make([]any, len(sortedKeys))
+
+	for idx, key := range sortedKeys {
+		keys[idx] = key
+	}
 
 	return keys
 }

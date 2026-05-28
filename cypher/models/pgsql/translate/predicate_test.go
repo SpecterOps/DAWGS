@@ -79,6 +79,12 @@ func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[st
 	return formatted
 }
 
+func TestExclusiveDisjunctionTranslates(t *testing.T) {
+	formatted := translatePredicateQuery(t, `MATCH (n:NodeKind1) WHERE true XOR false RETURN n`, nil)
+
+	require.Contains(t, formatted, "true != false")
+}
+
 func TestDynamicStringPredicatesUseHelperFunctions(t *testing.T) {
 	for _, testCase := range []struct {
 		name       string

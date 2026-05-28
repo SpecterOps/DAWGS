@@ -8,202 +8,554 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-func cypherSyntaxNodeSliceTypeConvert[F any, FS []F](fs FS) ([]cypher.SyntaxNode, error) {
-	return ConvertSliceType[cypher.SyntaxNode](fs)
+func newCypherWalkCursorWithBranches[F any, FS []F](node cypher.SyntaxNode, branches FS) *Cursor[cypher.SyntaxNode] {
+	cursor := &Cursor[cypher.SyntaxNode]{
+		Node:     node,
+		Branches: make([]cypher.SyntaxNode, 0, len(branches)),
+	}
+
+	addCypherBranches(cursor, branches)
+	return cursor
+}
+
+func newCypherWalkCursorWithBranchPrefix[F any, FS []F](node cypher.SyntaxNode, prefix cypher.SyntaxNode, branches FS) *Cursor[cypher.SyntaxNode] {
+	cursor := &Cursor[cypher.SyntaxNode]{
+		Node:     node,
+		Branches: make([]cypher.SyntaxNode, 0, len(branches)+1),
+	}
+
+	if !isNilNode(prefix) {
+		cursor.AddBranches(prefix)
+	}
+	addCypherBranches(cursor, branches)
+	return cursor
+}
+
+func newCypherWalkCursorWithMapItems(node cypher.SyntaxNode, mapLiteral cypher.MapLiteral) *Cursor[cypher.SyntaxNode] {
+	cursor := &Cursor[cypher.SyntaxNode]{
+		Node:     node,
+		Branches: make([]cypher.SyntaxNode, 0, len(mapLiteral)),
+	}
+
+	_ = mapLiteral.ForEachItem(func(key string, value cypher.Expression) error {
+		cursor.AddBranches(&cypher.MapItem{
+			Key:   key,
+			Value: value,
+		})
+		return nil
+	})
+
+	return cursor
+}
+
+func addCypherBranches[F any, FS []F](cursor *Cursor[cypher.SyntaxNode], branches FS) {
+	for _, branch := range branches {
+		cursor.AddBranches(cypher.SyntaxNode(branch))
+	}
+}
+
+func newCypherStructuralWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], error) {
+	if isNilNode(node) {
+		return nil, fmt.Errorf("unable to negotiate cypher model type %T into a translation cursor", node)
+	}
+
+	if cursor, handled := newCypherStructuralValueWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherStructuralPatternWalkCursor(node); handled {
+		return cursor, nil
+	}
+
+	return newCypherWalkCursor(node)
+}
+
+func newCypherStructuralValueWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.Limit:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Value != nil {
+			nextCursor.AddBranches(typedNode.Value)
+		}
+		return nextCursor, true
+
+	case *cypher.Skip:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Value != nil {
+			nextCursor.AddBranches(typedNode.Value)
+		}
+		return nextCursor, true
+
+	case *cypher.KindMatcher:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Reference != nil {
+			nextCursor.AddBranches(typedNode.Reference)
+		}
+		if typedNode.Kinds != nil {
+			nextCursor.AddBranches(typedNode.Kinds)
+		}
+		return nextCursor, true
+
+	case *cypher.Properties:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node: node,
+		}
+		if typedNode.Parameter != nil {
+			nextCursor.AddBranches(typedNode.Parameter)
+		}
+		if typedNode.Map != nil {
+			nextCursor.AddBranches(typedNode.Map)
+		}
+		return nextCursor, true
+
+	case cypher.MapLiteral:
+		return newCypherWalkCursorWithMapItems(node, typedNode), true
+
+	case *cypher.RemoveItem:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.KindMatcher != nil {
+			nextCursor.AddBranches(typedNode.KindMatcher)
+		}
+		if typedNode.Property != nil {
+			nextCursor.AddBranches(typedNode.Property)
+		}
+		return nextCursor, true
+
+	case *cypher.IDInCollection:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Variable != nil {
+			nextCursor.AddBranches(typedNode.Variable)
+		}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
+		}
+		return nextCursor, true
+
+	case *cypher.ProjectionItem:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
+		}
+		if typedNode.Alias != nil {
+			nextCursor.AddBranches(typedNode.Alias)
+		}
+		return nextCursor, true
+
+	case *cypher.PartialComparison:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node:     node,
+			Branches: []cypher.SyntaxNode{typedNode.Operator},
+		}
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
+		}
+		return nextCursor, true
+
+	case *cypher.PartialArithmeticExpression:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node:     node,
+			Branches: []cypher.SyntaxNode{typedNode.Operator},
+		}
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
+		}
+		return nextCursor, true
+
+	case *cypher.UnaryAddOrSubtractExpression:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node:     node,
+			Branches: []cypher.SyntaxNode{typedNode.Operator},
+		}
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
+		}
+		return nextCursor, true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherStructuralPatternWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.PatternPart:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node:     node,
+			Branches: make([]cypher.SyntaxNode, 0, len(typedNode.PatternElements)+1),
+		}
+		if typedNode.Variable != nil {
+			nextCursor.AddBranches(typedNode.Variable)
+		}
+		addCypherBranches(nextCursor, typedNode.PatternElements)
+		return nextCursor, true
+
+	case *cypher.RelationshipPattern:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node: node,
+		}
+		if typedNode.Variable != nil {
+			nextCursor.AddBranches(typedNode.Variable)
+		}
+		if typedNode.Kinds != nil {
+			nextCursor.AddBranches(typedNode.Kinds)
+		}
+		if typedNode.Range != nil {
+			nextCursor.AddBranches(typedNode.Range)
+		}
+		if typedNode.Properties != nil {
+			nextCursor.AddBranches(typedNode.Properties)
+		}
+		return nextCursor, true
+
+	case *cypher.NodePattern:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node: node,
+		}
+		if typedNode.Variable != nil {
+			nextCursor.AddBranches(typedNode.Variable)
+		}
+		if typedNode.Kinds != nil {
+			nextCursor.AddBranches(typedNode.Kinds)
+		}
+		if typedNode.Properties != nil {
+			nextCursor.AddBranches(typedNode.Properties)
+		}
+		return nextCursor, true
+
+	default:
+		return nil, false
+	}
 }
 
 func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], error) {
-	switch typedNode := node.(type) {
-	// Types with no AST branches
-	case *cypher.RangeQuantifier, cypher.Operator, *cypher.Limit, *cypher.Skip, graph.Kinds, *cypher.Parameter:
+	if isNilNode(node) {
+		return nil, fmt.Errorf("unable to negotiate cypher model type %T into a translation cursor", node)
+	}
+
+	if cursor, handled := newCypherLeafWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherValueWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherPredicateWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherOperatorWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherProjectionWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherQueryWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherUpdatingWalkCursor(node); handled {
+		return cursor, nil
+	}
+	if cursor, handled := newCypherPatternWalkCursor(node); handled {
+		return cursor, nil
+	}
+
+	return nil, fmt.Errorf("unable to negotiate cypher model type %T into a translation cursor", node)
+}
+
+func newCypherLeafWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch node.(type) {
+	case *cypher.RangeQuantifier, *cypher.PatternRange, cypher.Operator, *cypher.Limit, *cypher.Skip,
+		graph.Kinds, cypher.MapLiteral, *cypher.Parameter, *cypher.Literal, *cypher.Variable:
 		return &Cursor[cypher.SyntaxNode]{
 			Node: node,
-		}, nil
+		}, true
 
+	default:
+		return nil, false
+	}
+}
+
+func newCypherValueWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
 	case *cypher.KindMatcher:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Reference},
-		}, nil
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Reference != nil {
+			nextCursor.AddBranches(typedNode.Reference)
+		}
+		return nextCursor, true
 
 	case *cypher.PropertyLookup:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Atom},
-		}, nil
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Atom != nil {
+			nextCursor.AddBranches(typedNode.Atom)
+		}
+		return nextCursor, true
 
 	case *cypher.MapItem:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Value},
-		}, nil
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Value != nil {
+			nextCursor.AddBranches(typedNode.Value)
+		}
+		return nextCursor, true
 
 	case *cypher.Properties:
 		if typedNode.Parameter != nil {
 			return &Cursor[cypher.SyntaxNode]{
 				Node:     node,
 				Branches: []cypher.SyntaxNode{typedNode.Parameter},
-			}, nil
-		} else if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Map.Items()); err != nil {
-			return nil, err
+			}, true
 		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: branches,
-			}, nil
+			return newCypherWalkCursorWithMapItems(node, typedNode.Map), true
 		}
-
-	case *cypher.Literal:
-		return &Cursor[cypher.SyntaxNode]{
-			Node: node,
-		}, nil
-
-	case cypher.MapLiteral:
-		return &Cursor[cypher.SyntaxNode]{
-			Node: node,
-		}, nil
 
 	case *cypher.ListLiteral:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions()); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.Expressions()), true
+
+	case *cypher.FunctionInvocation:
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.Arguments), true
+
+	case *cypher.Parenthetical:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
+		}
+		return nextCursor, true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherPredicateWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.Quantifier:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Filter != nil {
+			nextCursor.AddBranches(typedNode.Filter)
+		}
+		return nextCursor, true
+
+	case *cypher.FilterExpression:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+
+		if typedNode.Specifier != nil {
+			nextCursor.AddBranches(typedNode.Specifier)
+		}
+		if typedNode.Where != nil {
+			nextCursor.AddBranches(typedNode.Where)
 		}
 
-	case *cypher.Create:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Pattern); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: branches,
-			}, nil
+		return nextCursor, true
+
+	case *cypher.IDInCollection:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
 		}
+		return nextCursor, true
 
-	case *cypher.Unwind:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Expression, typedNode.Variable},
-		}, nil
+	case *cypher.Where:
+		return newCypherWalkCursorWithBranches(node, typedNode.Expressions), true
 
-	case *cypher.RemoveItem:
+	case *cypher.Negation:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
+		}
+		return nextCursor, true
+
+	case *cypher.Conjunction:
+		return newCypherWalkCursorWithBranches(node, typedNode.Expressions), true
+
+	case *cypher.Disjunction:
+		return newCypherWalkCursorWithBranches(node, typedNode.Expressions), true
+
+	case *cypher.ExclusiveDisjunction:
+		return newCypherWalkCursorWithBranches(node, typedNode.Expressions), true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherOperatorWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.ArithmeticExpression:
+		return newCypherWalkCursorWithBranchPrefix(node, typedNode.Left, typedNode.Partials), true
+
+	case *cypher.PartialArithmeticExpression:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
-			Node: node,
-		}
-
-		if typedNode.Property != nil {
-			nextCursor.AddBranches(typedNode.Property)
-		}
-
-		return nextCursor, nil
-
-	case *cypher.Remove:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Items); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
-		}
-
-	case *cypher.Delete:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
-		}
-
-	case *cypher.SetItem:
-		return &Cursor[cypher.SyntaxNode]{
 			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Left, typedNode.Right},
-		}, nil
-
-	case *cypher.Set:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Items); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
+			Branches: []cypher.SyntaxNode{typedNode.Operator},
 		}
-
-	case *cypher.UpdatingClause:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Clause},
-		}, nil
-
-	case *cypher.PatternPredicate:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.PatternElements); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
 		}
+		return nextCursor, true
 
+	case *cypher.PartialComparison:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
+		}
+		return nextCursor, true
+
+	case *cypher.Comparison:
+		return newCypherWalkCursorWithBranchPrefix(node, typedNode.Left, typedNode.Partials), true
+
+	case *cypher.UnaryAddOrSubtractExpression:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
+		}
+		return nextCursor, true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherProjectionWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
 	case *cypher.Order:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Items); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
-		}
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.Items), true
 
 	case *cypher.SortItem:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Expression},
-		}, nil
-
-	case *cypher.MultiPartQuery:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Parts); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: append(branches, typedNode.SinglePartQuery),
-			}, nil
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
 		}
+		return nextCursor, true
 
-	case *cypher.MultiPartQueryPart:
+	case *cypher.Projection:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
 			Node: node,
 		}
 
-		if len(typedNode.ReadingClauses) > 0 {
-			if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.ReadingClauses); err != nil {
-				return nil, err
-			} else {
-				nextCursor.AddBranches(branches...)
-			}
+		addCypherBranches(nextCursor, typedNode.Items)
+
+		if typedNode.Order != nil {
+			nextCursor.AddBranches(typedNode.Order)
 		}
 
-		if len(typedNode.UpdatingClauses) > 0 {
-			if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.UpdatingClauses); err != nil {
-				return nil, err
-			} else {
-				nextCursor.AddBranches(branches...)
-			}
+		if typedNode.Skip != nil {
+			nextCursor.AddBranches(typedNode.Skip)
 		}
 
-		if typedNode.With != nil {
-			nextCursor.AddBranches(typedNode.With)
+		if typedNode.Limit != nil {
+			nextCursor.AddBranches(typedNode.Limit)
 		}
 
-		return nextCursor, nil
+		return nextCursor, true
+
+	case *cypher.ProjectionItem:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
+		}
+		return nextCursor, true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherQueryWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	if cursor, handled := newCypherStatementWalkCursor(node); handled {
+		return cursor, true
+	}
+	if cursor, handled := newCypherClauseWalkCursor(node); handled {
+		return cursor, true
+	}
+
+	return nil, false
+}
+
+func newCypherStatementWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.MultiPartQuery:
+		nextCursor := newCypherWalkCursorWithBranches(typedNode, typedNode.Parts)
+		if typedNode.SinglePartQuery != nil {
+			nextCursor.AddBranches(typedNode.SinglePartQuery)
+		}
+		return nextCursor, true
+
+	case *cypher.MultiPartQueryPart:
+		return newCypherMultiPartQueryPartWalkCursor(typedNode), true
+
+	case *cypher.RegularQuery:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.SingleQuery != nil {
+			nextCursor.AddBranches(typedNode.SingleQuery)
+		}
+		return nextCursor, true
+
+	case *cypher.SingleQuery:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.SinglePartQuery != nil {
+			nextCursor.AddBranches(typedNode.SinglePartQuery)
+		}
+		if typedNode.MultiPartQuery != nil {
+			nextCursor.AddBranches(typedNode.MultiPartQuery)
+		}
+		return nextCursor, true
+
+	case *cypher.SinglePartQuery:
+		return newCypherSinglePartQueryWalkCursor(typedNode), true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherMultiPartQueryPartWalkCursor(node *cypher.MultiPartQueryPart) *Cursor[cypher.SyntaxNode] {
+	nextCursor := &Cursor[cypher.SyntaxNode]{
+		Node: node,
+	}
+
+	if len(node.ReadingClauses) > 0 {
+		addCypherBranches(nextCursor, node.ReadingClauses)
+	}
+
+	if len(node.UpdatingClauses) > 0 {
+		addCypherBranches(nextCursor, node.UpdatingClauses)
+	}
+
+	if node.With != nil {
+		nextCursor.AddBranches(node.With)
+	}
+
+	return nextCursor
+}
+
+func newCypherSinglePartQueryWalkCursor(node *cypher.SinglePartQuery) *Cursor[cypher.SyntaxNode] {
+	nextCursor := &Cursor[cypher.SyntaxNode]{
+		Node: node,
+	}
+
+	if len(node.ReadingClauses) > 0 {
+		addCypherBranches(nextCursor, node.ReadingClauses)
+	}
+
+	if len(node.UpdatingClauses) > 0 {
+		addCypherBranches(nextCursor, node.UpdatingClauses)
+	}
+
+	if node.Return != nil {
+		nextCursor.AddBranches(node.Return)
+	}
+
+	return nextCursor
+}
+
+func newCypherClauseWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.Unwind:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Expression != nil {
+			nextCursor.AddBranches(typedNode.Expression)
+		}
+		if typedNode.Variable != nil {
+			nextCursor.AddBranches(typedNode.Variable)
+		}
+		return nextCursor, true
 
 	case *cypher.With:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
@@ -218,130 +570,14 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 			nextCursor.AddBranches(typedNode.Where)
 		}
 
-		return nextCursor, nil
-
-	case *cypher.Quantifier:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Filter},
-		}, nil
-
-	case *cypher.FilterExpression:
-		nextCursor := &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Specifier},
-		}
-
-		if typedNode.Where != nil {
-			nextCursor.AddBranches(typedNode.Where)
-		}
-
-		return nextCursor, nil
-
-	case *cypher.IDInCollection:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Expression},
-		}, nil
-
-	case *cypher.FunctionInvocation:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Arguments); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     typedNode,
-				Branches: branches,
-			}, nil
-		}
-
-	case *cypher.Parenthetical:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Expression},
-		}, nil
-
-	case *cypher.RegularQuery:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.SingleQuery},
-		}, nil
-
-	case *cypher.SingleQuery:
-		if typedNode.SinglePartQuery != nil {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: []cypher.SyntaxNode{typedNode.SinglePartQuery},
-			}, nil
-		}
-
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.MultiPartQuery},
-		}, nil
-
-	case *cypher.SinglePartQuery:
-		nextCursor := &Cursor[cypher.SyntaxNode]{
-			Node: node,
-		}
-
-		if len(typedNode.ReadingClauses) > 0 {
-			if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.ReadingClauses); err != nil {
-				return nil, err
-			} else {
-				nextCursor.AddBranches(branches...)
-			}
-		}
-
-		if len(typedNode.UpdatingClauses) > 0 {
-			if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.UpdatingClauses); err != nil {
-				return nil, err
-			} else {
-				nextCursor.AddBranches(branches...)
-			}
-		}
-
-		if typedNode.Return != nil {
-			nextCursor.AddBranches(typedNode.Return)
-		}
-
-		return nextCursor, nil
+		return nextCursor, true
 
 	case *cypher.Return:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Projection},
-		}, nil
-
-	case *cypher.Projection:
-		nextCursor := &Cursor[cypher.SyntaxNode]{
-			Node: node,
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Projection != nil {
+			nextCursor.AddBranches(typedNode.Projection)
 		}
-
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Items); err != nil {
-			return nil, err
-		} else {
-			nextCursor.AddBranches(branches...)
-		}
-
-		if typedNode.Order != nil {
-			nextCursor.AddBranches(typedNode.Order)
-		}
-
-		if typedNode.Skip != nil {
-			nextCursor.AddBranches(typedNode.Skip)
-		}
-
-		if typedNode.Limit != nil {
-			nextCursor.AddBranches(typedNode.Limit)
-		}
-
-		return nextCursor, nil
-
-	case *cypher.ProjectionItem:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Expression},
-		}, nil
+		return nextCursor, true
 
 	case *cypher.ReadingClause:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
@@ -356,40 +592,97 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 			nextCursor.AddBranches(typedNode.Unwind)
 		}
 
-		return nextCursor, nil
+		return nextCursor, true
 
 	case *cypher.Match:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
 			Node: node,
 		}
 
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Pattern); err != nil {
-			return nil, err
-		} else {
-			nextCursor.AddBranches(branches...)
-		}
+		addCypherBranches(nextCursor, typedNode.Pattern)
 
 		if typedNode.Where != nil {
 			nextCursor.AddBranches(typedNode.Where)
 		}
 
-		return nextCursor, nil
+		return nextCursor, true
 
-	case *cypher.PatternPart:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.PatternElements); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: branches,
-			}, nil
+	default:
+		return nil, false
+	}
+}
+
+func newCypherUpdatingWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.Create:
+		return newCypherWalkCursorWithBranches(node, typedNode.Pattern), true
+
+	case *cypher.RemoveItem:
+		nextCursor := &Cursor[cypher.SyntaxNode]{
+			Node: node,
 		}
 
+		if typedNode.Property != nil {
+			nextCursor.AddBranches(typedNode.Property)
+		}
+
+		return nextCursor, true
+
+	case *cypher.Remove:
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.Items), true
+
+	case *cypher.Delete:
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.Expressions), true
+
+	case *cypher.SetItem:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Left != nil {
+			nextCursor.AddBranches(typedNode.Left)
+		}
+		if typedNode.Right != nil {
+			nextCursor.AddBranches(typedNode.Right)
+		}
+		return nextCursor, true
+
+	case *cypher.Set:
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.Items), true
+
+	case *cypher.UpdatingClause:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Clause != nil {
+			nextCursor.AddBranches(typedNode.Clause)
+		}
+		return nextCursor, true
+
+	case *cypher.Merge:
+		return newCypherWalkCursorWithBranchPrefix(node, typedNode.PatternPart, typedNode.MergeActions), true
+
+	case *cypher.MergeAction:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Set != nil {
+			nextCursor.AddBranches(typedNode.Set)
+		}
+		return nextCursor, true
+
+	default:
+		return nil, false
+	}
+}
+
+func newCypherPatternWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
+	switch typedNode := node.(type) {
+	case *cypher.PatternPredicate:
+		return newCypherWalkCursorWithBranches(typedNode, typedNode.PatternElements), true
+
+	case *cypher.PatternPart:
+		return newCypherWalkCursorWithBranches(node, typedNode.PatternElements), true
+
 	case *cypher.PatternElement:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Element},
-		}, nil
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Element != nil {
+			nextCursor.AddBranches(typedNode.Element)
+		}
+		return nextCursor, true
 
 	case *cypher.RelationshipPattern:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
@@ -400,7 +693,7 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 			nextCursor.AddBranches(typedNode.Properties)
 		}
 
-		return nextCursor, nil
+		return nextCursor, true
 
 	case *cypher.NodePattern:
 		nextCursor := &Cursor[cypher.SyntaxNode]{
@@ -411,104 +704,9 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 			nextCursor.AddBranches(typedNode.Properties)
 		}
 
-		return nextCursor, nil
-
-	case *cypher.Where:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: branches,
-			}, nil
-		}
-
-	case *cypher.Variable:
-		return &Cursor[cypher.SyntaxNode]{
-			Node: node,
-		}, nil
-
-	case *cypher.ArithmeticExpression:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Partials); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: append([]cypher.SyntaxNode{typedNode.Left}, branches...),
-			}, nil
-		}
-
-	case *cypher.PartialArithmeticExpression:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Operator, typedNode.Right},
-		}, nil
-
-	case *cypher.PartialComparison:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Right},
-		}, nil
-
-	case *cypher.Negation:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Expression},
-		}, nil
-
-	case *cypher.Conjunction:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: branches,
-			}, nil
-		}
-
-	case *cypher.Disjunction:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Expressions); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: branches,
-			}, nil
-		}
-
-	case *cypher.Comparison:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.Partials); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: append([]cypher.SyntaxNode{typedNode.Left}, branches...),
-			}, nil
-		}
-
-	case *cypher.Merge:
-		if branches, err := cypherSyntaxNodeSliceTypeConvert(typedNode.MergeActions); err != nil {
-			return nil, err
-		} else {
-			return &Cursor[cypher.SyntaxNode]{
-				Node:     node,
-				Branches: append([]cypher.SyntaxNode{typedNode.PatternPart}, branches...),
-			}, nil
-		}
-
-	case *cypher.MergeAction:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Set},
-		}, nil
-
-	case *cypher.UnaryAddOrSubtractExpression:
-		return &Cursor[cypher.SyntaxNode]{
-			Node:     node,
-			Branches: []cypher.SyntaxNode{typedNode.Right},
-		}, nil
+		return nextCursor, true
 
 	default:
-		return nil, fmt.Errorf("unable to negotiate cypher model type %T into a translation cursor", node)
+		return nil, false
 	}
 }

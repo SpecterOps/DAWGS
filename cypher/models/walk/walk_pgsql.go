@@ -35,6 +35,10 @@ func newSQLCaseWalkCursor(node pgsql.SyntaxNode, caseExpr pgsql.Case) (*Cursor[p
 }
 
 func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) {
+	if isNilNode(node) {
+		return nil, fmt.Errorf("unable to negotiate sql type %T into a translation cursor", node)
+	}
+
 	switch typedNode := node.(type) {
 	case pgsql.Query:
 		nextCursor := &Cursor[pgsql.SyntaxNode]{

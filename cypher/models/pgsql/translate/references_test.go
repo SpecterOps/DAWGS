@@ -48,6 +48,13 @@ func TestCollectReferencedIdentifiersIncludesPatternPredicateReferences(t *testi
 	require.True(t, referencedIdentifiers.Contains("r"))
 }
 
+func TestCollectReferencedIdentifiersIncludesExclusiveDisjunctionOperands(t *testing.T) {
+	referencedIdentifiers := referencedIdentifiersForQuery(t, "match (n), (m) where n.enabled = true xor m.enabled = true return n")
+
+	require.True(t, referencedIdentifiers.Contains("n"))
+	require.True(t, referencedIdentifiers.Contains("m"))
+}
+
 func TestCollectReferencedIdentifiersIncludesRepeatedMatchPatternDeclarations(t *testing.T) {
 	referencedIdentifiers := referencedIdentifiersForQuery(t, "match (a)-->(b) match (b)-->(c) return c")
 

@@ -2,6 +2,7 @@ package format_test
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
@@ -25,6 +26,93 @@ func TestCypherEmitter_StripLiterals(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, emitter.Write(regularQuery, buffer))
 	require.Equal(t, "match (n {value: $STRIPPED}) where n.other = $STRIPPED and n.number = $STRIPPED return n.name, n", buffer.String())
+}
+
+func TestCypherEmitter_FormatsMapLiteralInKeyOrder(t *testing.T) {
+	var (
+		buffer  = &bytes.Buffer{}
+		emitter = format.NewCypherEmitter(false)
+	)
+
+	err := emitter.WriteExpression(buffer, cypher.MapLiteral{
+		"b": cypher.NewLiteral(2, false),
+		"a": cypher.NewLiteral(1, false),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "{a: 1, b: 2}", buffer.String())
+}
+
+func TestCypherEmitter_MapLiteralPropagatesExpressionError(t *testing.T) {
+	var (
+		buffer  = &bytes.Buffer{}
+		emitter = format.NewCypherEmitter(false)
+	)
+
+	err := emitter.WriteExpression(buffer, cypher.MapLiteral{
+		"bad": struct{}{},
+	})
+
+	require.ErrorContains(t, err, "unexpected expression type")
+}
+
+func TestCypherEmitter_MapLiteralPropagatesWriterError(t *testing.T) {
+	expectedErr := errors.New("write failed")
+	testCases := map[string]struct {
+		allowedWrites int
+		mapLiteral    cypher.MapLiteral
+	}{
+		"opening delimiter": {
+			allowedWrites: 0,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"key": {
+			allowedWrites: 1,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"colon": {
+			allowedWrites: 2,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"value": {
+			allowedWrites: 3,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"item separator": {
+			allowedWrites: 4,
+			mapLiteral: cypher.MapLiteral{
+				"a": cypher.NewLiteral(1, false),
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+		"closing delimiter": {
+			allowedWrites: 4,
+			mapLiteral: cypher.MapLiteral{
+				"b": cypher.NewLiteral(2, false),
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			writer := &errorAfterNWrites{
+				remaining: testCase.allowedWrites,
+				err:       expectedErr,
+			}
+
+			err := format.NewCypherEmitter(false).WriteExpression(writer, testCase.mapLiteral)
+
+			require.ErrorIs(t, err, expectedErr)
+		})
+	}
 }
 
 func TestCypherEmitter_HappyPath(t *testing.T) {
@@ -81,6 +169,20 @@ func TestNewStringLiteral_Escaping(t *testing.T) {
 			require.Equal(t, tc.expected, literal.Value)
 		})
 	}
+}
+
+type errorAfterNWrites struct {
+	remaining int
+	err       error
+}
+
+func (s *errorAfterNWrites) Write(p []byte) (int, error) {
+	if s.remaining == 0 {
+		return 0, s.err
+	}
+
+	s.remaining--
+	return len(p), nil
 }
 
 func TestNewStringLiteral_InQuery(t *testing.T) {
