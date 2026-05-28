@@ -75,10 +75,43 @@ func TestCypherWalkVisitsExclusiveDisjunction(t *testing.T) {
 	require.Equal(t, []string{"left", "right"}, visited)
 }
 
-func TestCypherWalkVisitsMapLiteralValuesInKeyOrder(t *testing.T) {
+func TestCypherWalkTreatsBareMapLiteralAsLeaf(t *testing.T) {
 	mapLiteral := cypher.MapLiteral{
 		"b": cypher.NewVariableWithSymbol("b_value"),
 		"a": cypher.NewVariableWithSymbol("a_value"),
+	}
+
+	var (
+		visitedMapLiterals int
+		visitedMapItems    int
+		visitedValues      []string
+	)
+
+	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		switch typedNode := node.(type) {
+		case cypher.MapLiteral:
+			visitedMapLiterals++
+
+		case *cypher.MapItem:
+			visitedMapItems++
+
+		case *cypher.Variable:
+			visitedValues = append(visitedValues, typedNode.Symbol)
+		}
+	})
+
+	require.NoError(t, walk.Cypher(mapLiteral, visitor))
+	require.Equal(t, 1, visitedMapLiterals)
+	require.Zero(t, visitedMapItems)
+	require.Empty(t, visitedValues)
+}
+
+func TestCypherWalkVisitsPropertiesMapValuesInKeyOrder(t *testing.T) {
+	properties := &cypher.Properties{
+		Map: cypher.MapLiteral{
+			"b": cypher.NewVariableWithSymbol("b_value"),
+			"a": cypher.NewVariableWithSymbol("a_value"),
+		},
 	}
 
 	var (
@@ -96,7 +129,7 @@ func TestCypherWalkVisitsMapLiteralValuesInKeyOrder(t *testing.T) {
 		}
 	})
 
-	require.NoError(t, walk.Cypher(mapLiteral, visitor))
+	require.NoError(t, walk.Cypher(properties, visitor))
 	require.Equal(t, []string{"a", "b"}, visitedKeys)
 	require.Equal(t, []string{"a_value", "b_value"}, visitedValues)
 }
@@ -127,7 +160,22 @@ func TestCypherWalkSkipsNilBranches(t *testing.T) {
 	}
 }
 
-func TestWalkSkipsNilPointersButVisitsTypedNilCollections(t *testing.T) {
+func TestWalkRejectsNilRootsButVisitsTypedNilCollections(t *testing.T) {
+	t.Run("cypher nil interface root", func(t *testing.T) {
+		var (
+			root    cypher.SyntaxNode
+			visited bool
+		)
+
+		visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(cypher.SyntaxNode, walk.VisitorHandler) {
+			visited = true
+		})
+
+		err := walk.Cypher(root, visitor)
+		require.ErrorContains(t, err, "unable to negotiate cypher model type <nil>")
+		require.False(t, visited)
+	})
+
 	t.Run("cypher nil pointer root", func(t *testing.T) {
 		var (
 			root    *cypher.Variable
@@ -138,8 +186,41 @@ func TestWalkSkipsNilPointersButVisitsTypedNilCollections(t *testing.T) {
 			visited = true
 		})
 
-		require.NoError(t, walk.Cypher(root, visitor))
+		err := walk.Cypher(root, visitor)
+		require.ErrorContains(t, err, "unable to negotiate cypher model type *cypher.Variable")
 		require.False(t, visited)
+	})
+
+	t.Run("pgsql nil interface root", func(t *testing.T) {
+		var (
+			root    pgsql.SyntaxNode
+			visited bool
+		)
+
+		visitor := walk.NewSimpleVisitor[pgsql.SyntaxNode](func(pgsql.SyntaxNode, walk.VisitorHandler) {
+			visited = true
+		})
+
+		err := walk.PgSQL(root, visitor)
+		require.ErrorContains(t, err, "unable to negotiate sql type <nil>")
+		require.False(t, visited)
+	})
+
+	t.Run("cypher nil interface branch", func(t *testing.T) {
+		expression := cypher.NewDisjunction(nil)
+		visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(cypher.SyntaxNode, walk.VisitorHandler) {})
+
+		err := walk.Cypher(expression, visitor)
+		require.ErrorContains(t, err, "unable to negotiate cypher model type <nil>")
+	})
+
+	t.Run("cypher nil pointer branch", func(t *testing.T) {
+		var variable *cypher.Variable
+		expression := cypher.NewDisjunction(variable)
+		visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(cypher.SyntaxNode, walk.VisitorHandler) {})
+
+		err := walk.Cypher(expression, visitor)
+		require.ErrorContains(t, err, "unable to negotiate cypher model type *cypher.Variable")
 	})
 
 	t.Run("cypher nil map literal root", func(t *testing.T) {
@@ -376,6 +457,23 @@ func TestGenericReturnsCursorConstructorErrors(t *testing.T) {
 		require.Empty(t, visitor.events)
 	})
 
+	t.Run("nil root", func(t *testing.T) {
+		expectedErr := errors.New("nil root cursor failure")
+		var root *genericWalkTestNode
+		visitor := newRecordingGenericWalkVisitor()
+		called := false
+
+		err := walk.Generic(root, visitor, func(node *genericWalkTestNode) (*walk.Cursor[*genericWalkTestNode], error) {
+			called = true
+			require.Nil(t, node)
+			return nil, expectedErr
+		})
+
+		require.ErrorIs(t, err, expectedErr)
+		require.True(t, called)
+		require.Empty(t, visitor.events)
+	})
+
 	t.Run("child", func(t *testing.T) {
 		expectedErr := errors.New("child cursor failure")
 		root := &genericWalkTestNode{
@@ -388,6 +486,26 @@ func TestGenericReturnsCursorConstructorErrors(t *testing.T) {
 
 		err := walk.Generic(root, visitor, func(node *genericWalkTestNode) (*walk.Cursor[*genericWalkTestNode], error) {
 			if node.name == "bad" {
+				return nil, expectedErr
+			}
+
+			return newGenericWalkTestCursor(node)
+		})
+
+		require.ErrorIs(t, err, expectedErr)
+		require.Equal(t, []string{"enter:root"}, visitor.events)
+	})
+
+	t.Run("nil child", func(t *testing.T) {
+		expectedErr := errors.New("nil child cursor failure")
+		root := &genericWalkTestNode{
+			name:     "root",
+			children: []*genericWalkTestNode{nil},
+		}
+		visitor := newRecordingGenericWalkVisitor()
+
+		err := walk.Generic(root, visitor, func(node *genericWalkTestNode) (*walk.Cursor[*genericWalkTestNode], error) {
+			if node == nil {
 				return nil, expectedErr
 			}
 
@@ -1124,6 +1242,12 @@ func TestCypherStructuralWalkVisitsModeledChildFields(t *testing.T) {
 				},
 			},
 			visited: []string{"parameter:props", "mapitem:name", "variable:name"},
+		},
+		"bare map literal": {
+			node: cypher.MapLiteral{
+				"name": cypher.NewVariableWithSymbol("name"),
+			},
+			visited: []string{"mapitem:name", "variable:name"},
 		},
 		"remove item kind matcher and property": {
 			node: &cypher.RemoveItem{

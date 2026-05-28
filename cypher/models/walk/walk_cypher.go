@@ -55,6 +55,10 @@ func addCypherBranches[F any, FS []F](cursor *Cursor[cypher.SyntaxNode], branche
 }
 
 func newCypherStructuralWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], error) {
+	if isNilNode(node) {
+		return nil, fmt.Errorf("unable to negotiate cypher model type %T into a translation cursor", node)
+	}
+
 	if cursor, handled := newCypherStructuralValueWalkCursor(node); handled {
 		return cursor, nil
 	}
@@ -102,6 +106,9 @@ func newCypherStructuralValueWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.
 			nextCursor.AddBranches(typedNode.Map)
 		}
 		return nextCursor, true
+
+	case cypher.MapLiteral:
+		return newCypherWalkCursorWithMapItems(node, typedNode), true
 
 	case *cypher.RemoveItem:
 		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
@@ -220,6 +227,10 @@ func newCypherStructuralPatternWalkCursor(node cypher.SyntaxNode) (*Cursor[cyphe
 }
 
 func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], error) {
+	if isNilNode(node) {
+		return nil, fmt.Errorf("unable to negotiate cypher model type %T into a translation cursor", node)
+	}
+
 	if cursor, handled := newCypherLeafWalkCursor(node); handled {
 		return cursor, nil
 	}
@@ -251,7 +262,7 @@ func newCypherWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], er
 func newCypherLeafWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode], bool) {
 	switch node.(type) {
 	case *cypher.RangeQuantifier, *cypher.PatternRange, cypher.Operator, *cypher.Limit, *cypher.Skip,
-		graph.Kinds, *cypher.Parameter, *cypher.Literal, *cypher.Variable:
+		graph.Kinds, cypher.MapLiteral, *cypher.Parameter, *cypher.Literal, *cypher.Variable:
 		return &Cursor[cypher.SyntaxNode]{
 			Node: node,
 		}, true
@@ -293,9 +304,6 @@ func newCypherValueWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxNode
 		} else {
 			return newCypherWalkCursorWithMapItems(node, typedNode.Map), true
 		}
-
-	case cypher.MapLiteral:
-		return newCypherWalkCursorWithMapItems(node, typedNode), true
 
 	case *cypher.ListLiteral:
 		return newCypherWalkCursorWithBranches(typedNode, typedNode.Expressions()), true

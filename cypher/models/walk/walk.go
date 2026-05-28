@@ -189,10 +189,6 @@ func isNilNode[N any](node N) bool {
 func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (*Cursor[E], error)) error {
 	var stack []*Cursor[E]
 
-	if isNilNode(node) {
-		return nil
-	}
-
 	if cursor, err := cursorConstructor(node); err != nil {
 		return err
 	} else {

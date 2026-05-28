@@ -9,19 +9,23 @@ This records the validation pass for the Cypher AST tooling test-hardening work.
 - Branch: `main`, 21 commits ahead of `upstream/main`.
 - Baseline: `upstream/main` resolves locally at `9fe779703362543ce2ef6a46fd93f4c040ac1ac0`.
 - Existing untracked files left untouched during preflight: `review.md` and `docs/cypher_support_v4.md`.
-- Integration validation will be run separately for the Neo4j and PostgreSQL connection strings provided for this
-  remediation pass.
+- Integration validation was run separately for the supplied Neo4j and PostgreSQL connection strings.
 
-## XOR Traversal Audit
+## Semantic Traversal Audit
 
 `walk.Cypher` consumers in `cypher/models/pgsql/translate`, `cypher/models/pgsql/optimize`, `query/builder.go`, and
 `query/neo4j` were audited for the newly reachable `*cypher.ExclusiveDisjunction` node. The PostgreSQL translator
 needed an explicit XOR translation path; it now lowers XOR expression-list joins to PostgreSQL boolean inequality.
 Reference and source collectors operate on descendant variables and tolerate the newly visible operand sub-trees.
 
+The reviewed broadening where bare `cypher.MapLiteral` values expanded into `*cypher.MapItem` children in all semantic
+expression contexts was reverted. `walk.Cypher` now preserves the upstream semantic contract: bare map literals are
+leaf nodes, while `*cypher.Properties` exposes map items for pattern/create/update property maps. `walk.CypherStructural`
+owns bare map literal expansion for AST inspection use cases.
+
 ## Walker Benchmark Comparison
 
-Benchmarks were captured with:
+The prior benchmark pass was captured with:
 
 ```bash
 go test -run '^$' -bench 'BenchmarkCypher' -benchmem -count=10 ./cypher/models/walk
@@ -33,11 +37,10 @@ structural benchmark omitted. The comparable semantic walker results were:
 | Benchmark | `upstream/main` | `HEAD` | Delta |
 | --- | ---: | ---: | ---: |
 | `CypherWalkLargeProjection-20` | 69.72 us/op | 83.54 us/op | +19.83% |
-| `CypherWalkLargeMapLiteral-20` | 43.28 ns/op | 141014 ns/op | +325680.29% |
 
-The map-literal number is not an apples-to-apples traversal comparison: `HEAD` visits map items and values, while
-`upstream/main` treats the same map literal as a near-leaf. The projection benchmark remains slower after replacing the
-post-dequeue reflective nil check with cursor-constructor nil filtering and a leaf fast path in `Generic`; allocations
+The earlier branch-only map-literal benchmark delta came from semantic traversal expanding bare map literals. That
+broadening was reverted, so the semantic map-literal benchmark is expected to remain leaf-equivalent with upstream.
+The projection benchmark remains slower after moving optional-field nil filtering into cursor constructors; allocations
 are effectively flat at 74.55 KiB/op on `upstream/main` vs. 74.41 KiB/op on `HEAD`.
 
 The branch-only structural benchmark measured:
@@ -69,8 +72,10 @@ Behavior changes to call out:
 - `cypher.MapLiteral.Keys()` now returns keys in ascending lexical order. It previously returned descending order.
 - `walk.Cypher` now traverses `*cypher.ExclusiveDisjunction`; translator and collector visitors now see XOR operand
   sub-trees.
-- `walk.Generic` treats nil roots and nil optional branches as skipped traversal inputs instead of reporting a cursor
-  negotiation error.
+- `walk.Cypher` keeps bare `cypher.MapLiteral` values as semantic leaves; only `*cypher.Properties` exposes
+  `*cypher.MapItem` children in semantic traversal. `walk.CypherStructural` traverses bare map literal contents.
+- `walk.Generic` continues to surface nil roots and nil branches through cursor-constructor negotiation errors instead
+  of treating them as successful optional traversals.
 - `cancelableVisitorHandler.SetError` now accumulates repeated errors with `errors.Join` in a left-associated chain
   instead of storing a flat slice before joining.
 
@@ -86,6 +91,8 @@ New exported APIs:
 
 ## Commands
 
+- `go test ./cypher/models/walk`
+  - Result: pass.
 - `go test ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`
   - Result: pass.
 - `go test -covermode=count -coverpkg=./cypher/models/walk,./cypher/models/cypher,./cypher/models/cypher/format -coverprofile=/tmp/cypher_ast_tooling_validation.cover ./cypher/models/walk ./cypher/models/cypher ./cypher/models/cypher/format`
