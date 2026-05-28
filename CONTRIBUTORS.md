@@ -28,3 +28,4 @@ This project would not be what it is without the hard work and thoughts of those
 - [HD Moore](https://github.com/hdm)
 - [Sean Johnson](https://github.com/seanjSO)
 - [Benjamin Sheth](https://github.com/bsheth711)
+- [Mitchell Amundsen](https://github.com/mamundsen-specter)
