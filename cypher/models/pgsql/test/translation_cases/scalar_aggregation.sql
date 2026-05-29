@@ -103,3 +103,4 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 
 -- case: MATCH (n) WITH sum(n.age) / count(n) AS avg_age RETURN avg_age
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum((((s1.n0).properties ->> 'age'))::float8)::numeric / count(s1.n0)::int8 as i0 from s1) select s0.i0 as avg_age from s0;
+
