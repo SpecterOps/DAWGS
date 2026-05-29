@@ -334,10 +334,10 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 		ROperand: propertyLookup("isassignabletorole"),
 		Expected: "'true' = (n.properties ->> 'isassignabletorole')",
 	}, {
-		Name:     "non-boolean string literal keeps jsonb scalar equality",
+		Name:     "non-boolean string literal uses guarded text property lookup",
 		LOperand: propertyLookup("rank"),
 		ROperand: mustAsLiteral("1"),
-		Expected: "((n.properties -> 'rank'))::jsonb = to_jsonb(('1')::text)::jsonb",
+		Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') = '1')",
 	}, {
 		Name:     "boolean literal keeps jsonb scalar equality",
 		LOperand: propertyLookup("isassignabletorole"),

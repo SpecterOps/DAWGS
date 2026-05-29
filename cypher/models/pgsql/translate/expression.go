@@ -240,7 +240,7 @@ func rewritePropertyLookupOperator(propertyLookup *pgsql.BinaryExpression, dataT
 
 func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
 	switch dataType {
-	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric, pgsql.Text:
+	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric:
 		return true
 
 	default:
@@ -285,6 +285,23 @@ func isBooleanTextCompatibilityOperand(kindMapper *contextAwareKindMapper, expre
 	default:
 		return false
 	}
+}
+
+func rewriteStringEqualityOperand(kindMapper *contextAwareKindMapper, expression pgsql.Expression) (pgsql.Expression, bool) {
+	if literal, isLiteral := expression.(pgsql.Literal); isLiteral && literal.Null {
+		return nil, false
+	} else if isBooleanTextCompatibilityOperand(kindMapper, expression) {
+		// Preserve compatibility for existing callers that compare JSON boolean properties to stringified booleans.
+		return nil, false
+	}
+
+	if typedExpression, isTypeHinted := expression.(pgsql.TypeHinted); !isTypeHinted {
+		return nil, false
+	} else if typedExpression.TypeHint() != pgsql.Text {
+		return nil, false
+	}
+
+	return expression, true
 }
 
 func rewriteJSONScalarEqualityOperand(kindMapper *contextAwareKindMapper, expression pgsql.Expression) (pgsql.Expression, bool) {
@@ -381,7 +398,10 @@ func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expressio
 				}
 
 			case pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals:
-				if rewrittenROperand, rewritten := rewriteJSONScalarEqualityOperand(kindMapper, expression.ROperand); rewritten {
+				if rewrittenROperand, rewritten := rewriteStringEqualityOperand(kindMapper, expression.ROperand); rewritten {
+					expression.LOperand = rewritePropertyLookupOperator(leftPropertyLookup, pgsql.Text)
+					expression.ROperand = rewrittenROperand
+				} else if rewrittenROperand, rewritten := rewriteJSONScalarEqualityOperand(kindMapper, expression.ROperand); rewritten {
 					leftPropertyLookup.Operator = pgsql.OperatorJSONField
 					expression.ROperand = rewrittenROperand
 				} else if rOperandTypeHint == pgsql.AnyArray {
@@ -411,11 +431,14 @@ func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expressio
 			case pgsql.OperatorCypherStartsWith, pgsql.OperatorCypherEndsWith, pgsql.OperatorCypherContains, pgsql.OperatorRegexMatch:
 				expression.ROperand = rewritePropertyLookupOperator(rightPropertyLookup, pgsql.Text)
 
-				// If the left operand is a literal, unlike the right operand case there is no need to rewrite
-				// for special (like, ilike, etc.) character classes
+			// If the left operand is a literal, unlike the right operand case there is no need to rewrite
+			// for special (like, ilike, etc.) character classes
 
 			case pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals:
-				if rewrittenLOperand, rewritten := rewriteJSONScalarEqualityOperand(kindMapper, expression.LOperand); rewritten {
+				if rewrittenLOperand, rewritten := rewriteStringEqualityOperand(kindMapper, expression.LOperand); rewritten {
+					expression.LOperand = rewrittenLOperand
+					expression.ROperand = rewritePropertyLookupOperator(rightPropertyLookup, pgsql.Text)
+				} else if rewrittenLOperand, rewritten := rewriteJSONScalarEqualityOperand(kindMapper, expression.LOperand); rewritten {
 					expression.LOperand = rewrittenLOperand
 					rightPropertyLookup.Operator = pgsql.OperatorJSONField
 				} else if lOperandTypeHint == pgsql.AnyArray {
@@ -474,6 +497,8 @@ func (s *Builder) PopOperand(kindMapper *contextAwareKindMapper) (pgsql.Expressi
 	case *pgsql.BinaryExpression:
 		if err := applyBinaryExpressionTypeHints(kindMapper, typedNext); err != nil {
 			return nil, err
+		} else if rewrittenExpression, rewritten := buildStringPropertyEqualityPredicate(kindMapper, typedNext); rewritten {
+			next = rewrittenExpression
 		}
 	}
 
@@ -886,6 +911,103 @@ func jsonFieldPropertyLookup(propertyLookup *pgsql.BinaryExpression) *pgsql.Bina
 	return pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONField, propertyLookup.ROperand)
 }
 
+func jsonTextPropertyLookup(propertyLookup *pgsql.BinaryExpression) *pgsql.BinaryExpression {
+	return pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONTextField, propertyLookup.ROperand)
+}
+
+func jsonbTypeof(expression pgsql.Expression) pgsql.Expression {
+	return pgsql.FunctionCall{
+		Function:   pgsql.FunctionJSONBTypeof,
+		Parameters: []pgsql.Expression{expression},
+	}
+}
+
+func jsonbStringTypeCheck(propertyLookup *pgsql.BinaryExpression) pgsql.Expression {
+	return pgsql.NewBinaryExpression(
+		jsonbTypeof(jsonFieldPropertyLookup(propertyLookup)),
+		pgsql.OperatorEquals,
+		pgsql.NewLiteral("string", pgsql.Text),
+	)
+}
+
+func toJSONBTextOperand(expression pgsql.Expression) pgsql.Expression {
+	return pgsql.FunctionCall{
+		Function: pgsql.FunctionToJSONB,
+		Parameters: []pgsql.Expression{
+			pgsql.NewTypeCast(expression, pgsql.Text),
+		},
+		CastType: pgsql.JSONB,
+	}
+}
+
+func buildStringPropertyEqualityComparison(propertyLookup *pgsql.BinaryExpression, textOperand pgsql.Expression, propertyOnLeft bool, operator pgsql.Operator) pgsql.Expression {
+	textPropertyLookup := jsonTextPropertyLookup(propertyLookup)
+
+	if propertyOnLeft {
+		return pgsql.NewBinaryExpression(textPropertyLookup, operator, textOperand)
+	}
+
+	return pgsql.NewBinaryExpression(textOperand, operator, textPropertyLookup)
+}
+
+func buildStringPropertyEqualityPredicate(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) (pgsql.Expression, bool) {
+	if !expression.Operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals) {
+		return nil, false
+	}
+
+	leftPropertyLookup, hasLeftPropertyLookup := expressionToPropertyLookupBinaryExpression(expression.LOperand)
+	rightPropertyLookup, hasRightPropertyLookup := expressionToPropertyLookupBinaryExpression(expression.ROperand)
+
+	if hasLeftPropertyLookup {
+		if rewrittenROperand, rewritten := rewriteStringEqualityOperand(kindMapper, expression.ROperand); rewritten {
+			rewritePropertyLookupOperator(leftPropertyLookup, pgsql.Text)
+			return buildStringPropertyComparisonPredicate(leftPropertyLookup, rewrittenROperand, true, expression.Operator), true
+		}
+	}
+
+	if hasRightPropertyLookup {
+		if rewrittenLOperand, rewritten := rewriteStringEqualityOperand(kindMapper, expression.LOperand); rewritten {
+			rewritePropertyLookupOperator(rightPropertyLookup, pgsql.Text)
+			return buildStringPropertyComparisonPredicate(rightPropertyLookup, rewrittenLOperand, false, expression.Operator), true
+		}
+	}
+
+	return nil, false
+}
+
+func buildStringPropertyComparisonPredicate(propertyLookup *pgsql.BinaryExpression, textOperand pgsql.Expression, propertyOnLeft bool, operator pgsql.Operator) pgsql.Expression {
+	stringComparison := buildStringPropertyEqualityComparison(propertyLookup, textOperand, propertyOnLeft, operator)
+
+	if operator == pgsql.OperatorEquals {
+		return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
+			jsonbStringTypeCheck(propertyLookup),
+			pgsql.OperatorAnd,
+			stringComparison,
+		))
+	}
+
+	nonStringTypeCheck := pgsql.NewBinaryExpression(
+		jsonbTypeof(jsonFieldPropertyLookup(propertyLookup)),
+		pgsql.OperatorCypherNotEquals,
+		pgsql.NewLiteral("string", pgsql.Text),
+	)
+	nonStringComparison := pgsql.NewBinaryExpression(
+		jsonFieldPropertyLookup(propertyLookup),
+		pgsql.OperatorCypherNotEquals,
+		toJSONBTextOperand(textOperand),
+	)
+
+	return pgsql.NewParenthetical(pgsql.NewBinaryExpression(
+		pgsql.NewBinaryExpression(
+			jsonbStringTypeCheck(propertyLookup),
+			pgsql.OperatorAnd,
+			stringComparison,
+		),
+		pgsql.OperatorOr,
+		pgsql.NewBinaryExpression(nonStringTypeCheck, pgsql.OperatorAnd, nonStringComparison),
+	))
+}
+
 func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, negated bool) *pgsql.BinaryExpression {
 	emptyArrayExpression := pgsql.NewBinaryExpression(
 		jsonFieldPropertyLookup(propertyLookup),
@@ -1197,6 +1319,10 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 		s.PushOperand(newExpression)
 
 	case pgsql.OperatorEquals:
+		if err := applyBinaryExpressionTypeHints(s.kindMapper, newExpression); err != nil {
+			return err
+		}
+
 		if propertyLookup, hasEmptyArrayLiteralPropertyComparison := isEmptyArrayLiteralPropertyComparison(newExpression); hasEmptyArrayLiteralPropertyComparison {
 			expandedExpression := buildEmptyArrayPropertyComparison(propertyLookup, false)
 
@@ -1205,11 +1331,17 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 			s.PushOperand(pgsql.NewParenthetical(expandedExpression))
+		} else if rewrittenExpression, rewritten := buildStringPropertyEqualityPredicate(s.kindMapper, newExpression); rewritten {
+			s.PushOperand(rewrittenExpression)
 		} else {
 			s.PushOperand(newExpression)
 		}
 
 	case pgsql.OperatorCypherNotEquals:
+		if err := applyBinaryExpressionTypeHints(s.kindMapper, newExpression); err != nil {
+			return err
+		}
+
 		if propertyLookup, hasEmptyArrayLiteralPropertyComparison := isEmptyArrayLiteralPropertyComparison(newExpression); hasEmptyArrayLiteralPropertyComparison {
 			expandedExpression := buildEmptyArrayPropertyComparison(propertyLookup, true)
 
@@ -1218,6 +1350,8 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 			s.PushOperand(pgsql.NewParenthetical(expandedExpression))
+		} else if rewrittenExpression, rewritten := buildStringPropertyEqualityPredicate(s.kindMapper, newExpression); rewritten {
+			s.PushOperand(rewrittenExpression)
 		} else {
 			s.PushOperand(newExpression)
 		}
