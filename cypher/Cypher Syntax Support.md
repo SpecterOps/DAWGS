@@ -452,8 +452,10 @@ match (n) where n.name = '1234' return n
 will use the `name` index regardless of node label.
 
 For substring and suffix searches, PostgreSQL can use explicit `TextSearchIndex`/trigram expression indexes requested
-by schema, but CySQL does not add blanket suffix indexes during default schema assertion. Suffix forms are still being
-kept conservative so `ENDS WITH`, reversed operands, null handling, and string type semantics remain backend-equivalent.
+by schema, but CySQL does not add blanket suffix indexes during default schema assertion. Current hard PostgreSQL plan
+regression coverage is limited to literal `CONTAINS`, `STARTS WITH`, and `ENDS WITH` forms that lower directly to
+`LIKE` over `properties ->> key`. Dynamic parameter/property forms that lower to helper functions remain outside the
+index-match contract until their lowering changes.
 
 ### null Behavior
 
