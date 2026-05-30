@@ -18,68 +18,256 @@ package integration
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/drivers"
+	"github.com/specterops/dawgs/drivers/neo4j"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/testutil/integrationharness"
 	"github.com/specterops/dawgs/opengraph"
+	"github.com/specterops/dawgs/util/size"
 )
+
+const ConnectionStringEnv = "CONNECTION_STRING"
 
 var (
-	localDatasetFlag = integrationharness.LocalDatasetFlag
+	localDatasetFlag   = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
+	errFixtureRollback = errors.New("fixture rollback")
 )
 
-// driverFromConnStr returns the dawgs driver name based on the connection string scheme.
-func driverFromConnStr(connStr string) (string, error) {
-	return integrationharness.DriverFromConnectionString(connStr)
+type CleanupMode int
+
+const (
+	CleanupGraph CleanupMode = iota
+	CloseOnly
+)
+
+type Options struct {
+	RequireDriver          string
+	SkipIfNoConnection     bool
+	SkipIfDriverMismatch   bool
+	ConnectionStringEnvVar string
+	GraphName              string
+	GraphQueryMemoryLimit  size.Size
+	Schema                 *graph.Schema
+	ExtraNodeKinds         graph.Kinds
+	ExtraEdgeKinds         graph.Kinds
+	Datasets               []string
+	DatasetPath            func(name string) string
+	CleanupMode            CleanupMode
 }
 
-// SetupDB opens a database connection for the selected driver, asserts a schema
-// derived from the given datasets, and registers cleanup. Returns the database
-// and a background context.
-func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
-	t.Helper()
-
-	return setupDB(t, integrationharness.CleanupGraph, nil, nil, datasets...)
+type Session struct {
+	ConnectionString string
+	Driver           string
+	DB               graph.Database
+	PGPool           *pgxpool.Pool
+	Ctx              context.Context
 }
 
-// SetupDBWithKinds opens a database connection like SetupDB, then extends the
-// asserted schema with additional node and edge kinds.
-func SetupDBWithKinds(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
-	t.Helper()
+// DriverFromConnStr returns the dawgs driver name based on the connection string scheme.
+func DriverFromConnectionString(connStr string) (string, error) {
+	u, err := url.Parse(connStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse connection string: %w", err)
+	}
 
-	return setupDB(t, integrationharness.CleanupGraph, extraNodeKinds, extraEdgeKinds, datasets...)
+	switch u.Scheme {
+	case "postgresql", "postgres":
+		return pg.DriverName, nil
+	case neo4j.DriverName, "neo4j+s", "neo4j+ssc":
+		return neo4j.DriverName, nil
+	default:
+		return "", fmt.Errorf("unknown connection string scheme %q", u.Scheme)
+	}
 }
 
-// SetupDBWithKindsNoGraphCleanup opens a database connection like SetupDBWithKinds
-// but only closes the connection during cleanup. Use this for rollback-only tests
-// that must not clear a shared database.
-func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+func Open(t *testing.T, opts Options) *Session {
 	t.Helper()
 
-	return setupDB(t, integrationharness.CloseOnly, extraNodeKinds, extraEdgeKinds, datasets...)
-}
+	ctx := context.Background()
+	connEnv := opts.ConnectionStringEnvVar
+	if connEnv == "" {
+		connEnv = ConnectionStringEnv
+	}
 
-func setupDB(t *testing.T, cleanupMode integrationharness.CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
-	t.Helper()
+	connStr := os.Getenv(connEnv)
+	if connStr == "" {
+		if opts.SkipIfNoConnection {
+			t.Skipf("%s env var is not set", connEnv)
+		}
+		t.Fatalf("%s env var is not set", connEnv)
+	}
 
-	session := integrationharness.Open(t, integrationharness.Options{
-		CleanupMode:    cleanupMode,
-		Datasets:       datasets,
-		ExtraNodeKinds: extraNodeKinds,
-		ExtraEdgeKinds: extraEdgeKinds,
-		DatasetPath:    datasetPath,
+	driver, err := DriverFromConnectionString(connStr)
+	if err != nil {
+		t.Fatalf("failed to detect driver: %v", err)
+	}
+
+	if opts.RequireDriver != "" && driver != opts.RequireDriver {
+		if opts.SkipIfDriverMismatch {
+			t.Skipf("%s is not a %s connection string", connEnv, opts.RequireDriver)
+		}
+		t.Fatalf("%s is not a %s connection string", connEnv, opts.RequireDriver)
+	}
+
+	cfg := dawgs.Config{
+		ConnectionString:      connStr,
+		GraphQueryMemoryLimit: opts.graphQueryMemoryLimit(),
+	}
+
+	session := &Session{
+		ConnectionString: connStr,
+		Driver:           driver,
+		Ctx:              ctx,
+	}
+
+	if driver == pg.DriverName {
+		pool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: connStr})
+		if err != nil {
+			t.Fatalf("failed to create PG pool: %v", err)
+		}
+		cfg.Pool = pool
+		session.PGPool = pool
+	}
+
+	db, err := dawgs.Open(ctx, driver, cfg)
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	session.DB = db
+
+	schema := opts.Schema
+	if schema == nil {
+		schema = buildSchema(t, opts)
+	}
+	if schema != nil {
+		if err := db.AssertSchema(ctx, *schema); err != nil {
+			t.Fatalf("failed to assert schema: %v", err)
+		}
+	}
+
+	t.Cleanup(func() {
+		if opts.CleanupMode != CloseOnly {
+			_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+				return tx.Nodes().Delete()
+			})
+		}
+		db.Close(ctx)
 	})
 
-	return session.DB, session.Ctx
+	return session
+}
+
+func (s *Session) ClearGraph(t *testing.T) {
+	t.Helper()
+
+	if err := s.DB.WriteTransaction(s.Ctx, func(tx graph.Transaction) error {
+		return tx.Nodes().Delete()
+	}); err != nil {
+		t.Fatalf("failed to clear graph: %v", err)
+	}
+}
+
+func (s *Session) LoadDataset(t *testing.T, path string) opengraph.IDMap {
+	t.Helper()
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open dataset %q: %v", path, err)
+	}
+	defer f.Close()
+
+	idMap, err := opengraph.Load(s.Ctx, s.DB, f)
+	if err != nil {
+		t.Fatalf("failed to load dataset %q: %v", path, err)
+	}
+
+	return idMap
+}
+
+func (s *Session) WithRollbackFixture(t *testing.T, fixture *opengraph.Graph, clearGraph bool, delegate func(tx graph.Transaction, idMap opengraph.IDMap) error) error {
+	t.Helper()
+
+	return s.withRollback(t, func(tx graph.Transaction) error {
+		if clearGraph {
+			if err := tx.Nodes().Delete(); err != nil {
+				return fmt.Errorf("clearing graph before fixture: %w", err)
+			}
+		}
+
+		idMap, err := opengraph.WriteGraphTx(tx, fixture)
+		if err != nil {
+			return fmt.Errorf("creating fixture: %w", err)
+		}
+
+		if delegate != nil {
+			return delegate(tx, idMap)
+		}
+
+		return nil
+	})
+}
+
+func (s *Session) WithRollback(t *testing.T, delegate func(tx graph.Transaction) error) error {
+	t.Helper()
+	return s.withRollback(t, delegate)
+}
+
+func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction) error) error {
+	t.Helper()
+
+	err := s.DB.WriteTransaction(s.Ctx, func(tx graph.Transaction) error {
+		if err := delegate(tx); err != nil {
+			return err
+		}
+
+		return errFixtureRollback
+	})
+	if errors.Is(err, errFixtureRollback) {
+		return nil
+	}
+
+	return err
+}
+
+func buildSchema(t *testing.T, opts Options) *graph.Schema {
+	t.Helper()
+
+	nodeKinds, edgeKinds := collectKinds(t, opts.Datasets, opts.datasetPath())
+	nodeKinds = nodeKinds.Add(opts.ExtraNodeKinds...)
+	edgeKinds = edgeKinds.Add(opts.ExtraEdgeKinds...)
+
+	if len(nodeKinds) == 0 && len(edgeKinds) == 0 {
+		return nil
+	}
+
+	graphName := opts.GraphName
+	if graphName == "" {
+		graphName = "integration_test"
+	}
+
+	return &graph.Schema{
+		Graphs: []graph.Graph{{
+			Name:  graphName,
+			Nodes: nodeKinds,
+			Edges: edgeKinds,
+		}},
+		DefaultGraph: graph.Graph{Name: graphName},
+	}
 }
 
 // collectKinds parses the given datasets and returns the union of all node and edge kinds.
-func collectKinds(t *testing.T, datasets []string) (graph.Kinds, graph.Kinds) {
+func collectKinds(t *testing.T, datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds) {
 	t.Helper()
 
 	var nodeKinds, edgeKinds graph.Kinds
@@ -102,6 +290,80 @@ func collectKinds(t *testing.T, datasets []string) (graph.Kinds, graph.Kinds) {
 	}
 
 	return nodeKinds, edgeKinds
+}
+
+func (s *Options) datasetPath() func(name string) string {
+	if s.DatasetPath != nil {
+		return s.DatasetPath
+	}
+
+	return func(name string) string {
+		return "testdata/" + name + ".json"
+	}
+}
+
+func (s Options) graphQueryMemoryLimit() size.Size {
+	if s.GraphQueryMemoryLimit == 0 {
+		return size.Gibibyte
+	}
+
+	return s.GraphQueryMemoryLimit
+}
+
+// SetupDB opens a database connection for the selected driver, asserts a schema
+// derived from the given datasets, and registers cleanup. Returns the database
+// and a background context.
+func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
+	session := Open(t, Options{
+		CleanupMode:    0,
+		Datasets:       datasets,
+		ExtraNodeKinds: nil,
+		ExtraEdgeKinds: nil,
+		DatasetPath:    datasetPath,
+	})
+
+	return session.DB, session.Ctx
+}
+
+// SetupDBWithKinds opens a database connection like SetupDB, then extends the
+// asserted schema with additional node and edge kinds.
+func SetupDBWithKinds(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
+	session := Open(t, Options{
+		CleanupMode:    cleanupMode,
+		Datasets:       datasets,
+		ExtraNodeKinds: extraNodeKinds,
+		ExtraEdgeKinds: extraEdgeKinds,
+		DatasetPath:    datasetPath,
+	})
+
+	return session.DB, session.Ctx
+}
+
+// SetupDBWithKindsNoGraphCleanup opens a database connection like SetupDBWithKinds
+// but only closes the connection during cleanup. Use this for rollback-only tests
+// that must not clear a shared database.
+func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
+	return setupDB(t, CloseOnly, extraNodeKinds, extraEdgeKinds, datasets...)
+}
+
+func setupDB(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+	t.Helper()
+
+	session := Open(t, Options{
+		CleanupMode:    cleanupMode,
+		Datasets:       datasets,
+		ExtraNodeKinds: extraNodeKinds,
+		ExtraEdgeKinds: extraEdgeKinds,
+		DatasetPath:    datasetPath,
+	})
+
+	return session.DB, session.Ctx
 }
 
 // ClearGraph deletes all nodes (and cascading edges) from the database.

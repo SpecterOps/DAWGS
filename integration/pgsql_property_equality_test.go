@@ -53,7 +53,7 @@ func TestPostgreSQLPropertyTextEqualityCompatibility(t *testing.T) {
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
 
-	driver, err := driverFromConnStr(connStr)
+	driver, err := DriverFromConnectionString(connStr)
 	if err != nil {
 		t.Fatalf("failed to detect driver: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestPostgreSQLPropertyTextEqualityCompatibility(t *testing.T) {
 		userKind   = graph.StringKind("User")
 		groupKind  = graph.StringKind("Group")
 		memberOf   = graph.StringKind("MemberOf")
-		db, ctx    = SetupDBWithKinds(t, graph.Kinds{userKind, groupKind}, graph.Kinds{memberOf})
+		db, ctx    = SetupDBWithKinds(t, 0, graph.Kinds{userKind, groupKind}, graph.Kinds{memberOf})
 		boolTrue   *graph.Relationship
 		boolFalse  *graph.Relationship
 		stringTrue *graph.Relationship

@@ -31,7 +31,6 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/testutil/integrationharness"
 	"github.com/specterops/dawgs/opengraph"
 )
 
@@ -276,7 +275,7 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 	t.Helper()
 
 	queryErrorObserved := false
-	session := &integrationharness.Session{DB: db, Ctx: ctx}
+	session := &Session{DB: db, Ctx: ctx}
 	err := session.WithRollbackFixture(t, tc.Fixture, true, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()

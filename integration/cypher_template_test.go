@@ -30,7 +30,6 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/testutil/integrationharness"
 	"github.com/specterops/dawgs/opengraph"
 )
 
@@ -198,7 +197,7 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 	}
 
 	queryErrorObserved := false
-	session := &integrationharness.Session{DB: db, Ctx: ctx}
+	session := &Session{DB: db, Ctx: ctx}
 	err := session.WithRollbackFixture(t, tc.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 		result := tx.Query(tc.Cypher, tc.Params)
 		defer result.Close()
@@ -230,7 +229,7 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 		t.Fatal("metamorphic cases must define at least two queries")
 	}
 
-	session := &integrationharness.Session{DB: db, Ctx: ctx}
+	session := &Session{DB: db, Ctx: ctx}
 	err := session.WithRollbackFixture(t, family.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 		assertCtx := newAssertionContext(idMap)
 		var baselineName string
