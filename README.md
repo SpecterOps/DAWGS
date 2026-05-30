@@ -111,9 +111,19 @@ indexes created on expressions such as `properties ->> 'objectid'` and `properti
 anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's
 `kind_id`-first edge index for efficient typed counts.
 
+PostgreSQL property index regression coverage is hard-failing under the `manual_integration` tag. The synthetic plan
+test translates Cypher to PgSQL, disables sequential scans for the `EXPLAIN`, and requires explicit node property
+indexes to appear in the JSON plan:
+
+```bash
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+  go test -tags manual_integration ./integration -run TestPostgreSQLPropertyIndexPlans
+```
+
 Substring and suffix predicates are intentionally not promoted to blanket schema indexes. PostgreSQL deployments can
 request explicit `TextSearchIndex`/trigram property indexes for fields that need `CONTAINS`, `STARTS WITH`, or
-`ENDS WITH`, but default schema assertion should wait until all suffix forms share one semantics-preserving lowering.
+`ENDS WITH`. The hard regression only asserts current index-compatible literal forms; dynamic parameter/property forms
+that lower to helper functions are intentionally outside that contract until their lowering changes.
 
 Thresholds are report-only by default. To enforce the configured thresholds, run:
 

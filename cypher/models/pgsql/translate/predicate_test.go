@@ -126,12 +126,83 @@ func TestDynamicStringPredicatesUseHelperFunctions(t *testing.T) {
 }
 
 func TestLiteralStringPredicatesKeepLikePatterns(t *testing.T) {
-	formatted := translatePredicateQuery(t, `MATCH (n:NodeKind1) WHERE n.name CONTAINS 'needle' RETURN n`, nil)
+	for _, testCase := range []struct {
+		name     string
+		query    string
+		expected string
+	}{
+		{
+			name:     "contains",
+			query:    `MATCH (n:NodeKind1) WHERE n.name CONTAINS 'needle' RETURN n`,
+			expected: "((n0.properties ->> 'name') like '%needle%')",
+		},
+		{
+			name:     "starts with",
+			query:    `MATCH (n:NodeKind1) WHERE n.name STARTS WITH 'prefix' RETURN n`,
+			expected: "((n0.properties ->> 'name') like 'prefix%')",
+		},
+		{
+			name:     "ends with",
+			query:    `MATCH (n:NodeKind1) WHERE n.name ENDS WITH 'suffix' RETURN n`,
+			expected: "((n0.properties ->> 'name') like '%suffix')",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, testCase.query, nil)
 
-	require.Contains(t, formatted, " like ")
-	require.Contains(t, formatted, "'%needle%'")
-	require.NotContains(t, formatted, "cypher_contains(")
-	require.Equal(t, 1, strings.Count(formatted, " like "))
+			require.Contains(t, formatted, testCase.expected)
+			require.Contains(t, formatted, " like ")
+			require.NotContains(t, formatted, "cypher_contains(")
+			require.NotContains(t, formatted, "cypher_starts_with(")
+			require.NotContains(t, formatted, "cypher_ends_with(")
+			require.NotContains(t, formatted, "coalesce(")
+			require.Equal(t, 1, strings.Count(formatted, " like "))
+		})
+	}
+}
+
+func TestStringPropertyEqualityKeepsBTreeIndexableTextLookup(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		query      string
+		parameters map[string]any
+		expected   string
+	}{
+		{
+			name:       "untyped parameter equality",
+			query:      `MATCH (n) WHERE n.objectid = $objectid RETURN n`,
+			parameters: map[string]any{"objectid": "S-1-5-21-1"},
+			expected:   "jsonb_typeof((n0.properties -> 'objectid')) = 'string' and (n0.properties ->> 'objectid') = @pi0::text",
+		},
+		{
+			name:       "typed parameter equality",
+			query:      `MATCH (n:NodeKind1) WHERE n.objectid = $objectid RETURN n`,
+			parameters: map[string]any{"objectid": "S-1-5-21-1"},
+			expected:   "jsonb_typeof((n0.properties -> 'objectid')) = 'string' and (n0.properties ->> 'objectid') = @pi0::text",
+		},
+		{
+			name:     "inline property map equality",
+			query:    `MATCH (n:NodeKind1 {name: 'indexed-name'}) RETURN n`,
+			expected: "jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = 'indexed-name'",
+		},
+		{
+			name:     "reversed literal equality",
+			query:    `MATCH (n) WHERE 'S-1-5-21-1' = n.objectid RETURN n`,
+			expected: "jsonb_typeof((n0.properties -> 'objectid')) = 'string' and 'S-1-5-21-1' = (n0.properties ->> 'objectid')",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, testCase.query, testCase.parameters)
+			normalized := strings.Join(strings.Fields(formatted), " ")
+
+			require.Contains(t, normalized, testCase.expected)
+			require.NotContains(t, normalized, "coalesce(")
+			require.NotContains(t, normalized, "lower(")
+			require.NotContains(t, normalized, "to_jsonb(")
+			require.NotContains(t, normalized, "->> 'objectid')::")
+			require.NotContains(t, normalized, "->> 'name')::")
+		})
+	}
 }
 
 func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
