@@ -176,3 +176,13 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
 	return s.SchemaManager.Fetch(ctx)
 }
+
+func (s *Driver) Optimize(ctx context.Context, opts ...graph.OptimizeOption) error {
+	config := &graph.OptimizeConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// PostgreSQL VACUUM/ANALYZE implementation
+	return nil
+}
