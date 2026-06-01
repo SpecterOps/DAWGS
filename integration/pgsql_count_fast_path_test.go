@@ -33,7 +33,7 @@ func TestPostgreSQLCountStoreFastPathRequiresRelationshipEndpoints(t *testing.T)
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
 
-	driver, err := driverFromConnStr(connStr)
+	driver, err := DriverFromConnectionString(connStr)
 	if err != nil {
 		t.Fatalf("failed to detect driver: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestPostgreSQLCountStoreFastPathRequiresRelationshipEndpoints(t *testing.T)
 	var (
 		nodeKind = graph.StringKind("CountFastPathNode")
 		edgeKind = graph.StringKind("CountFastPathEdge")
-		db, ctx  = SetupDBWithKinds(t, graph.Kinds{nodeKind}, graph.Kinds{edgeKind})
+		db, ctx  = SetupDBWithKinds(t, 0, graph.Kinds{nodeKind}, graph.Kinds{edgeKind})
 	)
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {

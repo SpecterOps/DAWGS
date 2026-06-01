@@ -29,7 +29,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/drivers"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -132,7 +131,11 @@ func Open(t *testing.T, opts Options) *Session {
 	}
 
 	if driver == pg.DriverName {
-		pool, err := pg.NewPool(drivers.DatabaseConfiguration{Connection: connStr})
+		poolCfg, err := pgxpool.ParseConfig(connStr)
+		if err != nil {
+			t.Fatalf("failed to parse pool configuration: %v", err)
+		}
+		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
 			t.Fatalf("failed to create PG pool: %v", err)
 		}
@@ -346,13 +349,7 @@ func SetupDBWithKinds(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, ext
 // SetupDBWithKindsNoGraphCleanup opens a database connection like SetupDBWithKinds
 // but only closes the connection during cleanup. Use this for rollback-only tests
 // that must not clear a shared database.
-func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
-	t.Helper()
-
-	return setupDB(t, CloseOnly, extraNodeKinds, extraEdgeKinds, datasets...)
-}
-
-func setupDB(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+func SetupDBWithKindsNoGraphCleanup(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
 	session := Open(t, Options{
