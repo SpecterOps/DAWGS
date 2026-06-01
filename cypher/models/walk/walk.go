@@ -3,6 +3,7 @@ package walk
 import (
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -29,7 +30,7 @@ type Visitor[N any] interface {
 type cancelableVisitorHandler struct {
 	currentSyntaxNodeConsumed bool
 	done                      bool
-	errs                      []error
+	err                       error
 }
 
 func (s *cancelableVisitorHandler) Done() bool {
@@ -42,7 +43,12 @@ func (s *cancelableVisitorHandler) SetDone() {
 
 func (s *cancelableVisitorHandler) SetError(err error) {
 	if err != nil {
-		s.errs = append(s.errs, err)
+		if s.err == nil {
+			s.err = err
+		} else {
+			s.err = errors.Join(s.err, err)
+		}
+
 		s.done = true
 	}
 }
@@ -52,7 +58,7 @@ func (s *cancelableVisitorHandler) SetErrorf(format string, args ...any) {
 }
 
 func (s *cancelableVisitorHandler) Error() error {
-	return errors.Join(s.errs...)
+	return s.err
 }
 
 func (s *cancelableVisitorHandler) Consume() {
@@ -107,8 +113,13 @@ type simpleVisitor[N any] struct {
 }
 
 func NewSimpleVisitor[N any](visitorFunc SimpleVisitorFunc[N]) Visitor[N] {
+	return NewSimpleVisitorWithOrder(OrderPrefix, visitorFunc)
+}
+
+func NewSimpleVisitorWithOrder[N any](order Order, visitorFunc SimpleVisitorFunc[N]) Visitor[N] {
 	return &simpleVisitor[N]{
 		Visitor:     NewVisitor[N](),
+		order:       order,
 		visitorFunc: visitorFunc,
 	}
 }
@@ -160,6 +171,21 @@ func (s *Cursor[N]) NextBranch() N {
 	return nextBranch
 }
 
+func isNilNode[N any](node N) bool {
+	rawNode := any(node)
+	if rawNode == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(rawNode)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Pointer:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
 func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (*Cursor[E], error)) error {
 	var stack []*Cursor[E]
 
@@ -181,14 +207,55 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 			if err := visitor.Error(); err != nil {
 				return err
 			}
+
+			if visitor.Done() {
+				return nil
+			}
 		}
 
-		if nextNode.HasNext() && !visitor.WasConsumed() {
+		if !nextNode.HasNext() {
+			visitor.Exit(nextNode.Node)
+
+			if err := visitor.Error(); err != nil {
+				return err
+			}
+
+			// Clear any consume flag set by Enter or Exit before visiting the next sibling.
+			visitor.WasConsumed()
+			stack = stack[0 : len(stack)-1]
+		} else if visitor.WasConsumed() {
+			visitor.Exit(nextNode.Node)
+
+			if err := visitor.Error(); err != nil {
+				return err
+			}
+
+			// Clear any consume flag set by Exit before visiting the next sibling.
+			visitor.WasConsumed()
+			stack = stack[0 : len(stack)-1]
+		} else {
 			if !isFirstVisit {
 				visitor.Visit(nextNode.Node)
 
 				if err := visitor.Error(); err != nil {
 					return err
+				}
+
+				if visitor.Done() {
+					return nil
+				}
+
+				if visitor.WasConsumed() {
+					visitor.Exit(nextNode.Node)
+
+					if err := visitor.Error(); err != nil {
+						return err
+					}
+
+					// Clear any consume flag set by Exit before visiting the next sibling.
+					visitor.WasConsumed()
+					stack = stack[0 : len(stack)-1]
+					continue
 				}
 			}
 
@@ -197,14 +264,6 @@ func Generic[E any](node E, visitor Visitor[E], cursorConstructor func(node E) (
 			} else {
 				stack = append(stack, cursor)
 			}
-		} else {
-			visitor.Exit(nextNode.Node)
-
-			if err := visitor.Error(); err != nil {
-				return err
-			}
-
-			stack = stack[0 : len(stack)-1]
 		}
 	}
 
@@ -217,4 +276,8 @@ func PgSQL(node pgsql.SyntaxNode, visitor Visitor[pgsql.SyntaxNode]) error {
 
 func Cypher(node cypher.SyntaxNode, visitor Visitor[cypher.SyntaxNode]) error {
 	return Generic(node, visitor, newCypherWalkCursor)
+}
+
+func CypherStructural(node cypher.SyntaxNode, visitor Visitor[cypher.SyntaxNode]) error {
+	return Generic(node, visitor, newCypherStructuralWalkCursor)
 }

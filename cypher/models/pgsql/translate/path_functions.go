@@ -12,7 +12,7 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 	for _, dependency := range pathBinding.Dependencies {
 		switch dependency.DataType {
 		case pgsql.ExpansionPath:
-			if edgeArrayReference, err := expansionPathEdgeArrayReference(scope, dependency); err != nil {
+			if edgeArrayReference, err := expansionPathEdgeArrayExpression(scope, dependency); err != nil {
 				return nil, err
 			} else {
 				edgeArrayReferences = append(edgeArrayReferences, edgeArrayReference)
@@ -24,6 +24,9 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 				Values:   []pgsql.Expression{edgeReference},
 				CastType: pgsql.EdgeCompositeArray,
 			})
+
+		case pgsql.PathEdge:
+			edgeArrayReferences = append(edgeArrayReferences, pathEdgeArrayExpression(scope, dependency))
 
 		default:
 			// Path bindings also depend on their node endpoints. Those are not part of relationships(p).
@@ -38,7 +41,7 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 }
 
 func resolvePathCompositeFieldReference(scope *Scope, reference pgsql.RowColumnReference) (pgsql.Expression, bool, error) {
-	identifier, isIdentifier := reference.Identifier.(pgsql.Identifier)
+	identifier, isIdentifier := unwrapParenthetical(reference.Identifier).(pgsql.Identifier)
 	if !isIdentifier {
 		return nil, false, nil
 	}
@@ -62,6 +65,15 @@ func resolvePathCompositeFieldReference(scope *Scope, reference pgsql.RowColumnR
 	case pgsql.ColumnEdges:
 		expression, err := pathCompositeEdgesExpression(scope, binding)
 		return expression, true, err
+	case pgsql.ColumnNodes:
+		if expression, err := expressionForPathComposite(binding, scope); err != nil {
+			return nil, false, err
+		} else {
+			return pgsql.RowColumnReference{
+				Identifier: expression,
+				Column:     reference.Column,
+			}, true, nil
+		}
 	default:
 		return nil, false, fmt.Errorf("unsupported path composite field reference: %s", reference.Column)
 	}
@@ -141,6 +153,24 @@ func resolvePathCompositeFieldReferences(scope *Scope, expression pgsql.Expressi
 	case nil:
 		return nil, nil
 
+	case pgsql.Identifier:
+		if binding, bound := scope.Lookup(typedExpression); !bound {
+			if aliasedBinding, aliasBound := scope.AliasedLookup(typedExpression); aliasBound {
+				binding = aliasedBinding
+				bound = true
+			}
+
+			if !bound || binding.DataType != pgsql.PathComposite {
+				return expression, nil
+			}
+
+			return expressionForPathComposite(binding, scope)
+		} else if binding.DataType == pgsql.PathComposite {
+			return expressionForPathComposite(binding, scope)
+		}
+
+		return expression, nil
+
 	case pgsql.RowColumnReference:
 		if resolved, rewritten, err := resolvePathCompositeFieldReference(scope, typedExpression); rewritten || err != nil {
 			return resolved, err
@@ -213,6 +243,44 @@ func resolvePathCompositeFieldReferences(scope *Scope, expression pgsql.Expressi
 			typedExpression.Expression = resolved
 			return typedExpression, nil
 		}
+
+	case pgsql.ArraySlice:
+		if resolved, err := resolvePathCompositeFieldReferences(scope, typedExpression.Expression); err != nil {
+			return nil, err
+		} else {
+			typedExpression.Expression = resolved
+		}
+
+		if typedExpression.Lower != nil {
+			if resolved, err := resolvePathCompositeFieldReferences(scope, typedExpression.Lower); err != nil {
+				return nil, err
+			} else {
+				typedExpression.Lower = resolved
+			}
+		}
+
+		if typedExpression.Upper != nil {
+			if resolved, err := resolvePathCompositeFieldReferences(scope, typedExpression.Upper); err != nil {
+				return nil, err
+			} else {
+				typedExpression.Upper = resolved
+			}
+		}
+
+		return typedExpression, nil
+
+	case *pgsql.ArraySlice:
+		if typedExpression == nil {
+			return nil, nil
+		}
+
+		resolved, err := resolvePathCompositeFieldReferences(scope, *typedExpression)
+		if err != nil {
+			return nil, err
+		}
+
+		arraySlice := resolved.(pgsql.ArraySlice)
+		return &arraySlice, nil
 
 	case pgsql.ArrayLiteral:
 		for idx, value := range typedExpression.Values {

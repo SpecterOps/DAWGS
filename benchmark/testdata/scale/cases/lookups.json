@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "name": "objectid_exact_string_anchor",
+      "dataset": "base",
+      "category": "lookups",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.objectid = $objectid RETURN id(n)",
+      "params": {
+        "objectid": "S-1-5-21-1"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_set"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "root_predicate": "selective_property",
+        "terminal_predicate": "node_kind",
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["property-anchor", "expression-index"]
+    },
+    {
+      "name": "boolean_property_filter",
+      "dataset": "base",
+      "category": "lookups",
+      "cypher": "MATCH (n:NodeKind1) WHERE n.enabled = true RETURN id(n)",
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_set"
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": false
+      },
+      "shape": {
+        "root_predicate": "boolean_property",
+        "terminal_predicate": "node_kind",
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["property-filter"]
+    }
+  ]
+}
+

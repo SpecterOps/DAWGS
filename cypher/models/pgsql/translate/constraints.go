@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/walk"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -438,35 +439,39 @@ type PatternConstraints struct {
 // of the traversal has an extreme disparity in search space.
 //
 // In cases that match this heuristic, it's beneficial to begin the traversal with the most tightly constrained set
-// of nodes. To accomplish this we flip the order of the traversal step.
-func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, traversalStep *TraversalStep) error {
+// of nodes. The optimizer selectivity model decides whether the step should flip; this method only applies that
+// decision to the translated constraint and traversal state.
+func (s *PatternConstraints) OptimizePatternConstraintBalance(scope *Scope, traversalStep *TraversalStep) (bool, error) {
 	// If the left node is already materialized from a previous step, it is the anchor
 	// for this expansion. Flipping the traversal direction would detach it from the
 	// previous frame and produce invalid SQL (missing FROM-clause entry).
 	if traversalStep.LeftNodeBound {
-		return nil
+		return false, nil
 	}
 
-	if traversalStep.RightNodeBound {
-		// Right is the tighter anchor by definition; flip once to normalize it to the left.
-		traversalStep.FlipNodes()
-		s.FlipNodes()
-
-		return nil
+	// Only flip a right-bound segment when a previous frame exists to serve as the
+	// FROM source for the now-left bound node. Self-referential patterns such as
+	// (u)-[]->(u) can mark the right node as bound without a preceding CTE.
+	if traversalStep.RightNodeBound && !traversalStep.hasPreviousFrameBinding() {
+		return false, nil
 	}
 
-	if leftNodeSelectivity, err := MeasureSelectivity(scope, s.LeftNode.Expression); err != nil {
-		return err
-	} else if rightNodeSelectivity, err := MeasureSelectivity(scope, s.RightNode.Expression); err != nil {
-		return err
-	} else if rightNodeSelectivity-leftNodeSelectivity >= selectivityFlipThreshold {
+	if shouldFlip, err := optimize.NewSelectivityModel(scope).ShouldFlipTraversalDirection(
+		traversalStep.LeftNodeBound,
+		traversalStep.RightNodeBound,
+		s.LeftNode.Expression,
+		s.RightNode.Expression,
+	); err != nil {
+		return false, err
+	} else if shouldFlip {
 		// (a)-[*..]->(b:Constraint)
 		// (a)<-[*..]-(b:Constraint)
 		traversalStep.FlipNodes()
 		s.FlipNodes()
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 func (s *PatternConstraints) FlipNodes() {

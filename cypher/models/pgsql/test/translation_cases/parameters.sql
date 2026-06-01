@@ -29,9 +29,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n) where n.isassignabletorole = $p0 return n
 -- cypher_params: {"p0":"true"}
 -- pgsql_params:{"pi0":"true"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> 'isassignabletorole') = @pi0::text)) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'isassignabletorole')) = 'string' and (n0.properties ->> 'isassignabletorole') = @pi0::text))) select s0.n0 as n from s0;
 
 -- case: match (n) where n.isassignabletorole = $p0 return n
 -- cypher_params: {"p0":true}
 -- pgsql_params:{"pi0":true}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> 'isassignabletorole'))::jsonb = to_jsonb((@pi0::bool)::bool)::jsonb)) select s0.n0 as n from s0;
+

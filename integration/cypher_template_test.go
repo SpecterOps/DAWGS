@@ -72,6 +72,7 @@ func TestCypherTemplates(t *testing.T) {
 	nodeKinds, edgeKinds := cypherTemplateKinds(templateFiles)
 
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
+	ClearGraph(t, db, ctx)
 
 	for _, templateFile := range templateFiles {
 		fileName := strings.TrimSuffix(filepath.Base(templateFile.path), filepath.Ext(templateFile.path))
@@ -80,14 +81,16 @@ func TestCypherTemplates(t *testing.T) {
 				t.Run(family.Name, func(t *testing.T) {
 					for _, variant := range family.Variants {
 						t.Run(variant.Name, func(t *testing.T) {
-							cypher := renderCypherTemplate(t, family.Template, variant.Vars)
-							check := parseAssertion(t, variant.Assert)
-							tc := testCase{
-								Name:    variant.Name,
-								Cypher:  cypher,
-								Params:  mergeParams(family.Params, variant.Params),
-								Fixture: family.Fixture,
-							}
+							var (
+								cypher = renderCypherTemplate(t, family.Template, variant.Vars)
+								check  = parseAssertion(t, variant.Assert)
+								tc     = testCase{
+									Name:    variant.Name,
+									Cypher:  cypher,
+									Params:  mergeParams(family.Params, variant.Params),
+									Fixture: family.Fixture,
+								}
+							)
 
 							runWithTemplateFixture(t, ctx, db, tc, check)
 						})
@@ -236,8 +239,11 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 		var baseline []string
 
 		for _, query := range family.Queries {
-			result := tx.Query(query.Cypher, query.Params)
-			collected := collectResult(t, result)
+			var (
+				result    = tx.Query(query.Cypher, query.Params)
+				collected = collectResult(t, result)
+			)
+
 			result.Close()
 
 			signature := comparisonSignature(t, collected, assertCtx, family.Compare)

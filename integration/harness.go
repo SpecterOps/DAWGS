@@ -405,22 +405,24 @@ func LoadDataset(t *testing.T, db graph.Database, ctx context.Context, name stri
 func QueryPaths(t *testing.T, ctx context.Context, db graph.Database, cypher string) []graph.Path {
 	t.Helper()
 
-	var paths []graph.Path
+	var (
+		paths []graph.Path
+		err   = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query(cypher, nil)
+			defer result.Close()
 
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(cypher, nil)
-		defer result.Close()
-
-		for result.Next() {
-			var p graph.Path
-			if err := result.Scan(&p); err != nil {
-				return fmt.Errorf("scan error: %w", err)
+			for result.Next() {
+				var p graph.Path
+				if err := result.Scan(&p); err != nil {
+					return fmt.Errorf("scan error: %w", err)
+				}
+				paths = append(paths, p)
 			}
-			paths = append(paths, p)
-		}
 
-		return result.Error()
-	})
+			return result.Error()
+		})
+	)
+
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
@@ -438,25 +440,27 @@ func QueryNodeIDs(t *testing.T, ctx context.Context, db graph.Database, cypher s
 		rev[dbID] = fid
 	}
 
-	var ids []string
-	seen := make(map[string]bool)
+	var (
+		ids  []string
+		seen = make(map[string]bool)
+		err  = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query(cypher, nil)
+			defer result.Close()
 
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(cypher, nil)
-		defer result.Close()
+			for result.Next() {
+				var n graph.Node
+				if err := result.Scan(&n); err != nil {
+					return err
+				}
+				if fid, ok := rev[n.ID]; ok && !seen[fid] {
+					ids = append(ids, fid)
+					seen[fid] = true
+				}
+			}
+			return result.Error()
+		})
+	)
 
-		for result.Next() {
-			var n graph.Node
-			if err := result.Scan(&n); err != nil {
-				return err
-			}
-			if fid, ok := rev[n.ID]; ok && !seen[fid] {
-				ids = append(ids, fid)
-				seen[fid] = true
-			}
-		}
-		return result.Error()
-	})
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
@@ -493,9 +497,11 @@ func AssertPaths(t *testing.T, paths []graph.Path, idMap opengraph.IDMap, expect
 		rev[dbID] = fixtureID
 	}
 
-	toSig := func(ids []string) string { return strings.Join(ids, ",") }
+	var (
+		toSig = func(ids []string) string { return strings.Join(ids, ",") }
+		got   = make([]string, len(paths))
+	)
 
-	got := make([]string, len(paths))
 	for i, p := range paths {
 		ids := make([]string, len(p.Nodes))
 		for j, node := range p.Nodes {

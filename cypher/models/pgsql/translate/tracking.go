@@ -26,6 +26,9 @@ func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Ident
 		prefixStr = "n"
 	case pgsql.EdgeComposite:
 		prefixStr = "e"
+	case pgsql.PathEdge:
+		dataType = pgsql.EdgeComposite
+		prefixStr = "e"
 	case pgsql.Scope:
 		prefixStr = "s"
 	case pgsql.ParameterIdentifier:
@@ -340,6 +343,18 @@ func (s *Scope) AliasedLookup(identifier pgsql.Identifier) (*BoundIdentifier, bo
 
 func (s *Scope) LookupString(identifierString string) (*BoundIdentifier, bool) {
 	return s.AliasedLookup(pgsql.Identifier(identifierString))
+}
+
+func (s *Scope) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
+	if binding, bound := s.Lookup(identifier); bound {
+		return binding.DataType, true
+	}
+
+	if binding, bound := s.AliasedLookup(identifier); bound {
+		return binding.DataType, true
+	}
+
+	return "", false
 }
 
 func (s *Scope) Define(identifier pgsql.Identifier, dataType pgsql.DataType) *BoundIdentifier {

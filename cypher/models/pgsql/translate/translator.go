@@ -7,6 +7,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
@@ -28,6 +29,23 @@ type Translator struct {
 	query          *Query
 	scope          *Scope
 	unwindTargets  map[*cypher.Variable]struct{}
+
+	collectIDMembershipAliases map[pgsql.Identifier]struct{}
+	collectIDProjectionDepth   int
+
+	appliedLoweringCounts         map[string]int
+	patternTargets                map[*cypher.PatternPart]optimize.PatternTarget
+	patternPredicateTargets       map[*cypher.PatternPredicate]optimize.PatternTarget
+	projectionPruningDecisions    map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
+	latePathDecisions             map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
+	suffixPushdownDecisions       map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	predicatePlacementDecisions   map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
+	expandIntoDecisions           map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
+	traversalDirectionDecisions   map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
+	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
+	shortestPathFilterDecisions   map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
+	limitPushdownDecisions        map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
+	patternPredicateDecisions     map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
 }
 
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
@@ -40,8 +58,10 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		inputParameters[key] = value
 	}
 
-	translatedParameters := map[string]any{}
-	ctxAwareKindMapper := newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
+	var (
+		translatedParameters = map[string]any{}
+		ctxAwareKindMapper   = newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
+	)
 
 	return &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
@@ -59,6 +79,61 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 	}
 }
 
+func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
+	s.patternTargets = optimize.IndexPatternTargets(plan.Query)
+	s.patternPredicateTargets = optimize.IndexPatternPredicateTargets(plan.Query)
+	s.projectionPruningDecisions = map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision{}
+	s.latePathDecisions = map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision{}
+	s.suffixPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision{}
+	s.predicatePlacementDecisions = map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision{}
+	s.expandIntoDecisions = map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision{}
+	s.traversalDirectionDecisions = map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision{}
+	s.shortestPathStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision{}
+	s.shortestPathFilterDecisions = map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision{}
+	s.limitPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision{}
+	s.patternPredicateDecisions = map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision{}
+
+	for _, decision := range plan.LoweringPlan.ProjectionPruning {
+		s.projectionPruningDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.LatePathMaterialization {
+		s.latePathDecisions[decision.Target] = append(s.latePathDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.ExpansionSuffixPushdown {
+		s.suffixPushdownDecisions[decision.Target] = append(s.suffixPushdownDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.PredicatePlacement {
+		s.predicatePlacementDecisions[decision.Target] = append(s.predicatePlacementDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.ExpandInto {
+		s.expandIntoDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.TraversalDirection {
+		s.traversalDirectionDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.ShortestPathStrategy {
+		s.shortestPathStrategyDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.ShortestPathFilter {
+		s.shortestPathFilterDecisions[decision.Target] = append(s.shortestPathFilterDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.LimitPushdown {
+		s.limitPushdownDecisions[decision.Target] = append(s.limitPushdownDecisions[decision.Target], decision)
+	}
+
+	for _, decision := range plan.LoweringPlan.PatternPredicate {
+		s.patternPredicateDecisions[decision.Target] = decision
+	}
+}
+
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 	case *cypher.RegularQuery, *cypher.SingleQuery, *cypher.PatternElement,
@@ -70,6 +145,13 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.Quantifier, *cypher.IDInCollection:
+
+	case *cypher.RangeQuantifier:
+		if typedExpression.Value != string(pgsql.WildcardIdentifier) {
+			s.SetErrorf("unsupported range quantifier expression: %s", typedExpression.Value)
+		} else {
+			s.treeTranslator.PushOperand(pgsql.WildcardIdentifier)
+		}
 
 	case *cypher.Unwind:
 		if typedExpression.Variable != nil {
@@ -176,6 +258,10 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushParenthetical()
 
 	case *cypher.SortItem:
+		if err := s.ensureSortItemProjectionAliases(); err != nil {
+			s.SetError(err)
+		}
+
 		s.query.CurrentPart().SortItems = append(s.query.CurrentPart().SortItems, pgsql.NewOrderBy(typedExpression.Ascending))
 
 	case *cypher.Projection:
@@ -184,10 +270,15 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.ProjectionItem:
+		if typedExpression.Alias != nil {
+			if _, collectIDs := s.collectIDMembershipAliases[pgsql.Identifier(typedExpression.Alias.Symbol)]; collectIDs {
+				s.collectIDProjectionDepth++
+			}
+		}
 		s.query.CurrentPart().PrepareProjection()
 
 	case *cypher.PatternPredicate:
-		if err := s.preparePatternPredicate(); err != nil {
+		if err := s.preparePatternPredicate(typedExpression); err != nil {
 			s.SetError(err)
 		}
 
@@ -205,6 +296,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	case *cypher.Disjunction:
 		for idx := 0; idx < typedExpression.Len()-1; idx++ {
 			s.treeTranslator.VisitOperator(pgsql.OperatorOr)
+		}
+
+	case *cypher.ExclusiveDisjunction:
+		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+			s.treeTranslator.VisitOperator(pgsql.OperatorNotEquals)
 		}
 
 	case *cypher.Conjunction:
@@ -468,6 +564,13 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 			}
 		}
 
+	case *cypher.ExclusiveDisjunction:
+		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorNotEquals); err != nil {
+				s.SetError(err)
+			}
+		}
+
 	case *cypher.Conjunction:
 		for idx := 0; idx < typedExpression.Len()-1; idx++ {
 			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorAnd); err != nil {
@@ -478,6 +581,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	case *cypher.ProjectionItem:
 		if err := s.translateProjectionItem(s.scope, typedExpression); err != nil {
 			s.SetError(err)
+		}
+		if typedExpression.Alias != nil {
+			if _, collectIDs := s.collectIDMembershipAliases[pgsql.Identifier(typedExpression.Alias.Symbol)]; collectIDs {
+				s.collectIDProjectionDepth--
+			}
 		}
 
 	case *cypher.Match:
@@ -515,17 +623,168 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 }
 
 type Result struct {
-	Statement  pgsql.Statement
-	Parameters map[string]any
+	Statement    pgsql.Statement
+	Parameters   map[string]any
+	Optimization OptimizationSummary
+}
+
+type OptimizationSummary struct {
+	Rules                []optimize.RuleResult          `json:"rules,omitempty"`
+	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
+	PlannedLowerings     []optimize.LoweringDecision    `json:"planned_lowerings,omitempty"`
+	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
+	SkippedLowerings     []SkippedLowering              `json:"skipped_lowerings,omitempty"`
+	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
+}
+
+type SkippedLowering struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+	Count  int    `json:"count,omitempty"`
+}
+
+func (s *Translator) recordLowering(name string) {
+	if s.appliedLoweringCounts == nil {
+		s.appliedLoweringCounts = map[string]int{}
+	}
+	s.appliedLoweringCounts[name]++
+
+	for _, lowering := range s.translation.Optimization.Lowerings {
+		if lowering.Name == name {
+			return
+		}
+	}
+
+	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
+}
+
+func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
+	applied := map[string]int{}
+
+	for _, lowering := range s.translation.Optimization.Lowerings {
+		applied[lowering.Name] = 1
+	}
+
+	for name, count := range s.appliedLoweringCounts {
+		applied[name] = count
+	}
+
+	return applied
+}
+
+func (s *Translator) recordSkippedLowerings() {
+	if s.translation.Optimization.LoweringPlan == nil {
+		return
+	}
+
+	applied := s.appliedLoweringCountSnapshot()
+
+	for _, planned := range plannedLoweringCounts(*s.translation.Optimization.LoweringPlan) {
+		if planned.Count == 0 {
+			continue
+		}
+
+		skippedCount := planned.Count - applied[planned.Name]
+		if skippedCount <= 0 {
+			continue
+		}
+
+		s.translation.Optimization.SkippedLowerings = append(s.translation.Optimization.SkippedLowerings, SkippedLowering{
+			Name:   planned.Name,
+			Reason: skippedLoweringReason(planned.Name, applied, *s.translation.Optimization.LoweringPlan),
+			Count:  skippedCount,
+		})
+	}
+}
+
+func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
+	return []SkippedLowering{
+		{Name: optimize.LoweringProjectionPruning, Count: len(plan.ProjectionPruning)},
+		{Name: optimize.LoweringLatePathMaterialization, Count: len(plan.LatePathMaterialization)},
+		{Name: optimize.LoweringExpandIntoDetection, Count: len(plan.ExpandInto)},
+		{Name: optimize.LoweringTraversalDirection, Count: len(plan.TraversalDirection)},
+		{Name: optimize.LoweringShortestPathStrategy, Count: len(plan.ShortestPathStrategy)},
+		{Name: optimize.LoweringShortestPathFilter, Count: len(plan.ShortestPathFilter)},
+		{Name: optimize.LoweringLimitPushdown, Count: len(plan.LimitPushdown)},
+		{Name: optimize.LoweringExpansionSuffixPushdown, Count: len(plan.ExpansionSuffixPushdown)},
+		{Name: optimize.LoweringPredicatePlacement, Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate)},
+		{Name: optimize.LoweringCountStoreFastPath, Count: len(plan.CountStoreFastPath)},
+		{Name: optimize.LoweringAggregateTraversalCount, Count: len(plan.AggregateTraversalCount)},
+	}
+}
+
+func skippedLoweringReason(name string, applied map[string]int, plan optimize.LoweringPlan) string {
+	if applied[optimize.LoweringCountStoreFastPath] > 0 && name != optimize.LoweringCountStoreFastPath {
+		return "superseded by CountStoreFastPath"
+	}
+	if applied[optimize.LoweringAggregateTraversalCount] > 0 && name != optimize.LoweringAggregateTraversalCount {
+		return "superseded by AggregateTraversalCount"
+	}
+
+	switch name {
+	case optimize.LoweringPredicatePlacement:
+		return "planned predicate placements were not consumed by this translation shape"
+	case optimize.LoweringTraversalDirection:
+		if reason := skippedTraversalDirectionReason(plan); reason != "" {
+			return reason
+		}
+	default:
+		return "planned lowering did not change the emitted SQL"
+	}
+
+	return "planned lowering did not change the emitted SQL"
+}
+
+func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
+	for _, decision := range plan.TraversalDirection {
+		if !decision.Flip && decision.Reason != "" {
+			return decision.Reason
+		}
+	}
+
+	return ""
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
-	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
-
-	if err := walk.Cypher(cypherQuery, translator); err != nil {
+	optimizedPlan, err := optimize.Optimize(cypherQuery)
+	if err != nil {
 		return Result{}, err
 	}
 
+	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
+	if membershipAliases, err := collectIDMembershipAliases(optimizedPlan.Query); err != nil {
+		return Result{}, err
+	} else {
+		translator.collectIDMembershipAliases = membershipAliases
+	}
+	translator.SetOptimizationPlan(optimizedPlan)
+	translator.translation.Optimization.Rules = optimizedPlan.Rules
+	translator.translation.Optimization.PredicateAttachments = optimizedPlan.PredicateAttachments
+	if !optimizedPlan.LoweringPlan.Empty() {
+		loweringPlan := optimizedPlan.LoweringPlan
+		translator.translation.Optimization.LoweringPlan = &loweringPlan
+		translator.translation.Optimization.PlannedLowerings = loweringPlan.Decisions()
+	}
+
+	if translated, err := translator.translateCountStoreFastPath(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
+		return Result{}, err
+	} else if translated {
+		translator.recordSkippedLowerings()
+		return translator.translation, nil
+	}
+
+	if translated, err := translator.translateAggregateTraversalCount(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
+		return Result{}, err
+	} else if translated {
+		translator.recordSkippedLowerings()
+		return translator.translation, nil
+	}
+
+	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
+		return Result{}, err
+	}
+
+	translator.recordSkippedLowerings()
 	return translator.translation, nil
 }
 
@@ -536,8 +795,11 @@ func decodeCypherStringLiteral(raw string) (string, error) {
 		return "", fmt.Errorf("invalid cypher string literal: missing or mismatched surrounding quotes: %q", raw)
 	}
 	// Cypher parser wraps string literals with ' characters
-	body := raw[1 : len(raw)-1]
-	var b strings.Builder
+	var (
+		body = raw[1 : len(raw)-1]
+		b    strings.Builder
+	)
+
 	b.Grow(len(body))
 	for i := 0; i < len(body); i++ {
 		if body[i] != '\\' {

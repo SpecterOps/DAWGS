@@ -11,6 +11,7 @@ var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
 	"exit":             quitCmd(),
 	"explain-psql":     explainAsPsqlCmd(),
 	"list-connections": listConnectionsCmd(),
+	"load-connections": loadConnectionsCmd(),
 	"load-opengraph":   loadOpenGraphCmd(),
 	"load-db-kinds":    getPGDBKinds(),
 	"lookup-kind":      lookupKindCmd(),
@@ -20,6 +21,7 @@ var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
 	"query-cypher":     queryCypherCmd(),
 	"quit":             quitCmd(),
 	"runtime-trace":    runtimeTraceCmd(),
+	"save-connections": saveConnectionsCmd(),
 	"save-opengraph":   saveOpenGraphCmd(),
 	"translate-psql":   translateToPsqlCmd(),
 }

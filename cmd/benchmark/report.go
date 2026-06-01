@@ -40,8 +40,8 @@ func writeJSON(w io.Writer, r Report) error {
 
 func writeMarkdown(w io.Writer, r Report) error {
 	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations)
-	fmt.Fprintf(w, "| Query | Dataset | Median | P95 | Max |\n")
-	fmt.Fprintf(w, "|-------|---------|-------:|----:|----:|\n")
+	fmt.Fprintf(w, "| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |\n")
+	fmt.Fprintf(w, "|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|\n")
 
 	for _, res := range r.Results {
 		label := res.Section
@@ -49,17 +49,37 @@ func writeMarkdown(w io.Writer, r Report) error {
 			label = res.Section + " / " + res.Label
 		}
 
-		fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n",
+		fmt.Fprintf(w, "| %s | %s | %d | %s | %s | %s | %s | %s | %s |\n",
 			label,
 			res.Dataset,
+			res.RowCount,
+			fmtOptionalInt64(res.DistinctRowCount),
+			fmtOptionalInt64(res.DuplicateRowCount),
 			fmtDuration(res.Stats.Median),
 			fmtDuration(res.Stats.P95),
 			fmtDuration(res.Stats.Max),
+			fmtExplainStatus(res.Explain),
 		)
 	}
 
 	fmt.Fprintln(w)
 	return nil
+}
+
+func fmtOptionalInt64(value *int64) string {
+	if value == nil {
+		return "-"
+	}
+
+	return fmt.Sprintf("%d", *value)
+}
+
+func fmtExplainStatus(explain *ExplainResult) string {
+	if explain == nil {
+		return "-"
+	}
+
+	return "captured"
 }
 
 func fmtDuration(d time.Duration) string {

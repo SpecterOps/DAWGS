@@ -160,6 +160,141 @@
         "edges": []
       },
       "assert": {"exact_int": 2}
+    },
+    {
+      "name": "add two aggregate counts inside one projection",
+      "cypher": "MATCH (n) RETURN count(n) + count(n)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {"exact_int": 4}
+    },
+    {
+      "name": "multiply an aggregate count by a literal inside one projection",
+      "cypher": "MATCH (n) RETURN count(n) * 2",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {"exact_int": 6}
+    },
+    {
+      "name": "order by aliased aggregate projection",
+      "cypher": "MATCH (n) RETURN count(n) AS total ORDER BY total DESC",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {
+        "keys": ["total"],
+        "ordered_row_values": [[2]]
+      }
+    },
+    {
+      "name": "add grouped property expression to aggregate count inline",
+      "cypher": "MATCH (n) RETURN toInteger(n.value) + count(n)",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "add grouped property expression to aggregate count through aliases",
+      "cypher": "MATCH (n) WITH toInteger(n.value) AS value, count(n) AS node_count RETURN value + node_count",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "project grouped property plus aggregate through with inline expression",
+      "cypher": "MATCH (n) WITH toInteger(n.value) + count(n) AS score RETURN score",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "project grouped property plus aggregate through with aliases",
+      "cypher": "MATCH (n) WITH toInteger(n.value) AS value, count(n) AS node_count WITH value + node_count AS score RETURN score",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"value": 10}},
+          {"id": "c", "kinds": ["NodeKind1"], "properties": {"value": 20}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [12, 21]}
+    },
+    {
+      "name": "compare aggregate count inside with projection",
+      "cypher": "MATCH (n) WITH count(n) > 1 AS many RETURN many",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [true]}
+    },
+    {
+      "name": "divide aggregate sum by aggregate count inside with projection",
+      "cypher": "MATCH (n) WITH sum(n.age) / count(n) AS avg_age RETURN avg_age",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"age": 30}},
+          {"id": "b", "kinds": ["NodeKind1"], "properties": {"age": 50}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [40]}
+    },
+    {
+      "name": "aggregate after optimized expansion groups by terminal node",
+      "cypher": "MATCH p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) WHERE src.name = 'aggregation-expansion-src' WITH dst, count(p) AS path_count RETURN dst.name, path_count",
+      "fixture": {
+        "nodes": [
+          {"id": "src", "kinds": ["NodeKind1"], "properties": {"name": "aggregation-expansion-src"}},
+          {"id": "mid-a", "kinds": ["NodeKind1"]},
+          {"id": "mid-b", "kinds": ["NodeKind1"]},
+          {"id": "dst", "kinds": ["NodeKind2"], "properties": {"name": "aggregation-expansion-dst"}}
+        ],
+        "edges": [
+          {"start_id": "src", "end_id": "mid-a", "kind": "EdgeKind1"},
+          {"start_id": "src", "end_id": "mid-b", "kind": "EdgeKind1"},
+          {"start_id": "mid-a", "end_id": "dst", "kind": "EdgeKind2"},
+          {"start_id": "mid-b", "end_id": "dst", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"row_values": [["aggregation-expansion-dst", 2]]}
     }
   ]
 }

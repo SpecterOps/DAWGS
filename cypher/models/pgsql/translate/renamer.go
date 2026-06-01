@@ -387,6 +387,9 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 			}
 		}
 
+	case *pgsql.EdgeArrayFromPathIDs:
+		return s.rewriteExpression(&typedExpression.PathIDs)
+
 	case *pgsql.AliasedExpression:
 		switch typedInnerExpression := typedExpression.Expression.(type) {
 		case pgsql.Identifier:

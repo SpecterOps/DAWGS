@@ -47,6 +47,7 @@ func translationTestKinds() graph.Kinds {
 		"TrustedBy",
 		"WriteAccountRestrictions",
 		"WriteOwner",
+		"AZUser",
 	})...)
 }
 

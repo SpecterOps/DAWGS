@@ -61,9 +61,11 @@ func decomposePropertyLookup(expression pgsql.Expression) (PropertyLookup, error
 }
 
 func (s *Translator) buildPatternPropertyConstraints(binding *BoundIdentifier, properties TranslatedProperties) (pgsql.Expression, error) {
-	var propertyConstraints pgsql.Expression
+	var (
+		propertyConstraints pgsql.Expression
+		keys                = make([]string, 0, len(properties.Map))
+	)
 
-	keys := make([]string, 0, len(properties.Map))
 	for key := range properties.Map {
 		keys = append(keys, key)
 	}
@@ -77,6 +79,8 @@ func (s *Translator) buildPatternPropertyConstraints(binding *BoundIdentifier, p
 
 		if newConstraint, err := s.treeTranslator.PopBinaryExpression(pgsql.OperatorEquals); err != nil {
 			return nil, err
+		} else if rewrittenConstraint, rewritten := buildStringPropertyEqualityPredicate(newConstraint); rewritten {
+			propertyConstraints = pgsql.OptionalAnd(propertyConstraints, rewrittenConstraint)
 		} else {
 			propertyConstraints = pgsql.OptionalAnd(propertyConstraints, newConstraint)
 		}

@@ -25,15 +25,40 @@ func TestInferExpressionType(t *testing.T) {
 		Exclusive    bool
 	}
 
-	testCases := []testCase{{
-		ExpectedType: pgsql.Boolean,
-		Expression: pgsql.NewBinaryExpression(
-			pgsql.NewPropertyLookup(
-				pgsql.CompoundIdentifier{"n", "properties"},
-				mustAsLiteral("field_a"),
+	var (
+		testCases = []testCase{{
+			ExpectedType: pgsql.Boolean,
+			Expression: pgsql.NewBinaryExpression(
+				pgsql.NewPropertyLookup(
+					pgsql.CompoundIdentifier{"n", "properties"},
+					mustAsLiteral("field_a"),
+				),
+				pgsql.OperatorAnd,
+				pgsql.NewBinaryExpression(
+					mustAsLiteral("123"),
+					pgsql.OperatorIn,
+					pgsql.ArrayLiteral{
+						Values:   []pgsql.Expression{mustAsLiteral("a"), mustAsLiteral("b")},
+						CastType: pgsql.TextArray,
+					},
+				),
 			),
-			pgsql.OperatorAnd,
-			pgsql.NewBinaryExpression(
+		}, {
+			ExpectedType: pgsql.Boolean,
+			Expression: pgsql.NewBinaryExpression(
+				pgsql.NewPropertyLookup(
+					pgsql.CompoundIdentifier{"n", "properties"},
+					mustAsLiteral("field_a"),
+				),
+				pgsql.OperatorAnd,
+				pgsql.NewPropertyLookup(
+					pgsql.CompoundIdentifier{"n", "properties"},
+					mustAsLiteral("field_b"),
+				),
+			),
+		}, {
+			ExpectedType: pgsql.Boolean,
+			Expression: pgsql.NewBinaryExpression(
 				mustAsLiteral("123"),
 				pgsql.OperatorIn,
 				pgsql.ArrayLiteral{
@@ -41,84 +66,58 @@ func TestInferExpressionType(t *testing.T) {
 					CastType: pgsql.TextArray,
 				},
 			),
-		),
-	}, {
-		ExpectedType: pgsql.Boolean,
-		Expression: pgsql.NewBinaryExpression(
-			pgsql.NewPropertyLookup(
-				pgsql.CompoundIdentifier{"n", "properties"},
-				mustAsLiteral("field_a"),
+		}, {
+			ExpectedType: pgsql.Text,
+			Expression: pgsql.NewBinaryExpression(
+				mustAsLiteral("123"),
+				pgsql.OperatorConcatenate,
+				mustAsLiteral("456"),
 			),
-			pgsql.OperatorAnd,
-			pgsql.NewPropertyLookup(
-				pgsql.CompoundIdentifier{"n", "properties"},
-				mustAsLiteral("field_b"),
-			),
-		),
-	}, {
-		ExpectedType: pgsql.Boolean,
-		Expression: pgsql.NewBinaryExpression(
-			mustAsLiteral("123"),
-			pgsql.OperatorIn,
-			pgsql.ArrayLiteral{
-				Values:   []pgsql.Expression{mustAsLiteral("a"), mustAsLiteral("b")},
-				CastType: pgsql.TextArray,
-			},
-		),
-	}, {
-		ExpectedType: pgsql.Text,
-		Expression: pgsql.NewBinaryExpression(
-			mustAsLiteral("123"),
-			pgsql.OperatorConcatenate,
-			mustAsLiteral("456"),
-		),
-	}, {
-		ExpectedType: pgsql.Text,
-		Expression: pgsql.NewBinaryExpression(
-			mustAsLiteral("n"),
-			pgsql.OperatorConcatenate,
-			mustAsLiteral(123),
-		),
-	}, {
-		ExpectedType: pgsql.Int8,
-		Expression: pgsql.NewBinaryExpression(
-			mustAsLiteral(123),
-			pgsql.OperatorAdd,
-			pgsql.NewBinaryExpression(
+		}, {
+			ExpectedType: pgsql.Text,
+			Expression: pgsql.NewBinaryExpression(
+				mustAsLiteral("n"),
+				pgsql.OperatorConcatenate,
 				mustAsLiteral(123),
-				pgsql.OperatorMultiply,
-				mustAsLiteral(1),
 			),
-		),
-	}, {
-		ExpectedType: pgsql.Int8,
-		Expression: pgsql.NewBinaryExpression(
-			mustAsLiteral(123),
-			pgsql.OperatorAdd,
-			pgsql.NewBinaryExpression(
-				mustAsLiteral(int16(123)),
-				pgsql.OperatorMultiply,
-				mustAsLiteral(int16(1)),
+		}, {
+			ExpectedType: pgsql.Int8,
+			Expression: pgsql.NewBinaryExpression(
+				mustAsLiteral(123),
+				pgsql.OperatorAdd,
+				pgsql.NewBinaryExpression(
+					mustAsLiteral(123),
+					pgsql.OperatorMultiply,
+					mustAsLiteral(1),
+				),
 			),
-		),
-	}, {
-		Exclusive:    true,
-		ExpectedType: pgsql.Int4,
-		Expression: pgsql.NewBinaryExpression(
-			pgsql.NewPropertyLookup(
-				pgsql.CompoundIdentifier{"n", "properties"},
-				mustAsLiteral("field"),
+		}, {
+			ExpectedType: pgsql.Int8,
+			Expression: pgsql.NewBinaryExpression(
+				mustAsLiteral(123),
+				pgsql.OperatorAdd,
+				pgsql.NewBinaryExpression(
+					mustAsLiteral(int16(123)),
+					pgsql.OperatorMultiply,
+					mustAsLiteral(int16(1)),
+				),
 			),
-			pgsql.OperatorAdd,
-			pgsql.NewBinaryExpression(
-				mustAsLiteral(int16(123)),
-				pgsql.OperatorMultiply,
-				mustAsLiteral(int32(1)),
+		}, {
+			Exclusive:    true,
+			ExpectedType: pgsql.Int4,
+			Expression: pgsql.NewBinaryExpression(
+				pgsql.NewPropertyLookup(
+					pgsql.CompoundIdentifier{"n", "properties"},
+					mustAsLiteral("field"),
+				),
+				pgsql.OperatorAdd,
+				pgsql.NewBinaryExpression(
+					mustAsLiteral(int16(123)),
+					pgsql.OperatorMultiply,
+					mustAsLiteral(int32(1)),
+				),
 			),
-		),
-	}}
-
-	var (
+		}}
 		exclusive    []testCase
 		hasExclusive bool
 	)
@@ -298,66 +297,106 @@ func TestInferWrappedExpressionType(t *testing.T) {
 }
 
 func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
-	propertyLookup := func(property string) *pgsql.BinaryExpression {
-		return pgsql.NewPropertyLookup(
-			pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
-			mustAsLiteral(property),
-		)
-	}
-	renderEquality := func(t *testing.T, lOperand, rOperand pgsql.Expression) string {
-		t.Helper()
+	var (
+		propertyLookup = func(property string) *pgsql.BinaryExpression {
+			return pgsql.NewPropertyLookup(
+				pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
+				mustAsLiteral(property),
+			)
+		}
+		renderComparison = func(t *testing.T, lOperand pgsql.Expression, operator pgsql.Operator, rOperand pgsql.Expression) string {
+			t.Helper()
 
-		treeTranslator := translate.NewExpressionTreeTranslator(nil)
-		treeTranslator.PushOperand(lOperand)
-		treeTranslator.PushOperand(rOperand)
-		require.NoError(t, treeTranslator.CompleteBinaryExpression(translate.NewScope(), pgsql.OperatorEquals))
+			treeTranslator := translate.NewExpressionTreeTranslator(nil)
+			treeTranslator.PushOperand(lOperand)
+			treeTranslator.PushOperand(rOperand)
+			require.NoError(t, treeTranslator.CompleteBinaryExpression(translate.NewScope(), operator))
 
-		formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
-		require.NoError(t, err)
+			formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
+			require.NoError(t, err)
 
-		return formatted
-	}
-
-	testCases := []struct {
-		Name     string
-		LOperand pgsql.Expression
-		ROperand pgsql.Expression
-		Expected string
-	}{{
-		Name:     "boolean string literal keeps text property lookup",
-		LOperand: propertyLookup("isassignabletorole"),
-		ROperand: mustAsLiteral("true"),
-		Expected: "(n.properties ->> 'isassignabletorole') = 'true'",
-	}, {
-		Name:     "boolean string literal keeps text property lookup when reversed",
-		LOperand: mustAsLiteral("true"),
-		ROperand: propertyLookup("isassignabletorole"),
-		Expected: "'true' = (n.properties ->> 'isassignabletorole')",
-	}, {
-		Name:     "non-boolean string literal keeps jsonb scalar equality",
-		LOperand: propertyLookup("rank"),
-		ROperand: mustAsLiteral("1"),
-		Expected: "((n.properties -> 'rank'))::jsonb = to_jsonb(('1')::text)::jsonb",
-	}, {
-		Name:     "boolean literal keeps jsonb scalar equality",
-		LOperand: propertyLookup("isassignabletorole"),
-		ROperand: mustAsLiteral(true),
-		Expected: "((n.properties -> 'isassignabletorole'))::jsonb = to_jsonb((true)::bool)::jsonb",
-	}, {
-		Name:     "numeric literal keeps jsonb scalar equality",
-		LOperand: propertyLookup("count"),
-		ROperand: mustAsLiteral(1),
-		Expected: "((n.properties -> 'count'))::jsonb = to_jsonb((1)::int8)::jsonb",
-	}, {
-		Name:     "property to property equality keeps jsonb operands",
-		LOperand: propertyLookup("left"),
-		ROperand: propertyLookup("right"),
-		Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
-	}}
+			return formatted
+		}
+		testCases = []struct {
+			Name     string
+			LOperand pgsql.Expression
+			Operator pgsql.Operator
+			ROperand pgsql.Expression
+			Expected string
+		}{{
+			Name:     "string literal uses typed text property lookup",
+			LOperand: propertyLookup("isassignabletorole"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: mustAsLiteral("true"),
+			Expected: "(jsonb_typeof((n.properties -> 'isassignabletorole')) = 'string' and (n.properties ->> 'isassignabletorole') = 'true')",
+		}, {
+			Name:     "string literal uses typed text property lookup when reversed",
+			LOperand: mustAsLiteral("true"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: propertyLookup("isassignabletorole"),
+			Expected: "(jsonb_typeof((n.properties -> 'isassignabletorole')) = 'string' and 'true' = (n.properties ->> 'isassignabletorole'))",
+		}, {
+			Name:     "numeric-looking string literal remains string typed",
+			LOperand: propertyLookup("rank"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: mustAsLiteral("1"),
+			Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') = '1')",
+		}, {
+			Name:     "text parameter uses typed text property lookup",
+			LOperand: propertyLookup("objectid"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: pgsql.Parameter{Identifier: "pi0", CastType: pgsql.Text},
+			Expected: "(jsonb_typeof((n.properties -> 'objectid')) = 'string' and (n.properties ->> 'objectid') = @pi0::text)",
+		}, {
+			Name:     "text function uses typed text property lookup",
+			LOperand: propertyLookup("distinguishedname"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: pgsql.FunctionCall{
+				Function:   pgsql.FunctionToUpper,
+				Parameters: []pgsql.Expression{mustAsLiteral("admin")},
+				CastType:   pgsql.Text,
+			},
+			Expected: "(jsonb_typeof((n.properties -> 'distinguishedname')) = 'string' and (n.properties ->> 'distinguishedname') = upper('admin')::text)",
+		}, {
+			Name: "text function uses typed text property lookup when reversed",
+			LOperand: pgsql.FunctionCall{
+				Function:   pgsql.FunctionToUpper,
+				Parameters: []pgsql.Expression{mustAsLiteral("admin")},
+				CastType:   pgsql.Text,
+			},
+			Operator: pgsql.OperatorEquals,
+			ROperand: propertyLookup("distinguishedname"),
+			Expected: "(jsonb_typeof((n.properties -> 'distinguishedname')) = 'string' and upper('admin')::text = (n.properties ->> 'distinguishedname'))",
+		}, {
+			Name:     "string inequality keeps non-string JSONB branch",
+			LOperand: propertyLookup("rank"),
+			Operator: pgsql.OperatorCypherNotEquals,
+			ROperand: mustAsLiteral("1"),
+			Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') <> '1' or jsonb_typeof((n.properties -> 'rank')) <> 'string' and (n.properties -> 'rank') <> to_jsonb(('1')::text)::jsonb)",
+		}, {
+			Name:     "boolean literal keeps jsonb scalar equality",
+			LOperand: propertyLookup("isassignabletorole"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: mustAsLiteral(true),
+			Expected: "((n.properties -> 'isassignabletorole'))::jsonb = to_jsonb((true)::bool)::jsonb",
+		}, {
+			Name:     "numeric literal keeps jsonb scalar equality",
+			LOperand: propertyLookup("count"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: mustAsLiteral(1),
+			Expected: "((n.properties -> 'count'))::jsonb = to_jsonb((1)::int8)::jsonb",
+		}, {
+			Name:     "property to property equality keeps jsonb operands",
+			LOperand: propertyLookup("left"),
+			Operator: pgsql.OperatorEquals,
+			ROperand: propertyLookup("right"),
+			Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
+		}}
+	)
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			require.Equal(t, testCase.Expected, renderEquality(t, testCase.LOperand, testCase.ROperand))
+			require.Equal(t, testCase.Expected, renderComparison(t, testCase.LOperand, testCase.Operator, testCase.ROperand))
 		})
 	}
 }
@@ -443,8 +482,11 @@ func TestExpressionTreeTranslator(t *testing.T) {
 	treeTranslator.PopRemainingExpressionsAsUserConstraints()
 
 	// Pull out the 'a' constraint
-	aIdentifier := pgsql.AsIdentifierSet("a")
-	expectedTranslation := "(a.name = 'a' and a.num_a > 1)"
+	var (
+		aIdentifier         = pgsql.AsIdentifierSet("a")
+		expectedTranslation = "(a.name = 'a' and a.num_a > 1)"
+	)
+
 	validateConstraints(t, treeTranslator, aIdentifier, expectedTranslation)
 
 	// Pull out the 'b' constraint next

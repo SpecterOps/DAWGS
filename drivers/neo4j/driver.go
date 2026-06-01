@@ -14,16 +14,19 @@ const (
 	DriverName = "neo4j"
 )
 
-func readCfg() neo4j.SessionConfig {
+func sessionConfig(accessMode neo4j.AccessMode, databaseName string) neo4j.SessionConfig {
 	return neo4j.SessionConfig{
-		AccessMode: neo4j.AccessModeRead,
+		AccessMode:   accessMode,
+		DatabaseName: databaseName,
 	}
 }
 
-func writeCfg() neo4j.SessionConfig {
-	return neo4j.SessionConfig{
-		AccessMode: neo4j.AccessModeWrite,
-	}
+func (s *driver) readCfg() neo4j.SessionConfig {
+	return sessionConfig(neo4j.AccessModeRead, s.databaseName)
+}
+
+func (s *driver) writeCfg() neo4j.SessionConfig {
+	return sessionConfig(neo4j.AccessModeWrite, s.databaseName)
 }
 
 type driver struct {
@@ -33,6 +36,7 @@ type driver struct {
 	batchWriteSize            int
 	writeFlushSize            int
 	graphQueryMemoryLimit     size.Size
+	databaseName              string
 }
 
 func (s *driver) SetBatchWriteSize(size int) {
@@ -64,7 +68,7 @@ func (s *driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 			Timeout: s.defaultTransactionTimeout,
 		}
 
-		session = s.driver.NewSession(writeCfg())
+		session = s.driver.NewSession(s.writeCfg())
 		batch   = newBatchOperation(ctx, session, cfg, s.writeFlushSize, config.BatchSize, s.graphQueryMemoryLimit)
 	)
 
@@ -110,14 +114,14 @@ func (s *driver) transaction(ctx context.Context, txDelegate graph.TransactionDe
 }
 
 func (s *driver) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	session := s.driver.NewSession(readCfg())
+	session := s.driver.NewSession(s.readCfg())
 	defer session.Close()
 
 	return s.transaction(ctx, txDelegate, session, options)
 }
 
 func (s *driver) WriteTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	session := s.driver.NewSession(writeCfg())
+	session := s.driver.NewSession(s.writeCfg())
 	defer session.Close()
 
 	return s.transaction(ctx, txDelegate, session, options)

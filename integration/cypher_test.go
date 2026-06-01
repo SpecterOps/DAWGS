@@ -65,8 +65,10 @@ func TestCypher(t *testing.T) {
 		dataset string
 		files   []caseFile
 	}
-	groups := map[string]*group{}
-	var datasetNames []string
+	var (
+		groups       = map[string]*group{}
+		datasetNames []string
+	)
 
 	for _, path := range files {
 		raw, err := os.ReadFile(path)
@@ -126,6 +128,7 @@ func TestCypher(t *testing.T) {
 //	"empty"                               — zero rows
 //	"no_error"                            — drains result, checks no error
 //	"query_error"                         — drains result, expects an error
+//	{"keys": ["a", "b"]}                  — every returned row has exactly these result keys, preserving order
 //	{"row_count": N}                      — exactly N rows
 //	{"at_least_int": N}                   — first scalar >= N
 //	{"exact_int": N}                      — first scalar == N
@@ -143,6 +146,7 @@ func TestCypher(t *testing.T) {
 //	{"path_node_ids": [["a", "b"]]}       — exact multiset of returned path node ID sequences
 //	{"path_lengths": [N...]}              — exact multiset of returned path edge counts
 //	{"path_edge_kinds": [["K"...]]}       — exact multiset of returned path edge kind sequences
+//	{"relationship_list_kinds": [["K"...]]} — exact multiset of returned relationship-list kind sequences
 //
 // Object assertions may combine multiple keys; every assertion must pass.
 func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
@@ -174,6 +178,9 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 	var assertions []resultAssertion
 	for key, val := range obj {
 		switch key {
+		case "keys":
+			assertions = append(assertions, assertKeys(decodeAssertionValue[[]string](t, key, val)))
+
 		case "row_count":
 			assertions = append(assertions, assertRowCount(decodeAssertionValue[int](t, key, val)))
 
@@ -226,6 +233,9 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 		case "path_edge_kinds":
 			assertions = append(assertions, assertPathEdgeKinds(decodeAssertionValue[[][]string](t, key, val)))
 
+		case "relationship_list_kinds":
+			assertions = append(assertions, assertRelationshipListKinds(decodeAssertionValue[[][]string](t, key, val)))
+
 		default:
 			t.Fatalf("unknown assertion key: %q", key)
 		}
@@ -250,16 +260,19 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap opengraph.IDMap, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
-	queryErrorObserved := false
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Query(tc.Cypher, tc.Params)
-		defer result.Close()
-		assertion.checkResult(t, result, newAssertionContext(idMap))
-		if assertion.expectQueryError {
-			queryErrorObserved = true
-		}
-		return nil
-	})
+	var (
+		queryErrorObserved = false
+		err                = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query(tc.Cypher, tc.Params)
+			defer result.Close()
+			assertion.checkResult(t, result, newAssertionContext(idMap))
+			if assertion.expectQueryError {
+				queryErrorObserved = true
+			}
+			return nil
+		})
+	)
+
 	if err != nil {
 		if assertion.expectQueryError && queryErrorObserved {
 			return
@@ -416,6 +429,23 @@ func assertEmpty(t *testing.T, result queryResult, _ assertionContext) {
 
 func assertNoError(t *testing.T, _ queryResult, _ assertionContext) {
 	t.Helper()
+}
+
+func assertKeys(expected []string) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		if len(result.rows) == 0 {
+			t.Fatal("key assertion expected at least one row")
+		}
+
+		want := strings.Join(expected, "\x00")
+		for rowIdx, row := range result.rows {
+			if got := strings.Join(row.keys, "\x00"); got != want {
+				t.Fatalf("row %d keys mismatch:\n  got:  %v\n  want: %v", rowIdx, row.keys, expected)
+			}
+		}
+	}
 }
 
 func assertRowCount(n int) resultAssertion {
@@ -755,8 +785,10 @@ func assertNodeListIDs(expected [][]string) resultAssertion {
 func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, unique bool) []string {
 	t.Helper()
 
-	ids := make([]string, 0, len(result.rows))
-	seen := map[string]bool{}
+	var (
+		ids  = make([]string, 0, len(result.rows))
+		seen = map[string]bool{}
+	)
 
 	for _, row := range result.rows {
 		for _, rawVal := range row.values {
@@ -852,6 +884,35 @@ func assertPathEdgeKinds(expected [][]string) resultAssertion {
 	}
 }
 
+func assertRelationshipListKinds(expected [][]string) resultAssertion {
+	return func(t *testing.T, result queryResult, _ assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(result.rows))
+		for _, row := range result.rows {
+			for _, rawVal := range row.values {
+				var relationshipPointers []*graph.Relationship
+				if result.mapper.Map(rawVal, &relationshipPointers) {
+					got = append(got, relationshipListKindSignature(t, relationshipPointers))
+					continue
+				}
+
+				var relationships []graph.Relationship
+				if result.mapper.Map(rawVal, &relationships) {
+					got = append(got, relationshipValueListKindSignature(t, relationships))
+				}
+			}
+		}
+
+		want := make([]string, len(expected))
+		for idx, expectedKinds := range expected {
+			want[idx] = strings.Join(expectedKinds, "->")
+		}
+
+		assertStringMultiset(t, got, want, "relationship-list kind sequences")
+	}
+}
+
 func pathNodeIDSignature(t *testing.T, path graph.Path, ctx assertionContext) string {
 	t.Helper()
 
@@ -881,6 +942,40 @@ func pathEdgeKindSignature(t *testing.T, path graph.Path) string {
 		}
 
 		edgeKinds[idx] = edge.Kind.String()
+	}
+
+	return strings.Join(edgeKinds, "->")
+}
+
+func relationshipListKindSignature(t *testing.T, relationships []*graph.Relationship) string {
+	t.Helper()
+
+	edgeKinds := make([]string, len(relationships))
+	for idx, relationship := range relationships {
+		if relationship == nil {
+			t.Fatalf("relationship list contains nil relationship at index %d", idx)
+		}
+
+		if relationship.Kind == nil {
+			t.Fatalf("relationship list item at index %d has nil kind", idx)
+		}
+
+		edgeKinds[idx] = relationship.Kind.String()
+	}
+
+	return strings.Join(edgeKinds, "->")
+}
+
+func relationshipValueListKindSignature(t *testing.T, relationships []graph.Relationship) string {
+	t.Helper()
+
+	edgeKinds := make([]string, len(relationships))
+	for idx, relationship := range relationships {
+		if relationship.Kind == nil {
+			t.Fatalf("relationship list item at index %d has nil kind", idx)
+		}
+
+		edgeKinds[idx] = relationship.Kind.String()
 	}
 
 	return strings.Join(edgeKinds, "->")

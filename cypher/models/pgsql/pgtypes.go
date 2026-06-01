@@ -106,6 +106,7 @@ const (
 	ExpansionRootNode     DataType = "expansion_root_node"
 	ExpansionEdge         DataType = "expansion_edge"
 	ExpansionTerminalNode DataType = "expansion_terminal_node"
+	PathEdge              DataType = "path_edge"
 )
 
 func (s DataType) IsKnown() bool {
@@ -320,6 +321,14 @@ func (s DataType) OperatorResultType(other DataType, operator Operator) (DataTyp
 
 	case OperatorConcatenate:
 		// Array types may only concatenate if their base types match
+		if s == AnyArray && other.IsArrayType() {
+			return other, true
+		}
+
+		if other == AnyArray && s.IsArrayType() {
+			return s, true
+		}
+
 		if s.IsArrayType() {
 			return s, s == other || s.ArrayBaseType() == other
 		}
@@ -360,7 +369,7 @@ func (s DataType) MatchesOneOf(others ...DataType) bool {
 
 func (s DataType) IsArrayType() bool {
 	switch s {
-	case Int2Array, Int4Array, Int8Array, IntArray, Float4Array, Float8Array, TextArray, JSONBArray,
+	case AnyArray, Int2Array, Int4Array, Int8Array, IntArray, Float4Array, Float8Array, TextArray, JSONBArray,
 		NodeCompositeArray, EdgeCompositeArray, NumericArray:
 		return true
 	}

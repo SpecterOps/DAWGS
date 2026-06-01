@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mitchellh/go-wordwrap"
+	"github.com/specterops/dawgs/tools/dawgrun/pkg/texttools"
 )
 
 func getFlagSetHelpDetails(flagSet *flag.FlagSet) string {
@@ -39,42 +40,64 @@ func helpCmd() CommandDesc {
 
 				sortedCommands := slices.Sorted(maps.Keys(cmdRegistry))
 				for _, name := range sortedCommands {
+					cmd := cmdRegistry[name]
+					if slices.Contains(cmd.DisallowRunModes, ctx.scope.GetRunMode()) {
+						continue
+					}
+
 					commandLeft := fmt.Sprintf(
 						"%s%s%s",
 						strings.Repeat(" ", 4),
 						name,
 						strings.Repeat(" ", maxNameLength-(len(name))),
 					)
-					cmd := cmdRegistry[name]
 					spacerPad := strings.Repeat(" ", len(commandLeft))
 					fmt.Fprintf(ctx.output, "%s%s%s\n", commandLeft, spacerPad, cmd.help)
 				}
+			} else if strings.ToLower(fields[0]) == "all" {
+				// ALL COMMAND HELP
+				for name, cmd := range cmdRegistry {
+					// skip commands that are disabled for this run mode
+					if slices.Contains(cmd.DisallowRunModes, ctx.scope.GetRunMode()) {
+						continue
+					}
+
+					fmt.Fprintf(ctx.output, "%s", renderHelp(name, cmd))
+				}
 			} else {
-				// COMMAND HELP
+				// INDIVIDUAL COMMAND HELP
 				name := fields[0]
 				cmd, ok := cmdRegistry[name]
-				if !ok {
+				if !ok || slices.Contains(cmd.DisallowRunModes, ctx.scope.GetRunMode()) {
 					return fmt.Errorf("unknown command: %s", name)
 				}
 
-				wrappedHelp := indentLines(wordwrap.WrapString(cmd.help, 80), 1)
-				fmt.Fprintf(ctx.output, "\nHELP: %s %s\n\n", name, strings.Join(cmd.args, " "))
-				fmt.Fprintf(ctx.output, "%s\n", wrappedHelp)
-				if strings.TrimSpace(cmd.desc) != "" {
-					fmt.Fprint(ctx.output, "\n")
-					fmt.Fprintf(ctx.output, "%s\n", indentLines(wordwrap.WrapString(cmd.desc, 80), 1))
-				}
-				if cmd.flags != nil {
-					flagDefaults := getFlagSetHelpDetails(cmd.flags)
-					fmt.Fprintf(ctx.output, "\n%s\n%s\n",
-						indentLines("flags:", 1),
-						indentLines(wordwrap.WrapString(flagDefaults, 80), 2),
-					)
-				}
-				fmt.Fprint(ctx.output, "END HELP\n")
+				fmt.Fprintf(ctx.output, "%s", renderHelp(name, cmd))
 			}
 
 			return nil
 		},
 	}
+}
+
+func renderHelp(name string, cmd CommandDesc) string {
+	builder := new(strings.Builder)
+
+	wrappedHelp := texttools.IndentLines(wordwrap.WrapString(cmd.help, 80), 1)
+	fmt.Fprintf(builder, "\nHELP: %s %s\n\n", name, strings.Join(cmd.args, " "))
+	fmt.Fprintf(builder, "%s\n", wrappedHelp)
+	if strings.TrimSpace(cmd.desc) != "" {
+		fmt.Fprint(builder, "\n")
+		fmt.Fprintf(builder, "%s\n", texttools.IndentLines(wordwrap.WrapString(cmd.desc, 80), 1))
+	}
+	if cmd.flags != nil {
+		flagDefaults := getFlagSetHelpDetails(cmd.flags)
+		fmt.Fprintf(builder, "\n%s\n%s\n",
+			texttools.IndentLines("flags:", 1),
+			texttools.IndentLines(wordwrap.WrapString(flagDefaults, 80), 2),
+		)
+	}
+	fmt.Fprint(builder, "END HELP\n")
+
+	return builder.String()
 }
