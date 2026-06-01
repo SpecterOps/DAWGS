@@ -4,8 +4,8 @@ import (
 	"context"
 )
 
-// TargetStorage identifies a region of graph storage that an
-// optimization pass may target.
+// TargetStorage identifies a region of graph storage that an optimization
+// pass may target.
 type TargetStorage int
 
 const (
@@ -14,32 +14,44 @@ const (
 )
 
 // OptimizeConfig is the resolved configuration for a single Optimize call.
-// Drivers consume this struct after all OptimizeOption values have been
-// applied. Options unsupported by a given driver should be ignored.
+// Drivers apply every OptimizeOption to this struct before reading it.
 type OptimizeConfig struct {
-	// Targets is the set of storage regions to optimize. An empty slice means
-	// "all regions the driver knows about".
+	// Targets is the set of storage regions to optimize. A nil or empty
+	// slice instructs the driver to optimize every region it knows about.
 	Targets []TargetStorage
 }
 
-// OptimizeOption mutates an OptimizeConfig.
+// OptimizeOption mutates an OptimizeConfig and is applied in the order
+// passed to Optimize.
 type OptimizeOption func(*OptimizeConfig)
 
-// OptimizeTargets restricts the optimization pass to the given storage regions.
+// OptimizeTargets restricts the optimization pass to the given storage
+// regions. Repeated calls append targets rather than replacing them.
+// Calling OptimizeTargets with no arguments does not change the resolved
+// target set; if no targets are configured by the time Optimize runs, the
+// driver treats that as "all regions it knows about".
 func OptimizeTargets(targets ...TargetStorage) OptimizeOption {
 	return func(c *OptimizeConfig) {
 		c.Targets = append(c.Targets, targets...)
 	}
 }
 
-// StorageMaintainer is an optional capability implemented by drivers that can
-// perform storage maintenance. Consumers should detect support with a
-// type assertion against a graph.Database:
+// StorageMaintainer is an optional capability implemented by drivers that
+// can perform storage maintenance. Drivers that cannot perform meaningful maintenance
+// must not implement this interface; a failed type assertion is the
+// signal for "this driver does not support storage maintenance".
+// A non-nil error returned from Optimize signals a driver-specific failure
+// during a supported call.
+//
+// Consumers detect support with a type assertion against a graph.Database:
 //
 //	if m, ok := db.(graph.StorageMaintainer); ok {
 //	    err := m.Optimize(ctx, graph.OptimizeTargets(graph.Nodes, graph.Relationships))
 //	    ...
 //	}
 type StorageMaintainer interface {
+	// Optimize runs a storage maintenance pass against the regions
+	// identified by opts. With no options, every region the driver
+	// recognizes is optimized.
 	Optimize(ctx context.Context, opts ...OptimizeOption) error
 }
