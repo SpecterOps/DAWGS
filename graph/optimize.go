@@ -36,22 +36,22 @@ func OptimizeTargets(targets ...TargetStorage) OptimizeOption {
 	}
 }
 
-// StorageMaintainer is an optional capability implemented by drivers that
-// can perform storage maintenance. Drivers that cannot perform meaningful maintenance
+// StorageOptimizer is an optional capability implemented by drivers that
+// can perform storage optimization. Drivers that cannot perform meaningful optimization
 // must not implement this interface; a failed type assertion is the
-// signal for "this driver does not support storage maintenance".
+// signal for "this driver does not support storage optimization".
 // A non-nil error returned from Optimize signals a driver-specific failure
 // during a supported call.
 //
 // Consumers detect support with a type assertion against a graph.Database:
 //
-//	if m, ok := db.(graph.StorageMaintainer); ok {
+//	if m, ok := db.(graph.StorageOptimizer); ok {
 //	    err := m.Optimize(ctx, graph.OptimizeTargets(graph.Nodes, graph.Relationships))
 //	    ...
 //	}
-type StorageMaintainer interface {
-	// Optimize runs a storage maintenance pass against the regions
+type StorageOptimizer interface {
+	// OptimizeStorage runs a storage optimization pass against the regions
 	// identified by opts. With no options, every region the driver
 	// recognizes is optimized.
-	Optimize(ctx context.Context, opts ...OptimizeOption) error
+	OptimizeStorage(ctx context.Context, opts ...OptimizeOption) error
 }
