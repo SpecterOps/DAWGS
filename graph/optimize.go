@@ -13,7 +13,7 @@ const (
 	Relationships
 )
 
-// OptimizeConfig is the resolved configuration for a single Optimize call.
+// OptimizeConfig is the resolved configuration for a single OptimizeStorage call.
 // Drivers apply every OptimizeOption to this struct before reading it.
 type OptimizeConfig struct {
 	// Targets is the set of storage regions to optimize. A nil or empty
@@ -28,7 +28,7 @@ type OptimizeOption func(*OptimizeConfig)
 // OptimizeTargets restricts the optimization pass to the given storage
 // regions. Repeated calls append targets rather than replacing them.
 // Calling OptimizeTargets with no arguments does not change the resolved
-// target set; if no targets are configured by the time Optimize runs, the
+// target set; if no targets are configured by the time OptimizeStorage runs, the
 // driver treats that as "all regions it knows about".
 func OptimizeTargets(targets ...TargetStorage) OptimizeOption {
 	return func(c *OptimizeConfig) {
@@ -40,7 +40,7 @@ func OptimizeTargets(targets ...TargetStorage) OptimizeOption {
 // can perform storage optimization. Drivers that cannot perform meaningful optimization
 // must not implement this interface; a failed type assertion is the
 // signal for "this driver does not support storage optimization".
-// A non-nil error returned from Optimize signals a driver-specific failure
+// A non-nil error returned from OptimizeStorage signals a driver-specific failure
 // during a supported call.
 //
 // Consumers detect support with a type assertion against a graph.Database:
