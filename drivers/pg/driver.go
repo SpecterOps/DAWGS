@@ -177,7 +177,7 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	return s.SchemaManager.Fetch(ctx)
 }
 
-func (s *Driver) Optimize(ctx context.Context, opts ...graph.OptimizeOption) error {
+func (s *Driver) OptimizeStorage(ctx context.Context, opts ...graph.OptimizeOption) error {
 	config := &graph.OptimizeConfig{}
 	for _, opt := range opts {
 		opt(config)
