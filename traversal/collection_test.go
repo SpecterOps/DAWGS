@@ -1,6 +1,8 @@
 package traversal
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
@@ -47,4 +49,27 @@ func TestNewPathCollector(t *testing.T) {
 	assert.NotNil(t, collector)
 	assert.NotNil(t, collector.lock)
 	assert.Empty(t, collector.Paths)
+}
+
+func TestNodeCollectorPopulatePropertiesError(t *testing.T) {
+	ctx := context.Background()
+	newCollector := NewNodeCollector()
+
+	db := &mockGraphDB{
+		errorMsg: fmt.Errorf("Read Transaction Failed"),
+	}
+	err := newCollector.PopulateProperties(ctx, db, "name")
+	assert.Equal(t, err.Error(), "Read Transaction Failed")
+}
+
+func TestPathCollectorAdd(t *testing.T) {
+	collector := NewPathCollector()
+	firstPath := collectionPath(2, 5, 13)
+	secondPath := collectionPath(3, 6, 14)
+
+	collector.Add(firstPath)
+	collector.Add(secondPath)
+	assert.Len(t, collector.Paths, 2)
+	assert.Equal(t, firstPath, collector.Paths[0])
+	assert.Equal(t, secondPath, collector.Paths[1])
 }
