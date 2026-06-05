@@ -59,7 +59,7 @@ func TestNodeCollectorPopulatePropertiesError(t *testing.T) {
 		errorMsg: fmt.Errorf("Read Transaction Failed"),
 	}
 	err := newCollector.PopulateProperties(ctx, db, "name")
-	assert.Equal(t, err.Error(), "Read Transaction Failed")
+	assert.EqualError(t, err, "Read Transaction Failed")
 }
 
 func TestPathCollectorAdd(t *testing.T) {

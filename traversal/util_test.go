@@ -21,7 +21,7 @@ func (m *mockGraphDB) SetWriteFlushSize(size int) {}
 
 func (m *mockGraphDB) SetDefaultGraph(ctx context.Context, graph graph.Graph) error {
 	if m.errorMsg.Error() == "Failed setting default graph namespace" {
-		return fmt.Errorf("Failed to refresh kinds")
+		return fmt.Errorf("Failed setting default graph namespace")
 	}
 	return nil
 }

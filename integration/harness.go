@@ -349,11 +349,11 @@ func SetupDBWithKinds(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, ext
 // SetupDBWithKindsNoGraphCleanup opens a database connection like SetupDBWithKinds
 // but only closes the connection during cleanup. Use this for rollback-only tests
 // that must not clear a shared database.
-func SetupDBWithKindsNoGraphCleanup(t *testing.T, cleanupMode CleanupMode, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
+func SetupDBWithKindsNoGraphCleanup(t *testing.T, extraNodeKinds, extraEdgeKinds graph.Kinds, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
 	session := Open(t, Options{
-		CleanupMode:    cleanupMode,
+		CleanupMode:    CloseOnly,
 		Datasets:       datasets,
 		ExtraNodeKinds: extraNodeKinds,
 		ExtraEdgeKinds: extraEdgeKinds,

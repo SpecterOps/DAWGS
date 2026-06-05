@@ -71,7 +71,7 @@ func TestCypherTemplates(t *testing.T) {
 	templateFiles := loadCypherTemplateFiles(t)
 	nodeKinds, edgeKinds := cypherTemplateKinds(templateFiles)
 
-	db, ctx := SetupDBWithKindsNoGraphCleanup(t, 0, nodeKinds, edgeKinds)
+	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
 
 	for _, templateFile := range templateFiles {
