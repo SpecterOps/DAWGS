@@ -1,0 +1,127 @@
+{
+  "dataset": "bed8320",
+  "cases": [
+    {
+      "name": "BED-8320 optimized negated undirected predicate remains row-correlated from left-bound node",
+      "cypher": "match (g:NodeKind2) where not ((g)--()) return g.name",
+      "assert": {
+        "scalar_values": [
+          "KEY ADMINS GAMMA"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 optimized negated undirected predicate remains row-correlated from right-bound node",
+      "cypher": "match (g:NodeKind2) where not (()--(g)) return g.name",
+      "assert": {
+        "scalar_values": [
+          "KEY ADMINS GAMMA"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 optimized positive undirected predicate keeps incident nodes",
+      "cypher": "match (g:NodeKind2) where (g)--() return count(g)",
+      "assert": {
+        "exact_int": 5
+      }
+    },
+    {
+      "name": "BED-8320 optimized both-bound undirected predicate finds connected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS BETA' and (a)--(b) return count(a)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-8320 optimized both-bound undirected predicate rejects disconnected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS GAMMA' and (a)--(b) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "BED-8320 optimized unbound undirected predicate is true when any relationship exists",
+      "cypher": "match (g:NodeKind2) where ()--() return count(g)",
+      "assert": {
+        "exact_int": 6
+      }
+    },
+    {
+      "name": "BED-8320 optimized negated unbound undirected predicate is false when any relationship exists",
+      "cypher": "match (g:NodeKind2) where not (()--()) return count(g)",
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "BED-8320 optimized typed undirected predicate keeps EdgeKind1 incident nodes from left-bound node",
+      "cypher": "match (g:NodeKind2) where (g)-[:EdgeKind1]-() return count(g)",
+      "assert": {
+        "exact_int": 4
+      }
+    },
+    {
+      "name": "BED-8320 optimized typed undirected predicate keeps EdgeKind1 incident nodes from right-bound node",
+      "cypher": "match (g:NodeKind2) where ()-[:EdgeKind1]-(g) return count(g)",
+      "assert": {
+        "exact_int": 4
+      }
+    },
+    {
+      "name": "BED-8320 optimized negated typed undirected predicate excludes EdgeKind1 incident nodes from right-bound node",
+      "cypher": "match (g:NodeKind2) where not (()-[:EdgeKind1]-(g)) return g.name",
+      "assert": {
+        "scalar_values": [
+          "KEY ADMINS DELTA",
+          "KEY ADMINS GAMMA"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 optimized negated typed undirected predicate excludes EdgeKind1 incident nodes from left-bound node",
+      "cypher": "match (g:NodeKind2) where not ((g)-[:EdgeKind1]-()) return g.name",
+      "assert": {
+        "scalar_values": [
+          "KEY ADMINS DELTA",
+          "KEY ADMINS GAMMA"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 optimized typed both-bound undirected predicate finds connected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS BETA' and (a)-[:EdgeKind1]-(b) return count(a)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-8320 optimized typed both-bound undirected predicate rejects wrong edge kind",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS ALPHA' and (a)-[:EdgeKind1]-(b) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "BED-8320 optimized typed both-bound undirected predicate rejects disconnected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS GAMMA' and (a)-[:EdgeKind1]-(b) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "BED-8320 optimized typed unbound undirected predicate is true when any matching relationship exists",
+      "cypher": "match (g:NodeKind2) where ()-[:EdgeKind1]-() return count(g)",
+      "assert": {
+        "exact_int": 6
+      }
+    },
+    {
+      "name": "BED-8320 optimized negated typed unbound undirected predicate is false when matching relationships exist",
+      "cypher": "match (g:NodeKind2) where not (()-[:EdgeKind1]-()) return count(g)",
+      "assert": {
+        "exact_int": 0
+      }
+    }
+  ]
+}
