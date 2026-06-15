@@ -228,6 +228,6 @@ func (s *DatabaseSwitch) OptimizeStorage(ctx context.Context) error {
 		s.currentDBLock.RLock()
 		defer s.currentDBLock.RUnlock()
 
-		return s.currentDB.OptimizeStorage(ctx)
+		return s.currentDB.OptimizeStorage(internalCtx)
 	}
 }
