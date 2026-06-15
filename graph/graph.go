@@ -420,4 +420,7 @@ type Database interface {
 
 	// RefreshKinds refreshes the in memory kinds maps
 	RefreshKinds(ctx context.Context) error
+
+	// OptimizeStorage performs routine maintenance operations on the underlying storage
+	OptimizeStorage(ctx context.Context) error
 }

@@ -218,3 +218,16 @@ func (s *DatabaseSwitch) RefreshKinds(ctx context.Context) error {
 		return s.currentDB.RefreshKinds(ctx)
 	}
 }
+
+func (s *DatabaseSwitch) OptimizeStorage(ctx context.Context) error {
+	if internalCtx, err := s.newInternalContext(ctx); err != nil {
+		return err
+	} else {
+		defer s.retireInternalContext(internalCtx)
+
+		s.currentDBLock.RLock()
+		defer s.currentDBLock.RUnlock()
+
+		return s.currentDB.OptimizeStorage(ctx)
+	}
+}
