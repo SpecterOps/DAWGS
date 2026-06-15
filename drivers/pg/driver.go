@@ -184,11 +184,9 @@ func (s *Driver) OptimizeStorage(ctx context.Context) error {
 	}
 	defer conn.Release()
 
-	// VACUUM cannot run inside a transaction block, so it must be issued
-	// through the simple query protocol; pgx's default extended protocol
-	// wraps statements in an implicit transaction the server rejects.
-	if _, err := conn.Exec(ctx, "VACUUM (ANALYZE)", pgx.QueryExecModeSimpleProtocol); err != nil {
-		return fmt.Errorf("VACUUM (ANALYZE): %w", err)
+	// Targeting the partitioned parent tables cascades to every partition;
+	if _, err := conn.Exec(ctx, "VACUUM (ANALYZE) node, edge", pgx.QueryExecModeSimpleProtocol); err != nil {
+		return fmt.Errorf("VACUUM (ANALYZE) node, edge: %w", err)
 	}
 
 	return nil
