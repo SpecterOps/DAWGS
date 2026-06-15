@@ -56,6 +56,10 @@ func (s *fakeDatabase) RefreshKinds(context.Context) error {
 	return nil
 }
 
+func (s *fakeDatabase) OptimizeStorage(ctx context.Context) error {
+	return nil
+}
+
 func TestConfigRoundTrip(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	expected := types.Config{

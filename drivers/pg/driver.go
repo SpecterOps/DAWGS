@@ -176,3 +176,7 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
 	return s.SchemaManager.Fetch(ctx)
 }
+
+func (s *Driver) OptimizeStorage(ctx context.Context) error {
+	return nil
+}

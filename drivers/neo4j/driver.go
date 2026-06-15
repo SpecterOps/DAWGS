@@ -192,3 +192,7 @@ func (s *driver) RefreshKinds(_ context.Context) error {
 	// This isn't needed for neo4j
 	return nil
 }
+
+func (s *driver) OptimizeStorage(ctx context.Context) error {
+	return nil
+}
