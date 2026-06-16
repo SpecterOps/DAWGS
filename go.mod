@@ -14,6 +14,7 @@ require (
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
+	github.com/pashagolub/pgxmock/v5 v5.1.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/tools v0.44.0
 )
