@@ -220,7 +220,7 @@ func (s *Translator) buildPatternPredicates() error {
 					traversalStepQuery pgsql.Query
 					err                error
 				)
-				if traversalStep.Direction != graph.DirectionBoth && (traversalStep.LeftNodeBound || traversalStep.RightNodeBound) {
+				if traversalStep.LeftNodeBound || traversalStep.RightNodeBound {
 					traversalStepQuery, err = s.buildTraversalPatternRootWithOuterCorrelation(traversalStep.Frame, traversalStep)
 				} else {
 					traversalStepQuery, err = s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep)
