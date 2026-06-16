@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -38,10 +39,24 @@ func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
 		}
 
 		total := dead + live
+		var deadTupleRatio float64
+		if total > 0 {
+			deadTupleRatio = float64(dead) / float64(total)
+		}
+
+		slog.InfoContext(ctx, "Queried PostgreSQL table storage statistics",
+			slog.String("table", table),
+			slog.Int64("dead_tuples", dead),
+			slog.Int64("live_tuples", live),
+			slog.Int64("total_tuples", total),
+			slog.Float64("dead_tuple_ratio", deadTupleRatio),
+			slog.Float64("dead_tuple_threshold", deadTupleThreshold),
+		)
+
 		if total == 0 {
 			continue
 		}
-		if float64(dead)/float64(total) >= deadTupleThreshold {
+		if deadTupleRatio >= deadTupleThreshold {
 			targets = append(targets, table)
 		}
 	}
@@ -52,6 +67,11 @@ func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
 
 	// Targeting the partitioned parents cascades to every partition.
 	stmt := "VACUUM (ANALYZE) " + strings.Join(targets, ", ")
+	slog.InfoContext(ctx, "Executing PostgreSQL storage optimization",
+		slog.Any("targets", targets),
+		slog.String("statement", stmt),
+	)
+
 	if _, err := conn.Exec(ctx, stmt, pgx.QueryExecModeSimpleProtocol); err != nil {
 		return fmt.Errorf("%s: %w", stmt, err)
 	}
