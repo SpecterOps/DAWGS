@@ -178,5 +178,11 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 }
 
 func (s *Driver) OptimizeStorage(ctx context.Context) error {
-	return nil
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for VACUUM: %w", err)
+	}
+	defer conn.Release()
+
+	return optimizeStorage(ctx, conn)
 }

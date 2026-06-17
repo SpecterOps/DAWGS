@@ -368,3 +368,27 @@ func lookupKindIDCmd() CommandDesc {
 		},
 	}
 }
+
+func optimizeStorageCmd() CommandDesc {
+	return CommandDesc{
+		args: []string{"<connection name>"},
+		help: "Optimize the storage on an opened connection",
+		desc: "Perform routine maintenance operations on the underlying storage, such as VACUUM, ANALYZE, etc.",
+		Fn: func(ctx *CommandContext, fields []string) error {
+			if len(fields) != 1 {
+				return fmt.Errorf("invalid usage: optimize-storage <connection name>")
+			}
+
+			connName := fields[0]
+			if db, ok := ctx.scope.GetConnection(connName); ok {
+				if err := db.OptimizeStorage(ctx); err != nil {
+					return fmt.Errorf("failed to optimize storage: %w", err)
+				}
+			} else {
+				return fmt.Errorf("connection not found: %s", connName)
+			}
+
+			return nil
+		},
+	}
+}
