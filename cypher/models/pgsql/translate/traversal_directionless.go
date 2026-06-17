@@ -7,6 +7,52 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+// directionlessSingleBoundPlan is a "generic" plan to hold the details necessary for constructing
+// a single-bound traversal step
+type directionlessSingleBoundPlan struct {
+	boundNodeConstraints   pgsql.Expression
+	boundNodeJoinCondition pgsql.Expression
+	nodeJoinBinding        pgsql.Identifier
+	nodeJoinConstraint     pgsql.Expression
+	whereConstraint        pgsql.Expression
+	boundNode              *BoundIdentifier
+	unboundNodeIdentifier  pgsql.Identifier
+}
+
+func buildDirectionlessSingleBoundPlan(traversalStep *TraversalStep) directionlessSingleBoundPlan {
+	// Partition node constraints
+	rightJoinLocal, rightJoinExternal := partitionConstraintByLocality(
+		traversalStep.RightNodeConstraints,
+		pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
+	)
+
+	leftJoinLocal, leftJoinExternal := partitionConstraintByLocality(
+		traversalStep.LeftNodeConstraints,
+		pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+	)
+
+	plan := directionlessSingleBoundPlan{}
+	if traversalStep.LeftNodeBound {
+		plan.nodeJoinBinding = traversalStep.RightNode.Identifier
+		plan.nodeJoinConstraint = pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition)
+		plan.whereConstraint = pgsql.OptionalAnd(rightJoinExternal, traversalStep.EdgeConstraints.Expression)
+		plan.boundNodeConstraints = traversalStep.LeftNodeConstraints
+		plan.boundNodeJoinCondition = traversalStep.LeftNodeJoinCondition
+		plan.boundNode = traversalStep.LeftNode
+		plan.unboundNodeIdentifier = traversalStep.RightNode.Identifier
+	} else if traversalStep.RightNodeBound {
+		plan.nodeJoinBinding = traversalStep.LeftNode.Identifier
+		plan.nodeJoinConstraint = pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition)
+		plan.whereConstraint = pgsql.OptionalAnd(leftJoinExternal, traversalStep.EdgeConstraints.Expression)
+		plan.boundNodeConstraints = traversalStep.RightNodeConstraints
+		plan.boundNodeJoinCondition = traversalStep.RightNodeJoinCondition
+		plan.boundNode = traversalStep.RightNode
+		plan.unboundNodeIdentifier = traversalStep.LeftNode.Identifier
+	}
+
+	return plan
+}
+
 //
 // DIRECTIONLESS TRAVERSALS WITHOUT OUTER CORRELATION
 //
@@ -28,50 +74,48 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 		return s.buildSingleBoundDirectionlessTraversalRoot(traversalStep)
 	}
 
+	// Neither side is bound
 	return s.buildUnboundDirectionlessTraversalPatternRoot(traversalStep)
 }
 
-func buildDirectionlessPairwiseEdgeConstraint(traversalStep *TraversalStep) pgsql.Expression {
-	prevFrame := traversalStep.Frame.Previous
-
-	// ((sN.nLeft).id = (eN).start_id AND (sN.nRight).id = (eN).end_id)
+func buildDirectionlessPairwiseEdgeConstraintForRefs(left pgsql.Expression, right pgsql.Expression, edge pgsql.Identifier) pgsql.Expression {
+	// ((left).id = (eN).start_id AND (right).id = (eN).end_id)
 	leftToRight := pgsql.NewParenthetical(
 		pgsql.NewBinaryExpression(
 			pgsql.NewBinaryExpression(
-				// (sN.nLeft).id
-				boundEndpointIDReference(prevFrame, traversalStep.LeftNode),
+				left,
 				pgsql.OperatorEquals,
 				// (eN).start_id
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.CompoundIdentifier{edge, pgsql.ColumnStartID},
 			),
 			pgsql.OperatorAnd,
 			pgsql.NewBinaryExpression(
-				// (sN.nRight).id
-				boundEndpointIDReference(prevFrame, traversalStep.RightNode),
+				// (right).id
+				right,
 				pgsql.OperatorEquals,
 				// (eN).end_id
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.CompoundIdentifier{edge, pgsql.ColumnEndID},
 			),
 		),
 	)
 
-	// ((sN.nRight).id = (eN).start_id AND (sN.nLeft).id = (eN).end_id)
+	// ((right).id = (eN).start_id AND (left).id = (eN).end_id)
 	rightToLeft := pgsql.NewParenthetical(
 		pgsql.NewBinaryExpression(
 			pgsql.NewBinaryExpression(
-				// (sN.nRight).id
-				boundEndpointIDReference(prevFrame, traversalStep.RightNode),
+				// (right).id
+				right,
 				pgsql.OperatorEquals,
 				// (eN).start_id
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.CompoundIdentifier{edge, pgsql.ColumnStartID},
 			),
 			pgsql.OperatorAnd,
 			pgsql.NewBinaryExpression(
-				// (sN.nLeft).id
-				boundEndpointIDReference(prevFrame, traversalStep.LeftNode),
+				// (left).id
+				left,
 				pgsql.OperatorEquals,
 				// (eN).end_id
-				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.CompoundIdentifier{edge, pgsql.ColumnEndID},
 			),
 		),
 	)
@@ -83,6 +127,8 @@ func buildDirectionlessPairwiseEdgeConstraint(traversalStep *TraversalStep) pgsq
 	)
 }
 
+// buildPairwiseDirectionlessTraversalPatternRoot builds a traversal pattern for a path predicate where both side of
+// the traversal root are bound to external nodes
 func (s *Translator) buildPairwiseDirectionlessTraversalPatternRoot(traversalStep *TraversalStep) (pgsql.Query, error) {
 	var (
 		// Partition node constraints
@@ -101,7 +147,12 @@ func (s *Translator) buildPairwiseDirectionlessTraversalPatternRoot(traversalSte
 		}
 	)
 
-	pairwiseEdgeConstraint := buildDirectionlessPairwiseEdgeConstraint(traversalStep)
+	previousFrame := traversalStep.Frame.Previous
+	pairwiseEdgeConstraint := buildDirectionlessPairwiseEdgeConstraintForRefs(
+		boundEndpointIDReference(previousFrame, traversalStep.LeftNode),
+		boundEndpointIDReference(previousFrame, traversalStep.RightNode),
+		traversalStep.Edge.Identifier,
+	)
 	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 		Source: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{traversalStep.Frame.Previous.Binding.Identifier},
@@ -200,8 +251,12 @@ func (s *Translator) buildUnboundDirectionlessTraversalPatternRoot(traversalStep
 			pgsql.NewBinaryExpression(
 				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
 				pgsql.OperatorCypherNotEquals,
-				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID})),
-		nextSelect.Where)
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+			),
+		),
+		nextSelect.Where,
+	)
+
 	return pgsql.Query{
 		Body: nextSelect,
 	}, nil
@@ -210,8 +265,7 @@ func (s *Translator) buildUnboundDirectionlessTraversalPatternRoot(traversalStep
 // buildSingleBoundDirectionlessTraversalRoot checks that the bound previous frame exists and generates the binding
 // parameters necessary to generate the SQL query for a single-bound undirected traversal.
 func (s *Translator) buildSingleBoundDirectionlessTraversalRoot(traversalStep *TraversalStep) (pgsql.Query, error) {
-	referenceFrame := traversalStep.Frame
-	previousFrame, hasPreviousFrame := s.previousValidFrame(referenceFrame)
+	previousFrame, hasPreviousFrame := s.previousValidFrame(traversalStep.Frame)
 
 	// If left node is bound and there is no previous frame, this is a bug in the bounds generation
 	if traversalStep.LeftNodeBound && !hasPreviousFrame {
@@ -224,43 +278,10 @@ func (s *Translator) buildSingleBoundDirectionlessTraversalRoot(traversalStep *T
 	}
 
 	var (
-		// Partition node constraints
-		rightJoinLocal, rightJoinExternal = partitionConstraintByLocality(
-			traversalStep.RightNodeConstraints,
-			pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
-		)
-
-		leftJoinLocal, leftJoinExternal = partitionConstraintByLocality(
-			traversalStep.LeftNodeConstraints,
-			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
-		)
-
-		edgeJoinConstraint    pgsql.Expression
-		nodeJoinConstraint    pgsql.Expression
-		whereConstraint       pgsql.Expression
-		nodeJoinBinding       pgsql.Identifier
-		boundNodeIdentifier   pgsql.Identifier
-		unboundNodeIdentifier pgsql.Identifier
-
+		plan                = buildDirectionlessSingleBoundPlan(traversalStep)
 		pivotEdgeIdentifier = traversalStep.Edge.Identifier
 		projection          = traversalStep.Projection
 	)
-
-	if traversalStep.LeftNodeBound {
-		edgeJoinConstraint = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, traversalStep.LeftNodeJoinCondition)
-		nodeJoinBinding = traversalStep.RightNode.Identifier
-		nodeJoinConstraint = pgsql.OptionalAnd(rightJoinLocal, traversalStep.RightNodeJoinCondition)
-		whereConstraint = pgsql.OptionalAnd(rightJoinExternal, traversalStep.EdgeConstraints.Expression)
-		boundNodeIdentifier = traversalStep.LeftNode.Identifier
-		unboundNodeIdentifier = traversalStep.RightNode.Identifier
-	} else if traversalStep.RightNodeBound {
-		edgeJoinConstraint = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, traversalStep.RightNodeJoinCondition)
-		nodeJoinBinding = traversalStep.LeftNode.Identifier
-		nodeJoinConstraint = pgsql.OptionalAnd(leftJoinLocal, traversalStep.LeftNodeJoinCondition)
-		whereConstraint = pgsql.OptionalAnd(leftJoinExternal, traversalStep.EdgeConstraints.Expression)
-		boundNodeIdentifier = traversalStep.RightNode.Identifier
-		unboundNodeIdentifier = traversalStep.LeftNode.Identifier
-	}
 
 	nextSelect := pgsql.Select{
 		Projection: projection,
@@ -280,32 +301,32 @@ func (s *Translator) buildSingleBoundDirectionlessTraversalRoot(traversalStep *T
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: edgeJoinConstraint,
+				Constraint: pgsql.OptionalAnd(plan.boundNodeConstraints, plan.boundNodeJoinCondition),
 			},
 		}, {
 			Table: pgsql.TableReference{
 				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.OptionalValue(nodeJoinBinding),
+				Binding: models.OptionalValue(plan.nodeJoinBinding),
 			},
 			JoinOperator: pgsql.JoinOperator{
 				JoinType:   pgsql.JoinTypeInner,
-				Constraint: nodeJoinConstraint,
+				Constraint: plan.nodeJoinConstraint,
 			},
 		}},
 	})
 
-	nextSelect.Where = whereConstraint
+	nextSelect.Where = plan.whereConstraint
 
 	// selected node is not joined here, so the guard must reference the bound node through the previous frame
 	nextSelect.Where = pgsql.OptionalAnd(
 		pgsql.NewParenthetical(
 			pgsql.NewBinaryExpression(
 				pgsql.RowColumnReference{
-					Identifier: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier, boundNodeIdentifier},
+					Identifier: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier, plan.boundNode.Identifier},
 					Column:     pgsql.ColumnID,
 				},
 				pgsql.OperatorCypherNotEquals,
-				pgsql.CompoundIdentifier{unboundNodeIdentifier, pgsql.ColumnID},
+				pgsql.CompoundIdentifier{plan.unboundNodeIdentifier, pgsql.ColumnID},
 			),
 		),
 		nextSelect.Where,
@@ -359,7 +380,6 @@ func (s *Translator) buildSelfReferentialDirectionlessTraversalRoot(traversalSte
 	// both endpoints reference the same node binding.
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeJoinCondition, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
-
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
 
@@ -377,5 +397,117 @@ func (s *Translator) buildDirectionlessTraversalPatternRootWithOuterCorrelation(
 		return s.buildBoundEndpointTraversalPattern(traversalStep.Frame, traversalStep)
 	}
 
-	return pgsql.Query{}, fmt.Errorf("not implemented")
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		// Both sides are bound, build a strict pairwise join on the edge
+		return s.buildPairwiseDirectionlessTraversalPatternRootWithOuterCorrelation(traversalStep)
+	} else if traversalStep.LeftNodeBound || traversalStep.RightNodeBound {
+		// One of the traversal step nodes is bound by the outer query, so
+		// generate internal constraints to "bind" the inner and outer queries
+		return s.buildSingleBoundDirectionlessTraversalRootWithOuterCorrelation(traversalStep)
+	}
+
+	// When unbound, fall back to the uncorrelated, unbound, directionless builder
+	return s.buildUnboundDirectionlessTraversalPatternRoot(traversalStep)
+}
+
+func (s *Translator) buildSingleBoundDirectionlessTraversalRootWithOuterCorrelation(traversalStep *TraversalStep) (pgsql.Query, error) {
+	previousFrame, hasPreviousFrame := s.previousValidFrame(traversalStep.Frame)
+
+	// If left node is bound and there is no previous frame, this is a bug in the bounds generation
+	if traversalStep.LeftNodeBound && !hasPreviousFrame {
+		return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
+	}
+
+	// Special-case for self-referential right-bound form
+	if traversalStep.RightNodeBound && !hasPreviousFrame {
+		return s.buildSelfReferentialDirectionlessTraversalRoot(traversalStep)
+	}
+
+	var (
+		plan       = buildDirectionlessSingleBoundPlan(traversalStep)
+		projection = traversalStep.Projection
+	)
+
+	nextSelect := pgsql.Select{Projection: projection}
+	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+		},
+		Joins: []pgsql.Join{{
+			Table: pgsql.TableReference{
+				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+				Binding: models.OptionalValue(plan.nodeJoinBinding),
+			},
+			JoinOperator: pgsql.JoinOperator{
+				JoinType:   pgsql.JoinTypeInner,
+				Constraint: plan.nodeJoinConstraint,
+			},
+		}},
+	})
+
+	nextSelect.Where = pgsql.OptionalAnd(plan.boundNodeConstraints, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(plan.boundNodeJoinCondition, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(plan.whereConstraint, nextSelect.Where)
+
+	// selected node is not joined here, so the guard must reference the bound node through the previous frame
+	nextSelect.Where = pgsql.OptionalAnd(
+		pgsql.NewParenthetical(
+			pgsql.NewBinaryExpression(
+				boundEndpointIDReference(previousFrame, plan.boundNode),
+				pgsql.OperatorCypherNotEquals,
+				pgsql.CompoundIdentifier{plan.unboundNodeIdentifier, pgsql.ColumnID},
+			),
+		),
+		nextSelect.Where,
+	)
+
+	return pgsql.Query{Body: nextSelect}, nil
+}
+
+// buildPairwiseDirectionlessTraversalPatternRootWithOuterCorrelation builds a traversal pattern for a path predicate where both side of
+// the traversal root are bound to external nodes
+func (s *Translator) buildPairwiseDirectionlessTraversalPatternRootWithOuterCorrelation(traversalStep *TraversalStep) (pgsql.Query, error) {
+	var (
+		// Partition node constraints
+		_, rightJoinExternal = partitionConstraintByLocality(
+			traversalStep.RightNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.RightNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		_, leftJoinExternal = partitionConstraintByLocality(
+			traversalStep.LeftNodeConstraints,
+			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
+		)
+
+		nextSelect = pgsql.Select{
+			Projection: traversalStep.Projection,
+		}
+	)
+
+	previousFrame := traversalStep.Frame.Previous
+	pairwiseEdgeConstraint := buildDirectionlessPairwiseEdgeConstraintForRefs(
+		boundEndpointIDReference(previousFrame, traversalStep.LeftNode),
+		boundEndpointIDReference(previousFrame, traversalStep.RightNode),
+		traversalStep.Edge.Identifier,
+	)
+	nextSelect.From = append(nextSelect.From, pgsql.FromClause{
+		Source: pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(traversalStep.Edge.Identifier),
+		},
+	})
+
+	// Dual-bound: both endpoint external constraints apply.
+	nextSelect.Where = pgsql.OptionalAnd(pairwiseEdgeConstraint, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(leftJoinExternal, nextSelect.Where)
+	nextSelect.Where = pgsql.OptionalAnd(rightJoinExternal, nextSelect.Where)
+
+	// Only apply endpoint inequality when the bound nodes are different, to allow for self-referential relationships
+	if traversalStep.LeftNode.Identifier != traversalStep.RightNode.Identifier {
+		nextSelect.Where = pgsql.OptionalAnd(boundEndpointInequality(traversalStep.Frame.Previous, traversalStep), nextSelect.Where)
+	}
+
+	return pgsql.Query{Body: nextSelect}, nil
 }
