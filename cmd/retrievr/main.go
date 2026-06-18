@@ -159,8 +159,9 @@ func (s commandRuntime) runBench(ctx context.Context, args []string) error {
 	)
 
 	cfg.BatchSize = defaultBatchSize
+	cfg.SampleSize = defaultBenchSampleSize
 	cfg.ZstdLevel = defaultZstdLevel
-	workers = workerList{1, 2, 4, 8}
+	workers = workerList{1}
 
 	flags := flag.NewFlagSet("retrievr bench", flag.ContinueOnError)
 	flags.SetOutput(s.stderr)
@@ -169,6 +170,7 @@ func (s commandRuntime) runBench(ctx context.Context, args []string) error {
 	flags.BoolVar(&cfg.AllGraphs, "all-graphs", false, "Benchmark every graph discoverable by the selected driver.")
 	flags.Var(&workers, "workers", "Comma-separated worker counts.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
+	flags.IntVar(&cfg.SampleSize, "sample-size", cfg.SampleSize, "Maximum nodes and relationships to scan per phase; 0 scans the full graph.")
 	flags.StringVar(&compressionVal, "compression", "", "Optional compression codec to include encode/compress timing: zstd or gzip.")
 	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
 	flags.BoolVar(&cfg.JSONOutput, "json", false, "Emit machine-readable JSON.")

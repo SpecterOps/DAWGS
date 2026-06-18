@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	defaultShardSize = 100_000
-	defaultBatchSize = 10_000
+	defaultShardSize       = 100_000
+	defaultBatchSize       = 10_000
+	defaultBenchSampleSize = 1_000_000
 )
 
 type stringList []string
@@ -142,6 +143,7 @@ type benchOptions struct {
 	AllGraphs   bool
 	Workers     []int
 	BatchSize   int
+	SampleSize  int
 	Compression compressionCodec
 	ZstdLevel   int
 	JSONOutput  bool
@@ -151,8 +153,16 @@ func (s benchOptions) validate() error {
 	if len(s.Workers) == 0 {
 		return fmt.Errorf("workers are required")
 	}
+	for _, workerCount := range s.Workers {
+		if workerCount != 1 {
+			return fmt.Errorf("parallel benchmark workers are disabled until safe partitioned scans are implemented; use -workers 1")
+		}
+	}
 	if s.BatchSize <= 0 {
 		return fmt.Errorf("batch-size must be > 0")
+	}
+	if s.SampleSize < 0 {
+		return fmt.Errorf("sample-size must be >= 0")
 	}
 	if s.ZstdLevel <= 0 {
 		return fmt.Errorf("zstd-level must be > 0")

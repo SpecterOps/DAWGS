@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
 )
 
 type benchReport struct {
@@ -26,8 +25,11 @@ type benchGraphReport struct {
 type benchResult struct {
 	Workers                  int     `json:"workers"`
 	BatchSize                int     `json:"batch_size"`
+	SampleSize               int     `json:"sample_size,omitempty"`
 	NodeCount                int64   `json:"node_count"`
 	EdgeCount                int64   `json:"edge_count"`
+	NodeProcessed            int64   `json:"node_processed"`
+	EdgeProcessed            int64   `json:"edge_processed"`
 	NodeWallMillis           int64   `json:"node_wall_millis"`
 	EdgeWallMillis           int64   `json:"edge_wall_millis"`
 	NodeDBReadMillis         int64   `json:"node_db_read_millis"`
@@ -56,35 +58,110 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 		return benchReport{}, err
 	}
 
+	startedAt := time.Now()
+	slog.Info("retrievr bench started",
+		slog.String("driver", driverName),
+		slog.Int("graph_count", len(targets)),
+		slog.Int("batch_size", options.BatchSize),
+		slog.Int("sample_size", options.SampleSize),
+		slog.Any("workers", options.Workers),
+		slog.String("compression", string(options.Compression)),
+	)
+
 	report := benchReport{
 		Driver:      driverName,
 		GeneratedAt: time.Now().UTC(),
 		Graphs:      make([]benchGraphReport, 0, len(targets)),
 	}
-	for _, target := range targets {
-		targetGraph := graph.Graph{Name: target.Name}
+	for targetIndex, target := range targets {
+		graphStartedAt := time.Now()
+		slog.Info("retrievr bench graph started",
+			slog.String("graph", target.Name),
+			slog.Int("graph_index", targetIndex+1),
+			slog.Int("graph_count", len(targets)),
+		)
+
+		targetGraph := graph.Graph{
+			Name: target.Name,
+		}
+		slog.Info("retrievr bench counting graph entities",
+			slog.String("graph", target.Name),
+		)
 		nodeCount, edgeCount, err := countGraphEntities(ctx, db, targetGraph)
 		if err != nil {
 			return benchReport{}, err
 		}
+		slog.Info("retrievr bench graph counts ready",
+			slog.String("graph", target.Name),
+			slog.Int64("node_count", nodeCount),
+			slog.Int64("edge_count", edgeCount),
+		)
 
-		graphReport := benchGraphReport{Name: target.Name}
-		for _, workerCount := range options.Workers {
+		graphReport := benchGraphReport{
+			Name: target.Name,
+		}
+		for workerIndex, workerCount := range options.Workers {
+			workerStartedAt := time.Now()
+			slog.Info("retrievr bench worker run started",
+				slog.String("graph", target.Name),
+				slog.Int("worker_count", workerCount),
+				slog.Int("worker_index", workerIndex+1),
+				slog.Int("worker_runs", len(options.Workers)),
+				slog.Int("batch_size", options.BatchSize),
+				slog.Int("sample_size", options.SampleSize),
+			)
+
+			plannedNodes := benchPlannedCount(nodeCount, options.SampleSize)
+			slog.Info("retrievr bench node phase started",
+				slog.String("graph", target.Name),
+				slog.Int("worker_count", workerCount),
+				slog.Int64("node_count", nodeCount),
+				slog.Int64("planned_count", plannedNodes),
+			)
 			nodeResult, err := benchNodes(ctx, db, targetGraph, nodeCount, workerCount, options)
 			if err != nil {
 				return benchReport{}, err
 			}
+			slog.Info("retrievr bench node phase completed",
+				slog.String("graph", target.Name),
+				slog.Int("worker_count", workerCount),
+				slog.Int64("processed", nodeResult.Count),
+				slog.Duration("wall_elapsed", nodeResult.WallElapsed),
+				slog.Duration("db_read_elapsed", nodeResult.DBReadElapsed),
+				slog.Duration("encode_compress_elapsed", nodeResult.EncodeCompressTime),
+				slog.Float64("entities_per_second", perSecond(nodeResult.Count, nodeResult.WallElapsed)),
+			)
+
+			plannedEdges := benchPlannedCount(edgeCount, options.SampleSize)
+			slog.Info("retrievr bench edge phase started",
+				slog.String("graph", target.Name),
+				slog.Int("worker_count", workerCount),
+				slog.Int64("edge_count", edgeCount),
+				slog.Int64("planned_count", plannedEdges),
+			)
 			edgeResult, err := benchEdges(ctx, db, targetGraph, edgeCount, workerCount, options)
 			if err != nil {
 				return benchReport{}, err
 			}
+			slog.Info("retrievr bench edge phase completed",
+				slog.String("graph", target.Name),
+				slog.Int("worker_count", workerCount),
+				slog.Int64("processed", edgeResult.Count),
+				slog.Duration("wall_elapsed", edgeResult.WallElapsed),
+				slog.Duration("db_read_elapsed", edgeResult.DBReadElapsed),
+				slog.Duration("encode_compress_elapsed", edgeResult.EncodeCompressTime),
+				slog.Float64("entities_per_second", perSecond(edgeResult.Count, edgeResult.WallElapsed)),
+			)
 
 			totalWall := nodeResult.WallElapsed + edgeResult.WallElapsed
 			graphReport.Results = append(graphReport.Results, benchResult{
 				Workers:                  workerCount,
 				BatchSize:                options.BatchSize,
+				SampleSize:               options.SampleSize,
 				NodeCount:                nodeCount,
 				EdgeCount:                edgeCount,
+				NodeProcessed:            nodeResult.Count,
+				EdgeProcessed:            edgeResult.Count,
 				NodeWallMillis:           nodeResult.WallElapsed.Milliseconds(),
 				EdgeWallMillis:           edgeResult.WallElapsed.Milliseconds(),
 				NodeDBReadMillis:         nodeResult.DBReadElapsed.Milliseconds(),
@@ -98,215 +175,231 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 				UncompressedBytes:        nodeResult.UncompressedByteSize + edgeResult.UncompressedByteSize,
 				CompressedBytes:          nodeResult.CompressedByteSize + edgeResult.CompressedByteSize,
 			})
+
+			slog.Info("retrievr bench worker run completed",
+				slog.String("graph", target.Name),
+				slog.Int("worker_count", workerCount),
+				slog.Duration("wall_elapsed", time.Since(workerStartedAt)),
+				slog.Float64("entities_per_second", perSecond(nodeResult.Count+edgeResult.Count, totalWall)),
+			)
 		}
 		report.Graphs = append(report.Graphs, graphReport)
+		slog.Info("retrievr bench graph completed",
+			slog.String("graph", target.Name),
+			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
+		)
 	}
+	slog.Info("retrievr bench completed",
+		slog.String("driver", driverName),
+		slog.Int("graph_count", len(targets)),
+		slog.Duration("wall_elapsed", time.Since(startedAt)),
+	)
 	return report, nil
 }
 
 func benchNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph, total int64, workers int, options benchOptions) (benchPhaseResult, error) {
 	startedAt := time.Now()
-	result, err := runOffsetWorkers(ctx, int(total), workers, options.BatchSize, func(offset int) (benchPhaseResult, error) {
+	planned := benchPlannedCount(total, options.SampleSize)
+	var (
+		result         benchPhaseResult
+		lastID         graph.ID
+		hasLastID      bool
+		nextProgressAt = retrievrInitialProgressAt(planned)
+	)
+
+	for result.Count < planned {
+		remaining := planned - result.Count
 		readStarted := time.Now()
-		nodes, err := readDatabaseNodesOffset(ctx, db, targetGraph, offset, options.BatchSize)
-		readElapsed := time.Since(readStarted)
+		nodes, err := readDatabaseNodes(ctx, db, targetGraph, lastID, hasLastID, benchBatchLimit(remaining, options.BatchSize))
+		result.DBReadElapsed += time.Since(readStarted)
 		if err != nil {
 			return benchPhaseResult{}, err
 		}
+		if int64(len(nodes)) > remaining {
+			nodes = nodes[:int(remaining)]
+		}
+		if len(nodes) == 0 {
+			break
+		}
 
-		workerResult := benchPhaseResult{
-			Count:         int64(len(nodes)),
-			DBReadElapsed: readElapsed,
+		nextID := nodes[len(nodes)-1].ID
+		if hasLastID && nextID <= lastID {
+			return benchPhaseResult{}, fmt.Errorf("node keyset scan did not advance after ID %d", lastID.Uint64())
 		}
-		if options.Compression != compressionNone && len(nodes) > 0 {
-			items := make([]fragmentNode, 0, len(nodes))
-			for _, node := range nodes {
-				kinds := node.Kinds.Strings()
-				sort.Strings(kinds)
-				items = append(items, fragmentNode{
-					ID:         node.ID.String(),
-					Kinds:      kinds,
-					Properties: node.Properties.MapOrEmpty(),
-				})
-			}
-			encodeStarted := time.Now()
-			uncompressedBytes, compressedBytes, err := compressedJSONSize(options.Compression, options.ZstdLevel, nodeFragment{
-				Phase: phaseNodes,
-				Items: items,
-			})
-			workerResult.EncodeCompressTime = time.Since(encodeStarted)
-			if err != nil {
-				return benchPhaseResult{}, err
-			}
-			workerResult.UncompressedByteSize = uncompressedBytes
-			workerResult.CompressedByteSize = compressedBytes
+
+		batchResult, err := benchNodeBatch(nodes, options)
+		if err != nil {
+			return benchPhaseResult{}, err
 		}
-		return workerResult, nil
-	})
+		result.Count += batchResult.Count
+		result.EncodeCompressTime += batchResult.EncodeCompressTime
+		result.UncompressedByteSize += batchResult.UncompressedByteSize
+		result.CompressedByteSize += batchResult.CompressedByteSize
+		lastID = nextID
+		hasLastID = true
+		nextProgressAt = logBenchPhaseProgress(targetGraph.Name, phaseNodes, workers, result, planned, startedAt, nextProgressAt)
+	}
+
 	result.WallElapsed = time.Since(startedAt)
-	return result, err
+	return result, nil
 }
 
 func benchEdges(ctx context.Context, db graph.Database, targetGraph graph.Graph, total int64, workers int, options benchOptions) (benchPhaseResult, error) {
 	startedAt := time.Now()
-	result, err := runOffsetWorkers(ctx, int(total), workers, options.BatchSize, func(offset int) (benchPhaseResult, error) {
+	planned := benchPlannedCount(total, options.SampleSize)
+	var (
+		result         benchPhaseResult
+		lastID         graph.ID
+		hasLastID      bool
+		nextProgressAt = retrievrInitialProgressAt(planned)
+	)
+
+	for result.Count < planned {
+		remaining := planned - result.Count
 		readStarted := time.Now()
-		relationships, err := readDatabaseRelationshipsOffset(ctx, db, targetGraph, offset, options.BatchSize)
-		readElapsed := time.Since(readStarted)
+		relationships, err := readDatabaseRelationships(ctx, db, targetGraph, lastID, hasLastID, benchBatchLimit(remaining, options.BatchSize))
+		result.DBReadElapsed += time.Since(readStarted)
 		if err != nil {
 			return benchPhaseResult{}, err
 		}
+		if int64(len(relationships)) > remaining {
+			relationships = relationships[:int(remaining)]
+		}
+		if len(relationships) == 0 {
+			break
+		}
 
-		workerResult := benchPhaseResult{
-			Count:         int64(len(relationships)),
-			DBReadElapsed: readElapsed,
+		nextID := relationships[len(relationships)-1].ID
+		if hasLastID && nextID <= lastID {
+			return benchPhaseResult{}, fmt.Errorf("relationship keyset scan did not advance after ID %d", lastID.Uint64())
 		}
-		if options.Compression != compressionNone && len(relationships) > 0 {
-			items := make([]fragmentEdge, 0, len(relationships))
-			for _, relationship := range relationships {
-				kind := ""
-				if relationship.Kind != nil {
-					kind = relationship.Kind.String()
-				}
-				items = append(items, fragmentEdge{
-					StartID:    relationship.StartID.String(),
-					EndID:      relationship.EndID.String(),
-					Kind:       kind,
-					Properties: relationship.Properties.MapOrEmpty(),
-				})
-			}
-			encodeStarted := time.Now()
-			uncompressedBytes, compressedBytes, err := compressedJSONSize(options.Compression, options.ZstdLevel, edgeFragment{
-				Phase: phaseEdges,
-				Items: items,
-			})
-			workerResult.EncodeCompressTime = time.Since(encodeStarted)
-			if err != nil {
-				return benchPhaseResult{}, err
-			}
-			workerResult.UncompressedByteSize = uncompressedBytes
-			workerResult.CompressedByteSize = compressedBytes
+
+		batchResult, err := benchRelationshipBatch(relationships, options)
+		if err != nil {
+			return benchPhaseResult{}, err
 		}
-		return workerResult, nil
-	})
+		result.Count += batchResult.Count
+		result.EncodeCompressTime += batchResult.EncodeCompressTime
+		result.UncompressedByteSize += batchResult.UncompressedByteSize
+		result.CompressedByteSize += batchResult.CompressedByteSize
+		lastID = nextID
+		hasLastID = true
+		nextProgressAt = logBenchPhaseProgress(targetGraph.Name, phaseEdges, workers, result, planned, startedAt, nextProgressAt)
+	}
+
 	result.WallElapsed = time.Since(startedAt)
-	return result, err
+	return result, nil
 }
 
-func runOffsetWorkers(ctx context.Context, total int, workers int, batchSize int, read func(offset int) (benchPhaseResult, error)) (benchPhaseResult, error) {
-	if total == 0 {
-		return benchPhaseResult{}, nil
+func benchNodeBatch(nodes []*graph.Node, options benchOptions) (benchPhaseResult, error) {
+	result := benchPhaseResult{
+		Count: int64(len(nodes)),
+	}
+	if options.Compression == compressionNone || len(nodes) == 0 {
+		return result, nil
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	jobs := make(chan int)
-	results := make(chan benchPhaseResult, workers)
-	errors := make(chan error, 1)
-
-	var waitGroup sync.WaitGroup
-	for range workers {
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
-			var workerResult benchPhaseResult
-			for offset := range jobs {
-				nextResult, err := read(offset)
-				if err != nil {
-					select {
-					case errors <- err:
-					default:
-					}
-					cancel()
-					return
-				}
-				workerResult.Count += nextResult.Count
-				workerResult.DBReadElapsed += nextResult.DBReadElapsed
-				workerResult.EncodeCompressTime += nextResult.EncodeCompressTime
-				workerResult.UncompressedByteSize += nextResult.UncompressedByteSize
-				workerResult.CompressedByteSize += nextResult.CompressedByteSize
-			}
-			results <- workerResult
-		}()
+	items := make([]fragmentNode, 0, len(nodes))
+	for _, node := range nodes {
+		kinds := node.Kinds.Strings()
+		sort.Strings(kinds)
+		items = append(items, fragmentNode{
+			ID:         node.ID.String(),
+			Kinds:      kinds,
+			Properties: node.Properties.MapOrEmpty(),
+		})
 	}
-
-	go func() {
-		defer close(jobs)
-		for offset := 0; offset < total; offset += batchSize {
-			select {
-			case <-ctx.Done():
-				return
-			case jobs <- offset:
-			}
-		}
-	}()
-
-	waitGroup.Wait()
-	close(results)
-
-	select {
-	case err := <-errors:
+	encodeStarted := time.Now()
+	uncompressedBytes, compressedBytes, err := compressedJSONSize(options.Compression, options.ZstdLevel, nodeFragment{
+		Phase: phaseNodes,
+		Items: items,
+	})
+	result.EncodeCompressTime = time.Since(encodeStarted)
+	if err != nil {
 		return benchPhaseResult{}, err
-	default:
 	}
-
-	var combined benchPhaseResult
-	for nextResult := range results {
-		combined.Count += nextResult.Count
-		combined.DBReadElapsed += nextResult.DBReadElapsed
-		combined.EncodeCompressTime += nextResult.EncodeCompressTime
-		combined.UncompressedByteSize += nextResult.UncompressedByteSize
-		combined.CompressedByteSize += nextResult.CompressedByteSize
-	}
-	return combined, nil
+	result.UncompressedByteSize = uncompressedBytes
+	result.CompressedByteSize = compressedBytes
+	return result, nil
 }
 
-func readDatabaseNodesOffset(ctx context.Context, db graph.Database, targetGraph graph.Graph, offset int, batchSize int) ([]*graph.Node, error) {
-	var nodes []*graph.Node
-	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		return tx.Nodes().
-			OrderBy(query.NodeID()).
-			Offset(offset).
-			Limit(batchSize).
-			Fetch(func(cursor graph.Cursor[*graph.Node]) error {
-				for node := range cursor.Chan() {
-					nodes = append(nodes, node)
-				}
-				return cursor.Error()
-			})
-	}); err != nil {
-		return nil, fmt.Errorf("read node batch at offset %d: %w", offset, err)
+func benchRelationshipBatch(relationships []*graph.Relationship, options benchOptions) (benchPhaseResult, error) {
+	result := benchPhaseResult{
+		Count: int64(len(relationships)),
 	}
-	return nodes, nil
+	if options.Compression == compressionNone || len(relationships) == 0 {
+		return result, nil
+	}
+
+	items := make([]fragmentEdge, 0, len(relationships))
+	for _, relationship := range relationships {
+		kind := ""
+		if relationship.Kind != nil {
+			kind = relationship.Kind.String()
+		}
+		items = append(items, fragmentEdge{
+			StartID:    relationship.StartID.String(),
+			EndID:      relationship.EndID.String(),
+			Kind:       kind,
+			Properties: relationship.Properties.MapOrEmpty(),
+		})
+	}
+	encodeStarted := time.Now()
+	uncompressedBytes, compressedBytes, err := compressedJSONSize(options.Compression, options.ZstdLevel, edgeFragment{
+		Phase: phaseEdges,
+		Items: items,
+	})
+	result.EncodeCompressTime = time.Since(encodeStarted)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	result.UncompressedByteSize = uncompressedBytes
+	result.CompressedByteSize = compressedBytes
+	return result, nil
 }
 
-func readDatabaseRelationshipsOffset(ctx context.Context, db graph.Database, targetGraph graph.Graph, offset int, batchSize int) ([]*graph.Relationship, error) {
-	var relationships []*graph.Relationship
-	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		return tx.Relationships().
-			OrderBy(query.RelationshipID()).
-			Offset(offset).
-			Limit(batchSize).
-			Fetch(func(cursor graph.Cursor[*graph.Relationship]) error {
-				for relationship := range cursor.Chan() {
-					relationships = append(relationships, relationship)
-				}
-				return cursor.Error()
-			})
-	}); err != nil {
-		return nil, fmt.Errorf("read relationship batch at offset %d: %w", offset, err)
-	}
-	return relationships, nil
-}
-
-func perSecond(count int64, elapsed time.Duration) float64 {
-	if count == 0 || elapsed <= 0 {
+func benchPlannedCount(total int64, sampleSize int) int64 {
+	if total <= 0 {
 		return 0
 	}
-	return float64(count) / elapsed.Seconds()
+	if sampleSize <= 0 {
+		return total
+	}
+	sampleCount := int64(sampleSize)
+	if sampleCount > total {
+		return total
+	}
+	return sampleCount
+}
+
+func benchBatchLimit(remaining int64, batchSize int) int {
+	if remaining <= 0 {
+		return 0
+	}
+	if int64(batchSize) > remaining {
+		return int(remaining)
+	}
+	return batchSize
+}
+
+func logBenchPhaseProgress(graphName string, phaseName phase, workers int, result benchPhaseResult, planned int64, startedAt time.Time, nextProgressAt int64) int64 {
+	if nextProgressAt == 0 || result.Count < nextProgressAt || result.Count >= planned {
+		return nextProgressAt
+	}
+
+	slog.Info("retrievr bench phase progress",
+		slog.String("graph", graphName),
+		slog.String("phase", string(phaseName)),
+		slog.Int("worker_count", workers),
+		slog.Int64("processed", result.Count),
+		slog.Int64("planned_count", planned),
+		slog.Duration("wall_elapsed", time.Since(startedAt)),
+		slog.Duration("db_read_elapsed", result.DBReadElapsed),
+		slog.Duration("encode_compress_elapsed", result.EncodeCompressTime),
+		slog.Float64("entities_per_second", perSecond(result.Count, time.Since(startedAt))),
+	)
+
+	return retrievrNextProgressAt(result.Count, planned, nextProgressAt)
 }
 
 func writeBenchReport(writer io.Writer, report benchReport) {
@@ -315,10 +408,13 @@ func writeBenchReport(writer io.Writer, report benchReport) {
 		for _, result := range graphReport.Results {
 			fmt.Fprintf(
 				writer,
-				"  workers=%d batch=%d nodes=%d edges=%d total_ms=%d entities_per_sec=%.2f db_read_ms=%d encode_compress_ms=%d\n",
+				"  workers=%d batch=%d sample_size=%d nodes=%d/%d edges=%d/%d total_ms=%d entities_per_sec=%.2f db_read_ms=%d encode_compress_ms=%d\n",
 				result.Workers,
 				result.BatchSize,
+				result.SampleSize,
+				result.NodeProcessed,
 				result.NodeCount,
+				result.EdgeProcessed,
 				result.EdgeCount,
 				result.TotalWallMillis,
 				result.EntitiesPerSecond,

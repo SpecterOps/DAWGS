@@ -23,6 +23,27 @@ func TestParseWorkerList(t *testing.T) {
 	}
 }
 
+func TestFlagListTypes(t *testing.T) {
+	var graphs stringList
+	if err := graphs.Set(" default "); err != nil {
+		t.Fatalf("set graph: %v", err)
+	}
+	if err := graphs.Set(""); err == nil {
+		t.Fatalf("expected empty graph error")
+	}
+	if graphs.String() != "default" {
+		t.Fatalf("graph list string = %q", graphs.String())
+	}
+
+	var workers workerList
+	if err := workers.Set("2,4"); err != nil {
+		t.Fatalf("set workers: %v", err)
+	}
+	if workers.String() != "2,4" {
+		t.Fatalf("worker list string = %q", workers.String())
+	}
+}
+
 func TestDumpOptionsScrubFullRequiresSalt(t *testing.T) {
 	options := dumpOptions{
 		OutputDir:   t.TempDir(),
@@ -35,6 +56,59 @@ func TestDumpOptionsScrubFullRequiresSalt(t *testing.T) {
 
 	if err := options.validate(); err == nil {
 		t.Fatalf("expected missing salt error")
+	}
+}
+
+func TestOptionsValidate(t *testing.T) {
+	dump := dumpOptions{
+		OutputDir:   t.TempDir(),
+		Scrub:       scrubNone,
+		Compression: compressionGzip,
+		ZstdLevel:   defaultZstdLevel,
+		ShardSize:   defaultShardSize,
+		BatchSize:   defaultBatchSize,
+	}
+	if err := dump.validate(); err != nil {
+		t.Fatalf("valid dump options: %v", err)
+	}
+	dump.Compression = compressionCodec("zip")
+	if err := dump.validate(); err == nil {
+		t.Fatalf("expected invalid compression")
+	}
+
+	load := loadOptions{
+		InputDir:  t.TempDir(),
+		BatchSize: 1,
+	}
+	if err := load.validate(); err != nil {
+		t.Fatalf("valid load options: %v", err)
+	}
+	load.InputDir = ""
+	if err := load.validate(); err == nil {
+		t.Fatalf("expected missing input dir")
+	}
+
+	bench := benchOptions{
+		Workers:    []int{1},
+		BatchSize:  1,
+		SampleSize: 1,
+		ZstdLevel:  defaultZstdLevel,
+	}
+	if err := bench.validate(); err != nil {
+		t.Fatalf("valid bench options: %v", err)
+	}
+	bench.Workers = nil
+	if err := bench.validate(); err == nil {
+		t.Fatalf("expected missing workers")
+	}
+	bench.Workers = []int{2}
+	if err := bench.validate(); err == nil {
+		t.Fatalf("expected unsupported parallel worker error")
+	}
+	bench.Workers = []int{1}
+	bench.SampleSize = -1
+	if err := bench.validate(); err == nil {
+		t.Fatalf("expected invalid sample size")
 	}
 }
 

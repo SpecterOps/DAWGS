@@ -135,12 +135,30 @@ func defaultScrubberConfig() scrubberConfig {
 				"hostname",
 			},
 			ValueShapePatterns: []valueShapeConfig{
-				{Name: "email", Pattern: emailPattern.String()},
-				{Name: "uuid", Pattern: uuidPattern.String()},
-				{Name: "domain_sid", Pattern: domainSIDPattern.String()},
-				{Name: "object_sid", Pattern: objectSIDPattern.String()},
-				{Name: "ipv4", Pattern: ipv4Pattern.String()},
-				{Name: "host", Pattern: hostLikePattern.String()},
+				{
+					Name:    "email",
+					Pattern: emailPattern.String(),
+				},
+				{
+					Name:    "uuid",
+					Pattern: uuidPattern.String(),
+				},
+				{
+					Name:    "domain_sid",
+					Pattern: domainSIDPattern.String(),
+				},
+				{
+					Name:    "object_sid",
+					Pattern: objectSIDPattern.String(),
+				},
+				{
+					Name:    "ipv4",
+					Pattern: ipv4Pattern.String(),
+				},
+				{
+					Name:    "host",
+					Pattern: hostLikePattern.String(),
+				},
 			},
 		},
 	}
@@ -149,19 +167,19 @@ func defaultScrubberConfig() scrubberConfig {
 func newScrubber(configPath string, salt string) (*scrubber, error) {
 	cfg := defaultScrubberConfig()
 	if strings.TrimSpace(configPath) != "" {
-		contents, err := os.ReadFile(configPath)
-		if err != nil {
+		if contents, err := os.ReadFile(configPath); err != nil {
 			return nil, fmt.Errorf("read scrub config: %w", err)
+		} else {
+			fileCfg := scrubberFileConfig{
+				Scrub:      cfg,
+				Classifier: cfg.Classifier,
+			}
+			if err := toml.Unmarshal(contents, &fileCfg); err != nil {
+				return nil, fmt.Errorf("parse scrub config: %w", err)
+			}
+			cfg = fileCfg.Scrub
+			cfg.Classifier = fileCfg.Classifier
 		}
-		fileCfg := scrubberFileConfig{
-			Scrub:      cfg,
-			Classifier: cfg.Classifier,
-		}
-		if err := toml.Unmarshal(contents, &fileCfg); err != nil {
-			return nil, fmt.Errorf("parse scrub config: %w", err)
-		}
-		cfg = fileCfg.Scrub
-		cfg.Classifier = fileCfg.Classifier
 	}
 
 	cfg.Salt = strings.TrimSpace(salt)
@@ -202,11 +220,14 @@ func newScrubber(configPath string, salt string) (*scrubber, error) {
 		if strings.TrimSpace(shape.Name) == "" || strings.TrimSpace(shape.Pattern) == "" {
 			continue
 		}
-		pattern, err := regexp.Compile(shape.Pattern)
-		if err != nil {
+		if pattern, err := regexp.Compile(shape.Pattern); err != nil {
 			return nil, fmt.Errorf("compile value shape %q: %w", shape.Name, err)
+		} else {
+			shapeRules = append(shapeRules, compiledShape{
+				name:    shape.Name,
+				pattern: pattern,
+			})
 		}
-		shapeRules = append(shapeRules, compiledShape{name: shape.Name, pattern: pattern})
 	}
 
 	return &scrubber{

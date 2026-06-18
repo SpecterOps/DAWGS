@@ -30,6 +30,10 @@ The manifest is written last as `manifest.json`; if a dump fails before that
 point, the directory is intentionally left for inspection without a success
 manifest.
 
+Dump progress is emitted with `log/slog` on stderr. Notices mark output
+directory preparation, graph counting, scrub pre-pass work, node and relationship
+phase boundaries, periodic entity progress, manifest writing, and completion.
+
 ## Scrubbed Dumps
 
 ```bash
@@ -62,20 +66,42 @@ separate pass, asserts destination graph schemas from the manifest metadata, and
 then loads all nodes before relationships. Graph names from the dump are
 preserved; load does not support overriding graph names.
 
+Load progress is emitted with `log/slog` on stderr. Notices mark manifest
+reading, checksum verification, schema assertion, graph boundaries, node and
+relationship phase boundaries, periodic entity progress, and completion.
+
 ## Bench
 
 ```bash
 retrievr bench \
   -connection "$CONNECTION_STRING" \
   -graph default \
-  -workers 1,2,4,8 \
-  -batch-size 10000
+  -workers 1 \
+  -batch-size 10000 \
+  -sample-size 1000000
 ```
 
 Benchmark mode performs read-only scans and reports node and relationship
-throughput. It keeps database read timing separate from optional JSON
+throughput. By default, each phase scans at most 1,000,000 nodes or
+relationships so large graphs do not require a full read to produce a throughput
+estimate. Pass `-sample-size 0` to scan the full graph. Parallel worker counts
+above `1` are currently rejected until the benchmark has a safe partitioned read
+strategy. The benchmark keeps database read timing separate from optional JSON
 encode/compression timing:
 
 ```bash
 retrievr bench -connection "$CONNECTION_STRING" -graph default -compression zstd -json
 ```
+
+Benchmark progress is emitted with `log/slog` on stderr. Notices mark benchmark
+start, graph counting, each worker run, node and edge phase boundaries, and
+completion. Text or JSON benchmark reports remain on stdout.
+
+## Testing Policy
+
+Unit tests focus on collection format validation, compression/checksum behavior,
+scrub transformations, schema planning, edge resolution, CLI flag validation,
+and other pure helpers. Full database dump/load behavior is covered by
+integration tests rather than heavy mocks of Dawgs database interfaces. This
+keeps tests focused on durable behavior instead of line coverage for
+orchestration code.

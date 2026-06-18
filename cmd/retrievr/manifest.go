@@ -13,16 +13,14 @@ func readManifest(inputDir string) (manifest, error) {
 	var value manifest
 
 	manifestPath := filepath.Join(inputDir, manifestFileName)
-	contents, err := os.ReadFile(manifestPath)
-	if err != nil {
+	if contents, err := os.ReadFile(manifestPath); err != nil {
 		return value, fmt.Errorf("read manifest: %w", err)
-	}
-	if err := json.Unmarshal(contents, &value); err != nil {
+	} else if err := json.Unmarshal(contents, &value); err != nil {
 		return value, fmt.Errorf("decode manifest: %w", err)
-	}
-	if err := value.validate(); err != nil {
+	} else if err := value.validate(); err != nil {
 		return value, err
 	}
+
 	return value, nil
 }
 
@@ -31,14 +29,14 @@ func writeManifest(outputDir string, value manifest) error {
 		return err
 	}
 
+	tempPath := filepath.Join(outputDir, manifestFileName+".tmp")
+	finalPath := filepath.Join(outputDir, manifestFileName)
 	payload, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode manifest: %w", err)
 	}
 	payload = append(payload, '\n')
 
-	tempPath := filepath.Join(outputDir, manifestFileName+".tmp")
-	finalPath := filepath.Join(outputDir, manifestFileName)
 	if err := os.WriteFile(tempPath, payload, 0o600); err != nil {
 		return fmt.Errorf("write manifest temp file: %w", err)
 	}

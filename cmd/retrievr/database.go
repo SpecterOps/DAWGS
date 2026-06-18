@@ -34,10 +34,10 @@ func openDatabase(ctx context.Context, cfg databaseConfig) (graph.Database, stri
 
 	driverName := strings.TrimSpace(cfg.Driver)
 	if driverName == "" {
-		var err error
-		driverName, err = driverFromConnectionString(connection)
-		if err != nil {
+		if inferredDriverName, err := driverFromConnectionString(connection); err != nil {
 			return nil, "", err
+		} else {
+			driverName = inferredDriverName
 		}
 	}
 
@@ -49,21 +49,22 @@ func openDatabase(ctx context.Context, cfg databaseConfig) (graph.Database, stri
 	poolOwnedByDriver := false
 	switch driverName {
 	case pg.DriverName:
-		poolCfg, err := pgxpool.ParseConfig(connection)
-		if err != nil {
+		if poolCfg, err := pgxpool.ParseConfig(connection); err != nil {
 			return nil, "", fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
-		}
-		pool, err := pg.NewPool(poolCfg)
-		if err != nil {
+		} else if pool, err := pg.NewPool(poolCfg); err != nil {
 			return nil, "", fmt.Errorf("open PostgreSQL pool: %w", err)
+		} else {
+			defer func() {
+				if !poolOwnedByDriver {
+					pool.Close()
+				}
+			}()
+			openConfig.Pool = pool
 		}
-		defer func() {
-			if !poolOwnedByDriver {
-				pool.Close()
-			}
-		}()
-		openConfig.Pool = pool
+
 	case neo4j.DriverName:
+		// No driver-specific setup is required for Neo4j.
+
 	default:
 		return nil, "", fmt.Errorf("unsupported driver %q; expected %s or %s", driverName, pg.DriverName, neo4j.DriverName)
 	}
@@ -82,7 +83,9 @@ func openDatabase(ctx context.Context, cfg databaseConfig) (graph.Database, stri
 	}()
 
 	if graphName := strings.TrimSpace(cfg.Graph); graphName != "" {
-		if err := db.SetDefaultGraph(ctx, graph.Graph{Name: graphName}); err != nil {
+		if err := db.SetDefaultGraph(ctx, graph.Graph{
+			Name: graphName,
+		}); err != nil {
 			return nil, "", fmt.Errorf("set graph target %q: %w", graphName, err)
 		}
 	}
@@ -117,14 +120,18 @@ func resolveGraphTargets(ctx context.Context, db graph.Database, driverName stri
 		case pg.DriverName:
 			return discoverPostgresGraphs(ctx, db)
 		case neo4j.DriverName:
-			return []graphTarget{{Name: defaultGraphName}}, nil
+			return []graphTarget{{
+				Name: defaultGraphName,
+			}}, nil
 		default:
 			return nil, fmt.Errorf("all-graphs is not supported for driver %q", driverName)
 		}
 	}
 
 	if len(requested) == 0 {
-		return []graphTarget{{Name: defaultGraphName}}, nil
+		return []graphTarget{{
+			Name: defaultGraphName,
+		}}, nil
 	}
 	if driverName == neo4j.DriverName && len(requested) > 1 {
 		return nil, fmt.Errorf("neo4j supports one retrievr graph target because Dawgs graph names are no-ops for that driver")
@@ -141,7 +148,9 @@ func resolveGraphTargets(ctx context.Context, db graph.Database, driverName stri
 			return nil, fmt.Errorf("duplicate graph target %q", trimmed)
 		}
 		seen[trimmed] = struct{}{}
-		targets = append(targets, graphTarget{Name: trimmed})
+		targets = append(targets, graphTarget{
+			Name: trimmed,
+		})
 	}
 	return targets, nil
 }
@@ -172,7 +181,9 @@ order by g.name`
 			if !hasNodePartition || !hasEdgePartition {
 				return fmt.Errorf("PostgreSQL graph %q is missing expected node/edge partitions", name)
 			}
-			targets = append(targets, graphTarget{Name: name})
+			targets = append(targets, graphTarget{
+				Name: name,
+			})
 		}
 		return result.Error()
 	}); err != nil {

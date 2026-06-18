@@ -6,11 +6,7 @@ import (
 )
 
 func TestManifestValidateRejectsUnsupportedFormat(t *testing.T) {
-	value := newManifest("pg", compressionGzip, defaultZstdLevel, scrubMetadata{
-		Mode:             scrubNone,
-		NodeActionCounts: map[string]int{},
-		EdgeActionCounts: map[string]int{},
-	}, 0)
+	value := newValidTestManifest(0)
 	value.Format = "future"
 
 	if err := value.validate(); err == nil {
@@ -19,18 +15,24 @@ func TestManifestValidateRejectsUnsupportedFormat(t *testing.T) {
 }
 
 func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
-	value := newManifest("pg", compressionGzip, defaultZstdLevel, scrubMetadata{
-		Mode:             scrubNone,
-		NodeActionCounts: map[string]int{},
-		EdgeActionCounts: map[string]int{},
-	}, 1)
+	value := newValidTestManifest(1)
 	value.Graphs = []graphManifest{{
 		Name:      "default",
 		NodeCount: 1,
 		EdgeCount: 1,
 		Files: []fileManifest{
-			{Phase: phaseEdges, Path: "graphs/default/edges-000001.ogfrag.gz", Count: 1, SHA256: "abc"},
-			{Phase: phaseNodes, Path: "graphs/default/nodes-000001.ogfrag.gz", Count: 1, SHA256: "def"},
+			{
+				Phase:  phaseEdges,
+				Path:   "graphs/default/edges-000001.ogfrag.gz",
+				Count:  1,
+				SHA256: "abc",
+			},
+			{
+				Phase:  phaseNodes,
+				Path:   "graphs/default/nodes-000001.ogfrag.gz",
+				Count:  1,
+				SHA256: "def",
+			},
 		},
 	}}
 
@@ -39,14 +41,90 @@ func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
 	}
 }
 
+func TestManifestValidateRejectsMalformedGraphEntries(t *testing.T) {
+	validFile := fileManifest{
+		Phase:           phaseNodes,
+		Path:            "graphs/default/nodes-000001.ogfrag.gz",
+		Count:           1,
+		CompressedBytes: 10,
+		SHA256:          "abc",
+	}
+
+	cases := map[string]func(manifest) manifest{
+		"graph count mismatch": func(value manifest) manifest {
+			value.Source.GraphCount = 2
+			return value
+		},
+		"duplicate graph": func(value manifest) manifest {
+			value.Source.GraphCount = 2
+			value.Graphs = append(value.Graphs, value.Graphs[0])
+			return value
+		},
+		"empty graph name": func(value manifest) manifest {
+			value.Graphs[0].Name = ""
+			return value
+		},
+		"unsupported phase": func(value manifest) manifest {
+			value.Graphs[0].Files[0].Phase = phase("bad")
+			return value
+		},
+		"missing path": func(value manifest) manifest {
+			value.Graphs[0].Files[0].Path = ""
+			return value
+		},
+		"missing checksum": func(value manifest) manifest {
+			value.Graphs[0].Files[0].SHA256 = ""
+			return value
+		},
+		"negative count": func(value manifest) manifest {
+			value.Graphs[0].Files[0].Count = -1
+			return value
+		},
+		"negative bytes": func(value manifest) manifest {
+			value.Graphs[0].Files[0].CompressedBytes = -1
+			return value
+		},
+		"node count mismatch": func(value manifest) manifest {
+			value.Graphs[0].NodeCount = 2
+			return value
+		},
+		"edge count mismatch": func(value manifest) manifest {
+			value.Graphs[0].EdgeCount = 1
+			return value
+		},
+		"unsupported codec": func(value manifest) manifest {
+			value.Compression = compressionCodec("zip")
+			return value
+		},
+		"unsupported id strategy": func(value manifest) manifest {
+			value.IDStrategy = "other"
+			return value
+		},
+	}
+
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			value := newValidTestManifest(1)
+			value.Graphs = []graphManifest{{
+				Name:      "default",
+				NodeCount: 1,
+				Files:     []fileManifest{validFile},
+			}}
+			if err := mutate(value).validate(); err == nil {
+				t.Fatalf("expected validation error")
+			}
+		})
+	}
+}
+
 func TestWriteReadManifest(t *testing.T) {
 	dir := t.TempDir()
-	value := newManifest("pg", compressionGzip, defaultZstdLevel, scrubMetadata{
-		Mode:             scrubNone,
-		NodeActionCounts: map[string]int{},
-		EdgeActionCounts: map[string]int{},
-	}, 1)
-	value.Schema.Graphs = []graphSchemaMetadata{{Name: "default", NodeKinds: []string{"User"}, EdgeKinds: []string{"AdminTo"}}}
+	value := newValidTestManifest(1)
+	value.Schema.Graphs = []graphSchemaMetadata{{
+		Name:      "default",
+		NodeKinds: []string{"User"},
+		EdgeKinds: []string{"AdminTo"},
+	}}
 	value.Graphs = []graphManifest{{
 		Name:      "default",
 		NodeCount: 0,
@@ -62,4 +140,12 @@ func TestWriteReadManifest(t *testing.T) {
 	if _, err := readManifest(filepath.Join(dir, "missing")); err == nil {
 		t.Fatalf("expected missing manifest error")
 	}
+}
+
+func newValidTestManifest(graphCount int) manifest {
+	return newManifest("pg", compressionGzip, defaultZstdLevel, scrubMetadata{
+		Mode:             scrubNone,
+		NodeActionCounts: map[string]int{},
+		EdgeActionCounts: map[string]int{},
+	}, graphCount)
 }

@@ -43,7 +43,9 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db, _, err := openDatabase(ctx, databaseConfig{Connection: connection})
+	db, _, err := openDatabase(ctx, databaseConfig{
+		Connection: connection,
+	})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
@@ -66,12 +68,16 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			return tx.WithGraph(graph.Graph{Name: graphName}).Nodes().Delete()
+			return tx.WithGraph(graph.Graph{
+				Name: graphName,
+			}).Nodes().Delete()
 		})
 	})
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{Name: graphName})
+		tx = tx.WithGraph(graph.Graph{
+			Name: graphName,
+		})
 		alice, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "alice"}), userKind)
 		if err != nil {
 			return err
@@ -87,7 +93,9 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}
 
 	dumpDir := t.TempDir()
-	dumpResult, err := Dump(ctx, db, driverName, []graphTarget{{Name: graphName}}, dumpOptions{
+	dumpResult, err := Dump(ctx, db, driverName, []graphTarget{{
+		Name: graphName,
+	}}, dumpOptions{
 		OutputDir:   dumpDir,
 		Scrub:       scrubNone,
 		Compression: compressionGzip,
@@ -103,7 +111,9 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		return tx.WithGraph(graph.Graph{Name: graphName}).Nodes().Delete()
+		return tx.WithGraph(graph.Graph{
+			Name: graphName,
+		}).Nodes().Delete()
 	}); err != nil {
 		t.Fatalf("clear graph before load: %v", err)
 	}

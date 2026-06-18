@@ -116,10 +116,12 @@ type fragmentEdge struct {
 
 func newManifest(driverName string, codec compressionCodec, compressionLevel int, scrub scrubMetadata, graphCount int) manifest {
 	return manifest{
-		Format:           manifestFormat,
-		GeneratedAt:      time.Now().UTC(),
-		Driver:           driverName,
-		Source:           sourceMetadata{GraphCount: graphCount},
+		Format:      manifestFormat,
+		GeneratedAt: time.Now().UTC(),
+		Driver:      driverName,
+		Source: sourceMetadata{
+			GraphCount: graphCount,
+		},
 		Compression:      codec,
 		CompressionLevel: compressionLevel,
 		Scrub:            scrub,

@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
@@ -27,12 +29,25 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		return dumpResult{}, fmt.Errorf("at least one graph target is required")
 	}
 
-	var activeScrubber *scrubber
-	scrubInfo := scrubMetadata{
-		Mode:             scrubNone,
-		NodeActionCounts: map[string]int{},
-		EdgeActionCounts: map[string]int{},
-	}
+	startedAt := time.Now()
+	slog.Info("retrievr dump started",
+		slog.String("driver", driverName),
+		slog.Int("graph_count", len(targets)),
+		slog.String("output_dir", options.OutputDir),
+		slog.Int("batch_size", options.BatchSize),
+		slog.Int("shard_size", options.ShardSize),
+		slog.String("compression", string(options.Compression)),
+		slog.String("scrub", string(options.Scrub)),
+	)
+
+	var (
+		activeScrubber *scrubber
+		scrubInfo      = scrubMetadata{
+			Mode:             scrubNone,
+			NodeActionCounts: map[string]int{},
+			EdgeActionCounts: map[string]int{},
+		}
+	)
 	if options.Scrub == scrubFull {
 		nextScrubber, err := newScrubber(options.ScrubConfigPath, options.Salt)
 		if err != nil {
@@ -42,14 +57,27 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		scrubInfo = activeScrubber.metadata()
 	}
 
+	slog.Info("retrievr dump preparing output directory",
+		slog.String("output_dir", options.OutputDir),
+		slog.Bool("force", options.Force),
+	)
 	if err := prepareOutputDirectory(options.OutputDir, options.Force); err != nil {
 		return dumpResult{}, err
 	}
+	slog.Info("retrievr dump output directory ready",
+		slog.String("output_dir", options.OutputDir),
+	)
 
 	nextManifest := newManifest(driverName, options.Compression, options.ZstdLevel, scrubInfo, len(targets))
 	var totalNodes, totalEdges int64
 
-	for _, target := range targets {
+	for targetIndex, target := range targets {
+		graphStartedAt := time.Now()
+		slog.Info("retrievr dump graph started",
+			slog.String("graph", target.Name),
+			slog.Int("graph_index", targetIndex+1),
+			slog.Int("graph_count", len(targets)),
+		)
 		graphEntry, schemaEntry, err := dumpGraph(ctx, db, target, options, activeScrubber)
 		if err != nil {
 			return dumpResult{}, err
@@ -60,15 +88,36 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		addActionCounts(nextManifest.Scrub.EdgeActionCounts, graphEntry.EdgeActionCounts)
 		totalNodes += graphEntry.NodeCount
 		totalEdges += graphEntry.EdgeCount
+		slog.Info("retrievr dump graph completed",
+			slog.String("graph", target.Name),
+			slog.Int64("node_count", graphEntry.NodeCount),
+			slog.Int64("edge_count", graphEntry.EdgeCount),
+			slog.Int("file_count", len(graphEntry.Files)),
+			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
+		)
 	}
 
+	slog.Info("retrievr dump writing manifest",
+		slog.String("output_dir", options.OutputDir),
+		slog.Int64("node_count", totalNodes),
+		slog.Int64("edge_count", totalEdges),
+	)
 	if err := writeManifest(options.OutputDir, nextManifest); err != nil {
 		return dumpResult{}, err
 	}
+	manifestPath := filepath.Join(options.OutputDir, manifestFileName)
+	slog.Info("retrievr dump completed",
+		slog.String("driver", driverName),
+		slog.Int("graph_count", len(targets)),
+		slog.String("manifest", manifestPath),
+		slog.Int64("node_count", totalNodes),
+		slog.Int64("edge_count", totalEdges),
+		slog.Duration("wall_elapsed", time.Since(startedAt)),
+	)
 
 	return dumpResult{
 		Manifest:     nextManifest,
-		ManifestPath: filepath.Join(options.OutputDir, manifestFileName),
+		ManifestPath: manifestPath,
 		NodeCount:    totalNodes,
 		EdgeCount:    totalEdges,
 	}, nil
@@ -103,16 +152,41 @@ func prepareOutputDirectory(outputDir string, force bool) error {
 }
 
 func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, options dumpOptions, activeScrubber *scrubber) (graphManifest, graphSchemaMetadata, error) {
-	targetGraph := graph.Graph{Name: target.Name}
-	if activeScrubber != nil {
-		if err := collectScrubRegistry(ctx, db, targetGraph, options.BatchSize, activeScrubber); err != nil {
-			return graphManifest{}, graphSchemaMetadata{}, err
-		}
+	targetGraph := graph.Graph{
+		Name: target.Name,
 	}
 
+	countStartedAt := time.Now()
+	slog.Info("retrievr dump counting graph entities",
+		slog.String("graph", target.Name),
+	)
 	nodeCount, edgeCount, err := countGraphEntities(ctx, db, targetGraph)
 	if err != nil {
 		return graphManifest{}, graphSchemaMetadata{}, err
+	}
+	slog.Info("retrievr dump graph counts ready",
+		slog.String("graph", target.Name),
+		slog.Int64("node_count", nodeCount),
+		slog.Int64("edge_count", edgeCount),
+		slog.Duration("wall_elapsed", time.Since(countStartedAt)),
+	)
+
+	if activeScrubber != nil {
+		scrubStartedAt := time.Now()
+		slog.Info("retrievr dump scrub pre-pass started",
+			slog.String("graph", target.Name),
+			slog.Int64("node_count", nodeCount),
+			slog.Int("batch_size", options.BatchSize),
+		)
+		observedNodes, err := collectScrubRegistry(ctx, db, targetGraph, options.BatchSize, activeScrubber, nodeCount)
+		if err != nil {
+			return graphManifest{}, graphSchemaMetadata{}, err
+		}
+		slog.Info("retrievr dump scrub pre-pass completed",
+			slog.String("graph", target.Name),
+			slog.Int64("processed", observedNodes),
+			slog.Duration("wall_elapsed", time.Since(scrubStartedAt)),
+		)
 	}
 
 	graphEntry := graphManifest{
@@ -125,17 +199,43 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	nodeKinds := map[string]struct{}{}
 	edgeKinds := map[string]struct{}{}
 
-	nodeFiles, err := dumpNodePhase(ctx, db, targetGraph, options, activeScrubber, nodeKinds, graphEntry.NodeActionCounts)
+	nodeStartedAt := time.Now()
+	slog.Info("retrievr dump node phase started",
+		slog.String("graph", target.Name),
+		slog.Int64("node_count", nodeCount),
+		slog.Int("batch_size", options.BatchSize),
+		slog.Int("shard_size", options.ShardSize),
+	)
+	nodeFiles, err := dumpNodePhase(ctx, db, targetGraph, options, activeScrubber, nodeKinds, graphEntry.NodeActionCounts, nodeCount)
 	if err != nil {
 		return graphManifest{}, graphSchemaMetadata{}, err
 	}
 	graphEntry.Files = append(graphEntry.Files, nodeFiles...)
+	slog.Info("retrievr dump node phase completed",
+		slog.String("graph", target.Name),
+		slog.Int64("processed", fileTotal(nodeFiles)),
+		slog.Int("file_count", len(nodeFiles)),
+		slog.Duration("wall_elapsed", time.Since(nodeStartedAt)),
+	)
 
-	edgeFiles, err := dumpEdgePhase(ctx, db, targetGraph, options, activeScrubber, edgeKinds, graphEntry.EdgeActionCounts)
+	edgeStartedAt := time.Now()
+	slog.Info("retrievr dump edge phase started",
+		slog.String("graph", target.Name),
+		slog.Int64("edge_count", edgeCount),
+		slog.Int("batch_size", options.BatchSize),
+		slog.Int("shard_size", options.ShardSize),
+	)
+	edgeFiles, err := dumpEdgePhase(ctx, db, targetGraph, options, activeScrubber, edgeKinds, graphEntry.EdgeActionCounts, edgeCount)
 	if err != nil {
 		return graphManifest{}, graphSchemaMetadata{}, err
 	}
 	graphEntry.Files = append(graphEntry.Files, edgeFiles...)
+	slog.Info("retrievr dump edge phase completed",
+		slog.String("graph", target.Name),
+		slog.Int64("processed", fileTotal(edgeFiles)),
+		slog.Int("file_count", len(edgeFiles)),
+		slog.Duration("wall_elapsed", time.Since(edgeStartedAt)),
+	)
 
 	if fileTotal(nodeFiles) != nodeCount {
 		return graphManifest{}, graphSchemaMetadata{}, fmt.Errorf("dumped %d nodes for graph %q but counted %d", fileTotal(nodeFiles), target.Name, nodeCount)
@@ -152,22 +252,27 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	return graphEntry, schemaEntry, nil
 }
 
-func collectScrubRegistry(ctx context.Context, db graph.Database, targetGraph graph.Graph, batchSize int, activeScrubber *scrubber) error {
+func collectScrubRegistry(ctx context.Context, db graph.Database, targetGraph graph.Graph, batchSize int, activeScrubber *scrubber, planned int64) (int64, error) {
 	var (
-		lastID    graph.ID
-		hasLastID bool
+		lastID         graph.ID
+		hasLastID      bool
+		processed      int64
+		startedAt      = time.Now()
+		nextProgressAt = retrievrInitialProgressAt(planned)
 	)
 	for {
 		nodes, err := readDatabaseNodes(ctx, db, targetGraph, lastID, hasLastID, batchSize)
 		if err != nil {
-			return fmt.Errorf("scrub pre-pass: %w", err)
+			return processed, fmt.Errorf("scrub pre-pass: %w", err)
 		}
 		if len(nodes) == 0 {
-			return nil
+			return processed, nil
 		}
 		for _, node := range nodes {
 			activeScrubber.observeNode(node.Properties.MapOrEmpty())
 		}
+		processed += int64(len(nodes))
+		nextProgressAt = logRetrievrEntityProgress("retrievr dump scrub pre-pass progress", targetGraph.Name, phaseNodes, processed, planned, startedAt, nextProgressAt)
 		lastID = nodes[len(nodes)-1].ID
 		hasLastID = true
 	}
@@ -191,7 +296,7 @@ func countGraphEntities(ctx context.Context, db graph.Database, targetGraph grap
 	return nodeCount, edgeCount, nil
 }
 
-func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, nodeKinds map[string]struct{}, graphActionCounts map[string]int) ([]fileManifest, error) {
+func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, nodeKinds map[string]struct{}, graphActionCounts map[string]int, planned int64) ([]fileManifest, error) {
 	var (
 		files             []fileManifest
 		items             []fragmentNode
@@ -199,6 +304,9 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		shardNumber       = 1
 		lastID            graph.ID
 		hasLastID         bool
+		processed         int64
+		startedAt         = time.Now()
+		nextProgressAt    = retrievrInitialProgressAt(planned)
 	)
 
 	flush := func() error {
@@ -248,6 +356,8 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 				}
 			}
 		}
+		processed += int64(len(nodes))
+		nextProgressAt = logRetrievrEntityProgress("retrievr dump node phase progress", targetGraph.Name, phaseNodes, processed, planned, startedAt, nextProgressAt)
 		lastID = nodes[len(nodes)-1].ID
 		hasLastID = true
 	}
@@ -258,7 +368,7 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, edgeKinds map[string]struct{}, graphActionCounts map[string]int) ([]fileManifest, error) {
+func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, edgeKinds map[string]struct{}, graphActionCounts map[string]int, planned int64) ([]fileManifest, error) {
 	var (
 		files             []fileManifest
 		items             []fragmentEdge
@@ -266,6 +376,9 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		shardNumber       = 1
 		lastID            graph.ID
 		hasLastID         bool
+		processed         int64
+		startedAt         = time.Now()
+		nextProgressAt    = retrievrInitialProgressAt(planned)
 	)
 
 	flush := func() error {
@@ -318,6 +431,8 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 				}
 			}
 		}
+		processed += int64(len(relationships))
+		nextProgressAt = logRetrievrEntityProgress("retrievr dump edge phase progress", targetGraph.Name, phaseEdges, processed, planned, startedAt, nextProgressAt)
 		lastID = relationships[len(relationships)-1].ID
 		hasLastID = true
 	}
@@ -329,11 +444,10 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 }
 
 func writeNodeFragment(outputDir, graphName string, shardNumber int, options dumpOptions, items []fragmentNode, actionCounts map[string]int) (fileManifest, error) {
-	extension, err := compressionExtension(options.Compression)
+	relativePath, err := fragmentPath(graphName, phaseNodes, shardNumber, options.Compression)
 	if err != nil {
 		return fileManifest{}, err
 	}
-	relativePath := path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("nodes-%06d.ogfrag%s", shardNumber, extension))
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
 	fileEntry, err := writeCompressedJSON(absolutePath, options.Compression, options.ZstdLevel, nodeFragment{
 		Phase: phaseNodes,
@@ -350,11 +464,10 @@ func writeNodeFragment(outputDir, graphName string, shardNumber int, options dum
 }
 
 func writeEdgeFragment(outputDir, graphName string, shardNumber int, options dumpOptions, items []fragmentEdge, actionCounts map[string]int) (fileManifest, error) {
-	extension, err := compressionExtension(options.Compression)
+	relativePath, err := fragmentPath(graphName, phaseEdges, shardNumber, options.Compression)
 	if err != nil {
 		return fileManifest{}, err
 	}
-	relativePath := path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("edges-%06d.ogfrag%s", shardNumber, extension))
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
 	fileEntry, err := writeCompressedJSON(absolutePath, options.Compression, options.ZstdLevel, edgeFragment{
 		Phase: phaseEdges,
@@ -368,6 +481,28 @@ func writeEdgeFragment(outputDir, graphName string, shardNumber int, options dum
 	fileEntry.Count = len(items)
 	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
 	return fileEntry, nil
+}
+
+func fragmentPath(graphName string, fragmentPhase phase, shardNumber int, codec compressionCodec) (string, error) {
+	if shardNumber <= 0 {
+		return "", fmt.Errorf("shard number must be > 0")
+	}
+	extension, err := compressionExtension(codec)
+	if err != nil {
+		return "", err
+	}
+
+	var prefix string
+	switch fragmentPhase {
+	case phaseNodes:
+		prefix = "nodes"
+	case phaseEdges:
+		prefix = "edges"
+	default:
+		return "", fmt.Errorf("unsupported fragment phase %q", fragmentPhase)
+	}
+
+	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s-%06d.ogfrag%s", prefix, shardNumber, extension)), nil
 }
 
 func fileTotal(files []fileManifest) int64 {

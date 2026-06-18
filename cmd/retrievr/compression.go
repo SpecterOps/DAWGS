@@ -100,7 +100,9 @@ func writeCompressedJSON(path string, codec compressionCodec, zstdLevel int, val
 	}
 
 	hasher := sha256.New()
-	counter := &countingWriter{writer: io.MultiWriter(file, hasher)}
+	counter := &countingWriter{
+		writer: io.MultiWriter(file, hasher),
+	}
 	compressor, err := newCompressionWriter(counter, codec, zstdLevel)
 	if err != nil {
 		file.Close()
