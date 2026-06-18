@@ -4,7 +4,8 @@
 collections of compact OpenGraph-derived JSON fragments.
 
 The v1 collection format is intended for idle databases. Dumps are deterministic
-by entity ID order, but they do not provide a transactional cross-fragment
+by entity ID order and bound each graph scan to the highest entity IDs observed
+when counting starts, but they do not provide a transactional cross-fragment
 snapshot.
 
 ## Dump
@@ -29,6 +30,11 @@ Existing non-empty output directories are refused unless `-force` is supplied.
 The manifest is written last as `manifest.json`; if a dump fails before that
 point, the directory is intentionally left for inspection without a success
 manifest.
+
+Rows inserted after the initial graph count are ignored by the bounded scan.
+Deletes or other concurrent source mutations can still make the final dumped
+counts differ from the initial counts, in which case dump fails rather than
+writing a misleading manifest.
 
 Dump progress is emitted with `log/slog` on stderr. Notices mark output
 directory preparation, graph counting, scrub pre-pass work, node and relationship
