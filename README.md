@@ -95,7 +95,9 @@ make quality FUZZ_REPORT=.coverage/fuzz.json MUTATION_REPORT=.coverage/mutation.
 
 `make quality_backend` captures PostgreSQL and Neo4j integration results for backend equivalence comparison. It requires
 `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING`. `make quality_bench` writes benchmark markdown and JSON captures
-for later baseline comparison.
+for later baseline comparison. Benchmark drift comparison is performed by
+`make quality` through `tools/metrics`; there is no separate benchmark diff
+command package.
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
@@ -105,6 +107,21 @@ writes JSONL captures and markdown/JSON summaries under `.coverage/`.
 current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
 comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
 against a previous JSONL baseline.
+
+`go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
+manifest-based collections of compact OpenGraph-derived fragments. It supports
+PostgreSQL and Neo4j, gzip and zstd compression, checksum validation before
+load, optional deterministic property scrubbing, and a read-throughput benchmark
+mode. It can also package dumps as single HPKE/ML-KEM encrypted TAR archives.
+See [cmd/retriever/README.md](cmd/retriever/README.md) for dump, encrypted
+archive, load, scrubbed dump, metrics verification, and benchmark examples.
+The same import/export functionality is available to library consumers from
+`github.com/specterops/dawgs/retriever`; callers provide an already-open
+`graph.Database`, and archive helpers support both path-based and stream-based
+APIs. The package exposes CLI-matching default option constructors, structured
+progress callbacks, manifest/metrics helpers, HPKE key envelope reader/writer
+helpers, and typed errors for validation, compatibility, checksum, metrics, and
+count mismatches.
 
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective

@@ -438,6 +438,20 @@ func TestQueryBuilder_Render(t *testing.T) {
 		),
 	), "match (n) where (n)<-[]->() return n order by n.value asc"))
 
+	t.Run("Node has Relationships Order by Direct Node ID", assertQueryResult(query.SinglePartQuery(
+		query.Where(
+			query.HasRelationships(query.Node()),
+		),
+
+		query.Returning(
+			query.Node(),
+		),
+
+		query.OrderBy(
+			query.NodeID(),
+		),
+	), "match (n) where (n)<-[]->() return n order by id(n) asc"))
+
 	t.Run("Node has Relationships Order by Node Item", assertQueryResult(query.SinglePartQuery(
 		query.Where(
 			query.HasRelationships(query.Node()),
