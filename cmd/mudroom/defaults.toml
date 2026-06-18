@@ -1,0 +1,319 @@
+[database]
+graph = ""
+all_graphs = false
+
+[exploration]
+node_sample_limit = 1000
+relationship_sample_limit = 1000
+histogram_limit = 25
+
+[opengraph]
+input = ""
+output = ""
+manifest = ""
+plan = ""
+
+[scrub]
+mode = "shape_only"
+salt = ""
+fake_domain = "example.invalid"
+timestamp_shift_days = 37
+redaction_marker = "[REDACTED]"
+
+[scrub.graph_rules]
+domain_kind = "Domain"
+objectid_key = "objectid"
+domain_name_key = "name"
+domain_sid_reference_keys = [
+  "domainsid",
+]
+objectid_reference_keys = [
+  "ownersid",
+  "tenantid",
+  "onpremid",
+  "distinguishedname",
+]
+self_objectid_alias_keys = [
+  "objectguid",
+]
+domain_name_reference_keys = [
+  "domain",
+]
+case_insensitive_domain_names = true
+preserve_ad_sid_domain_prefixes = true
+
+[classifier]
+long_text_threshold = 80
+max_depth = 4
+identifier_minimum_samples = 20
+identifier_uniqueness_threshold = 0.85
+identifier_minimum_average_length = 8.0
+preserve_keys = [
+  "admincount",
+  "adminsdholderprotected",
+  "authenticationenabled",
+  "blocksinheritance",
+  "casecuritycollected",
+  "collected",
+  "composite_azure_users",
+  "composite_computers",
+  "composite_principals",
+  "composite_risk_assets",
+  "composite_risk_impact_count",
+  "composite_risk_impact_percent",
+  "composite_sps",
+  "composite_users",
+  "composite_vms",
+  "doesanyacegrantownerrights",
+  "doesanyinheritedacegrantownerrights",
+  "dontreqpreauth",
+  "enabled",
+  "enforced",
+  "firstseen",
+  "haslaps",
+  "hasspn",
+  "highvalue",
+  "isacl",
+  "isbuiltin",
+  "isdc",
+  "isinherited",
+  "isaclprotected",
+  "isassignabletorole",
+  "isprimarygroup",
+  "isreadonlydc",
+  "lastcollected",
+  "lastlogon",
+  "lastlogontimestamp",
+  "lastseen",
+  "lastsuccessfulsignindatetime",
+  "lockedout",
+  "logonscriptenabled",
+  "onpremsyncenabled",
+  "operatingsystem",
+  "operatingsystemversion",
+  "passwordcantchange",
+  "passwordexpired",
+  "passwordnotreqd",
+  "principal_count",
+  "pwdlastset",
+  "pwdneverexpires",
+  "sensitive",
+  "securityenabled",
+  "smartcardrequired",
+  "supportedencryptiontypes",
+  "tier_zero_active_assets_count",
+  "tier_zero_exposure_percent",
+  "tier_zero_total_assets_count",
+  "trustedtoauth",
+  "trustype",
+  "unconstraineddelegation",
+  "usedeskeyonly",
+  "useraccountcontrol",
+  "usertype",
+  "vulnerablenetlogonsecuritydescriptorcollected",
+  "whencreated",
+  "groupscope",
+  "gpostatus",
+  "gpostatusraw",
+  "inheritancehash",
+  "signinaudience",
+]
+sensitive_key_markers = [
+  "address",
+  "appid",
+  "applicationid",
+  "caname",
+  "canonicalname",
+  "certchain",
+  "certname",
+  "certthumbprint",
+  "certthumbprints",
+  "cidr",
+  "clientid",
+  "company",
+  "department",
+  "description",
+  "deviceid",
+  "displayname",
+  "distinguishedname",
+  "dns",
+  "domain",
+  "domainsid",
+  "email",
+  "employee",
+  "endpoint",
+  "fqdn",
+  "gpcpath",
+  "guid",
+  "homedirectory",
+  "host",
+  "hostname",
+  "ip",
+  "issuer",
+  "logonscript",
+  "mac",
+  "mail",
+  "managedby",
+  "managedidentity",
+  "manager",
+  "memberof",
+  "mobile",
+  "name",
+  "netbios",
+  "note",
+  "objectguid",
+  "objectid",
+  "objectsid",
+  "office",
+  "onpremid",
+  "owner",
+  "phone",
+  "primarysid",
+  "principal",
+  "samaccount",
+  "securityidentifier",
+  "serial",
+  "serviceprincipalid",
+  "serviceprincipalname",
+  "serviceprincipalnames",
+  "sid",
+  "spn",
+  "subject",
+  "subscription",
+  "subnet",
+  "templateid",
+  "tenant",
+  "tenantid",
+  "thumbprint",
+  "title",
+  "upn",
+  "url",
+  "userid",
+  "roledefinitionid",
+  "resourcegroup",
+  "profilepath",
+]
+
+[[classifier.value_shapes]]
+name = "email"
+pattern = '''(?i)^[^@\s]+@[^@\s]+\.[^@\s]+$'''
+
+[[classifier.value_shapes]]
+name = "sid"
+pattern = '''^S-\d-\d+-(\d+-){1,}\d+$'''
+
+[[classifier.value_shapes]]
+name = "guid"
+pattern = '''(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'''
+
+[[classifier.value_shapes]]
+name = "ipv4"
+pattern = '''^(\d{1,3}\.){3}\d{1,3}$'''
+
+[[classifier.value_shapes]]
+name = "ipv4_cidr"
+pattern = '''^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'''
+
+[[classifier.value_shapes]]
+name = "ipv6"
+pattern = '''(?i)^([0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(%[0-9a-z_.-]+)?$'''
+
+[[classifier.value_shapes]]
+name = "url"
+pattern = '''(?i)^https?://'''
+
+[[classifier.value_shapes]]
+name = "uri"
+pattern = '''(?i)^[a-z][a-z0-9+.-]*://'''
+
+[[classifier.value_shapes]]
+name = "ldap_url"
+pattern = '''(?i)^ldaps?://'''
+
+[[classifier.value_shapes]]
+name = "distinguished_name"
+pattern = '''(?i)(^|,)(cn|ou|dc)='''
+
+[[classifier.value_shapes]]
+name = "hostname"
+pattern = '''(?i)^([a-z0-9-]*[a-z][a-z0-9-]*\.)+[a-z0-9-]*[a-z][a-z0-9-]*$'''
+
+[[classifier.value_shapes]]
+name = "hostname_trailing_dot"
+pattern = '''(?i)^([a-z0-9-]*[a-z][a-z0-9-]*\.)+[a-z0-9-]*[a-z][a-z0-9-]*\.$'''
+
+[[classifier.value_shapes]]
+name = "mac_address"
+pattern = '''(?i)^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$'''
+
+[[classifier.value_shapes]]
+name = "windows_path"
+pattern = '''(?i)^[a-z]:\\[^\\/:*?"<>|\r\n]+(\\[^\\/:*?"<>|\r\n]+)*\\?$'''
+
+[[classifier.value_shapes]]
+name = "unc_path"
+pattern = '''^\\\\[^\\/:*?"<>|\r\n]+\\[^\\/:*?"<>|\r\n]+'''
+
+[[classifier.value_shapes]]
+name = "spn"
+pattern = '''(?i)^[a-z][a-z0-9+.-]*/[^\s/]+(:\d+)?(/[^\s]+)?$'''
+
+[[classifier.value_shapes]]
+name = "downlevel_logon_name"
+pattern = '''^[^\\/\s]+\\[^\\/\s]+$'''
+
+[[classifier.value_shapes]]
+name = "azure_resource_id"
+pattern = '''(?i)^/subscriptions/[0-9a-f-]{36}/resourcegroups/[^/]+/providers/[^/]+/.+'''
+
+[[classifier.value_shapes]]
+name = "aws_arn"
+pattern = '''^arn:aws[a-zA-Z-]*:[^:]*:[^:]*:[0-9]{0,12}:.+'''
+
+[[classifier.value_shapes]]
+name = "cert_thumbprint"
+pattern = '''(?i)^([0-9a-f]{40}|[0-9a-f]{64})$'''
+
+[[classifier.value_shapes]]
+name = "compact_guid"
+pattern = '''(?i)^[0-9a-f]{32}$'''
+
+[[classifier.value_shapes]]
+name = "long_hex"
+pattern = '''(?i)^[0-9a-f]{48,}$'''
+
+[[classifier.value_shapes]]
+name = "jwt"
+pattern = '''^eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}$'''
+
+[[classifier.value_shapes]]
+name = "base64_token"
+pattern = '''(?i)^([a-z0-9+/]{40,}={1,2}|[a-z0-9+/]{20,}[+/][a-z0-9+/]{20,}={0,2})$'''
+
+[[classifier.value_shapes]]
+name = "pem_header"
+pattern = '''^-----BEGIN [A-Z ]+-----$'''
+
+[[classifier.value_shapes]]
+name = "phone_number"
+pattern = '''^\+?[0-9][0-9 ()/-]{7,}[0-9]$'''
+
+[[classifier.value_shapes]]
+name = "embedded_email"
+pattern = '''(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}'''
+
+[[classifier.value_shapes]]
+name = "embedded_sid"
+pattern = '''S-\d-\d+-(\d+-){1,}\d+'''
+
+[[classifier.value_shapes]]
+name = "embedded_guid"
+pattern = '''(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
+
+[[classifier.value_shapes]]
+name = "embedded_ipv4"
+pattern = '''(\d{1,3}\.){3}\d{1,3}'''
+
+[[classifier.value_shapes]]
+name = "embedded_uri"
+pattern = '''(?i)[a-z][a-z0-9+.-]*://[^\s]+'''

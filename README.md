@@ -106,6 +106,18 @@ current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is referen
 comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
 against a previous JSONL baseline.
 
+`go run ./cmd/mudroom` provides shape-preserving OpenGraph scrubbing. It can plan,
+scrub, validate, and explore graph data while preserving node IDs, relationship
+endpoints, and kind labels. See [cmd/mudroom/README.md](cmd/mudroom/README.md)
+for file and live database workflows.
+
+`go run ./cmd/retrievr` dumps and loads live Dawgs graph databases as
+manifest-based collections of compact OpenGraph-derived fragments. It supports
+PostgreSQL and Neo4j, gzip and zstd compression, checksum validation before
+load, optional deterministic property scrubbing, and a read-throughput benchmark
+mode. See [cmd/retrievr/README.md](cmd/retrievr/README.md) for dump, load,
+scrubbed dump, and benchmark examples.
+
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective
 anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's

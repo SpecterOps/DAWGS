@@ -13,8 +13,10 @@ require (
 	github.com/gammazero/deque v1.2.1
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/klauspost/compress v1.18.6
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/pashagolub/pgxmock/v5 v5.1.0
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/tools v0.44.0
 )
@@ -167,7 +169,6 @@ require (
 	github.com/nishanths/exhaustive v0.12.0 // indirect
 	github.com/nishanths/predeclared v0.2.2 // indirect
 	github.com/nunnatsa/ginkgolinter v0.23.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
