@@ -46,6 +46,53 @@ Dump progress is emitted with `log/slog` on stderr. Notices mark output
 directory preparation, graph counting, scrub pre-pass work, node and relationship
 phase boundaries, periodic entity progress, manifest writing, and completion.
 
+## Encrypted Archives
+
+Generate a recipient key pair before creating encrypted archives:
+
+```bash
+retriever keygen \
+  -private retriever-private.key \
+  -public retriever-public.key
+```
+
+The private key is written as an unencrypted JSON key envelope with restrictive
+file permissions. Store it separately from archives and treat it as sensitive.
+Key generation refuses to replace existing key files.
+
+Pass `-archive-out` and `-recipient` to create a single encrypted TAR archive
+after a dump succeeds:
+
+```bash
+retriever dump \
+  -connection "$CONNECTION_STRING" \
+  -out ./dumpdir \
+  -graph default \
+  -scrub full \
+  -salt "$RETRIEVER_SCRUB_SALT" \
+  -archive-out ./dump.tar.pq \
+  -recipient ./retriever-public.key
+```
+
+The archive layer uses an uncompressed TAR stream encrypted with HPKE using
+ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. Fragment compression inside the dump
+directory remains controlled by `-compression`; the archive itself is not
+compressed. If archive creation fails, the command fails and removes partial
+archive output while leaving the completed dump directory for inspection.
+
+Unpack an encrypted archive with the private key:
+
+```bash
+retriever unpack \
+  -archive ./dump.tar.pq \
+  -identity ./retriever-private.key \
+  -out ./dumpdir
+```
+
+Existing non-empty unpack output directories are refused unless `-force` is
+supplied. Unpacked collections retain the normal `manifest.json` and fragment
+layout and can be loaded with `retriever load -in ./dumpdir`.
+
 ## Scrubbed Dumps
 
 ```bash

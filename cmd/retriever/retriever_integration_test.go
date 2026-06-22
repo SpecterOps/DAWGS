@@ -20,8 +20,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,6 +94,16 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 		t.Fatalf("seed graph: %v", err)
 	}
 
+	entitySnapshot, err := countGraphEntitySnapshot(ctx, db, graph.Graph{
+		Name: graphName,
+	})
+	if err != nil {
+		t.Fatalf("count graph entities: %v", err)
+	}
+	if entitySnapshot.NodeCount != 2 || entitySnapshot.EdgeCount != 1 {
+		t.Skipf("graph target %q is not isolated by the current PostgreSQL query path: nodes=%d edges=%d", graphName, entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
+	}
+
 	dumpDir := t.TempDir()
 	dumpResult, err := Dump(ctx, db, driverName, []graphTarget{{
 		Name: graphName,
@@ -109,6 +121,15 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	if dumpResult.NodeCount != 2 || dumpResult.EdgeCount != 1 {
 		t.Fatalf("unexpected dump counts: nodes=%d edges=%d", dumpResult.NodeCount, dumpResult.EdgeCount)
 	}
+	if dumpResult.Manifest.Metrics == nil {
+		t.Fatalf("dump manifest is missing metrics")
+	}
+	if got := len(dumpResult.Manifest.Metrics.Graphs); got != 1 {
+		t.Fatalf("dump metrics graph count = %d", got)
+	}
+	if dumpResult.Manifest.Metrics.Graphs[0].NodeCount != 2 || dumpResult.Manifest.Metrics.Graphs[0].EdgeCount != 1 {
+		t.Fatalf("unexpected dump metrics counts: %+v", dumpResult.Manifest.Metrics.Graphs[0])
+	}
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		return tx.WithGraph(graph.Graph{
@@ -119,13 +140,47 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}
 
 	loadResult, err := Load(ctx, db, driverName, loadOptions{
-		InputDir:  dumpDir,
-		BatchSize: 1,
+		InputDir:      dumpDir,
+		BatchSize:     1,
+		VerifyMetrics: true,
 	})
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	if loadResult.NodeCount != 2 || loadResult.EdgeCount != 1 {
 		t.Fatalf("unexpected load counts: nodes=%d edges=%d", loadResult.NodeCount, loadResult.EdgeCount)
+	}
+
+	verifyResult, err := Verify(ctx, db, driverName, verifyOptions{
+		InputDir:  dumpDir,
+		BatchSize: 1,
+	})
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if verifyResult.NodeCount != 2 || verifyResult.EdgeCount != 1 {
+		t.Fatalf("unexpected verify counts: nodes=%d edges=%d", verifyResult.NodeCount, verifyResult.EdgeCount)
+	}
+
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		tx = tx.WithGraph(graph.Graph{
+			Name: graphName,
+		})
+		_, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "extra"}), userKind)
+		return err
+	}); err != nil {
+		t.Fatalf("mutate loaded graph: %v", err)
+	}
+
+	_, err = Verify(ctx, db, driverName, verifyOptions{
+		InputDir:  dumpDir,
+		BatchSize: 1,
+	})
+	var mismatch metricsMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("expected metrics mismatch error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "node_count") {
+		t.Fatalf("expected mismatch to include node_count, got %v", err)
 	}
 }

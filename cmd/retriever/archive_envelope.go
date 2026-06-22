@@ -1,0 +1,438 @@
+package main
+
+import (
+	"bytes"
+	"crypto/hpke"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+const (
+	encryptedArchiveMagic        = "RTRV-PQ-ARCHIVE-v1"
+	encryptedArchiveFormat       = "retriever-encrypted-tar-v1"
+	encryptedArchiveHPKEInfo     = "retriever/archive/hpke/v1"
+	encryptedArchiveChunkSize    = 1024 * 1024
+	maxEncryptedArchiveFrameSize = encryptedArchiveChunkSize + 4096
+	maxEncryptedArchiveHeaderLen = 64 * 1024
+
+	encryptedArchiveFrameData  byte = 0
+	encryptedArchiveFrameFinal byte = 1
+)
+
+type encryptedArchiveHeader struct {
+	Format    string                       `json:"format"`
+	Archive   encryptedArchiveFormatHeader `json:"archive"`
+	Crypto    encryptedArchiveCryptoHeader `json:"crypto"`
+	ChunkSize int                          `json:"chunk_size"`
+}
+
+type encryptedArchiveFormatHeader struct {
+	Format      string `json:"format"`
+	Compression string `json:"compression"`
+}
+
+type encryptedArchiveCryptoHeader struct {
+	Scheme          string `json:"scheme"`
+	KEM             string `json:"kem"`
+	KDF             string `json:"kdf"`
+	AEAD            string `json:"aead"`
+	EncapsulatedKey string `json:"encapsulated_key"`
+}
+
+type encryptedArchiveWriter struct {
+	writer     io.Writer
+	sender     *hpke.Sender
+	headerHash [sha256.Size]byte
+	frameIndex uint64
+	closed     bool
+}
+
+type encryptedArchiveReader struct {
+	reader     io.Reader
+	recipient  *hpke.Recipient
+	headerHash [sha256.Size]byte
+	frameIndex uint64
+	plaintext  []byte
+	final      bool
+}
+
+func writeEncryptedCollectionArchive(dumpDir, archivePath string, recipient hpke.PublicKey) error {
+	archivePath = strings.TrimSpace(archivePath)
+	if archivePath == "" {
+		return fmt.Errorf("archive output path is required")
+	}
+	if err := requirePathDoesNotExist(archivePath); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		return fmt.Errorf("create archive parent directory: %w", err)
+	}
+
+	tempFile, err := os.CreateTemp(filepath.Dir(archivePath), filepath.Base(archivePath)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create archive temp file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	cleanupTemp := true
+	defer func() {
+		if cleanupTemp {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	slog.Info("retriever archive encryption started",
+		slog.String("input_dir", dumpDir),
+		slog.String("archive", archivePath),
+	)
+	archiveWriter, err := newEncryptedArchiveWriter(tempFile, recipient)
+	if err != nil {
+		_ = tempFile.Close()
+		return err
+	}
+	if err := writeCollectionTar(archiveWriter, dumpDir, archivePath, tempPath); err != nil {
+		_ = tempFile.Close()
+		return err
+	}
+	if err := archiveWriter.Close(); err != nil {
+		_ = tempFile.Close()
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("close archive temp file: %w", err)
+	}
+	if err := requirePathDoesNotExist(archivePath); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, archivePath); err != nil {
+		return fmt.Errorf("rename archive: %w", err)
+	}
+	cleanupTemp = false
+	slog.Info("retriever archive encryption completed",
+		slog.String("archive", archivePath),
+	)
+	return nil
+}
+
+func unpackEncryptedCollectionArchive(archivePath, outputDir string, force bool, identity hpke.PrivateKey) error {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return fmt.Errorf("open archive: %w", err)
+	}
+	defer file.Close()
+
+	slog.Info("retriever archive decryption started",
+		slog.String("archive", archivePath),
+		slog.String("output_dir", outputDir),
+	)
+	archiveReader, err := newEncryptedArchiveReader(file, identity)
+	if err != nil {
+		return err
+	}
+	if err := unpackTar(archiveReader, outputDir, force); err != nil {
+		return err
+	}
+	if _, err := io.Copy(io.Discard, archiveReader); err != nil {
+		return fmt.Errorf("finish encrypted archive stream: %w", err)
+	}
+	slog.Info("retriever archive decryption completed",
+		slog.String("archive", archivePath),
+		slog.String("output_dir", outputDir),
+	)
+	return nil
+}
+
+func newEncryptedArchiveWriter(writer io.Writer, recipient hpke.PublicKey) (*encryptedArchiveWriter, error) {
+	if recipient == nil {
+		return nil, fmt.Errorf("recipient public key is required")
+	}
+	if recipient.KEM().ID() != defaultArchiveKEM().ID() {
+		return nil, fmt.Errorf("recipient public key uses unsupported KEM")
+	}
+
+	encapsulatedKey, sender, err := hpke.NewSender(recipient, defaultArchiveKDF(), defaultArchiveAEAD(), []byte(encryptedArchiveHPKEInfo))
+	if err != nil {
+		return nil, fmt.Errorf("create archive sender: %w", err)
+	}
+	header := encryptedArchiveHeader{
+		Format: encryptedArchiveFormat,
+		Archive: encryptedArchiveFormatHeader{
+			Format:      "tar",
+			Compression: "none",
+		},
+		Crypto: encryptedArchiveCryptoHeader{
+			Scheme:          archiveCryptoScheme,
+			KEM:             archiveKEMName,
+			KDF:             archiveKDFName,
+			AEAD:            archiveAEADName,
+			EncapsulatedKey: base64.StdEncoding.EncodeToString(encapsulatedKey),
+		},
+		ChunkSize: encryptedArchiveChunkSize,
+	}
+	headerBytes, err := json.Marshal(header)
+	if err != nil {
+		return nil, fmt.Errorf("encode archive header: %w", err)
+	}
+	if len(headerBytes) > maxEncryptedArchiveHeaderLen {
+		return nil, fmt.Errorf("archive header is too large")
+	}
+	if _, err := writer.Write([]byte(encryptedArchiveMagic)); err != nil {
+		return nil, fmt.Errorf("write archive magic: %w", err)
+	}
+	var headerLen [4]byte
+	binary.BigEndian.PutUint32(headerLen[:], uint32(len(headerBytes)))
+	if _, err := writer.Write(headerLen[:]); err != nil {
+		return nil, fmt.Errorf("write archive header length: %w", err)
+	}
+	if _, err := writer.Write(headerBytes); err != nil {
+		return nil, fmt.Errorf("write archive header: %w", err)
+	}
+
+	return &encryptedArchiveWriter{
+		writer:     writer,
+		sender:     sender,
+		headerHash: sha256.Sum256(headerBytes),
+	}, nil
+}
+
+func (s *encryptedArchiveWriter) Write(p []byte) (int, error) {
+	if s.closed {
+		return 0, fmt.Errorf("encrypted archive writer is closed")
+	}
+	written := 0
+	for len(p) > 0 {
+		chunkSize := len(p)
+		if chunkSize > encryptedArchiveChunkSize {
+			chunkSize = encryptedArchiveChunkSize
+		}
+		if err := s.writeFrame(encryptedArchiveFrameData, p[:chunkSize]); err != nil {
+			return written, err
+		}
+		p = p[chunkSize:]
+		written += chunkSize
+	}
+	return written, nil
+}
+
+func (s *encryptedArchiveWriter) Close() error {
+	if s.closed {
+		return fmt.Errorf("encrypted archive writer is already closed")
+	}
+	if err := s.writeFrame(encryptedArchiveFrameFinal, nil); err != nil {
+		return err
+	}
+	s.closed = true
+	slog.Info("retriever archive encryption finalized",
+		slog.Uint64("frame_count", s.frameIndex),
+	)
+	return nil
+}
+
+func (s *encryptedArchiveWriter) writeFrame(frameType byte, plaintext []byte) error {
+	ciphertext, err := s.sender.Seal(archiveFrameAAD(s.headerHash, s.frameIndex, frameType), plaintext)
+	if err != nil {
+		return fmt.Errorf("encrypt archive frame %d: %w", s.frameIndex, err)
+	}
+	if err := writeEncryptedArchiveFrame(s.writer, frameType, ciphertext); err != nil {
+		return err
+	}
+	s.frameIndex++
+	return nil
+}
+
+func writeEncryptedArchiveFrame(writer io.Writer, frameType byte, ciphertext []byte) error {
+	if len(ciphertext) > int(^uint32(0)) {
+		return fmt.Errorf("encrypted archive frame is too large")
+	}
+	var frameHeader [5]byte
+	frameHeader[0] = frameType
+	binary.BigEndian.PutUint32(frameHeader[1:], uint32(len(ciphertext)))
+	if _, err := writer.Write(frameHeader[:]); err != nil {
+		return fmt.Errorf("write archive frame header: %w", err)
+	}
+	if _, err := writer.Write(ciphertext); err != nil {
+		return fmt.Errorf("write archive frame: %w", err)
+	}
+	return nil
+}
+
+func newEncryptedArchiveReader(reader io.Reader, identity hpke.PrivateKey) (*encryptedArchiveReader, error) {
+	if identity == nil {
+		return nil, fmt.Errorf("identity private key is required")
+	}
+	if identity.KEM().ID() != defaultArchiveKEM().ID() {
+		return nil, fmt.Errorf("identity private key uses unsupported KEM")
+	}
+
+	headerBytes, header, err := readEncryptedArchiveHeader(reader)
+	if err != nil {
+		return nil, err
+	}
+	encapsulatedKey, err := base64.StdEncoding.DecodeString(header.Crypto.EncapsulatedKey)
+	if err != nil {
+		return nil, fmt.Errorf("decode encapsulated key: %w", err)
+	}
+	recipient, err := hpke.NewRecipient(encapsulatedKey, identity, defaultArchiveKDF(), defaultArchiveAEAD(), []byte(encryptedArchiveHPKEInfo))
+	if err != nil {
+		return nil, fmt.Errorf("create archive recipient: %w", err)
+	}
+	return &encryptedArchiveReader{
+		reader:     reader,
+		recipient:  recipient,
+		headerHash: sha256.Sum256(headerBytes),
+	}, nil
+}
+
+func readEncryptedArchiveHeader(reader io.Reader) ([]byte, encryptedArchiveHeader, error) {
+	var header encryptedArchiveHeader
+	magic := make([]byte, len(encryptedArchiveMagic))
+	if _, err := io.ReadFull(reader, magic); err != nil {
+		return nil, header, fmt.Errorf("read archive magic: %w", err)
+	}
+	if string(magic) != encryptedArchiveMagic {
+		return nil, header, fmt.Errorf("unsupported archive magic %q", string(magic))
+	}
+
+	var headerLenBytes [4]byte
+	if _, err := io.ReadFull(reader, headerLenBytes[:]); err != nil {
+		return nil, header, fmt.Errorf("read archive header length: %w", err)
+	}
+	headerLen := binary.BigEndian.Uint32(headerLenBytes[:])
+	if headerLen == 0 || headerLen > maxEncryptedArchiveHeaderLen {
+		return nil, header, fmt.Errorf("archive header length %d is invalid", headerLen)
+	}
+	headerBytes := make([]byte, headerLen)
+	if _, err := io.ReadFull(reader, headerBytes); err != nil {
+		return nil, header, fmt.Errorf("read archive header: %w", err)
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return nil, header, fmt.Errorf("decode archive header: %w", err)
+	}
+	if err := validateEncryptedArchiveHeader(header); err != nil {
+		return nil, header, err
+	}
+	return headerBytes, header, nil
+}
+
+func validateEncryptedArchiveHeader(header encryptedArchiveHeader) error {
+	if header.Format != encryptedArchiveFormat {
+		return fmt.Errorf("unsupported encrypted archive format %q", header.Format)
+	}
+	if header.Archive.Format != "tar" {
+		return fmt.Errorf("unsupported archive payload format %q", header.Archive.Format)
+	}
+	if header.Archive.Compression != "none" {
+		return fmt.Errorf("unsupported archive payload compression %q", header.Archive.Compression)
+	}
+	if err := validateArchiveCryptoMetadata(archiveCryptoMetadata{
+		Scheme: header.Crypto.Scheme,
+		KEM:    header.Crypto.KEM,
+		KDF:    header.Crypto.KDF,
+		AEAD:   header.Crypto.AEAD,
+	}); err != nil {
+		return err
+	}
+	if strings.TrimSpace(header.Crypto.EncapsulatedKey) == "" {
+		return fmt.Errorf("archive header is missing encapsulated key")
+	}
+	if header.ChunkSize != encryptedArchiveChunkSize {
+		return fmt.Errorf("unsupported archive chunk size %d", header.ChunkSize)
+	}
+	return nil
+}
+
+func (s *encryptedArchiveReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	for len(s.plaintext) == 0 {
+		if s.final {
+			return 0, io.EOF
+		}
+		if err := s.readNextFrame(); err != nil {
+			return 0, err
+		}
+	}
+	n := copy(p, s.plaintext)
+	s.plaintext = s.plaintext[n:]
+	return n, nil
+}
+
+func (s *encryptedArchiveReader) readNextFrame() error {
+	var frameHeader [5]byte
+	if _, err := io.ReadFull(s.reader, frameHeader[:]); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return fmt.Errorf("encrypted archive missing final frame")
+		}
+		return fmt.Errorf("read archive frame header: %w", err)
+	}
+
+	frameType := frameHeader[0]
+	if frameType != encryptedArchiveFrameData && frameType != encryptedArchiveFrameFinal {
+		return fmt.Errorf("archive frame %d has unsupported type %d", s.frameIndex, frameType)
+	}
+	ciphertextLen := binary.BigEndian.Uint32(frameHeader[1:])
+	if ciphertextLen > maxEncryptedArchiveFrameSize {
+		return fmt.Errorf("archive frame %d is too large", s.frameIndex)
+	}
+	ciphertext := make([]byte, ciphertextLen)
+	if _, err := io.ReadFull(s.reader, ciphertext); err != nil {
+		return fmt.Errorf("read archive frame %d: %w", s.frameIndex, err)
+	}
+	plaintext, err := s.recipient.Open(archiveFrameAAD(s.headerHash, s.frameIndex, frameType), ciphertext)
+	if err != nil {
+		return fmt.Errorf("decrypt archive frame %d: %w", s.frameIndex, err)
+	}
+	s.frameIndex++
+
+	if frameType == encryptedArchiveFrameFinal {
+		if len(plaintext) != 0 {
+			return fmt.Errorf("encrypted archive final frame contained plaintext")
+		}
+		if err := requireEncryptedArchiveEOF(s.reader); err != nil {
+			return err
+		}
+		s.final = true
+		slog.Info("retriever archive decryption finalized",
+			slog.Uint64("frame_count", s.frameIndex),
+		)
+		return nil
+	}
+	s.plaintext = plaintext
+	return nil
+}
+
+func requireEncryptedArchiveEOF(reader io.Reader) error {
+	var extra [1]byte
+	n, err := reader.Read(extra[:])
+	if n > 0 {
+		return fmt.Errorf("encrypted archive has trailing data after final frame")
+	}
+	if err == nil {
+		return fmt.Errorf("encrypted archive stream did not end after final frame")
+	}
+	if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("read archive trailer: %w", err)
+	}
+	return nil
+}
+
+func archiveFrameAAD(headerHash [sha256.Size]byte, frameIndex uint64, frameType byte) []byte {
+	var aad bytes.Buffer
+	aad.WriteString(encryptedArchiveMagic)
+	aad.WriteByte(0)
+	aad.Write(headerHash[:])
+	var indexBytes [8]byte
+	binary.BigEndian.PutUint64(indexBytes[:], frameIndex)
+	aad.Write(indexBytes[:])
+	aad.WriteByte(frameType)
+	return aad.Bytes()
+}

@@ -82,6 +82,8 @@ type dumpOptions struct {
 	AllGraphs        bool
 	OutputDir        string
 	Force            bool
+	ArchiveOut       string
+	RecipientPath    string
 	Scrub            scrubMode
 	Salt             string
 	ScrubConfigPath  string
@@ -95,6 +97,12 @@ type dumpOptions struct {
 func (s dumpOptions) validate() error {
 	if strings.TrimSpace(s.OutputDir) == "" {
 		return fmt.Errorf("output directory is required; pass -out")
+	}
+	if strings.TrimSpace(s.ArchiveOut) != "" && strings.TrimSpace(s.RecipientPath) == "" {
+		return fmt.Errorf("-archive-out requires -recipient")
+	}
+	if strings.TrimSpace(s.ArchiveOut) == "" && strings.TrimSpace(s.RecipientPath) != "" {
+		return fmt.Errorf("-recipient requires -archive-out")
 	}
 	if err := validateCompression(s.Compression); err != nil {
 		return err
@@ -134,6 +142,44 @@ func (s loadOptions) validate() error {
 	}
 	if s.BatchSize <= 0 {
 		return fmt.Errorf("batch-size must be > 0")
+	}
+	return nil
+}
+
+type unpackOptions struct {
+	ArchivePath  string
+	IdentityPath string
+	OutputDir    string
+	Force        bool
+}
+
+func (s unpackOptions) validate() error {
+	if strings.TrimSpace(s.ArchivePath) == "" {
+		return fmt.Errorf("archive path is required; pass -archive")
+	}
+	if strings.TrimSpace(s.IdentityPath) == "" {
+		return fmt.Errorf("identity key path is required; pass -identity")
+	}
+	if strings.TrimSpace(s.OutputDir) == "" {
+		return fmt.Errorf("output directory is required; pass -out")
+	}
+	return nil
+}
+
+type keygenOptions struct {
+	PrivatePath string
+	PublicPath  string
+}
+
+func (s keygenOptions) validate() error {
+	if strings.TrimSpace(s.PrivatePath) == "" {
+		return fmt.Errorf("private key path is required; pass -private")
+	}
+	if strings.TrimSpace(s.PublicPath) == "" {
+		return fmt.Errorf("public key path is required; pass -public")
+	}
+	if sameCleanPath(s.PrivatePath, s.PublicPath) {
+		return fmt.Errorf("private and public key paths must be different")
 	}
 	return nil
 }

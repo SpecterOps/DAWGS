@@ -342,9 +342,77 @@ func validateMetricsManifest(value metricsManifest, graphEntries []graphManifest
 		if graphEntry.EdgeCount != manifestGraph.EdgeCount {
 			return fmt.Errorf("metrics graph %q edge_count %d does not match manifest edge_count %d", graphEntry.Name, graphEntry.EdgeCount, manifestGraph.EdgeCount)
 		}
+		if err := validateGraphMetricHistograms(graphEntry); err != nil {
+			return err
+		}
 		if expectedFingerprint := fingerprintGraphMetrics(graphEntry); graphEntry.Fingerprint != expectedFingerprint {
 			return fmt.Errorf("metrics graph %q fingerprint %q does not match computed fingerprint %q", graphEntry.Name, graphEntry.Fingerprint, expectedFingerprint)
 		}
+	}
+	return nil
+}
+
+func validateGraphMetricHistograms(value graphMetrics) error {
+	if value.NodeCount < 0 {
+		return fmt.Errorf("metrics graph %q has negative node_count %d", value.Name, value.NodeCount)
+	}
+	if value.EdgeCount < 0 {
+		return fmt.Errorf("metrics graph %q has negative edge_count %d", value.Name, value.EdgeCount)
+	}
+
+	for _, histogram := range []struct {
+		name     string
+		values   map[string]int64
+		expected int64
+	}{
+		{
+			name:     "node_kind_histogram",
+			values:   value.NodeKindHistogram,
+			expected: value.NodeCount,
+		},
+		{
+			name:     "in_degree_histogram",
+			values:   value.InDegreeHistogram,
+			expected: value.NodeCount,
+		},
+		{
+			name:     "out_degree_histogram",
+			values:   value.OutDegreeHistogram,
+			expected: value.NodeCount,
+		},
+		{
+			name:     "total_degree_histogram",
+			values:   value.TotalDegreeHistogram,
+			expected: value.NodeCount,
+		},
+		{
+			name:     "edge_kind_histogram",
+			values:   value.EdgeKindHistogram,
+			expected: value.EdgeCount,
+		},
+		{
+			name:     "endpoint_kind_histogram",
+			values:   value.EndpointKindHistogram,
+			expected: value.EdgeCount,
+		},
+	} {
+		if err := validateMetricHistogramSum(value.Name, histogram.name, histogram.values, histogram.expected); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateMetricHistogramSum(graphName string, histogramName string, histogram map[string]int64, expected int64) error {
+	var total int64
+	for key, count := range histogram {
+		if count < 0 {
+			return fmt.Errorf("metrics graph %q %s[%q] has negative count %d", graphName, histogramName, key, count)
+		}
+		total += count
+	}
+	if total != expected {
+		return fmt.Errorf("metrics graph %q %s total %d does not match expected count %d", graphName, histogramName, total, expected)
 	}
 	return nil
 }
@@ -358,11 +426,15 @@ func cloneMetricHistogram(source map[string]int64) map[string]int64 {
 }
 
 func metricKindSetKey(kinds []string) string {
-	values := make([]string, 0, len(kinds))
+	seen := map[string]struct{}{}
 	for _, kind := range kinds {
 		if kind != "" {
-			values = append(values, kind)
+			seen[kind] = struct{}{}
 		}
+	}
+	values := make([]string, 0, len(seen))
+	for kind := range seen {
+		values = append(values, kind)
 	}
 	if len(values) == 0 {
 		return metricsNoneKind

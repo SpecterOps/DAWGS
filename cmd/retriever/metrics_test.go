@@ -98,13 +98,13 @@ func TestMetricsBuilderFinalizesGraphShape(t *testing.T) {
 }
 
 func TestMetricsFingerprintStableAcrossObservationOrder(t *testing.T) {
-	first := buildFingerprintFixture(t, []fragmentNode{
+	first := buildNamedFingerprintFixture(t, "default", []fragmentNode{
 		{ID: "a", Kinds: []string{"User", "Person"}},
 		{ID: "b", Kinds: []string{"Group"}},
 	}, []fragmentEdge{
 		{StartID: "a", EndID: "b", Kind: "MemberOf"},
 	})
-	second := buildFingerprintFixture(t, []fragmentNode{
+	second := buildNamedFingerprintFixture(t, "default", []fragmentNode{
 		{ID: "b", Kinds: []string{"Group"}},
 		{ID: "a", Kinds: []string{"Person", "User"}},
 	}, []fragmentEdge{
@@ -113,6 +113,14 @@ func TestMetricsFingerprintStableAcrossObservationOrder(t *testing.T) {
 
 	if first.Fingerprint != second.Fingerprint {
 		t.Fatalf("fingerprint changed with observation order: %q != %q", first.Fingerprint, second.Fingerprint)
+	}
+}
+
+func TestMetricKindSetKeyDeduplicatesKinds(t *testing.T) {
+	once := metricKindSetKey([]string{"User", "Person"})
+	duplicated := metricKindSetKey([]string{"Person", "User", "User"})
+	if once != duplicated {
+		t.Fatalf("duplicate kind changed kind set key: %q != %q", once, duplicated)
 	}
 }
 
@@ -143,7 +151,7 @@ func TestMetricsIgnorePropertiesAndIDsInFinalForm(t *testing.T) {
 }
 
 func TestMetricsComparisonReportsDeterministicDiffs(t *testing.T) {
-	expected := buildFingerprintFixture(t, []fragmentNode{
+	expected := buildNamedFingerprintFixture(t, "default", []fragmentNode{
 		{ID: "a", Kinds: []string{"User"}},
 	}, nil)
 	actual := expected
@@ -166,8 +174,36 @@ func TestMetricsComparisonReportsDeterministicDiffs(t *testing.T) {
 	}
 }
 
+func TestMetricsManifestComparisonReportsGraphSetDiffs(t *testing.T) {
+	expected := metricsManifest{
+		Version: metricsVersion,
+		Graphs: []graphMetrics{
+			buildNamedFingerprintFixture(t, "b", []fragmentNode{{ID: "b", Kinds: []string{"User"}}}, nil),
+			buildNamedFingerprintFixture(t, "a", []fragmentNode{{ID: "a", Kinds: []string{"User"}}}, nil),
+		},
+	}
+	actual := metricsManifest{
+		Version: "future",
+		Graphs: []graphMetrics{
+			buildNamedFingerprintFixture(t, "c", []fragmentNode{{ID: "c", Kinds: []string{"User"}}}, nil),
+		},
+	}
+
+	differences := compareMetricsManifest(expected, actual)
+	for _, expectedDiff := range []string{
+		`metrics.version: expected "retriever-metrics-v1", actual "future"`,
+		`graph "a" missing from actual metrics`,
+		`graph "b" missing from actual metrics`,
+		`graph "c" only present in actual metrics`,
+	} {
+		if !containsExact(differences, expectedDiff) {
+			t.Fatalf("missing diff %q in %v", expectedDiff, differences)
+		}
+	}
+}
+
 func TestMetricsValidationRejectsMismatchedFingerprint(t *testing.T) {
-	metrics := buildFingerprintFixture(t, []fragmentNode{
+	metrics := buildNamedFingerprintFixture(t, "default", []fragmentNode{
 		{ID: "a", Kinds: []string{"User"}},
 	}, nil)
 	metrics.Fingerprint = "sha256:bad"
@@ -185,10 +221,63 @@ func TestMetricsValidationRejectsMismatchedFingerprint(t *testing.T) {
 	}
 }
 
+func TestMetricsValidationRejectsHistogramInvariantViolations(t *testing.T) {
+	base := buildNamedFingerprintFixture(t, "default", []fragmentNode{
+		{ID: "a", Kinds: []string{"User"}},
+		{ID: "b", Kinds: []string{"Group"}},
+	}, []fragmentEdge{
+		{StartID: "a", EndID: "b", Kind: "MemberOf"},
+	})
+
+	cases := map[string]func(graphMetrics) graphMetrics{
+		"node kind sum mismatch": func(value graphMetrics) graphMetrics {
+			value.NodeKindHistogram = map[string]int64{
+				metricKindSetKey([]string{"User"}): 1,
+			}
+			value.Fingerprint = fingerprintGraphMetrics(value)
+			return value
+		},
+		"edge kind sum mismatch": func(value graphMetrics) graphMetrics {
+			value.EdgeKindHistogram = map[string]int64{}
+			value.Fingerprint = fingerprintGraphMetrics(value)
+			return value
+		},
+		"negative count": func(value graphMetrics) graphMetrics {
+			value.OutDegreeHistogram = map[string]int64{
+				metricDegreeKey(0): -1,
+				metricDegreeKey(1): 3,
+			}
+			value.Fingerprint = fingerprintGraphMetrics(value)
+			return value
+		},
+	}
+
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := validateMetricsManifest(metricsManifest{
+				Version: metricsVersion,
+				Graphs:  []graphMetrics{mutate(base)},
+			}, []graphManifest{{
+				Name:      "default",
+				NodeCount: 2,
+				EdgeCount: 1,
+			}})
+			if err == nil {
+				t.Fatalf("expected invariant validation error")
+			}
+		})
+	}
+}
+
 func buildFingerprintFixture(t *testing.T, nodes []fragmentNode, edges []fragmentEdge) graphMetrics {
 	t.Helper()
+	return buildNamedFingerprintFixture(t, "default", nodes, edges)
+}
 
-	builder := newMetricsBuilder("default", int64(len(nodes)))
+func buildNamedFingerprintFixture(t *testing.T, graphName string, nodes []fragmentNode, edges []fragmentEdge) graphMetrics {
+	t.Helper()
+
+	builder := newMetricsBuilder(graphName, int64(len(nodes)))
 	for _, node := range nodes {
 		if err := builder.observeFragmentNode(node); err != nil {
 			t.Fatalf("observe node: %v", err)
@@ -200,4 +289,13 @@ func buildFingerprintFixture(t *testing.T, nodes []fragmentNode, edges []fragmen
 		}
 	}
 	return builder.finalize()
+}
+
+func containsExact(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }

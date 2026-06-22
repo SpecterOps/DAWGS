@@ -75,6 +75,15 @@ func TestOptionsValidate(t *testing.T) {
 	if err := dump.validate(); err == nil {
 		t.Fatalf("expected invalid compression")
 	}
+	dump.Compression = compressionGzip
+	dump.ArchiveOut = filepath.Join(t.TempDir(), "dump.tar.pq")
+	if err := dump.validate(); err == nil {
+		t.Fatalf("expected archive recipient validation error")
+	}
+	dump.RecipientPath = filepath.Join(t.TempDir(), "recipient.key")
+	if err := dump.validate(); err != nil {
+		t.Fatalf("valid dump archive options: %v", err)
+	}
 
 	load := loadOptions{
 		InputDir:  t.TempDir(),
@@ -86,6 +95,31 @@ func TestOptionsValidate(t *testing.T) {
 	load.InputDir = ""
 	if err := load.validate(); err == nil {
 		t.Fatalf("expected missing input dir")
+	}
+
+	unpack := unpackOptions{
+		ArchivePath:  filepath.Join(t.TempDir(), "dump.tar.pq"),
+		IdentityPath: filepath.Join(t.TempDir(), "private.key"),
+		OutputDir:    t.TempDir(),
+	}
+	if err := unpack.validate(); err != nil {
+		t.Fatalf("valid unpack options: %v", err)
+	}
+	unpack.IdentityPath = ""
+	if err := unpack.validate(); err == nil {
+		t.Fatalf("expected missing identity path")
+	}
+
+	keygen := keygenOptions{
+		PrivatePath: filepath.Join(t.TempDir(), "private.key"),
+		PublicPath:  filepath.Join(t.TempDir(), "public.key"),
+	}
+	if err := keygen.validate(); err != nil {
+		t.Fatalf("valid keygen options: %v", err)
+	}
+	keygen.PublicPath = keygen.PrivatePath
+	if err := keygen.validate(); err == nil {
+		t.Fatalf("expected duplicate key path validation error")
 	}
 
 	verify := verifyOptions{
