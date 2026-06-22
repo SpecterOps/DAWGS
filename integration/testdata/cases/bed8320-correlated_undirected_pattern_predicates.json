@@ -1,0 +1,63 @@
+{
+  "dataset": "bed8320",
+  "cases": [
+    {
+      "name": "BED-8320 long-form typed undirected predicate remains row-correlated from left-bound node",
+      "cypher": "match (g:NodeKind2) where (g)-[:EdgeKind1]-(:NodeKind1) return g.name",
+      "assert": {
+        "scalar_values": [
+          "BED-6695 MEMBER USER",
+          "KEY ADMINS BETA",
+          "OPERATORS"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 long-form typed undirected predicate remains row-correlated from right-bound node",
+      "cypher": "match (g:NodeKind2) where (:NodeKind1)-[:EdgeKind1]-(g) return g.name",
+      "assert": {
+        "scalar_values": [
+          "BED-6695 MEMBER USER",
+          "KEY ADMINS BETA",
+          "OPERATORS"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 long-form negated typed undirected predicate excludes NodeKind1 incident nodes from left-bound node",
+      "cypher": "match (g:NodeKind2) where not ((g)-[:EdgeKind1]-(:NodeKind1)) return g.name",
+      "assert": {
+        "scalar_values": [
+          "KEY ADMINS ALPHA",
+          "KEY ADMINS DELTA",
+          "KEY ADMINS GAMMA"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 long-form negated typed undirected predicate excludes NodeKind1 incident nodes from right-bound node",
+      "cypher": "match (g:NodeKind2) where not ((:NodeKind1)-[:EdgeKind1]-(g)) return g.name",
+      "assert": {
+        "scalar_values": [
+          "KEY ADMINS ALPHA",
+          "KEY ADMINS DELTA",
+          "KEY ADMINS GAMMA"
+        ]
+      }
+    },
+    {
+      "name": "BED-8320 long-form typed both-bound undirected predicate finds connected pair",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS BETA' and (a:NodeKind1)-[:EdgeKind1]-(b:NodeKind2) return count(a)",
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "BED-8320 long-form typed both-bound undirected predicate rejects wrong edge kind",
+      "cypher": "match (a:NodeKind1), (b:NodeKind2) where a.name = 'User A' and b.name = 'KEY ADMINS ALPHA' and (a:NodeKind1)-[:EdgeKind1]-(b:NodeKind2) return count(a)",
+      "assert": {
+        "exact_int": 0
+      }
+    }
+  ]
+}
