@@ -70,7 +70,7 @@ func TestPostgreSQLPropertyTextEqualityCompatibility(t *testing.T) {
 		userKind    = graph.StringKind("User")
 		groupKind   = graph.StringKind("Group")
 		memberOf    = graph.StringKind("MemberOf")
-		db, ctx     = SetupDBWithKinds(t, 0, graph.Kinds{userKind, groupKind}, graph.Kinds{memberOf})
+		db, ctx     = SetupDBWithKinds(t, CleanupGraph, graph.Kinds{userKind, groupKind}, graph.Kinds{memberOf})
 		boolTrue    *graph.Relationship
 		boolFalse   *graph.Relationship
 		stringTrue  *graph.Relationship

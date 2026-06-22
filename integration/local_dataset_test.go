@@ -36,7 +36,7 @@ func TestLocalDataset(t *testing.T) {
 	dataset := *localDatasetFlag
 	loadStart := time.Now()
 
-	db, ctx := SetupDB(t, dataset)
+	db, ctx := SetupDB(t, CleanupGraph, dataset)
 	idMap := LoadDataset(t, db, ctx, dataset)
 
 	t.Logf("load: %d nodes mapped in %s", len(idMap), time.Since(loadStart))

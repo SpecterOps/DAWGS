@@ -44,7 +44,7 @@ func TestPostgreSQLCountStoreFastPathRequiresRelationshipEndpoints(t *testing.T)
 	var (
 		nodeKind = graph.StringKind("CountFastPathNode")
 		edgeKind = graph.StringKind("CountFastPathEdge")
-		db, ctx  = SetupDBWithKinds(t, 0, graph.Kinds{nodeKind}, graph.Kinds{edgeKind})
+		db, ctx  = SetupDBWithKinds(t, CleanupGraph, graph.Kinds{nodeKind}, graph.Kinds{edgeKind})
 	)
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {

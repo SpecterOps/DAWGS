@@ -316,11 +316,11 @@ func (s Options) graphQueryMemoryLimit() size.Size {
 // SetupDB opens a database connection for the selected driver, asserts a schema
 // derived from the given datasets, and registers cleanup. Returns the database
 // and a background context.
-func SetupDB(t *testing.T, datasets ...string) (graph.Database, context.Context) {
+func SetupDB(t *testing.T, cleanupMode CleanupMode, datasets ...string) (graph.Database, context.Context) {
 	t.Helper()
 
 	session := Open(t, Options{
-		CleanupMode:    0,
+		CleanupMode:    cleanupMode,
 		Datasets:       datasets,
 		ExtraNodeKinds: nil,
 		ExtraEdgeKinds: nil,

@@ -93,7 +93,7 @@ func TestCypher(t *testing.T) {
 		groups[ds].files = append(groups[ds].files, cf)
 	}
 
-	db, ctx := SetupDB(t, datasetNames...)
+	db, ctx := SetupDB(t, CleanupGraph, datasetNames...)
 
 	for _, g := range groups {
 		ClearGraph(t, db, ctx)
