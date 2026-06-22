@@ -15,6 +15,7 @@ const usage = `usage: retriever <command> [options]
 Commands:
   dump    Dump live Dawgs graph data into a manifest-based collection.
   load    Load a manifest-based collection into a Dawgs graph database.
+  verify  Verify loaded graph metrics against a dump manifest.
   bench   Benchmark read throughput for dump planning.
 `
 
@@ -48,6 +49,8 @@ func (s commandRuntime) run(ctx context.Context, args []string) error {
 		return s.runDump(ctx, args[1:])
 	case "load":
 		return s.runLoad(ctx, args[1:])
+	case "verify":
+		return s.runVerify(ctx, args[1:])
 	case "bench":
 		return s.runBench(ctx, args[1:])
 	default:
@@ -130,6 +133,7 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	commonDatabaseFlags(flags, &cfg.Database)
 	flags.StringVar(&cfg.InputDir, "in", "", "Input collection directory.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database write batch size.")
+	flags.BoolVar(&cfg.VerifyMetrics, "verify-metrics", false, "Verify loaded graph metrics against the dump manifest after load.")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -150,6 +154,38 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintf(s.stdout, "loaded %d graph(s)\nnodes: %d\nrelationships: %d\n", result.GraphCount, result.NodeCount, result.EdgeCount)
+	return nil
+}
+
+func (s commandRuntime) runVerify(ctx context.Context, args []string) error {
+	var cfg verifyOptions
+	cfg.BatchSize = defaultBatchSize
+
+	flags := flag.NewFlagSet("retriever verify", flag.ContinueOnError)
+	flags.SetOutput(s.stderr)
+	commonDatabaseFlags(flags, &cfg.Database)
+	flags.StringVar(&cfg.InputDir, "in", "", "Input collection directory.")
+	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	fillConnectionFromEnv(&cfg.Database)
+	if err := cfg.validate(); err != nil {
+		return err
+	}
+
+	db, driverName, err := openDatabase(ctx, cfg.Database)
+	if err != nil {
+		return err
+	}
+	defer db.Close(ctx)
+
+	result, err := Verify(ctx, db, driverName, cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(s.stdout, "verified %d graph(s)\nnodes: %d\nrelationships: %d\n", result.GraphCount, result.NodeCount, result.EdgeCount)
 	return nil
 }
 

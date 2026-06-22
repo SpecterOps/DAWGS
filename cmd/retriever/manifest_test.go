@@ -151,6 +151,39 @@ func TestWriteReadManifest(t *testing.T) {
 	}
 }
 
+func TestManifestValidateAcceptsMetrics(t *testing.T) {
+	value := newValidTestManifest(1)
+	metrics := buildFingerprintFixture(t, []fragmentNode{{
+		ID:    "a",
+		Kinds: []string{"User"},
+	}}, nil)
+	value.Graphs = []graphManifest{{
+		Name:      "default",
+		NodeCount: 1,
+		EdgeCount: 0,
+		Files: []fileManifest{{
+			Phase:           phaseNodes,
+			Path:            "graphs/default/nodes-000001.ogfrag.gz",
+			Count:           1,
+			CompressedBytes: 1,
+			SHA256:          "abc",
+		}},
+	}}
+	value.Metrics = &metricsManifest{
+		Version: metricsVersion,
+		Graphs:  []graphMetrics{metrics},
+	}
+
+	if err := value.validate(); err != nil {
+		t.Fatalf("validate manifest metrics: %v", err)
+	}
+
+	value.Metrics.Graphs[0].Fingerprint = "sha256:bad"
+	if err := value.validate(); err == nil {
+		t.Fatalf("expected metrics fingerprint validation error")
+	}
+}
+
 func newValidTestManifest(graphCount int) manifest {
 	return newManifest("pg", compressionGzip, defaultZstdLevel, scrubMetadata{
 		Mode:             scrubNone,

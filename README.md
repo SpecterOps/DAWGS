@@ -116,7 +116,7 @@ manifest-based collections of compact OpenGraph-derived fragments. It supports
 PostgreSQL and Neo4j, gzip and zstd compression, checksum validation before
 load, optional deterministic property scrubbing, and a read-throughput benchmark
 mode. See [cmd/retriever/README.md](cmd/retriever/README.md) for dump, load,
-scrubbed dump, and benchmark examples.
+scrubbed dump, metrics verification, and benchmark examples.
 
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective

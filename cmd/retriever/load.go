@@ -145,6 +145,35 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
 		)
 	}
+	if options.VerifyMetrics {
+		if nextManifest.Metrics == nil {
+			return loadResult{}, fmt.Errorf("manifest does not contain graph metrics; create a new dump with metrics support before verifying")
+		}
+
+		verifyStartedAt := time.Now()
+		slog.Info("retriever load metrics verification started",
+			slog.Int("graph_count", len(nextManifest.Graphs)),
+			slog.Int("batch_size", options.BatchSize),
+		)
+		actualMetrics, _, err := collectDatabaseMetrics(ctx, db, nextManifest.Graphs, options.BatchSize)
+		if err != nil {
+			return loadResult{}, err
+		}
+		differences := compareMetricsManifest(*nextManifest.Metrics, actualMetrics)
+		if len(differences) > 0 {
+			slog.Info("retriever load metrics verification failed",
+				slog.Int("difference_count", len(differences)),
+				slog.Duration("wall_elapsed", time.Since(verifyStartedAt)),
+			)
+			return loadResult{}, metricsMismatchError{
+				Differences: differences,
+			}
+		}
+		slog.Info("retriever load metrics verification passed",
+			slog.Int("graph_count", len(nextManifest.Graphs)),
+			slog.Duration("wall_elapsed", time.Since(verifyStartedAt)),
+		)
+	}
 	slog.Info("retriever load completed",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", result.GraphCount),

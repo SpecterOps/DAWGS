@@ -30,6 +30,13 @@ The manifest is written last as `manifest.json`; if a dump fails before that
 point, the directory is intentionally left for inspection without a success
 manifest.
 
+New dumps include a `retriever-metrics-v1` manifest section with graph metrics
+computed from the same node and relationship streams written to the fragments.
+The metrics include entity counts, kind histograms, degree histograms, endpoint
+kind-shape histograms, and a canonical SHA-256 fingerprint. They intentionally
+exclude IDs, property keys, property values, source identifiers, examples, and
+sampled paths.
+
 Rows inserted after the initial graph count are ignored once the counted entity
 total has been scanned. Deletes or other concurrent source mutations can still
 make the final dumped counts differ from the initial counts, in which case dump
@@ -75,6 +82,40 @@ preserved; load does not support overriding graph names.
 Load progress is emitted with `log/slog` on stderr. Notices mark manifest
 reading, checksum verification, schema assertion, graph boundaries, node and
 relationship phase boundaries, periodic entity progress, and completion.
+
+Pass `-verify-metrics` to scan the loaded destination graph after load and
+compare it against the metrics stored in the manifest:
+
+```bash
+retriever load \
+  -connection "$CONNECTION_STRING" \
+  -in ./dumpdir \
+  -verify-metrics
+```
+
+Metrics verification adds a full post-load node and relationship scan.
+
+## Verify
+
+```bash
+retriever verify \
+  -connection "$CONNECTION_STRING" \
+  -in ./dumpdir
+```
+
+Verification reads expected metrics from `manifest.json`, computes actual
+metrics from the destination graph database, and compares them strictly. A
+successful run prints the verified graph, node, and relationship counts. A
+mismatch exits non-zero and prints deterministic differences, for example:
+
+```text
+retriever: graph metrics mismatch:
+  graph "default" node_count: expected 884868, actual 884867
+```
+
+Use standalone verification when the load already happened or when you want the
+proof step to be a separate operational checkpoint. Older dumps without a
+metrics section cannot be verified with this command.
 
 ## Bench
 

@@ -179,24 +179,33 @@ Integration tests should run only when `CONNECTION_STRING` is available.
 
 ## Implementation Sequence
 
-1. Add metrics types, canonical serialization, fingerprinting, and pure tests.
-2. Add the metrics builder and tests.
-3. Wire the metrics builder into dump manifest generation.
-4. Add a destination database metrics scanner.
-5. Add strict comparison and deterministic diff output.
-6. Add `retriever verify`.
-7. Add optional `load -verify-metrics`.
-8. Add `slog` progress notices.
-9. Update `cmd/retriever/README.md`.
-10. Validate with `go test ./cmd/retriever`.
+1. Add pure metrics types, canonical serialization, fingerprinting, comparison,
+   and unit tests.
+2. Add a `metricsBuilder` that observes dumped nodes and relationships without
+   retaining attribution in the finalized metrics.
+3. Add optional manifest metrics validation so old manifests still load, while
+   new manifests can carry `retriever-metrics-v1` data.
+4. Wire the builder into the dump node and relationship streams so the manifest
+   proves the artifact that was actually written.
+5. Add a destination database metrics scanner using the existing ordered batch
+   read helpers.
+6. Add `retriever verify` to compare manifest metrics with destination graph
+   metrics and return deterministic diffs.
+7. Add explicit `retriever load -verify-metrics` support after standalone
+   verification works.
+8. Add `slog` progress notices around metrics collection, fingerprinting, and
+   verification.
+9. Update `cmd/retriever/README.md` with the proof workflow and performance
+   cost.
+10. Validate with `go test ./cmd/retriever` and a direct command build.
 
-## Open Question
+## Kind Name Decision
 
-Decide whether node kind names and relationship kind names are allowed in the
-proof artifact.
+Node kind names and relationship kind names are included in the proof artifact
+by default.
 
-Recommendation: include them by default because they are schema-level metrics
-and make the proof operationally useful.
+They are treated as schema-level metrics and make the proof operationally
+useful.
 
 If kind names are considered sensitive in some environments, add a future
 option such as:

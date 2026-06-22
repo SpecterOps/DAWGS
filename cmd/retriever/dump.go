@@ -74,6 +74,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 	)
 
 	nextManifest := newManifest(driverName, options.Compression, options.ZstdLevel, scrubInfo, len(targets))
+	nextMetrics := newMetricsManifest(len(targets))
 	var totalNodes, totalEdges int64
 
 	for targetIndex, target := range targets {
@@ -83,12 +84,13 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 			slog.Int("graph_index", targetIndex+1),
 			slog.Int("graph_count", len(targets)),
 		)
-		graphEntry, schemaEntry, err := dumpGraph(ctx, db, target, options, activeScrubber)
+		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, db, target, options, activeScrubber)
 		if err != nil {
 			return dumpResult{}, err
 		}
 		nextManifest.Graphs = append(nextManifest.Graphs, graphEntry)
 		nextManifest.Schema.Graphs = append(nextManifest.Schema.Graphs, schemaEntry)
+		nextMetrics.Graphs = append(nextMetrics.Graphs, metricsEntry)
 		addActionCounts(nextManifest.Scrub.NodeActionCounts, graphEntry.NodeActionCounts)
 		addActionCounts(nextManifest.Scrub.EdgeActionCounts, graphEntry.EdgeActionCounts)
 		totalNodes += graphEntry.NodeCount
@@ -101,6 +103,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
 		)
 	}
+	nextManifest.Metrics = &nextMetrics
 
 	slog.Info("retriever dump writing manifest",
 		slog.String("output_dir", options.OutputDir),
@@ -156,7 +159,7 @@ func prepareOutputDirectory(outputDir string, force bool) error {
 	return nil
 }
 
-func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, options dumpOptions, activeScrubber *scrubber) (graphManifest, graphSchemaMetadata, error) {
+func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, options dumpOptions, activeScrubber *scrubber) (graphManifest, graphSchemaMetadata, graphMetrics, error) {
 	targetGraph := graph.Graph{
 		Name: target.Name,
 	}
@@ -167,7 +170,7 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	)
 	entitySnapshot, err := countGraphEntitySnapshot(ctx, db, targetGraph)
 	if err != nil {
-		return graphManifest{}, graphSchemaMetadata{}, err
+		return graphManifest{}, graphSchemaMetadata{}, graphMetrics{}, err
 	}
 	slog.Info("retriever dump graph counts ready",
 		slog.String("graph", target.Name),
@@ -185,7 +188,7 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		)
 		observedNodes, err := collectScrubRegistry(ctx, db, targetGraph, options.BatchSize, activeScrubber, entitySnapshot)
 		if err != nil {
-			return graphManifest{}, graphSchemaMetadata{}, err
+			return graphManifest{}, graphSchemaMetadata{}, graphMetrics{}, err
 		}
 		slog.Info("retriever dump scrub pre-pass completed",
 			slog.String("graph", target.Name),
@@ -203,6 +206,7 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	}
 	nodeKinds := map[string]struct{}{}
 	edgeKinds := map[string]struct{}{}
+	metricsBuilder := newMetricsBuilder(target.Name, entitySnapshot.NodeCount)
 
 	nodeStartedAt := time.Now()
 	slog.Info("retriever dump node phase started",
@@ -211,9 +215,9 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("shard_size", options.ShardSize),
 	)
-	nodeFiles, err := dumpNodePhase(ctx, db, targetGraph, options, activeScrubber, nodeKinds, graphEntry.NodeActionCounts, entitySnapshot)
+	nodeFiles, err := dumpNodePhase(ctx, db, targetGraph, options, activeScrubber, nodeKinds, graphEntry.NodeActionCounts, entitySnapshot, metricsBuilder)
 	if err != nil {
-		return graphManifest{}, graphSchemaMetadata{}, err
+		return graphManifest{}, graphSchemaMetadata{}, graphMetrics{}, err
 	}
 	graphEntry.Files = append(graphEntry.Files, nodeFiles...)
 	slog.Info("retriever dump node phase completed",
@@ -230,9 +234,9 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("shard_size", options.ShardSize),
 	)
-	edgeFiles, err := dumpEdgePhase(ctx, db, targetGraph, options, activeScrubber, edgeKinds, graphEntry.EdgeActionCounts, entitySnapshot)
+	edgeFiles, err := dumpEdgePhase(ctx, db, targetGraph, options, activeScrubber, edgeKinds, graphEntry.EdgeActionCounts, entitySnapshot, metricsBuilder)
 	if err != nil {
-		return graphManifest{}, graphSchemaMetadata{}, err
+		return graphManifest{}, graphSchemaMetadata{}, graphMetrics{}, err
 	}
 	graphEntry.Files = append(graphEntry.Files, edgeFiles...)
 	slog.Info("retriever dump edge phase completed",
@@ -243,18 +247,25 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	)
 
 	if fileTotal(nodeFiles) != entitySnapshot.NodeCount {
-		return graphManifest{}, graphSchemaMetadata{}, fmt.Errorf("dumped %d nodes for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", fileTotal(nodeFiles), target.Name, entitySnapshot.NodeCount)
+		return graphManifest{}, graphSchemaMetadata{}, graphMetrics{}, fmt.Errorf("dumped %d nodes for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", fileTotal(nodeFiles), target.Name, entitySnapshot.NodeCount)
 	}
 	if fileTotal(edgeFiles) != entitySnapshot.EdgeCount {
-		return graphManifest{}, graphSchemaMetadata{}, fmt.Errorf("dumped %d relationships for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", fileTotal(edgeFiles), target.Name, entitySnapshot.EdgeCount)
+		return graphManifest{}, graphSchemaMetadata{}, graphMetrics{}, fmt.Errorf("dumped %d relationships for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", fileTotal(edgeFiles), target.Name, entitySnapshot.EdgeCount)
 	}
+	metricsEntry := metricsBuilder.finalize()
+	slog.Info("retriever dump metrics fingerprint computed",
+		slog.String("graph", target.Name),
+		slog.String("fingerprint", metricsEntry.Fingerprint),
+		slog.Int64("node_count", metricsEntry.NodeCount),
+		slog.Int64("edge_count", metricsEntry.EdgeCount),
+	)
 
 	schemaEntry := graphSchemaMetadata{
 		Name:      target.Name,
 		NodeKinds: stringsFromKindSet(nodeKinds),
 		EdgeKinds: stringsFromKindSet(edgeKinds),
 	}
-	return graphEntry, schemaEntry, nil
+	return graphEntry, schemaEntry, metricsEntry, nil
 }
 
 func collectScrubRegistry(ctx context.Context, db graph.Database, targetGraph graph.Graph, batchSize int, activeScrubber *scrubber, entitySnapshot graphEntitySnapshot) (int64, error) {
@@ -318,7 +329,7 @@ func countGraphEntitySnapshot(ctx context.Context, db graph.Database, targetGrap
 	return entitySnapshot, nil
 }
 
-func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, nodeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot) ([]fileManifest, error) {
+func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, nodeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot, metricsBuilder *metricsBuilder) ([]fileManifest, error) {
 	if entitySnapshot.NodeCount == 0 {
 		return nil, nil
 	}
@@ -375,11 +386,15 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 				addActionCounts(shardActionCounts, actionCounts)
 				addActionCounts(graphActionCounts, actionCounts)
 			}
-			items = append(items, fragmentNode{
+			item := fragmentNode{
 				ID:         node.ID.String(),
 				Kinds:      kinds,
 				Properties: properties,
-			})
+			}
+			if err := metricsBuilder.observeFragmentNode(item); err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 			if len(items) >= options.ShardSize {
 				if err := flush(); err != nil {
 					return nil, err
@@ -398,7 +413,7 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, edgeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot) ([]fileManifest, error) {
+func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, edgeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot, metricsBuilder *metricsBuilder) ([]fileManifest, error) {
 	if entitySnapshot.EdgeCount == 0 {
 		return nil, nil
 	}
@@ -457,12 +472,16 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 				addActionCounts(shardActionCounts, actionCounts)
 				addActionCounts(graphActionCounts, actionCounts)
 			}
-			items = append(items, fragmentEdge{
+			item := fragmentEdge{
 				StartID:    relationship.StartID.String(),
 				EndID:      relationship.EndID.String(),
 				Kind:       kind,
 				Properties: properties,
-			})
+			}
+			if err := metricsBuilder.observeFragmentEdge(item); err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 			if len(items) >= options.ShardSize {
 				if err := flush(); err != nil {
 					return nil, err

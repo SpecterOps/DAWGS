@@ -48,6 +48,7 @@ type manifest struct {
 	IDStrategy       string           `json:"id_strategy"`
 	Schema           schemaMetadata   `json:"schema"`
 	Graphs           []graphManifest  `json:"graphs"`
+	Metrics          *metricsManifest `json:"metrics,omitempty"`
 	Warnings         []string         `json:"warnings,omitempty"`
 }
 
@@ -188,6 +189,11 @@ func (s manifest) validate() error {
 		}
 		if graphEntry.EdgeCount != edgeFiles {
 			return fmt.Errorf("manifest graph %q edge_count %d does not match edge file total %d", graphEntry.Name, graphEntry.EdgeCount, edgeFiles)
+		}
+	}
+	if s.Metrics != nil {
+		if err := validateMetricsManifest(*s.Metrics, s.Graphs); err != nil {
+			return err
 		}
 	}
 

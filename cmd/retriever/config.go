@@ -122,12 +122,29 @@ func (s dumpOptions) validate() error {
 }
 
 type loadOptions struct {
+	Database      databaseConfig
+	InputDir      string
+	BatchSize     int
+	VerifyMetrics bool
+}
+
+func (s loadOptions) validate() error {
+	if strings.TrimSpace(s.InputDir) == "" {
+		return fmt.Errorf("input directory is required; pass -in")
+	}
+	if s.BatchSize <= 0 {
+		return fmt.Errorf("batch-size must be > 0")
+	}
+	return nil
+}
+
+type verifyOptions struct {
 	Database  databaseConfig
 	InputDir  string
 	BatchSize int
 }
 
-func (s loadOptions) validate() error {
+func (s verifyOptions) validate() error {
 	if strings.TrimSpace(s.InputDir) == "" {
 		return fmt.Errorf("input directory is required; pass -in")
 	}

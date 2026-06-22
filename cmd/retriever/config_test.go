@@ -88,6 +88,18 @@ func TestOptionsValidate(t *testing.T) {
 		t.Fatalf("expected missing input dir")
 	}
 
+	verify := verifyOptions{
+		InputDir:  t.TempDir(),
+		BatchSize: 1,
+	}
+	if err := verify.validate(); err != nil {
+		t.Fatalf("valid verify options: %v", err)
+	}
+	verify.BatchSize = 0
+	if err := verify.validate(); err == nil {
+		t.Fatalf("expected invalid verify batch size")
+	}
+
 	bench := benchOptions{
 		Workers:    []int{1},
 		BatchSize:  1,
