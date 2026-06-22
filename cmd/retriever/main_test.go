@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -55,5 +57,32 @@ func TestCommandRuntimeHelpAndValidation(t *testing.T) {
 	err = runtime.run(context.Background(), []string{"bench", "-workers", "0"})
 	if err == nil || !strings.Contains(err.Error(), "worker counts must be > 0") {
 		t.Fatalf("expected worker validation error, got %v", err)
+	}
+}
+
+func TestDumpArchiveOutputPreflightBeforeDatabase(t *testing.T) {
+	runtime := commandRuntime{
+		stdout: &bytes.Buffer{},
+		stderr: &bytes.Buffer{},
+	}
+	dir := t.TempDir()
+	privatePath := filepath.Join(dir, "private.key")
+	publicPath := filepath.Join(dir, "public.key")
+	if err := generateArchiveKeyFiles(privatePath, publicPath); err != nil {
+		t.Fatalf("generate archive keys: %v", err)
+	}
+	archivePath := filepath.Join(dir, "dump.tar.pq")
+	if err := os.WriteFile(archivePath, []byte("exists"), 0o600); err != nil {
+		t.Fatalf("write existing archive: %v", err)
+	}
+
+	err := runtime.run(context.Background(), []string{
+		"dump",
+		"-out", filepath.Join(dir, "dump"),
+		"-archive-out", archivePath,
+		"-recipient", publicPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected archive preflight error before database open, got %v", err)
 	}
 }

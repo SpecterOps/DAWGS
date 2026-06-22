@@ -67,14 +67,8 @@ type encryptedArchiveReader struct {
 
 func writeEncryptedCollectionArchive(dumpDir, archivePath string, recipient hpke.PublicKey) error {
 	archivePath = strings.TrimSpace(archivePath)
-	if archivePath == "" {
-		return fmt.Errorf("archive output path is required")
-	}
-	if err := requirePathDoesNotExist(archivePath); err != nil {
+	if err := preflightArchiveOutputPath(archivePath); err != nil {
 		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
-		return fmt.Errorf("create archive parent directory: %w", err)
 	}
 
 	tempFile, err := os.CreateTemp(filepath.Dir(archivePath), filepath.Base(archivePath)+".*.tmp")
@@ -122,12 +116,52 @@ func writeEncryptedCollectionArchive(dumpDir, archivePath string, recipient hpke
 	return nil
 }
 
+func preflightArchiveOutputPath(archivePath string) error {
+	archivePath = strings.TrimSpace(archivePath)
+	if archivePath == "" {
+		return fmt.Errorf("archive output path is required")
+	}
+	if err := requirePathDoesNotExist(archivePath); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		return fmt.Errorf("create archive parent directory: %w", err)
+	}
+
+	tempFile, err := os.CreateTemp(filepath.Dir(archivePath), filepath.Base(archivePath)+".preflight-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create archive preflight temp file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	closeErr := tempFile.Close()
+	removeErr := os.Remove(tempPath)
+	if closeErr != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("close archive preflight temp file: %w", closeErr)
+	}
+	if removeErr != nil {
+		return fmt.Errorf("remove archive preflight temp file: %w", removeErr)
+	}
+	return requirePathDoesNotExist(archivePath)
+}
+
 func unpackEncryptedCollectionArchive(archivePath, outputDir string, force bool, identity hpke.PrivateKey) error {
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("open archive: %w", err)
 	}
 	defer file.Close()
+
+	stagingDir, err := createUnpackStagingDirectory(outputDir, force)
+	if err != nil {
+		return err
+	}
+	cleanupStaging := true
+	defer func() {
+		if cleanupStaging {
+			_ = os.RemoveAll(stagingDir)
+		}
+	}()
 
 	slog.Info("retriever archive decryption started",
 		slog.String("archive", archivePath),
@@ -137,16 +171,116 @@ func unpackEncryptedCollectionArchive(archivePath, outputDir string, force bool,
 	if err != nil {
 		return err
 	}
-	if err := unpackTar(archiveReader, outputDir, force); err != nil {
+	if err := unpackTar(archiveReader, stagingDir, false); err != nil {
 		return err
 	}
 	if _, err := io.Copy(io.Discard, archiveReader); err != nil {
 		return fmt.Errorf("finish encrypted archive stream: %w", err)
 	}
+	if err := validateUnpackedCollection(stagingDir); err != nil {
+		return err
+	}
+	if err := promoteUnpackStagingDirectory(stagingDir, outputDir, force); err != nil {
+		return err
+	}
+	cleanupStaging = false
 	slog.Info("retriever archive decryption completed",
 		slog.String("archive", archivePath),
 		slog.String("output_dir", outputDir),
 	)
+	return nil
+}
+
+func createUnpackStagingDirectory(outputDir string, force bool) (string, error) {
+	outputDir = strings.TrimSpace(outputDir)
+	if outputDir == "" {
+		return "", fmt.Errorf("output directory is required; pass -out")
+	}
+	if err := preflightUnpackOutputDirectory(outputDir, force); err != nil {
+		return "", err
+	}
+
+	parentDir := filepath.Dir(outputDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return "", fmt.Errorf("create unpack parent directory: %w", err)
+	}
+	stagingDir, err := os.MkdirTemp(parentDir, "."+filepath.Base(outputDir)+".unpack-*.tmp")
+	if err != nil {
+		return "", fmt.Errorf("create unpack staging directory: %w", err)
+	}
+	return stagingDir, nil
+}
+
+func preflightUnpackOutputDirectory(outputDir string, force bool) error {
+	info, err := os.Stat(outputDir)
+	if err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("output path %q exists and is not a directory", outputDir)
+		}
+		entries, err := os.ReadDir(outputDir)
+		if err != nil {
+			return fmt.Errorf("read output directory: %w", err)
+		}
+		if len(entries) > 0 && !force {
+			return fmt.Errorf("output directory %q is not empty; pass -force to replace it", outputDir)
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect output directory: %w", err)
+	}
+	return nil
+}
+
+func validateUnpackedCollection(outputDir string) error {
+	nextManifest, err := readManifest(outputDir)
+	if err != nil {
+		return err
+	}
+	if err := verifyManifestFiles(outputDir, nextManifest); err != nil {
+		return err
+	}
+
+	expectedPaths, err := archivePathsFromManifest(nextManifest)
+	if err != nil {
+		return err
+	}
+	expected := make(map[string]struct{}, len(expectedPaths))
+	for _, relativePath := range expectedPaths {
+		expected[relativePath] = struct{}{}
+	}
+	if err := filepath.WalkDir(outputDir, func(filePath string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relativePath, err := filepath.Rel(outputDir, filePath)
+		if err != nil {
+			return err
+		}
+		archivePath := filepath.ToSlash(relativePath)
+		if _, ok := expected[archivePath]; !ok {
+			return fmt.Errorf("unpacked archive contains unexpected file %q", archivePath)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func promoteUnpackStagingDirectory(stagingDir, outputDir string, force bool) error {
+	if err := preflightUnpackOutputDirectory(outputDir, force); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(outputDir); err != nil {
+		return fmt.Errorf("replace output directory: %w", err)
+	}
+	if err := os.Rename(stagingDir, outputDir); err != nil {
+		return fmt.Errorf("promote unpacked archive: %w", err)
+	}
 	return nil
 }
 

@@ -120,6 +120,9 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := preflightArchiveOutputPath(cfg.ArchiveOut); err != nil {
+			return err
+		}
 	}
 
 	db, driverName, err := openDatabase(ctx, cfg.Database)

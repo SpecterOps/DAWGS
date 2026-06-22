@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"crypto/hpke"
 	"encoding/binary"
@@ -129,6 +130,69 @@ func TestEncryptedCollectionArchiveSyntheticRoundTrip(t *testing.T) {
 
 	if _, err := os.Stat(archivePath + ".tmp"); !os.IsNotExist(err) {
 		t.Fatalf("expected archive temp path cleanup, got %v", err)
+	}
+}
+
+func TestEncryptedCollectionArchiveFailureDoesNotReplaceOutput(t *testing.T) {
+	privateKey, publicKey := generateTestArchiveKeyPair(t)
+	dir := t.TempDir()
+	dumpDir := writeArchiveFixture(t)
+	goodArchivePath := filepath.Join(dir, "good.tar.pq")
+	if err := writeEncryptedCollectionArchive(dumpDir, goodArchivePath, publicKey); err != nil {
+		t.Fatalf("write encrypted collection archive: %v", err)
+	}
+	goodPayload, err := os.ReadFile(goodArchivePath)
+	if err != nil {
+		t.Fatalf("read good archive: %v", err)
+	}
+	badArchivePath := filepath.Join(dir, "bad.tar.pq")
+	if err := os.WriteFile(badArchivePath, stripFinalArchiveFrame(t, goodPayload), 0o600); err != nil {
+		t.Fatalf("write bad archive: %v", err)
+	}
+
+	outputDir := filepath.Join(dir, "out")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatalf("create output dir: %v", err)
+	}
+	oldPath := filepath.Join(outputDir, "old")
+	if err := os.WriteFile(oldPath, []byte("keep me"), 0o600); err != nil {
+		t.Fatalf("write old output: %v", err)
+	}
+
+	err = unpackEncryptedCollectionArchive(badArchivePath, outputDir, true, privateKey)
+	if err == nil || !strings.Contains(err.Error(), "final frame") {
+		t.Fatalf("expected missing final frame error, got %v", err)
+	}
+	contents, err := os.ReadFile(oldPath)
+	if err != nil {
+		t.Fatalf("read old output after failed unpack: %v", err)
+	}
+	if string(contents) != "keep me" {
+		t.Fatalf("old output was replaced after failed unpack: %q", contents)
+	}
+}
+
+func TestEncryptedCollectionArchiveRejectsInvalidCollection(t *testing.T) {
+	privateKey, publicKey := generateTestArchiveKeyPair(t)
+	dir := t.TempDir()
+	archivePayload := encryptArchiveBytes(t, buildTarPayload(t, &tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     "extra.txt",
+		Mode:     0o600,
+		Size:     int64(len("not a collection")),
+	}, []byte("not a collection")), publicKey)
+	archivePath := filepath.Join(dir, "invalid.tar.pq")
+	if err := os.WriteFile(archivePath, archivePayload, 0o600); err != nil {
+		t.Fatalf("write invalid archive: %v", err)
+	}
+
+	outputDir := filepath.Join(dir, "out")
+	err := unpackEncryptedCollectionArchive(archivePath, outputDir, false, privateKey)
+	if err == nil || !strings.Contains(err.Error(), "read manifest") {
+		t.Fatalf("expected manifest validation error, got %v", err)
+	}
+	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+		t.Fatalf("invalid collection was promoted to output dir: %v", err)
 	}
 }
 

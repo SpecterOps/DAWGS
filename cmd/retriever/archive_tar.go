@@ -145,6 +145,16 @@ func writeCollectionTarFile(tarWriter *tar.Writer, dumpDir, relativePath string)
 		return fmt.Errorf("open archive file %q: %w", relativePath, err)
 	}
 	defer file.Close()
+	openInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat archive file %q: %w", relativePath, err)
+	}
+	if !openInfo.Mode().IsRegular() {
+		return fmt.Errorf("archive file %q is not a regular file", relativePath)
+	}
+	if !os.SameFile(info, openInfo) {
+		return fmt.Errorf("archive file %q changed while packaging", relativePath)
+	}
 
 	copied, err := io.Copy(tarWriter, file)
 	if err != nil {
