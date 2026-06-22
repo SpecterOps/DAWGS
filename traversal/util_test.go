@@ -89,6 +89,8 @@ func (m *mockGraphDB) Run(ctx context.Context, query string, parameters map[stri
 	return nil
 }
 
+func (m *mockGraphDB) OptimizeStorage(ctx context.Context) error { return nil }
+
 func collectionPath(startID, endID, relationshipID graph.ID) graph.Path {
 	return graph.Path{
 		Nodes: []*graph.Node{
