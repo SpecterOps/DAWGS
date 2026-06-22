@@ -264,9 +264,7 @@ func (s Future[U]) TypeHint() DataType {
 }
 
 func (s Future[U]) NodeType() string {
-	var (
-		emptyU U
-	)
+	var emptyU U
 
 	return fmt.Sprintf("syntax_node_future[%T]", emptyU)
 }
@@ -1296,4 +1294,12 @@ func OptionalAnd(leftOperand Expression, rightOperand Expression) Expression {
 	}
 
 	return NewBinaryExpression(leftOperand, OperatorAnd, rightOperand)
+}
+
+func OptionalParenthetical(optional Expression) Expression {
+	if optional == nil {
+		return nil
+	}
+
+	return NewParenthetical(optional)
 }

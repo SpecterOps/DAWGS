@@ -28,51 +28,80 @@ func (s *Translator) preparePatternPredicate(predicate *cypher.PatternPredicate)
 }
 
 func (s *Translator) buildOptimizedRelationshipExistPredicate(part *PatternPart, traversalStep *TraversalStep) (pgsql.Expression, error) {
-	var whereClause pgsql.Expression = pgsql.NewBinaryExpression(
-		pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-			pgsql.OperatorEquals,
-			pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-		pgsql.OperatorOr,
-		pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
-			pgsql.OperatorEquals,
-			pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-	)
-
-	if traversalStep.RightNodeBound {
-		var (
-			forward = pgsql.NewBinaryExpression(
+	var whereClause pgsql.Expression
+	if traversalStep.LeftNodeBound && traversalStep.RightNodeBound {
+		// Pair-wise bounds on the directionless relationship
+		whereClause = pgsql.NewBinaryExpression(
+			pgsql.NewParenthetical(
 				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-				pgsql.OperatorAnd,
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+					),
+					pgsql.OperatorAnd,
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+					),
+				),
+			),
+			pgsql.OperatorOr,
+			pgsql.NewParenthetical(
 				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
-			)
-			reverse = pgsql.NewBinaryExpression(
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID}),
-				pgsql.OperatorAnd,
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID}),
-			)
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+					),
+					pgsql.OperatorAnd,
+					pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+					),
+				),
+			),
 		)
-
-		whereClause = pgsql.NewBinaryExpression(forward, pgsql.OperatorOr, reverse)
+	} else if traversalStep.RightNodeBound {
+		whereClause = pgsql.NewBinaryExpression(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+			),
+			pgsql.OperatorOr,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+			),
+		)
+	} else if traversalStep.LeftNodeBound {
+		whereClause = pgsql.NewBinaryExpression(
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+			),
+			pgsql.OperatorOr,
+			pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnEndID},
+				pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+			),
+		)
+	} else {
+		// Neither side of the traversal is bound, so this becomes a "select everything from edges"
+		whereClause = nil
 	}
 
+	// Pull edge constraints in to the exists check
 	if constraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(pgsql.AsIdentifierSet(traversalStep.Edge.Identifier)); err != nil {
 		return nil, err
 	} else {
-		whereClause = pgsql.OptionalAnd(constraint.Expression, pgsql.NewParenthetical(whereClause))
+		whereClause = pgsql.OptionalAnd(constraint.Expression, pgsql.OptionalParenthetical(whereClause))
 	}
 
 	if err := RewriteFrameBindings(s.scope, whereClause); err != nil {
@@ -191,7 +220,7 @@ func (s *Translator) buildPatternPredicates() error {
 					traversalStepQuery pgsql.Query
 					err                error
 				)
-				if traversalStep.Direction != graph.DirectionBoth && (traversalStep.LeftNodeBound || traversalStep.RightNodeBound) {
+				if traversalStep.LeftNodeBound || traversalStep.RightNodeBound {
 					traversalStepQuery, err = s.buildTraversalPatternRootWithOuterCorrelation(traversalStep.Frame, traversalStep)
 				} else {
 					traversalStepQuery, err = s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep)

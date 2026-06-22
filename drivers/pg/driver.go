@@ -176,3 +176,13 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
 	return s.SchemaManager.Fetch(ctx)
 }
+
+func (s *Driver) OptimizeStorage(ctx context.Context) error {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for VACUUM: %w", err)
+	}
+	defer conn.Release()
+
+	return optimizeStorage(ctx, conn)
+}
