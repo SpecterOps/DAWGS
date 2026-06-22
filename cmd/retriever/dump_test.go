@@ -3,9 +3,6 @@ package main
 import (
 	"path/filepath"
 	"testing"
-
-	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
 )
 
 func TestFragmentPath(t *testing.T) {
@@ -100,44 +97,5 @@ func TestKindAndActionHelpers(t *testing.T) {
 	})
 	if total != 5 {
 		t.Fatalf("file total = %d", total)
-	}
-}
-
-func TestEntityIDScanCriteria(t *testing.T) {
-	if criteria := entityIDScanCriteria(query.NodeID(), 0, false, 0, false); criteria != nil {
-		t.Fatalf("expected no criteria without bounds")
-	}
-
-	cases := []struct {
-		name       string
-		afterID    graph.ID
-		hasAfterID bool
-		maxID      graph.ID
-		hasMaxID   bool
-	}{
-		{
-			name:       "after",
-			afterID:    1,
-			hasAfterID: true,
-		},
-		{
-			name:     "max",
-			maxID:    10,
-			hasMaxID: true,
-		},
-		{
-			name:       "range",
-			afterID:    1,
-			hasAfterID: true,
-			maxID:      10,
-			hasMaxID:   true,
-		},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			if criteria := entityIDScanCriteria(query.NodeID(), testCase.afterID, testCase.hasAfterID, testCase.maxID, testCase.hasMaxID); criteria == nil {
-				t.Fatalf("expected criteria")
-			}
-		})
 	}
 }

@@ -113,7 +113,7 @@ func (s dumpOptions) validate() error {
 		return nil
 	case scrubFull:
 		if strings.TrimSpace(s.Salt) == "" {
-			return fmt.Errorf("-scrub full requires -salt or RETRIEVR_SCRUB_SALT; refusing to write scrubbed output without deterministic pseudonymization")
+			return fmt.Errorf("-scrub full requires -salt, RETRIEVER_SCRUB_SALT, or legacy RETRIEVR_SCRUB_SALT; refusing to write scrubbed output without deterministic pseudonymization")
 		}
 		return nil
 	default:

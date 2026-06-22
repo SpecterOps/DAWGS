@@ -56,7 +56,7 @@ func TestScrubberDeterministic(t *testing.T) {
 }
 
 func TestScrubberConfigFileShape(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "retrievr.toml")
+	configPath := filepath.Join(t.TempDir(), "retriever.toml")
 	writeTestFile(t, configPath, []byte(`
 [scrub]
 fake_domain = "scrub.example"

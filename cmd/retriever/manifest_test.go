@@ -14,6 +14,15 @@ func TestManifestValidateRejectsUnsupportedFormat(t *testing.T) {
 	}
 }
 
+func TestManifestValidateAcceptsLegacyFormat(t *testing.T) {
+	value := newValidTestManifest(0)
+	value.Format = legacyManifestFormat
+
+	if err := value.validate(); err != nil {
+		t.Fatalf("validate legacy manifest format: %v", err)
+	}
+}
+
 func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
 	value := newValidTestManifest(1)
 	value.Graphs = []graphManifest{{

@@ -20,16 +20,16 @@ func TestBenchSamplingHelpers(t *testing.T) {
 	if got := benchPlannedCount(0, 10); got != 0 {
 		t.Fatalf("planned empty count = %d", got)
 	}
-	if got := benchBatchLimit(3, 10); got != 3 {
+	if got := retrieverBatchLimit(3, 10); got != 3 {
 		t.Fatalf("batch limit for remainder = %d", got)
 	}
-	if got := benchBatchLimit(20, 10); got != 10 {
+	if got := retrieverBatchLimit(20, 10); got != 10 {
 		t.Fatalf("batch limit for full batch = %d", got)
 	}
-	if got := retrievrInitialProgressAt(retrievrProgressEntityInterval); got != 0 {
+	if got := retrieverInitialProgressAt(retrieverProgressEntityInterval); got != 0 {
 		t.Fatalf("unexpected progress threshold for exact interval: %d", got)
 	}
-	if got := retrievrInitialProgressAt(retrievrProgressEntityInterval + 1); got != retrievrProgressEntityInterval {
+	if got := retrieverInitialProgressAt(retrieverProgressEntityInterval + 1); got != retrieverProgressEntityInterval {
 		t.Fatalf("unexpected progress threshold: %d", got)
 	}
 }

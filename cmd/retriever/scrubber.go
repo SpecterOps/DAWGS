@@ -13,7 +13,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-const scrubRulesVersion = "retrievr-scrub-v1"
+const scrubRulesVersion = "retriever-scrub-v1"
 
 type propertyAction string
 

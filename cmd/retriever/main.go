@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const usage = `usage: retrievr <command> [options]
+const usage = `usage: retriever <command> [options]
 
 Commands:
   dump    Dump live Dawgs graph data into a manifest-based collection.
@@ -29,7 +29,7 @@ func main() {
 		stderr: os.Stderr,
 	}
 	if err := runtime.run(context.Background(), os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "retrievr: %v\n", err)
+		fmt.Fprintf(os.Stderr, "retriever: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -70,7 +70,7 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	cfg.ShardSize = defaultShardSize
 	cfg.BatchSize = defaultBatchSize
 
-	flags := flag.NewFlagSet("retrievr dump", flag.ContinueOnError)
+	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
 	flags.SetOutput(s.stderr)
 	commonDatabaseFlags(flags, &cfg.Database)
 	flags.Var(&graphs, "graph", "Graph target. May be repeated.")
@@ -78,8 +78,8 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	flags.StringVar(&cfg.OutputDir, "out", "", "Output collection directory.")
 	flags.BoolVar(&cfg.Force, "force", false, "Replace an existing non-empty output directory.")
 	flags.StringVar(&scrubValue, "scrub", string(cfg.Scrub), "Scrub mode: none or full.")
-	flags.StringVar(&cfg.Salt, "salt", "", "Scrub salt. Overrides RETRIEVR_SCRUB_SALT and is never written.")
-	flags.StringVar(&cfg.ScrubConfigPath, "config", "", "Optional retrievr TOML config for scrub classifier settings.")
+	flags.StringVar(&cfg.Salt, "salt", "", "Scrub salt. Overrides RETRIEVER_SCRUB_SALT and is never written.")
+	flags.StringVar(&cfg.ScrubConfigPath, "config", "", "Optional retriever TOML config for scrub classifier settings.")
 	flags.StringVar(&compressionVal, "compression", string(cfg.Compression), "Compression codec: zstd or gzip.")
 	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
 	flags.IntVar(&cfg.ShardSize, "shard-size", cfg.ShardSize, "Maximum entities per fragment.")
@@ -93,7 +93,10 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	cfg.Scrub = scrubMode(strings.TrimSpace(scrubValue))
 	cfg.Compression = compressionCodec(strings.TrimSpace(compressionVal))
 	if strings.TrimSpace(cfg.Salt) == "" {
-		cfg.Salt = strings.TrimSpace(os.Getenv("RETRIEVR_SCRUB_SALT"))
+		cfg.Salt = strings.TrimSpace(os.Getenv("RETRIEVER_SCRUB_SALT"))
+		if cfg.Salt == "" {
+			cfg.Salt = strings.TrimSpace(os.Getenv("RETRIEVR_SCRUB_SALT"))
+		}
 	}
 	if err := cfg.validate(); err != nil {
 		return err
@@ -122,7 +125,7 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	var cfg loadOptions
 	cfg.BatchSize = defaultBatchSize
 
-	flags := flag.NewFlagSet("retrievr load", flag.ContinueOnError)
+	flags := flag.NewFlagSet("retriever load", flag.ContinueOnError)
 	flags.SetOutput(s.stderr)
 	commonDatabaseFlags(flags, &cfg.Database)
 	flags.StringVar(&cfg.InputDir, "in", "", "Input collection directory.")
@@ -163,7 +166,7 @@ func (s commandRuntime) runBench(ctx context.Context, args []string) error {
 	cfg.ZstdLevel = defaultZstdLevel
 	workers = workerList{1}
 
-	flags := flag.NewFlagSet("retrievr bench", flag.ContinueOnError)
+	flags := flag.NewFlagSet("retriever bench", flag.ContinueOnError)
 	flags.SetOutput(s.stderr)
 	commonDatabaseFlags(flags, &cfg.Database)
 	flags.Var(&graphs, "graph", "Graph target. May be repeated.")

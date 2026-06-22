@@ -59,7 +59,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 	}
 
 	startedAt := time.Now()
-	slog.Info("retrievr bench started",
+	slog.Info("retriever bench started",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", len(targets)),
 		slog.Int("batch_size", options.BatchSize),
@@ -75,7 +75,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 	}
 	for targetIndex, target := range targets {
 		graphStartedAt := time.Now()
-		slog.Info("retrievr bench graph started",
+		slog.Info("retriever bench graph started",
 			slog.String("graph", target.Name),
 			slog.Int("graph_index", targetIndex+1),
 			slog.Int("graph_count", len(targets)),
@@ -84,14 +84,14 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 		targetGraph := graph.Graph{
 			Name: target.Name,
 		}
-		slog.Info("retrievr bench counting graph entities",
+		slog.Info("retriever bench counting graph entities",
 			slog.String("graph", target.Name),
 		)
 		nodeCount, edgeCount, err := countGraphEntities(ctx, db, targetGraph)
 		if err != nil {
 			return benchReport{}, err
 		}
-		slog.Info("retrievr bench graph counts ready",
+		slog.Info("retriever bench graph counts ready",
 			slog.String("graph", target.Name),
 			slog.Int64("node_count", nodeCount),
 			slog.Int64("edge_count", edgeCount),
@@ -102,7 +102,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 		}
 		for workerIndex, workerCount := range options.Workers {
 			workerStartedAt := time.Now()
-			slog.Info("retrievr bench worker run started",
+			slog.Info("retriever bench worker run started",
 				slog.String("graph", target.Name),
 				slog.Int("worker_count", workerCount),
 				slog.Int("worker_index", workerIndex+1),
@@ -112,7 +112,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 			)
 
 			plannedNodes := benchPlannedCount(nodeCount, options.SampleSize)
-			slog.Info("retrievr bench node phase started",
+			slog.Info("retriever bench node phase started",
 				slog.String("graph", target.Name),
 				slog.Int("worker_count", workerCount),
 				slog.Int64("node_count", nodeCount),
@@ -122,7 +122,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 			if err != nil {
 				return benchReport{}, err
 			}
-			slog.Info("retrievr bench node phase completed",
+			slog.Info("retriever bench node phase completed",
 				slog.String("graph", target.Name),
 				slog.Int("worker_count", workerCount),
 				slog.Int64("processed", nodeResult.Count),
@@ -133,7 +133,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 			)
 
 			plannedEdges := benchPlannedCount(edgeCount, options.SampleSize)
-			slog.Info("retrievr bench edge phase started",
+			slog.Info("retriever bench edge phase started",
 				slog.String("graph", target.Name),
 				slog.Int("worker_count", workerCount),
 				slog.Int64("edge_count", edgeCount),
@@ -143,7 +143,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 			if err != nil {
 				return benchReport{}, err
 			}
-			slog.Info("retrievr bench edge phase completed",
+			slog.Info("retriever bench edge phase completed",
 				slog.String("graph", target.Name),
 				slog.Int("worker_count", workerCount),
 				slog.Int64("processed", edgeResult.Count),
@@ -176,7 +176,7 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 				CompressedBytes:          nodeResult.CompressedByteSize + edgeResult.CompressedByteSize,
 			})
 
-			slog.Info("retrievr bench worker run completed",
+			slog.Info("retriever bench worker run completed",
 				slog.String("graph", target.Name),
 				slog.Int("worker_count", workerCount),
 				slog.Duration("wall_elapsed", time.Since(workerStartedAt)),
@@ -184,12 +184,12 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 			)
 		}
 		report.Graphs = append(report.Graphs, graphReport)
-		slog.Info("retrievr bench graph completed",
+		slog.Info("retriever bench graph completed",
 			slog.String("graph", target.Name),
 			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
 		)
 	}
-	slog.Info("retrievr bench completed",
+	slog.Info("retriever bench completed",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", len(targets)),
 		slog.Duration("wall_elapsed", time.Since(startedAt)),
@@ -204,13 +204,13 @@ func benchNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph,
 		result         benchPhaseResult
 		lastID         graph.ID
 		hasLastID      bool
-		nextProgressAt = retrievrInitialProgressAt(planned)
+		nextProgressAt = retrieverInitialProgressAt(planned)
 	)
 
 	for result.Count < planned {
 		remaining := planned - result.Count
 		readStarted := time.Now()
-		nodes, err := readDatabaseNodes(ctx, db, targetGraph, lastID, hasLastID, benchBatchLimit(remaining, options.BatchSize))
+		nodes, err := readDatabaseNodes(ctx, db, targetGraph, lastID, hasLastID, retrieverBatchLimit(remaining, options.BatchSize))
 		result.DBReadElapsed += time.Since(readStarted)
 		if err != nil {
 			return benchPhaseResult{}, err
@@ -251,13 +251,13 @@ func benchEdges(ctx context.Context, db graph.Database, targetGraph graph.Graph,
 		result         benchPhaseResult
 		lastID         graph.ID
 		hasLastID      bool
-		nextProgressAt = retrievrInitialProgressAt(planned)
+		nextProgressAt = retrieverInitialProgressAt(planned)
 	)
 
 	for result.Count < planned {
 		remaining := planned - result.Count
 		readStarted := time.Now()
-		relationships, err := readDatabaseRelationships(ctx, db, targetGraph, lastID, hasLastID, benchBatchLimit(remaining, options.BatchSize))
+		relationships, err := readDatabaseRelationships(ctx, db, targetGraph, lastID, hasLastID, retrieverBatchLimit(remaining, options.BatchSize))
 		result.DBReadElapsed += time.Since(readStarted)
 		if err != nil {
 			return benchPhaseResult{}, err
@@ -372,22 +372,12 @@ func benchPlannedCount(total int64, sampleSize int) int64 {
 	return sampleCount
 }
 
-func benchBatchLimit(remaining int64, batchSize int) int {
-	if remaining <= 0 {
-		return 0
-	}
-	if int64(batchSize) > remaining {
-		return int(remaining)
-	}
-	return batchSize
-}
-
 func logBenchPhaseProgress(graphName string, phaseName phase, workers int, result benchPhaseResult, planned int64, startedAt time.Time, nextProgressAt int64) int64 {
 	if nextProgressAt == 0 || result.Count < nextProgressAt || result.Count >= planned {
 		return nextProgressAt
 	}
 
-	slog.Info("retrievr bench phase progress",
+	slog.Info("retriever bench phase progress",
 		slog.String("graph", graphName),
 		slog.String("phase", string(phaseName)),
 		slog.Int("worker_count", workers),
@@ -399,7 +389,7 @@ func logBenchPhaseProgress(graphName string, phaseName phase, workers int, resul
 		slog.Float64("entities_per_second", perSecond(result.Count, time.Since(startedAt))),
 	)
 
-	return retrievrNextProgressAt(result.Count, planned, nextProgressAt)
+	return retrieverNextProgressAt(result.Count, planned, nextProgressAt)
 }
 
 func writeBenchReport(writer io.Writer, report benchReport) {

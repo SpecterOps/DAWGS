@@ -51,10 +51,10 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}
 	defer db.Close(ctx)
 
-	graphName := fmt.Sprintf("retrievr_it_%d", time.Now().UTC().UnixNano())
-	userKind := graph.StringKind("RetrievrUser")
-	systemKind := graph.StringKind("RetrievrSystem")
-	adminKind := graph.StringKind("RetrievrAdminTo")
+	graphName := fmt.Sprintf("retriever_it_%d", time.Now().UTC().UnixNano())
+	userKind := graph.StringKind("RetrieverUser")
+	systemKind := graph.StringKind("RetrieverSystem")
+	adminKind := graph.StringKind("RetrieverAdminTo")
 	graphSchema := graph.Graph{
 		Name:  graphName,
 		Nodes: graph.Kinds{userKind, systemKind},

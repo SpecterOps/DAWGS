@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	manifestFormat = "retrievr-opengraph-collection-v1"
-	idStrategy     = "source_database_id_string"
+	manifestFormat       = "retriever-opengraph-collection-v1"
+	legacyManifestFormat = "retrievr-opengraph-collection-v1"
+	idStrategy           = "source_database_id_string"
 )
 
 type phase string
@@ -38,7 +39,7 @@ const (
 type manifest struct {
 	Format           string           `json:"format"`
 	GeneratedAt      time.Time        `json:"generated_at"`
-	RetrievrVersion  string           `json:"retrievr_version,omitempty"`
+	RetrieverVersion string           `json:"retriever_version,omitempty"`
 	Driver           string           `json:"driver"`
 	Source           sourceMetadata   `json:"source"`
 	Compression      compressionCodec `json:"compression"`
@@ -131,7 +132,7 @@ func newManifest(driverName string, codec compressionCodec, compressionLevel int
 }
 
 func (s manifest) validate() error {
-	if s.Format != manifestFormat {
+	if !isSupportedManifestFormat(s.Format) {
 		return fmt.Errorf("unsupported manifest format %q", s.Format)
 	}
 	if s.IDStrategy != idStrategy {
@@ -191,6 +192,15 @@ func (s manifest) validate() error {
 	}
 
 	return nil
+}
+
+func isSupportedManifestFormat(format string) bool {
+	switch format {
+	case manifestFormat, legacyManifestFormat:
+		return true
+	default:
+		return false
+	}
 }
 
 func graphSchemaFromMetadata(metadata graphSchemaMetadata) graph.Graph {

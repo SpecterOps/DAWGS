@@ -5,16 +5,26 @@ import (
 	"time"
 )
 
-const retrievrProgressEntityInterval int64 = 250_000
+const retrieverProgressEntityInterval int64 = 250_000
 
-func retrievrInitialProgressAt(planned int64) int64 {
-	if planned <= retrievrProgressEntityInterval {
+func retrieverInitialProgressAt(planned int64) int64 {
+	if planned <= retrieverProgressEntityInterval {
 		return 0
 	}
-	return retrievrProgressEntityInterval
+	return retrieverProgressEntityInterval
 }
 
-func logRetrievrEntityProgress(message string, graphName string, phaseName phase, processed int64, planned int64, startedAt time.Time, nextProgressAt int64) int64 {
+func retrieverBatchLimit(remaining int64, batchSize int) int {
+	if remaining <= 0 {
+		return 0
+	}
+	if int64(batchSize) > remaining {
+		return int(remaining)
+	}
+	return batchSize
+}
+
+func logRetrieverEntityProgress(message string, graphName string, phaseName phase, processed int64, planned int64, startedAt time.Time, nextProgressAt int64) int64 {
 	if nextProgressAt == 0 || processed < nextProgressAt || processed >= planned {
 		return nextProgressAt
 	}
@@ -28,12 +38,12 @@ func logRetrievrEntityProgress(message string, graphName string, phaseName phase
 		slog.Float64("entities_per_second", perSecond(processed, time.Since(startedAt))),
 	)
 
-	return retrievrNextProgressAt(processed, planned, nextProgressAt)
+	return retrieverNextProgressAt(processed, planned, nextProgressAt)
 }
 
-func retrievrNextProgressAt(processed int64, planned int64, nextProgressAt int64) int64 {
+func retrieverNextProgressAt(processed int64, planned int64, nextProgressAt int64) int64 {
 	for nextProgressAt <= processed {
-		nextProgressAt += retrievrProgressEntityInterval
+		nextProgressAt += retrieverProgressEntityInterval
 	}
 	if nextProgressAt >= planned {
 		return 0

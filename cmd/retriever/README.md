@@ -1,17 +1,16 @@
-# retrievr
+# retriever
 
-`retrievr` dumps and loads live Dawgs graph databases as manifest-based
+`retriever` dumps and loads live Dawgs graph databases as manifest-based
 collections of compact OpenGraph-derived JSON fragments.
 
 The v1 collection format is intended for idle databases. Dumps are deterministic
-by entity ID order and bound each graph scan to the highest entity IDs observed
-when counting starts, but they do not provide a transactional cross-fragment
-snapshot.
+by entity ID order and cap each graph scan at the entity counts observed when
+counting starts, but they do not provide a transactional cross-fragment snapshot.
 
 ## Dump
 
 ```bash
-retrievr dump \
+retriever dump \
   -connection "$CONNECTION_STRING" \
   -out ./dumpdir \
   -graph default \
@@ -31,10 +30,10 @@ The manifest is written last as `manifest.json`; if a dump fails before that
 point, the directory is intentionally left for inspection without a success
 manifest.
 
-Rows inserted after the initial graph count are ignored by the bounded scan.
-Deletes or other concurrent source mutations can still make the final dumped
-counts differ from the initial counts, in which case dump fails rather than
-writing a misleading manifest.
+Rows inserted after the initial graph count are ignored once the counted entity
+total has been scanned. Deletes or other concurrent source mutations can still
+make the final dumped counts differ from the initial counts, in which case dump
+fails rather than writing a misleading manifest.
 
 Dump progress is emitted with `log/slog` on stderr. Notices mark output
 directory preparation, graph counting, scrub pre-pass work, node and relationship
@@ -43,18 +42,19 @@ phase boundaries, periodic entity progress, manifest writing, and completion.
 ## Scrubbed Dumps
 
 ```bash
-retrievr dump \
+retriever dump \
   -connection "$CONNECTION_STRING" \
   -out ./scrubbed-dump \
   -graph default \
   -scrub full \
-  -salt "$RETRIEVR_SCRUB_SALT"
+  -salt "$RETRIEVER_SCRUB_SALT"
 ```
 
 `-scrub full` fails closed unless a salt is supplied by `-salt` or
-`RETRIEVR_SCRUB_SALT`. Scrubbing preserves topology and source database IDs while
-deterministically transforming sensitive property values. Action counts are
-recorded per file, per graph, and globally in the manifest.
+`RETRIEVER_SCRUB_SALT`. The legacy `RETRIEVR_SCRUB_SALT` name is accepted as a
+fallback for existing scripts. Scrubbing preserves topology and source database
+IDs while deterministically transforming sensitive property values. Action
+counts are recorded per file, per graph, and globally in the manifest.
 
 Classifier and graph-identifier settings can be overridden with `-config`; see
 `defaults.toml` for the supported TOML shape.
@@ -62,7 +62,7 @@ Classifier and graph-identifier settings can be overridden with `-config`; see
 ## Load
 
 ```bash
-retrievr load \
+retriever load \
   -connection "$CONNECTION_STRING" \
   -in ./dumpdir
 ```
@@ -79,7 +79,7 @@ relationship phase boundaries, periodic entity progress, and completion.
 ## Bench
 
 ```bash
-retrievr bench \
+retriever bench \
   -connection "$CONNECTION_STRING" \
   -graph default \
   -workers 1 \
@@ -96,7 +96,7 @@ strategy. The benchmark keeps database read timing separate from optional JSON
 encode/compression timing:
 
 ```bash
-retrievr bench -connection "$CONNECTION_STRING" -graph default -compression zstd -json
+retriever bench -connection "$CONNECTION_STRING" -graph default -compression zstd -json
 ```
 
 Benchmark progress is emitted with `log/slog` on stderr. Notices mark benchmark

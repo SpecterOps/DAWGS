@@ -24,10 +24,6 @@ type dumpResult struct {
 type graphEntitySnapshot struct {
 	NodeCount int64
 	EdgeCount int64
-	MaxNodeID graph.ID
-	MaxEdgeID graph.ID
-	HasNodes  bool
-	HasEdges  bool
 }
 
 func Dump(ctx context.Context, db graph.Database, driverName string, targets []graphTarget, options dumpOptions) (dumpResult, error) {
@@ -39,7 +35,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 	}
 
 	startedAt := time.Now()
-	slog.Info("retrievr dump started",
+	slog.Info("retriever dump started",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", len(targets)),
 		slog.String("output_dir", options.OutputDir),
@@ -66,14 +62,14 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		scrubInfo = activeScrubber.metadata()
 	}
 
-	slog.Info("retrievr dump preparing output directory",
+	slog.Info("retriever dump preparing output directory",
 		slog.String("output_dir", options.OutputDir),
 		slog.Bool("force", options.Force),
 	)
 	if err := prepareOutputDirectory(options.OutputDir, options.Force); err != nil {
 		return dumpResult{}, err
 	}
-	slog.Info("retrievr dump output directory ready",
+	slog.Info("retriever dump output directory ready",
 		slog.String("output_dir", options.OutputDir),
 	)
 
@@ -82,7 +78,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 
 	for targetIndex, target := range targets {
 		graphStartedAt := time.Now()
-		slog.Info("retrievr dump graph started",
+		slog.Info("retriever dump graph started",
 			slog.String("graph", target.Name),
 			slog.Int("graph_index", targetIndex+1),
 			slog.Int("graph_count", len(targets)),
@@ -97,7 +93,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		addActionCounts(nextManifest.Scrub.EdgeActionCounts, graphEntry.EdgeActionCounts)
 		totalNodes += graphEntry.NodeCount
 		totalEdges += graphEntry.EdgeCount
-		slog.Info("retrievr dump graph completed",
+		slog.Info("retriever dump graph completed",
 			slog.String("graph", target.Name),
 			slog.Int64("node_count", graphEntry.NodeCount),
 			slog.Int64("edge_count", graphEntry.EdgeCount),
@@ -106,7 +102,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		)
 	}
 
-	slog.Info("retrievr dump writing manifest",
+	slog.Info("retriever dump writing manifest",
 		slog.String("output_dir", options.OutputDir),
 		slog.Int64("node_count", totalNodes),
 		slog.Int64("edge_count", totalEdges),
@@ -115,7 +111,7 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		return dumpResult{}, err
 	}
 	manifestPath := filepath.Join(options.OutputDir, manifestFileName)
-	slog.Info("retrievr dump completed",
+	slog.Info("retriever dump completed",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", len(targets)),
 		slog.String("manifest", manifestPath),
@@ -166,25 +162,23 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	}
 
 	countStartedAt := time.Now()
-	slog.Info("retrievr dump counting graph entities",
+	slog.Info("retriever dump counting graph entities",
 		slog.String("graph", target.Name),
 	)
 	entitySnapshot, err := countGraphEntitySnapshot(ctx, db, targetGraph)
 	if err != nil {
 		return graphManifest{}, graphSchemaMetadata{}, err
 	}
-	slog.Info("retrievr dump graph counts ready",
+	slog.Info("retriever dump graph counts ready",
 		slog.String("graph", target.Name),
 		slog.Int64("node_count", entitySnapshot.NodeCount),
 		slog.Int64("edge_count", entitySnapshot.EdgeCount),
-		slog.Uint64("max_node_id", entitySnapshot.MaxNodeID.Uint64()),
-		slog.Uint64("max_edge_id", entitySnapshot.MaxEdgeID.Uint64()),
 		slog.Duration("wall_elapsed", time.Since(countStartedAt)),
 	)
 
 	if activeScrubber != nil {
 		scrubStartedAt := time.Now()
-		slog.Info("retrievr dump scrub pre-pass started",
+		slog.Info("retriever dump scrub pre-pass started",
 			slog.String("graph", target.Name),
 			slog.Int64("node_count", entitySnapshot.NodeCount),
 			slog.Int("batch_size", options.BatchSize),
@@ -193,7 +187,7 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		if err != nil {
 			return graphManifest{}, graphSchemaMetadata{}, err
 		}
-		slog.Info("retrievr dump scrub pre-pass completed",
+		slog.Info("retriever dump scrub pre-pass completed",
 			slog.String("graph", target.Name),
 			slog.Int64("processed", observedNodes),
 			slog.Duration("wall_elapsed", time.Since(scrubStartedAt)),
@@ -211,10 +205,9 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	edgeKinds := map[string]struct{}{}
 
 	nodeStartedAt := time.Now()
-	slog.Info("retrievr dump node phase started",
+	slog.Info("retriever dump node phase started",
 		slog.String("graph", target.Name),
 		slog.Int64("node_count", entitySnapshot.NodeCount),
-		slog.Uint64("max_node_id", entitySnapshot.MaxNodeID.Uint64()),
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("shard_size", options.ShardSize),
 	)
@@ -223,7 +216,7 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		return graphManifest{}, graphSchemaMetadata{}, err
 	}
 	graphEntry.Files = append(graphEntry.Files, nodeFiles...)
-	slog.Info("retrievr dump node phase completed",
+	slog.Info("retriever dump node phase completed",
 		slog.String("graph", target.Name),
 		slog.Int64("processed", fileTotal(nodeFiles)),
 		slog.Int("file_count", len(nodeFiles)),
@@ -231,10 +224,9 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 	)
 
 	edgeStartedAt := time.Now()
-	slog.Info("retrievr dump edge phase started",
+	slog.Info("retriever dump edge phase started",
 		slog.String("graph", target.Name),
 		slog.Int64("edge_count", entitySnapshot.EdgeCount),
-		slog.Uint64("max_edge_id", entitySnapshot.MaxEdgeID.Uint64()),
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("shard_size", options.ShardSize),
 	)
@@ -243,7 +235,7 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		return graphManifest{}, graphSchemaMetadata{}, err
 	}
 	graphEntry.Files = append(graphEntry.Files, edgeFiles...)
-	slog.Info("retrievr dump edge phase completed",
+	slog.Info("retriever dump edge phase completed",
 		slog.String("graph", target.Name),
 		slog.Int64("processed", fileTotal(edgeFiles)),
 		slog.Int("file_count", len(edgeFiles)),
@@ -275,12 +267,16 @@ func collectScrubRegistry(ctx context.Context, db graph.Database, targetGraph gr
 		hasLastID      bool
 		processed      int64
 		startedAt      = time.Now()
-		nextProgressAt = retrievrInitialProgressAt(entitySnapshot.NodeCount)
+		nextProgressAt = retrieverInitialProgressAt(entitySnapshot.NodeCount)
 	)
-	for {
-		nodes, err := readDatabaseNodesBounded(ctx, db, targetGraph, lastID, hasLastID, entitySnapshot.MaxNodeID, entitySnapshot.HasNodes, batchSize)
+	for processed < entitySnapshot.NodeCount {
+		remaining := entitySnapshot.NodeCount - processed
+		nodes, err := readDatabaseNodes(ctx, db, targetGraph, lastID, hasLastID, retrieverBatchLimit(remaining, batchSize))
 		if err != nil {
 			return processed, fmt.Errorf("scrub pre-pass: %w", err)
+		}
+		if int64(len(nodes)) > remaining {
+			nodes = nodes[:int(remaining)]
 		}
 		if len(nodes) == 0 {
 			return processed, nil
@@ -289,10 +285,11 @@ func collectScrubRegistry(ctx context.Context, db graph.Database, targetGraph gr
 			activeScrubber.observeNode(node.Properties.MapOrEmpty())
 		}
 		processed += int64(len(nodes))
-		nextProgressAt = logRetrievrEntityProgress("retrievr dump scrub pre-pass progress", targetGraph.Name, phaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt)
+		nextProgressAt = logRetrieverEntityProgress("retriever dump scrub pre-pass progress", targetGraph.Name, phaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt)
 		lastID = nodes[len(nodes)-1].ID
 		hasLastID = true
 	}
+	return processed, nil
 }
 
 func countGraphEntities(ctx context.Context, db graph.Database, targetGraph graph.Graph) (int64, int64, error) {
@@ -311,33 +308,9 @@ func countGraphEntitySnapshot(ctx context.Context, db graph.Database, targetGrap
 		if entitySnapshot.NodeCount, err = tx.Nodes().Count(); err != nil {
 			return fmt.Errorf("count nodes: %w", err)
 		}
-		if entitySnapshot.NodeCount > 0 {
-			if node, err := tx.Nodes().
-				OrderBy(query.Order(query.NodeID(), query.Descending())).
-				Limit(1).
-				First(); err != nil {
-				return fmt.Errorf("read max node ID: %w", err)
-			} else {
-				entitySnapshot.MaxNodeID = node.ID
-				entitySnapshot.HasNodes = true
-			}
-		}
-
 		if entitySnapshot.EdgeCount, err = tx.Relationships().Count(); err != nil {
 			return fmt.Errorf("count relationships: %w", err)
 		}
-		if entitySnapshot.EdgeCount > 0 {
-			if relationship, err := tx.Relationships().
-				OrderBy(query.Order(query.RelationshipID(), query.Descending())).
-				Limit(1).
-				First(); err != nil {
-				return fmt.Errorf("read max relationship ID: %w", err)
-			} else {
-				entitySnapshot.MaxEdgeID = relationship.ID
-				entitySnapshot.HasEdges = true
-			}
-		}
-
 		return nil
 	}); err != nil {
 		return graphEntitySnapshot{}, err
@@ -359,7 +332,7 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		hasLastID         bool
 		processed         int64
 		startedAt         = time.Now()
-		nextProgressAt    = retrievrInitialProgressAt(entitySnapshot.NodeCount)
+		nextProgressAt    = retrieverInitialProgressAt(entitySnapshot.NodeCount)
 	)
 
 	flush := func() error {
@@ -377,10 +350,14 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		return nil
 	}
 
-	for {
-		nodes, err := readDatabaseNodesBounded(ctx, db, targetGraph, lastID, hasLastID, entitySnapshot.MaxNodeID, entitySnapshot.HasNodes, options.BatchSize)
+	for processed < entitySnapshot.NodeCount {
+		remaining := entitySnapshot.NodeCount - processed
+		nodes, err := readDatabaseNodes(ctx, db, targetGraph, lastID, hasLastID, retrieverBatchLimit(remaining, options.BatchSize))
 		if err != nil {
 			return nil, err
+		}
+		if int64(len(nodes)) > remaining {
+			nodes = nodes[:int(remaining)]
 		}
 		if len(nodes) == 0 {
 			break
@@ -410,7 +387,7 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 			}
 		}
 		processed += int64(len(nodes))
-		nextProgressAt = logRetrievrEntityProgress("retrievr dump node phase progress", targetGraph.Name, phaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt)
+		nextProgressAt = logRetrieverEntityProgress("retriever dump node phase progress", targetGraph.Name, phaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt)
 		lastID = nodes[len(nodes)-1].ID
 		hasLastID = true
 	}
@@ -435,7 +412,7 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		hasLastID         bool
 		processed         int64
 		startedAt         = time.Now()
-		nextProgressAt    = retrievrInitialProgressAt(entitySnapshot.EdgeCount)
+		nextProgressAt    = retrieverInitialProgressAt(entitySnapshot.EdgeCount)
 	)
 
 	flush := func() error {
@@ -453,10 +430,14 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		return nil
 	}
 
-	for {
-		relationships, err := readDatabaseRelationshipsBounded(ctx, db, targetGraph, lastID, hasLastID, entitySnapshot.MaxEdgeID, entitySnapshot.HasEdges, options.BatchSize)
+	for processed < entitySnapshot.EdgeCount {
+		remaining := entitySnapshot.EdgeCount - processed
+		relationships, err := readDatabaseRelationships(ctx, db, targetGraph, lastID, hasLastID, retrieverBatchLimit(remaining, options.BatchSize))
 		if err != nil {
 			return nil, err
+		}
+		if int64(len(relationships)) > remaining {
+			relationships = relationships[:int(remaining)]
 		}
 		if len(relationships) == 0 {
 			break
@@ -489,7 +470,7 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 			}
 		}
 		processed += int64(len(relationships))
-		nextProgressAt = logRetrievrEntityProgress("retrievr dump edge phase progress", targetGraph.Name, phaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt)
+		nextProgressAt = logRetrieverEntityProgress("retriever dump edge phase progress", targetGraph.Name, phaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt)
 		lastID = relationships[len(relationships)-1].ID
 		hasLastID = true
 	}
@@ -571,18 +552,14 @@ func fileTotal(files []fileManifest) int64 {
 }
 
 func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int) ([]*graph.Node, error) {
-	return readDatabaseNodesBounded(ctx, db, targetGraph, afterID, hasAfterID, 0, false, batchSize)
-}
-
-func readDatabaseNodesBounded(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, maxID graph.ID, hasMaxID bool, batchSize int) ([]*graph.Node, error) {
 	var nodes []*graph.Node
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		tx = tx.WithGraph(targetGraph)
 		nodeQuery := tx.Nodes().
 			OrderBy(query.NodeID()).
 			Limit(batchSize)
-		if criteria := entityIDScanCriteria(query.NodeID(), afterID, hasAfterID, maxID, hasMaxID); criteria != nil {
-			nodeQuery = nodeQuery.Filter(criteria)
+		if hasAfterID {
+			nodeQuery = nodeQuery.Filter(query.GreaterThan(query.NodeID(), afterID))
 		}
 
 		return nodeQuery.Fetch(func(cursor graph.Cursor[*graph.Node]) error {
@@ -601,18 +578,14 @@ func readDatabaseNodesBounded(ctx context.Context, db graph.Database, targetGrap
 }
 
 func readDatabaseRelationships(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int) ([]*graph.Relationship, error) {
-	return readDatabaseRelationshipsBounded(ctx, db, targetGraph, afterID, hasAfterID, 0, false, batchSize)
-}
-
-func readDatabaseRelationshipsBounded(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, maxID graph.ID, hasMaxID bool, batchSize int) ([]*graph.Relationship, error) {
 	var relationships []*graph.Relationship
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		tx = tx.WithGraph(targetGraph)
 		relationshipQuery := tx.Relationships().
 			OrderBy(query.RelationshipID()).
 			Limit(batchSize)
-		if criteria := entityIDScanCriteria(query.RelationshipID(), afterID, hasAfterID, maxID, hasMaxID); criteria != nil {
-			relationshipQuery = relationshipQuery.Filter(criteria)
+		if hasAfterID {
+			relationshipQuery = relationshipQuery.Filter(query.GreaterThan(query.RelationshipID(), afterID))
 		}
 
 		return relationshipQuery.Fetch(func(cursor graph.Cursor[*graph.Relationship]) error {
@@ -628,23 +601,4 @@ func readDatabaseRelationshipsBounded(ctx context.Context, db graph.Database, ta
 		return nil, fmt.Errorf("read initial relationship batch: %w", err)
 	}
 	return relationships, nil
-}
-
-func entityIDScanCriteria(idCriteria graph.Criteria, afterID graph.ID, hasAfterID bool, maxID graph.ID, hasMaxID bool) graph.Criteria {
-	var criteria []graph.Criteria
-	if hasAfterID {
-		criteria = append(criteria, query.GreaterThan(idCriteria, afterID))
-	}
-	if hasMaxID {
-		criteria = append(criteria, query.LessThanOrEquals(idCriteria, maxID))
-	}
-
-	switch len(criteria) {
-	case 0:
-		return nil
-	case 1:
-		return criteria[0]
-	default:
-		return query.And(criteria...)
-	}
 }

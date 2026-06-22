@@ -134,7 +134,7 @@ func resolveGraphTargets(ctx context.Context, db graph.Database, driverName stri
 		}}, nil
 	}
 	if driverName == neo4j.DriverName && len(requested) > 1 {
-		return nil, fmt.Errorf("neo4j supports one retrievr graph target because Dawgs graph names are no-ops for that driver")
+		return nil, fmt.Errorf("neo4j supports one retriever graph target because Dawgs graph names are no-ops for that driver")
 	}
 
 	targets := make([]graphTarget, 0, len(requested))

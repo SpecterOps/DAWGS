@@ -35,21 +35,21 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 	}
 
 	startedAt := time.Now()
-	slog.Info("retrievr load started",
+	slog.Info("retriever load started",
 		slog.String("driver", driverName),
 		slog.String("input_dir", options.InputDir),
 		slog.Int("batch_size", options.BatchSize),
 	)
 
 	readManifestStartedAt := time.Now()
-	slog.Info("retrievr load reading manifest",
+	slog.Info("retriever load reading manifest",
 		slog.String("input_dir", options.InputDir),
 	)
 	nextManifest, err := readManifest(options.InputDir)
 	if err != nil {
 		return loadResult{}, err
 	}
-	slog.Info("retrievr load manifest ready",
+	slog.Info("retriever load manifest ready",
 		slog.String("input_dir", options.InputDir),
 		slog.Int("graph_count", len(nextManifest.Graphs)),
 		slog.String("source_driver", nextManifest.Driver),
@@ -61,27 +61,27 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 	}
 
 	verifyStartedAt := time.Now()
-	slog.Info("retrievr load verifying fragments",
+	slog.Info("retriever load verifying fragments",
 		slog.String("input_dir", options.InputDir),
 		slog.Int("file_count", manifestFileCount(nextManifest)),
 	)
 	if err := verifyManifestFiles(options.InputDir, nextManifest); err != nil {
 		return loadResult{}, err
 	}
-	slog.Info("retrievr load fragments verified",
+	slog.Info("retriever load fragments verified",
 		slog.String("input_dir", options.InputDir),
 		slog.Int("file_count", manifestFileCount(nextManifest)),
 		slog.Duration("wall_elapsed", time.Since(verifyStartedAt)),
 	)
 
 	schemaStartedAt := time.Now()
-	slog.Info("retrievr load asserting schemas",
+	slog.Info("retriever load asserting schemas",
 		slog.Int("graph_count", len(nextManifest.Graphs)),
 	)
 	if err := assertManifestSchemas(ctx, db, nextManifest); err != nil {
 		return loadResult{}, err
 	}
-	slog.Info("retrievr load schemas ready",
+	slog.Info("retriever load schemas ready",
 		slog.Int("graph_count", len(nextManifest.Graphs)),
 		slog.Duration("wall_elapsed", time.Since(schemaStartedAt)),
 	)
@@ -90,7 +90,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 	result.GraphCount = len(nextManifest.Graphs)
 	for graphIndex, graphEntry := range nextManifest.Graphs {
 		graphStartedAt := time.Now()
-		slog.Info("retrievr load graph started",
+		slog.Info("retriever load graph started",
 			slog.String("graph", graphEntry.Name),
 			slog.Int("graph_index", graphIndex+1),
 			slog.Int("graph_count", len(nextManifest.Graphs)),
@@ -99,7 +99,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 		)
 
 		nodeStartedAt := time.Now()
-		slog.Info("retrievr load node phase started",
+		slog.Info("retriever load node phase started",
 			slog.String("graph", graphEntry.Name),
 			slog.Int64("node_count", graphEntry.NodeCount),
 		)
@@ -107,7 +107,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 		if err != nil {
 			return loadResult{}, err
 		}
-		slog.Info("retrievr load node phase completed",
+		slog.Info("retriever load node phase completed",
 			slog.String("graph", graphEntry.Name),
 			slog.Int64("processed", nodeCount),
 			slog.Duration("wall_elapsed", time.Since(nodeStartedAt)),
@@ -115,7 +115,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 		)
 
 		edgeStartedAt := time.Now()
-		slog.Info("retrievr load edge phase started",
+		slog.Info("retriever load edge phase started",
 			slog.String("graph", graphEntry.Name),
 			slog.Int64("edge_count", graphEntry.EdgeCount),
 			slog.Int("batch_size", options.BatchSize),
@@ -124,7 +124,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 		if err != nil {
 			return loadResult{}, err
 		}
-		slog.Info("retrievr load edge phase completed",
+		slog.Info("retriever load edge phase completed",
 			slog.String("graph", graphEntry.Name),
 			slog.Int64("processed", edgeCount),
 			slog.Duration("wall_elapsed", time.Since(edgeStartedAt)),
@@ -138,14 +138,14 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 		}
 		result.NodeCount += nodeCount
 		result.EdgeCount += edgeCount
-		slog.Info("retrievr load graph completed",
+		slog.Info("retriever load graph completed",
 			slog.String("graph", graphEntry.Name),
 			slog.Int64("node_count", nodeCount),
 			slog.Int64("edge_count", edgeCount),
 			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
 		)
 	}
-	slog.Info("retrievr load completed",
+	slog.Info("retriever load completed",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", result.GraphCount),
 		slog.Int64("node_count", result.NodeCount),
@@ -205,7 +205,7 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 	var (
 		loaded         int64
 		startedAt      = time.Now()
-		nextProgressAt = retrievrInitialProgressAt(graphEntry.NodeCount)
+		nextProgressAt = retrieverInitialProgressAt(graphEntry.NodeCount)
 	)
 
 	for _, fileEntry := range graphEntry.Files {
@@ -246,7 +246,7 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 			return nil, loaded, fmt.Errorf("load node fragment %s: %w", fileEntry.Path, err)
 		}
 		loaded += int64(len(fragment.Items))
-		nextProgressAt = logRetrievrEntityProgress("retrievr load node phase progress", graphEntry.Name, phaseNodes, loaded, graphEntry.NodeCount, startedAt, nextProgressAt)
+		nextProgressAt = logRetrieverEntityProgress("retriever load node phase progress", graphEntry.Name, phaseNodes, loaded, graphEntry.NodeCount, startedAt, nextProgressAt)
 	}
 
 	return nodeMap, loaded, nil
@@ -256,7 +256,7 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 	var (
 		loaded         int64
 		startedAt      = time.Now()
-		nextProgressAt = retrievrInitialProgressAt(graphEntry.EdgeCount)
+		nextProgressAt = retrieverInitialProgressAt(graphEntry.EdgeCount)
 	)
 
 	for _, fileEntry := range graphEntry.Files {
@@ -293,7 +293,7 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 			return loaded, fmt.Errorf("load edge fragment %s: %w", fileEntry.Path, err)
 		}
 		loaded += int64(len(fragment.Items))
-		nextProgressAt = logRetrievrEntityProgress("retrievr load edge phase progress", graphEntry.Name, phaseEdges, loaded, graphEntry.EdgeCount, startedAt, nextProgressAt)
+		nextProgressAt = logRetrieverEntityProgress("retriever load edge phase progress", graphEntry.Name, phaseEdges, loaded, graphEntry.EdgeCount, startedAt, nextProgressAt)
 	}
 
 	return loaded, nil

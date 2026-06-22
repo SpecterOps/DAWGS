@@ -111,11 +111,11 @@ scrub, validate, and explore graph data while preserving node IDs, relationship
 endpoints, and kind labels. See [cmd/mudroom/README.md](cmd/mudroom/README.md)
 for file and live database workflows.
 
-`go run ./cmd/retrievr` dumps and loads live Dawgs graph databases as
+`go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compact OpenGraph-derived fragments. It supports
 PostgreSQL and Neo4j, gzip and zstd compression, checksum validation before
 load, optional deterministic property scrubbing, and a read-throughput benchmark
-mode. See [cmd/retrievr/README.md](cmd/retrievr/README.md) for dump, load,
+mode. See [cmd/retriever/README.md](cmd/retriever/README.md) for dump, load,
 scrubbed dump, and benchmark examples.
 
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
