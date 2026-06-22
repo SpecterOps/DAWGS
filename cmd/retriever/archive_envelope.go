@@ -167,17 +167,7 @@ func unpackEncryptedCollectionArchive(archivePath, outputDir string, force bool,
 		slog.String("archive", archivePath),
 		slog.String("output_dir", outputDir),
 	)
-	archiveReader, err := newEncryptedArchiveReader(file, identity)
-	if err != nil {
-		return err
-	}
-	if err := unpackTar(archiveReader, stagingDir, false); err != nil {
-		return err
-	}
-	if _, err := io.Copy(io.Discard, archiveReader); err != nil {
-		return fmt.Errorf("finish encrypted archive stream: %w", err)
-	}
-	if err := validateUnpackedCollection(stagingDir); err != nil {
+	if err := unpackEncryptedCollectionArchiveToDirectory(file, stagingDir, identity); err != nil {
 		return err
 	}
 	if err := promoteUnpackStagingDirectory(stagingDir, outputDir, force); err != nil {
@@ -189,6 +179,20 @@ func unpackEncryptedCollectionArchive(archivePath, outputDir string, force bool,
 		slog.String("output_dir", outputDir),
 	)
 	return nil
+}
+
+func unpackEncryptedCollectionArchiveToDirectory(reader io.Reader, outputDir string, identity hpke.PrivateKey) error {
+	archiveReader, err := newEncryptedArchiveReader(reader, identity)
+	if err != nil {
+		return err
+	}
+	if err := unpackTar(archiveReader, outputDir, false); err != nil {
+		return err
+	}
+	if _, err := io.Copy(io.Discard, archiveReader); err != nil {
+		return fmt.Errorf("finish encrypted archive stream: %w", err)
+	}
+	return validateUnpackedCollection(outputDir)
 }
 
 func createUnpackStagingDirectory(outputDir string, force bool) (string, error) {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/specterops/dawgs/drivers/neo4j"
@@ -30,9 +32,12 @@ type resolvedFragmentEdge struct {
 }
 
 func Load(ctx context.Context, db graph.Database, driverName string, options loadOptions) (loadResult, error) {
-	if err := options.validate(); err != nil {
+	preparedOptions, cleanupInput, err := prepareLoadInput(options)
+	if err != nil {
 		return loadResult{}, err
 	}
+	defer cleanupInput()
+	options = preparedOptions
 
 	startedAt := time.Now()
 	slog.Info("retriever load started",
@@ -182,6 +187,55 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 		slog.Duration("wall_elapsed", time.Since(startedAt)),
 	)
 	return result, nil
+}
+
+func prepareLoadInput(options loadOptions) (loadOptions, func(), error) {
+	if err := options.validate(); err != nil {
+		return loadOptions{}, nil, err
+	}
+	options.InputDir = strings.TrimSpace(options.InputDir)
+	options.ArchivePath = strings.TrimSpace(options.ArchivePath)
+	options.IdentityPath = strings.TrimSpace(options.IdentityPath)
+	if options.ArchivePath == "" {
+		return options, func() {}, nil
+	}
+
+	identity, err := loadArchivePrivateKey(options.IdentityPath)
+	if err != nil {
+		return loadOptions{}, nil, err
+	}
+	tempDir, err := os.MkdirTemp("", "retriever-load-archive-*")
+	if err != nil {
+		return loadOptions{}, nil, fmt.Errorf("create load archive temp directory: %w", err)
+	}
+	cleanup := func() {
+		_ = os.RemoveAll(tempDir)
+	}
+	file, err := os.Open(options.ArchivePath)
+	if err != nil {
+		cleanup()
+		return loadOptions{}, nil, fmt.Errorf("open archive: %w", err)
+	}
+	defer file.Close()
+
+	slog.Info("retriever load archive unpacking started",
+		slog.String("archive", options.ArchivePath),
+	)
+	if err := unpackEncryptedCollectionArchiveToDirectory(file, tempDir, identity); err != nil {
+		cleanup()
+		return loadOptions{}, nil, err
+	}
+	slog.Info("retriever load archive unpacking completed",
+		slog.String("archive", options.ArchivePath),
+	)
+	options.InputDir = tempDir
+	options.ArchivePath = ""
+	options.IdentityPath = ""
+	if err := options.validate(); err != nil {
+		cleanup()
+		return loadOptions{}, nil, err
+	}
+	return options, cleanup, nil
 }
 
 func assertManifestSchemas(ctx context.Context, db graph.Database, value manifest) error {

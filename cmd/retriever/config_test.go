@@ -96,6 +96,18 @@ func TestOptionsValidate(t *testing.T) {
 	if err := load.validate(); err == nil {
 		t.Fatalf("expected missing input dir")
 	}
+	load.ArchivePath = filepath.Join(t.TempDir(), "dump.tar.pq")
+	if err := load.validate(); err == nil {
+		t.Fatalf("expected missing identity path")
+	}
+	load.IdentityPath = filepath.Join(t.TempDir(), "private.key")
+	if err := load.validate(); err != nil {
+		t.Fatalf("valid load archive options: %v", err)
+	}
+	load.InputDir = t.TempDir()
+	if err := load.validate(); err == nil {
+		t.Fatalf("expected mutually exclusive load input error")
+	}
 
 	unpack := unpackOptions{
 		ArchivePath:  filepath.Join(t.TempDir(), "dump.tar.pq"),

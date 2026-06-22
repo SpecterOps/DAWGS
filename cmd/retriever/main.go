@@ -205,6 +205,8 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	flags.SetOutput(s.stderr)
 	commonDatabaseFlags(flags, &cfg.Database)
 	flags.StringVar(&cfg.InputDir, "in", "", "Input collection directory.")
+	flags.StringVar(&cfg.ArchivePath, "archive", "", "Encrypted archive input path.")
+	flags.StringVar(&cfg.IdentityPath, "identity", "", "Recipient private key path for -archive.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database write batch size.")
 	flags.BoolVar(&cfg.VerifyMetrics, "verify-metrics", false, "Verify loaded graph metrics against the dump manifest after load.")
 	if err := flags.Parse(args); err != nil {
@@ -212,9 +214,12 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	}
 
 	fillConnectionFromEnv(&cfg.Database)
-	if err := cfg.validate(); err != nil {
+	preparedCfg, cleanupInput, err := prepareLoadInput(cfg)
+	if err != nil {
 		return err
 	}
+	defer cleanupInput()
+	cfg = preparedCfg
 
 	db, driverName, err := openDatabase(ctx, cfg.Database)
 	if err != nil {

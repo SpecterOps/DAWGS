@@ -132,13 +132,27 @@ func (s dumpOptions) validate() error {
 type loadOptions struct {
 	Database      databaseConfig
 	InputDir      string
+	ArchivePath   string
+	IdentityPath  string
 	BatchSize     int
 	VerifyMetrics bool
 }
 
 func (s loadOptions) validate() error {
-	if strings.TrimSpace(s.InputDir) == "" {
-		return fmt.Errorf("input directory is required; pass -in")
+	inputDir := strings.TrimSpace(s.InputDir)
+	archivePath := strings.TrimSpace(s.ArchivePath)
+	identityPath := strings.TrimSpace(s.IdentityPath)
+	if inputDir != "" && archivePath != "" {
+		return fmt.Errorf("load accepts either -in or -archive, not both")
+	}
+	if archivePath == "" && identityPath != "" {
+		return fmt.Errorf("-identity requires -archive")
+	}
+	if inputDir == "" && archivePath == "" {
+		return fmt.Errorf("input directory or archive path is required; pass -in or -archive")
+	}
+	if archivePath != "" && identityPath == "" {
+		return fmt.Errorf("-archive requires -identity")
 	}
 	if s.BatchSize <= 0 {
 		return fmt.Errorf("batch-size must be > 0")

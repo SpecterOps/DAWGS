@@ -121,10 +121,20 @@ retriever load \
   -in ./dumpdir
 ```
 
+Encrypted archives produced by `dump -archive-out` can be loaded directly:
+
+```bash
+retriever load \
+  -connection "$CONNECTION_STRING" \
+  -archive ./dump.tar.pq \
+  -identity ./retriever-private.key
+```
+
 Load reads and validates `manifest.json`, verifies every fragment checksum in a
 separate pass, asserts destination graph schemas from the manifest metadata, and
 then loads all nodes before relationships. Graph names from the dump are
-preserved; load does not support overriding graph names.
+preserved; load does not support overriding graph names. Archive loads decrypt
+and validate into a temporary collection directory before opening the database.
 
 Load progress is emitted with `log/slog` on stderr. Notices mark manifest
 reading, checksum verification, schema assertion, graph boundaries, node and
