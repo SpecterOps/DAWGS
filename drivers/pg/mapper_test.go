@@ -140,3 +140,93 @@ func TestValueMapperMapsCompositeArrays(t *testing.T) {
 		require.Equal(t, graph.StringKind("MemberOf"), relationships[0].Kind)
 	})
 }
+
+func TestAsKindID(t *testing.T) {
+	testsCases := []struct {
+		value           any
+		expectedValue   int16
+		expectedBoolean bool
+	}{
+		{
+			value:           float64(1),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           int(32767),
+			expectedValue:   32767,
+			expectedBoolean: true,
+		},
+		{
+			value:           int(32768),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           int8(1),
+			expectedValue:   1,
+			expectedBoolean: true,
+		},
+		{
+			value:           int16(1),
+			expectedValue:   1,
+			expectedBoolean: true,
+		},
+		{
+			value:           int32(-32769),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           int32(32768),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           int32(32767),
+			expectedValue:   32767,
+			expectedBoolean: true,
+		},
+		{
+			value:           int64(-32769),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           int64(32768),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           int64(32767),
+			expectedValue:   32767,
+			expectedBoolean: true,
+		},
+		{
+			value:           uint32(32768),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+		{
+			value:           uint32(32767),
+			expectedValue:   32767,
+			expectedBoolean: true,
+		},
+		{
+			value:           uint64(32767),
+			expectedValue:   32767,
+			expectedBoolean: true,
+		},
+		{
+			value:           uint64(32768),
+			expectedValue:   0,
+			expectedBoolean: false,
+		},
+	}
+
+	for _, testCase := range testsCases {
+		actualValue, actualBoolean := asKindID(testCase.value)
+		require.Equal(t, int16(testCase.expectedValue), actualValue)
+		require.Equal(t, testCase.expectedBoolean, actualBoolean)
+	}
+}
