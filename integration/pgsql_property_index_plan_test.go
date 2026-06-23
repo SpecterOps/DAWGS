@@ -171,7 +171,7 @@ func setupIndexedPostgresDB(t *testing.T, graphName string, nodeIndexes []graph.
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
 
-	driverName, err := driverFromConnStr(connStr)
+	driverName, err := DriverFromConnectionString(connStr)
 	if err != nil {
 		t.Fatalf("failed to detect driver: %v", err)
 	}

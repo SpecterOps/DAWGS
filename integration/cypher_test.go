@@ -21,7 +21,6 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -94,7 +93,7 @@ func TestCypher(t *testing.T) {
 		groups[ds].files = append(groups[ds].files, cf)
 	}
 
-	db, ctx := SetupDB(t, datasetNames...)
+	db, ctx := SetupDB(t, CleanupGraph, datasetNames...)
 
 	for _, g := range groups {
 		ClearGraph(t, db, ctx)
@@ -257,9 +256,6 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 	}
 }
 
-// errFixtureRollback is returned to unconditionally roll back inline fixture data.
-var errFixtureRollback = errors.New("fixture rollback")
-
 // runReadOnly executes a test case against the pre-loaded dataset.
 func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap opengraph.IDMap, tc testCase, assertion caseAssertion) {
 	t.Helper()
@@ -291,34 +287,24 @@ func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap ope
 func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
-	var (
-		queryErrorObserved = false
-		err                = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			if err := tx.Nodes().Delete(); err != nil {
-				return fmt.Errorf("clearing graph before fixture: %w", err)
-			}
+	queryErrorObserved := false
+	session := &Session{DB: db, Ctx: ctx}
+	err := session.WithRollbackFixture(t, tc.Fixture, true, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+		result := tx.Query(tc.Cypher, tc.Params)
+		defer result.Close()
+		assertion.checkResult(t, result, newAssertionContext(idMap))
+		if assertion.expectQueryError {
+			queryErrorObserved = true
+		}
 
-			idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
-			if err != nil {
-				return fmt.Errorf("creating fixture: %w", err)
-			}
-
-			result := tx.Query(tc.Cypher, tc.Params)
-			defer result.Close()
-			assertion.checkResult(t, result, newAssertionContext(idMap))
-			if assertion.expectQueryError {
-				queryErrorObserved = true
-			}
-
-			return errFixtureRollback
-		})
-	)
+		return nil
+	})
 
 	if assertion.expectQueryError && queryErrorObserved && err != nil {
 		return
 	}
 
-	if !errors.Is(err, errFixtureRollback) {
+	if err != nil {
 		t.Fatalf("unexpected transaction error: %v", err)
 	}
 }

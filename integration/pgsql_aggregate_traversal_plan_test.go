@@ -79,7 +79,7 @@ func TestPostgreSQLLiveAggregateTraversalCountPlanShape(t *testing.T) {
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
 
-	driver, err := driverFromConnStr(connStr)
+	driver, err := DriverFromConnectionString(connStr)
 	if err != nil {
 		t.Fatalf("failed to detect driver: %v", err)
 	}

@@ -21,7 +21,6 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -200,30 +199,24 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 		t.Fatal("template cases must define an inline fixture")
 	}
 
-	var (
-		queryErrorObserved = false
-		err                = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			idMap, err := opengraph.WriteGraphTx(tx, tc.Fixture)
-			if err != nil {
-				return fmt.Errorf("creating fixture: %w", err)
-			}
+	queryErrorObserved := false
+	session := &Session{DB: db, Ctx: ctx}
+	err := session.WithRollbackFixture(t, tc.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+		result := tx.Query(tc.Cypher, tc.Params)
+		defer result.Close()
+		assertion.checkResult(t, result, newAssertionContext(idMap))
+		if assertion.expectQueryError {
+			queryErrorObserved = true
+		}
 
-			result := tx.Query(tc.Cypher, tc.Params)
-			defer result.Close()
-			assertion.checkResult(t, result, newAssertionContext(idMap))
-			if assertion.expectQueryError {
-				queryErrorObserved = true
-			}
-
-			return errFixtureRollback
-		})
-	)
+		return nil
+	})
 
 	if assertion.expectQueryError && queryErrorObserved && err != nil {
 		return
 	}
 
-	if !errors.Is(err, errFixtureRollback) {
+	if err != nil {
 		t.Fatalf("unexpected transaction error: %v", err)
 	}
 }
@@ -239,17 +232,11 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 		t.Fatal("metamorphic cases must define at least two queries")
 	}
 
-	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		idMap, err := opengraph.WriteGraphTx(tx, family.Fixture)
-		if err != nil {
-			return fmt.Errorf("creating fixture: %w", err)
-		}
-
-		var (
-			assertCtx    = newAssertionContext(idMap)
-			baselineName string
-			baseline     []string
-		)
+	session := &Session{DB: db, Ctx: ctx}
+	err := session.WithRollbackFixture(t, family.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+		assertCtx := newAssertionContext(idMap)
+		var baselineName string
+		var baseline []string
 
 		for _, query := range family.Queries {
 			var (
@@ -282,10 +269,10 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 			t.Fatal("all metamorphic queries were skipped")
 		}
 
-		return errFixtureRollback
+		return nil
 	})
 
-	if !errors.Is(err, errFixtureRollback) {
+	if err != nil {
 		t.Fatalf("unexpected transaction error: %v", err)
 	}
 }
@@ -333,7 +320,8 @@ func comparisonModeSignature(t *testing.T, result queryResult, ctx assertionCont
 	var signature []string
 	switch mode {
 	case "row_count":
-		signature = []string{fmt.Sprintf("%d", len(result.rows))}
+		row := fmt.Sprintf("%d", len(result.rows))
+		signature = []string{row}
 	case "scalar_values":
 		signature = sortedSignatures(firstScalarSignatures(t, result))
 	case "ordered_scalar_values":

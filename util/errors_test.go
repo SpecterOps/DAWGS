@@ -2,6 +2,7 @@ package util_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -35,4 +36,15 @@ func TestIsNeoTimeoutError(t *testing.T) {
 	notDriverTimeOutErr := graph.NewError(notDriverTimeOutQuery, notDriverError)
 
 	require.False(t, util.IsNeoTimeoutError(notDriverTimeOutErr))
+}
+
+func TestNewErrorCollector(t *testing.T) {
+	errCollector := util.NewErrorCollector()
+
+	errCollector.Add(fmt.Errorf("errorOne"))
+	errCollector.Add(fmt.Errorf("errorTwo"))
+	err := errCollector.Combined()
+
+	require.NotNil(t, err)
+	require.Equal(t, err.Error(), "errorOne\nerrorTwo")
 }
