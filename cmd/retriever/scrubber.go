@@ -13,7 +13,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-const scrubRulesVersion = "retriever-scrub-v1"
+const scrubRulesVersion = "retriever-scrub-v2"
 
 type propertyAction string
 
@@ -315,6 +315,20 @@ func (s *scrubber) planProperty(key string, value any) propertyPlan {
 		plan.Action = actionShiftTimestamp
 		return plan
 	}
+	if isFreeTextKey(normalizedKey) {
+		plan.Action = actionRedact
+		return plan
+	}
+	if isPathKey(normalizedKey) {
+		plan.Action = actionPseudonymize
+		plan.Shape = s.classifyValue(value)
+		return plan
+	}
+	if isScriptKey(normalizedKey) {
+		plan.Action = actionPseudonymize
+		plan.Shape = s.classifyValue(value)
+		return plan
+	}
 	if s.shouldRedact(normalizedKey, value) {
 		plan.Action = actionRedact
 		return plan
@@ -326,6 +340,11 @@ func (s *scrubber) planProperty(key string, value any) propertyPlan {
 	}
 	if s.isSensitiveKey(normalizedKey) {
 		plan.Action = actionPseudonymize
+		return plan
+	}
+	if isSemanticOrgKey(normalizedKey) || isStringLike(value) {
+		plan.Action = actionPseudonymize
+		plan.Shape = s.classifyValue(value)
 		return plan
 	}
 	return plan
@@ -392,6 +411,33 @@ func (s *scrubber) isSensitiveKey(normalizedKey string) bool {
 		}
 	}
 	return false
+}
+
+func isFreeTextKey(normalizedKey string) bool {
+	return strings.Contains(normalizedKey, "description") ||
+		strings.Contains(normalizedKey, "comment") ||
+		strings.Contains(normalizedKey, "note") ||
+		normalizedKey == "info"
+}
+
+func isPathKey(normalizedKey string) bool {
+	return strings.Contains(normalizedKey, "path") ||
+		strings.Contains(normalizedKey, "directory") ||
+		strings.Contains(normalizedKey, "homedir") ||
+		strings.Contains(normalizedKey, "folder")
+}
+
+func isScriptKey(normalizedKey string) bool {
+	return strings.Contains(normalizedKey, "script")
+}
+
+func isSemanticOrgKey(normalizedKey string) bool {
+	switch normalizedKey {
+	case "title", "department", "division", "company", "organization", "office", "location":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *scrubber) classifyValue(value any) string {

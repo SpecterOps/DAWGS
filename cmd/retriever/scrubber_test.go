@@ -191,6 +191,99 @@ func TestScrubberTimestampAndRedactionBranches(t *testing.T) {
 	}
 }
 
+func TestScrubberRedactsFreeTextFields(t *testing.T) {
+	scrubber, err := newScrubber("", "test-salt")
+	if err != nil {
+		t.Fatalf("new scrubber: %v", err)
+	}
+
+	scrubbed, counts := scrubber.scrubProperties(map[string]any{
+		"description": "Work item ABC123 service owner Example Person for Example Division",
+		"comments":    "Read only access to placeholder application resource",
+		"info":        "Example location operations notes",
+	})
+
+	for key, value := range scrubbed {
+		if value != scrubber.config.RedactionMarker {
+			t.Fatalf("expected %s to be redacted, got %#v", key, value)
+		}
+	}
+	if counts[string(actionRedact)] != 3 {
+		t.Fatalf("redact count = %d, want 3", counts[string(actionRedact)])
+	}
+}
+
+func TestScrubberPseudonymizesPathAndScriptFields(t *testing.T) {
+	scrubber, err := newScrubber("", "test-salt")
+	if err != nil {
+		t.Fatalf("new scrubber: %v", err)
+	}
+
+	scrubbed, counts := scrubber.scrubProperties(map[string]any{
+		"homedirectory": `\\fileserver01\share\account123`,
+		"profilepath":   `\\profilehost01\profiles\group\account456`,
+		"logonscript":   `startup\login.bat`,
+	})
+
+	if counts[string(actionPseudonymize)] != 3 {
+		t.Fatalf("pseudonymize count = %d, want 3", counts[string(actionPseudonymize)])
+	}
+	assertScrubbedStringDoesNotContain(t, scrubbed["homedirectory"], "fileserver01", "share", "account123")
+	assertScrubbedStringDoesNotContain(t, scrubbed["profilepath"], "profilehost01", "profiles", "account456")
+	assertScrubbedStringDoesNotContain(t, scrubbed["logonscript"], "startup", "login")
+
+	home, ok := scrubbed["homedirectory"].(string)
+	if !ok || !strings.HasPrefix(home, "value-") {
+		t.Fatalf("home directory was not pseudonymized as generic value: %#v", scrubbed["homedirectory"])
+	}
+	script, ok := scrubbed["logonscript"].(string)
+	if !ok || !strings.HasPrefix(script, "value-") {
+		t.Fatalf("logon script was not pseudonymized as generic value: %#v", scrubbed["logonscript"])
+	}
+}
+
+func TestScrubberPseudonymizesUnknownStringsInFullScrub(t *testing.T) {
+	scrubber, err := newScrubber("", "test-salt")
+	if err != nil {
+		t.Fatalf("new scrubber: %v", err)
+	}
+
+	scrubbed, counts := scrubber.scrubProperties(map[string]any{
+		"business_justification": "Read only access to placeholder application for example organization",
+		"enabled":                true,
+		"risk_score":             42,
+	})
+
+	if counts[string(actionPseudonymize)] != 1 || counts[string(actionPreserve)] != 2 {
+		t.Fatalf("unexpected action counts: %+v", counts)
+	}
+	assertScrubbedStringDoesNotContain(t, scrubbed["business_justification"], "placeholder", "application", "organization")
+	if got, ok := scrubbed["business_justification"].(string); !ok || !strings.HasPrefix(got, "value-") {
+		t.Fatalf("unknown string was not pseudonymized as generic value: %#v", scrubbed["business_justification"])
+	}
+	if scrubbed["enabled"] != true || scrubbed["risk_score"] != 42 {
+		t.Fatalf("safe scalar values were not preserved: %#v", scrubbed)
+	}
+}
+
+func TestScrubberPseudonymizesTicketLikeValues(t *testing.T) {
+	scrubber, err := newScrubber("", "test-salt")
+	if err != nil {
+		t.Fatalf("new scrubber: %v", err)
+	}
+
+	scrubbed, counts := scrubber.scrubProperties(map[string]any{
+		"request_id": "WORKITEM-12345",
+	})
+
+	if counts[string(actionPseudonymize)] != 1 {
+		t.Fatalf("expected pseudonymize count, got %+v", counts)
+	}
+	if got, ok := scrubbed["request_id"].(string); !ok || !strings.HasPrefix(got, "value-") {
+		t.Fatalf("ticket was not pseudonymized as generic value: %#v", scrubbed["request_id"])
+	}
+}
+
 func TestScrubberIdentifierRegistryConsistency(t *testing.T) {
 	scrubber, err := newScrubber("", "test-salt")
 	if err != nil {
@@ -208,6 +301,19 @@ func TestScrubberIdentifierRegistryConsistency(t *testing.T) {
 	}
 	if scrubbed["objectid"] == sourceSID {
 		t.Fatalf("identifier was not scrubbed")
+	}
+}
+
+func assertScrubbedStringDoesNotContain(t *testing.T, value any, forbidden ...string) {
+	t.Helper()
+	stringValue, ok := value.(string)
+	if !ok {
+		t.Fatalf("expected scrubbed string, got %#v", value)
+	}
+	for _, next := range forbidden {
+		if strings.Contains(stringValue, next) {
+			t.Fatalf("scrubbed value %q still contains %q", stringValue, next)
+		}
 	}
 }
 
