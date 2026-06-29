@@ -186,3 +186,27 @@ func (s *Driver) OptimizeStorage(ctx context.Context) error {
 
 	return optimizeStorage(ctx, conn)
 }
+
+// WipeGraph truncates the partitioned node and edge tables, removing every node and edge across all graphs in a single
+// statement that bypasses the per-row edge cascade trigger. The optional retain delegate runs within the same
+// transaction after the truncate, allowing callers to atomically recreate any data that must survive the wipe. If retain
+// returns an error the transaction is rolled back and the graph is left untouched.
+func (s *Driver) WipeGraph(ctx context.Context, retain graph.TransactionDelegate) error {
+	return s.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		result := tx.Raw("truncate table node, edge;", nil)
+
+		// Close before issuing further statements: a pgx transaction shares a single connection and cannot run the
+		// retain delegate's queries while these rows remain open.
+		result.Close()
+
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("truncating graph tables: %w", err)
+		}
+
+		if retain != nil {
+			return retain(tx)
+		}
+
+		return nil
+	})
+}
