@@ -148,25 +148,29 @@ create table if not exists edge
 
 -- delete_node_edges is a trigger and associated plpgsql function to cascade delete edges when attached nodes are
 -- deleted. While this could be done with a foreign key relationship, it would scope the cascade delete to individual
--- node partitions and therefore require the graph_id value of each node as part of the delete statement.
+-- node partitions and therefore require the graph_id value of each node as part of the delete statement. The trigger is
+-- statement-level and reads the deleted rows from a transition table so that deleting many nodes in a single statement
+-- fires the cascading edge delete once rather than once per row.
 create or replace function delete_node_edges() returns trigger as
 $$
 begin
-  delete from edge where start_id = OLD.id or end_id = OLD.id;
+  delete from edge where start_id in (select id from deleted_nodes)
+                      or end_id in (select id from deleted_nodes);
   return null;
 end
 $$
   language plpgsql
-  volatile
-  strict;
+  volatile;
 
 -- Drop and create the delete_node_edges trigger for the delete_node_edges() plpgsql function. See the function comment
--- for more information.
+-- for more information. The referencing clause exposes the rows removed by the delete statement as the deleted_nodes
+-- transition table.
 drop trigger if exists delete_node_edges on node;
 create trigger delete_node_edges
   after delete
   on node
-  for each row
+  referencing old table as deleted_nodes
+  for each statement
 execute procedure delete_node_edges();
 
 
