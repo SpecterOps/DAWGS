@@ -264,12 +264,32 @@ func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds,
 		return fmt.Errorf("cannot exclude undefined kinds from node delete: %v", excludeMissing)
 	}
 
+	statement, arguments := buildNodeDeleteStatement(len(includeAny) > 0, includeIDs, excludeIDs)
+
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for node delete: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
+		return fmt.Errorf("%s: %w", statement, err)
+	}
+
+	return nil
+}
+
+// buildNodeDeleteStatement renders the node delete statement and its positional arguments for the given resolved kind
+// IDs. The include predicate is emitted whenever an include filter was requested (includeRequested), even if includeIDs
+// is empty, so that targeting only undefined kinds matches no nodes. The exclude predicate is emitted only when
+// excludeIDs is non-empty, so an unresolved exclusion can never widen the delete into an unguarded wipe.
+func buildNodeDeleteStatement(includeRequested bool, includeIDs []int16, excludeIDs []int16) (string, []any) {
 	var (
 		predicates []string
 		arguments  []any
 	)
 
-	if len(includeAny) > 0 {
+	if includeRequested {
 		arguments = append(arguments, includeIDs)
 		predicates = append(predicates, fmt.Sprintf("kind_ids operator (pg_catalog.&&) $%d::int2[]", len(arguments)))
 	}
@@ -284,17 +304,7 @@ func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds,
 		statement += " where " + strings.Join(predicates, " and ")
 	}
 
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire connection for node delete: %w", err)
-	}
-	defer conn.Release()
-
-	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
-		return fmt.Errorf("%s: %w", statement, err)
-	}
-
-	return nil
+	return statement, arguments
 }
 
 // DeleteRelationshipsByKinds performs a server-side, set-based delete of relationships whose kind_id matches any of
