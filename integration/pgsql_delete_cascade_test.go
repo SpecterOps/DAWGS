@@ -102,9 +102,55 @@ func TestPostgreSQLStatementLevelDeleteTriggerCascadesEdges(t *testing.T) {
 		t.Fatalf("surviving node count: got %d, want 2", nodeCount)
 	}
 
-	if edgeCount := countByCypher(t, ctx, db, "MATCH (:CascadeDeleteNode)-[r:CascadeDeleteEdge]->(:CascadeDeleteNode) RETURN count(r)"); edgeCount != 1 {
+	// Count the edge storage directly rather than via Cypher: a Cypher match only sees edges whose endpoints still
+	// exist, so an orphaned CascadeDeleteEdge left behind by a failed cascade would be silently excluded. A SQL
+	// count(*) over the edge table detects those orphans and holds the cascade to exactly the one surviving edge.
+	if edgeCount := countEdgesByKindSQL(t, ctx, db, edgeKind); edgeCount != 1 {
 		t.Fatalf("surviving edge count: got %d, want 1", edgeCount)
 	}
+}
+
+// countEdgesByKindSQL counts rows in the edge storage for the given kind via raw SQL, bypassing Cypher endpoint
+// matching so that orphaned edges still referencing deleted nodes are included in the count.
+func countEdgesByKindSQL(t *testing.T, ctx context.Context, db graph.Database, kind graph.Kind) int64 {
+	t.Helper()
+
+	kindMapper, err := pg.KindMapperFromGraphDatabase(db)
+	if err != nil {
+		t.Fatalf("failed to resolve kind mapper: %v", err)
+	}
+
+	kindID, err := kindMapper.MapKind(ctx, kind)
+	if err != nil {
+		t.Fatalf("failed to map kind %s: %v", kind, err)
+	}
+
+	var count int64
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		result := tx.Raw("select count(*) from edge where kind_id = @kind_id", map[string]any{"kind_id": kindID})
+		defer result.Close()
+
+		if !result.Next() {
+			if err := result.Error(); err != nil {
+				return err
+			}
+			return errors.New("expected count row")
+		}
+
+		if err := result.Scan(&count); err != nil {
+			return err
+		}
+
+		if result.Next() {
+			return errors.New("expected one count row")
+		}
+
+		return result.Error()
+	}); err != nil {
+		t.Fatalf("edge count query failed: %v", err)
+	}
+
+	return count
 }
 
 // countByCypher executes a Cypher query that returns a single count and returns it.
