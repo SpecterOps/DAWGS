@@ -216,8 +216,8 @@ func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16
 
 // DeleteNodesByKinds performs a server-side, set-based delete of nodes using the kind_ids GIN index instead of
 // streaming node IDs through the application. A node is deleted when its kind_ids overlap includeAny (or, when
-// includeAny is empty, for every node) and do not overlap excludeAny. Deleting nodes fires the statement-level
-// delete_node_edges trigger, cascading the attached edge deletes in a single pass.
+// includeAny is empty, for every node) and do not overlap excludeAny. Deleting nodes fires the delete_node_edges
+// trigger, cascading the attached edge deletes.
 //
 // includeAny and excludeAny are mapped to kind IDs tolerantly: kinds that are not defined in the database map to
 // no IDs and therefore match no nodes. This makes a request that targets only undefined kinds a safe no-op rather
@@ -260,6 +260,37 @@ func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds,
 	defer conn.Release()
 
 	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
+		return fmt.Errorf("%s: %w", statement, err)
+	}
+
+	return nil
+}
+
+// DeleteRelationshipsByKinds performs a server-side, set-based delete of relationships whose kind_id matches any of
+// the given kinds, using the edge_kind_id_id_start_id_end_id_index covering index instead of streaming relationship
+// IDs through the application.
+//
+// kinds are mapped to kind IDs tolerantly: kinds that are not defined in the database map to no IDs. An empty kinds
+// argument, or one that maps entirely to undefined kinds, deletes nothing rather than every relationship.
+func (s *Driver) DeleteRelationshipsByKinds(ctx context.Context, kinds graph.Kinds) error {
+	if len(kinds) == 0 {
+		return nil
+	}
+
+	kindIDs, err := s.resolveKindIDs(ctx, kinds)
+	if err != nil {
+		return err
+	}
+
+	const statement = "delete from edge where kind_id = any($1::int2[])"
+
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for relationship delete: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, statement, kindIDs); err != nil {
 		return fmt.Errorf("%s: %w", statement, err)
 	}
 
