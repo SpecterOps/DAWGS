@@ -33,8 +33,8 @@ type nodesByKindDeleter interface {
 }
 
 // TestPostgreSQLDeleteNodesByKinds verifies the server-side, set-based node delete: includeAny restricts the delete to
-// nodes carrying one of the listed kinds, excludeAny protects nodes carrying one of the listed kinds, undefined kinds
-// are a safe no-op, and the statement-level trigger cascades incident edges.
+// nodes carrying one of the listed kinds, excludeAny protects nodes carrying one of the listed kinds, undefined include
+// kinds are a safe no-op while undefined exclude kinds fail closed, and deleting nodes cascades incident edges.
 func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 	connStr := os.Getenv("CONNECTION_STRING")
 	if connStr == "" {
@@ -135,6 +135,21 @@ func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 
 		if count := countByCypher(t, ctx, db, "MATCH (n) RETURN count(n)"); count != 4 {
 			t.Fatalf("node count after no-op delete: got %d, want 4", count)
+		}
+
+		cleanupAll(t, ctx, deleter)
+	})
+
+	t.Run("undefined exclude kinds fail closed and delete nothing", func(t *testing.T) {
+		createFixture()
+
+		// An unresolved exclusion would otherwise collapse to an unguarded delete; the driver must refuse instead.
+		if err := deleter.DeleteNodesByKinds(ctx, nil, graph.Kinds{missing}); err == nil {
+			t.Fatal("DeleteNodesByKinds(exclude missing) succeeded, want error")
+		}
+
+		if count := countByCypher(t, ctx, db, "MATCH (n) RETURN count(n)"); count != 4 {
+			t.Fatalf("node count after failed delete: got %d, want 4", count)
 		}
 
 		cleanupAll(t, ctx, deleter)
