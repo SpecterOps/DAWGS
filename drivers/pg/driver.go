@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -185,4 +186,82 @@ func (s *Driver) OptimizeStorage(ctx context.Context) error {
 	defer conn.Release()
 
 	return optimizeStorage(ctx, conn)
+}
+
+// resolveKindIDs maps kinds to their integer IDs, refreshing the schema cache once on a miss. Kinds that remain
+// undefined after the refresh are tolerated and omitted from the result so that callers match no nodes for them
+// rather than erroring.
+func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
+	if len(kinds) == 0 {
+		return nil, nil
+	}
+
+	s.lock.RLock()
+	if kindIDs, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
+		s.lock.RUnlock()
+		return kindIDs, nil
+	}
+	s.lock.RUnlock()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if err := s.Fetch(ctx); err != nil {
+		return nil, err
+	}
+
+	kindIDs, _ := s.mapKinds(kinds)
+	return kindIDs, nil
+}
+
+// DeleteNodesByKinds performs a server-side, set-based delete of nodes using the kind_ids GIN index instead of
+// streaming node IDs through the application. A node is deleted when its kind_ids overlap includeAny (or, when
+// includeAny is empty, for every node) and do not overlap excludeAny. Deleting nodes fires the statement-level
+// delete_node_edges trigger, cascading the attached edge deletes in a single pass.
+//
+// includeAny and excludeAny are mapped to kind IDs tolerantly: kinds that are not defined in the database map to
+// no IDs and therefore match no nodes. This makes a request that targets only undefined kinds a safe no-op rather
+// than an accidental full delete.
+func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds, excludeAny graph.Kinds) error {
+	includeIDs, err := s.resolveKindIDs(ctx, includeAny)
+	if err != nil {
+		return err
+	}
+
+	excludeIDs, err := s.resolveKindIDs(ctx, excludeAny)
+	if err != nil {
+		return err
+	}
+
+	var (
+		predicates []string
+		arguments  []any
+	)
+
+	if len(includeAny) > 0 {
+		arguments = append(arguments, includeIDs)
+		predicates = append(predicates, fmt.Sprintf("kind_ids operator (pg_catalog.&&) $%d::int2[]", len(arguments)))
+	}
+
+	if len(excludeAny) > 0 {
+		arguments = append(arguments, excludeIDs)
+		predicates = append(predicates, fmt.Sprintf("not (kind_ids operator (pg_catalog.&&) $%d::int2[])", len(arguments)))
+	}
+
+	statement := "delete from node"
+	if len(predicates) > 0 {
+		statement += " where " + strings.Join(predicates, " and ")
+	}
+
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for node delete: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
+		return fmt.Errorf("%s: %w", statement, err)
+	}
+
+	return nil
 }
