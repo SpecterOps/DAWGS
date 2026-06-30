@@ -214,14 +214,18 @@ func (s *Driver) WipeGraph(ctx context.Context, retain graph.TransactionDelegate
 // undefined after the refresh are tolerated and omitted from the result so that callers match no nodes for them
 // rather than erroring.
 func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
+// resolveKindIDs maps kinds to their integer IDs, refreshing the schema cache once on a miss. It returns the resolved
+// IDs alongside any kinds that remain undefined after the refresh, so callers can decide whether an unresolved kind is
+// a tolerable no-op (include predicates) or must fail closed (exclude predicates).
+func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16, graph.Kinds, error) {
 	if len(kinds) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	s.lock.RLock()
 	if kindIDs, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
 		s.lock.RUnlock()
-		return kindIDs, nil
+		return kindIDs, nil, nil
 	}
 	s.lock.RUnlock()
 
@@ -229,11 +233,11 @@ func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16
 	defer s.lock.Unlock()
 
 	if err := s.Fetch(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	kindIDs, _ := s.mapKinds(kinds)
-	return kindIDs, nil
+	kindIDs, missingKinds := s.mapKinds(kinds)
+	return kindIDs, missingKinds, nil
 }
 
 // DeleteNodesByKinds performs a server-side, set-based delete of nodes using the kind_ids GIN index instead of
@@ -241,18 +245,23 @@ func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16
 // includeAny is empty, for every node) and do not overlap excludeAny. Deleting nodes fires the delete_node_edges
 // trigger, cascading the attached edge deletes.
 //
-// includeAny and excludeAny are mapped to kind IDs tolerantly: kinds that are not defined in the database map to
-// no IDs and therefore match no nodes. This makes a request that targets only undefined kinds a safe no-op rather
-// than an accidental full delete.
+// includeAny is mapped to kind IDs tolerantly: include kinds that are not defined in the database map to no IDs and
+// therefore match no nodes, so a request that targets only undefined kinds is a safe no-op rather than an accidental
+// full delete. excludeAny is mapped fail-closed: if any exclude kind is undefined the delete is refused, because
+// silently dropping an exclusion would widen the delete and could remove protected nodes (e.g. an unresolved
+// MigrationData would turn a guarded wipe into an unguarded delete from node).
 func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds, excludeAny graph.Kinds) error {
-	includeIDs, err := s.resolveKindIDs(ctx, includeAny)
+	includeIDs, _, err := s.resolveKindIDs(ctx, includeAny)
 	if err != nil {
 		return err
 	}
 
-	excludeIDs, err := s.resolveKindIDs(ctx, excludeAny)
+	excludeIDs, excludeMissing, err := s.resolveKindIDs(ctx, excludeAny)
 	if err != nil {
 		return err
+	}
+	if len(excludeMissing) > 0 {
+		return fmt.Errorf("cannot exclude undefined kinds from node delete: %v", excludeMissing)
 	}
 
 	var (
@@ -265,7 +274,7 @@ func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds,
 		predicates = append(predicates, fmt.Sprintf("kind_ids operator (pg_catalog.&&) $%d::int2[]", len(arguments)))
 	}
 
-	if len(excludeAny) > 0 {
+	if len(excludeIDs) > 0 {
 		arguments = append(arguments, excludeIDs)
 		predicates = append(predicates, fmt.Sprintf("not (kind_ids operator (pg_catalog.&&) $%d::int2[])", len(arguments)))
 	}
@@ -299,7 +308,7 @@ func (s *Driver) DeleteRelationshipsByKinds(ctx context.Context, kinds graph.Kin
 		return nil
 	}
 
-	kindIDs, err := s.resolveKindIDs(ctx, kinds)
+	kindIDs, _, err := s.resolveKindIDs(ctx, kinds)
 	if err != nil {
 		return err
 	}
