@@ -40,7 +40,6 @@ func Dump(ctx context.Context, db graph.Database, driverName string, targets []g
 		slog.Int("graph_count", len(targets)),
 		slog.String("output_dir", options.OutputDir),
 		slog.Int("batch_size", options.BatchSize),
-		slog.Int("shard_size", options.ShardSize),
 		slog.String("compression", string(options.Compression)),
 		slog.String("scrub", string(options.Scrub)),
 	)
@@ -213,7 +212,6 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		slog.String("graph", target.Name),
 		slog.Int64("node_count", entitySnapshot.NodeCount),
 		slog.Int("batch_size", options.BatchSize),
-		slog.Int("shard_size", options.ShardSize),
 	)
 	nodeFiles, err := dumpNodePhase(ctx, db, targetGraph, options, activeScrubber, nodeKinds, graphEntry.NodeActionCounts, entitySnapshot, metricsBuilder)
 	if err != nil {
@@ -232,7 +230,6 @@ func dumpGraph(ctx context.Context, db graph.Database, target graphTarget, optio
 		slog.String("graph", target.Name),
 		slog.Int64("edge_count", entitySnapshot.EdgeCount),
 		slog.Int("batch_size", options.BatchSize),
-		slog.Int("shard_size", options.ShardSize),
 	)
 	edgeFiles, err := dumpEdgePhase(ctx, db, targetGraph, options, activeScrubber, edgeKinds, graphEntry.EdgeActionCounts, entitySnapshot, metricsBuilder)
 	if err != nil {
@@ -334,32 +331,26 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		return nil, nil
 	}
 
-	var (
-		files             []fileManifest
-		items             []fragmentNode
-		shardActionCounts = map[string]int{}
-		shardNumber       = 1
-		lastID            graph.ID
-		hasLastID         bool
-		processed         int64
-		startedAt         = time.Now()
-		nextProgressAt    = retrieverInitialProgressAt(entitySnapshot.NodeCount)
-	)
-
-	flush := func() error {
-		if len(items) == 0 {
-			return nil
-		}
-		fileEntry, err := writeNodeFragment(options.OutputDir, targetGraph.Name, shardNumber, options, items, shardActionCounts)
-		if err != nil {
-			return err
-		}
-		files = append(files, fileEntry)
-		items = nil
-		shardActionCounts = map[string]int{}
-		shardNumber++
-		return nil
+	relativePath, err := phaseFilePath(targetGraph.Name, phaseNodes, options.Compression)
+	if err != nil {
+		return nil, err
 	}
+	absolutePath := filepath.Join(options.OutputDir, filepath.FromSlash(relativePath))
+	writer, err := newCompressedJSONLinesWriter(absolutePath, options.Compression, options.ZstdLevel)
+	if err != nil {
+		return nil, err
+	}
+	defer writer.Abort()
+
+	var (
+		fileActionCounts = map[string]int{}
+		lastID           graph.ID
+		hasLastID        bool
+		processed        int64
+		written          int64
+		startedAt        = time.Now()
+		nextProgressAt   = retrieverInitialProgressAt(entitySnapshot.NodeCount)
+	)
 
 	for processed < entitySnapshot.NodeCount {
 		remaining := entitySnapshot.NodeCount - processed
@@ -383,7 +374,7 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 			if activeScrubber != nil {
 				var actionCounts map[string]int
 				properties, actionCounts = activeScrubber.scrubProperties(properties)
-				addActionCounts(shardActionCounts, actionCounts)
+				addActionCounts(fileActionCounts, actionCounts)
 				addActionCounts(graphActionCounts, actionCounts)
 			}
 			item := fragmentNode{
@@ -394,12 +385,10 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 			if err := metricsBuilder.observeFragmentNode(item); err != nil {
 				return nil, err
 			}
-			items = append(items, item)
-			if len(items) >= options.ShardSize {
-				if err := flush(); err != nil {
-					return nil, err
-				}
+			if err := writer.Encode(item); err != nil {
+				return nil, err
 			}
+			written++
 		}
 		processed += int64(len(nodes))
 		nextProgressAt = logRetrieverEntityProgress("retriever dump node phase progress", targetGraph.Name, phaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt)
@@ -407,10 +396,19 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		hasLastID = true
 	}
 
-	if err := flush(); err != nil {
+	count, err := fileCountFromInt64(written)
+	if err != nil {
 		return nil, err
 	}
-	return files, nil
+	fileEntry, err := writer.Close()
+	if err != nil {
+		return nil, err
+	}
+	fileEntry.Phase = phaseNodes
+	fileEntry.Path = relativePath
+	fileEntry.Count = count
+	fileEntry.ActionCounts = cloneActionCounts(fileActionCounts)
+	return []fileManifest{fileEntry}, nil
 }
 
 func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Graph, options dumpOptions, activeScrubber *scrubber, edgeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot, metricsBuilder *metricsBuilder) ([]fileManifest, error) {
@@ -418,32 +416,26 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		return nil, nil
 	}
 
-	var (
-		files             []fileManifest
-		items             []fragmentEdge
-		shardActionCounts = map[string]int{}
-		shardNumber       = 1
-		lastID            graph.ID
-		hasLastID         bool
-		processed         int64
-		startedAt         = time.Now()
-		nextProgressAt    = retrieverInitialProgressAt(entitySnapshot.EdgeCount)
-	)
-
-	flush := func() error {
-		if len(items) == 0 {
-			return nil
-		}
-		fileEntry, err := writeEdgeFragment(options.OutputDir, targetGraph.Name, shardNumber, options, items, shardActionCounts)
-		if err != nil {
-			return err
-		}
-		files = append(files, fileEntry)
-		items = nil
-		shardActionCounts = map[string]int{}
-		shardNumber++
-		return nil
+	relativePath, err := phaseFilePath(targetGraph.Name, phaseEdges, options.Compression)
+	if err != nil {
+		return nil, err
 	}
+	absolutePath := filepath.Join(options.OutputDir, filepath.FromSlash(relativePath))
+	writer, err := newCompressedJSONLinesWriter(absolutePath, options.Compression, options.ZstdLevel)
+	if err != nil {
+		return nil, err
+	}
+	defer writer.Abort()
+
+	var (
+		fileActionCounts = map[string]int{}
+		lastID           graph.ID
+		hasLastID        bool
+		processed        int64
+		written          int64
+		startedAt        = time.Now()
+		nextProgressAt   = retrieverInitialProgressAt(entitySnapshot.EdgeCount)
+	)
 
 	for processed < entitySnapshot.EdgeCount {
 		remaining := entitySnapshot.EdgeCount - processed
@@ -469,7 +461,7 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 			if activeScrubber != nil {
 				var actionCounts map[string]int
 				properties, actionCounts = activeScrubber.scrubProperties(properties)
-				addActionCounts(shardActionCounts, actionCounts)
+				addActionCounts(fileActionCounts, actionCounts)
 				addActionCounts(graphActionCounts, actionCounts)
 			}
 			item := fragmentEdge{
@@ -481,12 +473,10 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 			if err := metricsBuilder.observeFragmentEdge(item); err != nil {
 				return nil, err
 			}
-			items = append(items, item)
-			if len(items) >= options.ShardSize {
-				if err := flush(); err != nil {
-					return nil, err
-				}
+			if err := writer.Encode(item); err != nil {
+				return nil, err
 			}
+			written++
 		}
 		processed += int64(len(relationships))
 		nextProgressAt = logRetrieverEntityProgress("retriever dump edge phase progress", targetGraph.Name, phaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt)
@@ -494,22 +484,38 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 		hasLastID = true
 	}
 
-	if err := flush(); err != nil {
+	count, err := fileCountFromInt64(written)
+	if err != nil {
 		return nil, err
 	}
-	return files, nil
+	fileEntry, err := writer.Close()
+	if err != nil {
+		return nil, err
+	}
+	fileEntry.Phase = phaseEdges
+	fileEntry.Path = relativePath
+	fileEntry.Count = count
+	fileEntry.ActionCounts = cloneActionCounts(fileActionCounts)
+	return []fileManifest{fileEntry}, nil
 }
 
-func writeNodeFragment(outputDir, graphName string, shardNumber int, options dumpOptions, items []fragmentNode, actionCounts map[string]int) (fileManifest, error) {
-	relativePath, err := fragmentPath(graphName, phaseNodes, shardNumber, options.Compression)
+func writeNodeFragment(outputDir, graphName string, options dumpOptions, items []fragmentNode, actionCounts map[string]int) (fileManifest, error) {
+	relativePath, err := phaseFilePath(graphName, phaseNodes, options.Compression)
 	if err != nil {
 		return fileManifest{}, err
 	}
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	fileEntry, err := writeCompressedJSON(absolutePath, options.Compression, options.ZstdLevel, nodeFragment{
-		Phase: phaseNodes,
-		Items: items,
-	})
+	writer, err := newCompressedJSONLinesWriter(absolutePath, options.Compression, options.ZstdLevel)
+	if err != nil {
+		return fileManifest{}, err
+	}
+	defer writer.Abort()
+	for _, item := range items {
+		if err := writer.Encode(item); err != nil {
+			return fileManifest{}, err
+		}
+	}
+	fileEntry, err := writer.Close()
 	if err != nil {
 		return fileManifest{}, err
 	}
@@ -520,16 +526,23 @@ func writeNodeFragment(outputDir, graphName string, shardNumber int, options dum
 	return fileEntry, nil
 }
 
-func writeEdgeFragment(outputDir, graphName string, shardNumber int, options dumpOptions, items []fragmentEdge, actionCounts map[string]int) (fileManifest, error) {
-	relativePath, err := fragmentPath(graphName, phaseEdges, shardNumber, options.Compression)
+func writeEdgeFragment(outputDir, graphName string, options dumpOptions, items []fragmentEdge, actionCounts map[string]int) (fileManifest, error) {
+	relativePath, err := phaseFilePath(graphName, phaseEdges, options.Compression)
 	if err != nil {
 		return fileManifest{}, err
 	}
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	fileEntry, err := writeCompressedJSON(absolutePath, options.Compression, options.ZstdLevel, edgeFragment{
-		Phase: phaseEdges,
-		Items: items,
-	})
+	writer, err := newCompressedJSONLinesWriter(absolutePath, options.Compression, options.ZstdLevel)
+	if err != nil {
+		return fileManifest{}, err
+	}
+	defer writer.Abort()
+	for _, item := range items {
+		if err := writer.Encode(item); err != nil {
+			return fileManifest{}, err
+		}
+	}
+	fileEntry, err := writer.Close()
 	if err != nil {
 		return fileManifest{}, err
 	}
@@ -540,10 +553,7 @@ func writeEdgeFragment(outputDir, graphName string, shardNumber int, options dum
 	return fileEntry, nil
 }
 
-func fragmentPath(graphName string, fragmentPhase phase, shardNumber int, codec compressionCodec) (string, error) {
-	if shardNumber <= 0 {
-		return "", fmt.Errorf("shard number must be > 0")
-	}
+func phaseFilePath(graphName string, fragmentPhase phase, codec compressionCodec) (string, error) {
 	extension, err := compressionExtension(codec)
 	if err != nil {
 		return "", err
@@ -559,7 +569,15 @@ func fragmentPath(graphName string, fragmentPhase phase, shardNumber int, codec 
 		return "", fmt.Errorf("unsupported fragment phase %q", fragmentPhase)
 	}
 
-	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s-%06d.ogfrag%s", prefix, shardNumber, extension)), nil
+	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s.jsonl%s", prefix, extension)), nil
+}
+
+func fileCountFromInt64(value int64) (int, error) {
+	count := int(value)
+	if int64(count) != value {
+		return 0, fmt.Errorf("file record count %d overflows manifest count field", value)
+	}
+	return count, nil
 }
 
 func fileTotal(files []fileManifest) int64 {

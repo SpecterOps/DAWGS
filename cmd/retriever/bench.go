@@ -310,10 +310,7 @@ func benchNodeBatch(nodes []*graph.Node, options benchOptions) (benchPhaseResult
 		})
 	}
 	encodeStarted := time.Now()
-	uncompressedBytes, compressedBytes, err := compressedJSONSize(options.Compression, options.ZstdLevel, nodeFragment{
-		Phase: phaseNodes,
-		Items: items,
-	})
+	uncompressedBytes, compressedBytes, err := compressedJSONLinesSize(options.Compression, options.ZstdLevel, items)
 	result.EncodeCompressTime = time.Since(encodeStarted)
 	if err != nil {
 		return benchPhaseResult{}, err
@@ -345,10 +342,7 @@ func benchRelationshipBatch(relationships []*graph.Relationship, options benchOp
 		})
 	}
 	encodeStarted := time.Now()
-	uncompressedBytes, compressedBytes, err := compressedJSONSize(options.Compression, options.ZstdLevel, edgeFragment{
-		Phase: phaseEdges,
-		Items: items,
-	})
+	uncompressedBytes, compressedBytes, err := compressedJSONLinesSize(options.Compression, options.ZstdLevel, items)
 	result.EncodeCompressTime = time.Since(encodeStarted)
 	if err != nil {
 		return benchPhaseResult{}, err

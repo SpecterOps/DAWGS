@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	defaultShardSize       = 100_000
 	defaultBatchSize       = 10_000
 	defaultBenchSampleSize = 1_000_000
 )
@@ -89,7 +88,7 @@ type dumpOptions struct {
 	ScrubConfigPath  string
 	Compression      compressionCodec
 	ZstdLevel        int
-	ShardSize        int
+	Parquet          bool
 	BatchSize        int
 	ProgressInterval int
 }
@@ -109,9 +108,6 @@ func (s dumpOptions) validate() error {
 	}
 	if s.ZstdLevel <= 0 {
 		return fmt.Errorf("zstd-level must be > 0")
-	}
-	if s.ShardSize <= 0 {
-		return fmt.Errorf("shard-size must be > 0")
 	}
 	if s.BatchSize <= 0 {
 		return fmt.Errorf("batch-size must be > 0")

@@ -1,11 +1,12 @@
 # retriever
 
 `retriever` dumps and loads live Dawgs graph databases as manifest-based
-collections of compact OpenGraph-derived JSON fragments.
+collections of compressed OpenGraph-derived JSON Lines files.
 
-The v1 collection format is intended for idle databases. Dumps are deterministic
-by entity ID order and cap each graph scan at the entity counts observed when
-counting starts, but they do not provide a transactional cross-fragment snapshot.
+The v1 JSONL collection format is intended for idle databases. Dumps are
+deterministic by entity ID order and cap each graph scan at the entity counts
+observed when counting starts, but they do not provide a transactional
+cross-phase snapshot.
 
 ## Dump
 
@@ -16,8 +17,7 @@ retriever dump \
   -graph default \
   -scrub none \
   -compression zstd \
-  -zstd-level 11 \
-  -shard-size 100000
+  -zstd-level 11
 ```
 
 Use repeated `-graph` flags to dump multiple named graphs. For PostgreSQL,
@@ -30,8 +30,50 @@ The manifest is written last as `manifest.json`; if a dump fails before that
 point, the directory is intentionally left for inspection without a success
 manifest.
 
+Each graph is written under its own directory with one node file and one edge
+file:
+
+```text
+manifest.json
+graphs/default/nodes.jsonl.zst
+graphs/default/edges.jsonl.zst
+```
+
+Each JSONL row is shaped like the current retriever entity item. Node rows have
+`id`, `kinds`, and `properties`; edge rows have `start_id`, `end_id`, `kind`,
+and `properties`. Property values remain inside `properties`, including
+`objectid`, so downstream analytics jobs can decorate Parquet projections
+without changing the retriever dump contract.
+
+Pass `-parquet` to derive analytics-friendly Parquet files after the JSONL dump
+succeeds:
+
+```bash
+retriever dump \
+  -connection "$CONNECTION_STRING" \
+  -out ./dumpdir \
+  -graph default \
+  -compression zstd \
+  -parquet
+```
+
+Parquet conversion uses the embedded DuckDB Go client, so builds need a
+CGO-capable toolchain. The derived files are written next to the JSONL files:
+
+```text
+graphs/default/nodes.parquet
+graphs/default/edges.parquet
+```
+
+`nodes.parquet` contains `id`, `objectid`, `kinds`, and `properties`.
+`edges.parquet` contains `id`, `start_id`, `end_id`, `start_objectid`,
+`end_objectid`, `kind`, and `properties`. Edge IDs are generated as
+`start_objectid || '_' || kind || '_' || end_objectid`; endpoint object IDs are
+derived by joining edges back to the node projection. `retriever load`
+continues to load from the manifest-listed JSONL files.
+
 New dumps include a `retriever-metrics-v1` manifest section with graph metrics
-computed from the same node and relationship streams written to the fragments.
+computed from the same node and relationship streams written to the JSONL files.
 The metrics include entity counts, kind histograms, degree histograms, endpoint
 kind-shape histograms, and a canonical SHA-256 fingerprint. They intentionally
 exclude IDs, property keys, property values, source identifiers, examples, and
@@ -75,7 +117,7 @@ retriever dump \
 ```
 
 The archive layer uses an uncompressed TAR stream encrypted with HPKE using
-ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. Fragment compression inside the dump
+ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. JSONL compression inside the dump
 directory remains controlled by `-compression`; the archive itself is not
 compressed. If archive creation fails, the command fails and removes partial
 archive output while leaving the completed dump directory for inspection.
@@ -90,7 +132,7 @@ retriever unpack \
 ```
 
 Existing non-empty unpack output directories are refused unless `-force` is
-supplied. Unpacked collections retain the normal `manifest.json` and fragment
+supplied. Unpacked collections retain the normal `manifest.json` and JSONL
 layout and can be loaded with `retriever load -in ./dumpdir`.
 
 ## Scrubbed Dumps
@@ -130,11 +172,13 @@ retriever load \
   -identity ./retriever-private.key
 ```
 
-Load reads and validates `manifest.json`, verifies every fragment checksum in a
-separate pass, asserts destination graph schemas from the manifest metadata, and
-then loads all nodes before relationships. Graph names from the dump are
-preserved; load does not support overriding graph names. Archive loads decrypt
-and validate into a temporary collection directory before opening the database.
+Load reads and validates `manifest.json`, verifies every JSONL file checksum and
+record count in a separate pass, asserts destination graph schemas from the
+manifest metadata, and then loads all nodes before relationships. Graph names
+from the dump are preserved; load does not support overriding graph names.
+Archive loads decrypt and validate into a temporary collection directory before
+opening the database. Manifests from the previous compact-fragment format are
+recognized as legacy inputs.
 
 Load progress is emitted with `log/slog` on stderr. Notices mark manifest
 reading, checksum verification, schema assertion, graph boundaries, node and

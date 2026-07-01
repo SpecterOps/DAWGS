@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	manifestFormat       = "retriever-opengraph-collection-v1"
-	legacyManifestFormat = "retrievr-opengraph-collection-v1"
-	idStrategy           = "source_database_id_string"
+	manifestFormat              = "retriever-opengraph-jsonl-collection-v1"
+	legacyCompactManifestFormat = "retriever-opengraph-collection-v1"
+	legacyManifestFormat        = "retrievr-opengraph-collection-v1"
+	idStrategy                  = "source_database_id_string"
 )
 
 type phase string
@@ -202,11 +203,15 @@ func (s manifest) validate() error {
 
 func isSupportedManifestFormat(format string) bool {
 	switch format {
-	case manifestFormat, legacyManifestFormat:
+	case manifestFormat, legacyCompactManifestFormat, legacyManifestFormat:
 		return true
 	default:
 		return false
 	}
+}
+
+func isJSONLManifestFormat(format string) bool {
+	return format == manifestFormat
 }
 
 func graphSchemaFromMetadata(metadata graphSchemaMetadata) graph.Graph {

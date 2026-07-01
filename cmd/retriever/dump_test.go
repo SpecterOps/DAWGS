@@ -5,28 +5,25 @@ import (
 	"testing"
 )
 
-func TestFragmentPath(t *testing.T) {
-	nodePath, err := fragmentPath("graph/name", phaseNodes, 7, compressionZstd)
+func TestPhaseFilePath(t *testing.T) {
+	nodePath, err := phaseFilePath("graph/name", phaseNodes, compressionZstd)
 	if err != nil {
-		t.Fatalf("node fragment path: %v", err)
+		t.Fatalf("node phase path: %v", err)
 	}
-	if nodePath != "graphs/graph%2Fname/nodes-000007.ogfrag.zst" {
-		t.Fatalf("unexpected node fragment path %q", nodePath)
+	if nodePath != "graphs/graph%2Fname/nodes.jsonl.zst" {
+		t.Fatalf("unexpected node phase path %q", nodePath)
 	}
 
-	edgePath, err := fragmentPath("default", phaseEdges, 3, compressionGzip)
+	edgePath, err := phaseFilePath("default", phaseEdges, compressionGzip)
 	if err != nil {
-		t.Fatalf("edge fragment path: %v", err)
+		t.Fatalf("edge phase path: %v", err)
 	}
-	if edgePath != "graphs/default/edges-000003.ogfrag.gz" {
-		t.Fatalf("unexpected edge fragment path %q", edgePath)
+	if edgePath != "graphs/default/edges.jsonl.gz" {
+		t.Fatalf("unexpected edge phase path %q", edgePath)
 	}
 
-	if _, err := fragmentPath("default", phase("bad"), 1, compressionGzip); err == nil {
+	if _, err := phaseFilePath("default", phase("bad"), compressionGzip); err == nil {
 		t.Fatalf("expected unsupported phase error")
-	}
-	if _, err := fragmentPath("default", phaseNodes, 0, compressionGzip); err == nil {
-		t.Fatalf("expected invalid shard number error")
 	}
 }
 
@@ -37,7 +34,7 @@ func TestWriteFragmentMetadata(t *testing.T) {
 		ZstdLevel:   defaultZstdLevel,
 	}
 
-	fileEntry, err := writeNodeFragment(options.OutputDir, "default", 1, options, []fragmentNode{{
+	fileEntry, err := writeNodeFragment(options.OutputDir, "default", options, []fragmentNode{{
 		ID:         "1",
 		Kinds:      []string{"User"},
 		Properties: map[string]any{"name": "alice"},
@@ -45,17 +42,17 @@ func TestWriteFragmentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write node fragment: %v", err)
 	}
-	if fileEntry.Phase != phaseNodes || fileEntry.Path != "graphs/default/nodes-000001.ogfrag.gz" || fileEntry.Count != 1 {
+	if fileEntry.Phase != phaseNodes || fileEntry.Path != "graphs/default/nodes.jsonl.gz" || fileEntry.Count != 1 {
 		t.Fatalf("unexpected node file manifest: %+v", fileEntry)
 	}
 	if fileEntry.ActionCounts["pseudonymize"] != 1 {
 		t.Fatalf("missing action count: %+v", fileEntry.ActionCounts)
 	}
 	if _, err := readManifest(filepath.Join(options.OutputDir, "graphs")); err == nil {
-		t.Fatalf("fragment write should not create manifest")
+		t.Fatalf("phase write should not create manifest")
 	}
 
-	edgeEntry, err := writeEdgeFragment(options.OutputDir, "default", 2, options, []fragmentEdge{{
+	edgeEntry, err := writeEdgeFragment(options.OutputDir, "default", options, []fragmentEdge{{
 		StartID: "1",
 		EndID:   "2",
 		Kind:    "AdminTo",
@@ -63,7 +60,7 @@ func TestWriteFragmentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write edge fragment: %v", err)
 	}
-	if edgeEntry.Phase != phaseEdges || edgeEntry.Path != "graphs/default/edges-000002.ogfrag.gz" || edgeEntry.Count != 1 {
+	if edgeEntry.Phase != phaseEdges || edgeEntry.Path != "graphs/default/edges.jsonl.gz" || edgeEntry.Count != 1 {
 		t.Fatalf("unexpected edge file manifest: %+v", edgeEntry)
 	}
 }

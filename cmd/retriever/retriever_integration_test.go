@@ -112,7 +112,6 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 		Scrub:       scrubNone,
 		Compression: compressionGzip,
 		ZstdLevel:   defaultZstdLevel,
-		ShardSize:   1,
 		BatchSize:   1,
 	})
 	if err != nil {

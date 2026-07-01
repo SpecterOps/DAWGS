@@ -66,14 +66,14 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 	}
 
 	verifyStartedAt := time.Now()
-	slog.Info("retriever load verifying fragments",
+	slog.Info("retriever load verifying files",
 		slog.String("input_dir", options.InputDir),
 		slog.Int("file_count", manifestFileCount(nextManifest)),
 	)
 	if err := verifyManifestFiles(options.InputDir, nextManifest); err != nil {
 		return loadResult{}, err
 	}
-	slog.Info("retriever load fragments verified",
+	slog.Info("retriever load files verified",
 		slog.String("input_dir", options.InputDir),
 		slog.Int("file_count", manifestFileCount(nextManifest)),
 		slog.Duration("wall_elapsed", time.Since(verifyStartedAt)),
@@ -108,7 +108,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 			slog.String("graph", graphEntry.Name),
 			slog.Int64("node_count", graphEntry.NodeCount),
 		)
-		nodeMap, nodeCount, err := loadGraphNodes(ctx, db, options.InputDir, nextManifest.Compression, graphEntry)
+		nodeMap, nodeCount, err := loadGraphNodes(ctx, db, options.InputDir, nextManifest.Format, nextManifest.Compression, graphEntry, options.BatchSize)
 		if err != nil {
 			return loadResult{}, err
 		}
@@ -125,7 +125,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options loa
 			slog.Int64("edge_count", graphEntry.EdgeCount),
 			slog.Int("batch_size", options.BatchSize),
 		)
-		edgeCount, err := loadGraphEdges(ctx, db, options.InputDir, nextManifest.Compression, graphEntry, nodeMap, options.BatchSize)
+		edgeCount, err := loadGraphEdges(ctx, db, options.InputDir, nextManifest.Format, nextManifest.Compression, graphEntry, nodeMap, options.BatchSize)
 		if err != nil {
 			return loadResult{}, err
 		}
@@ -283,7 +283,7 @@ func manifestFileCount(value manifest) int {
 	return count
 }
 
-func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, codec compressionCodec, graphEntry graphManifest) (map[string]graph.ID, int64, error) {
+func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, format string, codec compressionCodec, graphEntry graphManifest, batchSize int) (map[string]graph.ID, int64, error) {
 	nodeMap := make(map[string]graph.ID, int(graphEntry.NodeCount))
 	var (
 		loaded         int64
@@ -291,8 +291,63 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 		nextProgressAt = retrieverInitialProgressAt(graphEntry.NodeCount)
 	)
 
+	loadBatch := func(filePath string, items []fragmentNode) error {
+		if len(items) == 0 {
+			return nil
+		}
+		if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			tx = tx.WithGraph(graph.Graph{
+				Name: graphEntry.Name,
+			})
+			for _, item := range items {
+				if item.ID == "" {
+					return fmt.Errorf("node fragment %s contains empty source ID", filePath)
+				}
+				if _, exists := nodeMap[item.ID]; exists {
+					return fmt.Errorf("duplicate source node ID %q in graph %q", item.ID, graphEntry.Name)
+				}
+				dbNode, err := tx.CreateNode(graph.AsProperties(item.Properties), graph.StringsToKinds(item.Kinds)...)
+				if err != nil {
+					return fmt.Errorf("create node %q: %w", item.ID, err)
+				}
+				nodeMap[item.ID] = dbNode.ID
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("load node fragment %s: %w", filePath, err)
+		}
+		loaded += int64(len(items))
+		nextProgressAt = logRetrieverEntityProgress("retriever load node phase progress", graphEntry.Name, phaseNodes, loaded, graphEntry.NodeCount, startedAt, nextProgressAt)
+		return nil
+	}
+
 	for _, fileEntry := range graphEntry.Files {
 		if fileEntry.Phase != phaseNodes {
+			continue
+		}
+
+		if isJSONLManifestFormat(format) {
+			batch := make([]fragmentNode, 0, batchSize)
+			count, err := readCompressedJSONLines[fragmentNode](filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path)), codec, func(item fragmentNode) error {
+				batch = append(batch, item)
+				if len(batch) < batchSize {
+					return nil
+				}
+				if err := loadBatch(fileEntry.Path, batch); err != nil {
+					return err
+				}
+				batch = batch[:0]
+				return nil
+			})
+			if err != nil {
+				return nil, loaded, fmt.Errorf("read node JSONL %s: %w", fileEntry.Path, err)
+			}
+			if count != fileEntry.Count {
+				return nil, loaded, fmt.Errorf("node JSONL %s record count %d does not match manifest count %d", fileEntry.Path, count, fileEntry.Count)
+			}
+			if err := loadBatch(fileEntry.Path, batch); err != nil {
+				return nil, loaded, err
+			}
 			continue
 		}
 
@@ -307,43 +362,74 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 			return nil, loaded, fmt.Errorf("fragment %s item count %d does not match manifest count %d", fileEntry.Path, len(fragment.Items), fileEntry.Count)
 		}
 
-		if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			tx = tx.WithGraph(graph.Graph{
-				Name: graphEntry.Name,
-			})
-			for _, item := range fragment.Items {
-				if item.ID == "" {
-					return fmt.Errorf("node fragment %s contains empty source ID", fileEntry.Path)
-				}
-				if _, exists := nodeMap[item.ID]; exists {
-					return fmt.Errorf("duplicate source node ID %q in graph %q", item.ID, graphEntry.Name)
-				}
-				dbNode, err := tx.CreateNode(graph.AsProperties(item.Properties), graph.StringsToKinds(item.Kinds)...)
-				if err != nil {
-					return fmt.Errorf("create node %q: %w", item.ID, err)
-				}
-				nodeMap[item.ID] = dbNode.ID
-			}
-			return nil
-		}); err != nil {
-			return nil, loaded, fmt.Errorf("load node fragment %s: %w", fileEntry.Path, err)
+		if err := loadBatch(fileEntry.Path, fragment.Items); err != nil {
+			return nil, loaded, err
 		}
-		loaded += int64(len(fragment.Items))
-		nextProgressAt = logRetrieverEntityProgress("retriever load node phase progress", graphEntry.Name, phaseNodes, loaded, graphEntry.NodeCount, startedAt, nextProgressAt)
 	}
 
 	return nodeMap, loaded, nil
 }
 
-func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, codec compressionCodec, graphEntry graphManifest, nodeMap map[string]graph.ID, batchSize int) (int64, error) {
+func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, format string, codec compressionCodec, graphEntry graphManifest, nodeMap map[string]graph.ID, batchSize int) (int64, error) {
 	var (
 		loaded         int64
 		startedAt      = time.Now()
 		nextProgressAt = retrieverInitialProgressAt(graphEntry.EdgeCount)
 	)
 
+	loadBatch := func(filePath string, items []fragmentEdge) error {
+		if len(items) == 0 {
+			return nil
+		}
+		if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
+			batch = batch.WithGraph(graph.Graph{
+				Name: graphEntry.Name,
+			})
+			for _, item := range items {
+				resolved, err := resolveFragmentEdge(item, nodeMap)
+				if err != nil {
+					return err
+				}
+				if err := batch.CreateRelationshipByIDs(resolved.StartID, resolved.EndID, resolved.Kind, resolved.Properties); err != nil {
+					return fmt.Errorf("create edge (%s)-[%s]->(%s): %w", item.StartID, item.Kind, item.EndID, err)
+				}
+			}
+			return nil
+		}, graph.WithBatchSize(batchSize)); err != nil {
+			return fmt.Errorf("load edge fragment %s: %w", filePath, err)
+		}
+		loaded += int64(len(items))
+		nextProgressAt = logRetrieverEntityProgress("retriever load edge phase progress", graphEntry.Name, phaseEdges, loaded, graphEntry.EdgeCount, startedAt, nextProgressAt)
+		return nil
+	}
+
 	for _, fileEntry := range graphEntry.Files {
 		if fileEntry.Phase != phaseEdges {
+			continue
+		}
+
+		if isJSONLManifestFormat(format) {
+			batch := make([]fragmentEdge, 0, batchSize)
+			count, err := readCompressedJSONLines[fragmentEdge](filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path)), codec, func(item fragmentEdge) error {
+				batch = append(batch, item)
+				if len(batch) < batchSize {
+					return nil
+				}
+				if err := loadBatch(fileEntry.Path, batch); err != nil {
+					return err
+				}
+				batch = batch[:0]
+				return nil
+			})
+			if err != nil {
+				return loaded, fmt.Errorf("read edge JSONL %s: %w", fileEntry.Path, err)
+			}
+			if count != fileEntry.Count {
+				return loaded, fmt.Errorf("edge JSONL %s record count %d does not match manifest count %d", fileEntry.Path, count, fileEntry.Count)
+			}
+			if err := loadBatch(fileEntry.Path, batch); err != nil {
+				return loaded, err
+			}
 			continue
 		}
 
@@ -358,25 +444,9 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 			return loaded, fmt.Errorf("fragment %s item count %d does not match manifest count %d", fileEntry.Path, len(fragment.Items), fileEntry.Count)
 		}
 
-		if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
-			batch = batch.WithGraph(graph.Graph{
-				Name: graphEntry.Name,
-			})
-			for _, item := range fragment.Items {
-				resolved, err := resolveFragmentEdge(item, nodeMap)
-				if err != nil {
-					return err
-				}
-				if err := batch.CreateRelationshipByIDs(resolved.StartID, resolved.EndID, resolved.Kind, resolved.Properties); err != nil {
-					return fmt.Errorf("create edge (%s)-[%s]->(%s): %w", item.StartID, item.Kind, item.EndID, err)
-				}
-			}
-			return nil
-		}, graph.WithBatchSize(batchSize)); err != nil {
-			return loaded, fmt.Errorf("load edge fragment %s: %w", fileEntry.Path, err)
+		if err := loadBatch(fileEntry.Path, fragment.Items); err != nil {
+			return loaded, err
 		}
-		loaded += int64(len(fragment.Items))
-		nextProgressAt = logRetrieverEntityProgress("retriever load edge phase progress", graphEntry.Name, phaseEdges, loaded, graphEntry.EdgeCount, startedAt, nextProgressAt)
 	}
 
 	return loaded, nil

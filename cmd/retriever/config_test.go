@@ -50,7 +50,6 @@ func TestDumpOptionsScrubFullRequiresSalt(t *testing.T) {
 		Scrub:       scrubFull,
 		Compression: compressionZstd,
 		ZstdLevel:   defaultZstdLevel,
-		ShardSize:   defaultShardSize,
 		BatchSize:   defaultBatchSize,
 	}
 
@@ -65,7 +64,6 @@ func TestOptionsValidate(t *testing.T) {
 		Scrub:       scrubNone,
 		Compression: compressionGzip,
 		ZstdLevel:   defaultZstdLevel,
-		ShardSize:   defaultShardSize,
 		BatchSize:   defaultBatchSize,
 	}
 	if err := dump.validate(); err != nil {

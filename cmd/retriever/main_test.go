@@ -34,6 +34,16 @@ func TestCommandRuntimeHelpAndValidation(t *testing.T) {
 		t.Fatalf("expected scrub salt validation error, got %v", err)
 	}
 
+	err = runtime.run(context.Background(), []string{"dump", "-out", t.TempDir(), "-shard-size", "1"})
+	if err == nil || !strings.Contains(err.Error(), "flag provided but not defined: -shard-size") {
+		t.Fatalf("expected shard-size flag rejection, got %v", err)
+	}
+
+	err = runtime.run(context.Background(), []string{"dump", "-out", t.TempDir(), "-parquet"})
+	if err == nil || !strings.Contains(err.Error(), "database connection is required") {
+		t.Fatalf("expected parquet flag to parse before database validation, got %v", err)
+	}
+
 	err = runtime.run(context.Background(), []string{"load"})
 	if err == nil || !strings.Contains(err.Error(), "input directory or archive path is required") {
 		t.Fatalf("expected load input validation error, got %v", err)

@@ -83,14 +83,18 @@ func TestResolveFragmentEdge(t *testing.T) {
 
 func TestVerifyManifestFilesRejectsBadChecksum(t *testing.T) {
 	dir := t.TempDir()
-	entry, err := writeCompressedJSON(filepath.Join(dir, "fragment.gz"), compressionGzip, defaultZstdLevel, nodeFragment{
-		Phase: phaseNodes,
-		Items: []fragmentNode{{
-			ID: "1",
-		}},
-	})
+	writer, err := newCompressedJSONLinesWriter(filepath.Join(dir, "nodes.jsonl.gz"), compressionGzip, defaultZstdLevel)
 	if err != nil {
-		t.Fatalf("write fragment: %v", err)
+		t.Fatalf("open JSONL writer: %v", err)
+	}
+	if err := writer.Encode(fragmentNode{
+		ID: "1",
+	}); err != nil {
+		t.Fatalf("write JSONL node: %v", err)
+	}
+	entry, err := writer.Close()
+	if err != nil {
+		t.Fatalf("close JSONL writer: %v", err)
 	}
 
 	value := newValidTestManifest(1)
@@ -99,7 +103,7 @@ func TestVerifyManifestFilesRejectsBadChecksum(t *testing.T) {
 		NodeCount: 1,
 		Files: []fileManifest{{
 			Phase:           phaseNodes,
-			Path:            "fragment.gz",
+			Path:            "nodes.jsonl.gz",
 			Count:           1,
 			CompressedBytes: entry.CompressedBytes,
 			SHA256:          "bad",

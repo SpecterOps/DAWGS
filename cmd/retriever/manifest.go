@@ -50,8 +50,20 @@ func writeManifest(outputDir string, value manifest) error {
 func verifyManifestFiles(inputDir string, value manifest) error {
 	for _, graphEntry := range value.Graphs {
 		for _, fileEntry := range graphEntry.Files {
-			if err := verifyChecksum(filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path)), fileEntry.SHA256, fileEntry.CompressedBytes); err != nil {
+			absolutePath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+			if err := verifyChecksum(absolutePath, fileEntry.SHA256, fileEntry.CompressedBytes); err != nil {
 				return err
+			}
+			if isJSONLManifestFormat(value.Format) {
+				count, err := readCompressedJSONLines[json.RawMessage](absolutePath, value.Compression, func(json.RawMessage) error {
+					return nil
+				})
+				if err != nil {
+					return fmt.Errorf("verify JSONL file %s: %w", fileEntry.Path, err)
+				}
+				if count != fileEntry.Count {
+					return fmt.Errorf("JSONL record count mismatch for %s: manifest has %d, file has %d", fileEntry.Path, fileEntry.Count, count)
+				}
 			}
 		}
 	}

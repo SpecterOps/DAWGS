@@ -16,7 +16,7 @@ func TestManifestValidateRejectsUnsupportedFormat(t *testing.T) {
 
 func TestManifestValidateAcceptsLegacyFormat(t *testing.T) {
 	value := newValidTestManifest(0)
-	value.Format = legacyManifestFormat
+	value.Format = legacyCompactManifestFormat
 
 	if err := value.validate(); err != nil {
 		t.Fatalf("validate legacy manifest format: %v", err)
@@ -32,13 +32,13 @@ func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
 		Files: []fileManifest{
 			{
 				Phase:  phaseEdges,
-				Path:   "graphs/default/edges-000001.ogfrag.gz",
+				Path:   "graphs/default/edges.jsonl.gz",
 				Count:  1,
 				SHA256: "abc",
 			},
 			{
 				Phase:  phaseNodes,
-				Path:   "graphs/default/nodes-000001.ogfrag.gz",
+				Path:   "graphs/default/nodes.jsonl.gz",
 				Count:  1,
 				SHA256: "def",
 			},
@@ -53,7 +53,7 @@ func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
 func TestManifestValidateRejectsMalformedGraphEntries(t *testing.T) {
 	validFile := fileManifest{
 		Phase:           phaseNodes,
-		Path:            "graphs/default/nodes-000001.ogfrag.gz",
+		Path:            "graphs/default/nodes.jsonl.gz",
 		Count:           1,
 		CompressedBytes: 10,
 		SHA256:          "abc",
@@ -163,7 +163,7 @@ func TestManifestValidateAcceptsMetrics(t *testing.T) {
 		EdgeCount: 0,
 		Files: []fileManifest{{
 			Phase:           phaseNodes,
-			Path:            "graphs/default/nodes-000001.ogfrag.gz",
+			Path:            "graphs/default/nodes.jsonl.gz",
 			Count:           1,
 			CompressedBytes: 1,
 			SHA256:          "abc",

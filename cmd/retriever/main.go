@@ -77,7 +77,6 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	cfg.Scrub = scrubNone
 	cfg.Compression = compressionZstd
 	cfg.ZstdLevel = defaultZstdLevel
-	cfg.ShardSize = defaultShardSize
 	cfg.BatchSize = defaultBatchSize
 
 	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
@@ -94,7 +93,7 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	flags.StringVar(&cfg.ScrubConfigPath, "config", "", "Optional retriever TOML config for scrub classifier settings.")
 	flags.StringVar(&compressionVal, "compression", string(cfg.Compression), "Compression codec: zstd or gzip.")
 	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
-	flags.IntVar(&cfg.ShardSize, "shard-size", cfg.ShardSize, "Maximum entities per fragment.")
+	flags.BoolVar(&cfg.Parquet, "parquet", false, "Also derive nodes.parquet and edges.parquet files with DuckDB.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -140,6 +139,13 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	var parquetLine string
+	if cfg.Parquet {
+		if err := writeParquetCollection(ctx, cfg.OutputDir, result.Manifest); err != nil {
+			return err
+		}
+		parquetLine = "parquet: true\n"
+	}
 	var archiveLine string
 	if strings.TrimSpace(cfg.ArchiveOut) != "" {
 		if err := writeEncryptedCollectionArchive(cfg.OutputDir, cfg.ArchiveOut, archiveRecipient); err != nil {
@@ -147,7 +153,7 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 		}
 		archiveLine = fmt.Sprintf("archive: %s\n", cfg.ArchiveOut)
 	}
-	fmt.Fprintf(s.stdout, "dumped %d graph(s)\nmanifest: %s\n%snodes: %d\nrelationships: %d\n", len(result.Manifest.Graphs), result.ManifestPath, archiveLine, result.NodeCount, result.EdgeCount)
+	fmt.Fprintf(s.stdout, "dumped %d graph(s)\nmanifest: %s\n%s%snodes: %d\nrelationships: %d\n", len(result.Manifest.Graphs), result.ManifestPath, parquetLine, archiveLine, result.NodeCount, result.EdgeCount)
 	return nil
 }
 

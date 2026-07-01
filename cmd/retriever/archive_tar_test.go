@@ -70,7 +70,7 @@ func TestCollectionTarRejectsUnsafeInputs(t *testing.T) {
 		"absolute":       "/tmp/fragment.gz",
 		"parent":         "../fragment.gz",
 		"nested parent":  "graphs/../fragment.gz",
-		"back separator": `graphs\default\nodes-000001.ogfrag.gz`,
+		"back separator": `graphs\default\nodes.jsonl.gz`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := writeManifestWithArchivePath(t, archivePath)
@@ -163,7 +163,7 @@ func writeArchiveFixture(t *testing.T) string {
 		Compression: compressionGzip,
 		ZstdLevel:   defaultZstdLevel,
 	}
-	nodeEntry, err := writeNodeFragment(dir, "secret-graph", 1, options, []fragmentNode{{
+	nodeEntry, err := writeNodeFragment(dir, "secret-graph", options, []fragmentNode{{
 		ID:         "1",
 		Kinds:      []string{"User"},
 		Properties: map[string]any{"name": "alice"},
@@ -171,7 +171,7 @@ func writeArchiveFixture(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("write node fragment: %v", err)
 	}
-	edgeEntry, err := writeEdgeFragment(dir, "secret-graph", 1, options, []fragmentEdge{{
+	edgeEntry, err := writeEdgeFragment(dir, "secret-graph", options, []fragmentEdge{{
 		StartID: "1",
 		EndID:   "1",
 		Kind:    "MemberOf",
