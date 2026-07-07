@@ -425,6 +425,300 @@ func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 	})
 }
 
+func TestLoweringPlanReportsExactOneHopRangeExpansion(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..1]->(m)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringExactRangeExpansion,
+	})
+	require.Equal(t, []ExactRangeExpansionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Depth: 1,
+	}}, plan.LoweringPlan.ExactRangeExpansion)
+	require.Contains(t, plan.LoweringPlan.LatePathMaterialization, LatePathMaterializationDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode: LatePathMaterializationPathEdgeID,
+	})
+}
+
+func TestLoweringPlanReportsExactTwoHopRangeExpansion(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*2..2]->(m)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringExactRangeExpansion,
+	})
+	require.Equal(t, []ExactRangeExpansionDecision{{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Depth: 2,
+	}}, plan.LoweringPlan.ExactRangeExpansion)
+}
+
+func TestExactRangeDependentPlanningRequiresDecision(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..1]->(m)-[:Enroll]->(ca)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	var (
+		readingClauses   = regularQuery.SingleQuery.SinglePartQuery.ReadingClauses
+		patternPart      = readingClauses[0].Match.Pattern[0]
+		steps            = traversalStepsForPattern(patternPart)
+		target           = PatternTarget{}
+		sourceReferences = map[string]struct{}{
+			"p": {},
+		}
+	)
+
+	t.Run("without decision", func(t *testing.T) {
+		plan := LoweringPlan{}
+
+		appendPatternProjectionPruningDecisions(&plan, target, patternPart, steps, sourceReferences)
+		require.Equal(t, []ProjectionPruningDecision{
+			{
+				Target:                   target.TraversalStep(0),
+				ReferencedSymbols:        []string{"p"},
+				PatternBindingReferenced: true,
+				OmitRelationship:         true,
+			},
+		}, plan.ProjectionPruning)
+
+		appendPatternLatePathMaterializationDecisions(&plan, target, patternPart, steps, sourceReferences)
+		require.Contains(t, plan.LatePathMaterialization, LatePathMaterializationDecision{
+			Target: target.TraversalStep(0),
+			Mode:   LatePathMaterializationExpansionPath,
+		})
+
+		appendExpansionSuffixPushdownDecisions(&plan, 0, readingClauses)
+		require.Contains(t, plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
+			Target:          target.TraversalStep(0),
+			SuffixLength:    1,
+			SuffixStartStep: 1,
+			SuffixEndStep:   1,
+		})
+	})
+
+	t.Run("with decision", func(t *testing.T) {
+		plan := LoweringPlan{
+			ExactRangeExpansion: []ExactRangeExpansionDecision{
+				{
+					Target: target.TraversalStep(0),
+					Depth:  1,
+				},
+			},
+		}
+
+		appendPatternProjectionPruningDecisions(&plan, target, patternPart, steps, sourceReferences)
+		require.Empty(t, plan.ProjectionPruning)
+
+		appendPatternLatePathMaterializationDecisions(&plan, target, patternPart, steps, sourceReferences)
+		require.Contains(t, plan.LatePathMaterialization, LatePathMaterializationDecision{
+			Target: target.TraversalStep(0),
+			Mode:   LatePathMaterializationPathEdgeID,
+		})
+
+		appendExpansionSuffixPushdownDecisions(&plan, 0, readingClauses)
+		require.Empty(t, plan.ExpansionSuffixPushdown)
+	})
+}
+
+func TestLoweringPlanSkipsExactRangeExpansionBeyondDepthCap(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*3..3]->(m)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringExactRangeExpansion,
+	})
+	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
+}
+
+func TestLoweringPlanSkipsUndirectedExactRangeExpansion(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*2..2]-(m)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringExactRangeExpansion,
+	})
+	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
+}
+
+func TestLoweringPlanSkipsExactOneHopRangeExpansionForNamedRelationshipBinding(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[r:MemberOf*1..1]->(m)
+		RETURN p, r
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringExactRangeExpansion,
+	})
+	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
+	require.Contains(t, plan.LoweringPlan.LatePathMaterialization, LatePathMaterializationDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+		Mode: LatePathMaterializationExpansionPath,
+	})
+}
+
+func TestLoweringPlanSkipsExactOneHopRangeExpansionForShortestPath(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((n)-[:MemberOf*1..1]->(m))
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringExactRangeExpansion,
+	})
+	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
+}
+
+func TestLoweringPlanReportsPathRelationshipPredicate(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(m)
+		WHERE any(r in relationships(p) WHERE type(r) STARTS WITH 'Member')
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringPathRelationshipPredicate,
+	})
+	require.Equal(t, []PathRelationshipPredicateDecision{{
+		Target: QuantifierTarget{
+			QueryPartIndex:  0,
+			QuantifierIndex: 0,
+		},
+		PathSymbol:    "p",
+		BindingSymbol: "r",
+	}}, plan.LoweringPlan.PathRelationshipPredicate)
+}
+
+func TestLoweringPlanReportsNonePathRelationshipPredicate(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(m)
+		WHERE none(r in relationships(p) WHERE type(r) = 'AdminTo')
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringPathRelationshipPredicate,
+	})
+	require.Equal(t, []PathRelationshipPredicateDecision{{
+		Target: QuantifierTarget{
+			QueryPartIndex:  0,
+			QuantifierIndex: 0,
+		},
+		PathSymbol:    "p",
+		BindingSymbol: "r",
+	}}, plan.LoweringPlan.PathRelationshipPredicate)
+}
+
+func TestLoweringPlanSkipsPathRelationshipPredicateForAllQuantifier(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(m)
+		WHERE all(r in relationships(p) WHERE type(r) = 'MemberOf')
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringPathRelationshipPredicate,
+	})
+	require.Empty(t, plan.LoweringPlan.PathRelationshipPredicate)
+}
+
+func TestLoweringPlanSkipsPathRelationshipPredicateAfterWithProjection(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n)-[:MemberOf*1..]->(m)
+		WITH p
+		WHERE none(r in relationships(p) WHERE type(r) = 'AdminTo')
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{
+		Name: LoweringPathRelationshipPredicate,
+	})
+	require.Empty(t, plan.LoweringPlan.PathRelationshipPredicate)
+}
+
 func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -1514,8 +1808,14 @@ func TestConservativePatternReorderingMovesIndependentNodeAnchorsEarlier(t *test
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Equal(t, []RuleResult{
-		{Name: "ConservativePatternReordering", Applied: true},
-		{Name: "PredicateAttachment", Applied: false},
+		{
+			Name:    "ConservativePatternReordering",
+			Applied: true,
+		},
+		{
+			Name:    "PredicateAttachment",
+			Applied: false,
+		},
 	}, plan.Rules)
 
 	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses
@@ -1538,8 +1838,73 @@ func TestConservativePatternReorderingKeepsDependentAnchorsInPlace(t *testing.T)
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Equal(t, []RuleResult{
-		{Name: "ConservativePatternReordering", Applied: false},
-		{Name: "PredicateAttachment", Applied: true},
+		{
+			Name:    "ConservativePatternReordering",
+			Applied: false,
+		},
+		{
+			Name:    "PredicateAttachment",
+			Applied: true,
+		},
+	}, plan.Rules)
+
+	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses
+	require.Equal(t, "a", firstNodeSymbol(readingClauses[0]))
+	require.Equal(t, "b", firstNodeSymbol(readingClauses[1]))
+}
+
+func TestConservativePatternReorderingUsesSelectivityWithinDependencySafeRegion(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a:Group)
+		MATCH (b:User {objectid: 'target'})
+		MATCH p = (a)-[:MemberOf]->(b)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []RuleResult{
+		{
+			Name:    "ConservativePatternReordering",
+			Applied: true,
+		},
+		{
+			Name:    "PredicateAttachment",
+			Applied: false,
+		},
+	}, plan.Rules)
+
+	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses
+	require.Equal(t, "b", firstNodeSymbol(readingClauses[0]))
+	require.Equal(t, "a", firstNodeSymbol(readingClauses[1]))
+	require.Len(t, readingClauses[2].Match.Pattern[0].PatternElements, 3)
+}
+
+func TestConservativePatternReorderingPinsUnresolvedExternalDependencies(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a)
+		WHERE a.name = external.name
+		MATCH (b:User {objectid: 'target'})
+		RETURN b
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []RuleResult{
+		{
+			Name:    "ConservativePatternReordering",
+			Applied: false,
+		},
+		{
+			Name:    "PredicateAttachment",
+			Applied: true,
+		},
 	}, plan.Rules)
 
 	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses

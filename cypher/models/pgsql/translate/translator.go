@@ -33,19 +33,22 @@ type Translator struct {
 	collectIDMembershipAliases map[pgsql.Identifier]struct{}
 	collectIDProjectionDepth   int
 
-	appliedLoweringCounts         map[string]int
-	patternTargets                map[*cypher.PatternPart]optimize.PatternTarget
-	patternPredicateTargets       map[*cypher.PatternPredicate]optimize.PatternTarget
-	projectionPruningDecisions    map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
-	latePathDecisions             map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
-	suffixPushdownDecisions       map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
-	predicatePlacementDecisions   map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
-	expandIntoDecisions           map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
-	traversalDirectionDecisions   map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
-	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
-	shortestPathFilterDecisions   map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
-	limitPushdownDecisions        map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
-	patternPredicateDecisions     map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
+	appliedLoweringCounts              map[string]int
+	patternTargets                     map[*cypher.PatternPart]optimize.PatternTarget
+	patternPredicateTargets            map[*cypher.PatternPredicate]optimize.PatternTarget
+	projectionPruningDecisions         map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
+	latePathDecisions                  map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
+	suffixPushdownDecisions            map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	predicatePlacementDecisions        map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
+	expandIntoDecisions                map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
+	traversalDirectionDecisions        map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
+	shortestPathStrategyDecisions      map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
+	shortestPathFilterDecisions        map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
+	limitPushdownDecisions             map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
+	patternPredicateDecisions          map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
+	exactRangeExpansionDecisions       map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
+	pathRelationshipPredicateDecisions map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision
+	quantifierTargets                  []optimize.QuantifierTarget
 }
 
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
@@ -92,6 +95,8 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.shortestPathFilterDecisions = map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision{}
 	s.limitPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision{}
 	s.patternPredicateDecisions = map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision{}
+	s.exactRangeExpansionDecisions = map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision{}
+	s.pathRelationshipPredicateDecisions = map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -132,6 +137,14 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	for _, decision := range plan.LoweringPlan.PatternPredicate {
 		s.patternPredicateDecisions[decision.Target] = decision
 	}
+
+	for _, decision := range plan.LoweringPlan.ExactRangeExpansion {
+		s.exactRangeExpansionDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.PathRelationshipPredicate {
+		s.pathRelationshipPredicateDecisions[decision.Target] = decision
+	}
 }
 
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
@@ -144,7 +157,10 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
 		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
 		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
-		*cypher.Quantifier, *cypher.IDInCollection:
+		*cypher.IDInCollection:
+
+	case *cypher.Quantifier:
+		s.enterQuantifier()
 
 	case *cypher.RangeQuantifier:
 		if typedExpression.Value != string(pgsql.WildcardIdentifier) {
@@ -388,6 +404,7 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		if err := s.buildQuantifier(typedExpression); err != nil {
 			s.SetError(err)
 		}
+		s.exitQuantifier()
 
 	case *cypher.NodePattern:
 		if err := s.translateNodePattern(typedExpression); err != nil {
@@ -699,17 +716,58 @@ func (s *Translator) recordSkippedLowerings() {
 
 func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 	return []SkippedLowering{
-		{Name: optimize.LoweringProjectionPruning, Count: len(plan.ProjectionPruning)},
-		{Name: optimize.LoweringLatePathMaterialization, Count: len(plan.LatePathMaterialization)},
-		{Name: optimize.LoweringExpandIntoDetection, Count: len(plan.ExpandInto)},
-		{Name: optimize.LoweringTraversalDirection, Count: len(plan.TraversalDirection)},
-		{Name: optimize.LoweringShortestPathStrategy, Count: len(plan.ShortestPathStrategy)},
-		{Name: optimize.LoweringShortestPathFilter, Count: len(plan.ShortestPathFilter)},
-		{Name: optimize.LoweringLimitPushdown, Count: len(plan.LimitPushdown)},
-		{Name: optimize.LoweringExpansionSuffixPushdown, Count: len(plan.ExpansionSuffixPushdown)},
-		{Name: optimize.LoweringPredicatePlacement, Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate)},
-		{Name: optimize.LoweringCountStoreFastPath, Count: len(plan.CountStoreFastPath)},
-		{Name: optimize.LoweringAggregateTraversalCount, Count: len(plan.AggregateTraversalCount)},
+		{
+			Name:  optimize.LoweringProjectionPruning,
+			Count: len(plan.ProjectionPruning),
+		},
+		{
+			Name:  optimize.LoweringLatePathMaterialization,
+			Count: len(plan.LatePathMaterialization),
+		},
+		{
+			Name:  optimize.LoweringExpandIntoDetection,
+			Count: len(plan.ExpandInto),
+		},
+		{
+			Name:  optimize.LoweringTraversalDirection,
+			Count: len(plan.TraversalDirection),
+		},
+		{
+			Name:  optimize.LoweringShortestPathStrategy,
+			Count: len(plan.ShortestPathStrategy),
+		},
+		{
+			Name:  optimize.LoweringShortestPathFilter,
+			Count: len(plan.ShortestPathFilter),
+		},
+		{
+			Name:  optimize.LoweringLimitPushdown,
+			Count: len(plan.LimitPushdown),
+		},
+		{
+			Name:  optimize.LoweringExpansionSuffixPushdown,
+			Count: len(plan.ExpansionSuffixPushdown),
+		},
+		{
+			Name:  optimize.LoweringPredicatePlacement,
+			Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate),
+		},
+		{
+			Name:  optimize.LoweringCountStoreFastPath,
+			Count: len(plan.CountStoreFastPath),
+		},
+		{
+			Name:  optimize.LoweringExactRangeExpansion,
+			Count: len(plan.ExactRangeExpansion),
+		},
+		{
+			Name:  optimize.LoweringPathRelationshipPredicate,
+			Count: len(plan.PathRelationshipPredicate),
+		},
+		{
+			Name:  optimize.LoweringAggregateTraversalCount,
+			Count: len(plan.AggregateTraversalCount),
+		},
 	}
 }
 

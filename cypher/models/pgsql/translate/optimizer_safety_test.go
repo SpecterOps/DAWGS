@@ -599,6 +599,154 @@ RETURN p
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
 }
 
+func TestOptimizerSafetyExactOneHopRangeUsesFixedTraversal(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (a:Group)-[:MemberOf*1..1]->(b:Group)
+WHERE a.name = 'src'
+RETURN p
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringLatePathMaterialization)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringLatePathMaterialization)
+	require.NotContains(t, normalizedQuery, "with recursive")
+	require.NotContains(t, normalizedQuery, "_seed")
+	require.Contains(t, normalizedQuery, "from edge e0 join node n0")
+	require.Contains(t, normalizedQuery, "join node n1")
+}
+
+func TestOptimizerSafetyExactTwoHopRangeUsesFixedTraversal(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (a:Group)-[:MemberOf*2..2]->(b:Group)
+WHERE a.name = 'src'
+RETURN p
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	require.NotContains(t, normalizedQuery, "with recursive")
+	require.NotContains(t, normalizedQuery, "_seed")
+	require.Contains(t, normalizedQuery, "from edge e0")
+	require.Contains(t, normalizedQuery, "join edge e1")
+	require.Contains(t, normalizedQuery, "e1.id !=")
+	require.Contains(t, normalizedQuery, "array [")
+}
+
+func TestOptimizerSafetyExactTwoHopRangePreservesLaterSourceStepTargets(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH (a)-[:MemberOf*2..2]->(b)-[:Enroll]->(c)
+RETURN a
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	require.Contains(t, normalizedQuery, "on (s1.n2).id = e2.start_id")
+	require.NotContains(t, normalizedQuery, "on n2.id = e2.start_id")
+}
+
+func TestOptimizerSafetyExactTwoHopRangeKeepsSyntheticIntermediateNode(t *testing.T) {
+	t.Parallel()
+
+	normalizedQuery := strings.ToLower(optimizerSafetySQL(t, `
+MATCH (a)-[:MemberOf*2..2]->(b)
+RETURN a
+	`))
+
+	require.Contains(t, normalizedQuery, "on (s0.n1).id = e1.start_id")
+	require.NotContains(t, normalizedQuery, "on n1.id = e1.start_id")
+}
+
+func TestOptimizerSafetyConsecutiveExactRangesUseSourceStepTargets(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (a)-[:MemberOf*2..2]->(b)-[:Enroll*1..1]->(c)
+RETURN p
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	require.NotContains(t, normalizedQuery, "with recursive")
+	require.NotContains(t, normalizedQuery, "_seed")
+	require.Contains(t, normalizedQuery, "join edge e2")
+}
+
+func TestOptimizerSafetyExactRangePrefixPreservesSuffixPushdownTargets(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (a)-[:MemberOf*2..2]->(b)-[:AdminTo*1..]->(c)-[:Enroll]->(d)
+RETURN p
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSuffixPushdown)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSuffixPushdown)
+	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSuffixPushdown)
+}
+
+func TestOptimizerSafetyPathRelationshipPredicateUsesPathIDs(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (a:Group)-[:MemberOf*1..]->(b:Group)
+WHERE any(r in relationships(p) WHERE type(r) STARTS WITH 'Member')
+RETURN p
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
+	require.Contains(t, normalizedQuery, "exists (select 1 from edge i0 where")
+	require.Contains(t, normalizedQuery, "i0.id = any (s0.ep0)")
+	require.Contains(t, normalizedQuery, "kind_name(i0.kind_id)::text like 'member%'")
+	require.NotContains(t, normalizedQuery, "select count(*)::int from unnest")
+	require.NotContains(t, normalizedQuery, "from unnest(((select coalesce(array_agg")
+}
+
+func TestOptimizerSafetyNonePathRelationshipPredicateUsesNotExists(t *testing.T) {
+	t.Parallel()
+
+	translation := optimizerSafetyTranslation(t, `
+MATCH p = (a:Group)-[:MemberOf*1..]->(b:Group)
+WHERE none(r in relationships(p) WHERE type(r) = 'AdminTo')
+RETURN p
+	`)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
+	require.Contains(t, normalizedQuery, "not exists (select 1 from edge i0 where")
+	require.Contains(t, normalizedQuery, "i0.id = any (s0.ep0)")
+	require.Contains(t, normalizedQuery, "s0.ep0 is not null")
+	require.NotContains(t, normalizedQuery, "select count(*)::int from unnest")
+}
+
 func TestOptimizerSafetyAggregateTraversalCountUsesIDOnlySourceAnchoredShape(t *testing.T) {
 	t.Parallel()
 

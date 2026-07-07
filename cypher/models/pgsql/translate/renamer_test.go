@@ -72,6 +72,23 @@ func TestRewriteFrameBindings(t *testing.T) {
 		},
 	}, {
 		Case: pgsql.NewBinaryExpression(
+			a.Identifier,
+			pgsql.OperatorEquals,
+			pgsql.NewAnyExpression(pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{a.Identifier},
+				CastType: pgsql.IntArray,
+			}, pgsql.IntArray),
+		),
+		Expected: pgsql.NewBinaryExpression(
+			rewrittenA,
+			pgsql.OperatorEquals,
+			pgsql.NewAnyExpression(pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{rewrittenA},
+				CastType: pgsql.IntArray,
+			}, pgsql.IntArray),
+		),
+	}, {
+		Case: pgsql.NewBinaryExpression(
 			pgsql.ArraySlice{
 				Expression: a.Identifier,
 				Lower:      a.Identifier,

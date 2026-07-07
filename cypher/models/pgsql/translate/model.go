@@ -424,6 +424,8 @@ type ProjectionPruningApplication struct {
 
 type TraversalStep struct {
 	Frame                  *Frame
+	SourceTarget           optimize.TraversalStepTarget
+	HasSourceTarget        bool
 	Direction              graph.Direction
 	Expansion              *Expansion
 	PathReversed           bool
@@ -503,6 +505,22 @@ type PatternPart struct {
 	TraversalSteps   []*TraversalStep
 	NodeSelect       NodeSelect
 	Constraints      *ConstraintTracker
+	nextSourceStep   int
+}
+
+func (s *PatternPart) nextSourceTarget() (optimize.TraversalStepTarget, bool) {
+	if s == nil {
+		return optimize.TraversalStepTarget{}, false
+	}
+
+	stepIndex := s.nextSourceStep
+	s.nextSourceStep++
+
+	if !s.HasTarget {
+		return optimize.TraversalStepTarget{}, false
+	}
+
+	return s.Target.TraversalStep(stepIndex), true
 }
 
 func (s *PatternPart) LastStep() *TraversalStep {
@@ -571,6 +589,7 @@ type QueryPart struct {
 	// repetition of some of the exported fields above which is intentional and may be a good refactor target
 	// in the future
 	patternPredicates               []*pgsql.Future[*Pattern]
+	pathEdgeIDArrayFutures          []*pgsql.Future[*BoundIdentifier]
 	properties                      TranslatedProperties
 	currentPattern                  *Pattern
 	stashedPattern                  *Pattern
@@ -581,6 +600,8 @@ type QueryPart struct {
 	referencedIdentifiers           *pgsql.IdentifierSet
 	stashedExpressionTreeTranslator *ExpressionTreeTranslator
 	stashedQuantifierArray          []pgsql.Expression
+	stashedQuantifierUseExists      bool
+	quantifierIndex                 int
 	quantifierIdentifiers           *pgsql.IdentifierSet
 	unwindClauses                   []UnwindClause
 	isCreating                      bool
@@ -662,6 +683,10 @@ func (s *QueryPart) StashCurrentPattern() {
 
 func (s *QueryPart) AddPatternPredicateFuture(predicateFuture *pgsql.Future[*Pattern]) {
 	s.patternPredicates = append(s.patternPredicates, predicateFuture)
+}
+
+func (s *QueryPart) AddPathEdgeIDArrayFuture(pathEdgeIDArrayFuture *pgsql.Future[*BoundIdentifier]) {
+	s.pathEdgeIDArrayFutures = append(s.pathEdgeIDArrayFutures, pathEdgeIDArrayFuture)
 }
 
 func (s *QueryPart) ConsumeCurrentPattern() *Pattern {

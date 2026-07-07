@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -37,6 +38,8 @@ const (
 	boundSourceSelectivityLimited
 	boundSourceSelectivityTopN
 )
+
+const maxExactRangeExpansionDepth int64 = 2
 
 func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
 	if query == nil || query.SingleQuery == nil {
@@ -107,6 +110,9 @@ func appendQueryPartLowerings(
 		return err
 	}
 
+	appendExactRangeExpansionDecisions(plan, queryPartIndex, readingClauses)
+	appendPatternPredicateExactRangeExpansionDecisions(plan, queryPartIndex, queryPart)
+	appendPathRelationshipPredicateDecisions(plan, queryPartIndex, queryPart)
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, queryPart, sourceReferences)
@@ -119,6 +125,219 @@ func appendQueryPartLowerings(
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
 	return nil
+}
+
+func appendExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
+			continue
+		}
+
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			appendPatternExactRangeExpansionDecisions(plan, PatternTarget{
+				QueryPartIndex: queryPartIndex,
+				ClauseIndex:    clauseIndex,
+				PatternIndex:   patternIndex,
+			}, patternPart)
+		}
+	}
+}
+
+func appendPatternPredicateExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
+	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
+		patternPart := patternPartForPredicate(indexedPredicate.Predicate)
+		appendPatternExactRangeExpansionDecisions(plan, PatternTarget{
+			QueryPartIndex: queryPartIndex,
+			ClauseIndex:    indexedPredicate.ClauseIndex,
+			PatternIndex:   indexedPredicate.PredicateIndex,
+			Predicate:      true,
+			PredicateIndex: indexedPredicate.PredicateIndex,
+		}, patternPart)
+	}
+}
+
+func appendPatternExactRangeExpansionDecisions(plan *LoweringPlan, target PatternTarget, patternPart *cypher.PatternPart) {
+	for stepIndex, step := range traversalStepsForPattern(patternPart) {
+		if exactRangeExpansionCandidate(patternPart, step) {
+			plan.ExactRangeExpansion = append(plan.ExactRangeExpansion, ExactRangeExpansionDecision{
+				Target: target.TraversalStep(stepIndex),
+				Depth:  ExactPatternRangeDepth(step.Relationship.Range),
+			})
+		}
+	}
+}
+
+func exactRangeExpansionCandidate(patternPart *cypher.PatternPart, step sourceTraversalStep) bool {
+	if patternPart == nil {
+		return false
+	}
+
+	if patternPart.ShortestPathPattern ||
+		patternPart.AllShortestPathsPattern ||
+		step.Relationship == nil ||
+		step.Relationship.Direction == graph.DirectionBoth ||
+		step.Relationship.Variable != nil {
+		return false
+	}
+
+	depth := ExactPatternRangeDepth(step.Relationship.Range)
+	return depth >= 1 && depth <= maxExactRangeExpansionDepth
+}
+
+func hasExactRangeExpansionDecision(plan *LoweringPlan, target TraversalStepTarget) bool {
+	if plan == nil {
+		return false
+	}
+
+	for _, decision := range plan.ExactRangeExpansion {
+		if decision.Target == target {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ExactPatternRangeDepth(patternRange *cypher.PatternRange) int64 {
+	if patternRange == nil || patternRange.StartIndex == nil || patternRange.EndIndex == nil {
+		return 0
+	}
+
+	if *patternRange.StartIndex != *patternRange.EndIndex {
+		return 0
+	}
+
+	return *patternRange.StartIndex
+}
+
+type indexedQuantifier struct {
+	Index      int
+	Quantifier *cypher.Quantifier
+}
+
+type quantifierCollector struct {
+	walk.VisitorHandler
+	quantifiers []indexedQuantifier
+}
+
+func (s *quantifierCollector) Enter(node cypher.SyntaxNode) {
+	if quantifier, isQuantifier := node.(*cypher.Quantifier); isQuantifier {
+		s.quantifiers = append(s.quantifiers, indexedQuantifier{
+			Index:      len(s.quantifiers),
+			Quantifier: quantifier,
+		})
+	}
+}
+
+func (s *quantifierCollector) Visit(cypher.SyntaxNode) {}
+func (s *quantifierCollector) Exit(cypher.SyntaxNode)  {}
+
+func indexedQuantifiersInQueryPart(queryPart cypher.SyntaxNode) []indexedQuantifier {
+	if queryPart == nil {
+		return nil
+	}
+
+	collector := &quantifierCollector{
+		VisitorHandler: walk.NewCancelableErrorHandler(),
+	}
+
+	if err := walk.Cypher(queryPart, collector); err != nil {
+		return nil
+	}
+
+	return collector.quantifiers
+}
+
+func quantifiersInSyntax(node cypher.SyntaxNode) []*cypher.Quantifier {
+	if node == nil {
+		return nil
+	}
+
+	var (
+		quantifiers []*cypher.Quantifier
+		collector   = &quantifierCollector{
+			VisitorHandler: walk.NewCancelableErrorHandler(),
+		}
+	)
+
+	if err := walk.Cypher(node, collector); err != nil {
+		return nil
+	}
+
+	for _, indexed := range collector.quantifiers {
+		quantifiers = append(quantifiers, indexed.Quantifier)
+	}
+
+	return quantifiers
+}
+
+func pathRelationshipQuantifierCandidate(quantifier *cypher.Quantifier) (string, string, bool) {
+	if quantifier == nil ||
+		(quantifier.Type != cypher.QuantifierTypeAny && quantifier.Type != cypher.QuantifierTypeNone) ||
+		quantifier.Filter == nil ||
+		quantifier.Filter.Specifier == nil ||
+		quantifier.Filter.Specifier.Variable == nil {
+		return "", "", false
+	}
+
+	function, isFunction := quantifier.Filter.Specifier.Expression.(*cypher.FunctionInvocation)
+	if !isFunction || function == nil || function.NumArguments() != 1 || !strings.EqualFold(function.Name, cypher.RelationshipsFunction) {
+		return "", "", false
+	}
+
+	pathVariable, isPathVariable := function.Arguments[0].(*cypher.Variable)
+	if !isPathVariable || pathVariable == nil || pathVariable.Symbol == "" {
+		return "", "", false
+	}
+
+	bindingSymbol := quantifier.Filter.Specifier.Variable.Symbol
+	if bindingSymbol == "" {
+		return "", "", false
+	}
+
+	return pathVariable.Symbol, bindingSymbol, true
+}
+
+func appendPathRelationshipPredicateDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
+	quantifierIndexes := map[*cypher.Quantifier]int{}
+	for _, indexed := range indexedQuantifiersInQueryPart(queryPart) {
+		quantifierIndexes[indexed.Quantifier] = indexed.Index
+	}
+
+	appendMatchWhereQuantifier := func(quantifier *cypher.Quantifier) {
+		if quantifierIndex, indexed := quantifierIndexes[quantifier]; indexed {
+			if pathSymbol, bindingSymbol, eligible := pathRelationshipQuantifierCandidate(quantifier); eligible {
+				plan.PathRelationshipPredicate = append(plan.PathRelationshipPredicate, PathRelationshipPredicateDecision{
+					Target: QuantifierTarget{
+						QueryPartIndex:  queryPartIndex,
+						QuantifierIndex: quantifierIndex,
+					},
+					PathSymbol:    pathSymbol,
+					BindingSymbol: bindingSymbol,
+				})
+			}
+		}
+	}
+
+	appendReadingClauseDecisions := func(readingClauses []*cypher.ReadingClause) {
+		for _, readingClause := range readingClauses {
+			if readingClause == nil || readingClause.Match == nil || readingClause.Match.Where == nil {
+				continue
+			}
+
+			for _, quantifier := range quantifiersInSyntax(readingClause.Match.Where) {
+				appendMatchWhereQuantifier(quantifier)
+			}
+		}
+	}
+
+	switch typedQueryPart := queryPart.(type) {
+	case *cypher.SinglePartQuery:
+		appendReadingClauseDecisions(typedQueryPart.ReadingClauses)
+
+	case *cypher.MultiPartQueryPart:
+		appendReadingClauseDecisions(typedQueryPart.ReadingClauses)
+	}
 }
 
 func appendProjectionPruningDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
@@ -156,7 +375,7 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 			hasPruning     bool
 		)
 
-		if step.Relationship.Range != nil {
+		if step.Relationship.Range != nil && !hasExactRangeExpansionDecision(plan, decision.Target) {
 			decision.OmitRelationship = !edgeReferenced
 			decision.OmitPathBinding = !pathReferenced
 			hasPruning = decision.OmitRelationship || decision.OmitPathBinding
@@ -266,7 +485,7 @@ func appendPatternLatePathMaterializationDecisions(plan *LoweringPlan, target Pa
 	for stepIndex, step := range steps {
 		stepTarget := target.TraversalStep(stepIndex)
 
-		if step.Relationship.Range != nil {
+		if step.Relationship.Range != nil && !hasExactRangeExpansionDecision(plan, stepTarget) {
 			if !pathReferenced {
 				continue
 			}
@@ -1277,6 +1496,10 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 					ClauseIndex:    clauseIndex,
 					PatternIndex:   patternIndex,
 				}.TraversalStep(stepIndex)
+				if hasExactRangeExpansionDecision(plan, target) {
+					continue
+				}
+
 				if hasTraversalDirectionFlip(plan, target) || expansionStepMayFlipForConstraintBalance(stepIndex, step, declaredEndpoints[stepIndex]) {
 					continue
 				}

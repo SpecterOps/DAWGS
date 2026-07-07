@@ -35,6 +35,9 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 	if err := s.buildPatternPredicates(); err != nil {
 		return err
 	}
+	if err := s.buildPathEdgeIDArrayFutures(); err != nil {
+		return err
+	}
 
 	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
