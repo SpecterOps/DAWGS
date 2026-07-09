@@ -369,8 +369,18 @@ func Where(expression graph.Criteria) *cypherModel.Where {
 }
 
 func OrderBy(leaves ...graph.Criteria) *cypherModel.Order {
+	items := make([]*cypherModel.SortItem, 0, len(leaves))
+
+	for _, leaf := range leaves {
+		if sortItem, ok := leaf.(*cypherModel.SortItem); ok {
+			items = append(items, sortItem)
+		} else {
+			items = append(items, Order(leaf, Ascending()))
+		}
+	}
+
 	return &cypherModel.Order{
-		Items: convertCriteria[*cypherModel.SortItem](leaves...),
+		Items: items,
 	}
 }
 
