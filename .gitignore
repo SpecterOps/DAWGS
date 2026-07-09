@@ -10,3 +10,6 @@ integration/testdata/local/
 
 # Local test and metric artifacts
 .coverage/
+
+# Local benchmark comparison output
+.bench/

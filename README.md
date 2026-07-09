@@ -95,9 +95,35 @@ make quality FUZZ_REPORT=.coverage/fuzz.json MUTATION_REPORT=.coverage/mutation.
 
 `make quality_backend` captures PostgreSQL and Neo4j integration results for backend equivalence comparison. It requires
 `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING`. `make quality_bench` writes benchmark markdown and JSON captures
-for later baseline comparison. Benchmark drift comparison is performed by
-`make quality` through `tools/metrics`; there is no separate benchmark diff
-command package.
+for later baseline comparison. Benchmark drift comparison can be performed by `make quality` through `tools/metrics` when
+`BENCHMARK_REPORT` and `BENCHMARK_BASELINE` are provided.
+
+Run the package benchmark suite with:
+
+```bash
+make test_bench
+```
+
+Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
+
+```bash
+go run ./cmd/benchdiff -base main -target HEAD -kind unit
+```
+
+For integration benchmark comparisons, provide the same `CONNECTION_STRING` used by integration tests:
+
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+go run ./cmd/benchdiff -base main -target HEAD -kind all -driver pg -fail-regression 10%
+```
+
+The harness writes raw outputs and a Markdown report under `.bench/runs/` by default. The report begins with comparison
+findings, includes the raw `benchstat` output for each benchmark suite, and ends with a table of all captured benchmark
+numbers.
+
+The integration benchmark runner includes committed `base`, `adcs_fanout`, and `traversal_shapes` datasets by default.
+The traversal shape suite checks expected result counts for chain, fanout, bounded cycle, disconnected,
+edge-kind-selective, and multi-path shortest-path scenarios before recording timings.
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then

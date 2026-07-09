@@ -422,7 +422,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 		query.Returning(
 			query.Node(),
 		),
-	), "match (n) where (n)<-[]->() return n"))
+	), "match (n) where (n)-[]-() return n"))
 
 	t.Run("Node has Relationships Order by Node Item", assertQueryResult(query.SinglePartQuery(
 		query.Where(
@@ -436,7 +436,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 		query.OrderBy(
 			query.Order(query.NodeProperty("value"), query.Ascending()),
 		),
-	), "match (n) where (n)<-[]->() return n order by n.value asc"))
+	), "match (n) where (n)-[]-() return n order by n.value asc"))
 
 	t.Run("Node has Relationships Order by Direct Node ID", assertQueryResult(query.SinglePartQuery(
 		query.Where(
@@ -450,7 +450,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 		query.OrderBy(
 			query.NodeID(),
 		),
-	), "match (n) where (n)<-[]->() return n order by id(n) asc"))
+	), "match (n) where (n)-[]-() return n order by id(n) asc"))
 
 	t.Run("Node has Relationships Order by Node Item", assertQueryResult(query.SinglePartQuery(
 		query.Where(
@@ -465,7 +465,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 			query.Order(query.NodeProperty("value_1"), query.Ascending()),
 			query.Order(query.NodeProperty("value_2"), query.Descending()),
 		),
-	), "match (n) where (n)<-[]->() return n order by n.value_1 asc, n.value_2 desc"))
+	), "match (n) where (n)-[]-() return n order by n.value_1 asc, n.value_2 desc"))
 
 	t.Run("Node has Relationships Order by Node Item with Limit and Offset", assertQueryResult(query.SinglePartQuery(
 		query.Where(
@@ -483,7 +483,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 
 		query.Limit(10),
 		query.Offset(20),
-	), "match (n) where (n)<-[]->() return n order by n.value_1 asc, n.value_2 desc skip 20 limit 10"))
+	), "match (n) where (n)-[]-() return n order by n.value_1 asc, n.value_2 desc skip 20 limit 10"))
 
 	t.Run("Node has no Relationships", assertQueryResult(query.SinglePartQuery(
 		query.Where(
@@ -493,7 +493,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 		query.Returning(
 			query.Node(),
 		),
-	), "match (n) where not ((n)<-[]->()) return n"))
+	), "match (n) where not ((n)-[]-()) return n"))
 
 	t.Run("Node Datetime Before", assertQueryResult(query.SinglePartQuery(
 		query.Where(
