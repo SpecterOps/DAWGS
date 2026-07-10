@@ -1,8 +1,9 @@
 # BloodHound PgSQL Model
 
 This package contains a syntax model for the PostgreSQL SQL dialect. It also contains a translation implementation to
-take openCpyher input and output valid PostgreSQL SQL. This model is not intended to be a complete implementation of all
-available SQL dialect features but rather the subset of the dialect required to perform openCypher to pgsql translation.
+take openCypher input and output valid PostgreSQL SQL. This model is not intended to be a complete implementation of all
+available SQL dialect features but rather the subset of the dialect required to perform openCypher to PostgreSQL
+translation.
 
 **Expected PostgreSQL SQL dialect version**: `16.X`
 
@@ -13,6 +14,12 @@ The `format` package contains the string rendering logic for the PgSQL syntax mo
 ## Translation
 
 The `translate` package contains the openCypher translation implementation.
+
+## Optimization
+
+The `optimize` package analyzes Cypher query shape before PostgreSQL SQL emission. See
+[PostgreSQL Translation](../../../docs/postgresql_translation.md) for optimizer coverage, indexing notes, and
+validation workflow.
 
 ## Visualization
 

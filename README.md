@@ -4,93 +4,36 @@ Database Abstraction Wrapper for Graph Schemas
 
 ![A Corgi Treat](logo_small.png)
 
-## Purpose
+DAWGS provides tools and query helpers for running property graphs on vanilla PostgreSQL without extra database
+plugins. It exposes a backend abstraction for graph queries, with current backend support for PostgreSQL and Neo4j.
+The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
+support Cypher natively.
 
-DAWGS is a collection of tools and query language helpers to enable running property graphs on vanilla PostgreSQL
-without the need for additional plugins.
+## Quick Start
 
-At the core of the library is an abstraction layer that allows users to swap out existing database backends (currently
-Neo4j and PostgreSQL) or build their own with no change to query implementation. The query interface is built around
-openCypher with translation implementations for backends that do not natively support the query language.
-
-## Development Setup
-
-For users making changes to `dawgs` and its packages, the [go mod replace](https://go.dev/ref/mod#go-mod-file-replace)
-directive can be utilized. This allows changes made in the checked out `dawgs` repo to be immediately visible to
-consuming projects.
-
-**Example**
-
-```
-replace github.com/specterops/dawgs => /home/zinic/work/dawgs
-```
-
-### Building and Testing
-
-The [Makefile](Makefile) drives build and test automation. The default `make` target should suffice for normal
-development processes.
+Build the repository:
 
 ```bash
-make
+make build
 ```
 
-For validation before handing off a change, run the full test target:
-
-```bash
-make test_all
-```
-
-`make test_all` runs unit tests and the integration suites. Integration tests use the `CONNECTION_STRING` environment
-variable and run against the backend selected by that connection string's scheme.
-
-The shared integration cases under `integration/testdata/cases` and `integration/testdata/templates` are expected to be
-semantically equivalent across supported backends. Avoid driver-specific skips or expected results in those files; add
-driver-scoped integration coverage instead when a backend-only capability needs to be tested.
-
-Benign local examples:
-
-```bash
-export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
-export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
-```
-
-Neo4j connection strings may use `neo4j://`, `neo4j+s://`, or `neo4j+ssc://`; a single path segment selects the Neo4j database name.
-
-Use `make test` for unit tests only and `make test_integration` for integration tests only.
-
-### Test Metrics
-
-`make test` writes unit test coverage artifacts under `.coverage/`:
+Run unit tests:
 
 ```bash
 make test
 ```
 
-The stable coverage profile is `.coverage/unit.out`, and the function coverage summary is `.coverage/coverage.txt`.
-
-Cyclomatic complexity, CRAP, and quality signal reports are available through dedicated metric targets:
+Run integration tests when a backend is available:
 
 ```bash
-make complexity
-make crap
-make quality
-make metrics
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+make test_integration
 ```
 
-`make complexity` writes `.coverage/cyclomatic.txt`. `make crap` reruns unit tests for a fresh coverage profile, then
-writes `.coverage/crap.txt`, `.coverage/crap.json`, `.coverage/quality.txt`, `.coverage/quality.json`, and a standalone
-HTML report at `.coverage/metrics.html`. The quality section summarizes semantic drift, backend equivalence,
-integration/template invariants, fuzz health, mutation score, and benchmark drift. Signals that need external captures are
-reported as pending unless their input files are provided.
-Generated parser files, tests, vendor code, and testdata are excluded from these reports. The HTML report embeds its CSS
-and JavaScript directly in the document, so it can be opened without network access.
-
-Optional quality inputs can be supplied through Make variables:
+Use this module from another Go project:
 
 ```bash
-make quality BACKEND_RESULT_ARGS="-backend-result pg=.coverage/integration-pg.json -backend-result neo4j=.coverage/integration-neo4j.json"
-make quality BENCHMARK_REPORT=.coverage/benchmark.json BENCHMARK_BASELINE=.coverage/benchmark-baseline.json
-make quality FUZZ_REPORT=.coverage/fuzz.json MUTATION_REPORT=.coverage/mutation.json
+go get github.com/specterops/dawgs
 ```
 
 `make quality_backend` captures PostgreSQL and Neo4j integration results for backend equivalence comparison. It requires
@@ -158,20 +101,25 @@ PostgreSQL property index regression coverage is hard-failing under the `manual_
 test translates Cypher to PgSQL, disables sequential scans for the `EXPLAIN`, and requires explicit node property
 indexes to appear in the JSON plan:
 
-```bash
-CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
-  go test -tags manual_integration ./integration -run TestPostgreSQLPropertyIndexPlans
+For local development against a checkout, use a Go module replacement in the consuming project:
+
+```go
+replace github.com/specterops/dawgs => /path/to/dawgs
 ```
 
-Substring and suffix predicates are intentionally not promoted to blanket schema indexes. PostgreSQL deployments can
-request explicit `TextSearchIndex`/trigram property indexes for fields that need `CONTAINS`, `STARTS WITH`, or
-`ENDS WITH`. The hard regression only asserts current index-compatible literal forms; dynamic parameter/property forms
-that lower to helper functions are intentionally outside that contract until their lowering changes.
+## Documentation
 
-Thresholds are report-only by default. To enforce the configured thresholds, run:
+- [Development workflow](docs/development.md): build, test, integration, metrics, quality, and corpus-capture commands.
+- [Cypher library](cypher/README.md): parser generation and Cypher package overview.
+- [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
+- [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
+- [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
+- [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
 
-```bash
-make metrics_check
-```
+## Repository Map
 
-The defaults can be adjusted with `CYCLO_TOP`, `CYCLO_OVER`, `CRAP_TOP`, `CRAP_OVER`, and `BENCHMARK_REGRESSION`.
+- `cypher/`: parser, Cypher AST, walkers, and backend translation models.
+- `drivers/`: database driver implementations.
+- `integration/`: backend-equivalent integration suites and fixtures.
+- `cmd/`: command-line tools for capture, export, and diagnostics.
+- `tools/`: developer tools such as `dawgrun` and metrics reporting.

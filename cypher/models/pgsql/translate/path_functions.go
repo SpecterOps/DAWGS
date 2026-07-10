@@ -40,6 +40,56 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 	return pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}, nil
 }
 
+func pathCompositeEdgeIDArrayExpression(scope *Scope, pathBinding *BoundIdentifier) (pgsql.Expression, error) {
+	var edgeIDArrayReferences []pgsql.Expression
+
+	for _, dependency := range pathBinding.Dependencies {
+		switch dependency.DataType {
+		case pgsql.ExpansionPath:
+			edgeIDArrayReferences = append(edgeIDArrayReferences, pathBindingReference(scope, dependency))
+
+		case pgsql.EdgeComposite:
+			edgeIDArrayReferences = append(edgeIDArrayReferences, pgsql.ArrayLiteral{
+				Values: []pgsql.Expression{
+					pathCompositeColumnReference(scope, dependency, pgsql.ColumnID),
+				},
+				CastType: pgsql.Int8Array,
+			})
+
+		case pgsql.PathEdge:
+			edgeIDArrayReferences = append(edgeIDArrayReferences, pgsql.ArrayLiteral{
+				Values: []pgsql.Expression{
+					pathEdgeIDReference(scope, dependency),
+				},
+				CastType: pgsql.Int8Array,
+			})
+
+		default:
+			// Path bindings also depend on their node endpoints. Those are not part of relationships(p).
+		}
+	}
+
+	if edgeIDArrayExpression := concatenatePathCompositeParts(edgeIDArrayReferences); edgeIDArrayExpression != nil {
+		return edgeIDArrayExpression, nil
+	}
+
+	return pgsql.ArrayLiteral{
+		CastType: pgsql.Int8Array,
+	}, nil
+}
+
+func (s *Translator) buildPathEdgeIDArrayFutures() error {
+	for _, future := range s.query.CurrentPart().pathEdgeIDArrayFutures {
+		if edgeIDArrayExpression, err := pathCompositeEdgeIDArrayExpression(s.scope, future.Data); err != nil {
+			return err
+		} else {
+			future.SyntaxNode = edgeIDArrayExpression
+		}
+	}
+
+	return nil
+}
+
 func resolvePathCompositeFieldReference(scope *Scope, reference pgsql.RowColumnReference) (pgsql.Expression, bool, error) {
 	identifier, isIdentifier := unwrapParenthetical(reference.Identifier).(pgsql.Identifier)
 	if !isIdentifier {

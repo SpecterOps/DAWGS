@@ -6,11 +6,16 @@ import (
 )
 
 func (s *Translator) recordPredicatePlacementConsumption(part *PatternPart, stepIndex int, traversalStep *TraversalStep, constraints PatternConstraints) {
-	if part == nil || !part.HasTarget || traversalStep == nil {
+	if traversalStep == nil {
 		return
 	}
 
-	for _, decision := range s.predicatePlacementDecisions[part.Target.TraversalStep(stepIndex)] {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
+		return
+	}
+
+	for _, decision := range s.predicatePlacementDecisions[target] {
 		if predicatePlacementDecisionConsumed(decision, traversalStep, constraints) {
 			s.recordLowering(optimize.LoweringPredicatePlacement)
 			return

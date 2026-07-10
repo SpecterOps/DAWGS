@@ -191,6 +191,26 @@ func pathCompositeReference(scope *Scope, binding *BoundIdentifier, columns []pg
 	}
 }
 
+func edgeCompositeValue(expression pgsql.Expression) pgsql.CompositeValue {
+	value := pgsql.CompositeValue{
+		DataType: pgsql.EdgeComposite,
+	}
+
+	for _, edgeTableColumn := range pgsql.EdgeTableColumns {
+		switch typedExpression := expression.(type) {
+		case pgsql.Identifier:
+			value.Values = append(value.Values, pgsql.CompoundIdentifier{typedExpression, edgeTableColumn})
+		default:
+			value.Values = append(value.Values, pgsql.RowColumnReference{
+				Identifier: expression,
+				Column:     edgeTableColumn,
+			})
+		}
+	}
+
+	return value
+}
+
 func pathCompositeColumnReference(scope *Scope, binding *BoundIdentifier, column pgsql.Identifier) pgsql.Expression {
 	if binding.LastProjection != nil || scope.CurrentFrameBinding() != nil {
 		return pgsql.RowColumnReference{
@@ -486,18 +506,10 @@ func buildProjectionForEdgeComposite(alias pgsql.Identifier, projected *BoundIde
 		}, nil
 	}
 
-	value := pgsql.CompositeValue{
-		DataType: pgsql.EdgeComposite,
-	}
-
-	for _, edgeTableColumn := range pgsql.EdgeTableColumns {
-		value.Values = append(value.Values, pgsql.CompoundIdentifier{projected.Identifier, edgeTableColumn})
-	}
-
 	// Create a new final projection that's aliased to the visible binding's identifier
 	return []pgsql.SelectItem{
 		&pgsql.AliasedExpression{
-			Expression: value,
+			Expression: edgeCompositeValue(projected.Identifier),
 			Alias:      pgsql.AsOptionalIdentifier(alias),
 		},
 	}, nil

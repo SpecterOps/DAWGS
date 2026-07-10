@@ -123,6 +123,49 @@ func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 	require.Contains(t, formatted, ".edges")
 }
 
+func TestRelationshipEndpointFunctionsUseEdgeCompositeArguments(t *testing.T) {
+	t.Parallel()
+
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH ()-[r]->() RETURN startNode(r), endNode(r)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	normalized := strings.Join(strings.Fields(formatted), " ")
+
+	require.Contains(t, normalized, "start_node(((s0.e0).id, (s0.e0).start_id, (s0.e0).end_id, (s0.e0).kind_id, (s0.e0).properties)::edgecomposite)")
+	require.Contains(t, normalized, "end_node(((s0.e0).id, (s0.e0).start_id, (s0.e0).end_id, (s0.e0).kind_id, (s0.e0).properties)::edgecomposite)")
+	require.NotContains(t, normalized, "start_node(s0.e0)")
+	require.NotContains(t, normalized, "end_node(s0.e0)")
+}
+
+func TestPathRelationshipPredicateEndpointFunctionUsesEdgeCompositeArguments(t *testing.T) {
+	t.Parallel()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
+MATCH p = shortestPath((s:Group)-[:MemberOf*1..]->(d:Group))
+WHERE NONE(r IN relationships(p) WHERE type(r) = 'MemberOf' AND startNode(r).name = 'blocked-session-host')
+RETURN p
+`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	normalized := strings.Join(strings.Fields(formatted), " ")
+
+	require.Contains(t, normalized, "from edge i0")
+	require.Contains(t, normalized, "start_node((i0.id, i0.start_id, i0.end_id, i0.kind_id, i0.properties)::edgecomposite)")
+	require.NotContains(t, normalized, "start_node(i0)")
+}
+
 func TestPrepareCollectExpressionMissingBindingErrorNamesArgument(t *testing.T) {
 	t.Parallel()
 

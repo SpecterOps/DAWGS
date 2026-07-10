@@ -602,6 +602,41 @@ func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted
 	}, pgsql.TextArray)
 }
 
+func (s *Translator) relationshipEndpointFunctionArgument(argument pgsql.Expression) pgsql.Expression {
+	identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier)
+	if !isIdentifier {
+		return argument
+	}
+
+	if binding, bound := s.scope.Lookup(identifier); bound && bindingExpressionType(binding) == pgsql.EdgeComposite {
+		return edgeCompositeValue(identifier)
+	}
+
+	if binding, bound := s.scope.AliasedLookup(identifier); bound && bindingExpressionType(binding) == pgsql.EdgeComposite {
+		return edgeCompositeValue(identifier)
+	}
+
+	return argument
+}
+
+func (s *Translator) translateRelationshipEndpointFunction(function pgsql.Identifier, functionInvocation *cypher.FunctionInvocation) error {
+	if functionInvocation.NumArguments() != 1 {
+		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
+	}
+
+	if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		return err
+	} else {
+		s.treeTranslator.PushOperand(pgsql.FunctionCall{
+			Function:   function,
+			Parameters: []pgsql.Expression{s.relationshipEndpointFunctionArgument(argument)},
+			CastType:   pgsql.NodeComposite,
+		})
+	}
+
+	return nil
+}
+
 func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocation) {
 	switch formattedName := strings.ToLower(typedExpression.Name); formattedName {
 	case cypher.DurationFunction:
@@ -669,29 +704,13 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 		}
 
 	case cypher.StartNodeFunction:
-		if typedExpression.NumArguments() != 1 {
-			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
-		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		if err := s.translateRelationshipEndpointFunction(pgsql.FunctionStartNode, typedExpression); err != nil {
 			s.SetError(err)
-		} else {
-			s.treeTranslator.PushOperand(pgsql.FunctionCall{
-				Function:   pgsql.FunctionStartNode,
-				Parameters: []pgsql.Expression{argument},
-				CastType:   pgsql.NodeComposite,
-			})
 		}
 
 	case cypher.EndNodeFunction:
-		if typedExpression.NumArguments() != 1 {
-			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
-		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
+		if err := s.translateRelationshipEndpointFunction(pgsql.FunctionEndNode, typedExpression); err != nil {
 			s.SetError(err)
-		} else {
-			s.treeTranslator.PushOperand(pgsql.FunctionCall{
-				Function:   pgsql.FunctionEndNode,
-				Parameters: []pgsql.Expression{argument},
-				CastType:   pgsql.NodeComposite,
-			})
 		}
 
 	case cypher.NodeLabelsFunction:

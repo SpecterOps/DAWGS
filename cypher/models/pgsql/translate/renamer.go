@@ -92,6 +92,20 @@ func (s *FrameBindingRewriter) rewriteArraySlice(slice *pgsql.ArraySlice) error 
 	return nil
 }
 
+func (s *FrameBindingRewriter) rewriteArrayLiteral(literal *pgsql.ArrayLiteral) error {
+	if literal == nil {
+		return nil
+	}
+
+	for idx := range literal.Values {
+		if err := s.rewriteExpression(&literal.Values[idx]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *FrameBindingRewriter) rewriteExpression(expression *pgsql.Expression) error {
 	if expression == nil || *expression == nil {
 		return nil
@@ -120,6 +134,15 @@ func (s *FrameBindingRewriter) rewriteExpression(expression *pgsql.Expression) e
 
 	case *pgsql.ArraySlice:
 		return s.rewriteArraySlice(typedExpression)
+
+	case pgsql.ArrayLiteral:
+		if err := s.rewriteArrayLiteral(&typedExpression); err != nil {
+			return err
+		}
+		*expression = typedExpression
+
+	case *pgsql.ArrayLiteral:
+		return s.rewriteArrayLiteral(typedExpression)
 	}
 
 	return nil
@@ -214,6 +237,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 				if err := s.rewriteArraySlice(typedValue); err != nil {
 					return err
 				}
+
+			case pgsql.ArrayLiteral:
+				if err := s.rewriteArrayLiteral(&typedValue); err != nil {
+					return err
+				}
+				typedExpression.Values[idx] = typedValue
+
+			case *pgsql.ArrayLiteral:
+				if err := s.rewriteArrayLiteral(typedValue); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -263,6 +297,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 
 			case *pgsql.ArraySlice:
 				if err := s.rewriteArraySlice(typedParameter); err != nil {
+					return err
+				}
+
+			case pgsql.ArrayLiteral:
+				if err := s.rewriteArrayLiteral(&typedParameter); err != nil {
+					return err
+				}
+				typedExpression.Parameters[idx] = typedParameter
+
+			case *pgsql.ArrayLiteral:
+				if err := s.rewriteArrayLiteral(typedParameter); err != nil {
 					return err
 				}
 			}
@@ -359,6 +404,12 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 	case *pgsql.ArraySlice:
 		return s.rewriteArraySlice(typedExpression)
 
+	case pgsql.ArrayLiteral:
+		return s.rewriteArrayLiteral(&typedExpression)
+
+	case *pgsql.ArrayLiteral:
+		return s.rewriteArrayLiteral(typedExpression)
+
 	case *pgsql.Parenthetical:
 		switch typedInnerExpression := typedExpression.Expression.(type) {
 		case pgsql.Identifier:
@@ -383,6 +434,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 
 		case *pgsql.ArraySlice:
 			if err := s.rewriteArraySlice(typedInnerExpression); err != nil {
+				return err
+			}
+
+		case pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(&typedInnerExpression); err != nil {
+				return err
+			}
+			typedExpression.Expression = typedInnerExpression
+
+		case *pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(typedInnerExpression); err != nil {
 				return err
 			}
 		}
@@ -416,6 +478,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 			if err := s.rewriteArraySlice(typedInnerExpression); err != nil {
 				return err
 			}
+
+		case pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(&typedInnerExpression); err != nil {
+				return err
+			}
+			typedExpression.Expression = typedInnerExpression
+
+		case *pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(typedInnerExpression); err != nil {
+				return err
+			}
 		}
 
 	case *pgsql.AnyExpression:
@@ -442,6 +515,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 
 		case *pgsql.ArraySlice:
 			if err := s.rewriteArraySlice(typedInnerExpression); err != nil {
+				return err
+			}
+
+		case pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(&typedInnerExpression); err != nil {
+				return err
+			}
+			typedExpression.Expression = typedInnerExpression
+
+		case *pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(typedInnerExpression); err != nil {
 				return err
 			}
 		}
@@ -472,6 +556,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 			if err := s.rewriteArraySlice(typedOperand); err != nil {
 				return err
 			}
+
+		case pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(&typedOperand); err != nil {
+				return err
+			}
+			typedExpression.Operand = typedOperand
+
+		case *pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(typedOperand); err != nil {
+				return err
+			}
 		}
 
 	case *pgsql.BinaryExpression:
@@ -500,6 +595,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 			if err := s.rewriteArraySlice(typedLOperand); err != nil {
 				return err
 			}
+
+		case pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(&typedLOperand); err != nil {
+				return err
+			}
+			typedExpression.LOperand = typedLOperand
+
+		case *pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(typedLOperand); err != nil {
+				return err
+			}
 		}
 
 		switch typedROperand := typedExpression.ROperand.(type) {
@@ -525,6 +631,17 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 
 		case *pgsql.ArraySlice:
 			if err := s.rewriteArraySlice(typedROperand); err != nil {
+				return err
+			}
+
+		case pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(&typedROperand); err != nil {
+				return err
+			}
+			typedExpression.ROperand = typedROperand
+
+		case *pgsql.ArrayLiteral:
+			if err := s.rewriteArrayLiteral(typedROperand); err != nil {
 				return err
 			}
 		}

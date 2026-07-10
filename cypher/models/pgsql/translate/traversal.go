@@ -27,13 +27,49 @@ func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.E
 	)
 }
 
+func sourceTargetForTraversalStep(part *PatternPart, stepIndex int) (optimize.TraversalStepTarget, bool) {
+	if part == nil || stepIndex < 0 || stepIndex >= len(part.TraversalSteps) {
+		return optimize.TraversalStepTarget{}, false
+	}
+
+	if traversalStep := part.TraversalSteps[stepIndex]; traversalStep != nil && traversalStep.HasSourceTarget {
+		return traversalStep.SourceTarget, true
+	}
+
+	if !part.HasTarget {
+		return optimize.TraversalStepTarget{}, false
+	}
+
+	return part.Target.TraversalStep(stepIndex), true
+}
+
+func traversalStepIsFirstForSourceTarget(part *PatternPart, stepIndex int) bool {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget || stepIndex == 0 {
+		return true
+	}
+
+	previousTarget, previousHasTarget := sourceTargetForTraversalStep(part, stepIndex-1)
+	return !previousHasTarget || previousTarget != target
+}
+
+func traversalStepIsLastForSourceTarget(part *PatternPart, stepIndex int) bool {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget || stepIndex+1 >= len(part.TraversalSteps) {
+		return true
+	}
+
+	nextTarget, nextHasTarget := sourceTargetForTraversalStep(part, stepIndex+1)
+	return !nextHasTarget || nextTarget != target
+}
+
 func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
 	if traversalStep == nil || traversalStep.Expansion != nil || !traversalStep.LeftNodeBound || !traversalStep.RightNodeBound {
 		return false
 	}
 
-	if part != nil && part.HasTarget {
-		if _, hasDecision := s.expandIntoDecisions[part.Target.TraversalStep(stepIndex)]; hasDecision {
+	if target, hasTarget := sourceTargetForTraversalStep(part, stepIndex); hasTarget {
+		if _, hasDecision := s.expandIntoDecisions[target]; hasDecision {
 			return true
 		}
 
@@ -44,11 +80,12 @@ func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, trave
 }
 
 func (s *Translator) traversalDirectionDecision(part *PatternPart, stepIndex int) (optimize.TraversalDirectionDecision, bool) {
-	if part == nil || !part.HasTarget {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
 		return optimize.TraversalDirectionDecision{}, false
 	}
 
-	decision, hasDecision := s.traversalDirectionDecisions[part.Target.TraversalStep(stepIndex)]
+	decision, hasDecision := s.traversalDirectionDecisions[target]
 	return decision, hasDecision
 }
 
@@ -81,11 +118,12 @@ func (s *Translator) applyPatternConstraintBalance(part *PatternPart, stepIndex 
 }
 
 func (s *Translator) shortestPathStrategyDecision(part *PatternPart, stepIndex int) (optimize.ShortestPathStrategyDecision, bool) {
-	if part == nil || !part.HasTarget {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
 		return optimize.ShortestPathStrategyDecision{}, false
 	}
 
-	decision, hasDecision := s.shortestPathStrategyDecisions[part.Target.TraversalStep(stepIndex)]
+	decision, hasDecision := s.shortestPathStrategyDecisions[target]
 	return decision, hasDecision
 }
 
@@ -116,11 +154,12 @@ func (s *Translator) useBidirectionalShortestPathStrategy(part *PatternPart, ste
 }
 
 func (s *Translator) shortestPathFilterDecisionsForStep(part *PatternPart, stepIndex int) []optimize.ShortestPathFilterDecision {
-	if part == nil || !part.HasTarget {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
 		return nil
 	}
 
-	return s.shortestPathFilterDecisions[part.Target.TraversalStep(stepIndex)]
+	return s.shortestPathFilterDecisions[target]
 }
 
 func (s *Translator) applyShortestPathFilterMaterialization(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) {
@@ -142,11 +181,12 @@ func (s *Translator) applyShortestPathFilterMaterialization(part *PatternPart, s
 }
 
 func (s *Translator) hasLimitPushdownDecision(part *PatternPart, stepIndex int, mode optimize.LimitPushdownMode) bool {
-	if part == nil || !part.HasTarget {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
 		return true
 	}
 
-	for _, decision := range s.limitPushdownDecisions[part.Target.TraversalStep(stepIndex)] {
+	for _, decision := range s.limitPushdownDecisions[target] {
 		if decision.Mode == mode {
 			return true
 		}
@@ -638,10 +678,12 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 
 	var applied int
 	for stepIndex := range part.TraversalSteps {
-		var (
-			target    = part.Target.TraversalStep(stepIndex)
-			decisions = s.suffixPushdownDecisions[target]
-		)
+		target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+		if !hasTarget {
+			continue
+		}
+
+		decisions := s.suffixPushdownDecisions[target]
 
 		if len(decisions) == 0 {
 			continue
@@ -649,16 +691,40 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 
 		for _, decision := range decisions {
 			if decision.SuffixLength <= 0 ||
-				decision.SuffixStartStep <= stepIndex ||
+				decision.SuffixStartStep <= target.StepIndex ||
 				decision.SuffixEndStep < decision.SuffixStartStep ||
-				decision.SuffixEndStep >= len(part.TraversalSteps) ||
 				decision.SuffixEndStep-decision.SuffixStartStep+1 != decision.SuffixLength {
 				continue
 			}
 
 			var (
+				suffixStartTarget = target
+				suffixEndTarget   = target
+			)
+			suffixStartTarget.StepIndex = decision.SuffixStartStep
+			suffixEndTarget.StepIndex = decision.SuffixEndStep
+
+			suffixStartIndex, suffixEndIndex := -1, -1
+			for candidateIndex := range part.TraversalSteps {
+				candidateTarget, candidateHasTarget := sourceTargetForTraversalStep(part, candidateIndex)
+				if !candidateHasTarget {
+					continue
+				}
+
+				if candidateTarget == suffixStartTarget && suffixStartIndex < 0 {
+					suffixStartIndex = candidateIndex
+				}
+				if candidateTarget == suffixEndTarget {
+					suffixEndIndex = candidateIndex
+				}
+			}
+			if suffixStartIndex < 0 || suffixEndIndex < suffixStartIndex {
+				continue
+			}
+
+			var (
 				currentStep = part.TraversalSteps[stepIndex]
-				suffixSteps = part.TraversalSteps[decision.SuffixStartStep : decision.SuffixEndStep+1]
+				suffixSteps = part.TraversalSteps[suffixStartIndex : suffixEndIndex+1]
 			)
 
 			if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
@@ -736,11 +802,12 @@ func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, s
 }
 
 func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int) (optimize.ProjectionPruningDecision, bool) {
-	if part == nil || !part.HasTarget {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
 		return optimize.ProjectionPruningDecision{}, false
 	}
 
-	decision, hasDecision := s.projectionPruningDecisions[part.Target.TraversalStep(stepIndex)]
+	decision, hasDecision := s.projectionPruningDecisions[target]
 	return decision, hasDecision
 }
 
@@ -750,7 +817,7 @@ func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, 
 		return
 	}
 
-	if decision.OmitLeftNode {
+	if decision.OmitLeftNode && traversalStepIsFirstForSourceTarget(part, stepIndex) {
 		traversalStep.ProjectionPruning.LeftNode = traversalStep.LeftNode
 	}
 
@@ -758,7 +825,7 @@ func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, 
 		traversalStep.ProjectionPruning.Relationship = traversalStep.Edge
 	}
 
-	if decision.OmitRightNode {
+	if decision.OmitRightNode && traversalStepIsLastForSourceTarget(part, stepIndex) {
 		traversalStep.ProjectionPruning.RightNode = traversalStep.RightNode
 	}
 
@@ -768,11 +835,12 @@ func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, 
 }
 
 func (s *Translator) latePathMaterializationDecision(part *PatternPart, stepIndex int, mode optimize.LatePathMaterializationMode) (optimize.LatePathMaterializationDecision, bool) {
-	if part == nil || !part.HasTarget {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
 		return optimize.LatePathMaterializationDecision{}, false
 	}
 
-	for _, decision := range s.latePathDecisions[part.Target.TraversalStep(stepIndex)] {
+	for _, decision := range s.latePathDecisions[target] {
 		if decision.Mode == mode {
 			return decision, true
 		}

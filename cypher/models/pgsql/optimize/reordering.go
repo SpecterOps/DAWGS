@@ -1,10 +1,6 @@
 package optimize
 
-import (
-	"sort"
-
-	"github.com/specterops/dawgs/cypher/models/cypher"
-)
+import "github.com/specterops/dawgs/cypher/models/cypher"
 
 type ConservativePatternReorderingRule struct{}
 
@@ -29,9 +25,12 @@ func (s ConservativePatternReorderingRule) Apply(plan *Plan) (bool, error) {
 }
 
 type reorderCandidate struct {
-	clause *cypher.ReadingClause
-	rank   int
-	index  int
+	clause       *cypher.ReadingClause
+	declarations map[string]struct{}
+	dependencies map[string]struct{}
+	movable      bool
+	score        boundSourceSelectivity
+	index        int
 }
 
 func reorderMultiPartQuery(query *cypher.MultiPartQuery, analysis Analysis) bool {
@@ -82,36 +81,19 @@ func reorderReadingClauses(readingClauses []*cypher.ReadingClause, regions []Reg
 			continue
 		}
 
-		applied = reorderRegion(readingClauses[region.StartClause:region.EndClause+1]) || applied
+		applied = reorderRegion(readingClauses[region.StartClause:region.EndClause+1], declaredBeforeClause(readingClauses, region.StartClause)) || applied
 	}
 
 	return applied
 }
 
-func reorderRegion(regionClauses []*cypher.ReadingClause) bool {
-	var (
-		candidates     = make([]reorderCandidate, len(regionClauses))
-		declaredBefore = map[string]struct{}{}
-	)
+func reorderRegion(regionClauses []*cypher.ReadingClause, declaredBeforeRegion map[string]struct{}) bool {
+	candidates := reorderCandidates(regionClauses, declaredBeforeRegion)
 
-	for idx, clause := range regionClauses {
-		candidates[idx] = reorderCandidate{
-			clause: clause,
-			rank:   matchClauseRank(clause, declaredBefore),
-			index:  idx,
-		}
-
-		for _, binding := range bindingsForReadingClause(idx, clause) {
-			declaredBefore[binding.Symbol] = struct{}{}
-		}
-	}
-
-	sort.SliceStable(candidates, func(i, j int) bool {
-		return candidates[i].rank < candidates[j].rank
-	})
+	reordered := reorderCandidateSegments(candidates, declaredBeforeRegion)
 
 	var applied bool
-	for idx, candidate := range candidates {
+	for idx, candidate := range reordered {
 		if regionClauses[idx] != candidate.clause {
 			applied = true
 			regionClauses[idx] = candidate.clause
@@ -121,45 +103,207 @@ func reorderRegion(regionClauses []*cypher.ReadingClause) bool {
 	return applied
 }
 
-func matchClauseRank(readingClause *cypher.ReadingClause, declaredBefore map[string]struct{}) int {
-	if isIndependentNodeAnchor(readingClause, declaredBefore) {
-		return 0
-	}
-
-	return 1
-}
-
-func isIndependentNodeAnchor(readingClause *cypher.ReadingClause, declaredBefore map[string]struct{}) bool {
-	if readingClause == nil || readingClause.Match == nil {
-		return false
-	}
-
-	match := readingClause.Match
-	if match.Optional || len(match.Pattern) != 1 {
-		return false
-	}
-
-	nodePattern, ok := singleNodePattern(match.Pattern[0])
-	if !ok || nodePattern.Variable == nil || nodePattern.Variable.Symbol == "" {
-		return false
-	}
-
-	if _, alreadyDeclared := declaredBefore[nodePattern.Variable.Symbol]; alreadyDeclared {
-		return false
-	}
-
-	if !isSelectiveNodeAnchor(nodePattern, match.Where) {
-		return false
-	}
-
-	declared := bindingSymbolSet(bindingsForMatch(0, match))
-	for _, dependency := range localMatchDependencies(match) {
-		if _, isLocal := declared[dependency]; !isLocal {
-			return false
+func declaredBeforeClause(readingClauses []*cypher.ReadingClause, clauseIndex int) map[string]struct{} {
+	declared := map[string]struct{}{}
+	for idx := 0; idx < clauseIndex && idx < len(readingClauses); idx++ {
+		for _, binding := range bindingsForReadingClause(idx, readingClauses[idx]) {
+			declared[binding.Symbol] = struct{}{}
 		}
 	}
 
+	return declared
+}
+
+func reorderCandidates(regionClauses []*cypher.ReadingClause, declaredBeforeRegion map[string]struct{}) []reorderCandidate {
+	var (
+		candidates       = make([]reorderCandidate, len(regionClauses))
+		firstDeclaration = copyStringSet(declaredBeforeRegion)
+		regionSymbols    = map[string]struct{}{}
+	)
+
+	for idx, clause := range regionClauses {
+		for _, binding := range bindingsForReadingClause(idx, clause) {
+			regionSymbols[binding.Symbol] = struct{}{}
+		}
+	}
+
+	for idx, clause := range regionClauses {
+		var (
+			declarations = map[string]struct{}{}
+			dependencies = map[string]struct{}{}
+		)
+
+		for _, binding := range bindingsForReadingClause(idx, clause) {
+			if _, declared := firstDeclaration[binding.Symbol]; declared {
+				dependencies[binding.Symbol] = struct{}{}
+				continue
+			}
+
+			firstDeclaration[binding.Symbol] = struct{}{}
+			declarations[binding.Symbol] = struct{}{}
+		}
+
+		var match *cypher.Match
+		if clause != nil {
+			match = clause.Match
+		}
+
+		for _, dependency := range localMatchDependencies(match) {
+			dependencies[dependency] = struct{}{}
+		}
+
+		movable := true
+		for dependency := range dependencies {
+			if _, declaredBefore := declaredBeforeRegion[dependency]; declaredBefore {
+				continue
+			}
+			if _, declaredInRegion := regionSymbols[dependency]; declaredInRegion {
+				continue
+			}
+
+			movable = false
+			break
+		}
+
+		candidates[idx] = reorderCandidate{
+			clause:       clause,
+			declarations: declarations,
+			dependencies: dependencies,
+			movable:      movable,
+			score:        matchClauseSelectivity(clause),
+			index:        idx,
+		}
+	}
+
+	return candidates
+}
+
+func reorderCandidateSegments(candidates []reorderCandidate, declaredBeforeRegion map[string]struct{}) []reorderCandidate {
+	var (
+		reordered = make([]reorderCandidate, 0, len(candidates))
+		available = copyStringSet(declaredBeforeRegion)
+		segment   []reorderCandidate
+	)
+
+	flushSegment := func() {
+		if len(segment) == 0 {
+			return
+		}
+
+		nextSegment := reorderMovableCandidates(segment, available)
+		for _, candidate := range nextSegment {
+			mergeStringSet(available, candidate.declarations)
+		}
+
+		reordered = append(reordered, nextSegment...)
+		segment = nil
+	}
+
+	for _, candidate := range candidates {
+		if !candidate.movable {
+			flushSegment()
+			reordered = append(reordered, candidate)
+			mergeStringSet(available, candidate.declarations)
+			continue
+		}
+
+		segment = append(segment, candidate)
+	}
+
+	flushSegment()
+	return reordered
+}
+
+func reorderMovableCandidates(candidates []reorderCandidate, available map[string]struct{}) []reorderCandidate {
+	var (
+		reordered = make([]reorderCandidate, 0, len(candidates))
+		remaining = append([]reorderCandidate(nil), candidates...)
+	)
+
+	for len(remaining) > 0 {
+		nextIndex := bestSchedulableCandidateIndex(remaining, available)
+		if nextIndex < 0 {
+			reordered = append(reordered, remaining...)
+			break
+		}
+
+		next := remaining[nextIndex]
+		reordered = append(reordered, next)
+		mergeStringSet(available, next.declarations)
+		remaining = append(remaining[:nextIndex], remaining[nextIndex+1:]...)
+	}
+
+	return reordered
+}
+
+func bestSchedulableCandidateIndex(candidates []reorderCandidate, available map[string]struct{}) int {
+	bestIndex := -1
+	for idx, candidate := range candidates {
+		if !candidateDependenciesSatisfied(candidate, available) {
+			continue
+		}
+
+		if bestIndex < 0 ||
+			candidate.score > candidates[bestIndex].score ||
+			(candidate.score == candidates[bestIndex].score && candidate.index < candidates[bestIndex].index) {
+			bestIndex = idx
+		}
+	}
+
+	return bestIndex
+}
+
+func candidateDependenciesSatisfied(candidate reorderCandidate, available map[string]struct{}) bool {
+	for dependency := range candidate.dependencies {
+		if _, declared := available[dependency]; declared {
+			continue
+		}
+		if _, declaredByCandidate := candidate.declarations[dependency]; declaredByCandidate {
+			continue
+		}
+
+		return false
+	}
+
 	return true
+}
+
+func matchClauseSelectivity(readingClause *cypher.ReadingClause) boundSourceSelectivity {
+	if readingClause == nil || readingClause.Match == nil {
+		return boundSourceSelectivityNone
+	}
+
+	var selectivity boundSourceSelectivity
+	for _, patternPart := range readingClause.Match.Pattern {
+		for _, nodePattern := range nodePatternsForPattern(patternPart) {
+			mergeSelectivityValue(&selectivity, nodePatternSelectivity(nodePattern, false))
+		}
+
+		for _, step := range traversalStepsForPattern(patternPart) {
+			if step.Relationship == nil {
+				continue
+			}
+
+			if len(step.Relationship.Kinds) > 0 {
+				mergeSelectivityValue(&selectivity, boundSourceSelectivityKindOnly)
+			}
+			mergeSelectivityValue(&selectivity, propertyConstraintSelectivity(step.Relationship.Properties))
+		}
+	}
+
+	if readingClause.Match.Where != nil {
+		for _, expression := range readingClause.Match.Where.Expressions {
+			for _, term := range cypherConjunctionTerms(expression) {
+				if _, termSelectivity, ok := propertyPredicateSelectivity(term); ok {
+					mergeSelectivityValue(&selectivity, termSelectivity)
+				} else {
+					mergeSelectivityValue(&selectivity, boundSourceSelectivityPredicate)
+				}
+			}
+		}
+	}
+
+	return selectivity
 }
 
 func singleNodePattern(pattern *cypher.PatternPart) (*cypher.NodePattern, bool) {
@@ -168,10 +312,6 @@ func singleNodePattern(pattern *cypher.PatternPart) (*cypher.NodePattern, bool) 
 	}
 
 	return pattern.PatternElements[0].AsNodePattern()
-}
-
-func isSelectiveNodeAnchor(nodePattern *cypher.NodePattern, where *cypher.Where) bool {
-	return len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil || wherePredicateCount(where) > 0
 }
 
 func localMatchDependencies(match *cypher.Match) []string {
@@ -202,19 +342,16 @@ func localMatchDependencies(match *cypher.Match) []string {
 	return sortedUniqueStrings(dependencies)
 }
 
-func bindingSymbolSet(bindings []Binding) map[string]struct{} {
-	symbols := make(map[string]struct{}, len(bindings))
-	for _, binding := range bindings {
-		symbols[binding.Symbol] = struct{}{}
-	}
-
-	return symbols
-}
-
 func bindingsForReadingClause(clauseIndex int, readingClause *cypher.ReadingClause) []Binding {
 	if readingClause == nil || readingClause.Match == nil {
 		return nil
 	}
 
 	return bindingsForMatch(clauseIndex, readingClause.Match)
+}
+
+func mergeStringSet(dst map[string]struct{}, src map[string]struct{}) {
+	for value := range src {
+		dst[value] = struct{}{}
+	}
 }

@@ -6,18 +6,20 @@ import (
 )
 
 const (
-	LoweringProjectionPruning       = "ProjectionPruning"
-	LoweringLatePathMaterialization = "LatePathMaterialization"
-	LoweringExpandIntoDetection     = "ExpandIntoDetection"
-	LoweringTraversalDirection      = "TraversalDirectionSelection"
-	LoweringShortestPathStrategy    = "ShortestPathStrategySelection"
-	LoweringShortestPathFilter      = "ShortestPathFilterMaterialization"
-	LoweringLimitPushdown           = "LimitPushdown"
-	LoweringExpansionSuffixPushdown = "ExpansionSuffixPushdown"
-	LoweringPredicatePlacement      = "PredicatePlacement"
-	LoweringCountStoreFastPath      = "CountStoreFastPath"
-	LoweringCollectIDMembership     = "CollectIDMembership"
-	LoweringAggregateTraversalCount = "AggregateTraversalCount"
+	LoweringProjectionPruning         = "ProjectionPruning"
+	LoweringLatePathMaterialization   = "LatePathMaterialization"
+	LoweringExpandIntoDetection       = "ExpandIntoDetection"
+	LoweringTraversalDirection        = "TraversalDirectionSelection"
+	LoweringShortestPathStrategy      = "ShortestPathStrategySelection"
+	LoweringShortestPathFilter        = "ShortestPathFilterMaterialization"
+	LoweringLimitPushdown             = "LimitPushdown"
+	LoweringExpansionSuffixPushdown   = "ExpansionSuffixPushdown"
+	LoweringPredicatePlacement        = "PredicatePlacement"
+	LoweringCountStoreFastPath        = "CountStoreFastPath"
+	LoweringCollectIDMembership       = "CollectIDMembership"
+	LoweringAggregateTraversalCount   = "AggregateTraversalCount"
+	LoweringExactRangeExpansion       = "ExactRangeExpansion"
+	LoweringPathRelationshipPredicate = "PathRelationshipPredicate"
 )
 
 type LoweringDecision struct {
@@ -50,6 +52,11 @@ type TraversalStepTarget struct {
 	Predicate      bool `json:"predicate,omitempty"`
 	PredicateIndex int  `json:"predicate_index,omitempty"`
 	StepIndex      int  `json:"step_index"`
+}
+
+type QuantifierTarget struct {
+	QueryPartIndex  int `json:"query_part_index"`
+	QuantifierIndex int `json:"quantifier_index"`
 }
 
 type ProjectionPruningDecision struct {
@@ -164,6 +171,17 @@ type CountStoreFastPathDecision struct {
 	KindSymbols    []string                 `json:"kind_symbols,omitempty"`
 }
 
+type ExactRangeExpansionDecision struct {
+	Target TraversalStepTarget `json:"target"`
+	Depth  int64               `json:"depth"`
+}
+
+type PathRelationshipPredicateDecision struct {
+	Target        QuantifierTarget `json:"target"`
+	PathSymbol    string           `json:"path_symbol"`
+	BindingSymbol string           `json:"binding_symbol"`
+}
+
 type AggregateTraversalCountDecision struct {
 	QueryPartIndex int                 `json:"query_part_index"`
 	SourceSymbol   string              `json:"source_symbol"`
@@ -194,18 +212,20 @@ type AggregateTraversalCountShape struct {
 }
 
 type LoweringPlan struct {
-	ProjectionPruning       []ProjectionPruningDecision         `json:"projection_pruning,omitempty"`
-	LatePathMaterialization []LatePathMaterializationDecision   `json:"late_path_materialization,omitempty"`
-	ExpandInto              []ExpandIntoDecision                `json:"expand_into,omitempty"`
-	TraversalDirection      []TraversalDirectionDecision        `json:"traversal_direction,omitempty"`
-	ShortestPathStrategy    []ShortestPathStrategyDecision      `json:"shortest_path_strategy,omitempty"`
-	ShortestPathFilter      []ShortestPathFilterDecision        `json:"shortest_path_filter,omitempty"`
-	LimitPushdown           []LimitPushdownDecision             `json:"limit_pushdown,omitempty"`
-	ExpansionSuffixPushdown []ExpansionSuffixPushdownDecision   `json:"expansion_suffix_pushdown,omitempty"`
-	PredicatePlacement      []PredicatePlacementDecision        `json:"predicate_placement,omitempty"`
-	PatternPredicate        []PatternPredicatePlacementDecision `json:"pattern_predicate_placement,omitempty"`
-	CountStoreFastPath      []CountStoreFastPathDecision        `json:"count_store_fast_path,omitempty"`
-	AggregateTraversalCount []AggregateTraversalCountDecision   `json:"aggregate_traversal_count,omitempty"`
+	ProjectionPruning         []ProjectionPruningDecision         `json:"projection_pruning,omitempty"`
+	LatePathMaterialization   []LatePathMaterializationDecision   `json:"late_path_materialization,omitempty"`
+	ExpandInto                []ExpandIntoDecision                `json:"expand_into,omitempty"`
+	TraversalDirection        []TraversalDirectionDecision        `json:"traversal_direction,omitempty"`
+	ShortestPathStrategy      []ShortestPathStrategyDecision      `json:"shortest_path_strategy,omitempty"`
+	ShortestPathFilter        []ShortestPathFilterDecision        `json:"shortest_path_filter,omitempty"`
+	LimitPushdown             []LimitPushdownDecision             `json:"limit_pushdown,omitempty"`
+	ExpansionSuffixPushdown   []ExpansionSuffixPushdownDecision   `json:"expansion_suffix_pushdown,omitempty"`
+	PredicatePlacement        []PredicatePlacementDecision        `json:"predicate_placement,omitempty"`
+	PatternPredicate          []PatternPredicatePlacementDecision `json:"pattern_predicate_placement,omitempty"`
+	CountStoreFastPath        []CountStoreFastPathDecision        `json:"count_store_fast_path,omitempty"`
+	ExactRangeExpansion       []ExactRangeExpansionDecision       `json:"exact_range_expansion,omitempty"`
+	PathRelationshipPredicate []PathRelationshipPredicateDecision `json:"path_relationship_predicate,omitempty"`
+	AggregateTraversalCount   []AggregateTraversalCountDecision   `json:"aggregate_traversal_count,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -220,6 +240,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.PredicatePlacement) == 0 &&
 		len(s.PatternPredicate) == 0 &&
 		len(s.CountStoreFastPath) == 0 &&
+		len(s.ExactRangeExpansion) == 0 &&
+		len(s.PathRelationshipPredicate) == 0 &&
 		len(s.AggregateTraversalCount) == 0
 }
 
@@ -241,6 +263,8 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringExpansionSuffixPushdown, len(s.ExpansionSuffixPushdown) > 0)
 	add(LoweringPredicatePlacement, len(s.PredicatePlacement) > 0 || len(s.PatternPredicate) > 0)
 	add(LoweringCountStoreFastPath, len(s.CountStoreFastPath) > 0)
+	add(LoweringExactRangeExpansion, len(s.ExactRangeExpansion) > 0)
+	add(LoweringPathRelationshipPredicate, len(s.PathRelationshipPredicate) > 0)
 	add(LoweringAggregateTraversalCount, len(s.AggregateTraversalCount) > 0)
 
 	return decisions
