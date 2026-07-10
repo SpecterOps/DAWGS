@@ -53,6 +53,35 @@ func TestBackendParityNeo4jPrepare(t *testing.T) {
 			expectedCypher: "match (s)-[r:MemberOf]->(e) where id(s) = $p0 return id(s), id(r), id(e)",
 			expectedParams: map[string]any{"p0": 1},
 		},
+		"relationship read with negated relationship kind": {
+			builder: v2.New().Where(
+				v2.Not(v2.Relationship().Kind().IsOneOf(graph.Kinds{graph.StringKind("HasSession")})),
+				v2.Relationship().Kind().IsOneOf(graph.Kinds{graph.StringKind("MemberOf")}),
+				v2.End().ID().Equals(42),
+			).Return(
+				v2.Start().ID(),
+				v2.Relationship().ID(),
+				v2.KindsOf(v2.Relationship()),
+				v2.End().ID(),
+			),
+			expectedCypher: "match (s)-[r:MemberOf]->(e) where not r:HasSession and id(e) = $p0 return id(s), id(r), type(r), id(e)",
+			expectedParams: map[string]any{"p0": 42},
+		},
+		"relationship read with compound negated relationship kinds": {
+			builder: v2.New().Where(
+				v2.Not(v2.Or(
+					v2.Relationship().Kind().Is(graph.StringKind("HasSession")),
+					v2.Relationship().Kind().Is(graph.StringKind("MemberOf")),
+				)),
+				v2.End().ID().Equals(42),
+			).Return(
+				v2.Start().ID(),
+				v2.Relationship().ID(),
+				v2.End().ID(),
+			),
+			expectedCypher: "match (s)-[r]->(e) where not (r:HasSession or r:MemberOf) and id(e) = $p0 return id(s), id(r), id(e)",
+			expectedParams: map[string]any{"p0": 42},
+		},
 		"shortest path": {
 			builder: v2.New().WithShortestPaths().Where(
 				v2.Relationship().Kind().Is(graph.StringKind("MemberOf")),

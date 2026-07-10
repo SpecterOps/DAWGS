@@ -678,6 +678,10 @@ func (s kindContinuation) Is(kind graph.Kind) cypher.Expression {
 }
 
 func (s kindContinuation) IsOneOf(kinds graph.Kinds) cypher.Expression {
+	if len(kinds) == 0 {
+		return invalidExpression(fmt.Errorf("kind predicate requires at least one kind"))
+	}
+
 	return &cypher.KindMatcher{
 		Reference: s.identifier,
 		Kinds:     kinds,
@@ -702,6 +706,10 @@ func (s kindsContinuation) Has(kind graph.Kind) cypher.Expression {
 }
 
 func (s kindsContinuation) HasOneOf(kinds graph.Kinds) cypher.Expression {
+	if len(kinds) == 0 {
+		return invalidExpression(fmt.Errorf("kind predicate requires at least one kind"))
+	}
+
 	return &cypher.KindMatcher{
 		Reference: s.identifier,
 		Kinds:     kinds,
