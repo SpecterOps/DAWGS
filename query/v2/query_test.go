@@ -215,6 +215,18 @@ func TestInvalidCreateQualifiedExpressionReturnsError(t *testing.T) {
 	require.ErrorContains(t, err, "invalid qualified expression for create: *cypher.PropertyLookup")
 }
 
+func TestEmptyKindPredicatesReturnErrors(t *testing.T) {
+	_, err := v2.New().Where(
+		v2.Relationship().Kind().IsOneOf(nil),
+	).Return(v2.Relationship()).Build()
+	require.ErrorContains(t, err, "kind predicate requires at least one kind")
+
+	_, err = v2.New().Where(
+		v2.Node().Kinds().HasOneOf(graph.Kinds{}),
+	).Return(v2.Node()).Build()
+	require.ErrorContains(t, err, "kind predicate requires at least one kind")
+}
+
 func TestUpdatingClausesPreserveFluentOrder(t *testing.T) {
 	preparedQuery, err := v2.New().Create(
 		v2.NodePattern(graph.Kinds{graph.StringKind("User")}, nil),

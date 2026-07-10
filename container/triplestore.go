@@ -249,7 +249,7 @@ func (s *triplestoreProjection) NumEdges() uint64 {
 	count := uint64(0)
 
 	s.origin.EachEdge(func(next Edge) bool {
-		if !s.deletedEdges.Contains(next.ID) {
+		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.End) {
 			count += 1
 		}
 
@@ -281,7 +281,7 @@ func (s *triplestoreProjection) EachEdge(delegate func(next Edge) bool) {
 
 func (s *triplestoreProjection) EachAdjacentEdge(node uint64, direction graph.Direction, delegate func(next Edge) bool) {
 	s.origin.EachAdjacentEdge(node, direction, func(next Edge) bool {
-		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.Start) {
+		if !s.deletedEdges.Contains(next.ID) && !s.deletedNodes.Contains(next.Start) && !s.deletedNodes.Contains(next.End) {
 			return delegate(next)
 		}
 

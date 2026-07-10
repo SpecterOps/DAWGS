@@ -41,6 +41,16 @@ func (s *ExpressionListRewriter) peekExpressionList() (cypher.ExpressionList, bo
 	return nil, false
 }
 
+func (s *ExpressionListRewriter) hasNegationAncestor() bool {
+	for idx := len(s.descentStack) - 1; idx >= 0; idx-- {
+		if _, isNegation := s.descentStack[idx].(*cypher.Negation); isNegation {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *ExpressionListRewriter) popExpression() {
 	s.descentStack = s.descentStack[:len(s.descentStack)-1]
 }
@@ -121,6 +131,10 @@ func (s *ExpressionListRewriter) Exit(node cypher.SyntaxNode) {
 		if variable, typeOK := typedNode.Reference.(*cypher.Variable); !typeOK {
 			s.SetErrorf("expected a variable as the reference for a kind matcher but received: %T", node)
 		} else if variable.Symbol == query.EdgeSymbol {
+			if s.hasNegationAncestor() {
+				return
+			}
+
 			// We need to remove this expression from the most recent expression list and tack it onto the
 			// relationship of the last match
 			if lastMatch, hasLastMatch := s.peekLastMatch(); !hasLastMatch {
