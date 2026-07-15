@@ -27,12 +27,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/ops"
 	"github.com/specterops/dawgs/retriever"
 )
 
-func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
+func TestDumpLoadRoundTrip(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING not set")
@@ -41,8 +43,10 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("infer driver: %v", err)
 	}
-	if driverName != pg.DriverName {
-		t.Skipf("CONNECTION_STRING selects %s, not PostgreSQL", driverName)
+	switch driverName {
+	case pg.DriverName, neo4j.DriverName:
+	default:
+		t.Skipf("CONNECTION_STRING selects unsupported retriever integration driver %s", driverName)
 	}
 
 	ctx := context.Background()
@@ -69,28 +73,57 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("assert schema: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+	clearGraph := func() error {
+		return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			return tx.WithGraph(graph.Graph{
 				Name: graphName,
 			}).Nodes().Delete()
 		})
+	}
+	if err := clearGraph(); err != nil {
+		t.Fatalf("clear graph before seed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clearGraph()
 	})
 
+	const (
+		nodeCount = 7
+		edgeCount = 5
+		batchSize = 2
+		shardSize = 3
+	)
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		tx = tx.WithGraph(graph.Graph{
 			Name: graphName,
 		})
-		alice, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "alice"}), userKind)
-		if err != nil {
-			return err
+
+		nodes := make([]*graph.Node, 0, nodeCount)
+		for index := range nodeCount {
+			kind := userKind
+			if index%2 == 1 {
+				kind = systemKind
+			}
+
+			node, err := tx.CreateNode(graph.AsProperties(map[string]any{
+				"name": fmt.Sprintf("node-%d", index),
+				"role": fmt.Sprintf("role-%d", index%3),
+			}), kind)
+			if err != nil {
+				return err
+			}
+			nodes = append(nodes, node)
 		}
-		system, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "server"}), systemKind)
-		if err != nil {
-			return err
+
+		for index := range edgeCount {
+			if _, err := tx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
+				"route": fmt.Sprintf("route-%d", index),
+			})); err != nil {
+				return err
+			}
 		}
-		_, err = tx.CreateRelationshipByIDs(alice.ID, system.ID, adminKind, graph.AsProperties(map[string]any{"source": "test"}))
-		return err
+
+		return nil
 	}); err != nil {
 		t.Fatalf("seed graph: %v", err)
 	}
@@ -101,8 +134,8 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("count graph entities: %v", err)
 	}
-	if entitySnapshot.NodeCount != 2 || entitySnapshot.EdgeCount != 1 {
-		t.Skipf("graph target %q is not isolated by the current PostgreSQL query path: nodes=%d edges=%d", graphName, entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
+	if entitySnapshot.NodeCount != nodeCount || entitySnapshot.EdgeCount != edgeCount {
+		t.Fatalf("unexpected seeded graph counts: nodes=%d edges=%d", entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
 	}
 
 	dumpDir := t.TempDir()
@@ -113,14 +146,36 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 		Scrub:       retriever.ScrubNone,
 		Compression: retriever.CompressionGzip,
 		ZstdLevel:   retriever.DefaultZstdLevel,
-		ShardSize:   1,
-		BatchSize:   1,
+		ShardSize:   shardSize,
+		BatchSize:   batchSize,
 	})
 	if err != nil {
 		t.Fatalf("dump: %v", err)
 	}
-	if dumpResult.NodeCount != 2 || dumpResult.EdgeCount != 1 {
+	if dumpResult.NodeCount != nodeCount || dumpResult.EdgeCount != edgeCount {
 		t.Fatalf("unexpected dump counts: nodes=%d edges=%d", dumpResult.NodeCount, dumpResult.EdgeCount)
+	}
+	if got := len(dumpResult.Manifest.Graphs); got != 1 {
+		t.Fatalf("dump manifest graph count = %d", got)
+	}
+	graphEntry := dumpResult.Manifest.Graphs[0]
+	if graphEntry.NodeCount != nodeCount || graphEntry.EdgeCount != edgeCount {
+		t.Fatalf("unexpected manifest graph counts: nodes=%d edges=%d", graphEntry.NodeCount, graphEntry.EdgeCount)
+	}
+	var nodeFiles, edgeFiles int
+	for _, fileEntry := range graphEntry.Files {
+		switch fileEntry.Phase {
+		case retriever.PhaseNodes:
+			nodeFiles++
+		case retriever.PhaseEdges:
+			edgeFiles++
+		}
+		if fileEntry.Count > shardSize {
+			t.Fatalf("fragment %s count %d exceeds shard size %d", fileEntry.Path, fileEntry.Count, shardSize)
+		}
+	}
+	if nodeFiles != 3 || edgeFiles != 2 {
+		t.Fatalf("unexpected manifest shards: node files=%d edge files=%d", nodeFiles, edgeFiles)
 	}
 	if dumpResult.Manifest.Metrics == nil {
 		t.Fatalf("dump manifest is missing metrics")
@@ -128,46 +183,107 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 	if got := len(dumpResult.Manifest.Metrics.Graphs); got != 1 {
 		t.Fatalf("dump metrics graph count = %d", got)
 	}
-	if dumpResult.Manifest.Metrics.Graphs[0].NodeCount != 2 || dumpResult.Manifest.Metrics.Graphs[0].EdgeCount != 1 {
+	if dumpResult.Manifest.Metrics.Graphs[0].NodeCount != nodeCount || dumpResult.Manifest.Metrics.Graphs[0].EdgeCount != edgeCount {
 		t.Fatalf("unexpected dump metrics counts: %+v", dumpResult.Manifest.Metrics.Graphs[0])
 	}
 
 	if _, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{
 		InputDir:      dumpDir,
-		BatchSize:     1,
+		BatchSize:     batchSize,
 		VerifyMetrics: true,
 	}); err == nil || !strings.Contains(err.Error(), "is not empty") {
 		t.Fatalf("expected non-empty target load error, got %v", err)
 	}
 
-	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		return tx.WithGraph(graph.Graph{
-			Name: graphName,
-		}).Nodes().Delete()
-	}); err != nil {
+	if err := clearGraph(); err != nil {
 		t.Fatalf("clear graph before load: %v", err)
 	}
 
 	loadResult, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{
 		InputDir:      dumpDir,
-		BatchSize:     1,
+		BatchSize:     batchSize,
 		VerifyMetrics: true,
 	})
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if loadResult.NodeCount != 2 || loadResult.EdgeCount != 1 {
+	if loadResult.NodeCount != nodeCount || loadResult.EdgeCount != edgeCount {
 		t.Fatalf("unexpected load counts: nodes=%d edges=%d", loadResult.NodeCount, loadResult.EdgeCount)
+	}
+
+	var loadedNodes []*graph.Node
+	var loadedEdges []*graph.Relationship
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		tx = tx.WithGraph(graph.Graph{Name: graphName})
+		var err error
+		if loadedNodes, err = ops.FetchNodes(tx.Nodes()); err != nil {
+			return err
+		}
+		loadedEdges, err = ops.FetchRelationships(tx.Relationships())
+		return err
+	}); err != nil {
+		t.Fatalf("read restored topology: %v", err)
+	}
+	if len(loadedNodes) != nodeCount || len(loadedEdges) != edgeCount {
+		t.Fatalf("unexpected restored topology counts: nodes=%d edges=%d", len(loadedNodes), len(loadedEdges))
+	}
+
+	nodeNames := make(map[graph.ID]string, len(loadedNodes))
+	expectedRoles := make(map[string]string, nodeCount)
+	expectedKinds := make(map[string]string, nodeCount)
+	for index := range nodeCount {
+		name := fmt.Sprintf("node-%d", index)
+		expectedRoles[name] = fmt.Sprintf("role-%d", index%3)
+		expectedKinds[name] = userKind.String()
+		if index%2 == 1 {
+			expectedKinds[name] = systemKind.String()
+		}
+	}
+	for _, node := range loadedNodes {
+		if node.Properties == nil {
+			t.Fatalf("restored node %d is missing properties", node.ID)
+		}
+		name := fmt.Sprint(node.Properties.Get("name").Any())
+		role := fmt.Sprint(node.Properties.Get("role").Any())
+		nodeNames[node.ID] = name
+		if expectedRole, ok := expectedRoles[name]; !ok || role != expectedRole {
+			t.Fatalf("unexpected restored node properties: %+v", node.Properties.MapOrEmpty())
+		}
+		if len(node.Kinds) != 1 || node.Kinds[0].String() != expectedKinds[name] {
+			t.Fatalf("unexpected restored node kinds for %s: %v", name, node.Kinds.Strings())
+		}
+	}
+
+	restoredRoutes := map[string]string{}
+	for _, relationship := range loadedEdges {
+		startName, startOK := nodeNames[relationship.StartID]
+		endName, endOK := nodeNames[relationship.EndID]
+		if !startOK || !endOK {
+			t.Fatalf("restored relationship has unresolved endpoint IDs: %+v", relationship)
+		}
+		if relationship.Kind == nil || relationship.Kind.String() != adminKind.String() {
+			t.Fatalf("unexpected restored relationship kind: %+v", relationship.Kind)
+		}
+		if relationship.Properties == nil {
+			t.Fatalf("restored relationship is missing properties: %+v", relationship)
+		}
+		restoredRoutes[startName+"->"+endName] = fmt.Sprint(relationship.Properties.Get("route").Any())
+	}
+	for index := range edgeCount {
+		path := fmt.Sprintf("node-%d->node-%d", index, index+1)
+		if route := restoredRoutes[path]; route != fmt.Sprintf("route-%d", index) {
+			t.Fatalf("restored route %s = %q", path, route)
+		}
 	}
 
 	verifyResult, err := retriever.Verify(ctx, db, driverName, retriever.VerifyOptions{
 		InputDir:  dumpDir,
-		BatchSize: 1,
+		BatchSize: batchSize,
 	})
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if verifyResult.NodeCount != 2 || verifyResult.EdgeCount != 1 {
+	if verifyResult.NodeCount != nodeCount || verifyResult.EdgeCount != edgeCount {
 		t.Fatalf("unexpected verify counts: nodes=%d edges=%d", verifyResult.NodeCount, verifyResult.EdgeCount)
 	}
 
@@ -183,7 +299,7 @@ func TestPostgreSQLDumpLoadRoundTrip(t *testing.T) {
 
 	_, err = retriever.Verify(ctx, db, driverName, retriever.VerifyOptions{
 		InputDir:  dumpDir,
-		BatchSize: 1,
+		BatchSize: batchSize,
 	})
 	var mismatch retriever.MetricsMismatchError
 	if !errors.As(err, &mismatch) {

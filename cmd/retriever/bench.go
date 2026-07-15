@@ -465,7 +465,7 @@ func benchEdges(ctx context.Context, db graph.Database, targetGraph graph.Graph,
 }
 
 func benchNodeBatch(nodes []*graph.Node, options benchOptions) (benchPhaseResult, error) {
-	return benchCompressedBatch(len(nodes), options, func() retriever.NodeFragment {
+	return benchCompressedBatch(len(nodes), options, func() []retriever.FragmentNode {
 		items := make([]retriever.FragmentNode, 0, len(nodes))
 		for _, node := range nodes {
 			kinds := node.Kinds.Strings()
@@ -478,15 +478,12 @@ func benchNodeBatch(nodes []*graph.Node, options benchOptions) (benchPhaseResult
 			})
 		}
 
-		return retriever.NodeFragment{
-			Phase: retriever.PhaseNodes,
-			Items: items,
-		}
+		return items
 	})
 }
 
 func benchRelationshipBatch(relationships []*graph.Relationship, options benchOptions) (benchPhaseResult, error) {
-	return benchCompressedBatch(len(relationships), options, func() retriever.EdgeFragment {
+	return benchCompressedBatch(len(relationships), options, func() []retriever.FragmentEdge {
 		items := make([]retriever.FragmentEdge, 0, len(relationships))
 		for _, relationship := range relationships {
 			kind := ""
@@ -502,14 +499,11 @@ func benchRelationshipBatch(relationships []*graph.Relationship, options benchOp
 			})
 		}
 
-		return retriever.EdgeFragment{
-			Phase: retriever.PhaseEdges,
-			Items: items,
-		}
+		return items
 	})
 }
 
-func benchCompressedBatch[T any](count int, options benchOptions, buildPayload func() T) (benchPhaseResult, error) {
+func benchCompressedBatch[T any](count int, options benchOptions, buildRecords func() []T) (benchPhaseResult, error) {
 	result := benchPhaseResult{
 		Count: int64(count),
 	}
@@ -518,7 +512,7 @@ func benchCompressedBatch[T any](count int, options benchOptions, buildPayload f
 	}
 
 	encodeStarted := time.Now()
-	uncompressedBytes, compressedBytes, err := retriever.CompressedJSONSize(options.Compression, options.ZstdLevel, buildPayload())
+	uncompressedBytes, compressedBytes, err := retriever.CompressedJSONLinesSize(options.Compression, options.ZstdLevel, buildRecords())
 	result.EncodeCompressTime = time.Since(encodeStarted)
 
 	if err != nil {

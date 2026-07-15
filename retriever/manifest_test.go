@@ -6,20 +6,19 @@ import (
 )
 
 func TestManifestValidateRejectsUnsupportedFormat(t *testing.T) {
-	value := newValidTestManifest(0)
-	value.Format = "future"
+	for _, format := range []string{
+		"future",
+		"retriever-opengraph-collection-v1",
+		"retrievr-opengraph-collection-v1",
+	} {
+		t.Run(format, func(t *testing.T) {
+			value := newValidTestManifest(0)
+			value.Format = format
 
-	if err := value.validate(); err == nil {
-		t.Fatalf("expected unsupported format error")
-	}
-}
-
-func TestManifestValidateAcceptsLegacyFormat(t *testing.T) {
-	value := newValidTestManifest(0)
-	value.Format = legacyManifestFormat
-
-	if err := value.validate(); err != nil {
-		t.Fatalf("validate legacy Manifest format: %v", err)
+			if err := value.validate(); err == nil {
+				t.Fatalf("expected unsupported format error")
+			}
+		})
 	}
 }
 
@@ -29,11 +28,11 @@ func TestPublicManifestHelpers(t *testing.T) {
 		t.Fatalf("validate manifest through public method: %v", err)
 	}
 
-	if !IsSupportedManifestFormat(manifestFormat) || !IsSupportedManifestFormat(legacyManifestFormat) {
-		t.Fatalf("expected public format helper to accept current and legacy formats")
+	if !IsSupportedManifestFormat(manifestFormat) {
+		t.Fatalf("expected public format helper to accept current format")
 	}
 
-	if IsSupportedManifestFormat("future") {
+	if IsSupportedManifestFormat("retriever-opengraph-collection-v1") || IsSupportedManifestFormat("retrievr-opengraph-collection-v1") || IsSupportedManifestFormat("future") {
 		t.Fatalf("expected unsupported format to be rejected")
 	}
 
@@ -56,13 +55,13 @@ func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
 		Files: []FileManifest{
 			{
 				Phase:  PhaseEdges,
-				Path:   "graphs/default/edges-000001.ogfrag.gz",
+				Path:   "graphs/default/edges-000001.jsonl.gz",
 				Count:  1,
 				SHA256: "abc",
 			},
 			{
 				Phase:  PhaseNodes,
-				Path:   "graphs/default/nodes-000001.ogfrag.gz",
+				Path:   "graphs/default/nodes-000001.jsonl.gz",
 				Count:  1,
 				SHA256: "def",
 			},
@@ -77,7 +76,7 @@ func TestManifestValidateRequiresNodeFilesBeforeEdgeFiles(t *testing.T) {
 func TestManifestValidateRejectsMalformedGraphEntries(t *testing.T) {
 	validFile := FileManifest{
 		Phase:           PhaseNodes,
-		Path:            "graphs/default/nodes-000001.ogfrag.gz",
+		Path:            "graphs/default/nodes-000001.jsonl.gz",
 		Count:           1,
 		CompressedBytes: 10,
 		SHA256:          "abc",
@@ -194,7 +193,7 @@ func TestManifestValidateAcceptsMetrics(t *testing.T) {
 		EdgeCount: 0,
 		Files: []FileManifest{{
 			Phase:           PhaseNodes,
-			Path:            "graphs/default/nodes-000001.ogfrag.gz",
+			Path:            "graphs/default/nodes-000001.jsonl.gz",
 			Count:           1,
 			CompressedBytes: 1,
 			SHA256:          "abc",

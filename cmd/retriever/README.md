@@ -1,11 +1,19 @@
 # retriever
 
 `retriever` dumps and loads live Dawgs graph databases as manifest-based
-collections of compact OpenGraph-derived JSON fragments.
+collections of compact JSONL fragments.
 
 The v1 collection format is intended for idle databases. Dumps are deterministic
 by entity ID order and cap each graph scan at the entity counts observed when
 counting starts, but they do not provide a transactional cross-fragment snapshot.
+
+The collection manifest format is `retriever-jsonl-collection-v1`. Node and
+relationship fragments contain one JSON object per line and use paths such as
+`graphs/default/nodes-000001.jsonl.zst` and
+`graphs/default/edges-000001.jsonl.zst`. The manifest identifies each file's
+phase, record count, compressed and uncompressed sizes, and SHA-256 checksum.
+The writer always terminates records with a newline; the loader also accepts a
+final record without one.
 
 ## Dump
 
@@ -91,7 +99,9 @@ retriever unpack \
 
 Existing non-empty unpack output directories are refused unless `-force` is
 supplied. Unpacked collections retain the normal `manifest.json` and fragment
-layout and can be loaded with `retriever load -in ./dumpdir`.
+layout and can be loaded with `retriever load -in ./dumpdir`. Before promoting
+the staged output directory, unpack validates the manifest, expected paths,
+compressed sizes and checksums, JSONL records, source IDs, and record counts.
 
 ## Scrubbed Dumps
 
@@ -130,11 +140,22 @@ retriever load \
   -identity ./retriever-private.key
 ```
 
-Load reads and validates `manifest.json`, verifies every fragment checksum in a
-separate pass, asserts destination graph schemas from the manifest metadata, and
-then loads all nodes before relationships. Graph names from the dump are
-preserved; load does not support overriding graph names. Archive loads decrypt
-and validate into a temporary collection directory before opening the database.
+Load reads and validates `manifest.json`, then verifies every fragment checksum,
+JSONL record, and record count before performing database writes. It asserts
+destination graph schemas from the manifest metadata and loads all nodes before
+relationships. Graph names from the dump are preserved; load does not support
+overriding graph names. Archive loads decrypt and validate into a temporary
+collection directory before opening the database.
+
+The preflight combines compressed byte counting and SHA-256 calculation with
+JSONL decoding in one read of each fragment. Load then reopens and decodes the
+fragments while writing to the database. This intentional second decode ensures
+that every fragment is semantically valid before any database mutation. Measure
+the complete preflight-plus-decode fragment path with:
+
+```bash
+go test ./retriever -run '^$' -bench '^BenchmarkLoadFragmentPath$' -benchmem
+```
 
 Load refuses to write into target graphs that already contain nodes or
 relationships; clear the destination graph before restoring a collection.
@@ -211,6 +232,7 @@ completion. Text or JSON benchmark reports remain on stdout.
 Unit tests focus on collection format validation, compression/checksum behavior,
 scrub transformations, schema planning, edge resolution, CLI flag validation,
 and other pure helpers. Full database dump/load behavior is covered by
-integration tests rather than heavy mocks of Dawgs database interfaces. This
-keeps tests focused on durable behavior instead of line coverage for
-orchestration code.
+integration tests for the backend selected by `CONNECTION_STRING`. The round-trip
+case crosses scan-batch and shard boundaries and verifies restored properties and
+topology. `BenchmarkLoadFragmentPath` measures preflight plus the second fragment
+decode used during database loading.

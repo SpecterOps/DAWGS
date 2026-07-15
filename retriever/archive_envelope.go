@@ -403,7 +403,7 @@ func validateUnpackedCollection(outputDir string) error {
 	if err != nil {
 		return err
 	}
-	if err := verifyManifestFiles(outputDir, nextManifest); err != nil {
+	if err := verifyCollectionFragments(outputDir, nextManifest); err != nil {
 		return err
 	}
 

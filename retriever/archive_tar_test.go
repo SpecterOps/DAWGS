@@ -94,7 +94,7 @@ func TestCollectionTarRejectsUnsafeInputs(t *testing.T) {
 		"absolute":       "/tmp/fragment.gz",
 		"parent":         "../fragment.gz",
 		"nested parent":  "graphs/../fragment.gz",
-		"back separator": `graphs\default\nodes-000001.ogfrag.gz`,
+		"back separator": `graphs\default\nodes-000001.jsonl.gz`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := writeManifestWithArchivePath(t, archivePath)

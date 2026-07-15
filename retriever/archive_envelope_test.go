@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"crypto/hpke"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -396,6 +398,51 @@ func TestEncryptedCollectionArchiveRejectsInvalidCollection(t *testing.T) {
 
 	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
 		t.Fatalf("invalid collection was promoted to output dir: %v", err)
+	}
+}
+
+func TestEncryptedCollectionArchiveRejectsMalformedJSONLines(t *testing.T) {
+	privateKey, publicKey := generateTestArchiveKeyPair(t)
+	dumpDir := writeArchiveFixture(t)
+	value, err := readManifest(dumpDir)
+	if err != nil {
+		t.Fatalf("read fixture manifest: %v", err)
+	}
+
+	nodeEntry := &value.Graphs[0].Files[0]
+	payload := "{\"id\":\"1\",\"kinds\":[\"User\"],\"unexpected\":true}\n"
+	fragmentPath := filepath.Join(dumpDir, filepath.FromSlash(nodeEntry.Path))
+	writeCompressedPayload(t, fragmentPath, value.Compression, payload)
+
+	contents, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read malformed fragment: %v", err)
+	}
+	checksum := sha256.Sum256(contents)
+	nodeEntry.CompressedBytes = int64(len(contents))
+	nodeEntry.UncompressedBytes = int64(len(payload))
+	nodeEntry.SHA256 = hex.EncodeToString(checksum[:])
+	if err := writeManifest(dumpDir, value); err != nil {
+		t.Fatalf("write self-consistent malformed collection manifest: %v", err)
+	}
+
+	var archive bytes.Buffer
+	if err := WriteEncryptedCollectionArchive(&archive, dumpDir, publicKey); err != nil {
+		t.Fatalf("write malformed collection archive: %v", err)
+	}
+
+	outputDir := filepath.Join(t.TempDir(), "out")
+	err = Unpack(UnpackOptions{
+		ArchiveReader:   bytes.NewReader(archive.Bytes()),
+		ArchiveIdentity: privateKey,
+		OutputDir:       outputDir,
+	})
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected malformed JSONL validation error, got %v", err)
+	}
+
+	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+		t.Fatalf("malformed collection was promoted to output dir: %v", err)
 	}
 }
 

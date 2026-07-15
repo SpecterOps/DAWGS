@@ -78,7 +78,7 @@ comparison mode yet. The command can emit JSONL records plus Markdown and JSON s
 against a previous JSONL baseline.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
-manifest-based collections of compact OpenGraph-derived fragments. It supports
+manifest-based collections of compressed JSONL fragments. It supports
 PostgreSQL and Neo4j, gzip and zstd compression, checksum validation before
 load, optional deterministic property scrubbing, and a read-throughput benchmark
 mode. It can also package dumps as single HPKE/ML-KEM encrypted TAR archives.

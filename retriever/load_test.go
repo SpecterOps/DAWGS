@@ -2,7 +2,10 @@ package retriever
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -172,12 +175,9 @@ func TestReadLoadManifestRejectsNeo4jMultiGraph(t *testing.T) {
 
 func TestVerifyManifestFilesRejectsBadChecksum(t *testing.T) {
 	dir := t.TempDir()
-	entry, err := writeCompressedJSON(filepath.Join(dir, "fragment.gz"), CompressionGzip, DefaultZstdLevel, NodeFragment{
-		Phase: PhaseNodes,
-		Items: []FragmentNode{{
-			ID: "1",
-		}},
-	})
+	entry, err := writeCompressedJSONLines(filepath.Join(dir, "fragment.gz"), CompressionGzip, DefaultZstdLevel, []FragmentNode{{
+		ID: "1",
+	}})
 	if err != nil {
 		t.Fatalf("write fragment: %v", err)
 	}
@@ -214,83 +214,181 @@ func TestVerifyManifestFilesRejectsBadChecksum(t *testing.T) {
 
 func TestReadFragmentFilesValidatePhaseAndCount(t *testing.T) {
 	dir := t.TempDir()
-	nodeEntry, err := writeCompressedJSON(filepath.Join(dir, "nodes.gz"), CompressionGzip, DefaultZstdLevel, NodeFragment{
-		Phase: PhaseNodes,
-		Items: []FragmentNode{{
-			ID: "1",
-		}},
-	})
+	nodeEntry, err := writeCompressedJSONLines(filepath.Join(dir, "nodes.gz"), CompressionGzip, DefaultZstdLevel, []FragmentNode{{
+		ID: "1",
+	}})
 	if err != nil {
 		t.Fatalf("write node fragment: %v", err)
 	}
 
 	nodeFile := FileManifest{
+		Phase:           PhaseNodes,
 		Path:            "nodes.gz",
 		Count:           1,
 		CompressedBytes: nodeEntry.CompressedBytes,
 		SHA256:          nodeEntry.SHA256,
 	}
 
-	if fragment, err := readNodeFragmentFile(dir, CompressionGzip, nodeFile); err != nil {
+	var nodes []FragmentNode
+	if count, err := readNodeFragmentFile(dir, CompressionGzip, nodeFile, func(item FragmentNode) error {
+		nodes = append(nodes, item)
+
+		return nil
+	}); err != nil {
 		t.Fatalf("read node fragment: %v", err)
-	} else if len(fragment.Items) != 1 || fragment.Items[0].ID != "1" {
-		t.Fatalf("unexpected node fragment: %+v", fragment)
+	} else if count != 1 || len(nodes) != 1 || nodes[0].ID != "1" {
+		t.Fatalf("unexpected node records: %+v", nodes)
 	}
 
 	nodeFile.Count = 2
 
-	if _, err := readNodeFragmentFile(dir, CompressionGzip, nodeFile); err == nil {
+	if _, err := readNodeFragmentFile(dir, CompressionGzip, nodeFile, nil); err == nil {
 		t.Fatalf("expected node count mismatch")
 	}
 
-	wrongPhaseEntry, err := writeCompressedJSON(filepath.Join(dir, "wrong-Phase.gz"), CompressionGzip, DefaultZstdLevel, EdgeFragment{
-		Phase: PhaseEdges,
-		Items: []FragmentEdge{{
-			StartID: "1",
-			EndID:   "2",
-		}},
-	})
+	wrongPhaseEntry, err := writeCompressedJSONLines(filepath.Join(dir, "wrong-phase.gz"), CompressionGzip, DefaultZstdLevel, []FragmentEdge{{
+		StartID: "1",
+		EndID:   "2",
+	}})
 	if err != nil {
 		t.Fatalf("write wrong Phase fragment: %v", err)
 	}
 
 	if _, err := readNodeFragmentFile(dir, CompressionGzip, FileManifest{
-		Path:            "wrong-Phase.gz",
+		Phase:           PhaseEdges,
+		Path:            "wrong-phase.gz",
 		Count:           1,
 		CompressedBytes: wrongPhaseEntry.CompressedBytes,
 		SHA256:          wrongPhaseEntry.SHA256,
-	}); err == nil {
+	}, nil); err == nil {
 		t.Fatalf("expected node Phase mismatch")
-	} else if !strings.Contains(err.Error(), "Phase") {
+	} else if !strings.Contains(err.Error(), "phase") {
 		t.Fatalf("expected node Phase mismatch, got %v", err)
 	}
 
-	edgeEntry, err := writeCompressedJSON(filepath.Join(dir, "edges.gz"), CompressionGzip, DefaultZstdLevel, EdgeFragment{
-		Phase: PhaseEdges,
-		Items: []FragmentEdge{{
-			StartID: "1",
-			EndID:   "2",
-			Kind:    "AdminTo",
-		}},
-	})
+	edgeEntry, err := writeCompressedJSONLines(filepath.Join(dir, "edges.gz"), CompressionGzip, DefaultZstdLevel, []FragmentEdge{{
+		StartID: "1",
+		EndID:   "2",
+		Kind:    "AdminTo",
+	}})
 	if err != nil {
 		t.Fatalf("write edge fragment: %v", err)
 	}
 
 	edgeFile := FileManifest{
+		Phase:           PhaseEdges,
 		Path:            "edges.gz",
 		Count:           1,
 		CompressedBytes: edgeEntry.CompressedBytes,
 		SHA256:          edgeEntry.SHA256,
 	}
-	if fragment, err := readEdgeFragmentFile(dir, CompressionGzip, edgeFile); err != nil {
+	var edges []FragmentEdge
+	if count, err := readEdgeFragmentFile(dir, CompressionGzip, edgeFile, func(item FragmentEdge) error {
+		edges = append(edges, item)
+
+		return nil
+	}); err != nil {
 		t.Fatalf("read edge fragment: %v", err)
-	} else if len(fragment.Items) != 1 || fragment.Items[0].Kind != "AdminTo" {
-		t.Fatalf("unexpected edge fragment: %+v", fragment)
+	} else if count != 1 || len(edges) != 1 || edges[0].Kind != "AdminTo" {
+		t.Fatalf("unexpected edge records: %+v", edges)
 	}
 
 	edgeFile.Count = 2
-	if _, err := readEdgeFragmentFile(dir, CompressionGzip, edgeFile); err == nil {
+	if _, err := readEdgeFragmentFile(dir, CompressionGzip, edgeFile, nil); err == nil {
 		t.Fatalf("expected edge count mismatch")
+	}
+}
+
+func TestVerifyLoadFragmentsRejectsMalformedJSONLines(t *testing.T) {
+	dir := t.TempDir()
+	fragmentPath := filepath.Join(dir, "nodes.jsonl.gz")
+	writeCompressedPayload(t, fragmentPath, CompressionGzip, "{\"id\":\"1\",\"kinds\":[]}\n\n")
+
+	contents, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read fragment: %v", err)
+	}
+	checksum := sha256.Sum256(contents)
+
+	value := newValidTestManifest(1)
+	value.Graphs = []GraphManifest{{
+		Name:      "default",
+		NodeCount: 2,
+		Files: []FileManifest{{
+			Phase:           PhaseNodes,
+			Path:            "nodes.jsonl.gz",
+			Count:           2,
+			CompressedBytes: int64(len(contents)),
+			SHA256:          hex.EncodeToString(checksum[:]),
+		}},
+	}}
+
+	if err := verifyLoadFragments(dir, value); err == nil || !strings.Contains(err.Error(), "blank line") {
+		t.Fatalf("expected malformed JSONL preflight error, got %v", err)
+	}
+}
+
+func TestVerifyLoadFragmentsPrioritizesIntegrityFailure(t *testing.T) {
+	dir := t.TempDir()
+	fragmentPath := filepath.Join(dir, "nodes.jsonl.gz")
+	writeCompressedPayload(t, fragmentPath, CompressionGzip, "{\"id\":\"1\",\"kinds\":[]}\n\n")
+
+	contents, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read fragment: %v", err)
+	}
+
+	value := newValidTestManifest(1)
+	value.Graphs = []GraphManifest{{
+		Name:      "default",
+		NodeCount: 2,
+		Files: []FileManifest{{
+			Phase:           PhaseNodes,
+			Path:            "nodes.jsonl.gz",
+			Count:           2,
+			CompressedBytes: int64(len(contents)),
+			SHA256:          "bad",
+		}},
+	}}
+
+	err = verifyLoadFragments(dir, value)
+	var checksumErr ChecksumMismatchError
+	if !errors.As(err, &checksumErr) {
+		t.Fatalf("expected checksum error before malformed JSONL error, got %v", err)
+	}
+}
+
+func TestReadFragmentFilesRejectEmptySourceIDs(t *testing.T) {
+	dir := t.TempDir()
+
+	if _, err := writeCompressedJSONLines(filepath.Join(dir, "node.jsonl.gz"), CompressionGzip, DefaultZstdLevel, []FragmentNode{{}}); err != nil {
+		t.Fatalf("write node fragment: %v", err)
+	}
+	if _, err := readNodeFragmentFile(dir, CompressionGzip, FileManifest{
+		Phase: PhaseNodes,
+		Path:  "node.jsonl.gz",
+		Count: 1,
+	}, nil); err == nil || !strings.Contains(err.Error(), "empty source ID") {
+		t.Fatalf("expected empty node source ID error, got %v", err)
+	}
+
+	for name, edge := range map[string]FragmentEdge{
+		"start": {EndID: "2"},
+		"end":   {StartID: "1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := name + ".jsonl.gz"
+			if _, err := writeCompressedJSONLines(filepath.Join(dir, path), CompressionGzip, DefaultZstdLevel, []FragmentEdge{edge}); err != nil {
+				t.Fatalf("write edge fragment: %v", err)
+			}
+
+			if _, err := readEdgeFragmentFile(dir, CompressionGzip, FileManifest{
+				Phase: PhaseEdges,
+				Path:  path,
+				Count: 1,
+			}, nil); err == nil || !strings.Contains(err.Error(), "empty "+name+" source ID") {
+				t.Fatalf("expected empty %s source ID error, got %v", name, err)
+			}
+		})
 	}
 }

@@ -10,7 +10,7 @@ func TestFragmentPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("node fragment path: %v", err)
 	}
-	if nodePath != "graphs/graph%2Fname/nodes-000007.ogfrag.zst" {
+	if nodePath != "graphs/graph%2Fname/nodes-000007.jsonl.zst" {
 		t.Fatalf("unexpected node fragment path %q", nodePath)
 	}
 
@@ -18,7 +18,7 @@ func TestFragmentPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("edge fragment path: %v", err)
 	}
-	if edgePath != "graphs/default/edges-000003.ogfrag.gz" {
+	if edgePath != "graphs/default/edges-000003.jsonl.gz" {
 		t.Fatalf("unexpected edge fragment path %q", edgePath)
 	}
 
@@ -45,7 +45,7 @@ func TestWriteFragmentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write node fragment: %v", err)
 	}
-	if fileEntry.Phase != PhaseNodes || fileEntry.Path != "graphs/default/nodes-000001.ogfrag.gz" || fileEntry.Count != 1 {
+	if fileEntry.Phase != PhaseNodes || fileEntry.Path != "graphs/default/nodes-000001.jsonl.gz" || fileEntry.Count != 1 {
 		t.Fatalf("unexpected node file Manifest: %+v", fileEntry)
 	}
 	if fileEntry.ActionCounts["pseudonymize"] != 1 {
@@ -63,7 +63,7 @@ func TestWriteFragmentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write edge fragment: %v", err)
 	}
-	if edgeEntry.Phase != PhaseEdges || edgeEntry.Path != "graphs/default/edges-000002.ogfrag.gz" || edgeEntry.Count != 1 {
+	if edgeEntry.Phase != PhaseEdges || edgeEntry.Path != "graphs/default/edges-000002.jsonl.gz" || edgeEntry.Count != 1 {
 		t.Fatalf("unexpected edge file Manifest: %+v", edgeEntry)
 	}
 }
