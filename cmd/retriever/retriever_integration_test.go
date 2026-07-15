@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/ops"
@@ -43,7 +42,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("infer driver: %v", err)
 	}
-	if driverName != pg.DriverName:
+	if driverName != pg.DriverName {
 		t.Skipf("CONNECTION_STRING selects unsupported retriever integration driver %s", driverName)
 	}
 
