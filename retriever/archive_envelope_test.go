@@ -3,6 +3,7 @@ package retriever
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"crypto/hpke"
 	"crypto/sha256"
 	"encoding/binary"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/specterops/dawgs/drivers/pg"
 )
 
 func TestEncryptedArchiveRoundTrip(t *testing.T) {
@@ -401,7 +404,7 @@ func TestEncryptedCollectionArchiveRejectsInvalidCollection(t *testing.T) {
 	}
 }
 
-func TestEncryptedCollectionArchiveRejectsMalformedJSONLines(t *testing.T) {
+func TestEncryptedCollectionArchiveAllowsSelfConsistentMalformedJSONLines(t *testing.T) {
 	privateKey, publicKey := generateTestArchiveKeyPair(t)
 	dumpDir := writeArchiveFixture(t)
 	value, err := readManifest(dumpDir)
@@ -437,12 +440,19 @@ func TestEncryptedCollectionArchiveRejectsMalformedJSONLines(t *testing.T) {
 		ArchiveIdentity: privateKey,
 		OutputDir:       outputDir,
 	})
-	if err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("expected malformed JSONL validation error, got %v", err)
+	if err != nil {
+		t.Fatalf("unpack integrity-valid malformed JSONL collection: %v", err)
 	}
 
-	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
-		t.Fatalf("malformed collection was promoted to output dir: %v", err)
+	if originalTree, unpackedTree := readFileTree(t, dumpDir), readFileTree(t, outputDir); !equalFileTrees(originalTree, unpackedTree) {
+		t.Fatalf("unpacked malformed collection does not match original")
+	}
+
+	loadOptions := DefaultLoadOptions("")
+	loadOptions.ArchiveReader = bytes.NewReader(archive.Bytes())
+	loadOptions.ArchiveIdentity = privateKey
+	if _, err := Load(context.Background(), nil, pg.DriverName, loadOptions); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected direct archive load semantic preflight error, got %v", err)
 	}
 }
 

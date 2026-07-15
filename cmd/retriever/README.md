@@ -101,7 +101,10 @@ Existing non-empty unpack output directories are refused unless `-force` is
 supplied. Unpacked collections retain the normal `manifest.json` and fragment
 layout and can be loaded with `retriever load -in ./dumpdir`. Before promoting
 the staged output directory, unpack validates the manifest, expected paths,
-compressed sizes and checksums, JSONL records, source IDs, and record counts.
+compressed sizes and checksums, and the absence of unexpected files. Unpack does
+not decompress fragments or validate JSONL records, source IDs, or record
+counts; that semantic validation occurs when the collection is passed to
+`retriever load`.
 
 ## Scrubbed Dumps
 
@@ -144,8 +147,10 @@ Load reads and validates `manifest.json`, then verifies every fragment checksum,
 JSONL record, and record count before performing database writes. It asserts
 destination graph schemas from the manifest metadata and loads all nodes before
 relationships. Graph names from the dump are preserved; load does not support
-overriding graph names. Archive loads decrypt and validate into a temporary
-collection directory before opening the database.
+overriding graph names. Direct archive loads decrypt and perform integrity-only
+unpack validation in a temporary collection directory, then run the same
+semantic preflight as directory loads before schema assertion or database
+writes.
 
 The preflight combines compressed byte counting and SHA-256 calculation with
 JSONL decoding in one read of each fragment. Load then reopens and decodes the
