@@ -234,6 +234,24 @@ func TestReadCompressedJSONLinesSupportsLargeRecords(t *testing.T) {
 	}
 }
 
+func TestReadCompressedJSONLinesRejectsLineLargerThanBuffer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "too-large.gz")
+	payload := `{"id":"1","kinds":[],"properties":{"description":"` +
+		strings.Repeat("x", maxJSONLLineBytes) + `"}}` + "\n"
+	writeCompressedPayload(t, path, CompressionGzip, payload)
+
+	count, err := readCompressedJSONLines[FragmentNode](path, CompressionGzip, nil)
+	if err == nil {
+		t.Fatal("expected oversized line to fail")
+	}
+	if count != 0 {
+		t.Fatalf("record count = %d, want 0", count)
+	}
+	if !strings.Contains(err.Error(), "read JSONL record 1") || !strings.Contains(err.Error(), "token too long") {
+		t.Fatalf("unexpected oversized-line error: %v", err)
+	}
+}
+
 func TestCompressedJSONLinesWriterAbort(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "fragment.gz")
 	writer, err := newCompressedJSONLinesWriter(path, CompressionGzip, DefaultZstdLevel)

@@ -13,7 +13,7 @@ relationship fragments contain one JSON object per line and use paths such as
 `graphs/default/edges-000001.jsonl.zst`. The manifest identifies each file's
 phase, record count, compressed and uncompressed sizes, and SHA-256 checksum.
 The writer always terminates records with a newline; the loader also accepts a
-final record without one.
+final record without one. The loader rejects JSONL lines larger than 10 MiB.
 
 ## Dump
 

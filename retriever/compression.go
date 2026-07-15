@@ -16,7 +16,10 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-const DefaultZstdLevel = 11
+const (
+	DefaultZstdLevel  = 11
+	maxJSONLLineBytes = 10 * 1024 * 1024
+)
 
 type countingWriter struct {
 	writer io.Writer
@@ -254,52 +257,44 @@ func readCompressedJSONLinesFromReader[T any](reader io.Reader, codec Compressio
 		return 0, fmt.Errorf("open compressed fragment: %w", err)
 	}
 
-	bufferedReader := bufio.NewReader(decompressor)
+	scanner := bufio.NewScanner(decompressor)
+	scanner.Buffer(make([]byte, maxJSONLLineBytes), maxJSONLLineBytes)
 	count := 0
 	var decodeErr error
-	for {
-		line, readErr := bufferedReader.ReadBytes('\n')
-		if len(line) > 0 {
-			line = bytes.TrimSuffix(line, []byte{'\n'})
-			line = bytes.TrimSuffix(line, []byte{'\r'})
-			if len(bytes.TrimSpace(line)) == 0 {
-				decodeErr = fmt.Errorf("decode JSONL record %d: blank line", count+1)
-				break
-			}
-
-			var record T
-			decoder := json.NewDecoder(bytes.NewReader(line))
-			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&record); err != nil {
-				decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
-				break
-			}
-			if err := decoder.Decode(&struct{}{}); err != io.EOF {
-				if err == nil {
-					decodeErr = fmt.Errorf("decode JSONL record %d: multiple JSON values", count+1)
-					break
-				}
-
-				decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
-				break
-			}
-
-			count++
-			if handle != nil {
-				if err := handle(record); err != nil {
-					decodeErr = err
-					break
-				}
-			}
-		}
-
-		if readErr == io.EOF {
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			decodeErr = fmt.Errorf("decode JSONL record %d: blank line", count+1)
 			break
 		}
-		if readErr != nil {
-			decodeErr = fmt.Errorf("read JSONL record %d: %w", count+1, readErr)
+
+		var record T
+		decoder := json.NewDecoder(bytes.NewReader(line))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&record); err != nil {
+			decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
 			break
 		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			if err == nil {
+				decodeErr = fmt.Errorf("decode JSONL record %d: multiple JSON values", count+1)
+				break
+			}
+
+			decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
+			break
+		}
+
+		count++
+		if handle != nil {
+			if err := handle(record); err != nil {
+				decodeErr = err
+				break
+			}
+		}
+	}
+	if err := scanner.Err(); decodeErr == nil && err != nil {
+		decodeErr = fmt.Errorf("read JSONL record %d: %w", count+1, err)
 	}
 
 	if err := decompressor.Close(); decodeErr == nil && err != nil {
