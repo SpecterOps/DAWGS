@@ -43,9 +43,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("infer driver: %v", err)
 	}
-	switch driverName {
-	case pg.DriverName, neo4j.DriverName:
-	default:
+	if driverName != pg.DriverName:
 		t.Skipf("CONNECTION_STRING selects unsupported retriever integration driver %s", driverName)
 	}
 
