@@ -25,19 +25,25 @@ func TestIdentityTransformSession(t *testing.T) {
 		graph.NewNode(2, graph.AsProperties(map[string]any{"name": "alice"}), graph.StringKind("User"), graph.StringKind("Admin")),
 		graph.NewNode(3, nil),
 	}
-	if actual := session.TransformNodes(nodes); !reflect.DeepEqual(actual, transformedBatch[normalizedNode]{Records: []transformedRecord[normalizedNode]{
-		{Record: normalizedNode{ID: "2", Kinds: []string{"Admin", "User"}, Properties: map[string]any{"name": "alice"}}},
-		{Record: normalizedNode{ID: "3", Kinds: []string{}, Properties: map[string]any{}}},
-	}}) {
+	if actual := session.TransformNodes(nodes); !reflect.DeepEqual(actual, transformedBatch[normalizedNode]{
+		Records: []normalizedNode{
+			{ID: "2", Kinds: []string{"Admin", "User"}, Properties: map[string]any{"name": "alice"}},
+			{ID: "3", Kinds: []string{}, Properties: map[string]any{}},
+		},
+		ActionCounts: make([]map[string]int, 2),
+	}) {
 		t.Fatalf("identity node batch = %#v", actual)
 	}
 
 	relationships := []*graph.Relationship{
 		graph.NewRelationship(9, 2, 3, graph.AsProperties(map[string]any{"enabled": true}), graph.StringKind("MemberOf")),
 	}
-	if actual := session.TransformEdges(relationships); !reflect.DeepEqual(actual, transformedBatch[normalizedEdge]{Records: []transformedRecord[normalizedEdge]{
-		{Record: normalizedEdge{ID: "9", StartID: "2", EndID: "3", Kind: "MemberOf", Properties: map[string]any{"enabled": true}}},
-	}}) {
+	if actual := session.TransformEdges(relationships); !reflect.DeepEqual(actual, transformedBatch[normalizedEdge]{
+		Records: []normalizedEdge{
+			{ID: "9", StartID: "2", EndID: "3", Kind: "MemberOf", Properties: map[string]any{"enabled": true}},
+		},
+		ActionCounts: make([]map[string]int, 1),
+	}) {
 		t.Fatalf("identity edge batch = %#v", actual)
 	}
 }
@@ -63,25 +69,25 @@ func TestFullScrubTransformSessionPreparationAndActions(t *testing.T) {
 	if len(nodeBatch.Records) != 1 {
 		t.Fatalf("node records = %d", len(nodeBatch.Records))
 	}
-	if !reflect.DeepEqual(nodeBatch.Records[0].ActionCounts, map[string]int{
+	if !reflect.DeepEqual(nodeBatch.ActionCounts[0], map[string]int{
 		string(actionPseudonymize): 1,
 		string(actionRedact):       1,
 	}) {
-		t.Fatalf("node actions = %+v", nodeBatch.Records[0].ActionCounts)
+		t.Fatalf("node actions = %+v", nodeBatch.ActionCounts[0])
 	}
-	if nodeBatch.Records[0].Record.Properties["objectid"] == sourceSID || nodeBatch.Records[0].Record.Properties["description"] != "[REDACTED]" {
-		t.Fatalf("scrubbed node = %+v", nodeBatch.Records[0].Record)
+	if nodeBatch.Records[0].Properties["objectid"] == sourceSID || nodeBatch.Records[0].Properties["description"] != "[REDACTED]" {
+		t.Fatalf("scrubbed node = %+v", nodeBatch.Records[0])
 	}
 
 	edgeBatch := transform.TransformEdges([]*graph.Relationship{
 		graph.NewRelationship(4, 1, 2, graph.AsProperties(map[string]any{"owner_sid": sourceSID}), graph.StringKind("MemberOf")),
 	})
-	if len(edgeBatch.Records) != 1 || !reflect.DeepEqual(edgeBatch.Records[0].ActionCounts, map[string]int{
+	if len(edgeBatch.Records) != 1 || !reflect.DeepEqual(edgeBatch.ActionCounts[0], map[string]int{
 		string(actionPseudonymize): 1,
 	}) {
 		t.Fatalf("edge batch = %#v", edgeBatch)
 	}
-	if edgeBatch.Records[0].Record.Properties["owner_sid"] != nodeBatch.Records[0].Record.Properties["objectid"] {
+	if edgeBatch.Records[0].Properties["owner_sid"] != nodeBatch.Records[0].Properties["objectid"] {
 		t.Fatalf("prepared registry did not preserve reference equality")
 	}
 }

@@ -395,6 +395,52 @@ func prepareTransformSession(ctx context.Context, source graphSource, targetGrap
 	return processed, nil
 }
 
+// bufferedShardReceiver preserves the whole-shard dump path until the
+// single-output coordinator replaces it.
+type bufferedShardReceiver[T any] struct {
+	id      shardID
+	records []T
+	emit    func(shardSummary, []T) error
+	active  bool
+}
+
+func (s *bufferedShardReceiver[T]) BeginShard(id shardID) error {
+	if s.active {
+		return fmt.Errorf("begin shard while shard %d is active", s.id.Number)
+	}
+	s.id = id
+	s.records = nil
+	s.active = true
+	return nil
+}
+
+func (s *bufferedShardReceiver[T]) WriteBatch(records []T) error {
+	if !s.active {
+		return fmt.Errorf("write shard batch without an active shard")
+	}
+	s.records = append(s.records, records...)
+	return nil
+}
+
+func (s *bufferedShardReceiver[T]) FinishShard(summary shardSummary) error {
+	if !s.active {
+		return fmt.Errorf("finish shard without an active shard")
+	}
+	if summary.ID != s.id {
+		return fmt.Errorf("finish shard %d while shard %d is active", summary.ID.Number, s.id.Number)
+	}
+	if summary.Rows != len(s.records) {
+		return fmt.Errorf("finish shard %d with %d rows after receiving %d", summary.ID.Number, summary.Rows, len(s.records))
+	}
+	if err := s.emit(summary, s.records); err != nil {
+		return err
+	}
+
+	s.active = false
+	s.records = nil
+	return nil
+}
+
 func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedNode, FileManifest]) ([]FileManifest, error) {
 	if entitySnapshot.NodeCount == 0 {
 		return nil, nil
@@ -406,32 +452,33 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	}
 
 	var files []FileManifest
-	emit := func(shard logicalShard[normalizedNode]) error {
-		fileEntry, err := writeFragment(ctx, sink, shard.Summary, shard.Records)
+	emit := func(summary shardSummary, records []normalizedNode) error {
+		fileEntry, err := writeFragment(ctx, sink, summary, records)
 		if err != nil {
 			return err
 		}
-		fileEntry.ActionCounts = cloneActionCounts(shard.Summary.ActionCounts)
+		fileEntry.ActionCounts = cloneActionCounts(summary.ActionCounts)
 		files = append(files, fileEntry)
 		return nil
 	}
+	receiver := &bufferedShardReceiver[normalizedNode]{emit: emit}
 
 	if _, err := runFaucetWithProgress(ctx, source.Nodes(targetGraph, entitySnapshot.NodeCount, options.BatchSize), entitySnapshot.NodeCount, options.ProgressInterval, func(nodes []*graph.Node) error {
 		batch := transform.TransformNodes(nodes)
-		for _, transformed := range batch.Records {
-			if err := observer.ObserveNode(transformed.Record, transformed.ActionCounts); err != nil {
+		for index, record := range batch.Records {
+			if err := observer.ObserveNode(record, batch.ActionCounts[index]); err != nil {
 				return err
 			}
 		}
 
-		return sharder.Add(batch, emit)
+		return sharder.Add(batch, receiver)
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever dump node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
 		return nil, err
 	}
 
-	if err := sharder.Flush(emit); err != nil {
+	if err := sharder.Flush(receiver); err != nil {
 		return nil, err
 	}
 
@@ -449,32 +496,33 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	}
 
 	var files []FileManifest
-	emit := func(shard logicalShard[normalizedEdge]) error {
-		fileEntry, err := writeFragment(ctx, sink, shard.Summary, shard.Records)
+	emit := func(summary shardSummary, records []normalizedEdge) error {
+		fileEntry, err := writeFragment(ctx, sink, summary, records)
 		if err != nil {
 			return err
 		}
-		fileEntry.ActionCounts = cloneActionCounts(shard.Summary.ActionCounts)
+		fileEntry.ActionCounts = cloneActionCounts(summary.ActionCounts)
 		files = append(files, fileEntry)
 		return nil
 	}
+	receiver := &bufferedShardReceiver[normalizedEdge]{emit: emit}
 
 	if _, err := runFaucetWithProgress(ctx, source.Edges(targetGraph, entitySnapshot.EdgeCount, options.BatchSize), entitySnapshot.EdgeCount, options.ProgressInterval, func(relationships []*graph.Relationship) error {
 		batch := transform.TransformEdges(relationships)
-		for _, transformed := range batch.Records {
-			if err := observer.ObserveEdge(transformed.Record, transformed.ActionCounts); err != nil {
+		for index, record := range batch.Records {
+			if err := observer.ObserveEdge(record, batch.ActionCounts[index]); err != nil {
 				return err
 			}
 		}
 
-		return sharder.Add(batch, emit)
+		return sharder.Add(batch, receiver)
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever dump edge phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
 		return nil, err
 	}
 
-	if err := sharder.Flush(emit); err != nil {
+	if err := sharder.Flush(receiver); err != nil {
 		return nil, err
 	}
 

@@ -14,9 +14,10 @@ type shardSummary struct {
 	ActionCounts map[string]int
 }
 
-type logicalShard[T any] struct {
-	Summary shardSummary
-	Records []T
+type logicalShardReceiver[T any] interface {
+	BeginShard(shardID) error
+	WriteBatch([]T) error
+	FinishShard(shardSummary) error
 }
 
 type logicalSharder[T any] struct {
@@ -24,7 +25,8 @@ type logicalSharder[T any] struct {
 	phase        Phase
 	shardSize    int
 	nextNumber   int
-	records      []T
+	active       bool
+	rows         int
 	actionCounts map[string]int
 }
 
@@ -38,18 +40,35 @@ func newLogicalSharder[T any](graphName string, phase Phase, shardSize int) (*lo
 		phase:        phase,
 		shardSize:    shardSize,
 		nextNumber:   1,
-		records:      make([]T, 0, shardSize),
 		actionCounts: map[string]int{},
 	}, nil
 }
 
-func (s *logicalSharder[T]) Add(batch transformedBatch[T], emit func(logicalShard[T]) error) error {
-	for _, transformed := range batch.Records {
-		s.records = append(s.records, transformed.Record)
-		addActionCounts(s.actionCounts, transformed.ActionCounts)
+func (s *logicalSharder[T]) Add(batch transformedBatch[T], receiver logicalShardReceiver[T]) error {
+	if len(batch.Records) != len(batch.ActionCounts) {
+		return fmt.Errorf("transformed batch has %d records and %d action-count entries", len(batch.Records), len(batch.ActionCounts))
+	}
 
-		if len(s.records) == s.shardSize {
-			if err := s.emit(emit); err != nil {
+	for offset := 0; offset < len(batch.Records); {
+		if !s.active {
+			if err := receiver.BeginShard(s.id()); err != nil {
+				return err
+			}
+			s.active = true
+		}
+
+		batchEnd := min(offset+s.shardSize-s.rows, len(batch.Records))
+		if err := receiver.WriteBatch(batch.Records[offset:batchEnd]); err != nil {
+			return err
+		}
+		for _, actionCounts := range batch.ActionCounts[offset:batchEnd] {
+			addActionCounts(s.actionCounts, actionCounts)
+		}
+		s.rows += batchEnd - offset
+		offset = batchEnd
+
+		if s.rows == s.shardSize {
+			if err := s.finish(receiver); err != nil {
 				return err
 			}
 		}
@@ -58,32 +77,34 @@ func (s *logicalSharder[T]) Add(batch transformedBatch[T], emit func(logicalShar
 	return nil
 }
 
-func (s *logicalSharder[T]) Flush(emit func(logicalShard[T]) error) error {
-	if len(s.records) == 0 {
+func (s *logicalSharder[T]) Flush(receiver logicalShardReceiver[T]) error {
+	if !s.active || s.rows == 0 {
 		return nil
 	}
-	return s.emit(emit)
+	return s.finish(receiver)
 }
 
-func (s *logicalSharder[T]) emit(emit func(logicalShard[T]) error) error {
-	shard := logicalShard[T]{
-		Summary: shardSummary{
-			ID: shardID{
-				Graph:  s.graph,
-				Phase:  s.phase,
-				Number: s.nextNumber,
-			},
-			Rows:         len(s.records),
-			ActionCounts: cloneActionCounts(s.actionCounts),
-		},
-		Records: s.records,
+func (s *logicalSharder[T]) id() shardID {
+	return shardID{
+		Graph:  s.graph,
+		Phase:  s.phase,
+		Number: s.nextNumber,
 	}
-	if err := emit(shard); err != nil {
+}
+
+func (s *logicalSharder[T]) finish(receiver logicalShardReceiver[T]) error {
+	summary := shardSummary{
+		ID:           s.id(),
+		Rows:         s.rows,
+		ActionCounts: cloneActionCounts(s.actionCounts),
+	}
+	if err := receiver.FinishShard(summary); err != nil {
 		return err
 	}
 
 	s.nextNumber++
-	s.records = make([]T, 0, s.shardSize)
+	s.active = false
+	s.rows = 0
 	s.actionCounts = map[string]int{}
 	return nil
 }

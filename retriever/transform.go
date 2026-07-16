@@ -3,12 +3,8 @@ package retriever
 import "github.com/specterops/dawgs/graph"
 
 type transformedBatch[T any] struct {
-	Records []transformedRecord[T]
-}
-
-type transformedRecord[T any] struct {
-	Record       T
-	ActionCounts map[string]int
+	Records      []T
+	ActionCounts []map[string]int
 }
 
 type transformSession interface {
@@ -48,19 +44,25 @@ func (identityTransformSession) NeedsPreparation() bool {
 func (identityTransformSession) PrepareNode(*graph.Node) {}
 
 func (identityTransformSession) TransformNodes(nodes []*graph.Node) transformedBatch[normalizedNode] {
-	records := make([]transformedRecord[normalizedNode], len(nodes))
-	for index, node := range nodes {
-		records[index].Record = normalizeNode(node)
+	batch := transformedBatch[normalizedNode]{
+		Records:      make([]normalizedNode, len(nodes)),
+		ActionCounts: make([]map[string]int, len(nodes)),
 	}
-	return transformedBatch[normalizedNode]{Records: records}
+	for index, node := range nodes {
+		batch.Records[index] = normalizeNode(node)
+	}
+	return batch
 }
 
 func (identityTransformSession) TransformEdges(relationships []*graph.Relationship) transformedBatch[normalizedEdge] {
-	records := make([]transformedRecord[normalizedEdge], len(relationships))
-	for index, relationship := range relationships {
-		records[index].Record = normalizeEdge(relationship)
+	batch := transformedBatch[normalizedEdge]{
+		Records:      make([]normalizedEdge, len(relationships)),
+		ActionCounts: make([]map[string]int, len(relationships)),
 	}
-	return transformedBatch[normalizedEdge]{Records: records}
+	for index, relationship := range relationships {
+		batch.Records[index] = normalizeEdge(relationship)
+	}
+	return batch
 }
 
 type fullScrubTransformSession struct {
@@ -81,24 +83,26 @@ func (s fullScrubTransformSession) PrepareNode(node *graph.Node) {
 
 func (s fullScrubTransformSession) TransformNodes(nodes []*graph.Node) transformedBatch[normalizedNode] {
 	batch := transformedBatch[normalizedNode]{
-		Records: make([]transformedRecord[normalizedNode], len(nodes)),
+		Records:      make([]normalizedNode, len(nodes)),
+		ActionCounts: make([]map[string]int, len(nodes)),
 	}
 	for index, node := range nodes {
 		record := normalizeNode(node)
-		record.Properties, batch.Records[index].ActionCounts = s.scrubber.scrubProperties(record.Properties)
-		batch.Records[index].Record = record
+		record.Properties, batch.ActionCounts[index] = s.scrubber.scrubProperties(record.Properties)
+		batch.Records[index] = record
 	}
 	return batch
 }
 
 func (s fullScrubTransformSession) TransformEdges(relationships []*graph.Relationship) transformedBatch[normalizedEdge] {
 	batch := transformedBatch[normalizedEdge]{
-		Records: make([]transformedRecord[normalizedEdge], len(relationships)),
+		Records:      make([]normalizedEdge, len(relationships)),
+		ActionCounts: make([]map[string]int, len(relationships)),
 	}
 	for index, relationship := range relationships {
 		record := normalizeEdge(relationship)
-		record.Properties, batch.Records[index].ActionCounts = s.scrubber.scrubProperties(record.Properties)
-		batch.Records[index].Record = record
+		record.Properties, batch.ActionCounts[index] = s.scrubber.scrubProperties(record.Properties)
+		batch.Records[index] = record
 	}
 	return batch
 }
