@@ -115,20 +115,9 @@ func scanDatabaseNodesWithProgressInterval(
 	handle entityBatchHandler[*graph.Node],
 	logProgress entityProgressLogger,
 ) (int64, error) {
-	return scanEntityBatches(entityScanOptions[*graph.Node]{
-		Total:            total,
-		BatchSize:        batchSize,
-		ProgressInterval: progressInterval,
-		EntityName:       "node",
-		Read: func(afterID graph.ID, hasAfterID bool, limit int) ([]*graph.Node, error) {
-			return readDatabaseNodes(ctx, db, targetGraph, afterID, hasAfterID, limit)
-		},
-		ID: func(node *graph.Node) graph.ID {
-			return node.ID
-		},
-		Handle:      handle,
-		LogProgress: logProgress,
-	})
+	return newDatabaseGraphSource(db).
+		Nodes(targetGraph, total, batchSize, progressInterval, logProgress).
+		Run(ctx, handle)
 }
 
 func scanDatabaseRelationships(
@@ -153,18 +142,7 @@ func scanDatabaseRelationshipsWithProgressInterval(
 	handle entityBatchHandler[*graph.Relationship],
 	logProgress entityProgressLogger,
 ) (int64, error) {
-	return scanEntityBatches(entityScanOptions[*graph.Relationship]{
-		Total:            total,
-		BatchSize:        batchSize,
-		ProgressInterval: progressInterval,
-		EntityName:       "relationship",
-		Read: func(afterID graph.ID, hasAfterID bool, limit int) ([]*graph.Relationship, error) {
-			return readDatabaseRelationships(ctx, db, targetGraph, afterID, hasAfterID, limit)
-		},
-		ID: func(relationship *graph.Relationship) graph.ID {
-			return relationship.ID
-		},
-		Handle:      handle,
-		LogProgress: logProgress,
-	})
+	return newDatabaseGraphSource(db).
+		Edges(targetGraph, total, batchSize, progressInterval, logProgress).
+		Run(ctx, handle)
 }
