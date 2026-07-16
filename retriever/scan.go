@@ -115,9 +115,14 @@ func scanDatabaseNodesWithProgressInterval(
 	handle entityBatchHandler[*graph.Node],
 	logProgress entityProgressLogger,
 ) (int64, error) {
-	return newDatabaseGraphSource(db).
-		Nodes(targetGraph, total, batchSize, progressInterval, logProgress).
-		Run(ctx, handle)
+	return runFaucetWithProgress(
+		ctx,
+		newDatabaseGraphSource(db).Nodes(targetGraph, total, batchSize),
+		total,
+		progressInterval,
+		handle,
+		logProgress,
+	)
 }
 
 func scanDatabaseRelationships(
@@ -142,7 +147,48 @@ func scanDatabaseRelationshipsWithProgressInterval(
 	handle entityBatchHandler[*graph.Relationship],
 	logProgress entityProgressLogger,
 ) (int64, error) {
-	return newDatabaseGraphSource(db).
-		Edges(targetGraph, total, batchSize, progressInterval, logProgress).
-		Run(ctx, handle)
+	return runFaucetWithProgress(
+		ctx,
+		newDatabaseGraphSource(db).Edges(targetGraph, total, batchSize),
+		total,
+		progressInterval,
+		handle,
+		logProgress,
+	)
+}
+
+type batchProgressObserver struct {
+	processed      int64
+	startedAt      time.Time
+	nextProgressAt int64
+	logProgress    entityProgressLogger
+}
+
+func newBatchProgressObserver(total, progressInterval int64, logProgress entityProgressLogger) *batchProgressObserver {
+	return &batchProgressObserver{
+		startedAt:      time.Now(),
+		nextProgressAt: retrieverInitialProgressAtInterval(total, progressInterval),
+		logProgress:    logProgress,
+	}
+}
+
+func (s *batchProgressObserver) Observe(count int) {
+	s.processed += int64(count)
+	if s.logProgress != nil {
+		s.nextProgressAt = s.logProgress(s.processed, s.startedAt, s.nextProgressAt)
+	}
+}
+
+func runFaucetWithProgress[T any](ctx context.Context, source faucet[T], total, progressInterval int64, handle entityBatchHandler[T], logProgress entityProgressLogger) (int64, error) {
+	progress := newBatchProgressObserver(total, progressInterval, logProgress)
+	return source.Run(ctx, func(batch []T) error {
+		if handle != nil {
+			if err := handle(batch); err != nil {
+				return err
+			}
+		}
+
+		progress.Observe(len(batch))
+		return nil
+	})
 }

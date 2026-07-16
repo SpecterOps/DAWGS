@@ -54,22 +54,9 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 		Scrub:       options.Scrub,
 	})
 
-	var (
-		activeScrubber *scrubber
-
-		scrubInfo = ScrubMetadata{
-			Mode:             ScrubNone,
-			NodeActionCounts: map[string]int{},
-			EdgeActionCounts: map[string]int{},
-		}
-	)
-	if options.Scrub == ScrubFull {
-		nextScrubber, err := newScrubber(options.ScrubConfig, options.Salt)
-		if err != nil {
-			return DumpResult{}, err
-		}
-		activeScrubber = nextScrubber
-		scrubInfo = activeScrubber.metadata()
+	transform, err := newTransformSession(options)
+	if err != nil {
+		return DumpResult{}, err
 	}
 
 	slog.Info("retriever dump preparing output directory",
@@ -89,7 +76,7 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 		OutputDir: options.OutputDir,
 	})
 
-	nextManifest := newManifest(driverName, options.Compression, options.ZstdLevel, scrubInfo, len(targets))
+	nextManifest := newManifest(driverName, options.Compression, options.ZstdLevel, transform.Metadata(), len(targets))
 	nextMetrics := newMetricsManifest(len(targets))
 	var totalNodes, totalEdges int64
 
@@ -109,7 +96,7 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 			OutputDir:  options.OutputDir,
 		})
 
-		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, source, target, options, activeScrubber)
+		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, source, target, options, transform)
 		if err != nil {
 			return DumpResult{}, err
 		}
@@ -217,7 +204,7 @@ func prepareOutputDirectory(outputDir string, force bool) error {
 	return nil
 }
 
-func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, activeScrubber *scrubber) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
+func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
 	targetGraph := graph.Graph{
 		Name: target.Name,
 	}
@@ -246,7 +233,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		Elapsed:   time.Since(countStartedAt),
 	})
 
-	if activeScrubber != nil {
+	if transform.NeedsPreparation() {
 		scrubStartedAt := time.Now()
 		slog.Info("retriever dump scrub pre-pass started",
 			slog.String("graph", target.Name),
@@ -262,7 +249,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 			BatchSize: options.BatchSize,
 		})
 
-		observedNodes, err := collectScrubRegistry(ctx, source, targetGraph, options.BatchSize, activeScrubber, entitySnapshot, options.Progress, options.ProgressInterval)
+		observedNodes, err := prepareTransformSession(ctx, source, targetGraph, options.BatchSize, transform, entitySnapshot, options.Progress, options.ProgressInterval)
 		if err != nil {
 			return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 		}
@@ -285,16 +272,11 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 	}
 
 	graphEntry := GraphManifest{
-		Name:             target.Name,
-		NodeCount:        entitySnapshot.NodeCount,
-		EdgeCount:        entitySnapshot.EdgeCount,
-		NodeActionCounts: map[string]int{},
-		EdgeActionCounts: map[string]int{},
+		Name:      target.Name,
+		NodeCount: entitySnapshot.NodeCount,
+		EdgeCount: entitySnapshot.EdgeCount,
 	}
-
-	nodeKinds := map[string]struct{}{}
-	edgeKinds := map[string]struct{}{}
-	metricsBuilder := newMetricsBuilder(target.Name, entitySnapshot.NodeCount)
+	observer := newGraphObserver(target.Name, entitySnapshot.NodeCount)
 
 	nodeStartedAt := time.Now()
 	slog.Info("retriever dump node phase started",
@@ -313,7 +295,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, activeScrubber, nodeKinds, graphEntry.NodeActionCounts, entitySnapshot, metricsBuilder)
+	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -355,7 +337,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, activeScrubber, edgeKinds, graphEntry.EdgeActionCounts, entitySnapshot, metricsBuilder)
+	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -380,29 +362,31 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		EntitiesPerSecond: perSecond(fileTotal(edgeFiles), time.Since(edgeStartedAt)),
 	})
 
-	if fileTotal(nodeFiles) != entitySnapshot.NodeCount {
+	if observer.nodeCount != entitySnapshot.NodeCount {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, EntityCountMismatchError{
 			Operation: OperationDump,
 			Graph:     target.Name,
 			Phase:     PhaseNodes,
 			Expected:  entitySnapshot.NodeCount,
-			Actual:    fileTotal(nodeFiles),
-			Message:   fmt.Sprintf("dumped %d nodes for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", fileTotal(nodeFiles), target.Name, entitySnapshot.NodeCount),
+			Actual:    observer.nodeCount,
+			Message:   fmt.Sprintf("dumped %d nodes for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", observer.nodeCount, target.Name, entitySnapshot.NodeCount),
 		}
 	}
 
-	if fileTotal(edgeFiles) != entitySnapshot.EdgeCount {
+	if observer.edgeCount != entitySnapshot.EdgeCount {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, EntityCountMismatchError{
 			Operation: OperationDump,
 			Graph:     target.Name,
 			Phase:     PhaseEdges,
 			Expected:  entitySnapshot.EdgeCount,
-			Actual:    fileTotal(edgeFiles),
-			Message:   fmt.Sprintf("dumped %d relationships for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", fileTotal(edgeFiles), target.Name, entitySnapshot.EdgeCount),
+			Actual:    observer.edgeCount,
+			Message:   fmt.Sprintf("dumped %d relationships for graph %q but counted %d at scan start; source graph changed during dump or the ID scan was inconsistent", observer.edgeCount, target.Name, entitySnapshot.EdgeCount),
 		}
 	}
 
-	metricsEntry := metricsBuilder.finalize()
+	graphEntry.NodeActionCounts = observer.nodeActionCounts
+	graphEntry.EdgeActionCounts = observer.edgeActionCounts
+	metricsEntry := observer.Metrics()
 
 	slog.Info("retriever dump metrics fingerprint computed",
 		slog.String("graph", target.Name),
@@ -411,23 +395,19 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		slog.Int64("edge_count", metricsEntry.EdgeCount),
 	)
 
-	schemaEntry := GraphSchemaMetadata{
-		Name:      target.Name,
-		NodeKinds: stringsFromKindSet(nodeKinds),
-		EdgeKinds: stringsFromKindSet(edgeKinds),
-	}
+	schemaEntry := observer.Schema()
 
 	return graphEntry, schemaEntry, metricsEntry, nil
 }
 
-func collectScrubRegistry(ctx context.Context, source graphSource, targetGraph graph.Graph, batchSize int, activeScrubber *scrubber, entitySnapshot graphEntitySnapshot, progress ProgressFunc, progressInterval int64) (int64, error) {
-	processed, err := source.Nodes(targetGraph, entitySnapshot.NodeCount, batchSize, progressInterval, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-		return logRetrieverEntityProgressInterval("retriever dump scrub pre-pass progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, progress, progressInterval)
-	}).Run(ctx, func(nodes []*graph.Node) error {
+func prepareTransformSession(ctx context.Context, source graphSource, targetGraph graph.Graph, batchSize int, transform transformSession, entitySnapshot graphEntitySnapshot, progress ProgressFunc, progressInterval int64) (int64, error) {
+	processed, err := runFaucetWithProgress(ctx, source.Nodes(targetGraph, entitySnapshot.NodeCount, batchSize), entitySnapshot.NodeCount, progressInterval, func(nodes []*graph.Node) error {
 		for _, node := range nodes {
-			activeScrubber.observeNode(node.Properties.MapOrEmpty())
+			transform.PrepareNode(node)
 		}
 		return nil
+	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
+		return logRetrieverEntityProgressInterval("retriever dump scrub pre-pass progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, progress, progressInterval)
 	})
 	if err != nil {
 		return processed, fmt.Errorf("scrub pre-pass: %w", err)
@@ -436,7 +416,7 @@ func collectScrubRegistry(ctx context.Context, source graphSource, targetGraph g
 	return processed, nil
 }
 
-func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, activeScrubber *scrubber, nodeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot, metricsBuilder *metricsBuilder) ([]FileManifest, error) {
+func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot) ([]FileManifest, error) {
 	if entitySnapshot.NodeCount == 0 {
 		return nil, nil
 	}
@@ -467,10 +447,9 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		return nil
 	}
 
-	if _, err := source.Nodes(targetGraph, entitySnapshot.NodeCount, options.BatchSize, options.ProgressInterval, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-		return logRetrieverEntityProgressInterval("retriever dump node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
-	}).Run(ctx, func(nodes []*graph.Node) error {
-		for _, node := range nodes {
+	if _, err := runFaucetWithProgress(ctx, source.Nodes(targetGraph, entitySnapshot.NodeCount, options.BatchSize), entitySnapshot.NodeCount, options.ProgressInterval, func(nodes []*graph.Node) error {
+		batch := transform.TransformNodes(nodes)
+		for _, transformed := range batch.Records {
 			if fragmentWriter == nil {
 				nextWriter, nextRelativePath, err := openFragmentWriter(options.OutputDir, targetGraph.Name, PhaseNodes, shardNumber, options)
 				if err != nil {
@@ -481,22 +460,15 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 				fragmentRelativePath = nextRelativePath
 			}
 
-			record := normalizeNode(node)
-			addKindsToSet(nodeKinds, record.Kinds)
+			record := transformed.Record
+			actionCounts := transformed.ActionCounts
+			addActionCounts(shardActionCounts, actionCounts)
 
-			if activeScrubber != nil {
-				var actionCounts map[string]int
-				record.Properties, actionCounts = activeScrubber.scrubProperties(record.Properties)
-				addActionCounts(shardActionCounts, actionCounts)
-				addActionCounts(graphActionCounts, actionCounts)
-			}
-
-			item := jsonlV1NodeFromNormalized(record)
-
-			if err := metricsBuilder.observeFragmentNode(item); err != nil {
+			if err := observer.ObserveNode(record, actionCounts); err != nil {
 				return err
 			}
 
+			item := jsonlV1NodeFromNormalized(record)
 			if err := fragmentWriter.Write(item); err != nil {
 				return err
 			}
@@ -509,6 +481,8 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		}
 
 		return nil
+	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
+		return logRetrieverEntityProgressInterval("retriever dump node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
 		if fragmentWriter != nil {
 			fragmentWriter.Abort()
@@ -524,7 +498,7 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, activeScrubber *scrubber, edgeKinds map[string]struct{}, graphActionCounts map[string]int, entitySnapshot graphEntitySnapshot, metricsBuilder *metricsBuilder) ([]FileManifest, error) {
+func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot) ([]FileManifest, error) {
 	if entitySnapshot.EdgeCount == 0 {
 		return nil, nil
 	}
@@ -555,10 +529,9 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		return nil
 	}
 
-	if _, err := source.Edges(targetGraph, entitySnapshot.EdgeCount, options.BatchSize, options.ProgressInterval, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-		return logRetrieverEntityProgressInterval("retriever dump edge phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
-	}).Run(ctx, func(relationships []*graph.Relationship) error {
-		for _, relationship := range relationships {
+	if _, err := runFaucetWithProgress(ctx, source.Edges(targetGraph, entitySnapshot.EdgeCount, options.BatchSize), entitySnapshot.EdgeCount, options.ProgressInterval, func(relationships []*graph.Relationship) error {
+		batch := transform.TransformEdges(relationships)
+		for _, transformed := range batch.Records {
 			if fragmentWriter == nil {
 				nextWriter, nextRelativePath, err := openFragmentWriter(options.OutputDir, targetGraph.Name, PhaseEdges, shardNumber, options)
 				if err != nil {
@@ -569,24 +542,15 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 				fragmentRelativePath = nextRelativePath
 			}
 
-			record := normalizeEdge(relationship)
-			if relationship.Kind != nil {
-				edgeKinds[record.Kind] = struct{}{}
-			}
+			record := transformed.Record
+			actionCounts := transformed.ActionCounts
+			addActionCounts(shardActionCounts, actionCounts)
 
-			if activeScrubber != nil {
-				var actionCounts map[string]int
-				record.Properties, actionCounts = activeScrubber.scrubProperties(record.Properties)
-				addActionCounts(shardActionCounts, actionCounts)
-				addActionCounts(graphActionCounts, actionCounts)
-			}
-
-			item := jsonlV1EdgeFromNormalized(record)
-
-			if err := metricsBuilder.observeFragmentEdge(item); err != nil {
+			if err := observer.ObserveEdge(record, actionCounts); err != nil {
 				return err
 			}
 
+			item := jsonlV1EdgeFromNormalized(record)
 			if err := fragmentWriter.Write(item); err != nil {
 				return err
 			}
@@ -599,6 +563,8 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		}
 
 		return nil
+	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
+		return logRetrieverEntityProgressInterval("retriever dump edge phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
 		if fragmentWriter != nil {
 			fragmentWriter.Abort()

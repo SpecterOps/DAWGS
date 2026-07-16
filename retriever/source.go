@@ -19,8 +19,8 @@ type faucet[T any] interface {
 
 type graphSource interface {
 	Inventory(context.Context, graph.Graph) (graphEntitySnapshot, error)
-	Nodes(graph.Graph, int64, int, int64, entityProgressLogger) faucet[*graph.Node]
-	Edges(graph.Graph, int64, int, int64, entityProgressLogger) faucet[*graph.Relationship]
+	Nodes(graph.Graph, int64, int) faucet[*graph.Node]
+	Edges(graph.Graph, int64, int) faucet[*graph.Relationship]
 }
 
 type databaseGraphSource struct {
@@ -53,60 +53,52 @@ func (s databaseGraphSource) Inventory(ctx context.Context, targetGraph graph.Gr
 	return snapshot, nil
 }
 
-func (s databaseGraphSource) Nodes(targetGraph graph.Graph, total int64, batchSize int, progressInterval int64, logProgress entityProgressLogger) faucet[*graph.Node] {
+func (s databaseGraphSource) Nodes(targetGraph graph.Graph, total int64, batchSize int) faucet[*graph.Node] {
 	return keysetFaucet[*graph.Node]{
-		total:            total,
-		batchSize:        batchSize,
-		progressInterval: progressInterval,
-		entityName:       "node",
+		total:      total,
+		batchSize:  batchSize,
+		entityName: "node",
 		read: func(ctx context.Context, afterID graph.ID, hasAfterID bool, limit int) ([]*graph.Node, error) {
 			return s.readNodes(ctx, targetGraph, afterID, hasAfterID, limit)
 		},
 		id: func(node *graph.Node) graph.ID {
 			return node.ID
 		},
-		logProgress: logProgress,
 	}
 }
 
-func (s databaseGraphSource) Edges(targetGraph graph.Graph, total int64, batchSize int, progressInterval int64, logProgress entityProgressLogger) faucet[*graph.Relationship] {
+func (s databaseGraphSource) Edges(targetGraph graph.Graph, total int64, batchSize int) faucet[*graph.Relationship] {
 	return keysetFaucet[*graph.Relationship]{
-		total:            total,
-		batchSize:        batchSize,
-		progressInterval: progressInterval,
-		entityName:       "relationship",
+		total:      total,
+		batchSize:  batchSize,
+		entityName: "relationship",
 		read: func(ctx context.Context, afterID graph.ID, hasAfterID bool, limit int) ([]*graph.Relationship, error) {
 			return s.readRelationships(ctx, targetGraph, afterID, hasAfterID, limit)
 		},
 		id: func(relationship *graph.Relationship) graph.ID {
 			return relationship.ID
 		},
-		logProgress: logProgress,
 	}
 }
 
 type keysetFaucet[T any] struct {
-	total            int64
-	batchSize        int
-	progressInterval int64
-	entityName       string
-	read             func(context.Context, graph.ID, bool, int) ([]T, error)
-	id               entityIDFunc[T]
-	logProgress      entityProgressLogger
+	total      int64
+	batchSize  int
+	entityName string
+	read       func(context.Context, graph.ID, bool, int) ([]T, error)
+	id         entityIDFunc[T]
 }
 
 func (s keysetFaucet[T]) Run(ctx context.Context, handle entityBatchHandler[T]) (int64, error) {
 	return scanEntityBatches(entityScanOptions[T]{
-		Total:            s.total,
-		BatchSize:        s.batchSize,
-		ProgressInterval: s.progressInterval,
-		EntityName:       s.entityName,
+		Total:      s.total,
+		BatchSize:  s.batchSize,
+		EntityName: s.entityName,
 		Read: func(afterID graph.ID, hasAfterID bool, limit int) ([]T, error) {
 			return s.read(ctx, afterID, hasAfterID, limit)
 		},
-		ID:          s.id,
-		Handle:      handle,
-		LogProgress: s.logProgress,
+		ID:     s.id,
+		Handle: handle,
 	})
 }
 

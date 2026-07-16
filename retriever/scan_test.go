@@ -1,6 +1,7 @@
 package retriever
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -217,5 +218,32 @@ func TestScanEntityBatchesValidationAndReaderErrors(t *testing.T) {
 	})
 	if !errors.Is(err, readerErr) || processed != 0 {
 		t.Fatalf("processed=%d err=%v", processed, err)
+	}
+}
+
+func TestRunFaucetWithProgressObservesSuccessfulBatchesOnce(t *testing.T) {
+	source := scriptedFaucet[scanTestEntity]{
+		batches: [][]scanTestEntity{{{id: 1}, {id: 2}}, {{id: 3}}},
+		total:   3,
+	}
+	var (
+		handled  []graph.ID
+		progress []int64
+	)
+
+	processed, err := runFaucetWithProgress(context.Background(), source, 3, 1, func(batch []scanTestEntity) error {
+		for _, entity := range batch {
+			handled = append(handled, entity.id)
+		}
+		return nil
+	}, func(processed int64, _ time.Time, nextProgressAt int64) int64 {
+		progress = append(progress, processed)
+		return nextProgressAt
+	})
+	if err != nil {
+		t.Fatalf("run faucet: %v", err)
+	}
+	if processed != 3 || !reflect.DeepEqual(handled, []graph.ID{1, 2, 3}) || !reflect.DeepEqual(progress, []int64{2, 3}) {
+		t.Fatalf("processed=%d handled=%v progress=%v", processed, handled, progress)
 	}
 }

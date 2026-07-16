@@ -33,7 +33,7 @@ func TestDatabaseGraphSourceCreatesFreshCappedFaucets(t *testing.T) {
 
 	for run := range 2 {
 		var ids []graph.ID
-		processed, err := source.Nodes(target, snapshot.NodeCount, 10, 0, nil).Run(context.Background(), func(nodes []*graph.Node) error {
+		processed, err := source.Nodes(target, snapshot.NodeCount, 10).Run(context.Background(), func(nodes []*graph.Node) error {
 			for _, node := range nodes {
 				ids = append(ids, node.ID)
 			}
@@ -98,12 +98,12 @@ func (s *scriptedGraphSource) Inventory(context.Context, graph.Graph) (graphEnti
 	return s.snapshot, nil
 }
 
-func (s *scriptedGraphSource) Nodes(graph.Graph, int64, int, int64, entityProgressLogger) faucet[*graph.Node] {
+func (s *scriptedGraphSource) Nodes(graph.Graph, int64, int) faucet[*graph.Node] {
 	s.nodeFaucets++
 	return scriptedFaucet[*graph.Node]{batches: s.nodeBatches, total: s.snapshot.NodeCount}
 }
 
-func (s *scriptedGraphSource) Edges(graph.Graph, int64, int, int64, entityProgressLogger) faucet[*graph.Relationship] {
+func (s *scriptedGraphSource) Edges(graph.Graph, int64, int) faucet[*graph.Relationship] {
 	s.edgeFaucets++
 	return scriptedFaucet[*graph.Relationship]{batches: s.edgeBatches, total: s.snapshot.EdgeCount}
 }
