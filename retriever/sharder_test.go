@@ -47,8 +47,8 @@ func TestLogicalSharderBoundaries(t *testing.T) {
 			var actual [][]int
 			for index, shard := range shards {
 				actual = append(actual, shard.Records)
-				if shard.Spec.Graph != "example" || shard.Spec.Phase != PhaseNodes || shard.Spec.Number != index+1 || shard.Spec.ExpectedRows != len(shard.Records) {
-					t.Fatalf("shard %d spec = %+v", index, shard.Spec)
+				if shard.Summary.ID.Graph != "example" || shard.Summary.ID.Phase != PhaseNodes || shard.Summary.ID.Number != index+1 || shard.Summary.Rows != len(shard.Records) {
+					t.Fatalf("shard %d summary = %+v", index, shard.Summary)
 				}
 			}
 			if !reflect.DeepEqual(actual, testCase.expected) {
@@ -81,7 +81,7 @@ func TestLogicalSharderSplitsActionCounts(t *testing.T) {
 		t.Fatalf("flush: %v", err)
 	}
 
-	if len(shards) != 2 || !reflect.DeepEqual(shards[0].Spec.ActionCounts, map[string]int{"preserve": 1, "redact": 1}) || !reflect.DeepEqual(shards[1].Spec.ActionCounts, map[string]int{"preserve": 2}) {
+	if len(shards) != 2 || !reflect.DeepEqual(shards[0].Summary.ActionCounts, map[string]int{"preserve": 1, "redact": 1}) || !reflect.DeepEqual(shards[1].Summary.ActionCounts, map[string]int{"preserve": 2}) {
 		t.Fatalf("shard action counts = %+v", shards)
 	}
 }

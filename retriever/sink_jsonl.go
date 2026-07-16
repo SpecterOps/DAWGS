@@ -44,15 +44,15 @@ func newJSONLFragmentSink[T any](options DumpOptions, workspace collectionWorksp
 	}
 }
 
-func (s jsonlFragmentSink[T]) Open(ctx context.Context, spec shardSpec) (fragmentWriter[T, FileManifest], error) {
+func (s jsonlFragmentSink[T]) Open(ctx context.Context, id shardID) (fragmentWriter[T, FileManifest], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if spec.Phase != s.phase {
-		return nil, fmt.Errorf("JSONL sink for phase %q cannot open shard for phase %q", s.phase, spec.Phase)
+	if id.Phase != s.phase {
+		return nil, fmt.Errorf("JSONL sink for phase %q cannot open shard for phase %q", s.phase, id.Phase)
 	}
 
-	relativePath, err := jsonlFragmentPath(spec.Graph, spec.Phase, spec.Number, s.codec)
+	relativePath, err := jsonlFragmentPath(id.Graph, id.Phase, id.Number, s.codec)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (s jsonlFragmentSink[T]) Open(ctx context.Context, spec shardSpec) (fragmen
 	}
 
 	return &jsonlFragmentWriter[T]{
-		spec:         spec,
+		id:           id,
 		relativePath: relativePath,
 		adapt:        s.adapt,
 		writer:       writer,
@@ -76,7 +76,7 @@ func (s jsonlFragmentSink[T]) Open(ctx context.Context, spec shardSpec) (fragmen
 }
 
 type jsonlFragmentWriter[T any] struct {
-	spec         shardSpec
+	id           shardID
 	relativePath string
 	adapt        func(T) any
 	writer       *compressedJSONLinesWriter
@@ -104,14 +104,8 @@ func (s *jsonlFragmentWriter[T]) Prepare(ctx context.Context) (preparedFragment[
 		return nil, err
 	}
 	metadata := prepared.Metadata()
-	if metadata.Count != s.spec.ExpectedRows {
-		_ = prepared.Abort()
-		return nil, fmt.Errorf("prepared JSONL shard %d has %d rows, expected %d", s.spec.Number, metadata.Count, s.spec.ExpectedRows)
-	}
-
-	metadata.Phase = s.spec.Phase
+	metadata.Phase = s.id.Phase
 	metadata.Path = s.relativePath
-	metadata.ActionCounts = cloneActionCounts(s.spec.ActionCounts)
 	return &preparedJSONLFragment{
 		fragment: prepared,
 		metadata: metadata,
@@ -167,13 +161,17 @@ func writeNodeFragment(outputDir, graphName string, shardNumber int, options Dum
 	sink := newJSONLFragmentSink(options, newLocalCollectionWorkspace(outputDir, options.Force), PhaseNodes, func(record FragmentNode) any {
 		return record
 	})
-	return writeFragment(context.Background(), sink, shardSpec{
-		Graph:        graphName,
-		Phase:        PhaseNodes,
-		Number:       shardNumber,
-		ExpectedRows: len(items),
+	summary := shardSummary{
+		ID:           shardID{Graph: graphName, Phase: PhaseNodes, Number: shardNumber},
+		Rows:         len(items),
 		ActionCounts: actionCounts,
-	}, items)
+	}
+	metadata, err := writeFragment(context.Background(), sink, summary, items)
+	if err != nil {
+		return FileManifest{}, err
+	}
+	metadata.ActionCounts = cloneActionCounts(summary.ActionCounts)
+	return metadata, nil
 }
 
 func writeEdgeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentEdge, actionCounts map[string]int) (FileManifest, error) {
@@ -181,11 +179,15 @@ func writeEdgeFragment(outputDir, graphName string, shardNumber int, options Dum
 	sink := newJSONLFragmentSink(options, newLocalCollectionWorkspace(outputDir, options.Force), PhaseEdges, func(record FragmentEdge) any {
 		return record
 	})
-	return writeFragment(context.Background(), sink, shardSpec{
-		Graph:        graphName,
-		Phase:        PhaseEdges,
-		Number:       shardNumber,
-		ExpectedRows: len(items),
+	summary := shardSummary{
+		ID:           shardID{Graph: graphName, Phase: PhaseEdges, Number: shardNumber},
+		Rows:         len(items),
 		ActionCounts: actionCounts,
-	}, items)
+	}
+	metadata, err := writeFragment(context.Background(), sink, summary, items)
+	if err != nil {
+		return FileManifest{}, err
+	}
+	metadata.ActionCounts = cloneActionCounts(summary.ActionCounts)
+	return metadata, nil
 }

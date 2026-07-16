@@ -32,7 +32,7 @@ type failingNodeSink struct {
 	lifecycle *fragmentLifecycle
 }
 
-func (s failingNodeSink) Open(context.Context, shardSpec) (fragmentWriter[normalizedNode, FileManifest], error) {
+func (s failingNodeSink) Open(context.Context, shardID) (fragmentWriter[normalizedNode, FileManifest], error) {
 	if s.point == fragmentFailureOpen {
 		return nil, s.failure
 	}

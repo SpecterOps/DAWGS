@@ -407,10 +407,11 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 
 	var files []FileManifest
 	emit := func(shard logicalShard[normalizedNode]) error {
-		fileEntry, err := writeFragment(ctx, sink, shard.Spec, shard.Records)
+		fileEntry, err := writeFragment(ctx, sink, shard.Summary, shard.Records)
 		if err != nil {
 			return err
 		}
+		fileEntry.ActionCounts = cloneActionCounts(shard.Summary.ActionCounts)
 		files = append(files, fileEntry)
 		return nil
 	}
@@ -449,10 +450,11 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 
 	var files []FileManifest
 	emit := func(shard logicalShard[normalizedEdge]) error {
-		fileEntry, err := writeFragment(ctx, sink, shard.Spec, shard.Records)
+		fileEntry, err := writeFragment(ctx, sink, shard.Summary, shard.Records)
 		if err != nil {
 			return err
 		}
+		fileEntry.ActionCounts = cloneActionCounts(shard.Summary.ActionCounts)
 		files = append(files, fileEntry)
 		return nil
 	}

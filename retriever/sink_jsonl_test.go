@@ -14,15 +14,13 @@ func TestJSONLFragmentSinkOwnsWireFormatAndMetadata(t *testing.T) {
 		Compression: CompressionGzip,
 		ZstdLevel:   DefaultZstdLevel,
 	}
-	spec := shardSpec{
-		Graph:        "graph/name",
-		Phase:        PhaseNodes,
-		Number:       2,
-		ExpectedRows: 1,
+	summary := shardSummary{
+		ID:           shardID{Graph: "graph/name", Phase: PhaseNodes, Number: 2},
+		Rows:         1,
 		ActionCounts: map[string]int{"preserve": 1},
 	}
 
-	metadata, err := writeFragment(context.Background(), newJSONLNodeSink(options), spec, []normalizedNode{{
+	metadata, err := writeFragment(context.Background(), newJSONLNodeSink(options), summary, []normalizedNode{{
 		ID:         "1",
 		Kinds:      []string{"User"},
 		Properties: map[string]any{"name": "alice"},
@@ -30,7 +28,7 @@ func TestJSONLFragmentSinkOwnsWireFormatAndMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write JSONL fragment: %v", err)
 	}
-	if metadata.Phase != PhaseNodes || metadata.Path != "graphs/graph%2Fname/nodes-000002.jsonl.gz" || metadata.Count != 1 || !reflect.DeepEqual(metadata.ActionCounts, spec.ActionCounts) {
+	if metadata.Phase != PhaseNodes || metadata.Path != "graphs/graph%2Fname/nodes-000002.jsonl.gz" || metadata.Count != 1 || metadata.ActionCounts != nil {
 		t.Fatalf("JSONL metadata = %+v", metadata)
 	}
 
@@ -56,8 +54,8 @@ func TestJSONLEdgeSinkOmitsSourceRelationshipID(t *testing.T) {
 		Compression: CompressionGzip,
 		ZstdLevel:   DefaultZstdLevel,
 	}
-	spec := shardSpec{Graph: "example", Phase: PhaseEdges, Number: 1, ExpectedRows: 1}
-	metadata, err := writeFragment(context.Background(), newJSONLEdgeSink(options), spec, []normalizedEdge{{
+	summary := shardSummary{ID: shardID{Graph: "example", Phase: PhaseEdges, Number: 1}, Rows: 1}
+	metadata, err := writeFragment(context.Background(), newJSONLEdgeSink(options), summary, []normalizedEdge{{
 		ID:      "source-edge-id",
 		StartID: "1",
 		EndID:   "2",
@@ -86,23 +84,16 @@ func TestJSONLFragmentSinkRejectsPhaseAndRowCountMismatch(t *testing.T) {
 		ZstdLevel:   DefaultZstdLevel,
 	}
 	sink := newJSONLNodeSink(options)
-	if _, err := sink.Open(context.Background(), shardSpec{Graph: "example", Phase: PhaseEdges, Number: 1}); err == nil {
+	if _, err := sink.Open(context.Background(), shardID{Graph: "example", Phase: PhaseEdges, Number: 1}); err == nil {
 		t.Fatalf("expected phase mismatch")
 	}
 
-	spec := shardSpec{Graph: "example", Phase: PhaseNodes, Number: 1, ExpectedRows: 2}
-	writer, err := sink.Open(context.Background(), spec)
-	if err != nil {
-		t.Fatalf("open sink: %v", err)
-	}
-	if err := writer.WriteBatch(context.Background(), []normalizedNode{{ID: "1"}}); err != nil {
-		t.Fatalf("write batch: %v", err)
-	}
-	if _, err := writer.Prepare(context.Background()); err == nil {
+	summary := shardSummary{ID: shardID{Graph: "example", Phase: PhaseNodes, Number: 1}, Rows: 2}
+	if _, err := writeFragment(context.Background(), sink, summary, []normalizedNode{{ID: "1"}}); err == nil {
 		t.Fatalf("expected row count mismatch")
 	}
 
-	relativePath, err := jsonlFragmentPath(spec.Graph, spec.Phase, spec.Number, options.Compression)
+	relativePath, err := jsonlFragmentPath(summary.ID.Graph, summary.ID.Phase, summary.ID.Number, options.Compression)
 	if err != nil {
 		t.Fatalf("fragment path: %v", err)
 	}

@@ -2,16 +2,20 @@ package retriever
 
 import "fmt"
 
-type shardSpec struct {
-	Graph        string
-	Phase        Phase
-	Number       int
-	ExpectedRows int
+type shardID struct {
+	Graph  string
+	Phase  Phase
+	Number int
+}
+
+type shardSummary struct {
+	ID           shardID
+	Rows         int
 	ActionCounts map[string]int
 }
 
 type logicalShard[T any] struct {
-	Spec    shardSpec
+	Summary shardSummary
 	Records []T
 }
 
@@ -63,11 +67,13 @@ func (s *logicalSharder[T]) Flush(emit func(logicalShard[T]) error) error {
 
 func (s *logicalSharder[T]) emit(emit func(logicalShard[T]) error) error {
 	shard := logicalShard[T]{
-		Spec: shardSpec{
-			Graph:        s.graph,
-			Phase:        s.phase,
-			Number:       s.nextNumber,
-			ExpectedRows: len(s.records),
+		Summary: shardSummary{
+			ID: shardID{
+				Graph:  s.graph,
+				Phase:  s.phase,
+				Number: s.nextNumber,
+			},
+			Rows:         len(s.records),
 			ActionCounts: cloneActionCounts(s.actionCounts),
 		},
 		Records: s.records,

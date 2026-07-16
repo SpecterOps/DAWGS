@@ -1,27 +1,34 @@
 package retriever
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
-type fragmentSink[T, M any] interface {
-	Open(context.Context, shardSpec) (fragmentWriter[T, M], error)
+type fragmentMetadata interface {
+	rowCount() int
 }
 
-type fragmentWriter[T, M any] interface {
+type fragmentSink[T any, M fragmentMetadata] interface {
+	Open(context.Context, shardID) (fragmentWriter[T, M], error)
+}
+
+type fragmentWriter[T any, M fragmentMetadata] interface {
 	WriteBatch(context.Context, []T) error
 	Prepare(context.Context) (preparedFragment[M], error)
 	Abort() error
 }
 
-type preparedFragment[M any] interface {
+type preparedFragment[M fragmentMetadata] interface {
 	Metadata() M
 	Commit(context.Context) error
 	Abort() error
 }
 
-func writeFragment[T, M any](ctx context.Context, sink fragmentSink[T, M], spec shardSpec, records []T) (M, error) {
+func writeFragment[T any, M fragmentMetadata](ctx context.Context, sink fragmentSink[T, M], summary shardSummary, records []T) (M, error) {
 	var empty M
 
-	writer, err := sink.Open(ctx, spec)
+	writer, err := sink.Open(ctx, summary.ID)
 	if err != nil {
 		return empty, err
 	}
@@ -36,6 +43,10 @@ func writeFragment[T, M any](ctx context.Context, sink fragmentSink[T, M], spec 
 		return empty, err
 	}
 	metadata := prepared.Metadata()
+	if metadata.rowCount() != summary.Rows {
+		_ = prepared.Abort()
+		return empty, fmt.Errorf("prepared shard %d has %d rows, expected %d", summary.ID.Number, metadata.rowCount(), summary.Rows)
+	}
 	if err := prepared.Commit(ctx); err != nil {
 		_ = prepared.Abort()
 		return empty, err
