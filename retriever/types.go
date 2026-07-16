@@ -92,10 +92,6 @@ type FileManifest struct {
 	ActionCounts      map[string]int `json:"action_counts"`
 }
 
-func (s FileManifest) rowCount() int {
-	return s.Count
-}
-
 type FragmentNode struct {
 	ID         string         `json:"id"`
 	Kinds      []string       `json:"kinds"`

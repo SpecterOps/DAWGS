@@ -14,6 +14,18 @@ type jsonlFragmentSink[T any] struct {
 	adapt     func(T) any
 }
 
+type jsonlFragmentMetadata struct {
+	Path              string
+	Rows              int
+	CompressedBytes   int64
+	UncompressedBytes int64
+	SHA256            string
+}
+
+func (s jsonlFragmentMetadata) rowCount() int {
+	return s.Rows
+}
+
 func newJSONLNodeSink(options DumpOptions) jsonlFragmentSink[normalizedNode] {
 	return newJSONLNodeSinkInWorkspace(options, newLocalCollectionWorkspace(options.OutputDir, options.Force))
 }
@@ -44,7 +56,7 @@ func newJSONLFragmentSink[T any](options DumpOptions, workspace collectionWorksp
 	}
 }
 
-func (s jsonlFragmentSink[T]) Open(ctx context.Context, id shardID) (fragmentWriter[T, FileManifest], error) {
+func (s jsonlFragmentSink[T]) Open(ctx context.Context, id shardID) (fragmentWriter[T, jsonlFragmentMetadata], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -68,7 +80,6 @@ func (s jsonlFragmentSink[T]) Open(ctx context.Context, id shardID) (fragmentWri
 	}
 
 	return &jsonlFragmentWriter[T]{
-		id:           id,
 		relativePath: relativePath,
 		adapt:        s.adapt,
 		writer:       writer,
@@ -76,7 +87,6 @@ func (s jsonlFragmentSink[T]) Open(ctx context.Context, id shardID) (fragmentWri
 }
 
 type jsonlFragmentWriter[T any] struct {
-	id           shardID
 	relativePath string
 	adapt        func(T) any
 	writer       *compressedJSONLinesWriter
@@ -94,7 +104,7 @@ func (s *jsonlFragmentWriter[T]) WriteBatch(ctx context.Context, records []T) er
 	return nil
 }
 
-func (s *jsonlFragmentWriter[T]) Prepare(ctx context.Context) (preparedFragment[FileManifest], error) {
+func (s *jsonlFragmentWriter[T]) Prepare(ctx context.Context) (preparedFragment[jsonlFragmentMetadata], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -103,9 +113,14 @@ func (s *jsonlFragmentWriter[T]) Prepare(ctx context.Context) (preparedFragment[
 	if err != nil {
 		return nil, err
 	}
-	metadata := prepared.Metadata()
-	metadata.Phase = s.id.Phase
-	metadata.Path = s.relativePath
+	encoding := prepared.Metadata()
+	metadata := jsonlFragmentMetadata{
+		Path:              s.relativePath,
+		Rows:              encoding.Rows,
+		CompressedBytes:   encoding.CompressedBytes,
+		UncompressedBytes: encoding.UncompressedBytes,
+		SHA256:            encoding.SHA256,
+	}
 	return &preparedJSONLFragment{
 		fragment: prepared,
 		metadata: metadata,
@@ -118,10 +133,10 @@ func (s *jsonlFragmentWriter[T]) Abort() error {
 
 type preparedJSONLFragment struct {
 	fragment *preparedCompressedJSONLinesFragment
-	metadata FileManifest
+	metadata jsonlFragmentMetadata
 }
 
-func (s *preparedJSONLFragment) Metadata() FileManifest {
+func (s *preparedJSONLFragment) Metadata() jsonlFragmentMetadata {
 	return s.metadata
 }
 
@@ -170,8 +185,7 @@ func writeNodeFragment(outputDir, graphName string, shardNumber int, options Dum
 	if err != nil {
 		return FileManifest{}, err
 	}
-	metadata.ActionCounts = cloneActionCounts(summary.ActionCounts)
-	return metadata, nil
+	return newJSONLFileManifest(summary, metadata), nil
 }
 
 func writeEdgeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentEdge, actionCounts map[string]int) (FileManifest, error) {
@@ -188,6 +202,5 @@ func writeEdgeFragment(outputDir, graphName string, shardNumber int, options Dum
 	if err != nil {
 		return FileManifest{}, err
 	}
-	metadata.ActionCounts = cloneActionCounts(summary.ActionCounts)
-	return metadata, nil
+	return newJSONLFileManifest(summary, metadata), nil
 }

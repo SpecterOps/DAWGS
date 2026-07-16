@@ -19,8 +19,8 @@ type DumpResult struct {
 type dumpOverrides struct {
 	workspace collectionWorkspace
 	publisher collectionPublisher
-	nodeSink  fragmentSink[normalizedNode, FileManifest]
-	edgeSink  fragmentSink[normalizedEdge, FileManifest]
+	nodeSink  fragmentSink[normalizedNode, jsonlFragmentMetadata]
+	edgeSink  fragmentSink[normalizedEdge, jsonlFragmentMetadata]
 }
 
 func Dump(ctx context.Context, db graph.Database, driverName string, targets []GraphTarget, options DumpOptions) (DumpResult, error) {
@@ -183,7 +183,7 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 	}, nil
 }
 
-func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession, nodeSink fragmentSink[normalizedNode, FileManifest], edgeSink fragmentSink[normalizedEdge, FileManifest]) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
+func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession, nodeSink fragmentSink[normalizedNode, jsonlFragmentMetadata], edgeSink fragmentSink[normalizedEdge, jsonlFragmentMetadata]) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
 	targetGraph := graph.Graph{
 		Name: target.Name,
 	}
@@ -441,7 +441,7 @@ func (s *bufferedShardReceiver[T]) FinishShard(summary shardSummary) error {
 	return nil
 }
 
-func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedNode, FileManifest]) ([]FileManifest, error) {
+func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedNode, jsonlFragmentMetadata]) ([]FileManifest, error) {
 	if entitySnapshot.NodeCount == 0 {
 		return nil, nil
 	}
@@ -453,12 +453,11 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 
 	var files []FileManifest
 	emit := func(summary shardSummary, records []normalizedNode) error {
-		fileEntry, err := writeFragment(ctx, sink, summary, records)
+		metadata, err := writeFragment(ctx, sink, summary, records)
 		if err != nil {
 			return err
 		}
-		fileEntry.ActionCounts = cloneActionCounts(summary.ActionCounts)
-		files = append(files, fileEntry)
+		files = append(files, newJSONLFileManifest(summary, metadata))
 		return nil
 	}
 	receiver := &bufferedShardReceiver[normalizedNode]{emit: emit}
@@ -485,7 +484,7 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedEdge, FileManifest]) ([]FileManifest, error) {
+func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedEdge, jsonlFragmentMetadata]) ([]FileManifest, error) {
 	if entitySnapshot.EdgeCount == 0 {
 		return nil, nil
 	}
@@ -497,12 +496,11 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 
 	var files []FileManifest
 	emit := func(summary shardSummary, records []normalizedEdge) error {
-		fileEntry, err := writeFragment(ctx, sink, summary, records)
+		metadata, err := writeFragment(ctx, sink, summary, records)
 		if err != nil {
 			return err
 		}
-		fileEntry.ActionCounts = cloneActionCounts(summary.ActionCounts)
-		files = append(files, fileEntry)
+		files = append(files, newJSONLFileManifest(summary, metadata))
 		return nil
 	}
 	receiver := &bufferedShardReceiver[normalizedEdge]{emit: emit}

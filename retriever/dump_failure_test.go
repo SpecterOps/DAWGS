@@ -32,7 +32,7 @@ type failingNodeSink struct {
 	lifecycle *fragmentLifecycle
 }
 
-func (s failingNodeSink) Open(context.Context, shardID) (fragmentWriter[normalizedNode, FileManifest], error) {
+func (s failingNodeSink) Open(context.Context, shardID) (fragmentWriter[normalizedNode, jsonlFragmentMetadata], error) {
 	if s.point == fragmentFailureOpen {
 		return nil, s.failure
 	}
@@ -55,7 +55,7 @@ func (s *failingNodeWriter) WriteBatch(context.Context, []normalizedNode) error 
 	return nil
 }
 
-func (s *failingNodeWriter) Prepare(context.Context) (preparedFragment[FileManifest], error) {
+func (s *failingNodeWriter) Prepare(context.Context) (preparedFragment[jsonlFragmentMetadata], error) {
 	if s.point == fragmentFailurePrepare {
 		return nil, s.failure
 	}
@@ -76,8 +76,8 @@ type failingPreparedNodeFragment struct {
 	lifecycle *fragmentLifecycle
 }
 
-func (s *failingPreparedNodeFragment) Metadata() FileManifest {
-	return FileManifest{Phase: PhaseNodes, Path: "unused", Count: 1, SHA256: "unused"}
+func (s *failingPreparedNodeFragment) Metadata() jsonlFragmentMetadata {
+	return jsonlFragmentMetadata{Path: "unused", Rows: 1, SHA256: "unused"}
 }
 
 func (s *failingPreparedNodeFragment) Commit(context.Context) error {

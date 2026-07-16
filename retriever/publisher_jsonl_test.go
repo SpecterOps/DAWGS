@@ -6,6 +6,41 @@ import (
 	"testing"
 )
 
+func TestNewJSONLFileManifestCombinesLogicalAndPhysicalMetadata(t *testing.T) {
+	actionCounts := map[string]int{"redact": 2}
+	summary := shardSummary{
+		ID:           shardID{Graph: "example", Phase: PhaseNodes, Number: 3},
+		Rows:         4,
+		ActionCounts: actionCounts,
+	}
+	metadata := jsonlFragmentMetadata{
+		Path:              "graphs/example/nodes-000003.jsonl.gz",
+		Rows:              4,
+		CompressedBytes:   100,
+		UncompressedBytes: 200,
+		SHA256:            "checksum",
+	}
+
+	actual := newJSONLFileManifest(summary, metadata)
+	expected := FileManifest{
+		Phase:             PhaseNodes,
+		Path:              metadata.Path,
+		Count:             4,
+		CompressedBytes:   100,
+		UncompressedBytes: 200,
+		SHA256:            "checksum",
+		ActionCounts:      map[string]int{"redact": 2},
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("file manifest = %+v, want %+v", actual, expected)
+	}
+
+	actionCounts["redact"] = 9
+	if actual.ActionCounts["redact"] != 2 {
+		t.Fatalf("file manifest retained logical action-count map")
+	}
+}
+
 func TestJSONLCollectionPublisherAggregatesGraphMetadata(t *testing.T) {
 	workspace := newLocalCollectionWorkspace(t.TempDir(), false)
 	options := DefaultDumpOptions(workspace.Root())

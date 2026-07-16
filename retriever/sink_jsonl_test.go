@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestJSONLFragmentSinkOwnsWireFormatAndMetadata(t *testing.T) {
+func TestJSONLFragmentSinkOwnsWireFormatAndPhysicalMetadata(t *testing.T) {
 	options := DumpOptions{
 		OutputDir:   t.TempDir(),
 		Compression: CompressionGzip,
@@ -28,7 +28,7 @@ func TestJSONLFragmentSinkOwnsWireFormatAndMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write JSONL fragment: %v", err)
 	}
-	if metadata.Phase != PhaseNodes || metadata.Path != "graphs/graph%2Fname/nodes-000002.jsonl.gz" || metadata.Count != 1 || metadata.ActionCounts != nil {
+	if metadata.Path != "graphs/graph%2Fname/nodes-000002.jsonl.gz" || metadata.Rows != 1 || metadata.CompressedBytes <= 0 || metadata.UncompressedBytes <= 0 || metadata.SHA256 == "" {
 		t.Fatalf("JSONL metadata = %+v", metadata)
 	}
 

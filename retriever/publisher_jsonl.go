@@ -18,6 +18,18 @@ type jsonlCollectionPublisher struct {
 	metrics   MetricsManifest
 }
 
+func newJSONLFileManifest(summary shardSummary, metadata jsonlFragmentMetadata) FileManifest {
+	return FileManifest{
+		Phase:             summary.ID.Phase,
+		Path:              metadata.Path,
+		Count:             metadata.Rows,
+		CompressedBytes:   metadata.CompressedBytes,
+		UncompressedBytes: metadata.UncompressedBytes,
+		SHA256:            metadata.SHA256,
+		ActionCounts:      cloneActionCounts(summary.ActionCounts),
+	}
+}
+
 func newJSONLCollectionPublisher(workspace collectionWorkspace, driverName string, options DumpOptions, scrub ScrubMetadata, graphCount int) *jsonlCollectionPublisher {
 	return &jsonlCollectionPublisher{
 		workspace: workspace,

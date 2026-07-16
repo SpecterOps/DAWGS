@@ -31,7 +31,7 @@ func TestCompressedJSONLinesRoundTrip(t *testing.T) {
 				t.Fatalf("write compressed JSONL: %v", err)
 			}
 
-			if entry.Count != len(records) || entry.SHA256 == "" {
+			if entry.Rows != len(records) || entry.SHA256 == "" {
 				t.Fatalf("unexpected fragment metadata: %+v", entry)
 			}
 
@@ -140,7 +140,7 @@ func TestEmptyJSONLinesFragmentRoundTrip(t *testing.T) {
 		t.Fatalf("read empty fragment: %v", err)
 	}
 
-	if entry.Count != 0 || entry.UncompressedBytes != 0 || count != 0 {
+	if entry.Rows != 0 || entry.UncompressedBytes != 0 || count != 0 {
 		t.Fatalf("unexpected empty fragment metadata: entry=%+v count=%d", entry, count)
 	}
 }
@@ -292,7 +292,7 @@ func TestCompressedJSONLinesWriterPrepareCommitLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare writer: %v", err)
 	}
-	if prepared.Metadata().Count != 1 || prepared.Metadata().SHA256 == "" {
+	if prepared.Metadata().Rows != 1 || prepared.Metadata().SHA256 == "" {
 		t.Fatalf("prepared metadata = %+v", prepared.Metadata())
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {

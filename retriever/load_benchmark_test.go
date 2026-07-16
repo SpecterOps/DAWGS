@@ -48,9 +48,14 @@ func BenchmarkLoadFragmentPath(b *testing.B) {
 		if err != nil {
 			b.Fatalf("write node benchmark fragment: %v", err)
 		}
-		entry.Phase = PhaseNodes
-		entry.Path = path
-		files = append(files, entry)
+		files = append(files, FileManifest{
+			Phase:             PhaseNodes,
+			Path:              path,
+			Count:             entry.Rows,
+			CompressedBytes:   entry.CompressedBytes,
+			UncompressedBytes: entry.UncompressedBytes,
+			SHA256:            entry.SHA256,
+		})
 	}
 	for start, shard := 0, 1; start < len(edges); start, shard = start+shardSize, shard+1 {
 		end := min(start+shardSize, len(edges))
@@ -59,9 +64,14 @@ func BenchmarkLoadFragmentPath(b *testing.B) {
 		if err != nil {
 			b.Fatalf("write edge benchmark fragment: %v", err)
 		}
-		entry.Phase = PhaseEdges
-		entry.Path = path
-		files = append(files, entry)
+		files = append(files, FileManifest{
+			Phase:             PhaseEdges,
+			Path:              path,
+			Count:             entry.Rows,
+			CompressedBytes:   entry.CompressedBytes,
+			UncompressedBytes: entry.UncompressedBytes,
+			SHA256:            entry.SHA256,
+		})
 	}
 
 	value := newValidTestManifest(1)

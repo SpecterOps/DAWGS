@@ -49,8 +49,15 @@ const (
 
 type preparedCompressedJSONLinesFragment struct {
 	artifact stagedWorkspaceFile
-	metadata FileManifest
+	metadata compressedJSONLinesMetadata
 	state    preparedCompressedJSONLinesState
+}
+
+type compressedJSONLinesMetadata struct {
+	Rows              int
+	CompressedBytes   int64
+	UncompressedBytes int64
+	SHA256            string
 }
 
 type preparedCompressedJSONLinesState uint8
@@ -196,8 +203,8 @@ func (s *compressedJSONLinesWriter) Prepare() (*preparedCompressedJSONLinesFragm
 
 	return &preparedCompressedJSONLinesFragment{
 		artifact: s.artifact,
-		metadata: FileManifest{
-			Count:             s.count,
+		metadata: compressedJSONLinesMetadata{
+			Rows:              s.count,
 			CompressedBytes:   s.compressedCounter.count,
 			UncompressedBytes: s.uncompressedCounter.count,
 			SHA256:            hex.EncodeToString(s.hasher.Sum(nil)),
@@ -221,7 +228,7 @@ func (s *compressedJSONLinesWriter) Abort() error {
 	}
 }
 
-func (s *preparedCompressedJSONLinesFragment) Metadata() FileManifest {
+func (s *preparedCompressedJSONLinesFragment) Metadata() compressedJSONLinesMetadata {
 	return s.metadata
 }
 
@@ -255,27 +262,27 @@ func (s *preparedCompressedJSONLinesFragment) Abort() error {
 	}
 }
 
-func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLevel int, records []T) (FileManifest, error) {
+func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLevel int, records []T) (compressedJSONLinesMetadata, error) {
 	writer, err := newCompressedJSONLinesWriter(path, codec, zstdLevel)
 	if err != nil {
-		return FileManifest{}, err
+		return compressedJSONLinesMetadata{}, err
 	}
 
 	for _, record := range records {
 		if err := writer.Write(record); err != nil {
 			_ = writer.Abort()
 
-			return FileManifest{}, err
+			return compressedJSONLinesMetadata{}, err
 		}
 	}
 
 	prepared, err := writer.Prepare()
 	if err != nil {
-		return FileManifest{}, err
+		return compressedJSONLinesMetadata{}, err
 	}
 	if err := prepared.Commit(context.Background()); err != nil {
 		_ = prepared.Abort()
-		return FileManifest{}, err
+		return compressedJSONLinesMetadata{}, err
 	}
 	return prepared.Metadata(), nil
 }
