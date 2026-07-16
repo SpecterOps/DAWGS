@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
@@ -18,11 +16,18 @@ type DumpResult struct {
 	EdgeCount    int64
 }
 
-func Dump(ctx context.Context, db graph.Database, driverName string, targets []GraphTarget, options DumpOptions) (DumpResult, error) {
-	return dumpWithSource(ctx, newDatabaseGraphSource(db), driverName, targets, options)
+type dumpOverrides struct {
+	workspace collectionWorkspace
+	publisher collectionPublisher
+	nodeSink  fragmentSink[normalizedNode, FileManifest]
+	edgeSink  fragmentSink[normalizedEdge, FileManifest]
 }
 
-func dumpWithSource(ctx context.Context, source graphSource, driverName string, targets []GraphTarget, options DumpOptions) (DumpResult, error) {
+func Dump(ctx context.Context, db graph.Database, driverName string, targets []GraphTarget, options DumpOptions) (DumpResult, error) {
+	return runDump(ctx, newDatabaseGraphSource(db), driverName, targets, options, dumpOverrides{})
+}
+
+func runDump(ctx context.Context, source graphSource, driverName string, targets []GraphTarget, options DumpOptions, overrides dumpOverrides) (DumpResult, error) {
 	if err := options.validate(); err != nil {
 		return DumpResult{}, err
 	}
@@ -62,7 +67,11 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 		slog.String("output_dir", options.OutputDir),
 		slog.Bool("force", options.Force),
 	)
-	if err := prepareOutputDirectory(options.OutputDir, options.Force); err != nil {
+	workspace := overrides.workspace
+	if workspace == nil {
+		workspace = newLocalCollectionWorkspace(options.OutputDir, options.Force)
+	}
+	if err := workspace.Prepare(ctx); err != nil {
 		return DumpResult{}, err
 	}
 
@@ -75,8 +84,19 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 		OutputDir: options.OutputDir,
 	})
 
-	nextManifest := newManifest(driverName, options.Compression, options.ZstdLevel, transform.Metadata(), len(targets))
-	nextMetrics := newMetricsManifest(len(targets))
+	publisher := overrides.publisher
+	if publisher == nil {
+		publisher = newJSONLCollectionPublisher(workspace, driverName, options, transform.Metadata(), len(targets))
+	}
+	nodeSink := overrides.nodeSink
+	if nodeSink == nil {
+		nodeSink = newJSONLNodeSinkInWorkspace(options, workspace)
+	}
+	edgeSink := overrides.edgeSink
+	if edgeSink == nil {
+		edgeSink = newJSONLEdgeSinkInWorkspace(options, workspace)
+	}
+
 	var totalNodes, totalEdges int64
 
 	for targetIndex, target := range targets {
@@ -95,17 +115,12 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 			OutputDir:  options.OutputDir,
 		})
 
-		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, source, target, options, transform)
+		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, source, target, options, transform, nodeSink, edgeSink)
 		if err != nil {
 			return DumpResult{}, err
 		}
 
-		nextManifest.Graphs = append(nextManifest.Graphs, graphEntry)
-		nextManifest.Schema.Graphs = append(nextManifest.Schema.Graphs, schemaEntry)
-		nextMetrics.Graphs = append(nextMetrics.Graphs, metricsEntry)
-
-		addActionCounts(nextManifest.Scrub.NodeActionCounts, graphEntry.NodeActionCounts)
-		addActionCounts(nextManifest.Scrub.EdgeActionCounts, graphEntry.EdgeActionCounts)
+		publisher.AddGraph(graphEntry, schemaEntry, metricsEntry)
 
 		totalNodes += graphEntry.NodeCount
 		totalEdges += graphEntry.EdgeCount
@@ -131,23 +146,20 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 		})
 	}
 
-	nextManifest.Metrics = &nextMetrics
-
 	slog.Info("retriever dump writing manifest",
 		slog.String("output_dir", options.OutputDir),
 		slog.Int64("node_count", totalNodes),
 		slog.Int64("edge_count", totalEdges),
 	)
-	if err := writeManifest(options.OutputDir, nextManifest); err != nil {
+	publication, err := publisher.Publish(ctx)
+	if err != nil {
 		return DumpResult{}, err
 	}
-
-	manifestPath := filepath.Join(options.OutputDir, manifestFileName)
 
 	slog.Info("retriever dump completed",
 		slog.String("driver", driverName),
 		slog.Int("graph_count", len(targets)),
-		slog.String("manifest", manifestPath),
+		slog.String("manifest", publication.Path),
 		slog.Int64("node_count", totalNodes),
 		slog.Int64("edge_count", totalEdges),
 		slog.Duration("wall_elapsed", time.Since(startedAt)),
@@ -164,46 +176,14 @@ func dumpWithSource(ctx context.Context, source graphSource, driverName string, 
 	})
 
 	return DumpResult{
-		Manifest:     nextManifest,
-		ManifestPath: manifestPath,
+		Manifest:     publication.Manifest,
+		ManifestPath: publication.Path,
 		NodeCount:    totalNodes,
 		EdgeCount:    totalEdges,
 	}, nil
 }
 
-func prepareOutputDirectory(outputDir string, force bool) error {
-	info, err := os.Stat(outputDir)
-	if err == nil {
-		if !info.IsDir() {
-			return fmt.Errorf("output path %q exists and is not a directory", outputDir)
-		}
-
-		entries, err := os.ReadDir(outputDir)
-		if err != nil {
-			return fmt.Errorf("read output directory: %w", err)
-		}
-
-		if len(entries) > 0 {
-			if !force {
-				return fmt.Errorf("output directory %q is not empty; pass -force to replace it", outputDir)
-			}
-
-			if err := os.RemoveAll(outputDir); err != nil {
-				return fmt.Errorf("replace output directory: %w", err)
-			}
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect output directory: %w", err)
-	}
-
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-
-	return nil
-}
-
-func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
+func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession, nodeSink fragmentSink[normalizedNode, FileManifest], edgeSink fragmentSink[normalizedEdge, FileManifest]) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
 	targetGraph := graph.Graph{
 		Name: target.Name,
 	}
@@ -294,7 +274,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot)
+	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, nodeSink)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -336,7 +316,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot)
+	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, edgeSink)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -415,7 +395,7 @@ func prepareTransformSession(ctx context.Context, source graphSource, targetGrap
 	return processed, nil
 }
 
-func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot) ([]FileManifest, error) {
+func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedNode, FileManifest]) ([]FileManifest, error) {
 	if entitySnapshot.NodeCount == 0 {
 		return nil, nil
 	}
@@ -425,7 +405,6 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		return nil, err
 	}
 
-	sink := newJSONLNodeSink(options)
 	var files []FileManifest
 	emit := func(shard logicalShard[normalizedNode]) error {
 		fileEntry, err := writeFragment(ctx, sink, shard.Spec, shard.Records)
@@ -458,7 +437,7 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot) ([]FileManifest, error) {
+func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, sink fragmentSink[normalizedEdge, FileManifest]) ([]FileManifest, error) {
 	if entitySnapshot.EdgeCount == 0 {
 		return nil, nil
 	}
@@ -468,7 +447,6 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		return nil, err
 	}
 
-	sink := newJSONLEdgeSink(options)
 	var files []FileManifest
 	emit := func(shard logicalShard[normalizedEdge]) error {
 		fileEntry, err := writeFragment(ctx, sink, shard.Spec, shard.Records)

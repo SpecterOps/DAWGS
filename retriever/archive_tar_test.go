@@ -54,6 +54,25 @@ func TestCollectionTarDeterministicAndSorted(t *testing.T) {
 	}
 }
 
+func TestCollectionTarIgnoresFilesAbsentFromManifest(t *testing.T) {
+	dir := writeArchiveFixture(t)
+	orphanPath := filepath.Join(dir, "graphs", "secret-graph", "orphan.jsonl.gz")
+	if err := os.WriteFile(orphanPath, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("write orphan fragment: %v", err)
+	}
+
+	var buffer bytes.Buffer
+	if err := writeCollectionTar(&buffer, dir); err != nil {
+		t.Fatalf("write tar: %v", err)
+	}
+
+	for _, name := range tarEntryNames(t, buffer.Bytes()) {
+		if name == "graphs/secret-graph/orphan.jsonl.gz" {
+			t.Fatalf("archive included unmanifested file %q", name)
+		}
+	}
+}
+
 func TestCollectionTarStableMetadata(t *testing.T) {
 	dir := writeArchiveFixture(t)
 	var buffer bytes.Buffer

@@ -103,14 +103,24 @@ func TestDumpGraphTransformsAndObservesEachRecordOnce(t *testing.T) {
 		edgeCalls: map[string]int{},
 	}
 
-	graphEntry, schema, metrics, err := dumpGraph(context.Background(), source, GraphTarget{Name: "source"}, DumpOptions{
+	options := DumpOptions{
 		OutputDir:   t.TempDir(),
 		Scrub:       ScrubNone,
 		Compression: CompressionGzip,
 		ZstdLevel:   DefaultZstdLevel,
 		ShardSize:   10,
 		BatchSize:   10,
-	}, transform)
+	}
+	workspace := newLocalCollectionWorkspace(options.OutputDir, false)
+	graphEntry, schema, metrics, err := dumpGraph(
+		context.Background(),
+		source,
+		GraphTarget{Name: "source"},
+		options,
+		transform,
+		newJSONLNodeSinkInWorkspace(options, workspace),
+		newJSONLEdgeSinkInWorkspace(options, workspace),
+	)
 	if err != nil {
 		t.Fatalf("dump graph: %v", err)
 	}

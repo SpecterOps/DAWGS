@@ -60,7 +60,7 @@ func TestDumpWithScriptedGraphSource(t *testing.T) {
 		}},
 	}
 
-	result, err := dumpWithSource(context.Background(), source, "scripted-source", []GraphTarget{{Name: "source"}}, DumpOptions{
+	result, err := runDump(context.Background(), source, "scripted-source", []GraphTarget{{Name: "source"}}, DumpOptions{
 		OutputDir:   t.TempDir(),
 		Scrub:       ScrubFull,
 		Salt:        "source-test",
@@ -68,7 +68,7 @@ func TestDumpWithScriptedGraphSource(t *testing.T) {
 		ZstdLevel:   DefaultZstdLevel,
 		ShardSize:   10,
 		BatchSize:   10,
-	})
+	}, dumpOverrides{})
 	if err != nil {
 		t.Fatalf("dump: %v", err)
 	}

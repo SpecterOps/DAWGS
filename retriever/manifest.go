@@ -1,6 +1,7 @@
 package retriever
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,29 +36,27 @@ func WriteManifest(outputDir string, value Manifest) error {
 }
 
 func writeManifest(outputDir string, value Manifest) error {
-	if err := value.validate(); err != nil {
+	payload, err := encodeManifest(value)
+	if err != nil {
 		return err
 	}
 
-	tempPath := filepath.Join(outputDir, manifestFileName+".tmp")
-	finalPath := filepath.Join(outputDir, manifestFileName)
+	_, err = newLocalCollectionWorkspace(outputDir, false).Publish(context.Background(), manifestFileName, payload)
+	return err
+}
+
+func encodeManifest(value Manifest) ([]byte, error) {
+	if err := value.validate(); err != nil {
+		return nil, err
+	}
+
 	payload, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode manifest: %w", err)
+		return nil, fmt.Errorf("encode manifest: %w", err)
 	}
 
 	payload = append(payload, '\n')
-
-	if err := os.WriteFile(tempPath, payload, 0o600); err != nil {
-		return fmt.Errorf("write manifest temp file: %w", err)
-	}
-
-	if err := os.Rename(tempPath, finalPath); err != nil {
-		os.Remove(tempPath)
-		return fmt.Errorf("rename manifest: %w", err)
-	}
-
-	return nil
+	return payload, nil
 }
 
 func VerifyManifestFiles(inputDir string, value Manifest) error {

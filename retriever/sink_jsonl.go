@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"path/filepath"
 )
 
 type jsonlFragmentSink[T any] struct {
-	outputDir string
+	workspace collectionWorkspace
 	codec     CompressionCodec
 	zstdLevel int
 	phase     Phase
@@ -16,20 +15,28 @@ type jsonlFragmentSink[T any] struct {
 }
 
 func newJSONLNodeSink(options DumpOptions) jsonlFragmentSink[normalizedNode] {
-	return newJSONLFragmentSink(options, PhaseNodes, func(record normalizedNode) any {
+	return newJSONLNodeSinkInWorkspace(options, newLocalCollectionWorkspace(options.OutputDir, options.Force))
+}
+
+func newJSONLNodeSinkInWorkspace(options DumpOptions, workspace collectionWorkspace) jsonlFragmentSink[normalizedNode] {
+	return newJSONLFragmentSink(options, workspace, PhaseNodes, func(record normalizedNode) any {
 		return jsonlV1NodeFromNormalized(record)
 	})
 }
 
 func newJSONLEdgeSink(options DumpOptions) jsonlFragmentSink[normalizedEdge] {
-	return newJSONLFragmentSink(options, PhaseEdges, func(record normalizedEdge) any {
+	return newJSONLEdgeSinkInWorkspace(options, newLocalCollectionWorkspace(options.OutputDir, options.Force))
+}
+
+func newJSONLEdgeSinkInWorkspace(options DumpOptions, workspace collectionWorkspace) jsonlFragmentSink[normalizedEdge] {
+	return newJSONLFragmentSink(options, workspace, PhaseEdges, func(record normalizedEdge) any {
 		return jsonlV1EdgeFromNormalized(record)
 	})
 }
 
-func newJSONLFragmentSink[T any](options DumpOptions, phase Phase, adapt func(T) any) jsonlFragmentSink[T] {
+func newJSONLFragmentSink[T any](options DumpOptions, workspace collectionWorkspace, phase Phase, adapt func(T) any) jsonlFragmentSink[T] {
 	return jsonlFragmentSink[T]{
-		outputDir: options.OutputDir,
+		workspace: workspace,
 		codec:     options.Compression,
 		zstdLevel: options.ZstdLevel,
 		phase:     phase,
@@ -49,8 +56,10 @@ func (s jsonlFragmentSink[T]) Open(ctx context.Context, spec shardSpec) (fragmen
 	if err != nil {
 		return nil, err
 	}
-	writer, err := newCompressedJSONLinesWriter(
-		filepath.Join(s.outputDir, filepath.FromSlash(relativePath)),
+	writer, err := newCompressedJSONLinesWriterInWorkspace(
+		ctx,
+		s.workspace,
+		relativePath,
 		s.codec,
 		s.zstdLevel,
 	)
@@ -155,7 +164,7 @@ func jsonlFragmentPath(graphName string, fragmentPhase Phase, shardNumber int, c
 
 func writeNodeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentNode, actionCounts map[string]int) (FileManifest, error) {
 	options.OutputDir = outputDir
-	sink := newJSONLFragmentSink(options, PhaseNodes, func(record FragmentNode) any {
+	sink := newJSONLFragmentSink(options, newLocalCollectionWorkspace(outputDir, options.Force), PhaseNodes, func(record FragmentNode) any {
 		return record
 	})
 	return writeFragment(context.Background(), sink, shardSpec{
@@ -169,7 +178,7 @@ func writeNodeFragment(outputDir, graphName string, shardNumber int, options Dum
 
 func writeEdgeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentEdge, actionCounts map[string]int) (FileManifest, error) {
 	options.OutputDir = outputDir
-	sink := newJSONLFragmentSink(options, PhaseEdges, func(record FragmentEdge) any {
+	sink := newJSONLFragmentSink(options, newLocalCollectionWorkspace(outputDir, options.Force), PhaseEdges, func(record FragmentEdge) any {
 		return record
 	})
 	return writeFragment(context.Background(), sink, shardSpec{

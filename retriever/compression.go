@@ -29,9 +29,7 @@ type countingWriter struct {
 }
 
 type compressedJSONLinesWriter struct {
-	path                string
-	tempPath            string
-	file                *os.File
+	artifact            stagedWorkspaceFile
 	compressor          io.WriteCloser
 	encoder             *json.Encoder
 	compressedCounter   *countingWriter
@@ -50,8 +48,7 @@ const (
 )
 
 type preparedCompressedJSONLinesFragment struct {
-	path     string
-	tempPath string
+	artifact stagedWorkspaceFile
 	metadata FileManifest
 	state    preparedCompressedJSONLinesState
 }
@@ -122,24 +119,23 @@ func newDecompressionReader(reader io.Reader, codec CompressionCodec) (io.ReadCl
 }
 
 func newCompressedJSONLinesWriter(path string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create fragment directory: %w", err)
-	}
+	workspace := newLocalCollectionWorkspace(filepath.Dir(path), false)
+	return newCompressedJSONLinesWriterInWorkspace(context.Background(), workspace, filepath.Base(path), codec, zstdLevel)
+}
 
-	tempPath := path + ".tmp"
-	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+func newCompressedJSONLinesWriterInWorkspace(ctx context.Context, workspace collectionWorkspace, relativePath string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
+	artifact, err := workspace.Stage(ctx, relativePath)
 	if err != nil {
-		return nil, fmt.Errorf("open fragment temp file: %w", err)
+		return nil, err
 	}
 
 	hasher := sha256.New()
 	compressedCounter := &countingWriter{
-		writer: io.MultiWriter(file, hasher),
+		writer: io.MultiWriter(artifact, hasher),
 	}
 	compressor, err := newCompressionWriter(compressedCounter, codec, zstdLevel)
 	if err != nil {
-		_ = file.Close()
-		_ = os.Remove(tempPath)
+		_ = artifact.Abort()
 
 		return nil, err
 	}
@@ -151,9 +147,7 @@ func newCompressedJSONLinesWriter(path string, codec CompressionCodec, zstdLevel
 	encoder.SetEscapeHTML(false)
 
 	return &compressedJSONLinesWriter{
-		path:                path,
-		tempPath:            tempPath,
-		file:                file,
+		artifact:            artifact,
 		compressor:          compressor,
 		encoder:             encoder,
 		compressedCounter:   compressedCounter,
@@ -187,23 +181,21 @@ func (s *compressedJSONLinesWriter) Prepare() (*preparedCompressedJSONLinesFragm
 	s.state = compressedWriterPrepared
 
 	if err := s.compressor.Close(); err != nil {
-		_ = s.file.Close()
-		_ = os.Remove(s.tempPath)
+		_ = s.artifact.Abort()
 		s.state = compressedWriterAborted
 
 		return nil, fmt.Errorf("finish compressed fragment: %w", err)
 	}
 
-	if err := s.file.Close(); err != nil {
-		_ = os.Remove(s.tempPath)
+	if err := s.artifact.Close(); err != nil {
+		_ = s.artifact.Abort()
 		s.state = compressedWriterAborted
 
 		return nil, fmt.Errorf("close fragment file: %w", err)
 	}
 
 	return &preparedCompressedJSONLinesFragment{
-		path:     s.path,
-		tempPath: s.tempPath,
+		artifact: s.artifact,
 		metadata: FileManifest{
 			Count:             s.count,
 			CompressedBytes:   s.compressedCounter.count,
@@ -220,8 +212,7 @@ func (s *compressedJSONLinesWriter) Abort() error {
 		s.state = compressedWriterAborted
 		return errors.Join(
 			s.compressor.Close(),
-			s.file.Close(),
-			removeStagedFragment(s.tempPath),
+			s.artifact.Abort(),
 		)
 	case compressedWriterAborted:
 		return nil
@@ -242,10 +233,10 @@ func (s *preparedCompressedJSONLinesFragment) Commit(ctx context.Context) error 
 		return err
 	}
 
-	if err := os.Rename(s.tempPath, s.path); err != nil {
-		_ = removeStagedFragment(s.tempPath)
+	if err := s.artifact.Commit(ctx); err != nil {
+		_ = s.artifact.Abort()
 		s.state = compressedFragmentAborted
-		return fmt.Errorf("rename fragment: %w", err)
+		return err
 	}
 
 	s.state = compressedFragmentCommitted
@@ -256,19 +247,12 @@ func (s *preparedCompressedJSONLinesFragment) Abort() error {
 	switch s.state {
 	case compressedFragmentPrepared:
 		s.state = compressedFragmentAborted
-		return removeStagedFragment(s.tempPath)
+		return s.artifact.Abort()
 	case compressedFragmentAborted:
 		return nil
 	default:
 		return fmt.Errorf("abort committed JSONL fragment")
 	}
-}
-
-func removeStagedFragment(path string) error {
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
 }
 
 func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLevel int, records []T) (FileManifest, error) {
