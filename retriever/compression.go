@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -36,8 +38,31 @@ type compressedJSONLinesWriter struct {
 	uncompressedCounter *countingWriter
 	hasher              hash.Hash
 	count               int
-	closed              bool
+	state               compressedJSONLinesWriterState
 }
+
+type compressedJSONLinesWriterState uint8
+
+const (
+	compressedWriterOpen compressedJSONLinesWriterState = iota
+	compressedWriterPrepared
+	compressedWriterAborted
+)
+
+type preparedCompressedJSONLinesFragment struct {
+	path     string
+	tempPath string
+	metadata FileManifest
+	state    preparedCompressedJSONLinesState
+}
+
+type preparedCompressedJSONLinesState uint8
+
+const (
+	compressedFragmentPrepared preparedCompressedJSONLinesState = iota
+	compressedFragmentCommitted
+	compressedFragmentAborted
+)
 
 func (s *countingWriter) Write(p []byte) (int, error) {
 	n, err := s.writer.Write(p)
@@ -138,8 +163,8 @@ func newCompressedJSONLinesWriter(path string, codec CompressionCodec, zstdLevel
 }
 
 func (s *compressedJSONLinesWriter) Write(value any) error {
-	if s.closed {
-		return fmt.Errorf("write closed JSONL fragment")
+	if s.state != compressedWriterOpen {
+		return fmt.Errorf("write JSONL fragment after prepare or abort")
 	}
 
 	if err := s.encoder.Encode(value); err != nil {
@@ -155,48 +180,95 @@ func (s *compressedJSONLinesWriter) Count() int {
 	return s.count
 }
 
-func (s *compressedJSONLinesWriter) Close() (FileManifest, error) {
-	if s.closed {
-		return FileManifest{}, fmt.Errorf("close JSONL fragment more than once")
+func (s *compressedJSONLinesWriter) Prepare() (*preparedCompressedJSONLinesFragment, error) {
+	if s.state != compressedWriterOpen {
+		return nil, fmt.Errorf("prepare JSONL fragment more than once or after abort")
 	}
-	s.closed = true
+	s.state = compressedWriterPrepared
 
 	if err := s.compressor.Close(); err != nil {
 		_ = s.file.Close()
 		_ = os.Remove(s.tempPath)
+		s.state = compressedWriterAborted
 
-		return FileManifest{}, fmt.Errorf("finish compressed fragment: %w", err)
+		return nil, fmt.Errorf("finish compressed fragment: %w", err)
 	}
 
 	if err := s.file.Close(); err != nil {
 		_ = os.Remove(s.tempPath)
+		s.state = compressedWriterAborted
 
-		return FileManifest{}, fmt.Errorf("close fragment file: %w", err)
+		return nil, fmt.Errorf("close fragment file: %w", err)
 	}
 
-	if err := os.Rename(s.tempPath, s.path); err != nil {
-		_ = os.Remove(s.tempPath)
-
-		return FileManifest{}, fmt.Errorf("rename fragment: %w", err)
-	}
-
-	return FileManifest{
-		Count:             s.count,
-		CompressedBytes:   s.compressedCounter.count,
-		UncompressedBytes: s.uncompressedCounter.count,
-		SHA256:            hex.EncodeToString(s.hasher.Sum(nil)),
+	return &preparedCompressedJSONLinesFragment{
+		path:     s.path,
+		tempPath: s.tempPath,
+		metadata: FileManifest{
+			Count:             s.count,
+			CompressedBytes:   s.compressedCounter.count,
+			UncompressedBytes: s.uncompressedCounter.count,
+			SHA256:            hex.EncodeToString(s.hasher.Sum(nil)),
+		},
+		state: compressedFragmentPrepared,
 	}, nil
 }
 
-func (s *compressedJSONLinesWriter) Abort() {
-	if s.closed {
-		return
+func (s *compressedJSONLinesWriter) Abort() error {
+	switch s.state {
+	case compressedWriterOpen:
+		s.state = compressedWriterAborted
+		return errors.Join(
+			s.compressor.Close(),
+			s.file.Close(),
+			removeStagedFragment(s.tempPath),
+		)
+	case compressedWriterAborted:
+		return nil
+	default:
+		return fmt.Errorf("abort JSONL writer after prepare")
 	}
-	s.closed = true
+}
 
-	_ = s.compressor.Close()
-	_ = s.file.Close()
-	_ = os.Remove(s.tempPath)
+func (s *preparedCompressedJSONLinesFragment) Metadata() FileManifest {
+	return s.metadata
+}
+
+func (s *preparedCompressedJSONLinesFragment) Commit(ctx context.Context) error {
+	if s.state != compressedFragmentPrepared {
+		return fmt.Errorf("commit JSONL fragment that is not prepared")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(s.tempPath, s.path); err != nil {
+		_ = removeStagedFragment(s.tempPath)
+		s.state = compressedFragmentAborted
+		return fmt.Errorf("rename fragment: %w", err)
+	}
+
+	s.state = compressedFragmentCommitted
+	return nil
+}
+
+func (s *preparedCompressedJSONLinesFragment) Abort() error {
+	switch s.state {
+	case compressedFragmentPrepared:
+		s.state = compressedFragmentAborted
+		return removeStagedFragment(s.tempPath)
+	case compressedFragmentAborted:
+		return nil
+	default:
+		return fmt.Errorf("abort committed JSONL fragment")
+	}
+}
+
+func removeStagedFragment(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLevel int, records []T) (FileManifest, error) {
@@ -207,13 +279,21 @@ func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLe
 
 	for _, record := range records {
 		if err := writer.Write(record); err != nil {
-			writer.Abort()
+			_ = writer.Abort()
 
 			return FileManifest{}, err
 		}
 	}
 
-	return writer.Close()
+	prepared, err := writer.Prepare()
+	if err != nil {
+		return FileManifest{}, err
+	}
+	if err := prepared.Commit(context.Background()); err != nil {
+		_ = prepared.Abort()
+		return FileManifest{}, err
+	}
+	return prepared.Metadata(), nil
 }
 
 func readCompressedJSONLines[T any](path string, codec CompressionCodec, handle func(T) error) (int, error) {

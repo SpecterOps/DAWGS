@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -421,77 +420,38 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		return nil, nil
 	}
 
-	var (
-		files                []FileManifest
-		fragmentWriter       *compressedJSONLinesWriter
-		fragmentRelativePath string
-		shardActionCounts    = map[string]int{}
-		shardNumber          = 1
-	)
+	sharder, err := newLogicalSharder[normalizedNode](targetGraph.Name, PhaseNodes, options.ShardSize)
+	if err != nil {
+		return nil, err
+	}
 
-	flush := func() error {
-		if fragmentWriter == nil {
-			return nil
-		}
-
-		fileEntry, err := closeFragmentWriter(fragmentWriter, fragmentRelativePath, PhaseNodes, shardActionCounts)
-		fragmentWriter = nil
+	sink := newJSONLNodeSink(options)
+	var files []FileManifest
+	emit := func(shard logicalShard[normalizedNode]) error {
+		fileEntry, err := writeFragment(ctx, sink, shard.Spec, shard.Records)
 		if err != nil {
 			return err
 		}
-
 		files = append(files, fileEntry)
-		shardActionCounts = map[string]int{}
-		shardNumber++
-
 		return nil
 	}
 
 	if _, err := runFaucetWithProgress(ctx, source.Nodes(targetGraph, entitySnapshot.NodeCount, options.BatchSize), entitySnapshot.NodeCount, options.ProgressInterval, func(nodes []*graph.Node) error {
 		batch := transform.TransformNodes(nodes)
 		for _, transformed := range batch.Records {
-			if fragmentWriter == nil {
-				nextWriter, nextRelativePath, err := openFragmentWriter(options.OutputDir, targetGraph.Name, PhaseNodes, shardNumber, options)
-				if err != nil {
-					return err
-				}
-
-				fragmentWriter = nextWriter
-				fragmentRelativePath = nextRelativePath
-			}
-
-			record := transformed.Record
-			actionCounts := transformed.ActionCounts
-			addActionCounts(shardActionCounts, actionCounts)
-
-			if err := observer.ObserveNode(record, actionCounts); err != nil {
+			if err := observer.ObserveNode(transformed.Record, transformed.ActionCounts); err != nil {
 				return err
-			}
-
-			item := jsonlV1NodeFromNormalized(record)
-			if err := fragmentWriter.Write(item); err != nil {
-				return err
-			}
-
-			if fragmentWriter.Count() >= options.ShardSize {
-				if err := flush(); err != nil {
-					return err
-				}
 			}
 		}
 
-		return nil
+		return sharder.Add(batch, emit)
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever dump node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
-		if fragmentWriter != nil {
-			fragmentWriter.Abort()
-		}
-
 		return nil, err
 	}
 
-	if err := flush(); err != nil {
+	if err := sharder.Flush(emit); err != nil {
 		return nil, err
 	}
 
@@ -503,172 +463,42 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		return nil, nil
 	}
 
-	var (
-		files                []FileManifest
-		fragmentWriter       *compressedJSONLinesWriter
-		fragmentRelativePath string
-		shardActionCounts    = map[string]int{}
-		shardNumber          = 1
-	)
+	sharder, err := newLogicalSharder[normalizedEdge](targetGraph.Name, PhaseEdges, options.ShardSize)
+	if err != nil {
+		return nil, err
+	}
 
-	flush := func() error {
-		if fragmentWriter == nil {
-			return nil
-		}
-
-		fileEntry, err := closeFragmentWriter(fragmentWriter, fragmentRelativePath, PhaseEdges, shardActionCounts)
-		fragmentWriter = nil
+	sink := newJSONLEdgeSink(options)
+	var files []FileManifest
+	emit := func(shard logicalShard[normalizedEdge]) error {
+		fileEntry, err := writeFragment(ctx, sink, shard.Spec, shard.Records)
 		if err != nil {
 			return err
 		}
-
 		files = append(files, fileEntry)
-		shardActionCounts = map[string]int{}
-		shardNumber++
-
 		return nil
 	}
 
 	if _, err := runFaucetWithProgress(ctx, source.Edges(targetGraph, entitySnapshot.EdgeCount, options.BatchSize), entitySnapshot.EdgeCount, options.ProgressInterval, func(relationships []*graph.Relationship) error {
 		batch := transform.TransformEdges(relationships)
 		for _, transformed := range batch.Records {
-			if fragmentWriter == nil {
-				nextWriter, nextRelativePath, err := openFragmentWriter(options.OutputDir, targetGraph.Name, PhaseEdges, shardNumber, options)
-				if err != nil {
-					return err
-				}
-
-				fragmentWriter = nextWriter
-				fragmentRelativePath = nextRelativePath
-			}
-
-			record := transformed.Record
-			actionCounts := transformed.ActionCounts
-			addActionCounts(shardActionCounts, actionCounts)
-
-			if err := observer.ObserveEdge(record, actionCounts); err != nil {
+			if err := observer.ObserveEdge(transformed.Record, transformed.ActionCounts); err != nil {
 				return err
-			}
-
-			item := jsonlV1EdgeFromNormalized(record)
-			if err := fragmentWriter.Write(item); err != nil {
-				return err
-			}
-
-			if fragmentWriter.Count() >= options.ShardSize {
-				if err := flush(); err != nil {
-					return err
-				}
 			}
 		}
 
-		return nil
+		return sharder.Add(batch, emit)
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever dump edge phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
-		if fragmentWriter != nil {
-			fragmentWriter.Abort()
-		}
-
 		return nil, err
 	}
 
-	if err := flush(); err != nil {
+	if err := sharder.Flush(emit); err != nil {
 		return nil, err
 	}
 
 	return files, nil
-}
-
-func writeNodeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentNode, actionCounts map[string]int) (FileManifest, error) {
-	relativePath, err := fragmentPath(graphName, PhaseNodes, shardNumber, options.Compression)
-	if err != nil {
-		return FileManifest{}, err
-	}
-
-	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	fileEntry, err := writeCompressedJSONLines(absolutePath, options.Compression, options.ZstdLevel, items)
-	if err != nil {
-		return FileManifest{}, err
-	}
-
-	fileEntry.Phase = PhaseNodes
-	fileEntry.Path = relativePath
-	fileEntry.Count = len(items)
-	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
-
-	return fileEntry, nil
-}
-
-func writeEdgeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentEdge, actionCounts map[string]int) (FileManifest, error) {
-	relativePath, err := fragmentPath(graphName, PhaseEdges, shardNumber, options.Compression)
-	if err != nil {
-		return FileManifest{}, err
-	}
-
-	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	fileEntry, err := writeCompressedJSONLines(absolutePath, options.Compression, options.ZstdLevel, items)
-	if err != nil {
-		return FileManifest{}, err
-	}
-
-	fileEntry.Phase = PhaseEdges
-	fileEntry.Path = relativePath
-	fileEntry.Count = len(items)
-	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
-
-	return fileEntry, nil
-}
-
-func fragmentPath(graphName string, fragmentPhase Phase, shardNumber int, codec CompressionCodec) (string, error) {
-	if shardNumber <= 0 {
-		return "", fmt.Errorf("shard number must be > 0")
-	}
-
-	extension, err := compressionExtension(codec)
-	if err != nil {
-		return "", err
-	}
-
-	var prefix string
-	switch fragmentPhase {
-	case PhaseNodes:
-		prefix = "nodes"
-	case PhaseEdges:
-		prefix = "edges"
-	default:
-		return "", fmt.Errorf("unsupported fragment phase %q", fragmentPhase)
-	}
-
-	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s-%06d.jsonl%s", prefix, shardNumber, extension)), nil
-}
-
-func openFragmentWriter(outputDir, graphName string, fragmentPhase Phase, shardNumber int, options DumpOptions) (*compressedJSONLinesWriter, string, error) {
-	relativePath, err := fragmentPath(graphName, fragmentPhase, shardNumber, options.Compression)
-	if err != nil {
-		return nil, "", err
-	}
-
-	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	writer, err := newCompressedJSONLinesWriter(absolutePath, options.Compression, options.ZstdLevel)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return writer, relativePath, nil
-}
-
-func closeFragmentWriter(writer *compressedJSONLinesWriter, relativePath string, fragmentPhase Phase, actionCounts map[string]int) (FileManifest, error) {
-	fileEntry, err := writer.Close()
-	if err != nil {
-		return FileManifest{}, err
-	}
-
-	fileEntry.Phase = fragmentPhase
-	fileEntry.Path = relativePath
-	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
-
-	return fileEntry, nil
 }
 
 func fileTotal(files []FileManifest) int64 {

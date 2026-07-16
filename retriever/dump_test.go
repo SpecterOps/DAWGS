@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestFragmentPath(t *testing.T) {
-	nodePath, err := fragmentPath("graph/name", PhaseNodes, 7, CompressionZstd)
+func TestJSONLFragmentPath(t *testing.T) {
+	nodePath, err := jsonlFragmentPath("graph/name", PhaseNodes, 7, CompressionZstd)
 	if err != nil {
 		t.Fatalf("node fragment path: %v", err)
 	}
@@ -14,7 +14,7 @@ func TestFragmentPath(t *testing.T) {
 		t.Fatalf("unexpected node fragment path %q", nodePath)
 	}
 
-	edgePath, err := fragmentPath("default", PhaseEdges, 3, CompressionGzip)
+	edgePath, err := jsonlFragmentPath("default", PhaseEdges, 3, CompressionGzip)
 	if err != nil {
 		t.Fatalf("edge fragment path: %v", err)
 	}
@@ -22,10 +22,10 @@ func TestFragmentPath(t *testing.T) {
 		t.Fatalf("unexpected edge fragment path %q", edgePath)
 	}
 
-	if _, err := fragmentPath("default", Phase("bad"), 1, CompressionGzip); err == nil {
+	if _, err := jsonlFragmentPath("default", Phase("bad"), 1, CompressionGzip); err == nil {
 		t.Fatalf("expected unsupported Phase error")
 	}
-	if _, err := fragmentPath("default", PhaseNodes, 0, CompressionGzip); err == nil {
+	if _, err := jsonlFragmentPath("default", PhaseNodes, 0, CompressionGzip); err == nil {
 		t.Fatalf("expected invalid shard number error")
 	}
 }

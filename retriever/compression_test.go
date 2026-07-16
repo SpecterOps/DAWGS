@@ -2,6 +2,7 @@ package retriever
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -262,7 +263,9 @@ func TestCompressedJSONLinesWriterAbort(t *testing.T) {
 	if err := writer.Write(FragmentNode{ID: "1"}); err != nil {
 		t.Fatalf("write record: %v", err)
 	}
-	writer.Abort()
+	if err := writer.Abort(); err != nil {
+		t.Fatalf("abort writer: %v", err)
+	}
 
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected final path to be absent, got %v", err)
@@ -272,6 +275,87 @@ func TestCompressedJSONLinesWriterAbort(t *testing.T) {
 	}
 	if err := writer.Write(FragmentNode{ID: "2"}); err == nil {
 		t.Fatalf("expected write after abort to fail")
+	}
+}
+
+func TestCompressedJSONLinesWriterPrepareCommitLifecycle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fragment.gz")
+	writer, err := newCompressedJSONLinesWriter(path, CompressionGzip, DefaultZstdLevel)
+	if err != nil {
+		t.Fatalf("open writer: %v", err)
+	}
+	if err := writer.Write(FragmentNode{ID: "1"}); err != nil {
+		t.Fatalf("write record: %v", err)
+	}
+
+	prepared, err := writer.Prepare()
+	if err != nil {
+		t.Fatalf("prepare writer: %v", err)
+	}
+	if prepared.Metadata().Count != 1 || prepared.Metadata().SHA256 == "" {
+		t.Fatalf("prepared metadata = %+v", prepared.Metadata())
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("final path exists before commit: %v", err)
+	}
+	if _, err := os.Stat(path + ".tmp"); err != nil {
+		t.Fatalf("staged path missing after prepare: %v", err)
+	}
+	if err := writer.Write(FragmentNode{ID: "2"}); err == nil {
+		t.Fatalf("expected write after prepare to fail")
+	}
+	if _, err := writer.Prepare(); err == nil {
+		t.Fatalf("expected double prepare to fail")
+	}
+	if err := writer.Abort(); err == nil {
+		t.Fatalf("prepared fragment must be aborted through prepared handle")
+	}
+
+	if err := prepared.Commit(context.Background()); err != nil {
+		t.Fatalf("commit fragment: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("committed path missing: %v", err)
+	}
+	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+		t.Fatalf("staged path remains after commit: %v", err)
+	}
+	if err := prepared.Commit(context.Background()); err == nil {
+		t.Fatalf("expected double commit to fail")
+	}
+	if err := prepared.Abort(); err == nil {
+		t.Fatalf("expected abort after commit to fail")
+	}
+}
+
+func TestCompressedJSONLinesPreparedFragmentAbort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fragment.gz")
+	writer, err := newCompressedJSONLinesWriter(path, CompressionGzip, DefaultZstdLevel)
+	if err != nil {
+		t.Fatalf("open writer: %v", err)
+	}
+	if err := writer.Write(FragmentNode{ID: "1"}); err != nil {
+		t.Fatalf("write record: %v", err)
+	}
+	prepared, err := writer.Prepare()
+	if err != nil {
+		t.Fatalf("prepare writer: %v", err)
+	}
+
+	if err := prepared.Abort(); err != nil {
+		t.Fatalf("abort prepared fragment: %v", err)
+	}
+	if err := prepared.Abort(); err != nil {
+		t.Fatalf("repeat prepared abort: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("final path exists after abort: %v", err)
+	}
+	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+		t.Fatalf("staged path exists after abort: %v", err)
+	}
+	if err := prepared.Commit(context.Background()); err == nil {
+		t.Fatalf("expected commit after abort to fail")
 	}
 }
 
