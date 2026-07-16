@@ -117,11 +117,11 @@ func TestDumpFragmentFailuresDoNotPublishManifest(t *testing.T) {
 				[]GraphTarget{{Name: "source"}},
 				DefaultDumpOptions(outputDir),
 				dumpOverrides{
-					nodeSink: failingNodeSink{
+					nodeOutput: newJSONLShardOutput(failingNodeSink{
 						point:     point,
 						failure:   failure,
 						lifecycle: lifecycle,
-					},
+					}),
 				},
 			)
 			if !errors.Is(err, failure) {
