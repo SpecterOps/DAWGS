@@ -197,7 +197,27 @@ func readLoadManifest(inputDir string, driverName string) (Manifest, error) {
 }
 
 func verifyLoadFragments(inputDir string, nextManifest Manifest) error {
-	return verifyManifestFiles(inputDir, nextManifest)
+	return verifyCollectionFragments(inputDir, nextManifest)
+}
+
+func verifyCollectionFragments(inputDir string, nextManifest Manifest) error {
+	for _, graphEntry := range nextManifest.Graphs {
+		for _, fileEntry := range graphEntry.Files {
+			switch fileEntry.Phase {
+			case PhaseNodes:
+				if _, err := verifyNodeFragmentFile(inputDir, nextManifest.Compression, fileEntry); err != nil {
+					return err
+				}
+
+			case PhaseEdges:
+				if _, err := verifyEdgeFragmentFile(inputDir, nextManifest.Compression, fileEntry); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 type graphEntitySnapshotCounter func(context.Context, graph.Database, graph.Graph) (graphEntitySnapshot, error)
@@ -516,21 +536,13 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 			continue
 		}
 
-		fragment, err := readNodeFragmentFile(inputDir, codec, fileEntry)
-		if err != nil {
-			return nil, loaded, err
-		}
-
+		var fragmentCount int
 		if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			tx = tx.WithGraph(graph.Graph{
 				Name: graphEntry.Name,
 			})
 
-			for _, item := range fragment.Items {
-				if item.ID == "" {
-					return fmt.Errorf("node fragment %s contains empty source ID", fileEntry.Path)
-				}
-
+			count, err := readNodeFragmentFile(inputDir, codec, fileEntry, func(item FragmentNode) error {
 				if _, exists := nodeMap[item.ID]; exists {
 					return fmt.Errorf("duplicate source node ID %q in graph %q", item.ID, graphEntry.Name)
 				}
@@ -541,14 +553,17 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 				}
 
 				nodeMap[item.ID] = dbNode.ID
-			}
 
-			return nil
+				return nil
+			})
+			fragmentCount = count
+
+			return err
 		}); err != nil {
 			return nil, loaded, fmt.Errorf("load node fragment %s: %w", fileEntry.Path, err)
 		}
 
-		loaded += int64(len(fragment.Items))
+		loaded += int64(fragmentCount)
 		nextProgressAt = logRetrieverEntityProgressInterval("retriever load node phase progress", graphEntry.Name, PhaseNodes, loaded, graphEntry.NodeCount, startedAt, nextProgressAt, progress, progressInterval)
 	}
 
@@ -568,17 +583,13 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 			continue
 		}
 
-		fragment, err := readEdgeFragmentFile(inputDir, codec, fileEntry)
-		if err != nil {
-			return loaded, err
-		}
-
+		var fragmentCount int
 		if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
 			batch = batch.WithGraph(graph.Graph{
 				Name: graphEntry.Name,
 			})
 
-			for _, item := range fragment.Items {
+			count, err := readEdgeFragmentFile(inputDir, codec, fileEntry, func(item FragmentEdge) error {
 				resolved, err := resolveFragmentEdge(item, nodeMap)
 				if err != nil {
 					return err
@@ -587,52 +598,112 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 				if err := batch.CreateRelationshipByIDs(resolved.StartID, resolved.EndID, resolved.Kind, resolved.Properties); err != nil {
 					return fmt.Errorf("create edge (%s)-[%s]->(%s): %w", item.StartID, item.Kind, item.EndID, err)
 				}
-			}
 
-			return nil
+				return nil
+			})
+			fragmentCount = count
+
+			return err
 		}, graph.WithBatchSize(batchSize)); err != nil {
 			return loaded, fmt.Errorf("load edge fragment %s: %w", fileEntry.Path, err)
 		}
 
-		loaded += int64(len(fragment.Items))
+		loaded += int64(fragmentCount)
 		nextProgressAt = logRetrieverEntityProgressInterval("retriever load edge phase progress", graphEntry.Name, PhaseEdges, loaded, graphEntry.EdgeCount, startedAt, nextProgressAt, progress, progressInterval)
 	}
 
 	return loaded, nil
 }
 
-func readNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest) (NodeFragment, error) {
-	var fragment NodeFragment
-	if err := readCompressedJSON(filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path)), codec, &fragment); err != nil {
-		return NodeFragment{}, fmt.Errorf("read node fragment %s: %w", fileEntry.Path, err)
-	}
-
-	if fragment.Phase != PhaseNodes {
-		return NodeFragment{}, fmt.Errorf("fragment %s has phase %q, expected nodes", fileEntry.Path, fragment.Phase)
-	}
-
-	if len(fragment.Items) != fileEntry.Count {
-		return NodeFragment{}, fmt.Errorf("fragment %s item count %d does not match manifest count %d", fileEntry.Path, len(fragment.Items), fileEntry.Count)
-	}
-
-	return fragment, nil
+func readNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, handle func(FragmentNode) error) (int, error) {
+	return decodeNodeFragmentFile(inputDir, codec, fileEntry, false, handle)
 }
 
-func readEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest) (EdgeFragment, error) {
-	var fragment EdgeFragment
-	if err := readCompressedJSON(filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path)), codec, &fragment); err != nil {
-		return EdgeFragment{}, fmt.Errorf("read edge fragment %s: %w", fileEntry.Path, err)
+func verifyNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest) (int, error) {
+	return decodeNodeFragmentFile(inputDir, codec, fileEntry, true, nil)
+}
+
+func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, verifyIntegrity bool, handle func(FragmentNode) error) (int, error) {
+	if fileEntry.Phase != PhaseNodes {
+		return 0, fmt.Errorf("fragment %s has phase %q, expected nodes", fileEntry.Path, fileEntry.Phase)
 	}
 
-	if fragment.Phase != PhaseEdges {
-		return EdgeFragment{}, fmt.Errorf("fragment %s has phase %q, expected edges", fileEntry.Path, fragment.Phase)
+	fragmentPath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+	validate := func(item FragmentNode) error {
+		if item.ID == "" {
+			return fmt.Errorf("node fragment %s contains empty source ID", fileEntry.Path)
+		}
+
+		if handle != nil {
+			return handle(item)
+		}
+
+		return nil
 	}
 
-	if len(fragment.Items) != fileEntry.Count {
-		return EdgeFragment{}, fmt.Errorf("fragment %s item count %d does not match manifest count %d", fileEntry.Path, len(fragment.Items), fileEntry.Count)
+	var count int
+	var err error
+	if verifyIntegrity {
+		count, err = readVerifiedCompressedJSONLines(fragmentPath, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
+	} else {
+		count, err = readCompressedJSONLines(fragmentPath, codec, validate)
+	}
+	if err != nil {
+		return count, fmt.Errorf("read node fragment %s: %w", fileEntry.Path, err)
 	}
 
-	return fragment, nil
+	if count != fileEntry.Count {
+		return count, fmt.Errorf("fragment %s item count %d does not match manifest count %d", fileEntry.Path, count, fileEntry.Count)
+	}
+
+	return count, nil
+}
+
+func readEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, handle func(FragmentEdge) error) (int, error) {
+	return decodeEdgeFragmentFile(inputDir, codec, fileEntry, false, handle)
+}
+
+func verifyEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest) (int, error) {
+	return decodeEdgeFragmentFile(inputDir, codec, fileEntry, true, nil)
+}
+
+func decodeEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, verifyIntegrity bool, handle func(FragmentEdge) error) (int, error) {
+	if fileEntry.Phase != PhaseEdges {
+		return 0, fmt.Errorf("fragment %s has phase %q, expected edges", fileEntry.Path, fileEntry.Phase)
+	}
+
+	fragmentPath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+	validate := func(item FragmentEdge) error {
+		if item.StartID == "" {
+			return fmt.Errorf("edge fragment %s contains empty start source ID", fileEntry.Path)
+		}
+		if item.EndID == "" {
+			return fmt.Errorf("edge fragment %s contains empty end source ID", fileEntry.Path)
+		}
+
+		if handle != nil {
+			return handle(item)
+		}
+
+		return nil
+	}
+
+	var count int
+	var err error
+	if verifyIntegrity {
+		count, err = readVerifiedCompressedJSONLines(fragmentPath, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
+	} else {
+		count, err = readCompressedJSONLines(fragmentPath, codec, validate)
+	}
+	if err != nil {
+		return count, fmt.Errorf("read edge fragment %s: %w", fileEntry.Path, err)
+	}
+
+	if count != fileEntry.Count {
+		return count, fmt.Errorf("fragment %s item count %d does not match manifest count %d", fileEntry.Path, count, fileEntry.Count)
+	}
+
+	return count, nil
 }
 
 func resolveFragmentEdge(item FragmentEdge, nodeMap map[string]graph.ID) (resolvedFragmentEdge, error) {

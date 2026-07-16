@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	manifestFormat       = "retriever-opengraph-collection-v1"
-	legacyManifestFormat = "retrievr-opengraph-collection-v1"
-	idStrategy           = "source_database_id_string"
+	manifestFormat = "retriever-jsonl-collection-v1"
+	idStrategy     = "source_database_id_string"
 )
 
 type Phase string
@@ -93,20 +92,10 @@ type FileManifest struct {
 	ActionCounts      map[string]int `json:"action_counts"`
 }
 
-type NodeFragment struct {
-	Phase Phase          `json:"phase"`
-	Items []FragmentNode `json:"items"`
-}
-
 type FragmentNode struct {
 	ID         string         `json:"id"`
 	Kinds      []string       `json:"kinds"`
 	Properties map[string]any `json:"properties,omitempty"`
-}
-
-type EdgeFragment struct {
-	Phase Phase          `json:"phase"`
-	Items []FragmentEdge `json:"items"`
 }
 
 type FragmentEdge struct {
@@ -227,12 +216,7 @@ func (s Manifest) Validate() error {
 }
 
 func isSupportedManifestFormat(format string) bool {
-	switch format {
-	case manifestFormat, legacyManifestFormat:
-		return true
-	default:
-		return false
-	}
+	return format == manifestFormat
 }
 
 func IsSupportedManifestFormat(format string) bool {

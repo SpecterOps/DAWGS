@@ -2,8 +2,8 @@
 // manifest-based retriever collection format.
 //
 // The primary database operations accept an already-open graph.Database. The
-// package also exposes the collection manifest and fragment structs for callers
-// that need to inspect or transform collection contents directly.
+// package also exposes the collection manifest and JSONL record structs for
+// callers that need to inspect or transform collection contents directly.
 //
 // Default option constructors mirror the CLI defaults. Callers can attach a
 // ProgressFunc to receive structured operation, phase, archive, and periodic

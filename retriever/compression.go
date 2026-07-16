@@ -1,6 +1,7 @@
 package retriever
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
@@ -15,11 +16,27 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-const DefaultZstdLevel = 11
+const (
+	DefaultZstdLevel  = 11
+	maxJSONLLineBytes = 10 * 1024 * 1024
+)
 
 type countingWriter struct {
 	writer io.Writer
 	count  int64
+}
+
+type compressedJSONLinesWriter struct {
+	path                string
+	tempPath            string
+	file                *os.File
+	compressor          io.WriteCloser
+	encoder             *json.Encoder
+	compressedCounter   *countingWriter
+	uncompressedCounter *countingWriter
+	hasher              hash.Hash
+	count               int
+	closed              bool
 }
 
 func (s *countingWriter) Write(p []byte) (int, error) {
@@ -79,96 +96,212 @@ func newDecompressionReader(reader io.Reader, codec CompressionCodec) (io.ReadCl
 	}
 }
 
-func encodeCompactJSON(value any) ([]byte, error) {
-	var buffer bytes.Buffer
-	encoder := json.NewEncoder(&buffer)
-	encoder.SetEscapeHTML(false)
-
-	if err := encoder.Encode(value); err != nil {
-		return nil, err
-	}
-
-	return bytes.TrimRight(buffer.Bytes(), "\n"), nil
-}
-
-func writeCompressedJSON(path string, codec CompressionCodec, zstdLevel int, value any) (FileManifest, error) {
-	payload, err := encodeCompactJSON(value)
-	if err != nil {
-		return FileManifest{}, fmt.Errorf("encode fragment: %w", err)
-	}
-
+func newCompressedJSONLinesWriter(path string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return FileManifest{}, fmt.Errorf("create fragment directory: %w", err)
+		return nil, fmt.Errorf("create fragment directory: %w", err)
 	}
 
 	tempPath := path + ".tmp"
 	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return FileManifest{}, fmt.Errorf("open fragment temp file: %w", err)
+		return nil, fmt.Errorf("open fragment temp file: %w", err)
 	}
 
 	hasher := sha256.New()
-	counter := &countingWriter{
+	compressedCounter := &countingWriter{
 		writer: io.MultiWriter(file, hasher),
 	}
-	compressor, err := newCompressionWriter(counter, codec, zstdLevel)
+	compressor, err := newCompressionWriter(compressedCounter, codec, zstdLevel)
 	if err != nil {
-		file.Close()
-		os.Remove(tempPath)
+		_ = file.Close()
+		_ = os.Remove(tempPath)
 
-		return FileManifest{}, err
+		return nil, err
 	}
 
-	_, writeErr := compressor.Write(payload)
-	closeCompressionErr := compressor.Close()
-	closeFileErr := file.Close()
+	uncompressedCounter := &countingWriter{
+		writer: compressor,
+	}
+	encoder := json.NewEncoder(uncompressedCounter)
+	encoder.SetEscapeHTML(false)
 
-	if writeErr != nil {
-		os.Remove(tempPath)
-		return FileManifest{}, fmt.Errorf("write compressed fragment: %w", writeErr)
+	return &compressedJSONLinesWriter{
+		path:                path,
+		tempPath:            tempPath,
+		file:                file,
+		compressor:          compressor,
+		encoder:             encoder,
+		compressedCounter:   compressedCounter,
+		uncompressedCounter: uncompressedCounter,
+		hasher:              hasher,
+	}, nil
+}
+
+func (s *compressedJSONLinesWriter) Write(value any) error {
+	if s.closed {
+		return fmt.Errorf("write closed JSONL fragment")
 	}
 
-	if closeCompressionErr != nil {
-		os.Remove(tempPath)
-		return FileManifest{}, fmt.Errorf("finish compressed fragment: %w", closeCompressionErr)
+	if err := s.encoder.Encode(value); err != nil {
+		return fmt.Errorf("encode JSONL record %d: %w", s.count+1, err)
 	}
 
-	if closeFileErr != nil {
-		os.Remove(tempPath)
-		return FileManifest{}, fmt.Errorf("close fragment file: %w", closeFileErr)
+	s.count++
+
+	return nil
+}
+
+func (s *compressedJSONLinesWriter) Count() int {
+	return s.count
+}
+
+func (s *compressedJSONLinesWriter) Close() (FileManifest, error) {
+	if s.closed {
+		return FileManifest{}, fmt.Errorf("close JSONL fragment more than once")
+	}
+	s.closed = true
+
+	if err := s.compressor.Close(); err != nil {
+		_ = s.file.Close()
+		_ = os.Remove(s.tempPath)
+
+		return FileManifest{}, fmt.Errorf("finish compressed fragment: %w", err)
 	}
 
-	if err := os.Rename(tempPath, path); err != nil {
-		os.Remove(tempPath)
+	if err := s.file.Close(); err != nil {
+		_ = os.Remove(s.tempPath)
+
+		return FileManifest{}, fmt.Errorf("close fragment file: %w", err)
+	}
+
+	if err := os.Rename(s.tempPath, s.path); err != nil {
+		_ = os.Remove(s.tempPath)
+
 		return FileManifest{}, fmt.Errorf("rename fragment: %w", err)
 	}
 
 	return FileManifest{
-		CompressedBytes:   counter.count,
-		UncompressedBytes: int64(len(payload)),
-		SHA256:            hex.EncodeToString(hasher.Sum(nil)),
+		Count:             s.count,
+		CompressedBytes:   s.compressedCounter.count,
+		UncompressedBytes: s.uncompressedCounter.count,
+		SHA256:            hex.EncodeToString(s.hasher.Sum(nil)),
 	}, nil
 }
 
-func readCompressedJSON(path string, codec CompressionCodec, target any) error {
+func (s *compressedJSONLinesWriter) Abort() {
+	if s.closed {
+		return
+	}
+	s.closed = true
+
+	_ = s.compressor.Close()
+	_ = s.file.Close()
+	_ = os.Remove(s.tempPath)
+}
+
+func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLevel int, records []T) (FileManifest, error) {
+	writer, err := newCompressedJSONLinesWriter(path, codec, zstdLevel)
+	if err != nil {
+		return FileManifest{}, err
+	}
+
+	for _, record := range records {
+		if err := writer.Write(record); err != nil {
+			writer.Abort()
+
+			return FileManifest{}, err
+		}
+	}
+
+	return writer.Close()
+}
+
+func readCompressedJSONLines[T any](path string, codec CompressionCodec, handle func(T) error) (int, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("open fragment: %w", err)
+		return 0, fmt.Errorf("open fragment: %w", err)
 	}
 	defer file.Close()
 
-	reader, err := newDecompressionReader(file, codec)
+	return readCompressedJSONLinesFromReader(file, codec, handle)
+}
+
+func readVerifiedCompressedJSONLines[T any](path string, codec CompressionCodec, expectedSHA256 string, expectedCompressedBytes int64, handle func(T) error) (int, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("open compressed fragment: %w", err)
+		return 0, fmt.Errorf("open fragment: %w", err)
 	}
-	defer reader.Close()
+	defer file.Close()
 
-	decoder := json.NewDecoder(reader)
-	if err := decoder.Decode(target); err != nil {
-		return fmt.Errorf("decode fragment: %w", err)
+	hasher := sha256.New()
+	compressedCounter := &countingWriter{
+		writer: hasher,
+	}
+	trackedReader := io.TeeReader(file, compressedCounter)
+
+	count, decodeErr := readCompressedJSONLinesFromReader(trackedReader, codec, handle)
+	if _, err := io.Copy(io.Discard, trackedReader); err != nil {
+		return count, fmt.Errorf("hash checksum target: %w", err)
 	}
 
-	return nil
+	if err := verifyChecksumValues(path, expectedSHA256, expectedCompressedBytes, hex.EncodeToString(hasher.Sum(nil)), compressedCounter.count); err != nil {
+		return count, err
+	}
+
+	return count, decodeErr
+}
+
+func readCompressedJSONLinesFromReader[T any](reader io.Reader, codec CompressionCodec, handle func(T) error) (int, error) {
+	decompressor, err := newDecompressionReader(reader, codec)
+	if err != nil {
+		return 0, fmt.Errorf("open compressed fragment: %w", err)
+	}
+
+	scanner := bufio.NewScanner(decompressor)
+	scanner.Buffer(make([]byte, maxJSONLLineBytes), maxJSONLLineBytes)
+	count := 0
+	var decodeErr error
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			decodeErr = fmt.Errorf("decode JSONL record %d: blank line", count+1)
+			break
+		}
+
+		var record T
+		decoder := json.NewDecoder(bytes.NewReader(line))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&record); err != nil {
+			decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
+			break
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			if err == nil {
+				decodeErr = fmt.Errorf("decode JSONL record %d: multiple JSON values", count+1)
+				break
+			}
+
+			decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
+			break
+		}
+
+		count++
+		if handle != nil {
+			if err := handle(record); err != nil {
+				decodeErr = err
+				break
+			}
+		}
+	}
+	if err := scanner.Err(); decodeErr == nil && err != nil {
+		decodeErr = fmt.Errorf("read JSONL record %d: %w", count+1, err)
+	}
+
+	if err := decompressor.Close(); decodeErr == nil && err != nil {
+		return count, fmt.Errorf("close compressed fragment: %w", err)
+	}
+
+	return count, decodeErr
 }
 
 func verifyChecksum(path string, expectedSHA256 string, expectedCompressedBytes int64) error {
@@ -184,20 +317,23 @@ func verifyChecksum(path string, expectedSHA256 string, expectedCompressedBytes 
 		return fmt.Errorf("hash checksum target: %w", err)
 	}
 
-	if expectedCompressedBytes >= 0 && copied != expectedCompressedBytes {
+	return verifyChecksumValues(path, expectedSHA256, expectedCompressedBytes, hex.EncodeToString(hasher.Sum(nil)), copied)
+}
+
+func verifyChecksumValues(path string, expectedSHA256 string, expectedCompressedBytes int64, actualSHA256 string, actualCompressedBytes int64) error {
+	if expectedCompressedBytes >= 0 && actualCompressedBytes != expectedCompressedBytes {
 		return ByteCountMismatchError{
 			Path:          path,
 			ExpectedBytes: expectedCompressedBytes,
-			ActualBytes:   copied,
+			ActualBytes:   actualCompressedBytes,
 		}
 	}
 
-	actual := hex.EncodeToString(hasher.Sum(nil))
-	if actual != expectedSHA256 {
+	if actualSHA256 != expectedSHA256 {
 		return ChecksumMismatchError{
 			Path:           path,
 			ExpectedSHA256: expectedSHA256,
-			ActualSHA256:   actual,
+			ActualSHA256:   actualSHA256,
 		}
 	}
 
@@ -208,30 +344,34 @@ func copyHash(hasher hash.Hash, reader io.Reader) (int64, error) {
 	return io.Copy(hasher, reader)
 }
 
-func compressedJSONSize(codec CompressionCodec, zstdLevel int, value any) (int64, int64, error) {
-	payload, err := encodeCompactJSON(value)
-	if err != nil {
-		return 0, 0, err
-	}
-
+func compressedJSONLinesSize[T any](codec CompressionCodec, zstdLevel int, records []T) (int64, int64, error) {
 	var buffer bytes.Buffer
 	compressor, err := newCompressionWriter(&buffer, codec, zstdLevel)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	if _, err := compressor.Write(payload); err != nil {
-		compressor.Close()
-		return 0, 0, err
+	uncompressedCounter := &countingWriter{
+		writer: compressor,
+	}
+	encoder := json.NewEncoder(uncompressedCounter)
+	encoder.SetEscapeHTML(false)
+
+	for index, record := range records {
+		if err := encoder.Encode(record); err != nil {
+			_ = compressor.Close()
+
+			return 0, 0, fmt.Errorf("encode JSONL record %d: %w", index+1, err)
+		}
 	}
 
 	if err := compressor.Close(); err != nil {
 		return 0, 0, err
 	}
 
-	return int64(len(payload)), int64(buffer.Len()), nil
+	return uncompressedCounter.count, int64(buffer.Len()), nil
 }
 
-func CompressedJSONSize(codec CompressionCodec, zstdLevel int, value any) (int64, int64, error) {
-	return compressedJSONSize(codec, zstdLevel, value)
+func CompressedJSONLinesSize[T any](codec CompressionCodec, zstdLevel int, records []T) (int64, int64, error) {
+	return compressedJSONLinesSize(codec, zstdLevel, records)
 }
