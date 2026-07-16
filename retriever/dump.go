@@ -10,15 +10,18 @@ import (
 )
 
 type DumpResult struct {
-	Manifest     Manifest
-	ManifestPath string
-	NodeCount    int64
-	EdgeCount    int64
+	Manifest            Manifest
+	ManifestPath        string
+	ParquetManifestPath string
+	ParquetSuccessPath  string
+	NodeCount           int64
+	EdgeCount           int64
 }
 
 type dumpOverrides struct {
 	workspace  collectionWorkspace
 	publisher  collectionPublisher
+	parquet    parquetPublisher
 	nodeOutput shardOutput[normalizedNode]
 	edgeOutput shardOutput[normalizedEdge]
 }
@@ -44,6 +47,7 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("shard_size", options.ShardSize),
 		slog.String("compression", string(options.Compression)),
+		slog.Bool("parquet", options.Parquet),
 		slog.String("scrub", string(options.Scrub)),
 	)
 	options.Progress.emit(ProgressEvent{
@@ -55,6 +59,7 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 		BatchSize:   options.BatchSize,
 		ShardSize:   options.ShardSize,
 		Compression: options.Compression,
+		Parquet:     options.Parquet,
 		Scrub:       options.Scrub,
 	})
 
@@ -88,13 +93,25 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 	if publisher == nil {
 		publisher = newJSONLCollectionPublisher(workspace, driverName, options, transform.Metadata(), len(targets))
 	}
+	parquetPublisher := overrides.parquet
+	if options.Parquet && parquetPublisher == nil {
+		parquetPublisher = newParquetCollectionPublisher(workspace, len(targets))
+	}
 	nodeOutput := overrides.nodeOutput
 	if nodeOutput == nil {
-		nodeOutput = newShardSinkSet(newJSONLShardSink(newJSONLNodeSinkInWorkspace(options, workspace)))
+		sinks := []shardSink[normalizedNode]{newJSONLShardSink(newJSONLNodeSinkInWorkspace(options, workspace))}
+		if options.Parquet {
+			sinks = append(sinks, newParquetShardSink[normalizedNode](newParquetNodeSinkInWorkspace(workspace)))
+		}
+		nodeOutput = newShardSinkSet(sinks...)
 	}
 	edgeOutput := overrides.edgeOutput
 	if edgeOutput == nil {
-		edgeOutput = newShardSinkSet(newJSONLShardSink(newJSONLEdgeSinkInWorkspace(options, workspace)))
+		sinks := []shardSink[normalizedEdge]{newJSONLShardSink(newJSONLEdgeSinkInWorkspace(options, workspace))}
+		if options.Parquet {
+			sinks = append(sinks, newParquetShardSink[normalizedEdge](newParquetEdgeSinkInWorkspace(workspace)))
+		}
+		edgeOutput = newShardSinkSet(sinks...)
 	}
 
 	var totalNodes, totalEdges int64
@@ -115,12 +132,15 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 			OutputDir:  options.OutputDir,
 		})
 
-		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, source, target, options, transform, nodeOutput, edgeOutput)
+		graphEntry, schemaEntry, metricsEntry, err := dumpGraph(ctx, source, target, options, transform, nodeOutput, edgeOutput, parquetPublisher)
 		if err != nil {
 			return DumpResult{}, err
 		}
 
 		publisher.AddGraph(graphEntry, schemaEntry, metricsEntry)
+		if parquetPublisher != nil {
+			parquetPublisher.AddGraph(graphEntry.Name, graphEntry.NodeCount, graphEntry.EdgeCount)
+		}
 
 		totalNodes += graphEntry.NodeCount
 		totalEdges += graphEntry.EdgeCount
@@ -151,7 +171,7 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 		slog.Int64("node_count", totalNodes),
 		slog.Int64("edge_count", totalEdges),
 	)
-	publication, err := publisher.Publish(ctx)
+	publication, parquetPublication, err := publishDumpOutputs(ctx, publisher, parquetPublisher)
 	if err != nil {
 		return DumpResult{}, err
 	}
@@ -176,14 +196,16 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 	})
 
 	return DumpResult{
-		Manifest:     publication.Manifest,
-		ManifestPath: publication.Path,
-		NodeCount:    totalNodes,
-		EdgeCount:    totalEdges,
+		Manifest:            publication.Manifest,
+		ManifestPath:        publication.Path,
+		ParquetManifestPath: parquetPublication.ManifestPath,
+		ParquetSuccessPath:  parquetPublication.SuccessPath,
+		NodeCount:           totalNodes,
+		EdgeCount:           totalEdges,
 	}, nil
 }
 
-func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession, nodeOutput shardOutput[normalizedNode], edgeOutput shardOutput[normalizedEdge]) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
+func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, options DumpOptions, transform transformSession, nodeOutput shardOutput[normalizedNode], edgeOutput shardOutput[normalizedEdge], parquetPublisher parquetPublisher) (GraphManifest, GraphSchemaMetadata, GraphMetrics, error) {
 	targetGraph := graph.Graph{
 		Name: target.Name,
 	}
@@ -274,7 +296,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, nodeOutput)
+	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, nodeOutput, parquetPublisher)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -316,7 +338,7 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, edgeOutput)
+	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, edgeOutput, parquetPublisher)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -395,7 +417,7 @@ func prepareTransformSession(ctx context.Context, source graphSource, targetGrap
 	return processed, nil
 }
 
-func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, output shardOutput[normalizedNode]) ([]FileManifest, error) {
+func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, output shardOutput[normalizedNode], parquetPublisher parquetPublisher) ([]FileManifest, error) {
 	if entitySnapshot.NodeCount == 0 {
 		return nil, nil
 	}
@@ -408,6 +430,12 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	var files []FileManifest
 	receiver := newShardOutputReceiver(ctx, output, func(summary shardSummary, committed committedShard) error {
 		files = append(files, newJSONLFileManifest(summary, committed.JSONL))
+		if committed.Parquet != nil {
+			if parquetPublisher == nil {
+				return fmt.Errorf("received Parquet node fragment without a publisher")
+			}
+			parquetPublisher.AddFragment(summary, *committed.Parquet)
+		}
 		return nil
 	})
 
@@ -433,7 +461,7 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, output shardOutput[normalizedEdge]) ([]FileManifest, error) {
+func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, output shardOutput[normalizedEdge], parquetPublisher parquetPublisher) ([]FileManifest, error) {
 	if entitySnapshot.EdgeCount == 0 {
 		return nil, nil
 	}
@@ -446,6 +474,12 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	var files []FileManifest
 	receiver := newShardOutputReceiver(ctx, output, func(summary shardSummary, committed committedShard) error {
 		files = append(files, newJSONLFileManifest(summary, committed.JSONL))
+		if committed.Parquet != nil {
+			if parquetPublisher == nil {
+				return fmt.Errorf("received Parquet edge fragment without a publisher")
+			}
+			parquetPublisher.AddFragment(summary, *committed.Parquet)
+		}
 		return nil
 	})
 

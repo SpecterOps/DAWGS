@@ -44,6 +44,40 @@ func TestJSONLFragmentSinkConformance(t *testing.T) {
 	})
 }
 
+func TestParquetFragmentSinkConformance(t *testing.T) {
+	t.Run("nodes", func(t *testing.T) {
+		runLeafSinkContract(t, leafSinkContract[normalizedNode, parquetFragmentMetadata]{
+			New: func(t *testing.T) (fragmentSink[normalizedNode, parquetFragmentMetadata], shardID, string) {
+				outputDir := t.TempDir()
+				id := shardID{Graph: "graph/name", Phase: PhaseNodes, Number: 2}
+				relativePath, err := parquetFragmentPath(id.Graph, id.Phase, id.Number)
+				if err != nil {
+					t.Fatalf("fragment path: %v", err)
+				}
+				workspace := newLocalCollectionWorkspace(outputDir, false)
+				return newParquetNodeSinkInWorkspace(workspace), id, filepath.Join(outputDir, filepath.FromSlash(relativePath))
+			},
+			Record: normalizedNode{ID: "1", Kinds: []string{"User"}},
+		})
+	})
+
+	t.Run("edges", func(t *testing.T) {
+		runLeafSinkContract(t, leafSinkContract[normalizedEdge, parquetFragmentMetadata]{
+			New: func(t *testing.T) (fragmentSink[normalizedEdge, parquetFragmentMetadata], shardID, string) {
+				outputDir := t.TempDir()
+				id := shardID{Graph: "graph/name", Phase: PhaseEdges, Number: 2}
+				relativePath, err := parquetFragmentPath(id.Graph, id.Phase, id.Number)
+				if err != nil {
+					t.Fatalf("fragment path: %v", err)
+				}
+				workspace := newLocalCollectionWorkspace(outputDir, false)
+				return newParquetEdgeSinkInWorkspace(workspace), id, filepath.Join(outputDir, filepath.FromSlash(relativePath))
+			},
+			Record: normalizedEdge{ID: "3", StartID: "1", EndID: "2", Kind: "MemberOf"},
+		})
+	})
+}
+
 func newJSONLNodeSinkContract(t *testing.T) (fragmentSink[normalizedNode, jsonlFragmentMetadata], shardID, string) {
 	t.Helper()
 	options := DumpOptions{

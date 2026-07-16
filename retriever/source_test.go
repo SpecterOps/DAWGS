@@ -2,9 +2,12 @@ package retriever
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
+	parquetgo "github.com/parquet-go/parquet-go"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -45,6 +48,59 @@ func TestDatabaseGraphSourceCreatesFreshCappedFaucets(t *testing.T) {
 		if processed != 2 || !reflect.DeepEqual(ids, []graph.ID{1, 2}) {
 			t.Fatalf("run %d processed=%d ids=%v", run+1, processed, ids)
 		}
+	}
+}
+
+func TestDumpWithParquetSidecar(t *testing.T) {
+	outputDir := t.TempDir()
+	source := &scriptedGraphSource{
+		snapshot: graphEntitySnapshot{NodeCount: 2, EdgeCount: 1},
+		nodeBatches: [][]*graph.Node{{
+			graph.NewNode(1, graph.AsProperties(map[string]any{"name": "alice"}), graph.StringKind("User")),
+			graph.NewNode(2, nil, graph.StringKind("Group")),
+		}},
+		edgeBatches: [][]*graph.Relationship{{
+			graph.NewRelationship(10, 1, 2, graph.AsProperties(map[string]any{"since": 2024}), graph.StringKind("MemberOf")),
+		}},
+	}
+	options := DefaultDumpOptions(outputDir)
+	options.Compression = CompressionGzip
+	options.Parquet = true
+	options.ShardSize = 10
+	options.BatchSize = 10
+
+	result, err := runDump(context.Background(), source, "scripted-source", []GraphTarget{{Name: "source"}}, options, dumpOverrides{})
+	if err != nil {
+		t.Fatalf("dump: %v", err)
+	}
+	if result.ParquetManifestPath == "" || result.ParquetSuccessPath == "" {
+		t.Fatalf("Parquet publication paths = manifest %q success %q", result.ParquetManifestPath, result.ParquetSuccessPath)
+	}
+	if _, err := os.Stat(result.ParquetSuccessPath); err != nil {
+		t.Fatalf("stat Parquet success marker: %v", err)
+	}
+	manifest, err := ReadParquetManifest(outputDir)
+	if err != nil {
+		t.Fatalf("read Parquet manifest: %v", err)
+	}
+	if len(manifest.Graphs) != 1 || manifest.Graphs[0].NodeCount != 2 || manifest.Graphs[0].EdgeCount != 1 || len(manifest.Graphs[0].Files) != 2 {
+		t.Fatalf("Parquet manifest = %+v", manifest)
+	}
+	for _, file := range manifest.Graphs[0].Files {
+		if err := verifyChecksum(filepath.Join(outputDir, filepath.FromSlash(file.Path)), file.SHA256, file.Bytes); err != nil {
+			t.Fatalf("verify Parquet file %q: %v", file.Path, err)
+		}
+	}
+	edgeFile := manifest.Graphs[0].Files[1]
+	edges, err := parquetgo.ReadFile[parquetEdge](filepath.Join(outputDir, filepath.FromSlash(edgeFile.Path)))
+	if err != nil {
+		t.Fatalf("read Parquet edge file: %v", err)
+	}
+	if len(edges) != 1 || edges[0].ID != "10" || edges[0].StartID != "1" || edges[0].EndID != "2" {
+		t.Fatalf("Parquet edges = %+v", edges)
+	}
+	if len(result.Manifest.Graphs) != 1 || len(result.Manifest.Graphs[0].Files) != 2 {
+		t.Fatalf("JSONL manifest changed by Parquet sidecar: %+v", result.Manifest.Graphs)
 	}
 }
 

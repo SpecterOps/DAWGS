@@ -89,6 +89,7 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	allGraphs := flags.Bool("all-graphs", false, "Dump every graph discoverable by the selected driver.")
 	flags.StringVar(&cfg.OutputDir, "out", "", "Output collection directory.")
 	flags.BoolVar(&cfg.Force, "force", false, "Replace an existing non-empty output directory.")
+	flags.BoolVar(&cfg.Parquet, "parquet", false, "Write a Parquet sidecar export in addition to JSONL.")
 	flags.StringVar(&archiveOut, "archive-out", "", "Optional encrypted archive output path.")
 	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key for -archive-out.")
 	flags.StringVar(&scrubValue, "scrub", string(cfg.Scrub), "Scrub mode: none or full.")
@@ -171,8 +172,12 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 
 		archiveLine = fmt.Sprintf("archive: %s\n", archiveOut)
 	}
+	var parquetLines string
+	if result.ParquetManifestPath != "" {
+		parquetLines = fmt.Sprintf("parquet manifest: %s\nparquet success: %s\n", result.ParquetManifestPath, result.ParquetSuccessPath)
+	}
 
-	fmt.Fprintf(s.stdout, "dumped %d graph(s)\nmanifest: %s\n%snodes: %d\nrelationships: %d\n", len(result.Manifest.Graphs), result.ManifestPath, archiveLine, result.NodeCount, result.EdgeCount)
+	fmt.Fprintf(s.stdout, "dumped %d graph(s)\nmanifest: %s\n%s%snodes: %d\nrelationships: %d\n", len(result.Manifest.Graphs), result.ManifestPath, parquetLines, archiveLine, result.NodeCount, result.EdgeCount)
 	return nil
 }
 

@@ -1,5 +1,6 @@
 // Package retriever exports and imports Dawgs graph databases using the
-// manifest-based retriever collection format.
+// manifest-based retriever collection format. Dumps may additionally emit a
+// Parquet sidecar while retaining JSONL as the loadable collection.
 //
 // The primary database operations accept an already-open graph.Database. The
 // package also exposes the collection manifest and JSONL record structs for

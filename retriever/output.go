@@ -6,7 +6,8 @@ import (
 )
 
 type committedShard struct {
-	JSONL jsonlFragmentMetadata
+	JSONL   jsonlFragmentMetadata
+	Parquet *parquetFragmentMetadata
 }
 
 type shardOutput[T any] interface {
@@ -50,6 +51,12 @@ func newShardSink[T any, M fragmentMetadata](name string, sink fragmentSink[T, M
 func newJSONLShardSink[T any](sink fragmentSink[T, jsonlFragmentMetadata]) shardSink[T] {
 	return newShardSink(jsonlFragmentFormat, sink, func(committed *committedShard, metadata jsonlFragmentMetadata) {
 		committed.JSONL = metadata
+	})
+}
+
+func newParquetShardSink[T any](sink fragmentSink[T, parquetFragmentMetadata]) shardSink[T] {
+	return newShardSink(parquetFragmentFormat, sink, func(committed *committedShard, metadata parquetFragmentMetadata) {
+		committed.Parquet = &metadata
 	})
 }
 

@@ -126,6 +126,7 @@ func TestDumpGraphTransformsAndObservesEachRecordOnce(t *testing.T) {
 		transform,
 		newShardSinkSet(newJSONLShardSink(newJSONLNodeSinkInWorkspace(options, workspace))),
 		newShardSinkSet(newJSONLShardSink(newJSONLEdgeSinkInWorkspace(options, workspace))),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("dump graph: %v", err)

@@ -124,7 +124,7 @@ func TestOptionsValidate(t *testing.T) {
 
 func TestDefaultOptions(t *testing.T) {
 	dump := DefaultDumpOptions(t.TempDir())
-	if dump.Scrub != ScrubNone || dump.Compression != CompressionZstd || dump.ZstdLevel != DefaultZstdLevel {
+	if dump.Parquet || dump.Scrub != ScrubNone || dump.Compression != CompressionZstd || dump.ZstdLevel != DefaultZstdLevel {
 		t.Fatalf("unexpected dump defaults: %+v", dump)
 	}
 	if dump.ShardSize != DefaultShardSize || dump.BatchSize != DefaultBatchSize || dump.ProgressInterval != DefaultProgressInterval {

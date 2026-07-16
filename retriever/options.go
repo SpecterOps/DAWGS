@@ -48,6 +48,7 @@ type ProgressEvent struct {
 	NodeCount         int64
 	EdgeCount         int64
 	Compression       CompressionCodec
+	Parquet           bool
 	Scrub             ScrubMode
 	Elapsed           time.Duration
 	EntitiesPerSecond float64
@@ -64,6 +65,7 @@ func (s ProgressFunc) emit(event ProgressEvent) {
 type DumpOptions struct {
 	OutputDir        string
 	Force            bool
+	Parquet          bool
 	Scrub            ScrubMode
 	Salt             string
 	ScrubConfig      io.Reader

@@ -25,6 +25,7 @@ retriever dump \
   -scrub none \
   -compression zstd \
   -zstd-level 11 \
+  -parquet \
   -shard-size 100000
 ```
 
@@ -34,9 +35,10 @@ validates that expected node and edge partitions exist. For Neo4j, `-all-graphs`
 means the selected Neo4j database only.
 
 Existing non-empty output directories are refused unless `-force` is supplied.
-The manifest is written last as `manifest.json`; if a dump fails before that
-point, the directory is intentionally left for inspection without a success
-manifest.
+For JSONL-only dumps, the manifest is written last as `manifest.json`. With a
+Parquet sidecar, its metadata precedes `manifest.json` and `parquet/_SUCCESS`
+is written last. Failed dumps intentionally leave completed fragments for
+inspection without the final applicable success boundary.
 
 New dumps include a `retriever-metrics-v1` manifest section with graph metrics
 computed from the same node and relationship streams written to the fragments.
@@ -53,6 +55,28 @@ fails rather than writing a misleading manifest.
 Dump progress is emitted with `log/slog` on stderr. Notices mark output
 directory preparation, graph counting, scrub pre-pass work, node and relationship
 phase boundaries, periodic entity progress, manifest writing, and completion.
+
+### Parquet sidecar
+
+Pass `-parquet` to write a strict Parquet sidecar in addition to the normal
+compressed JSONL collection. JSONL remains mandatory and keeps its existing
+paths, bytes, manifest, load behavior, and checksums.
+
+Parquet fragments use matching logical shard boundaries under
+`parquet/graphs/<graph>/`. Node rows contain `id`, `kinds`, and JSON-annotated
+`properties`. Relationship rows contain `id`, `start_id`, `end_id`, `kind`, and
+JSON-annotated `properties`; unlike JSONL v1, the Parquet sidecar retains the
+source relationship ID. Columns use Zstandard compression.
+
+The sidecar metadata is `parquet/manifest.json` with format
+`retriever-parquet-export-v1`. Publication writes that metadata first, the
+existing JSONL `manifest.json` second, and `parquet/_SUCCESS` last. A requested
+Parquet failure fails the dump, and `_SUCCESS` is absent unless both outputs
+and their metadata completed.
+
+Load and verify continue to consume the JSONL collection. Encrypted archive
+creation also retains its existing behavior and packages the JSONL manifest
+and files; it does not include the optional Parquet sidecar.
 
 ## Encrypted Archives
 

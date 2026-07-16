@@ -76,6 +76,32 @@ type failingPreparedNodeFragment struct {
 	lifecycle *fragmentLifecycle
 }
 
+type failingParquetWriteSink struct {
+	failure error
+}
+
+func (s failingParquetWriteSink) Open(context.Context, shardID) (fragmentWriter[normalizedNode, parquetFragmentMetadata], error) {
+	return &failingParquetWriteWriter{failure: s.failure}, nil
+}
+
+type failingParquetWriteWriter struct {
+	failure error
+	aborted bool
+}
+
+func (s *failingParquetWriteWriter) WriteBatch(context.Context, []normalizedNode) error {
+	return s.failure
+}
+
+func (s *failingParquetWriteWriter) Prepare(context.Context) (preparedFragment[parquetFragmentMetadata], error) {
+	return nil, errors.New("unexpected prepare")
+}
+
+func (s *failingParquetWriteWriter) Abort() error {
+	s.aborted = true
+	return nil
+}
+
 func (s *failingPreparedNodeFragment) Metadata() jsonlFragmentMetadata {
 	return jsonlFragmentMetadata{Path: "unused", Rows: 1, SHA256: "unused"}
 }
@@ -175,6 +201,41 @@ func TestDumpPublishFailureLeavesFragmentsWithoutManifest(t *testing.T) {
 	}
 	if len(fragments) != 1 {
 		t.Fatalf("committed fragments = %v, want one", fragments)
+	}
+}
+
+func TestRequestedParquetFailurePublishesNoManifestOrSuccessMarker(t *testing.T) {
+	outputDir := t.TempDir()
+	workspace := newLocalCollectionWorkspace(outputDir, false)
+	options := DefaultDumpOptions(outputDir)
+	options.Parquet = true
+	failure := errors.New("injected Parquet failure")
+	nodeOutput := newShardSinkSet(
+		newJSONLShardSink(newJSONLNodeSinkInWorkspace(options, workspace)),
+		newParquetShardSink[normalizedNode](failingParquetWriteSink{failure: failure}),
+	)
+
+	_, err := runDump(
+		context.Background(),
+		oneNodeGraphSource(),
+		"failure-test",
+		[]GraphTarget{{Name: "source"}},
+		options,
+		dumpOverrides{workspace: workspace, nodeOutput: nodeOutput},
+	)
+	assertShardSinkOperation(t, err, parquetFragmentFormat, shardID{Graph: "source", Phase: PhaseNodes, Number: 1}, "write", failure)
+	assertNoPublishedManifest(t, outputDir)
+	for _, relativePath := range []string{ParquetManifestFileName, ParquetSuccessFileName} {
+		if _, statErr := os.Stat(filepath.Join(outputDir, filepath.FromSlash(relativePath))); !os.IsNotExist(statErr) {
+			t.Fatalf("%s should not be published, stat error = %v", relativePath, statErr)
+		}
+	}
+	jsonlPath, pathErr := jsonlFragmentPath("source", PhaseNodes, 1, options.Compression)
+	if pathErr != nil {
+		t.Fatalf("JSONL path: %v", pathErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(outputDir, filepath.FromSlash(jsonlPath))); !os.IsNotExist(statErr) {
+		t.Fatalf("JSONL sibling should be aborted, stat error = %v", statErr)
 	}
 }
 
