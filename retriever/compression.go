@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -142,9 +141,7 @@ func newCompressedJSONLinesWriterInWorkspace(ctx context.Context, workspace coll
 	}
 	compressor, err := newCompressionWriter(compressedCounter, codec, zstdLevel)
 	if err != nil {
-		_ = artifact.Abort()
-
-		return nil, err
+		return nil, cleanupOnError(err, artifact.Abort)
 	}
 
 	uncompressedCounter := &countingWriter{
@@ -188,17 +185,13 @@ func (s *compressedJSONLinesWriter) Prepare() (*preparedCompressedJSONLinesFragm
 	s.state = compressedWriterPrepared
 
 	if err := s.compressor.Close(); err != nil {
-		_ = s.artifact.Abort()
 		s.state = compressedWriterAborted
-
-		return nil, fmt.Errorf("finish compressed fragment: %w", err)
+		return nil, cleanupOnError(fmt.Errorf("finish compressed fragment: %w", err), s.artifact.Abort)
 	}
 
 	if err := s.artifact.Close(); err != nil {
-		_ = s.artifact.Abort()
 		s.state = compressedWriterAborted
-
-		return nil, fmt.Errorf("close fragment file: %w", err)
+		return nil, cleanupOnError(fmt.Errorf("close fragment file: %w", err), s.artifact.Abort)
 	}
 
 	return &preparedCompressedJSONLinesFragment{
@@ -217,10 +210,7 @@ func (s *compressedJSONLinesWriter) Abort() error {
 	switch s.state {
 	case compressedWriterOpen:
 		s.state = compressedWriterAborted
-		return errors.Join(
-			s.compressor.Close(),
-			s.artifact.Abort(),
-		)
+		return collectErrors(s.compressor.Close(), s.artifact.Abort())
 	case compressedWriterAborted:
 		return nil
 	default:
@@ -241,9 +231,8 @@ func (s *preparedCompressedJSONLinesFragment) Commit(ctx context.Context) error 
 	}
 
 	if err := s.artifact.Commit(ctx); err != nil {
-		_ = s.artifact.Abort()
 		s.state = compressedFragmentAborted
-		return err
+		return cleanupOnError(err, s.artifact.Abort)
 	}
 
 	s.state = compressedFragmentCommitted
@@ -270,9 +259,7 @@ func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLe
 
 	for _, record := range records {
 		if err := writer.Write(record); err != nil {
-			_ = writer.Abort()
-
-			return compressedJSONLinesMetadata{}, err
+			return compressedJSONLinesMetadata{}, cleanupOnError(err, writer.Abort)
 		}
 	}
 
@@ -281,8 +268,7 @@ func writeCompressedJSONLines[T any](path string, codec CompressionCodec, zstdLe
 		return compressedJSONLinesMetadata{}, err
 	}
 	if err := prepared.Commit(context.Background()); err != nil {
-		_ = prepared.Abort()
-		return compressedJSONLinesMetadata{}, err
+		return compressedJSONLinesMetadata{}, cleanupOnError(err, prepared.Abort)
 	}
 	return prepared.Metadata(), nil
 }

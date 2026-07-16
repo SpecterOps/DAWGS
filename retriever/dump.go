@@ -2,7 +2,6 @@ package retriever
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -91,11 +90,11 @@ func runDump(ctx context.Context, source graphSource, driverName string, targets
 	}
 	nodeOutput := overrides.nodeOutput
 	if nodeOutput == nil {
-		nodeOutput = newJSONLShardOutput(newJSONLNodeSinkInWorkspace(options, workspace))
+		nodeOutput = newShardSinkSet(newJSONLShardSink(newJSONLNodeSinkInWorkspace(options, workspace)))
 	}
 	edgeOutput := overrides.edgeOutput
 	if edgeOutput == nil {
-		edgeOutput = newJSONLShardOutput(newJSONLEdgeSinkInWorkspace(options, workspace))
+		edgeOutput = newShardSinkSet(newJSONLShardSink(newJSONLEdgeSinkInWorkspace(options, workspace)))
 	}
 
 	var totalNodes, totalEdges int64
@@ -424,11 +423,11 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever dump node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
-		return nil, errors.Join(err, receiver.Abort())
+		return nil, cleanupOnError(err, receiver.Abort)
 	}
 
 	if err := sharder.Flush(receiver); err != nil {
-		return nil, errors.Join(err, receiver.Abort())
+		return nil, cleanupOnError(err, receiver.Abort)
 	}
 
 	return files, nil
@@ -462,11 +461,11 @@ func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever dump edge phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
 	}); err != nil {
-		return nil, errors.Join(err, receiver.Abort())
+		return nil, cleanupOnError(err, receiver.Abort)
 	}
 
 	if err := sharder.Flush(receiver); err != nil {
-		return nil, errors.Join(err, receiver.Abort())
+		return nil, cleanupOnError(err, receiver.Abort)
 	}
 
 	return files, nil

@@ -2,7 +2,6 @@ package retriever
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -107,16 +106,13 @@ func (s *localCollectionWorkspace) Publish(ctx context.Context, relativePath str
 	}
 
 	if _, err := artifact.Write(payload); err != nil {
-		_ = artifact.Abort()
-		return "", fmt.Errorf("write staged artifact: %w", err)
+		return "", cleanupOnError(fmt.Errorf("write staged artifact: %w", err), artifact.Abort)
 	}
 	if err := artifact.Close(); err != nil {
-		_ = artifact.Abort()
-		return "", fmt.Errorf("close staged artifact: %w", err)
+		return "", cleanupOnError(fmt.Errorf("close staged artifact: %w", err), artifact.Abort)
 	}
 	if err := artifact.Commit(ctx); err != nil {
-		_ = artifact.Abort()
-		return "", err
+		return "", cleanupOnError(err, artifact.Abort)
 	}
 
 	return s.resolve(relativePath)
@@ -187,7 +183,7 @@ func (s *localStagedWorkspaceFile) Abort() error {
 		s.closed = true
 		closeErr = s.file.Close()
 	}
-	return errors.Join(closeErr, removeStagedArtifact(s.tempPath))
+	return collectErrors(closeErr, removeStagedArtifact(s.tempPath))
 }
 
 func removeStagedArtifact(path string) error {

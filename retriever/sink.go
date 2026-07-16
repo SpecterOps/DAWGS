@@ -2,8 +2,22 @@ package retriever
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
+
+func collectErrors(errs ...error) error {
+	return errors.Join(errs...)
+}
+
+func cleanupOnError(primary error, cleanups ...func() error) error {
+	errs := make([]error, 1, len(cleanups)+1)
+	errs[0] = primary
+	for _, cleanup := range cleanups {
+		errs = append(errs, cleanup())
+	}
+	return collectErrors(errs...)
+}
 
 type fragmentMetadata interface {
 	rowCount() int
@@ -33,23 +47,20 @@ func writeFragment[T any, M fragmentMetadata](ctx context.Context, sink fragment
 		return empty, err
 	}
 	if err := writer.WriteBatch(ctx, records); err != nil {
-		_ = writer.Abort()
-		return empty, err
+		return empty, cleanupOnError(err, writer.Abort)
 	}
 
 	prepared, err := writer.Prepare(ctx)
 	if err != nil {
-		_ = writer.Abort()
-		return empty, err
+		return empty, cleanupOnError(err, writer.Abort)
 	}
 	metadata := prepared.Metadata()
 	if metadata.rowCount() != summary.Rows {
-		_ = prepared.Abort()
-		return empty, fmt.Errorf("prepared shard %d has %d rows, expected %d", summary.ID.Number, metadata.rowCount(), summary.Rows)
+		err := fmt.Errorf("prepared shard %d has %d rows, expected %d", summary.ID.Number, metadata.rowCount(), summary.Rows)
+		return empty, cleanupOnError(err, prepared.Abort)
 	}
 	if err := prepared.Commit(ctx); err != nil {
-		_ = prepared.Abort()
-		return empty, err
+		return empty, cleanupOnError(err, prepared.Abort)
 	}
 
 	return metadata, nil

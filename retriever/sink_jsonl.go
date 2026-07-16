@@ -6,6 +6,8 @@ import (
 	"path"
 )
 
+const jsonlFragmentFormat = "JSONL"
+
 type jsonlFragmentSink[T any] struct {
 	workspace collectionWorkspace
 	codec     CompressionCodec

@@ -82,7 +82,7 @@ func (s *recordingPreparedJSONLFragment[T]) Abort() error {
 
 func TestJSONLShardOutputStreamsLogicalShardSlices(t *testing.T) {
 	state := &recordingJSONLSinkState[int]{}
-	output := newJSONLShardOutput(recordingJSONLFragmentSink[int]{state: state})
+	output := newShardSinkSet(newJSONLShardSink(recordingJSONLFragmentSink[int]{state: state}))
 	var committed []shardSummary
 	receiver := newShardOutputReceiver(context.Background(), output, func(summary shardSummary, result committedShard) error {
 		if result.JSONL.Rows != summary.Rows {
@@ -127,7 +127,7 @@ func TestJSONLShardOutputStreamsLogicalShardSlices(t *testing.T) {
 
 func TestJSONLShardOutputAbortsPreparedRowCountMismatch(t *testing.T) {
 	state := &recordingJSONLSinkState[int]{rowOffset: 1}
-	output := newJSONLShardOutput(recordingJSONLFragmentSink[int]{state: state})
+	output := newShardSinkSet(newJSONLShardSink(recordingJSONLFragmentSink[int]{state: state}))
 	id := shardID{Graph: "example", Phase: PhaseNodes, Number: 1}
 	writer, err := output.OpenShard(context.Background(), id)
 	if err != nil {
@@ -136,9 +136,8 @@ func TestJSONLShardOutputAbortsPreparedRowCountMismatch(t *testing.T) {
 	if err := writer.WriteBatch(context.Background(), []int{1}); err != nil {
 		t.Fatalf("write batch: %v", err)
 	}
-	if _, err := writer.Finish(context.Background(), shardSummary{ID: id, Rows: 1}); err == nil {
-		t.Fatalf("expected row count mismatch")
-	}
+	_, err = writer.Finish(context.Background(), shardSummary{ID: id, Rows: 1})
+	assertShardSinkOperation(t, err, jsonlFragmentFormat, id, "validate", nil)
 
 	fragment := state.fragments[0]
 	if !fragment.prepared || !fragment.preparedAborted || fragment.committed || fragment.writerAborted {
@@ -146,11 +145,43 @@ func TestJSONLShardOutputAbortsPreparedRowCountMismatch(t *testing.T) {
 	}
 }
 
+func assertShardSinkOperation(t *testing.T, err error, format string, id shardID, operation string, cause error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected %s %s error", format, operation)
+	}
+	if cause != nil && !errors.Is(err, cause) {
+		t.Fatalf("%s %s error = %v, want cause %v", format, operation, err, cause)
+	}
+
+	if !containsShardSinkOperation(err, format, id, operation) {
+		t.Fatalf("error lacks %s %s context for %+v: %v", format, operation, id, err)
+	}
+}
+
+func containsShardSinkOperation(err error, format string, id shardID, operation string) bool {
+	if err == nil {
+		return false
+	}
+	if operationErr, ok := err.(*shardSinkOperationError); ok && operationErr.Format == format && operationErr.ID == id && operationErr.Operation == operation {
+		return true
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, child := range joined.Unwrap() {
+			if containsShardSinkOperation(child, format, id, operation) {
+				return true
+			}
+		}
+		return false
+	}
+	return containsShardSinkOperation(errors.Unwrap(err), format, id, operation)
+}
+
 func TestShardOutputReceiverAbortsAfterWriteAndUpstreamFailures(t *testing.T) {
 	t.Run("write failure", func(t *testing.T) {
 		writeErr := errors.New("write failed")
 		state := &recordingJSONLSinkState[int]{writeErr: writeErr}
-		receiver := newShardOutputReceiver(context.Background(), newJSONLShardOutput(recordingJSONLFragmentSink[int]{state: state}), func(shardSummary, committedShard) error {
+		receiver := newShardOutputReceiver(context.Background(), newShardSinkSet(newJSONLShardSink(recordingJSONLFragmentSink[int]{state: state})), func(shardSummary, committedShard) error {
 			return nil
 		})
 		if err := receiver.BeginShard(shardID{Graph: "example", Phase: PhaseNodes, Number: 1}); err != nil {
@@ -166,7 +197,7 @@ func TestShardOutputReceiverAbortsAfterWriteAndUpstreamFailures(t *testing.T) {
 
 	t.Run("upstream failure", func(t *testing.T) {
 		state := &recordingJSONLSinkState[int]{}
-		receiver := newShardOutputReceiver(context.Background(), newJSONLShardOutput(recordingJSONLFragmentSink[int]{state: state}), func(shardSummary, committedShard) error {
+		receiver := newShardOutputReceiver(context.Background(), newShardSinkSet(newJSONLShardSink(recordingJSONLFragmentSink[int]{state: state})), func(shardSummary, committedShard) error {
 			return nil
 		})
 		if err := receiver.BeginShard(shardID{Graph: "example", Phase: PhaseNodes, Number: 1}); err != nil {

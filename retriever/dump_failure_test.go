@@ -117,16 +117,17 @@ func TestDumpFragmentFailuresDoNotPublishManifest(t *testing.T) {
 				[]GraphTarget{{Name: "source"}},
 				DefaultDumpOptions(outputDir),
 				dumpOverrides{
-					nodeOutput: newJSONLShardOutput(failingNodeSink{
+					nodeOutput: newShardSinkSet(newJSONLShardSink(failingNodeSink{
 						point:     point,
 						failure:   failure,
 						lifecycle: lifecycle,
-					}),
+					})),
 				},
 			)
 			if !errors.Is(err, failure) {
 				t.Fatalf("dump error = %v, want injected failure", err)
 			}
+			assertShardSinkOperation(t, err, jsonlFragmentFormat, shardID{Graph: "source", Phase: PhaseNodes, Number: 1}, string(point), failure)
 			assertNoPublishedManifest(t, outputDir)
 
 			switch point {
