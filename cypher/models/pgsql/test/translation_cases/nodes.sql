@@ -47,6 +47,27 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n) where n.name = '1234' return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = '1234'))) select s0.n0 as n from s0;
 
+-- case: match (n) where n.`a-aaa` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'a-aaa')) = 'string' and (n0.properties ->> 'a-aaa') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.`b_bbb` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'b_bbb')) = 'string' and (n0.properties ->> 'b_bbb') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.`has``tick` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'has`tick')) = 'string' and (n0.properties ->> 'has`tick') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.```starts-tick` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '`starts-tick')) = 'string' and (n0.properties ->> '`starts-tick') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.```super-wrapped``` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '`super-wrapped`')) = 'string' and (n0.properties ->> '`super-wrapped`') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.```` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '`')) = 'string' and (n0.properties ->> '`') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where (n).`a-aaa` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((jsonb_typeof((((s0.n0)).properties -> 'a-aaa')) = 'string' and (((s0.n0)).properties ->> 'a-aaa') = '123'));
+
 -- case: match (n:NodeKind1 {name: "SOME NAME"}) return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and (jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = 'SOME NAME')) select s0.n0 as n from s0;
 

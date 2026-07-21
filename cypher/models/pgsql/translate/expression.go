@@ -54,6 +54,20 @@ func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, l
 	}
 }
 
+func isEscapedPropertyLookupName(literal pgsql.Literal) bool {
+	if litString, typeOK := literal.Value.(string); !typeOK {
+		return false
+	} else if len(litString) > 2 && litString[0] == '`' && litString[len(litString)-1] == '`' {
+		return true
+	}
+
+	return false
+}
+
+func unescapePropertyLookupName(name string) string {
+	return strings.ReplaceAll(name[1:len(name)-1], "``", "`")
+}
+
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
 	if translatedAtom, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
@@ -64,7 +78,13 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 				return err
 			} else {
 				s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{typedTranslatedAtom, pgsql.ColumnProperties})
-				s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+				if !isEscapedPropertyLookupName(fieldIdentifierLiteral) {
+					s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+				} else if unescapedLiteral, err := pgsql.AsLiteral(unescapePropertyLookupName(fieldIdentifierLiteral.Value.(string))); err != nil {
+					return err
+				} else {
+					s.treeTranslator.PushOperand(unescapedLiteral)
+				}
 
 				if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup); err != nil {
 					return err
@@ -83,7 +103,13 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 					Identifier: translatedAtom,
 					Column:     pgsql.ColumnProperties,
 				})
-				s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+				if !isEscapedPropertyLookupName(fieldIdentifierLiteral) {
+					s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+				} else if unescapedLiteral, err := pgsql.AsLiteral(unescapePropertyLookupName(fieldIdentifierLiteral.Value.(string))); err != nil {
+					return err
+				} else {
+					s.treeTranslator.PushOperand(unescapedLiteral)
+				}
 
 				if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup); err != nil {
 					return err
@@ -300,7 +326,7 @@ func lookupRequiresElementType(typeHint pgsql.DataType, operator pgsql.Operator,
 
 func TypeCastExpression(expression pgsql.Expression, dataType pgsql.DataType) (pgsql.Expression, error) {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
-		var lookupTypeHint = dataType
+		lookupTypeHint := dataType
 
 		if lookupRequiresElementType(dataType, propertyLookup.Operator, propertyLookup.ROperand) {
 			// Take the base type of the array type hint: <unit> in <collection>
@@ -750,7 +776,6 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 					}
 				}
 			}
-
 		}
 	}
 
