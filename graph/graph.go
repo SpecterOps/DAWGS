@@ -307,6 +307,12 @@ type Batch interface {
 	Commit() error
 }
 
+// NodeBatchCreator is the optional bulk node-create contract implemented by
+// database batches that can return generated IDs in input order.
+type NodeBatchCreator interface {
+	CreateNodes(nodes []*Node) ([]ID, error)
+}
+
 // Transaction is an interface that contains all operations that may be executed against a DAWGS driver. DAWGS drivers are
 // expected to support all Transaction operations in-transaction.
 type Transaction interface {

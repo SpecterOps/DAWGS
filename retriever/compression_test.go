@@ -3,14 +3,17 @@ package retriever
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 func TestCompressedJSONLinesRoundTrip(t *testing.T) {
-	for _, codec := range []CompressionCodec{CompressionGzip, CompressionZstd} {
+	for _, codec := range []CompressionCodec{CompressionNone, CompressionGzip, CompressionZstd} {
 		t.Run(string(codec), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "fragment")
 			records := []FragmentNode{
@@ -247,8 +250,122 @@ func TestReadCompressedJSONLinesRejectsLineLargerThanBuffer(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("record count = %d, want 0", count)
 	}
-	if !strings.Contains(err.Error(), "read JSONL record 1") || !strings.Contains(err.Error(), "token too long") {
+	if !strings.Contains(err.Error(), "read JSONL record 1") || (!strings.Contains(err.Error(), "token too long") && !strings.Contains(err.Error(), "line exceeds")) {
 		t.Fatalf("unexpected oversized-line error: %v", err)
+	}
+}
+
+func TestReadCompressedJSONLinesAcceptsMaximumLineSize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "maximum.jsonl")
+	prefix := `{"id":"1","kinds":[],"properties":{"description":"`
+	suffix := `"}}`
+	payload := prefix + strings.Repeat("x", maxJSONLLineBytes-len(prefix)-len(suffix)) + suffix
+	if len(payload) != maxJSONLLineBytes {
+		t.Fatalf("test payload size = %d", len(payload))
+	}
+	writeCompressedPayload(t, path, CompressionNone, payload)
+
+	count, err := readCompressedJSONLines[FragmentNode](path, CompressionNone, nil)
+	if err != nil {
+		t.Fatalf("read maximum JSONL line: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("record count = %d", count)
+	}
+}
+
+func TestZstdWriterCanBeReusedAcrossFragments(t *testing.T) {
+	for index := 1; index <= 2; index++ {
+		path := filepath.Join(t.TempDir(), fmt.Sprintf("fragment-%d.zst", index))
+		entry, err := writeCompressedJSONLines(path, CompressionZstd, DefaultZstdLevel, []FragmentNode{{ID: strconv.Itoa(index)}})
+		if err != nil {
+			t.Fatalf("write zstd fragment %d: %v", index, err)
+		}
+		if err := verifyChecksum(path, entry.SHA256, entry.CompressedBytes); err != nil {
+			t.Fatalf("verify zstd fragment %d: %v", index, err)
+		}
+		count, err := readCompressedJSONLines[FragmentNode](path, CompressionZstd, nil)
+		if err != nil || count != 1 {
+			t.Fatalf("read zstd fragment %d: count=%d err=%v", index, count, err)
+		}
+	}
+}
+
+type alwaysFailWriter struct{}
+
+func (alwaysFailWriter) Write([]byte) (int, error) {
+	return 0, errors.New("injected writer failure")
+}
+
+func TestZstdWriterResetDoesNotReuseFailedState(t *testing.T) {
+	const level = 7
+	var first bytes.Buffer
+	firstWriter, err := newCompressionWriter(&first, CompressionZstd, level)
+	if err != nil {
+		t.Fatalf("open first zstd writer: %v", err)
+	}
+	if _, err := firstWriter.Write([]byte("first fragment")); err != nil {
+		t.Fatalf("write first fragment: %v", err)
+	}
+	if err := firstWriter.Close(); err != nil {
+		t.Fatalf("close first fragment: %v", err)
+	}
+
+	failedWriter, err := newCompressionWriter(alwaysFailWriter{}, CompressionZstd, level)
+	if err != nil {
+		t.Fatalf("reset pooled zstd writer: %v", err)
+	}
+	_, writeErr := failedWriter.Write(bytes.Repeat([]byte("failure"), 64*1024))
+	closeErr := failedWriter.Close()
+	if writeErr == nil && closeErr == nil {
+		t.Fatal("expected reset writer failure")
+	}
+
+	var final bytes.Buffer
+	finalWriter, err := newCompressionWriter(&final, CompressionZstd, level)
+	if err != nil {
+		t.Fatalf("open zstd writer after failure: %v", err)
+	}
+	if _, err := finalWriter.Write([]byte("final fragment")); err != nil {
+		t.Fatalf("write final fragment: %v", err)
+	}
+	if err := finalWriter.Close(); err != nil {
+		t.Fatalf("close final fragment: %v", err)
+	}
+	reader, err := newDecompressionReader(bytes.NewReader(final.Bytes()), CompressionZstd)
+	if err != nil {
+		t.Fatalf("open final fragment: %v", err)
+	}
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read final fragment: %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close final reader: %v", err)
+	}
+	if string(decoded) != "final fragment" {
+		t.Fatalf("final decoded payload = %q", decoded)
+	}
+}
+
+func TestZstdWriterCanBeReusedAfterFragmentAbort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "aborted.zst")
+	aborted, err := newCompressedJSONLinesWriter(path, CompressionZstd, DefaultZstdLevel)
+	if err != nil {
+		t.Fatalf("open aborted fragment: %v", err)
+	}
+	if err := aborted.Write(FragmentNode{ID: "aborted"}); err != nil {
+		t.Fatalf("write aborted fragment: %v", err)
+	}
+	aborted.Abort()
+
+	finalPath := filepath.Join(t.TempDir(), "final.zst")
+	entry, err := writeCompressedJSONLines(finalPath, CompressionZstd, DefaultZstdLevel, []FragmentNode{{ID: "final"}})
+	if err != nil {
+		t.Fatalf("write after abort: %v", err)
+	}
+	if err := verifyChecksum(finalPath, entry.SHA256, entry.CompressedBytes); err != nil {
+		t.Fatalf("verify after abort: %v", err)
 	}
 }
 

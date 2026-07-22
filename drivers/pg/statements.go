@@ -3,8 +3,20 @@ package pg
 const (
 	createNodeStatement               = `insert into node (graph_id, kind_ids, properties) values (@graph_id, @kind_ids, @properties) returning (id, kind_ids, properties)::nodeComposite;`
 	createNodeWithoutIDBatchStatement = `insert into node (graph_id, kind_ids, properties) select $1, unnest($2::text[])::int2[], unnest($3::jsonb[])`
-	createNodeWithIDBatchStatement    = `insert into node (graph_id, id, kind_ids, properties) select $1, unnest($2::int8[]), unnest($3::text[])::int2[], unnest($4::jsonb[])`
-	deleteNodeWithIDStatement         = `delete from node where node.id = any($1)`
+	createNodesReturningIDsStatement  = `with input as (
+select ordinality, kind_ids, properties
+from unnest($2::text[], $3::jsonb[]) with ordinality as rows(kind_ids, properties, ordinality)
+), prepared as materialized (
+select ordinality, nextval(pg_get_serial_sequence('node', 'id')) as id, kind_ids::int2[] as kind_ids, properties
+from input
+), inserted as (
+insert into node (graph_id, id, kind_ids, properties)
+select $1, id, kind_ids, properties from prepared order by ordinality
+returning id
+)
+select prepared.ordinality, prepared.id from prepared join inserted using (id) order by prepared.ordinality`
+	createNodeWithIDBatchStatement = `insert into node (graph_id, id, kind_ids, properties) select $1, unnest($2::int8[]), unnest($3::text[])::int2[], unnest($4::jsonb[])`
+	deleteNodeWithIDStatement      = `delete from node where node.id = any($1)`
 
 	createEdgeStatement = `insert into edge (graph_id, start_id, end_id, kind_id, properties) values (@graph_id, @start_id, @end_id, @kind_id, @properties) returning (id, start_id, end_id, kind_id, properties)::edgeComposite;`
 

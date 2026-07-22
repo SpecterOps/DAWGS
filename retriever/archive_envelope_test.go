@@ -176,6 +176,20 @@ func TestEncryptedCollectionArchiveProgressCallbacks(t *testing.T) {
 	if !progressEventsContain(events, OperationUnpack, "retriever archive unpacking completed") {
 		t.Fatalf("missing unpack completion progress event: %+v", events)
 	}
+
+	var integrityEvent *ProgressEvent
+	for index := range events {
+		if events[index].Message == "retriever archive fragment integrity validated during extraction" {
+			integrityEvent = &events[index]
+			break
+		}
+	}
+	if integrityEvent == nil || integrityEvent.CompressedBytesRead <= 0 || integrityEvent.FragmentPasses != 1 {
+		t.Fatalf("missing single-pass extraction integrity telemetry: %+v", integrityEvent)
+	}
+	if integrityEvent.HeapAlloc == 0 || integrityEvent.HeapInuse == 0 || integrityEvent.Sys == 0 {
+		t.Fatalf("missing runtime telemetry: %+v", integrityEvent)
+	}
 }
 
 func TestUnpackOptionsStreamRoundTripAndForceSafety(t *testing.T) {

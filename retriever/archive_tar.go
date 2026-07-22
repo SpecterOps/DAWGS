@@ -2,6 +2,8 @@ package retriever
 
 import (
 	"archive/tar"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -247,6 +249,40 @@ func UnpackTar(reader io.Reader, outputDir string, force bool) error {
 }
 
 func UnpackTarWithOptions(reader io.Reader, outputDir string, force bool, options ArchiveOptions) error {
+	_, err := unpackTarWithOptions(reader, outputDir, force, options, false)
+	return err
+}
+
+type unpackedFileIntegrity struct {
+	compressedBytes int64
+	sha256          string
+}
+
+func unpackCollectionTarWithOptions(reader io.Reader, outputDir string, force bool, options ArchiveOptions) error {
+	files, err := unpackTarWithOptions(reader, outputDir, force, options, true)
+	if err != nil {
+		return err
+	}
+
+	manifest, err := validateExtractedCollection(outputDir, files)
+	if err != nil {
+		return err
+	}
+
+	compressedBytes, _ := manifestFragmentBytes(manifest)
+	options.Progress.emit(ProgressEvent{
+		Operation:           OperationUnpack,
+		Message:             "retriever archive fragment integrity validated during extraction",
+		OutputDir:           outputDir,
+		FileCount:           manifestFileCount(manifest),
+		CompressedBytesRead: compressedBytes,
+		FragmentPasses:      1,
+	})
+
+	return nil
+}
+
+func unpackTarWithOptions(reader io.Reader, outputDir string, force bool, options ArchiveOptions, trackIntegrity bool) (map[string]unpackedFileIntegrity, error) {
 	slog.Info("retriever archive unpacking started",
 		slog.String("output_dir", outputDir),
 		slog.Bool("force", force),
@@ -258,11 +294,15 @@ func UnpackTarWithOptions(reader io.Reader, outputDir string, force bool, option
 	})
 
 	if err := prepareOutputDirectory(outputDir, force); err != nil {
-		return err
+		return nil, err
 	}
 
 	tarReader := tar.NewReader(reader)
 	seen := map[string]struct{}{}
+	var integrity map[string]unpackedFileIntegrity
+	if trackIntegrity {
+		integrity = map[string]unpackedFileIntegrity{}
+	}
 	var fileCount int
 	startedAt := time.Now()
 
@@ -273,30 +313,34 @@ func UnpackTarWithOptions(reader io.Reader, outputDir string, force bool, option
 		}
 
 		if err != nil {
-			return fmt.Errorf("read tar entry: %w", err)
+			return nil, fmt.Errorf("read tar entry: %w", err)
 		}
 
 		relativePath, err := sanitizeArchivePath(header.Name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if _, ok := seen[relativePath]; ok {
-			return fmt.Errorf("tar archive contains duplicate path %q", relativePath)
+			return nil, fmt.Errorf("tar archive contains duplicate path %q", relativePath)
 		}
 
 		seen[relativePath] = struct{}{}
 
 		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
-			return fmt.Errorf("tar archive path %q is not a regular file", relativePath)
+			return nil, fmt.Errorf("tar archive path %q is not a regular file", relativePath)
 		}
 
 		if header.Size < 0 {
-			return fmt.Errorf("tar archive path %q has negative size", relativePath)
+			return nil, fmt.Errorf("tar archive path %q has negative size", relativePath)
 		}
 
-		if err := unpackTarFile(tarReader, outputDir, relativePath, header.Size); err != nil {
-			return err
+		fileIntegrity, err := unpackTarFileTracked(tarReader, outputDir, relativePath, header.Size, trackIntegrity)
+		if err != nil {
+			return nil, err
+		}
+		if trackIntegrity {
+			integrity[relativePath] = fileIntegrity
 		}
 
 		fileCount++
@@ -325,7 +369,7 @@ func UnpackTarWithOptions(reader io.Reader, outputDir string, force bool, option
 		Elapsed:   time.Since(startedAt),
 	})
 
-	return nil
+	return integrity, nil
 }
 
 func unpackTar(reader io.Reader, outputDir string, force bool) error {
@@ -333,35 +377,89 @@ func unpackTar(reader io.Reader, outputDir string, force bool) error {
 }
 
 func unpackTarFile(reader io.Reader, outputDir, relativePath string, expectedSize int64) error {
+	_, err := unpackTarFileTracked(reader, outputDir, relativePath, expectedSize, false)
+	return err
+}
+
+func unpackTarFileTracked(reader io.Reader, outputDir, relativePath string, expectedSize int64, trackIntegrity bool) (unpackedFileIntegrity, error) {
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
-		return fmt.Errorf("create parent directory for %q: %w", relativePath, err)
+		return unpackedFileIntegrity{}, fmt.Errorf("create parent directory for %q: %w", relativePath, err)
 	}
 
 	file, err := os.OpenFile(absolutePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return fmt.Errorf("create unpacked file %q: %w", relativePath, err)
+		return unpackedFileIntegrity{}, fmt.Errorf("create unpacked file %q: %w", relativePath, err)
 	}
 
-	copied, copyErr := io.Copy(file, reader)
+	var (
+		hasher           = sha256.New()
+		target io.Writer = file
+	)
+	if trackIntegrity {
+		target = io.MultiWriter(file, hasher)
+	}
+	copied, copyErr := io.Copy(target, reader)
 	closeErr := file.Close()
 
 	if copyErr != nil {
 		_ = os.Remove(absolutePath)
-		return fmt.Errorf("write unpacked file %q: %w", relativePath, copyErr)
+		return unpackedFileIntegrity{}, fmt.Errorf("write unpacked file %q: %w", relativePath, copyErr)
 	}
 
 	if closeErr != nil {
 		_ = os.Remove(absolutePath)
-		return fmt.Errorf("close unpacked file %q: %w", relativePath, closeErr)
+		return unpackedFileIntegrity{}, fmt.Errorf("close unpacked file %q: %w", relativePath, closeErr)
 	}
 
 	if copied != expectedSize {
 		_ = os.Remove(absolutePath)
-		return fmt.Errorf("unpacked file %q size mismatch: expected %d, wrote %d", relativePath, expectedSize, copied)
+		return unpackedFileIntegrity{}, fmt.Errorf("unpacked file %q size mismatch: expected %d, wrote %d", relativePath, expectedSize, copied)
 	}
 
-	return nil
+	result := unpackedFileIntegrity{compressedBytes: copied}
+	if trackIntegrity {
+		result.sha256 = hex.EncodeToString(hasher.Sum(nil))
+	}
+	return result, nil
+}
+
+func validateExtractedCollection(outputDir string, files map[string]unpackedFileIntegrity) (Manifest, error) {
+	nextManifest, err := readManifest(outputDir)
+	if err != nil {
+		return Manifest{}, err
+	}
+
+	expectedPaths, err := archivePathsFromManifest(nextManifest)
+	if err != nil {
+		return Manifest{}, err
+	}
+	expected := make(map[string]struct{}, len(expectedPaths))
+	for _, relativePath := range expectedPaths {
+		expected[relativePath] = struct{}{}
+	}
+	for relativePath := range files {
+		if _, found := expected[relativePath]; !found {
+			return Manifest{}, fmt.Errorf("unpacked archive contains unexpected file %q", relativePath)
+		}
+	}
+	for _, relativePath := range expectedPaths {
+		if _, found := files[relativePath]; !found {
+			return Manifest{}, fmt.Errorf("unpacked archive is missing file %q", relativePath)
+		}
+	}
+
+	for _, graphEntry := range nextManifest.Graphs {
+		for _, fileEntry := range graphEntry.Files {
+			actual := files[fileEntry.Path]
+			absolutePath := filepath.Join(outputDir, filepath.FromSlash(fileEntry.Path))
+			if err := verifyChecksumValues(absolutePath, fileEntry.SHA256, fileEntry.CompressedBytes, actual.sha256, actual.compressedBytes); err != nil {
+				return Manifest{}, err
+			}
+		}
+	}
+
+	return nextManifest, nil
 }
 
 func sanitizeArchivePath(value string) (string, error) {

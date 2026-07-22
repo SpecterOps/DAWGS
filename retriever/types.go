@@ -24,6 +24,7 @@ type CompressionCodec string
 
 const (
 	CompressionDisabled CompressionCodec = ""
+	CompressionNone     CompressionCodec = "none"
 	CompressionGzip     CompressionCodec = "gzip"
 	CompressionZstd     CompressionCodec = "zstd"
 )

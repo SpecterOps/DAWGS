@@ -23,6 +23,8 @@ type QueryBuilder struct {
 
 	query    *cypher.RegularQuery
 	order    *cypher.Order
+	skip     *cypher.Skip
+	limit    *cypher.Limit
 	prepared bool
 }
 
@@ -63,6 +65,11 @@ func hasPreparedMatchPattern(readingClause *cypher.ReadingClause) bool {
 
 func (s *QueryBuilder) Apply(criteria graph.Criteria) {
 	switch typedCriteria := criteria.(type) {
+	case []graph.Criteria:
+		for _, nestedCriteria := range typedCriteria {
+			s.Apply(nestedCriteria)
+		}
+
 	case *cypher.Where:
 		if query.GetFirstReadingClause(s.query) == nil {
 			s.query.SingleQuery.SinglePartQuery.AddReadingClause(&cypher.ReadingClause{
@@ -74,19 +81,19 @@ func (s *QueryBuilder) Apply(criteria graph.Criteria) {
 
 	case *cypher.Return:
 		s.query.SingleQuery.SinglePartQuery.Return = cypher.Copy(typedCriteria)
+		s.applyProjectionModifiers()
 
 	case *cypher.Limit:
-		if s.query.SingleQuery.SinglePartQuery.Return != nil {
-			s.query.SingleQuery.SinglePartQuery.Return.Projection.Limit = cypher.Copy(typedCriteria)
-		}
+		s.limit = cypher.Copy(typedCriteria)
+		s.applyProjectionModifiers()
 
 	case *cypher.Skip:
-		if s.query.SingleQuery.SinglePartQuery.Return != nil {
-			s.query.SingleQuery.SinglePartQuery.Return.Projection.Skip = cypher.Copy(typedCriteria)
-		}
+		s.skip = cypher.Copy(typedCriteria)
+		s.applyProjectionModifiers()
 
 	case *cypher.Order:
 		s.order = cypher.Copy(typedCriteria)
+		s.applyProjectionModifiers()
 
 	case []*cypher.UpdatingClause:
 		for _, updatingClause := range typedCriteria {
@@ -98,6 +105,25 @@ func (s *QueryBuilder) Apply(criteria graph.Criteria) {
 
 	default:
 		panic(fmt.Sprintf("invalid type for dawgs query: %T %+v", criteria, criteria))
+	}
+}
+
+func (s *QueryBuilder) applyProjectionModifiers() {
+	returnClause := s.query.SingleQuery.SinglePartQuery.Return
+	if returnClause == nil || returnClause.Projection == nil {
+		return
+	}
+
+	if s.order != nil {
+		returnClause.Projection.Order = cypher.Copy(s.order)
+	}
+
+	if s.skip != nil {
+		returnClause.Projection.Skip = cypher.Copy(s.skip)
+	}
+
+	if s.limit != nil {
+		returnClause.Projection.Limit = cypher.Copy(s.limit)
 	}
 }
 
@@ -190,14 +216,7 @@ func (s *QueryBuilder) prepareMatch() error {
 
 	// Is there a return clause
 	if spqReturn := s.query.SingleQuery.SinglePartQuery.Return; spqReturn != nil && spqReturn.Projection != nil {
-		// Did we have an order specified?
-		if s.order != nil {
-			if spqReturn.Projection.Order != nil {
-				return fmt.Errorf("order specified twice")
-			}
-
-			s.query.SingleQuery.SinglePartQuery.Return.Projection.Order = s.order
-		}
+		s.applyProjectionModifiers()
 
 		if err := walk.Cypher(s.query.SingleQuery.SinglePartQuery.Return, bindWalk); err != nil {
 			return err

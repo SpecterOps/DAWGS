@@ -20,6 +20,9 @@ type Cache struct {
 type Builder struct {
 	regularQuery *cypher.RegularQuery
 	cache        *Cache
+	order        *cypher.Order
+	skip         *cypher.Skip
+	limit        *cypher.Limit
 }
 
 func NewBuilder(cache *Cache) *Builder {
@@ -240,22 +243,20 @@ func (s *Builder) Apply(criteria ...graph.Criteria) {
 			firstReadingClause.Match.Where = cypher.Copy(typedCriteria)
 
 		case *cypher.Return:
-			s.regularQuery.SingleQuery.SinglePartQuery.Return = typedCriteria
+			s.regularQuery.SingleQuery.SinglePartQuery.Return = cypher.Copy(typedCriteria)
+			s.applyProjectionModifiers()
 
 		case *cypher.Limit:
-			if s.regularQuery.SingleQuery.SinglePartQuery.Return != nil {
-				s.regularQuery.SingleQuery.SinglePartQuery.Return.Projection.Limit = cypher.Copy(typedCriteria)
-			}
+			s.limit = cypher.Copy(typedCriteria)
+			s.applyProjectionModifiers()
 
 		case *cypher.Skip:
-			if s.regularQuery.SingleQuery.SinglePartQuery.Return != nil {
-				s.regularQuery.SingleQuery.SinglePartQuery.Return.Projection.Skip = cypher.Copy(typedCriteria)
-			}
+			s.skip = cypher.Copy(typedCriteria)
+			s.applyProjectionModifiers()
 
 		case *cypher.Order:
-			if s.regularQuery.SingleQuery.SinglePartQuery.Return != nil {
-				s.regularQuery.SingleQuery.SinglePartQuery.Return.Projection.Order = cypher.Copy(typedCriteria)
-			}
+			s.order = cypher.Copy(typedCriteria)
+			s.applyProjectionModifiers()
 
 		case []*cypher.UpdatingClause:
 			for _, updatingClause := range typedCriteria {
@@ -268,5 +269,24 @@ func (s *Builder) Apply(criteria ...graph.Criteria) {
 		default:
 			panic(fmt.Errorf("invalid type for dawgs query: %T %+v", typedCriteria, typedCriteria))
 		}
+	}
+}
+
+func (s *Builder) applyProjectionModifiers() {
+	returnClause := s.regularQuery.SingleQuery.SinglePartQuery.Return
+	if returnClause == nil || returnClause.Projection == nil {
+		return
+	}
+
+	if s.order != nil {
+		returnClause.Projection.Order = cypher.Copy(s.order)
+	}
+
+	if s.skip != nil {
+		returnClause.Projection.Skip = cypher.Copy(s.skip)
+	}
+
+	if s.limit != nil {
+		returnClause.Projection.Limit = cypher.Copy(s.limit)
 	}
 }

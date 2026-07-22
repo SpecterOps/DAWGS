@@ -79,9 +79,10 @@ against a previous JSONL baseline.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports
-PostgreSQL and Neo4j, gzip and zstd compression, checksum validation before
-load, optional deterministic property scrubbing, and a read-throughput benchmark
-mode. It can also package dumps as single HPKE/ML-KEM encrypted TAR archives.
+PostgreSQL and Neo4j, uncompressed, gzip, and zstd fragments, bounded keyset
+scans, resumable dump checkpoints, checksum validation before load, optional
+deterministic property scrubbing, and a read-throughput benchmark mode. It can
+also package dumps as single HPKE/ML-KEM encrypted TAR archives.
 See [cmd/retriever/README.md](cmd/retriever/README.md) for dump, encrypted
 archive, load, scrubbed dump, metrics verification, and benchmark examples.
 The same import/export functionality is available to library consumers from

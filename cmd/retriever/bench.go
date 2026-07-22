@@ -375,29 +375,25 @@ func benchNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph,
 		return benchPhaseResult{}, err
 	}
 
-	_, scanErr := scanEntityBatches(entityScanOptions[*graph.Node]{
-		Total:      planned,
-		BatchSize:  options.BatchSize,
-		EntityName: "node",
-		Read: func(afterID graph.ID, hasAfterID bool, limit int) ([]*graph.Node, error) {
-			readStarted := time.Now()
-			nodes, err := readDatabaseNodes(scanCtx, db, targetGraph, afterID, hasAfterID, limit)
-			processor.addDBReadElapsed(time.Since(readStarted))
+	var (
+		nodes          = make([]*graph.Node, 0, options.BatchSize)
+		nextProgressAt = retrieverInitialProgressAt(planned)
+	)
+	_, scanErr := retriever.ScanDatabaseNodes(scanCtx, db, targetGraph, planned, options.BatchSize, func(node *graph.Node) error {
+		nodes = append(nodes, node)
+		return nil
+	}, func(event retriever.ScanBatchEvent) error {
+		processor.addDBReadElapsed(event.ReadElapsed)
+		if err := processor.handle(nodes); err != nil {
+			return err
+		}
+		nodes = make([]*graph.Node, 0, options.BatchSize)
 
-			return nodes, err
-		},
-		ID: func(node *graph.Node) graph.ID {
-			return node.ID
-		},
-		Handle: func(nodes []*graph.Node) error {
-			return processor.handle(nodes)
-		},
-		LogProgress: func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-			progressResult := processor.snapshot()
-			progressResult.Count = processed
+		progressResult := processor.snapshot()
+		progressResult.Count = event.Processed
+		nextProgressAt = logBenchPhaseProgress(targetGraph.Name, retriever.PhaseNodes, workers, progressResult, planned, startedAt, nextProgressAt)
 
-			return logBenchPhaseProgress(targetGraph.Name, retriever.PhaseNodes, workers, progressResult, planned, startedAt, nextProgressAt)
-		},
+		return nil
 	})
 
 	result, processErr := processor.closeAndWait()
@@ -425,29 +421,25 @@ func benchEdges(ctx context.Context, db graph.Database, targetGraph graph.Graph,
 		return benchPhaseResult{}, err
 	}
 
-	_, scanErr := scanEntityBatches(entityScanOptions[*graph.Relationship]{
-		Total:      planned,
-		BatchSize:  options.BatchSize,
-		EntityName: "relationship",
-		Read: func(afterID graph.ID, hasAfterID bool, limit int) ([]*graph.Relationship, error) {
-			readStarted := time.Now()
-			relationships, err := readDatabaseRelationships(scanCtx, db, targetGraph, afterID, hasAfterID, limit)
-			processor.addDBReadElapsed(time.Since(readStarted))
+	var (
+		relationships  = make([]*graph.Relationship, 0, options.BatchSize)
+		nextProgressAt = retrieverInitialProgressAt(planned)
+	)
+	_, scanErr := retriever.ScanDatabaseRelationships(scanCtx, db, targetGraph, planned, options.BatchSize, func(relationship *graph.Relationship) error {
+		relationships = append(relationships, relationship)
+		return nil
+	}, func(event retriever.ScanBatchEvent) error {
+		processor.addDBReadElapsed(event.ReadElapsed)
+		if err := processor.handle(relationships); err != nil {
+			return err
+		}
+		relationships = make([]*graph.Relationship, 0, options.BatchSize)
 
-			return relationships, err
-		},
-		ID: func(relationship *graph.Relationship) graph.ID {
-			return relationship.ID
-		},
-		Handle: func(relationships []*graph.Relationship) error {
-			return processor.handle(relationships)
-		},
-		LogProgress: func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-			progressResult := processor.snapshot()
-			progressResult.Count = processed
+		progressResult := processor.snapshot()
+		progressResult.Count = event.Processed
+		nextProgressAt = logBenchPhaseProgress(targetGraph.Name, retriever.PhaseEdges, workers, progressResult, planned, startedAt, nextProgressAt)
 
-			return logBenchPhaseProgress(targetGraph.Name, retriever.PhaseEdges, workers, progressResult, planned, startedAt, nextProgressAt)
-		},
+		return nil
 	})
 
 	result, processErr := processor.closeAndWait()

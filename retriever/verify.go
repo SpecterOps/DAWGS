@@ -243,15 +243,9 @@ func collectDatabaseNodeMetrics(ctx context.Context, db graph.Database, targetGr
 	})
 
 	startedAt := time.Now()
-	processed, err := scanDatabaseNodesWithProgressInterval(ctx, db, targetGraph, entitySnapshot.NodeCount, batchSize, progressInterval, func(nodes []*graph.Node) error {
-		for _, node := range nodes {
-			if err := metricsBuilder.observeNode(node.ID.String(), node.Kinds.Strings()); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
+	processed, err := scanDatabaseNodesWithProgressInterval(ctx, db, targetGraph, entitySnapshot.NodeCount, batchSize, progressInterval, func(node *graph.Node) error {
+		return metricsBuilder.observeDatabaseNode(node.ID, node.Kinds.Strings())
+	}, nil, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever metrics node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, progress, progressInterval)
 	})
 	if err != nil {
@@ -305,20 +299,14 @@ func collectDatabaseRelationshipMetrics(ctx context.Context, db graph.Database, 
 	})
 
 	startedAt := time.Now()
-	processed, err := scanDatabaseRelationshipsWithProgressInterval(ctx, db, targetGraph, entitySnapshot.EdgeCount, batchSize, progressInterval, func(relationships []*graph.Relationship) error {
-		for _, relationship := range relationships {
-			kind := ""
-			if relationship.Kind != nil {
-				kind = relationship.Kind.String()
-			}
-
-			if err := metricsBuilder.observeRelationship(relationship.StartID.String(), relationship.EndID.String(), kind); err != nil {
-				return err
-			}
+	processed, err := scanDatabaseRelationshipsWithProgressInterval(ctx, db, targetGraph, entitySnapshot.EdgeCount, batchSize, progressInterval, func(relationship *graph.Relationship) error {
+		kind := ""
+		if relationship.Kind != nil {
+			kind = relationship.Kind.String()
 		}
 
-		return nil
-	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
+		return metricsBuilder.observeDatabaseRelationship(relationship.StartID, relationship.EndID, kind)
+	}, nil, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
 		return logRetrieverEntityProgressInterval("retriever metrics relationship phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, progress, progressInterval)
 	})
 	if err != nil {

@@ -2,6 +2,17 @@ package retriever
 
 import "testing"
 
+func TestProgressEventIncludesRuntimeTelemetry(t *testing.T) {
+	var observed ProgressEvent
+	ProgressFunc(func(event ProgressEvent) {
+		observed = event
+	}).emit(ProgressEvent{Message: "test"})
+
+	if observed.HeapAlloc == 0 || observed.HeapInuse == 0 || observed.Sys == 0 {
+		t.Fatalf("missing runtime memory telemetry: %+v", observed)
+	}
+}
+
 func TestRetrieverNextProgressAtInterval(t *testing.T) {
 	cases := []struct {
 		name           string

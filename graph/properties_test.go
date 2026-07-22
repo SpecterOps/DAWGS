@@ -67,6 +67,52 @@ func TestSizeOfProperties(t *testing.T) {
 
 }
 
+func TestAsPropertiesLeavesMutationTrackingLazy(t *testing.T) {
+	properties := graph.AsProperties(map[string]any{"name": "alice"})
+	if properties.Modified != nil || properties.Deleted != nil {
+		t.Fatalf("read-only properties eagerly allocated tracking maps: %+v", properties)
+	}
+
+	clone := properties.Clone()
+	if clone.Modified != nil || clone.Deleted != nil {
+		t.Fatalf("read-only clone eagerly allocated tracking maps: %+v", clone)
+	}
+	if clone.Get("name").Any() != "alice" {
+		t.Fatalf("read-only clone lost property map: %+v", clone)
+	}
+}
+
+func TestPropertiesMutationsInitializeLazyTracking(t *testing.T) {
+	properties := graph.AsProperties(map[string]any{"delete": "value"})
+	properties.Set("set", "value")
+	properties.Delete("delete")
+
+	if _, ok := properties.Modified["set"]; !ok {
+		t.Fatalf("set property was not tracked: %+v", properties)
+	}
+	if _, ok := properties.Deleted["delete"]; !ok {
+		t.Fatalf("deleted property was not tracked: %+v", properties)
+	}
+
+	merged := graph.NewProperties()
+	merged.Merge(properties)
+	if merged.Get("set").Any() != "value" {
+		t.Fatalf("merge lost set property: %+v", merged)
+	}
+	if _, ok := merged.Modified["set"]; !ok {
+		t.Fatalf("merge lost modified tracking: %+v", merged)
+	}
+	if _, ok := merged.Deleted["delete"]; !ok {
+		t.Fatalf("merge lost deleted tracking: %+v", merged)
+	}
+
+	readOnly := graph.NewProperties()
+	readOnly.Merge(graph.AsProperties(map[string]any{"read": "only"}))
+	if readOnly.Modified != nil || readOnly.Deleted != nil {
+		t.Fatalf("read-only merge allocated tracking maps: %+v", readOnly)
+	}
+}
+
 func TestGetWithFallbackProperties(t *testing.T) {
 	properties := graph.NewProperties()
 

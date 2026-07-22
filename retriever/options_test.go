@@ -35,6 +35,14 @@ func TestOptionsValidate(t *testing.T) {
 		t.Fatalf("valid dump options: %v", err)
 	}
 
+	dump.Force = true
+	dump.Resume = true
+	if err := dump.Validate(); err == nil {
+		t.Fatalf("expected force and resume validation error")
+	}
+	dump.Force = false
+	dump.Resume = false
+
 	dump.Compression = CompressionCodec("zip")
 
 	if err := dump.Validate(); err == nil {

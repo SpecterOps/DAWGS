@@ -2,6 +2,8 @@ package neo4j
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -30,6 +32,97 @@ type batchTransaction struct {
 func (s *batchTransaction) CreateNode(node *graph.Node) error {
 	_, err := s.innerTx.CreateNode(node.Properties, node.Kinds...)
 	return err
+}
+
+func (s *batchTransaction) CreateNodes(nodes []*graph.Node) ([]graph.ID, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
+
+	type nodeCreateGroup struct {
+		labels []string
+		rows   []map[string]any
+	}
+	groups := map[string]*nodeCreateGroup{}
+	for ordinal, node := range nodes {
+		if node == nil {
+			return nil, fmt.Errorf("bulk create node %d is nil", ordinal)
+		}
+
+		labels := node.Kinds.Strings()
+		sort.Strings(labels)
+		labels = compactStrings(labels)
+		key := strings.Join(labels, "\x00")
+		group, found := groups[key]
+		if !found {
+			group = &nodeCreateGroup{labels: labels}
+			groups[key] = group
+		}
+		properties := map[string]any{}
+		if node.Properties != nil {
+			properties = node.Properties.MapOrEmpty()
+		}
+		group.rows = append(group.rows, map[string]any{
+			"ordinal":    ordinal,
+			"properties": properties,
+		})
+	}
+
+	createdIDs := make([]graph.ID, len(nodes))
+	seen := make([]bool, len(nodes))
+	for _, group := range groups {
+		var statement strings.Builder
+		statement.WriteString("unwind $nodes as row create (n")
+		for _, label := range group.labels {
+			statement.WriteString(":")
+			statement.WriteString(label)
+		}
+		statement.WriteString(") set n = row.properties return row.ordinal, id(n)")
+
+		result := s.innerTx.runAndLog(statement.String(), map[string]any{"nodes": group.rows}, len(group.rows))
+		for result.Next() {
+			var ordinal int
+			var id graph.ID
+			if err := result.Scan(&ordinal, &id); err != nil {
+				result.Close()
+				return nil, err
+			}
+			if ordinal < 0 || ordinal >= len(nodes) || seen[ordinal] {
+				result.Close()
+				return nil, fmt.Errorf("bulk create returned invalid node ordinal %d", ordinal)
+			}
+			createdIDs[ordinal] = id
+			seen[ordinal] = true
+		}
+		if err := result.Error(); err != nil {
+			result.Close()
+			return nil, err
+		}
+		result.Close()
+	}
+
+	for ordinal, found := range seen {
+		if !found {
+			return nil, fmt.Errorf("bulk create did not return node ordinal %d", ordinal)
+		}
+	}
+
+	return createdIDs, nil
+}
+
+func compactStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+
+	compacted := values[:1]
+	for _, value := range values[1:] {
+		if value != compacted[len(compacted)-1] {
+			compacted = append(compacted, value)
+		}
+	}
+
+	return compacted
 }
 
 func (s *batchTransaction) CreateRelationship(relationship *graph.Relationship) error {

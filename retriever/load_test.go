@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,6 +15,43 @@ import (
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 )
+
+type loadNodeBatchTestDatabase struct {
+	graph.Database
+	batchSizes []int
+	graphs     []string
+	createdIDs [][]graph.ID
+	failAt     int
+}
+
+func (s *loadNodeBatchTestDatabase) BatchOperation(ctx context.Context, delegate graph.BatchDelegate, _ ...graph.BatchOption) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return delegate(&loadNodeBatchTestBatch{database: s})
+}
+
+type loadNodeBatchTestBatch struct {
+	graph.Batch
+	database *loadNodeBatchTestDatabase
+	graph    string
+}
+
+func (s *loadNodeBatchTestBatch) WithGraph(target graph.Graph) graph.Batch {
+	s.graph = target.Name
+	return s
+}
+
+func (s *loadNodeBatchTestBatch) CreateNodes(nodes []*graph.Node) ([]graph.ID, error) {
+	call := len(s.database.batchSizes) + 1
+	s.database.batchSizes = append(s.database.batchSizes, len(nodes))
+	s.database.graphs = append(s.database.graphs, s.graph)
+	if s.database.failAt == call {
+		return nil, errors.New("injected bulk node failure")
+	}
+	ids := append([]graph.ID(nil), s.database.createdIDs[call-1]...)
+	return ids, nil
+}
 
 func TestRequireEmptyLoadTargets(t *testing.T) {
 	ctx := context.Background()
@@ -141,6 +179,163 @@ func TestResolveFragmentEdge(t *testing.T) {
 	if _, err := resolveFragmentEdge(item, nodeMap); err == nil {
 		t.Fatalf("expected missing end node error")
 	}
+}
+
+func TestNodeIDResolverUsesNumericFastPathAndArbitraryFallback(t *testing.T) {
+	resolver := newNodeIDResolver(4)
+	for sourceID, destinationID := range map[string]graph.ID{
+		"42":      100,
+		"00042":   101,
+		"node-a":  102,
+		"-custom": 103,
+	} {
+		if !resolver.put(sourceID, destinationID) {
+			t.Fatalf("put source ID %q", sourceID)
+		}
+	}
+
+	if len(resolver.numeric) != 1 || len(resolver.fallback) != 3 {
+		t.Fatalf("resolver storage numeric=%d fallback=%d", len(resolver.numeric), len(resolver.fallback))
+	}
+	for sourceID, expected := range map[string]graph.ID{"42": 100, "00042": 101, "node-a": 102, "-custom": 103} {
+		if actual, found := resolver.resolve(sourceID); !found || actual != expected {
+			t.Fatalf("resolve %q = %d, %t; want %d", sourceID, actual, found, expected)
+		}
+		if resolver.put(sourceID, 999) {
+			t.Fatalf("duplicate source ID %q was accepted", sourceID)
+		}
+	}
+	if _, found := resolver.resolve("missing"); found {
+		t.Fatal("missing source ID resolved")
+	}
+}
+
+func TestLoadGraphNodesUsesBoundedCorrelatedBatches(t *testing.T) {
+	dir := t.TempDir()
+	first := writeTestNodeFragment(t, dir, "nodes-1.gz", []FragmentNode{
+		{ID: "1", Kinds: []string{"Node"}},
+		{ID: "arbitrary", Kinds: []string{"Node"}},
+		{ID: "3", Kinds: []string{"Node"}},
+	})
+	second := writeTestNodeFragment(t, dir, "nodes-2.gz", []FragmentNode{
+		{ID: "4", Kinds: []string{"Node"}},
+		{ID: "5", Kinds: []string{"Node"}},
+	})
+	graphEntry := GraphManifest{
+		Name:      "selected",
+		NodeCount: 5,
+		Files:     []FileManifest{first, second},
+	}
+	database := &loadNodeBatchTestDatabase{createdIDs: [][]graph.ID{
+		{300, 100},
+		{900, 200},
+		{700},
+	}}
+
+	resolver, count, err := loadGraphNodes(context.Background(), database, dir, CompressionGzip, graphEntry, 2, nil, 0)
+	if err != nil {
+		t.Fatalf("load graph nodes: %v", err)
+	}
+	if count != 5 || !reflect.DeepEqual(database.batchSizes, []int{2, 2, 1}) {
+		t.Fatalf("count=%d batch sizes=%v", count, database.batchSizes)
+	}
+	if !reflect.DeepEqual(database.graphs, []string{"selected", "selected", "selected"}) {
+		t.Fatalf("batch graph targets = %v", database.graphs)
+	}
+	for sourceID, expectedID := range map[string]graph.ID{
+		"1": 300, "arbitrary": 100, "3": 900, "4": 200, "5": 700,
+	} {
+		if actual, found := resolver.resolve(sourceID); !found || actual != expectedID {
+			t.Fatalf("resolver[%q] = %d, %t; want %d", sourceID, actual, found, expectedID)
+		}
+	}
+}
+
+func TestLoadGraphNodesStopsAtFailedAtomicBatch(t *testing.T) {
+	dir := t.TempDir()
+	file := writeTestNodeFragment(t, dir, "nodes.gz", []FragmentNode{{ID: "1"}, {ID: "2"}, {ID: "3"}})
+	database := &loadNodeBatchTestDatabase{
+		createdIDs: [][]graph.ID{{10, 20}, {30}},
+		failAt:     2,
+	}
+
+	resolver, loaded, err := loadGraphNodes(context.Background(), database, dir, CompressionGzip, GraphManifest{
+		Name: "default", NodeCount: 3, Files: []FileManifest{file},
+	}, 2, nil, 0)
+	if err == nil || !strings.Contains(err.Error(), "injected bulk node failure") {
+		t.Fatalf("expected failed node batch, got resolver=%v loaded=%d err=%v", resolver, loaded, err)
+	}
+	if loaded != 2 || !reflect.DeepEqual(database.batchSizes, []int{2, 1}) {
+		t.Fatalf("loaded=%d batch sizes=%v", loaded, database.batchSizes)
+	}
+}
+
+func TestLoadGraphNodesPropagatesCancellationBeforeMutation(t *testing.T) {
+	dir := t.TempDir()
+	file := writeTestNodeFragment(t, dir, "nodes.gz", []FragmentNode{{ID: "1"}})
+	database := &loadNodeBatchTestDatabase{createdIDs: [][]graph.ID{{10}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	resolver, loaded, err := loadGraphNodes(ctx, database, dir, CompressionGzip, GraphManifest{
+		Name: "default", NodeCount: 1, Files: []FileManifest{file},
+	}, 1, nil, 0)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got resolver=%v loaded=%d err=%v", resolver, loaded, err)
+	}
+	if len(database.batchSizes) != 0 {
+		t.Fatalf("canceled load reached node creator: %v", database.batchSizes)
+	}
+}
+
+func TestVerifyCollectionFragmentsRejectsCrossFragmentDuplicateAndMissingEndpoint(t *testing.T) {
+	t.Run("duplicate node", func(t *testing.T) {
+		dir := t.TempDir()
+		first := writeTestNodeFragment(t, dir, "nodes-1.gz", []FragmentNode{{ID: "1"}})
+		second := writeTestNodeFragment(t, dir, "nodes-2.gz", []FragmentNode{{ID: "1"}})
+		manifest := newValidTestManifest(1)
+		manifest.Graphs = []GraphManifest{{Name: "default", NodeCount: 2, Files: []FileManifest{first, second}}}
+
+		err := verifyCollectionFragments(dir, manifest)
+		if err == nil || !strings.Contains(err.Error(), "duplicate source node ID") {
+			t.Fatalf("expected duplicate source ID error, got %v", err)
+		}
+	})
+
+	t.Run("missing endpoint", func(t *testing.T) {
+		dir := t.TempDir()
+		nodes := writeTestNodeFragment(t, dir, "nodes.gz", []FragmentNode{{ID: "1"}})
+		edges := writeTestEdgeFragment(t, dir, "edges.gz", []FragmentEdge{{StartID: "1", EndID: "missing", Kind: "Edge"}})
+		manifest := newValidTestManifest(1)
+		manifest.Graphs = []GraphManifest{{Name: "default", NodeCount: 1, EdgeCount: 1, Files: []FileManifest{nodes, edges}}}
+
+		err := verifyCollectionFragments(dir, manifest)
+		if err == nil || !strings.Contains(err.Error(), `missing end node "missing"`) {
+			t.Fatalf("expected missing endpoint error, got %v", err)
+		}
+	})
+}
+
+func writeTestNodeFragment(t *testing.T, dir, name string, nodes []FragmentNode) FileManifest {
+	t.Helper()
+	entry, err := writeCompressedJSONLines(filepath.Join(dir, name), CompressionGzip, DefaultZstdLevel, nodes)
+	if err != nil {
+		t.Fatalf("write node fragment: %v", err)
+	}
+	entry.Phase = PhaseNodes
+	entry.Path = name
+	return entry
+}
+
+func writeTestEdgeFragment(t *testing.T, dir, name string, edges []FragmentEdge) FileManifest {
+	t.Helper()
+	entry, err := writeCompressedJSONLines(filepath.Join(dir, name), CompressionGzip, DefaultZstdLevel, edges)
+	if err != nil {
+		t.Fatalf("write edge fragment: %v", err)
+	}
+	entry.Phase = PhaseEdges
+	entry.Path = name
+	return entry
 }
 
 func TestReadLoadManifestRejectsNeo4jMultiGraph(t *testing.T) {

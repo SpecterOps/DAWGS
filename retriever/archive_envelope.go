@@ -324,16 +324,12 @@ func UnpackEncryptedCollectionArchiveWithOptions(reader io.Reader, outputDir str
 		return err
 	}
 
-	if err := UnpackTarWithOptions(archiveReader, outputDir, false, options); err != nil {
+	if err := unpackCollectionTarWithOptions(archiveReader, outputDir, false, options); err != nil {
 		return err
 	}
 
 	if _, err := io.Copy(io.Discard, archiveReader); err != nil {
 		return fmt.Errorf("finish encrypted archive stream: %w", err)
-	}
-
-	if err := validateUnpackedCollection(outputDir); err != nil {
-		return err
 	}
 
 	options.Progress.emit(ProgressEvent{
@@ -393,51 +389,6 @@ func preflightUnpackOutputDirectory(outputDir string, force bool) error {
 
 	if !os.IsNotExist(err) {
 		return fmt.Errorf("inspect output directory: %w", err)
-	}
-
-	return nil
-}
-
-func validateUnpackedCollection(outputDir string) error {
-	nextManifest, err := readManifest(outputDir)
-	if err != nil {
-		return err
-	}
-	if err := verifyManifestFiles(outputDir, nextManifest); err != nil {
-		return err
-	}
-
-	expectedPaths, err := archivePathsFromManifest(nextManifest)
-	if err != nil {
-		return err
-	}
-	expected := make(map[string]struct{}, len(expectedPaths))
-	for _, relativePath := range expectedPaths {
-		expected[relativePath] = struct{}{}
-	}
-
-	if err := filepath.WalkDir(outputDir, func(filePath string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if entry.IsDir() {
-			return nil
-		}
-
-		relativePath, err := filepath.Rel(outputDir, filePath)
-		if err != nil {
-			return err
-		}
-
-		archivePath := filepath.ToSlash(relativePath)
-		if _, ok := expected[archivePath]; !ok {
-			return fmt.Errorf("unpacked archive contains unexpected file %q", archivePath)
-		}
-
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	return nil

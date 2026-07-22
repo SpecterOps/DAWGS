@@ -7,19 +7,60 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
 
 const (
-	DefaultZstdLevel  = 11
-	maxJSONLLineBytes = 10 * 1024 * 1024
+	DefaultZstdLevel       = 3
+	initialJSONLBufferSize = 64 * 1024
+	maxJSONLLineBytes      = 10 * 1024 * 1024
 )
+
+var zstdWriterPools sync.Map
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (s nopWriteCloser) Close() error { return nil }
+
+type pooledZstdWriter struct {
+	encoder  *zstd.Encoder
+	pool     *sync.Pool
+	closed   bool
+	writeErr error
+}
+
+func (s *pooledZstdWriter) Write(value []byte) (int, error) {
+	written, err := s.encoder.Write(value)
+	if err != nil {
+		s.writeErr = errors.Join(s.writeErr, err)
+	}
+	return written, err
+}
+
+func (s *pooledZstdWriter) Close() error {
+	if s.closed {
+		return fmt.Errorf("close zstd writer more than once")
+	}
+	s.closed = true
+
+	closeErr := s.encoder.Close()
+	if s.writeErr != nil || closeErr != nil {
+		return errors.Join(s.writeErr, closeErr)
+	}
+
+	s.pool.Put(s.encoder)
+	return nil
+}
 
 type countingWriter struct {
 	writer io.Writer
@@ -47,7 +88,7 @@ func (s *countingWriter) Write(p []byte) (int, error) {
 
 func ValidateCompression(codec CompressionCodec) error {
 	switch codec {
-	case CompressionGzip, CompressionZstd:
+	case CompressionNone, CompressionGzip, CompressionZstd:
 		return nil
 	default:
 		return ValidationError{Message: fmt.Sprintf("unsupported compression codec %q", codec)}
@@ -60,6 +101,8 @@ func validateCompression(codec CompressionCodec) error {
 
 func compressionExtension(codec CompressionCodec) (string, error) {
 	switch codec {
+	case CompressionNone:
+		return "", nil
 	case CompressionGzip:
 		return ".gz", nil
 	case CompressionZstd:
@@ -71,10 +114,24 @@ func compressionExtension(codec CompressionCodec) (string, error) {
 
 func newCompressionWriter(writer io.Writer, codec CompressionCodec, zstdLevel int) (io.WriteCloser, error) {
 	switch codec {
+	case CompressionNone:
+		return nopWriteCloser{Writer: writer}, nil
 	case CompressionGzip:
 		return gzip.NewWriterLevel(writer, gzip.BestCompression)
 	case CompressionZstd:
-		return zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(zstdLevel)))
+		poolValue, _ := zstdWriterPools.LoadOrStore(zstdLevel, &sync.Pool{})
+		pool := poolValue.(*sync.Pool)
+		if pooled := pool.Get(); pooled != nil {
+			encoder := pooled.(*zstd.Encoder)
+			encoder.Reset(writer)
+			return &pooledZstdWriter{encoder: encoder, pool: pool}, nil
+		}
+
+		encoder, err := zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(zstdLevel)))
+		if err != nil {
+			return nil, err
+		}
+		return &pooledZstdWriter{encoder: encoder, pool: pool}, nil
 	default:
 		return nil, fmt.Errorf("unsupported compression codec %q", codec)
 	}
@@ -82,6 +139,8 @@ func newCompressionWriter(writer io.Writer, codec CompressionCodec, zstdLevel in
 
 func newDecompressionReader(reader io.Reader, codec CompressionCodec) (io.ReadCloser, error) {
 	switch codec {
+	case CompressionNone:
+		return io.NopCloser(reader), nil
 	case CompressionGzip:
 		return gzip.NewReader(reader)
 	case CompressionZstd:
@@ -258,11 +317,15 @@ func readCompressedJSONLinesFromReader[T any](reader io.Reader, codec Compressio
 	}
 
 	scanner := bufio.NewScanner(decompressor)
-	scanner.Buffer(make([]byte, maxJSONLLineBytes), maxJSONLLineBytes)
+	scanner.Buffer(make([]byte, initialJSONLBufferSize), maxJSONLLineBytes+1)
 	count := 0
 	var decodeErr error
 	for scanner.Scan() {
 		line := scanner.Bytes()
+		if len(line) > maxJSONLLineBytes {
+			decodeErr = fmt.Errorf("read JSONL record %d: line exceeds %d bytes", count+1, maxJSONLLineBytes)
+			break
+		}
 		if len(bytes.TrimSpace(line)) == 0 {
 			decodeErr = fmt.Errorf("decode JSONL record %d: blank line", count+1)
 			break

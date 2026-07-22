@@ -14,7 +14,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build manual_integration
+//go:build manual_integration || integration
 
 package main
 
@@ -23,13 +23,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/ops"
+	"github.com/specterops/dawgs/query"
 	"github.com/specterops/dawgs/retriever"
 )
 
@@ -42,10 +43,6 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("infer driver: %v", err)
 	}
-	if driverName != pg.DriverName {
-		t.Skipf("CONNECTION_STRING selects unsupported retriever integration driver %s", driverName)
-	}
-
 	ctx := context.Background()
 	db, _, err := openDatabase(ctx, databaseConfig{
 		Connection: connection,
@@ -90,6 +87,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 		batchSize = 2
 		shardSize = 3
 	)
+	var seededNodeIDs, seededEdgeIDs []graph.ID
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		tx = tx.WithGraph(graph.Graph{
 			Name: graphName,
@@ -110,14 +108,17 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 				return err
 			}
 			nodes = append(nodes, node)
+			seededNodeIDs = append(seededNodeIDs, node.ID)
 		}
 
 		for index := range edgeCount {
-			if _, err := tx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
+			relationship, err := tx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
 				"route": fmt.Sprintf("route-%d", index),
-			})); err != nil {
+			}))
+			if err != nil {
 				return err
 			}
+			seededEdgeIDs = append(seededEdgeIDs, relationship.ID)
 		}
 
 		return nil
@@ -134,6 +135,9 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	if entitySnapshot.NodeCount != nodeCount || entitySnapshot.EdgeCount != edgeCount {
 		t.Fatalf("unexpected seeded graph counts: nodes=%d edges=%d", entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
 	}
+
+	assertBoundedRetrieverScans(t, ctx, db, graph.Graph{Name: graphName}, entitySnapshot, batchSize)
+	assertSkipAndLimit(t, ctx, db, graph.Graph{Name: graphName}, seededNodeIDs, seededEdgeIDs)
 
 	dumpDir := t.TempDir()
 	dumpResult, err := retriever.Dump(ctx, db, driverName, []retriever.GraphTarget{{
@@ -304,5 +308,85 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "node_count") {
 		t.Fatalf("expected mismatch to include node_count, got %v", err)
+	}
+}
+
+func assertBoundedRetrieverScans(t *testing.T, ctx context.Context, db graph.Database, targetGraph graph.Graph, snapshot graphEntitySnapshot, batchSize int) {
+	t.Helper()
+
+	var nodeIDs []graph.ID
+	processed, err := retriever.ScanDatabaseNodes(ctx, db, targetGraph, snapshot.NodeCount, batchSize, func(node *graph.Node) error {
+		nodeIDs = append(nodeIDs, node.ID)
+		return nil
+	}, func(event retriever.ScanBatchEvent) error {
+		if event.Count > batchSize {
+			return fmt.Errorf("node cursor callback count %d exceeds batch size %d", event.Count, batchSize)
+		}
+		return nil
+	})
+	if err != nil || processed != snapshot.NodeCount {
+		t.Fatalf("bounded node scan processed=%d err=%v", processed, err)
+	}
+	assertStrictIDs(t, "node", nodeIDs)
+
+	var edgeIDs []graph.ID
+	processed, err = retriever.ScanDatabaseRelationships(ctx, db, targetGraph, snapshot.EdgeCount, batchSize, func(relationship *graph.Relationship) error {
+		edgeIDs = append(edgeIDs, relationship.ID)
+		return nil
+	}, func(event retriever.ScanBatchEvent) error {
+		if event.Count > batchSize {
+			return fmt.Errorf("relationship cursor callback count %d exceeds batch size %d", event.Count, batchSize)
+		}
+		return nil
+	})
+	if err != nil || processed != snapshot.EdgeCount {
+		t.Fatalf("bounded relationship scan processed=%d err=%v", processed, err)
+	}
+	assertStrictIDs(t, "relationship", edgeIDs)
+}
+
+func assertStrictIDs(t *testing.T, entityName string, ids []graph.ID) {
+	t.Helper()
+	for index := 1; index < len(ids); index++ {
+		if ids[index] <= ids[index-1] {
+			t.Fatalf("%s IDs are not strictly increasing: %v", entityName, ids)
+		}
+	}
+}
+
+func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, targetGraph graph.Graph, nodeIDs, edgeIDs []graph.ID) {
+	t.Helper()
+
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		tx = tx.WithGraph(targetGraph)
+		var actualNodeIDs []graph.ID
+		if err := tx.Nodes().OrderBy(query.NodeID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+			for id := range cursor.Chan() {
+				actualNodeIDs = append(actualNodeIDs, id)
+			}
+			return cursor.Error()
+		}); err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(actualNodeIDs, nodeIDs[1:3]) {
+			return fmt.Errorf("node skip/limit IDs = %v, want %v", actualNodeIDs, nodeIDs[1:3])
+		}
+
+		var actualEdgeIDs []graph.ID
+		if err := tx.Relationships().OrderBy(query.RelationshipID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+			for id := range cursor.Chan() {
+				actualEdgeIDs = append(actualEdgeIDs, id)
+			}
+			return cursor.Error()
+		}); err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(actualEdgeIDs, edgeIDs[1:3]) {
+			return fmt.Errorf("relationship skip/limit IDs = %v, want %v", actualEdgeIDs, edgeIDs[1:3])
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatalf("assert skip and limit: %v", err)
 	}
 }

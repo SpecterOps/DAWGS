@@ -42,6 +42,7 @@ func logRetrieverEntityProgressInterval(message string, graphName string, phaseN
 	}
 
 	elapsed := time.Since(startedAt)
+	telemetry := sampleRuntimeTelemetry()
 	slog.Info(message,
 		slog.String("graph", graphName),
 		slog.String("phase", string(phaseName)),
@@ -49,6 +50,11 @@ func logRetrieverEntityProgressInterval(message string, graphName string, phaseN
 		slog.Int64("planned_count", planned),
 		slog.Duration("wall_elapsed", elapsed),
 		slog.Float64("entities_per_second", perSecond(processed, elapsed)),
+		slog.Uint64("heap_alloc_bytes", telemetry.heapAlloc),
+		slog.Uint64("heap_inuse_bytes", telemetry.heapInuse),
+		slog.Uint64("sys_bytes", telemetry.sys),
+		slog.Uint64("gc_count", uint64(telemetry.numGC)),
+		slog.Uint64("rss_bytes", telemetry.rss),
 	)
 	progress.emit(ProgressEvent{
 		Message:           message,
@@ -58,6 +64,11 @@ func logRetrieverEntityProgressInterval(message string, graphName string, phaseN
 		Planned:           planned,
 		Elapsed:           elapsed,
 		EntitiesPerSecond: perSecond(processed, elapsed),
+		HeapAlloc:         telemetry.heapAlloc,
+		HeapInuse:         telemetry.heapInuse,
+		Sys:               telemetry.sys,
+		NumGC:             telemetry.numGC,
+		RSS:               telemetry.rss,
 	})
 
 	return retrieverNextProgressAtInterval(processed, planned, nextProgressAt, interval)

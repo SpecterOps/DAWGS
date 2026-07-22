@@ -6,15 +6,20 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
-const scrubRulesVersion = "retriever-scrub-v2"
+const (
+	scrubRulesVersion     = "retriever-scrub-v2"
+	maxScrubPropertyPlans = 4096
+)
 
 type PropertyAction string
 
@@ -75,11 +80,35 @@ type compiledShape struct {
 }
 
 type scrubber struct {
-	config           ScrubberConfig
-	preserveKeys     map[string]struct{}
-	referenceKeys    map[string]struct{}
-	shapeRules       []compiledShape
-	identifierLookup map[string]string
+	config              ScrubberConfig
+	preserveKeys        map[string]struct{}
+	referenceKeys       map[string]struct{}
+	sensitiveKeyMarkers []string
+	shapeRules          []compiledShape
+	propertyPlans       map[string]propertyKeyPlan
+	propertyPlansMu     sync.RWMutex
+	mac                 hash.Hash
+	digestBytes         [sha256.Size]byte
+	digestHex           [sha256.Size * 2]byte
+}
+
+type propertyKeyPlan struct {
+	normalized string
+	reference  bool
+	preserve   bool
+	timestamp  bool
+	freeText   bool
+	path       bool
+	script     bool
+	sensitive  bool
+	semantic   bool
+}
+
+type scrubActionCounts struct {
+	preserve     int
+	pseudonymize int
+	redact       int
+	shift        int
 }
 
 var (
@@ -194,13 +223,37 @@ func newScrubber(configReader io.Reader, salt string) (*scrubber, error) {
 		}
 	}
 
+	sensitiveKeyMarkers := make([]string, 0, len(cfg.Classifier.SensitiveKeyMarks))
+	for _, marker := range cfg.Classifier.SensitiveKeyMarks {
+		if normalized := normalizeKey(marker); normalized != "" {
+			sensitiveKeyMarkers = append(sensitiveKeyMarkers, normalized)
+		}
+	}
+
+	saltBytes := []byte(cfg.Salt)
+
 	return &scrubber{
-		config:           cfg,
-		preserveKeys:     preserveKeys,
-		referenceKeys:    referenceKeys,
-		shapeRules:       shapeRules,
-		identifierLookup: map[string]string{},
+		config:              cfg,
+		preserveKeys:        preserveKeys,
+		referenceKeys:       referenceKeys,
+		sensitiveKeyMarkers: sensitiveKeyMarkers,
+		shapeRules:          shapeRules,
+		propertyPlans:       map[string]propertyKeyPlan{},
+		mac:                 hmac.New(sha256.New, saltBytes),
 	}, nil
+}
+
+func (s *scrubber) forGraph() *scrubber {
+	saltBytes := []byte(s.config.Salt)
+	return &scrubber{
+		config:              s.config,
+		preserveKeys:        s.preserveKeys,
+		referenceKeys:       s.referenceKeys,
+		sensitiveKeyMarkers: s.sensitiveKeyMarkers,
+		shapeRules:          s.shapeRules,
+		propertyPlans:       map[string]propertyKeyPlan{},
+		mac:                 hmac.New(sha256.New, saltBytes),
+	}
 }
 
 func (s *scrubber) metadata() ScrubMetadata {
@@ -213,48 +266,22 @@ func (s *scrubber) metadata() ScrubMetadata {
 	}
 }
 
-func (s *scrubber) observeNode(properties map[string]any) {
-	for key, value := range properties {
-		normalized := normalizeKey(key)
-		if _, ok := s.referenceKeys[normalized]; !ok {
-			continue
-		}
-
-		s.observeIdentifier(value)
-	}
-}
-
-func (s *scrubber) observeIdentifier(value any) {
-	switch typed := value.(type) {
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed != "" {
-			s.identifierLookup[trimmed] = s.pseudonymizeString(trimmed, s.classifyString(trimmed))
-		}
-
-	case []any:
-		for _, item := range typed {
-			s.observeIdentifier(item)
-		}
-
-	case []string:
-		for _, item := range typed {
-			s.observeIdentifier(item)
-		}
-	}
-}
-
 func (s *scrubber) scrubProperties(properties map[string]any) (map[string]any, map[string]int) {
+	scrubbed, counts := s.scrubPropertiesWithCounts(properties)
+	return scrubbed, counts.mapValue()
+}
+
+func (s *scrubber) scrubPropertiesWithCounts(properties map[string]any) (map[string]any, scrubActionCounts) {
 	if properties == nil {
-		return map[string]any{}, map[string]int{}
+		return map[string]any{}, scrubActionCounts{}
 	}
 
 	scrubbed := make(map[string]any, len(properties))
-	actionCounts := map[string]int{}
+	var actionCounts scrubActionCounts
 	for key, value := range properties {
 		nextValue, plan := s.scrubProperty(key, value)
 		scrubbed[key] = nextValue
-		actionCounts[string(plan.Action)] += 1
+		actionCounts.add(plan.Action)
 	}
 
 	return scrubbed, actionCounts
@@ -266,50 +293,50 @@ func (s *scrubber) scrubProperty(key string, value any) (any, PropertyPlan) {
 }
 
 func (s *scrubber) planProperty(key string, value any) PropertyPlan {
-	normalizedKey := normalizeKey(key)
+	keyPlan := s.planKey(key)
 	plan := PropertyPlan{
 		Key:    key,
 		Action: actionPreserve,
 	}
 
-	if _, ok := s.referenceKeys[normalizedKey]; ok && isStringLike(value) {
+	if keyPlan.reference && isStringLike(value) {
 		plan.Action = actionPseudonymize
 		plan.Shape = s.classifyValue(value)
 
 		return plan
 	}
 
-	if _, ok := s.preserveKeys[normalizedKey]; ok {
+	if keyPlan.preserve {
 		return plan
 	}
 
-	if isTimestampKey(normalizedKey) {
+	if keyPlan.timestamp {
 		plan.Action = actionShiftTimestamp
 
 		return plan
 	}
 
-	if isFreeTextKey(normalizedKey) {
+	if keyPlan.freeText {
 		plan.Action = actionRedact
 
 		return plan
 	}
 
-	if isPathKey(normalizedKey) {
+	if keyPlan.path {
 		plan.Action = actionPseudonymize
 		plan.Shape = s.classifyValue(value)
 
 		return plan
 	}
 
-	if isScriptKey(normalizedKey) {
+	if keyPlan.script {
 		plan.Action = actionPseudonymize
 		plan.Shape = s.classifyValue(value)
 
 		return plan
 	}
 
-	if s.shouldRedact(normalizedKey, value) {
+	if s.shouldRedact(keyPlan.normalized, value) {
 		plan.Action = actionRedact
 
 		return plan
@@ -322,18 +349,49 @@ func (s *scrubber) planProperty(key string, value any) PropertyPlan {
 		return plan
 	}
 
-	if s.isSensitiveKey(normalizedKey) {
+	if keyPlan.sensitive {
 		plan.Action = actionPseudonymize
 
 		return plan
 	}
 
-	if isSemanticOrgKey(normalizedKey) || isStringLike(value) {
+	if keyPlan.semantic || isStringLike(value) {
 		plan.Action = actionPseudonymize
 		plan.Shape = s.classifyValue(value)
 
 		return plan
 	}
+
+	return plan
+}
+
+func (s *scrubber) planKey(key string) propertyKeyPlan {
+	normalized := normalizeKey(key)
+
+	s.propertyPlansMu.RLock()
+	plan, found := s.propertyPlans[normalized]
+	s.propertyPlansMu.RUnlock()
+	if found {
+		return plan
+	}
+
+	_, plan.reference = s.referenceKeys[normalized]
+	_, plan.preserve = s.preserveKeys[normalized]
+	plan.normalized = normalized
+	plan.timestamp = isTimestampKey(normalized)
+	plan.freeText = isFreeTextKey(normalized)
+	plan.path = isPathKey(normalized)
+	plan.script = isScriptKey(normalized)
+	plan.sensitive = s.isSensitiveKey(normalized)
+	plan.semantic = isSemanticOrgKey(normalized)
+
+	s.propertyPlansMu.Lock()
+	if existing, ok := s.propertyPlans[normalized]; ok {
+		plan = existing
+	} else if len(s.propertyPlans) < maxScrubPropertyPlans {
+		s.propertyPlans[normalized] = plan
+	}
+	s.propertyPlansMu.Unlock()
 
 	return plan
 }
@@ -397,8 +455,8 @@ func (s *scrubber) shouldRedact(normalizedKey string, value any) bool {
 }
 
 func (s *scrubber) isSensitiveKey(normalizedKey string) bool {
-	for _, marker := range s.config.Classifier.SensitiveKeyMarks {
-		if marker = normalizeKey(marker); marker != "" && strings.Contains(normalizedKey, marker) {
+	for _, marker := range s.sensitiveKeyMarkers {
+		if strings.Contains(normalizedKey, marker) {
 			return true
 		}
 	}
@@ -553,10 +611,6 @@ func (s *scrubber) pseudonymizeValue(key string, value any, shape string) any {
 
 	switch typed := value.(type) {
 	case string:
-		if replacement, ok := s.identifierLookup[strings.TrimSpace(typed)]; ok {
-			return replacement
-		}
-
 		if _, ok := s.referenceKeys[normalizedKey]; ok {
 			return s.pseudonymizeString(typed, s.classifyString(typed))
 		}
@@ -636,10 +690,51 @@ func (s *scrubber) fakeDomainSID(digest string) string {
 }
 
 func (s *scrubber) digest(value string) string {
-	mac := hmac.New(sha256.New, []byte(s.config.Salt))
-	mac.Write([]byte(value))
+	s.mac.Reset()
+	_, _ = io.WriteString(s.mac, value)
+	digest := s.mac.Sum(s.digestBytes[:0])
+	hex.Encode(s.digestHex[:], digest)
+	result := string(s.digestHex[:])
+	clear(s.digestBytes[:])
+	clear(s.digestHex[:])
 
-	return hex.EncodeToString(mac.Sum(nil))
+	return result
+}
+
+func (s *scrubActionCounts) add(action PropertyAction) {
+	switch action {
+	case actionPreserve:
+		s.preserve++
+	case actionPseudonymize:
+		s.pseudonymize++
+	case actionRedact:
+		s.redact++
+	case actionShiftTimestamp:
+		s.shift++
+	}
+}
+
+func (s *scrubActionCounts) addCounts(other scrubActionCounts) {
+	s.preserve += other.preserve
+	s.pseudonymize += other.pseudonymize
+	s.redact += other.redact
+	s.shift += other.shift
+}
+
+func (s scrubActionCounts) mapValue() map[string]int {
+	result := map[string]int{}
+	for action, count := range map[PropertyAction]int{
+		actionPreserve:       s.preserve,
+		actionPseudonymize:   s.pseudonymize,
+		actionRedact:         s.redact,
+		actionShiftTimestamp: s.shift,
+	} {
+		if count > 0 {
+			result[string(action)] = count
+		}
+	}
+
+	return result
 }
 
 func intFromHex(value string) int {

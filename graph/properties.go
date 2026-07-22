@@ -235,16 +235,29 @@ type Properties struct {
 }
 
 func (s *Properties) Merge(other *Properties) {
+	if other == nil {
+		return
+	}
+
+	if len(other.Map) > 0 && s.Map == nil {
+		s.Map = make(map[string]any, len(other.Map))
+	}
 	for otherKey, otherValue := range other.Map {
 		s.Map[otherKey] = otherValue
 	}
 
+	if len(other.Modified) > 0 && s.Modified == nil {
+		s.Modified = make(map[string]struct{}, len(other.Modified))
+	}
 	for otherModifiedKey := range other.Modified {
 		s.Modified[otherModifiedKey] = struct{}{}
 
 		delete(s.Deleted, otherModifiedKey)
 	}
 
+	if len(other.Deleted) > 0 && s.Deleted == nil {
+		s.Deleted = make(map[string]struct{}, len(other.Deleted))
+	}
 	for otherDeletedKey := range other.Deleted {
 		s.Deleted[otherDeletedKey] = struct{}{}
 
@@ -376,22 +389,27 @@ func (s *Properties) SetAll(other map[string]any) *Properties {
 }
 
 func (s *Properties) Clone() *Properties {
-	newProperties := &Properties{
-		Map:      map[string]any{},
-		Deleted:  map[string]struct{}{},
-		Modified: map[string]struct{}{},
+	newProperties := &Properties{}
+
+	if s.Map != nil {
+		newProperties.Map = make(map[string]any, len(s.Map))
+		for key, value := range s.Map {
+			newProperties.Map[key] = value
+		}
 	}
 
-	for key, value := range s.Map {
-		newProperties.Map[key] = value
+	if s.Modified != nil {
+		newProperties.Modified = make(map[string]struct{}, len(s.Modified))
+		for key := range s.Modified {
+			newProperties.Modified[key] = struct{}{}
+		}
 	}
 
-	for key := range s.Modified {
-		newProperties.Modified[key] = struct{}{}
-	}
-
-	for key := range s.Deleted {
-		newProperties.Deleted[key] = struct{}{}
+	if s.Deleted != nil {
+		newProperties.Deleted = make(map[string]struct{}, len(s.Deleted))
+		for key := range s.Deleted {
+			newProperties.Deleted[key] = struct{}{}
+		}
 	}
 
 	return newProperties
@@ -502,11 +520,7 @@ func NewProperties() *Properties {
 }
 
 func NewPropertiesRed() *Properties {
-	return &Properties{
-		Map:      map[string]any{},
-		Modified: make(map[string]struct{}),
-		Deleted:  make(map[string]struct{}),
-	}
+	return &Properties{}
 }
 
 type PropertyMap map[String]any
@@ -536,8 +550,6 @@ func AsProperties[T PropertyMap | map[String]any | map[string]any](rawStore T) *
 	}
 
 	return &Properties{
-		Map:      store,
-		Modified: make(map[string]struct{}),
-		Deleted:  make(map[string]struct{}),
+		Map: store,
 	}
 }

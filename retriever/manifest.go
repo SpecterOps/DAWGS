@@ -75,3 +75,26 @@ func verifyManifestFiles(inputDir string, value Manifest) error {
 
 	return nil
 }
+
+func manifestFragmentBytes(value Manifest) (int64, int64) {
+	var compressedBytes, uncompressedBytes int64
+	for _, graphEntry := range value.Graphs {
+		for _, fileEntry := range graphEntry.Files {
+			compressedBytes += fileEntry.CompressedBytes
+			uncompressedBytes += fileEntry.UncompressedBytes
+		}
+	}
+
+	return compressedBytes, uncompressedBytes
+}
+
+func graphPhaseFragmentBytes(value GraphManifest, phase Phase) (int64, int64) {
+	var compressedBytes, uncompressedBytes int64
+	for _, fileEntry := range value.Files {
+		if fileEntry.Phase == phase {
+			compressedBytes += fileEntry.CompressedBytes
+			uncompressedBytes += fileEntry.UncompressedBytes
+		}
+	}
+	return compressedBytes, uncompressedBytes
+}

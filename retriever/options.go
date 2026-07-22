@@ -30,33 +30,42 @@ type GraphTarget struct {
 }
 
 type ProgressEvent struct {
-	Operation         string
-	Message           string
-	Driver            string
-	Graph             string
-	Phase             Phase
-	InputDir          string
-	OutputDir         string
-	ArchivePath       string
-	GraphIndex        int
-	GraphCount        int
-	FileCount         int
-	BatchSize         int
-	ShardSize         int
-	Processed         int64
-	Planned           int64
-	NodeCount         int64
-	EdgeCount         int64
-	Compression       CompressionCodec
-	Scrub             ScrubMode
-	Elapsed           time.Duration
-	EntitiesPerSecond float64
+	Operation             string
+	Message               string
+	Driver                string
+	Graph                 string
+	Phase                 Phase
+	InputDir              string
+	OutputDir             string
+	ArchivePath           string
+	GraphIndex            int
+	GraphCount            int
+	FileCount             int
+	BatchSize             int
+	ShardSize             int
+	Processed             int64
+	Planned               int64
+	NodeCount             int64
+	EdgeCount             int64
+	Compression           CompressionCodec
+	Scrub                 ScrubMode
+	Elapsed               time.Duration
+	EntitiesPerSecond     float64
+	HeapAlloc             uint64
+	HeapInuse             uint64
+	Sys                   uint64
+	NumGC                 uint32
+	RSS                   uint64
+	CompressedBytesRead   int64
+	DecompressedBytesRead int64
+	FragmentPasses        int64
 }
 
 type ProgressFunc func(ProgressEvent)
 
 func (s ProgressFunc) emit(event ProgressEvent) {
 	if s != nil {
+		event.withRuntimeTelemetry()
 		s(event)
 	}
 }
@@ -64,6 +73,7 @@ func (s ProgressFunc) emit(event ProgressEvent) {
 type DumpOptions struct {
 	OutputDir        string
 	Force            bool
+	Resume           bool
 	Scrub            ScrubMode
 	Salt             string
 	ScrubConfig      io.Reader
@@ -90,6 +100,10 @@ func DefaultDumpOptions(outputDir string) DumpOptions {
 func (s DumpOptions) Validate() error {
 	if strings.TrimSpace(s.OutputDir) == "" {
 		return ValidationError{Message: "output directory is required; pass -out"}
+	}
+
+	if s.Force && s.Resume {
+		return ValidationError{Message: "force and resume are mutually exclusive"}
 	}
 
 	if err := ValidateCompression(s.Compression); err != nil {

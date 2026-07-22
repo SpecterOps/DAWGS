@@ -6,10 +6,12 @@
 // callers that need to inspect or transform collection contents directly.
 //
 // Default option constructors mirror the CLI defaults. Callers can attach a
-// ProgressFunc to receive structured operation, phase, archive, and periodic
-// scan progress events. Validation, compatibility, checksum, metrics, and
-// count mismatch failures have typed error values for errors.As checks. Dump,
-// Load, Verify, Unpack, and Keygen provide option-based entry points.
+// ProgressFunc to receive structured operation, phase, archive, periodic scan,
+// runtime-memory, and fragment-I/O progress events. DumpOptions.Resume resumes
+// an interrupted dump from its validated per-fragment checkpoint. Validation,
+// compatibility, checksum, metrics, and count mismatch failures have typed
+// error values for errors.As checks. Dump, Load, Verify, Unpack, and Keygen
+// provide option-based entry points.
 //
 // Archive APIs are available in both stream-oriented and path-oriented forms.
 // Stream-oriented encrypted archive functions use the standard library

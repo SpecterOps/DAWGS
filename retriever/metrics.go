@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/specterops/dawgs/graph"
 )
 
 const (
@@ -56,12 +58,25 @@ type metricsBuilder struct {
 	graphName             string
 	nodeCount             int64
 	edgeCount             int64
-	nodeKindByID          map[string]string
-	inDegreeByID          map[string]uint64
-	outDegreeByID         map[string]uint64
-	nodeKindHistogram     map[string]int64
-	edgeKindHistogram     map[string]int64
-	endpointKindHistogram map[string]int64
+	expectedNodeCount     int
+	numericOrdinalByID    map[graph.ID]uint32
+	stringOrdinalByID     map[string]uint32
+	nodeKindRefs          []uint32
+	inDegrees             []uint64
+	outDegrees            []uint64
+	nodeKindRefByKey      map[string]uint32
+	nodeKindKeys          []string
+	edgeKindRefByKey      map[string]uint32
+	edgeKindKeys          []string
+	nodeKindHistogram     map[uint32]int64
+	edgeKindHistogram     map[uint32]int64
+	endpointKindHistogram map[metricEndpointKindRefs]int64
+}
+
+type metricEndpointKindRefs struct {
+	start uint32
+	edge  uint32
+	end   uint32
 }
 
 func newMetricsManifest(graphCount int) MetricsManifest {
@@ -75,15 +90,22 @@ func newMetricsBuilder(graphName string, expectedNodeCount int64) *metricsBuilde
 	if expectedNodeCount < 0 {
 		expectedNodeCount = 0
 	}
+	expectedCapacity := int(expectedNodeCount)
+	if int64(expectedCapacity) != expectedNodeCount {
+		expectedCapacity = 0
+	}
 
 	return &metricsBuilder{
 		graphName:             graphName,
-		nodeKindByID:          make(map[string]string, expectedNodeCount),
-		inDegreeByID:          make(map[string]uint64, expectedNodeCount),
-		outDegreeByID:         make(map[string]uint64, expectedNodeCount),
-		nodeKindHistogram:     map[string]int64{},
-		edgeKindHistogram:     map[string]int64{},
-		endpointKindHistogram: map[string]int64{},
+		expectedNodeCount:     expectedCapacity,
+		nodeKindRefs:          make([]uint32, 0, expectedCapacity),
+		inDegrees:             make([]uint64, 0, expectedCapacity),
+		outDegrees:            make([]uint64, 0, expectedCapacity),
+		nodeKindRefByKey:      map[string]uint32{},
+		edgeKindRefByKey:      map[string]uint32{},
+		nodeKindHistogram:     map[uint32]int64{},
+		edgeKindHistogram:     map[uint32]int64{},
+		endpointKindHistogram: map[metricEndpointKindRefs]int64{},
 	}
 }
 
@@ -96,16 +118,59 @@ func (s *metricsBuilder) observeNode(id string, kinds []string) error {
 		return fmt.Errorf("metrics node observation has empty ID")
 	}
 
-	if _, seen := s.nodeKindByID[id]; seen {
+	if s.numericOrdinalByID != nil {
+		return fmt.Errorf("metrics node observation cannot mix string and numeric IDs")
+	}
+	if s.stringOrdinalByID == nil {
+		s.stringOrdinalByID = make(map[string]uint32, s.expectedNodeCount)
+	}
+	if _, seen := s.stringOrdinalByID[id]; seen {
 		return fmt.Errorf("metrics node observation has duplicate ID %q", id)
 	}
 
-	kindKey := metricKindSetKey(kinds)
-	s.nodeKindByID[id] = kindKey
-	s.nodeKindHistogram[kindKey]++
-	s.nodeCount++
+	ordinal, err := s.appendNode(kinds)
+	if err != nil {
+		return err
+	}
+	s.stringOrdinalByID[id] = ordinal
 
 	return nil
+}
+
+func (s *metricsBuilder) observeDatabaseNode(id graph.ID, kinds []string) error {
+	if s.stringOrdinalByID != nil {
+		return fmt.Errorf("metrics node observation cannot mix numeric and string IDs")
+	}
+	if s.numericOrdinalByID == nil {
+		s.numericOrdinalByID = make(map[graph.ID]uint32, s.expectedNodeCount)
+	}
+	if _, seen := s.numericOrdinalByID[id]; seen {
+		return fmt.Errorf("metrics node observation has duplicate ID %q", id.String())
+	}
+
+	ordinal, err := s.appendNode(kinds)
+	if err != nil {
+		return err
+	}
+	s.numericOrdinalByID[id] = ordinal
+
+	return nil
+}
+
+func (s *metricsBuilder) appendNode(kinds []string) (uint32, error) {
+	if uint64(len(s.nodeKindRefs)) >= uint64(^uint32(0)) {
+		return 0, fmt.Errorf("metrics node observation exceeds compact ordinal capacity")
+	}
+
+	ordinal := uint32(len(s.nodeKindRefs))
+	kindRef := s.internNodeKind(metricKindSetKey(kinds))
+	s.nodeKindRefs = append(s.nodeKindRefs, kindRef)
+	s.inDegrees = append(s.inDegrees, 0)
+	s.outDegrees = append(s.outDegrees, 0)
+	s.nodeKindHistogram[kindRef]++
+	s.nodeCount++
+
+	return ordinal, nil
 }
 
 func (s *metricsBuilder) observeFragmentEdge(edge FragmentEdge) error {
@@ -113,20 +178,72 @@ func (s *metricsBuilder) observeFragmentEdge(edge FragmentEdge) error {
 }
 
 func (s *metricsBuilder) observeRelationship(startID, endID, kind string) error {
-	startKindKey, startFound := s.nodeKindByID[startID]
-	endKindKey, endFound := s.nodeKindByID[endID]
+	if s.stringOrdinalByID == nil {
+		return fmt.Errorf("metrics relationship observation cannot resolve string endpoint IDs")
+	}
+
+	startOrdinal, startFound := s.stringOrdinalByID[startID]
+	endOrdinal, endFound := s.stringOrdinalByID[endID]
 	if !startFound || !endFound {
 		return fmt.Errorf("metrics relationship observation references an endpoint missing from the node scan")
 	}
 
-	edgeKindKey := metricKindKey(kind)
-	s.edgeKindHistogram[edgeKindKey]++
-	s.endpointKindHistogram[metricEndpointKindKey(startKindKey, edgeKindKey, endKindKey)]++
-	s.outDegreeByID[startID]++
-	s.inDegreeByID[endID]++
-	s.edgeCount++
+	s.observeRelationshipOrdinals(startOrdinal, endOrdinal, kind)
 
 	return nil
+}
+
+func (s *metricsBuilder) observeDatabaseRelationship(startID, endID graph.ID, kind string) error {
+	if s.numericOrdinalByID == nil {
+		return fmt.Errorf("metrics relationship observation cannot resolve numeric endpoint IDs")
+	}
+
+	startOrdinal, startFound := s.numericOrdinalByID[startID]
+	endOrdinal, endFound := s.numericOrdinalByID[endID]
+	if !startFound || !endFound {
+		return fmt.Errorf("metrics relationship observation references an endpoint missing from the node scan")
+	}
+
+	s.observeRelationshipOrdinals(startOrdinal, endOrdinal, kind)
+
+	return nil
+}
+
+func (s *metricsBuilder) observeRelationshipOrdinals(startOrdinal, endOrdinal uint32, kind string) {
+	edgeKindRef := s.internEdgeKind(kind)
+	s.edgeKindHistogram[edgeKindRef]++
+	s.endpointKindHistogram[metricEndpointKindRefs{
+		start: s.nodeKindRefs[startOrdinal],
+		edge:  edgeKindRef,
+		end:   s.nodeKindRefs[endOrdinal],
+	}]++
+	s.outDegrees[startOrdinal]++
+	s.inDegrees[endOrdinal]++
+	s.edgeCount++
+}
+
+func (s *metricsBuilder) internNodeKind(key string) uint32 {
+	if reference, found := s.nodeKindRefByKey[key]; found {
+		return reference
+	}
+
+	reference := uint32(len(s.nodeKindKeys))
+	s.nodeKindRefByKey[key] = reference
+	s.nodeKindKeys = append(s.nodeKindKeys, key)
+
+	return reference
+}
+
+func (s *metricsBuilder) internEdgeKind(kind string) uint32 {
+	if reference, found := s.edgeKindRefByKey[kind]; found {
+		return reference
+	}
+
+	reference := uint32(len(s.edgeKindKeys))
+	s.edgeKindRefByKey[kind] = reference
+	s.edgeKindKeys = append(s.edgeKindKeys, metricKindKey(kind))
+
+	return reference
 }
 
 func (s *metricsBuilder) finalize() GraphMetrics {
@@ -134,17 +251,27 @@ func (s *metricsBuilder) finalize() GraphMetrics {
 		Name:                  s.graphName,
 		NodeCount:             s.nodeCount,
 		EdgeCount:             s.edgeCount,
-		NodeKindHistogram:     cloneMetricHistogram(s.nodeKindHistogram),
-		EdgeKindHistogram:     cloneMetricHistogram(s.edgeKindHistogram),
+		NodeKindHistogram:     map[string]int64{},
+		EdgeKindHistogram:     map[string]int64{},
 		InDegreeHistogram:     map[string]int64{},
 		OutDegreeHistogram:    map[string]int64{},
 		TotalDegreeHistogram:  map[string]int64{},
-		EndpointKindHistogram: cloneMetricHistogram(s.endpointKindHistogram),
+		EndpointKindHistogram: map[string]int64{},
 	}
 
-	for id := range s.nodeKindByID {
-		inDegree := s.inDegreeByID[id]
-		outDegree := s.outDegreeByID[id]
+	for kindRef, count := range s.nodeKindHistogram {
+		value.NodeKindHistogram[s.nodeKindKeys[kindRef]] = count
+	}
+	for kindRef, count := range s.edgeKindHistogram {
+		value.EdgeKindHistogram[s.edgeKindKeys[kindRef]] = count
+	}
+	for kindRefs, count := range s.endpointKindHistogram {
+		value.EndpointKindHistogram[metricEndpointKindKey(s.nodeKindKeys[kindRefs.start], s.edgeKindKeys[kindRefs.edge], s.nodeKindKeys[kindRefs.end])] = count
+	}
+
+	for ordinal := range s.nodeKindRefs {
+		inDegree := s.inDegrees[ordinal]
+		outDegree := s.outDegrees[ordinal]
 
 		value.InDegreeHistogram[metricDegreeKey(inDegree)]++
 		value.OutDegreeHistogram[metricDegreeKey(outDegree)]++

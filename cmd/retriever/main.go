@@ -80,6 +80,7 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 		archiveOut     string
 		recipientPath  string
 		scrubConfig    string
+		pprofListen    string
 	)
 
 	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
@@ -89,15 +90,17 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	allGraphs := flags.Bool("all-graphs", false, "Dump every graph discoverable by the selected driver.")
 	flags.StringVar(&cfg.OutputDir, "out", "", "Output collection directory.")
 	flags.BoolVar(&cfg.Force, "force", false, "Replace an existing non-empty output directory.")
+	flags.BoolVar(&cfg.Resume, "resume", false, "Resume an interrupted dump from its validated checkpoint.")
 	flags.StringVar(&archiveOut, "archive-out", "", "Optional encrypted archive output path.")
 	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key for -archive-out.")
 	flags.StringVar(&scrubValue, "scrub", string(cfg.Scrub), "Scrub mode: none or full.")
 	flags.StringVar(&cfg.Salt, "salt", "", "Scrub salt. Overrides RETRIEVER_SCRUB_SALT and is never written.")
 	flags.StringVar(&scrubConfig, "config", "", "Optional retriever TOML config for scrub classifier settings.")
-	flags.StringVar(&compressionVal, "compression", string(cfg.Compression), "Compression codec: zstd or gzip.")
+	flags.StringVar(&compressionVal, "compression", string(cfg.Compression), "Compression codec: zstd, gzip, or none.")
 	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
 	flags.IntVar(&cfg.ShardSize, "shard-size", cfg.ShardSize, "Maximum entities per fragment.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
+	commonPprofFlag(flags, &pprofListen)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -146,6 +149,12 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	} else if strings.TrimSpace(recipientPath) != "" {
 		return fmt.Errorf("-recipient requires -archive-out")
 	}
+
+	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	if err != nil {
+		return err
+	}
+	defer stopPprofServer(profileServer, s.stderr)
 
 	db, driverName, err := openDatabase(ctx, dbCfg)
 	if err != nil {
@@ -249,6 +258,7 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 		inputDir     string
 		archivePath  string
 		identityPath string
+		pprofListen  string
 	)
 
 	flags := flag.NewFlagSet("retriever load", flag.ContinueOnError)
@@ -259,6 +269,7 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	flags.StringVar(&identityPath, "identity", "", "Recipient private key path for -archive.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database write batch size.")
 	flags.BoolVar(&cfg.VerifyMetrics, "verify-metrics", false, "Verify loaded graph metrics against the dump manifest after load.")
+	commonPprofFlag(flags, &pprofListen)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -296,6 +307,12 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 		return err
 	}
 
+	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	if err != nil {
+		return err
+	}
+	defer stopPprofServer(profileServer, s.stderr)
+
 	db, driverName, err := openDatabase(ctx, dbCfg)
 	if err != nil {
 		return err
@@ -313,8 +330,9 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 
 func (s commandRuntime) runVerify(ctx context.Context, args []string) error {
 	var (
-		dbCfg databaseConfig
-		cfg   = retriever.DefaultVerifyOptions("")
+		dbCfg       databaseConfig
+		cfg         = retriever.DefaultVerifyOptions("")
+		pprofListen string
 	)
 
 	flags := flag.NewFlagSet("retriever verify", flag.ContinueOnError)
@@ -322,6 +340,7 @@ func (s commandRuntime) runVerify(ctx context.Context, args []string) error {
 	commonDatabaseFlags(flags, &dbCfg)
 	flags.StringVar(&cfg.InputDir, "in", "", "Input collection directory.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
+	commonPprofFlag(flags, &pprofListen)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -331,6 +350,12 @@ func (s commandRuntime) runVerify(ctx context.Context, args []string) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+
+	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	if err != nil {
+		return err
+	}
+	defer stopPprofServer(profileServer, s.stderr)
 
 	db, driverName, err := openDatabase(ctx, dbCfg)
 	if err != nil {
@@ -355,6 +380,7 @@ func (s commandRuntime) runBench(ctx context.Context, args []string) error {
 		graphs         stringList
 		workers        workerList
 		compressionVal string
+		pprofListen    string
 	)
 
 	cfg.BatchSize = retriever.DefaultBatchSize
@@ -369,9 +395,10 @@ func (s commandRuntime) runBench(ctx context.Context, args []string) error {
 	flags.Var(&workers, "workers", "Comma-separated worker counts.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
 	flags.IntVar(&cfg.SampleSize, "sample-size", cfg.SampleSize, "Maximum nodes and relationships to scan per phase; 0 scans the full graph.")
-	flags.StringVar(&compressionVal, "compression", "", "Optional compression codec to include encode/compress timing: zstd or gzip.")
+	flags.StringVar(&compressionVal, "compression", "", "Optional compression codec to include encode/compress timing: zstd, gzip, or none.")
 	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
 	flags.BoolVar(&cfg.JSONOutput, "json", false, "Emit machine-readable JSON.")
+	commonPprofFlag(flags, &pprofListen)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -388,6 +415,12 @@ func (s commandRuntime) runBench(ctx context.Context, args []string) error {
 	if err := cfg.validate(); err != nil {
 		return err
 	}
+
+	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	if err != nil {
+		return err
+	}
+	defer stopPprofServer(profileServer, s.stderr)
 
 	db, driverName, err := openDatabase(ctx, dbCfg)
 	if err != nil {

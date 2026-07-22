@@ -149,6 +149,63 @@ func TestQueryBuilder_RenderShortestPaths(t *testing.T) {
 	}))
 }
 
+func TestQueryBuilderProjectionModifiersAreOrderIndependent(t *testing.T) {
+	testCases := map[string][]graph.Criteria{
+		"before return": {
+			query.OrderBy(query.NodeID()),
+			query.Limit(7),
+			query.Offset(3),
+			query.Returning(query.Node()),
+		},
+		"after return": {
+			query.Returning(query.Node()),
+			query.Offset(3),
+			query.Limit(7),
+			query.OrderBy(query.NodeID()),
+		},
+		"criteria slice": {
+			[]graph.Criteria{
+				query.OrderBy(query.NodeID()),
+				query.Limit(7),
+				query.Offset(3),
+			},
+			query.Returning(query.Node()),
+		},
+		"last modifier and replacement return win": {
+			query.Returning(query.NodeID()),
+			query.OrderBy(query.NodeProperty("name")),
+			query.OrderBy(query.NodeID()),
+			query.Limit(2),
+			query.Limit(7),
+			query.Offset(1),
+			query.Offset(3),
+			query.Returning(query.Node()),
+		},
+	}
+
+	for name, criteria := range testCases {
+		t.Run(name, func(t *testing.T) {
+			builder := neo4j.NewEmptyQueryBuilder()
+			for _, criterion := range criteria {
+				builder.Apply(criterion)
+			}
+
+			if err := builder.Prepare(); err != nil {
+				t.Fatalf("prepare query: %v", err)
+			}
+
+			rendered, err := builder.Render()
+			if err != nil {
+				t.Fatalf("render query: %v", err)
+			}
+
+			if expected := "match (n) return n order by id(n) asc skip 3 limit 7"; rendered != expected {
+				t.Fatalf("rendered query = %q, want %q", rendered, expected)
+			}
+		})
+	}
+}
+
 func TestQueryBuilder_Render(t *testing.T) {
 	// Node Queries
 	t.Run("Node Count", assertQueryResult(query.SinglePartQuery(

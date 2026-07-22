@@ -82,6 +82,82 @@ func (s *batch) CreateNode(node *graph.Node) error {
 	return s.tryFlush(s.batchWriteSize)
 }
 
+func (s *batch) CreateNodes(nodes []*graph.Node) ([]graph.ID, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
+
+	var (
+		kindIDSlices  = make([]string, len(nodes))
+		properties    = make([]pgtype.JSONB, len(nodes))
+		kindIDEncoder = Int2ArrayEncoder{buffer: &bytes.Buffer{}}
+	)
+	for index, node := range nodes {
+		if node == nil {
+			return nil, fmt.Errorf("bulk create node %d is nil", index)
+		}
+
+		mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, node.Kinds)
+		if err != nil {
+			return nil, fmt.Errorf("unable to map kinds: %w", err)
+		}
+		kindIDSlices[index] = kindIDEncoder.Encode(mappedKindIDs)
+
+		propertiesJSONB, err := pgsql.PropertiesToJSONB(node.Properties)
+		if err != nil {
+			return nil, err
+		}
+		properties[index] = propertiesJSONB
+	}
+
+	graphTarget, err := s.innerTransaction.getTargetGraph()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.innerTransaction.conn.Begin(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(s.ctx)
+
+	rows, err := tx.Query(s.ctx, createNodesReturningIDsStatement, graphTarget.ID, kindIDSlices, properties)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	createdIDs := make([]graph.ID, len(nodes))
+	seen := make([]bool, len(nodes))
+	for rows.Next() {
+		var ordinal int64
+		var id int64
+		if err := rows.Scan(&ordinal, &id); err != nil {
+			return nil, err
+		}
+		if id < 0 || ordinal < 1 || ordinal > int64(len(nodes)) || seen[ordinal-1] {
+			return nil, fmt.Errorf("bulk create returned invalid node ordinal %d", ordinal)
+		}
+		createdIDs[ordinal-1] = graph.ID(id)
+		seen[ordinal-1] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for index, found := range seen {
+		if !found {
+			return nil, fmt.Errorf("bulk create did not return node ordinal %d", index+1)
+		}
+	}
+
+	if err := tx.Commit(s.ctx); err != nil {
+		return nil, err
+	}
+
+	return createdIDs, nil
+}
+
 func (s *batch) Nodes() graph.NodeQuery {
 	return s.innerTransaction.Nodes()
 }

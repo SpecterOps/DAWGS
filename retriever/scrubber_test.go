@@ -1,9 +1,11 @@
 package retriever
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -358,26 +360,168 @@ func TestScrubberPseudonymizesTicketLikeValues(t *testing.T) {
 	}
 }
 
-func TestScrubberIdentifierRegistryConsistency(t *testing.T) {
+func TestScrubberRegistryFreeOutputParityAndReferenceConsistency(t *testing.T) {
 	scrubber, err := newScrubber(nil, "test-salt")
 	if err != nil {
 		t.Fatalf("new scrubber: %v", err)
 	}
 
-	sourceSID := "S-1-5-21-1-2-3-500"
-	scrubber.observeNode(map[string]any{"objectid": sourceSID})
-
-	scrubbed, _ := scrubber.scrubProperties(map[string]any{
-		"objectid":  sourceSID,
-		"owner_sid": sourceSID,
-	})
-
-	if scrubbed["objectid"] != scrubbed["owner_sid"] {
-		t.Fatalf("registry rewrite mismatch: objectid=%#v owner_sid=%#v", scrubbed["objectid"], scrubbed["owner_sid"])
+	type parityGraph struct {
+		nodes []map[string]any
+		edges []map[string]any
 	}
 
-	if scrubbed["objectid"] == sourceSID {
-		t.Fatalf("identifier was not scrubbed")
+	graphs := []parityGraph{
+		{
+			nodes: []map[string]any{
+				{
+					"objectid":           "S-1-5-21-1-2-3-500",
+					"owner_sid":          "S-1-5-21-1-2-3-501",
+					"unrelated_repeat":   "S-1-5-21-1-2-3-500",
+					"domain_sid_history": []any{"S-1-5-21-1-2-3", "", 42},
+					"nested":             map[string]any{"email": "alice@example.com", "values": []any{"alpha", "beta"}},
+					"description":        "free text",
+					"created_at":         "2026-01-01T00:00:00Z",
+					"enabled":            true,
+				},
+				{
+					"objectid":  "S-1-5-21-1-2-3-501",
+					"owner_sid": " S-1-5-21-1-2-3-500 ",
+					"name":      "ALICE",
+					"empty":     "",
+				},
+			},
+			edges: []map[string]any{{
+				"owner_sid": "S-1-5-21-1-2-3-500",
+				"path":      `\\server\share\alice`,
+				"password":  "secret",
+			}},
+		},
+		{
+			nodes: []map[string]any{{
+				"objectid":  "S-1-5-21-9-8-7-1000",
+				"owner_sid": "S-1-5-21-1-2-3-500",
+			}},
+			edges: []map[string]any{{
+				"owner_sid": "S-1-5-21-9-8-7-1000",
+				"office":    "North",
+			}},
+		},
+	}
+
+	legacyLookup := map[string]string{}
+	for _, nextGraph := range graphs {
+		for _, properties := range nextGraph.nodes {
+			legacyObserveNode(scrubber, legacyLookup, properties)
+		}
+	}
+
+	var legacyRecords, registryFreeRecords []any
+	for _, nextGraph := range graphs {
+		for _, properties := range append(append([]map[string]any{}, nextGraph.nodes...), nextGraph.edges...) {
+			legacyProperties, legacyCounts := legacyScrubProperties(scrubber, legacyLookup, properties)
+			registryFreeProperties, registryFreeCounts := scrubber.scrubProperties(properties)
+			legacyRecords = append(legacyRecords, []any{legacyProperties, legacyCounts})
+			registryFreeRecords = append(registryFreeRecords, []any{registryFreeProperties, registryFreeCounts})
+		}
+	}
+
+	legacyJSON, err := json.Marshal(legacyRecords)
+	if err != nil {
+		t.Fatalf("marshal legacy records: %v", err)
+	}
+	registryFreeJSON, err := json.Marshal(registryFreeRecords)
+	if err != nil {
+		t.Fatalf("marshal registry-free records: %v", err)
+	}
+	if string(legacyJSON) != string(registryFreeJSON) {
+		t.Fatalf("registry-free scrub output changed decoded JSONL records\nlegacy: %s\ncurrent: %s", legacyJSON, registryFreeJSON)
+	}
+
+	first := registryFreeRecords[0].([]any)[0].(map[string]any)
+	second := registryFreeRecords[1].([]any)[0].(map[string]any)
+	if first["objectid"] != first["unrelated_repeat"] || first["objectid"] != second["owner_sid"] {
+		t.Fatalf("equal source identifiers did not map consistently: %#v %#v", first, second)
+	}
+	if first["objectid"] == first["owner_sid"] {
+		t.Fatalf("unequal source identifiers unexpectedly collided: %#v", first)
+	}
+}
+
+func legacyObserveNode(scrubber *scrubber, lookup map[string]string, properties map[string]any) {
+	for key, value := range properties {
+		if _, ok := scrubber.referenceKeys[normalizeKey(key)]; !ok {
+			continue
+		}
+		legacyObserveIdentifier(scrubber, lookup, value)
+	}
+}
+
+func legacyObserveIdentifier(scrubber *scrubber, lookup map[string]string, value any) {
+	switch typed := value.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(typed); trimmed != "" {
+			lookup[trimmed] = scrubber.pseudonymizeString(trimmed, scrubber.classifyString(trimmed))
+		}
+	case []any:
+		for _, item := range typed {
+			legacyObserveIdentifier(scrubber, lookup, item)
+		}
+	case []string:
+		for _, item := range typed {
+			legacyObserveIdentifier(scrubber, lookup, item)
+		}
+	}
+}
+
+func legacyScrubProperties(scrubber *scrubber, lookup map[string]string, properties map[string]any) (map[string]any, map[string]int) {
+	scrubbed := make(map[string]any, len(properties))
+	actionCounts := map[string]int{}
+	for key, value := range properties {
+		plan := scrubber.planProperty(key, value)
+		if plan.Action == actionPseudonymize {
+			scrubbed[key] = legacyPseudonymizeValue(scrubber, lookup, key, value, plan.Shape)
+		} else {
+			scrubbed[key] = scrubber.scrubWithPlan(key, value, plan)
+		}
+		actionCounts[string(plan.Action)]++
+	}
+
+	return scrubbed, actionCounts
+}
+
+func legacyPseudonymizeValue(scrubber *scrubber, lookup map[string]string, key string, value any, shape string) any {
+	switch typed := value.(type) {
+	case string:
+		if replacement, ok := lookup[strings.TrimSpace(typed)]; ok {
+			return replacement
+		}
+		if _, ok := scrubber.referenceKeys[normalizeKey(key)]; ok {
+			return scrubber.pseudonymizeString(typed, scrubber.classifyString(typed))
+		}
+		return scrubber.pseudonymizeString(typed, shape)
+	case []any:
+		values := make([]any, 0, len(typed))
+		for _, item := range typed {
+			values = append(values, legacyPseudonymizeValue(scrubber, lookup, key, item, scrubber.classifyValue(item)))
+		}
+		return values
+	case []string:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if replacement, ok := legacyPseudonymizeValue(scrubber, lookup, key, item, scrubber.classifyString(item)).(string); ok {
+				values = append(values, replacement)
+			}
+		}
+		return values
+	case map[string]any:
+		values := make(map[string]any, len(typed))
+		for nestedKey, nestedValue := range typed {
+			values[nestedKey] = legacyPseudonymizeValue(scrubber, lookup, nestedKey, nestedValue, scrubber.classifyValue(nestedValue))
+		}
+		return values
+	default:
+		return value
 	}
 }
 
@@ -392,6 +536,19 @@ func assertScrubbedStringDoesNotContain(t *testing.T, value any, forbidden ...st
 		if strings.Contains(stringValue, next) {
 			t.Fatalf("scrubbed value %q still contains %q", stringValue, next)
 		}
+	}
+}
+
+func TestScrubberPropertyPlanCacheIsBounded(t *testing.T) {
+	scrubber, err := newScrubber(nil, "test-salt")
+	if err != nil {
+		t.Fatalf("new scrubber: %v", err)
+	}
+	for index := 0; index < maxScrubPropertyPlans+100; index++ {
+		scrubber.planKey("unique-property-" + strconv.Itoa(index))
+	}
+	if len(scrubber.propertyPlans) != maxScrubPropertyPlans {
+		t.Fatalf("property plan cache size = %d, want %d", len(scrubber.propertyPlans), maxScrubPropertyPlans)
 	}
 }
 

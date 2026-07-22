@@ -109,6 +109,9 @@ func TestMetricsBuilderFinalizesGraphShape(t *testing.T) {
 	if metrics.Fingerprint == "" || !strings.HasPrefix(metrics.Fingerprint, "sha256:") {
 		t.Fatalf("missing fingerprint: %q", metrics.Fingerprint)
 	}
+	if metrics.Fingerprint != "sha256:ba922f625c06beb94a7f8e97d859eec3aed7c6ded49d5a5fe0a556f87e20d829" {
+		t.Fatalf("metrics fingerprint golden = %q", metrics.Fingerprint)
+	}
 }
 
 func TestMetricsFingerprintStableAcrossObservationOrder(t *testing.T) {
