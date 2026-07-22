@@ -210,10 +210,8 @@ func (s *Driver) WipeGraph(ctx context.Context, retain graph.TransactionDelegate
 
 		return nil
 	})
-// resolveKindIDs maps kinds to their integer IDs, refreshing the schema cache once on a miss. Kinds that remain
-// undefined after the refresh are tolerated and omitted from the result so that callers match no nodes for them
-// rather than erroring.
-func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
+}
+
 // resolveKindIDs maps kinds to their integer IDs, refreshing the schema cache once on a miss. It returns the resolved
 // IDs alongside any kinds that remain undefined after the refresh, so callers can decide whether an unresolved kind is
 // a tolerable no-op (include predicates) or must fail closed (exclude predicates).
