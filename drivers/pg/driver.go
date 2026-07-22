@@ -264,17 +264,7 @@ func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds,
 
 	statement, arguments := buildNodeDeleteStatement(len(includeAny) > 0, includeIDs, excludeIDs)
 
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire connection for node delete: %w", err)
-	}
-	defer conn.Release()
-
-	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
-		return fmt.Errorf("%s: %w", statement, err)
-	}
-
-	return nil
+	return s.execDelete(ctx, "node", statement, arguments...)
 }
 
 // buildNodeDeleteStatement renders the node delete statement and its positional arguments for the given resolved kind
@@ -323,13 +313,20 @@ func (s *Driver) DeleteRelationshipsByKinds(ctx context.Context, kinds graph.Kin
 
 	const statement = "delete from edge where kind_id = any($1::int2[])"
 
+	return s.execDelete(ctx, "relationship", statement, kindIDs)
+}
+
+// execDelete acquires a pooled connection and runs a delete statement, wrapping acquisition and execution errors. label
+// names the delete for the acquire error message; statement and arguments are passed through unchanged so each caller
+// preserves its own SQL, positional arguments, and statement error wrapping.
+func (s *Driver) execDelete(ctx context.Context, label, statement string, arguments ...any) error {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
-		return fmt.Errorf("acquire connection for relationship delete: %w", err)
+		return fmt.Errorf("acquire connection for %s delete: %w", label, err)
 	}
 	defer conn.Release()
 
-	if _, err := conn.Exec(ctx, statement, kindIDs); err != nil {
+	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
 		return fmt.Errorf("%s: %w", statement, err)
 	}
 
