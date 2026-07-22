@@ -134,6 +134,9 @@ func TestPostgreSQLDeleteRelationshipsByKinds(t *testing.T) {
 		if err := deleter.DeleteRelationshipsByKinds(ctx, graph.Kinds{missing}); err != nil {
 			t.Fatalf("DeleteRelationshipsByKinds(missing) failed: %v", err)
 		}
+		if err := deleter.DeleteRelationshipsByKinds(ctx, graph.Kinds{}); err != nil {
+			t.Fatalf("DeleteRelationshipsByKinds(empty) failed: %v", err)
+		}
 		if err := deleter.DeleteRelationshipsByKinds(ctx, nil); err != nil {
 			t.Fatalf("DeleteRelationshipsByKinds(nil) failed: %v", err)
 		}
