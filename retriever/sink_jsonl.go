@@ -172,37 +172,3 @@ func jsonlFragmentPath(graphName string, fragmentPhase Phase, shardNumber int, c
 
 	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s-%06d.jsonl%s", prefix, shardNumber, extension)), nil
 }
-
-func writeNodeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentNode, actionCounts map[string]int) (FileManifest, error) {
-	options.OutputDir = outputDir
-	sink := newJSONLFragmentSink(options, newLocalCollectionWorkspace(outputDir, options.Force), PhaseNodes, func(record FragmentNode) any {
-		return record
-	})
-	summary := shardSummary{
-		ID:           shardID{Graph: graphName, Phase: PhaseNodes, Number: shardNumber},
-		Rows:         len(items),
-		ActionCounts: actionCounts,
-	}
-	metadata, err := writeFragment(context.Background(), sink, summary, items)
-	if err != nil {
-		return FileManifest{}, err
-	}
-	return newJSONLFileManifest(summary, metadata), nil
-}
-
-func writeEdgeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentEdge, actionCounts map[string]int) (FileManifest, error) {
-	options.OutputDir = outputDir
-	sink := newJSONLFragmentSink(options, newLocalCollectionWorkspace(outputDir, options.Force), PhaseEdges, func(record FragmentEdge) any {
-		return record
-	})
-	summary := shardSummary{
-		ID:           shardID{Graph: graphName, Phase: PhaseEdges, Number: shardNumber},
-		Rows:         len(items),
-		ActionCounts: actionCounts,
-	}
-	metadata, err := writeFragment(context.Background(), sink, summary, items)
-	if err != nil {
-		return FileManifest{}, err
-	}
-	return newJSONLFileManifest(summary, metadata), nil
-}

@@ -1,9 +1,6 @@
 package retriever
 
-import (
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 func TestJSONLFragmentPath(t *testing.T) {
 	nodePath, err := jsonlFragmentPath("graph/name", PhaseNodes, 7, CompressionZstd)
@@ -27,44 +24,6 @@ func TestJSONLFragmentPath(t *testing.T) {
 	}
 	if _, err := jsonlFragmentPath("default", PhaseNodes, 0, CompressionGzip); err == nil {
 		t.Fatalf("expected invalid shard number error")
-	}
-}
-
-func TestWriteFragmentMetadata(t *testing.T) {
-	options := DumpOptions{
-		OutputDir:   t.TempDir(),
-		Compression: CompressionGzip,
-		ZstdLevel:   DefaultZstdLevel,
-	}
-
-	fileEntry, err := writeNodeFragment(options.OutputDir, "default", 1, options, []FragmentNode{{
-		ID:         "1",
-		Kinds:      []string{"User"},
-		Properties: map[string]any{"name": "alice"},
-	}}, map[string]int{"pseudonymize": 1})
-	if err != nil {
-		t.Fatalf("write node fragment: %v", err)
-	}
-	if fileEntry.Phase != PhaseNodes || fileEntry.Path != "graphs/default/nodes-000001.jsonl.gz" || fileEntry.Count != 1 {
-		t.Fatalf("unexpected node file Manifest: %+v", fileEntry)
-	}
-	if fileEntry.ActionCounts["pseudonymize"] != 1 {
-		t.Fatalf("missing action count: %+v", fileEntry.ActionCounts)
-	}
-	if _, err := readManifest(filepath.Join(options.OutputDir, "graphs")); err == nil {
-		t.Fatalf("fragment write should not create Manifest")
-	}
-
-	edgeEntry, err := writeEdgeFragment(options.OutputDir, "default", 2, options, []FragmentEdge{{
-		StartID: "1",
-		EndID:   "2",
-		Kind:    "AdminTo",
-	}}, nil)
-	if err != nil {
-		t.Fatalf("write edge fragment: %v", err)
-	}
-	if edgeEntry.Phase != PhaseEdges || edgeEntry.Path != "graphs/default/edges-000002.jsonl.gz" || edgeEntry.Count != 1 {
-		t.Fatalf("unexpected edge file Manifest: %+v", edgeEntry)
 	}
 }
 

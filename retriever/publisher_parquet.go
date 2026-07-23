@@ -10,27 +10,27 @@ import (
 )
 
 const (
-	ParquetManifestFormat   = "retriever-parquet-export-v1"
-	ParquetManifestFileName = "parquet/manifest.json"
-	ParquetSuccessFileName  = "parquet/_SUCCESS"
+	parquetManifestFormat   = "retriever-parquet-export-v1"
+	parquetManifestFileName = "parquet/manifest.json"
+	parquetSuccessFileName  = "parquet/_SUCCESS"
 )
 
-type ParquetManifest struct {
+type parquetManifest struct {
 	Format             string                 `json:"format"`
 	GeneratedAt        time.Time              `json:"generated_at"`
 	Compression        string                 `json:"compression"`
 	PropertiesEncoding string                 `json:"properties_encoding"`
-	Graphs             []ParquetGraphManifest `json:"graphs"`
+	Graphs             []parquetGraphManifest `json:"graphs"`
 }
 
-type ParquetGraphManifest struct {
+type parquetGraphManifest struct {
 	Name      string                `json:"name"`
 	NodeCount int64                 `json:"node_count"`
 	EdgeCount int64                 `json:"edge_count"`
-	Files     []ParquetFileManifest `json:"files"`
+	Files     []parquetFileManifest `json:"files"`
 }
 
-type ParquetFileManifest struct {
+type parquetFileManifest struct {
 	Phase        Phase          `json:"phase"`
 	Path         string         `json:"path"`
 	Count        int            `json:"count"`
@@ -53,26 +53,26 @@ type parquetPublisher interface {
 
 type parquetCollectionPublisher struct {
 	workspace collectionWorkspace
-	manifest  ParquetManifest
-	files     map[string][]ParquetFileManifest
+	manifest  parquetManifest
+	files     map[string][]parquetFileManifest
 }
 
 func newParquetCollectionPublisher(workspace collectionWorkspace, graphCount int) *parquetCollectionPublisher {
 	return &parquetCollectionPublisher{
 		workspace: workspace,
-		manifest: ParquetManifest{
-			Format:             ParquetManifestFormat,
+		manifest: parquetManifest{
+			Format:             parquetManifestFormat,
 			GeneratedAt:        time.Now().UTC(),
 			Compression:        "zstd",
 			PropertiesEncoding: "json",
-			Graphs:             make([]ParquetGraphManifest, 0, graphCount),
+			Graphs:             make([]parquetGraphManifest, 0, graphCount),
 		},
-		files: make(map[string][]ParquetFileManifest, graphCount),
+		files: make(map[string][]parquetFileManifest, graphCount),
 	}
 }
 
 func (s *parquetCollectionPublisher) AddFragment(summary shardSummary, metadata parquetFragmentMetadata) {
-	s.files[summary.ID.Graph] = append(s.files[summary.ID.Graph], ParquetFileManifest{
+	s.files[summary.ID.Graph] = append(s.files[summary.ID.Graph], parquetFileManifest{
 		Phase:        summary.ID.Phase,
 		Path:         metadata.Path,
 		Count:        metadata.Rows,
@@ -83,11 +83,11 @@ func (s *parquetCollectionPublisher) AddFragment(summary shardSummary, metadata 
 }
 
 func (s *parquetCollectionPublisher) AddGraph(name string, nodeCount, edgeCount int64) {
-	s.manifest.Graphs = append(s.manifest.Graphs, ParquetGraphManifest{
+	s.manifest.Graphs = append(s.manifest.Graphs, parquetGraphManifest{
 		Name:      name,
 		NodeCount: nodeCount,
 		EdgeCount: edgeCount,
-		Files:     append([]ParquetFileManifest(nil), s.files[name]...),
+		Files:     append([]parquetFileManifest(nil), s.files[name]...),
 	})
 }
 
@@ -96,11 +96,11 @@ func (s *parquetCollectionPublisher) PublishManifest(ctx context.Context) (strin
 	if err != nil {
 		return "", err
 	}
-	return s.workspace.Publish(ctx, ParquetManifestFileName, payload)
+	return s.workspace.Publish(ctx, parquetManifestFileName, payload)
 }
 
 func (s *parquetCollectionPublisher) PublishSuccess(ctx context.Context) (string, error) {
-	return s.workspace.Publish(ctx, ParquetSuccessFileName, []byte(ParquetManifestFormat+"\n"))
+	return s.workspace.Publish(ctx, parquetSuccessFileName, []byte(parquetManifestFormat+"\n"))
 }
 
 func publishDumpOutputs(ctx context.Context, jsonl collectionPublisher, parquet parquetPublisher) (collectionPublication, parquetPublication, error) {
@@ -128,9 +128,9 @@ func publishDumpOutputs(ctx context.Context, jsonl collectionPublisher, parquet 
 	return jsonlResult, parquetResult, nil
 }
 
-func ReadParquetManifest(outputDir string) (ParquetManifest, error) {
-	var manifest ParquetManifest
-	payload, err := os.ReadFile(filepath.Join(outputDir, filepath.FromSlash(ParquetManifestFileName)))
+func readParquetManifest(outputDir string) (parquetManifest, error) {
+	var manifest parquetManifest
+	payload, err := os.ReadFile(filepath.Join(outputDir, filepath.FromSlash(parquetManifestFileName)))
 	if err != nil {
 		return manifest, fmt.Errorf("read Parquet manifest: %w", err)
 	}
@@ -143,7 +143,7 @@ func ReadParquetManifest(outputDir string) (ParquetManifest, error) {
 	return manifest, nil
 }
 
-func encodeParquetManifest(manifest ParquetManifest) ([]byte, error) {
+func encodeParquetManifest(manifest parquetManifest) ([]byte, error) {
 	if err := manifest.validate(); err != nil {
 		return nil, err
 	}
@@ -154,8 +154,8 @@ func encodeParquetManifest(manifest ParquetManifest) ([]byte, error) {
 	return append(payload, '\n'), nil
 }
 
-func (s ParquetManifest) validate() error {
-	if s.Format != ParquetManifestFormat {
+func (s parquetManifest) validate() error {
+	if s.Format != parquetManifestFormat {
 		return fmt.Errorf("unsupported Parquet manifest format %q", s.Format)
 	}
 	if s.Compression != "zstd" {
@@ -204,8 +204,4 @@ func (s ParquetManifest) validate() error {
 		}
 	}
 	return nil
-}
-
-func (s ParquetManifest) Validate() error {
-	return s.validate()
 }

@@ -20,14 +20,11 @@ func TestJSONLFragmentSinkOwnsWireFormatAndPhysicalMetadata(t *testing.T) {
 		ActionCounts: map[string]int{"preserve": 1},
 	}
 
-	metadata, err := writeFragment(context.Background(), newJSONLNodeSink(options), summary, []normalizedNode{{
+	metadata := writeTestJSONLShard(t, newJSONLNodeSink(options), summary, []normalizedNode{{
 		ID:         "1",
 		Kinds:      []string{"User"},
 		Properties: map[string]any{"name": "alice"},
 	}})
-	if err != nil {
-		t.Fatalf("write JSONL fragment: %v", err)
-	}
 	if metadata.Path != "graphs/graph%2Fname/nodes-000002.jsonl.gz" || metadata.Rows != 1 || metadata.CompressedBytes <= 0 || metadata.UncompressedBytes <= 0 || metadata.SHA256 == "" {
 		t.Fatalf("JSONL metadata = %+v", metadata)
 	}
@@ -55,15 +52,12 @@ func TestJSONLEdgeSinkOmitsSourceRelationshipID(t *testing.T) {
 		ZstdLevel:   DefaultZstdLevel,
 	}
 	summary := shardSummary{ID: shardID{Graph: "example", Phase: PhaseEdges, Number: 1}, Rows: 1}
-	metadata, err := writeFragment(context.Background(), newJSONLEdgeSink(options), summary, []normalizedEdge{{
+	metadata := writeTestJSONLShard(t, newJSONLEdgeSink(options), summary, []normalizedEdge{{
 		ID:      "source-edge-id",
 		StartID: "1",
 		EndID:   "2",
 		Kind:    "MemberOf",
 	}})
-	if err != nil {
-		t.Fatalf("write JSONL edge fragment: %v", err)
-	}
 
 	var records []FragmentEdge
 	if _, err := readCompressedJSONLines(filepath.Join(options.OutputDir, filepath.FromSlash(metadata.Path)), CompressionGzip, func(record FragmentEdge) error {
@@ -77,7 +71,7 @@ func TestJSONLEdgeSinkOmitsSourceRelationshipID(t *testing.T) {
 	}
 }
 
-func TestJSONLFragmentSinkRejectsPhaseAndRowCountMismatch(t *testing.T) {
+func TestJSONLFragmentSinkRejectsPhaseAndOutputRejectsRowCountMismatch(t *testing.T) {
 	options := DumpOptions{
 		OutputDir:   t.TempDir(),
 		Compression: CompressionGzip,
@@ -89,7 +83,15 @@ func TestJSONLFragmentSinkRejectsPhaseAndRowCountMismatch(t *testing.T) {
 	}
 
 	summary := shardSummary{ID: shardID{Graph: "example", Phase: PhaseNodes, Number: 1}, Rows: 2}
-	if _, err := writeFragment(context.Background(), sink, summary, []normalizedNode{{ID: "1"}}); err == nil {
+	output := newShardSinkSet(newJSONLShardSink(sink))
+	writer, err := output.OpenShard(context.Background(), summary.ID)
+	if err != nil {
+		t.Fatalf("open shard: %v", err)
+	}
+	if err := writer.WriteBatch(context.Background(), []normalizedNode{{ID: "1"}}); err != nil {
+		t.Fatalf("write shard: %v", err)
+	}
+	if _, err := writer.Finish(context.Background(), summary); err == nil {
 		t.Fatalf("expected row count mismatch")
 	}
 
@@ -104,4 +106,22 @@ func TestJSONLFragmentSinkRejectsPhaseAndRowCountMismatch(t *testing.T) {
 	if _, err := os.Stat(absolutePath + ".tmp"); !os.IsNotExist(err) {
 		t.Fatalf("staged path exists after prepare failure: %v", err)
 	}
+}
+
+func writeTestJSONLShard[T any](t *testing.T, sink fragmentSink[T, jsonlFragmentMetadata], summary shardSummary, records []T) jsonlFragmentMetadata {
+	t.Helper()
+
+	output := newShardSinkSet(newJSONLShardSink(sink))
+	writer, err := output.OpenShard(context.Background(), summary.ID)
+	if err != nil {
+		t.Fatalf("open JSONL shard: %v", err)
+	}
+	if err := writer.WriteBatch(context.Background(), records); err != nil {
+		t.Fatalf("write JSONL shard: %v", err)
+	}
+	committed, err := writer.Finish(context.Background(), summary)
+	if err != nil {
+		t.Fatalf("finish JSONL shard: %v", err)
+	}
+	return committed.JSONL
 }

@@ -31,7 +31,7 @@ func TestParquetCollectionPublisherCombinesLogicalAndPhysicalMetadata(t *testing
 	if err != nil {
 		t.Fatalf("publish success: %v", err)
 	}
-	stored, err := ReadParquetManifest(workspace.Root())
+	stored, err := readParquetManifest(workspace.Root())
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
@@ -72,12 +72,12 @@ func (s recordingParquetPublisher) AddGraph(string, int64, int64) {}
 
 func (s recordingParquetPublisher) PublishManifest(context.Context) (string, error) {
 	*s.events = append(*s.events, "parquet-manifest")
-	return ParquetManifestFileName, s.manifestErr
+	return parquetManifestFileName, s.manifestErr
 }
 
 func (s recordingParquetPublisher) PublishSuccess(context.Context) (string, error) {
 	*s.events = append(*s.events, "parquet-success")
-	return ParquetSuccessFileName, s.successErr
+	return parquetSuccessFileName, s.successErr
 }
 
 func TestDumpOutputPublicationOrder(t *testing.T) {

@@ -296,7 +296,20 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	nodeFiles, err := dumpNodePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, nodeOutput, parquetPublisher)
+	nodeFiles, err := dumpEntityPhase(
+		ctx,
+		source.Nodes(targetGraph, entitySnapshot.NodeCount, options.BatchSize),
+		dumpPhaseConfig{
+			Graph:   targetGraph.Name,
+			Phase:   PhaseNodes,
+			Planned: entitySnapshot.NodeCount,
+			Options: options,
+		},
+		transform.TransformNodes,
+		observer.ObserveNode,
+		nodeOutput,
+		parquetPublisher,
+	)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -338,7 +351,20 @@ func dumpGraph(ctx context.Context, source graphSource, target GraphTarget, opti
 		ShardSize: options.ShardSize,
 	})
 
-	edgeFiles, err := dumpEdgePhase(ctx, source, targetGraph, options, transform, observer, entitySnapshot, edgeOutput, parquetPublisher)
+	edgeFiles, err := dumpEntityPhase(
+		ctx,
+		source.Edges(targetGraph, entitySnapshot.EdgeCount, options.BatchSize),
+		dumpPhaseConfig{
+			Graph:   targetGraph.Name,
+			Phase:   PhaseEdges,
+			Planned: entitySnapshot.EdgeCount,
+			Options: options,
+		},
+		transform.TransformEdges,
+		observer.ObserveEdge,
+		edgeOutput,
+		parquetPublisher,
+	)
 	if err != nil {
 		return GraphManifest{}, GraphSchemaMetadata{}, GraphMetrics{}, err
 	}
@@ -417,12 +443,27 @@ func prepareTransformSession(ctx context.Context, source graphSource, targetGrap
 	return processed, nil
 }
 
-func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, output shardOutput[normalizedNode], parquetPublisher parquetPublisher) ([]FileManifest, error) {
-	if entitySnapshot.NodeCount == 0 {
+type dumpPhaseConfig struct {
+	Graph   string
+	Phase   Phase
+	Planned int64
+	Options DumpOptions
+}
+
+func dumpEntityPhase[S, T any](
+	ctx context.Context,
+	source faucet[S],
+	config dumpPhaseConfig,
+	transform func([]S) transformedBatch[T],
+	observe func(T, map[string]int) error,
+	output shardOutput[T],
+	parquetPublisher parquetPublisher,
+) ([]FileManifest, error) {
+	if config.Planned == 0 {
 		return nil, nil
 	}
 
-	sharder, err := newLogicalSharder[normalizedNode](targetGraph.Name, PhaseNodes, options.ShardSize)
+	sharder, err := newLogicalSharder[T](config.Graph, config.Phase, config.Options.ShardSize)
 	if err != nil {
 		return nil, err
 	}
@@ -432,24 +473,25 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 		files = append(files, newJSONLFileManifest(summary, committed.JSONL))
 		if committed.Parquet != nil {
 			if parquetPublisher == nil {
-				return fmt.Errorf("received Parquet node fragment without a publisher")
+				return fmt.Errorf("received Parquet %s fragment without a publisher", config.Phase)
 			}
 			parquetPublisher.AddFragment(summary, *committed.Parquet)
 		}
 		return nil
 	})
 
-	if _, err := runFaucetWithProgress(ctx, source.Nodes(targetGraph, entitySnapshot.NodeCount, options.BatchSize), entitySnapshot.NodeCount, options.ProgressInterval, func(nodes []*graph.Node) error {
-		batch := transform.TransformNodes(nodes)
+	if _, err := runFaucetWithProgress(ctx, source, config.Planned, config.Options.ProgressInterval, func(sourceBatch []S) error {
+		batch := transform(sourceBatch)
 		for index, record := range batch.Records {
-			if err := observer.ObserveNode(record, batch.ActionCounts[index]); err != nil {
+			if err := observe(record, batch.ActionCounts[index]); err != nil {
 				return err
 			}
 		}
 
 		return sharder.Add(batch, receiver)
 	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-		return logRetrieverEntityProgressInterval("retriever dump node phase progress", targetGraph.Name, PhaseNodes, processed, entitySnapshot.NodeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
+		message := fmt.Sprintf("retriever dump %s phase progress", dumpPhaseLabel(config.Phase))
+		return logRetrieverEntityProgressInterval(message, config.Graph, config.Phase, processed, config.Planned, startedAt, nextProgressAt, config.Options.Progress, config.Options.ProgressInterval)
 	}); err != nil {
 		return nil, cleanupOnError(err, receiver.Abort)
 	}
@@ -461,48 +503,11 @@ func dumpNodePhase(ctx context.Context, source graphSource, targetGraph graph.Gr
 	return files, nil
 }
 
-func dumpEdgePhase(ctx context.Context, source graphSource, targetGraph graph.Graph, options DumpOptions, transform transformSession, observer *graphObserver, entitySnapshot graphEntitySnapshot, output shardOutput[normalizedEdge], parquetPublisher parquetPublisher) ([]FileManifest, error) {
-	if entitySnapshot.EdgeCount == 0 {
-		return nil, nil
+func dumpPhaseLabel(phase Phase) string {
+	if phase == PhaseEdges {
+		return "edge"
 	}
-
-	sharder, err := newLogicalSharder[normalizedEdge](targetGraph.Name, PhaseEdges, options.ShardSize)
-	if err != nil {
-		return nil, err
-	}
-
-	var files []FileManifest
-	receiver := newShardOutputReceiver(ctx, output, func(summary shardSummary, committed committedShard) error {
-		files = append(files, newJSONLFileManifest(summary, committed.JSONL))
-		if committed.Parquet != nil {
-			if parquetPublisher == nil {
-				return fmt.Errorf("received Parquet edge fragment without a publisher")
-			}
-			parquetPublisher.AddFragment(summary, *committed.Parquet)
-		}
-		return nil
-	})
-
-	if _, err := runFaucetWithProgress(ctx, source.Edges(targetGraph, entitySnapshot.EdgeCount, options.BatchSize), entitySnapshot.EdgeCount, options.ProgressInterval, func(relationships []*graph.Relationship) error {
-		batch := transform.TransformEdges(relationships)
-		for index, record := range batch.Records {
-			if err := observer.ObserveEdge(record, batch.ActionCounts[index]); err != nil {
-				return err
-			}
-		}
-
-		return sharder.Add(batch, receiver)
-	}, func(processed int64, startedAt time.Time, nextProgressAt int64) int64 {
-		return logRetrieverEntityProgressInterval("retriever dump edge phase progress", targetGraph.Name, PhaseEdges, processed, entitySnapshot.EdgeCount, startedAt, nextProgressAt, options.Progress, options.ProgressInterval)
-	}); err != nil {
-		return nil, cleanupOnError(err, receiver.Abort)
-	}
-
-	if err := sharder.Flush(receiver); err != nil {
-		return nil, cleanupOnError(err, receiver.Abort)
-	}
-
-	return files, nil
+	return "node"
 }
 
 func fileTotal(files []FileManifest) int64 {

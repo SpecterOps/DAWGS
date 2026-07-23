@@ -213,23 +213,27 @@ func writeArchiveFixture(t *testing.T) string {
 		Compression: CompressionGzip,
 		ZstdLevel:   DefaultZstdLevel,
 	}
-	nodeEntry, err := writeNodeFragment(dir, "secret-graph", 1, options, []FragmentNode{{
+	nodeSummary := shardSummary{
+		ID:   shardID{Graph: "secret-graph", Phase: PhaseNodes, Number: 1},
+		Rows: 1,
+	}
+	nodeMetadata := writeTestJSONLShard(t, newJSONLNodeSink(options), nodeSummary, []normalizedNode{{
 		ID:         "1",
 		Kinds:      []string{"User"},
 		Properties: map[string]any{"name": "alice"},
-	}}, nil)
-	if err != nil {
-		t.Fatalf("write node fragment: %v", err)
-	}
+	}})
+	nodeEntry := newJSONLFileManifest(nodeSummary, nodeMetadata)
 
-	edgeEntry, err := writeEdgeFragment(dir, "secret-graph", 1, options, []FragmentEdge{{
+	edgeSummary := shardSummary{
+		ID:   shardID{Graph: "secret-graph", Phase: PhaseEdges, Number: 1},
+		Rows: 1,
+	}
+	edgeMetadata := writeTestJSONLShard(t, newJSONLEdgeSink(options), edgeSummary, []normalizedEdge{{
 		StartID: "1",
 		EndID:   "1",
 		Kind:    "MemberOf",
-	}}, nil)
-	if err != nil {
-		t.Fatalf("write edge fragment: %v", err)
-	}
+	}})
+	edgeEntry := newJSONLFileManifest(edgeSummary, edgeMetadata)
 
 	value := newValidTestManifest(1)
 	value.Schema.Graphs = []GraphSchemaMetadata{{

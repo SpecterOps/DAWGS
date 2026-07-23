@@ -88,10 +88,11 @@ archive, load, scrubbed dump, metrics verification, and benchmark examples.
 The same import/export functionality is available to library consumers from
 `github.com/specterops/dawgs/retriever`; callers provide an already-open
 `graph.Database`, and archive helpers support both path-based and stream-based
-APIs. The package exposes CLI-matching default option constructors, structured
-progress callbacks, manifest/metrics helpers, HPKE key envelope reader/writer
-helpers, and typed errors for validation, compatibility, checksum, metrics, and
-count mismatches.
+APIs. Library dumps enable the optional sidecar with `DumpOptions.Parquet` and
+receive its manifest and success-marker paths in `DumpResult`. The package
+exposes CLI-matching default option constructors, structured progress callbacks,
+manifest/metrics helpers, HPKE key envelope reader/writer helpers, and typed
+errors for validation, compatibility, checksum, metrics, and count mismatches.
 
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective

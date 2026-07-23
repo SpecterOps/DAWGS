@@ -79,7 +79,7 @@ func TestDumpWithParquetSidecar(t *testing.T) {
 	if _, err := os.Stat(result.ParquetSuccessPath); err != nil {
 		t.Fatalf("stat Parquet success marker: %v", err)
 	}
-	manifest, err := ReadParquetManifest(outputDir)
+	manifest, err := readParquetManifest(outputDir)
 	if err != nil {
 		t.Fatalf("read Parquet manifest: %v", err)
 	}

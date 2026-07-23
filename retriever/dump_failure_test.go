@@ -225,7 +225,7 @@ func TestRequestedParquetFailurePublishesNoManifestOrSuccessMarker(t *testing.T)
 	)
 	assertShardSinkOperation(t, err, parquetFragmentFormat, shardID{Graph: "source", Phase: PhaseNodes, Number: 1}, "write", failure)
 	assertNoPublishedManifest(t, outputDir)
-	for _, relativePath := range []string{ParquetManifestFileName, ParquetSuccessFileName} {
+	for _, relativePath := range []string{parquetManifestFileName, parquetSuccessFileName} {
 		if _, statErr := os.Stat(filepath.Join(outputDir, filepath.FromSlash(relativePath))); !os.IsNotExist(statErr) {
 			t.Fatalf("%s should not be published, stat error = %v", relativePath, statErr)
 		}
