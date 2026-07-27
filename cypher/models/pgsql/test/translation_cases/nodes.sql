@@ -68,6 +68,9 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n) where (n).`a-aaa` = "123" return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((jsonb_typeof((((s0.n0)).properties -> 'a-aaa')) = 'string' and (((s0.n0)).properties ->> 'a-aaa') = '123'));
 
+-- case: match ()-[r]-() where startNode(r).`something` = "abc" return r
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((jsonb_typeof(((start_node(s0.n0)::nodecomposite).properties -> 'something')) = 'string' and ((start_node(s0.n0)::nodecomposite).properties ->> 'something') = 'abc'));
+
 -- case: match (n:NodeKind1 {name: "SOME NAME"}) return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and (jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = 'SOME NAME')) select s0.n0 as n from s0;
 
