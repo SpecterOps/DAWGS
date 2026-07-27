@@ -1,0 +1,135 @@
+{
+  "cases": [
+    {
+      "name": "BED-8321 multi-step right-bound pattern predicate counts only correlated rows",
+      "cypher": "match (g:NodeKind2) where (:NodeKind1)-[:EdgeKind1]->(:NodeKind2)-[:EdgeKind1]->(g) return count(g)",
+      "fixture": {
+        "nodes": [
+          {"id": "u1", "kinds": ["NodeKind1"], "properties": {"name": "u1"}},
+          {"id": "g1", "kinds": ["NodeKind2"], "properties": {"name": "g1"}},
+          {"id": "g2", "kinds": ["NodeKind2"], "properties": {"name": "g2"}},
+          {"id": "g3", "kinds": ["NodeKind2"], "properties": {"name": "g3"}},
+          {"id": "g4", "kinds": ["NodeKind2"], "properties": {"name": "g4"}}
+        ],
+        "edges": [
+          {"start_id": "u1", "end_id": "g1", "kind": "EdgeKind1"},
+          {"start_id": "g1", "end_id": "g2", "kind": "EdgeKind1"},
+          {"start_id": "u1", "end_id": "g4", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"exact_int": 1}
+    },
+    {
+      "name": "BED-8321 multi-step right-bound pattern predicate returns only the terminal node",
+      "cypher": "match (g:NodeKind2) where (:NodeKind1)-[:EdgeKind1]->(:NodeKind2)-[:EdgeKind1]->(g) return g",
+      "fixture": {
+        "nodes": [
+          {"id": "u1", "kinds": ["NodeKind1"], "properties": {"name": "u1"}},
+          {"id": "g1", "kinds": ["NodeKind2"], "properties": {"name": "g1"}},
+          {"id": "g2", "kinds": ["NodeKind2"], "properties": {"name": "g2"}},
+          {"id": "g3", "kinds": ["NodeKind2"], "properties": {"name": "g3"}},
+          {"id": "g4", "kinds": ["NodeKind2"], "properties": {"name": "g4"}}
+        ],
+        "edges": [
+          {"start_id": "u1", "end_id": "g1", "kind": "EdgeKind1"},
+          {"start_id": "g1", "end_id": "g2", "kind": "EdgeKind1"},
+          {"start_id": "u1", "end_id": "g4", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"node_ids": ["g2"]}
+    },
+    {
+      "name": "BED-8321 multi-step left-facing pattern predicate returns only the terminal node",
+      "cypher": "match (g:NodeKind2) where (g)<-[:EdgeKind1]-(:NodeKind2)<-[:EdgeKind1]-(:NodeKind1) return g",
+      "fixture": {
+        "nodes": [
+          {"id": "u1", "kinds": ["NodeKind1"], "properties": {"name": "u1"}},
+          {"id": "g1", "kinds": ["NodeKind2"], "properties": {"name": "g1"}},
+          {"id": "g2", "kinds": ["NodeKind2"], "properties": {"name": "g2"}},
+          {"id": "g3", "kinds": ["NodeKind2"], "properties": {"name": "g3"}},
+          {"id": "g4", "kinds": ["NodeKind2"], "properties": {"name": "g4"}}
+        ],
+        "edges": [
+          {"start_id": "u1", "end_id": "g1", "kind": "EdgeKind1"},
+          {"start_id": "g1", "end_id": "g2", "kind": "EdgeKind1"},
+          {"start_id": "u1", "end_id": "g4", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"node_ids": ["g2"]}
+    },
+    {
+      "name": "BED-8321 negated multi-step right-bound pattern predicate excludes only the terminal node",
+      "cypher": "match (g:NodeKind2) where not ((:NodeKind1)-[:EdgeKind1]->(:NodeKind2)-[:EdgeKind1]->(g)) return g",
+      "fixture": {
+        "nodes": [
+          {"id": "u1", "kinds": ["NodeKind1"], "properties": {"name": "u1"}},
+          {"id": "g1", "kinds": ["NodeKind2"], "properties": {"name": "g1"}},
+          {"id": "g2", "kinds": ["NodeKind2"], "properties": {"name": "g2"}},
+          {"id": "g3", "kinds": ["NodeKind2"], "properties": {"name": "g3"}},
+          {"id": "g4", "kinds": ["NodeKind2"], "properties": {"name": "g4"}}
+        ],
+        "edges": [
+          {"start_id": "u1", "end_id": "g1", "kind": "EdgeKind1"},
+          {"start_id": "g1", "end_id": "g2", "kind": "EdgeKind1"},
+          {"start_id": "u1", "end_id": "g4", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"node_ids": ["g1", "g3", "g4"]}
+    },
+    {
+      "name": "BED-8321 multi-step untyped right-bound pattern predicate returns only reachable terminal nodes",
+      "cypher": "match (s) where ()-[]->()-[]->(s) return s",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"name": "d"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"node_ids": ["c"]}
+    },
+    {
+      "name": "BED-8321 multi-step untyped left-bound pattern predicate returns only originating nodes",
+      "cypher": "match (s) where (s)-[]->()-[]->() return s",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["NodeKind2"], "properties": {"name": "d"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind1"},
+          {"start_id": "a", "end_id": "d", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"node_ids": ["a"]}
+    },
+    {
+      "name": "BED-8321 multi-step right-bound pattern predicate stays correlated across multiple match frames",
+      "cypher": "match (u:NodeKind1), (g:NodeKind2) where u.name = 'u1' and (:NodeKind1)-[:EdgeKind1]->(:NodeKind2)-[:EdgeKind1]->(g) return g.name",
+      "fixture": {
+        "nodes": [
+          {"id": "u1", "kinds": ["NodeKind1"], "properties": {"name": "u1"}},
+          {"id": "u2", "kinds": ["NodeKind1"], "properties": {"name": "u2"}},
+          {"id": "g1", "kinds": ["NodeKind2"], "properties": {"name": "g1"}},
+          {"id": "g2", "kinds": ["NodeKind2"], "properties": {"name": "g2"}},
+          {"id": "g3", "kinds": ["NodeKind2"], "properties": {"name": "g3"}}
+        ],
+        "edges": [
+          {"start_id": "u1", "end_id": "g1", "kind": "EdgeKind1"},
+          {"start_id": "g1", "end_id": "g2", "kind": "EdgeKind1"},
+          {"start_id": "u2", "end_id": "g3", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"scalar_values": ["g2"]}
+    }
+  ]
+}

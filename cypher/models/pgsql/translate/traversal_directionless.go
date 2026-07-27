@@ -201,7 +201,7 @@ func (s *Translator) buildUnboundDirectionlessTraversalPatternRoot(traversalStep
 		}
 	)
 
-	if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
+	if previousFrame, hasPrevious := s.previousFrameTraversalSource(traversalStep); hasPrevious {
 		nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 			Source: pgsql.TableReference{
 				Name: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier},

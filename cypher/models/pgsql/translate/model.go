@@ -423,12 +423,18 @@ type ProjectionPruningApplication struct {
 }
 
 type TraversalStep struct {
-	Frame                  *Frame
-	SourceTarget           optimize.TraversalStepTarget
-	HasSourceTarget        bool
-	Direction              graph.Direction
-	Expansion              *Expansion
-	PathReversed           bool
+	Frame           *Frame
+	SourceTarget    optimize.TraversalStepTarget
+	HasSourceTarget bool
+	Direction       graph.Direction
+	Expansion       *Expansion
+	PathReversed    bool
+
+	// OmitPreviousFrameSource suppresses comma-joining the previous frame as a FROM source. Pattern
+	// predicate roots require this so that references to the enclosing query part's frame remain
+	// correlated to the outer row instead of re-scanning the outer CTE.
+	OmitPreviousFrameSource bool
+
 	ProjectionPruning      ProjectionPruningApplication
 	LeftNode               *BoundIdentifier
 	LeftNodeBound          bool

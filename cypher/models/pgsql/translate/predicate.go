@@ -195,6 +195,12 @@ func (s *Translator) buildPatternPredicates() error {
 			}
 		}
 
+		// The root step of a pattern predicate is evaluated per outer row. Comma-joining the enclosing
+		// query part's frame would re-scan the outer CTE and decorrelate the predicate, so suppress it.
+		if len(patternPart.TraversalSteps) > 0 {
+			patternPart.TraversalSteps[0].OmitPreviousFrameSource = true
+		}
+
 		if err := s.translateTraversalPatternPart(patternPart, true, true); err != nil {
 			return err
 		}
