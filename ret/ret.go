@@ -32,7 +32,7 @@ func Dump(ctx context.Context, db graph.Database, config DumpConfig) (DumpResult
 			break
 		}
 
-		normalized, err := transformer.TransformNodes(nodes)
+		_, err = transformer.TransformNodes(nodes)
 		if err != nil {
 			return DumpResult{}, err
 		}
