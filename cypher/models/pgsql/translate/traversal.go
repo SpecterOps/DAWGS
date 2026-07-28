@@ -432,7 +432,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
 		)
 
-		if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
+		if previousFrame, hasPrevious := s.previousFrameTraversalSource(traversalStep); hasPrevious {
 			nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 				Source: pgsql.TableReference{
 					Name: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier},
@@ -506,7 +506,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 			pgsql.AsIdentifierSet(traversalStep.LeftNode.Identifier, traversalStep.Edge.Identifier),
 		)
 
-		if previousFrame, hasPrevious := s.previousValidFrame(traversalStep.Frame); hasPrevious {
+		if previousFrame, hasPrevious := s.previousFrameTraversalSource(traversalStep); hasPrevious {
 			nextSelect.From = append(nextSelect.From, pgsql.FromClause{
 				Source: pgsql.TableReference{
 					Name: pgsql.CompoundIdentifier{previousFrame.Binding.Identifier},

@@ -20,6 +20,17 @@ func (s *Translator) previousValidFrame(partFrame *Frame) (*Frame, bool) {
 	return partFrame.Previous, true
 }
 
+// previousFrameTraversalSource resolves the previous frame to comma-join as a FROM source for a traversal
+// step root. Steps flagged with OmitPreviousFrameSource resolve to no source so that references to the
+// enclosing frame stay correlated to the outer row rather than re-scanning the outer CTE.
+func (s *Translator) previousFrameTraversalSource(traversalStep *TraversalStep) (*Frame, bool) {
+	if traversalStep.OmitPreviousFrameSource {
+		return nil, false
+	}
+
+	return s.previousValidFrame(traversalStep.Frame)
+}
+
 func (s *Translator) buildMultiPartSinglePartQuery(singlePartQuery *cypher.SinglePartQuery, cteChain []pgsql.CommonTableExpression) error {
 	// Earlier multipart sections are rendered as CTEs that the final single-part
 	// query can read from.
