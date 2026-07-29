@@ -183,19 +183,19 @@ func TestLoadPreservesManifestGraphPhaseBatchAndEntityOrder(t *testing.T) {
 	require.Equal(t, []string{
 		"operation_started:load",
 		"graph_started:second",
-		"phase_started:second:nodes:3",
+		"phase_started:second:nodes:0:3",
 		"phase_progress:second:nodes:2:3",
 		"phase_progress:second:nodes:3:3",
 		"phase_completed:second:nodes:3",
-		"phase_started:second:relationships:2",
+		"phase_started:second:relationships:0:2",
 		"phase_progress:second:relationships:2:2",
 		"phase_completed:second:relationships:2",
 		"graph_completed:second:3:2",
 		"graph_started:first",
-		"phase_started:first:nodes:1",
+		"phase_started:first:nodes:0:1",
 		"phase_progress:first:nodes:1:1",
 		"phase_completed:first:nodes:1",
-		"phase_started:first:relationships:0",
+		"phase_started:first:relationships:0:0",
 		"phase_completed:first:relationships:0",
 		"graph_completed:first:1:0",
 		"operation_completed:load:ok",
@@ -411,11 +411,11 @@ func TestLoadCancellationOnRelationshipPhaseStartStopsBeforeRelationshipMutation
 	require.Equal(t, []string{
 		"operation_started:load",
 		"graph_started:asset",
-		"phase_started:asset:nodes:2",
+		"phase_started:asset:nodes:0:2",
 		"phase_progress:asset:nodes:1:2",
 		"phase_progress:asset:nodes:2:2",
 		"phase_completed:asset:nodes:2",
-		"phase_started:asset:relationships:1",
+		"phase_started:asset:relationships:0:1",
 		"operation_completed:load:error",
 	}, loadLifecycleEventNames(events))
 	requireSingleCanceledTerminalEvent(t, events)
@@ -510,7 +510,7 @@ func loadEventNames(events []observe.Event) []string {
 		case observe.GraphCompleted:
 			names[index] = fmt.Sprintf("graph_completed:%s:%d:%d", value.Graph, value.Nodes, value.Relationships)
 		case observe.PhaseStarted:
-			names[index] = fmt.Sprintf("phase_started:%s:%s:%d", value.Graph, value.Phase, value.Total)
+			names[index] = fmt.Sprintf("phase_started:%s:%s:%d:%d", value.Graph, value.Phase, value.Completed, value.Total)
 		case observe.PhaseProgress:
 			names[index] = fmt.Sprintf("phase_progress:%s:%s:%d:%d", value.Graph, value.Phase, value.Completed, value.Total)
 		case observe.PhaseCompleted:

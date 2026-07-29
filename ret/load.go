@@ -141,6 +141,7 @@ func loadGraph(
 		Operation: loadOperationName,
 		Graph:     graphEntry.Name,
 		Phase:     loadNodesPhase,
+		Completed: 0,
 		Total:     graphEntry.NodeCount,
 	})
 	if err := ctx.Err(); err != nil {
@@ -191,6 +192,7 @@ func loadGraph(
 			Operation: loadOperationName,
 			Graph:     graphEntry.Name,
 			Phase:     loadRelationshipsPhase,
+			Completed: 0,
 			Total:     graphEntry.RelationshipCount,
 		})
 		return ctx.Err()

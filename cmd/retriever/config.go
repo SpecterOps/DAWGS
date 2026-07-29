@@ -3,14 +3,140 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/specterops/dawgs/retriever"
+	"github.com/specterops/dawgs/ret"
+	"github.com/specterops/dawgs/ret/jsonl"
+	"github.com/specterops/dawgs/ret/parquet"
+	"github.com/specterops/dawgs/ret/scrub"
 )
 
-const defaultBenchSampleSize = 1_000_000
+const (
+	defaultGraphName       = "default"
+	defaultEntityBatchSize = 10_000
+	defaultShardSize       = 100_000
+	defaultBenchSampleSize = 1_000_000
+)
+
+type dumpCommandConfig struct {
+	database  databaseConfig
+	dump      ret.DumpConfig
+	graphs    []string
+	allGraphs bool
+	force     bool
+	pprof     string
+}
+
+func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error) {
+	config := dumpCommandConfig{
+		dump: ret.DumpConfig{
+			EntityBatchSize: defaultEntityBatchSize,
+			ShardSize:       defaultShardSize,
+			JSONL: jsonl.Config{
+				Enabled: true,
+				Codec:   jsonl.CodecZstd,
+				Level:   0,
+			},
+			Parquet: parquet.Config{},
+			Scrub:   disabledDefaultScrubConfig(),
+		},
+	}
+	var (
+		graphs           stringList
+		scrubMode        string
+		scrubSalt        string
+		scrubConfigPath  string
+		jsonlCompression string
+	)
+	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
+	flags.SetOutput(output)
+	commonDatabaseFlags(flags, &config.database)
+	flags.Var(&graphs, "graph", "Graph target. May be repeated.")
+	flags.BoolVar(&config.allGraphs, "all-graphs", false, "Dump every graph discoverable by the selected driver.")
+	flags.StringVar(&config.dump.Directory, "out", "", "Output collection directory.")
+	flags.BoolVar(&config.force, "force", false, "Replace the exact output directory before a fresh dump.")
+	flags.BoolVar(&config.dump.Resume, "resume", false, "Resume an interrupted dump from its validated checkpoint.")
+	flags.BoolVar(&config.dump.JSONL.Enabled, "jsonl", config.dump.JSONL.Enabled, "Write JSONL artifacts.")
+	flags.StringVar(&jsonlCompression, "jsonl-compression", string(config.dump.JSONL.Codec), "JSONL compression codec: zstd, gzip, or none.")
+	flags.IntVar(&config.dump.JSONL.Level, "jsonl-level", config.dump.JSONL.Level, "JSONL compression level; 0 selects the package default.")
+	flags.BoolVar(&config.dump.Parquet.Enabled, "parquet", config.dump.Parquet.Enabled, "Write Parquet artifacts.")
+	flags.StringVar(&scrubMode, "scrub", "none", "Scrub mode: none or full.")
+	flags.StringVar(&scrubSalt, "salt", "", "Scrub salt. Overrides RETRIEVER_SCRUB_SALT and is never written.")
+	flags.StringVar(&scrubConfigPath, "config", "", "Optional retriever TOML scrub configuration.")
+	flags.IntVar(&config.dump.ShardSize, "shard-size", config.dump.ShardSize, "Maximum entities per shard.")
+	flags.IntVar(&config.dump.EntityBatchSize, "batch-size", config.dump.EntityBatchSize, "Database read batch size.")
+	commonPprofFlag(flags, &config.pprof)
+	if err := flags.Parse(args); err != nil {
+		return dumpCommandConfig{}, err
+	}
+
+	fillConnectionFromEnv(&config.database)
+	config.graphs = append([]string(nil), graphs...)
+	config.dump.Directory = strings.TrimSpace(config.dump.Directory)
+	config.dump.JSONL.Codec = jsonl.Codec(strings.TrimSpace(jsonlCompression))
+
+	if path := strings.TrimSpace(scrubConfigPath); path != "" {
+		loaded, err := scrub.ReadConfig(path)
+		if err != nil {
+			return dumpCommandConfig{}, err
+		}
+		config.dump.Scrub = loaded
+	}
+	if strings.TrimSpace(scrubSalt) == "" {
+		scrubSalt = strings.TrimSpace(os.Getenv("RETRIEVER_SCRUB_SALT"))
+		if scrubSalt == "" {
+			scrubSalt = strings.TrimSpace(os.Getenv("RETRIEVR_SCRUB_SALT"))
+		}
+	}
+	config.dump.Scrub.Salt = strings.TrimSpace(scrubSalt)
+	switch strings.TrimSpace(scrubMode) {
+	case "none":
+		config.dump.Scrub.Enabled = false
+	case "full":
+		config.dump.Scrub.Enabled = true
+		if config.dump.Scrub.Salt == "" {
+			return dumpCommandConfig{}, fmt.Errorf("-scrub full requires -salt, RETRIEVER_SCRUB_SALT, or legacy RETRIEVR_SCRUB_SALT")
+		}
+	default:
+		return dumpCommandConfig{}, fmt.Errorf("unsupported scrub mode %q", scrubMode)
+	}
+
+	if config.dump.Directory == "" {
+		return dumpCommandConfig{}, fmt.Errorf("output directory is required; pass -out")
+	}
+	if config.force && config.dump.Resume {
+		return dumpCommandConfig{}, fmt.Errorf("-force and -resume are mutually exclusive")
+	}
+	if config.dump.EntityBatchSize <= 0 {
+		return dumpCommandConfig{}, fmt.Errorf("batch-size must be > 0")
+	}
+	if config.dump.ShardSize <= 0 {
+		return dumpCommandConfig{}, fmt.Errorf("shard-size must be > 0")
+	}
+	if !config.dump.JSONL.Enabled && !config.dump.Parquet.Enabled {
+		return dumpCommandConfig{}, fmt.Errorf("at least one of -jsonl or -parquet must be enabled")
+	}
+	if err := config.dump.JSONL.Validate(); err != nil {
+		return dumpCommandConfig{}, fmt.Errorf("JSONL configuration: %w", err)
+	}
+	if err := config.dump.Parquet.Validate(); err != nil {
+		return dumpCommandConfig{}, fmt.Errorf("Parquet configuration: %w", err)
+	}
+	if err := config.dump.Scrub.Validate(); err != nil {
+		return dumpCommandConfig{}, fmt.Errorf("scrub configuration: %w", err)
+	}
+	return config, nil
+}
+
+func disabledDefaultScrubConfig() scrub.Config {
+	config := scrub.DefaultConfig()
+	config.Enabled = false
+	config.Salt = ""
+	return config
+}
 
 type stringList []string
 
@@ -99,12 +225,12 @@ func parseWorkerList(value string) ([]int, error) {
 }
 
 type benchOptions struct {
-	Workers     []int
-	BatchSize   int
-	SampleSize  int
-	Compression retriever.CompressionCodec
-	ZstdLevel   int
-	JSONOutput  bool
+	Workers    []int
+	BatchSize  int
+	SampleSize int
+	JSONL      jsonl.Config
+	Parquet    parquet.Config
+	JSONOutput bool
 }
 
 func (s benchOptions) validate() error {
@@ -126,17 +252,77 @@ func (s benchOptions) validate() error {
 		return fmt.Errorf("sample-size must be >= 0")
 	}
 
-	if s.ZstdLevel <= 0 {
-		return fmt.Errorf("zstd-level must be > 0")
+	if !s.JSONL.Enabled && !s.Parquet.Enabled {
+		return fmt.Errorf("at least one of -jsonl or -parquet must be enabled")
 	}
 
-	if s.Compression != retriever.CompressionDisabled {
-		if err := retriever.ValidateCompression(s.Compression); err != nil {
-			return err
+	if s.JSONL.Enabled {
+		if err := s.JSONL.Validate(); err != nil {
+			return fmt.Errorf("JSONL configuration: %w", err)
+		}
+	}
+	if s.Parquet.Enabled {
+		if err := s.Parquet.Validate(); err != nil {
+			return fmt.Errorf("Parquet configuration: %w", err)
 		}
 	}
 
 	return nil
+}
+
+type benchCommandConfig struct {
+	database  databaseConfig
+	bench     benchOptions
+	graphs    []string
+	allGraphs bool
+	pprof     string
+}
+
+func parseBenchCommand(args []string, output io.Writer) (benchCommandConfig, error) {
+	config := benchCommandConfig{
+		bench: benchOptions{
+			Workers:    []int{1},
+			BatchSize:  defaultEntityBatchSize,
+			SampleSize: defaultBenchSampleSize,
+			JSONL: jsonl.Config{
+				Enabled: true,
+				Codec:   jsonl.CodecZstd,
+			},
+		},
+	}
+	var (
+		graphs           stringList
+		workers          workerList
+		jsonlCompression = string(config.bench.JSONL.Codec)
+	)
+	flags := flag.NewFlagSet("retriever bench", flag.ContinueOnError)
+	flags.SetOutput(output)
+	commonDatabaseFlags(flags, &config.database)
+	flags.Var(&graphs, "graph", "Graph target. May be repeated.")
+	flags.BoolVar(&config.allGraphs, "all-graphs", false, "Benchmark every graph discoverable by the selected driver.")
+	flags.Var(&workers, "workers", "Comma-separated worker counts.")
+	flags.IntVar(&config.bench.BatchSize, "batch-size", config.bench.BatchSize, "Database read batch size.")
+	flags.IntVar(&config.bench.SampleSize, "sample-size", config.bench.SampleSize, "Maximum nodes and relationships to scan per phase; 0 scans the full graph.")
+	flags.BoolVar(&config.bench.JSONL.Enabled, "jsonl", config.bench.JSONL.Enabled, "Benchmark JSONL artifacts.")
+	flags.StringVar(&jsonlCompression, "jsonl-compression", jsonlCompression, "JSONL compression codec: zstd, gzip, or none.")
+	flags.IntVar(&config.bench.JSONL.Level, "jsonl-level", config.bench.JSONL.Level, "JSONL compression level; 0 selects the package default.")
+	flags.BoolVar(&config.bench.Parquet.Enabled, "parquet", config.bench.Parquet.Enabled, "Benchmark Parquet artifacts.")
+	flags.BoolVar(&config.bench.JSONOutput, "json", false, "Emit machine-readable JSON.")
+	commonPprofFlag(flags, &config.pprof)
+	if err := flags.Parse(args); err != nil {
+		return benchCommandConfig{}, err
+	}
+
+	fillConnectionFromEnv(&config.database)
+	config.graphs = append([]string(nil), graphs...)
+	if len(workers) > 0 {
+		config.bench.Workers = append([]int(nil), workers...)
+	}
+	config.bench.JSONL.Codec = jsonl.Codec(strings.TrimSpace(jsonlCompression))
+	if err := config.bench.validate(); err != nil {
+		return benchCommandConfig{}, err
+	}
+	return config, nil
 }
 
 func commonDatabaseFlags(flags *flag.FlagSet, cfg *databaseConfig) {

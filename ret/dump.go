@@ -230,6 +230,7 @@ func (s *dumpRunner) processNodes(graphState *checkpoint.GraphState, runtime *du
 		Operation: dumpOperationName,
 		Graph:     graphState.Name,
 		Phase:     string(checkpoint.PhaseNodes),
+		Completed: runtime.nodeCount,
 		Total:     graphState.Snapshot.NodeCount,
 	})
 
@@ -359,6 +360,7 @@ func (s *dumpRunner) processRelationships(graphState *checkpoint.GraphState, run
 		Operation: dumpOperationName,
 		Graph:     graphState.Name,
 		Phase:     string(checkpoint.PhaseRelationships),
+		Completed: runtime.relationshipCount,
 		Total:     graphState.Snapshot.RelationshipCount,
 	})
 

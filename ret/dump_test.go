@@ -185,12 +185,12 @@ func TestDumpObserverEventsAreOrderedAndShardEventsFollowCheckpoint(t *testing.T
 	require.Equal(t, []string{
 		"operation_started",
 		"graph_started:asset",
-		"phase_started:nodes",
+		"phase_started:nodes:0",
 		"phase_progress:nodes:1",
 		"phase_progress:nodes:2",
 		"shard:node:1",
 		"phase_completed:nodes",
-		"phase_started:relationships",
+		"phase_started:relationships:0",
 		"phase_progress:relationships:1",
 		"shard:relationship:1",
 		"phase_completed:relationships",
@@ -575,7 +575,7 @@ func dumpTestEventName(event observe.Event) string {
 	case observe.GraphCompleted:
 		return "graph_completed:" + value.Graph
 	case observe.PhaseStarted:
-		return "phase_started:" + value.Phase
+		return fmt.Sprintf("phase_started:%s:%d", value.Phase, value.Completed)
 	case observe.PhaseProgress:
 		return fmt.Sprintf("phase_progress:%s:%d", value.Phase, value.Completed)
 	case observe.PhaseCompleted:

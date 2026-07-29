@@ -38,7 +38,7 @@ func (GraphCompleted) isEvent() {}
 // PhaseStarted indicates a graph-processing phase has begun.
 type PhaseStarted struct {
 	Operation, Graph, Phase string
-	Total                   int64
+	Completed, Total        int64
 }
 
 func (PhaseStarted) isEvent() {}

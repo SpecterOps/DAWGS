@@ -14,6 +14,7 @@ import (
 	"github.com/specterops/dawgs/ret/dawgs"
 	"github.com/specterops/dawgs/ret/entity"
 	"github.com/specterops/dawgs/ret/jsonl"
+	"github.com/specterops/dawgs/ret/observe"
 	"github.com/specterops/dawgs/ret/parquet"
 	"github.com/specterops/dawgs/ret/scrub"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,12 @@ func TestDumpResumeReconstructsMetricsAndContinuesAfterCommittedShard(t *testing
 	// which loses metrics endpoint state, kinds, or the first shard.
 	config, database := interruptedDumpAfterFirstNodeShard(t, true, true)
 	config.Resume = true
+	var starts []observe.PhaseStarted
+	config.Observer = observe.ObserverFunc(func(_ context.Context, event observe.Event) {
+		if value, ok := event.(observe.PhaseStarted); ok {
+			starts = append(starts, value)
+		}
+	})
 
 	result, err := Dump(context.Background(), database, config)
 
@@ -33,6 +40,9 @@ func TestDumpResumeReconstructsMetricsAndContinuesAfterCommittedShard(t *testing
 	require.EqualValues(t, manifest.Graphs[0].RelationshipCount, manifest.Graphs[0].Metrics.RelationshipCount)
 	require.Equal(t, []int{1, 2, 3}, dumpNodeShardIndices(manifest.Graphs[0]))
 	require.NoFileExists(t, filepath.Join(config.Directory, checkpoint.FileName))
+	require.Len(t, starts, 2)
+	require.EqualValues(t, 1, starts[0].Completed)
+	require.EqualValues(t, 0, starts[1].Completed)
 }
 
 func TestDumpResumeReconstructsParquetOnlyCheckpoint(t *testing.T) {

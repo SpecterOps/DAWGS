@@ -2,15 +2,21 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"sort"
+	"os"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/retriever"
+	"github.com/specterops/dawgs/ret/dawgs"
+	"github.com/specterops/dawgs/ret/entity"
+	"github.com/specterops/dawgs/ret/jsonl"
+	"github.com/specterops/dawgs/ret/parquet"
 )
 
 type benchReport struct {
@@ -25,6 +31,7 @@ type benchGraphReport struct {
 }
 
 type benchResult struct {
+	Format                   string  `json:"format"`
 	Workers                  int     `json:"workers"`
 	BatchSize                int     `json:"batch_size"`
 	SampleSize               int     `json:"sample_size,omitempty"`
@@ -55,7 +62,7 @@ type benchPhaseResult struct {
 	CompressedByteSize   int64
 }
 
-func Bench(ctx context.Context, db graph.Database, driverName string, targets []retriever.GraphTarget, options benchOptions) (benchReport, error) {
+func Bench(ctx context.Context, db graph.Database, driverName string, graphNames []string, options benchOptions) (benchReport, error) {
 	if err := options.validate(); err != nil {
 		return benchReport{}, err
 	}
@@ -63,160 +70,189 @@ func Bench(ctx context.Context, db graph.Database, driverName string, targets []
 	startedAt := time.Now()
 	slog.Info("retriever bench started",
 		slog.String("driver", driverName),
-		slog.Int("graph_count", len(targets)),
+		slog.Int("graph_count", len(graphNames)),
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("sample_size", options.SampleSize),
 		slog.Any("workers", options.Workers),
-		slog.String("compression", string(options.Compression)),
+		slog.Bool("jsonl", options.JSONL.Enabled),
+		slog.String("jsonl_codec", string(options.JSONL.Codec)),
+		slog.Bool("parquet", options.Parquet.Enabled),
 	)
 
 	report := benchReport{
 		Driver:      driverName,
 		GeneratedAt: time.Now().UTC(),
-		Graphs:      make([]benchGraphReport, 0, len(targets)),
+		Graphs:      make([]benchGraphReport, 0, len(graphNames)),
 	}
 
-	for targetIndex, target := range targets {
+	for targetIndex, graphName := range graphNames {
 		graphStartedAt := time.Now()
 
 		slog.Info("retriever bench graph started",
-			slog.String("graph", target.Name),
+			slog.String("graph", graphName),
 			slog.Int("graph_index", targetIndex+1),
-			slog.Int("graph_count", len(targets)),
+			slog.Int("graph_count", len(graphNames)),
 		)
-
-		targetGraph := graph.Graph{
-			Name: target.Name,
-		}
 
 		slog.Info("retriever bench counting graph entities",
-			slog.String("graph", target.Name),
+			slog.String("graph", graphName),
 		)
 
-		nodeCount, edgeCount, err := countGraphEntities(ctx, db, targetGraph)
+		source, err := dawgs.NewSource(db, graphName, options.BatchSize)
+		if err != nil {
+			return benchReport{}, err
+		}
+		snapshot, err := source.Snapshot(ctx)
 		if err != nil {
 			return benchReport{}, err
 		}
 
 		slog.Info("retriever bench graph counts ready",
-			slog.String("graph", target.Name),
-			slog.Int64("node_count", nodeCount),
-			slog.Int64("edge_count", edgeCount),
+			slog.String("graph", graphName),
+			slog.Int64("node_count", snapshot.NodeCount),
+			slog.Int64("edge_count", snapshot.RelationshipCount),
 		)
 
 		graphReport := benchGraphReport{
-			Name: target.Name,
+			Name: graphName,
 		}
 
 		for workerIndex, workerCount := range options.Workers {
-			workerStartedAt := time.Now()
-
-			slog.Info("retriever bench worker run started",
-				slog.String("graph", target.Name),
-				slog.Int("worker_count", workerCount),
-				slog.Int("worker_index", workerIndex+1),
-				slog.Int("worker_runs", len(options.Workers)),
-				slog.Int("batch_size", options.BatchSize),
-				slog.Int("sample_size", options.SampleSize),
-			)
-
-			plannedNodes := benchPlannedCount(nodeCount, options.SampleSize)
-
-			slog.Info("retriever bench node phase started",
-				slog.String("graph", target.Name),
-				slog.Int("worker_count", workerCount),
-				slog.Int64("node_count", nodeCount),
-				slog.Int64("planned_count", plannedNodes),
-			)
-
-			nodeResult, err := benchNodes(ctx, db, targetGraph, nodeCount, workerCount, options)
-			if err != nil {
-				return benchReport{}, err
+			if options.JSONL.Enabled {
+				result, err := benchJSONLRun(ctx, db, graphName, snapshot, workerCount, workerIndex, options)
+				if err != nil {
+					return benchReport{}, err
+				}
+				graphReport.Results = append(graphReport.Results, result)
 			}
-
-			slog.Info("retriever bench node phase completed",
-				slog.String("graph", target.Name),
-				slog.Int("worker_count", workerCount),
-				slog.Int64("processed", nodeResult.Count),
-				slog.Duration("wall_elapsed", nodeResult.WallElapsed),
-				slog.Duration("db_read_elapsed", nodeResult.DBReadElapsed),
-				slog.Duration("encode_compress_elapsed", nodeResult.EncodeCompressTime),
-				slog.Float64("entities_per_second", perSecond(nodeResult.Count, nodeResult.WallElapsed)),
-			)
-
-			plannedEdges := benchPlannedCount(edgeCount, options.SampleSize)
-
-			slog.Info("retriever bench edge phase started",
-				slog.String("graph", target.Name),
-				slog.Int("worker_count", workerCount),
-				slog.Int64("edge_count", edgeCount),
-				slog.Int64("planned_count", plannedEdges),
-			)
-
-			edgeResult, err := benchEdges(ctx, db, targetGraph, edgeCount, workerCount, options)
-			if err != nil {
-				return benchReport{}, err
+			if options.Parquet.Enabled {
+				result, err := benchParquetRun(ctx, db, graphName, snapshot, workerCount, workerIndex, options)
+				if err != nil {
+					return benchReport{}, err
+				}
+				graphReport.Results = append(graphReport.Results, result)
 			}
-
-			slog.Info("retriever bench edge phase completed",
-				slog.String("graph", target.Name),
-				slog.Int("worker_count", workerCount),
-				slog.Int64("processed", edgeResult.Count),
-				slog.Duration("wall_elapsed", edgeResult.WallElapsed),
-				slog.Duration("db_read_elapsed", edgeResult.DBReadElapsed),
-				slog.Duration("encode_compress_elapsed", edgeResult.EncodeCompressTime),
-				slog.Float64("entities_per_second", perSecond(edgeResult.Count, edgeResult.WallElapsed)),
-			)
-
-			totalWall := nodeResult.WallElapsed + edgeResult.WallElapsed
-			graphReport.Results = append(graphReport.Results, benchResult{
-				Workers:                  workerCount,
-				BatchSize:                options.BatchSize,
-				SampleSize:               options.SampleSize,
-				NodeCount:                nodeCount,
-				EdgeCount:                edgeCount,
-				NodeProcessed:            nodeResult.Count,
-				EdgeProcessed:            edgeResult.Count,
-				NodeWallMillis:           nodeResult.WallElapsed.Milliseconds(),
-				EdgeWallMillis:           edgeResult.WallElapsed.Milliseconds(),
-				NodeDBReadMillis:         nodeResult.DBReadElapsed.Milliseconds(),
-				EdgeDBReadMillis:         edgeResult.DBReadElapsed.Milliseconds(),
-				NodeEncodeCompressMillis: nodeResult.EncodeCompressTime.Milliseconds(),
-				EdgeEncodeCompressMillis: edgeResult.EncodeCompressTime.Milliseconds(),
-				TotalWallMillis:          totalWall.Milliseconds(),
-				NodesPerSecond:           perSecond(nodeResult.Count, nodeResult.WallElapsed),
-				EdgesPerSecond:           perSecond(edgeResult.Count, edgeResult.WallElapsed),
-				EntitiesPerSecond:        perSecond(nodeResult.Count+edgeResult.Count, totalWall),
-				UncompressedBytes:        nodeResult.UncompressedByteSize + edgeResult.UncompressedByteSize,
-				CompressedBytes:          nodeResult.CompressedByteSize + edgeResult.CompressedByteSize,
-			})
-
-			slog.Info("retriever bench worker run completed",
-				slog.String("graph", target.Name),
-				slog.Int("worker_count", workerCount),
-				slog.Duration("wall_elapsed", time.Since(workerStartedAt)),
-				slog.Float64("entities_per_second", perSecond(nodeResult.Count+edgeResult.Count, totalWall)),
-			)
 		}
 
 		report.Graphs = append(report.Graphs, graphReport)
 
 		slog.Info("retriever bench graph completed",
-			slog.String("graph", target.Name),
+			slog.String("graph", graphName),
 			slog.Duration("wall_elapsed", time.Since(graphStartedAt)),
 		)
 	}
 
 	slog.Info("retriever bench completed",
 		slog.String("driver", driverName),
-		slog.Int("graph_count", len(targets)),
+		slog.Int("graph_count", len(graphNames)),
 		slog.Duration("wall_elapsed", time.Since(startedAt)),
 	)
 
 	return report, nil
 }
 
+func benchJSONLRun(ctx context.Context, db graph.Database, graphName string, snapshot dawgs.Snapshot, workers, workerIndex int, options benchOptions) (benchResult, error) {
+	runStartedAt := time.Now()
+	logBenchRunStarted(graphName, "jsonl", workers, workerIndex, options)
+	nodeResult, err := benchNodes(
+		ctx, db, graphName, "jsonl", snapshot.NodeCount, workers, options,
+		func(path string, nodes []entity.Node) (benchPhaseResult, error) {
+			return benchJSONLNodeBatch(path, nodes, options.JSONL)
+		},
+	)
+	if err != nil {
+		return benchResult{}, err
+	}
+	relationshipResult, err := benchRelationships(
+		ctx, db, graphName, "jsonl", snapshot.RelationshipCount, workers, options,
+		func(path string, relationships []entity.Relationship) (benchPhaseResult, error) {
+			return benchJSONLRelationshipBatch(path, relationships, options.JSONL)
+		},
+	)
+	if err != nil {
+		return benchResult{}, err
+	}
+	result := newBenchResult("jsonl", snapshot, workers, options, nodeResult, relationshipResult)
+	logBenchRunCompleted(graphName, result, time.Since(runStartedAt))
+	return result, nil
+}
+
+func benchParquetRun(ctx context.Context, db graph.Database, graphName string, snapshot dawgs.Snapshot, workers, workerIndex int, options benchOptions) (benchResult, error) {
+	runStartedAt := time.Now()
+	logBenchRunStarted(graphName, "parquet", workers, workerIndex, options)
+	nodeResult, err := benchNodes(
+		ctx, db, graphName, "parquet", snapshot.NodeCount, workers, options,
+		func(path string, nodes []entity.Node) (benchPhaseResult, error) {
+			return benchParquetNodeBatch(path, nodes, options.Parquet)
+		},
+	)
+	if err != nil {
+		return benchResult{}, err
+	}
+	relationshipResult, err := benchRelationships(
+		ctx, db, graphName, "parquet", snapshot.RelationshipCount, workers, options,
+		func(path string, relationships []entity.Relationship) (benchPhaseResult, error) {
+			return benchParquetRelationshipBatch(path, relationships, options.Parquet)
+		},
+	)
+	if err != nil {
+		return benchResult{}, err
+	}
+	result := newBenchResult("parquet", snapshot, workers, options, nodeResult, relationshipResult)
+	logBenchRunCompleted(graphName, result, time.Since(runStartedAt))
+	return result, nil
+}
+
+func logBenchRunStarted(graphName, format string, workers, workerIndex int, options benchOptions) {
+	slog.Info("retriever bench worker run started",
+		slog.String("graph", graphName),
+		slog.String("format", format),
+		slog.Int("worker_count", workers),
+		slog.Int("worker_index", workerIndex+1),
+		slog.Int("worker_runs", len(options.Workers)),
+		slog.Int("batch_size", options.BatchSize),
+		slog.Int("sample_size", options.SampleSize),
+	)
+}
+
+func newBenchResult(format string, snapshot dawgs.Snapshot, workers int, options benchOptions, nodeResult, relationshipResult benchPhaseResult) benchResult {
+	totalWall := nodeResult.WallElapsed + relationshipResult.WallElapsed
+	return benchResult{
+		Format:                   format,
+		Workers:                  workers,
+		BatchSize:                options.BatchSize,
+		SampleSize:               options.SampleSize,
+		NodeCount:                snapshot.NodeCount,
+		EdgeCount:                snapshot.RelationshipCount,
+		NodeProcessed:            nodeResult.Count,
+		EdgeProcessed:            relationshipResult.Count,
+		NodeWallMillis:           nodeResult.WallElapsed.Milliseconds(),
+		EdgeWallMillis:           relationshipResult.WallElapsed.Milliseconds(),
+		NodeDBReadMillis:         nodeResult.DBReadElapsed.Milliseconds(),
+		EdgeDBReadMillis:         relationshipResult.DBReadElapsed.Milliseconds(),
+		NodeEncodeCompressMillis: nodeResult.EncodeCompressTime.Milliseconds(),
+		EdgeEncodeCompressMillis: relationshipResult.EncodeCompressTime.Milliseconds(),
+		TotalWallMillis:          totalWall.Milliseconds(),
+		NodesPerSecond:           perSecond(nodeResult.Count, nodeResult.WallElapsed),
+		EdgesPerSecond:           perSecond(relationshipResult.Count, relationshipResult.WallElapsed),
+		EntitiesPerSecond:        perSecond(nodeResult.Count+relationshipResult.Count, totalWall),
+		UncompressedBytes:        nodeResult.UncompressedByteSize + relationshipResult.UncompressedByteSize,
+		CompressedBytes:          nodeResult.CompressedByteSize + relationshipResult.CompressedByteSize,
+	}
+}
+
+func logBenchRunCompleted(graphName string, result benchResult, elapsed time.Duration) {
+	slog.Info("retriever bench worker run completed",
+		slog.String("graph", graphName),
+		slog.String("format", result.Format),
+		slog.Int("worker_count", result.Workers),
+		slog.Duration("wall_elapsed", elapsed),
+		slog.Float64("entities_per_second", result.EntitiesPerSecond),
+	)
+}
+
 type benchBatchProcessor[T any] struct {
+	parent  context.Context
 	ctx     context.Context
 	cancel  context.CancelFunc
 	process func([]T) (benchPhaseResult, error)
@@ -239,6 +275,7 @@ func newBenchBatchProcessor[T any](ctx context.Context, workers int, process fun
 	var (
 		scanCtx, cancel = context.WithCancel(ctx)
 		processor       = &benchBatchProcessor[T]{
+			parent:  ctx,
 			ctx:     scanCtx,
 			cancel:  cancel,
 			process: process,
@@ -322,6 +359,9 @@ func (s *benchBatchProcessor[T]) closeAndWait() (benchPhaseResult, error) {
 	if err := s.currentError(); err != nil {
 		return benchPhaseResult{}, err
 	}
+	if err := s.parent.Err(); err != nil {
+		return benchPhaseResult{}, err
+	}
 
 	return s.snapshot(), nil
 }
@@ -364,157 +404,301 @@ func (s *benchBatchProcessor[T]) snapshot() benchPhaseResult {
 	return s.result
 }
 
-func benchNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph, total int64, workers int, options benchOptions) (benchPhaseResult, error) {
+type benchArtifactFilesystem struct {
+	mkdirTemp func(string, string) (string, error)
+	removeAll func(string) error
+}
+
+func (s benchArtifactFilesystem) withDefaults() benchArtifactFilesystem {
+	if s.mkdirTemp == nil {
+		s.mkdirTemp = os.MkdirTemp
+	}
+	if s.removeAll == nil {
+		s.removeAll = os.RemoveAll
+	}
+	return s
+}
+
+func benchNodes(
+	ctx context.Context,
+	db graph.Database,
+	graphName string,
+	format string,
+	total int64,
+	workers int,
+	options benchOptions,
+	write func(string, []entity.Node) (benchPhaseResult, error),
+) (benchPhaseResult, error) {
+	return benchNodesWithFilesystem(ctx, db, graphName, format, total, workers, options, write, benchArtifactFilesystem{})
+}
+
+func benchNodesWithFilesystem(
+	ctx context.Context,
+	db graph.Database,
+	graphName string,
+	format string,
+	total int64,
+	workers int,
+	options benchOptions,
+	write func(string, []entity.Node) (benchPhaseResult, error),
+	filesystem benchArtifactFilesystem,
+) (phaseResult benchPhaseResult, resultErr error) {
+	filesystem = filesystem.withDefaults()
+	tempDir, err := filesystem.mkdirTemp("", "retriever-bench-"+format+"-nodes-")
+	if err != nil {
+		return benchPhaseResult{}, fmt.Errorf("create %s node benchmark directory: %w", format, err)
+	}
+	defer func() {
+		if err := filesystem.removeAll(tempDir); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("remove %s node benchmark directory %q: %w", format, tempDir, err))
+		}
+	}()
+
+	source, err := dawgs.NewSource(db, graphName, options.BatchSize)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	var batchNumber atomic.Int64
+	processor, scanCtx, err := newBenchBatchProcessor(ctx, workers, func(nodes []entity.Node) (benchPhaseResult, error) {
+		path := filepath.Join(tempDir, fmt.Sprintf("worker-batch-%06d", batchNumber.Add(1)))
+		return write(path, nodes)
+	})
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+
 	startedAt := time.Now()
 	planned := benchPlannedCount(total, options.SampleSize)
+	processed := int64(0)
+	nextProgressAt := retrieverInitialProgressAt(planned)
+	slog.Info("retriever bench node phase started",
+		slog.String("graph", graphName),
+		slog.String("format", format),
+		slog.Int("worker_count", workers),
+		slog.Int64("node_count", total),
+		slog.Int64("planned_count", planned),
+	)
 
-	processor, scanCtx, err := newBenchBatchProcessor(ctx, workers, func(nodes []*graph.Node) (benchPhaseResult, error) {
-		return benchNodeBatch(nodes, options)
+	for processed < planned {
+		readStartedAt := time.Now()
+		batch, readErr := source.NextNodes(scanCtx)
+		processor.addDBReadElapsed(time.Since(readStartedAt))
+		if readErr != nil {
+			_, closeErr := processor.closeAndWait()
+			return benchPhaseResult{}, errors.Join(readErr, closeErr)
+		}
+		if len(batch.Entities) == 0 {
+			_, closeErr := processor.closeAndWait()
+			return benchPhaseResult{}, errors.Join(
+				fmt.Errorf("node benchmark scan ended after %d of %d entities", processed, planned),
+				closeErr,
+			)
+		}
+
+		remaining := planned - processed
+		if int64(len(batch.Entities)) > remaining {
+			batch.Entities = batch.Entities[:remaining]
+		}
+		if err := processor.handle(batch.Entities); err != nil {
+			_, closeErr := processor.closeAndWait()
+			return benchPhaseResult{}, errors.Join(err, closeErr)
+		}
+		processed += int64(len(batch.Entities))
+
+		progress := processor.snapshot()
+		progress.Count = processed
+		nextProgressAt = logBenchPhaseProgress(graphName, "nodes", workers, progress, planned, startedAt, nextProgressAt)
+	}
+
+	phaseResult, err = processor.closeAndWait()
+	phaseResult.WallElapsed = time.Since(startedAt)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	if phaseResult.Count != planned {
+		return benchPhaseResult{}, fmt.Errorf("node benchmark wrote %d of %d planned entities", phaseResult.Count, planned)
+	}
+	slog.Info("retriever bench node phase completed",
+		slog.String("graph", graphName),
+		slog.String("format", format),
+		slog.Int("worker_count", workers),
+		slog.Int64("processed", phaseResult.Count),
+		slog.Duration("wall_elapsed", phaseResult.WallElapsed),
+		slog.Duration("db_read_elapsed", phaseResult.DBReadElapsed),
+		slog.Duration("encode_compress_elapsed", phaseResult.EncodeCompressTime),
+		slog.Float64("entities_per_second", perSecond(phaseResult.Count, phaseResult.WallElapsed)),
+	)
+	return phaseResult, nil
+}
+
+func benchRelationships(
+	ctx context.Context,
+	db graph.Database,
+	graphName string,
+	format string,
+	total int64,
+	workers int,
+	options benchOptions,
+	write func(string, []entity.Relationship) (benchPhaseResult, error),
+) (benchPhaseResult, error) {
+	return benchRelationshipsWithFilesystem(ctx, db, graphName, format, total, workers, options, write, benchArtifactFilesystem{})
+}
+
+func benchRelationshipsWithFilesystem(
+	ctx context.Context,
+	db graph.Database,
+	graphName string,
+	format string,
+	total int64,
+	workers int,
+	options benchOptions,
+	write func(string, []entity.Relationship) (benchPhaseResult, error),
+	filesystem benchArtifactFilesystem,
+) (phaseResult benchPhaseResult, resultErr error) {
+	filesystem = filesystem.withDefaults()
+	tempDir, err := filesystem.mkdirTemp("", "retriever-bench-"+format+"-relationships-")
+	if err != nil {
+		return benchPhaseResult{}, fmt.Errorf("create %s relationship benchmark directory: %w", format, err)
+	}
+	defer func() {
+		if err := filesystem.removeAll(tempDir); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("remove %s relationship benchmark directory %q: %w", format, tempDir, err))
+		}
+	}()
+
+	source, err := dawgs.NewSource(db, graphName, options.BatchSize)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	var batchNumber atomic.Int64
+	processor, scanCtx, err := newBenchBatchProcessor(ctx, workers, func(relationships []entity.Relationship) (benchPhaseResult, error) {
+		path := filepath.Join(tempDir, fmt.Sprintf("worker-batch-%06d", batchNumber.Add(1)))
+		return write(path, relationships)
 	})
 	if err != nil {
 		return benchPhaseResult{}, err
 	}
 
-	var (
-		nodes          = make([]*graph.Node, 0, options.BatchSize)
-		nextProgressAt = retrieverInitialProgressAt(planned)
-	)
-	_, scanErr := retriever.ScanDatabaseNodes(scanCtx, db, targetGraph, planned, options.BatchSize, func(node *graph.Node) error {
-		nodes = append(nodes, node)
-		return nil
-	}, func(event retriever.ScanBatchEvent) error {
-		processor.addDBReadElapsed(event.ReadElapsed)
-		if err := processor.handle(nodes); err != nil {
-			return err
-		}
-		nodes = make([]*graph.Node, 0, options.BatchSize)
-
-		progressResult := processor.snapshot()
-		progressResult.Count = event.Processed
-		nextProgressAt = logBenchPhaseProgress(targetGraph.Name, retriever.PhaseNodes, workers, progressResult, planned, startedAt, nextProgressAt)
-
-		return nil
-	})
-
-	result, processErr := processor.closeAndWait()
-	result.WallElapsed = time.Since(startedAt)
-
-	if processErr != nil {
-		return benchPhaseResult{}, processErr
-	}
-
-	if scanErr != nil {
-		return benchPhaseResult{}, scanErr
-	}
-
-	return result, nil
-}
-
-func benchEdges(ctx context.Context, db graph.Database, targetGraph graph.Graph, total int64, workers int, options benchOptions) (benchPhaseResult, error) {
 	startedAt := time.Now()
 	planned := benchPlannedCount(total, options.SampleSize)
-
-	processor, scanCtx, err := newBenchBatchProcessor(ctx, workers, func(relationships []*graph.Relationship) (benchPhaseResult, error) {
-		return benchRelationshipBatch(relationships, options)
-	})
-	if err != nil {
-		return benchPhaseResult{}, err
-	}
-
-	var (
-		relationships  = make([]*graph.Relationship, 0, options.BatchSize)
-		nextProgressAt = retrieverInitialProgressAt(planned)
+	processed := int64(0)
+	nextProgressAt := retrieverInitialProgressAt(planned)
+	slog.Info("retriever bench relationship phase started",
+		slog.String("graph", graphName),
+		slog.String("format", format),
+		slog.Int("worker_count", workers),
+		slog.Int64("relationship_count", total),
+		slog.Int64("planned_count", planned),
 	)
-	_, scanErr := retriever.ScanDatabaseRelationships(scanCtx, db, targetGraph, planned, options.BatchSize, func(relationship *graph.Relationship) error {
-		relationships = append(relationships, relationship)
-		return nil
-	}, func(event retriever.ScanBatchEvent) error {
-		processor.addDBReadElapsed(event.ReadElapsed)
-		if err := processor.handle(relationships); err != nil {
-			return err
+
+	for processed < planned {
+		readStartedAt := time.Now()
+		batch, readErr := source.NextRelationships(scanCtx)
+		processor.addDBReadElapsed(time.Since(readStartedAt))
+		if readErr != nil {
+			_, closeErr := processor.closeAndWait()
+			return benchPhaseResult{}, errors.Join(readErr, closeErr)
 		}
-		relationships = make([]*graph.Relationship, 0, options.BatchSize)
-
-		progressResult := processor.snapshot()
-		progressResult.Count = event.Processed
-		nextProgressAt = logBenchPhaseProgress(targetGraph.Name, retriever.PhaseEdges, workers, progressResult, planned, startedAt, nextProgressAt)
-
-		return nil
-	})
-
-	result, processErr := processor.closeAndWait()
-	result.WallElapsed = time.Since(startedAt)
-
-	if processErr != nil {
-		return benchPhaseResult{}, processErr
-	}
-
-	if scanErr != nil {
-		return benchPhaseResult{}, scanErr
-	}
-
-	return result, nil
-}
-
-func benchNodeBatch(nodes []*graph.Node, options benchOptions) (benchPhaseResult, error) {
-	return benchCompressedBatch(len(nodes), options, func() []retriever.FragmentNode {
-		items := make([]retriever.FragmentNode, 0, len(nodes))
-		for _, node := range nodes {
-			kinds := node.Kinds.Strings()
-			sort.Strings(kinds)
-
-			items = append(items, retriever.FragmentNode{
-				ID:         node.ID.String(),
-				Kinds:      kinds,
-				Properties: node.Properties.MapOrEmpty(),
-			})
+		if len(batch.Entities) == 0 {
+			_, closeErr := processor.closeAndWait()
+			return benchPhaseResult{}, errors.Join(
+				fmt.Errorf("relationship benchmark scan ended after %d of %d entities", processed, planned),
+				closeErr,
+			)
 		}
 
-		return items
-	})
-}
-
-func benchRelationshipBatch(relationships []*graph.Relationship, options benchOptions) (benchPhaseResult, error) {
-	return benchCompressedBatch(len(relationships), options, func() []retriever.FragmentEdge {
-		items := make([]retriever.FragmentEdge, 0, len(relationships))
-		for _, relationship := range relationships {
-			kind := ""
-			if relationship.Kind != nil {
-				kind = relationship.Kind.String()
-			}
-
-			items = append(items, retriever.FragmentEdge{
-				StartID:    relationship.StartID.String(),
-				EndID:      relationship.EndID.String(),
-				Kind:       kind,
-				Properties: relationship.Properties.MapOrEmpty(),
-			})
+		remaining := planned - processed
+		if int64(len(batch.Entities)) > remaining {
+			batch.Entities = batch.Entities[:remaining]
 		}
+		if err := processor.handle(batch.Entities); err != nil {
+			_, closeErr := processor.closeAndWait()
+			return benchPhaseResult{}, errors.Join(err, closeErr)
+		}
+		processed += int64(len(batch.Entities))
 
-		return items
-	})
-}
-
-func benchCompressedBatch[T any](count int, options benchOptions, buildRecords func() []T) (benchPhaseResult, error) {
-	result := benchPhaseResult{
-		Count: int64(count),
-	}
-	if options.Compression == retriever.CompressionDisabled || count == 0 {
-		return result, nil
+		progress := processor.snapshot()
+		progress.Count = processed
+		nextProgressAt = logBenchPhaseProgress(graphName, "relationships", workers, progress, planned, startedAt, nextProgressAt)
 	}
 
-	encodeStarted := time.Now()
-	uncompressedBytes, compressedBytes, err := retriever.CompressedJSONLinesSize(options.Compression, options.ZstdLevel, buildRecords())
-	result.EncodeCompressTime = time.Since(encodeStarted)
-
+	phaseResult, err = processor.closeAndWait()
+	phaseResult.WallElapsed = time.Since(startedAt)
 	if err != nil {
 		return benchPhaseResult{}, err
 	}
+	if phaseResult.Count != planned {
+		return benchPhaseResult{}, fmt.Errorf("relationship benchmark wrote %d of %d planned entities", phaseResult.Count, planned)
+	}
+	slog.Info("retriever bench relationship phase completed",
+		slog.String("graph", graphName),
+		slog.String("format", format),
+		slog.Int("worker_count", workers),
+		slog.Int64("processed", phaseResult.Count),
+		slog.Duration("wall_elapsed", phaseResult.WallElapsed),
+		slog.Duration("db_read_elapsed", phaseResult.DBReadElapsed),
+		slog.Duration("encode_compress_elapsed", phaseResult.EncodeCompressTime),
+		slog.Float64("entities_per_second", perSecond(phaseResult.Count, phaseResult.WallElapsed)),
+	)
+	return phaseResult, nil
+}
 
-	result.UncompressedByteSize = uncompressedBytes
-	result.CompressedByteSize = compressedBytes
+func benchJSONLNodeBatch(path string, nodes []entity.Node, config jsonl.Config) (benchPhaseResult, error) {
+	startedAt := time.Now()
+	artifact, err := jsonl.WriteNodes(path, filepath.Base(path), config, nodes)
+	elapsed := time.Since(startedAt)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	return benchPhaseResult{
+		Count:                artifact.Count,
+		EncodeCompressTime:   elapsed,
+		UncompressedByteSize: artifact.UncompressedBytes,
+		CompressedByteSize:   artifact.StoredBytes,
+	}, nil
+}
 
-	return result, nil
+func benchJSONLRelationshipBatch(path string, relationships []entity.Relationship, config jsonl.Config) (benchPhaseResult, error) {
+	startedAt := time.Now()
+	artifact, err := jsonl.WriteRelationships(path, filepath.Base(path), config, relationships)
+	elapsed := time.Since(startedAt)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	return benchPhaseResult{
+		Count:                artifact.Count,
+		EncodeCompressTime:   elapsed,
+		UncompressedByteSize: artifact.UncompressedBytes,
+		CompressedByteSize:   artifact.StoredBytes,
+	}, nil
+}
+
+func benchParquetNodeBatch(path string, nodes []entity.Node, config parquet.Config) (benchPhaseResult, error) {
+	startedAt := time.Now()
+	artifact, err := parquet.WriteNodes(path, filepath.Base(path), config, nodes)
+	elapsed := time.Since(startedAt)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	return benchPhaseResult{
+		Count:              artifact.Count,
+		EncodeCompressTime: elapsed,
+		CompressedByteSize: artifact.StoredBytes,
+	}, nil
+}
+
+func benchParquetRelationshipBatch(path string, relationships []entity.Relationship, config parquet.Config) (benchPhaseResult, error) {
+	startedAt := time.Now()
+	artifact, err := parquet.WriteRelationships(path, filepath.Base(path), config, relationships)
+	elapsed := time.Since(startedAt)
+	if err != nil {
+		return benchPhaseResult{}, err
+	}
+	return benchPhaseResult{
+		Count:              artifact.Count,
+		EncodeCompressTime: elapsed,
+		CompressedByteSize: artifact.StoredBytes,
+	}, nil
 }
 
 func benchPlannedCount(total int64, sampleSize int) int64 {
@@ -534,14 +718,14 @@ func benchPlannedCount(total int64, sampleSize int) int64 {
 	return sampleCount
 }
 
-func logBenchPhaseProgress(graphName string, phaseName retriever.Phase, workers int, result benchPhaseResult, planned int64, startedAt time.Time, nextProgressAt int64) int64 {
+func logBenchPhaseProgress(graphName string, phaseName string, workers int, result benchPhaseResult, planned int64, startedAt time.Time, nextProgressAt int64) int64 {
 	if nextProgressAt == 0 || result.Count < nextProgressAt || result.Count >= planned {
 		return nextProgressAt
 	}
 
 	slog.Info("retriever bench phase progress",
 		slog.String("graph", graphName),
-		slog.String("phase", string(phaseName)),
+		slog.String("phase", phaseName),
 		slog.Int("worker_count", workers),
 		slog.Int64("processed", result.Count),
 		slog.Int64("planned_count", planned),
@@ -561,7 +745,8 @@ func writeBenchReport(writer io.Writer, report benchReport) {
 		for _, result := range graphReport.Results {
 			fmt.Fprintf(
 				writer,
-				"  workers=%d batch=%d sample_size=%d nodes=%d/%d edges=%d/%d total_ms=%d entities_per_sec=%.2f db_read_ms=%d encode_compress_ms=%d\n",
+				"  format=%s workers=%d batch=%d sample_size=%d nodes=%d/%d edges=%d/%d total_ms=%d entities_per_sec=%.2f db_read_ms=%d encode_compress_ms=%d\n",
+				result.Format,
 				result.Workers,
 				result.BatchSize,
 				result.SampleSize,
