@@ -24,89 +24,70 @@ const (
 	maxPhysicalLine   = 10 * 1024 * 1024
 )
 
-// afterVerifiedSnapshotForTest lets same-package regression tests replace the
-// source path after decoding. It remains nil in production.
-var afterVerifiedSnapshotForTest func()
-
-func ReadNodes(root string, artifact NodeArtifact, visit func(entity.Node) error) error {
-	metadata := artifact.metadata()
-	path, err := validateArtifact(root, metadata)
+func ReadNodes(root string, artifact NodeArtifact) ([]entity.Node, error) {
+	if artifact.SchemaVersion != SchemaVersion {
+		return nil, fmt.Errorf("unsupported JSONL artifact schema %q", artifact.SchemaVersion)
+	}
+	if err := (Config{Enabled: true, Codec: Codec(artifact.Codec), Level: artifact.Level}).Validate(); err != nil {
+		return nil, fmt.Errorf("validate JSONL artifact codec: %w", err)
+	}
+	if artifact.Count < 0 || artifact.UncompressedBytes < 0 || artifact.StoredBytes < 0 {
+		return nil, fmt.Errorf("JSONL artifact sizes and count must be non-negative")
+	}
+	path, err := artifactPath(root, artifact.Path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stored, err := readStoredSnapshot(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := verifyStored(stored, metadata); err != nil {
-		return err
+	if err := verifyStored(stored, artifact.StoredBytes, artifact.SHA256); err != nil {
+		return nil, err
 	}
-	nodes, count, uncompressed, err := decodeNodes(stored, Codec(metadata.codec))
+	nodes, count, uncompressed, err := decodeNodes(stored, Codec(artifact.Codec))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := verifyReadMetadata(metadata, count, uncompressed); err != nil {
-		return err
+	if err := verifyReadMetadata(count, uncompressed, artifact.Count, artifact.UncompressedBytes); err != nil {
+		return nil, err
 	}
-	if visit == nil {
-		return nil
-	}
-	if afterVerifiedSnapshotForTest != nil {
-		afterVerifiedSnapshotForTest()
-	}
-	for index, node := range nodes {
-		if err := visit(node); err != nil {
-			return fmt.Errorf("visit node record %d: %w", index+1, err)
-		}
-	}
-	return nil
+	return nodes, nil
 }
 
-func ReadRelationships(root string, artifact RelationshipArtifact, visit func(entity.Relationship) error) error {
-	metadata := artifact.metadata()
-	path, err := validateArtifact(root, metadata)
+func ReadRelationships(root string, artifact RelationshipArtifact) ([]entity.Relationship, error) {
+	if artifact.SchemaVersion != SchemaVersion {
+		return nil, fmt.Errorf("unsupported JSONL artifact schema %q", artifact.SchemaVersion)
+	}
+	if err := (Config{Enabled: true, Codec: Codec(artifact.Codec), Level: artifact.Level}).Validate(); err != nil {
+		return nil, fmt.Errorf("validate JSONL artifact codec: %w", err)
+	}
+	if artifact.Count < 0 || artifact.UncompressedBytes < 0 || artifact.StoredBytes < 0 {
+		return nil, fmt.Errorf("JSONL artifact sizes and count must be non-negative")
+	}
+	path, err := artifactPath(root, artifact.Path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stored, err := readStoredSnapshot(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := verifyStored(stored, metadata); err != nil {
-		return err
+	if err := verifyStored(stored, artifact.StoredBytes, artifact.SHA256); err != nil {
+		return nil, err
 	}
-	relationships, count, uncompressed, err := decodeRelationships(stored, Codec(metadata.codec))
+	relationships, count, uncompressed, err := decodeRelationships(stored, Codec(artifact.Codec))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := verifyReadMetadata(metadata, count, uncompressed); err != nil {
-		return err
+	if err := verifyReadMetadata(count, uncompressed, artifact.Count, artifact.UncompressedBytes); err != nil {
+		return nil, err
 	}
-	if visit == nil {
-		return nil
-	}
-	if afterVerifiedSnapshotForTest != nil {
-		afterVerifiedSnapshotForTest()
-	}
-	for index, relationship := range relationships {
-		if err := visit(relationship); err != nil {
-			return fmt.Errorf("visit relationship record %d: %w", index+1, err)
-		}
-	}
-	return nil
+	return relationships, nil
 }
 
-func validateArtifact(root string, artifact artifactMetadata) (string, error) {
-	if artifact.schemaVersion != SchemaVersion {
-		return "", fmt.Errorf("unsupported JSONL artifact schema %q", artifact.schemaVersion)
-	}
-	if err := (Config{Enabled: true, Codec: Codec(artifact.codec), Level: artifact.level}).Validate(); err != nil {
-		return "", fmt.Errorf("validate JSONL artifact codec: %w", err)
-	}
-	if artifact.count < 0 || artifact.uncompressedBytes < 0 || artifact.storedBytes < 0 {
-		return "", fmt.Errorf("JSONL artifact sizes and count must be non-negative")
-	}
-	path, err := cleanRelativePath(artifact.path)
+func artifactPath(root, relativePath string) (string, error) {
+	path, err := cleanRelativePath(relativePath)
 	if err != nil {
 		return "", err
 	}
@@ -136,27 +117,27 @@ func readStoredSnapshot(path string) ([]byte, error) {
 	return stored, nil
 }
 
-func verifyStored(stored []byte, artifact artifactMetadata) error {
+func verifyStored(stored []byte, expectedBytes int64, expectedSHA256 string) error {
 	hasher := sha256.New()
 	if _, err := hasher.Write(stored); err != nil {
 		return fmt.Errorf("hash JSONL artifact: %w", err)
 	}
-	if int64(len(stored)) != artifact.storedBytes {
-		return fmt.Errorf("JSONL stored size mismatch: got %d, want %d", len(stored), artifact.storedBytes)
+	if int64(len(stored)) != expectedBytes {
+		return fmt.Errorf("JSONL stored size mismatch: got %d, want %d", len(stored), expectedBytes)
 	}
 	actual := hex.EncodeToString(hasher.Sum(nil))
-	if actual != artifact.sha256 {
-		return fmt.Errorf("JSONL stored SHA-256 mismatch: got %s, want %s", actual, artifact.sha256)
+	if actual != expectedSHA256 {
+		return fmt.Errorf("JSONL stored SHA-256 mismatch: got %s, want %s", actual, expectedSHA256)
 	}
 	return nil
 }
 
-func verifyReadMetadata(artifact artifactMetadata, count, uncompressed int64) error {
-	if count != artifact.count {
-		return fmt.Errorf("JSONL record count mismatch: got %d, want %d", count, artifact.count)
+func verifyReadMetadata(count, uncompressed, expectedCount, expectedUncompressed int64) error {
+	if count != expectedCount {
+		return fmt.Errorf("JSONL record count mismatch: got %d, want %d", count, expectedCount)
 	}
-	if uncompressed != artifact.uncompressedBytes {
-		return fmt.Errorf("JSONL uncompressed size mismatch: got %d, want %d", uncompressed, artifact.uncompressedBytes)
+	if uncompressed != expectedUncompressed {
+		return fmt.Errorf("JSONL uncompressed size mismatch: got %d, want %d", uncompressed, expectedUncompressed)
 	}
 	return nil
 }

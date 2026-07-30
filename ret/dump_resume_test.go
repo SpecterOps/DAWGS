@@ -196,10 +196,11 @@ func TestDumpResumePreservesScrubbedArtifactsAndActionCounts(t *testing.T) {
 	require.Len(t, manifest.Graphs[0].NodeShards, 3)
 	for _, shard := range manifest.Graphs[0].NodeShards {
 		require.Equal(t, scrub.ActionCounts{Redact: 1}, shard.ScrubCounts)
-		require.NoError(t, jsonl.ReadNodes(config.Directory, *shard.JSONL, func(node entity.Node) error {
+		nodes, err := jsonl.ReadNodes(config.Directory, *shard.JSONL)
+		require.NoError(t, err)
+		for _, node := range nodes {
 			require.Equal(t, "[REDACTED]", node.Properties["password"])
-			return nil
-		}))
+		}
 	}
 }
 

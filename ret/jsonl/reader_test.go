@@ -19,16 +19,15 @@ func TestReadNodesNormalizesJSONNumbersRecursivelyForGraphProperties(t *testing.
 	if err := os.WriteFile(filepath.Join(root, "nodes.jsonl"), contents, 0o600); err != nil {
 		t.Fatalf("write nodes: %v", err)
 	}
-	var got entity.Node
-
-	err := jsonl.ReadNodes(root, nodeArtifact("nodes.jsonl", contents), func(node entity.Node) error {
-		got = node
-		return nil
-	})
+	nodes, err := jsonl.ReadNodes(root, nodeArtifact("nodes.jsonl", contents))
 
 	if err != nil {
 		t.Fatalf("read nodes: %v", err)
 	}
+	if len(nodes) != 1 {
+		t.Fatalf("read nodes = %#v, want one node", nodes)
+	}
+	got := nodes[0]
 	if value, ok := got.Properties["integer"].(int64); !ok || value != 9007199254740993 {
 		t.Fatalf("integer = %#v (%T), want exact int64", got.Properties["integer"], got.Properties["integer"])
 	}
@@ -64,16 +63,15 @@ func TestReadRelationshipsNormalizesJSONNumbersRecursively(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "relationships.jsonl"), contents, 0o600); err != nil {
 		t.Fatalf("write relationships: %v", err)
 	}
-	var got entity.Relationship
-
-	err := jsonl.ReadRelationships(root, relationshipArtifact("relationships.jsonl", contents), func(relationship entity.Relationship) error {
-		got = relationship
-		return nil
-	})
+	relationships, err := jsonl.ReadRelationships(root, relationshipArtifact("relationships.jsonl", contents))
 
 	if err != nil {
 		t.Fatalf("read relationships: %v", err)
 	}
+	if len(relationships) != 1 {
+		t.Fatalf("read relationships = %#v, want one relationship", relationships)
+	}
+	got := relationships[0]
 	if value, ok := got.Properties["integer"].(int64); !ok || value != 7 {
 		t.Fatalf("integer = %#v (%T), want int64(7)", got.Properties["integer"], got.Properties["integer"])
 	}
@@ -86,7 +84,7 @@ func TestReadRelationshipsNormalizesJSONNumbersRecursively(t *testing.T) {
 	}
 }
 
-func TestReadNodesRejectsUnsupportedJSONNumberDomainBeforeVisiting(t *testing.T) {
+func TestReadNodesRejectsUnsupportedJSONNumberDomainWithoutReturningEntities(t *testing.T) {
 	for name, contents := range map[string][]byte{
 		"integer above int64": []byte(`{"source_id":"1","properties":{"limit":9223372036854775808}}` + "\n"),
 		"integer below int64": []byte(`{"source_id":"1","properties":{"limit":-9223372036854775809}}` + "\n"),
@@ -97,18 +95,13 @@ func TestReadNodesRejectsUnsupportedJSONNumberDomainBeforeVisiting(t *testing.T)
 			if err := os.WriteFile(filepath.Join(root, "nodes.jsonl"), contents, 0o600); err != nil {
 				t.Fatalf("write nodes: %v", err)
 			}
-			visited := false
-
-			err := jsonl.ReadNodes(root, nodeArtifact("nodes.jsonl", contents), func(entity.Node) error {
-				visited = true
-				return nil
-			})
+			nodes, err := jsonl.ReadNodes(root, nodeArtifact("nodes.jsonl", contents))
 
 			if err == nil {
 				t.Fatal("expected numeric domain error")
 			}
-			if visited {
-				t.Fatal("visitor called for unsupported numeric property")
+			if nodes != nil {
+				t.Fatalf("read nodes = %#v, want nil on unsupported numeric property", nodes)
 			}
 			for _, fragment := range []string{"node record 1", "properties.limit"} {
 				if !strings.Contains(err.Error(), fragment) {
@@ -119,7 +112,7 @@ func TestReadNodesRejectsUnsupportedJSONNumberDomainBeforeVisiting(t *testing.T)
 	}
 }
 
-func TestReadNodesRejectsInvalidArtifactsBeforeVisiting(t *testing.T) {
+func TestReadNodesRejectsInvalidArtifactsWithoutReturningEntities(t *testing.T) {
 	root := t.TempDir()
 	artifact, err := jsonl.WriteNodes(filepath.Join(root, "nodes.tmp"), "nodes.jsonl", jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, []entity.Node{{SourceID: "1"}})
 	if err != nil {
@@ -135,19 +128,19 @@ func TestReadNodesRejectsInvalidArtifactsBeforeVisiting(t *testing.T) {
 		"truncation":    func(value jsonl.NodeArtifact) { mutateFile(t, path, []byte(`{"source_id":"1"`)) },
 		"count mismatch": func(value jsonl.NodeArtifact) {
 			value.Count++
-			requireReadNodeErrorWithoutVisitor(t, root, value)
+			requireReadNodeErrorWithoutEntities(t, root, value)
 		},
 		"stored size mismatch": func(value jsonl.NodeArtifact) {
 			value.StoredBytes++
-			requireReadNodeErrorWithoutVisitor(t, root, value)
+			requireReadNodeErrorWithoutEntities(t, root, value)
 		},
 		"unsupported schema": func(value jsonl.NodeArtifact) {
 			value.SchemaVersion = "wrong"
-			requireReadNodeErrorWithoutVisitor(t, root, value)
+			requireReadNodeErrorWithoutEntities(t, root, value)
 		},
 		"path traversal": func(value jsonl.NodeArtifact) {
 			value.Path = "../nodes.jsonl"
-			requireReadNodeErrorWithoutVisitor(t, root, value)
+			requireReadNodeErrorWithoutEntities(t, root, value)
 		},
 	}
 
@@ -167,7 +160,7 @@ func TestReadNodesRejectsInvalidArtifactsBeforeVisiting(t *testing.T) {
 			}
 			mutate(value)
 			if name == "byte mutation" || name == "truncation" {
-				requireReadNodeErrorWithoutVisitor(t, root, value)
+				requireReadNodeErrorWithoutEntities(t, root, value)
 			}
 		})
 	}
@@ -183,7 +176,7 @@ func TestReadNodesRejectsGzipArtifactLabeledZstd(t *testing.T) {
 		t.Fatalf("install artifact: %v", err)
 	}
 	artifact.Codec = string(jsonl.CodecZstd)
-	requireReadNodeErrorWithoutVisitor(t, root, artifact)
+	requireReadNodeErrorWithoutEntities(t, root, artifact)
 }
 
 func TestReadRelationshipsRejectsTrailingJSONAndInvalidEntity(t *testing.T) {
@@ -194,16 +187,12 @@ func TestReadRelationshipsRejectsTrailingJSONAndInvalidEntity(t *testing.T) {
 		t.Fatalf("write relationships: %v", err)
 	}
 	artifact := relationshipArtifact("relationships.jsonl", contents)
-	visited := false
-	err := jsonl.ReadRelationships(root, artifact, func(entity.Relationship) error {
-		visited = true
-		return nil
-	})
+	relationships, err := jsonl.ReadRelationships(root, artifact)
 	if err == nil {
 		t.Fatal("expected trailing JSON error")
 	}
-	if visited {
-		t.Fatal("visitor called for malformed JSON")
+	if relationships != nil {
+		t.Fatalf("read relationships = %#v, want nil for malformed JSON", relationships)
 	}
 
 	contents = []byte(`{"start_id":"","end_id":"2","kind":"MemberOf"}` + "\n")
@@ -211,16 +200,12 @@ func TestReadRelationshipsRejectsTrailingJSONAndInvalidEntity(t *testing.T) {
 		t.Fatalf("write invalid relationship: %v", err)
 	}
 	artifact = relationshipArtifact("relationships.jsonl", contents)
-	visited = false
-	err = jsonl.ReadRelationships(root, artifact, func(entity.Relationship) error {
-		visited = true
-		return nil
-	})
+	relationships, err = jsonl.ReadRelationships(root, artifact)
 	if err == nil {
 		t.Fatal("expected invalid relationship error")
 	}
-	if visited {
-		t.Fatal("visitor called for invalid entity")
+	if relationships != nil {
+		t.Fatalf("read relationships = %#v, want nil for invalid entity", relationships)
 	}
 }
 
@@ -232,7 +217,7 @@ func TestReadNodesRejectsUncompressedSizeMismatch(t *testing.T) {
 	}
 	artifact := nodeArtifact("nodes.jsonl", contents)
 	artifact.UncompressedBytes++
-	requireReadNodeErrorWithoutVisitor(t, root, artifact)
+	requireReadNodeErrorWithoutEntities(t, root, artifact)
 }
 
 func TestReadNodesRejectsMalformedJSONAndOversizedPhysicalLine(t *testing.T) {
@@ -245,23 +230,19 @@ func TestReadNodesRejectsMalformedJSONAndOversizedPhysicalLine(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, "nodes.jsonl"), contents, 0o600); err != nil {
 				t.Fatalf("write nodes: %v", err)
 			}
-			requireReadNodeErrorWithoutVisitor(t, root, nodeArtifact("nodes.jsonl", contents))
+			requireReadNodeErrorWithoutEntities(t, root, nodeArtifact("nodes.jsonl", contents))
 		})
 	}
 }
 
-func requireReadNodeErrorWithoutVisitor(t *testing.T, root string, artifact jsonl.NodeArtifact) {
+func requireReadNodeErrorWithoutEntities(t *testing.T, root string, artifact jsonl.NodeArtifact) {
 	t.Helper()
-	visited := false
-	err := jsonl.ReadNodes(root, artifact, func(entity.Node) error {
-		visited = true
-		return nil
-	})
+	nodes, err := jsonl.ReadNodes(root, artifact)
 	if err == nil {
 		t.Fatal("expected read error")
 	}
-	if visited {
-		t.Fatalf("visitor called for invalid artifact: %v", err)
+	if nodes != nil {
+		t.Fatalf("read nodes = %#v, want nil for invalid artifact: %v", nodes, err)
 	}
 }
 

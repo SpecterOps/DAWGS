@@ -40,10 +40,11 @@ func TestDumpSplitsDatabaseBatchAcrossLogicalShards(t *testing.T) {
 
 	var sourceIDs []string
 	for _, shard := range manifest.Graphs[0].NodeShards {
-		require.NoError(t, jsonl.ReadNodes(config.Directory, *shard.JSONL, func(node entity.Node) error {
+		nodes, err := jsonl.ReadNodes(config.Directory, *shard.JSONL)
+		require.NoError(t, err)
+		for _, node := range nodes {
 			sourceIDs = append(sourceIDs, node.SourceID)
-			return nil
-		}))
+		}
 	}
 	require.Equal(t, []string{"1", "2", "3", "4", "5"}, sourceIDs)
 }
@@ -503,26 +504,23 @@ func TestDumpScrubsConcreteArtifactsAndRecordsPerShardActions(t *testing.T) {
 	manifest := readDumpManifest(t, result.ManifestPath)
 	require.Equal(t, scrub.ActionCounts{Redact: 2}, manifest.Graphs[0].NodeShards[0].ScrubCounts)
 	require.Equal(t, scrub.ActionCounts{Redact: 1}, manifest.Graphs[0].RelationshipShards[0].ScrubCounts)
-	var nodePasswords []any
-	require.NoError(t, jsonl.ReadNodes(
+	nodes, err := jsonl.ReadNodes(
 		config.Directory,
 		*manifest.Graphs[0].NodeShards[0].JSONL,
-		func(node entity.Node) error {
-			nodePasswords = append(nodePasswords, node.Properties["password"])
-			return nil
-		},
-	))
+	)
+	require.NoError(t, err)
+	nodePasswords := make([]any, 0, len(nodes))
+	for _, node := range nodes {
+		nodePasswords = append(nodePasswords, node.Properties["password"])
+	}
 	require.Equal(t, []any{"[REDACTED]", "[REDACTED]"}, nodePasswords)
-	var relationshipPassword any
-	require.NoError(t, jsonl.ReadRelationships(
+	relationships, err := jsonl.ReadRelationships(
 		config.Directory,
 		*manifest.Graphs[0].RelationshipShards[0].JSONL,
-		func(relationship entity.Relationship) error {
-			relationshipPassword = relationship.Properties["password"]
-			return nil
-		},
-	))
-	require.Equal(t, "[REDACTED]", relationshipPassword)
+	)
+	require.NoError(t, err)
+	require.Len(t, relationships, 1)
+	require.Equal(t, "[REDACTED]", relationships[0].Properties["password"])
 }
 
 func TestDumpWithoutScrubConfigPreservesPropertiesAndDisablesScrubMetadata(t *testing.T) {
@@ -548,14 +546,13 @@ func TestDumpWithoutScrubConfigPreservesPropertiesAndDisablesScrubMetadata(t *te
 	require.Empty(t, manifest.Scrub.RulesFingerprint)
 	require.Empty(t, manifest.Scrub.SaltFingerprint)
 	require.True(t, manifest.Graphs[0].NodeShards[0].ScrubCounts.IsZero())
-	require.NoError(t, jsonl.ReadNodes(
+	nodes, err := jsonl.ReadNodes(
 		config.Directory,
 		*manifest.Graphs[0].NodeShards[0].JSONL,
-		func(node entity.Node) error {
-			require.Equal(t, "secret", node.Properties["password"])
-			return nil
-		},
-	))
+	)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "secret", nodes[0].Properties["password"])
 }
 
 const checkpointFileNameForTest = ".ret-checkpoint.json"

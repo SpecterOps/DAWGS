@@ -744,12 +744,11 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 		if shard.JSONL == nil || shard.Parquet == nil {
 			t.Fatalf("dual node shard %d is missing a concrete artifact", shard.Index)
 		}
-		if err := jsonl.ReadNodes(root, *shard.JSONL, func(node entity.Node) error {
-			result.jsonlNodes = append(result.jsonlNodes, node)
-			return nil
-		}); err != nil {
+		nodes, err := jsonl.ReadNodes(root, *shard.JSONL)
+		if err != nil {
 			t.Fatalf("read JSONL node shard %d: %v", shard.Index, err)
 		}
+		result.jsonlNodes = append(result.jsonlNodes, nodes...)
 		if err := parquet.ReadNodes(root, *shard.Parquet, func(node entity.Node) error {
 			result.parquetNodes = append(result.parquetNodes, node)
 			return nil
@@ -762,12 +761,11 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 		if shard.JSONL == nil || shard.Parquet == nil {
 			t.Fatalf("dual relationship shard %d is missing a concrete artifact", shard.Index)
 		}
-		if err := jsonl.ReadRelationships(root, *shard.JSONL, func(relationship entity.Relationship) error {
-			result.jsonlRelationships = append(result.jsonlRelationships, relationship)
-			return nil
-		}); err != nil {
+		relationships, err := jsonl.ReadRelationships(root, *shard.JSONL)
+		if err != nil {
 			t.Fatalf("read JSONL relationship shard %d: %v", shard.Index, err)
 		}
+		result.jsonlRelationships = append(result.jsonlRelationships, relationships...)
 		if err := parquet.ReadRelationships(root, *shard.Parquet, func(relationship entity.Relationship) error {
 			result.parquetRelationshipIDs = append(result.parquetRelationshipIDs, relationship.SourceID)
 			relationship.SourceID = ""

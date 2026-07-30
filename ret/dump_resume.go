@@ -164,7 +164,16 @@ func (s *dumpRunner) reconstructNodeShard(
 	var err error
 	switch {
 	case shard.JSONL != nil:
-		err = jsonl.ReadNodes(s.config.Directory, *shard.JSONL, visit)
+		var nodes []entity.Node
+		nodes, err = jsonl.ReadNodes(s.config.Directory, *shard.JSONL)
+		if err == nil {
+			for index, node := range nodes {
+				if visitErr := visit(node); visitErr != nil {
+					err = fmt.Errorf("process JSONL node record %d: %w", index+1, visitErr)
+					break
+				}
+			}
+		}
 	case shard.Parquet != nil:
 		err = parquet.ReadNodes(s.config.Directory, *shard.Parquet, visit)
 	default:
@@ -199,7 +208,16 @@ func (s *dumpRunner) reconstructRelationshipShard(
 	var err error
 	switch {
 	case shard.JSONL != nil:
-		err = jsonl.ReadRelationships(s.config.Directory, *shard.JSONL, visit)
+		var relationships []entity.Relationship
+		relationships, err = jsonl.ReadRelationships(s.config.Directory, *shard.JSONL)
+		if err == nil {
+			for index, relationship := range relationships {
+				if visitErr := visit(relationship); visitErr != nil {
+					err = fmt.Errorf("process JSONL relationship record %d: %w", index+1, visitErr)
+					break
+				}
+			}
+		}
 	case shard.Parquet != nil:
 		err = parquet.ReadRelationships(s.config.Directory, *shard.Parquet, visit)
 	default:
