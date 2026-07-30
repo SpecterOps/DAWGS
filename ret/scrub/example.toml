@@ -1,9 +1,8 @@
-[scrub]
 fake_domain = "example.invalid"
 timestamp_shift_days = 17
 redaction_marker = "[REDACTED]"
 
-[scrub.graph_rules]
+[graph_rules]
 domain_kind = "Domain"
 objectid_key = "objectid"
 domain_name_key = "domain"

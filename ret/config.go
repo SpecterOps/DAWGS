@@ -20,7 +20,7 @@ type DumpConfig struct {
 	Resume          bool
 	JSONL           jsonl.Config
 	Parquet         parquet.Config
-	Scrub           scrub.Config
+	Scrub           *scrub.Config // Nil disables scrubbing.
 	Observer        observe.Observer
 }
 
@@ -54,7 +54,11 @@ func (s DumpConfig) Validate() error {
 	if !s.JSONL.Enabled && !s.Parquet.Enabled {
 		return fmt.Errorf("%w: at least one output is required", ErrInvalidConfig)
 	}
-	if err := errors.Join(s.JSONL.Validate(), s.Parquet.Validate(), s.Scrub.Validate()); err != nil {
+	var scrubErr error
+	if s.Scrub != nil {
+		scrubErr = s.Scrub.Validate()
+	}
+	if err := errors.Join(s.JSONL.Validate(), s.Parquet.Validate(), scrubErr); err != nil {
 		return fmt.Errorf("%w: dump output and scrub configuration: %w", ErrInvalidConfig, err)
 	}
 	return nil

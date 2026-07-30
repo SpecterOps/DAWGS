@@ -133,13 +133,13 @@ func (s *dumpRunner) reconstructGraph(index int) (*dumpGraphRuntime, error) {
 		if err := s.reconstructNodeShard(graphState.Name, shard, runtime); err != nil {
 			return nil, err
 		}
-		mergeDumpActionCounts(runtime.totalScrubCounts, shard.ScrubCounts)
+		runtime.totalScrubCounts.Add(shard.ScrubCounts)
 	}
 	for _, shard := range graphState.RelationshipShards {
 		if err := s.reconstructRelationshipShard(graphState.Name, shard, runtime); err != nil {
 			return nil, err
 		}
-		mergeDumpActionCounts(runtime.totalScrubCounts, shard.ScrubCounts)
+		runtime.totalScrubCounts.Add(shard.ScrubCounts)
 	}
 	return runtime, nil
 }

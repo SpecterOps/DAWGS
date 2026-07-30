@@ -661,13 +661,20 @@ func validateLogicalShard(
 	if hasJSONL != identity.JSONLEnabled || hasParquet != identity.ParquetEnabled {
 		return fmt.Errorf("%s shard %d output mismatch with checkpoint identity", entityType, index)
 	}
-	if !identity.ScrubEnabled && len(counts) != 0 {
+	if !identity.ScrubEnabled && !counts.IsZero() {
 		return fmt.Errorf("%s shard %d has scrub counts while scrubbing is disabled", entityType, index)
 	}
-	for action, value := range counts {
-		if action == "" || value < 0 {
-			return fmt.Errorf("%s shard %d has invalid scrub count %q=%d", entityType, index, action, value)
-		}
+	if counts.Preserve < 0 {
+		return fmt.Errorf("%s shard %d has invalid scrub count %q=%d", entityType, index, "preserve", counts.Preserve)
+	}
+	if counts.Pseudonymize < 0 {
+		return fmt.Errorf("%s shard %d has invalid scrub count %q=%d", entityType, index, "pseudonymize", counts.Pseudonymize)
+	}
+	if counts.Redact < 0 {
+		return fmt.Errorf("%s shard %d has invalid scrub count %q=%d", entityType, index, "redact", counts.Redact)
+	}
+	if counts.ShiftTimestamp < 0 {
+		return fmt.Errorf("%s shard %d has invalid scrub count %q=%d", entityType, index, "shift_timestamp", counts.ShiftTimestamp)
 	}
 	return nil
 }

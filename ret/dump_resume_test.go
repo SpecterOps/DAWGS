@@ -186,7 +186,7 @@ func TestDumpResumePreservesScrubbedArtifactsAndActionCounts(t *testing.T) {
 	state, exists, err := (checkpoint.Store{Root: config.Directory}).Load()
 	require.NoError(t, err)
 	require.True(t, exists)
-	require.Equal(t, scrub.ActionCounts{"redact": 1}, state.Graphs[0].NodeShards[0].ScrubCounts)
+	require.Equal(t, scrub.ActionCounts{Redact: 1}, state.Graphs[0].NodeShards[0].ScrubCounts)
 
 	config.Resume = true
 	result, err := Dump(context.Background(), database, config)
@@ -195,7 +195,7 @@ func TestDumpResumePreservesScrubbedArtifactsAndActionCounts(t *testing.T) {
 	manifest := readDumpManifest(t, result.ManifestPath)
 	require.Len(t, manifest.Graphs[0].NodeShards, 3)
 	for _, shard := range manifest.Graphs[0].NodeShards {
-		require.Equal(t, scrub.ActionCounts{"redact": 1}, shard.ScrubCounts)
+		require.Equal(t, scrub.ActionCounts{Redact: 1}, shard.ScrubCounts)
 		require.NoError(t, jsonl.ReadNodes(config.Directory, *shard.JSONL, func(node entity.Node) error {
 			require.Equal(t, "[REDACTED]", node.Properties["password"])
 			return nil
@@ -310,6 +310,11 @@ func TestDumpResumeRejectsIdentityChanges(t *testing.T) {
 			match:  "Parquet enabled",
 		},
 		{
+			name:   "scrub enabled",
+			mutate: func(config *DumpConfig) { config.Scrub = nil },
+			match:  "scrub enabled",
+		},
+		{
 			name: "scrub rules",
 			mutate: func(config *DumpConfig) {
 				config.Scrub.Rules.FakeDomain = "changed.example"
@@ -359,7 +364,7 @@ func TestDumpResumeRemovesRecognizedUncheckpointedArtifact(t *testing.T) {
 		"asset",
 		2,
 		99,
-		nil,
+		scrub.ActionCounts{},
 		[]entity.Node{{SourceID: "99", Kinds: []string{"Orphan"}}},
 		config.JSONL,
 		config.Parquet,
@@ -424,7 +429,7 @@ func TestDumpResumeCancellationDuringCountSnapshotStopsBeforeOrphanCleanup(t *te
 		"asset",
 		2,
 		99,
-		nil,
+		scrub.ActionCounts{},
 		[]entity.Node{{SourceID: "99", Kinds: []string{"Orphan"}}},
 		config.JSONL,
 		config.Parquet,

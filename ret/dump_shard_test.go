@@ -20,7 +20,7 @@ func TestWriteNodeShardPublishesBothConcreteArtifacts(t *testing.T) {
 	// Break caught: publishing only one enabled artifact or returning metadata before both files exist.
 	root := t.TempDir()
 	shard, err := writeNodeShard(
-		root, "asset", 1, 42, scrub.ActionCounts{"replace": 1},
+		root, "asset", 1, 42, scrub.ActionCounts{Redact: 1},
 		[]entity.Node{{SourceID: "42", Kinds: []string{"User"}, Properties: map[string]any{"name": "Ada"}}},
 		jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd, Level: 3},
 		parquet.Config{Enabled: true},
@@ -48,7 +48,7 @@ func TestWriteNodeShardPublishesExactlyTheEnabledConcreteOutput(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			shard, err := writeNodeShard(root, "asset", 1, 42, nil, []entity.Node{{SourceID: "42"}}, test.jsonl, test.parquet)
+			shard, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, test.jsonl, test.parquet)
 
 			require.NoError(t, err)
 			require.Equal(t, test.wantJSONL, shard.JSONL != nil)
@@ -63,7 +63,7 @@ func TestWriteRelationshipShardPublishesBothConcreteArtifacts(t *testing.T) {
 	// Break caught: applying the logical dual-output commit only to node shards.
 	root := t.TempDir()
 	shard, err := writeRelationshipShard(
-		root, "asset", 1, 99, scrub.ActionCounts{"replace": 1},
+		root, "asset", 1, 99, scrub.ActionCounts{Redact: 1},
 		[]entity.Relationship{{SourceID: "99", StartID: "1", EndID: "2", Kind: "MemberOf"}},
 		jsonl.Config{Enabled: true, Codec: jsonl.CodecNone},
 		parquet.Config{Enabled: true},
@@ -85,7 +85,7 @@ func TestWriteNodeShardCleansAllArtifactsWhenSecondWriterFails(t *testing.T) {
 	t.Cleanup(func() { writeParquetNodes = originalWriteParquetNodes })
 
 	root := t.TempDir()
-	_, err := writeNodeShard(root, "asset", 1, 42, nil, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{Enabled: true})
+	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{Enabled: true})
 	require.ErrorContains(t, err, "injected Parquet failure")
 	require.Empty(t, regularFiles(t, root))
 }
@@ -101,7 +101,7 @@ func TestWriteNodeShardRejectsMismatchedWriterCount(t *testing.T) {
 	t.Cleanup(func() { writeJSONLNodes = originalWriteJSONLNodes })
 
 	root := t.TempDir()
-	_, err := writeNodeShard(root, "asset", 1, 42, nil, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{})
+	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{})
 	require.ErrorIs(t, err, ErrArtifactIntegrity)
 	require.Empty(t, regularFiles(t, root))
 }
@@ -120,7 +120,7 @@ func TestWriteNodeShardCleansPublishedArtifactWhenSecondRenameFails(t *testing.T
 	t.Cleanup(func() { shardRename = originalRename })
 
 	root := t.TempDir()
-	_, err := writeNodeShard(root, "asset", 1, 42, nil, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{Enabled: true})
+	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{Enabled: true})
 	require.ErrorContains(t, err, "injected second rename failure")
 	require.Empty(t, regularFiles(t, root))
 }

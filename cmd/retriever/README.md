@@ -93,9 +93,12 @@ retriever dump \
   -salt "$RETRIEVER_SCRUB_SALT"
 ```
 
-`RETRIEVR_SCRUB_SALT` remains a fallback spelling. `-config` reads the scrub
-TOML policy; command-line mode and salt still control whether and how the
-policy runs.
+`RETRIEVR_SCRUB_SALT` remains a fallback spelling. `-config` reads the direct
+scrub TOML policy shape illustrated by
+[`ret/scrub/example.toml`](../../ret/scrub/example.toml): scalar policy fields
+are top-level, with `[graph_rules]` and `[classifier]` sections. Salt is
+runtime-only and must come from `-salt` or the environment; TOML cannot set it.
+Command-line mode controls whether the policy runs.
 
 ## Load
 

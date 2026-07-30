@@ -392,16 +392,20 @@ func validateLogicalShard(
 }
 
 func validateScrubCounts(counts scrub.ActionCounts, enabled bool) error {
-	if !enabled && len(counts) != 0 {
+	if !enabled && !counts.IsZero() {
 		return fmt.Errorf("scrub counts are present while scrubbing is disabled")
 	}
-	for action, count := range counts {
-		if action == "" {
-			return fmt.Errorf("scrub count has an empty action name")
-		}
-		if count < 0 {
-			return fmt.Errorf("scrub count for %q must not be negative", action)
-		}
+	if counts.Preserve < 0 {
+		return fmt.Errorf("scrub count for %q must not be negative", "preserve")
+	}
+	if counts.Pseudonymize < 0 {
+		return fmt.Errorf("scrub count for %q must not be negative", "pseudonymize")
+	}
+	if counts.Redact < 0 {
+		return fmt.Errorf("scrub count for %q must not be negative", "redact")
+	}
+	if counts.ShiftTimestamp < 0 {
+		return fmt.Errorf("scrub count for %q must not be negative", "shift_timestamp")
 	}
 
 	return nil

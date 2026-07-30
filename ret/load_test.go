@@ -14,7 +14,6 @@ import (
 	"github.com/specterops/dawgs/ret/jsonl"
 	"github.com/specterops/dawgs/ret/observe"
 	"github.com/specterops/dawgs/ret/parquet"
-	"github.com/specterops/dawgs/ret/scrub"
 	"github.com/stretchr/testify/require"
 )
 
@@ -469,7 +468,7 @@ func writeLoadCollection(
 	config.ShardSize = 10
 	config.JSONL = jsonl.Config{Enabled: jsonlEnabled, Codec: jsonl.CodecNone}
 	config.Parquet = parquet.Config{Enabled: parquetEnabled}
-	config.Scrub = scrub.Config{}
+	config.Scrub = nil
 	_, err := Dump(context.Background(), newDumpTestDatabase(graphs), config)
 	require.NoError(t, err)
 	return config.Directory

@@ -12,8 +12,50 @@ import (
 
 const maxPropertyPlans = 4096
 
-// ActionCounts reports the number of successful actions by action name.
-type ActionCounts map[string]int64
+// ActionCounts reports the number of successful scrub actions.
+type ActionCounts struct {
+	Preserve       int64 `json:"preserve,omitempty"`
+	Pseudonymize   int64 `json:"pseudonymize,omitempty"`
+	Redact         int64 `json:"redact,omitempty"`
+	ShiftTimestamp int64 `json:"shift_timestamp,omitempty"`
+}
+
+// Add accumulates other into counts.
+func (s *ActionCounts) Add(other ActionCounts) {
+	s.Preserve += other.Preserve
+	s.Pseudonymize += other.Pseudonymize
+	s.Redact += other.Redact
+	s.ShiftTimestamp += other.ShiftTimestamp
+}
+
+// Combine returns the sum of counts and other without modifying either value.
+func (s ActionCounts) Combine(other ActionCounts) ActionCounts {
+	s.Add(other)
+	return s
+}
+
+// Total returns the number of all successful scrub actions.
+func (s ActionCounts) Total() int64 {
+	return s.Preserve + s.Pseudonymize + s.Redact + s.ShiftTimestamp
+}
+
+// IsZero reports whether counts contains no scrub actions.
+func (s ActionCounts) IsZero() bool {
+	return s == ActionCounts{}
+}
+
+func (s *ActionCounts) increment(action propertyAction) {
+	switch action {
+	case actionPreserve:
+		s.Preserve++
+	case actionPseudonymize:
+		s.Pseudonymize++
+	case actionRedact:
+		s.Redact++
+	case actionShiftTimestamp:
+		s.ShiftTimestamp++
+	}
+}
 
 type compiledShape struct {
 	name    string
@@ -22,7 +64,6 @@ type compiledShape struct {
 
 // Scrubber applies compiled, immutable rules to caller-owned property maps.
 type Scrubber struct {
-	enabled             bool
 	rules               Rules
 	salt                []byte
 	preserveKeys        map[string]struct{}
@@ -37,8 +78,7 @@ type Scrubber struct {
 
 // New compiles a scrub policy.
 func New(config Config) (*Scrubber, error) {
-	config.Salt = strings.TrimSpace(config.Salt)
-	config.Rules = normalizeRules(cloneRules(config.Rules))
+	config.Rules = cloneRules(config.Rules)
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -47,6 +87,7 @@ func New(config Config) (*Scrubber, error) {
 	for _, key := range config.Rules.Classifier.PreserveKeys {
 		preserveKeys[normalizeKey(key)] = struct{}{}
 	}
+
 	referenceKeys := map[string]struct{}{}
 	for _, keys := range [][]string{
 		config.Rules.GraphRules.DomainSIDReferenceKeys,
@@ -61,17 +102,16 @@ func New(config Config) (*Scrubber, error) {
 			}
 		}
 	}
+
 	shapeRules := make([]compiledShape, 0, len(config.Rules.Classifier.ValueShapePatterns))
 	for _, shape := range config.Rules.Classifier.ValueShapePatterns {
-		if strings.TrimSpace(shape.Name) == "" || strings.TrimSpace(shape.Pattern) == "" {
-			continue
-		}
 		pattern, err := regexp.Compile(shape.Pattern)
 		if err != nil {
 			return nil, err
 		}
 		shapeRules = append(shapeRules, compiledShape{name: shape.Name, pattern: pattern})
 	}
+
 	sensitiveKeyMarkers := make([]string, 0, len(config.Rules.Classifier.SensitiveKeyMarks))
 	for _, marker := range config.Rules.Classifier.SensitiveKeyMarks {
 		if normalized := normalizeKey(marker); normalized != "" {
@@ -87,7 +127,6 @@ func New(config Config) (*Scrubber, error) {
 	saltDigest := sha256.Sum256([]byte(config.Salt))
 
 	return &Scrubber{
-		enabled:             config.Enabled,
 		rules:               config.Rules,
 		salt:                append([]byte(nil), config.Salt...),
 		preserveKeys:        preserveKeys,
@@ -100,43 +139,28 @@ func New(config Config) (*Scrubber, error) {
 	}, nil
 }
 
-func normalizeRules(rules Rules) Rules {
-	rules.FakeDomain = strings.Trim(strings.ToLower(strings.TrimSpace(rules.FakeDomain)), ".")
-	rules.RedactionMarker = strings.TrimSpace(rules.RedactionMarker)
-	if rules.RedactionMarker == "" {
-		rules.RedactionMarker = "[REDACTED]"
-	}
-	if rules.Classifier.LongTextThreshold <= 0 {
-		rules.Classifier.LongTextThreshold = 512
-	}
-	if rules.TimestampShiftDays == 0 {
-		rules.TimestampShiftDays = 17
-	}
-	return rules
-}
-
 // Scrub mutates properties in place and returns action counts.
 func (s *Scrubber) Scrub(properties map[string]any) ActionCounts {
 	counts := ActionCounts{}
-	if s == nil || !s.enabled {
+	if s == nil {
 		return counts
 	}
-	s.scrubMap(properties, counts)
+	s.scrubMap(properties, &counts)
 	return counts
 }
 
-func (s *Scrubber) scrubMap(properties map[string]any, counts ActionCounts) {
+func (s *Scrubber) scrubMap(properties map[string]any, counts *ActionCounts) {
 	for key, value := range properties {
 		action := s.planProperty(key, value)
 		properties[key] = s.scrubWithAction(key, value, action)
-		counts[string(action)]++
+		counts.increment(action)
 		if action == actionPreserve {
 			s.scrubNested(value, counts)
 		}
 	}
 }
 
-func (s *Scrubber) scrubNested(value any, counts ActionCounts) {
+func (s *Scrubber) scrubNested(value any, counts *ActionCounts) {
 	switch typed := value.(type) {
 	case map[string]any:
 		s.scrubMap(typed, counts)

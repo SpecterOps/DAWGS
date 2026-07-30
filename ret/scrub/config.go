@@ -2,7 +2,6 @@
 package scrub
 
 import (
-	_ "embed"
 	"fmt"
 	"os"
 	"regexp"
@@ -13,9 +12,9 @@ import (
 
 // Config configures a Scrubber.
 type Config struct {
-	Enabled bool
-	Salt    string
-	Rules   Rules
+	// Salt is runtime-only and is not decoded from or encoded into config files.
+	Salt string `toml:"-" json:"-"`
+	Rules
 }
 
 // Rules contains the policy rules applied while scrubbing properties.
@@ -54,40 +53,108 @@ type ValueShapeConfig struct {
 	Pattern string `toml:"pattern"`
 }
 
-//go:embed defaults.toml
-var defaultConfigTOML []byte
-
-// DefaultConfig returns the legacy scrub policy with scrubbing enabled.
+// DefaultConfig returns the legacy scrub policy.
 func DefaultConfig() Config {
-	config, err := decodeConfig(defaultConfigTOML, Config{Enabled: true})
-	if err != nil {
-		panic(fmt.Sprintf("parse embedded scrub defaults: %v", err))
+	return Config{
+		Rules: Rules{
+			FakeDomain:         "example.invalid",
+			TimestampShiftDays: 17,
+			RedactionMarker:    "[REDACTED]",
+			GraphRules: GraphRulesConfig{
+				DomainKind:                  "Domain",
+				ObjectIDKey:                 "objectid",
+				DomainNameKey:               "domain",
+				DomainSIDReferenceKeys:      []string{"domainsid", "domain_sid"},
+				ObjectIDReferenceKeys:       []string{"objectid", "object_id", "sid", "owner_sid", "primarygroupid"},
+				SelfObjectIDAliasKeys:       []string{"objectsid"},
+				DomainNameReferenceKeys:     []string{"domain", "domain_name"},
+				CaseInsensitiveDomainNames:  true,
+				PreserveADSIDDomainPrefixes: true,
+			},
+			Classifier: ClassifierConfig{
+				LongTextThreshold: 512,
+				PreserveKeys:      []string{"objectid", "domainsid", "kind"},
+				SensitiveKeyMarks: []string{
+					"password",
+					"secret",
+					"token",
+					"credential",
+					"privatekey",
+					"private_key",
+					"apikey",
+					"api_key",
+					"email",
+					"mail",
+					"phone",
+					"address",
+					"name",
+					"displayname",
+					"samaccountname",
+					"userprincipalname",
+					"dns",
+					"hostname",
+				},
+				ValueShapePatterns: []ValueShapeConfig{
+					{Name: "email", Pattern: `(?i)^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$`},
+					{Name: "uuid", Pattern: `(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`},
+					{Name: "domain_sid", Pattern: `^S-1-5-21-\d+-\d+-\d+$`},
+					{Name: "object_sid", Pattern: `^(S-1-5-21-\d+-\d+-\d+)-(\d+)$`},
+					{Name: "ipv4", Pattern: `^(\d{1,3}\.){3}\d{1,3}$`},
+					{Name: "host", Pattern: `(?i)^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$`},
+				},
+			},
+		},
 	}
-
-	return config
 }
 
-// ReadConfig reads a TOML configuration using the legacy [scrub] and
-// [classifier] sections. Missing values retain the default policy values.
+// ReadConfig reads a TOML scrub policy. Missing values retain the defaults.
 func ReadConfig(path string) (Config, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read scrub config: %w", err)
 	}
 
-	config, err := decodeConfig(contents, DefaultConfig())
-	if err != nil {
+	config := DefaultConfig()
+	if err := toml.Unmarshal(contents, &config); err != nil {
 		return Config{}, fmt.Errorf("parse scrub config: %w", err)
 	}
 
 	return config, config.Validate()
 }
 
-// Validate verifies that configured value-shape patterns can be compiled.
+// Validate verifies that the scrub policy is complete, canonical, and compilable.
 func (s Config) Validate() error {
-	for _, shape := range s.Rules.Classifier.ValueShapePatterns {
-		if strings.TrimSpace(shape.Name) == "" || strings.TrimSpace(shape.Pattern) == "" {
-			continue
+	if strings.TrimSpace(s.Rules.FakeDomain) == "" {
+		return fmt.Errorf("fake domain must be non-empty")
+	}
+	if strings.TrimSpace(s.Rules.FakeDomain) != s.Rules.FakeDomain {
+		return fmt.Errorf("fake domain must be trimmed")
+	}
+	if strings.ToLower(s.Rules.FakeDomain) != s.Rules.FakeDomain {
+		return fmt.Errorf("fake domain must be lowercase")
+	}
+	if strings.HasPrefix(s.Rules.FakeDomain, ".") || strings.HasSuffix(s.Rules.FakeDomain, ".") {
+		return fmt.Errorf("fake domain must not have a leading or trailing dot")
+	}
+	if strings.TrimSpace(s.Rules.RedactionMarker) == "" {
+		return fmt.Errorf("redaction marker must be non-empty")
+	}
+	if strings.TrimSpace(s.Rules.RedactionMarker) != s.Rules.RedactionMarker {
+		return fmt.Errorf("redaction marker must be trimmed")
+	}
+	if s.Rules.Classifier.LongTextThreshold <= 0 {
+		return fmt.Errorf("long text threshold must be greater than zero")
+	}
+	if s.Rules.TimestampShiftDays == 0 {
+		return fmt.Errorf("timestamp shift days must be non-zero")
+	}
+
+	for index, shape := range s.Rules.Classifier.ValueShapePatterns {
+		if strings.TrimSpace(shape.Name) == "" {
+			return fmt.Errorf("value shape %d name must be non-empty", index)
+		}
+		if strings.TrimSpace(shape.Pattern) == "" {
+			return fmt.Errorf("value shape %q pattern must be non-empty", shape.Name)
 		}
 		if _, err := regexp.Compile(shape.Pattern); err != nil {
 			return fmt.Errorf("compile value shape %q: %w", shape.Name, err)
@@ -95,44 +162,6 @@ func (s Config) Validate() error {
 	}
 
 	return nil
-}
-
-type configFile struct {
-	Scrub struct {
-		Enabled            bool             `toml:"enabled"`
-		Salt               string           `toml:"salt"`
-		FakeDomain         string           `toml:"fake_domain"`
-		TimestampShiftDays int              `toml:"timestamp_shift_days"`
-		RedactionMarker    string           `toml:"redaction_marker"`
-		GraphRules         GraphRulesConfig `toml:"graph_rules"`
-	} `toml:"scrub"`
-	Classifier ClassifierConfig `toml:"classifier"`
-}
-
-func decodeConfig(contents []byte, base Config) (Config, error) {
-	file := configFile{}
-	file.Scrub.Enabled = base.Enabled
-	file.Scrub.Salt = base.Salt
-	file.Scrub.FakeDomain = base.Rules.FakeDomain
-	file.Scrub.TimestampShiftDays = base.Rules.TimestampShiftDays
-	file.Scrub.RedactionMarker = base.Rules.RedactionMarker
-	file.Scrub.GraphRules = cloneGraphRules(base.Rules.GraphRules)
-	file.Classifier = cloneClassifier(base.Rules.Classifier)
-	if err := toml.Unmarshal(contents, &file); err != nil {
-		return Config{}, err
-	}
-
-	return Config{
-		Enabled: file.Scrub.Enabled,
-		Salt:    file.Scrub.Salt,
-		Rules: Rules{
-			FakeDomain:         file.Scrub.FakeDomain,
-			TimestampShiftDays: file.Scrub.TimestampShiftDays,
-			RedactionMarker:    file.Scrub.RedactionMarker,
-			GraphRules:         file.Scrub.GraphRules,
-			Classifier:         file.Classifier,
-		},
-	}, nil
 }
 
 func cloneRules(rules Rules) Rules {

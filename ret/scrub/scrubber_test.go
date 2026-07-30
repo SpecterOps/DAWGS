@@ -36,8 +36,8 @@ func TestScrubPseudonymizesSensitiveValues(t *testing.T) {
 	} {
 		require.NotEqual(t, raw, properties[key], key)
 	}
-	require.EqualValues(t, 2, counts["pseudonymize"])
-	require.EqualValues(t, 1, counts["redact"])
+	require.EqualValues(t, 2, counts.Pseudonymize)
+	require.EqualValues(t, 1, counts.Redact)
 }
 
 func TestScrubIsDeterministic(t *testing.T) {
@@ -115,9 +115,9 @@ func TestScrubTimestampAndRedactionBranches(t *testing.T) {
 	require.Equal(t, 1768694400, properties["created_unix"])
 	require.Equal(t, "2026-01-18T00:00:00Z", properties["updated_time"])
 	require.Equal(t, []string{"2026-01-18T00:00:00Z"}, properties["deleted_at"])
-	require.EqualValues(t, 1, counts["redact"])
-	require.EqualValues(t, 4, counts["shift_timestamp"])
-	require.EqualValues(t, 1, counts["pseudonymize"])
+	require.EqualValues(t, 1, counts.Redact)
+	require.EqualValues(t, 4, counts.ShiftTimestamp)
+	require.EqualValues(t, 1, counts.Pseudonymize)
 }
 
 func TestScrubTimestampKeyHeuristics(t *testing.T) {
@@ -139,7 +139,7 @@ func TestScrubTimestampKeyHeuristics(t *testing.T) {
 
 	counts := scrubber.Scrub(properties)
 
-	require.EqualValues(t, len(timestampKeys), counts["shift_timestamp"])
+	require.EqualValues(t, len(timestampKeys), counts.ShiftTimestamp)
 	for key, value := range properties {
 		require.Equal(t, "2026-01-18T00:00:00Z", value, key)
 	}
@@ -160,7 +160,7 @@ func TestScrubTimestampKeyHeuristics(t *testing.T) {
 
 	counts = scrubber.Scrub(nonTimestampProperties)
 
-	require.Zero(t, counts["shift_timestamp"])
+	require.Zero(t, counts.ShiftTimestamp)
 }
 
 func TestScrubRedactsFreeTextFields(t *testing.T) {
@@ -176,7 +176,7 @@ func TestScrubRedactsFreeTextFields(t *testing.T) {
 	for key, value := range properties {
 		require.Equal(t, "[REDACTED]", value, key)
 	}
-	require.EqualValues(t, 3, counts["redact"])
+	require.EqualValues(t, 3, counts.Redact)
 }
 
 func TestScrubPseudonymizesPathAndScriptFields(t *testing.T) {
@@ -189,7 +189,7 @@ func TestScrubPseudonymizesPathAndScriptFields(t *testing.T) {
 
 	counts := scrubber.Scrub(properties)
 
-	require.EqualValues(t, 3, counts["pseudonymize"])
+	require.EqualValues(t, 3, counts.Pseudonymize)
 	for key, forbidden := range map[string][]string{
 		"homedirectory": {"fileserver01", "share", "account123"},
 		"profilepath":   {"profilehost01", "profiles", "account456"},
@@ -214,8 +214,8 @@ func TestScrubPseudonymizesUnknownStringsAndPreservesSafeScalars(t *testing.T) {
 
 	counts := scrubber.Scrub(properties)
 
-	require.EqualValues(t, 1, counts["pseudonymize"])
-	require.EqualValues(t, 2, counts["preserve"])
+	require.EqualValues(t, 1, counts.Pseudonymize)
+	require.EqualValues(t, 2, counts.Preserve)
 	require.Regexp(t, `^value-[0-9a-f]{16}$`, properties["business_justification"])
 	require.Equal(t, true, properties["enabled"])
 	require.Equal(t, 42, properties["risk_score"])
@@ -225,7 +225,7 @@ func TestScrubPseudonymizesTicketLikeValues(t *testing.T) {
 	properties := map[string]any{"request_id": "WORKITEM-12345"}
 	counts := newTestScrubber(t).Scrub(properties)
 
-	require.EqualValues(t, 1, counts["pseudonymize"])
+	require.EqualValues(t, 1, counts.Pseudonymize)
 	require.Regexp(t, `^value-[0-9a-f]{16}$`, properties["request_id"])
 }
 
@@ -252,7 +252,7 @@ func TestScrubRecordFixturePreservesReferenceConsistencyAndActionCounts(t *testi
 				"created_at":         "2026-01-01T00:00:00Z",
 				"enabled":            true,
 			},
-			want: ActionCounts{"pseudonymize": 6, "preserve": 2, "redact": 1, "shift_timestamp": 1},
+			want: ActionCounts{Pseudonymize: 6, Preserve: 2, Redact: 1, ShiftTimestamp: 1},
 		},
 		{
 			name: "second node",
@@ -262,7 +262,7 @@ func TestScrubRecordFixturePreservesReferenceConsistencyAndActionCounts(t *testi
 				"name":      "ALICE",
 				"empty":     "",
 			},
-			want: ActionCounts{"pseudonymize": 3, "preserve": 1},
+			want: ActionCounts{Pseudonymize: 3, Preserve: 1},
 		},
 		{
 			name: "first edge",
@@ -271,7 +271,7 @@ func TestScrubRecordFixturePreservesReferenceConsistencyAndActionCounts(t *testi
 				"path":      `\\server\share\alice`,
 				"password":  "secret",
 			},
-			want: ActionCounts{"pseudonymize": 2, "redact": 1},
+			want: ActionCounts{Pseudonymize: 2, Redact: 1},
 		},
 		{
 			name: "third node",
@@ -279,7 +279,7 @@ func TestScrubRecordFixturePreservesReferenceConsistencyAndActionCounts(t *testi
 				"objectid":  "S-1-5-21-9-8-7-1000",
 				"owner_sid": "S-1-5-21-1-2-3-500",
 			},
-			want: ActionCounts{"pseudonymize": 2},
+			want: ActionCounts{Pseudonymize: 2},
 		},
 		{
 			name: "second edge",
@@ -287,7 +287,7 @@ func TestScrubRecordFixturePreservesReferenceConsistencyAndActionCounts(t *testi
 				"owner_sid": "S-1-5-21-9-8-7-1000",
 				"office":    "North",
 			},
-			want: ActionCounts{"pseudonymize": 2},
+			want: ActionCounts{Pseudonymize: 2},
 		},
 	}
 
@@ -332,17 +332,27 @@ func TestScrubMutatesNestedValueBecauseInputCopyIsShallow(t *testing.T) {
 	require.Equal(t, "[REDACTED]", nested["password"])
 }
 
-func TestScrubDisabledDoesNotMutate(t *testing.T) {
+func TestConstructedScrubberAlwaysScrubs(t *testing.T) {
 	config := DefaultConfig()
-	config.Enabled = false
+	config.Salt = "test-salt"
 	scrubber, err := New(config)
 	require.NoError(t, err)
 	properties := map[string]any{"password": "secret"}
 
 	counts := scrubber.Scrub(properties)
 
-	require.Empty(t, counts)
-	require.Equal(t, "secret", properties["password"])
+	require.Equal(t, ActionCounts{Redact: 1}, counts)
+	require.Equal(t, "[REDACTED]", properties["password"])
+}
+
+func TestNilScrubberDoesNotMutate(t *testing.T) {
+	var scrubber *Scrubber
+	properties := map[string]any{"password": "secret"}
+
+	counts := scrubber.Scrub(properties)
+
+	require.True(t, counts.IsZero())
+	require.Equal(t, map[string]any{"password": "secret"}, properties)
 }
 
 func TestScrubPropertyPlanCacheIsBounded(t *testing.T) {
@@ -369,7 +379,7 @@ func TestFingerprintsAreStableAndSaltIsNotExposed(t *testing.T) {
 	require.Regexp(t, `^[0-9a-f]{64}$`, first.SaltFingerprint())
 }
 
-func TestNewTrimsSaltLikeLegacyPolicy(t *testing.T) {
+func TestNewPreservesExactSalt(t *testing.T) {
 	trimmedConfig := DefaultConfig()
 	trimmedConfig.Salt = "test-salt"
 	trimmed, err := New(trimmedConfig)
@@ -384,6 +394,7 @@ func TestNewTrimsSaltLikeLegacyPolicy(t *testing.T) {
 	trimmed.Scrub(trimmedProperties)
 	spaced.Scrub(spacedProperties)
 
-	require.Equal(t, trimmedProperties, spacedProperties)
-	require.Equal(t, trimmed.SaltFingerprint(), spaced.SaltFingerprint())
+	require.NotEqual(t, trimmedProperties, spacedProperties)
+	require.NotEqual(t, trimmed.SaltFingerprint(), spaced.SaltFingerprint())
+	require.Equal(t, "01320aaeeb335238814ed5c78b7f8f5fb73340eb9f4392e68f7861cc2f3a4bf8", spaced.SaltFingerprint())
 }

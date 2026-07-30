@@ -14,6 +14,7 @@ import (
 	"github.com/specterops/dawgs/ret/dawgs"
 	"github.com/specterops/dawgs/ret/jsonl"
 	"github.com/specterops/dawgs/ret/parquet"
+	"github.com/specterops/dawgs/ret/scrub"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +57,7 @@ func fixtureNodeShard(identity Identity, graph string, index int, count int64, c
 		Index:        index,
 		Count:        count,
 		LastSourceID: cursor,
-		ScrubCounts:  map[string]int64{"redact": 1},
+		ScrubCounts:  scrub.ActionCounts{Redact: 1},
 	}
 	if identity.JSONLEnabled {
 		shard.JSONL = &jsonl.NodeArtifact{
@@ -87,7 +88,7 @@ func fixtureRelationshipShard(identity Identity, graph string, index int, count 
 		Index:        index,
 		Count:        count,
 		LastSourceID: cursor,
-		ScrubCounts:  map[string]int64{"redact": 1},
+		ScrubCounts:  scrub.ActionCounts{Redact: 1},
 	}
 	if identity.JSONLEnabled {
 		shard.JSONL = &jsonl.RelationshipArtifact{
@@ -397,7 +398,7 @@ func TestStoreAcceptsDisabledScrubWithoutFingerprintsOrCounts(t *testing.T) {
 	state.Identity.ScrubEnabled = false
 	state.Identity.ScrubRulesFingerprint = ""
 	state.Identity.ScrubSaltFingerprint = ""
-	state.Graphs[0].NodeShards[0].ScrubCounts = nil
+	state.Graphs[0].NodeShards[0].ScrubCounts = scrub.ActionCounts{}
 
 	require.NoError(t, (Store{Root: t.TempDir()}).Save(state))
 }
@@ -461,6 +462,18 @@ func TestStoreRejectsMalformedState(t *testing.T) {
 			value.Identity.ScrubEnabled = false
 			value.Identity.ScrubRulesFingerprint = ""
 			value.Identity.ScrubSaltFingerprint = ""
+		}},
+		{name: "negative preserve scrub count", label: "scrub count", mutate: func(value *State) {
+			value.Graphs[0].NodeShards[0].ScrubCounts.Preserve = -1
+		}},
+		{name: "negative pseudonymize scrub count", label: "scrub count", mutate: func(value *State) {
+			value.Graphs[0].NodeShards[0].ScrubCounts.Pseudonymize = -1
+		}},
+		{name: "negative redact scrub count", label: "scrub count", mutate: func(value *State) {
+			value.Graphs[0].NodeShards[0].ScrubCounts.Redact = -1
+		}},
+		{name: "negative shift timestamp scrub count", label: "scrub count", mutate: func(value *State) {
+			value.Graphs[0].NodeShards[0].ScrubCounts.ShiftTimestamp = -1
 		}},
 		{name: "graph order", label: "order", mutate: func(value *State) { value.Graphs[0].Name = "beta" }},
 		{name: "duplicate graph state", label: "duplicate", mutate: func(value *State) {

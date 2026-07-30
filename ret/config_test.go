@@ -66,6 +66,15 @@ func TestDumpConfigReturnsFormatAndScrubValidationErrors(t *testing.T) {
 	}
 }
 
+func TestDumpConfigAllowsDisabledScrubbing(t *testing.T) {
+	// Break caught: requiring a scrub policy when nil is the library-level
+	// opt-out from scrubbing.
+	config := validDumpConfig(t)
+	config.Scrub = nil
+
+	require.NoError(t, config.Validate())
+}
+
 func TestDumpConfigRetainsEveryDelegatedValidationCause(t *testing.T) {
 	// Break caught: classifying a root validation error while silently discarding one delegated failure.
 	config := validDumpConfig(t)
@@ -97,6 +106,10 @@ func validDumpConfig(t *testing.T) DumpConfig {
 		ShardSize:       1,
 		JSONL:           jsonl.Config{Enabled: true, Codec: jsonl.CodecNone},
 		Parquet:         parquet.Config{Enabled: true},
-		Scrub:           scrub.DefaultConfig(),
+		Scrub:           pointerTo(scrub.DefaultConfig()),
 	}
+}
+
+func pointerTo[T any](value T) *T {
+	return &value
 }

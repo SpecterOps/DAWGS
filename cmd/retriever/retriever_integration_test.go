@@ -205,7 +205,7 @@ func TestRetFacadeScrubbedDualOutput(t *testing.T) {
 		jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
 		parquet.Config{Enabled: true},
 	)
-	config.Scrub = scrubConfig
+	config.Scrub = &scrubConfig
 
 	if _, err := ret.Dump(harness.ctx, harness.database, config); err != nil {
 		t.Fatalf("dump scrubbed collection: %v", err)
@@ -740,7 +740,7 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 		scrubMetadata: manifest.Scrub,
 	}
 	for _, shard := range graphEntry.NodeShards {
-		addActionCounts(result.scrubCounts, shard.ScrubCounts)
+		result.scrubCounts.Add(shard.ScrubCounts)
 		if shard.JSONL == nil || shard.Parquet == nil {
 			t.Fatalf("dual node shard %d is missing a concrete artifact", shard.Index)
 		}
@@ -758,7 +758,7 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 		}
 	}
 	for _, shard := range graphEntry.RelationshipShards {
-		addActionCounts(result.scrubCounts, shard.ScrubCounts)
+		result.scrubCounts.Add(shard.ScrubCounts)
 		if shard.JSONL == nil || shard.Parquet == nil {
 			t.Fatalf("dual relationship shard %d is missing a concrete artifact", shard.Index)
 		}
@@ -780,22 +780,16 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 	return result
 }
 
-func addActionCounts(destination, source scrub.ActionCounts) {
-	for action, count := range source {
-		destination[action] += count
-	}
-}
-
 func assertScrubFixture(t *testing.T, artifacts concreteArtifacts, wantKinds []string) {
 	t.Helper()
 	if !artifacts.scrubMetadata.Enabled {
 		t.Fatal("scrub metadata is not enabled")
 	}
 	wantCounts := scrub.ActionCounts{
-		"preserve":        2,
-		"pseudonymize":    1,
-		"redact":          1,
-		"shift_timestamp": 1,
+		Preserve:       2,
+		Pseudonymize:   1,
+		Redact:         1,
+		ShiftTimestamp: 1,
 	}
 	if !reflect.DeepEqual(artifacts.scrubCounts, wantCounts) {
 		t.Fatalf("scrub action counts = %#v, want %#v", artifacts.scrubCounts, wantCounts)

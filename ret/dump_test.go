@@ -501,8 +501,8 @@ func TestDumpScrubsConcreteArtifactsAndRecordsPerShardActions(t *testing.T) {
 
 	require.NoError(t, err)
 	manifest := readDumpManifest(t, result.ManifestPath)
-	require.Equal(t, scrub.ActionCounts{"redact": 2}, manifest.Graphs[0].NodeShards[0].ScrubCounts)
-	require.Equal(t, scrub.ActionCounts{"redact": 1}, manifest.Graphs[0].RelationshipShards[0].ScrubCounts)
+	require.Equal(t, scrub.ActionCounts{Redact: 2}, manifest.Graphs[0].NodeShards[0].ScrubCounts)
+	require.Equal(t, scrub.ActionCounts{Redact: 1}, manifest.Graphs[0].RelationshipShards[0].ScrubCounts)
 	var nodePasswords []any
 	require.NoError(t, jsonl.ReadNodes(
 		config.Directory,
@@ -525,6 +525,39 @@ func TestDumpScrubsConcreteArtifactsAndRecordsPerShardActions(t *testing.T) {
 	require.Equal(t, "[REDACTED]", relationshipPassword)
 }
 
+func TestDumpWithoutScrubConfigPreservesPropertiesAndDisablesScrubMetadata(t *testing.T) {
+	// Break caught: compiling or applying a zero-value scrub policy when the
+	// library caller disables scrubbing with a nil configuration.
+	database := newDumpTestDatabase(map[string]*dumpTestGraph{
+		"asset": {
+			nodes: []*graph.Node{
+				graph.NewNode(1, graph.AsProperties(map[string]any{"password": "secret"}), graph.StringKind("Entity")),
+			},
+		},
+	})
+	config := validRootDumpConfig(t)
+	config.JSONL.Enabled = true
+	config.Parquet.Enabled = false
+	config.Scrub = nil
+
+	result, err := Dump(context.Background(), database, config)
+
+	require.NoError(t, err)
+	manifest := readDumpManifest(t, result.ManifestPath)
+	require.False(t, manifest.Scrub.Enabled)
+	require.Empty(t, manifest.Scrub.RulesFingerprint)
+	require.Empty(t, manifest.Scrub.SaltFingerprint)
+	require.True(t, manifest.Graphs[0].NodeShards[0].ScrubCounts.IsZero())
+	require.NoError(t, jsonl.ReadNodes(
+		config.Directory,
+		*manifest.Graphs[0].NodeShards[0].JSONL,
+		func(node entity.Node) error {
+			require.Equal(t, "secret", node.Properties["password"])
+			return nil
+		},
+	))
+}
+
 const checkpointFileNameForTest = ".ret-checkpoint.json"
 
 func validRootDumpConfig(t *testing.T) DumpConfig {
@@ -536,7 +569,7 @@ func validRootDumpConfig(t *testing.T) DumpConfig {
 		ShardSize:       2,
 		JSONL:           jsonl.Config{Enabled: true, Codec: jsonl.CodecNone},
 		Parquet:         parquet.Config{Enabled: true},
-		Scrub:           scrub.DefaultConfig(),
+		Scrub:           pointerTo(scrub.DefaultConfig()),
 	}
 }
 

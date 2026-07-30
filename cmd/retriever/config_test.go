@@ -1,10 +1,14 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/specterops/dawgs/ret/jsonl"
 	"github.com/specterops/dawgs/ret/parquet"
+	"github.com/specterops/dawgs/ret/scrub"
 )
 
 func TestParseDumpDefaultsToJSONLZstdWithoutParquet(t *testing.T) {
@@ -23,6 +27,9 @@ func TestParseDumpDefaultsToJSONLZstdWithoutParquet(t *testing.T) {
 	}
 	if config.dump.Parquet.Enabled {
 		t.Fatal("Parquet is enabled by default")
+	}
+	if config.dump.Scrub != nil {
+		t.Fatalf("scrubbing is enabled by default: %+v", config.dump.Scrub)
 	}
 }
 
@@ -50,6 +57,67 @@ func TestParseDumpRejectsInvalidIndependentJSONLConfig(t *testing.T) {
 	}, testFlagOutput(t))
 	if err == nil {
 		t.Fatal("expected invalid JSONL codec")
+	}
+}
+
+func TestParseDumpEnablesScrubbingWithRuntimeSalt(t *testing.T) {
+	config, err := parseDumpCommand([]string{
+		"-out", t.TempDir(),
+		"-scrub", "full",
+		"-salt", "runtime-salt",
+	}, testFlagOutput(t))
+	if err != nil {
+		t.Fatalf("parse dump: %v", err)
+	}
+	if config.dump.Scrub == nil {
+		t.Fatal("scrubbing remained disabled")
+	}
+	if config.dump.Scrub.Salt != "runtime-salt" {
+		t.Fatalf("scrub salt = %q", config.dump.Scrub.Salt)
+	}
+	if !reflect.DeepEqual(config.dump.Scrub.Rules, scrub.DefaultConfig().Rules) {
+		t.Fatalf("scrub rules differ from defaults: %+v", config.dump.Scrub.Rules)
+	}
+}
+
+func TestParseDumpReadsDirectScrubPolicyAndOverridesFileSaltAtRuntime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "scrub.toml")
+	if err := os.WriteFile(path, []byte(`
+salt = "must-not-load"
+fake_domain = "scrub.example"
+
+[graph_rules]
+domain_kind = "CustomDomain"
+
+[classifier]
+long_text_threshold = 8
+`), 0o600); err != nil {
+		t.Fatalf("write scrub config: %v", err)
+	}
+
+	config, err := parseDumpCommand([]string{
+		"-out", t.TempDir(),
+		"-scrub", "full",
+		"-salt", "runtime-salt",
+		"-config", path,
+	}, testFlagOutput(t))
+	if err != nil {
+		t.Fatalf("parse dump: %v", err)
+	}
+	if config.dump.Scrub == nil {
+		t.Fatal("scrubbing remained disabled")
+	}
+	if config.dump.Scrub.Salt != "runtime-salt" {
+		t.Fatalf("scrub salt = %q", config.dump.Scrub.Salt)
+	}
+	if config.dump.Scrub.Rules.FakeDomain != "scrub.example" {
+		t.Fatalf("fake domain = %q", config.dump.Scrub.Rules.FakeDomain)
+	}
+	if config.dump.Scrub.Rules.GraphRules.DomainKind != "CustomDomain" {
+		t.Fatalf("domain kind = %q", config.dump.Scrub.Rules.GraphRules.DomainKind)
+	}
+	if config.dump.Scrub.Rules.Classifier.LongTextThreshold != 8 {
+		t.Fatalf("long text threshold = %d", config.dump.Scrub.Rules.Classifier.LongTextThreshold)
 	}
 }
 

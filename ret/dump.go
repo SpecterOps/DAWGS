@@ -43,9 +43,13 @@ func Dump(ctx context.Context, database graph.Database, config DumpConfig) (resu
 	if err := config.Validate(); err != nil {
 		return DumpResult{}, err
 	}
-	compiledScrubber, err := scrub.New(config.Scrub)
-	if err != nil {
-		return DumpResult{}, fmt.Errorf("%w: compile scrub configuration: %w", ErrInvalidConfig, err)
+	var compiledScrubber *scrub.Scrubber
+	if config.Scrub != nil {
+		var err error
+		compiledScrubber, err = scrub.New(*config.Scrub)
+		if err != nil {
+			return DumpResult{}, fmt.Errorf("%w: compile scrub configuration: %w", ErrInvalidConfig, err)
+		}
 	}
 
 	runner := dumpRunner{
@@ -291,9 +295,11 @@ func (s *dumpRunner) processNodes(graphState *checkpoint.GraphState, runtime *du
 			if err != nil {
 				return fmt.Errorf("dump graph %q node source ID: %w", graphState.Name, err)
 			}
-			counts := s.scrubber.Scrub(node.Properties)
-			mergeDumpActionCounts(activeCounts, counts)
-			mergeDumpActionCounts(runtime.totalScrubCounts, counts)
+			if s.scrubber != nil {
+				counts := s.scrubber.Scrub(node.Properties)
+				activeCounts.Add(counts)
+				runtime.totalScrubCounts.Add(counts)
+			}
 			if err := runtime.builder.ObserveNode(node); err != nil {
 				return fmt.Errorf("dump graph %q node metrics: %w", graphState.Name, err)
 			}
@@ -421,9 +427,11 @@ func (s *dumpRunner) processRelationships(graphState *checkpoint.GraphState, run
 			if err != nil {
 				return fmt.Errorf("dump graph %q relationship source ID: %w", graphState.Name, err)
 			}
-			counts := s.scrubber.Scrub(relationship.Properties)
-			mergeDumpActionCounts(activeCounts, counts)
-			mergeDumpActionCounts(runtime.totalScrubCounts, counts)
+			if s.scrubber != nil {
+				counts := s.scrubber.Scrub(relationship.Properties)
+				activeCounts.Add(counts)
+				runtime.totalScrubCounts.Add(counts)
+			}
 			if err := runtime.builder.ObserveRelationship(relationship); err != nil {
 				return fmt.Errorf("dump graph %q relationship metrics: %w", graphState.Name, err)
 			}
@@ -528,8 +536,8 @@ func (s *dumpRunner) manifest() collection.Manifest {
 	if s.config.Parquet.Enabled {
 		outputs.Parquet = &collection.ParquetOutput{SchemaVersion: parquet.SchemaVersion}
 	}
-	scrubMetadata := collection.ScrubMetadata{Enabled: s.config.Scrub.Enabled}
-	if s.config.Scrub.Enabled {
+	scrubMetadata := collection.ScrubMetadata{Enabled: s.scrubber != nil}
+	if s.scrubber != nil {
 		scrubMetadata.RulesFingerprint = s.scrubber.RulesFingerprint()
 		scrubMetadata.SaltFingerprint = s.scrubber.SaltFingerprint()
 	}
@@ -553,9 +561,9 @@ func dumpCheckpointIdentity(config DumpConfig, compiled *scrub.Scrubber) checkpo
 		ParquetEnabled:       config.Parquet.Enabled,
 		JSONLSchemaVersion:   jsonl.SchemaVersion,
 		ParquetSchemaVersion: parquet.SchemaVersion,
-		ScrubEnabled:         config.Scrub.Enabled,
+		ScrubEnabled:         compiled != nil,
 	}
-	if config.Scrub.Enabled {
+	if compiled != nil {
 		identity.ScrubRulesFingerprint = compiled.RulesFingerprint()
 		identity.ScrubSaltFingerprint = compiled.SaltFingerprint()
 	}
@@ -568,12 +576,6 @@ func parseDumpSourceID(value string) (uint64, error) {
 		return 0, fmt.Errorf("expected canonical positive Dawgs ID, got %q", value)
 	}
 	return parsed, nil
-}
-
-func mergeDumpActionCounts(target, source scrub.ActionCounts) {
-	for action, count := range source {
-		target[action] += count
-	}
 }
 
 type dumpKindCatalog struct {

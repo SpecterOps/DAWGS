@@ -218,8 +218,20 @@ func TestManifestRejectsInvalidLogicalShards(t *testing.T) {
 			},
 			message: "last source ID",
 		},
-		"negative scrub count": {
-			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].ScrubCounts["redact"] = -1 },
+		"negative preserve scrub count": {
+			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].ScrubCounts.Preserve = -1 },
+			message: "scrub count",
+		},
+		"negative pseudonymize scrub count": {
+			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].ScrubCounts.Pseudonymize = -1 },
+			message: "scrub count",
+		},
+		"negative redact scrub count": {
+			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].ScrubCounts.Redact = -1 },
+			message: "scrub count",
+		},
+		"negative shift timestamp scrub count": {
+			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].ScrubCounts.ShiftTimestamp = -1 },
 			message: "scrub count",
 		},
 		"disabled scrub count": {
@@ -400,7 +412,7 @@ func fixtureManifest() Manifest {
 				Index:        1,
 				Count:        2,
 				LastSourceID: 10,
-				ScrubCounts:  scrub.ActionCounts{"pseudonymize": 2},
+				ScrubCounts:  scrub.ActionCounts{Pseudonymize: 2},
 				JSONL: &jsonl.NodeArtifact{
 					SchemaVersion:     jsonl.SchemaVersion,
 					Path:              NodeJSONLPath("bloodhound", 1, jsonl.CodecZstd),
@@ -423,7 +435,7 @@ func fixtureManifest() Manifest {
 				Index:        1,
 				Count:        1,
 				LastSourceID: 20,
-				ScrubCounts:  scrub.ActionCounts{"preserve": 1},
+				ScrubCounts:  scrub.ActionCounts{Preserve: 1},
 				JSONL: &jsonl.RelationshipArtifact{
 					SchemaVersion:     jsonl.SchemaVersion,
 					Path:              RelationshipJSONLPath("bloodhound", 1, jsonl.CodecZstd),

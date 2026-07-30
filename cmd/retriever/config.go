@@ -41,7 +41,6 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 				Level:   0,
 			},
 			Parquet: parquet.Config{},
-			Scrub:   disabledDefaultScrubConfig(),
 		},
 	}
 	var (
@@ -50,6 +49,7 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 		scrubSalt        string
 		scrubConfigPath  string
 		jsonlCompression string
+		scrubConfig      = scrub.DefaultConfig()
 	)
 	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
 	flags.SetOutput(output)
@@ -83,7 +83,7 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 		if err != nil {
 			return dumpCommandConfig{}, err
 		}
-		config.dump.Scrub = loaded
+		scrubConfig = loaded
 	}
 	if strings.TrimSpace(scrubSalt) == "" {
 		scrubSalt = strings.TrimSpace(os.Getenv("RETRIEVER_SCRUB_SALT"))
@@ -91,15 +91,15 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 			scrubSalt = strings.TrimSpace(os.Getenv("RETRIEVR_SCRUB_SALT"))
 		}
 	}
-	config.dump.Scrub.Salt = strings.TrimSpace(scrubSalt)
+	scrubConfig.Salt = strings.TrimSpace(scrubSalt)
 	switch strings.TrimSpace(scrubMode) {
 	case "none":
-		config.dump.Scrub.Enabled = false
+		config.dump.Scrub = nil
 	case "full":
-		config.dump.Scrub.Enabled = true
-		if config.dump.Scrub.Salt == "" {
+		if scrubConfig.Salt == "" {
 			return dumpCommandConfig{}, fmt.Errorf("-scrub full requires -salt, RETRIEVER_SCRUB_SALT, or legacy RETRIEVR_SCRUB_SALT")
 		}
+		config.dump.Scrub = &scrubConfig
 	default:
 		return dumpCommandConfig{}, fmt.Errorf("unsupported scrub mode %q", scrubMode)
 	}
@@ -125,17 +125,12 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 	if err := config.dump.Parquet.Validate(); err != nil {
 		return dumpCommandConfig{}, fmt.Errorf("Parquet configuration: %w", err)
 	}
-	if err := config.dump.Scrub.Validate(); err != nil {
-		return dumpCommandConfig{}, fmt.Errorf("scrub configuration: %w", err)
+	if config.dump.Scrub != nil {
+		if err := config.dump.Scrub.Validate(); err != nil {
+			return dumpCommandConfig{}, fmt.Errorf("scrub configuration: %w", err)
+		}
 	}
 	return config, nil
-}
-
-func disabledDefaultScrubConfig() scrub.Config {
-	config := scrub.DefaultConfig()
-	config.Enabled = false
-	config.Salt = ""
-	return config
 }
 
 type stringList []string
