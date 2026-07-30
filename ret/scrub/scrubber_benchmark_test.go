@@ -24,8 +24,8 @@ func BenchmarkScrubPlanReuse(b *testing.B) {
 	scrubber.Scrub(properties)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		scrubBenchmarkCounts = scrubber.Scrub(properties)
 	}
 }
