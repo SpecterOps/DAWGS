@@ -41,7 +41,7 @@ func isCompositePropertyLookupTarget(expression pgsql.TypeHinted) bool {
 }
 
 func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, lookup *cypher.PropertyLookup) error {
-	if fieldIdentifierLiteral, err := propertyLookupNameLiteral(lookup.Symbol); err != nil {
+	if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
 		return err
 	} else {
 		s.treeTranslator.PushOperand(pgsql.RowColumnReference{
@@ -53,38 +53,13 @@ func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, l
 		return s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup)
 	}
 }
-
-func isEscapedPropertyLookupName(literal pgsql.Literal) bool {
-	if litString, typeOK := literal.Value.(string); !typeOK {
-		return false
-	} else if len(litString) > 2 && litString[0] == '`' && litString[len(litString)-1] == '`' {
-		return true
-	}
-
-	return false
-}
-
-func unescapePropertyLookupName(name string) string {
-	return strings.ReplaceAll(name[1:len(name)-1], "``", "`")
-}
-
-func propertyLookupNameLiteral(name string) (pgsql.Literal, error) {
-	if fieldIdentifierLiteral, err := pgsql.AsLiteral(name); err != nil {
-		return pgsql.Literal{}, err
-	} else if !isEscapedPropertyLookupName(fieldIdentifierLiteral) {
-		return fieldIdentifierLiteral, nil
-	} else {
-		return pgsql.AsLiteral(unescapePropertyLookupName(fieldIdentifierLiteral.Value.(string)))
-	}
-}
-
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
 	if translatedAtom, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
 	} else {
 		switch typedTranslatedAtom := translatedAtom.(type) {
 		case pgsql.Identifier:
-			if fieldIdentifierLiteral, err := propertyLookupNameLiteral(lookup.Symbol); err != nil {
+			if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
 				return err
 			} else {
 				s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{typedTranslatedAtom, pgsql.ColumnProperties})
@@ -100,7 +75,7 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 				return err
 			} else if !expressionHasCompositeProperties(expressionType) {
 				return fmt.Errorf("unsupported property lookup %s on expression type %s", lookup.Symbol, expressionType)
-			} else if fieldIdentifierLiteral, err := propertyLookupNameLiteral(lookup.Symbol); err != nil {
+			} else if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
 				return err
 			} else {
 				s.treeTranslator.PushOperand(pgsql.RowColumnReference{

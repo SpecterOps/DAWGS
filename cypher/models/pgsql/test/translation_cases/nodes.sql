@@ -69,7 +69,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((jsonb_typeof((((s0.n0)).properties -> 'a-aaa')) = 'string' and (((s0.n0)).properties ->> 'a-aaa') = '123'));
 
 -- case: match ()-[r]-() where startNode(r).`something` = "abc" return r
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((jsonb_typeof(((start_node(s0.n0)::nodecomposite).properties -> 'something')) = 'string' and ((start_node(s0.n0)::nodecomposite).properties ->> 'something') = 'abc'));
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on (n0.id = e0.end_id or n0.id = e0.start_id) join node n1 on (n1.id = e0.end_id or n1.id = e0.start_id) where (n0.id <> n1.id)) select s0.e0 as r from s0 where ((jsonb_typeof(((start_node(((s0.e0).id, (s0.e0).start_id, (s0.e0).end_id, (s0.e0).kind_id, (s0.e0).properties)::edgecomposite)::nodecomposite).properties -> 'something')) = 'string' and ((start_node(((s0.e0).id, (s0.e0).start_id, (s0.e0).end_id, (s0.e0).kind_id, (s0.e0).properties)::edgecomposite)::nodecomposite).properties ->> 'something') = 'abc'));
 
 -- case: match (n:NodeKind1 {name: "SOME NAME"}) return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and (jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = 'SOME NAME')) select s0.n0 as n from s0;

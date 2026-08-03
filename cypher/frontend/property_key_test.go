@@ -1,0 +1,40 @@
+package frontend_test
+
+import (
+	"testing"
+
+	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/walk"
+	"github.com/stretchr/testify/require"
+)
+
+func TestParsePropertyLookupStoresRawPropertyKeyNames(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.match, n.`a-aaa`, n.`has``tick`, n.``")
+	require.NoError(t, err)
+
+	var symbols []string
+	err = walk.CypherStructural(regularQuery, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if propertyLookup, typeOK := node.(*cypher.PropertyLookup); typeOK {
+			symbols = append(symbols, propertyLookup.Symbol)
+		}
+	}))
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"match", "a-aaa", "has`tick", ""}, symbols)
+}
+
+func TestParseMapLiteralStoresRawPropertyKeyNames(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN {match: 1, `a-aaa`: 2, `has``tick`: 3, ``: 4}")
+	require.NoError(t, err)
+
+	var keys []string
+	err = walk.CypherStructural(regularQuery, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if mapItem, typeOK := node.(*cypher.MapItem); typeOK {
+			keys = append(keys, mapItem.Key)
+		}
+	}))
+	require.NoError(t, err)
+
+	require.ElementsMatch(t, []string{"match", "a-aaa", "has`tick", ""}, keys)
+}
