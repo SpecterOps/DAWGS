@@ -332,7 +332,7 @@ func (s Emitter) formatMapLiteral(output io.Writer, mapLiteral cypher.MapLiteral
 			first = false
 		}
 
-		if _, err := io.WriteString(output, key); err != nil {
+		if _, err := io.WriteString(output, cypher.EscapePropertyKeyName(key)); err != nil {
 			return err
 		}
 
@@ -633,7 +633,7 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 			return err
 		}
 
-		if _, err := io.WriteString(output, typedExpression.Symbol); err != nil {
+		if _, err := io.WriteString(output, cypher.EscapePropertyKeyName(typedExpression.Symbol)); err != nil {
 			return err
 		}
 
