@@ -28,12 +28,6 @@ func (s *ActionCounts) Add(other ActionCounts) {
 	s.ShiftTimestamp += other.ShiftTimestamp
 }
 
-// Combine returns the sum of counts and other without modifying either value.
-func (s ActionCounts) Combine(other ActionCounts) ActionCounts {
-	s.Add(other)
-	return s
-}
-
 // Total returns the number of all successful scrub actions.
 func (s ActionCounts) Total() int64 {
 	return s.Preserve + s.Pseudonymize + s.Redact + s.ShiftTimestamp

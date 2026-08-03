@@ -7,34 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestActionCountsAddAndCombine(t *testing.T) {
-	left := ActionCounts{
-		Preserve:     1,
-		Pseudonymize: 2,
-	}
-	right := ActionCounts{
-		Preserve:       3,
-		Redact:         4,
-		ShiftTimestamp: 5,
-	}
-
-	combined := left.Combine(right)
-
-	require.Equal(t, ActionCounts{
-		Preserve:       4,
-		Pseudonymize:   2,
-		Redact:         4,
-		ShiftTimestamp: 5,
-	}, combined)
-	require.Equal(t, ActionCounts{
-		Preserve:     1,
-		Pseudonymize: 2,
-	}, left)
-
-	left.Add(right)
-	require.Equal(t, combined, left)
-}
-
 func TestActionCountsTotalAndIsZero(t *testing.T) {
 	require.True(t, (ActionCounts{}).IsZero())
 	require.Zero(t, (ActionCounts{}).Total())
