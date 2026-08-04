@@ -558,6 +558,247 @@ func TestQueryBuilder_Phase3TrustAndPruningForms(t *testing.T) {
 	))
 }
 
+func TestQueryBuilder_Phase4StandaloneHopForms(t *testing.T) {
+	hopKinds := func(count int) graph.Kinds {
+		kinds := make(graph.Kinds, count)
+		for idx := range count {
+			kinds[idx] = graph.StringKind(fmt.Sprintf("HopKind%02d", idx+1))
+		}
+		return kinds
+	}
+
+	t.Run("HOP-01 outbound exact start anchor with full directional projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Equals(query.StartID(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopKind01")),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopKind01]->(e) where id(s) = $p0 return r, e",
+		map[string]any{"p0": graph.ID(101)},
+	))
+
+	t.Run("HOP-01 outbound one-element start IN anchor", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.StartID(), graph.ID(101)),
+				query.KindIn(query.Relationship(), graph.StringKind("HopKind01")),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopKind01]->(e) where id(s) in $p0 return r, e",
+		map[string]any{"p0": []graph.ID{101}},
+	))
+
+	t.Run("HOP-02 inbound exact end anchor with full directional projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Equals(query.EndID(), graph.ID(202)),
+				query.Kind(query.Relationship(), graph.StringKind("HopKind01")),
+			)),
+			query.Returning(query.Relationship(), query.Start()),
+		),
+		"match (s)-[r:HopKind01]->(e) where id(e) = $p0 return r, s",
+		map[string]any{"p0": graph.ID(202)},
+	))
+
+	for _, count := range []int{2, 5, 9, 30} {
+		kinds := hopKinds(count)
+		renderedKinds := "HopKind01"
+		for idx := 1; idx < count; idx++ {
+			renderedKinds += fmt.Sprintf("|HopKind%02d", idx+1)
+		}
+
+		t.Run(fmt.Sprintf("HOP-03 outbound %d relationship kinds", count), assertQueryResult(
+			query.SinglePartQuery(
+				query.Where(query.And(
+					query.InIDs(query.StartID(), graph.ID(101)),
+					query.KindIn(query.Relationship(), kinds...),
+				)),
+				query.Returning(query.Relationship(), query.End()),
+			),
+			fmt.Sprintf("match (s)-[r:%s]->(e) where id(s) in $p0 return r, e", renderedKinds),
+			map[string]any{"p0": []graph.ID{101}},
+		))
+
+		t.Run(fmt.Sprintf("HOP-03 inbound %d relationship kinds", count), assertQueryResult(
+			query.SinglePartQuery(
+				query.Where(query.And(
+					query.InIDs(query.EndID(), graph.ID(202)),
+					query.KindIn(query.Relationship(), kinds...),
+				)),
+				query.Returning(query.Relationship(), query.Start()),
+			),
+			fmt.Sprintf("match (s)-[r:%s]->(e) where id(e) in $p0 return r, s", renderedKinds),
+			map[string]any{"p0": []graph.ID{202}},
+		))
+	}
+
+	t.Run("HOP-04 opposite endpoint kind disjunction", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.StartID(), graph.ID(101)),
+				query.KindIn(query.Relationship(), graph.StringKind("HopTypedEdge")),
+				query.KindIn(query.End(), graph.StringKind("HopEndA"), graph.StringKind("HopEndB")),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopTypedEdge]->(e) where id(s) in $p0 and (e:HopEndA or e:HopEndB) return r, e",
+		map[string]any{"p0": []graph.ID{101}},
+	))
+
+	t.Run("HOP-05 endpoint IDs through variable spelling", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Equals(query.StartID(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopIDEdge")),
+				query.InIDs(query.End(), graph.ID(202), graph.ID(303)),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopIDEdge]->(e) where id(s) = $p0 and id(e) in $p1 return r, e",
+		map[string]any{"p0": graph.ID(101), "p1": []graph.ID{202, 303}},
+	))
+
+	t.Run("HOP-05 endpoint IDs through identity-function spelling", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.Start(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopIDEdge")),
+				query.InIDs(query.EndID(), graph.ID(202), graph.ID(303)),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopIDEdge]->(e) where id(s) in $p0 and id(e) in $p1 return r, e",
+		map[string]any{"p0": []graph.ID{101}, "p1": []graph.ID{202, 303}},
+	))
+
+	t.Run("HOP-06 opposite endpoint scalar properties", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Equals(query.StartID(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopPropertyEdge")),
+				query.Equals(query.EndProperty("enabled"), true),
+				query.Equals(query.EndProperty("score"), 7),
+				query.Equals(query.EndProperty("name"), "target"),
+				query.Equals(query.EndProperty("isassignabletorole"), "true"),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopPropertyEdge]->(e) where id(s) = $p0 and e.enabled = $p1 and e.score = $p2 and e.name = $p3 and e.isassignabletorole = $p4 return r, e",
+		map[string]any{"p0": graph.ID(101), "p1": true, "p2": 7, "p3": "target", "p4": "true"},
+	))
+
+	t.Run("HOP-07 nested production-style endpoint predicate", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Equals(query.StartID(), graph.ID(101)),
+				query.KindIn(query.Relationship(), graph.StringKind("HopNestedEdge")),
+				query.Kind(query.End(), graph.StringKind("HopTemplate")),
+				query.Or(
+					query.And(
+						query.Equals(query.EndProperty("requiresmanagerapproval"), false),
+						query.GreaterThan(query.EndProperty("schemaversion"), 1),
+						query.Equals(query.EndProperty("authorizedsignatures"), 0),
+						query.Equals(query.EndProperty("authenticationenabled"), true),
+					),
+					query.And(
+						query.Equals(query.EndProperty("requiresmanagerapproval"), false),
+						query.Equals(query.EndProperty("schemaversion"), 1),
+						query.Equals(query.EndProperty("authenticationenabled"), true),
+					),
+				),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopNestedEdge]->(e) where id(s) = $p0 and e:HopTemplate and (e.requiresmanagerapproval = $p1 and e.schemaversion > $p2 and e.authorizedsignatures = $p3 and e.authenticationenabled = $p4 or e.requiresmanagerapproval = $p5 and e.schemaversion = $p6 and e.authenticationenabled = $p7) return r, e",
+		map[string]any{"p0": graph.ID(101), "p1": false, "p2": 1, "p3": 0, "p4": true, "p5": false, "p6": 1, "p7": true},
+	))
+
+	t.Run("HOP-08 collection predicates nested with scalar fallback", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Equals(query.StartID(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopCollectionEdge")),
+				query.Or(
+					query.Equals(query.EndProperty("schannelauthenticationenabled"), true),
+					query.Equals(query.Size(query.EndProperty("effectiveekus")), 0),
+					query.InInverted(query.EndProperty("effectiveekus"), "1.3.6.1.5.5.7.3.2"),
+				),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopCollectionEdge]->(e) where id(s) = $p0 and (e.schannelauthenticationenabled = $p1 or size(e.effectiveekus) = $p2 or $p3 in e.effectiveekus) return r, e",
+		map[string]any{"p0": graph.ID(101), "p1": true, "p2": 0, "p3": "1.3.6.1.5.5.7.3.2"},
+	))
+
+	t.Run("HOP-09 two-sided endpoint ID lists", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.StartID(), graph.ID(101), graph.ID(202)),
+				query.InIDs(query.EndID(), graph.ID(303), graph.ID(404)),
+				query.Kind(query.Relationship(), graph.StringKind("HopSetEdge")),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopSetEdge]->(e) where id(s) in $p0 and id(e) in $p1 return r, e",
+		map[string]any{"p0": []graph.ID{101, 202}, "p1": []graph.ID{303, 404}},
+	))
+
+	t.Run("HOP-10 outbound endpoint kind property and start anchor", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.StartID(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopProjectionEdge")),
+				query.Kind(query.End(), graph.StringKind("HopProjectionEnd")),
+				query.Equals(query.EndProperty("active"), true),
+			)),
+			query.Returning(query.Relationship(), query.End()),
+		),
+		"match (s)-[r:HopProjectionEdge]->(e) where id(s) in $p0 and e:HopProjectionEnd and e.active = $p1 return r, e",
+		map[string]any{"p0": []graph.ID{101}, "p1": true},
+	))
+
+	t.Run("HOP-10 inbound endpoint kind property and end anchor", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.EndID(), graph.ID(202)),
+				query.Kind(query.Relationship(), graph.StringKind("HopProjectionEdge")),
+				query.Kind(query.Start(), graph.StringKind("HopProjectionStart")),
+				query.Equals(query.StartProperty("active"), true),
+			)),
+			query.Returning(query.Relationship(), query.Start()),
+		),
+		"match (s)-[r:HopProjectionEdge]->(e) where id(e) in $p0 and s:HopProjectionStart and s.active = $p1 return r, s",
+		map[string]any{"p0": []graph.ID{202}, "p1": true},
+	))
+
+	t.Run("HOP-10 explicit start-node projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.EndID(), graph.ID(202)),
+				query.Kind(query.Relationship(), graph.StringKind("HopProjectionEdge")),
+			)),
+			query.Returning(query.Start()),
+		),
+		"match (s)-[r:HopProjectionEdge]->(e) where id(e) in $p0 return s",
+		map[string]any{"p0": []graph.ID{202}},
+	))
+
+	t.Run("HOP-10 explicit end-ID and relationship projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.InIDs(query.StartID(), graph.ID(101)),
+				query.Kind(query.Relationship(), graph.StringKind("HopProjectionEdge")),
+			)),
+			query.Returning(query.EndID(), query.Relationship()),
+		),
+		"match (s)-[r:HopProjectionEdge]->(e) where id(s) in $p0 return id(e), r",
+		map[string]any{"p0": []graph.ID{101}},
+	))
+}
+
 func TestQueryBuilder_Render(t *testing.T) {
 	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 

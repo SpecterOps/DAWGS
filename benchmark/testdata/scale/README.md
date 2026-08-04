@@ -44,10 +44,10 @@ The runner drains the mutation result and validates those expectations inside
 one rollback transaction. Warm-up, every timed iteration, and PostgreSQL
 `EXPLAIN ANALYZE` therefore start from the same committed fixture state.
 
-The `generated_reconciliation` and `generated_trust_pruning` datasets are
-constructed by `testutil.NewReconciliationScaleFixture` and
-`testutil.NewTrustPruningScaleFixture`; they are intentionally not large
-handwritten OpenGraph JSON files.
+The `generated_reconciliation`, `generated_trust_pruning`, and `generated_hops`
+datasets are constructed by `testutil.NewReconciliationScaleFixture`,
+`testutil.NewTrustPruningScaleFixture`, and `testutil.NewHopScaleFixture`; they
+are intentionally not large handwritten OpenGraph JSON files.
 
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
 summaries.
