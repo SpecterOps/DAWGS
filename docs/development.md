@@ -145,3 +145,14 @@ Store graphbench and plan-corpus captures under `.coverage/`; they are
 environment-specific review artifacts, not committed correctness goldens.
 
 See [Graph Benchmark Capture](../cmd/graphbench/README.md) for command examples.
+
+## BloodHound Source-Parity Audits
+
+When the reviewed BHE or BHCE snapshots change, repeat the call-site inventory,
+active-entry-point trace, normalized query-form mapping, and commit recording in
+[BloodHound Regression Source Parity](regression_source_parity.md).
+
+Dormant `FUTURE-*` forms stay manifest-only until a reviewed caller is enabled.
+The unit suites reject dormant IDs from both shared plan inputs and scale cases;
+activating a form requires updating those gates together with its required
+semantic, plan, and scale coverage.
