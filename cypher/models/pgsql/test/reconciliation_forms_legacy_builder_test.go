@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLegacyBuilderPostgreSQL_Phase2ReconciliationForms(t *testing.T) {
+func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 	reconciliationKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
 		for idx := range count {
@@ -60,7 +60,7 @@ func TestLegacyBuilderPostgreSQL_Phase2ReconciliationForms(t *testing.T) {
 			assertRelationshipDelete(t, formatted)
 			require.Contains(t, formatted, "n1.id = e0.end_id")
 			require.Contains(t, formatted, "n1.properties -> 'objectid'")
-			require.Contains(t, formatted, fmt.Sprintf("array [%s]::int2[]", phase2KindIDs(33, count)))
+			require.Contains(t, formatted, fmt.Sprintf("array [%s]::int2[]", sequentialKindIDs(33, count)))
 			require.Equal(t, map[string]any{"pi0": "target-id"}, translation.Parameters)
 		})
 
@@ -77,7 +77,7 @@ func TestLegacyBuilderPostgreSQL_Phase2ReconciliationForms(t *testing.T) {
 			assertRelationshipDelete(t, formatted)
 			require.Contains(t, formatted, "n0.id = e0.start_id")
 			require.Contains(t, formatted, "n0.properties -> 'objectid'")
-			require.Contains(t, formatted, fmt.Sprintf("array [%s]::int2[]", phase2KindIDs(33, count)))
+			require.Contains(t, formatted, fmt.Sprintf("array [%s]::int2[]", sequentialKindIDs(33, count)))
 			require.Equal(t, map[string]any{"pi0": "target-id"}, translation.Parameters)
 		})
 	}
@@ -192,7 +192,7 @@ func TestLegacyBuilderPostgreSQL_Phase2ReconciliationForms(t *testing.T) {
 	}
 }
 
-func phase2KindIDs(first, count int) string {
+func sequentialKindIDs(first, count int) string {
 	ids := make([]string, count)
 	for idx := range count {
 		ids[idx] = fmt.Sprint(first + idx)

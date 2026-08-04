@@ -30,11 +30,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase4LegacyBuilderIntegration(t *testing.T) {
-	anchorFixture := phase4TemplateFixture(t, "HOP-01 through HOP-03 anchored direction and relationship-kind cardinality")
-	idFixture := phase4TemplateFixture(t, "HOP-04 and HOP-05 endpoint kinds and ID constraints")
-	predicateFixture := phase4TemplateFixture(t, "HOP-06 through HOP-08 scalar nested and collection endpoint predicates")
-	projectionFixture := phase4TemplateFixture(t, "HOP-09 and HOP-10 two-sided sets and directional projections")
+func TestLegacyBuilderStandaloneHops(t *testing.T) {
+	anchorFixture := regressionTemplateFixture(t, "HOP-01 through HOP-03 anchored direction and relationship-kind cardinality")
+	idFixture := regressionTemplateFixture(t, "HOP-04 and HOP-05 endpoint kinds and ID constraints")
+	predicateFixture := regressionTemplateFixture(t, "HOP-06 through HOP-08 scalar nested and collection endpoint predicates")
+	projectionFixture := regressionTemplateFixture(t, "HOP-09 and HOP-10 two-sided sets and directional projections")
 
 	var nodeKinds, edgeKinds graph.Kinds
 	for _, fixture := range []*opengraph.Graph{anchorFixture, idFixture, predicateFixture, projectionFixture} {
@@ -54,7 +54,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 			)
 		}, func(relationshipQuery graph.RelationshipQuery, idMap opengraph.IDMap) error {
 			return relationshipQuery.FetchDirection(graph.DirectionInbound, func(cursor graph.Cursor[graph.DirectionalResult]) error {
-				results := phase4DirectionalResults(t, cursor)
+				results := standaloneHopDirectionalResults(t, cursor)
 				require.Len(t, results, 1)
 				require.Equal(t, idMap["out-one-target"], results[0].Node.ID)
 				return nil
@@ -70,7 +70,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 			)
 		}, func(relationshipQuery graph.RelationshipQuery, idMap opengraph.IDMap) error {
 			return relationshipQuery.FetchDirection(graph.DirectionOutbound, func(cursor graph.Cursor[graph.DirectionalResult]) error {
-				results := phase4DirectionalResults(t, cursor)
+				results := standaloneHopDirectionalResults(t, cursor)
 				require.Len(t, results, 1)
 				require.Equal(t, idMap["in-one-source"], results[0].Node.ID)
 				return nil
@@ -92,7 +92,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 			relationships, err := ops.FetchRelationships(relationshipQuery)
 			require.NoError(t, err)
 			require.Len(t, relationships, 30)
-			require.NotContains(t, phase4RelationshipMarkers(t, relationships), "out-disallowed")
+			require.NotContains(t, standaloneHopRelationshipMarkers(t, relationships), "out-disallowed")
 			return nil
 		})
 	})
@@ -135,7 +135,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 				}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 					relationships, err := ops.FetchRelationships(relationshipQuery)
 					require.NoError(t, err)
-					require.ElementsMatch(t, testCase.expected, phase4RelationshipMarkers(t, relationships))
+					require.ElementsMatch(t, testCase.expected, standaloneHopRelationshipMarkers(t, relationships))
 					return nil
 				})
 			})
@@ -152,7 +152,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 				query.Equals(query.EndProperty("value"), "alpha"),
 				query.Equals(query.EndProperty("isassignabletorole"), "true"),
 			)
-		}, phase4AssertRelationshipMarkers(t, []string{"scalar-match"}))
+		}, assertStandaloneHopRelationshipMarkers(t, []string{"scalar-match"}))
 	})
 
 	t.Run("HOP-07 nested branch-local predicate", func(t *testing.T) {
@@ -175,7 +175,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 					),
 				),
 			)
-		}, phase4AssertRelationshipMarkers(t, []string{"nested-v1", "nested-v2"}))
+		}, assertStandaloneHopRelationshipMarkers(t, []string{"nested-v1", "nested-v2"}))
 	})
 
 	t.Run("HOP-08 collection OR scalar predicate", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 					query.InInverted(query.EndProperty("effectiveekus"), "1.3.6.1.5.5.7.3.2"),
 				),
 			)
-		}, phase4AssertRelationshipMarkers(t, []string{"collection-client", "collection-empty", "collection-scalar"}))
+		}, assertStandaloneHopRelationshipMarkers(t, []string{"collection-client", "collection-empty", "collection-scalar"}))
 	})
 
 	t.Run("HOP-09 two-sided ID lists", func(t *testing.T) {
@@ -199,7 +199,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 				query.InIDs(query.EndID(), idMap["e1"], idMap["e2"]),
 				query.Kind(query.Relationship(), graph.StringKind("HopSetEdge")),
 			)
-		}, phase4AssertRelationshipMarkers(t, []string{"s1-e1", "s1-e2", "s2-e1", "s2-e2"}))
+		}, assertStandaloneHopRelationshipMarkers(t, []string{"s1-e1", "s1-e2", "s2-e1", "s2-e2"}))
 	})
 
 	t.Run("HOP-10 both full directional projections", func(t *testing.T) {
@@ -213,7 +213,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 				)
 			}, func(relationshipQuery graph.RelationshipQuery, idMap opengraph.IDMap) error {
 				return relationshipQuery.FetchDirection(graph.DirectionInbound, func(cursor graph.Cursor[graph.DirectionalResult]) error {
-					results := phase4DirectionalResults(t, cursor)
+					results := standaloneHopDirectionalResults(t, cursor)
 					require.Len(t, results, 1)
 					require.Equal(t, idMap["e1"], results[0].Node.ID)
 					return nil
@@ -231,7 +231,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 				)
 			}, func(relationshipQuery graph.RelationshipQuery, idMap opengraph.IDMap) error {
 				return relationshipQuery.FetchDirection(graph.DirectionOutbound, func(cursor graph.Cursor[graph.DirectionalResult]) error {
-					results := phase4DirectionalResults(t, cursor)
+					results := standaloneHopDirectionalResults(t, cursor)
 					require.Len(t, results, 1)
 					require.Equal(t, idMap["s1"], results[0].Node.ID)
 					return nil
@@ -241,7 +241,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 	})
 }
 
-func phase4TemplateFixture(t *testing.T, familyName string) *opengraph.Graph {
+func regressionTemplateFixture(t *testing.T, familyName string) *opengraph.Graph {
 	t.Helper()
 	for _, templateFile := range loadCypherTemplateFiles(t) {
 		for _, family := range templateFile.Families {
@@ -254,7 +254,7 @@ func phase4TemplateFixture(t *testing.T, familyName string) *opengraph.Graph {
 	return nil
 }
 
-func phase4DirectionalResults(t *testing.T, cursor graph.Cursor[graph.DirectionalResult]) []graph.DirectionalResult {
+func standaloneHopDirectionalResults(t *testing.T, cursor graph.Cursor[graph.DirectionalResult]) []graph.DirectionalResult {
 	t.Helper()
 	var results []graph.DirectionalResult
 	for result := range cursor.Chan() {
@@ -264,7 +264,7 @@ func phase4DirectionalResults(t *testing.T, cursor graph.Cursor[graph.Directiona
 	return results
 }
 
-func phase4RelationshipMarkers(t *testing.T, relationships []*graph.Relationship) []string {
+func standaloneHopRelationshipMarkers(t *testing.T, relationships []*graph.Relationship) []string {
 	t.Helper()
 	markers := make([]string, 0, len(relationships))
 	for _, relationship := range relationships {
@@ -276,12 +276,12 @@ func phase4RelationshipMarkers(t *testing.T, relationships []*graph.Relationship
 	return markers
 }
 
-func phase4AssertRelationshipMarkers(t *testing.T, expected []string) func(graph.RelationshipQuery, opengraph.IDMap) error {
+func assertStandaloneHopRelationshipMarkers(t *testing.T, expected []string) func(graph.RelationshipQuery, opengraph.IDMap) error {
 	t.Helper()
 	return func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 		relationships, err := ops.FetchRelationships(relationshipQuery)
 		require.NoError(t, err)
-		require.Equal(t, expected, phase4RelationshipMarkers(t, relationships))
+		require.Equal(t, expected, standaloneHopRelationshipMarkers(t, relationships))
 		return nil
 	}
 }

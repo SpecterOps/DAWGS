@@ -24,22 +24,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func phase5RegressionKinds(numbers ...int) graph.Kinds {
+func scanLookupRegressionKinds(numbers ...int) graph.Kinds {
 	kinds := make(graph.Kinds, len(numbers))
 	for idx, number := range numbers {
-		kinds[idx] = graph.StringKind("RegressionKind" + phase5TwoDigits(number))
+		kinds[idx] = graph.StringKind("RegressionKind" + twoDigitKindSuffix(number))
 	}
 	return kinds
 }
 
-func phase5TwoDigits(value int) string {
+func twoDigitKindSuffix(value int) string {
 	if value < 10 {
 		return "0" + string(rune('0'+value))
 	}
 	return string(rune('0'+value/10)) + string(rune('0'+value%10))
 }
 
-func assertPhase5Translation(t *testing.T, criteria []graph.Criteria, fragments ...string) {
+func assertScanLookupTranslation(t *testing.T, criteria []graph.Criteria, fragments ...string) {
 	t.Helper()
 	formatted, _ := translateLegacyQuery(t, criteria...)
 	for _, fragment := range fragments {
@@ -47,58 +47,58 @@ func assertPhase5Translation(t *testing.T, criteria []graph.Criteria, fragments 
 	}
 }
 
-func TestLegacyBuilderPostgreSQL_Phase5RelationshipScans(t *testing.T) {
+func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 	t.Run("SCAN-01 base endpoints and relationship ID", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.KindIn(query.Start(), phase5RegressionKinds(61, 62)...),
-				query.Kind(query.Relationship(), phase5RegressionKinds(63)[0]),
-				query.KindIn(query.End(), phase5RegressionKinds(61, 62)...),
+				query.KindIn(query.Start(), scanLookupRegressionKinds(61, 62)...),
+				query.Kind(query.Relationship(), scanLookupRegressionKinds(63)[0]),
+				query.KindIn(query.End(), scanLookupRegressionKinds(61, 62)...),
 			)),
 			query.Returning(query.RelationshipID()),
 		}, "n0.kind_ids", "n1.kind_ids", "array [93, 94]::int2[]", "e0.kind_id = any (array [95]::int2[])", "select (s0.e0).id")
 	})
 
 	t.Run("SCAN-02 excludes Meta endpoints and hydrates relationships", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Not(query.KindIn(query.Start(), phase5RegressionKinds(64, 65)...)),
-				query.KindIn(query.Relationship(), phase5RegressionKinds(66, 67)...),
-				query.Not(query.KindIn(query.End(), phase5RegressionKinds(64, 65)...)),
+				query.Not(query.KindIn(query.Start(), scanLookupRegressionKinds(64, 65)...)),
+				query.KindIn(query.Relationship(), scanLookupRegressionKinds(66, 67)...),
+				query.Not(query.KindIn(query.End(), scanLookupRegressionKinds(64, 65)...)),
 			)),
 			query.Returning(query.Relationship()),
 		}, "not", "array [96, 97]::int2[]", "array [98, 99]::int2[]", "select s0.e0 as r")
 	})
 
 	t.Run("SCAN-03 exists relationship property and ID", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Not(query.KindIn(query.Start(), phase5RegressionKinds(64, 65)...)),
-				query.Kind(query.Relationship(), phase5RegressionKinds(68)[0]),
+				query.Not(query.KindIn(query.Start(), scanLookupRegressionKinds(64, 65)...)),
+				query.Kind(query.Relationship(), scanLookupRegressionKinds(68)[0]),
 				query.Exists(query.RelationshipProperty("lastseen")),
-				query.Not(query.KindIn(query.End(), phase5RegressionKinds(64, 65)...)),
+				query.Not(query.KindIn(query.End(), scanLookupRegressionKinds(64, 65)...)),
 			)),
 			query.Returning(query.RelationshipID()),
 		}, "e0.properties ? 'lastseen'", "not (e0.properties -> 'lastseen')", "array [100]::int2[]", "select (s0.e0).id")
 	})
 
 	for _, relationshipKind := range []int{70, 71} {
-		t.Run("SCAN-04 raw ownership representative "+phase5TwoDigits(relationshipKind), func(t *testing.T) {
-			assertPhase5Translation(t, []graph.Criteria{
+		t.Run("SCAN-04 raw ownership representative "+twoDigitKindSuffix(relationshipKind), func(t *testing.T) {
+			assertScanLookupTranslation(t, []graph.Criteria{
 				query.Where(query.And(
-					query.Kind(query.Relationship(), phase5RegressionKinds(relationshipKind)[0]),
-					query.Kind(query.Start(), phase5RegressionKinds(69)[0]),
+					query.Kind(query.Relationship(), scanLookupRegressionKinds(relationshipKind)[0]),
+					query.Kind(query.Start(), scanLookupRegressionKinds(69)[0]),
 				)),
 				query.Returning(query.Relationship()),
 			}, "n0.kind_ids", "array [101]::int2[]", "select s0.e0 as r")
 		})
 	}
 
-	nineKinds := phase5RegressionKinds(72, 73, 74, 75, 76, 77, 78, 79, 80)
+	nineKinds := scanLookupRegressionKinds(72, 73, 74, 75, 76, 77, 78, 79, 80)
 	t.Run("SCAN-05 nine relationship kinds bound end", func(t *testing.T) {
 		formatted, translation := translateLegacyQuery(t,
 			query.Where(query.And(
-				query.Kind(query.Start(), phase5RegressionKinds(69)[0]),
+				query.Kind(query.Start(), scanLookupRegressionKinds(69)[0]),
 				query.KindIn(query.Relationship(), nineKinds...),
 				query.Equals(query.EndID(), graph.ID(202)),
 			)),
@@ -110,18 +110,18 @@ func TestLegacyBuilderPostgreSQL_Phase5RelationshipScans(t *testing.T) {
 	})
 
 	t.Run("SCAN-06 FetchKinds column order", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Relationship(), phase5RegressionKinds(82)[0]),
-				query.Kind(query.End(), phase5RegressionKinds(81)[0]),
+				query.Kind(query.Relationship(), scanLookupRegressionKinds(82)[0]),
+				query.Kind(query.End(), scanLookupRegressionKinds(81)[0]),
 			)),
 			query.Returning(query.StartID(), query.RelationshipID(), query.KindsOf(query.Relationship()), query.EndID()),
 		}, "select (s0.n0).id as \"id(s)\", (s0.e0).id as \"id(r)\", kind_name((s0.e0).kind_id)::text as \"type(r)\", (s0.n1).id as \"id(e)\"")
 	})
 
 	t.Run("SCAN-07 directed start and end IDs", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
-			query.Where(query.KindIn(query.Relationship(), phase5RegressionKinds(83, 84)...)),
+		assertScanLookupTranslation(t, []graph.Criteria{
+			query.Where(query.KindIn(query.Relationship(), scanLookupRegressionKinds(83, 84)...)),
 			query.Returning(query.StartID(), query.EndID()),
 		}, "array [115, 116]::int2[]", "select (s0.n0).id as \"id(s)\", (s0.n1).id as \"id(e)\"")
 	})
@@ -131,19 +131,19 @@ func TestLegacyBuilderPostgreSQL_Phase5RelationshipScans(t *testing.T) {
 			endKinds graph.Kinds
 			relKinds graph.Kinds
 		}{
-			"scenario A": {relKinds: phase5RegressionKinds(87, 88, 89, 90, 91, 92)},
-			"scenario B": {endKinds: phase5RegressionKinds(81), relKinds: phase5RegressionKinds(87, 88, 89, 90, 91)},
+			"scenario A": {relKinds: scanLookupRegressionKinds(87, 88, 89, 90, 91, 92)},
+			"scenario B": {endKinds: scanLookupRegressionKinds(81), relKinds: scanLookupRegressionKinds(87, 88, 89, 90, 91)},
 		} {
 			t.Run(name, func(t *testing.T) {
 				criteria := []graph.Criteria{
-					query.KindIn(query.Start(), phase5RegressionKinds(85, 86, 81)...),
+					query.KindIn(query.Start(), scanLookupRegressionKinds(85, 86, 81)...),
 					query.InIDs(query.EndID(), graph.ID(202), graph.ID(303)),
 					query.KindIn(query.Relationship(), testCase.relKinds...),
 				}
 				if len(testCase.endKinds) > 0 {
 					criteria = append(criteria, query.KindIn(query.End(), testCase.endKinds...))
 				}
-				assertPhase5Translation(t, []graph.Criteria{
+				assertScanLookupTranslation(t, []graph.Criteria{
 					query.Where(query.And(criteria...)),
 					query.Returning(query.StartID()),
 				}, "n0.kind_ids", "n1.id = any", "select (s0.n0).id")
@@ -152,28 +152,28 @@ func TestLegacyBuilderPostgreSQL_Phase5RelationshipScans(t *testing.T) {
 	})
 }
 
-func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
+func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 	t.Run("LOOKUP-01 ID and full-node projections", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
-			query.Where(query.KindIn(query.Node(), phase5RegressionKinds(85, 86)...)),
+		assertScanLookupTranslation(t, []graph.Criteria{
+			query.Where(query.KindIn(query.Node(), scanLookupRegressionKinds(85, 86)...)),
 			query.Returning(query.NodeID()),
 		}, "array [117, 118]::int2[]", "select (s0.n0).id")
-		assertPhase5Translation(t, []graph.Criteria{
-			query.Where(query.Kind(query.Node(), phase5RegressionKinds(93)[0])),
+		assertScanLookupTranslation(t, []graph.Criteria{
+			query.Where(query.Kind(query.Node(), scanLookupRegressionKinds(93)[0])),
 			query.Returning(query.Node()),
 		}, "array [125]::int2[]", "select s0.n0 as n")
 	})
 
 	t.Run("LOOKUP-02 equalities and limit", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Node(), phase5RegressionKinds(81)[0]),
+				query.Kind(query.Node(), scanLookupRegressionKinds(81)[0]),
 				query.Equals(query.NodeProperty("objectid"), "S-1-5-21"),
 			)),
 			query.Returning(query.Node()),
 			query.Limit(1),
 		}, "n0.properties -> 'objectid'", "select s0.n0 as n", "limit 1")
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
 				query.Equals(query.NodeProperty("name"), "dc.example.test"),
 				query.Equals(query.NodeProperty("enabled"), true),
@@ -183,9 +183,9 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-03 boolean two-column projection", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Node(), phase5RegressionKinds(81)[0]),
+				query.Kind(query.Node(), scanLookupRegressionKinds(81)[0]),
 				query.Equals(query.NodeProperty("hasura"), true),
 			)),
 			query.Returning(query.NodeID(), query.NodeProperty("hasura")),
@@ -193,15 +193,15 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-04 prefix suffix and equality", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Node(), phase5RegressionKinds(94)[0]),
+				query.Kind(query.Node(), scanLookupRegressionKinds(94)[0]),
 				query.StringStartsWith(query.NodeProperty("distinguishedname"), "CN=ADMINSDHOLDER,"),
 				query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),
 			)),
 			query.Returning(query.Node()),
 		}, "cypher_starts_with", "n0.properties -> 'domainsid'")
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.Or(
 				query.StringEndsWith(query.NodeProperty("objectid"), "-S-1"),
 				query.StringEndsWith(query.NodeProperty("objectid"), "-S-2"),
@@ -218,26 +218,26 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 		require.Contains(t, formatted, "lower")
 		require.Contains(t, formatted, "cypher_starts_with")
 		require.Equal(t, map[string]any{"pi0": "remote desktop users%_"}, translation.Parameters)
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.CaseInsensitiveStringContains(query.NodeProperty("objectid"), "Approver_GUID")),
 			query.Returning(query.Node()),
 		}, "lower", "cypher_contains")
 	})
 
 	t.Run("LOOKUP-06 required and excluded kind groups", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.KindIn(query.Node(), phase5RegressionKinds(85, 86)...),
-				query.Kind(query.Node(), phase5RegressionKinds(69)[0]),
+				query.KindIn(query.Node(), scanLookupRegressionKinds(85, 86)...),
+				query.Kind(query.Node(), scanLookupRegressionKinds(69)[0]),
 				query.StringEndsWith(query.NodeProperty("objectid"), "-512"),
 				query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),
 			)),
 			query.Returning(query.Node()),
 		}, "array [117, 118]::int2[]", "array [101]::int2[]", "cypher_ends_with")
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Node(), phase5RegressionKinds(69)[0]),
-				query.Not(query.KindIn(query.Node(), phase5RegressionKinds(85, 98)...)),
+				query.Kind(query.Node(), scanLookupRegressionKinds(69)[0]),
+				query.Not(query.KindIn(query.Node(), scanLookupRegressionKinds(85, 98)...)),
 				query.StringEndsWith(query.NodeProperty("objectid"), "-512"),
 			)),
 			query.Returning(query.Node()),
@@ -245,16 +245,16 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-07 missing property", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.Not(query.Exists(query.NodeProperty("name")))),
 			query.Returning(query.Node()),
 		}, "n0.properties ? 'name'", "not (n0.properties -> 'name')", "not")
 	})
 
 	t.Run("LOOKUP-08 nullable approver disjunction", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Node(), phase5RegressionKinds(95)[0]),
+				query.Kind(query.Node(), scanLookupRegressionKinds(95)[0]),
 				query.Equals(query.NodeProperty("tenantid"), "tenant-1"),
 				query.Equals(query.NodeProperty("approvalrequired"), true),
 				query.Or(
@@ -277,9 +277,9 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-10 nested negated flags", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
-				query.Kind(query.Node(), phase5RegressionKinds(86)[0]),
+				query.Kind(query.Node(), scanLookupRegressionKinds(86)[0]),
 				query.Not(query.And(query.Exists(query.NodeProperty("gmsa")), query.Equals(query.NodeProperty("gmsa"), true))),
 				query.Not(query.And(query.Exists(query.NodeProperty("msa")), query.Equals(query.NodeProperty("msa"), true))),
 				query.InIDs(query.NodeID(), graph.ID(101), graph.ID(202)),
@@ -289,11 +289,11 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-11 tenant adjacency and endpoint property list", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
 				query.Equals(query.StartID(), graph.ID(101)),
-				query.Kind(query.Relationship(), phase5RegressionKinds(97)[0]),
-				query.KindIn(query.End(), phase5RegressionKinds(95, 96)...),
+				query.Kind(query.Relationship(), scanLookupRegressionKinds(97)[0]),
+				query.KindIn(query.End(), scanLookupRegressionKinds(95, 96)...),
 				query.In(query.EndProperty("roletemplateid"), []string{"role-a", "role-b"}),
 			)),
 			query.Returning(query.End()),
@@ -301,11 +301,11 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-12 exact edge key and First", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
+		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
 				query.Equals(query.StartID(), graph.ID(101)),
 				query.Equals(query.EndID(), graph.ID(202)),
-				query.Kind(query.Relationship(), phase5RegressionKinds(83)[0]),
+				query.Kind(query.Relationship(), scanLookupRegressionKinds(83)[0]),
 			)),
 			query.Returning(query.Relationship()),
 			query.Limit(1),
@@ -314,10 +314,10 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 
 	t.Run("LOOKUP-13 suffix with bound opposite endpoint projections", func(t *testing.T) {
 		for _, projection := range []graph.Criteria{query.Returning(query.Start()), query.Returning(query.StartID())} {
-			assertPhase5Translation(t, []graph.Criteria{
+			assertScanLookupTranslation(t, []graph.Criteria{
 				query.Where(query.And(
 					query.StringEndsWith(query.StartProperty("objectid"), "-555"),
-					query.Kind(query.Relationship(), phase5RegressionKinds(82)[0]),
+					query.Kind(query.Relationship(), scanLookupRegressionKinds(82)[0]),
 					query.Equals(query.EndID(), graph.ID(202)),
 				)),
 				projection,
@@ -326,8 +326,8 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-14 descending property order", func(t *testing.T) {
-		assertPhase5Translation(t, []graph.Criteria{
-			query.Where(query.Kind(query.Node(), phase5RegressionKinds(99)[0])),
+		assertScanLookupTranslation(t, []graph.Criteria{
+			query.Where(query.Kind(query.Node(), scanLookupRegressionKinds(99)[0])),
 			query.Returning(query.Node()),
 			query.OrderBy(query.Order(query.NodeProperty("name"), query.Descending())),
 		}, "select s0.n0 as n", "order by", "desc")
@@ -335,11 +335,11 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 
 	t.Run("LOOKUP-16 typed and untyped four-property equalities", func(t *testing.T) {
 		for name, kindCriteria := range map[string]graph.Criteria{
-			"typed":   query.Kind(query.Node(), phase5RegressionKinds(81)[0]),
+			"typed":   query.Kind(query.Node(), scanLookupRegressionKinds(81)[0]),
 			"untyped": query.And(),
 		} {
 			t.Run(name, func(t *testing.T) {
-				assertPhase5Translation(t, []graph.Criteria{
+				assertScanLookupTranslation(t, []graph.Criteria{
 					query.Where(query.And(
 						kindCriteria,
 						query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),

@@ -43,7 +43,7 @@ func translateLegacyQuery(t *testing.T, criteria ...graph.Criteria) (string, tra
 	return formatted, translation
 }
 
-func TestLegacyBuilderPostgreSQL_Phase1LogicalForms(t *testing.T) {
+func TestLegacyBuilderPostgreSQL_LogicalForms(t *testing.T) {
 	t.Run("LOGIC-01 branch-local relationship kinds", func(t *testing.T) {
 		formatted, _ := translateLegacyQuery(t,
 			query.Where(query.Or(

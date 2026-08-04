@@ -29,12 +29,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase5LegacyBuilderIntegration(t *testing.T) {
-	wideFixture := phase4TemplateFixture(t, "SCAN-01 through SCAN-04 wide relationship filters")
-	anchoredFixture := phase4TemplateFixture(t, "SCAN-05 through SCAN-08 anchored scans and projections")
-	basicFixture := phase4TemplateFixture(t, "LOOKUP-01 through LOOKUP-08 node predicates and projections")
-	advancedFixture := phase4TemplateFixture(t, "LOOKUP-09 through LOOKUP-14 and LOOKUP-16 advanced lookups")
-	countFixture := phase4TemplateFixture(t, "LOOKUP-15 dense graph counts")
+func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
+	wideFixture := regressionTemplateFixture(t, "SCAN-01 through SCAN-04 wide relationship filters")
+	anchoredFixture := regressionTemplateFixture(t, "SCAN-05 through SCAN-08 anchored scans and projections")
+	basicFixture := regressionTemplateFixture(t, "LOOKUP-01 through LOOKUP-08 node predicates and projections")
+	advancedFixture := regressionTemplateFixture(t, "LOOKUP-09 through LOOKUP-14 and LOOKUP-16 advanced lookups")
+	countFixture := regressionTemplateFixture(t, "LOOKUP-15 dense graph counts")
 
 	var nodeKinds, edgeKinds graph.Kinds
 	for _, fixture := range []*opengraph.Graph{wideFixture, anchoredFixture, basicFixture, advancedFixture, countFixture} {
@@ -68,7 +68,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 				query.KindIn(query.Relationship(), graph.StringKind("TrackerA"), graph.StringKind("TrackerB")),
 				query.Not(query.KindIn(query.End(), graph.StringKind("Meta"), graph.StringKind("MetaDetail"))),
 			)
-		}, phase4AssertRelationshipMarkers(t, []string{"tracker-a", "tracker-b"}))
+		}, assertStandaloneHopRelationshipMarkers(t, []string{"tracker-a", "tracker-b"}))
 	})
 
 	t.Run("SCAN-03 present lastseen relationship IDs", func(t *testing.T) {
@@ -95,7 +95,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 						query.Kind(query.Relationship(), graph.StringKind(kind)),
 						query.Kind(query.Start(), graph.StringKind("Entity")),
 					)
-				}, phase4AssertRelationshipMarkers(t, []string{expected}))
+				}, assertStandaloneHopRelationshipMarkers(t, []string{expected}))
 			})
 		}
 	})
@@ -104,7 +104,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, anchoredFixture, func(idMap opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Start(), graph.StringKind("Entity")),
-				query.KindIn(query.Relationship(), phase5ADCSKinds()...),
+				query.KindIn(query.Relationship(), scanLookupADCSKinds()...),
 				query.Equals(query.EndID(), idMap["target"]),
 			)
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
@@ -251,7 +251,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-04 case-sensitive prefix", func(t *testing.T) {
-		phase5AssertNodeIDs(t, session, basicFixture, []string{"adminsdholder"}, func(opengraph.IDMap) graph.Criteria {
+		assertScanLookupNodeIDs(t, session, basicFixture, []string{"adminsdholder"}, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Node(), graph.StringKind("Container")),
 				query.StringStartsWith(query.NodeProperty("distinguishedname"), "CN=ADMINSDHOLDER,CN=SYSTEM,"),
@@ -261,7 +261,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-05 case-insensitive contains candidates", func(t *testing.T) {
-		phase5AssertNodeIDs(t, session, basicFixture, []string{"ci-contains-exact", "ci-contains-substring"}, func(opengraph.IDMap) graph.Criteria {
+		assertScanLookupNodeIDs(t, session, basicFixture, []string{"ci-contains-exact", "ci-contains-substring"}, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Node(), graph.StringKind("Entity")),
 				query.CaseInsensitiveStringContains(query.NodeProperty("objectid"), "Approver_GUID"),
@@ -270,7 +270,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-06 required and excluded kinds", func(t *testing.T) {
-		phase5AssertNodeIDs(t, session, basicFixture, []string{"entity-only"}, func(opengraph.IDMap) graph.Criteria {
+		assertScanLookupNodeIDs(t, session, basicFixture, []string{"entity-only"}, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Node(), graph.StringKind("Entity")),
 				query.Not(query.KindIn(query.Node(), graph.StringKind("Group"), graph.StringKind("LocalGroup"))),
@@ -280,7 +280,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-07 missing and null properties", func(t *testing.T) {
-		phase5AssertNodeIDs(t, session, basicFixture, []string{"name-missing", "name-null"}, func(opengraph.IDMap) graph.Criteria {
+		assertScanLookupNodeIDs(t, session, basicFixture, []string{"name-missing", "name-null"}, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Node(), graph.StringKind("Lookup")),
 				query.Not(query.Exists(query.NodeProperty("name"))),
@@ -289,7 +289,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 	})
 
 	t.Run("LOOKUP-08 nullable approver disjunction", func(t *testing.T) {
-		phase5AssertNodeIDs(t, session, basicFixture, []string{"role-both", "role-group", "role-user"}, func(opengraph.IDMap) graph.Criteria {
+		assertScanLookupNodeIDs(t, session, basicFixture, []string{"role-both", "role-group", "role-user"}, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Node(), graph.StringKind("AZRole")),
 				query.Equals(query.NodeProperty("tenantid"), "tenant-1"),
@@ -308,7 +308,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 		}, func(nodeQuery graph.NodeQuery, idMap opengraph.IDMap) error {
 			nodes, err := ops.FetchNodes(nodeQuery)
 			require.NoError(t, err)
-			require.Equal(t, []string{"hydrate-a", "hydrate-b"}, phase5FixtureIDs(t, idMap, phase5NodeIDs(nodes)))
+			require.Equal(t, []string{"hydrate-a", "hydrate-b"}, scanLookupFixtureIDs(t, idMap, scanLookupNodeIDs(nodes)))
 			return nil
 		})
 	})
@@ -417,7 +417,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 			{family: "LOOKUP-15 dense graph counts", expectedNodes: 4, expectedEdges: 6},
 		} {
 			t.Run(testCase.family, func(t *testing.T) {
-				fixture := phase4TemplateFixture(t, testCase.family)
+				fixture := regressionTemplateFixture(t, testCase.family)
 				err := session.WithRollbackFixture(t, fixture, false, func(tx graph.Transaction, _ opengraph.IDMap) error {
 					nodeCount, err := tx.Nodes().Count()
 					require.NoError(t, err)
@@ -444,7 +444,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 			{name: "untyped LDAPS", available: "ldapsavailable", protection: "epa", expected: "ntlm-ldaps-good"},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
-				phase5AssertNodeIDs(t, session, advancedFixture, []string{testCase.expected}, func(opengraph.IDMap) graph.Criteria {
+				assertScanLookupNodeIDs(t, session, advancedFixture, []string{testCase.expected}, func(opengraph.IDMap) graph.Criteria {
 					criteria := []graph.Criteria{
 						query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),
 						query.Equals(query.NodeProperty("isdc"), true),
@@ -461,7 +461,7 @@ func TestPhase5LegacyBuilderIntegration(t *testing.T) {
 	})
 }
 
-func phase5ADCSKinds() graph.Kinds {
+func scanLookupADCSKinds() graph.Kinds {
 	kinds := make(graph.Kinds, 9)
 	for idx := range kinds {
 		kinds[idx] = graph.StringKind("ADCSEdge0" + string(rune('1'+idx)))
@@ -469,7 +469,7 @@ func phase5ADCSKinds() graph.Kinds {
 	return kinds
 }
 
-func phase5NodeIDs(nodes []*graph.Node) []graph.ID {
+func scanLookupNodeIDs(nodes []*graph.Node) []graph.ID {
 	ids := make([]graph.ID, len(nodes))
 	for idx, node := range nodes {
 		ids[idx] = node.ID
@@ -477,22 +477,22 @@ func phase5NodeIDs(nodes []*graph.Node) []graph.ID {
 	return ids
 }
 
-func phase5FixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) []string {
+func scanLookupFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) []string {
 	t.Helper()
 	fixtureIDs := make([]string, len(ids))
 	for idx, id := range ids {
-		fixtureIDs[idx] = phase1FixtureID(t, idMap, id)
+		fixtureIDs[idx] = regressionFixtureID(t, idMap, id)
 	}
 	sort.Strings(fixtureIDs)
 	return fixtureIDs
 }
 
-func phase5AssertNodeIDs(t *testing.T, session *Session, fixture *opengraph.Graph, expected []string, criteria func(opengraph.IDMap) graph.Criteria) {
+func assertScanLookupNodeIDs(t *testing.T, session *Session, fixture *opengraph.Graph, expected []string, criteria func(opengraph.IDMap) graph.Criteria) {
 	t.Helper()
 	WithLegacyNodeQuery(t, session, fixture, criteria, func(nodeQuery graph.NodeQuery, idMap opengraph.IDMap) error {
 		ids, err := ops.FetchNodeIDs(nodeQuery)
 		require.NoError(t, err)
-		require.Equal(t, expected, phase5FixtureIDs(t, idMap, ids))
+		require.Equal(t, expected, scanLookupFixtureIDs(t, idMap, ids))
 		return nil
 	})
 }

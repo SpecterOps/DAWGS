@@ -23,7 +23,7 @@ import (
 	"github.com/specterops/dawgs/query"
 )
 
-func phase5Kinds(names ...string) graph.Kinds {
+func scanLookupKinds(names ...string) graph.Kinds {
 	kinds := make(graph.Kinds, len(names))
 	for idx, name := range names {
 		kinds[idx] = graph.StringKind(name)
@@ -31,13 +31,13 @@ func phase5Kinds(names ...string) graph.Kinds {
 	return kinds
 }
 
-func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
+func TestQueryBuilder_RelationshipScans(t *testing.T) {
 	t.Run("SCAN-01 base endpoints and relationship ID projection", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
-				query.KindIn(query.Start(), phase5Kinds("ADBase", "AZBase")...),
+				query.KindIn(query.Start(), scanLookupKinds("ADBase", "AZBase")...),
 				query.Kind(query.Relationship(), graph.StringKind("PostProcessed")),
-				query.KindIn(query.End(), phase5Kinds("ADBase", "AZBase")...),
+				query.KindIn(query.End(), scanLookupKinds("ADBase", "AZBase")...),
 			)),
 			query.Returning(query.RelationshipID()),
 		),
@@ -47,9 +47,9 @@ func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
 	t.Run("SCAN-02 excludes Meta endpoints and hydrates relationships", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
-				query.Not(query.KindIn(query.Start(), phase5Kinds("Meta", "MetaDetail")...)),
-				query.KindIn(query.Relationship(), phase5Kinds("TrackerA", "TrackerB")...),
-				query.Not(query.KindIn(query.End(), phase5Kinds("Meta", "MetaDetail")...)),
+				query.Not(query.KindIn(query.Start(), scanLookupKinds("Meta", "MetaDetail")...)),
+				query.KindIn(query.Relationship(), scanLookupKinds("TrackerA", "TrackerB")...),
+				query.Not(query.KindIn(query.End(), scanLookupKinds("Meta", "MetaDetail")...)),
 			)),
 			query.Returning(query.Relationship()),
 		),
@@ -59,10 +59,10 @@ func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
 	t.Run("SCAN-03 non-Meta lastseen relationship IDs", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
-				query.Not(query.KindIn(query.Start(), phase5Kinds("Meta", "MetaDetail")...)),
+				query.Not(query.KindIn(query.Start(), scanLookupKinds("Meta", "MetaDetail")...)),
 				query.Kind(query.Relationship(), graph.StringKind("MigratedEdge")),
 				query.Exists(query.RelationshipProperty("lastseen")),
-				query.Not(query.KindIn(query.End(), phase5Kinds("Meta", "MetaDetail")...)),
+				query.Not(query.KindIn(query.End(), scanLookupKinds("Meta", "MetaDetail")...)),
 			)),
 			query.Returning(query.RelationshipID()),
 		),
@@ -80,7 +80,7 @@ func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
 		"match (s)-[r:OwnsRaw]->() where s:Entity return r",
 	))
 
-	nineKinds := phase5Kinds("ADCSEdge01", "ADCSEdge02", "ADCSEdge03", "ADCSEdge04", "ADCSEdge05", "ADCSEdge06", "ADCSEdge07", "ADCSEdge08", "ADCSEdge09")
+	nineKinds := scanLookupKinds("ADCSEdge01", "ADCSEdge02", "ADCSEdge03", "ADCSEdge04", "ADCSEdge05", "ADCSEdge06", "ADCSEdge07", "ADCSEdge08", "ADCSEdge09")
 	t.Run("SCAN-05 consolidated nine-kind inbound scan", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
@@ -107,19 +107,19 @@ func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
 
 	t.Run("SCAN-07 directed ID pair projection", assertQueryResult(
 		query.SinglePartQuery(
-			query.Where(query.KindIn(query.Relationship(), phase5Kinds("MemberOf", "MemberOfLocalGroup")...)),
+			query.Where(query.KindIn(query.Relationship(), scanLookupKinds("MemberOf", "MemberOfLocalGroup")...)),
 			query.Returning(query.StartID(), query.EndID()),
 		),
 		"match (s)-[r:MemberOf|MemberOfLocalGroup]->(e) return id(s), id(e)",
 	))
 
-	startKinds := phase5Kinds("Group", "User", "Computer")
+	startKinds := scanLookupKinds("Group", "User", "Computer")
 	t.Run("SCAN-08 scenario A", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
 				query.KindIn(query.Start(), startKinds...),
 				query.InIDs(query.EndID(), graph.ID(202), graph.ID(303)),
-				query.KindIn(query.Relationship(), phase5Kinds("GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL", "WritePublicInformation")...),
+				query.KindIn(query.Relationship(), scanLookupKinds("GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL", "WritePublicInformation")...),
 			)),
 			query.Returning(query.StartID()),
 		),
@@ -133,7 +133,7 @@ func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
 				query.KindIn(query.Start(), startKinds...),
 				query.InIDs(query.EndID(), graph.ID(202), graph.ID(303)),
 				query.Kind(query.End(), graph.StringKind("Computer")),
-				query.KindIn(query.Relationship(), phase5Kinds("GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL")...),
+				query.KindIn(query.Relationship(), scanLookupKinds("GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL")...),
 			)),
 			query.Returning(query.StartID()),
 		),
@@ -142,10 +142,10 @@ func TestQueryBuilder_Phase5RelationshipScans(t *testing.T) {
 	))
 }
 
-func TestQueryBuilder_Phase5Lookups(t *testing.T) {
+func TestQueryBuilder_NodeLookups(t *testing.T) {
 	t.Run("LOOKUP-01 kind disjunction ID projection", assertQueryResult(
 		query.SinglePartQuery(
-			query.Where(query.KindIn(query.Node(), phase5Kinds("Group", "User")...)),
+			query.Where(query.KindIn(query.Node(), scanLookupKinds("Group", "User")...)),
 			query.Returning(query.NodeID()),
 		),
 		"match (n) where (n:Group or n:User) return id(n)",
@@ -241,7 +241,7 @@ func TestQueryBuilder_Phase5Lookups(t *testing.T) {
 	t.Run("LOOKUP-06 required kind groups and suffix", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
-				query.KindIn(query.Node(), phase5Kinds("Group", "User")...),
+				query.KindIn(query.Node(), scanLookupKinds("Group", "User")...),
 				query.Kind(query.Node(), graph.StringKind("Entity")),
 				query.StringEndsWith(query.NodeProperty("objectid"), "-512"),
 				query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),
@@ -255,7 +255,7 @@ func TestQueryBuilder_Phase5Lookups(t *testing.T) {
 		query.SinglePartQuery(
 			query.Where(query.And(
 				query.Kind(query.Node(), graph.StringKind("Entity")),
-				query.Not(query.KindIn(query.Node(), phase5Kinds("Group", "LocalGroup")...)),
+				query.Not(query.KindIn(query.Node(), scanLookupKinds("Group", "LocalGroup")...)),
 				query.StringEndsWith(query.NodeProperty("objectid"), "-512"),
 			)),
 			query.Returning(query.Node()),
@@ -323,7 +323,7 @@ func TestQueryBuilder_Phase5Lookups(t *testing.T) {
 			query.Where(query.And(
 				query.Equals(query.StartID(), graph.ID(101)),
 				query.Kind(query.Relationship(), graph.StringKind("Contains")),
-				query.KindIn(query.End(), phase5Kinds("AZRole", "AZServicePrincipal")...),
+				query.KindIn(query.End(), scanLookupKinds("AZRole", "AZServicePrincipal")...),
 				query.In(query.EndProperty("roletemplateid"), []string{"role-a", "role-b"}),
 			)),
 			query.Returning(query.End()),

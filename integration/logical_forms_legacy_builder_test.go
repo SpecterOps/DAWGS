@@ -29,9 +29,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase1LegacyBuilderIntegration(t *testing.T) {
-	logicFixture := phase1LogicFixture()
-	projectionFixture := phase1ProjectionFixture()
+func TestLegacyBuilderLogicalForms(t *testing.T) {
+	logicFixture := logicalFormsFixture()
+	projectionFixture := logicalProjectionFixture()
 	logicNodeKinds, logicEdgeKinds := logicFixture.Kinds()
 	projectionNodeKinds, projectionEdgeKinds := projectionFixture.Kinds()
 
@@ -118,7 +118,7 @@ func TestPhase1LegacyBuilderIntegration(t *testing.T) {
 			var fixtureIDs []string
 			err := nodeQuery.FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
 				for id := range cursor.Chan() {
-					fixtureIDs = append(fixtureIDs, phase1FixtureID(t, idMap, id))
+					fixtureIDs = append(fixtureIDs, regressionFixtureID(t, idMap, id))
 				}
 				return cursor.Error()
 			})
@@ -213,7 +213,7 @@ func TestPhase1LegacyBuilderIntegration(t *testing.T) {
 	})
 }
 
-func phase1LogicFixture() *opengraph.Graph {
+func logicalFormsFixture() *opengraph.Graph {
 	day := func(day int) time.Time {
 		return time.Date(2026, time.January, day, 0, 0, 0, 0, time.UTC)
 	}
@@ -257,7 +257,7 @@ func phase1LogicFixture() *opengraph.Graph {
 	}
 }
 
-func phase1ProjectionFixture() *opengraph.Graph {
+func logicalProjectionFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
 			{ID: "projection-start", Kinds: []string{"LogicProjectionStart"}, Properties: map[string]any{"name": "start"}},
@@ -269,7 +269,7 @@ func phase1ProjectionFixture() *opengraph.Graph {
 	}
 }
 
-func phase1FixtureID(t *testing.T, idMap opengraph.IDMap, id graph.ID) string {
+func regressionFixtureID(t *testing.T, idMap opengraph.IDMap, id graph.ID) string {
 	t.Helper()
 	for fixtureID, databaseID := range idMap {
 		if databaseID == id {

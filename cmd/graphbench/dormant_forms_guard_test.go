@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase8DormantFormsStayOutOfScaleCorpus(t *testing.T) {
+func TestDormantFormsStayOutOfScaleCorpus(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
 
