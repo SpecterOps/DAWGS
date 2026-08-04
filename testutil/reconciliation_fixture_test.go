@@ -41,3 +41,19 @@ func TestFixtureNamesAreDeterministic(t *testing.T) {
 	require.Equal(t, FixtureNames("item", 2_000), FixtureNames("item", 2_000))
 	require.Empty(t, FixtureNames("item", -1))
 }
+
+func TestNewTrustPruningScaleFixtureIncludesDenseAndDecoyShapes(t *testing.T) {
+	fixture := NewTrustPruningScaleFixture(8)
+	nodeKinds, edgeKinds := fixture.Kinds()
+
+	require.Len(t, fixture.Nodes, 56)
+	require.Len(t, fixture.Edges, 83)
+	require.Contains(t, nodeKinds, graph.StringKind("Domain"))
+	require.Contains(t, nodeKinds, graph.StringKind("PruneCandidate"))
+	require.Contains(t, nodeKinds, graph.StringKind("PruneBatchNode"))
+	require.Contains(t, edgeKinds, graph.StringKind("SameForestTrust"))
+	require.Contains(t, edgeKinds, graph.StringKind("CrossForestTrust"))
+	require.Contains(t, edgeKinds, graph.StringKind("HasSession"))
+	require.Contains(t, edgeKinds, graph.StringKind("PruneBatch"))
+	require.Contains(t, edgeKinds, graph.StringKind("MetaIncludes"))
+}

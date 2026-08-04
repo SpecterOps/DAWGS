@@ -47,8 +47,8 @@ func scanDatasetKinds(datasetDir string, datasetNames []string) (graph.Kinds, gr
 }
 
 func parseDataset(datasetDir, name string) (opengraph.Document, error) {
-	if name == testutil.ReconciliationScaleDataset {
-		return opengraph.Document{Graph: *testutil.NewReconciliationScaleFixture(128)}, nil
+	if fixture := generatedDataset(name); fixture != nil {
+		return opengraph.Document{Graph: *fixture}, nil
 	}
 
 	path := filepath.Join(datasetDir, name+".json")
@@ -67,8 +67,8 @@ func parseDataset(datasetDir, name string) (opengraph.Document, error) {
 }
 
 func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string) (opengraph.IDMap, error) {
-	if name == testutil.ReconciliationScaleDataset {
-		return opengraph.WriteGraph(ctx, db, testutil.NewReconciliationScaleFixture(128))
+	if fixture := generatedDataset(name); fixture != nil {
+		return opengraph.WriteGraph(ctx, db, fixture)
 	}
 
 	path := filepath.Join(datasetDir, name+".json")
@@ -84,6 +84,17 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 	}
 
 	return idMap, nil
+}
+
+func generatedDataset(name string) *opengraph.Graph {
+	switch name {
+	case testutil.ReconciliationScaleDataset:
+		return testutil.NewReconciliationScaleFixture(128)
+	case testutil.TrustPruningScaleDataset:
+		return testutil.NewTrustPruningScaleFixture(128)
+	default:
+		return nil
+	}
 }
 
 func clearGraph(ctx context.Context, db graph.Database) error {
