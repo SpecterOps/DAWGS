@@ -23,6 +23,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
 type config struct {
@@ -37,6 +39,9 @@ type config struct {
 	Summary         string
 	SummaryJSON     string
 	Baseline        string
+	BHECommit       string
+	BHCECommit      string
+	DAWGSVersion    string
 }
 
 func parseConfig(args []string, env func(string) string) (config, error) {
@@ -59,6 +64,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.Summary, "summary", "", "markdown summary output path")
 	flags.StringVar(&cfg.SummaryJSON, "summary-json", "", "JSON summary output path")
 	flags.StringVar(&cfg.Baseline, "baseline", "", "previous JSONL output for baseline comparison")
+	flags.StringVar(&cfg.BHECommit, "bhe-commit", testutil.DefaultBHECommit, "BHE source snapshot commit")
+	flags.StringVar(&cfg.BHCECommit, "bhce-commit", testutil.DefaultBHCECommit, "BHCE source snapshot commit")
+	flags.StringVar(&cfg.DAWGSVersion, "dawgs-version", "", "DAWGS source version (auto-detected when empty)")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -180,6 +188,11 @@ func main() {
 		default:
 			fatal("execution mode %s is not implemented yet", mode)
 		}
+	}
+
+	metadata := testutil.ResolveBaselineMetadata(cfg.BHECommit, cfg.BHCECommit, cfg.DAWGSVersion)
+	for idx := range records {
+		records[idx].Metadata = metadata
 	}
 
 	if cfg.Baseline != "" {

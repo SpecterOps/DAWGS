@@ -95,18 +95,36 @@ func benchmarkSchema(nodeKinds, edgeKinds graph.Kinds) graph.Schema {
 }
 
 func resolveCaseParams(testCase ScaleCase, idMap opengraph.IDMap) (map[string]any, error) {
-	params := make(map[string]any, len(testCase.Params)+len(testCase.NodeParams))
-	for key, value := range testCase.Params {
+	return resolveParams(testCase.Name, testCase.Params, testCase.NodeParams, testCase.NodeListParams, idMap)
+}
+
+func resolveParams(caseName string, rawParams map[string]any, nodeParams map[string]string, nodeListParams map[string][]string, idMap opengraph.IDMap) (map[string]any, error) {
+	params := make(map[string]any, len(rawParams)+len(nodeParams)+len(nodeListParams))
+	for key, value := range rawParams {
 		params[key] = value
 	}
 
-	for paramName, nodeName := range testCase.NodeParams {
+	for paramName, nodeName := range nodeParams {
 		id, found := idMap[nodeName]
 		if !found {
-			return nil, fmt.Errorf("case %s references unknown dataset node %q", testCase.Name, nodeName)
+			return nil, fmt.Errorf("case %s references unknown dataset node %q", caseName, nodeName)
 		}
 
 		params[paramName] = id.Int64()
+	}
+
+	for paramName, nodeNames := range nodeListParams {
+		ids := make([]int64, len(nodeNames))
+		for idx, nodeName := range nodeNames {
+			id, found := idMap[nodeName]
+			if !found {
+				return nil, fmt.Errorf("case %s references unknown dataset node %q in list parameter %q", caseName, nodeName, paramName)
+			}
+
+			ids[idx] = id.Int64()
+		}
+
+		params[paramName] = ids
 	}
 
 	if len(params) == 0 {
@@ -114,4 +132,43 @@ func resolveCaseParams(testCase ScaleCase, idMap opengraph.IDMap) (map[string]an
 	}
 
 	return params, nil
+}
+
+func resolveWriteScenario(testCase ScaleCase, idMap opengraph.IDMap) (resolvedWriteScenario, error) {
+	if testCase.WriteScenario == nil {
+		return resolvedWriteScenario{}, nil
+	}
+
+	scenario := testCase.WriteScenario
+	if scenario.ExpectedMatched == nil || scenario.ExpectedAffected == nil {
+		return resolvedWriteScenario{}, fmt.Errorf("case %s has an incomplete write scenario", testCase.Name)
+	}
+	selectionParams, err := resolveParams(testCase.Name+" selection", scenario.Params, scenario.NodeParams, scenario.NodeListParams, idMap)
+	if err != nil {
+		return resolvedWriteScenario{}, err
+	}
+
+	resolved := resolvedWriteScenario{
+		SelectionCypher:  scenario.SelectionCypher,
+		SelectionParams:  selectionParams,
+		AffectedEntity:   scenario.AffectedEntity,
+		ExpectedMatched:  *scenario.ExpectedMatched,
+		ExpectedAffected: *scenario.ExpectedAffected,
+	}
+
+	for _, postState := range scenario.PostState {
+		params, err := resolveParams(testCase.Name+" post-state "+postState.Name, postState.Params, postState.NodeParams, postState.NodeListParams, idMap)
+		if err != nil {
+			return resolvedWriteScenario{}, err
+		}
+
+		resolved.PostState = append(resolved.PostState, resolvedStateQuery{
+			Name:     postState.Name,
+			Cypher:   postState.Cypher,
+			Params:   params,
+			Expected: postState.Expected,
+		})
+	}
+
+	return resolved, nil
 }

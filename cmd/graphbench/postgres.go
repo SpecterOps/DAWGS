@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -137,18 +138,39 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 		return record
 	}
 
-	rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
-	if err != nil {
-		record.Status = StatusError
-		record.Error = err.Error()
-		return record
+	if testCase.WriteScenario == nil {
+		rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		record.RowCount = rowCount
+		record.Stats = stats
+		applyRowExpectation(&record)
+	} else {
+		scenario, err := resolveWriteScenario(testCase, idMap)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		measurement, stats, err := measureWriteCypher(ctx, s.db, testCase.Cypher, params, scenario, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		record.MatchedCount = &measurement.Matched
+		record.AffectedCount = &measurement.Affected
+		record.PostState = measurement.PostState
+		record.Stats = stats
 	}
 
-	record.RowCount = rowCount
-	record.Stats = stats
-	applyRowExpectation(&record)
-
-	explain, err := s.explain(ctx, testCase.Cypher, params)
+	explain, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)
 	if err != nil {
 		if record.Status == StatusOK {
 			record.Status = StatusError
@@ -171,7 +193,7 @@ type postgresExplain struct {
 	Optimization translate.OptimizationSummary
 }
 
-func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, params map[string]any) (postgresExplain, error) {
+func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (postgresExplain, error) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	if err != nil {
 		return postgresExplain{}, err
@@ -188,7 +210,7 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 	}
 
 	var plan []string
-	if err := s.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	runExplain := func(tx graph.Transaction) error {
 		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) "+sqlQuery, translation.Parameters)
 		defer result.Close()
 
@@ -201,9 +223,26 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 			plan = append(plan, fmt.Sprint(values[0]))
 		}
 
-		return result.Error()
-	}); err != nil {
-		return postgresExplain{}, err
+		if err := result.Error(); err != nil {
+			return err
+		}
+		if write {
+			return errScaleWriteRollback
+		}
+		return nil
+	}
+
+	var explainErr error
+	if write {
+		explainErr = s.db.WriteTransaction(ctx, runExplain)
+		if errors.Is(explainErr, errScaleWriteRollback) {
+			explainErr = nil
+		}
+	} else {
+		explainErr = s.db.ReadTransaction(ctx, runExplain)
+	}
+	if explainErr != nil {
+		return postgresExplain{}, explainErr
 	}
 
 	return postgresExplain{

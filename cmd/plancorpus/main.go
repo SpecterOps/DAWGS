@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
 type commandConfig struct {
@@ -19,6 +21,9 @@ type commandConfig struct {
 	PGConnection    string
 	Neo4jConnection string
 	TopPlans        int
+	BHECommit       string
+	BHCECommit      string
+	DAWGSVersion    string
 }
 
 func main() {
@@ -31,6 +36,9 @@ func main() {
 	flag.StringVar(&cfg.PGConnection, "pg-connection", os.Getenv("PG_CONNECTION_STRING"), "PostgreSQL connection string")
 	flag.StringVar(&cfg.Neo4jConnection, "neo4j-connection", os.Getenv("NEO4J_CONNECTION_STRING"), "Neo4j connection string")
 	flag.IntVar(&cfg.TopPlans, "top", defaultTopPlans, "number of expensive PostgreSQL plans to include in summaries")
+	flag.StringVar(&cfg.BHECommit, "bhe-commit", testutil.DefaultBHECommit, "BHE source snapshot commit")
+	flag.StringVar(&cfg.BHCECommit, "bhce-commit", testutil.DefaultBHCECommit, "BHCE source snapshot commit")
+	flag.StringVar(&cfg.DAWGSVersion, "dawgs-version", "", "DAWGS source version (auto-detected when empty)")
 	flag.Parse()
 
 	if err := run(context.Background(), cfg); err != nil {
@@ -55,10 +63,15 @@ func run(ctx context.Context, cfg commandConfig) error {
 	}
 
 	var allRecords []PlanRecord
+	metadata := testutil.ResolveBaselineMetadata(cfg.BHECommit, cfg.BHCECommit, cfg.DAWGSVersion)
 	for _, spec := range specs {
 		records, err := captureCorpus(ctx, cfg.DatasetDir, suite, spec)
 		if err != nil {
 			return err
+		}
+
+		for idx := range records {
+			records[idx].Metadata = metadata
 		}
 
 		outputPath := filepath.Join(cfg.OutputDir, "plan-corpus-"+spec.DriverName+".jsonl")

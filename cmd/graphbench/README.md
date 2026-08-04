@@ -20,10 +20,21 @@ without treating it as a direct benchmark comparison.
 The command loads cases from `benchmark/testdata/scale` by default and imports
 the fixture datasets from `integration/testdata`.
 
+Corpus parameters support fixture IDs through `node_params` and
+`node_list_params`. Tagged datetime values are decoded to `time.Time`, avoiding
+lexical string comparisons in temporal cases. Mutating cases require an
+explicit `write_scenario`; the runner checks matched and affected counts plus
+post-state queries and rolls back warm-up, timed iterations, and PostgreSQL
+plan capture.
+
 Connection strings can be supplied as flags or environment variables:
 
 - PostgreSQL: `-pg-connection`, `PG_CONNECTION_STRING`, `-connection`, or `CONNECTION_STRING`.
 - Neo4j: `-neo4j-connection`, `NEO4J_CONNECTION_STRING`, `-connection`, or `CONNECTION_STRING`.
+
+Every output record includes BHE, BHCE, and DAWGS source metadata. Use
+`-bhe-commit`, `-bhce-commit`, and `-dawgs-version` to override the recorded
+defaults.
 
 ## Examples
 
@@ -69,6 +80,10 @@ Markdown and JSON summaries aggregate mode status counts, per-case timings, row
 counts, fallback reasons, and baseline regressions or improvements when a
 baseline capture is supplied.
 
+Write records additionally report matched and affected counts and each
+post-state observation. The recorded duration covers the mutation query; setup,
+verification, and rollback are outside that duration.
+
 PostgreSQL records include translated SQL and `EXPLAIN (ANALYZE, BUFFERS,
-TIMING OFF, FORMAT JSON)` metrics. Neo4j records include plan operator names
+TIMING OFF)` metrics. Neo4j records include plan operator names
 when an `EXPLAIN` plan can be captured.

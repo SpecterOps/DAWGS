@@ -248,6 +248,22 @@
         "query": "match (a:Thing1), (b:Thing2) detach delete a, b return b",
         "fitness": 4
       }
+    },
+    {
+      "name": "LOGIC-04 filtered relationship delete preserves mutation binding",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:RegressionKind05)-[r:RegressionKind06]->(e:RegressionKind07) where e.objectid = $object_id and r.shoulddelete = $should_delete delete r",
+        "fitness": 16
+      }
+    },
+    {
+      "name": "LOGIC-04 filtered detach node delete preserves mutation binding",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:RegressionKind08) where n.objectid = $object_id detach delete n",
+        "fitness": 9
+      }
     }
   ]
 }

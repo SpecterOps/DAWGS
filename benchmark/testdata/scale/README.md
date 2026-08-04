@@ -12,17 +12,32 @@ Apache AGE is intentionally not a benchmark mode here; it may appear only in
 
 Each JSON file contains a list of scale cases with:
 
-- `source`: the source corpus or workload family.
 - `dataset`: the fixture dataset to load from `integration/testdata`.
 - `name` and `category`: stable identifiers used in reports.
 - `cypher`: the Cypher query under test.
-- `parameters`: named parameter values.
-- `expected_rows`: the expected result cardinality.
+- `params`: named parameter values. A typed temporal parameter uses
+  `{"$type":"datetime","value":"2026-01-02T03:04:05Z"}`.
+- `node_params`: scalar parameters resolved from fixture node names.
+- `node_list_params`: list parameters resolved from fixture node names.
+- `expected.row_count`: the expected result cardinality for a read case.
 - `observes`: whether the query observes paths, nodes, relationships,
   properties, or only IDs internally.
 - `candidate_modes`: the execution modes that should attempt the case.
 - `reference_design`: optional design notes, including AGE observations when
   useful.
+
+Mutations are rejected as ordinary read cases. A mutation must add a
+`write_scenario` with:
+
+- a selection query and `expected_matched` count;
+- an `affected_entity` (`node` or `relationship`) and `expected_affected`
+  count;
+- one or more `post_state` queries with expected row counts or integer scalar
+  values.
+
+The runner drains the mutation result and validates those expectations inside
+one rollback transaction. Warm-up, every timed iteration, and PostgreSQL
+`EXPLAIN ANALYZE` therefore start from the same committed fixture state.
 
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
 summaries.

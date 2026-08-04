@@ -51,6 +51,16 @@ func (s *ExpressionListRewriter) hasNegationAncestor() bool {
 	return false
 }
 
+func (s *ExpressionListRewriter) hasDisjunctionAncestor() bool {
+	for idx := len(s.descentStack) - 1; idx >= 0; idx-- {
+		if _, isDisjunction := s.descentStack[idx].(*cypher.Disjunction); isDisjunction {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *ExpressionListRewriter) popExpression() {
 	s.descentStack = s.descentStack[:len(s.descentStack)-1]
 }
@@ -131,7 +141,11 @@ func (s *ExpressionListRewriter) Exit(node cypher.SyntaxNode) {
 		if variable, typeOK := typedNode.Reference.(*cypher.Variable); !typeOK {
 			s.SetErrorf("expected a variable as the reference for a kind matcher but received: %T", node)
 		} else if variable.Symbol == query.EdgeSymbol {
-			if s.hasNegationAncestor() {
+			// Relationship kinds can be folded into the match pattern only when
+			// doing so preserves their logical scope. A kind nested under a NOT or
+			// OR must remain in the WHERE expression; hoisting it would either
+			// invert the predicate or merge branch-local kinds into one pattern.
+			if s.hasNegationAncestor() || s.hasDisjunctionAncestor() {
 				return
 			}
 

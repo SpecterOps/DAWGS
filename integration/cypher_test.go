@@ -32,6 +32,7 @@ import (
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
+	"github.com/specterops/dawgs/testutil"
 )
 
 // caseFile represents one JSON test case file.
@@ -44,11 +45,23 @@ type caseFile struct {
 // Cases with a "fixture" field run in a write transaction that rolls back,
 // so the inline data doesn't persist.
 type testCase struct {
-	Name    string           `json:"name"`
-	Cypher  string           `json:"cypher"`
-	Params  map[string]any   `json:"params,omitempty"`
-	Assert  json.RawMessage  `json:"assert"`
-	Fixture *opengraph.Graph `json:"fixture,omitempty"`
+	Name           string              `json:"name"`
+	Cypher         string              `json:"cypher"`
+	Params         testutil.Params     `json:"params,omitempty"`
+	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	Assert         json.RawMessage     `json:"assert"`
+	PostAssertions []stateAssertion    `json:"post_assertions,omitempty"`
+	Fixture        *opengraph.Graph    `json:"fixture,omitempty"`
+}
+
+// stateAssertion runs after the primary query has been fully drained. It is
+// executed in the same transaction and against the same fixture ID map.
+type stateAssertion struct {
+	Name   string          `json:"name,omitempty"`
+	Cypher string          `json:"cypher"`
+	Params testutil.Params `json:"params,omitempty"`
+	Assert json.RawMessage `json:"assert"`
 }
 
 func TestCypher(t *testing.T) {
@@ -141,6 +154,9 @@ func TestCypher(t *testing.T) {
 //	{"contains_edge": {start,end,kind,props}} — some row/path has a relationship matching all listed fields
 //	{"node_ids": ["a", "b"]}              — exact multiset of returned fixture node IDs, order-independent
 //	{"node_id_set": ["a", "b"]}           — exact set of returned fixture node IDs, order-independent
+//	{"node_records": [{id,kinds,props}]}     — exact returned nodes, including kinds and properties
+//	{"relationship_triples": [{start,end,kind}]} — exact returned relationship triples
+//	{"relationship_records": [{start,end,kind,props}]} — exact returned relationships and properties
 //	{"ordered_node_ids": ["a", "b"]}      — first returned node ID per row, preserving row order
 //	{"node_list_ids": [["a", "b"]]}       — exact multiset of returned node-list ID sequences
 //	{"path_node_ids": [["a", "b"]]}       — exact multiset of returned path node ID sequences
@@ -218,6 +234,15 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 		case "node_id_set":
 			assertions = append(assertions, assertNodeIDs(decodeAssertionValue[[]string](t, key, val), true))
 
+		case "node_records":
+			assertions = append(assertions, assertNodeRecords(decodeAssertionValue[[]nodeExpectation](t, key, val)))
+
+		case "relationship_triples":
+			assertions = append(assertions, assertRelationshipRecords(decodeAssertionValue[[]edgeExpectation](t, key, val), false))
+
+		case "relationship_records":
+			assertions = append(assertions, assertRelationshipRecords(decodeAssertionValue[[]edgeExpectation](t, key, val), true))
+
 		case "ordered_node_ids":
 			assertions = append(assertions, assertOrderedNodeIDs(decodeAssertionValue[[]string](t, key, val)))
 
@@ -290,14 +315,16 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 	queryErrorObserved := false
 	session := &Session{DB: db, Ctx: ctx}
 	err := session.WithRollbackFixture(t, tc.Fixture, true, func(tx graph.Transaction, idMap opengraph.IDMap) error {
-		result := tx.Query(tc.Cypher, tc.Params)
-		defer result.Close()
+		params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, idMap)
+		result := tx.Query(tc.Cypher, params)
 		assertion.checkResult(t, result, newAssertionContext(idMap))
+		result.Close()
 		if assertion.expectQueryError {
 			queryErrorObserved = true
+			return nil
 		}
 
-		return nil
+		return runStateAssertions(t, tx, idMap, tc.PostAssertions)
 	})
 
 	if assertion.expectQueryError && queryErrorObserved && err != nil {
@@ -307,6 +334,71 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 	if err != nil {
 		t.Fatalf("unexpected transaction error: %v", err)
 	}
+}
+
+func resolveFixtureParams(
+	t *testing.T,
+	params map[string]any,
+	nodeParams map[string]string,
+	nodeListParams map[string][]string,
+	idMap opengraph.IDMap,
+) map[string]any {
+	t.Helper()
+
+	resolved := make(map[string]any, len(params)+len(nodeParams)+len(nodeListParams))
+	for name, value := range params {
+		resolved[name] = value
+	}
+
+	for paramName, fixtureID := range nodeParams {
+		id, found := idMap[fixtureID]
+		if !found {
+			t.Fatalf("node parameter %q references unknown fixture ID %q", paramName, fixtureID)
+		}
+		resolved[paramName] = id.Int64()
+	}
+
+	for paramName, fixtureIDs := range nodeListParams {
+		ids := make([]int64, len(fixtureIDs))
+		for idx, fixtureID := range fixtureIDs {
+			id, found := idMap[fixtureID]
+			if !found {
+				t.Fatalf("node list parameter %q references unknown fixture ID %q", paramName, fixtureID)
+			}
+			ids[idx] = id.Int64()
+		}
+		resolved[paramName] = ids
+	}
+
+	if len(resolved) == 0 {
+		return nil
+	}
+	return resolved
+}
+
+func runStateAssertions(t *testing.T, tx graph.Transaction, idMap opengraph.IDMap, assertions []stateAssertion) error {
+	t.Helper()
+
+	for idx, spec := range assertions {
+		name := spec.Name
+		if name == "" {
+			name = fmt.Sprintf("post assertion %d", idx+1)
+		}
+		if spec.Cypher == "" {
+			t.Fatalf("%s has no Cypher query", name)
+		}
+
+		check := parseAssertion(t, spec.Assert)
+		if check.expectQueryError {
+			t.Fatalf("%s may not expect a query error", name)
+		}
+
+		result := tx.Query(spec.Cypher, spec.Params)
+		check.checkResult(t, result, newAssertionContext(idMap))
+		result.Close()
+	}
+
+	return nil
 }
 
 // --- Assertion implementations ---
@@ -709,6 +801,12 @@ type edgeExpectation struct {
 	Props map[string]any `json:"props,omitempty"`
 }
 
+type nodeExpectation struct {
+	ID    string         `json:"id"`
+	Kinds []string       `json:"kinds,omitempty"`
+	Props map[string]any `json:"props,omitempty"`
+}
+
 func assertContainsEdge(expected edgeExpectation) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -729,6 +827,48 @@ func assertNodeIDs(expected []string, unique bool) resultAssertion {
 
 		got := collectNodeIDs(t, result, ctx, unique)
 		assertStringMultiset(t, got, expected, "node IDs")
+	}
+}
+
+func assertNodeRecords(expected []nodeExpectation) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		got := make([]string, 0, len(expected))
+		for _, row := range result.rows {
+			for _, rawValue := range row.values {
+				var node graph.Node
+				if result.mapper.Map(rawValue, &node) {
+					got = append(got, nodeRecordSignature(t, node, ctx))
+				}
+			}
+		}
+
+		want := make([]string, len(expected))
+		for idx, node := range expected {
+			want[idx] = expectedNodeRecordSignature(node)
+		}
+
+		assertStringMultiset(t, got, want, "node records")
+	}
+}
+
+func assertRelationshipRecords(expected []edgeExpectation, includeProperties bool) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		relationships := collectRelationships(t, result)
+		got := make([]string, len(relationships))
+		for idx, relationship := range relationships {
+			got[idx] = relationshipRecordSignature(t, relationship, ctx, includeProperties)
+		}
+
+		want := make([]string, len(expected))
+		for idx, relationship := range expected {
+			want[idx] = expectedRelationshipRecordSignature(relationship, includeProperties)
+		}
+
+		assertStringMultiset(t, got, want, "relationship records")
 	}
 }
 
@@ -1020,6 +1160,74 @@ func collectRelationships(t *testing.T, result queryResult) []graph.Relationship
 	}
 
 	return relationships
+}
+
+func nodeRecordSignature(t *testing.T, node graph.Node, ctx assertionContext) string {
+	t.Helper()
+
+	kinds := node.Kinds.Strings()
+	sort.Strings(kinds)
+
+	return strings.Join([]string{
+		ctx.fixtureID(t, node.ID),
+		strings.Join(kinds, ","),
+		propertyMapSignature(node.Properties.MapOrEmpty()),
+	}, "\x00")
+}
+
+func expectedNodeRecordSignature(node nodeExpectation) string {
+	kinds := append([]string(nil), node.Kinds...)
+	sort.Strings(kinds)
+
+	return strings.Join([]string{
+		node.ID,
+		strings.Join(kinds, ","),
+		propertyMapSignature(node.Props),
+	}, "\x00")
+}
+
+func relationshipRecordSignature(t *testing.T, relationship graph.Relationship, ctx assertionContext, includeProperties bool) string {
+	t.Helper()
+
+	kind := ""
+	if relationship.Kind != nil {
+		kind = relationship.Kind.String()
+	}
+
+	parts := []string{
+		ctx.fixtureID(t, relationship.StartID),
+		ctx.fixtureID(t, relationship.EndID),
+		kind,
+	}
+	if includeProperties {
+		parts = append(parts, propertyMapSignature(relationship.Properties.MapOrEmpty()))
+	}
+
+	return strings.Join(parts, "\x00")
+}
+
+func expectedRelationshipRecordSignature(relationship edgeExpectation, includeProperties bool) string {
+	parts := []string{relationship.Start, relationship.End, relationship.Kind}
+	if includeProperties {
+		parts = append(parts, propertyMapSignature(relationship.Props))
+	}
+
+	return strings.Join(parts, "\x00")
+}
+
+func propertyMapSignature(properties map[string]any) string {
+	keys := make([]string, 0, len(properties))
+	for key := range properties {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, len(keys))
+	for idx, key := range keys {
+		parts[idx] = key + "=" + scalarSignature(properties[key])
+	}
+
+	return strings.Join(parts, "\x01")
 }
 
 func relationshipMatches(t *testing.T, relationship graph.Relationship, expected edgeExpectation, ctx assertionContext) bool {
