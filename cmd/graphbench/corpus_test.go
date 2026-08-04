@@ -82,6 +82,21 @@ func TestGeneratedHopDatasetRegistersThirtyKindsAndEndpointSets(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("HopSetEdge"))
 }
 
+func TestGeneratedScanLookupDatasetRegistersWideAndLargeShapes(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.ScanLookupScaleDataset)
+	require.NoError(t, err)
+	nodeKinds, edgeKinds := doc.Graph.Kinds()
+
+	require.Contains(t, nodeKinds, graph.StringKind("ADBase"))
+	require.Contains(t, nodeKinds, graph.StringKind("AZRole"))
+	require.Contains(t, nodeKinds, graph.StringKind("Hydrate"))
+	require.Contains(t, edgeKinds, graph.StringKind("ScanPostProcessed"))
+	require.Contains(t, edgeKinds, graph.StringKind("Contains"))
+	for idx := 1; idx <= 9; idx++ {
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("ADCSEdge%02d", idx)))
+	}
+}
+
 func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 	zero := int64(0)
 	testCase := ScaleCase{

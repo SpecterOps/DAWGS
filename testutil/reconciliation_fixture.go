@@ -26,6 +26,7 @@ const (
 	ReconciliationScaleDataset = "generated_reconciliation"
 	TrustPruningScaleDataset   = "generated_trust_pruning"
 	HopScaleDataset            = "generated_hops"
+	ScanLookupScaleDataset     = "generated_scan_lookups"
 )
 
 // GeneratedNodeListParam resolves optional fixture IDs followed by a
@@ -312,5 +313,106 @@ func NewHopScaleFixture(fanout int) *opengraph.Graph {
 		opengraph.Edge{StartID: setStarts[0], EndID: setEnds[0], Kind: "HopWrongSetEdge", Properties: map[string]any{"marker": "wrong-set-kind"}},
 		opengraph.Edge{StartID: setEnds[0], EndID: setStarts[0], Kind: "HopSetEdge", Properties: map[string]any{"marker": "wrong-set-direction"}},
 	)
+	return fixture
+}
+
+// NewScanLookupScaleFixture returns deterministic wide-scan, large lookup,
+// adjacency, ordering, and count shapes for the Phase 5 regression corpus.
+func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
+	if fanout < 9 {
+		fanout = 128
+	}
+
+	fixture := &opengraph.Graph{
+		Nodes: []opengraph.Node{
+			{ID: "scan-base-root", Kinds: []string{"ADBase"}, Properties: map[string]any{"name": "scan-base-root"}},
+			{ID: "scan-tracker-root", Kinds: []string{"Plain"}, Properties: map[string]any{"name": "scan-tracker-root"}},
+			{ID: "scan-adcs-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-adcs-target"}},
+			{ID: "scan-local-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-local-target"}},
+			{ID: "lookup-tenant", Kinds: []string{"Tenant"}, Properties: map[string]any{"name": "lookup-tenant", "objectid": "tenant-scale"}},
+			{ID: "lookup-local-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "lookup-local-target"}},
+		},
+	}
+
+	escalationKinds := []string{"GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL", "WritePublicInformation"}
+	victimIDs := FixtureNames("scan-victim", max(1_000, fanout))
+	for idx := range fanout {
+		suffix := fmt.Sprintf("%04d", idx)
+		scanEndID := "scan-end-" + suffix
+		scanEntityID := "scan-entity-" + suffix
+		lookupObjectID := "lookup-object-" + suffix
+		lookupStringID := "lookup-string-" + suffix
+		lookupLocalID := "lookup-local-" + suffix
+		ntlmID := "lookup-ntlm-" + suffix
+
+		entityKinds := []string{"Entity"}
+		switch idx % 3 {
+		case 0:
+			entityKinds = append(entityKinds, "Group")
+		case 1:
+			entityKinds = append(entityKinds, "User")
+		case 2:
+			entityKinds = append(entityKinds, "Computer")
+		}
+
+		lookupObjectSuffix := "-513"
+		if idx%2 == 0 {
+			lookupObjectSuffix = "-512"
+		}
+		lookupName := fmt.Sprintf("Remote Desktop Users %04d", idx)
+		if idx%2 == 1 {
+			lookupName = fmt.Sprintf("rEmOtE dEsKtOp UsErS %04d", idx)
+		}
+
+		fixture.Nodes = append(fixture.Nodes,
+			opengraph.Node{ID: scanEndID, Kinds: []string{"AZBase", "Plain"}, Properties: map[string]any{"name": scanEndID}},
+			opengraph.Node{ID: scanEntityID, Kinds: entityKinds, Properties: map[string]any{"name": scanEntityID}},
+			opengraph.Node{ID: lookupObjectID, Kinds: []string{"Computer"}, Properties: map[string]any{"name": lookupObjectID, "objectid": "S-1-5-21-scale", "enabled": true}},
+			opengraph.Node{ID: lookupStringID, Kinds: []string{"Group", "Entity"}, Properties: map[string]any{"name": lookupName, "objectid": "S-1-5-21" + lookupObjectSuffix, "domainsid": "S-1-5-21"}},
+			opengraph.Node{ID: lookupLocalID, Kinds: []string{"LocalGroup", "Entity"}, Properties: map[string]any{"name": lookupLocalID, "objectid": "S-1-5-21-555"}},
+			opengraph.Node{ID: ntlmID, Kinds: []string{"Computer"}, Properties: map[string]any{"name": ntlmID, "domainsid": "S-1-5-21", "isdc": true, "ldapavailable": true, "ldapsigning": false}},
+		)
+
+		migrationProperties := map[string]any{"marker": "migration-" + suffix}
+		if idx%2 == 0 {
+			migrationProperties["lastseen"] = "2026-01-03T00:00:00Z"
+		} else if idx%4 == 1 {
+			migrationProperties["lastseen"] = nil
+		}
+
+		victimID := victimIDs[idx]
+		fixture.Edges = append(fixture.Edges,
+			opengraph.Edge{StartID: "scan-base-root", EndID: scanEndID, Kind: "ScanPostProcessed", Properties: map[string]any{"marker": "post-" + suffix}},
+			opengraph.Edge{StartID: "scan-tracker-root", EndID: scanEndID, Kind: "TrackerA", Properties: map[string]any{"marker": "tracker-a-" + suffix}},
+			opengraph.Edge{StartID: "scan-tracker-root", EndID: scanEndID, Kind: "TrackerB", Properties: map[string]any{"marker": "tracker-b-" + suffix}},
+			opengraph.Edge{StartID: "scan-tracker-root", EndID: scanEndID, Kind: "MigratedEdge", Properties: migrationProperties},
+			opengraph.Edge{StartID: scanEntityID, EndID: scanEndID, Kind: "OwnsRaw", Properties: map[string]any{"marker": "owns-" + suffix}},
+			opengraph.Edge{StartID: scanEntityID, EndID: "scan-adcs-target", Kind: fmt.Sprintf("ADCSEdge%02d", idx%9+1), Properties: map[string]any{"marker": "adcs-" + suffix}},
+			opengraph.Edge{StartID: scanEntityID, EndID: "scan-local-target", Kind: "LocalToComputer", Properties: map[string]any{"marker": "scan-local-" + suffix}},
+			opengraph.Edge{StartID: scanEntityID, EndID: scanEndID, Kind: "MemberOf", Properties: map[string]any{"marker": "member-" + suffix}},
+			opengraph.Edge{StartID: scanEntityID, EndID: scanEndID, Kind: "MemberOfLocalGroup", Properties: map[string]any{"marker": "member-local-" + suffix}},
+			opengraph.Edge{StartID: scanEntityID, EndID: victimID, Kind: escalationKinds[idx%len(escalationKinds)], Properties: map[string]any{"marker": "esc-" + suffix}},
+			opengraph.Edge{StartID: lookupLocalID, EndID: "lookup-local-target", Kind: "LocalToComputer", Properties: map[string]any{"marker": "lookup-local-" + suffix}},
+		)
+	}
+
+	for idx, victimID := range victimIDs {
+		victimKinds := []string{"Other"}
+		if idx%2 == 0 {
+			victimKinds = []string{"Computer"}
+		}
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: victimID, Kinds: victimKinds, Properties: map[string]any{"name": victimID}})
+	}
+
+	for _, targetID := range FixtureNames("lookup-id-target", 1_000) {
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: targetID, Kinds: []string{"Hydrate"}, Properties: map[string]any{"name": targetID}})
+	}
+
+	for idx, roleID := range FixtureNames("lookup-role", 1_000) {
+		roleTemplateID := fmt.Sprintf("role-template-%03d", idx)
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: roleID, Kinds: []string{"AZRole"}, Properties: map[string]any{"name": roleID, "roletemplateid": roleTemplateID, "enabled": true}})
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: "lookup-tenant", EndID: roleID, Kind: "Contains", Properties: map[string]any{"marker": roleID}})
+	}
+
 	return fixture
 }

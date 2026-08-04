@@ -94,6 +94,8 @@ func generatedDataset(name string) *opengraph.Graph {
 		return testutil.NewTrustPruningScaleFixture(128)
 	case testutil.HopScaleDataset:
 		return testutil.NewHopScaleFixture(128)
+	case testutil.ScanLookupScaleDataset:
+		return testutil.NewScanLookupScaleFixture(128)
 	default:
 		return nil
 	}
