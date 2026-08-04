@@ -41,6 +41,22 @@ Raw Cypher may instead use an explicit conversion such as
 `datetime($threshold)`. Legacy query-builder cases must pass `time.Time`
 directly.
 
+Large string-list parameters use the same tagged parameter decoder without a
+large handwritten JSON array:
+
+```json
+{
+  "params": {
+    "object_ids": {
+      "$type": "string_list",
+      "prefix": "missing",
+      "count": 1000,
+      "include": ["target-id"]
+    }
+  }
+}
+```
+
 Fixture-backed cases and template variants can bind database IDs without
 hard-coding them. `node_params` maps a query parameter to one fixture node ID;
 `node_list_params` maps a parameter to an ordered list of fixture node IDs:

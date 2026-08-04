@@ -25,14 +25,22 @@ import (
 )
 
 const (
-	typeKey  = "$type"
-	valueKey = "value"
+	typeKey    = "$type"
+	valueKey   = "value"
+	prefixKey  = "prefix"
+	countKey   = "count"
+	includeKey = "include"
 )
 
-// Params is a query parameter map that supports tagged temporal values. A
-// datetime is represented in JSON as:
+// Params is a query parameter map that supports tagged generated and temporal
+// values. A datetime is represented in JSON as:
 //
 //	{"$type": "datetime", "value": "2026-01-02T03:04:05Z"}
+//
+// A deterministic string list is represented without committing a large
+// handwritten array as:
+//
+//	{"$type": "string_list", "prefix": "missing", "count": 1000, "include": ["target-id"]}
 //
 // Tagged values may also appear in nested maps and lists.
 type Params map[string]any
@@ -121,7 +129,63 @@ func convertTaggedValue(rawType any, tagged map[string]any) (any, error) {
 
 		return parsed, nil
 
+	case "string_list":
+		return convertStringList(tagged)
+
 	default:
 		return nil, fmt.Errorf("unsupported tagged parameter type %q", typeName)
 	}
+}
+
+func convertStringList(tagged map[string]any) ([]string, error) {
+	rawPrefix, found := tagged[prefixKey]
+	if !found {
+		return nil, fmt.Errorf("string_list is missing %q", prefixKey)
+	}
+	prefix, ok := rawPrefix.(string)
+	if !ok {
+		return nil, fmt.Errorf("string_list %q must be a string", prefixKey)
+	}
+
+	rawCount, found := tagged[countKey]
+	if !found {
+		return nil, fmt.Errorf("string_list is missing %q", countKey)
+	}
+	countValue, ok := rawCount.(float64)
+	if !ok || countValue < 0 || countValue != float64(int(countValue)) {
+		return nil, fmt.Errorf("string_list %q must be a non-negative integer", countKey)
+	}
+	count := int(countValue)
+
+	include := make([]string, 0)
+	if rawInclude, found := tagged[includeKey]; found {
+		values, ok := rawInclude.([]any)
+		if !ok {
+			return nil, fmt.Errorf("string_list %q must be a string list", includeKey)
+		}
+		include = make([]string, len(values))
+		for idx, value := range values {
+			stringValue, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("string_list %q item %d must be a string", includeKey, idx)
+			}
+			include[idx] = stringValue
+		}
+	}
+
+	if len(tagged) != 3 && !(len(tagged) == 4 && tagged[includeKey] != nil) {
+		return nil, fmt.Errorf("string_list must contain only %q, %q, %q, and optional %q", typeKey, prefixKey, countKey, includeKey)
+	}
+
+	width := len(fmt.Sprintf("%d", max(count-1, 0)))
+	if width < 2 {
+		width = 2
+	}
+
+	values := make([]string, 0, len(include)+count)
+	values = append(values, include...)
+	for idx := range count {
+		values = append(values, fmt.Sprintf("%s-%0*d", prefix, width, idx))
+	}
+	return values, nil
 }

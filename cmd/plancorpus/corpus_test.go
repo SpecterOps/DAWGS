@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,24 @@ func TestLoadCorpus(t *testing.T) {
 	require.NotEmpty(t, suite.templateFiles)
 	require.NotEmpty(t, suite.nodeKinds)
 	require.NotEmpty(t, suite.edgeKinds)
+}
+
+func TestCorpusTemplatesParse(t *testing.T) {
+	suite, err := loadCorpus(filepath.Join("..", "..", "integration", "testdata"))
+	require.NoError(t, err)
+
+	for _, file := range suite.templateFiles {
+		for _, family := range file.Families {
+			for _, variant := range family.Variants {
+				t.Run(family.Name+"/"+variant.Name, func(t *testing.T) {
+					rendered, err := renderTemplate(family.Template, variant.Vars)
+					require.NoError(t, err)
+					_, err = frontend.ParseCypher(frontend.NewContext(), rendered)
+					require.NoError(t, err)
+				})
+			}
+		}
+	}
 }
 
 func TestRenderTemplateRequiresAllPlaceholders(t *testing.T) {

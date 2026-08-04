@@ -306,6 +306,142 @@ func TestQueryBuilder_LOGIC05ProjectionOrder(t *testing.T) {
 	}
 }
 
+func TestQueryBuilder_Phase2ReconciliationForms(t *testing.T) {
+	reconciliationKinds := func(count int) graph.Kinds {
+		kinds := make(graph.Kinds, count)
+		for idx := range count {
+			kinds[idx] = graph.StringKind(fmt.Sprintf("ReconcileKind%02d", idx+1))
+		}
+		return kinds
+	}
+
+	for _, count := range []int{1, 2, 9, 30} {
+		kinds := reconciliationKinds(count)
+		renderedKinds := "ReconcileKind01"
+		for idx := 1; idx < count; idx++ {
+			renderedKinds += fmt.Sprintf("|ReconcileKind%02d", idx+1)
+		}
+
+		t.Run(fmt.Sprintf("REC-01 inbound relationship delete with %d kinds", count), assertQueryResult(
+			query.SinglePartQuery(
+				query.Where(query.And(
+					query.Kind(query.End(), graph.StringKind("ADEntity")),
+					query.Equals(query.EndProperty("objectid"), "target-id"),
+					query.KindIn(query.Relationship(), kinds...),
+				)),
+				query.Delete(query.Relationship()),
+			),
+			fmt.Sprintf("match ()-[r:%s]->(e) where e:ADEntity and e.objectid = $p0 delete r", renderedKinds),
+			map[string]any{"p0": "target-id"},
+		))
+
+		t.Run(fmt.Sprintf("REC-02 outbound relationship delete with %d kinds", count), assertQueryResult(
+			query.SinglePartQuery(
+				query.Where(query.And(
+					query.Kind(query.Start(), graph.StringKind("ADEntity")),
+					query.Equals(query.StartProperty("objectid"), "target-id"),
+					query.KindIn(query.Relationship(), kinds...),
+				)),
+				query.Delete(query.Relationship()),
+			),
+			fmt.Sprintf("match (s)-[r:%s]->() where s:ADEntity and s.objectid = $p0 delete r", renderedKinds),
+			map[string]any{"p0": "target-id"},
+		))
+	}
+
+	t.Run("REC-03 inbound primary-group relationship delete", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.End(), graph.StringKind("Group")),
+				query.Equals(query.EndProperty("objectid"), "group-id"),
+				query.Kind(query.Relationship(), graph.StringKind("MemberOf")),
+				query.Equals(query.RelationshipProperty("isprimarygroup"), false),
+			)),
+			query.Delete(query.Relationship()),
+		),
+		"match ()-[r:MemberOf]->(e) where e:Group and e.objectid = $p0 and r.isprimarygroup = $p1 delete r",
+		map[string]any{"p0": "group-id", "p1": false},
+	))
+
+	t.Run("REC-03 outbound primary-group relationship delete", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.Start(), graph.StringKind("Computer")),
+				query.Equals(query.StartProperty("objectid"), "computer-id"),
+				query.Kind(query.Relationship(), graph.StringKind("MemberOf")),
+				query.Equals(query.RelationshipProperty("isprimarygroup"), true),
+			)),
+			query.Delete(query.Relationship()),
+		),
+		"match (s)-[r:MemberOf]->() where s:Computer and s.objectid = $p0 and r.isprimarygroup = $p1 delete r",
+		map[string]any{"p0": "computer-id", "p1": true},
+	))
+
+	t.Run("REC-04 endpoint object ID list relationship delete", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.Relationship(), graph.StringKind("ReconcileKind01")),
+				query.Kind(query.End(), graph.StringKind("ADEntity")),
+				query.In(query.EndProperty("objectid"), []string{"target-1", "target-2"}),
+			)),
+			query.Delete(query.Relationship()),
+		),
+		"match ()-[r:ReconcileKind01]->(e) where e:ADEntity and e.objectid in $p0 delete r",
+		map[string]any{"p0": []string{"target-1", "target-2"}},
+	))
+
+	t.Run("REC-05 delegated enrollment discovery projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.In(query.EndProperty("objectid"), []string{"ca-1", "ca-2"}),
+				query.Kind(query.Relationship(), graph.StringKind("PublishedTo")),
+				query.Kind(query.Start(), graph.StringKind("CertTemplate")),
+			)),
+			query.Returning(query.Relationship(), query.Start()),
+		),
+		"match (s)-[r:PublishedTo]->(e) where e.objectid in $p0 and s:CertTemplate return r, s",
+		map[string]any{"p0": []string{"ca-1", "ca-2"}},
+	))
+
+	t.Run("REC-06 delegated enrollment relationship delete by end IDs", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.End(), graph.StringKind("CertTemplate")),
+				query.InIDs(query.EndID(), graph.ID(101), graph.ID(202)),
+				query.KindIn(query.Relationship(), graph.StringKind("DelegatedEnrollmentAgent")),
+			)),
+			query.Delete(query.Relationship()),
+		),
+		"match ()-[r:DelegatedEnrollmentAgent]->(e) where e:CertTemplate and id(e) in $p0 delete r",
+		map[string]any{"p0": []graph.ID{101, 202}},
+	))
+
+	t.Run("REC-07 HostsCAService relationship delete", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.End(), graph.StringKind("EnterpriseCA")),
+				query.Equals(query.EndProperty("objectid"), "ca-id"),
+				query.KindIn(query.Relationship(), graph.StringKind("HostsCAService")),
+			)),
+			query.Delete(query.Relationship()),
+		),
+		"match ()-[r:HostsCAService]->(e) where e:EnterpriseCA and e.objectid = $p0 delete r",
+		map[string]any{"p0": "ca-id"},
+	))
+
+	t.Run("REC-08 AD entity detach delete", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.Node(), graph.StringKind("ADEntity")),
+				query.In(query.NodeProperty("objectid"), []string{"target-1", "target-2"}),
+			)),
+			query.Delete(query.Node()),
+		),
+		"match (n) where n:ADEntity and n.objectid in $p0 detach delete n",
+		map[string]any{"p0": []string{"target-1", "target-2"}},
+	))
+}
+
 func TestQueryBuilder_Render(t *testing.T) {
 	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 

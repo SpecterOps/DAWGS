@@ -16,9 +16,14 @@ Each JSON file contains a list of scale cases with:
 - `name` and `category`: stable identifiers used in reports.
 - `cypher`: the Cypher query under test.
 - `params`: named parameter values. A typed temporal parameter uses
-  `{"$type":"datetime","value":"2026-01-02T03:04:05Z"}`.
+  `{"$type":"datetime","value":"2026-01-02T03:04:05Z"}`. A deterministic
+  large string list uses
+  `{"$type":"string_list","prefix":"missing","count":1000,"include":["target"]}`.
 - `node_params`: scalar parameters resolved from fixture node names.
 - `node_list_params`: list parameters resolved from fixture node names.
+- `generated_node_list_params`: high-cardinality fixture-ID lists made from
+  optional included names plus a prefix/count sequence, for example
+  `{"ids":{"prefix":"target","count":2000,"include":["matched-target"]}}`.
 - `expected.row_count`: the expected result cardinality for a read case.
 - `observes`: whether the query observes paths, nodes, relationships,
   properties, or only IDs internally.
@@ -38,6 +43,10 @@ Mutations are rejected as ordinary read cases. A mutation must add a
 The runner drains the mutation result and validates those expectations inside
 one rollback transaction. Warm-up, every timed iteration, and PostgreSQL
 `EXPLAIN ANALYZE` therefore start from the same committed fixture state.
+
+The `generated_reconciliation` dataset is constructed by
+`testutil.NewReconciliationScaleFixture`; it is intentionally not a large
+handwritten OpenGraph JSON file.
 
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
 summaries.
