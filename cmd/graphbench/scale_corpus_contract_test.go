@@ -70,7 +70,7 @@ func TestScaleCorpusRequiredRepresentativesDeclareCardinality(t *testing.T) {
 	}
 
 	for _, id := range scaleCorpusRequiredIDs {
-		require.Positive(t, covered[id], "Phase 7 scale corpus is missing %s", id)
+		require.Positive(t, covered[id], "required scale corpus is missing %s", id)
 	}
 }
 

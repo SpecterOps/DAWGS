@@ -104,11 +104,11 @@ Append one record per reviewed source update:
 - BHE commit: `c9f61530f45b`
 - BHCE commit: `74dd3daa58a8`
 - DAWGS baseline: `v0.6.0-13-g6638cc2`; implementation worktree based on
-  `8c5fba7` with the Phase 8 parity-gate changes
+  `8c5fba7` with the dormant-form parity-gate changes
 - Active IDs: the `LOGIC-*`, `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`,
   `SCAN-*`, `LOOKUP-*`, and `WRITE-*` rows in
   `regression_coverage_manifest.md`
 - Dormant forms: `FUTURE-01`; both reviewed callers remain in the disabled
   Azure reconciliation block
-- Validation: PostgreSQL and Neo4j `make test_all`; Phase 7 PostgreSQL plan and
+- Validation: PostgreSQL and Neo4j `make test_all`; PostgreSQL scale-plan and
   scale captures under `.coverage/`

@@ -47,14 +47,14 @@ Run the package benchmark suite with:
 make test_bench
 ```
 
-The Phase 6 direct-write regression benchmark is integration-scoped because it
+The direct-write regression benchmark is integration-scoped because it
 measures real driver batch APIs. It reloads or clears its fixture outside the
 timed region and validates post-state after every iteration:
 
 ```bash
 CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
   go test -tags manual_integration ./integration -run '^$' \
-  -bench BenchmarkPhase6MutationSafeDirectWrites -benchtime=1x
+  -bench BenchmarkMutationSafeDirectWrites -benchtime=1x
 ```
 
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
@@ -89,7 +89,7 @@ comparison mode yet. The command can emit JSONL records plus Markdown and JSON s
 against a previous JSONL baseline. Mutating scale cases must declare a `write_scenario`; each warm-up and timed iteration
 runs in a rollback transaction and verifies matched, affected, and post-state cardinality.
 
-The Phase 7 PostgreSQL plan gate runs as part of `make test_all` when
+The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
 representative with `EXPLAIN ANALYZE`, enforces declared result or mutation
 cardinality, and checks stable mutation-target and anchored edge-index
@@ -98,7 +98,7 @@ invariants. Run it directly with:
 ```bash
 CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
   go test -tags manual_integration ./cmd/graphbench \
-  -run 'Test(PostgreSQLPhase7PlanInvariants|Phase7RequiredScaleRepresentativesDeclareCardinality)' \
+  -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1
 ```
 
