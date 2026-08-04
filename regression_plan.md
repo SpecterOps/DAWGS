@@ -114,19 +114,19 @@ Phase 0 should establish any missing harness support before these files are popu
 
 Complete these prerequisites before adding mutation cases in bulk.
 
-- [ ] Create a coverage manifest keyed by the IDs in this document and classify each required layer as existing, primitive-only, production-complete, or absent. Link existing test names rather than cloning equivalent primitives.
-- [ ] Extend both integration schemas and runners so a case can execute a mutation and then run one or more state assertions inside the same rollback transaction: `testCase` in `integration/cypher_test.go` and `cypherTemplateVariant` in `integration/cypher_template_test.go`.
-- [ ] Always drain and check the mutation result before inspecting state.
-- [ ] Support assertions for exact surviving node fixture IDs, exact surviving relationship triples, properties, and counts.
-- [ ] Add a backend-equivalent integration helper for executing legacy `NodeQuery` and `RelationshipQuery` criteria directly. An equivalent raw Cypher case does not exercise legacy AST construction or Neo4j preparation.
-- [ ] Require every mutation fixture to contain positive matches and decoys for direction, kind, property, ID, null/missing property, and relationship property where applicable.
-- [ ] Add a reusable reconciliation/post-processing fixture with typed endpoints, multi-kind nodes, duplicate edge kinds, missing properties, timestamps, and high-degree nodes.
-- [ ] Add deterministic fixture generators for list sizes and fanout; do not commit enormous handwritten JSON fixtures.
-- [ ] Append the synthetic 9- and 30-kind golden-test kinds to `translationTestKinds()` in `cypher/models/pgsql/test/translation_test.go`; never insert them before existing kinds and renumber established goldens.
-- [ ] Add list-valued fixture-ID parameter resolution to the scale corpus so `StartID`/`EndID` list forms do not require hard-coded database IDs.
-- [ ] Add typed temporal parameter support. Legacy-builder tests must pass `time.Time`; raw Cypher cases must use typed decoding or an explicit form such as `datetime($threshold)` so the test cannot pass through lexical string comparison.
-- [ ] Before putting Cypher mutations in a `ScaleCase` file, add an explicit write-scenario mode with expected matched/affected/post-state fields and rollback/reset semantics so warm-up and earlier iterations cannot change later measurements. Until then, keep only the selection-equivalent reads in JSON and measure actual direct mutations in Go `DR` benchmarks.
-- [ ] Record source commit and DAWGS version metadata with generated plan/scale baselines.
+- [x] Create a coverage manifest keyed by the IDs in this document and classify each required layer as existing, primitive-only, production-complete, or absent. Link existing test names rather than cloning equivalent primitives.
+- [x] Extend both integration schemas and runners so a case can execute a mutation and then run one or more state assertions inside the same rollback transaction: `testCase` in `integration/cypher_test.go` and `cypherTemplateVariant` in `integration/cypher_template_test.go`.
+- [x] Always drain and check the mutation result before inspecting state.
+- [x] Support assertions for exact surviving node fixture IDs, exact surviving relationship triples, properties, and counts.
+- [x] Add a backend-equivalent integration helper for executing legacy `NodeQuery` and `RelationshipQuery` criteria directly. An equivalent raw Cypher case does not exercise legacy AST construction or Neo4j preparation.
+- [x] Require every mutation fixture to contain positive matches and decoys for direction, kind, property, ID, null/missing property, and relationship property where applicable.
+- [x] Add a reusable reconciliation/post-processing fixture with typed endpoints, multi-kind nodes, duplicate edge kinds, missing properties, timestamps, and high-degree nodes.
+- [x] Add deterministic fixture generators for list sizes and fanout; do not commit enormous handwritten JSON fixtures.
+- [x] Append the synthetic 9- and 30-kind golden-test kinds to `translationTestKinds()` in `cypher/models/pgsql/test/translation_test.go`; never insert them before existing kinds and renumber established goldens.
+- [x] Add list-valued fixture-ID parameter resolution to the scale corpus so `StartID`/`EndID` list forms do not require hard-coded database IDs.
+- [x] Add typed temporal parameter support. Legacy-builder tests must pass `time.Time`; raw Cypher cases must use typed decoding or an explicit form such as `datetime($threshold)` so the test cannot pass through lexical string comparison.
+- [x] Before putting Cypher mutations in a `ScaleCase` file, add an explicit write-scenario mode with expected matched/affected/post-state fields and rollback/reset semantics so warm-up and earlier iterations cannot change later measurements. Until then, keep only the selection-equivalent reads in JSON and measure actual direct mutations in Go `DR` benchmarks.
+- [x] Record source commit and DAWGS version metadata with generated plan/scale baselines.
 
 Exit criteria:
 
@@ -311,15 +311,15 @@ Use the smallest matrix that exposes plan changes while retaining the production
 
 ### Baseline procedure
 
-- [ ] Capture PostgreSQL translated SQL, plan text/operators, lowering metadata, row counts, and runtime statistics on the same fixture.
-- [ ] Capture a `v0.6.0` reference and current-main result for the same query-form IDs when investigating the reported regression.
-- [ ] Run that comparison from one external/versioned harness, or apply the same test-only corpus commit to temporary worktrees for `v0.6.0` and the target revision. Do not assume the new harness exists when checking out the old tag.
-- [ ] Use `EXPLAIN (ANALYZE, BUFFERS)` for read-only scale cases.
-- [ ] Use rollback/reset isolation for mutation runtime measurements.
-- [ ] If the shared scale runner cannot safely execute a mutating form, benchmark its selection-equivalent read in `SC` and measure the actual mutation through the isolated `DR` benchmark; do not silently omit the mutation workload.
-- [ ] Compare ID-only and full-hydration projections separately; do not infer one from the other.
-- [ ] Flag new unbounded scans, unexpected materialization, join-order inversions, row-estimate explosions, and loss of endpoint/property index use.
-- [ ] Keep correctness gates deterministic. Store performance baselines and tolerances in the benchmark workflow rather than asserting a universal wall-clock threshold in unit tests.
+- [x] Capture PostgreSQL translated SQL, plan text/operators, lowering metadata, row counts, and runtime statistics on the same fixture.
+- [x] Capture a `v0.6.0` reference and current-main result for the same query-form IDs when investigating the reported regression.
+- [x] Run that comparison from one external/versioned harness, or apply the same test-only corpus commit to temporary worktrees for `v0.6.0` and the target revision. Do not assume the new harness exists when checking out the old tag.
+- [x] Use `EXPLAIN (ANALYZE, BUFFERS)` for read-only scale cases.
+- [x] Use rollback/reset isolation for mutation runtime measurements.
+- [x] If the shared scale runner cannot safely execute a mutating form, benchmark its selection-equivalent read in `SC` and measure the actual mutation through the isolated `DR` benchmark; do not silently omit the mutation workload.
+- [x] Compare ID-only and full-hydration projections separately; do not infer one from the other.
+- [x] Flag new unbounded scans, unexpected materialization, join-order inversions, row-estimate explosions, and loss of endpoint/property index use.
+- [x] Keep correctness gates deterministic. Store performance baselines and tolerances in the benchmark workflow rather than asserting a universal wall-clock threshold in unit tests.
 
 Phase 7 exit criteria:
 

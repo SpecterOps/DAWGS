@@ -144,6 +144,13 @@ instead of being cloned under BloodHound-specific names:
   keep every `FUTURE-*` ID out of active semantic, plan, and scale gates. The
   activation and ongoing source-review procedure is recorded in
   [`regression_source_parity.md`](docs/regression_source_parity.md).
+- `COMPLETION-SC`: the `SCAN-01` ID-only, `SCAN-06` shallow IDs/kind,
+  `SCAN-02` relationship hydration, and `LOOKUP-09` node hydration scale cases
+  are classified and enforced by
+  [`TestScaleCorpusDistinguishesProjectionClasses`](cmd/graphbench/phase7_test.go).
+- `COMPLETION-GATE`: [`TestRegressionCoverageManifestClosesEveryActiveID`](regression_manifest_test.go)
+  requires all 64 stable active IDs to remain present without an `A` or `P`
+  layer while preserving `FUTURE-01` as non-production-complete.
 
 ## Phase 1 sentinels
 
@@ -206,7 +213,7 @@ instead of being cloned under BloodHound-specific names:
 | `SCAN-03` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `SCAN-04` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `SCAN-05` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
-| `SCAN-06` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
+| `SCAN-06` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | C (`COMPLETION-SC`) | — |
 | `SCAN-07` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `SCAN-08` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-01` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
@@ -248,6 +255,32 @@ and therefore does not change the primitive or absent cells below.
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `FUTURE-01` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | — | A | — |
+
+## Completion audit
+
+The executable manifest gate and the following evidence close the completion
+definition in `regression_plan.md`:
+
+1. All 64 active stable IDs are present at their required layers without an
+   absent or primitive-only cell (`COMPLETION-GATE`).
+2. Shared Cypher mutations and direct writes assert exact targets, survivors,
+   properties, and counts with rollback/reset isolation (`IT-MUT`,
+   `PHASE2-IT`, `PHASE3-IT`, and `PHASE6-IT`).
+3. The `LOGIC-01` branch-local direction/kind truth table executes through the
+   shared integration corpus on PostgreSQL and Neo4j (`PHASE1-IT`).
+4. PostgreSQL translation and plan coverage exercises equality-anchored deletes
+   in both active endpoint orientations and every production-active list form
+   (`PHASE2-PG`, `PHASE2-PC`, and `PHASE7-PI`). The only outbound tenant-list
+   form is disabled upstream and remains `FUTURE-01` as required.
+5. Scale coverage explicitly separates ID-only, shallow IDs/kind, full
+   relationship, and full-node projections (`COMPLETION-SC`).
+6. Direct-write coverage includes the 1,000-item application batch and the
+   1,999/2,000/2,001 DAWGS flush boundary (`PHASE6-DR` and `PHASE6-SC`).
+7. `HOP-*` semantic and scale cases remain standalone one-hop queries; no new
+   runner sequences BloodHound traversal behavior (`PHASE4-IT` and
+   `PHASE4-SC`).
+8. Dormant IDs are rejected from active plan and scale corpora until their
+   callers are enabled (`PHASE8-GATE`).
 
 ## Phase 0 harness state
 
