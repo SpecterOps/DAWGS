@@ -80,8 +80,8 @@ edge-kind-selective, and multi-path shortest-path scenarios before recording tim
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the BHE, BHCE, and DAWGS source
-versions; the source commits can be overridden with command flags when the reviewed snapshots change.
+writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the DAWGS source version, which
+can be overridden with a command flag when needed.
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
 current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct

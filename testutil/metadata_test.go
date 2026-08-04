@@ -23,11 +23,9 @@ import (
 )
 
 func TestResolveBaselineMetadata(t *testing.T) {
-	metadata := ResolveBaselineMetadata("bhe", "bhce", "dawgs")
-	require.Equal(t, BaselineMetadata{BHECommit: "bhe", BHCECommit: "bhce", DAWGSVersion: "dawgs"}, metadata)
+	metadata := ResolveBaselineMetadata("dawgs")
+	require.Equal(t, BaselineMetadata{DAWGSVersion: "dawgs"}, metadata)
 
-	defaults := ResolveBaselineMetadata("", "", "")
-	require.Equal(t, DefaultBHECommit, defaults.BHECommit)
-	require.Equal(t, DefaultBHCECommit, defaults.BHCECommit)
+	defaults := ResolveBaselineMetadata("")
 	require.NotEmpty(t, defaults.DAWGSVersion)
 }

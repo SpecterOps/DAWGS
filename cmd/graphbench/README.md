@@ -32,9 +32,8 @@ Connection strings can be supplied as flags or environment variables:
 - PostgreSQL: `-pg-connection`, `PG_CONNECTION_STRING`, `-connection`, or `CONNECTION_STRING`.
 - Neo4j: `-neo4j-connection`, `NEO4J_CONNECTION_STRING`, `-connection`, or `CONNECTION_STRING`.
 
-Every output record includes BHE, BHCE, and DAWGS source metadata. Use
-`-bhe-commit`, `-bhce-commit`, and `-dawgs-version` to override the recorded
-defaults.
+Every output record includes the DAWGS source version. Use `-dawgs-version` to
+override the auto-detected value.
 
 ## Examples
 
