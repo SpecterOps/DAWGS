@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase8DormantFormsStayOutOfPlanCorpus(t *testing.T) {
+func TestDormantFormsStayOutOfPlanCorpus(t *testing.T) {
 	suite, err := loadCorpus("../../integration/testdata")
 	require.NoError(t, err)
 

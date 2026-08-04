@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLegacyBuilderPostgreSQL_Phase4StandaloneHopForms(t *testing.T) {
+func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 	hopKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
 		for idx := range count {
@@ -71,7 +71,7 @@ func TestLegacyBuilderPostgreSQL_Phase4StandaloneHopForms(t *testing.T) {
 
 	for _, count := range []int{2, 5, 9, 30} {
 		kinds := hopKinds(count)
-		kindIDs := phase2KindIDs(33, count)
+		kindIDs := sequentialKindIDs(33, count)
 
 		t.Run(fmt.Sprintf("HOP-03 outbound %d kinds", count), func(t *testing.T) {
 			formatted, translation := translateLegacyQuery(t,

@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPostgreSQLPhase7PlanInvariants(t *testing.T) {
+func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING env var is not set")
@@ -41,10 +41,10 @@ func TestPostgreSQLPhase7PlanInvariants(t *testing.T) {
 
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
-	required := phase7RequiredIDSet()
+	required := scaleCorpusRequiredIDSet()
 	filtered := ScaleCorpus{}
 	for _, testCase := range corpus.Cases {
-		id := phase7CaseID(testCase.Name)
+		id := scaleCorpusCaseID(testCase.Name)
 		_, isRequired := required[id]
 		if isRequired || id == "TRUST-03" {
 			filtered.Cases = append(filtered.Cases, testCase)
@@ -65,7 +65,7 @@ func TestPostgreSQLPhase7PlanInvariants(t *testing.T) {
 	byID := map[string][]CaseResult{}
 	for _, record := range records {
 		record := record
-		id := phase7CaseID(record.Name)
+		id := scaleCorpusCaseID(record.Name)
 		byID[id] = append(byID[id], record)
 
 		t.Run(record.Name, func(t *testing.T) {
@@ -79,17 +79,17 @@ func TestPostgreSQLPhase7PlanInvariants(t *testing.T) {
 
 			plan := strings.Join(record.PostgresPlan, "\n")
 			require.Contains(t, plan, "actual rows=", "plan must come from EXPLAIN ANALYZE")
-			assertPhase7MutationTarget(t, id, plan)
-			assertPhase7AnchorIndex(t, id, plan)
+			assertMutationPlanTarget(t, id, plan)
+			assertAnchorPlanIndex(t, id, plan)
 		})
 	}
 
-	for _, id := range phase7RequiredScaleIDs {
+	for _, id := range scaleCorpusRequiredIDs {
 		require.NotEmpty(t, byID[id], "missing PostgreSQL plan-invariant execution for %s", id)
 	}
 
 	t.Run("LOGIC-01 branch-local direction and kind plan", func(t *testing.T) {
-		record := requireSinglePhase7Record(t, byID, "TRUST-03")
+		record := requireSingleScaleRecord(t, byID, "TRUST-03")
 		normalizedSQL := strings.ToLower(record.SQL)
 		require.Contains(t, normalizedSQL, " or ")
 		require.GreaterOrEqual(t, strings.Count(normalizedSQL, "kind_id"), 2)
@@ -98,7 +98,7 @@ func TestPostgreSQLPhase7PlanInvariants(t *testing.T) {
 	})
 
 	t.Run("LOGIC-02 cross-binding temporal plan", func(t *testing.T) {
-		record := requireSinglePhase7Record(t, byID, "TRUST-01")
+		record := requireSingleScaleRecord(t, byID, "TRUST-01")
 		normalizedSQL := strings.ToLower(record.SQL)
 		require.Contains(t, normalizedSQL, " or ")
 		require.GreaterOrEqual(t, strings.Count(normalizedSQL, "lastcollected"), 2)
@@ -106,20 +106,20 @@ func TestPostgreSQLPhase7PlanInvariants(t *testing.T) {
 	})
 
 	t.Run("LOGIC-04 filtered mutation targets", func(t *testing.T) {
-		edgeDelete := requireSinglePhase7Record(t, byID, "REC-01")
-		nodeDelete := requireSinglePhase7Record(t, byID, "REC-08")
+		edgeDelete := requireSingleScaleRecord(t, byID, "REC-01")
+		nodeDelete := requireSingleScaleRecord(t, byID, "REC-08")
 		require.Contains(t, strings.Join(edgeDelete.PostgresPlan, "\n"), "Delete on edge")
 		require.Contains(t, strings.Join(nodeDelete.PostgresPlan, "\n"), "Delete on node")
 	})
 }
 
-func requireSinglePhase7Record(t *testing.T, byID map[string][]CaseResult, id string) CaseResult {
+func requireSingleScaleRecord(t *testing.T, byID map[string][]CaseResult, id string) CaseResult {
 	t.Helper()
 	require.Len(t, byID[id], 1, "%s must have one representative", id)
 	return byID[id][0]
 }
 
-func assertPhase7MutationTarget(t *testing.T, id, plan string) {
+func assertMutationPlanTarget(t *testing.T, id, plan string) {
 	t.Helper()
 
 	switch id {
@@ -130,7 +130,7 @@ func assertPhase7MutationTarget(t *testing.T, id, plan string) {
 	}
 }
 
-func assertPhase7AnchorIndex(t *testing.T, id, plan string) {
+func assertAnchorPlanIndex(t *testing.T, id, plan string) {
 	t.Helper()
 
 	switch id {
