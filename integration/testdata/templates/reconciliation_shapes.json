@@ -687,6 +687,116 @@
           ]
         }
       ]
+    },
+    {
+      "name": "TRUST-01 and TRUST-02 stale trust temporal disjunction",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "early-a", "kinds": ["Domain"], "properties": {"lastcollected": "2026-01-02T00:00:00Z"}},
+          {"id": "early-b", "kinds": ["Domain"], "properties": {"lastcollected": "2026-01-02T00:00:00Z"}},
+          {"id": "equal-a", "kinds": ["Domain"], "properties": {"lastcollected": "2026-01-03T00:00:00Z"}},
+          {"id": "equal-b", "kinds": ["Domain"], "properties": {"lastcollected": "2026-01-03T00:00:00Z"}},
+          {"id": "late-a", "kinds": ["Domain"], "properties": {"lastcollected": "2026-01-04T00:00:00Z"}},
+          {"id": "late-b", "kinds": ["Domain"], "properties": {"lastcollected": "2026-01-04T00:00:00Z"}},
+          {"id": "missing-a", "kinds": ["Domain"], "properties": {}},
+          {"id": "missing-b", "kinds": ["Domain"], "properties": {}},
+          {"id": "null-a", "kinds": ["Domain"], "properties": {"lastcollected": null}},
+          {"id": "null-b", "kinds": ["Domain"], "properties": {"lastcollected": null}},
+          {"id": "wrong-start", "kinds": ["Computer"], "properties": {"lastcollected": "2026-01-04T00:00:00Z"}},
+          {"id": "wrong-end", "kinds": ["User"], "properties": {"lastcollected": "2026-01-04T00:00:00Z"}}
+        ],
+        "edges": [
+          {"start_id": "late-a", "end_id": "early-a", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-older-start-only"}},
+          {"start_id": "early-a", "end_id": "late-a", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-older-end-only"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-older-both"}},
+          {"start_id": "equal-a", "end_id": "equal-b", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-equal"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-05T00:00:00Z", "marker": "same-newer"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "SameForestTrust", "properties": {"marker": "same-missing-relationship"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "SameForestTrust", "properties": {"lastseen": null, "marker": "same-null-relationship"}},
+          {"start_id": "missing-a", "end_id": "late-a", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-missing-start-valid-end"}},
+          {"start_id": "null-a", "end_id": "late-a", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-null-start-valid-end"}},
+          {"start_id": "late-a", "end_id": "missing-b", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-missing-end-valid-start"}},
+          {"start_id": "late-a", "end_id": "null-b", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-null-end-valid-start"}},
+          {"start_id": "missing-a", "end_id": "null-b", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-missing-null-endpoints"}},
+          {"start_id": "wrong-start", "end_id": "late-a", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-wrong-start-kind"}},
+          {"start_id": "late-a", "end_id": "wrong-end", "kind": "SameForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "same-wrong-end-kind"}},
+          {"start_id": "late-a", "end_id": "early-a", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-older-start-only"}},
+          {"start_id": "early-a", "end_id": "late-a", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-older-end-only"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-older-both"}},
+          {"start_id": "equal-a", "end_id": "equal-b", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-equal"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-05T00:00:00Z", "marker": "cross-newer"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "CrossForestTrust", "properties": {"marker": "cross-missing-relationship"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "CrossForestTrust", "properties": {"lastseen": null, "marker": "cross-null-relationship"}},
+          {"start_id": "missing-a", "end_id": "late-a", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-missing-start-valid-end"}},
+          {"start_id": "null-a", "end_id": "late-a", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-null-start-valid-end"}},
+          {"start_id": "late-a", "end_id": "missing-b", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-missing-end-valid-start"}},
+          {"start_id": "late-a", "end_id": "null-b", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-null-end-valid-start"}},
+          {"start_id": "missing-a", "end_id": "null-b", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-missing-null-endpoints"}},
+          {"start_id": "wrong-start", "end_id": "late-a", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-wrong-start-kind"}},
+          {"start_id": "late-a", "end_id": "wrong-end", "kind": "CrossForestTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-wrong-end-kind"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "TRUST-01 returns only stale SameForestTrust relationship IDs",
+          "vars": {"query": "MATCH (s:Domain)-[r:SameForestTrust]->(e:Domain) WHERE datetime(r.lastseen) < datetime(s.lastcollected) OR datetime(r.lastseen) < datetime(e.lastcollected) RETURN id(r)"},
+          "assert": {"keys": ["id(r)"], "row_count": 7}
+        },
+        {
+          "name": "TRUST-01 exact sparse truth and null matrix",
+          "vars": {"query": "MATCH (s:Domain)-[r:SameForestTrust]->(e:Domain) WHERE datetime(r.lastseen) < datetime(s.lastcollected) OR datetime(r.lastseen) < datetime(e.lastcollected) RETURN r.marker"},
+          "assert": {"scalar_values": ["same-older-start-only", "same-older-end-only", "same-older-both", "same-missing-start-valid-end", "same-null-start-valid-end", "same-missing-end-valid-start", "same-null-end-valid-start"]}
+        },
+        {
+          "name": "TRUST-02 returns and hydrates only stale CrossForestTrust relationships",
+          "vars": {"query": "MATCH (s:Domain)-[r:CrossForestTrust]->(e:Domain) WHERE datetime(r.lastseen) < datetime(s.lastcollected) OR datetime(r.lastseen) < datetime(e.lastcollected) RETURN r"},
+          "assert": {"row_count": 7, "relationship_records": [
+            {"start": "late-a", "end": "early-a", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-older-start-only"}},
+            {"start": "early-a", "end": "late-a", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-older-end-only"}},
+            {"start": "late-a", "end": "late-b", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-older-both"}},
+            {"start": "missing-a", "end": "late-a", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-missing-start-valid-end"}},
+            {"start": "null-a", "end": "late-a", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-null-start-valid-end"}},
+            {"start": "late-a", "end": "missing-b", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-missing-end-valid-start"}},
+            {"start": "late-a", "end": "null-b", "kind": "CrossForestTrust", "props": {"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-null-end-valid-start"}}
+          ]}
+        }
+      ]
+    },
+    {
+      "name": "TRUST-03 directional stale trust derivation",
+      "template": "MATCH (s:Domain)-[r]->(e:Domain) WHERE (id(s) = $forward_start AND id(e) = $forward_end AND r:AbuseTGTDelegation) OR (id(s) = $forward_end AND id(e) = $forward_start AND r:SpoofSIDHistory) RETURN {{projection}}",
+      "node_params": {"forward_start": "forward", "forward_end": "reverse"},
+      "fixture": {
+        "nodes": [
+          {"id": "forward", "kinds": ["Domain"], "properties": {"name": "forward"}},
+          {"id": "reverse", "kinds": ["Domain"], "properties": {"name": "reverse"}},
+          {"id": "wrong-kind", "kinds": ["Computer"], "properties": {"name": "wrong-kind"}}
+        ],
+        "edges": [
+          {"start_id": "forward", "end_id": "reverse", "kind": "AbuseTGTDelegation", "properties": {"marker": "valid-forward-abuse"}},
+          {"start_id": "reverse", "end_id": "forward", "kind": "SpoofSIDHistory", "properties": {"marker": "valid-reverse-spoof"}},
+          {"start_id": "forward", "end_id": "reverse", "kind": "SpoofSIDHistory", "properties": {"marker": "invalid-forward-spoof"}},
+          {"start_id": "reverse", "end_id": "forward", "kind": "AbuseTGTDelegation", "properties": {"marker": "invalid-reverse-abuse"}},
+          {"start_id": "forward", "end_id": "wrong-kind", "kind": "AbuseTGTDelegation", "properties": {"marker": "invalid-end-kind"}}
+        ]
+      },
+      "variants": [
+        {"name": "relationship ID projection preserves branch-local direction and kind", "vars": {"projection": "id(r)"}, "assert": {"keys": ["id(r)"], "row_count": 2}},
+        {"name": "exact directional markers exclude both cross-combinations", "vars": {"projection": "r.marker"}, "assert": {"scalar_values": ["valid-forward-abuse", "valid-reverse-spoof"]}},
+        {
+          "name": "reverse driving trust relationship preserves ID projection",
+          "vars": {"projection": "id(r)"},
+          "node_params": {"forward_start": "reverse", "forward_end": "forward"},
+          "assert": {"keys": ["id(r)"], "row_count": 2}
+        },
+        {
+          "name": "reverse driving trust relationship swaps only the intended branch-local matches",
+          "vars": {"projection": "r.marker"},
+          "node_params": {"forward_start": "reverse", "forward_end": "forward"},
+          "assert": {"scalar_values": ["invalid-forward-spoof", "invalid-reverse-abuse"]}
+        }
+      ]
     }
   ]
 }

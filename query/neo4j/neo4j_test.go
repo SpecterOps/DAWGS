@@ -442,6 +442,122 @@ func TestQueryBuilder_Phase2ReconciliationForms(t *testing.T) {
 	))
 }
 
+func TestQueryBuilder_Phase3TrustAndPruningForms(t *testing.T) {
+	threshold := time.Date(2026, time.January, 3, 0, 0, 0, 0, time.UTC)
+	domain := graph.StringKind("Domain")
+
+	t.Run("TRUST-01 SameForestTrust ID projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.Start(), domain),
+				query.Kind(query.End(), domain),
+				query.Kind(query.Relationship(), graph.StringKind("SameForestTrust")),
+				query.Or(
+					query.BeforeGraphQuery(query.RelationshipProperty("lastseen"), query.StartProperty("lastcollected")),
+					query.BeforeGraphQuery(query.RelationshipProperty("lastseen"), query.EndProperty("lastcollected")),
+				),
+			)),
+			query.Returning(query.RelationshipID()),
+		),
+		"match (s)-[r:SameForestTrust]->(e) where s:Domain and e:Domain and (r.lastseen < s.lastcollected or r.lastseen < e.lastcollected) return id(r)",
+	))
+
+	t.Run("TRUST-02 CrossForestTrust full relationship projection", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.Start(), domain),
+				query.Kind(query.End(), domain),
+				query.KindIn(query.Relationship(), graph.StringKind("CrossForestTrust")),
+				query.Or(
+					query.BeforeGraphQuery(query.RelationshipProperty("lastseen"), query.StartProperty("lastcollected")),
+					query.BeforeGraphQuery(query.RelationshipProperty("lastseen"), query.EndProperty("lastcollected")),
+				),
+			)),
+			query.Returning(query.Relationship()),
+		),
+		"match (s)-[r:CrossForestTrust]->(e) where s:Domain and e:Domain and (r.lastseen < s.lastcollected or r.lastseen < e.lastcollected) return r",
+	))
+
+	t.Run("TRUST-03 directional derived trust disjunction", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Kind(query.Start(), domain),
+				query.Kind(query.End(), domain),
+				query.Or(
+					query.And(
+						query.Equals(query.StartID(), graph.ID(101)),
+						query.Equals(query.EndID(), graph.ID(202)),
+						query.KindIn(query.Relationship(), graph.StringKind("AbuseTGTDelegation")),
+					),
+					query.And(
+						query.Equals(query.StartID(), graph.ID(202)),
+						query.Equals(query.EndID(), graph.ID(101)),
+						query.KindIn(query.Relationship(), graph.StringKind("SpoofSIDHistory")),
+					),
+				),
+			)),
+			query.Returning(query.RelationshipID()),
+		),
+		"match (s)-[r]->(e) where s:Domain and e:Domain and (id(s) = $p0 and id(e) = $p1 and r:AbuseTGTDelegation or id(s) = $p2 and id(e) = $p3 and r:SpoofSIDHistory) return id(r)",
+		map[string]any{"p0": graph.ID(101), "p1": graph.ID(202), "p2": graph.ID(202), "p3": graph.ID(101)},
+	))
+
+	t.Run("PRUNE-01 relationship TTL excludes several kinds", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Not(query.KindIn(query.Relationship(), graph.StringKind("MetaIncludes"), graph.StringKind("HasSession"))),
+				query.Before(query.RelationshipProperty("lastseen"), threshold),
+			)),
+			query.Returning(query.RelationshipID()),
+		),
+		"match ()-[r]->() where not ((r:MetaIncludes or r:HasSession)) and r.lastseen < $p0 return id(r)",
+		map[string]any{"p0": threshold},
+	))
+
+	t.Run("PRUNE-02 HasSession missing or stale TTL", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.KindIn(query.Relationship(), graph.StringKind("HasSession")),
+				query.Or(
+					query.Not(query.Exists(query.RelationshipProperty("lastseen"))),
+					query.Before(query.RelationshipProperty("lastseen"), threshold),
+				),
+			)),
+			query.Returning(query.RelationshipID()),
+		),
+		"match ()-[r:HasSession]->() where (not (r.lastseen is not null) or r.lastseen < $p0) return id(r)",
+		map[string]any{"p0": threshold},
+	))
+
+	t.Run("PRUNE-03 node TTL excludes several kinds", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Not(query.KindIn(query.Node(), graph.StringKind("Domain"), graph.StringKind("Tenant"), graph.StringKind("Meta"), graph.StringKind("MetaIncludes"), graph.StringKind("MigrationData"))),
+				query.Or(
+					query.Not(query.Exists(query.NodeProperty("lastseen"))),
+					query.Before(query.NodeProperty("lastseen"), threshold),
+				),
+			)),
+			query.Returning(query.NodeID()),
+		),
+		"match (n) where not ((n:Domain or n:Tenant or n:Meta or n:MetaIncludes or n:MigrationData)) and (not (n.lastseen is not null) or n.lastseen < $p0) return id(n)",
+		map[string]any{"p0": threshold},
+	))
+
+	t.Run("PRUNE-04 orphan SID prefix", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(query.And(
+				query.Not(query.KindIn(query.Node(), graph.StringKind("Domain"), graph.StringKind("Tenant"), graph.StringKind("Meta"), graph.StringKind("MetaIncludes"), graph.StringKind("MigrationData"))),
+				query.Not(query.Exists(query.NodeProperty("name"))),
+				query.StringStartsWith(query.NodeProperty("objectid"), "S-1-5"),
+			)),
+			query.Returning(query.NodeID()),
+		),
+		"match (n) where not ((n:Domain or n:Tenant or n:Meta or n:MetaIncludes or n:MigrationData)) and not (n.name is not null) and n.objectid starts with $p0 return id(n)",
+		map[string]any{"p0": "S-1-5"},
+	))
+}
+
 func TestQueryBuilder_Render(t *testing.T) {
 	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 

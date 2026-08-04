@@ -22,7 +22,10 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
-const ReconciliationScaleDataset = "generated_reconciliation"
+const (
+	ReconciliationScaleDataset = "generated_reconciliation"
+	TrustPruningScaleDataset   = "generated_trust_pruning"
+)
 
 // GeneratedNodeListParam resolves optional fixture IDs followed by a
 // deterministic prefix/count sequence. It keeps high-cardinality database-ID
@@ -127,6 +130,84 @@ func NewReconciliationScaleFixture(fanout int) *opengraph.Graph {
 		StartID:    "delete-target",
 		EndID:      "delete-target",
 		Kind:       "Incident",
+		Properties: map[string]any{"marker": "incident-self"},
+	})
+	return fixture
+}
+
+// NewTrustPruningScaleFixture returns deterministic dense trust and pruning
+// shapes without changing the cardinalities of the reconciliation fixture.
+func NewTrustPruningScaleFixture(fanout int) *opengraph.Graph {
+	if fanout < 1 {
+		fanout = 128
+	}
+
+	fixture := &opengraph.Graph{
+		Nodes: []opengraph.Node{
+			{ID: "trust-early", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": "2026-01-02T00:00:00Z"}},
+			{ID: "trust-late-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": "2026-01-04T00:00:00Z"}},
+			{ID: "trust-late-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": "2026-01-04T00:00:00Z"}},
+			{ID: "trust-equal-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": "2026-01-03T00:00:00Z"}},
+			{ID: "trust-equal-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": "2026-01-03T00:00:00Z"}},
+			{ID: "prune-a", Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": "a"}},
+			{ID: "prune-b", Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": "b"}},
+			{ID: "prune-missing", Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": "missing"}},
+			{ID: "prune-null", Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": "null", "lastseen": nil}},
+			{ID: "prune-protected", Kinds: []string{"PruneCandidate", "Domain"}, Properties: map[string]any{"name": "protected", "lastseen": "2026-01-02T00:00:00Z"}},
+			{ID: "orphan-missing", Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"objectid": "S-1-5-100"}},
+			{ID: "orphan-null", Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": nil, "objectid": "S-1-5-101"}},
+			{ID: "orphan-named", Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": "named", "objectid": "S-1-5-102"}},
+			{ID: "orphan-wrong-prefix", Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"objectid": "X-1-5-103"}},
+			{ID: "prune-batch-high", Kinds: []string{"PruneBatchNode"}, Properties: map[string]any{"remove": true}},
+			{ID: "prune-batch-survivor", Kinds: []string{"PruneBatchNode"}, Properties: map[string]any{"remove": false}},
+		},
+		Edges: []opengraph.Edge{
+			{StartID: "trust-equal-a", EndID: "trust-equal-b", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "same-equal"}},
+			{StartID: "trust-equal-a", EndID: "trust-equal-b", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-equal"}},
+			{StartID: "trust-late-a", EndID: "trust-late-b", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": "2026-01-05T00:00:00Z", "marker": "same-new"}},
+			{StartID: "trust-late-a", EndID: "trust-late-b", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": "2026-01-05T00:00:00Z", "marker": "cross-new"}},
+			{StartID: "trust-late-a", EndID: "trust-late-b", Kind: "AbuseTGTDelegation", Properties: map[string]any{"marker": "valid-forward-abuse"}},
+			{StartID: "trust-late-b", EndID: "trust-late-a", Kind: "SpoofSIDHistory", Properties: map[string]any{"marker": "valid-reverse-spoof"}},
+			{StartID: "trust-late-a", EndID: "trust-late-b", Kind: "SpoofSIDHistory", Properties: map[string]any{"marker": "invalid-forward-spoof"}},
+			{StartID: "trust-late-b", EndID: "trust-late-a", Kind: "AbuseTGTDelegation", Properties: map[string]any{"marker": "invalid-reverse-abuse"}},
+			{StartID: "prune-a", EndID: "prune-b", Kind: "PruneBatchSurvivor", Properties: map[string]any{"remove": false}},
+			{StartID: "prune-a", EndID: "prune-b", Kind: "MetaIncludes", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "protected-meta-includes"}},
+		},
+	}
+
+	for idx := range fanout {
+		suffix := fmt.Sprintf("%04d", idx)
+		oldNodeID := "prune-old-" + suffix
+		newNodeID := "prune-new-" + suffix
+		orphanNodeID := "orphan-scale-" + suffix
+		batchNodeID := "prune-batch-" + suffix
+		neighborID := "prune-neighbor-" + suffix
+
+		fixture.Nodes = append(fixture.Nodes,
+			opengraph.Node{ID: oldNodeID, Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": oldNodeID, "lastseen": "2026-01-02T00:00:00Z"}},
+			opengraph.Node{ID: newNodeID, Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": newNodeID, "lastseen": "2026-01-04T00:00:00Z"}},
+			opengraph.Node{ID: orphanNodeID, Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"objectid": "S-1-5-" + suffix}},
+			opengraph.Node{ID: batchNodeID, Kinds: []string{"PruneBatchNode"}, Properties: map[string]any{"remove": idx%2 == 0}},
+			opengraph.Node{ID: neighborID, Kinds: []string{"PruneNeighbor"}, Properties: map[string]any{"name": neighborID}},
+		)
+
+		fixture.Edges = append(fixture.Edges,
+			opengraph.Edge{StartID: "trust-late-a", EndID: "trust-early", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "same-old-" + suffix}},
+			opengraph.Edge{StartID: "trust-late-a", EndID: "trust-early", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-old-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "candidate-old-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": "2026-01-04T00:00:00Z", "marker": "candidate-new-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "HasSession", Properties: map[string]any{"marker": "session-missing-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "HasSession", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "HasSession", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "session-equal-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "PruneBatch", Properties: map[string]any{"remove": true, "marker": "batch-" + suffix}},
+			opengraph.Edge{StartID: "prune-batch-high", EndID: neighborID, Kind: "PruneIncident", Properties: map[string]any{"marker": "incident-" + suffix}},
+		)
+	}
+
+	fixture.Edges = append(fixture.Edges, opengraph.Edge{
+		StartID:    "prune-batch-high",
+		EndID:      "prune-batch-high",
+		Kind:       "PruneIncident",
 		Properties: map[string]any{"marker": "incident-self"},
 	})
 	return fixture
