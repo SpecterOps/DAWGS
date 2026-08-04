@@ -116,41 +116,64 @@ instead of being cloned under BloodHound-specific names:
 - `PHASE5-SC`: the required wide-scan, large-list, adjacency, count, and NTLM
   scenarios in [`scans_lookups.json`](benchmark/testdata/scale/cases/scans_lookups.json),
   backed by [`NewScanLookupScaleFixture`](testutil/reconciliation_fixture.go).
+- `PHASE6-DR`: [`TestPhase6DeleteRelationshipBoundariesAndSurvivors` through
+  `TestPhase6ExactKeyMissThenCreateNode`](integration/phase6_direct_write_test.go),
+  covering direct batch and transactional APIs on the selected backend with the
+  shared [`NewDirectWriteScaleFixture`](testutil/reconciliation_fixture.go), plus
+  the PostgreSQL conflict-key/property-index regression in
+  [`batch_test.go`](drivers/pg/batch_test.go).
+- `PHASE6-IT`: the exact-key create/update, full-node update, and exact-key
+  miss/create workflows in [`phase6_direct_write_test.go`](integration/phase6_direct_write_test.go),
+  with selector and driver-operation assertions kept separate.
+- `PHASE6-SC`: the reset-per-iteration, post-state-checked
+  [`BenchmarkPhase6MutationSafeDirectWrites`](integration/phase6_direct_write_test.go)
+  at 1,000 items and across the 2,000-item DAWGS flush boundary.
+- `PHASE7-PI`: [`TestPostgreSQLPhase7PlanInvariants`](cmd/graphbench/phase7_plan_integration_test.go)
+  executes every required Cypher scale representative through PostgreSQL with
+  `EXPLAIN ANALYZE`, exact read/write cardinality, rollback-isolated mutation
+  post-state, mutation-target, binding, and anchor-index assertions. The
+  backend-independent [`TestPhase7RequiredScaleRepresentativesDeclareCardinality`](cmd/graphbench/phase7_test.go)
+  prevents a required stable ID or its cardinality contract from disappearing.
+- `PHASE7-BASELINE`: `cmd/graphbench` captures translated SQL, lowering
+  metadata, plans, buffer/runtime metrics, and cardinalities for the complete
+  scale corpus; `cmd/plancorpus` captures the shared semantic corpus with source
+  metadata. Generated captures remain review artifacts under the ignored
+  `.coverage/` directory rather than committed machine-specific baselines.
 
 ## Phase 1 sentinels
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `LOGIC-01` | C (`PHASE1-QB`) | — | C (`PHASE1-PG`) | C (`PHASE1-IT`) | C (`PHASE1-PC`) | A | — | — |
-| `LOGIC-02` | C (`PHASE1-QB`) | — | C (`PHASE1-PG`) | C (`PHASE1-IT`) | C (`PHASE1-PC`) | A | — | — |
+| `LOGIC-01` | C (`PHASE1-QB`) | — | C (`PHASE1-PG`) | C (`PHASE1-IT`) | C (`PHASE1-PC`) | C (`PHASE7-PI`) | — | — |
+| `LOGIC-02` | C (`PHASE1-QB`) | — | C (`PHASE1-PG`) | C (`PHASE1-IT`) | C (`PHASE1-PC`) | C (`PHASE7-PI`) | — | — |
 | `LOGIC-03` | C (`PHASE1-QB`) | — | C (`PHASE1-PG`) | C (`PHASE1-IT`) | — | — | — | — |
-| `LOGIC-04` | — | C (`PHASE1-CY`) | C (`PHASE1-PG`) | C (`PHASE1-IT`) | C (`PHASE1-PC`) | A | — | — |
+| `LOGIC-04` | — | C (`PHASE1-CY`) | C (`PHASE1-PG`) | C (`PHASE1-IT`) | C (`PHASE1-PC`) | C (`PHASE7-PI`) | — | — |
 | `LOGIC-05` | C (`PHASE1-QB`) | — | C (`PHASE1-PG`) | C (`PHASE1-IT`) | — | — | — | — |
 
 ## Phase 2 reconciliation
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `REC-01` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
-| `REC-02` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-01` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | C (`PHASE7-PI`) | C (`PHASE2-SC`) | — |
+| `REC-02` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | C (`PHASE7-PI`) | C (`PHASE2-SC`) | — |
 | `REC-03` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | — | — |
-| `REC-04` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-04` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | C (`PHASE7-PI`) | C (`PHASE2-SC`) | — |
 | `REC-05` | C (`PHASE2-QB`) | — | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | — | — |
-| `REC-06` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-06` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | C (`PHASE7-PI`) | C (`PHASE2-SC`) | — |
 | `REC-07` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | — | — |
-| `REC-08` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-08` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | C (`PHASE7-PI`) | C (`PHASE2-SC`) | — |
 
 ## Phase 3 trust, pruning, and aging
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TRUST-01` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
-| `TRUST-02` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
-| `TRUST-03` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | — | — |
-| `PRUNE-01` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
-| `PRUNE-02` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
-| `PRUNE-03` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
-| `PRUNE-04` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `TRUST-01` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | C (`PHASE3-SC`) | — |
+| `TRUST-02` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | C (`PHASE3-SC`) | — |
+| `TRUST-03` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | — | — |
+| `PRUNE-01` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | C (`PHASE3-SC`) | — |
+| `PRUNE-02` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | C (`PHASE3-SC`) | — |
+| `PRUNE-03` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | C (`PHASE3-SC`) | — |
+| `PRUNE-04` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | C (`PHASE7-PI`) | C (`PHASE3-SC`) | — |
 | `PRUNE-05` | — | — | — | — | — | — | C (`PHASE3-SC`) | C (`PHASE3-DR`) |
 | `PRUNE-06` | — | — | — | — | — | — | C (`PHASE3-SC`) | C (`PHASE3-DR`) |
 
@@ -158,58 +181,58 @@ instead of being cloned under BloodHound-specific names:
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `HOP-01` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
-| `HOP-02` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
-| `HOP-03` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
-| `HOP-04` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
-| `HOP-05` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-01` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
+| `HOP-02` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
+| `HOP-03` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
+| `HOP-04` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
+| `HOP-05` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
 | `HOP-06` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | — | — | — |
-| `HOP-07` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-07` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
 | `HOP-08` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | — | — | — |
-| `HOP-09` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-09` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | C (`PHASE7-PI`) | C (`PHASE4-SC`) | — |
 | `HOP-10` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | — | — | — |
 
 ## Phase 5 scans and lookups
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `SCAN-01` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
-| `SCAN-02` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
-| `SCAN-03` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
-| `SCAN-04` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
-| `SCAN-05` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `SCAN-01` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `SCAN-02` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `SCAN-03` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `SCAN-04` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `SCAN-05` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `SCAN-06` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
-| `SCAN-07` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
-| `SCAN-08` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `SCAN-07` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `SCAN-08` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-01` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
-| `LOOKUP-02` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `LOOKUP-02` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-03` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | — | — | — | — |
-| `LOOKUP-04` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
-| `LOOKUP-05` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `LOOKUP-04` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `LOOKUP-05` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-06` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
 | `LOOKUP-07` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | — | — | — | — |
 | `LOOKUP-08` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
-| `LOOKUP-09` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `LOOKUP-09` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-10` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
-| `LOOKUP-11` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `LOOKUP-11` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-12` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
-| `LOOKUP-13` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `LOOKUP-13` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 | `LOOKUP-14` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | — | — | — |
-| `LOOKUP-15` | — | — | — | C (`PHASE5-IT`) | — | A | C (`PHASE5-SC`) | — |
-| `LOOKUP-16` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | A | C (`PHASE5-SC`) | — |
+| `LOOKUP-15` | — | — | — | C (`PHASE5-IT`) | — | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
+| `LOOKUP-16` | C (`PHASE5-QB`) | — | C (`PHASE5-PG`) | C (`PHASE5-IT`) | C (`PHASE5-PC`) | C (`PHASE7-PI`) | C (`PHASE5-SC`) | — |
 
 ## Phase 6 direct writes
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `WRITE-01` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
-| `WRITE-02` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
-| `WRITE-03` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
-| `WRITE-04` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
-| `WRITE-05` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
-| `WRITE-06` | — | — | — | P (`IT-HOP`) | — | — | — | P (`DR-BATCH`) |
-| `WRITE-07` | — | — | — | P (`IT-PRED`) | — | — | — | P (`DR-BATCH`) |
-| `WRITE-08` | — | — | — | P (`IT-PRED`) | — | — | — | P (`DR-BATCH`) |
+| `WRITE-01` | — | — | — | — | — | — | C (`PHASE6-SC`) | C (`PHASE6-DR`) |
+| `WRITE-02` | — | — | — | — | — | — | C (`PHASE6-SC`) | C (`PHASE6-DR`) |
+| `WRITE-03` | — | — | — | — | — | — | C (`PHASE6-SC`) | C (`PHASE6-DR`) |
+| `WRITE-04` | — | — | — | — | — | — | C (`PHASE6-SC`) | C (`PHASE6-DR`) |
+| `WRITE-05` | — | — | — | — | — | — | C (`PHASE6-SC`) | C (`PHASE6-DR`) |
+| `WRITE-06` | — | — | — | C (`PHASE6-IT`) | — | — | — | C (`PHASE6-DR`) |
+| `WRITE-07` | — | — | — | C (`PHASE6-IT`) | — | — | — | C (`PHASE6-DR`) |
+| `WRITE-08` | — | — | — | C (`PHASE6-IT`) | — | — | — | C (`PHASE6-DR`) |
 
 ## Phase 8 dormant coverage
 

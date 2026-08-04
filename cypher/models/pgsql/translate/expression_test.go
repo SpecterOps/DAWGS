@@ -284,6 +284,17 @@ func TestInferWrappedExpressionType(t *testing.T) {
 		Name:         "all expression over scalar",
 		ExpectedType: pgsql.UnknownDataType,
 		Expression:   pgsql.NewAllExpression(mustAsLiteral(int64(1))),
+	}, {
+		Name:         "case expression ignores null branch during inference",
+		ExpectedType: pgsql.Int,
+		Expression: pgsql.Case{
+			Conditions: []pgsql.Expression{mustAsLiteral(true)},
+			Then: []pgsql.Expression{pgsql.FunctionCall{
+				Function: pgsql.FunctionJSONBArrayLength,
+				CastType: pgsql.Int,
+			}},
+			Else: pgsql.NullLiteral(),
+		},
 	}}
 
 	for _, nextCase := range testCases {
@@ -390,7 +401,13 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			LOperand: propertyLookup("left"),
 			Operator: pgsql.OperatorEquals,
 			ROperand: propertyLookup("right"),
-			Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
+			Expected: "nullif((n.properties -> 'left'), ('null')::jsonb)::jsonb = nullif((n.properties -> 'right'), ('null')::jsonb)::jsonb",
+		}, {
+			Name:     "property ordering treats JSON null as SQL null",
+			LOperand: propertyLookup("left"),
+			Operator: pgsql.OperatorLessThan,
+			ROperand: propertyLookup("right"),
+			Expected: "nullif((n.properties -> 'left'), ('null')::jsonb)::jsonb < nullif((n.properties -> 'right'), ('null')::jsonb)::jsonb",
 		}}
 	)
 

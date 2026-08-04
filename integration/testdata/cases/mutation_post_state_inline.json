@@ -10,14 +10,16 @@
       "fixture": {
         "nodes": [
           {"id": "source", "kinds": ["NodeKind1"], "properties": {"name": "source"}},
+          {"id": "source-opposite", "kinds": ["NodeKind1"], "properties": {"name": "source-opposite"}},
+          {"id": "source-missing", "kinds": ["NodeKind1"], "properties": {"name": "source-missing"}},
           {"id": "target", "kinds": ["NodeKind2"], "properties": {"objectid": "target-id"}},
           {"id": "wrong-kind", "kinds": ["NodeKind1"], "properties": {"objectid": "target-id"}},
           {"id": "wrong-id", "kinds": ["NodeKind2"], "properties": {"objectid": "decoy-id"}}
         ],
         "edges": [
           {"start_id": "source", "end_id": "target", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "target"}},
-          {"start_id": "source", "end_id": "target", "kind": "EdgeKind1", "properties": {"shoulddelete": false, "marker": "opposite-property"}},
-          {"start_id": "source", "end_id": "target", "kind": "EdgeKind1", "properties": {"marker": "missing-property"}},
+          {"start_id": "source-opposite", "end_id": "target", "kind": "EdgeKind1", "properties": {"shoulddelete": false, "marker": "opposite-property"}},
+          {"start_id": "source-missing", "end_id": "target", "kind": "EdgeKind1", "properties": {"marker": "missing-property"}},
           {"start_id": "source", "end_id": "target", "kind": "EdgeKind2", "properties": {"shoulddelete": true, "marker": "wrong-edge-kind"}},
           {"start_id": "source", "end_id": "wrong-kind", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "wrong-node-kind"}},
           {"start_id": "source", "end_id": "wrong-id", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "wrong-object-id"}},
@@ -32,6 +34,8 @@
           "assert": {
             "node_records": [
               {"id": "source", "kinds": ["NodeKind1"], "props": {"name": "source"}},
+              {"id": "source-opposite", "kinds": ["NodeKind1"], "props": {"name": "source-opposite"}},
+              {"id": "source-missing", "kinds": ["NodeKind1"], "props": {"name": "source-missing"}},
               {"id": "target", "kinds": ["NodeKind2"], "props": {"objectid": "target-id"}},
               {"id": "wrong-kind", "kinds": ["NodeKind1"], "props": {"objectid": "target-id"}},
               {"id": "wrong-id", "kinds": ["NodeKind2"], "props": {"objectid": "decoy-id"}}
@@ -43,8 +47,8 @@
           "cypher": "MATCH ()-[r]->() RETURN r",
           "assert": {
             "relationship_records": [
-              {"start": "source", "end": "target", "kind": "EdgeKind1", "props": {"shoulddelete": false, "marker": "opposite-property"}},
-              {"start": "source", "end": "target", "kind": "EdgeKind1", "props": {"marker": "missing-property"}},
+              {"start": "source-opposite", "end": "target", "kind": "EdgeKind1", "props": {"shoulddelete": false, "marker": "opposite-property"}},
+              {"start": "source-missing", "end": "target", "kind": "EdgeKind1", "props": {"marker": "missing-property"}},
               {"start": "source", "end": "target", "kind": "EdgeKind2", "props": {"shoulddelete": true, "marker": "wrong-edge-kind"}},
               {"start": "source", "end": "wrong-kind", "kind": "EdgeKind1", "props": {"shoulddelete": true, "marker": "wrong-node-kind"}},
               {"start": "source", "end": "wrong-id", "kind": "EdgeKind1", "props": {"shoulddelete": true, "marker": "wrong-object-id"}},

@@ -31,14 +31,18 @@
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["PruneEndpoint"], "properties": {"name": "a"}},
-          {"id": "b", "kinds": ["PruneEndpoint"], "properties": {"name": "b"}}
+          {"id": "b", "kinds": ["PruneEndpoint"], "properties": {"name": "b"}},
+          {"id": "b-equal", "kinds": ["PruneEndpoint"], "properties": {"name": "b-equal"}},
+          {"id": "b-new", "kinds": ["PruneEndpoint"], "properties": {"name": "b-new"}},
+          {"id": "b-missing", "kinds": ["PruneEndpoint"], "properties": {"name": "b-missing"}},
+          {"id": "b-null", "kinds": ["PruneEndpoint"], "properties": {"name": "b-null"}}
         ],
         "edges": [
           {"start_id": "a", "end_id": "b", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "candidate-old"}},
-          {"start_id": "a", "end_id": "b", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "candidate-equal"}},
-          {"start_id": "a", "end_id": "b", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-04T00:00:00Z", "marker": "candidate-new"}},
-          {"start_id": "a", "end_id": "b", "kind": "CandidateRel", "properties": {"marker": "candidate-missing"}},
-          {"start_id": "a", "end_id": "b", "kind": "CandidateRel", "properties": {"lastseen": null, "marker": "candidate-null"}},
+          {"start_id": "a", "end_id": "b-equal", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "candidate-equal"}},
+          {"start_id": "a", "end_id": "b-new", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-04T00:00:00Z", "marker": "candidate-new"}},
+          {"start_id": "a", "end_id": "b-missing", "kind": "CandidateRel", "properties": {"marker": "candidate-missing"}},
+          {"start_id": "a", "end_id": "b-null", "kind": "CandidateRel", "properties": {"lastseen": null, "marker": "candidate-null"}},
           {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old"}},
           {"start_id": "a", "end_id": "b", "kind": "MetaIncludes", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "meta-includes-old"}}
         ]
@@ -68,16 +72,20 @@
       "fixture": {
         "nodes": [
           {"id": "a", "kinds": ["PruneEndpoint"], "properties": {"name": "a"}},
-          {"id": "b", "kinds": ["PruneEndpoint"], "properties": {"name": "b"}}
+          {"id": "b", "kinds": ["PruneEndpoint"], "properties": {"name": "b"}},
+          {"id": "b-null", "kinds": ["PruneEndpoint"], "properties": {"name": "b-null"}},
+          {"id": "b-old", "kinds": ["PruneEndpoint"], "properties": {"name": "b-old"}},
+          {"id": "b-equal", "kinds": ["PruneEndpoint"], "properties": {"name": "b-equal"}},
+          {"id": "b-new", "kinds": ["PruneEndpoint"], "properties": {"name": "b-new"}}
         ],
         "edges": [
           {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"marker": "session-missing"}},
-          {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"lastseen": null, "marker": "session-null"}},
-          {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old"}},
-          {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "session-equal"}},
-          {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"lastseen": "2026-01-04T00:00:00Z", "marker": "session-new"}},
+          {"start_id": "a", "end_id": "b-null", "kind": "HasSession", "properties": {"lastseen": null, "marker": "session-null"}},
+          {"start_id": "a", "end_id": "b-old", "kind": "HasSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old"}},
+          {"start_id": "a", "end_id": "b-equal", "kind": "HasSession", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "session-equal"}},
+          {"start_id": "a", "end_id": "b-new", "kind": "HasSession", "properties": {"lastseen": "2026-01-04T00:00:00Z", "marker": "session-new"}},
           {"start_id": "a", "end_id": "b", "kind": "OtherSession", "properties": {"marker": "wrong-kind-missing"}},
-          {"start_id": "a", "end_id": "b", "kind": "OtherSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "wrong-kind-old"}}
+          {"start_id": "a", "end_id": "b-old", "kind": "OtherSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "wrong-kind-old"}}
         ]
       },
       "variants": [

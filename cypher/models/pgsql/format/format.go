@@ -15,6 +15,25 @@ type OutputBuilder struct {
 	builder               *strings.Builder
 }
 
+func formatIdentifier(identifier pgsql.Identifier) string {
+	value := identifier.String()
+	if value == pgsql.WildcardIdentifier.String() {
+		return value
+	}
+
+	for idx, character := range value {
+		valid := character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+		if idx > 0 {
+			valid = valid || character >= '0' && character <= '9' || character == '$'
+		}
+		if !valid {
+			return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+		}
+	}
+
+	return value
+}
+
 func NewOutputBuilder() *OutputBuilder {
 	return &OutputBuilder{
 		builder: &strings.Builder{},
@@ -277,7 +296,7 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			builder.Write(typedNextExpr.String())
 
 		case pgsql.Identifier:
-			builder.Write(typedNextExpr)
+			builder.Write(formatIdentifier(typedNextExpr))
 
 		case pgsql.CompoundIdentifier:
 			for idx := len(typedNextExpr) - 1; idx >= 0; idx-- {
@@ -438,7 +457,7 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 					return fmt.Errorf("conflict target has both columns and an 'on constraint' expression set")
 				}
 
-				exprStack = append(exprStack, typedNextExpr.Constraint, pgsql.FormattingLiteral("on constraint "))
+				exprStack = append(exprStack, pgsql.FormattingLiteral(typedNextExpr.Constraint.String()), pgsql.FormattingLiteral("on constraint "))
 			}
 
 		case *pgsql.AliasedExpression:

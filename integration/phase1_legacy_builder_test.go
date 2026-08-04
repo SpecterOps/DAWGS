@@ -130,8 +130,11 @@ func TestPhase1LegacyBuilderIntegration(t *testing.T) {
 	})
 
 	t.Run("LOGIC-05 projection order and Go result types", func(t *testing.T) {
-		WithLegacyRelationshipQuery(t, session, projectionFixture, func(opengraph.IDMap) graph.Criteria {
-			return query.Kind(query.Relationship(), graph.StringKind("LogicProjectionEdge"))
+		WithLegacyRelationshipQuery(t, session, projectionFixture, func(idMap opengraph.IDMap) graph.Criteria {
+			return query.And(
+				query.Kind(query.Relationship(), graph.StringKind("LogicProjectionEdge")),
+				query.Equals(query.StartID(), idMap["projection-start"]),
+			)
 		}, func(relationshipQuery graph.RelationshipQuery, idMap opengraph.IDMap) error {
 			err := relationshipQuery.FetchDirection(graph.DirectionInbound, func(cursor graph.Cursor[graph.DirectionalResult]) error {
 				results := make([]graph.DirectionalResult, 0, 1)
@@ -225,6 +228,9 @@ func phase1LogicFixture() *opengraph.Graph {
 			{ID: "equal-b", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(3)}},
 			{ID: "late-a", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4)}},
 			{ID: "late-b", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4)}},
+			{ID: "late-b-newer", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)}},
+			{ID: "late-b-missing", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)}},
+			{ID: "late-b-null", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)}},
 			{ID: "candidate-missing", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{}},
 			{ID: "candidate-null", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{"lastseen": nil}},
 			{ID: "candidate-older", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{"lastseen": day(2)}},
@@ -244,9 +250,9 @@ func phase1LogicFixture() *opengraph.Graph {
 			{StartID: "early-a", EndID: "late-a", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "older-end-only"}},
 			{StartID: "late-a", EndID: "late-b", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "older-both"}},
 			{StartID: "equal-a", EndID: "equal-b", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "equal"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(5), "marker": "newer"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "LogicStaleTrust", Properties: map[string]any{"marker": "missing"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": nil, "marker": "null"}},
+			{StartID: "late-a", EndID: "late-b-newer", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(5), "marker": "newer"}},
+			{StartID: "late-a", EndID: "late-b-missing", Kind: "LogicStaleTrust", Properties: map[string]any{"marker": "missing"}},
+			{StartID: "late-a", EndID: "late-b-null", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": nil, "marker": "null"}},
 		},
 	}
 }

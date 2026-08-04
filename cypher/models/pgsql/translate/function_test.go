@@ -9,6 +9,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,6 +56,23 @@ func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, formatted, "(null)::nodecomposite[]")
 	require.Contains(t, formatted, "(null)::edgecomposite[]")
+}
+
+func TestListSizeGuardsDynamicJSONPropertiesByType(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("TestNode"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n:TestNode) RETURN size(n.values)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "case when jsonb_typeof")
+	require.Contains(t, formatted, "= 'array' then jsonb_array_length")
+	require.Contains(t, formatted, "else null end")
 }
 
 func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {

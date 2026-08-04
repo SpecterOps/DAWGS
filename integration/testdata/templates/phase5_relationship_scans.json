@@ -9,7 +9,7 @@
           {"id": "ad-b", "kinds": ["ADBase"], "properties": {"name": "ad-b"}},
           {"id": "az-a", "kinds": ["AZBase"], "properties": {"name": "az-a"}},
           {"id": "az-b", "kinds": ["AZBase"], "properties": {"name": "az-b"}},
-          {"id": "plain-a", "kinds": ["Plain"], "properties": {"name": "plain-a"}},
+          {"id": "plain-a", "kinds": ["Plain", "MissingPost"], "properties": {"name": "plain-a"}},
           {"id": "plain-b", "kinds": ["Plain"], "properties": {"name": "plain-b"}},
           {"id": "meta-start", "kinds": ["Meta", "Plain"], "properties": {"name": "meta-start"}},
           {"id": "meta-end", "kinds": ["MetaDetail", "Plain"], "properties": {"name": "meta-end"}},
@@ -57,7 +57,7 @@
       "fixture": {
         "nodes": [
           {"id": "target", "kinds": ["Computer"], "properties": {"name": "target"}},
-          {"id": "zero-target", "kinds": ["Computer"], "properties": {"name": "zero-target"}},
+          {"id": "zero-target", "kinds": ["Computer", "MissingMember"], "properties": {"name": "zero-target"}},
           {"id": "wrong-end", "kinds": ["Other"], "properties": {"name": "wrong-end"}},
           {"id": "source-01", "kinds": ["Entity", "Group"], "properties": {"name": "source-01", "objectid": "S-1-5-01"}},
           {"id": "source-02", "kinds": ["Entity", "User"], "properties": {"name": "source-02", "objectid": "S-1-5-02"}},

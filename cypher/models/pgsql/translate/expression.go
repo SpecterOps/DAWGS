@@ -328,6 +328,8 @@ func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expressio
 		(pgsql.OperatorIsComparator(expression.Operator) || expression.Operator == pgsql.OperatorCypherNotEquals) {
 		leftPropertyLookup.Operator = pgsql.OperatorJSONField
 		rightPropertyLookup.Operator = pgsql.OperatorJSONField
+		expression.LOperand = nullifyJSONPropertyLookup(leftPropertyLookup)
+		expression.ROperand = nullifyJSONPropertyLookup(rightPropertyLookup)
 
 		return nil
 	}
@@ -843,6 +845,17 @@ func isKnownEmptyArrayExpression(expression pgsql.Expression) bool {
 
 func jsonNullLiteral() pgsql.Expression {
 	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text), pgsql.JSONB)
+}
+
+func nullifyJSONPropertyLookup(propertyLookup *pgsql.BinaryExpression) pgsql.Expression {
+	return pgsql.FunctionCall{
+		Function: pgsql.FunctionNullIf,
+		Parameters: []pgsql.Expression{
+			propertyLookup,
+			jsonNullLiteral(),
+		},
+		CastType: pgsql.JSONB,
+	}
 }
 
 func jsonEmptyArrayLiteral() pgsql.Expression {

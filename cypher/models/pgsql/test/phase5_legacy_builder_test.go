@@ -116,14 +116,14 @@ func TestLegacyBuilderPostgreSQL_Phase5RelationshipScans(t *testing.T) {
 				query.Kind(query.End(), phase5RegressionKinds(81)[0]),
 			)),
 			query.Returning(query.StartID(), query.RelationshipID(), query.KindsOf(query.Relationship()), query.EndID()),
-		}, "select (s0.n0).id, (s0.e0).id, kind_name((s0.e0).kind_id)::text, (s0.n1).id")
+		}, "select (s0.n0).id as \"id(s)\", (s0.e0).id as \"id(r)\", kind_name((s0.e0).kind_id)::text as \"type(r)\", (s0.n1).id as \"id(e)\"")
 	})
 
 	t.Run("SCAN-07 directed start and end IDs", func(t *testing.T) {
 		assertPhase5Translation(t, []graph.Criteria{
 			query.Where(query.KindIn(query.Relationship(), phase5RegressionKinds(83, 84)...)),
 			query.Returning(query.StartID(), query.EndID()),
-		}, "array [115, 116]::int2[]", "select (s0.n0).id, (s0.n1).id")
+		}, "array [115, 116]::int2[]", "select (s0.n0).id as \"id(s)\", (s0.n1).id as \"id(e)\"")
 	})
 
 	t.Run("SCAN-08 scenario A and B", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestLegacyBuilderPostgreSQL_Phase5Lookups(t *testing.T) {
 				query.Equals(query.NodeProperty("hasura"), true),
 			)),
 			query.Returning(query.NodeID(), query.NodeProperty("hasura")),
-		}, "select (s0.n0).id, ((s0.n0).properties -> 'hasura')")
+		}, "select (s0.n0).id as \"id(n)\", ((s0.n0).properties -> 'hasura') as \"n.hasura\"")
 	})
 
 	t.Run("LOOKUP-04 prefix suffix and equality", func(t *testing.T) {

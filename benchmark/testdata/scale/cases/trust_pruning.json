@@ -86,21 +86,21 @@
       "name": "PRUNE-05_dense_relationship_batch_delete_equivalent",
       "dataset": "generated_trust_pruning",
       "category": "pruning_mutation",
-      "cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $remove DELETE r",
-      "params": {"remove": true},
+      "cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $flag DELETE r",
+      "params": {"flag": true},
       "expected": {"result_kind": "mutation"},
       "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
       "shape": {"root_predicate": "relationship_property", "edge_kinds": ["PruneBatch"], "path_materialization_required": false},
       "candidate_modes": ["postgres_sql", "neo4j"],
       "tags": ["PRUNE-05", "mutation", "direct-batch-equivalent"],
       "write_scenario": {
-        "selection_cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $remove RETURN id(r)",
-        "params": {"remove": true},
+        "selection_cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $flag RETURN id(r)",
+        "params": {"flag": true},
         "affected_entity": "relationship",
         "expected_matched": 128,
         "expected_affected": 128,
         "post_state": [
-          {"name": "selected relationships deleted", "cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $remove RETURN count(r)", "params": {"remove": true}, "expected": {"scalar_int": 0}},
+          {"name": "selected relationships deleted", "cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $flag RETURN count(r)", "params": {"flag": true}, "expected": {"scalar_int": 0}},
           {"name": "survivor relationship remains", "cypher": "MATCH ()-[r:PruneBatchSurvivor]->() RETURN count(r)", "expected": {"scalar_int": 1}}
         ]
       }
@@ -109,21 +109,21 @@
       "name": "PRUNE-06_high_degree_node_batch_delete_equivalent",
       "dataset": "generated_trust_pruning",
       "category": "pruning_mutation",
-      "cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $remove DETACH DELETE n",
-      "params": {"remove": true},
+      "cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $flag DETACH DELETE n",
+      "params": {"flag": true},
       "expected": {"result_kind": "mutation"},
       "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
       "shape": {"root_predicate": "node_property_high_degree", "path_materialization_required": false},
       "candidate_modes": ["postgres_sql", "neo4j"],
       "tags": ["PRUNE-06", "mutation", "high-degree", "cascade", "direct-batch-equivalent"],
       "write_scenario": {
-        "selection_cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $remove RETURN id(n)",
-        "params": {"remove": true},
+        "selection_cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $flag RETURN id(n)",
+        "params": {"flag": true},
         "affected_entity": "node",
         "expected_matched": 65,
         "expected_affected": 65,
         "post_state": [
-          {"name": "selected nodes deleted", "cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $remove RETURN count(n)", "params": {"remove": true}, "expected": {"scalar_int": 0}},
+          {"name": "selected nodes deleted", "cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $flag RETURN count(n)", "params": {"flag": true}, "expected": {"scalar_int": 0}},
           {"name": "high degree incident relationships cascaded", "cypher": "MATCH ()-[r:PruneIncident]->() RETURN count(r)", "expected": {"scalar_int": 0}},
           {"name": "unselected batch nodes survive", "cypher": "MATCH (n:PruneBatchNode) RETURN count(n)", "expected": {"scalar_int": 65}}
         ]
