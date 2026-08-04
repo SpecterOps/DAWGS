@@ -17,7 +17,9 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -32,13 +34,31 @@ func TestResolveCaseParams(t *testing.T) {
 		NodeParams: map[string]string{
 			"start_id": "n1",
 		},
-	}, opengraph.IDMap{"n1": graph.ID(42)})
+		NodeListParams: map[string][]string{
+			"end_ids": {"n2", "n1"},
+		},
+	}, opengraph.IDMap{"n1": graph.ID(42), "n2": graph.ID(84)})
 
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{
 		"name":     "value",
 		"start_id": int64(42),
+		"end_ids":  []int64{84, 42},
 	}, params)
+}
+
+func TestScaleCaseDecodesTypedDatetimeParameter(t *testing.T) {
+	var testCase ScaleCase
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"name":"typed-time",
+		"dataset":"base",
+		"category":"lookup",
+		"cypher":"MATCH (n) WHERE n.lastseen < $threshold RETURN n",
+		"params":{"threshold":{"$type":"datetime","value":"2026-01-02T03:04:05Z"}},
+		"candidate_modes":["postgres_sql"]
+	}`), &testCase))
+
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), testCase.Params["threshold"])
 }
 
 func TestParsePostgresPlanMetrics(t *testing.T) {

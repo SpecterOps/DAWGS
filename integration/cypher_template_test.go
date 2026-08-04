@@ -31,6 +31,7 @@ import (
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
+	"github.com/specterops/dawgs/testutil"
 )
 
 type cypherTemplateFile struct {
@@ -40,18 +41,23 @@ type cypherTemplateFile struct {
 }
 
 type cypherTemplateFamily struct {
-	Name     string                  `json:"name"`
-	Fixture  *opengraph.Graph        `json:"fixture"`
-	Template string                  `json:"template"`
-	Params   map[string]any          `json:"params,omitempty"`
-	Variants []cypherTemplateVariant `json:"variants"`
+	Name           string                  `json:"name"`
+	Fixture        *opengraph.Graph        `json:"fixture"`
+	Template       string                  `json:"template"`
+	Params         testutil.Params         `json:"params,omitempty"`
+	NodeParams     map[string]string       `json:"node_params,omitempty"`
+	NodeListParams map[string][]string     `json:"node_list_params,omitempty"`
+	Variants       []cypherTemplateVariant `json:"variants"`
 }
 
 type cypherTemplateVariant struct {
-	Name   string            `json:"name"`
-	Vars   map[string]string `json:"vars,omitempty"`
-	Params map[string]any    `json:"params,omitempty"`
-	Assert json.RawMessage   `json:"assert"`
+	Name           string              `json:"name"`
+	Vars           map[string]string   `json:"vars,omitempty"`
+	Params         testutil.Params     `json:"params,omitempty"`
+	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	Assert         json.RawMessage     `json:"assert"`
+	PostAssertions []stateAssertion    `json:"post_assertions,omitempty"`
 }
 
 type cypherMetamorphicFamily struct {
@@ -62,9 +68,9 @@ type cypherMetamorphicFamily struct {
 }
 
 type cypherMetamorphicQuery struct {
-	Name   string         `json:"name"`
-	Cypher string         `json:"cypher"`
-	Params map[string]any `json:"params,omitempty"`
+	Name   string          `json:"name"`
+	Cypher string          `json:"cypher"`
+	Params testutil.Params `json:"params,omitempty"`
 }
 
 func TestCypherTemplates(t *testing.T) {
@@ -85,10 +91,13 @@ func TestCypherTemplates(t *testing.T) {
 								cypher = renderCypherTemplate(t, family.Template, variant.Vars)
 								check  = parseAssertion(t, variant.Assert)
 								tc     = testCase{
-									Name:    variant.Name,
-									Cypher:  cypher,
-									Params:  mergeParams(family.Params, variant.Params),
-									Fixture: family.Fixture,
+									Name:           variant.Name,
+									Cypher:         cypher,
+									Params:         mergeParams(family.Params, variant.Params),
+									NodeParams:     mergeStringMap(family.NodeParams, variant.NodeParams),
+									NodeListParams: mergeStringListMap(family.NodeListParams, variant.NodeListParams),
+									Fixture:        family.Fixture,
+									PostAssertions: variant.PostAssertions,
 								}
 							)
 
@@ -192,6 +201,36 @@ func mergeParams(base, overrides map[string]any) map[string]any {
 	return merged
 }
 
+func mergeStringMap(base, overrides map[string]string) map[string]string {
+	if len(base) == 0 && len(overrides) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(base)+len(overrides))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range overrides {
+		merged[key] = value
+	}
+	return merged
+}
+
+func mergeStringListMap(base, overrides map[string][]string) map[string][]string {
+	if len(base) == 0 && len(overrides) == 0 {
+		return nil
+	}
+
+	merged := make(map[string][]string, len(base)+len(overrides))
+	for key, value := range base {
+		merged[key] = append([]string(nil), value...)
+	}
+	for key, value := range overrides {
+		merged[key] = append([]string(nil), value...)
+	}
+	return merged
+}
+
 func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
@@ -202,14 +241,16 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 	queryErrorObserved := false
 	session := &Session{DB: db, Ctx: ctx}
 	err := session.WithRollbackFixture(t, tc.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
-		result := tx.Query(tc.Cypher, tc.Params)
-		defer result.Close()
+		params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, idMap)
+		result := tx.Query(tc.Cypher, params)
 		assertion.checkResult(t, result, newAssertionContext(idMap))
+		result.Close()
 		if assertion.expectQueryError {
 			queryErrorObserved = true
+			return nil
 		}
 
-		return nil
+		return runStateAssertions(t, tx, idMap, tc.PostAssertions)
 	})
 
 	if assertion.expectQueryError && queryErrorObserved && err != nil {

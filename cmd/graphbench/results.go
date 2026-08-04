@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/testutil"
 )
 
 const (
@@ -58,6 +59,7 @@ type Buffers struct {
 }
 
 type CaseResult struct {
+	Metadata         testutil.BaselineMetadata      `json:"metadata"`
 	Source           string                         `json:"source"`
 	Dataset          string                         `json:"dataset"`
 	Name             string                         `json:"name"`
@@ -67,8 +69,12 @@ type CaseResult struct {
 	Cypher           string                         `json:"cypher"`
 	Params           map[string]any                 `json:"params,omitempty"`
 	NodeParams       map[string]string              `json:"node_params,omitempty"`
+	NodeListParams   map[string][]string            `json:"node_list_params,omitempty"`
 	ExpectedRowCount *int64                         `json:"expected_row_count,omitempty"`
 	RowCount         int64                          `json:"row_count,omitempty"`
+	MatchedCount     *int64                         `json:"matched_count,omitempty"`
+	AffectedCount    *int64                         `json:"affected_count,omitempty"`
+	PostState        []StateQueryResult             `json:"post_state,omitempty"`
 	Stats            DurationStats                  `json:"stats,omitempty"`
 	SQL              string                         `json:"sql,omitempty"`
 	PostgresPlan     []string                       `json:"postgres_plan,omitempty"`
@@ -79,6 +85,12 @@ type CaseResult struct {
 	Baseline         *BaselineComparison            `json:"baseline,omitempty"`
 	FallbackReason   string                         `json:"fallback_reason,omitempty"`
 	Error            string                         `json:"error,omitempty"`
+}
+
+type StateQueryResult struct {
+	Name      string `json:"name"`
+	RowCount  int64  `json:"row_count"`
+	ScalarInt *int64 `json:"scalar_int,omitempty"`
 }
 
 type BaselineComparison struct {
@@ -99,6 +111,7 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 		Cypher:           testCase.Cypher,
 		Params:           params,
 		NodeParams:       testCase.NodeParams,
+		NodeListParams:   testCase.NodeListParams,
 		ExpectedRowCount: testCase.Expected.RowCount,
 	}
 }

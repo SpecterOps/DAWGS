@@ -70,12 +70,14 @@ edge-kind-selective, and multi-path shortest-path scenarios before recording tim
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the BHE, BHCE, and DAWGS source
+versions; the source commits can be overridden with command flags when the reviewed snapshots change.
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
 current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
 comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
-against a previous JSONL baseline.
+against a previous JSONL baseline. Mutating scale cases must declare a `write_scenario`; each warm-up and timed iteration
+runs in a rollback transaction and verifies matched, affected, and post-state cardinality.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports
@@ -115,6 +117,8 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
+- [Integration corpus](integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.
+- [BloodHound regression coverage manifest](regression_coverage_manifest.md): per-query-form layer status and existing primitive links.
 - [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
 
 ## Repository Map

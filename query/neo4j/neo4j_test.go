@@ -206,7 +206,109 @@ func TestQueryBuilderProjectionModifiersAreOrderIndependent(t *testing.T) {
 	}
 }
 
+func TestQueryBuilder_LOGIC01PreservesBranchLocalRelationshipKinds(t *testing.T) {
+	rawQuery := query.SinglePartQuery(
+		query.Where(
+			query.Or(
+				query.And(
+					query.Equals(query.StartID(), graph.ID(101)),
+					query.Equals(query.EndID(), graph.ID(202)),
+					query.KindIn(query.Relationship(), graph.StringKind("KindA")),
+				),
+				query.And(
+					query.Equals(query.StartID(), graph.ID(202)),
+					query.Equals(query.EndID(), graph.ID(101)),
+					query.KindIn(query.Relationship(), graph.StringKind("KindB")),
+				),
+			),
+		),
+		query.Returning(query.RelationshipID()),
+	)
+
+	assertQueryResult(
+		rawQuery,
+		"match (s)-[r]->(e) where (id(s) = $p0 and id(e) = $p1 and r:KindA or id(s) = $p2 and id(e) = $p3 and r:KindB) return id(r)",
+		map[string]any{
+			"p0": graph.ID(101),
+			"p1": graph.ID(202),
+			"p2": graph.ID(202),
+			"p3": graph.ID(101),
+		},
+	)(t)
+}
+
+func TestQueryBuilder_Phase1LogicalForms(t *testing.T) {
+	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+
+	t.Run("LOGIC-02 cross-binding temporal disjunction", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(
+				query.Or(
+					query.BeforeGraphQuery(query.RelationshipProperty("lastseen"), query.StartProperty("lastcollected")),
+					query.BeforeGraphQuery(query.RelationshipProperty("lastseen"), query.EndProperty("lastcollected")),
+				),
+			),
+			query.Returning(query.RelationshipID()),
+		),
+		"match (s)-[r]->(e) where (r.lastseen < s.lastcollected or r.lastseen < e.lastcollected) return id(r)",
+	))
+
+	t.Run("LOGIC-03 scoped negation and null-aware age predicate", assertQueryResult(
+		query.SinglePartQuery(
+			query.Where(
+				query.And(
+					query.Not(query.KindIn(query.Node(), graph.StringKind("Protected"))),
+					query.Or(
+						query.Not(query.Exists(query.NodeProperty("lastseen"))),
+						query.Before(query.NodeProperty("lastseen"), temporalThreshold),
+					),
+				),
+			),
+			query.Returning(query.NodeID()),
+		),
+		"match (n) where not (n:Protected) and (not (n.lastseen is not null) or n.lastseen < $p0) return id(n)",
+		map[string]any{"p0": temporalThreshold},
+	))
+}
+
+func TestQueryBuilder_LOGIC05ProjectionOrder(t *testing.T) {
+	testCases := map[string]struct {
+		projection *cypher.Return
+		expected   string
+	}{
+		"full opposite node plus relationship": {
+			projection: query.Returning(query.Relationship(), query.End()),
+			expected:   "match ()-[r]->(e) return r, e",
+		},
+		"opposite ID and kinds plus relationship ID and kind": {
+			projection: query.Returning(query.EndID(), query.KindsOf(query.End()), query.RelationshipID(), query.KindsOf(query.Relationship())),
+			expected:   "match ()-[r]->(e) return id(e), labels(e), id(r), type(r)",
+		},
+		"start relationship end triple": {
+			projection: query.Returning(query.Start(), query.Relationship(), query.End()),
+			expected:   "match (s)-[r]->(e) return s, r, e",
+		},
+		"relationship ID only": {
+			projection: query.Returning(query.RelationshipID()),
+			expected:   "match ()-[r]->() return id(r)",
+		},
+		"full relationship": {
+			projection: query.Returning(query.Relationship()),
+			expected:   "match ()-[r]->() return r",
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, assertQueryResult(
+			query.SinglePartQuery(testCase.projection),
+			testCase.expected,
+		))
+	}
+}
+
 func TestQueryBuilder_Render(t *testing.T) {
+	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+
 	// Node Queries
 	t.Run("Node Count", assertQueryResult(query.SinglePartQuery(
 		query.Where(
@@ -555,7 +657,7 @@ func TestQueryBuilder_Render(t *testing.T) {
 	t.Run("Node Datetime Before", assertQueryResult(query.SinglePartQuery(
 		query.Where(
 			query.And(
-				query.Before(query.NodeProperty("lastseen"), time.Now().UTC()),
+				query.Before(query.NodeProperty("lastseen"), temporalThreshold),
 				query.In(query.NodeID(), []int{1, 2, 3, 4}),
 			),
 		),
@@ -563,7 +665,10 @@ func TestQueryBuilder_Render(t *testing.T) {
 		query.Returning(
 			query.Node(),
 		),
-	), "match (n) where n.lastseen < $p0 and id(n) in $p1 return n"))
+	), "match (n) where n.lastseen < $p0 and id(n) in $p1 return n", map[string]any{
+		"p0": temporalThreshold,
+		"p1": []int{1, 2, 3, 4},
+	}))
 
 	t.Run("Node Datetime Before or Equal to", assertQueryResult(query.SinglePartQuery(
 		query.Where(

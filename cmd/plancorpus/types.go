@@ -1,8 +1,12 @@
 package main
 
-import "github.com/specterops/dawgs/cypher/models/pgsql/translate"
+import (
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/testutil"
+)
 
 type PlanRecord struct {
+	Metadata         testutil.BaselineMetadata      `json:"metadata"`
 	Driver           string                         `json:"driver"`
 	Source           string                         `json:"source"`
 	Dataset          string                         `json:"dataset,omitempty"`

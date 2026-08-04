@@ -123,18 +123,39 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 		return record
 	}
 
-	rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
-	if err != nil {
-		record.Status = StatusError
-		record.Error = err.Error()
-		return record
+	if testCase.WriteScenario == nil {
+		rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		record.RowCount = rowCount
+		record.Stats = stats
+		applyRowExpectation(&record)
+	} else {
+		scenario, err := resolveWriteScenario(testCase, idMap)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		measurement, stats, err := measureWriteCypher(ctx, s.db, testCase.Cypher, params, scenario, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		record.MatchedCount = &measurement.Matched
+		record.AffectedCount = &measurement.Affected
+		record.PostState = measurement.PostState
+		record.Stats = stats
 	}
 
-	record.RowCount = rowCount
-	record.Stats = stats
-	applyRowExpectation(&record)
-
-	plan, operators, err := s.explain(ctx, testCase.Cypher, params)
+	plan, operators, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)
 	if err != nil {
 		if record.Status == StatusOK {
 			record.Status = StatusError
@@ -148,9 +169,13 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 	return record
 }
 
-func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any) (plan *Neo4jPlanNode, operators []string, err error) {
+func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (plan *Neo4jPlanNode, operators []string, err error) {
+	accessMode := neo4jcore.AccessModeRead
+	if write {
+		accessMode = neo4jcore.AccessModeWrite
+	}
 	session := s.planDriver.NewSession(ctx, neo4jcore.SessionConfig{
-		AccessMode:   neo4jcore.AccessModeRead,
+		AccessMode:   accessMode,
 		DatabaseName: s.databaseName,
 	})
 	defer func() {

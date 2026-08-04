@@ -79,6 +79,44 @@ func validateScaleCase(testCase ScaleCase) error {
 		}
 	}
 
+	if testCase.WriteScenario != nil {
+		if err := validateWriteScenario(*testCase.WriteScenario); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateWriteScenario(scenario WriteScenario) error {
+	if scenario.SelectionCypher == "" {
+		return fmt.Errorf("write_scenario.selection_cypher is required")
+	}
+	if scenario.ExpectedMatched == nil {
+		return fmt.Errorf("write_scenario.expected_matched is required")
+	}
+	if scenario.ExpectedAffected == nil {
+		return fmt.Errorf("write_scenario.expected_affected is required")
+	}
+	if scenario.AffectedEntity != "node" && scenario.AffectedEntity != "relationship" {
+		return fmt.Errorf("write_scenario.affected_entity must be node or relationship")
+	}
+	if len(scenario.PostState) == 0 {
+		return fmt.Errorf("write_scenario.post_state is required")
+	}
+
+	for idx, postState := range scenario.PostState {
+		if postState.Name == "" {
+			return fmt.Errorf("write_scenario.post_state[%d].name is required", idx)
+		}
+		if postState.Cypher == "" {
+			return fmt.Errorf("write_scenario.post_state[%d].cypher is required", idx)
+		}
+		if postState.Expected.RowCount == nil && postState.Expected.ScalarInt == nil {
+			return fmt.Errorf("write_scenario.post_state[%d].expected requires row_count or scalar_int", idx)
+		}
+	}
+
 	return nil
 }
 

@@ -24,14 +24,17 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
 type Summary struct {
-	GeneratedAt  time.Time       `json:"generated_at"`
-	Modes        []ModeSummary   `json:"modes"`
-	Cases        []CaseSummary   `json:"cases"`
-	Regressions  []BaselineEntry `json:"regressions,omitempty"`
-	Improvements []BaselineEntry `json:"improvements,omitempty"`
+	GeneratedAt  time.Time                 `json:"generated_at"`
+	Metadata     testutil.BaselineMetadata `json:"metadata"`
+	Modes        []ModeSummary             `json:"modes"`
+	Cases        []CaseSummary             `json:"cases"`
+	Regressions  []BaselineEntry           `json:"regressions,omitempty"`
+	Improvements []BaselineEntry           `json:"improvements,omitempty"`
 }
 
 type ModeSummary struct {
@@ -79,6 +82,9 @@ func buildSummary(records []CaseResult) Summary {
 	)
 
 	for _, record := range records {
+		if summary.Metadata == (testutil.BaselineMetadata{}) {
+			summary.Metadata = record.Metadata
+		}
 		modeSummary := modeSummaries[record.ExecutionMode]
 		if modeSummary == nil {
 			modeSummary = &ModeSummary{Mode: record.ExecutionMode}
@@ -209,6 +215,7 @@ func writeJSONSummaryFile(path string, summary Summary) error {
 func writeMarkdownSummary(w io.Writer, summary Summary) error {
 	fmt.Fprintf(w, "# GraphBench Summary\n\n")
 	fmt.Fprintf(w, "Generated: %s\n\n", summary.GeneratedAt.Format(time.RFC3339))
+	fmt.Fprintf(w, "Sources: BHE `%s`, BHCE `%s`, DAWGS `%s`\n\n", summary.Metadata.BHECommit, summary.Metadata.BHCECommit, summary.Metadata.DAWGSVersion)
 
 	fmt.Fprintf(w, "## Modes\n\n")
 	fmt.Fprintf(w, "| Mode | Total | OK | Row Mismatch | Error | Not Implemented |\n")

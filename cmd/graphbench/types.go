@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
 const (
@@ -58,24 +60,47 @@ type ScaleCaseFile struct {
 }
 
 type ScaleCase struct {
-	Source          string            `json:"-"`
-	Name            string            `json:"name"`
-	Dataset         string            `json:"dataset"`
-	Category        string            `json:"category"`
-	Cypher          string            `json:"cypher"`
-	Params          map[string]any    `json:"params,omitempty"`
-	NodeParams      map[string]string `json:"node_params,omitempty"`
-	Expected        ExpectedResult    `json:"expected"`
-	Observes        ObservedValues    `json:"observes"`
-	Shape           WorkloadShape     `json:"shape"`
-	CandidateModes  []ExecutionMode   `json:"candidate_modes"`
-	Tags            []string          `json:"tags,omitempty"`
-	ReferenceDesign *ReferenceDesign  `json:"reference_design,omitempty"`
+	Source          string              `json:"-"`
+	Name            string              `json:"name"`
+	Dataset         string              `json:"dataset"`
+	Category        string              `json:"category"`
+	Cypher          string              `json:"cypher"`
+	Params          testutil.Params     `json:"params,omitempty"`
+	NodeParams      map[string]string   `json:"node_params,omitempty"`
+	NodeListParams  map[string][]string `json:"node_list_params,omitempty"`
+	Expected        ExpectedResult      `json:"expected"`
+	Observes        ObservedValues      `json:"observes"`
+	Shape           WorkloadShape       `json:"shape"`
+	CandidateModes  []ExecutionMode     `json:"candidate_modes"`
+	Tags            []string            `json:"tags,omitempty"`
+	ReferenceDesign *ReferenceDesign    `json:"reference_design,omitempty"`
+	WriteScenario   *WriteScenario      `json:"write_scenario,omitempty"`
 }
 
 type ExpectedResult struct {
 	RowCount   *int64 `json:"row_count,omitempty"`
+	ScalarInt  *int64 `json:"scalar_int,omitempty"`
 	ResultKind string `json:"result_kind,omitempty"`
+}
+
+type WriteScenario struct {
+	SelectionCypher  string              `json:"selection_cypher"`
+	Params           testutil.Params     `json:"params,omitempty"`
+	NodeParams       map[string]string   `json:"node_params,omitempty"`
+	NodeListParams   map[string][]string `json:"node_list_params,omitempty"`
+	AffectedEntity   string              `json:"affected_entity"`
+	ExpectedMatched  *int64              `json:"expected_matched"`
+	ExpectedAffected *int64              `json:"expected_affected"`
+	PostState        []ScaleStateQuery   `json:"post_state"`
+}
+
+type ScaleStateQuery struct {
+	Name           string              `json:"name"`
+	Cypher         string              `json:"cypher"`
+	Params         testutil.Params     `json:"params,omitempty"`
+	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	Expected       ExpectedResult      `json:"expected"`
 }
 
 type ObservedValues struct {

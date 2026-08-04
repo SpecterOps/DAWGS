@@ -1,0 +1,67 @@
+{
+  "families": [
+    {
+      "name": "PHASE0 rollback restores the original mutation fixture",
+      "template": "MATCH (n:DeleteTarget) WHERE n.objectid = $object_id DETACH DELETE n",
+      "params": {"object_id": "delete-me"},
+      "fixture": {
+        "nodes": [
+          {"id": "victim", "kinds": ["DeleteTarget", "Entity"], "properties": {"objectid": "delete-me", "marker": "victim"}},
+          {"id": "survivor", "kinds": ["Entity"], "properties": {"objectid": "keep-me", "marker": "survivor"}},
+          {"id": "kind-decoy", "kinds": ["Entity"], "properties": {"objectid": "delete-me", "marker": "wrong-kind"}},
+          {"id": "property-decoy", "kinds": ["DeleteTarget"], "properties": {"objectid": "keep-me", "marker": "wrong-property"}}
+        ],
+        "edges": [
+          {"start_id": "survivor", "end_id": "victim", "kind": "Incident", "properties": {"direction": "inbound"}},
+          {"start_id": "victim", "end_id": "survivor", "kind": "Incident", "properties": {"direction": "outbound"}},
+          {"start_id": "victim", "end_id": "victim", "kind": "Incident", "properties": {"direction": "self"}},
+          {"start_id": "survivor", "end_id": "property-decoy", "kind": "Survives", "properties": {"marker": "keep-edge"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "first execution",
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "survivor", "kinds": ["Entity"], "props": {"objectid": "keep-me", "marker": "survivor"}},
+                  {"id": "kind-decoy", "kinds": ["Entity"], "props": {"objectid": "delete-me", "marker": "wrong-kind"}},
+                  {"id": "property-decoy", "kinds": ["DeleteTarget"], "props": {"objectid": "keep-me", "marker": "wrong-property"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {"relationship_records": [{"start": "survivor", "end": "property-decoy", "kind": "Survives", "props": {"marker": "keep-edge"}}]}
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {"exact_int": 3}
+            }
+          ]
+        },
+        {
+          "name": "identical execution after rollback",
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {"node_id_set": ["survivor", "kind-decoy", "property-decoy"]}
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {"relationship_triples": [{"start": "survivor", "end": "property-decoy", "kind": "Survives"}]}
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {"exact_int": 1}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

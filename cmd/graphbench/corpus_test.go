@@ -43,3 +43,29 @@ func TestScaleCorpusDatasets(t *testing.T) {
 
 	require.Equal(t, []string{"adcs_fanout", "base"}, scaleCorpusDatasets(corpus))
 }
+
+func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
+	zero := int64(0)
+	testCase := ScaleCase{
+		Name:           "write",
+		Dataset:        "base",
+		Category:       "delete",
+		Cypher:         "MATCH (n) DELETE n",
+		CandidateModes: []ExecutionMode{ModePostgresSQL},
+		WriteScenario: &WriteScenario{
+			SelectionCypher:  "MATCH (n) RETURN n",
+			AffectedEntity:   "node",
+			ExpectedMatched:  &zero,
+			ExpectedAffected: &zero,
+			PostState: []ScaleStateQuery{{
+				Name:     "survivors",
+				Cypher:   "MATCH (n) RETURN n",
+				Expected: ExpectedResult{RowCount: &zero},
+			}},
+		},
+	}
+
+	require.NoError(t, validateScaleCase(testCase))
+	testCase.WriteScenario.PostState = nil
+	require.ErrorContains(t, validateScaleCase(testCase), "post_state is required")
+}
