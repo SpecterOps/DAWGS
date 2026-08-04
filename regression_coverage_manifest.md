@@ -139,6 +139,11 @@ instead of being cloned under BloodHound-specific names:
   scale corpus; `cmd/plancorpus` captures the shared semantic corpus with source
   metadata. Generated captures remain review artifacts under the ignored
   `.coverage/` directory rather than committed machine-specific baselines.
+- `PHASE8-GATE`: [`TestPhase8DormantFormsStayOutOfPlanCorpus`](cmd/plancorpus/phase8_test.go)
+  and [`TestPhase8DormantFormsStayOutOfScaleCorpus`](cmd/graphbench/phase8_test.go)
+  keep every `FUTURE-*` ID out of active semantic, plan, and scale gates. The
+  activation and ongoing source-review procedure is recorded in
+  [`regression_source_parity.md`](docs/regression_source_parity.md).
 
 ## Phase 1 sentinels
 
@@ -235,6 +240,10 @@ instead of being cloned under BloodHound-specific names:
 | `WRITE-08` | — | — | — | C (`PHASE6-IT`) | — | — | — | C (`PHASE6-DR`) |
 
 ## Phase 8 dormant coverage
+
+`FUTURE-01` remains intentionally incomplete because its reviewed callers are
+disabled. `PHASE8-GATE` protects that classification; it is not query coverage
+and therefore does not change the primitive or absent cells below.
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

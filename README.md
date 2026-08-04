@@ -147,6 +147,7 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
 - [Integration corpus](integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.
 - [BloodHound regression coverage manifest](regression_coverage_manifest.md): per-query-form layer status and existing primitive links.
+- [BloodHound source-parity workflow](docs/regression_source_parity.md): dormant-form activation rules and repeatable BHE/BHCE source audits.
 - [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
 
 ## Repository Map
