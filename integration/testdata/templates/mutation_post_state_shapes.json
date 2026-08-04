@@ -1,7 +1,7 @@
 {
   "families": [
     {
-      "name": "PHASE0 rollback restores the original mutation fixture",
+      "name": "mutation rollback restores the original fixture",
       "template": "MATCH (n:DeleteTarget) WHERE n.objectid = $object_id DETACH DELETE n",
       "params": {"object_id": "delete-me"},
       "fixture": {

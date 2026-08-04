@@ -419,7 +419,7 @@ func NewHopScaleFixture(fanout int) *opengraph.Graph {
 }
 
 // NewScanLookupScaleFixture returns deterministic wide-scan, large lookup,
-// adjacency, ordering, and count shapes for the Phase 5 regression corpus.
+// adjacency, ordering, and count shapes for the scan/lookup regression corpus.
 func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
 	if fanout < 9 {
 		fanout = 128

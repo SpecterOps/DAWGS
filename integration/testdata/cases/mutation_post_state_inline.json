@@ -1,7 +1,7 @@
 {
   "cases": [
     {
-      "name": "PHASE0 relationship mutation assertions preserve every decoy",
+      "name": "relationship mutation assertions preserve every decoy",
       "cypher": "MATCH (s:NodeKind1)-[r:EdgeKind1]->(e:NodeKind2) WHERE e.objectid = $object_id AND r.shoulddelete = $should_delete DELETE r",
       "params": {
         "object_id": "target-id",
