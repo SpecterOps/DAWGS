@@ -129,7 +129,7 @@ Current modes are:
 AGE is reference-design input only and is not a direct comparison mode. The command can emit JSONL records plus
 Markdown and JSON summaries, and can compare current timings against a previous JSONL baseline.
 
-The Phase 7 PostgreSQL correctness gate shares the scale runner. It checks the
+The PostgreSQL scale-plan correctness gate shares the scale runner. It checks the
 required stable query-form IDs, declared read/write cardinalities, rollback-safe
 mutation post-state, `EXPLAIN ANALYZE` capture, and stable plan invariants. It
 runs under `make test_all` for PostgreSQL or can be selected directly:
@@ -137,7 +137,7 @@ runs under `make test_all` for PostgreSQL or can be selected directly:
 ```bash
 CONNECTION_STRING="$PG_CONNECTION_STRING" \
   go test -tags manual_integration ./cmd/graphbench \
-  -run 'Test(PostgreSQLPhase7PlanInvariants|Phase7RequiredScaleRepresentativesDeclareCardinality)' \
+  -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1
 ```
 

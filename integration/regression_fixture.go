@@ -59,7 +59,7 @@ func FixtureKinds(count int) []string {
 	return kinds
 }
 
-// NewReconciliationFixture builds the reusable Phase 0 fixture. It includes
+// NewReconciliationFixture builds the reusable reconciliation fixture. It includes
 // typed and multi-kind endpoints, duplicate relationship kinds, missing and
 // explicit-null properties, timestamps, both directions, and a deterministic
 // high-degree anchor. A non-positive fanout selects a small production-like
