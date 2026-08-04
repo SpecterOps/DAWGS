@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLegacyBuilderPostgreSQL_Phase3TrustAndPruningForms(t *testing.T) {
+func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 	threshold := time.Date(2026, time.January, 3, 0, 0, 0, 0, time.UTC)
 
 	testCases := map[string]struct {
@@ -34,7 +34,7 @@ func TestLegacyBuilderPostgreSQL_Phase3TrustAndPruningForms(t *testing.T) {
 		parameters map[string]any
 	}{
 		"TRUST-01 SameForestTrust ID projection": {
-			criteria: phase3TrustCriteria("RegressionKind40", "RegressionKind41", query.RelationshipID()),
+			criteria: trustPruningCriteria("RegressionKind40", "RegressionKind41", query.RelationshipID()),
 			fragments: []string{
 				"n0.kind_ids operator (pg_catalog.&&) array [72]::int2[]",
 				"n1.kind_ids operator (pg_catalog.&&) array [72]::int2[]",
@@ -47,7 +47,7 @@ func TestLegacyBuilderPostgreSQL_Phase3TrustAndPruningForms(t *testing.T) {
 			parameters: map[string]any{},
 		},
 		"TRUST-02 CrossForestTrust full projection": {
-			criteria: phase3TrustCriteria("RegressionKind40", "RegressionKind42", query.Relationship()),
+			criteria: trustPruningCriteria("RegressionKind40", "RegressionKind42", query.Relationship()),
 			fragments: []string{
 				"e0.kind_id = any (array [74]::int2[])",
 				"select s0.e0 as r",
@@ -149,7 +149,7 @@ func TestLegacyBuilderPostgreSQL_Phase3TrustAndPruningForms(t *testing.T) {
 	}
 }
 
-func phase3TrustCriteria(domainKind, relationshipKind string, projection graph.Criteria) []graph.Criteria {
+func trustPruningCriteria(domainKind, relationshipKind string, projection graph.Criteria) []graph.Criteria {
 	return []graph.Criteria{
 		query.Where(query.And(
 			query.Kind(query.Start(), graph.StringKind(domainKind)),

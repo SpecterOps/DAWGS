@@ -237,7 +237,7 @@ func TestQueryBuilder_LOGIC01PreservesBranchLocalRelationshipKinds(t *testing.T)
 	)(t)
 }
 
-func TestQueryBuilder_Phase1LogicalForms(t *testing.T) {
+func TestQueryBuilder_LogicalForms(t *testing.T) {
 	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 
 	t.Run("LOGIC-02 cross-binding temporal disjunction", assertQueryResult(
@@ -306,7 +306,7 @@ func TestQueryBuilder_LOGIC05ProjectionOrder(t *testing.T) {
 	}
 }
 
-func TestQueryBuilder_Phase2ReconciliationForms(t *testing.T) {
+func TestQueryBuilder_ReconciliationForms(t *testing.T) {
 	reconciliationKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
 		for idx := range count {
@@ -442,7 +442,7 @@ func TestQueryBuilder_Phase2ReconciliationForms(t *testing.T) {
 	))
 }
 
-func TestQueryBuilder_Phase3TrustAndPruningForms(t *testing.T) {
+func TestQueryBuilder_TrustAndPruningForms(t *testing.T) {
 	threshold := time.Date(2026, time.January, 3, 0, 0, 0, 0, time.UTC)
 	domain := graph.StringKind("Domain")
 
@@ -558,7 +558,7 @@ func TestQueryBuilder_Phase3TrustAndPruningForms(t *testing.T) {
 	))
 }
 
-func TestQueryBuilder_Phase4StandaloneHopForms(t *testing.T) {
+func TestQueryBuilder_StandaloneHopForms(t *testing.T) {
 	hopKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
 		for idx := range count {

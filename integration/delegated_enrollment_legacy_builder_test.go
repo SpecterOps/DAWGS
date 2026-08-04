@@ -28,8 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase2LegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
-	fixture := phase2DelegatedEnrollmentFixture()
+func TestLegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
+	fixture := delegatedEnrollmentFixture()
 	nodeKinds, edgeKinds := fixture.Kinds()
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
@@ -54,7 +54,7 @@ func TestPhase2LegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
 	})
 }
 
-func phase2DelegatedEnrollmentFixture() *opengraph.Graph {
+func delegatedEnrollmentFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
 			{ID: "template-a", Kinds: []string{"CertTemplate"}, Properties: map[string]any{"objectid": "template-a"}},

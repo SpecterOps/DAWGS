@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var phase7RequiredScaleIDs = []string{
+var scaleCorpusRequiredIDs = []string{
 	"REC-01", "REC-02", "REC-04", "REC-06", "REC-08",
 	"TRUST-01", "TRUST-02",
 	"PRUNE-01", "PRUNE-02", "PRUNE-03", "PRUNE-04",
@@ -32,29 +32,29 @@ var phase7RequiredScaleIDs = []string{
 	"LOOKUP-02", "LOOKUP-04", "LOOKUP-05", "LOOKUP-09", "LOOKUP-11", "LOOKUP-13", "LOOKUP-15", "LOOKUP-16",
 }
 
-func phase7CaseID(name string) string {
+func scaleCorpusCaseID(name string) string {
 	if separator := strings.IndexByte(name, '_'); separator >= 0 {
 		return name[:separator]
 	}
 	return name
 }
 
-func phase7RequiredIDSet() map[string]struct{} {
-	required := make(map[string]struct{}, len(phase7RequiredScaleIDs))
-	for _, id := range phase7RequiredScaleIDs {
+func scaleCorpusRequiredIDSet() map[string]struct{} {
+	required := make(map[string]struct{}, len(scaleCorpusRequiredIDs))
+	for _, id := range scaleCorpusRequiredIDs {
 		required[id] = struct{}{}
 	}
 	return required
 }
 
-func TestPhase7RequiredScaleRepresentativesDeclareCardinality(t *testing.T) {
+func TestScaleCorpusRequiredRepresentativesDeclareCardinality(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
 
-	required := phase7RequiredIDSet()
+	required := scaleCorpusRequiredIDSet()
 	covered := map[string]int{}
 	for _, testCase := range corpus.Cases {
-		id := phase7CaseID(testCase.Name)
+		id := scaleCorpusCaseID(testCase.Name)
 		if _, isRequired := required[id]; !isRequired {
 			continue
 		}
@@ -69,7 +69,7 @@ func TestPhase7RequiredScaleRepresentativesDeclareCardinality(t *testing.T) {
 		}
 	}
 
-	for _, id := range phase7RequiredScaleIDs {
+	for _, id := range scaleCorpusRequiredIDs {
 		require.Positive(t, covered[id], "Phase 7 scale corpus is missing %s", id)
 	}
 }

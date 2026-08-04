@@ -32,17 +32,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
-	fixture := phase3LegacyFixture()
+func TestLegacyBuilderTrustAndPruningSelectors(t *testing.T) {
+	fixture := trustPruningFixture()
 	nodeKinds, edgeKinds := fixture.Kinds()
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
 	session := &Session{DB: db, Ctx: ctx}
-	threshold := phase3Day(3)
+	threshold := regressionDay(3)
 
 	t.Run("TRUST-01 SameForestTrust IDs", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, fixture, func(opengraph.IDMap) graph.Criteria {
-			return phase3TrustCriteria("SameForestTrust")
+			return trustPruningCriteria("SameForestTrust")
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 			ids, err := ops.FetchRelationshipIDs(relationshipQuery)
 			require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 
 	t.Run("TRUST-02 CrossForestTrust hydration", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, fixture, func(opengraph.IDMap) graph.Criteria {
-			return phase3TrustCriteria("CrossForestTrust")
+			return trustPruningCriteria("CrossForestTrust")
 		}, func(relationshipQuery graph.RelationshipQuery, idMap opengraph.IDMap) error {
 			relationships, err := ops.FetchRelationships(relationshipQuery)
 			require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 
 	t.Run("TRUST-03 directional derived IDs", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, fixture, func(idMap opengraph.IDMap) graph.Criteria {
-			return phase3DirectionalTrustCriteria(idMap, "late-a", "late-b")
+			return directionalTrustCriteria(idMap, "late-a", "late-b")
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 			relationships, err := ops.FetchRelationships(relationshipQuery)
 			require.NoError(t, err)
@@ -89,12 +89,12 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 
 	t.Run("TRUST-03 reverse driving trust relationship", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, fixture, func(idMap opengraph.IDMap) graph.Criteria {
-			return phase3DirectionalTrustCriteria(idMap, "late-b", "late-a")
+			return directionalTrustCriteria(idMap, "late-b", "late-a")
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 			relationships, err := ops.FetchRelationships(relationshipQuery)
 			require.NoError(t, err)
 			require.Len(t, relationships, 2)
-			require.Equal(t, []string{"invalid-forward-spoof", "invalid-reverse-abuse"}, phase3RelationshipMarkers(t, relationships))
+			require.Equal(t, []string{"invalid-forward-spoof", "invalid-reverse-abuse"}, trustPruningRelationshipMarkers(t, relationships))
 			return nil
 		})
 	})
@@ -108,7 +108,7 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 			relationships, err := ops.FetchRelationships(relationshipQuery)
 			require.NoError(t, err)
-			require.Equal(t, []string{"candidate-old"}, phase3RelationshipMarkers(t, relationships))
+			require.Equal(t, []string{"candidate-old"}, trustPruningRelationshipMarkers(t, relationships))
 			return nil
 		})
 	})
@@ -125,7 +125,7 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 			relationships, err := ops.FetchRelationships(relationshipQuery)
 			require.NoError(t, err)
-			require.Equal(t, []string{"session-missing", "session-null", "session-old"}, phase3RelationshipMarkers(t, relationships))
+			require.Equal(t, []string{"session-missing", "session-null", "session-old"}, trustPruningRelationshipMarkers(t, relationships))
 			return nil
 		})
 	})
@@ -133,7 +133,7 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 	t.Run("PRUNE-03 protected kinds and missing null or old nodes", func(t *testing.T) {
 		WithLegacyNodeQuery(t, session, fixture, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
-				query.Not(query.KindIn(query.Node(), phase3ProtectedNodeKinds()...)),
+				query.Not(query.KindIn(query.Node(), pruningProtectedNodeKinds()...)),
 				query.Or(
 					query.Not(query.Exists(query.NodeProperty("lastseen"))),
 					query.Before(query.NodeProperty("lastseen"), threshold),
@@ -142,7 +142,7 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 		}, func(nodeQuery graph.NodeQuery, idMap opengraph.IDMap) error {
 			ids, err := ops.FetchNodeIDs(nodeQuery)
 			require.NoError(t, err)
-			require.Equal(t, []string{"candidate-missing", "candidate-null", "candidate-old", "orphan-empty", "orphan-missing", "orphan-null", "orphan-wrong-prefix"}, phase3FixtureIDs(t, idMap, ids))
+			require.Equal(t, []string{"candidate-missing", "candidate-null", "candidate-old", "orphan-empty", "orphan-missing", "orphan-null", "orphan-wrong-prefix"}, trustPruningFixtureIDs(t, idMap, ids))
 			return nil
 		})
 	})
@@ -150,21 +150,21 @@ func TestPhase3LegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 	t.Run("PRUNE-04 orphan SID nodes", func(t *testing.T) {
 		WithLegacyNodeQuery(t, session, fixture, func(opengraph.IDMap) graph.Criteria {
 			return query.And(
-				query.Not(query.KindIn(query.Node(), phase3ProtectedNodeKinds()...)),
+				query.Not(query.KindIn(query.Node(), pruningProtectedNodeKinds()...)),
 				query.Not(query.Exists(query.NodeProperty("name"))),
 				query.StringStartsWith(query.NodeProperty("objectid"), "S-1-5"),
 			)
 		}, func(nodeQuery graph.NodeQuery, idMap opengraph.IDMap) error {
 			ids, err := ops.FetchNodeIDs(nodeQuery)
 			require.NoError(t, err)
-			require.Equal(t, []string{"orphan-missing", "orphan-null"}, phase3FixtureIDs(t, idMap, ids))
+			require.Equal(t, []string{"orphan-missing", "orphan-null"}, trustPruningFixtureIDs(t, idMap, ids))
 			return nil
 		})
 	})
 }
 
-func TestPhase3DirectBatchPruning(t *testing.T) {
-	fixture := phase3BatchFixture(32)
+func TestDirectBatchPruning(t *testing.T) {
+	fixture := batchPruningFixture(32)
 	nodeKinds, edgeKinds := fixture.Kinds()
 	db, ctx := SetupDBWithKinds(t, CleanupGraph, nodeKinds, edgeKinds)
 
@@ -189,7 +189,7 @@ func TestPhase3DirectBatchPruning(t *testing.T) {
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				loadFixture(t)
-				deleted, err := phase3PruneRelationships(ctx, db, testCase.criteria, nil)
+				deleted, err := pruneRelationshipsInBatches(ctx, db, testCase.criteria, nil)
 				require.NoError(t, err)
 				require.Equal(t, testCase.expected, deleted)
 				require.Equal(t, testCase.remaining, countByCypher(t, ctx, db, "MATCH ()-[r:PruneDelete]->() RETURN count(r)"))
@@ -200,7 +200,7 @@ func TestPhase3DirectBatchPruning(t *testing.T) {
 
 	t.Run("PRUNE-05 relationship absent after selection is harmless", func(t *testing.T) {
 		loadFixture(t)
-		deleted, err := phase3PruneRelationships(ctx, db, func() graph.Criteria {
+		deleted, err := pruneRelationshipsInBatches(ctx, db, func() graph.Criteria {
 			return query.Equals(query.RelationshipProperty("marker"), "single")
 		}, func(ids []graph.ID) error {
 			return db.BatchOperation(ctx, func(batch graph.Batch) error {
@@ -226,7 +226,7 @@ func TestPhase3DirectBatchPruning(t *testing.T) {
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				loadFixture(t)
-				deleted, err := phase3PruneNodes(ctx, db, testCase.criteria, nil)
+				deleted, err := pruneNodesInBatches(ctx, db, testCase.criteria, nil)
 				require.NoError(t, err)
 				require.Equal(t, testCase.expected, deleted)
 				require.Equal(t, testCase.expectedCandidates, countByCypher(t, ctx, db, "MATCH (n:PruneDeleteNode) RETURN count(n)"))
@@ -237,7 +237,7 @@ func TestPhase3DirectBatchPruning(t *testing.T) {
 
 	t.Run("PRUNE-06 node absent after selection is harmless", func(t *testing.T) {
 		loadFixture(t)
-		deleted, err := phase3PruneNodes(ctx, db, func() graph.Criteria {
+		deleted, err := pruneNodesInBatches(ctx, db, func() graph.Criteria {
 			return query.Equals(query.NodeProperty("objectid"), "single")
 		}, func(ids []graph.ID) error {
 			return db.BatchOperation(ctx, func(batch graph.Batch) error {
@@ -250,7 +250,7 @@ func TestPhase3DirectBatchPruning(t *testing.T) {
 	})
 }
 
-func BenchmarkPhase3DirectBatchPruning(b *testing.B) {
+func BenchmarkDirectBatchPruning(b *testing.B) {
 	fixture := testutil.NewTrustPruningScaleFixture(2_000)
 	nodeKinds, edgeKinds := fixture.Kinds()
 	session := Open(b, Options{
@@ -277,7 +277,7 @@ func BenchmarkPhase3DirectBatchPruning(b *testing.B) {
 			b.StopTimer()
 			resetFixture(b)
 			b.StartTimer()
-			deleted, err := phase3PruneRelationships(session.Ctx, session.DB, func() graph.Criteria {
+			deleted, err := pruneRelationshipsInBatches(session.Ctx, session.DB, func() graph.Criteria {
 				return query.Kind(query.Relationship(), graph.StringKind("PruneBatch"))
 			}, nil)
 			if err != nil {
@@ -295,7 +295,7 @@ func BenchmarkPhase3DirectBatchPruning(b *testing.B) {
 			b.StopTimer()
 			resetFixture(b)
 			b.StartTimer()
-			deleted, err := phase3PruneNodes(session.Ctx, session.DB, func() graph.Criteria {
+			deleted, err := pruneNodesInBatches(session.Ctx, session.DB, func() graph.Criteria {
 				return query.Equals(query.NodeProperty("remove"), true)
 			}, nil)
 			if err != nil {
@@ -308,7 +308,7 @@ func BenchmarkPhase3DirectBatchPruning(b *testing.B) {
 	})
 }
 
-func phase3TrustCriteria(kind string) graph.Criteria {
+func trustPruningCriteria(kind string) graph.Criteria {
 	return query.And(
 		query.Kind(query.Start(), graph.StringKind("Domain")),
 		query.Kind(query.End(), graph.StringKind("Domain")),
@@ -320,7 +320,7 @@ func phase3TrustCriteria(kind string) graph.Criteria {
 	)
 }
 
-func phase3DirectionalTrustCriteria(idMap opengraph.IDMap, forward, reverse string) graph.Criteria {
+func directionalTrustCriteria(idMap opengraph.IDMap, forward, reverse string) graph.Criteria {
 	forwardID := idMap[forward]
 	reverseID := idMap[reverse]
 	return query.And(
@@ -341,7 +341,7 @@ func phase3DirectionalTrustCriteria(idMap opengraph.IDMap, forward, reverse stri
 	)
 }
 
-func phase3ProtectedNodeKinds() graph.Kinds {
+func pruningProtectedNodeKinds() graph.Kinds {
 	return graph.Kinds{
 		graph.StringKind("Domain"),
 		graph.StringKind("Tenant"),
@@ -351,7 +351,7 @@ func phase3ProtectedNodeKinds() graph.Kinds {
 	}
 }
 
-func phase3RelationshipMarkers(t *testing.T, relationships []*graph.Relationship) []string {
+func trustPruningRelationshipMarkers(t *testing.T, relationships []*graph.Relationship) []string {
 	t.Helper()
 	markers := make([]string, 0, len(relationships))
 	for _, relationship := range relationships {
@@ -363,38 +363,38 @@ func phase3RelationshipMarkers(t *testing.T, relationships []*graph.Relationship
 	return markers
 }
 
-func phase3FixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) []string {
+func trustPruningFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) []string {
 	t.Helper()
 	fixtureIDs := make([]string, 0, len(ids))
 	for _, id := range ids {
-		fixtureIDs = append(fixtureIDs, phase1FixtureID(t, idMap, id))
+		fixtureIDs = append(fixtureIDs, regressionFixtureID(t, idMap, id))
 	}
 	sort.Strings(fixtureIDs)
 	return fixtureIDs
 }
 
-func phase3LegacyFixture() *opengraph.Graph {
+func trustPruningFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
-			{ID: "early", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(2)}},
-			{ID: "late-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "late-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "candidate-rel-equal", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "candidate-rel-new", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "candidate-rel-missing", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "candidate-rel-null", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "session-null", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "session-old", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "session-equal", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "session-new", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(4)}},
-			{ID: "equal-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(3)}},
-			{ID: "equal-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": phase3Day(3)}},
-			{ID: "wrong-end", Kinds: []string{"Computer"}, Properties: map[string]any{"lastcollected": phase3Day(4), "lastseen": phase3Day(4)}},
+			{ID: "early", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(2)}},
+			{ID: "late-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "late-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "candidate-rel-equal", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "candidate-rel-new", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "candidate-rel-missing", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "candidate-rel-null", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "session-null", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "session-old", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "session-equal", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "session-new", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
+			{ID: "equal-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(3)}},
+			{ID: "equal-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(3)}},
+			{ID: "wrong-end", Kinds: []string{"Computer"}, Properties: map[string]any{"lastcollected": regressionDay(4), "lastseen": regressionDay(4)}},
 			{ID: "candidate-missing", Kinds: []string{"CandidateNode"}, Properties: map[string]any{}},
 			{ID: "candidate-null", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": nil}},
-			{ID: "candidate-old", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": phase3Day(2)}},
-			{ID: "candidate-equal", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": phase3Day(3)}},
-			{ID: "candidate-new", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": phase3Day(4)}},
+			{ID: "candidate-old", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": regressionDay(2)}},
+			{ID: "candidate-equal", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": regressionDay(3)}},
+			{ID: "candidate-new", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": regressionDay(4)}},
 			{ID: "orphan-missing", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"objectid": "S-1-5-100"}},
 			{ID: "orphan-null", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"name": nil, "objectid": "S-1-5-101"}},
 			{ID: "orphan-empty", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"name": "", "objectid": "S-1-5-102"}},
@@ -402,31 +402,31 @@ func phase3LegacyFixture() *opengraph.Graph {
 			{ID: "orphan-protected", Kinds: []string{"CandidateNode", "Domain"}, Properties: map[string]any{"objectid": "S-1-5-104"}},
 		},
 		Edges: []opengraph.Edge{
-			{StartID: "late-a", EndID: "early", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "same-old"}},
-			{StartID: "equal-a", EndID: "equal-b", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "same-equal"}},
-			{StartID: "late-a", EndID: "wrong-end", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "same-wrong-end"}},
-			{StartID: "late-a", EndID: "early", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "cross-old"}},
-			{StartID: "equal-a", EndID: "equal-b", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "cross-equal"}},
+			{StartID: "late-a", EndID: "early", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-old"}},
+			{StartID: "equal-a", EndID: "equal-b", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-equal"}},
+			{StartID: "late-a", EndID: "wrong-end", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-wrong-end"}},
+			{StartID: "late-a", EndID: "early", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "cross-old"}},
+			{StartID: "equal-a", EndID: "equal-b", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "cross-equal"}},
 			{StartID: "late-a", EndID: "late-b", Kind: "AbuseTGTDelegation", Properties: map[string]any{"marker": "valid-forward-abuse"}},
 			{StartID: "late-b", EndID: "late-a", Kind: "SpoofSIDHistory", Properties: map[string]any{"marker": "valid-reverse-spoof"}},
 			{StartID: "late-a", EndID: "late-b", Kind: "SpoofSIDHistory", Properties: map[string]any{"marker": "invalid-forward-spoof"}},
 			{StartID: "late-b", EndID: "late-a", Kind: "AbuseTGTDelegation", Properties: map[string]any{"marker": "invalid-reverse-abuse"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": phase3Day(2), "marker": "candidate-old"}},
-			{StartID: "late-a", EndID: "candidate-rel-equal", Kind: "CandidateRel", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "candidate-equal"}},
-			{StartID: "late-a", EndID: "candidate-rel-new", Kind: "CandidateRel", Properties: map[string]any{"lastseen": phase3Day(4), "marker": "candidate-new"}},
+			{StartID: "late-a", EndID: "late-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": regressionDay(2), "marker": "candidate-old"}},
+			{StartID: "late-a", EndID: "candidate-rel-equal", Kind: "CandidateRel", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "candidate-equal"}},
+			{StartID: "late-a", EndID: "candidate-rel-new", Kind: "CandidateRel", Properties: map[string]any{"lastseen": regressionDay(4), "marker": "candidate-new"}},
 			{StartID: "late-a", EndID: "candidate-rel-missing", Kind: "CandidateRel", Properties: map[string]any{"marker": "candidate-missing"}},
 			{StartID: "late-a", EndID: "candidate-rel-null", Kind: "CandidateRel", Properties: map[string]any{"lastseen": nil, "marker": "candidate-null"}},
 			{StartID: "late-a", EndID: "late-b", Kind: "HasSession", Properties: map[string]any{"marker": "session-missing"}},
 			{StartID: "late-a", EndID: "session-null", Kind: "HasSession", Properties: map[string]any{"lastseen": nil, "marker": "session-null"}},
-			{StartID: "late-a", EndID: "session-old", Kind: "HasSession", Properties: map[string]any{"lastseen": phase3Day(2), "marker": "session-old"}},
-			{StartID: "late-a", EndID: "session-equal", Kind: "HasSession", Properties: map[string]any{"lastseen": phase3Day(3), "marker": "session-equal"}},
-			{StartID: "late-a", EndID: "session-new", Kind: "HasSession", Properties: map[string]any{"lastseen": phase3Day(4), "marker": "session-new"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "MetaIncludes", Properties: map[string]any{"lastseen": phase3Day(2), "marker": "meta-includes-old"}},
+			{StartID: "late-a", EndID: "session-old", Kind: "HasSession", Properties: map[string]any{"lastseen": regressionDay(2), "marker": "session-old"}},
+			{StartID: "late-a", EndID: "session-equal", Kind: "HasSession", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "session-equal"}},
+			{StartID: "late-a", EndID: "session-new", Kind: "HasSession", Properties: map[string]any{"lastseen": regressionDay(4), "marker": "session-new"}},
+			{StartID: "late-a", EndID: "late-b", Kind: "MetaIncludes", Properties: map[string]any{"lastseen": regressionDay(2), "marker": "meta-includes-old"}},
 		},
 	}
 }
 
-func phase3BatchFixture(fanout int) *opengraph.Graph {
+func batchPruningFixture(fanout int) *opengraph.Graph {
 	fixture := &opengraph.Graph{
 		Nodes: []opengraph.Node{
 			{ID: "rel-a", Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": "rel-a"}},
@@ -457,7 +457,7 @@ func phase3BatchFixture(fanout int) *opengraph.Graph {
 	return fixture
 }
 
-func phase3PruneRelationships(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
+func pruneRelationshipsInBatches(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
 	var ids []graph.ID
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
@@ -485,7 +485,7 @@ func phase3PruneRelationships(ctx context.Context, db graph.Database, criteria g
 	return deleted, err
 }
 
-func phase3PruneNodes(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
+func pruneNodesInBatches(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
 	var ids []graph.ID
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
@@ -513,6 +513,6 @@ func phase3PruneNodes(ctx context.Context, db graph.Database, criteria graph.Cri
 	return deleted, err
 }
 
-func phase3Day(day int) time.Time {
+func regressionDay(day int) time.Time {
 	return time.Date(2026, time.January, day, 0, 0, 0, 0, time.UTC)
 }
