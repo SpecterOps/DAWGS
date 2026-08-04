@@ -26,6 +26,16 @@ func TestFormat_TypeCastedParenthetical(t *testing.T) {
 	require.Equal(t, "('str')::text", formattedQuery)
 }
 
+func TestFormat_QuotesExpressionShapedIdentifiers(t *testing.T) {
+	formatted, err := format.Expression(
+		pgsql.CompoundIdentifier{"s0", "id(n)"},
+		format.NewOutputBuilder(),
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, `s0."id(n)"`, formatted)
+}
+
 func TestFormat_Case(t *testing.T) {
 	formattedQuery, err := format.Expression(pgsql.Case{
 		Conditions: []pgsql.Expression{

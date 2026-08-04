@@ -1,9 +1,11 @@
 package translate
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	cypherFormat "github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/cypher/models/walk"
 
 	"github.com/specterops/dawgs/cypher/models"
@@ -1502,6 +1504,15 @@ func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cyphe
 		} else if identifiers.Len() > 0 {
 			// Identifier lookups will require a scope reference
 			s.query.CurrentPart().projections.Frame = s.scope.CurrentFrame()
+		}
+
+		if !hasAlias {
+			var buffer bytes.Buffer
+			if err := cypherFormat.NewCypherEmitter(false).WriteExpression(&buffer, projectionItem.Expression); err != nil {
+				return fmt.Errorf("format implicit projection name: %w", err)
+			}
+			alias = pgsql.Identifier(buffer.String())
+			hasAlias = true
 		}
 
 		switch typedSelectItem := unwrapParenthetical(selectItem).(type) {

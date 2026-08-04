@@ -122,6 +122,39 @@ func inferAllExpressionType(expression pgsql.AllExpression) (pgsql.DataType, err
 	}
 }
 
+func inferCaseExpressionType(expression pgsql.Case) (pgsql.DataType, error) {
+	resultType := pgsql.UnknownDataType
+	branches := append(append([]pgsql.Expression(nil), expression.Then...), expression.Else)
+
+	for _, branch := range branches {
+		if branch == nil {
+			continue
+		}
+
+		branchType, err := InferExpressionType(branch)
+		if err != nil {
+			return pgsql.UnsetDataType, err
+		}
+		if branchType == pgsql.Null || !branchType.IsKnown() {
+			continue
+		}
+		if !resultType.IsKnown() {
+			resultType = branchType
+			continue
+		}
+		if resultType == branchType {
+			continue
+		}
+		if supertype, valid := resultType.CoerceToSupertype(branchType); valid {
+			resultType = supertype
+		} else {
+			return pgsql.UnknownDataType, nil
+		}
+	}
+
+	return resultType, nil
+}
+
 func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	switch typedExpression := expression.(type) {
 	case pgsql.Identifier, pgsql.RowColumnReference:
@@ -192,6 +225,16 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 
 	case pgsql.AllExpression:
 		return inferAllExpressionType(typedExpression)
+
+	case *pgsql.Case:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return inferCaseExpressionType(*typedExpression)
+
+	case pgsql.Case:
+		return inferCaseExpressionType(typedExpression)
 
 	case *pgsql.AliasedExpression:
 		if typedExpression == nil {

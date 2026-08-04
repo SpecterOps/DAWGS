@@ -87,3 +87,27 @@ verification, and rollback are outside that duration.
 PostgreSQL records include translated SQL and `EXPLAIN (ANALYZE, BUFFERS,
 TIMING OFF)` metrics. Neo4j records include plan operator names
 when an `EXPLAIN` plan can be captured.
+
+## Phase 7 correctness gate
+
+The PostgreSQL-only `TestPostgreSQLPhase7PlanInvariants` test loads the same
+scale corpus and fixture as the command. It executes all Phase 7 Cypher
+representatives, requires their declared cardinalities and mutation post-state,
+and verifies that the captured plan came from `EXPLAIN ANALYZE`. Stable
+assertions cover relationship/node mutation targets, branch-local logical
+structure, temporal filtering, and anchored edge-index orientation. The test
+uses rollback isolation for writes and runs automatically under
+`make test_all` when `CONNECTION_STRING` selects PostgreSQL.
+
+Run only the Phase 7 gate with:
+
+```bash
+CONNECTION_STRING="$PG_CONNECTION_STRING" \
+  go test -tags manual_integration ./cmd/graphbench \
+  -run 'Test(PostgreSQLPhase7PlanInvariants|Phase7RequiredScaleRepresentativesDeclareCardinality)' \
+  -count=1
+```
+
+The non-integration cardinality test also guarantees that every required stable
+query-form ID remains represented in the scale corpus and declares an expected
+read or write cardinality.

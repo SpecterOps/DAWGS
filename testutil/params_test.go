@@ -35,6 +35,21 @@ func TestParamsDecodesTaggedDatetime(t *testing.T) {
 	require.Equal(t, []any{time.Date(2025, time.February, 3, 4, 5, 6, 0, time.UTC)}, values["nested"])
 }
 
+func TestParamsDecodesNestedObjectsAsStandardMaps(t *testing.T) {
+	var values Params
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"properties": {"name": "node", "nested": {"enabled": true}}
+	}`), &values))
+
+	properties, ok := values["properties"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "node", properties["name"])
+
+	nested, ok := properties["nested"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, nested["enabled"])
+}
+
 func TestParamsRejectsUnknownTaggedType(t *testing.T) {
 	var values Params
 	err := json.Unmarshal([]byte(`{"threshold":{"$type":"timestamp","value":"2026-01-02T03:04:05Z"}}`), &values)

@@ -35,6 +35,7 @@ const (
 	FunctionToLower                       Identifier = "lower"
 	FunctionToUpper                       Identifier = "upper"
 	FunctionCoalesce                      Identifier = "coalesce"
+	FunctionNullIf                        Identifier = "nullif"
 	FunctionReplace                       Identifier = "replace"
 	FunctionUnnest                        Identifier = "unnest"
 	FunctionNextValue                     Identifier = "nextval"
