@@ -17,8 +17,11 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,6 +45,16 @@ func TestScaleCorpusDatasets(t *testing.T) {
 	}}
 
 	require.Equal(t, []string{"adcs_fanout", "base"}, scaleCorpusDatasets(corpus))
+}
+
+func TestGeneratedReconciliationDatasetRegistersThirtyKinds(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.ReconciliationScaleDataset)
+	require.NoError(t, err)
+	_, edgeKinds := doc.Graph.Kinds()
+
+	for idx := 1; idx <= 30; idx++ {
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("RecKind%02d", idx)))
+	}
 }
 
 func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {

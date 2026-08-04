@@ -177,6 +177,516 @@
           "assert": {"keys": ["r"], "row_count": 1, "contains_edge": {"start": "start", "end": "end", "kind": "LogicProjectionEdge", "props": {"marker": "projection"}}}
         }
       ]
+    },
+    {
+      "name": "REC-01 inbound structure reconciliation delete",
+      "template": "MATCH ()-[r:{{relationship_kinds}}]->(e:ADEntity) WHERE e.objectid = $object_id DELETE r",
+      "fixture": {
+        "nodes": [
+          {"id": "source-a", "kinds": ["Source"], "properties": {"name": "source-a"}},
+          {"id": "source-b", "kinds": ["Source"], "properties": {"name": "source-b"}},
+          {"id": "target", "kinds": ["ADEntity", "Group"], "properties": {"objectid": "target-in"}},
+          {"id": "one-target", "kinds": ["ADEntity"], "properties": {"objectid": "one-in"}},
+          {"id": "wrong-kind", "kinds": ["OtherEntity"], "properties": {"objectid": "target-in"}},
+          {"id": "wrong-property", "kinds": ["ADEntity"], "properties": {"objectid": "other-in"}}
+        ],
+        "edges": [
+          {"start_id": "source-a", "end_id": "target", "kind": "RecKind01", "properties": {"marker": "k01-a"}},
+          {"start_id": "source-b", "end_id": "target", "kind": "RecKind01", "properties": {"marker": "k01-b"}},
+          {"start_id": "source-a", "end_id": "target", "kind": "RecKind02", "properties": {"marker": "k02"}},
+          {"start_id": "source-a", "end_id": "target", "kind": "RecKind09", "properties": {"marker": "k09"}},
+          {"start_id": "source-a", "end_id": "target", "kind": "RecKind30", "properties": {"marker": "k30"}},
+          {"start_id": "source-a", "end_id": "target", "kind": "RecKind31", "properties": {"marker": "wrong-edge"}},
+          {"start_id": "source-a", "end_id": "wrong-kind", "kind": "RecKind01", "properties": {"marker": "wrong-end-kind"}},
+          {"start_id": "source-a", "end_id": "wrong-property", "kind": "RecKind01", "properties": {"marker": "wrong-end-property"}},
+          {"start_id": "target", "end_id": "source-a", "kind": "RecKind01", "properties": {"marker": "wrong-direction"}},
+          {"start_id": "source-a", "end_id": "one-target", "kind": "RecKind01", "properties": {"marker": "one-match"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one kind deletes many exact matches",
+          "vars": {"relationship_kinds": "RecKind01"},
+          "params": {"object_id": "target-in"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["k02", "k09", "k30", "wrong-edge", "wrong-end-kind", "wrong-end-property", "wrong-direction", "one-match"]}}]
+        },
+        {
+          "name": "two kinds preserve nonselected kinds and decoys",
+          "vars": {"relationship_kinds": "RecKind01|RecKind02"},
+          "params": {"object_id": "target-in"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["k09", "k30", "wrong-edge", "wrong-end-kind", "wrong-end-property", "wrong-direction", "one-match"]}}]
+        },
+        {
+          "name": "nine kinds include the ninth kind",
+          "vars": {"relationship_kinds": "RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09"},
+          "params": {"object_id": "target-in"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["k30", "wrong-edge", "wrong-end-kind", "wrong-end-property", "wrong-direction", "one-match"]}}]
+        },
+        {
+          "name": "thirty kinds include the thirtieth kind",
+          "vars": {"relationship_kinds": "RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09|RecKind10|RecKind11|RecKind12|RecKind13|RecKind14|RecKind15|RecKind16|RecKind17|RecKind18|RecKind19|RecKind20|RecKind21|RecKind22|RecKind23|RecKind24|RecKind25|RecKind26|RecKind27|RecKind28|RecKind29|RecKind30"},
+          "params": {"object_id": "target-in"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["wrong-edge", "wrong-end-kind", "wrong-end-property", "wrong-direction", "one-match"]}}]
+        },
+        {
+          "name": "single exact match",
+          "vars": {"relationship_kinds": "RecKind01"},
+          "params": {"object_id": "one-in"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["k01-a", "k01-b", "k02", "k09", "k30", "wrong-edge", "wrong-end-kind", "wrong-end-property", "wrong-direction"]}}]
+        },
+        {
+          "name": "zero matches preserve every relationship",
+          "vars": {"relationship_kinds": "RecKind01"},
+          "params": {"object_id": "missing-in"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["k01-a", "k01-b", "k02", "k09", "k30", "wrong-edge", "wrong-end-kind", "wrong-end-property", "wrong-direction", "one-match"]}}]
+        }
+      ]
+    },
+    {
+      "name": "REC-01 and REC-02 thirty-kind schema registry",
+      "template": "MATCH ()-[r]->() RETURN count(r)",
+      "fixture": {
+        "nodes": [
+          {"id": "start", "kinds": ["RegistryStart"], "properties": {"name": "start"}},
+          {"id": "end", "kinds": ["RegistryEnd"], "properties": {"name": "end"}}
+        ],
+        "edges": [
+          {"start_id": "start", "end_id": "end", "kind": "RecKind03"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind04"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind05"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind06"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind07"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind08"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind10"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind11"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind12"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind13"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind14"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind15"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind16"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind17"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind18"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind19"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind20"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind21"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind22"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind23"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind24"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind25"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind26"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind27"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind28"},
+          {"start_id": "start", "end_id": "end", "kind": "RecKind29"}
+        ]
+      },
+      "variants": [
+        {"name": "register every nonmatching relationship kind", "assert": {"exact_int": 26}}
+      ]
+    },
+    {
+      "name": "REC-02 outbound structure reconciliation delete",
+      "template": "MATCH (s:ADEntity)-[r:{{relationship_kinds}}]->() WHERE s.objectid = $object_id DELETE r",
+      "fixture": {
+        "nodes": [
+          {"id": "target", "kinds": ["ADEntity", "Computer"], "properties": {"objectid": "target-out"}},
+          {"id": "one-target", "kinds": ["ADEntity"], "properties": {"objectid": "one-out"}},
+          {"id": "wrong-kind", "kinds": ["OtherEntity"], "properties": {"objectid": "target-out"}},
+          {"id": "wrong-property", "kinds": ["ADEntity"], "properties": {"objectid": "other-out"}},
+          {"id": "end-a", "kinds": ["Destination"], "properties": {"name": "end-a"}},
+          {"id": "end-b", "kinds": ["Destination"], "properties": {"name": "end-b"}}
+        ],
+        "edges": [
+          {"start_id": "target", "end_id": "end-a", "kind": "RecKind01", "properties": {"marker": "out-k01-a"}},
+          {"start_id": "target", "end_id": "end-b", "kind": "RecKind01", "properties": {"marker": "out-k01-b"}},
+          {"start_id": "target", "end_id": "end-a", "kind": "RecKind02", "properties": {"marker": "out-k02"}},
+          {"start_id": "target", "end_id": "end-a", "kind": "RecKind09", "properties": {"marker": "out-k09"}},
+          {"start_id": "target", "end_id": "end-a", "kind": "RecKind30", "properties": {"marker": "out-k30"}},
+          {"start_id": "target", "end_id": "end-a", "kind": "RecKind31", "properties": {"marker": "out-wrong-edge"}},
+          {"start_id": "wrong-kind", "end_id": "end-a", "kind": "RecKind01", "properties": {"marker": "out-wrong-start-kind"}},
+          {"start_id": "wrong-property", "end_id": "end-a", "kind": "RecKind01", "properties": {"marker": "out-wrong-start-property"}},
+          {"start_id": "end-a", "end_id": "target", "kind": "RecKind01", "properties": {"marker": "out-wrong-direction"}},
+          {"start_id": "one-target", "end_id": "end-a", "kind": "RecKind01", "properties": {"marker": "out-one-match"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one kind deletes many exact outbound matches",
+          "vars": {"relationship_kinds": "RecKind01"},
+          "params": {"object_id": "target-out"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["out-k02", "out-k09", "out-k30", "out-wrong-edge", "out-wrong-start-kind", "out-wrong-start-property", "out-wrong-direction", "out-one-match"]}}]
+        },
+        {
+          "name": "two outbound kinds",
+          "vars": {"relationship_kinds": "RecKind01|RecKind02"},
+          "params": {"object_id": "target-out"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["out-k09", "out-k30", "out-wrong-edge", "out-wrong-start-kind", "out-wrong-start-property", "out-wrong-direction", "out-one-match"]}}]
+        },
+        {
+          "name": "nine outbound kinds",
+          "vars": {"relationship_kinds": "RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09"},
+          "params": {"object_id": "target-out"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["out-k30", "out-wrong-edge", "out-wrong-start-kind", "out-wrong-start-property", "out-wrong-direction", "out-one-match"]}}]
+        },
+        {
+          "name": "thirty outbound kinds",
+          "vars": {"relationship_kinds": "RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09|RecKind10|RecKind11|RecKind12|RecKind13|RecKind14|RecKind15|RecKind16|RecKind17|RecKind18|RecKind19|RecKind20|RecKind21|RecKind22|RecKind23|RecKind24|RecKind25|RecKind26|RecKind27|RecKind28|RecKind29|RecKind30"},
+          "params": {"object_id": "target-out"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["out-wrong-edge", "out-wrong-start-kind", "out-wrong-start-property", "out-wrong-direction", "out-one-match"]}}]
+        },
+        {
+          "name": "single outbound exact match",
+          "vars": {"relationship_kinds": "RecKind01"},
+          "params": {"object_id": "one-out"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["out-k01-a", "out-k01-b", "out-k02", "out-k09", "out-k30", "out-wrong-edge", "out-wrong-start-kind", "out-wrong-start-property", "out-wrong-direction"]}}]
+        },
+        {
+          "name": "zero outbound matches preserve every relationship",
+          "vars": {"relationship_kinds": "RecKind01"},
+          "params": {"object_id": "missing-out"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["out-k01-a", "out-k01-b", "out-k02", "out-k09", "out-k30", "out-wrong-edge", "out-wrong-start-kind", "out-wrong-start-property", "out-wrong-direction", "out-one-match"]}}]
+        }
+      ]
+    },
+    {
+      "name": "REC-03 primary group reconciliation delete",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "user", "kinds": ["ADEntity", "User"], "properties": {"objectid": "user-id"}},
+          {"id": "group", "kinds": ["ADEntity", "Group"], "properties": {"objectid": "group-id"}},
+          {"id": "computer", "kinds": ["ADEntity", "Computer"], "properties": {"objectid": "computer-id"}},
+          {"id": "other", "kinds": ["ADEntity", "Group"], "properties": {"objectid": "other-id"}}
+        ],
+        "edges": [
+          {"start_id": "user", "end_id": "group", "kind": "MemberOf", "properties": {"isprimarygroup": false, "marker": "in-false"}},
+          {"start_id": "user", "end_id": "group", "kind": "MemberOf", "properties": {"isprimarygroup": true, "marker": "in-opposite"}},
+          {"start_id": "user", "end_id": "group", "kind": "MemberOf", "properties": {"marker": "in-missing"}},
+          {"start_id": "user", "end_id": "group", "kind": "OtherMembership", "properties": {"isprimarygroup": false, "marker": "in-wrong-kind"}},
+          {"start_id": "computer", "end_id": "group", "kind": "MemberOf", "properties": {"isprimarygroup": true, "marker": "out-true-a"}},
+          {"start_id": "computer", "end_id": "other", "kind": "MemberOf", "properties": {"isprimarygroup": true, "marker": "out-true-b"}},
+          {"start_id": "computer", "end_id": "group", "kind": "MemberOf", "properties": {"isprimarygroup": false, "marker": "out-opposite"}},
+          {"start_id": "computer", "end_id": "group", "kind": "MemberOf", "properties": {"marker": "out-missing"}},
+          {"start_id": "computer", "end_id": "group", "kind": "OtherMembership", "properties": {"isprimarygroup": true, "marker": "out-wrong-kind"}},
+          {"start_id": "group", "end_id": "computer", "kind": "MemberOf", "properties": {"isprimarygroup": true, "marker": "out-wrong-direction"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "inbound false deletes only the matching MemberOf edge",
+          "vars": {"query": "MATCH ()-[r:MemberOf]->(e:Group) WHERE e.objectid = $object_id AND r.isprimarygroup = $flag DELETE r"},
+          "params": {"object_id": "group-id", "flag": false},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["in-opposite", "in-missing", "in-wrong-kind", "out-true-a", "out-true-b", "out-opposite", "out-missing", "out-wrong-kind", "out-wrong-direction"]}}]
+        },
+        {
+          "name": "outbound true deletes all exact MemberOf edges",
+          "vars": {"query": "MATCH (s:Computer)-[r:MemberOf]->() WHERE s.objectid = $object_id AND r.isprimarygroup = $flag DELETE r"},
+          "params": {"object_id": "computer-id", "flag": true},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["in-false", "in-opposite", "in-missing", "in-wrong-kind", "out-opposite", "out-missing", "out-wrong-kind", "out-wrong-direction"]}}]
+        }
+      ]
+    },
+    {
+      "name": "REC-04 endpoint object ID list reconciliation delete",
+      "template": "MATCH ()-[r:{{relationship_kind}}]->(e:{{entity_kind}}) WHERE e.objectid IN $object_ids DELETE r",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["Source"], "properties": {"name": "source"}},
+          {"id": "ad-a", "kinds": ["ADEntity", "Computer"], "properties": {"objectid": "ad-a"}},
+          {"id": "ad-b", "kinds": ["ADEntity", "User"], "properties": {"objectid": "ad-b"}},
+          {"id": "az-a", "kinds": ["AZEntity", "AZUser"], "properties": {"objectid": "az-a"}},
+          {"id": "az-b", "kinds": ["AZEntity", "AZGroup"], "properties": {"objectid": "az-b"}},
+          {"id": "wrong-kind", "kinds": ["OtherEntity"], "properties": {"objectid": "ad-a"}},
+          {"id": "wrong-property", "kinds": ["ADEntity"], "properties": {"objectid": "other"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "ad-a", "kind": "ADReconcile", "properties": {"marker": "ad-a-1"}},
+          {"start_id": "source", "end_id": "ad-a", "kind": "ADReconcile", "properties": {"marker": "ad-a-2"}},
+          {"start_id": "source", "end_id": "ad-b", "kind": "ADReconcile", "properties": {"marker": "ad-b"}},
+          {"start_id": "source", "end_id": "az-a", "kind": "AZReconcile", "properties": {"marker": "az-a"}},
+          {"start_id": "source", "end_id": "az-b", "kind": "AZReconcile", "properties": {"marker": "az-b"}},
+          {"start_id": "source", "end_id": "wrong-kind", "kind": "ADReconcile", "properties": {"marker": "wrong-kind-end"}},
+          {"start_id": "source", "end_id": "wrong-property", "kind": "ADReconcile", "properties": {"marker": "wrong-property"}},
+          {"start_id": "source", "end_id": "ad-a", "kind": "OtherReconcile", "properties": {"marker": "wrong-edge"}},
+          {"start_id": "ad-a", "end_id": "source", "kind": "ADReconcile", "properties": {"marker": "wrong-direction"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "empty AD list preserves every relationship",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": []},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["ad-a-1", "ad-a-2", "ad-b", "az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "singleton AD list deletes all duplicate matches",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": ["ad-a"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["ad-b", "az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "duplicate AD IDs do not widen the delete",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": ["ad-a", "ad-a"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["ad-b", "az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "small AD list deletes both selected endpoints",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": ["ad-a", "ad-b"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "one thousand AD IDs preserve exact selection",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": {"$type": "string_list", "prefix": "missing-ad", "count": 998, "include": ["ad-a", "ad-b"]}},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "large AD list preserves exact selection",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": {"$type": "string_list", "prefix": "large-ad", "count": 1999, "include": ["ad-a", "ad-b"]}},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "one thousand no-match IDs preserve every relationship",
+          "vars": {"relationship_kind": "ADReconcile", "entity_kind": "ADEntity"},
+          "params": {"object_ids": {"$type": "string_list", "prefix": "no-match-ad", "count": 1000}},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["ad-a-1", "ad-a-2", "ad-b", "az-a", "az-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        },
+        {
+          "name": "Azure base kind and relationship kind remain isolated",
+          "vars": {"relationship_kind": "AZReconcile", "entity_kind": "AZEntity"},
+          "params": {"object_ids": ["az-a", "az-b"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["ad-a-1", "ad-a-2", "ad-b", "wrong-kind-end", "wrong-property", "wrong-edge", "wrong-direction"]}}]
+        }
+      ]
+    },
+    {
+      "name": "REC-05 delegated enrollment discovery",
+      "template": "MATCH (s:CertTemplate)-[r:PublishedTo]->(e) WHERE e.objectid IN $ca_ids RETURN r, s",
+      "fixture": {
+        "nodes": [
+          {"id": "template-a", "kinds": ["CertTemplate"], "properties": {"objectid": "template-a"}},
+          {"id": "template-b", "kinds": ["CertTemplate"], "properties": {"objectid": "template-b"}},
+          {"id": "wrong-start", "kinds": ["OtherTemplate"], "properties": {"objectid": "wrong-start"}},
+          {"id": "ca-a", "kinds": ["EnterpriseCA"], "properties": {"objectid": "ca-a"}},
+          {"id": "ca-b", "kinds": ["EnterpriseCA"], "properties": {"objectid": "ca-b"}},
+          {"id": "wrong-property", "kinds": ["EnterpriseCA"], "properties": {"objectid": "other-ca"}}
+        ],
+        "edges": [
+          {"start_id": "template-a", "end_id": "ca-a", "kind": "PublishedTo", "properties": {"marker": "published-a"}},
+          {"start_id": "template-a", "end_id": "ca-b", "kind": "PublishedTo", "properties": {"marker": "published-b"}},
+          {"start_id": "template-b", "end_id": "ca-a", "kind": "PublishedTo", "properties": {"marker": "published-c"}},
+          {"start_id": "wrong-start", "end_id": "ca-a", "kind": "PublishedTo", "properties": {"marker": "wrong-start"}},
+          {"start_id": "template-a", "end_id": "ca-a", "kind": "OtherPublication", "properties": {"marker": "wrong-edge"}},
+          {"start_id": "template-a", "end_id": "wrong-property", "kind": "PublishedTo", "properties": {"marker": "wrong-property"}}
+        ]
+      },
+      "variants": [
+        {"name": "empty CA list", "params": {"ca_ids": []}, "assert": {"row_count": 0}},
+        {
+          "name": "single CA retains every raw relationship row",
+          "params": {"ca_ids": ["ca-a"]},
+          "assert": {"row_count": 2, "node_id_set": ["template-a", "template-b"], "relationship_records": [
+            {"start": "template-a", "end": "ca-a", "kind": "PublishedTo", "props": {"marker": "published-a"}},
+            {"start": "template-b", "end": "ca-a", "kind": "PublishedTo", "props": {"marker": "published-c"}}
+          ]}
+        },
+        {
+          "name": "duplicate paths retain rows and expose a deduplicated node set",
+          "params": {"ca_ids": ["ca-a", "ca-b"]},
+          "assert": {"row_count": 3, "node_id_set": ["template-a", "template-b"], "relationship_records": [
+            {"start": "template-a", "end": "ca-a", "kind": "PublishedTo", "props": {"marker": "published-a"}},
+            {"start": "template-a", "end": "ca-b", "kind": "PublishedTo", "props": {"marker": "published-b"}},
+            {"start": "template-b", "end": "ca-a", "kind": "PublishedTo", "props": {"marker": "published-c"}}
+          ]}
+        },
+        {
+          "name": "large CA list retains the same exact raw rows",
+          "params": {"ca_ids": {"$type": "string_list", "prefix": "missing-ca", "count": 1999, "include": ["ca-a", "ca-b"]}},
+          "assert": {"row_count": 3, "node_id_set": ["template-a", "template-b"], "relationship_records": [
+            {"start": "template-a", "end": "ca-a", "kind": "PublishedTo", "props": {"marker": "published-a"}},
+            {"start": "template-a", "end": "ca-b", "kind": "PublishedTo", "props": {"marker": "published-b"}},
+            {"start": "template-b", "end": "ca-a", "kind": "PublishedTo", "props": {"marker": "published-c"}}
+          ]}
+        }
+      ]
+    },
+    {
+      "name": "REC-06 delegated enrollment relationship delete",
+      "template": "MATCH ()-[r:DelegatedEnrollmentAgent]->(e:CertTemplate) WHERE id(e) IN $template_ids DELETE r",
+      "fixture": {
+        "nodes": [
+          {"id": "agent", "kinds": ["ADEntity"], "properties": {"objectid": "agent"}},
+          {"id": "template-a", "kinds": ["CertTemplate"], "properties": {"objectid": "template-a"}},
+          {"id": "template-b", "kinds": ["CertTemplate"], "properties": {"objectid": "template-b"}},
+          {"id": "wrong-end", "kinds": ["OtherTemplate"], "properties": {"objectid": "wrong-end"}}
+        ],
+        "edges": [
+          {"start_id": "agent", "end_id": "template-a", "kind": "DelegatedEnrollmentAgent", "properties": {"marker": "dea-a-1"}},
+          {"start_id": "agent", "end_id": "template-a", "kind": "DelegatedEnrollmentAgent", "properties": {"marker": "dea-a-2"}},
+          {"start_id": "agent", "end_id": "template-b", "kind": "DelegatedEnrollmentAgent", "properties": {"marker": "dea-b"}},
+          {"start_id": "template-a", "end_id": "agent", "kind": "DelegatedEnrollmentAgent", "properties": {"marker": "wrong-direction"}},
+          {"start_id": "agent", "end_id": "wrong-end", "kind": "DelegatedEnrollmentAgent", "properties": {"marker": "wrong-end-kind"}},
+          {"start_id": "agent", "end_id": "template-a", "kind": "OtherDelegation", "properties": {"marker": "wrong-edge-kind"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "empty template ID list preserves every relationship",
+          "node_list_params": {"template_ids": []},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["dea-a-1", "dea-a-2", "dea-b", "wrong-direction", "wrong-end-kind", "wrong-edge-kind"]}}]
+        },
+        {
+          "name": "single template ID deletes every exact relationship",
+          "node_list_params": {"template_ids": ["template-a"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["dea-b", "wrong-direction", "wrong-end-kind", "wrong-edge-kind"]}}]
+        },
+        {
+          "name": "duplicate template IDs do not widen the delete",
+          "node_list_params": {"template_ids": ["template-a", "template-a"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["dea-b", "wrong-direction", "wrong-end-kind", "wrong-edge-kind"]}}]
+        },
+        {
+          "name": "small template ID list deletes both endpoints",
+          "node_list_params": {"template_ids": ["template-a", "template-b"]},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["wrong-direction", "wrong-end-kind", "wrong-edge-kind"]}}]
+        }
+      ]
+    },
+    {
+      "name": "REC-07 HostsCAService reconciliation delete",
+      "template": "MATCH ()-[r:HostsCAService]->(e:EnterpriseCA) WHERE e.objectid = $object_id DELETE r",
+      "fixture": {
+        "nodes": [
+          {"id": "host-a", "kinds": ["Computer"], "properties": {"objectid": "host-a"}},
+          {"id": "host-b", "kinds": ["Computer"], "properties": {"objectid": "host-b"}},
+          {"id": "ca", "kinds": ["EnterpriseCA"], "properties": {"objectid": "ca-id"}},
+          {"id": "wrong-kind", "kinds": ["OtherCA"], "properties": {"objectid": "ca-id"}},
+          {"id": "wrong-property", "kinds": ["EnterpriseCA"], "properties": {"objectid": "other-ca"}}
+        ],
+        "edges": [
+          {"start_id": "host-a", "end_id": "ca", "kind": "HostsCAService", "properties": {"marker": "hosts-a"}},
+          {"start_id": "host-b", "end_id": "ca", "kind": "HostsCAService", "properties": {"marker": "hosts-b"}},
+          {"start_id": "host-a", "end_id": "wrong-kind", "kind": "HostsCAService", "properties": {"marker": "wrong-ca-kind"}},
+          {"start_id": "host-a", "end_id": "wrong-property", "kind": "HostsCAService", "properties": {"marker": "wrong-object-id"}},
+          {"start_id": "host-a", "end_id": "ca", "kind": "OtherCAService", "properties": {"marker": "wrong-edge-kind"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "exact CA hit deletes duplicate matching edges",
+          "params": {"object_id": "ca-id"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["wrong-ca-kind", "wrong-object-id", "wrong-edge-kind"]}}]
+        },
+        {
+          "name": "no CA hit preserves every relationship",
+          "params": {"object_id": "missing-ca"},
+          "assert": "no_error",
+          "post_assertions": [{"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["hosts-a", "hosts-b", "wrong-ca-kind", "wrong-object-id", "wrong-edge-kind"]}}]
+        }
+      ]
+    },
+    {
+      "name": "REC-08 AD entity detach delete",
+      "template": "MATCH (n:ADEntity) WHERE n.objectid IN $object_ids DETACH DELETE n",
+      "fixture": {
+        "nodes": [
+          {"id": "isolated", "kinds": ["ADEntity", "User"], "properties": {"objectid": "isolated"}},
+          {"id": "low", "kinds": ["ADEntity", "Computer"], "properties": {"objectid": "low"}},
+          {"id": "high", "kinds": ["ADEntity", "Group"], "properties": {"objectid": "high"}},
+          {"id": "kind-decoy", "kinds": ["OtherEntity"], "properties": {"objectid": "isolated"}},
+          {"id": "property-decoy", "kinds": ["ADEntity"], "properties": {"objectid": "other"}},
+          {"id": "neighbor-a", "kinds": ["ADEntity"], "properties": {"objectid": "neighbor-a"}},
+          {"id": "neighbor-b", "kinds": ["ADEntity"], "properties": {"objectid": "neighbor-b"}},
+          {"id": "neighbor-c", "kinds": ["ADEntity"], "properties": {"objectid": "neighbor-c"}}
+        ],
+        "edges": [
+          {"start_id": "neighbor-a", "end_id": "low", "kind": "Incident", "properties": {"marker": "low-in"}},
+          {"start_id": "low", "end_id": "neighbor-b", "kind": "Incident", "properties": {"marker": "low-out"}},
+          {"start_id": "low", "end_id": "low", "kind": "Incident", "properties": {"marker": "low-self"}},
+          {"start_id": "neighbor-a", "end_id": "high", "kind": "Incident", "properties": {"marker": "high-in-a"}},
+          {"start_id": "neighbor-b", "end_id": "high", "kind": "Incident", "properties": {"marker": "high-in-b"}},
+          {"start_id": "high", "end_id": "neighbor-a", "kind": "Incident", "properties": {"marker": "high-out-a"}},
+          {"start_id": "high", "end_id": "neighbor-c", "kind": "Incident", "properties": {"marker": "high-out-c"}},
+          {"start_id": "high", "end_id": "high", "kind": "Incident", "properties": {"marker": "high-self"}},
+          {"start_id": "kind-decoy", "end_id": "property-decoy", "kind": "Survivor", "properties": {"marker": "survivor"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "empty object ID list preserves all nodes and relationships",
+          "params": {"object_ids": []},
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n) RETURN n", "assert": {"node_id_set": ["isolated", "low", "high", "kind-decoy", "property-decoy", "neighbor-a", "neighbor-b", "neighbor-c"]}},
+            {"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["low-in", "low-out", "low-self", "high-in-a", "high-in-b", "high-out-a", "high-out-c", "high-self", "survivor"]}}
+          ]
+        },
+        {
+          "name": "isolated target deletes exactly one node",
+          "params": {"object_ids": ["isolated"]},
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n) RETURN n", "assert": {"node_id_set": ["low", "high", "kind-decoy", "property-decoy", "neighbor-a", "neighbor-b", "neighbor-c"]}},
+            {"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["low-in", "low-out", "low-self", "high-in-a", "high-in-b", "high-out-a", "high-out-c", "high-self", "survivor"]}}
+          ]
+        },
+        {
+          "name": "low degree target cascades inbound outbound and self edges",
+          "params": {"object_ids": ["low"]},
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n) RETURN n", "assert": {"node_id_set": ["isolated", "high", "kind-decoy", "property-decoy", "neighbor-a", "neighbor-b", "neighbor-c"]}},
+            {"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["high-in-a", "high-in-b", "high-out-a", "high-out-c", "high-self", "survivor"]}}
+          ]
+        },
+        {
+          "name": "small list includes a high degree target",
+          "params": {"object_ids": ["low", "high"]},
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n) RETURN n", "assert": {"node_id_set": ["isolated", "kind-decoy", "property-decoy", "neighbor-a", "neighbor-b", "neighbor-c"]}},
+            {"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["survivor"]}}
+          ]
+        },
+        {
+          "name": "large object ID list preserves exact targets",
+          "params": {"object_ids": {"$type": "string_list", "prefix": "missing-node", "count": 1999, "include": ["low", "high"]}},
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n) RETURN n", "assert": {"node_id_set": ["isolated", "kind-decoy", "property-decoy", "neighbor-a", "neighbor-b", "neighbor-c"]}},
+            {"cypher": "MATCH ()-[r]->() RETURN r.marker", "assert": {"scalar_values": ["survivor"]}}
+          ]
+        }
+      ]
     }
   ]
 }

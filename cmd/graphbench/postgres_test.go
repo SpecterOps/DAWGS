@@ -23,6 +23,7 @@ import (
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
+	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,13 +38,22 @@ func TestResolveCaseParams(t *testing.T) {
 		NodeListParams: map[string][]string{
 			"end_ids": {"n2", "n1"},
 		},
-	}, opengraph.IDMap{"n1": graph.ID(42), "n2": graph.ID(84)})
+		GeneratedNodeListParams: map[string]testutil.GeneratedNodeListParam{
+			"generated_ids": {Prefix: "generated", Count: 2, Include: []string{"n2"}},
+		},
+	}, opengraph.IDMap{
+		"n1":           graph.ID(42),
+		"n2":           graph.ID(84),
+		"generated-00": graph.ID(126),
+		"generated-01": graph.ID(168),
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{
-		"name":     "value",
-		"start_id": int64(42),
-		"end_ids":  []int64{84, 42},
+		"name":          "value",
+		"start_id":      int64(42),
+		"end_ids":       []int64{84, 42},
+		"generated_ids": []int64{84, 126, 168},
 	}, params)
 }
 
