@@ -101,6 +101,16 @@ func translationTestKinds() graph.Kinds {
 		"RegressionKind48",
 		"RegressionKind49",
 		"RegressionKind50",
+		"RegressionKind51",
+		"RegressionKind52",
+		"RegressionKind53",
+		"RegressionKind54",
+		"RegressionKind55",
+		"RegressionKind56",
+		"RegressionKind57",
+		"RegressionKind58",
+		"RegressionKind59",
+		"RegressionKind60",
 	})...)
 }
 

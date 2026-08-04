@@ -92,6 +92,8 @@ func generatedDataset(name string) *opengraph.Graph {
 		return testutil.NewReconciliationScaleFixture(128)
 	case testutil.TrustPruningScaleDataset:
 		return testutil.NewTrustPruningScaleFixture(128)
+	case testutil.HopScaleDataset:
+		return testutil.NewHopScaleFixture(128)
 	default:
 		return nil
 	}

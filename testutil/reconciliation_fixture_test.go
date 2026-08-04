@@ -57,3 +57,17 @@ func TestNewTrustPruningScaleFixtureIncludesDenseAndDecoyShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("PruneBatch"))
 	require.Contains(t, edgeKinds, graph.StringKind("MetaIncludes"))
 }
+
+func TestNewHopScaleFixtureIncludesDenseAndLargeListShapes(t *testing.T) {
+	fixture := NewHopScaleFixture(32)
+	nodeKinds, edgeKinds := fixture.Kinds()
+
+	require.Len(t, fixture.Nodes, 1_132)
+	require.Len(t, fixture.Edges, 1_220)
+	require.Contains(t, nodeKinds, graph.StringKind("HopTemplate"))
+	require.Contains(t, nodeKinds, graph.StringKind("HopIDEndpoint"))
+	for idx := 1; idx <= 30; idx++ {
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("HopKind%02d", idx)))
+	}
+	require.Contains(t, edgeKinds, graph.StringKind("HopSetEdge"))
+}
