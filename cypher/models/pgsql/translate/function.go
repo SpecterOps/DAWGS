@@ -790,29 +790,37 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
 		} else {
-			var functionCall pgsql.FunctionCall
+			var sizeExpression pgsql.Expression
 
 			if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(argument); isPropertyLookup {
 				// Ensure that the JSONB array length function receives the JSONB type
 				propertyLookup.Operator = pgsql.OperatorJSONField
 
-				functionCall = pgsql.FunctionCall{
-					Function:   pgsql.FunctionJSONBArrayLength,
-					Parameters: []pgsql.Expression{argument},
-					CastType:   pgsql.Int,
+				sizeExpression = pgsql.Case{
+					Conditions: []pgsql.Expression{pgsql.NewBinaryExpression(
+						jsonbTypeof(argument),
+						pgsql.OperatorEquals,
+						pgsql.NewLiteral("array", pgsql.Text),
+					)},
+					Then: []pgsql.Expression{pgsql.FunctionCall{
+						Function:   pgsql.FunctionJSONBArrayLength,
+						Parameters: []pgsql.Expression{argument},
+						CastType:   pgsql.Int,
+					}},
+					Else: pgsql.NullLiteral(),
 				}
 			} else if isKnownEmptyArrayExpression(argument) {
 				s.treeTranslator.PushOperand(pgsql.NewLiteral(0, pgsql.Int))
 				return
 			} else {
-				functionCall = pgsql.FunctionCall{
+				sizeExpression = pgsql.FunctionCall{
 					Function:   pgsql.FunctionCardinality,
 					Parameters: []pgsql.Expression{argument},
 					CastType:   pgsql.Int,
 				}
 			}
 
-			s.treeTranslator.PushOperand(functionCall)
+			s.treeTranslator.PushOperand(sizeExpression)
 		}
 
 	case cypher.HeadFunction:

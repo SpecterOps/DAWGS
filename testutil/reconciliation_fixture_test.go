@@ -21,15 +21,28 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
 	"github.com/stretchr/testify/require"
 )
+
+func requireUniqueScaleEdgeKeys(t *testing.T, fixture *opengraph.Graph) {
+	t.Helper()
+
+	keys := map[string]struct{}{}
+	for _, edge := range fixture.Edges {
+		key := edge.StartID + "\x00" + edge.EndID + "\x00" + edge.Kind
+		require.NotContains(t, keys, key, "duplicate PostgreSQL edge key %s -> %s [%s]", edge.StartID, edge.EndID, edge.Kind)
+		keys[key] = struct{}{}
+	}
+}
 
 func TestNewReconciliationScaleFixture(t *testing.T) {
 	fixture := NewReconciliationScaleFixture(8)
 	nodeKinds, edgeKinds := fixture.Kinds()
 
-	require.Len(t, fixture.Nodes, 2_017)
+	require.Len(t, fixture.Nodes, 2_019)
 	require.Len(t, fixture.Edges, 46)
+	requireUniqueScaleEdgeKeys(t, fixture)
 	require.Contains(t, nodeKinds, graph.StringKind("ADEntity"))
 	for idx := 1; idx <= 30; idx++ {
 		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("RecKind%02d", idx)))
@@ -42,12 +55,47 @@ func TestFixtureNamesAreDeterministic(t *testing.T) {
 	require.Empty(t, FixtureNames("item", -1))
 }
 
+func TestNewDirectWriteScaleFixtureUsesExactBoundaryAndCascadeShape(t *testing.T) {
+	empty := NewDirectWriteScaleFixture(0)
+	require.Len(t, empty.Nodes, 2)
+	require.Len(t, empty.Edges, 2)
+
+	fixture := NewDirectWriteScaleFixture(3)
+	require.Len(t, fixture.Nodes, 5)
+	require.Len(t, fixture.Edges, 12)
+
+	var (
+		deleteEdges   int
+		updateEdges   int
+		incidentEdges int
+	)
+	for _, edge := range fixture.Edges {
+		switch edge.Kind {
+		case "WriteDeleteRelationship":
+			deleteEdges++
+		case "WriteUpdateRelationship":
+			updateEdges++
+		case "WriteIncident":
+			incidentEdges++
+		}
+	}
+	require.Equal(t, 4, deleteEdges)
+	require.Equal(t, 3, updateEdges)
+	require.Equal(t, 4, incidentEdges)
+
+	require.Equal(t, "write-target-00", fixture.Nodes[2].ID)
+	require.Equal(t, "write-target-02", fixture.Nodes[4].ID)
+	require.Equal(t, "write-root", fixture.Edges[2].StartID)
+	require.Equal(t, "write-target-01", fixture.Edges[4].StartID)
+}
+
 func TestNewTrustPruningScaleFixtureIncludesDenseAndDecoyShapes(t *testing.T) {
 	fixture := NewTrustPruningScaleFixture(8)
 	nodeKinds, edgeKinds := fixture.Kinds()
 
-	require.Len(t, fixture.Nodes, 56)
+	require.Len(t, fixture.Nodes, 112)
 	require.Len(t, fixture.Edges, 83)
+	requireUniqueScaleEdgeKeys(t, fixture)
 	require.Contains(t, nodeKinds, graph.StringKind("Domain"))
 	require.Contains(t, nodeKinds, graph.StringKind("PruneCandidate"))
 	require.Contains(t, nodeKinds, graph.StringKind("PruneBatchNode"))

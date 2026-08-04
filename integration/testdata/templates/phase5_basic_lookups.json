@@ -14,7 +14,7 @@
           {"id": "computer-hit-a", "kinds": ["Computer"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-100", "enabled": true}},
           {"id": "computer-hit-b", "kinds": ["Computer", "Entity"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-100", "enabled": true}},
           {"id": "computer-disabled", "kinds": ["Computer"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-101", "enabled": false}},
-          {"id": "objectid-untyped", "kinds": ["Other"], "properties": {"name": "untyped", "objectid": "S-1-5-21-100", "enabled": true}},
+          {"id": "objectid-untyped", "kinds": ["Other"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-100", "enabled": true}},
           {"id": "ura-true", "kinds": ["Computer"], "properties": {"name": "ura-true", "hasura": true}},
           {"id": "ura-false", "kinds": ["Computer"], "properties": {"name": "ura-false", "hasura": false}},
           {"id": "ura-null", "kinds": ["Computer"], "properties": {"name": "ura-null", "hasura": null}},

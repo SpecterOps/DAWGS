@@ -56,6 +56,92 @@ func FixtureNames(prefix string, count int) []string {
 	return values
 }
 
+// NewDirectWriteScaleFixture returns a deterministic graph for direct batch
+// mutation tests. The requested number of target nodes is used exactly so that
+// callers can exercise batch-flush boundaries without fixture rounding.
+//
+// Every target has one deletable relationship and one relationship-upsert
+// baseline. Deletion directions alternate, while the first two targets (when
+// present) provide self-connected and high-degree cascade shapes. Separate
+// root-to-survivor relationships are never incident to a target, including a
+// same-kind survivor for exact delete-set assertions.
+func NewDirectWriteScaleFixture(targets int) *opengraph.Graph {
+	if targets < 0 {
+		targets = 0
+	}
+
+	fixture := &opengraph.Graph{
+		Nodes: []opengraph.Node{
+			{ID: "write-root", Kinds: []string{"WriteEndpoint"}, Properties: map[string]any{"objectid": "write-root", "role": "root"}},
+			{ID: "write-survivor", Kinds: []string{"WriteEndpoint"}, Properties: map[string]any{"objectid": "write-survivor", "role": "survivor"}},
+		},
+		Edges: []opengraph.Edge{
+			{StartID: "write-root", EndID: "write-survivor", Kind: "WriteSurvivor", Properties: map[string]any{"marker": "survivor"}},
+			{StartID: "write-root", EndID: "write-survivor", Kind: "WriteDeleteRelationship", Properties: map[string]any{"deletebatch": false, "marker": "same-kind-survivor"}},
+		},
+	}
+
+	targetIDs := FixtureNames("write-target", targets)
+	for idx, targetID := range targetIDs {
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+			ID:    targetID,
+			Kinds: []string{"WriteDeleteNode", "WriteUpdateNode"},
+			Properties: map[string]any{
+				"objectid":    targetID,
+				"deletebatch": true,
+				"lastseen":    "2026-01-01T00:00:00Z",
+				"ordinal":     idx,
+			},
+		})
+
+		startID, endID := "write-root", targetID
+		if idx%2 == 1 {
+			startID, endID = targetID, "write-root"
+		}
+		fixture.Edges = append(fixture.Edges,
+			opengraph.Edge{
+				StartID: startID,
+				EndID:   endID,
+				Kind:    "WriteDeleteRelationship",
+				Properties: map[string]any{
+					"deletebatch": true,
+					"marker":      targetID,
+				},
+			},
+			opengraph.Edge{
+				StartID: "write-root",
+				EndID:   targetID,
+				Kind:    "WriteUpdateRelationship",
+				Properties: map[string]any{
+					"lastseen": "2026-01-01T00:00:00Z",
+					"marker":   targetID,
+				},
+			},
+		)
+	}
+
+	if targets > 0 {
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{
+			StartID:    targetIDs[0],
+			EndID:      targetIDs[0],
+			Kind:       "WriteIncident",
+			Properties: map[string]any{"marker": "self"},
+		})
+	}
+	if targets > 1 {
+		for idx, targetID := range targetIDs {
+			fixture.Edges = append(fixture.Edges, opengraph.Edge{
+				StartID:    targetIDs[1],
+				EndID:      targetID,
+				Kind:       "WriteIncident",
+				Properties: map[string]any{"marker": fmt.Sprintf("high-%04d", idx)},
+			})
+		}
+	}
+
+	return fixture
+}
+
 // NewReconciliationScaleFixture returns the deterministic graphbench fixture
 // for the ingestion reconciliation forms. fanout controls the degree of the
 // REC-08 detach-delete target.
@@ -67,12 +153,14 @@ func NewReconciliationScaleFixture(fanout int) *opengraph.Graph {
 	fixture := &opengraph.Graph{
 		Nodes: []opengraph.Node{
 			{ID: "source", Kinds: []string{"Source"}, Properties: map[string]any{"objectid": "source"}},
+			{ID: "list-source-duplicate", Kinds: []string{"Source"}, Properties: map[string]any{"objectid": "list-source-duplicate"}},
 			{ID: "sink", Kinds: []string{"Destination"}, Properties: map[string]any{"objectid": "sink"}},
 			{ID: "inbound-target", Kinds: []string{"ADEntity", "Group"}, Properties: map[string]any{"objectid": "rec-in"}},
 			{ID: "outbound-target", Kinds: []string{"ADEntity", "Computer"}, Properties: map[string]any{"objectid": "rec-out"}},
 			{ID: "list-target", Kinds: []string{"ADEntity", "User"}, Properties: map[string]any{"objectid": "rec-list"}},
 			{ID: "template", Kinds: []string{"CertTemplate"}, Properties: map[string]any{"objectid": "template"}},
 			{ID: "agent", Kinds: []string{"ADEntity", "User"}, Properties: map[string]any{"objectid": "agent"}},
+			{ID: "agent-duplicate", Kinds: []string{"ADEntity", "User"}, Properties: map[string]any{"objectid": "agent-duplicate"}},
 			{ID: "delete-target", Kinds: []string{"ADEntity", "Group"}, Properties: map[string]any{"objectid": "delete-target"}},
 			{ID: "survivor", Kinds: []string{"ADEntity", "User"}, Properties: map[string]any{"objectid": "survivor"}},
 		},
@@ -82,9 +170,9 @@ func NewReconciliationScaleFixture(fanout int) *opengraph.Graph {
 			{StartID: "outbound-target", EndID: "sink", Kind: "RecKind01", Properties: map[string]any{"marker": "rec-02-a"}},
 			{StartID: "outbound-target", EndID: "sink", Kind: "RecKind30", Properties: map[string]any{"marker": "rec-02-b"}},
 			{StartID: "source", EndID: "list-target", Kind: "ADReconcile", Properties: map[string]any{"marker": "rec-04-a"}},
-			{StartID: "source", EndID: "list-target", Kind: "ADReconcile", Properties: map[string]any{"marker": "rec-04-b"}},
+			{StartID: "list-source-duplicate", EndID: "list-target", Kind: "ADReconcile", Properties: map[string]any{"marker": "rec-04-b"}},
 			{StartID: "agent", EndID: "template", Kind: "DelegatedEnrollmentAgent", Properties: map[string]any{"marker": "rec-06-a"}},
-			{StartID: "agent", EndID: "template", Kind: "DelegatedEnrollmentAgent", Properties: map[string]any{"marker": "rec-06-b"}},
+			{StartID: "agent-duplicate", EndID: "template", Kind: "DelegatedEnrollmentAgent", Properties: map[string]any{"marker": "rec-06-b"}},
 			{StartID: "source", EndID: "survivor", Kind: "Survivor", Properties: map[string]any{"marker": "survivor"}},
 		},
 	}
@@ -179,29 +267,43 @@ func NewTrustPruningScaleFixture(fanout int) *opengraph.Graph {
 
 	for idx := range fanout {
 		suffix := fmt.Sprintf("%04d", idx)
+		trustEarlyID := "trust-early-" + suffix
 		oldNodeID := "prune-old-" + suffix
 		newNodeID := "prune-new-" + suffix
 		orphanNodeID := "orphan-scale-" + suffix
 		batchNodeID := "prune-batch-" + suffix
 		neighborID := "prune-neighbor-" + suffix
+		candidateOldTargetID := "candidate-old-target-" + suffix
+		candidateNewTargetID := "candidate-new-target-" + suffix
+		sessionMissingTargetID := "session-missing-target-" + suffix
+		sessionOldTargetID := "session-old-target-" + suffix
+		sessionEqualTargetID := "session-equal-target-" + suffix
+		batchEdgeTargetID := "prune-batch-edge-target-" + suffix
 
 		fixture.Nodes = append(fixture.Nodes,
+			opengraph.Node{ID: trustEarlyID, Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": "2026-01-02T00:00:00Z"}},
 			opengraph.Node{ID: oldNodeID, Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": oldNodeID, "lastseen": "2026-01-02T00:00:00Z"}},
 			opengraph.Node{ID: newNodeID, Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"name": newNodeID, "lastseen": "2026-01-04T00:00:00Z"}},
 			opengraph.Node{ID: orphanNodeID, Kinds: []string{"PruneCandidate"}, Properties: map[string]any{"objectid": "S-1-5-" + suffix}},
 			opengraph.Node{ID: batchNodeID, Kinds: []string{"PruneBatchNode"}, Properties: map[string]any{"remove": idx%2 == 0}},
 			opengraph.Node{ID: neighborID, Kinds: []string{"PruneNeighbor"}, Properties: map[string]any{"name": neighborID}},
+			opengraph.Node{ID: candidateOldTargetID, Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": candidateOldTargetID}},
+			opengraph.Node{ID: candidateNewTargetID, Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": candidateNewTargetID}},
+			opengraph.Node{ID: sessionMissingTargetID, Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": sessionMissingTargetID}},
+			opengraph.Node{ID: sessionOldTargetID, Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": sessionOldTargetID}},
+			opengraph.Node{ID: sessionEqualTargetID, Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": sessionEqualTargetID}},
+			opengraph.Node{ID: batchEdgeTargetID, Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": batchEdgeTargetID}},
 		)
 
 		fixture.Edges = append(fixture.Edges,
-			opengraph.Edge{StartID: "trust-late-a", EndID: "trust-early", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "same-old-" + suffix}},
-			opengraph.Edge{StartID: "trust-late-a", EndID: "trust-early", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-old-" + suffix}},
-			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "candidate-old-" + suffix}},
-			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": "2026-01-04T00:00:00Z", "marker": "candidate-new-" + suffix}},
-			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "HasSession", Properties: map[string]any{"marker": "session-missing-" + suffix}},
-			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "HasSession", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old-" + suffix}},
-			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "HasSession", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "session-equal-" + suffix}},
-			opengraph.Edge{StartID: "prune-a", EndID: "prune-b", Kind: "PruneBatch", Properties: map[string]any{"remove": true, "marker": "batch-" + suffix}},
+			opengraph.Edge{StartID: "trust-late-a", EndID: trustEarlyID, Kind: "SameForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "same-old-" + suffix}},
+			opengraph.Edge{StartID: "trust-late-a", EndID: trustEarlyID, Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "cross-old-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: candidateOldTargetID, Kind: "CandidateRel", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "candidate-old-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: candidateNewTargetID, Kind: "CandidateRel", Properties: map[string]any{"lastseen": "2026-01-04T00:00:00Z", "marker": "candidate-new-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: sessionMissingTargetID, Kind: "HasSession", Properties: map[string]any{"marker": "session-missing-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: sessionOldTargetID, Kind: "HasSession", Properties: map[string]any{"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: sessionEqualTargetID, Kind: "HasSession", Properties: map[string]any{"lastseen": "2026-01-03T00:00:00Z", "marker": "session-equal-" + suffix}},
+			opengraph.Edge{StartID: "prune-a", EndID: batchEdgeTargetID, Kind: "PruneBatch", Properties: map[string]any{"remove": true, "marker": "batch-" + suffix}},
 			opengraph.Edge{StartID: "prune-batch-high", EndID: neighborID, Kind: "PruneIncident", Properties: map[string]any{"marker": "incident-" + suffix}},
 		)
 	}

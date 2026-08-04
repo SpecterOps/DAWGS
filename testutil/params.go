@@ -56,12 +56,12 @@ func (s *Params) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 
-	*s = converted
+	*s = Params(converted)
 	return nil
 }
 
-func convertMap(values map[string]any) (Params, error) {
-	converted := make(Params, len(values))
+func convertMap(values map[string]any) (map[string]any, error) {
+	converted := make(map[string]any, len(values))
 	for key, value := range values {
 		typedValue, err := convertValue(value)
 		if err != nil {

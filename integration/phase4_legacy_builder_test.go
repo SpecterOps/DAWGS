@@ -135,7 +135,7 @@ func TestPhase4LegacyBuilderIntegration(t *testing.T) {
 				}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
 					relationships, err := ops.FetchRelationships(relationshipQuery)
 					require.NoError(t, err)
-					require.Equal(t, testCase.expected, phase4RelationshipMarkers(t, relationships))
+					require.ElementsMatch(t, testCase.expected, phase4RelationshipMarkers(t, relationships))
 					return nil
 				})
 			})

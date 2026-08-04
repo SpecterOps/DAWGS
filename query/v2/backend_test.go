@@ -205,7 +205,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 				"n0.id = @pi0::int8",
 				"e0.kind_id = any (array [1]::int2[])",
 				"depth < 2",
-				"select (s0.n0).id, (s0.n1).id from s0",
+				"select (s0.n0).id as \"id(s)\", (s0.n1).id as \"id(e)\" from s0",
 			},
 		},
 	}
@@ -246,7 +246,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Node().ID(),
 				v2.Node().Kinds(),
 			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and cypher_contains((n0.properties ->> 'name'), (@pi0::text)::text)::bool)) select (s0.n0).id, (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] from s0;",
+			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and cypher_contains((n0.properties ->> 'name'), (@pi0::text)::text)::bool)) select (s0.n0).id as \"id(n)\", (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] as \"labels(n)\" from s0;",
 			expectedParams: map[string]any{"pi0": "admin"},
 		},
 		"relationship read": {
@@ -258,7 +258,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Relationship().ID(),
 				v2.End().ID(),
 			),
-			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select (s0.n0).id, (s0.e0).id, (s0.n1).id from s0;",
+			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select (s0.n0).id as \"id(s)\", (s0.e0).id as \"id(r)\", (s0.n1).id as \"id(e)\" from s0;",
 			expectedParams: map[string]any{"pi0": 1},
 		},
 		"update node": {

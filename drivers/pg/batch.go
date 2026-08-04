@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
 
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v5"
@@ -718,17 +717,21 @@ func (s *relationshipCreateBatch) EncodeProperties(edgePropertiesBatch []*graph.
 }
 
 type relationshipCreateBatchBuilder struct {
-	keyToEdgeID             map[string]uint64
+	keyToPropertiesIndex    map[relationshipCreateKey]int
 	relationshipUpdateBatch *relationshipCreateBatch
-	edgePropertiesIndex     map[uint64]int
 	edgePropertiesBatch     []*graph.Properties
+}
+
+type relationshipCreateKey struct {
+	startID graph.ID
+	endID   graph.ID
+	kind    string
 }
 
 func newRelationshipCreateBatchBuilder(size int) *relationshipCreateBatchBuilder {
 	return &relationshipCreateBatchBuilder{
-		keyToEdgeID:             map[string]uint64{},
+		keyToPropertiesIndex:    map[relationshipCreateKey]int{},
 		relationshipUpdateBatch: newRelationshipCreateBatch(size),
-		edgePropertiesIndex:     map[uint64]int{},
 	}
 }
 
@@ -737,20 +740,17 @@ func (s *relationshipCreateBatchBuilder) Build() (*relationshipCreateBatch, erro
 }
 
 func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper KindMapper, edge *graph.Relationship) error {
-	keyBuilder := strings.Builder{}
+	key := relationshipCreateKey{
+		startID: edge.StartID,
+		endID:   edge.EndID,
+		kind:    edge.Kind.String(),
+	}
 
-	keyBuilder.WriteString(edge.StartID.String())
-	keyBuilder.WriteString(edge.EndID.String())
-	keyBuilder.WriteString(edge.Kind.String())
-
-	key := keyBuilder.String()
-
-	if existingPropertiesIdx, hasExisting := s.keyToEdgeID[key]; hasExisting {
+	if existingPropertiesIdx, hasExisting := s.keyToPropertiesIndex[key]; hasExisting {
 		s.edgePropertiesBatch[existingPropertiesIdx].Merge(edge.Properties)
 	} else {
 		var (
 			startID        = edge.StartID.Uint64()
-			edgeID         = edge.ID.Uint64()
 			endID          = edge.EndID.Uint64()
 			edgeProperties = edge.Properties.Clone()
 		)
@@ -761,10 +761,8 @@ func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper Kin
 			s.relationshipUpdateBatch.Add(startID, endID, edgeKindID)
 		}
 
-		s.keyToEdgeID[key] = edgeID
-
+		s.keyToPropertiesIndex[key] = len(s.edgePropertiesBatch)
 		s.edgePropertiesBatch = append(s.edgePropertiesBatch, edgeProperties)
-		s.edgePropertiesIndex[edgeID] = len(s.edgePropertiesBatch) - 1
 	}
 
 	return nil
@@ -784,7 +782,7 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 	} else if graphTarget, err := s.innerTransaction.getTargetGraph(); err != nil {
 		return err
 	} else if _, err := s.innerTransaction.conn.Exec(s.ctx, createEdgeBatchStatement, graphTarget.ID, createBatch.startIDs, createBatch.endIDs, createBatch.edgeKindIDs, createBatch.edgePropertyBags); err != nil {
-		slog.Info(fmt.Sprintf("Num merged property bags: %d - Num edge keys: %d - StartID batch size: %d", len(batchBuilder.edgePropertiesIndex), len(batchBuilder.keyToEdgeID), len(batchBuilder.relationshipUpdateBatch.startIDs)))
+		slog.Info(fmt.Sprintf("Num property bags: %d - Num edge keys: %d - StartID batch size: %d", len(batchBuilder.edgePropertiesBatch), len(batchBuilder.keyToPropertiesIndex), len(batchBuilder.relationshipUpdateBatch.startIDs)))
 		return err
 	}
 
