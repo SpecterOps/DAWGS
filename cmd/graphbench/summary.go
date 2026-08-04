@@ -215,7 +215,7 @@ func writeJSONSummaryFile(path string, summary Summary) error {
 func writeMarkdownSummary(w io.Writer, summary Summary) error {
 	fmt.Fprintf(w, "# GraphBench Summary\n\n")
 	fmt.Fprintf(w, "Generated: %s\n\n", summary.GeneratedAt.Format(time.RFC3339))
-	fmt.Fprintf(w, "Sources: BHE `%s`, BHCE `%s`, DAWGS `%s`\n\n", summary.Metadata.BHECommit, summary.Metadata.BHCECommit, summary.Metadata.DAWGSVersion)
+	fmt.Fprintf(w, "DAWGS version: `%s`\n\n", summary.Metadata.DAWGSVersion)
 
 	fmt.Fprintf(w, "## Modes\n\n")
 	fmt.Fprintf(w, "| Mode | Total | OK | Row Mismatch | Error | Not Implemented |\n")

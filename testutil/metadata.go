@@ -18,31 +18,16 @@ package testutil
 
 import "runtime/debug"
 
-const (
-	DefaultBHECommit  = "c9f61530f45b"
-	DefaultBHCECommit = "74dd3daa58a8"
-)
-
 type BaselineMetadata struct {
-	BHECommit    string `json:"bhe_commit"`
-	BHCECommit   string `json:"bhce_commit"`
 	DAWGSVersion string `json:"dawgs_version"`
 }
 
-func ResolveBaselineMetadata(bheCommit, bhceCommit, dawgsVersion string) BaselineMetadata {
-	if bheCommit == "" {
-		bheCommit = DefaultBHECommit
-	}
-	if bhceCommit == "" {
-		bhceCommit = DefaultBHCECommit
-	}
+func ResolveBaselineMetadata(dawgsVersion string) BaselineMetadata {
 	if dawgsVersion == "" {
 		dawgsVersion = currentDAWGSVersion()
 	}
 
 	return BaselineMetadata{
-		BHECommit:    bheCommit,
-		BHCECommit:   bhceCommit,
 		DAWGSVersion: dawgsVersion,
 	}
 }

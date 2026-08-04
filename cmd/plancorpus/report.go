@@ -279,12 +279,7 @@ func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
 	if err := writeln("# Cypher Plan Corpus Summary"); err != nil {
 		return err
 	}
-	if err := writef(
-		"\nSources: BHE `%s`, BHCE `%s`, DAWGS `%s`\n",
-		summary.Metadata.BHECommit,
-		summary.Metadata.BHCECommit,
-		summary.Metadata.DAWGSVersion,
-	); err != nil {
+	if err := writef("\nDAWGS version: `%s`\n", summary.Metadata.DAWGSVersion); err != nil {
 		return err
 	}
 	if err := writeln("\n## Drivers\n\n| Driver | Records | Errors |\n| --- | ---: | ---: |"); err != nil {
