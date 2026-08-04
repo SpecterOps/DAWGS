@@ -71,3 +71,19 @@ func TestNewHopScaleFixtureIncludesDenseAndLargeListShapes(t *testing.T) {
 	}
 	require.Contains(t, edgeKinds, graph.StringKind("HopSetEdge"))
 }
+
+func TestNewScanLookupScaleFixtureIncludesWideAndLargeListShapes(t *testing.T) {
+	fixture := NewScanLookupScaleFixture(32)
+	nodeKinds, edgeKinds := fixture.Kinds()
+
+	require.Len(t, fixture.Nodes, 3_198)
+	require.Len(t, fixture.Edges, 1_352)
+	require.Contains(t, nodeKinds, graph.StringKind("ADBase"))
+	require.Contains(t, nodeKinds, graph.StringKind("AZRole"))
+	require.Contains(t, nodeKinds, graph.StringKind("Hydrate"))
+	require.Contains(t, edgeKinds, graph.StringKind("ScanPostProcessed"))
+	require.Contains(t, edgeKinds, graph.StringKind("Contains"))
+	for idx := 1; idx <= 9; idx++ {
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("ADCSEdge%02d", idx)))
+	}
+}

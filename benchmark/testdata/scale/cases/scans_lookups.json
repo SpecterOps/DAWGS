@@ -1,0 +1,203 @@
+{
+  "cases": [
+    {
+      "name": "SCAN-01_dense_base_endpoint_relationship_ID_scan",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s)-[r:ScanPostProcessed]->(e) WHERE s:ADBase AND e:AZBase RETURN id(r)",
+      "expected": {"row_count": 128, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"root_predicate": "start_base_kind", "terminal_predicate": "end_base_kind", "edge_kinds": ["ScanPostProcessed"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-01", "dense", "relationship-id"]
+    },
+    {
+      "name": "SCAN-02_dense_non_Meta_relationship_hydration",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s)-[r:TrackerA|TrackerB]->(e) WHERE NOT (s:Meta OR s:MetaDetail) AND NOT (e:Meta OR e:MetaDetail) RETURN r",
+      "expected": {"row_count": 256},
+      "observes": {"paths": false, "nodes": false, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "excluded_start_kinds", "terminal_predicate": "excluded_end_kinds", "edge_kinds": ["TrackerA", "TrackerB"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-02", "dense", "full-relationship"]
+    },
+    {
+      "name": "SCAN-03_present_lastseen_selectivity",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s)-[r:MigratedEdge]->(e) WHERE NOT (s:Meta OR s:MetaDetail) AND r.lastseen IS NOT NULL AND NOT (e:Meta OR e:MetaDetail) RETURN id(r)",
+      "expected": {"row_count": 64, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "excluded_start_kinds", "terminal_predicate": "relationship_property_presence", "edge_kinds": ["MigratedEdge"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-03", "null-missing", "selective-property"]
+    },
+    {
+      "name": "SCAN-04_dense_raw_ownership_hydration",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s:Entity)-[r:OwnsRaw]->() RETURN r",
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": false, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "start_entity_kind", "edge_kinds": ["OwnsRaw"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-04", "dense", "full-relationship"]
+    },
+    {
+      "name": "SCAN-05_nine_kind_bound_end_inbound_scan",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s:Entity)-[r:ADCSEdge01|ADCSEdge02|ADCSEdge03|ADCSEdge04|ADCSEdge05|ADCSEdge06|ADCSEdge07|ADCSEdge08|ADCSEdge09]->(e) WHERE id(e) = $target RETURN r, s",
+      "node_params": {"target": "scan-adcs-target"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "start_entity_kind", "terminal_predicate": "bound_end_id", "edge_kinds": ["ADCSEdge01", "ADCSEdge02", "ADCSEdge03", "ADCSEdge04", "ADCSEdge05", "ADCSEdge06", "ADCSEdge07", "ADCSEdge08", "ADCSEdge09"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-05", "nine-kinds", "dense-inbound", "full-direction"]
+    },
+    {
+      "name": "SCAN-07_dense_directed_ID_pairs",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s)-[r:MemberOf|MemberOfLocalGroup]->(e) RETURN id(s), id(e)",
+      "expected": {"row_count": 256, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"edge_kinds": ["MemberOf", "MemberOfLocalGroup"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-07", "dense", "directed-pairs", "duplicate-endpoints"]
+    },
+    {
+      "name": "SCAN-08_thousand_victim_IDs_scenario_A",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s)-[r:GenericAll|GenericWrite|Owns|WriteOwner|WriteDACL|WritePublicInformation]->(e) WHERE (s:Group OR s:User OR s:Computer) AND id(e) IN $victims RETURN id(s)",
+      "generated_node_list_params": {"victims": {"prefix": "scan-victim", "count": 1000}},
+      "expected": {"row_count": 128, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"root_predicate": "three_start_kinds", "terminal_predicate": "large_end_id_list", "edge_kinds": ["GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL", "WritePublicInformation"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-08", "1000-list", "scenario-a", "dense"]
+    },
+    {
+      "name": "SCAN-08_thousand_victim_IDs_scenario_B",
+      "dataset": "generated_scan_lookups",
+      "category": "relationship_scans",
+      "cypher": "MATCH (s)-[r:GenericAll|GenericWrite|Owns|WriteOwner|WriteDACL]->(e:Computer) WHERE (s:Group OR s:User OR s:Computer) AND id(e) IN $victims RETURN id(s)",
+      "generated_node_list_params": {"victims": {"prefix": "scan-victim", "count": 1000}},
+      "expected": {"row_count": 64, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"root_predicate": "three_start_kinds", "terminal_predicate": "typed_large_end_id_list", "edge_kinds": ["GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["SCAN-08", "1000-list", "scenario-b", "selective-end-kind"]
+    },
+    {
+      "name": "LOOKUP-02_repeated_exact_objectid_lookup",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (n:Computer) WHERE n.objectid = $objectid RETURN id(n)",
+      "params": {"objectid": "S-1-5-21-scale"},
+      "expected": {"row_count": 128, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "exact_objectid", "terminal_predicate": "node_kind", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-02", "exact-property", "multiple-hit"]
+    },
+    {
+      "name": "LOOKUP-04_suffix_kind_and_domain_filter",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (n:Group) WHERE n.objectid ENDS WITH $suffix AND n.domainsid = $domain RETURN id(n)",
+      "params": {"suffix": "-512", "domain": "S-1-5-21"},
+      "expected": {"row_count": 64, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "suffix_and_equality", "terminal_predicate": "node_kind", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-04", "suffix", "selectivity"]
+    },
+    {
+      "name": "LOOKUP-05_repeated_case_insensitive_prefix",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (n:Group) WHERE toLower(n.name) STARTS WITH $prefix RETURN id(n)",
+      "params": {"prefix": "remote desktop users"},
+      "expected": {"row_count": 128, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "case_insensitive_prefix", "terminal_predicate": "node_kind", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-05", "case-insensitive", "repeated"]
+    },
+    {
+      "name": "LOOKUP-09_thousand_ID_full_node_hydration",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (n) WHERE id(n) IN $ids RETURN n",
+      "generated_node_list_params": {"ids": {"prefix": "lookup-id-target", "count": 1000}},
+      "expected": {"row_count": 1000},
+      "observes": {"paths": false, "nodes": true, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "large_node_id_list", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-09", "1000-list", "dense", "full-node"]
+    },
+    {
+      "name": "LOOKUP-11_tenant_adjacency_thousand_property_list",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (s)-[:Contains]->(e:AZRole) WHERE id(s) = $tenant AND e.roletemplateid IN $roles RETURN e",
+      "node_params": {"tenant": "lookup-tenant"},
+      "params": {"roles": {"$type": "string_list", "prefix": "role-template", "count": 1000}},
+      "expected": {"row_count": 1000},
+      "observes": {"paths": false, "nodes": true, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "bound_tenant", "terminal_predicate": "large_endpoint_property_list", "edge_kinds": ["Contains"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-11", "1000-list", "tenant-adjacency", "full-node"]
+    },
+    {
+      "name": "LOOKUP-13_dense_suffix_bound_endpoint",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (s)-[:LocalToComputer]->(e) WHERE s.objectid ENDS WITH $suffix AND id(e) = $target RETURN s",
+      "params": {"suffix": "-555"},
+      "node_params": {"target": "lookup-local-target"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "start_property_suffix", "terminal_predicate": "bound_end_id", "edge_kinds": ["LocalToComputer"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-13", "dense-inbound", "suffix", "bound-end"]
+    },
+    {
+      "name": "LOOKUP-15_all_node_count",
+      "dataset": "generated_scan_lookups",
+      "category": "counts",
+      "cypher": "MATCH (n) RETURN count(n)",
+      "expected": {"row_count": 1, "scalar_int": 3774, "result_kind": "scalar"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-15", "count", "dense-graph"]
+    },
+    {
+      "name": "LOOKUP-15_all_relationship_count",
+      "dataset": "generated_scan_lookups",
+      "category": "counts",
+      "cypher": "MATCH ()-[r]->() RETURN count(r)",
+      "expected": {"row_count": 1, "scalar_int": 2408, "result_kind": "scalar"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-15", "count", "dense-graph"]
+    },
+    {
+      "name": "LOOKUP-16_typed_four_property_NTLM_filter",
+      "dataset": "generated_scan_lookups",
+      "category": "lookups",
+      "cypher": "MATCH (n:Computer) WHERE n.domainsid = $domain AND n.isdc = true AND n.ldapavailable = true AND n.ldapsigning = false RETURN id(n)",
+      "params": {"domain": "S-1-5-21"},
+      "expected": {"row_count": 128, "result_kind": "id_set"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "four_property_equalities", "terminal_predicate": "node_kind", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["LOOKUP-16", "typed", "four-properties", "dense"]
+    }
+  ]
+}
