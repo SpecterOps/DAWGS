@@ -69,6 +69,19 @@ func TestGeneratedTrustPruningDatasetRegistersProductionShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("PruneBatch"))
 }
 
+func TestGeneratedHopDatasetRegistersThirtyKindsAndEndpointSets(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.HopScaleDataset)
+	require.NoError(t, err)
+	nodeKinds, edgeKinds := doc.Graph.Kinds()
+
+	require.Contains(t, nodeKinds, graph.StringKind("HopIDEndpoint"))
+	require.Contains(t, nodeKinds, graph.StringKind("HopTemplate"))
+	for idx := 1; idx <= 30; idx++ {
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("HopKind%02d", idx)))
+	}
+	require.Contains(t, edgeKinds, graph.StringKind("HopSetEdge"))
+}
+
 func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 	zero := int64(0)
 	testCase := ScaleCase{

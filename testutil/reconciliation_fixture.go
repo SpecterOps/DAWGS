@@ -25,6 +25,7 @@ import (
 const (
 	ReconciliationScaleDataset = "generated_reconciliation"
 	TrustPruningScaleDataset   = "generated_trust_pruning"
+	HopScaleDataset            = "generated_hops"
 )
 
 // GeneratedNodeListParam resolves optional fixture IDs followed by a
@@ -210,5 +211,106 @@ func NewTrustPruningScaleFixture(fanout int) *opengraph.Graph {
 		Kind:       "PruneIncident",
 		Properties: map[string]any{"marker": "incident-self"},
 	})
+	return fixture
+}
+
+// NewHopScaleFixture returns deterministic one-hop fanout, kind-cardinality,
+// endpoint-list, predicate-selectivity, and two-sided set shapes.
+func NewHopScaleFixture(fanout int) *opengraph.Graph {
+	if fanout < 30 {
+		fanout = 128
+	}
+
+	fixture := &opengraph.Graph{
+		Nodes: []opengraph.Node{
+			{ID: "hop-out-root", Kinds: []string{"HopAnchor"}, Properties: map[string]any{"name": "hop-out-root"}},
+			{ID: "hop-in-root", Kinds: []string{"HopAnchor"}, Properties: map[string]any{"name": "hop-in-root"}},
+			{ID: "hop-kind-root", Kinds: []string{"HopAnchor"}, Properties: map[string]any{"name": "hop-kind-root"}},
+			{ID: "hop-decoy-root", Kinds: []string{"HopAnchor"}, Properties: map[string]any{"name": "hop-decoy-root"}},
+		},
+	}
+
+	for idx := range fanout {
+		suffix := fmt.Sprintf("%04d", idx)
+		peerID := "hop-peer-" + suffix
+		sourceID := "hop-source-" + suffix
+		properties := map[string]any{
+			"name":                    peerID,
+			"requiresmanagerapproval": false,
+			"authenticationenabled":   true,
+		}
+		switch idx % 4 {
+		case 0:
+			properties["schemaversion"] = 2
+			properties["authorizedsignatures"] = 0
+		case 1:
+			properties["schemaversion"] = 1
+			properties["authorizedsignatures"] = 9
+		case 2:
+			properties["schemaversion"] = 2
+			properties["authorizedsignatures"] = 1
+		case 3:
+			properties["schemaversion"] = 2
+			properties["authorizedsignatures"] = 0
+			properties["authenticationenabled"] = false
+		}
+
+		peerKinds := []string{"HopEndpoint", "HopEndA", "HopTemplate"}
+		if idx%2 == 0 {
+			peerKinds = append(peerKinds, "HopEndB")
+		}
+		fixture.Nodes = append(fixture.Nodes,
+			opengraph.Node{ID: peerID, Kinds: peerKinds, Properties: properties},
+			opengraph.Node{ID: sourceID, Kinds: []string{"HopSource"}, Properties: map[string]any{"name": sourceID}},
+		)
+		fixture.Edges = append(fixture.Edges,
+			opengraph.Edge{StartID: "hop-out-root", EndID: peerID, Kind: "HopKind01", Properties: map[string]any{"marker": "out-" + suffix}},
+			opengraph.Edge{StartID: sourceID, EndID: "hop-in-root", Kind: "HopKind01", Properties: map[string]any{"marker": "in-" + suffix}},
+			opengraph.Edge{StartID: "hop-kind-root", EndID: peerID, Kind: fmt.Sprintf("HopKind%02d", idx%30+1), Properties: map[string]any{"marker": "kind-" + suffix}},
+			opengraph.Edge{StartID: "hop-out-root", EndID: peerID, Kind: "HopTypedEdge", Properties: map[string]any{"marker": "typed-" + suffix}},
+			opengraph.Edge{StartID: "hop-out-root", EndID: peerID, Kind: "HopNestedEdge", Properties: map[string]any{"marker": "nested-" + suffix}},
+		)
+	}
+
+	for idx, targetID := range FixtureNames("hop-id-target", 1_000) {
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+			ID:         targetID,
+			Kinds:      []string{"HopIDEndpoint"},
+			Properties: map[string]any{"name": targetID},
+		})
+		if idx < fanout {
+			fixture.Edges = append(fixture.Edges, opengraph.Edge{
+				StartID:    "hop-out-root",
+				EndID:      targetID,
+				Kind:       "HopIDEdge",
+				Properties: map[string]any{"marker": fmt.Sprintf("id-%04d", idx)},
+			})
+		}
+	}
+
+	setStarts := FixtureNames("hop-set-start", 32)
+	setEnds := FixtureNames("hop-set-end", 32)
+	for _, startID := range setStarts {
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: startID, Kinds: []string{"HopSetStart"}, Properties: map[string]any{"name": startID}})
+	}
+	for _, endID := range setEnds {
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: endID, Kinds: []string{"HopSetEnd"}, Properties: map[string]any{"name": endID}})
+	}
+	for _, startID := range setStarts {
+		for _, endID := range setEnds {
+			fixture.Edges = append(fixture.Edges, opengraph.Edge{
+				StartID:    startID,
+				EndID:      endID,
+				Kind:       "HopSetEdge",
+				Properties: map[string]any{"marker": startID + "-" + endID},
+			})
+		}
+	}
+	fixture.Edges = append(fixture.Edges,
+		opengraph.Edge{StartID: "hop-decoy-root", EndID: "hop-peer-0000", Kind: "HopTypedEdge", Properties: map[string]any{"marker": "wrong-root"}},
+		opengraph.Edge{StartID: "hop-peer-0000", EndID: "hop-out-root", Kind: "HopTypedEdge", Properties: map[string]any{"marker": "wrong-direction"}},
+		opengraph.Edge{StartID: setStarts[0], EndID: setEnds[0], Kind: "HopWrongSetEdge", Properties: map[string]any{"marker": "wrong-set-kind"}},
+		opengraph.Edge{StartID: setEnds[0], EndID: setStarts[0], Kind: "HopSetEdge", Properties: map[string]any{"marker": "wrong-set-direction"}},
+	)
 	return fixture
 }

@@ -85,6 +85,19 @@ instead of being cloned under BloodHound-specific names:
 - `PHASE3-DR`: [`TestPhase3DirectBatchPruning` and
   `BenchmarkPhase3DirectBatchPruning`](integration/phase3_legacy_builder_test.go),
   including IDs absent at delete time and a mixed-direction high-degree cascade.
+- `PHASE4-QB`: [`TestQueryBuilder_Phase4StandaloneHopForms`](query/neo4j/neo4j_test.go)
+  and [`TestLegacyBuilderPostgreSQL_Phase4StandaloneHopForms`](cypher/models/pgsql/test/phase4_legacy_builder_test.go).
+- `PHASE4-PG`: the `HOP-01` through `HOP-10` PostgreSQL goldens in
+  [`stepwise_traversal.sql`](cypher/models/pgsql/test/translation_cases/stepwise_traversal.sql).
+- `PHASE4-IT`: the backend-equivalent standalone-hop families in
+  [`post_processing_hop_shapes.json`](integration/testdata/templates/post_processing_hop_shapes.json),
+  plus [`TestPhase4LegacyBuilderIntegration`](integration/phase4_legacy_builder_test.go).
+- `PHASE4-PC`: the `HOP-01` through `HOP-10` families loaded from
+  [`post_processing_hop_shapes.json`](integration/testdata/templates/post_processing_hop_shapes.json)
+  by `cmd/plancorpus`.
+- `PHASE4-SC`: the repeatable standalone-hop scenarios in
+  [`hops.json`](benchmark/testdata/scale/cases/hops.json), backed by
+  [`NewHopScaleFixture`](testutil/reconciliation_fixture.go).
 
 ## Phase 1 sentinels
 
@@ -127,16 +140,16 @@ instead of being cloned under BloodHound-specific names:
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `HOP-01` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | P (`SC-HOP`) | — |
-| `HOP-02` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | A | — |
-| `HOP-03` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | A | — |
-| `HOP-04` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | A | — |
-| `HOP-05` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | A | — |
-| `HOP-06` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | — | — | — |
-| `HOP-07` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | A | A | — |
-| `HOP-08` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | — | — | — |
-| `HOP-09` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | A | — |
-| `HOP-10` | P (`QB-PROJ`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | — | — | — |
+| `HOP-01` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-02` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-03` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-04` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-05` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-06` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | — | — | — |
+| `HOP-07` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-08` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | — | — | — |
+| `HOP-09` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | A | C (`PHASE4-SC`) | — |
+| `HOP-10` | C (`PHASE4-QB`) | — | C (`PHASE4-PG`) | C (`PHASE4-IT`) | C (`PHASE4-PC`) | — | — | — |
 
 ## Phase 5 scans and lookups
 
