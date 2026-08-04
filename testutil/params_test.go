@@ -40,3 +40,29 @@ func TestParamsRejectsUnknownTaggedType(t *testing.T) {
 	err := json.Unmarshal([]byte(`{"threshold":{"$type":"timestamp","value":"2026-01-02T03:04:05Z"}}`), &values)
 	require.ErrorContains(t, err, `unsupported tagged parameter type "timestamp"`)
 }
+
+func TestParamsDecodesDeterministicStringList(t *testing.T) {
+	var values Params
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"object_ids": {"$type": "string_list", "prefix": "missing", "count": 3, "include": ["target-a", "target-b"]}
+	}`), &values))
+
+	require.Equal(t, []string{"target-a", "target-b", "missing-00", "missing-01", "missing-02"}, values["object_ids"])
+}
+
+func TestParamsRejectsInvalidStringList(t *testing.T) {
+	testCases := []string{
+		`{"ids":{"$type":"string_list","count":1}}`,
+		`{"ids":{"$type":"string_list","prefix":"x","count":-1}}`,
+		`{"ids":{"$type":"string_list","prefix":"x","count":1.5}}`,
+		`{"ids":{"$type":"string_list","prefix":"x","count":1,"include":[1]}}`,
+		`{"ids":{"$type":"string_list","prefix":"x","count":1,"extra":true}}`,
+	}
+
+	for _, raw := range testCases {
+		t.Run(raw, func(t *testing.T) {
+			var values Params
+			require.Error(t, json.Unmarshal([]byte(raw), &values))
+		})
+	}
+}

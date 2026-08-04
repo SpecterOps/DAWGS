@@ -44,7 +44,7 @@
       "name": "JD's Create User Example",
       "type": "string_match",
       "details": {
-        "query": "merge (x:Base {objectid: '\u003cobjId\u003e'}) set x:User, x.name = 'BOB@TEST.LAB' set x += {arr: ['abc', 'def', 'ghi']} return x",
+        "query": "merge (x:Base {objectid: '<objId>'}) set x:User, x.name = 'BOB@TEST.LAB' set x += {arr: ['abc', 'def', 'ghi']} return x",
         "fitness": 6
       }
     },
@@ -52,7 +52,7 @@
       "name": "JD's Create Edges Example",
       "type": "string_match",
       "details": {
-        "query": "match (x) match (y) merge (x)-[:Edge]-\u003e(y)",
+        "query": "match (x) match (y) merge (x)-[:Edge]->(y)",
         "fitness": 1
       }
     },
@@ -100,7 +100,7 @@
       "name": "Create relationship",
       "type": "string_match",
       "details": {
-        "query": "create p = (:Label {p: '1234'})-[:Link {r: 1234}]-\u003e(b {p: '4321'}) return p",
+        "query": "create p = (:Label {p: '1234'})-[:Link {r: 1234}]->(b {p: '4321'}) return p",
         "fitness": 12
       }
     },
@@ -108,7 +108,7 @@
       "name": "Create relationship with decimal properties parameter",
       "type": "string_match",
       "details": {
-        "query": "create p = (:Label {p: '1234'})-[:Link $1]-\u003e(b {p: '4321'}) return p",
+        "query": "create p = (:Label {p: '1234'})-[:Link $1]->(b {p: '4321'}) return p",
         "fitness": 9
       }
     },
@@ -116,7 +116,7 @@
       "name": "Create relationship with named properties parameter",
       "type": "string_match",
       "details": {
-        "query": "create p = (:Label {p: '1234'})-[:Link $named]-\u003e(b {p: '4321'}) return p",
+        "query": "create p = (:Label {p: '1234'})-[:Link $named]->(b {p: '4321'}) return p",
         "fitness": 9
       }
     },
@@ -124,7 +124,7 @@
       "name": "Create relationship with matching",
       "type": "string_match",
       "details": {
-        "query": "match (a), (b) where a.name = 'a' and b.linked = id(a) create p = (a)-[:Linked]-\u003e(b) return p",
+        "query": "match (a), (b) where a.name = 'a' and b.linked = id(a) create p = (a)-[:Linked]->(b) return p",
         "fitness": 12
       }
     },
@@ -263,6 +263,70 @@
       "details": {
         "query": "match (n:RegressionKind08) where n.objectid = $object_id detach delete n",
         "fitness": 9
+      }
+    },
+    {
+      "name": "REC-01 inbound reconciliation delete with thirty relationship kinds",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind01|RegressionKind02|RegressionKind03|RegressionKind04|RegressionKind05|RegressionKind06|RegressionKind07|RegressionKind08|RegressionKind09|RegressionKind10|RegressionKind11|RegressionKind12|RegressionKind13|RegressionKind14|RegressionKind15|RegressionKind16|RegressionKind17|RegressionKind18|RegressionKind19|RegressionKind20|RegressionKind21|RegressionKind22|RegressionKind23|RegressionKind24|RegressionKind25|RegressionKind26|RegressionKind27|RegressionKind28|RegressionKind29|RegressionKind30]->(e:RegressionKind31) where e.objectid = $object_id delete r",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "REC-02 outbound reconciliation delete with thirty relationship kinds",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:RegressionKind31)-[r:RegressionKind01|RegressionKind02|RegressionKind03|RegressionKind04|RegressionKind05|RegressionKind06|RegressionKind07|RegressionKind08|RegressionKind09|RegressionKind10|RegressionKind11|RegressionKind12|RegressionKind13|RegressionKind14|RegressionKind15|RegressionKind16|RegressionKind17|RegressionKind18|RegressionKind19|RegressionKind20|RegressionKind21|RegressionKind22|RegressionKind23|RegressionKind24|RegressionKind25|RegressionKind26|RegressionKind27|RegressionKind28|RegressionKind29|RegressionKind30]->() where s.objectid = $object_id delete r",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "REC-03 inbound primary group relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind32]->(e:RegressionKind31) where e.objectid = $object_id and r.isprimarygroup = $flag delete r",
+        "fitness": 14
+      }
+    },
+    {
+      "name": "REC-03 outbound primary group relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:RegressionKind31)-[r:RegressionKind32]->() where s.objectid = $object_id and r.isprimarygroup = $flag delete r",
+        "fitness": 14
+      }
+    },
+    {
+      "name": "REC-04 endpoint object ID list relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind32]->(e:RegressionKind31) where e.objectid in $object_ids delete r",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "REC-06 delegated enrollment relationship delete by endpoint IDs",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind37]->(e:RegressionKind35) where id(e) in $template_ids delete r",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "REC-07 HostsCAService relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind39]->(e:RegressionKind38) where e.objectid = $object_id delete r",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "REC-08 AD entity detach delete by object ID list",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:RegressionKind31) where n.objectid in $object_ids detach delete n",
+        "fitness": 7
       }
     }
   ]

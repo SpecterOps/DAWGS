@@ -24,6 +24,7 @@ import (
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
+	"github.com/specterops/dawgs/testutil"
 )
 
 const defaultGraphName = "integration_test"
@@ -46,6 +47,10 @@ func scanDatasetKinds(datasetDir string, datasetNames []string) (graph.Kinds, gr
 }
 
 func parseDataset(datasetDir, name string) (opengraph.Document, error) {
+	if name == testutil.ReconciliationScaleDataset {
+		return opengraph.Document{Graph: *testutil.NewReconciliationScaleFixture(128)}, nil
+	}
+
 	path := filepath.Join(datasetDir, name+".json")
 	f, err := os.Open(path)
 	if err != nil {
@@ -62,6 +67,10 @@ func parseDataset(datasetDir, name string) (opengraph.Document, error) {
 }
 
 func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string) (opengraph.IDMap, error) {
+	if name == testutil.ReconciliationScaleDataset {
+		return opengraph.WriteGraph(ctx, db, testutil.NewReconciliationScaleFixture(128))
+	}
+
 	path := filepath.Join(datasetDir, name+".json")
 	f, err := os.Open(path)
 	if err != nil {
@@ -95,11 +104,11 @@ func benchmarkSchema(nodeKinds, edgeKinds graph.Kinds) graph.Schema {
 }
 
 func resolveCaseParams(testCase ScaleCase, idMap opengraph.IDMap) (map[string]any, error) {
-	return resolveParams(testCase.Name, testCase.Params, testCase.NodeParams, testCase.NodeListParams, idMap)
+	return resolveParams(testCase.Name, testCase.Params, testCase.NodeParams, testCase.NodeListParams, testCase.GeneratedNodeListParams, idMap)
 }
 
-func resolveParams(caseName string, rawParams map[string]any, nodeParams map[string]string, nodeListParams map[string][]string, idMap opengraph.IDMap) (map[string]any, error) {
-	params := make(map[string]any, len(rawParams)+len(nodeParams)+len(nodeListParams))
+func resolveParams(caseName string, rawParams map[string]any, nodeParams map[string]string, nodeListParams map[string][]string, generatedNodeListParams map[string]testutil.GeneratedNodeListParam, idMap opengraph.IDMap) (map[string]any, error) {
+	params := make(map[string]any, len(rawParams)+len(nodeParams)+len(nodeListParams)+len(generatedNodeListParams))
 	for key, value := range rawParams {
 		params[key] = value
 	}
@@ -127,6 +136,24 @@ func resolveParams(caseName string, rawParams map[string]any, nodeParams map[str
 		params[paramName] = ids
 	}
 
+	for paramName, spec := range generatedNodeListParams {
+		if spec.Count < 0 {
+			return nil, fmt.Errorf("case %s generated node list parameter %q has negative count", caseName, paramName)
+		}
+
+		nodeNames := append([]string(nil), spec.Include...)
+		nodeNames = append(nodeNames, testutil.FixtureNames(spec.Prefix, spec.Count)...)
+		ids := make([]int64, len(nodeNames))
+		for idx, nodeName := range nodeNames {
+			id, found := idMap[nodeName]
+			if !found {
+				return nil, fmt.Errorf("case %s references unknown dataset node %q in generated list parameter %q", caseName, nodeName, paramName)
+			}
+			ids[idx] = id.Int64()
+		}
+		params[paramName] = ids
+	}
+
 	if len(params) == 0 {
 		return nil, nil
 	}
@@ -143,7 +170,7 @@ func resolveWriteScenario(testCase ScaleCase, idMap opengraph.IDMap) (resolvedWr
 	if scenario.ExpectedMatched == nil || scenario.ExpectedAffected == nil {
 		return resolvedWriteScenario{}, fmt.Errorf("case %s has an incomplete write scenario", testCase.Name)
 	}
-	selectionParams, err := resolveParams(testCase.Name+" selection", scenario.Params, scenario.NodeParams, scenario.NodeListParams, idMap)
+	selectionParams, err := resolveParams(testCase.Name+" selection", scenario.Params, scenario.NodeParams, scenario.NodeListParams, scenario.GeneratedNodeListParams, idMap)
 	if err != nil {
 		return resolvedWriteScenario{}, err
 	}
@@ -157,7 +184,7 @@ func resolveWriteScenario(testCase ScaleCase, idMap opengraph.IDMap) (resolvedWr
 	}
 
 	for _, postState := range scenario.PostState {
-		params, err := resolveParams(testCase.Name+" post-state "+postState.Name, postState.Params, postState.NodeParams, postState.NodeListParams, idMap)
+		params, err := resolveParams(testCase.Name+" post-state "+postState.Name, postState.Params, postState.NodeParams, postState.NodeListParams, postState.GeneratedNodeListParams, idMap)
 		if err != nil {
 			return resolvedWriteScenario{}, err
 		}

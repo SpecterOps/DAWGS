@@ -51,6 +51,21 @@ instead of being cloned under BloodHound-specific names:
 - `PHASE1-PC`: the `LOGIC-01`, `LOGIC-02`, and `LOGIC-04` families in
   [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json),
   loaded directly by `cmd/plancorpus` with fixture-ID parameter resolution.
+- `PHASE2-QB`: [`TestQueryBuilder_Phase2ReconciliationForms`](query/neo4j/neo4j_test.go)
+  and [`TestLegacyBuilderPostgreSQL_Phase2ReconciliationForms`](cypher/models/pgsql/test/phase2_legacy_builder_test.go).
+- `PHASE2-CY`: the `REC-01` through `REC-04` and `REC-06` through `REC-08`
+  mutation parser cases in [`mutation_tests.json`](cypher/test/cases/mutation_tests.json).
+- `PHASE2-PG`: the `REC-01` through `REC-08` PostgreSQL goldens in
+  [`reconciliation.sql`](cypher/models/pgsql/test/translation_cases/reconciliation.sql).
+- `PHASE2-IT`: the exact reconciliation semantic families in
+  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
+  and the [`FetchStartNodes` de-dup contract](integration/phase2_legacy_builder_test.go).
+- `PHASE2-PC`: the `REC-01` through `REC-08` families loaded from
+  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
+  by `cmd/plancorpus`.
+- `PHASE2-SC`: the repeatable `REC-01`, `REC-02`, `REC-04`, `REC-06`, and
+  `REC-08` write scenarios in
+  [`reconciliation.json`](benchmark/testdata/scale/cases/reconciliation.json).
 
 ## Phase 1 sentinels
 
@@ -66,14 +81,14 @@ instead of being cloned under BloodHound-specific names:
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `REC-01` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | A | — |
-| `REC-02` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | A | — |
-| `REC-03` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | — | — |
-| `REC-04` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | A | — |
-| `REC-05` | P (`QB-PROJ`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | — | — |
-| `REC-06` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | A | — |
-| `REC-07` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | — | — |
-| `REC-08` | P (`QB-PRED`) | P (`CY-MUT`) | P (`PG-DEL`) | P (`IT-MUT`) | A | A | A | — |
+| `REC-01` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-02` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-03` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | — | — |
+| `REC-04` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-05` | C (`PHASE2-QB`) | — | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | — | — |
+| `REC-06` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
+| `REC-07` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | — | — |
+| `REC-08` | C (`PHASE2-QB`) | C (`PHASE2-CY`) | C (`PHASE2-PG`) | C (`PHASE2-IT`) | C (`PHASE2-PC`) | — | C (`PHASE2-SC`) | — |
 
 ## Phase 3 trust, pruning, and aging
 
