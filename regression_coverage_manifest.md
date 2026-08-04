@@ -66,6 +66,25 @@ instead of being cloned under BloodHound-specific names:
 - `PHASE2-SC`: the repeatable `REC-01`, `REC-02`, `REC-04`, `REC-06`, and
   `REC-08` write scenarios in
   [`reconciliation.json`](benchmark/testdata/scale/cases/reconciliation.json).
+- `PHASE3-QB`: [`TestQueryBuilder_Phase3TrustAndPruningForms`](query/neo4j/neo4j_test.go)
+  and [`TestLegacyBuilderPostgreSQL_Phase3TrustAndPruningForms`](cypher/models/pgsql/test/phase3_legacy_builder_test.go).
+- `PHASE3-PG`: the `TRUST-01` through `TRUST-03` and `PRUNE-01` through
+  `PRUNE-04` PostgreSQL goldens in
+  [`reconciliation.sql`](cypher/models/pgsql/test/translation_cases/reconciliation.sql)
+  and [`post_processing.sql`](cypher/models/pgsql/test/translation_cases/post_processing.sql).
+- `PHASE3-IT`: the exact truth/null and hydration families in
+  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
+  and [`post_processing_shapes.json`](integration/testdata/templates/post_processing_shapes.json),
+  plus [`TestPhase3LegacyBuilderTrustAndPruningSelectors`](integration/phase3_legacy_builder_test.go).
+- `PHASE3-PC`: the `TRUST-01` through `TRUST-03` and `PRUNE-01` through
+  `PRUNE-04` families loaded from the shared template corpus by `cmd/plancorpus`.
+- `PHASE3-SC`: the dense trust reads, pruning selectors, and mutation-safe
+  batch-delete equivalents in
+  [`trust_pruning.json`](benchmark/testdata/scale/cases/trust_pruning.json),
+  backed by [`NewTrustPruningScaleFixture`](testutil/reconciliation_fixture.go).
+- `PHASE3-DR`: [`TestPhase3DirectBatchPruning` and
+  `BenchmarkPhase3DirectBatchPruning`](integration/phase3_legacy_builder_test.go),
+  including IDs absent at delete time and a mixed-direction high-degree cascade.
 
 ## Phase 1 sentinels
 
@@ -94,15 +113,15 @@ instead of being cloned under BloodHound-specific names:
 
 | ID | QB | CY | PG | IT | PC | PI | SC | DR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TRUST-01` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-PRED`) | A | A | A | — |
-| `TRUST-02` | P (`QB-PROJ`) | — | P (`PG-BIND`) | P (`IT-HOP`) | A | A | A | — |
-| `TRUST-03` | P (`QB-PRED`) | — | P (`PG-BIND`) | P (`IT-PRED`) | A | A | — | — |
-| `PRUNE-01` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | A | A | — |
-| `PRUNE-02` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | A | A | — |
-| `PRUNE-03` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | A | A | — |
-| `PRUNE-04` | P (`QB-PRED`) | — | P (`PG-PRED`) | P (`IT-PRED`) | A | A | A | — |
-| `PRUNE-05` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
-| `PRUNE-06` | — | — | — | — | — | — | A | P (`DR-BATCH`) |
+| `TRUST-01` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `TRUST-02` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `TRUST-03` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | — | — |
+| `PRUNE-01` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `PRUNE-02` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `PRUNE-03` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `PRUNE-04` | C (`PHASE3-QB`) | — | C (`PHASE3-PG`) | C (`PHASE3-IT`) | C (`PHASE3-PC`) | A | C (`PHASE3-SC`) | — |
+| `PRUNE-05` | — | — | — | — | — | — | C (`PHASE3-SC`) | C (`PHASE3-DR`) |
+| `PRUNE-06` | — | — | — | — | — | — | C (`PHASE3-SC`) | C (`PHASE3-DR`) |
 
 ## Phase 4 standalone hops
 

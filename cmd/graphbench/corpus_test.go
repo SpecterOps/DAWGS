@@ -57,6 +57,18 @@ func TestGeneratedReconciliationDatasetRegistersThirtyKinds(t *testing.T) {
 	}
 }
 
+func TestGeneratedTrustPruningDatasetRegistersProductionShapes(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.TrustPruningScaleDataset)
+	require.NoError(t, err)
+	nodeKinds, edgeKinds := doc.Graph.Kinds()
+
+	require.Contains(t, nodeKinds, graph.StringKind("Domain"))
+	require.Contains(t, nodeKinds, graph.StringKind("PruneCandidate"))
+	require.Contains(t, edgeKinds, graph.StringKind("SameForestTrust"))
+	require.Contains(t, edgeKinds, graph.StringKind("CrossForestTrust"))
+	require.Contains(t, edgeKinds, graph.StringKind("PruneBatch"))
+}
+
 func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 	zero := int64(0)
 	testCase := ScaleCase{
