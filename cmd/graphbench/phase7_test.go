@@ -73,3 +73,42 @@ func TestPhase7RequiredScaleRepresentativesDeclareCardinality(t *testing.T) {
 		require.Positive(t, covered[id], "Phase 7 scale corpus is missing %s", id)
 	}
 }
+
+func TestScaleCorpusDistinguishesProjectionClasses(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	requiredClasses := map[string]bool{
+		"projection-id-only":          false,
+		"projection-shallow-ids-kind": false,
+		"projection-full-hydration":   false,
+	}
+	for _, testCase := range corpus.Cases {
+		for _, tag := range testCase.Tags {
+			if _, required := requiredClasses[tag]; !required {
+				continue
+			}
+
+			requiredClasses[tag] = true
+			switch tag {
+			case "projection-id-only":
+				require.Equal(t, "id_set", testCase.Expected.ResultKind)
+				require.False(t, testCase.Observes.Nodes)
+				require.False(t, testCase.Observes.Relationships)
+				require.False(t, testCase.Observes.Properties)
+			case "projection-shallow-ids-kind":
+				require.Equal(t, "shallow_ids_kind", testCase.Expected.ResultKind)
+				require.False(t, testCase.Observes.Nodes)
+				require.False(t, testCase.Observes.Relationships)
+				require.False(t, testCase.Observes.Properties)
+			case "projection-full-hydration":
+				require.True(t, testCase.Observes.Nodes || testCase.Observes.Relationships)
+				require.True(t, testCase.Observes.Properties)
+			}
+		}
+	}
+
+	for projectionClass, found := range requiredClasses {
+		require.True(t, found, "scale corpus is missing %s", projectionClass)
+	}
+}
