@@ -31,8 +31,6 @@ Useful flags:
 | `-summary` | `.coverage/plan-corpus-summary.md` | Markdown summary |
 | `-summary-json` | `.coverage/plan-corpus-summary.json` | JSON summary |
 | `-top` | `25` | Number of expensive PostgreSQL plans to include in summaries |
-| `-bhe-commit` | `c9f61530f45b` | BHE source snapshot recorded in output |
-| `-bhce-commit` | `74dd3daa58a8` | BHCE source snapshot recorded in output |
 | `-dawgs-version` | auto-detected | DAWGS source version recorded in output |
 
 ## Reviewing Captures
@@ -43,7 +41,7 @@ such as `Recursive Union`, `SubPlan`, and `Function Scan on unnest`, and summari
 The JSON summary is intended for automation and baseline comparison. For optimizer work, check that intentional SQL
 shape changes are explained and that skipped-lowering accounting remains actionable. A planned lowering without a
 matching applied lowering should either have a specific skipped reason or indicate a translator consumption bug.
-Both per-query JSONL records and summaries include the source-version metadata
+Both per-query JSONL records and summaries include the DAWGS source version
 needed to compare captures made from different worktrees.
 
 Expected capture errors should be limited to invalid-query cases surfaced by the integration corpus or backend-specific

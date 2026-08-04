@@ -59,8 +59,6 @@ func TestWritePlanRecordsWritesJSONLines(t *testing.T) {
 		"name": "example",
 		"cypher": "MATCH (n) RETURN n",
 		"metadata": {
-			"bhe_commit": "",
-			"bhce_commit": "",
 			"dawgs_version": ""
 		}
 	}`, string(bytes.TrimSpace(contents)))
