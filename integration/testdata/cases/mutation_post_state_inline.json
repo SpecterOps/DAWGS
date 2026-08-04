@@ -1,0 +1,63 @@
+{
+  "cases": [
+    {
+      "name": "PHASE0 relationship mutation assertions preserve every decoy",
+      "cypher": "MATCH (s:NodeKind1)-[r:EdgeKind1]->(e:NodeKind2) WHERE e.objectid = $object_id AND r.shoulddelete = $should_delete DELETE r",
+      "params": {
+        "object_id": "target-id",
+        "should_delete": true
+      },
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["NodeKind1"], "properties": {"name": "source"}},
+          {"id": "target", "kinds": ["NodeKind2"], "properties": {"objectid": "target-id"}},
+          {"id": "wrong-kind", "kinds": ["NodeKind1"], "properties": {"objectid": "target-id"}},
+          {"id": "wrong-id", "kinds": ["NodeKind2"], "properties": {"objectid": "decoy-id"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "target", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "target"}},
+          {"start_id": "source", "end_id": "target", "kind": "EdgeKind1", "properties": {"shoulddelete": false, "marker": "opposite-property"}},
+          {"start_id": "source", "end_id": "target", "kind": "EdgeKind1", "properties": {"marker": "missing-property"}},
+          {"start_id": "source", "end_id": "target", "kind": "EdgeKind2", "properties": {"shoulddelete": true, "marker": "wrong-edge-kind"}},
+          {"start_id": "source", "end_id": "wrong-kind", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "wrong-node-kind"}},
+          {"start_id": "source", "end_id": "wrong-id", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "wrong-object-id"}},
+          {"start_id": "target", "end_id": "source", "kind": "EdgeKind1", "properties": {"shoulddelete": true, "marker": "reverse-direction"}}
+        ]
+      },
+      "assert": "no_error",
+      "post_assertions": [
+        {
+          "name": "exact surviving nodes and properties",
+          "cypher": "MATCH (n) RETURN n",
+          "assert": {
+            "node_records": [
+              {"id": "source", "kinds": ["NodeKind1"], "props": {"name": "source"}},
+              {"id": "target", "kinds": ["NodeKind2"], "props": {"objectid": "target-id"}},
+              {"id": "wrong-kind", "kinds": ["NodeKind1"], "props": {"objectid": "target-id"}},
+              {"id": "wrong-id", "kinds": ["NodeKind2"], "props": {"objectid": "decoy-id"}}
+            ]
+          }
+        },
+        {
+          "name": "exact surviving relationships and properties",
+          "cypher": "MATCH ()-[r]->() RETURN r",
+          "assert": {
+            "relationship_records": [
+              {"start": "source", "end": "target", "kind": "EdgeKind1", "props": {"shoulddelete": false, "marker": "opposite-property"}},
+              {"start": "source", "end": "target", "kind": "EdgeKind1", "props": {"marker": "missing-property"}},
+              {"start": "source", "end": "target", "kind": "EdgeKind2", "props": {"shoulddelete": true, "marker": "wrong-edge-kind"}},
+              {"start": "source", "end": "wrong-kind", "kind": "EdgeKind1", "props": {"shoulddelete": true, "marker": "wrong-node-kind"}},
+              {"start": "source", "end": "wrong-id", "kind": "EdgeKind1", "props": {"shoulddelete": true, "marker": "wrong-object-id"}},
+              {"start": "target", "end": "source", "kind": "EdgeKind1", "props": {"shoulddelete": true, "marker": "reverse-direction"}}
+            ]
+          }
+        },
+        {
+          "name": "exact surviving relationship count",
+          "cypher": "MATCH ()-[r]->() RETURN count(r)",
+          "assert": {"exact_int": 6}
+        }
+      ]
+    }
+  ]
+}

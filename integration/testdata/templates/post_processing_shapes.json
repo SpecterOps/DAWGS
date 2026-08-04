@@ -1,0 +1,28 @@
+{
+  "families": [
+    {
+      "name": "LOGIC-03 scoped kind negation with null-aware age predicate",
+      "template": "MATCH (n) WHERE NOT n:LogicProtected AND (n.lastseen IS NULL OR datetime(n.lastseen) < datetime($threshold)) RETURN n",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "fixture": {
+        "nodes": [
+          {"id": "missing", "kinds": ["LogicCandidate"], "properties": {"name": "missing"}},
+          {"id": "null", "kinds": ["LogicCandidate"], "properties": {"name": "null", "lastseen": null}},
+          {"id": "older", "kinds": ["LogicCandidate"], "properties": {"name": "older", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "equal", "kinds": ["LogicCandidate"], "properties": {"name": "equal", "lastseen": "2026-01-03T00:00:00Z"}},
+          {"id": "newer", "kinds": ["LogicCandidate"], "properties": {"name": "newer", "lastseen": "2026-01-04T00:00:00Z"}},
+          {"id": "protected-missing", "kinds": ["LogicProtected"], "properties": {"name": "protected-missing"}},
+          {"id": "protected-null", "kinds": ["LogicProtected"], "properties": {"name": "protected-null", "lastseen": null}},
+          {"id": "protected-older", "kinds": ["LogicProtected"], "properties": {"name": "protected-older", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "multi-kind-protected", "kinds": ["LogicCandidate", "LogicProtected"], "properties": {"name": "multi-kind-protected", "lastseen": "2026-01-02T00:00:00Z"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "missing null older equal newer and protected truth table",
+          "assert": {"node_id_set": ["missing", "null", "older"]}
+        }
+      ]
+    }
+  ]
+}

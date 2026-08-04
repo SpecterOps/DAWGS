@@ -60,3 +60,19 @@ func TestComputeDurationStatsUsesNearestRankP95(t *testing.T) {
 	require.Equal(t, 19*time.Millisecond, stats.P95)
 	require.Equal(t, 20*time.Millisecond, stats.Max)
 }
+
+func TestCheckStateExpectationChecksRowsAndScalar(t *testing.T) {
+	rowCount := int64(1)
+	scalar := int64(3)
+
+	require.NoError(t, checkStateExpectation(
+		StateQueryResult{RowCount: 1, ScalarInt: &scalar},
+		ExpectedResult{RowCount: &rowCount, ScalarInt: &scalar},
+	))
+
+	wrong := int64(4)
+	require.ErrorContains(t, checkStateExpectation(
+		StateQueryResult{RowCount: 1, ScalarInt: &scalar},
+		ExpectedResult{ScalarInt: &wrong},
+	), "expected scalar integer 4")
+}

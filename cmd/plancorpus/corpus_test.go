@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,4 +33,22 @@ func TestMergeParams(t *testing.T) {
 	merged := mergeParams(map[string]any{"a": 1, "b": 2}, map[string]any{"b": 3})
 	require.Equal(t, map[string]any{"a": 1, "b": 3}, merged)
 	require.Nil(t, mergeParams(nil, nil))
+}
+
+func TestResolveFixtureParams(t *testing.T) {
+	params, err := resolveFixtureParams(
+		map[string]any{"literal": "value"},
+		map[string]string{"start_id": "start"},
+		map[string][]string{"end_ids": {"end", "start"}},
+		opengraph.IDMap{"start": graph.ID(11), "end": graph.ID(22)},
+	)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"literal":  "value",
+		"start_id": int64(11),
+		"end_ids":  []int64{22, 11},
+	}, params)
+
+	_, err = resolveFixtureParams(nil, map[string]string{"missing": "unknown"}, nil, opengraph.IDMap{})
+	require.ErrorContains(t, err, "unknown fixture ID")
 }

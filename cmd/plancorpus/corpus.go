@@ -10,6 +10,7 @@ import (
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
+	"github.com/specterops/dawgs/testutil"
 )
 
 type corpus struct {
@@ -32,10 +33,12 @@ type caseFile struct {
 }
 
 type caseEntry struct {
-	Name    string           `json:"name"`
-	Cypher  string           `json:"cypher"`
-	Params  map[string]any   `json:"params,omitempty"`
-	Fixture *opengraph.Graph `json:"fixture,omitempty"`
+	Name           string              `json:"name"`
+	Cypher         string              `json:"cypher"`
+	Params         testutil.Params     `json:"params,omitempty"`
+	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	Fixture        *opengraph.Graph    `json:"fixture,omitempty"`
 }
 
 type templateFile struct {
@@ -45,17 +48,21 @@ type templateFile struct {
 }
 
 type templateFamily struct {
-	Name     string            `json:"name"`
-	Template string            `json:"template"`
-	Params   map[string]any    `json:"params,omitempty"`
-	Fixture  *opengraph.Graph  `json:"fixture,omitempty"`
-	Variants []templateVariant `json:"variants"`
+	Name           string              `json:"name"`
+	Template       string              `json:"template"`
+	Params         testutil.Params     `json:"params,omitempty"`
+	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	Fixture        *opengraph.Graph    `json:"fixture,omitempty"`
+	Variants       []templateVariant   `json:"variants"`
 }
 
 type templateVariant struct {
-	Name   string            `json:"name"`
-	Vars   map[string]string `json:"vars"`
-	Params map[string]any    `json:"params,omitempty"`
+	Name           string              `json:"name"`
+	Vars           map[string]string   `json:"vars"`
+	Params         testutil.Params     `json:"params,omitempty"`
+	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
 }
 
 type metamorphicFamily struct {
@@ -65,9 +72,9 @@ type metamorphicFamily struct {
 }
 
 type metamorphicQuery struct {
-	Name   string         `json:"name"`
-	Cypher string         `json:"cypher"`
-	Params map[string]any `json:"params,omitempty"`
+	Name   string          `json:"name"`
+	Cypher string          `json:"cypher"`
+	Params testutil.Params `json:"params,omitempty"`
 }
 
 func loadCorpus(datasetDir string) (corpus, error) {
@@ -219,4 +226,71 @@ func mergeParams(base, overrides map[string]any) map[string]any {
 		merged[key] = value
 	}
 	return merged
+}
+
+func mergeStringMap(base, overrides map[string]string) map[string]string {
+	if len(base) == 0 && len(overrides) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(base)+len(overrides))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range overrides {
+		merged[key] = value
+	}
+	return merged
+}
+
+func mergeStringListMap(base, overrides map[string][]string) map[string][]string {
+	if len(base) == 0 && len(overrides) == 0 {
+		return nil
+	}
+
+	merged := make(map[string][]string, len(base)+len(overrides))
+	for key, value := range base {
+		merged[key] = append([]string(nil), value...)
+	}
+	for key, value := range overrides {
+		merged[key] = append([]string(nil), value...)
+	}
+	return merged
+}
+
+func resolveFixtureParams(
+	params map[string]any,
+	nodeParams map[string]string,
+	nodeListParams map[string][]string,
+	idMap opengraph.IDMap,
+) (map[string]any, error) {
+	resolved := make(map[string]any, len(params)+len(nodeParams)+len(nodeListParams))
+	for name, value := range params {
+		resolved[name] = value
+	}
+
+	for paramName, fixtureID := range nodeParams {
+		id, found := idMap[fixtureID]
+		if !found {
+			return nil, fmt.Errorf("node parameter %q references unknown fixture ID %q", paramName, fixtureID)
+		}
+		resolved[paramName] = id.Int64()
+	}
+
+	for paramName, fixtureIDs := range nodeListParams {
+		ids := make([]int64, len(fixtureIDs))
+		for idx, fixtureID := range fixtureIDs {
+			id, found := idMap[fixtureID]
+			if !found {
+				return nil, fmt.Errorf("node list parameter %q references unknown fixture ID %q", paramName, fixtureID)
+			}
+			ids[idx] = id.Int64()
+		}
+		resolved[paramName] = ids
+	}
+
+	if len(resolved) == 0 {
+		return nil, nil
+	}
+	return resolved, nil
 }

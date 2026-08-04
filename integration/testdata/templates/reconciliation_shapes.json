@@ -1,0 +1,182 @@
+{
+  "families": [
+    {
+      "name": "LOGIC-01 branch-local relationship kinds",
+      "template": "MATCH (s:LogicDomain)-[r]->(e:LogicDomain) WHERE (id(s) = $forward_start AND id(e) = $forward_end AND r:LogicKindA) OR (id(s) = $forward_end AND id(e) = $forward_start AND r:LogicKindB) RETURN r.marker",
+      "node_params": {"forward_start": "forward", "forward_end": "reverse"},
+      "fixture": {
+        "nodes": [
+          {"id": "forward", "kinds": ["LogicDomain"], "properties": {"name": "forward"}},
+          {"id": "reverse", "kinds": ["LogicDomain"], "properties": {"name": "reverse"}}
+        ],
+        "edges": [
+          {"start_id": "forward", "end_id": "reverse", "kind": "LogicKindA", "properties": {"marker": "valid-forward"}},
+          {"start_id": "reverse", "end_id": "forward", "kind": "LogicKindB", "properties": {"marker": "valid-reverse"}},
+          {"start_id": "forward", "end_id": "reverse", "kind": "LogicKindB", "properties": {"marker": "invalid-forward-kind"}},
+          {"start_id": "reverse", "end_id": "forward", "kind": "LogicKindA", "properties": {"marker": "invalid-reverse-kind"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "both valid combinations exclude both invalid cross-combinations",
+          "assert": {"scalar_values": ["valid-forward", "valid-reverse"]}
+        }
+      ]
+    },
+    {
+      "name": "LOGIC-02 cross-binding temporal disjunction",
+      "template": "MATCH (s:LogicDomain)-[r:LogicStaleTrust]->(e:LogicDomain) WHERE r.lastseen < s.lastcollected OR r.lastseen < e.lastcollected RETURN r.marker",
+      "fixture": {
+        "nodes": [
+          {"id": "early-a", "kinds": ["LogicDomain"], "properties": {"lastcollected": "2026-01-02T00:00:00Z"}},
+          {"id": "early-b", "kinds": ["LogicDomain"], "properties": {"lastcollected": "2026-01-02T00:00:00Z"}},
+          {"id": "equal-a", "kinds": ["LogicDomain"], "properties": {"lastcollected": "2026-01-03T00:00:00Z"}},
+          {"id": "equal-b", "kinds": ["LogicDomain"], "properties": {"lastcollected": "2026-01-03T00:00:00Z"}},
+          {"id": "late-a", "kinds": ["LogicDomain"], "properties": {"lastcollected": "2026-01-04T00:00:00Z"}},
+          {"id": "late-b", "kinds": ["LogicDomain"], "properties": {"lastcollected": "2026-01-04T00:00:00Z"}},
+          {"id": "missing-a", "kinds": ["LogicDomain"], "properties": {}},
+          {"id": "missing-b", "kinds": ["LogicDomain"], "properties": {}},
+          {"id": "null-a", "kinds": ["LogicDomain"], "properties": {"lastcollected": null}},
+          {"id": "null-b", "kinds": ["LogicDomain"], "properties": {"lastcollected": null}}
+        ],
+        "edges": [
+          {"start_id": "late-a", "end_id": "early-a", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "older-start-only"}},
+          {"start_id": "early-a", "end_id": "late-a", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "older-end-only"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "older-both"}},
+          {"start_id": "equal-a", "end_id": "equal-b", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "equal"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-05T00:00:00Z", "marker": "newer"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "LogicStaleTrust", "properties": {"marker": "missing-relationship"}},
+          {"start_id": "late-a", "end_id": "late-b", "kind": "LogicStaleTrust", "properties": {"lastseen": null, "marker": "null-relationship"}},
+          {"start_id": "missing-a", "end_id": "late-a", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "missing-start-valid-end"}},
+          {"start_id": "null-a", "end_id": "late-a", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "null-start-valid-end"}},
+          {"start_id": "late-a", "end_id": "missing-b", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "missing-end-valid-start"}},
+          {"start_id": "late-a", "end_id": "null-b", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "null-end-valid-start"}},
+          {"start_id": "missing-a", "end_id": "null-b", "kind": "LogicStaleTrust", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "missing-and-null-endpoints"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "older equal newer missing and null truth table",
+          "assert": {
+            "scalar_values": [
+              "older-start-only",
+              "older-end-only",
+              "older-both",
+              "missing-start-valid-end",
+              "null-start-valid-end",
+              "missing-end-valid-start",
+              "null-end-valid-start"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "LOGIC-04 filtered relationship delete",
+      "template": "MATCH (s:LogicDeleteSource)-[r:LogicDeleteEdge]->(e:LogicDeleteTarget) WHERE e.objectid = $object_id AND r.shoulddelete = $should_delete DELETE r",
+      "params": {"object_id": "delete-edge", "should_delete": true},
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["LogicDeleteSource"], "properties": {"name": "source"}},
+          {"id": "target", "kinds": ["LogicDeleteTarget"], "properties": {"objectid": "delete-edge"}},
+          {"id": "decoy-target", "kinds": ["LogicDeleteTarget"], "properties": {"objectid": "keep-edge"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "target", "kind": "LogicDeleteEdge", "properties": {"shoulddelete": true, "marker": "delete"}},
+          {"start_id": "source", "end_id": "target", "kind": "LogicDeleteEdge", "properties": {"shoulddelete": false, "marker": "property-decoy"}},
+          {"start_id": "source", "end_id": "target", "kind": "LogicSurvivorEdge", "properties": {"shoulddelete": true, "marker": "kind-decoy"}},
+          {"start_id": "source", "end_id": "decoy-target", "kind": "LogicDeleteEdge", "properties": {"shoulddelete": true, "marker": "endpoint-decoy"}},
+          {"start_id": "target", "end_id": "source", "kind": "LogicDeleteEdge", "properties": {"shoulddelete": true, "marker": "direction-decoy"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "selected relationship binding is deleted and every decoy survives",
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "target", "kind": "LogicDeleteEdge", "props": {"shoulddelete": false, "marker": "property-decoy"}},
+                  {"start": "source", "end": "target", "kind": "LogicSurvivorEdge", "props": {"shoulddelete": true, "marker": "kind-decoy"}},
+                  {"start": "source", "end": "decoy-target", "kind": "LogicDeleteEdge", "props": {"shoulddelete": true, "marker": "endpoint-decoy"}},
+                  {"start": "target", "end": "source", "kind": "LogicDeleteEdge", "props": {"shoulddelete": true, "marker": "direction-decoy"}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LOGIC-04 filtered detach node delete",
+      "template": "MATCH (n:LogicDeleteNode) WHERE n.objectid = $object_id DETACH DELETE n",
+      "params": {"object_id": "delete-node"},
+      "fixture": {
+        "nodes": [
+          {"id": "victim", "kinds": ["LogicDeleteNode"], "properties": {"objectid": "delete-node"}},
+          {"id": "survivor", "kinds": ["LogicSurvivorNode"], "properties": {"objectid": "keep-node"}},
+          {"id": "kind-decoy", "kinds": ["LogicSurvivorNode"], "properties": {"objectid": "delete-node"}},
+          {"id": "property-decoy", "kinds": ["LogicDeleteNode"], "properties": {"objectid": "keep-node"}}
+        ],
+        "edges": [
+          {"start_id": "survivor", "end_id": "victim", "kind": "LogicIncident", "properties": {"marker": "inbound"}},
+          {"start_id": "victim", "end_id": "survivor", "kind": "LogicIncident", "properties": {"marker": "outbound"}},
+          {"start_id": "victim", "end_id": "victim", "kind": "LogicIncident", "properties": {"marker": "self"}},
+          {"start_id": "survivor", "end_id": "property-decoy", "kind": "LogicSurvivorEdge", "properties": {"marker": "survives"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "selected node binding cascades only its incident relationships",
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n) RETURN n", "assert": {"node_id_set": ["survivor", "kind-decoy", "property-decoy"]}},
+            {"cypher": "MATCH ()-[r]->() RETURN r", "assert": {"relationship_records": [{"start": "survivor", "end": "property-decoy", "kind": "LogicSurvivorEdge", "props": {"marker": "survives"}}]}}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LOGIC-05 directional projection order",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "start", "kinds": ["LogicProjectionStart"], "properties": {"name": "start"}},
+          {"id": "end", "kinds": ["LogicProjectionEnd", "LogicProjectionEntity"], "properties": {"name": "end"}}
+        ],
+        "edges": [
+          {"start_id": "start", "end_id": "end", "kind": "LogicProjectionEdge", "properties": {"marker": "projection"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "full opposite node plus relationship",
+          "vars": {"query": "MATCH ()-[r:LogicProjectionEdge]->(e) RETURN r, e"},
+          "assert": {"keys": ["r", "e"], "row_count": 1, "contains_edge": {"start": "start", "end": "end", "kind": "LogicProjectionEdge", "props": {"marker": "projection"}}}
+        },
+        {
+          "name": "opposite ID kinds and relationship ID kind",
+          "vars": {"query": "MATCH ()-[r:LogicProjectionEdge]->(e) RETURN id(e), labels(e), id(r), type(r)"},
+          "assert": {"keys": ["id(e)", "labels(e)", "id(r)", "type(r)"], "row_count": 1}
+        },
+        {
+          "name": "start relationship end triple",
+          "vars": {"query": "MATCH (s)-[r:LogicProjectionEdge]->(e) RETURN s, r, e"},
+          "assert": {"keys": ["s", "r", "e"], "row_count": 1, "contains_edge": {"start": "start", "end": "end", "kind": "LogicProjectionEdge"}}
+        },
+        {
+          "name": "relationship ID only",
+          "vars": {"query": "MATCH ()-[r:LogicProjectionEdge]->() RETURN id(r)"},
+          "assert": {"keys": ["id(r)"], "row_count": 1}
+        },
+        {
+          "name": "full relationship",
+          "vars": {"query": "MATCH ()-[r:LogicProjectionEdge]->() RETURN r"},
+          "assert": {"keys": ["r"], "row_count": 1, "contains_edge": {"start": "start", "end": "end", "kind": "LogicProjectionEdge", "props": {"marker": "projection"}}}
+        }
+      ]
+    }
+  ]
+}
