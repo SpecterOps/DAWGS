@@ -691,6 +691,7 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 
 		for _, decision := range decisions {
 			if decision.SuffixLength <= 0 ||
+				!decision.ApplySupplemental ||
 				decision.SuffixStartStep <= target.StepIndex ||
 				decision.SuffixEndStep < decision.SuffixStartStep ||
 				decision.SuffixEndStep-decision.SuffixStartStep+1 != decision.SuffixLength {
@@ -744,6 +745,54 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 
 func traversalStepHasContinuation(part *PatternPart, stepIndex int) bool {
 	return part != nil && stepIndex+1 < len(part.TraversalSteps)
+}
+
+func fieldRequirementAllowsIDOnly(decision optimize.FieldRequirementDecision) bool {
+	observesID := false
+	for _, use := range decision.Uses {
+		for _, field := range use.Fields {
+			if !use.Internal && field == optimize.FieldRequirementEntityID {
+				observesID = true
+			}
+
+			if !use.Internal && field != optimize.FieldRequirementEntityID {
+				return false
+			}
+
+			if field == optimize.FieldRequirementFullEntity || field == optimize.FieldRequirementFullPath {
+				return false
+			}
+		}
+	}
+
+	return observesID
+}
+
+func (s *Translator) applyIDOnlyTerminalProjection(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if part == nil || binding == nil || !part.HasTarget || traversalStepHasContinuation(part, stepIndex) {
+		return false
+	}
+
+	if part.PatternBinding != nil {
+		for _, pathSymbol := range s.scope.Symbols(part.PatternBinding) {
+			if decision, found := s.fieldRequirementDecisions[part.Target.QueryPartIndex][pathSymbol.String()]; found {
+				for _, field := range decision.Fields {
+					if field == optimize.FieldRequirementFullPath {
+						return false
+					}
+				}
+			}
+		}
+	}
+
+	for _, symbol := range s.scope.Symbols(binding) {
+		if decision, found := s.fieldRequirementDecisions[part.Target.QueryPartIndex][symbol.String()]; found && fieldRequirementAllowsIDOnly(decision) {
+			binding.IDOnly = true
+			return true
+		}
+	}
+
+	return false
 }
 
 func relationshipIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
@@ -1021,6 +1070,11 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		if hasDecision && pruneTraversalStepProjectionExports(part, stepIndex, traversalStep) {
 			s.recordLowering(optimize.LoweringProjectionPruning)
 		}
+	}
+
+	if s.applyIDOnlyTerminalProjection(part, stepIndex, traversalStep.LeftNode) ||
+		s.applyIDOnlyTerminalProjection(part, stepIndex, traversalStep.RightNode) {
+		s.recordLowering(optimize.LoweringFieldRequirements)
 	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {

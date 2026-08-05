@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -38,10 +39,22 @@ const (
 )
 
 type DurationStats struct {
-	Iterations int           `json:"iterations"`
-	Median     time.Duration `json:"median"`
-	P95        time.Duration `json:"p95"`
-	Max        time.Duration `json:"max"`
+	Iterations int             `json:"iterations"`
+	Median     time.Duration   `json:"median"`
+	P95        time.Duration   `json:"p95"`
+	Max        time.Duration   `json:"max"`
+	Samples    []LatencySample `json:"samples,omitempty"`
+}
+
+type LatencySample struct {
+	Round          int           `json:"round"`
+	Iteration      int           `json:"iteration"`
+	Case           string        `json:"case"`
+	Dataset        string        `json:"dataset"`
+	Backend        ExecutionMode `json:"backend"`
+	ConnectionID   string        `json:"connection_id,omitempty"`
+	Classification string        `json:"classification"`
+	Duration       time.Duration `json:"duration"`
 }
 
 type PostgresPlanMetrics struct {
@@ -59,32 +72,34 @@ type Buffers struct {
 }
 
 type CaseResult struct {
-	Metadata         testutil.BaselineMetadata      `json:"metadata"`
-	Source           string                         `json:"source"`
-	Dataset          string                         `json:"dataset"`
-	Name             string                         `json:"name"`
-	Category         string                         `json:"category"`
-	ExecutionMode    ExecutionMode                  `json:"execution_mode"`
-	Status           string                         `json:"status"`
-	Cypher           string                         `json:"cypher"`
-	Params           map[string]any                 `json:"params,omitempty"`
-	NodeParams       map[string]string              `json:"node_params,omitempty"`
-	NodeListParams   map[string][]string            `json:"node_list_params,omitempty"`
-	ExpectedRowCount *int64                         `json:"expected_row_count,omitempty"`
-	RowCount         int64                          `json:"row_count,omitempty"`
-	MatchedCount     *int64                         `json:"matched_count,omitempty"`
-	AffectedCount    *int64                         `json:"affected_count,omitempty"`
-	PostState        []StateQueryResult             `json:"post_state,omitempty"`
-	Stats            DurationStats                  `json:"stats,omitempty"`
-	SQL              string                         `json:"sql,omitempty"`
-	PostgresPlan     []string                       `json:"postgres_plan,omitempty"`
-	PostgresMetrics  *PostgresPlanMetrics           `json:"postgres_metrics,omitempty"`
-	Neo4jPlan        *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
-	Neo4jOperators   []string                       `json:"neo4j_operators,omitempty"`
-	Optimization     *translate.OptimizationSummary `json:"optimization,omitempty"`
-	Baseline         *BaselineComparison            `json:"baseline,omitempty"`
-	FallbackReason   string                         `json:"fallback_reason,omitempty"`
-	Error            string                         `json:"error,omitempty"`
+	Metadata          testutil.BaselineMetadata      `json:"metadata"`
+	Source            string                         `json:"source"`
+	Dataset           string                         `json:"dataset"`
+	Name              string                         `json:"name"`
+	Category          string                         `json:"category"`
+	ExecutionMode     ExecutionMode                  `json:"execution_mode"`
+	Status            string                         `json:"status"`
+	Cypher            string                         `json:"cypher"`
+	Params            map[string]any                 `json:"params,omitempty"`
+	NodeParams        map[string]string              `json:"node_params,omitempty"`
+	NodeListParams    map[string][]string            `json:"node_list_params,omitempty"`
+	ExpectedRowCount  *int64                         `json:"expected_row_count,omitempty"`
+	ObservedRows      []string                       `json:"observed_rows,omitempty"`
+	RowCount          int64                          `json:"row_count,omitempty"`
+	MatchedCount      *int64                         `json:"matched_count,omitempty"`
+	AffectedCount     *int64                         `json:"affected_count,omitempty"`
+	PostState         []StateQueryResult             `json:"post_state,omitempty"`
+	Stats             DurationStats                  `json:"stats,omitempty"`
+	SQL               string                         `json:"sql,omitempty"`
+	PostgresPlan      []string                       `json:"postgres_plan,omitempty"`
+	PostgresMetrics   *PostgresPlanMetrics           `json:"postgres_metrics,omitempty"`
+	Neo4jPlan         *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
+	Neo4jOperators    []string                       `json:"neo4j_operators,omitempty"`
+	Optimization      *translate.OptimizationSummary `json:"optimization,omitempty"`
+	Baseline          *BaselineComparison            `json:"baseline,omitempty"`
+	FallbackReason    string                         `json:"fallback_reason,omitempty"`
+	Error             string                         `json:"error,omitempty"`
+	StableObservation bool                           `json:"-"`
 }
 
 type StateQueryResult struct {
@@ -100,19 +115,46 @@ type BaselineComparison struct {
 	Ratio          float64       `json:"ratio"`
 }
 
+func validateBackendObservations(records []CaseResult) error {
+	type observationKey struct {
+		dataset string
+		name    string
+	}
+
+	postgres := map[observationKey][]string{}
+	for _, record := range records {
+		if record.ExecutionMode == ModePostgresSQL && record.Status == StatusOK && record.StableObservation && record.ObservedRows != nil {
+			postgres[observationKey{dataset: record.Dataset, name: record.Name}] = record.ObservedRows
+		}
+	}
+
+	for _, record := range records {
+		if record.ExecutionMode != ModeNeo4j || record.Status != StatusOK || !record.StableObservation || record.ObservedRows == nil {
+			continue
+		}
+		key := observationKey{dataset: record.Dataset, name: record.Name}
+		if expected, found := postgres[key]; found && !slices.Equal(expected, record.ObservedRows) {
+			return fmt.Errorf("backend observations differ for %s/%s: postgres=%v neo4j=%v", record.Dataset, record.Name, expected, record.ObservedRows)
+		}
+	}
+
+	return nil
+}
+
 func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any) CaseResult {
 	return CaseResult{
-		Source:           testCase.Source,
-		Dataset:          testCase.Dataset,
-		Name:             testCase.Name,
-		Category:         testCase.Category,
-		ExecutionMode:    mode,
-		Status:           StatusOK,
-		Cypher:           testCase.Cypher,
-		Params:           params,
-		NodeParams:       testCase.NodeParams,
-		NodeListParams:   testCase.NodeListParams,
-		ExpectedRowCount: testCase.Expected.RowCount,
+		Source:            testCase.Source,
+		Dataset:           testCase.Dataset,
+		Name:              testCase.Name,
+		Category:          testCase.Category,
+		ExecutionMode:     mode,
+		Status:            StatusOK,
+		Cypher:            testCase.Cypher,
+		Params:            params,
+		NodeParams:        testCase.NodeParams,
+		NodeListParams:    testCase.NodeListParams,
+		ExpectedRowCount:  testCase.Expected.RowCount,
+		StableObservation: testCase.Expected.ResultKind == "id_rows" || testCase.Expected.ResultKind == "path_set",
 	}
 }
 
@@ -133,7 +175,33 @@ func computeDurationStats(durations []time.Duration) (DurationStats, error) {
 		Median:     sortedDurations[n/2],
 		P95:        sortedDurations[p95Index],
 		Max:        sortedDurations[n-1],
+		Samples: func() []LatencySample {
+			samples := make([]LatencySample, len(durations))
+			for idx, duration := range durations {
+				samples[idx] = LatencySample{
+					Round:          1,
+					Iteration:      idx + 1,
+					Classification: "warm",
+					Duration:       duration,
+				}
+			}
+			return samples
+		}(),
 	}, nil
+}
+
+func labelLatencySamples(stats *DurationStats, mode ExecutionMode, testCase ScaleCase) {
+	for idx := range stats.Samples {
+		stats.Samples[idx].Backend = mode
+		stats.Samples[idx].Case = testCase.Name
+		stats.Samples[idx].Dataset = testCase.Dataset
+	}
+}
+
+func setSampleRound(stats *DurationStats, round int) {
+	for idx := range stats.Samples {
+		stats.Samples[idx].Round = round
+	}
 }
 
 func applyRowExpectation(result *CaseResult) {

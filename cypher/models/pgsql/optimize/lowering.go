@@ -20,6 +20,7 @@ const (
 	LoweringAggregateTraversalCount   = "AggregateTraversalCount"
 	LoweringExactRangeExpansion       = "ExactRangeExpansion"
 	LoweringPathRelationshipPredicate = "PathRelationshipPredicate"
+	LoweringFieldRequirements         = "FieldRequirements"
 )
 
 type LoweringDecision struct {
@@ -135,6 +136,8 @@ type ExpansionSuffixPushdownDecision struct {
 	SuffixLength         int                   `json:"suffix_length"`
 	SuffixStartStep      int                   `json:"suffix_start_step"`
 	SuffixEndStep        int                   `json:"suffix_end_step"`
+	ApplySupplemental    bool                  `json:"apply_supplemental"`
+	Reason               string                `json:"reason,omitempty"`
 	PredicateAttachments []PredicateAttachment `json:"predicate_attachments,omitempty"`
 }
 
@@ -191,6 +194,35 @@ type AggregateTraversalCountDecision struct {
 	Target         TraversalStepTarget `json:"target"`
 }
 
+type FieldRequirement string
+
+const (
+	FieldRequirementEntityID           FieldRequirement = "entity_id"
+	FieldRequirementKinds              FieldRequirement = "kinds"
+	FieldRequirementProperties         FieldRequirement = "properties"
+	FieldRequirementFullEntity         FieldRequirement = "full_entity"
+	FieldRequirementRelationshipIDs    FieldRequirement = "relationship_ids"
+	FieldRequirementOrderedPathEdgeIDs FieldRequirement = "ordered_path_edge_ids"
+	FieldRequirementFullPath           FieldRequirement = "full_path"
+)
+
+type FieldRequirementUse struct {
+	Ordinal  int                `json:"ordinal"`
+	Fields   []FieldRequirement `json:"fields"`
+	Internal bool               `json:"internal,omitempty"`
+}
+
+// FieldRequirementDecision is analysis metadata only. Phase 6B consumes this
+// staged information when it is safe to lower a composite binding to scalar
+// state; recording it here intentionally does not change SQL semantics.
+type FieldRequirementDecision struct {
+	QueryPartIndex int                   `json:"query_part_index"`
+	Symbol         string                `json:"symbol"`
+	Fields         []FieldRequirement    `json:"fields"`
+	Uses           []FieldRequirementUse `json:"uses"`
+	LastUse        int                   `json:"last_use"`
+}
+
 type AggregateTraversalCountShape struct {
 	QueryPartIndex    int
 	SourceSymbol      string
@@ -226,6 +258,7 @@ type LoweringPlan struct {
 	ExactRangeExpansion       []ExactRangeExpansionDecision       `json:"exact_range_expansion,omitempty"`
 	PathRelationshipPredicate []PathRelationshipPredicateDecision `json:"path_relationship_predicate,omitempty"`
 	AggregateTraversalCount   []AggregateTraversalCountDecision   `json:"aggregate_traversal_count,omitempty"`
+	FieldRequirements         []FieldRequirementDecision          `json:"field_requirements,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -242,7 +275,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.CountStoreFastPath) == 0 &&
 		len(s.ExactRangeExpansion) == 0 &&
 		len(s.PathRelationshipPredicate) == 0 &&
-		len(s.AggregateTraversalCount) == 0
+		len(s.AggregateTraversalCount) == 0 &&
+		len(s.FieldRequirements) == 0
 }
 
 func (s LoweringPlan) Decisions() []LoweringDecision {
@@ -266,6 +300,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringExactRangeExpansion, len(s.ExactRangeExpansion) > 0)
 	add(LoweringPathRelationshipPredicate, len(s.PathRelationshipPredicate) > 0)
 	add(LoweringAggregateTraversalCount, len(s.AggregateTraversalCount) > 0)
+	add(LoweringFieldRequirements, len(s.FieldRequirements) > 0)
 
 	return decisions
 }

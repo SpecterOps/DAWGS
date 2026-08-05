@@ -450,7 +450,10 @@ func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 		}
 
 	case *pgsql.EdgeArrayFromPathIDs:
-		return s.rewriteExpression(&typedExpression.PathIDs)
+		if err := s.rewriteExpression(&typedExpression.PathIDs); err != nil {
+			return err
+		}
+		return s.rewriteExpression(&typedExpression.GraphID)
 
 	case *pgsql.AliasedExpression:
 		switch typedInnerExpression := typedExpression.Expression.(type) {

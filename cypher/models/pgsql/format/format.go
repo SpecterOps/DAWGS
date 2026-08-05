@@ -11,6 +11,7 @@ import (
 type OutputBuilder struct {
 	MaterializeParameters bool
 	StripLiterals         bool
+	TargetGraphID         int32
 	parameters            map[string]any
 	builder               *strings.Builder
 }
@@ -44,6 +45,14 @@ func (s *OutputBuilder) WithMaterializedParameters(parameters map[string]any) *O
 	s.MaterializeParameters = true
 	s.parameters = parameters
 
+	return s
+}
+
+// WithTargetGraph renders persistent node and edge references against the
+// concrete target partitions. Graph-local IDs are not globally unique, and a
+// concrete relation also lets PostgreSQL avoid planning unrelated partitions.
+func (s *OutputBuilder) WithTargetGraph(graphID int32) *OutputBuilder {
+	s.TargetGraphID = graphID
 	return s
 }
 
@@ -348,7 +357,13 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 				exprStack = append(exprStack, typedNextExpr.Binding.Value, pgsql.FormattingLiteral(" "))
 			}
 
-			exprStack = append(exprStack, typedNextExpr.Name)
+			tableName := typedNextExpr.Name
+			if builder.TargetGraphID != 0 && len(tableName) == 1 &&
+				(tableName[0] == pgsql.TableNode || tableName[0] == pgsql.TableEdge) {
+				tableName = pgsql.CompoundIdentifier{pgsql.Identifier(fmt.Sprintf("%s_%d", tableName[0], builder.TargetGraphID))}
+			}
+
+			exprStack = append(exprStack, tableName)
 
 		case pgsql.LateralSubquery:
 			if typedNextExpr.Binding.Set {
@@ -557,12 +572,23 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 				return fmt.Errorf("edge array from path IDs has no path expression")
 			}
 
-			exprStack = append(
-				exprStack,
-				pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id)"),
-				typedNextExpr.PathIDs,
-				pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
-			)
+			if typedNextExpr.GraphID == nil {
+				exprStack = append(
+					exprStack,
+					pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id)"),
+					typedNextExpr.PathIDs,
+					pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
+				)
+			} else {
+				exprStack = append(
+					exprStack,
+					pgsql.FormattingLiteral(")"),
+					typedNextExpr.GraphID,
+					pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id and _edge.graph_id = "),
+					typedNextExpr.PathIDs,
+					pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
+				)
+			}
 
 		case pgsql.Parameter:
 			if builder.MaterializeParameters {

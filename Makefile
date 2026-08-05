@@ -33,6 +33,11 @@ METRICS_ENFORCE ?= 0
 BENCHMARK_REPORT ?=
 BENCHMARK_BASELINE ?=
 BENCHMARK_REGRESSION ?= 0.20
+PERF_BASELINE ?=
+PERF_CANDIDATE ?=
+PERF_GATE_OUTPUT ?= $(METRICS_DIR)/perf-gate.json
+PERF_GATE_SEED ?= 1
+PERF_CONFIDENCE ?= 0.95
 FUZZ_REPORT ?=
 MUTATION_REPORT ?=
 BACKEND_RESULT_ARGS ?=
@@ -56,7 +61,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus perf_gate complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
@@ -126,6 +131,19 @@ test_update:
 plan_corpus: $(METRICS_DIR)
 	@echo "Capturing Cypher plan corpus..."
 	@$(GO_CMD) run ./cmd/plancorpus
+
+perf_gate: $(METRICS_DIR)
+	@if [ -z "$(PERF_BASELINE)" ] || [ -z "$(PERF_CANDIDATE)" ]; then \
+		echo "PERF_BASELINE and PERF_CANDIDATE are required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-gate-baseline "$(PERF_BASELINE)" \
+		-gate-candidate "$(PERF_CANDIDATE)" \
+		-gate-output "$(PERF_GATE_OUTPUT)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)" \
+		-regression-threshold "$(BENCHMARK_REGRESSION)"
 
 # Metric targets
 $(METRICS_DIR):

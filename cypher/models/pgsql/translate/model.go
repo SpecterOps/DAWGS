@@ -82,6 +82,8 @@ type Expansion struct {
 	BackwardRecursiveQueryParameter *BoundIdentifier
 
 	UseBidirectionalSearch bool
+	SingletonRootID        pgsql.Expression
+	SingletonTerminalID    pgsql.Expression
 
 	EdgeStartIdentifier pgsql.Identifier
 	EdgeStartColumn     pgsql.CompoundIdentifier
@@ -89,6 +91,10 @@ type Expansion struct {
 	EdgeEndColumn       pgsql.CompoundIdentifier
 
 	Projection []pgsql.SelectItem
+}
+
+func (s *Expansion) UsesSingletonEndpointPair() bool {
+	return s != nil && s.SingletonRootID != nil && s.SingletonTerminalID != nil
 }
 
 func NewExpansionModel(part *PatternPart, relationshipPattern *cypher.RelationshipPattern) *Expansion {
@@ -316,6 +322,81 @@ func isIdentifierIDReference(expression pgsql.Expression, identifier pgsql.Ident
 	return isCompoundIdentifier && len(compoundIdentifier) == 2 &&
 		compoundIdentifier[0] == identifier &&
 		compoundIdentifier[1] == pgsql.ColumnID
+}
+
+func isSingletonIDOperand(expression pgsql.Expression) bool {
+	switch typedExpression := unwrapParenthetical(expression).(type) {
+	case pgsql.Literal:
+		return !typedExpression.Null
+	case pgsql.Parameter, *pgsql.Parameter:
+		return true
+	case pgsql.TypeCast:
+		switch typedExpression.CastType {
+		case pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8:
+			return isSingletonIDOperand(typedExpression.Expression)
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+func singletonIDAnchor(expression pgsql.Expression, identifier pgsql.Identifier) (pgsql.Expression, bool) {
+	var anchor pgsql.Expression
+
+	for _, term := range flattenConjunction(expression) {
+		binaryExpression, isBinaryExpression := unwrapParenthetical(term).(*pgsql.BinaryExpression)
+		if !isBinaryExpression || binaryExpression.Operator != pgsql.OperatorEquals {
+			continue
+		}
+
+		var candidate pgsql.Expression
+		switch {
+		case isIdentifierIDReference(binaryExpression.LOperand, identifier) && isSingletonIDOperand(binaryExpression.ROperand):
+			candidate = binaryExpression.ROperand
+		case isIdentifierIDReference(binaryExpression.ROperand, identifier) && isSingletonIDOperand(binaryExpression.LOperand):
+			candidate = binaryExpression.LOperand
+		default:
+			continue
+		}
+
+		if anchor != nil {
+			// Multiple ID equalities may be contradictory and require the generic
+			// validation path until the singleton validator can retain every term.
+			return nil, false
+		}
+		anchor = candidate
+	}
+
+	return anchor, anchor != nil
+}
+
+func replaceSingletonIDAnchor(expression pgsql.Expression, identifier pgsql.Identifier, replacement pgsql.Expression) pgsql.Expression {
+	switch typedExpression := expression.(type) {
+	case *pgsql.Parenthetical:
+		typedExpression.Expression = replaceSingletonIDAnchor(typedExpression.Expression, identifier, replacement)
+		return typedExpression
+
+	case *pgsql.BinaryExpression:
+		if typedExpression.Operator == pgsql.OperatorEquals {
+			switch {
+			case isIdentifierIDReference(typedExpression.LOperand, identifier) && isSingletonIDOperand(typedExpression.ROperand):
+				typedExpression.ROperand = replacement
+				return typedExpression
+			case isIdentifierIDReference(typedExpression.ROperand, identifier) && isSingletonIDOperand(typedExpression.LOperand):
+				typedExpression.LOperand = replacement
+				return typedExpression
+			}
+		}
+
+		typedExpression.LOperand = replaceSingletonIDAnchor(typedExpression.LOperand, identifier, replacement)
+		typedExpression.ROperand = replaceSingletonIDAnchor(typedExpression.ROperand, identifier, replacement)
+		return typedExpression
+
+	default:
+		return expression
+	}
 }
 
 func (s *TraversalStep) CanExecuteSelectiveBidirectionalSearch(scope *Scope) (bool, error) {

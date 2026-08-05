@@ -219,7 +219,7 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 		}
 
 		if traversalStep.Expansion != nil {
-			if expansion, err := NewExpansionBuilder(s.translation.Parameters, traversalStep); err != nil {
+			if expansion, err := NewExpansionBuilder(s.translation.Parameters, traversalStep, s.graphID); err != nil {
 				return err
 			} else if part.ShortestPath || part.AllShortestPaths {
 				if err := s.buildShortestPathsExpansionPattern(traversalStepContext, expansion, part.AllShortestPaths); err != nil {

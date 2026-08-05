@@ -245,6 +245,7 @@ func TestPushDownShortestPathLimitAppendsHarnessLimitWithEndpointInequality(t *t
 	require.Len(t, sourceCTE.Query.CommonTableExpressions.Expressions, 1)
 
 	harnessCTE := sourceCTE.Query.CommonTableExpressions.Expressions[0]
+	require.Equal(t, part.Limit, harnessCTE.Query.Limit)
 	selectBody, isSelect := harnessCTE.Query.Body.(pgsql.Select)
 	require.True(t, isSelect)
 	require.Len(t, selectBody.From, 1)

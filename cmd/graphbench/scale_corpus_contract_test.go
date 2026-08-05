@@ -112,3 +112,24 @@ func TestScaleCorpusDistinguishesProjectionClasses(t *testing.T) {
 		require.True(t, found, "scale corpus is missing %s", projectionClass)
 	}
 }
+
+func TestADCSIDRowsUseStableFixtureIdentitiesAndPreserveDuplicates(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	for _, testCase := range corpus.Cases {
+		if testCase.Name != "adcs_p1_endpoint_ids" {
+			continue
+		}
+
+		require.Equal(t, [][]string{
+			{"ca", "domain"},
+			{"ca", "domain"},
+			{"ca", "domain"},
+			{"ca", "domain"},
+		}, testCase.Expected.IDRows)
+		return
+	}
+
+	t.Fatal("adcs_p1_endpoint_ids case not found")
+}

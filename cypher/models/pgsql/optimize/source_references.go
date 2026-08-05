@@ -1,6 +1,9 @@
 package optimize
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
@@ -12,6 +15,187 @@ type sourceReferenceCollector struct {
 	matchPatternDeclarationRefs  map[string]int
 	matchPatternDeclarations     map[*cypher.PatternPart]struct{}
 	matchPatternDeclarationDepth int
+}
+
+type fieldRequirementCollector struct {
+	walk.VisitorHandler
+
+	queryPartIndex int
+	ordinal        int
+	patternDepth   int
+	propertyDepth  int
+	functionStack  []*cypher.FunctionInvocation
+	bindingKinds   map[string]string
+	patternUses    map[string]int
+	decisions      map[string]*FieldRequirementDecision
+}
+
+func newFieldRequirementCollector(queryPartIndex int) *fieldRequirementCollector {
+	return &fieldRequirementCollector{
+		VisitorHandler: walk.NewCancelableErrorHandler(),
+		queryPartIndex: queryPartIndex,
+		bindingKinds:   map[string]string{},
+		patternUses:    map[string]int{},
+		decisions:      map[string]*FieldRequirementDecision{},
+	}
+}
+
+func (s *fieldRequirementCollector) add(symbol string, internal bool, fields ...FieldRequirement) {
+	if symbol == "" {
+		return
+	}
+
+	s.ordinal++
+	decision, found := s.decisions[symbol]
+	if !found {
+		decision = &FieldRequirementDecision{QueryPartIndex: s.queryPartIndex, Symbol: symbol}
+		s.decisions[symbol] = decision
+	}
+
+	useFields := append([]FieldRequirement(nil), fields...)
+	decision.Uses = append(decision.Uses, FieldRequirementUse{Ordinal: s.ordinal, Fields: useFields, Internal: internal})
+	decision.LastUse = s.ordinal
+
+	present := make(map[FieldRequirement]struct{}, len(decision.Fields))
+	for _, field := range decision.Fields {
+		present[field] = struct{}{}
+	}
+	for _, field := range fields {
+		if _, found := present[field]; !found {
+			decision.Fields = append(decision.Fields, field)
+			present[field] = struct{}{}
+		}
+	}
+}
+
+func patternVariableSymbol(variable *cypher.Variable) string {
+	if variable == nil {
+		return ""
+	}
+	return variable.Symbol
+}
+
+func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
+	switch typedNode := node.(type) {
+	case *cypher.PatternPart:
+		s.patternDepth++
+		if symbol := patternVariableSymbol(typedNode.Variable); symbol != "" {
+			s.bindingKinds[symbol] = "path"
+			s.add(symbol, true, FieldRequirementOrderedPathEdgeIDs)
+		}
+
+	case *cypher.NodePattern:
+		if symbol := patternVariableSymbol(typedNode.Variable); symbol != "" {
+			s.bindingKinds[symbol] = "node"
+			s.patternUses[symbol]++
+			if s.patternUses[symbol] > 1 {
+				// Reused pattern bindings are consumed by bound-endpoint joins.
+				// Those joins still expect the entity representation; scalar-ID
+				// rehydration is a separate lowering capability.
+				s.add(symbol, true, FieldRequirementFullEntity)
+			}
+			if len(typedNode.Kinds) > 0 {
+				s.add(symbol, true, FieldRequirementEntityID, FieldRequirementKinds)
+			}
+			if typedNode.Properties != nil {
+				s.add(symbol, true, FieldRequirementEntityID, FieldRequirementProperties)
+			}
+		}
+
+	case *cypher.RelationshipPattern:
+		if symbol := patternVariableSymbol(typedNode.Variable); symbol != "" {
+			s.bindingKinds[symbol] = "relationship"
+			s.patternUses[symbol]++
+			if s.patternUses[symbol] > 1 {
+				s.add(symbol, true, FieldRequirementFullEntity)
+			}
+			s.add(symbol, true, FieldRequirementRelationshipIDs)
+			if len(typedNode.Kinds) > 0 {
+				s.add(symbol, true, FieldRequirementKinds)
+			}
+			if typedNode.Properties != nil {
+				s.add(symbol, true, FieldRequirementProperties)
+			}
+		}
+
+	case *cypher.PropertyLookup:
+		s.propertyDepth++
+
+	case *cypher.FunctionInvocation:
+		s.functionStack = append(s.functionStack, typedNode)
+
+	case *cypher.Variable:
+		if s.patternDepth > 0 {
+			return
+		}
+
+		if s.propertyDepth > 0 {
+			s.add(typedNode.Symbol, false, FieldRequirementEntityID, FieldRequirementProperties)
+			return
+		}
+
+		if len(s.functionStack) > 0 {
+			switch strings.ToLower(s.functionStack[len(s.functionStack)-1].Name) {
+			case cypher.IdentityFunction:
+				s.add(typedNode.Symbol, false, FieldRequirementEntityID)
+				return
+			case cypher.NodeLabelsFunction, cypher.EdgeTypeFunction:
+				s.add(typedNode.Symbol, false, FieldRequirementKinds)
+				return
+			case cypher.PathLengthFunction:
+				s.add(typedNode.Symbol, false, FieldRequirementOrderedPathEdgeIDs)
+				return
+			case cypher.NodesFunction, cypher.RelationshipsFunction:
+				s.add(typedNode.Symbol, false, FieldRequirementFullPath)
+				return
+			}
+		}
+
+		switch s.bindingKinds[typedNode.Symbol] {
+		case "path":
+			s.add(typedNode.Symbol, false, FieldRequirementFullPath)
+		case "relationship":
+			s.add(typedNode.Symbol, false, FieldRequirementFullEntity, FieldRequirementRelationshipIDs)
+		default:
+			s.add(typedNode.Symbol, false, FieldRequirementFullEntity)
+		}
+	}
+}
+
+func (s *fieldRequirementCollector) Visit(cypher.SyntaxNode) {}
+
+func (s *fieldRequirementCollector) Exit(node cypher.SyntaxNode) {
+	switch node.(type) {
+	case *cypher.PatternPart:
+		s.patternDepth--
+	case *cypher.PropertyLookup:
+		s.propertyDepth--
+	case *cypher.FunctionInvocation:
+		s.functionStack = s.functionStack[:len(s.functionStack)-1]
+	}
+}
+
+func collectFieldRequirements(queryPartIndex int, root cypher.SyntaxNode) ([]FieldRequirementDecision, error) {
+	if root == nil {
+		return nil, nil
+	}
+
+	collector := newFieldRequirementCollector(queryPartIndex)
+	if err := walk.Cypher(root, collector); err != nil {
+		return nil, err
+	}
+
+	symbols := make([]string, 0, len(collector.decisions))
+	for symbol := range collector.decisions {
+		symbols = append(symbols, symbol)
+	}
+	sort.Strings(symbols)
+
+	decisions := make([]FieldRequirementDecision, 0, len(symbols))
+	for _, symbol := range symbols {
+		decisions = append(decisions, *collector.decisions[symbol])
+	}
+	return decisions, nil
 }
 
 func newSourceReferenceCollector() *sourceReferenceCollector {

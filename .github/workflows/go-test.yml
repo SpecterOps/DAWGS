@@ -51,6 +51,11 @@ jobs:
         run: |
           make test
 
+      - name: Verify Generated Test Cases
+        run: |
+          make test_update
+          git diff --exit-code
+
       - name: Parse Coverage Value From Feature Branch
         run: |
           echo "current_coverage=$(tail -n 1 .coverage/coverage.txt | awk '{print $3}' | awk 'sub("%", "")')" >> $GITHUB_ENV

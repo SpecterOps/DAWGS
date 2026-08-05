@@ -46,6 +46,20 @@ func TestComputeDurationStatsCopiesAndSortsDurations(t *testing.T) {
 	require.Equal(t, 30*time.Millisecond, durations[0])
 	require.Equal(t, 10*time.Millisecond, durations[1])
 	require.Equal(t, 20*time.Millisecond, durations[2])
+	require.Equal(t, []LatencySample{
+		{Round: 1, Iteration: 1, Classification: "warm", Duration: 30 * time.Millisecond},
+		{Round: 1, Iteration: 2, Classification: "warm", Duration: 10 * time.Millisecond},
+		{Round: 1, Iteration: 3, Classification: "warm", Duration: 20 * time.Millisecond},
+	}, stats.Samples)
+
+	labelLatencySamples(&stats, ModePostgresSQL, ScaleCase{Name: "case", Dataset: "fixture"})
+	require.Equal(t, ModePostgresSQL, stats.Samples[0].Backend)
+	require.Equal(t, "case", stats.Samples[0].Case)
+	require.Equal(t, "fixture", stats.Samples[0].Dataset)
+
+	setSampleRound(&stats, 7)
+	require.Equal(t, 7, stats.Samples[0].Round)
+	require.Equal(t, 7, stats.Samples[2].Round)
 }
 
 func TestComputeDurationStatsUsesNearestRankP95(t *testing.T) {
@@ -75,4 +89,15 @@ func TestCheckStateExpectationChecksRowsAndScalar(t *testing.T) {
 		StateQueryResult{RowCount: 1, ScalarInt: &scalar},
 		ExpectedResult{ScalarInt: &wrong},
 	), "expected scalar integer 4")
+}
+
+func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
+	records := []CaseResult{
+		{Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK, StableObservation: true, ObservedRows: []string{`["a"]`, `["a"]`}},
+		{Dataset: "fixture", Name: "case", ExecutionMode: ModeNeo4j, Status: StatusOK, StableObservation: true, ObservedRows: []string{`["a"]`, `["a"]`}},
+	}
+	require.NoError(t, validateBackendObservations(records))
+
+	records[1].ObservedRows = []string{`["a"]`}
+	require.ErrorContains(t, validateBackendObservations(records), "backend observations differ")
 }

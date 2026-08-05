@@ -123,7 +123,12 @@ func appendQueryPartLowerings(
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
-	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
+	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	fieldRequirements, err := collectFieldRequirements(queryPartIndex, queryPart)
+	if err != nil {
+		return err
+	}
+	plan.FieldRequirements = append(plan.FieldRequirements, fieldRequirements...)
 	return nil
 }
 
@@ -1466,7 +1471,20 @@ func queryPartProjection(queryPart cypher.SyntaxNode) (*cypher.Projection, int) 
 	}
 }
 
-func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
+func suffixBindingsObserved(patternPart *cypher.PatternPart, steps []sourceTraversalStep, references map[string]struct{}) bool {
+	if patternPart != nil && patternPart.Variable != nil && referencesSourceIdentifier(references, patternPart.Variable.Symbol) {
+		return true
+	}
+	for _, step := range steps {
+		if (step.Relationship != nil && step.Relationship.Variable != nil && referencesSourceIdentifier(references, step.Relationship.Variable.Symbol)) ||
+			(step.RightNode != nil && step.RightNode.Variable != nil && referencesSourceIdentifier(references, step.RightNode.Variable.Symbol)) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	declaredSymbols := map[string]struct{}{}
 
 	for clauseIndex, readingClause := range readingClauses {
@@ -1505,11 +1523,22 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 				}
 
 				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:]); suffixLength > 0 {
+					suffixSteps := steps[stepIndex+1 : stepIndex+1+suffixLength]
+					// Start with the measured ADCS P1 shape: an observed immediate
+					// continuation of three or more fixed hops. Shorter suffixes retain
+					// the established prefilter until their own decoy-density A/B exists.
+					observed := suffixLength >= 3 && suffixBindingsObserved(patternPart, suffixSteps, sourceReferences)
+					reason := "supplemental suffix prefilter retained for unobserved continuation"
+					if observed {
+						reason = "immediate observed continuation produces suffix rows"
+					}
 					plan.ExpansionSuffixPushdown = append(plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
-						Target:          target,
-						SuffixLength:    suffixLength,
-						SuffixStartStep: stepIndex + 1,
-						SuffixEndStep:   stepIndex + suffixLength,
+						Target:            target,
+						SuffixLength:      suffixLength,
+						SuffixStartStep:   stepIndex + 1,
+						SuffixEndStep:     stepIndex + suffixLength,
+						ApplySupplemental: !observed,
+						Reason:            reason,
 					})
 				}
 			}

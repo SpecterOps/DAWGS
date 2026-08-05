@@ -291,10 +291,13 @@ func UpdatePositiveTestCasesFitness() error {
 						} else {
 							details.ExpectedFitness = &complexity.RelativeFitness
 
-							if updatedDetails, err := json.Marshal(details); err != nil {
+							var updatedDetails bytes.Buffer
+							encoder := json.NewEncoder(&updatedDetails)
+							encoder.SetEscapeHTML(false)
+							if err := encoder.Encode(details); err != nil {
 								return fmt.Errorf("error marshalling test case details: %v", err)
 							} else {
-								nextCase.Details = updatedDetails
+								nextCase.Details = bytes.TrimSpace(updatedDetails.Bytes())
 							}
 						}
 
@@ -309,7 +312,10 @@ func UpdatePositiveTestCasesFitness() error {
 				} else {
 					defer output.Close()
 
-					if err := json.NewEncoder(output).Encode(updatedCases); err != nil {
+					encoder := json.NewEncoder(output)
+					encoder.SetEscapeHTML(false)
+					encoder.SetIndent("", "  ")
+					if err := encoder.Encode(updatedCases); err != nil {
 						return err
 					}
 				}
