@@ -30,7 +30,10 @@ func TestFromCypherProperlyEscapesDebugComment(t *testing.T) {
 	for line := range strings.FieldsFuncSeq(formatted.Statement, IsPGNewline) {
 		if strings.HasPrefix(line, "with s0") {
 			break
-		} else if strings.HasPrefix(strings.TrimSpace(line), "--") {
+		}
+		is_commented := strings.HasPrefix(strings.TrimSpace(line), "--")
+		require.True(t, is_commented, "cypher line '%v' does not start with '--'", line)
+		if is_commented {
 			continue
 		}
 		require.NotContains(t, line, "fail")
