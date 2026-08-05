@@ -287,8 +287,9 @@ func runReadOnly(t *testing.T, ctx context.Context, db graph.Database, idMap ope
 
 	var (
 		queryErrorObserved = false
+		params             = resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, idMap)
 		err                = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-			result := tx.Query(tc.Cypher, tc.Params)
+			result := tx.Query(tc.Cypher, params)
 			defer result.Close()
 			assertion.checkResult(t, result, newAssertionContext(idMap))
 			if assertion.expectQueryError {

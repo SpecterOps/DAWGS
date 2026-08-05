@@ -92,7 +92,13 @@
       },
       "expected": {
         "row_count": 4,
-        "result_kind": "id_rows"
+        "result_kind": "id_rows",
+        "id_rows": [
+          ["ca", "domain"],
+          ["ca", "domain"],
+          ["ca", "domain"],
+          ["ca", "domain"]
+        ]
       },
       "observes": {
         "paths": false,
@@ -120,7 +126,13 @@
       },
       "expected": {
         "row_count": 4,
-        "result_kind": "path_set"
+        "result_kind": "path_set",
+        "path_rows": [
+          {"nodes": ["n", "ca", "store", "domain"], "relationship_kinds": ["Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]},
+          {"nodes": ["n", "p1-a", "ca", "store", "domain"], "relationship_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]},
+          {"nodes": ["n", "p1-b", "ca", "store", "domain"], "relationship_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]},
+          {"nodes": ["n", "p1-b", "p1-c", "ca", "store", "domain"], "relationship_kinds": ["MemberOf", "MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]}
+        ]
       },
       "observes": {
         "paths": true,
@@ -140,4 +152,3 @@
     }
   ]
 }
-

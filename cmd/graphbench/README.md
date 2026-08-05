@@ -27,6 +27,10 @@ explicit `write_scenario`; the runner checks matched and affected counts plus
 post-state queries and rolls back warm-up, timed iterations, and PostgreSQL
 plan capture.
 
+Read cases that return node IDs can declare `expected.id_rows` using fixture
+node names. GraphBench reverse-maps backend-assigned IDs through the complete
+dataset ID map and compares the rows as a multiset, preserving duplicates.
+
 Connection strings can be supplied as flags or environment variables:
 
 - PostgreSQL: `-pg-connection`, `PG_CONNECTION_STRING`, `-connection`, or `CONNECTION_STRING`.
@@ -72,12 +76,62 @@ go run ./cmd/graphbench \
   -summary .coverage/graphbench.md
 ```
 
+Capture independent rounds with 30-50 warm observations each. The PostgreSQL
+runner resets its one-connection pool before every case, records the first
+query execution as `cold`, and keeps connection establishment outside that
+sample. Use a distinct `-round` value for every independently reloaded run:
+Even-numbered rounds reverse the requested backend order to alternate which
+backend runs first.
+
+```bash
+go run ./cmd/graphbench \
+  -round 1 \
+  -iterations 30 \
+  -modes postgres_sql,neo4j \
+  -pg-connection "$PG_CONNECTION_STRING" \
+  -neo4j-connection "$NEO4J_CONNECTION_STRING" \
+  -jsonl-output .coverage/graphbench-round-1.jsonl
+```
+
+Concatenate the JSONL rounds for each version, then run the executable
+confidence gate:
+
+```bash
+make perf_gate \
+  PERF_BASELINE=.coverage/graphbench-baseline.jsonl \
+  PERF_CANDIDATE=.coverage/graphbench-candidate.jsonl
+```
+
+The versioned gate report includes artifact SHA-256 checksums, seeded 95%
+bootstrap intervals over matched round medians, stratified p95 intervals once
+each side has at least 150 samples, the 20% comparable-corpus regression gate,
+and the stricter shortest/ADCS target and PostgreSQL-to-Neo4j gates. Fewer than
+five matched rounds or insufficient p95 samples is reported as incomplete and
+fails the gate.
+
 ## Outputs
 
 JSONL output contains one `CaseResult` record per case and execution mode.
 Markdown and JSON summaries aggregate mode status counts, per-case timings, row
 counts, fallback reasons, and baseline regressions or improvements when a
 baseline capture is supplied.
+
+Each timing record retains the unsorted cold and warm latency samples with round,
+iteration, case, dataset, backend, and connection/session fields so confidence
+interval and regression tooling does not have to reconstruct observations from
+summary percentiles. Read cases run untimed preflight and postflight queries
+and compare their complete row multisets, including duplicate rows, around the
+timed block. For declared `id_rows` and `path_set` results, recorded
+`observed_rows` use stable fixture identities, retain relationship order,
+kinds, and properties, and reject relationship reuse within a path. GraphBench
+compares those stable result kinds across backends. Other result kinds still
+receive per-backend preflight/postflight checks, but are not compared across
+backends because they may contain backend-generated relationship IDs.
+PostgreSQL fixture loads are followed by `VACUUM (ANALYZE)` through
+the pool; a maintenance failure aborts the benchmark.
+The PostgreSQL runner uses a one-connection pool and records `pg_backend_pid()`
+as the sample connection identifier so session-local workspace behavior can be
+separated from cross-session effects.
 
 Write records additionally report matched and affected counts and each
 post-state observation. The recorded duration covers the mutation query; setup,

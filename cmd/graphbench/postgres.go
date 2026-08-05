@@ -38,7 +38,9 @@ type postgresSQLRunner struct {
 	datasetDir string
 	db         graph.Database
 	pgDriver   *pg.Driver
+	pool       *pgxpool.Pool
 	graphID    int32
+	backendPID string
 }
 
 func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus) (*postgresSQLRunner, error) {
@@ -46,6 +48,11 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 	if err != nil {
 		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
 	}
+	// GraphBench needs first-call and steady-state samples from an identifiable
+	// physical session. A single-connection pool makes that relationship
+	// deterministic while retaining the production pool hooks.
+	poolCfg.MinConns = 1
+	poolCfg.MaxConns = 1
 	pool, err := pg.NewPool(poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
@@ -83,12 +90,19 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 		_ = db.Close(ctx)
 		return nil, fmt.Errorf("PostgreSQL default graph is not set")
 	}
+	var backendPID int32
+	if err := pool.QueryRow(ctx, "select pg_backend_pid()").Scan(&backendPID); err != nil {
+		_ = db.Close(ctx)
+		return nil, fmt.Errorf("identify PostgreSQL benchmark connection: %w", err)
+	}
 
 	return &postgresSQLRunner{
 		datasetDir: datasetDir,
 		db:         db,
 		pgDriver:   pgDriver,
+		pool:       pool,
 		graphID:    defaultGraph.ID,
+		backendPID: strconv.FormatInt(int64(backendPID), 10),
 	}, nil
 }
 
@@ -115,10 +129,17 @@ func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus Scal
 		if err != nil {
 			return nil, err
 		}
+		if _, err := s.pool.Exec(ctx, "vacuum (analyze) node, edge"); err != nil {
+			return nil, fmt.Errorf("vacuum and analyze %s fixture: %w", datasetName, err)
+		}
 
 		for _, testCase := range casesByDataset[datasetName] {
 			if !testCase.Supports(ModePostgresSQL) {
 				continue
+			}
+
+			if err := s.resetCaseSession(ctx); err != nil {
+				return nil, fmt.Errorf("reset PostgreSQL session for %s: %w", testCase.Name, err)
 			}
 
 			record := s.runCase(ctx, iterations, testCase, idMap)
@@ -127,6 +148,17 @@ func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus Scal
 	}
 
 	return records, nil
+}
+
+func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
+	s.pool.Reset()
+
+	var backendPID int32
+	if err := s.pool.QueryRow(ctx, "select pg_backend_pid()").Scan(&backendPID); err != nil {
+		return err
+	}
+	s.backendPID = strconv.FormatInt(int64(backendPID), 10)
+	return nil
 }
 
 func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
@@ -139,7 +171,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 	}
 
 	if testCase.WriteScenario == nil {
-		rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
+		rowCount, observedRows, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, iterations)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = err.Error()
@@ -147,7 +179,12 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 		}
 
 		record.RowCount = rowCount
+		record.ObservedRows = observedRows
 		record.Stats = stats
+		labelLatencySamples(&record.Stats, ModePostgresSQL, testCase)
+		for idx := range record.Stats.Samples {
+			record.Stats.Samples[idx].ConnectionID = s.backendPID
+		}
 		applyRowExpectation(&record)
 	} else {
 		scenario, err := resolveWriteScenario(testCase, idMap)
@@ -168,6 +205,10 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 		record.AffectedCount = &measurement.Affected
 		record.PostState = measurement.PostState
 		record.Stats = stats
+		labelLatencySamples(&record.Stats, ModePostgresSQL, testCase)
+		for idx := range record.Stats.Samples {
+			record.Stats.Samples[idx].ConnectionID = s.backendPID
+		}
 	}
 
 	explain, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)

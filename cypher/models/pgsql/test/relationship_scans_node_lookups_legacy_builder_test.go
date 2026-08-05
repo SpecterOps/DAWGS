@@ -116,14 +116,14 @@ func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 				query.Kind(query.End(), scanLookupRegressionKinds(81)[0]),
 			)),
 			query.Returning(query.StartID(), query.RelationshipID(), query.KindsOf(query.Relationship()), query.EndID()),
-		}, "select (s0.n0).id as \"id(s)\", (s0.e0).id as \"id(r)\", kind_name((s0.e0).kind_id)::text as \"type(r)\", (s0.n1).id as \"id(e)\"")
+		}, "select s0.n0 as \"id(s)\", (s0.e0).id as \"id(r)\", kind_name((s0.e0).kind_id)::text as \"type(r)\", (s0.n1).id as \"id(e)\"")
 	})
 
 	t.Run("SCAN-07 directed start and end IDs", func(t *testing.T) {
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.KindIn(query.Relationship(), scanLookupRegressionKinds(83, 84)...)),
 			query.Returning(query.StartID(), query.EndID()),
-		}, "array [115, 116]::int2[]", "select (s0.n0).id as \"id(s)\", (s0.n1).id as \"id(e)\"")
+		}, "array [115, 116]::int2[]", "select s0.n0 as \"id(s)\", (s0.n1).id as \"id(e)\"")
 	})
 
 	t.Run("SCAN-08 scenario A and B", func(t *testing.T) {

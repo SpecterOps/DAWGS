@@ -45,6 +45,7 @@ const (
 	FunctionStringToArray                 Identifier = "string_to_array"
 	FunctionEdgesToPath                   Identifier = "edges_to_path"
 	FunctionOrderedEdgesToPath            Identifier = "ordered_edges_to_path"
+	FunctionOrderedEdgeIDsToPath          Identifier = "ordered_edge_ids_to_path"
 	FunctionNodesToPath                   Identifier = "nodes_to_path"
 	FunctionKindName                      Identifier = "kind_name"
 	FunctionStartNode                     Identifier = "start_node"

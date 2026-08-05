@@ -96,6 +96,10 @@ func generatedDataset(name string) *opengraph.Graph {
 		return testutil.NewHopScaleFixture(128)
 	case testutil.ScanLookupScaleDataset:
 		return testutil.NewScanLookupScaleFixture(128)
+	case testutil.ShortestPathScaleDataset:
+		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: 16, Fanout: 128})
+	case testutil.ADCSScaleDataset:
+		return testutil.NewADCSScaleFixture(testutil.ADCSScaleConfig{MemberOfDepth: 8, Fanout: 100, ValidSuffixEvery: 10, PropertyPayloadSize: 4096})
 	default:
 		return nil
 	}

@@ -92,7 +92,7 @@ func translateToPsqlCmd() CommandDesc {
 
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
+			queryBuilder := format.NewOutputBuilder().WithTargetGraph(result.GraphID)
 			if result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
@@ -153,7 +153,7 @@ func explainAsPsqlCmd() CommandDesc {
 
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
+			queryBuilder := format.NewOutputBuilder().WithTargetGraph(result.GraphID)
 			if result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}

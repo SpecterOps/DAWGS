@@ -79,9 +79,16 @@ type ScaleCase struct {
 }
 
 type ExpectedResult struct {
-	RowCount   *int64 `json:"row_count,omitempty"`
-	ScalarInt  *int64 `json:"scalar_int,omitempty"`
-	ResultKind string `json:"result_kind,omitempty"`
+	RowCount   *int64         `json:"row_count,omitempty"`
+	ScalarInt  *int64         `json:"scalar_int,omitempty"`
+	ResultKind string         `json:"result_kind,omitempty"`
+	IDRows     [][]string     `json:"id_rows,omitempty"`
+	PathRows   []ExpectedPath `json:"path_rows,omitempty"`
+}
+
+type ExpectedPath struct {
+	Nodes             []string `json:"nodes"`
+	RelationshipKinds []string `json:"relationship_kinds"`
 }
 
 type WriteScenario struct {
