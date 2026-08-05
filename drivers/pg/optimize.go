@@ -10,11 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// deadTupleThreshold is the minimum fraction of dead tuples a partitioned
-// parent must accumulate across its partitions before OptimizeStorage will
-// vacuum it.
-const deadTupleThreshold = 0.1
-
 // Sum n_dead_tup and n_live_tup across every leaf partition of the parent;
 const optimizeStorageStatsQuery = `
 	SELECT
@@ -31,8 +26,8 @@ type optimizeStorageConn interface {
 }
 
 func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
-	var targets []string
-	for _, table := range []string{"node", "edge"} {
+	targets := []string{"node", "edge"}
+	for _, table := range targets {
 		var dead, live int64
 		if err := conn.QueryRow(ctx, optimizeStorageStatsQuery, table).Scan(&dead, &live); err != nil {
 			return fmt.Errorf("query dead tuple stats for %s: %w", table, err)
@@ -50,19 +45,7 @@ func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
 			slog.Int64("live_tuples", live),
 			slog.Int64("total_tuples", total),
 			slog.Float64("dead_tuple_ratio", deadTupleRatio),
-			slog.Float64("dead_tuple_threshold", deadTupleThreshold),
 		)
-
-		if total == 0 {
-			continue
-		}
-		if deadTupleRatio >= deadTupleThreshold {
-			targets = append(targets, table)
-		}
-	}
-
-	if len(targets) == 0 {
-		return nil
 	}
 
 	// Targeting the partitioned parents cascades to every partition.

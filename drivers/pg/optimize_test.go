@@ -11,47 +11,12 @@ import (
 )
 
 func TestOptimizeStorage(t *testing.T) {
-	t.Run("skips vacuum when dead tuple ratios are below threshold", func(t *testing.T) {
+	t.Run("always vacuums node and edge regardless of dead tuple ratios", func(t *testing.T) {
 		ctx := context.Background()
 		conn := newOptimizeStorageMockConn(t)
 
-		expectOptimizeStorageStats(conn, "node", 9, 91)
-		expectOptimizeStorageStats(conn, "edge", 0, 0)
-
-		require.NoError(t, optimizeStorage(ctx, conn))
-		require.NoError(t, conn.ExpectationsWereMet())
-	})
-
-	t.Run("vacuums node only", func(t *testing.T) {
-		ctx := context.Background()
-		conn := newOptimizeStorageMockConn(t)
-
-		expectOptimizeStorageStats(conn, "node", 10, 90)
+		expectOptimizeStorageStats(conn, "node", 0, 0)
 		expectOptimizeStorageStats(conn, "edge", 9, 91)
-		expectOptimizeStorageVacuum(conn, "VACUUM (ANALYZE) node")
-
-		require.NoError(t, optimizeStorage(ctx, conn))
-		require.NoError(t, conn.ExpectationsWereMet())
-	})
-
-	t.Run("vacuums edge only", func(t *testing.T) {
-		ctx := context.Background()
-		conn := newOptimizeStorageMockConn(t)
-
-		expectOptimizeStorageStats(conn, "node", 9, 91)
-		expectOptimizeStorageStats(conn, "edge", 10, 90)
-		expectOptimizeStorageVacuum(conn, "VACUUM (ANALYZE) edge")
-
-		require.NoError(t, optimizeStorage(ctx, conn))
-		require.NoError(t, conn.ExpectationsWereMet())
-	})
-
-	t.Run("vacuums node and edge", func(t *testing.T) {
-		ctx := context.Background()
-		conn := newOptimizeStorageMockConn(t)
-
-		expectOptimizeStorageStats(conn, "node", 10, 90)
-		expectOptimizeStorageStats(conn, "edge", 10, 90)
 		expectOptimizeStorageVacuum(conn, "VACUUM (ANALYZE) node, edge")
 
 		require.NoError(t, optimizeStorage(ctx, conn))
