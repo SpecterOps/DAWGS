@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/specterops/dawgs/testutil"
@@ -35,11 +36,18 @@ type config struct {
 	Neo4jConnection string
 	Modes           []ExecutionMode
 	Iterations      int
+	Round           int
 	OutputJSONL     string
 	Summary         string
 	SummaryJSON     string
 	Baseline        string
 	DAWGSVersion    string
+	GateBaseline    string
+	GateCandidate   string
+	GateOutput      string
+	GateSeed        int64
+	Confidence      float64
+	Regression      float64
 }
 
 func parseConfig(args []string, env func(string) string) (config, error) {
@@ -58,17 +66,36 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.Neo4jConnection, "neo4j-connection", env("NEO4J_CONNECTION_STRING"), "Neo4j connection string")
 	flags.StringVar(&rawModes, "modes", string(ModePostgresSQL), "comma-separated execution modes")
 	flags.IntVar(&cfg.Iterations, "iterations", 3, "timed iterations per case")
+	flags.IntVar(&cfg.Round, "round", 1, "independent benchmark round identifier")
 	flags.StringVar(&cfg.OutputJSONL, "jsonl-output", "", "JSONL output path (default: stdout)")
 	flags.StringVar(&cfg.Summary, "summary", "", "markdown summary output path")
 	flags.StringVar(&cfg.SummaryJSON, "summary-json", "", "JSON summary output path")
 	flags.StringVar(&cfg.Baseline, "baseline", "", "previous JSONL output for baseline comparison")
 	flags.StringVar(&cfg.DAWGSVersion, "dawgs-version", "", "DAWGS source version (auto-detected when empty)")
+	flags.StringVar(&cfg.GateBaseline, "gate-baseline", "", "baseline JSONL artifact for comparison-only mode")
+	flags.StringVar(&cfg.GateCandidate, "gate-candidate", "", "candidate JSONL artifact for comparison-only mode")
+	flags.StringVar(&cfg.GateOutput, "gate-output", "", "performance-gate JSON output path (default: stdout)")
+	flags.Int64Var(&cfg.GateSeed, "seed", 1, "deterministic bootstrap seed")
+	flags.Float64Var(&cfg.Confidence, "confidence-level", 0.95, "bootstrap confidence level")
+	flags.Float64Var(&cfg.Regression, "regression-threshold", 0.20, "allowed comparable-case regression ratio")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
 	}
 	if cfg.Iterations < 1 {
 		return config{}, fmt.Errorf("iterations must be at least 1")
+	}
+	if cfg.Round < 1 {
+		return config{}, fmt.Errorf("round must be at least 1")
+	}
+	if (cfg.GateBaseline == "") != (cfg.GateCandidate == "") {
+		return config{}, fmt.Errorf("gate-baseline and gate-candidate must be supplied together")
+	}
+	if cfg.Confidence <= 0 || cfg.Confidence >= 1 {
+		return config{}, fmt.Errorf("confidence-level must be between 0 and 1")
+	}
+	if cfg.Regression < 0 {
+		return config{}, fmt.Errorf("regression-threshold must not be negative")
 	}
 
 	modes, err := parseExecutionModes(rawModes)
@@ -115,6 +142,20 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
+	if cfg.GateBaseline != "" {
+		passed, err := comparePerformanceArtifacts(cfg.GateBaseline, cfg.GateCandidate, cfg.GateOutput, PerfGateOptions{
+			Seed:                cfg.GateSeed,
+			Confidence:          cfg.Confidence,
+			RegressionThreshold: cfg.Regression,
+		})
+		if err != nil {
+			fatal("compare performance artifacts: %v", err)
+		}
+		if !passed {
+			fatal("performance gate failed")
+		}
+		return
+	}
 
 	corpus, err := loadScaleCorpus(cfg.CorpusRoot)
 	if err != nil {
@@ -126,7 +167,7 @@ func main() {
 		records []CaseResult
 	)
 
-	for _, mode := range cfg.Modes {
+	for _, mode := range modesForRound(cfg.Modes, cfg.Round) {
 		switch mode {
 		case ModePostgresSQL:
 			pgConnection := cfg.PGConnection
@@ -186,9 +227,14 @@ func main() {
 		}
 	}
 
+	if err := validateBackendObservations(records); err != nil {
+		fatal("validate backend observations: %v", err)
+	}
+
 	metadata := testutil.ResolveBaselineMetadata(cfg.DAWGSVersion)
 	for idx := range records {
 		records[idx].Metadata = metadata
+		setSampleRound(&records[idx].Stats, cfg.Round)
 	}
 
 	if cfg.Baseline != "" {
@@ -212,4 +258,12 @@ func main() {
 			fatal("write JSON summary: %v", err)
 		}
 	}
+}
+
+func modesForRound(modes []ExecutionMode, round int) []ExecutionMode {
+	ordered := append([]ExecutionMode(nil), modes...)
+	if round%2 == 0 {
+		slices.Reverse(ordered)
+	}
+	return ordered
 }

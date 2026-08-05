@@ -22,8 +22,72 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStableRowValuesReverseMapsNodeIDs(t *testing.T) {
+	values, err := stableRowValues(
+		[]any{int64(101), graph.NewNode(102, nil, graph.StringKind("Group"))},
+		graph.NewValueMapper(),
+		reverseIDMap(opengraph.IDMap{"start": 101, "end": 102}),
+		true,
+		false,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "start", values[0])
+	require.Equal(t, stableNodeObservation{Identity: "end", Kinds: []string{"Group"}}, values[1])
+}
+
+func TestResultContainsNodeIDs(t *testing.T) {
+	require.True(t, resultContainsNodeIDs(ExpectedResult{ResultKind: "id_set"}))
+	require.True(t, resultContainsNodeIDs(ExpectedResult{ResultKind: "id_rows"}))
+	require.False(t, resultContainsNodeIDs(ExpectedResult{ResultKind: "scalar"}))
+	require.False(t, resultContainsNodeIDs(ExpectedResult{ResultKind: "path_set"}))
+}
+
+func TestStableRowValuesMapsNativePathValues(t *testing.T) {
+	start := graph.NewNode(1, nil, graph.StringKind("Start"))
+	end := graph.NewNode(2, nil, graph.StringKind("End"))
+	edge := graph.NewRelationship(3, 1, 2, nil, graph.StringKind("Edge"))
+	mapper := graph.NewValueMapper(func(value, target any) bool {
+		path, sourceOK := value.(string)
+		mapped, targetOK := target.(*graph.Path)
+		if sourceOK && targetOK && path == "native-path" {
+			*mapped = graph.Path{Nodes: []*graph.Node{start, end}, Edges: []*graph.Relationship{edge}}
+			return true
+		}
+		return false
+	})
+
+	values, err := stableRowValues(
+		[]any{"native-path"},
+		mapper,
+		reverseIDMap(opengraph.IDMap{"start": 1, "end": 2}),
+		false,
+		true,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, stablePathObservation{
+		Nodes: []stableNodeObservation{
+			{Identity: "start", Kinds: []string{"Start"}},
+			{Identity: "end", Kinds: []string{"End"}},
+		},
+		Relationships: []stableRelationshipObservation{{Start: "start", End: "end", Kind: "Edge"}},
+	}, values[0])
+}
+
+func TestStableRowValuesRejectsRelationshipReuseWithinPath(t *testing.T) {
+	start := graph.NewNode(1, nil)
+	end := graph.NewNode(2, nil)
+	relationship := graph.NewRelationship(10, 1, 2, nil, graph.StringKind("Edge"))
+	_, err := stableRowValues([]any{graph.Path{
+		Nodes: []*graph.Node{start, end, start},
+		Edges: []*graph.Relationship{relationship, relationship},
+	}}, graph.NewValueMapper(), reverseIDMap(opengraph.IDMap{"start": 1, "end": 2}), false, true)
+	require.ErrorContains(t, err, "reuses relationship ID 10")
+}
 
 func TestMeasureWriteCypherRollsBackWarmupAndEveryIteration(t *testing.T) {
 	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 1}
@@ -47,6 +111,9 @@ func TestMeasureWriteCypherRollsBackWarmupAndEveryIteration(t *testing.T) {
 	require.Equal(t, int64(1), measurement.Affected)
 	require.Equal(t, int64(2), *measurement.PostState[0].ScalarInt)
 	require.Equal(t, 2, stats.Iterations)
+	require.Len(t, stats.Samples, 3)
+	require.Equal(t, "cold", stats.Samples[0].Classification)
+	require.Equal(t, "warm", stats.Samples[1].Classification)
 	require.Equal(t, 3, database.writeTransactions)
 	require.Equal(t, int64(3), database.relationships, "every write transaction must roll back")
 }

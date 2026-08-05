@@ -232,21 +232,24 @@ func pathEdgeIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expressio
 	return pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnID}
 }
 
-func pathEdgeArrayExpression(scope *Scope, edge *BoundIdentifier) pgsql.Expression {
+func edgeArrayFromPathIDs(scope *Scope, pathIDs pgsql.Expression) *pgsql.EdgeArrayFromPathIDs {
 	return &pgsql.EdgeArrayFromPathIDs{
-		PathIDs: pgsql.ArrayLiteral{
-			Values: []pgsql.Expression{
-				pathEdgeIDReference(scope, edge),
-			},
-			CastType: pgsql.Int8Array,
-		},
+		PathIDs: pathIDs,
+		GraphID: pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
 	}
 }
 
+func pathEdgeArrayExpression(scope *Scope, edge *BoundIdentifier) pgsql.Expression {
+	return edgeArrayFromPathIDs(scope, pgsql.ArrayLiteral{
+		Values: []pgsql.Expression{
+			pathEdgeIDReference(scope, edge),
+		},
+		CastType: pgsql.Int8Array,
+	})
+}
+
 func expansionPathEdgeArrayExpression(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
-	return &pgsql.EdgeArrayFromPathIDs{
-		PathIDs: pathBindingReference(scope, expansionPath),
-	}, nil
+	return edgeArrayFromPathIDs(scope, pathBindingReference(scope, expansionPath)), nil
 }
 
 func optionalOr(leftOperand, rightOperand pgsql.Expression) pgsql.Expression {
@@ -317,10 +320,25 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		nodeReferences       []pgsql.Expression
 		directNodeReferences []pgsql.Expression
 		directEdgeReferences []pgsql.Expression
+		allRawPathIDParts    []pgsql.Expression
 		seenExpansionPath    = false
 		seenPathEdge         = false
+		seenDirectEdge       = false
 		nullGuard            pgsql.Expression
+		pendingPathIDParts   []pgsql.Expression
 	)
+
+	flushPathIDParts := func() {
+		if len(pendingPathIDParts) == 0 {
+			return
+		}
+
+		edgeArrayReferences = append(edgeArrayReferences, edgeArrayFromPathIDs(
+			scope,
+			concatenatePathCompositeParts(pendingPathIDParts),
+		))
+		pendingPathIDParts = nil
+	}
 
 	// Path composite components are encoded as dependencies on the bound identifier representing the
 	// path. This is not ideal as it escapes normal translation flow as driven by the structure of the
@@ -331,13 +349,13 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		switch dependency.DataType {
 		case pgsql.ExpansionPath:
 			seenExpansionPath = true
-			if edgeArrayReference, err := expansionPathEdgeArrayExpression(scope, dependency); err != nil {
-				return nil, err
-			} else {
-				edgeArrayReferences = append(edgeArrayReferences, edgeArrayReference)
-			}
+			pathIDs := pathBindingReference(scope, dependency)
+			pendingPathIDParts = append(pendingPathIDParts, pathIDs)
+			allRawPathIDParts = append(allRawPathIDParts, pathIDs)
 
 		case pgsql.EdgeComposite:
+			seenDirectEdge = true
+			flushPathIDParts()
 			directEdgeReference := pathCompositeReference(scope, dependency, pgsql.EdgeTableColumns)
 
 			directEdgeReferences = append(directEdgeReferences, directEdgeReference)
@@ -348,7 +366,12 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 
 		case pgsql.PathEdge:
 			seenPathEdge = true
-			edgeArrayReferences = append(edgeArrayReferences, pathEdgeArrayExpression(scope, dependency))
+			pathIDs := pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{pathEdgeIDReference(scope, dependency)},
+				CastType: pgsql.Int8Array,
+			}
+			pendingPathIDParts = append(pendingPathIDParts, pathIDs)
+			allRawPathIDParts = append(allRawPathIDParts, pathIDs)
 
 		case pgsql.NodeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
 			directNodeReferences = append(directNodeReferences, pathCompositeReference(scope, dependency, pgsql.NodeTableColumns))
@@ -358,6 +381,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 			return nil, fmt.Errorf("unsupported type for path rendering: %s", dependency.DataType)
 		}
 	}
+	flushPathIDParts()
 
 	// The optimizer reversed the originating pattern so the traversal could be driven from the
 	// more selective terminal endpoint. The path dependencies were therefore accumulated in
@@ -396,6 +420,34 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 			return nil, fmt.Errorf("expansion path %s does not contain a root node reference", projected.Identifier)
 		}
 
+		knownNodes := pgsql.ArrayLiteral{
+			Values:   directNodeReferences,
+			CastType: pgsql.NodeCompositeArray,
+		}
+
+		// Read expansions carry edge IDs in path order. When every edge
+		// component is still an ID, let the graph-scoped linear materializer
+		// hydrate and walk the stream once. A direct edge composite indicates a
+		// mixed or mutation-returning path and retains the conservative generic
+		// materializer below.
+		if !seenDirectEdge {
+			pathIDs := concatenatePathCompositeParts(allRawPathIDParts)
+			if pathIDs == nil {
+				pathIDs = pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+			}
+
+			return nullGuardPathCompositeExpression(pgsql.FunctionCall{
+				Function: pgsql.FunctionOrderedEdgeIDsToPath,
+				Parameters: []pgsql.Expression{
+					pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
+					directNodeReferences[0],
+					pathIDs,
+					knownNodes,
+				},
+				CastType: pgsql.PathComposite,
+			}, nullGuard), nil
+		}
+
 		edgeArrayExpression := concatenatePathCompositeParts(edgeArrayReferences)
 		if edgeArrayExpression == nil {
 			edgeArrayExpression = pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}
@@ -404,12 +456,10 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		return nullGuardPathCompositeExpression(pgsql.FunctionCall{
 			Function: pgsql.FunctionOrderedEdgesToPath,
 			Parameters: []pgsql.Expression{
+				pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
 				directNodeReferences[0],
 				edgeArrayExpression,
-				pgsql.ArrayLiteral{
-					Values:   directNodeReferences,
-					CastType: pgsql.NodeCompositeArray,
-				},
+				knownNodes,
 			},
 			CastType: pgsql.PathComposite,
 		}, nullGuard), nil
@@ -417,6 +467,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		return nullGuardPathCompositeExpression(pgsql.FunctionCall{
 			Function: pgsql.FunctionNodesToPath,
 			Parameters: []pgsql.Expression{
+				pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
 				pgsql.Variadic{
 					Expression: pgsql.ArrayLiteral{
 						Values:   nodeReferences,
@@ -445,6 +496,18 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 }
 
 func buildProjectionForExpansionNode(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.IDOnly {
+		var expression pgsql.Expression = pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID}
+		if projected.LastProjection != nil {
+			expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+		}
+
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
@@ -475,6 +538,18 @@ func buildProjectionForExpansionNode(alias pgsql.Identifier, projected *BoundIde
 }
 
 func buildProjectionForNodeComposite(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.IDOnly {
+		var expression pgsql.Expression = pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID}
+		if projected.LastProjection != nil {
+			expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+		}
+
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
@@ -508,12 +583,10 @@ func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIde
 	// Create a new final projection that's aliased to the visible binding's identifier
 	return []pgsql.SelectItem{
 		&pgsql.AliasedExpression{
-			Expression: &pgsql.EdgeArrayFromPathIDs{
-				PathIDs: pgsql.CompoundIdentifier{
-					scope.CurrentFrame().Binding.Identifier,
-					pgsql.ColumnPath,
-				},
-			},
+			Expression: edgeArrayFromPathIDs(scope, pgsql.CompoundIdentifier{
+				scope.CurrentFrame().Binding.Identifier,
+				pgsql.ColumnPath,
+			}),
 			Alias: pgsql.AsOptionalIdentifier(alias),
 		},
 	}, nil
@@ -726,6 +799,7 @@ func appendLimitToShortestPathHarness(query *pgsql.Query, limit pgsql.Expression
 	}
 
 	if selectBody, isSelect := query.Body.(pgsql.Select); isSelect {
+		containsHarness := false
 		for idx := range selectBody.From {
 			if functionCall, isFunctionCall := selectBody.From[idx].Source.(pgsql.FunctionCall); isFunctionCall &&
 				isLimitPushdownShortestPathHarness(functionCall.Function) {
@@ -734,10 +808,18 @@ func appendLimitToShortestPathHarness(query *pgsql.Query, limit pgsql.Expression
 				// outer query will discard.
 				functionCall.Parameters = append(functionCall.Parameters, pgsql.NewTypeCast(limit, pgsql.Int8))
 				selectBody.From[idx].Source = functionCall
+				containsHarness = true
 			}
 		}
 
 		query.Body = selectBody
+		if containsHarness {
+			// Keep the internal limit so the BFS can stop early, and also bound
+			// the containing FunctionScan so downstream planning sees the same
+			// cardinality ceiling. In particular, LIMIT 0 must prevent invoking
+			// the harness because the harness uses zero to mean "unlimited".
+			query.Limit = limit
+		}
 	}
 }
 

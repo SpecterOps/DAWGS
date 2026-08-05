@@ -23,6 +23,7 @@ const (
 	TailFunction               = "tail"
 	NodesFunction              = "nodes"
 	RelationshipsFunction      = "relationships"
+	PathLengthFunction         = "length"
 	CoalesceFunction           = "coalesce"
 	CollectFunction            = "collect"
 	SumFunction                = "sum"

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -177,7 +178,15 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 			require.Equalf(t, expectedSQL, normalizedActual, "Test case for cypher query: '%s' failed to match.", s.Cypher)
 
 			if s.PgSQLParams != nil {
-				require.Equal(t, s.PgSQLParams, translation.Parameters)
+				// Golden parameters are stored as JSON, whose decoder represents
+				// numbers as float64. Compare the translated bag through the same
+				// serialization boundary so typed integer parameters do not create a
+				// false mismatch while their values and emitted casts remain exact.
+				var normalizedParameters map[string]any
+				encodedParameters, err := json.Marshal(translation.Parameters)
+				require.NoError(t, err)
+				require.NoError(t, json.Unmarshal(encodedParameters, &normalizedParameters))
+				require.Equal(t, s.PgSQLParams, normalizedParameters)
 			}
 		}
 	}
@@ -357,20 +366,28 @@ func UpdateTranslationTestCases(mapper pgsql.KindMapper) error {
 						return err
 					} else if nextCases, _, err := caseFile.Load(); err != nil {
 						return err
-					} else if output, err := os.OpenFile(updatedCaseFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644); err != nil {
-						return err
 					} else {
+						var output strings.Builder
 						formattedLicenseHeader := fmt.Sprintf(licenseHeader, time.Now().Year())
 
-						if _, err := io.WriteString(output, formattedLicenseHeader); err != nil {
+						if _, err := io.WriteString(&output, formattedLicenseHeader); err != nil {
 							return err
 						}
 
 						for _, nextCase := range nextCases {
-							nextCase.WriteTo(output, mapper)
+							if err := nextCase.WriteTo(&output, mapper); err != nil {
+								return err
+							}
 						}
 
-						output.Close()
+						trailingNewlines := "\n"
+						if bytes.HasSuffix(caseFile.content, []byte("\n\n")) {
+							trailingNewlines = "\n\n"
+						}
+						content := strings.TrimRight(output.String(), "\n") + trailingNewlines
+						if err := os.WriteFile(updatedCaseFilePath, []byte(content), 0644); err != nil {
+							return err
+						}
 					}
 				}
 			}

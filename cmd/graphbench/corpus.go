@@ -79,6 +79,28 @@ func validateScaleCase(testCase ScaleCase) error {
 		}
 	}
 
+	if len(testCase.Expected.IDRows) > 0 {
+		if testCase.Expected.ResultKind != "id_rows" {
+			return fmt.Errorf("expected.id_rows requires result_kind id_rows")
+		}
+		if testCase.Expected.RowCount == nil || int64(len(testCase.Expected.IDRows)) != *testCase.Expected.RowCount {
+			return fmt.Errorf("expected.id_rows must contain exactly row_count rows")
+		}
+	}
+	if len(testCase.Expected.PathRows) > 0 {
+		if testCase.Expected.ResultKind != "path_set" {
+			return fmt.Errorf("expected.path_rows requires result_kind path_set")
+		}
+		if testCase.Expected.RowCount == nil || int64(len(testCase.Expected.PathRows)) != *testCase.Expected.RowCount {
+			return fmt.Errorf("expected.path_rows must contain exactly row_count rows")
+		}
+		for idx, path := range testCase.Expected.PathRows {
+			if len(path.Nodes) != len(path.RelationshipKinds)+1 {
+				return fmt.Errorf("expected.path_rows[%d] must have one more node than relationship kind", idx)
+			}
+		}
+	}
+
 	if testCase.WriteScenario != nil {
 		if err := validateWriteScenario(*testCase.WriteScenario); err != nil {
 			return err

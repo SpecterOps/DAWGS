@@ -88,6 +88,11 @@ current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is referen
 comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
 against a previous JSONL baseline. Mutating scale cases must declare a `write_scenario`; each warm-up and timed iteration
 runs in a rollback transaction and verifies matched, affected, and post-state cardinality.
+Read timings retain every raw warm sample and are bracketed by untimed exact-row
+multiset checks. PostgreSQL datasets are vacuumed and analyzed after loading and
+before measured reads. Node-ID expectations and recorded paths use stable
+fixture identities rather than backend-assigned IDs, while preserving duplicate
+rows and path order.
 
 The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale

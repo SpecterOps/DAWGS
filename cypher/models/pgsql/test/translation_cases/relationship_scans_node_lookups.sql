@@ -32,31 +32,31 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 -- case: match (s:RegressionKind69)-[r:RegressionKind72]->(e) where id(e) = $end_id return r, s
 -- cypher_params: {"end_id":202}
 -- pgsql_params:{"pi0":202}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = @pi0::float8) and n1.id = e0.end_id join node n0 on n0.kind_ids operator (pg_catalog.@>) array [101]::int2[] and n0.id = e0.start_id where e0.kind_id = any (array [104]::int2[])) select s0.e0 as r, s0.n0 as s from s0;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = @pi0::float8) and n1.id = e0.end_id join node n0 on n0.kind_ids operator (pg_catalog.@>) array [101]::int2[] and n0.id = e0.start_id where e0.kind_id = any (array [104]::int2[])) select s0.e0 as r, s0.n0 as s from s0;
 
 -- case: match (s:RegressionKind69)-[r:RegressionKind72|RegressionKind73|RegressionKind74|RegressionKind75|RegressionKind76|RegressionKind77|RegressionKind78|RegressionKind79|RegressionKind80]->(e) where id(e) = $end_id return r, s
 -- cypher_params: {"end_id":202}
 -- pgsql_params:{"pi0":202}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = @pi0::float8) and n1.id = e0.end_id join node n0 on n0.kind_ids operator (pg_catalog.@>) array [101]::int2[] and n0.id = e0.start_id where e0.kind_id = any (array [104, 105, 106, 107, 108, 109, 110, 111, 112]::int2[])) select s0.e0 as r, s0.n0 as s from s0;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = @pi0::float8) and n1.id = e0.end_id join node n0 on n0.kind_ids operator (pg_catalog.@>) array [101]::int2[] and n0.id = e0.start_id where e0.kind_id = any (array [104, 105, 106, 107, 108, 109, 110, 111, 112]::int2[])) select s0.e0 as r, s0.n0 as s from s0;
 
 -- case: match (s)-[r:RegressionKind82]->(e:RegressionKind81) return id(s), id(r), type(r), id(e)
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on n1.kind_ids operator (pg_catalog.@>) array [113]::int2[] and n1.id = e0.end_id join node n0 on n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select (s0.n0).id as "id(s)", (s0.e0).id as "id(r)", kind_name((s0.e0).kind_id)::text as "type(r)", (s0.n1).id as "id(e)" from s0;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on n1.kind_ids operator (pg_catalog.@>) array [113]::int2[] and n1.id = e0.end_id join node n0 on n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select (s0.n0).id as "id(s)", (s0.e0).id as "id(r)", kind_name((s0.e0).kind_id)::text as "type(r)", s0.n1 as "id(e)" from s0;
 
 -- case: match (s)-[r:RegressionKind83]->(e) return id(s), id(e)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [115]::int2[])) select (s0.n0).id as "id(s)", (s0.n1).id as "id(e)" from s0;
+with s0 as (select n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [115]::int2[])) select s0.n0 as "id(s)", (s0.n1).id as "id(e)" from s0;
 
 -- case: match (s)-[r:RegressionKind83|RegressionKind84]->(e) return id(s), id(e)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [115, 116]::int2[])) select (s0.n0).id as "id(s)", (s0.n1).id as "id(e)" from s0;
+with s0 as (select n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [115, 116]::int2[])) select s0.n0 as "id(s)", (s0.n1).id as "id(e)" from s0;
 
 -- case: match (s)-[r:RegressionKind87|RegressionKind88|RegressionKind89|RegressionKind90|RegressionKind91|RegressionKind92]->(e) where (s:RegressionKind85 or s:RegressionKind86 or s:RegressionKind81) and id(e) in $end_ids return id(s)
 -- cypher_params: {"end_ids":[202,303]}
 -- pgsql_params:{"pi0":[202,303]}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = any (@pi0::float8[])) and n1.id = e0.end_id join node n0 on ((n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [113]::int2[])) and n0.id = e0.start_id where e0.kind_id = any (array [119, 120, 121, 122, 123, 124]::int2[])) select (s0.n0).id as "id(s)" from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = any (@pi0::float8[])) and n1.id = e0.end_id join node n0 on ((n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [113]::int2[])) and n0.id = e0.start_id where e0.kind_id = any (array [119, 120, 121, 122, 123, 124]::int2[])) select (s0.n0).id as "id(s)" from s0;
 
 -- case: match (s)-[r:RegressionKind87|RegressionKind88|RegressionKind89|RegressionKind90|RegressionKind91]->(e:RegressionKind81) where (s:RegressionKind85 or s:RegressionKind86 or s:RegressionKind81) and id(e) in $end_ids return id(s)
 -- cypher_params: {"end_ids":[202,303]}
 -- pgsql_params:{"pi0":[202,303]}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = any (@pi0::float8[])) and n1.kind_ids operator (pg_catalog.@>) array [113]::int2[] and n1.id = e0.end_id join node n0 on ((n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [113]::int2[])) and n0.id = e0.start_id where e0.kind_id = any (array [119, 120, 121, 122, 123]::int2[])) select (s0.n0).id as "id(s)" from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = any (@pi0::float8[])) and n1.kind_ids operator (pg_catalog.@>) array [113]::int2[] and n1.id = e0.end_id join node n0 on ((n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [113]::int2[])) and n0.id = e0.start_id where e0.kind_id = any (array [119, 120, 121, 122, 123]::int2[])) select (s0.n0).id as "id(s)" from s0;
 
 -- case: match (n) where n:RegressionKind85 or n:RegressionKind86 return id(n)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[])) select (s0.n0).id as "id(n)" from s0;
@@ -128,27 +128,27 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (s)-[:RegressionKind97]->(e) where id(s) = $tenant_id and (e:RegressionKind95 or e:RegressionKind96) and e.roletemplateid in $role_ids return e
 -- cypher_params: {"role_ids":["role-a","role-b"],"tenant_id":101}
 -- pgsql_params:{"pi0":101,"pi1":["role-a","role-b"]}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::float8) and n0.id = e0.start_id join node n1 on ((n1.kind_ids operator (pg_catalog.@>) array [127]::int2[] or n1.kind_ids operator (pg_catalog.@>) array [128]::int2[]) and (n1.properties ->> 'roletemplateid') = any (@pi1::text[])) and n1.id = e0.end_id where e0.kind_id = any (array [129]::int2[])) select s0.n1 as e from s0;
+with s0 as (select n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::float8) and n0.id = e0.start_id join node n1 on ((n1.kind_ids operator (pg_catalog.@>) array [127]::int2[] or n1.kind_ids operator (pg_catalog.@>) array [128]::int2[]) and (n1.properties ->> 'roletemplateid') = any (@pi1::text[])) and n1.id = e0.end_id where e0.kind_id = any (array [129]::int2[])) select s0.n1 as e from s0;
 
 -- case: match (s)-[:RegressionKind97]->(e:RegressionKind95) where id(s) = $tenant_id and e.enabled = true return e
 -- cypher_params: {"tenant_id":101}
 -- pgsql_params:{"pi0":101}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::float8) and n0.id = e0.start_id join node n1 on (((n1.properties -> 'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb) and n1.kind_ids operator (pg_catalog.@>) array [127]::int2[] and n1.id = e0.end_id where e0.kind_id = any (array [129]::int2[])) select s0.n1 as e from s0;
+with s0 as (select n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::float8) and n0.id = e0.start_id join node n1 on (((n1.properties -> 'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb) and n1.kind_ids operator (pg_catalog.@>) array [127]::int2[] and n1.id = e0.end_id where e0.kind_id = any (array [129]::int2[])) select s0.n1 as e from s0;
 
 -- case: match (s)-[r:RegressionKind83]->(e) where id(s) = $start_id and id(e) = $end_id return r limit 1
 -- cypher_params: {"end_id":202,"start_id":101}
 -- pgsql_params:{"pi0":101,"pi1":202}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::float8) and n0.id = e0.start_id join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id where e0.kind_id = any (array [115]::int2[]) limit 1) select s0.e0 as r from s0 limit 1;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::float8) and n0.id = e0.start_id join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id where e0.kind_id = any (array [115]::int2[]) limit 1) select s0.e0 as r from s0 limit 1;
 
 -- case: match (s)-[:RegressionKind82]->(e) where s.objectid ends with $suffix and id(e) = $end_id return s
 -- cypher_params: {"end_id":202,"suffix":"-555"}
 -- pgsql_params:{"pi0":"-555","pi1":202}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id join node n0 on (cypher_ends_with((n0.properties ->> 'objectid'), (@pi0::text)::text)::bool) and n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select s0.n0 as s from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id join node n0 on (cypher_ends_with((n0.properties ->> 'objectid'), (@pi0::text)::text)::bool) and n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select s0.n0 as s from s0;
 
 -- case: match (s)-[:RegressionKind82]->(e) where s.objectid ends with $suffix and id(e) = $end_id return id(s)
 -- cypher_params: {"end_id":202,"suffix":"-555"}
 -- pgsql_params:{"pi0":"-555","pi1":202}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id join node n0 on (cypher_ends_with((n0.properties ->> 'objectid'), (@pi0::text)::text)::bool) and n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select (s0.n0).id as "id(s)" from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id join node n0 on (cypher_ends_with((n0.properties ->> 'objectid'), (@pi0::text)::text)::bool) and n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select (s0.n0).id as "id(s)" from s0;
 
 -- case: match (n:RegressionKind99) return n order by n.name desc
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [131]::int2[]) select s0.n0 as n from s0 order by ((s0.n0).properties -> 'name') desc;

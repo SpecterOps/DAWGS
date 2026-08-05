@@ -3,6 +3,7 @@ package translate
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -57,19 +58,21 @@ type ExpansionBuilder struct {
 	UseUnionAll         bool
 
 	queryParameters map[string]any
+	graphID         int32
 	traversalStep   *TraversalStep
 	model           *Expansion
 	unwindClauses   []UnwindClause
 	unwindSources   []pgsql.FromClause
 }
 
-func NewExpansionBuilder(queryParameters map[string]any, traversalStep *TraversalStep) (*ExpansionBuilder, error) {
+func NewExpansionBuilder(queryParameters map[string]any, traversalStep *TraversalStep, graphID int32) (*ExpansionBuilder, error) {
 	if traversalStep.Expansion == nil {
 		return nil, errors.New("traversal step must have expansion set")
 	}
 
 	return &ExpansionBuilder{
 		queryParameters: queryParameters,
+		graphID:         graphID,
 		traversalStep:   traversalStep,
 		model:           traversalStep.Expansion,
 	}, nil
@@ -283,6 +286,30 @@ func newExpansionRootIDsParameterSeed(identifier, nodeIdentifier pgsql.Identifie
 
 func newExpansionTerminalIDsParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
 	return newExpansionNodeFilterSeed(identifier, expansionTerminalFilter, nodeIdentifier, constraints)
+}
+
+func newExpansionArrayParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression, parameterPosition int) expansionSeed {
+	parameterAlias := pgsql.Identifier(string(identifier) + "_parameter")
+	parameterID := pgsql.CompoundIdentifier{parameterAlias, pgsql.ColumnID}
+	seed := newExpansionSeed(identifier, pgd.EntityID(nodeIdentifier), []pgsql.FromClause{{
+		Source: pgsql.FormattingLiteral(fmt.Sprintf(
+			"unnest($%d::int8[]) as %s(id)",
+			parameterPosition,
+			parameterAlias,
+		)),
+		Joins: []pgsql.Join{{
+			Table: expansionNodeTableReference(nodeIdentifier),
+			JoinOperator: pgsql.JoinOperator{
+				JoinType: pgsql.JoinTypeInner,
+				Constraint: pgd.Equals(
+					pgd.EntityID(nodeIdentifier),
+					parameterID,
+				),
+			},
+		}},
+	}}, constraints)
+	seed.query.Distinct = true
+	return seed
 }
 
 func (s expansionSeed) CTE() pgsql.CommonTableExpression {
@@ -1158,7 +1185,15 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		previousFrameIdentifier,
 	)
 
-	if s.usesBoundRootIDs() {
+	if expansionModel.UsesSingletonEndpointPair() {
+		rootIDsSeed := newExpansionArrayParameterSeed(
+			expansionSeedIdentifier(expansionModel.Frame.Binding.Identifier),
+			s.traversalStep.LeftNode.Identifier,
+			primerSeedConstraints,
+			1,
+		)
+		seed = &rootIDsSeed
+	} else if s.usesBoundRootIDs() {
 		rootIDsSeed := newExpansionRootIDsParameterSeed(
 			expansionSeedIdentifier(expansionModel.Frame.Binding.Identifier),
 			s.traversalStep.LeftNode.Identifier,
@@ -1226,7 +1261,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		return pgsql.Query{}, nil, err
 	}
 
-	if !expansionModel.HasExplicitEndpointInequality {
+	if !expansionModel.HasExplicitEndpointInequality && !expansionModel.UsesSingletonEndpointPair() {
 		nextQuery.Where = pgsql.OptionalAnd(
 			nextQuery.Where,
 			shortestPathSeedSelfEndpointGuard(s.model.EdgeStartColumn, expansionModel.UseMaterializedEndpointPairFilter),
@@ -1344,7 +1379,15 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 		previousFrameIdentifier,
 	)
 
-	if s.usesBoundTerminalIDs() {
+	if expansionModel.UsesSingletonEndpointPair() {
+		terminalIDsSeed := newExpansionArrayParameterSeed(
+			expansionSeedIdentifier(expansionModel.Frame.Binding.Identifier),
+			s.traversalStep.RightNode.Identifier,
+			terminalSeedConstraints,
+			2,
+		)
+		seed = &terminalIDsSeed
+	} else if s.usesBoundTerminalIDs() {
 		terminalIDsSeed := newExpansionTerminalIDsParameterSeed(
 			expansionSeedIdentifier(expansionModel.Frame.Binding.Identifier),
 			s.traversalStep.RightNode.Identifier,
@@ -1485,6 +1528,26 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 }
 
 func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression) pgsql.CommonTableExpression {
+	const validatedEndpoints pgsql.Identifier = "singleton_endpoints"
+
+	if expansionModel.UsesSingletonEndpointPair() {
+		harnessParameters = append([]pgsql.Expression(nil), harnessParameters...)
+		rootArrayIndex := len(harnessParameters) - 3
+		terminalArrayIndex := len(harnessParameters) - 2
+		harnessParameters[rootArrayIndex] = pgsql.ArrayLiteral{
+			Values: []pgsql.Expression{
+				pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
+			},
+			CastType: pgsql.Int8Array,
+		}
+		harnessParameters[terminalArrayIndex] = pgsql.ArrayLiteral{
+			Values: []pgsql.Expression{
+				pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
+			},
+			CastType: pgsql.Int8Array,
+		}
+	}
+
 	var (
 		innerQuery = pgsql.Query{
 			Body: pgsql.Select{
@@ -1500,6 +1563,16 @@ func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expans
 			},
 		}
 	)
+	if expansionModel.UsesSingletonEndpointPair() {
+		selectBody := innerQuery.Body.(pgsql.Select)
+		selectBody.Projection = []pgsql.SelectItem{
+			pgsql.CompoundIdentifier{functionName, pgsql.WildcardIdentifier},
+		}
+		selectBody.From = append([]pgsql.FromClause{{
+			Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()},
+		}}, selectBody.From...)
+		innerQuery.Body = selectBody
+	}
 
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
@@ -1507,6 +1580,31 @@ func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expans
 			Shape: expansionColumns(),
 		},
 		Query: innerQuery,
+	}
+}
+
+func singletonEndpointValidationCTE(traversalStep *TraversalStep, expansionModel *Expansion) pgsql.CommonTableExpression {
+	const validatedEndpoints pgsql.Identifier = "singleton_endpoints"
+
+	return pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{Name: validatedEndpoints},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: []pgsql.SelectItem{
+				&pgsql.AliasedExpression{
+					Expression: pgd.EntityID(traversalStep.LeftNode.Identifier),
+					Alias:      models.OptionalValue(expansionRootID),
+				},
+				&pgsql.AliasedExpression{
+					Expression: pgd.EntityID(traversalStep.RightNode.Identifier),
+					Alias:      models.OptionalValue(expansionTerminalID),
+				},
+			},
+			From: []pgsql.FromClause{
+				{Source: expansionNodeTableReference(traversalStep.LeftNode.Identifier)},
+				{Source: expansionNodeTableReference(traversalStep.RightNode.Identifier)},
+			},
+			Where: pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints),
+		}},
 	}
 }
 
@@ -1727,7 +1825,7 @@ func shortestPathSeedSelfEndpointGuard(rootID pgsql.Expression, useEndpointPairF
 }
 
 func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *pgsql.Select, expansionModel *Expansion) {
-	if expansionModel.HasExplicitEndpointInequality {
+	if expansionModel.HasExplicitEndpointInequality || expansionAllowsZeroDepth(expansionModel) {
 		return
 	}
 
@@ -1799,6 +1897,9 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 			Body:                   projectionQuery,
 		}
 
+		if expansionModel.UsesSingletonEndpointPair() {
+			query.AddCTE(singletonEndpointValidationCTE(s.traversalStep, expansionModel))
+		}
 		query.AddCTE(shortestPathSearchCTE(harnessFunctionName, expansionModel, harnessParameters))
 		return query, nil
 	}
@@ -1826,7 +1927,9 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 		projectionQuery pgsql.Select
 	)
 
-	expansionModel.UseMaterializedEndpointPairFilter = s.canMaterializeEndpointPairFilter(expansionModel)
+	if !expansionModel.UsesSingletonEndpointPair() {
+		expansionModel.UseMaterializedEndpointPairFilter = s.canMaterializeEndpointPairFilter(expansionModel)
+	}
 
 	forwardFrontPrimerQuery, forwardSeedProjectionConstraints, err := s.prepareForwardFrontPrimerQuery(expansionModel)
 	if err != nil {
@@ -1884,7 +1987,14 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 	s.appendUnwindSources(&projectionQuery)
 	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
 
-	if harnessParameters, err := s.bidirectionalAllShortestPathsParameters(expansionModel, forwardFrontPrimerQuery, forwardFrontRecursiveQuery, backwardFrontPrimerQuery, backwardFrontRecursiveQuery); err != nil {
+	if harnessParameters, err := s.bidirectionalShortestPathsParameters(
+		expansionModel,
+		forwardFrontPrimerQuery,
+		forwardFrontRecursiveQuery,
+		backwardFrontPrimerQuery,
+		backwardFrontRecursiveQuery,
+		harnessFunctionName == pgsql.FunctionBidirectionalSPHarness,
+	); err != nil {
 		return pgsql.Query{}, err
 	} else {
 		query := pgsql.Query{
@@ -1892,6 +2002,9 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 			Body:                   projectionQuery,
 		}
 
+		if expansionModel.UsesSingletonEndpointPair() {
+			query.AddCTE(singletonEndpointValidationCTE(s.traversalStep, expansionModel))
+		}
 		query.AddCTE(shortestPathSearchCTE(harnessFunctionName, expansionModel, harnessParameters))
 		return query, nil
 	}
@@ -1933,13 +2046,13 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 	)
 
 	if hasPairFilter {
-		if formattedFilter, err := format.Statement(pairFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
+		if formattedFilter, err := format.Statement(pairFilterStatement, format.NewOutputBuilder().WithTargetGraph(s.graphID).WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
 			pairFilter = formattedFilter
 		}
 	} else if hasRootFilter {
-		if formattedFilter, err := format.Statement(rootFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
+		if formattedFilter, err := format.Statement(rootFilterStatement, format.NewOutputBuilder().WithTargetGraph(s.graphID).WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
 			rootFilter = formattedFilter
@@ -1947,7 +2060,7 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 	}
 
 	if !hasPairFilter && hasTerminalFilter {
-		if formattedFilter, err := format.Statement(terminalFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
+		if formattedFilter, err := format.Statement(terminalFilterStatement, format.NewOutputBuilder().WithTargetGraph(s.graphID).WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
 			terminalFilter = formattedFilter
@@ -1972,7 +2085,7 @@ func (s *ExpansionBuilder) shortestPathsParameters(expansionModel *Expansion, fo
 		formatFragment    = func(query pgsql.SetExpression) (string, error) {
 			return format.Statement(
 				nextFrontInsert(query),
-				format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters))
+				format.NewOutputBuilder().WithTargetGraph(s.graphID).WithMaterializedParameters(s.queryParameters))
 		}
 	)
 
@@ -2010,13 +2123,32 @@ func (s *ExpansionBuilder) shortestPathsParameters(expansionModel *Expansion, fo
 	return harnessParameters, nil
 }
 
-func (s *ExpansionBuilder) bidirectionalAllShortestPathsParameters(expansionModel *Expansion, forwardFrontPrimerQuery pgsql.SetExpression, forwardFrontRecursiveQuery pgsql.SetExpression, backwardFrontPrimerQuery pgsql.SetExpression, backwardFrontRecursiveQuery pgsql.SetExpression) ([]pgsql.Expression, error) {
+func shortestPathWorkspaceFragment(fragment string) string {
+	return strings.NewReplacer(
+		"on conflict on constraint forward_visited_pkey", "on conflict on constraint bsp_forward_visited_pkey",
+		"on conflict on constraint backward_visited_pkey", "on conflict on constraint bsp_backward_visited_pkey",
+		"forward_visited", "pg_temp.bsp_forward_visited",
+		"backward_visited", "pg_temp.bsp_backward_visited",
+		"forward_front", "pg_temp.bsp_forward_front",
+		"backward_front", "pg_temp.bsp_backward_front",
+		"next_front", "pg_temp.bsp_next_front",
+	).Replace(fragment)
+}
+
+func (s *ExpansionBuilder) bidirectionalShortestPathsParameters(expansionModel *Expansion, forwardFrontPrimerQuery pgsql.SetExpression, forwardFrontRecursiveQuery pgsql.SetExpression, backwardFrontPrimerQuery pgsql.SetExpression, backwardFrontRecursiveQuery pgsql.SetExpression, useReusableWorkspace bool) ([]pgsql.Expression, error) {
 	var (
 		harnessParameters []pgsql.Expression
 		formatFragment    = func(query pgsql.SetExpression) (string, error) {
-			return format.Statement(
+			fragment, err := format.Statement(
 				nextFrontInsert(query),
-				format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters))
+				format.NewOutputBuilder().WithTargetGraph(s.graphID).WithMaterializedParameters(s.queryParameters))
+			if err != nil {
+				return "", err
+			}
+			if useReusableWorkspace {
+				fragment = shortestPathWorkspaceFragment(fragment)
+			}
+			return fragment, nil
 		}
 	)
 
@@ -2064,11 +2196,51 @@ func (s *ExpansionBuilder) bidirectionalAllShortestPathsParameters(expansionMode
 	}
 
 	harnessParameters = append(harnessParameters, pgsql.NewLiteral(expansionModel.Options.MaxDepth.GetOr(translateDefaultMaxTraversalDepth), pgsql.Int))
+	if expansionModel.UsesSingletonEndpointPair() {
+		harnessParameters = append(harnessParameters,
+			pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{expansionModel.SingletonRootID},
+				CastType: pgsql.Int8Array,
+			},
+			pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{expansionModel.SingletonTerminalID},
+				CastType: pgsql.Int8Array,
+			},
+		)
+		if useReusableWorkspace {
+			harnessParameters = append(harnessParameters, pgsql.NewLiteral(expansionAllowsZeroDepth(expansionModel), pgsql.Boolean))
+		}
+		return harnessParameters, nil
+	}
 
 	if filterParameters, err := s.boundEndpointFilterParameters(); err != nil {
 		return nil, err
 	} else {
+		if useReusableWorkspace {
+			for idx, filterParameter := range filterParameters {
+				typeCast, isTypeCast := filterParameter.(pgsql.TypeCast)
+				if !isTypeCast {
+					continue
+				}
+				literal, isLiteral := typeCast.Expression.(pgsql.Literal)
+				if !isLiteral {
+					continue
+				}
+				if value, isString := literal.Value.(string); isString {
+					literal.Value = strings.NewReplacer(
+						"traversal_root_filter", "pg_temp.bsp_root_filter",
+						"traversal_terminal_filter", "pg_temp.bsp_terminal_filter",
+						"traversal_pair_filter", "pg_temp.bsp_pair_filter",
+					).Replace(value)
+					typeCast.Expression = literal
+					filterParameters[idx] = typeCast
+				}
+			}
+		}
 		harnessParameters = append(harnessParameters, filterParameters...)
+	}
+	if useReusableWorkspace {
+		harnessParameters = append(harnessParameters, pgsql.NewLiteral(expansionAllowsZeroDepth(expansionModel), pgsql.Boolean))
 	}
 
 	return harnessParameters, nil
@@ -2280,6 +2452,7 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 
 	case *pgsql.EdgeArrayFromPathIDs:
 		typedExpression.PathIDs = rewriteCurrentFrameProjectionReferences(typedExpression.PathIDs, frameID, aliases)
+		typedExpression.GraphID = rewriteCurrentFrameProjectionReferences(typedExpression.GraphID, frameID, aliases)
 		return typedExpression
 
 	case pgsql.ArrayLiteral:
@@ -3222,6 +3395,10 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	// Remove the previous projections of the root and terminal node to reproject them after expansion
 	traversalStep.LeftNode.Dematerialize()
 	traversalStep.RightNode.Dematerialize()
+	if s.applyIDOnlyTerminalProjection(part, stepIndex, traversalStep.LeftNode) ||
+		s.applyIDOnlyTerminalProjection(part, stepIndex, traversalStep.RightNode) {
+		s.recordLowering(optimize.LoweringFieldRequirements)
+	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {
 		return err
@@ -3351,6 +3528,34 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 		traversalStep.RightNode.Identifier,
 	)
 	s.applyShortestPathFilterMaterialization(part, stepIndex, traversalStep, expansionModel)
+	if expansionModel.UseBidirectionalSearch &&
+		!expansionModel.Options.FindAllShortestPaths &&
+		!traversalStep.LeftNodeBound &&
+		!traversalStep.RightNodeBound &&
+		(!expansionModel.Options.MinDepth.Set || expansionModel.Options.MinDepth.Value > 0) {
+		rootAnchor, hasRootAnchor := singletonIDAnchor(expansionModel.PrimerNodeConstraints, traversalStep.LeftNode.Identifier)
+		terminalAnchor, hasTerminalAnchor := singletonIDAnchor(expansionModel.TerminalNodeConstraints, traversalStep.RightNode.Identifier)
+		if hasRootAnchor && hasTerminalAnchor {
+			var err error
+			if expansionModel.SingletonRootID, err = s.liftSingletonIDAnchor(rootAnchor); err != nil {
+				return err
+			}
+			expansionModel.PrimerNodeConstraints = replaceSingletonIDAnchor(
+				expansionModel.PrimerNodeConstraints,
+				traversalStep.LeftNode.Identifier,
+				expansionModel.SingletonRootID,
+			)
+			if expansionModel.SingletonTerminalID, err = s.liftSingletonIDAnchor(terminalAnchor); err != nil {
+				return err
+			}
+			expansionModel.TerminalNodeConstraints = replaceSingletonIDAnchor(
+				expansionModel.TerminalNodeConstraints,
+				traversalStep.RightNode.Identifier,
+				expansionModel.SingletonTerminalID,
+			)
+			expansionModel.UseMaterializedEndpointPairFilter = false
+		}
+	}
 
 	// If this query is a shortest-path look up, the translator will have to use a function harness for
 	// traversal. As such, query fragments for the traversal harness will have to be passed by the parameters
@@ -3384,6 +3589,36 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 	}
 
 	return nil
+}
+
+func (s *Translator) liftSingletonIDAnchor(expression pgsql.Expression) (pgsql.Expression, error) {
+	switch typedExpression := unwrapParenthetical(expression).(type) {
+	case pgsql.Literal:
+		parameterBinding, err := s.scope.DefineNew(pgsql.ParameterIdentifier)
+		if err != nil {
+			return nil, err
+		}
+		parameter, err := pgsql.AsParameter(parameterBinding.Identifier, typedExpression.Value)
+		if err != nil {
+			return nil, err
+		}
+		parameter.CastType = pgsql.Int8
+		parameterBinding.Parameter = parameter
+		s.translation.Parameters[parameterBinding.Identifier.String()] = typedExpression.Value
+		return parameter, nil
+
+	case pgsql.Parameter:
+		typedExpression.CastType = pgsql.Int8
+		return typedExpression, nil
+	case *pgsql.Parameter:
+		copy := *typedExpression
+		copy.CastType = pgsql.Int8
+		return &copy, nil
+	case pgsql.TypeCast:
+		return s.liftSingletonIDAnchor(typedExpression.Expression)
+	default:
+		return nil, fmt.Errorf("unsupported singleton endpoint expression: %T", expression)
+	}
 }
 
 func (s *Translator) translateNonTraversalPatternPart(part *PatternPart) error {

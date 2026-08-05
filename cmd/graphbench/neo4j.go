@@ -124,7 +124,7 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 	}
 
 	if testCase.WriteScenario == nil {
-		rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
+		rowCount, observedRows, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, iterations)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = err.Error()
@@ -132,7 +132,9 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 		}
 
 		record.RowCount = rowCount
+		record.ObservedRows = observedRows
 		record.Stats = stats
+		labelLatencySamples(&record.Stats, ModeNeo4j, testCase)
 		applyRowExpectation(&record)
 	} else {
 		scenario, err := resolveWriteScenario(testCase, idMap)
@@ -153,6 +155,7 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 		record.AffectedCount = &measurement.Affected
 		record.PostState = measurement.PostState
 		record.Stats = stats
+		labelLatencySamples(&record.Stats, ModeNeo4j, testCase)
 	}
 
 	plan, operators, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)

@@ -315,8 +315,10 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "select distinct (s9.n2).id as root_id from s9")
 	require.Contains(t, normalizedQuery, "s5.ep0 as ep0")
 	require.NotContains(t, normalizedQuery, "s5.e0 as e0")
-	require.Contains(t, normalizedQuery, "from unnest(s12.ep0)")
-	require.Contains(t, normalizedQuery, "from unnest(array [s12.e1]::int8[])")
+	require.Contains(t, normalizedQuery, "ordered_edge_ids_to_path(0, s12.n0, s12.ep0 || array [s12.e1]::int8[] || array [s12.e2]::int8[] || array [s12.e3]::int8[]")
+	require.Equal(t, 2, strings.Count(normalizedQuery, "ordered_edge_ids_to_path("), normalizedQuery)
+	require.NotContains(t, normalizedQuery, "ordered_edges_to_path(")
+	require.NotContains(t, normalizedQuery, "from unnest(")
 	require.NotContains(t, normalizedQuery, "array [s12.e1]::edgecomposite[]")
 	require.Contains(t, normalizedQuery, "from s5, s7")
 	requireSQLContainsInOrder(t, normalizedQuery,

@@ -12,7 +12,7 @@ import (
 )
 
 func Translated(translation Result) (string, error) {
-	return format.Statement(translation.Statement, format.NewOutputBuilder())
+	return format.Statement(translation.Statement, format.NewOutputBuilder().WithTargetGraph(translation.GraphID))
 }
 
 // postgres comments can be terminated by \r, \n, or both per the source:
@@ -53,7 +53,7 @@ func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapp
 
 	if translation, err := Translate(ctx, regularQuery, kindMapper, nil, graphID); err != nil {
 		return format.Formatted{}, err
-	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder()); err != nil {
+	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder().WithTargetGraph(translation.GraphID)); err != nil {
 		return format.Formatted{}, err
 	} else {
 		output.WriteString(sqlQuery)

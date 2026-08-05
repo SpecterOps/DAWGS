@@ -48,6 +48,7 @@ type Translator struct {
 	patternPredicateDecisions          map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
 	exactRangeExpansionDecisions       map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
 	pathRelationshipPredicateDecisions map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision
+	fieldRequirementDecisions          map[int]map[string]optimize.FieldRequirementDecision
 	quantifierTargets                  []optimize.QuantifierTarget
 }
 
@@ -66,10 +67,11 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		ctxAwareKindMapper   = newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
 	)
 
-	return &Translator{
+	translator := &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
 			Parameters: translatedParameters,
+			GraphID:    graphID,
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
@@ -80,6 +82,9 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		scope:          NewScope(),
 		unwindTargets:  map[*cypher.Variable]struct{}{},
 	}
+
+	translator.scope.SetGraphID(graphID)
+	return translator
 }
 
 func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
@@ -97,6 +102,7 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.patternPredicateDecisions = map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision{}
 	s.exactRangeExpansionDecisions = map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision{}
 	s.pathRelationshipPredicateDecisions = map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision{}
+	s.fieldRequirementDecisions = map[int]map[string]optimize.FieldRequirementDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -144,6 +150,15 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 
 	for _, decision := range plan.LoweringPlan.PathRelationshipPredicate {
 		s.pathRelationshipPredicateDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.FieldRequirements {
+		bySymbol := s.fieldRequirementDecisions[decision.QueryPartIndex]
+		if bySymbol == nil {
+			bySymbol = map[string]optimize.FieldRequirementDecision{}
+			s.fieldRequirementDecisions[decision.QueryPartIndex] = bySymbol
+		}
+		bySymbol[decision.Symbol] = decision
 	}
 }
 
@@ -643,6 +658,7 @@ type Result struct {
 	Statement    pgsql.Statement
 	Parameters   map[string]any
 	Optimization OptimizationSummary
+	GraphID      int32
 }
 
 type OptimizationSummary struct {

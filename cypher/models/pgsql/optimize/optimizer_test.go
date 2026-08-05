@@ -50,6 +50,33 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	require.Len(t, plan.PredicateAttachments, 2)
 }
 
+func TestFieldRequirementAnalysisDistinguishesObservationBoundaries(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (n:Group)-[r:MemberOf*1..]->(ca:EnterpriseCA)
+		WHERE n.objectid = 'source'
+		RETURN id(ca), labels(n), length(p)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringFieldRequirements})
+
+	bySymbol := map[string]FieldRequirementDecision{}
+	for _, decision := range plan.LoweringPlan.FieldRequirements {
+		bySymbol[decision.Symbol] = decision
+	}
+
+	require.Contains(t, bySymbol["ca"].Fields, FieldRequirementEntityID)
+	require.NotContains(t, bySymbol["ca"].Fields, FieldRequirementFullEntity)
+	require.Contains(t, bySymbol["n"].Fields, FieldRequirementKinds)
+	require.Contains(t, bySymbol["n"].Fields, FieldRequirementProperties)
+	require.Contains(t, bySymbol["p"].Fields, FieldRequirementOrderedPathEdgeIDs)
+	require.NotContains(t, bySymbol["p"].Fields, FieldRequirementFullPath)
+}
+
 func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +111,7 @@ func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
 		SuffixLength:    3,
 		SuffixStartStep: 1,
 		SuffixEndStep:   3,
+		Reason:          "immediate observed continuation produces suffix rows",
 	})
 	require.Contains(t, plan.LoweringPlan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
 		Target: TraversalStepTarget{
@@ -95,6 +123,8 @@ func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
 		SuffixLength:         2,
 		SuffixStartStep:      1,
 		SuffixEndStep:        2,
+		ApplySupplemental:    true,
+		Reason:               "supplemental suffix prefilter retained for unobserved continuation",
 		PredicateAttachments: []PredicateAttachment{ctPredicate},
 	})
 	require.Contains(t, plan.LoweringPlan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
@@ -104,9 +134,11 @@ func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
 			PatternIndex:   0,
 			StepIndex:      3,
 		},
-		SuffixLength:    1,
-		SuffixStartStep: 4,
-		SuffixEndStep:   4,
+		SuffixLength:      1,
+		SuffixStartStep:   4,
+		SuffixEndStep:     4,
+		ApplySupplemental: true,
+		Reason:            "supplemental suffix prefilter retained for unobserved continuation",
 	})
 
 	require.Contains(t, plan.LoweringPlan.ExpandInto, ExpandIntoDecision{
@@ -177,7 +209,10 @@ func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
 
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
-	require.Equal(t, []LoweringDecision{{Name: LoweringProjectionPruning}}, plan.LoweringPlan.Decisions())
+	require.Equal(t, []LoweringDecision{
+		{Name: LoweringProjectionPruning},
+		{Name: LoweringFieldRequirements},
+	}, plan.LoweringPlan.Decisions())
 	require.Equal(t, []ProjectionPruningDecision{{
 		Target: TraversalStepTarget{
 			QueryPartIndex: 0,
@@ -525,12 +560,14 @@ func TestExactRangeDependentPlanningRequiresDecision(t *testing.T) {
 			Mode:   LatePathMaterializationExpansionPath,
 		})
 
-		appendExpansionSuffixPushdownDecisions(&plan, 0, readingClauses)
+		appendExpansionSuffixPushdownDecisions(&plan, 0, readingClauses, nil)
 		require.Contains(t, plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
-			Target:          target.TraversalStep(0),
-			SuffixLength:    1,
-			SuffixStartStep: 1,
-			SuffixEndStep:   1,
+			Target:            target.TraversalStep(0),
+			SuffixLength:      1,
+			SuffixStartStep:   1,
+			SuffixEndStep:     1,
+			ApplySupplemental: true,
+			Reason:            "supplemental suffix prefilter retained for unobserved continuation",
 		})
 	})
 
@@ -553,7 +590,7 @@ func TestExactRangeDependentPlanningRequiresDecision(t *testing.T) {
 			Mode:   LatePathMaterializationPathEdgeID,
 		})
 
-		appendExpansionSuffixPushdownDecisions(&plan, 0, readingClauses)
+		appendExpansionSuffixPushdownDecisions(&plan, 0, readingClauses, nil)
 		require.Empty(t, plan.ExpansionSuffixPushdown)
 	})
 }
@@ -741,9 +778,11 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 			PatternIndex:   0,
 			StepIndex:      0,
 		},
-		SuffixLength:    1,
-		SuffixStartStep: 1,
-		SuffixEndStep:   1,
+		SuffixLength:      1,
+		SuffixStartStep:   1,
+		SuffixEndStep:     1,
+		ApplySupplemental: true,
+		Reason:            "supplemental suffix prefilter retained for unobserved continuation",
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
@@ -767,9 +806,11 @@ func TestLoweringPlanIncludesConstrainedBoundEndpointInExpansionSuffix(t *testin
 			PatternIndex:   0,
 			StepIndex:      0,
 		},
-		SuffixLength:    2,
-		SuffixStartStep: 1,
-		SuffixEndStep:   2,
+		SuffixLength:      2,
+		SuffixStartStep:   1,
+		SuffixEndStep:     2,
+		ApplySupplemental: true,
+		Reason:            "supplemental suffix prefilter retained for unobserved continuation",
 	})
 }
 

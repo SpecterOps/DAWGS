@@ -186,7 +186,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 			),
 			expectedSQLContains: []string{
 				"with recursive",
-				"ordered_edges_to_path",
+				"ordered_edge_ids_to_path",
 				"n0.id = @pi0::int8",
 				"e0.kind_id = any (array [1]::int2[])",
 				"depth < 2",
@@ -205,7 +205,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 				"n0.id = @pi0::int8",
 				"e0.kind_id = any (array [1]::int2[])",
 				"depth < 2",
-				"select (s0.n0).id as \"id(s)\", (s0.n1).id as \"id(e)\" from s0",
+				"select s0.n0 as \"id(s)\", (s0.n1).id as \"id(e)\" from s0",
 			},
 		},
 	}
@@ -258,7 +258,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Relationship().ID(),
 				v2.End().ID(),
 			),
-			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select (s0.n0).id as \"id(s)\", (s0.e0).id as \"id(r)\", (s0.n1).id as \"id(e)\" from s0;",
+			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select s0.n0 as \"id(s)\", (s0.e0).id as \"id(r)\", (s0.n1).id as \"id(e)\" from s0;",
 			expectedParams: map[string]any{"pi0": 1},
 		},
 		"update node": {
@@ -347,9 +347,15 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			sql, err := translate.Translated(translation)
 			require.NoError(t, err)
 			require.Contains(t, sql, testCase.expectedHarness)
-			require.Contains(t, sql, "ordered_edges_to_path")
-			require.Contains(t, sql, "n0.id = 1")
-			require.Contains(t, sql, "n1.id = 2")
+			require.Contains(t, sql, "ordered_edge_ids_to_path")
+			if name == "shortest path" {
+				require.Contains(t, sql, "n0.id = @pi0::int8")
+				require.Contains(t, sql, "n1.id = @pi1::int8")
+				require.Contains(t, sql, "singleton_endpoints")
+			} else {
+				require.Contains(t, sql, "n0.id = 1")
+				require.Contains(t, sql, "n1.id = 2")
+			}
 
 			serializedHarnessQueryHasKindConstraint := false
 			for _, parameterValue := range translation.Parameters {

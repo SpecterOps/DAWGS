@@ -97,6 +97,30 @@ func TestGeneratedScanLookupDatasetRegistersWideAndLargeShapes(t *testing.T) {
 	}
 }
 
+func TestGeneratedShortestPathDatasetRegistersMatrixShapes(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.ShortestPathScaleDataset)
+	require.NoError(t, err)
+	nodeKinds, edgeKinds := doc.Graph.Kinds()
+
+	require.Contains(t, nodeKinds, graph.StringKind("ShortestNode"))
+	require.Contains(t, edgeKinds, graph.StringKind("Traverse"))
+	require.Contains(t, edgeKinds, graph.StringKind("TypedTraverse"))
+	require.NotEmpty(t, doc.Graph.Nodes)
+}
+
+func TestGeneratedADCSDatasetRegistersSuffixAndDecoyShapes(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.ADCSScaleDataset)
+	require.NoError(t, err)
+	nodeKinds, edgeKinds := doc.Graph.Kinds()
+
+	for _, kind := range []string{"Group", "EnterpriseCA", "NTAuthStore", "Domain"} {
+		require.Contains(t, nodeKinds, graph.StringKind(kind))
+	}
+	for _, kind := range []string{"MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor", "WrongEnrollKind"} {
+		require.Contains(t, edgeKinds, graph.StringKind(kind))
+	}
+}
+
 func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 	zero := int64(0)
 	testCase := ScaleCase{
