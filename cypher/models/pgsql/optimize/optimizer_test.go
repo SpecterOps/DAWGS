@@ -1414,6 +1414,64 @@ func TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates(t *testing
 	}}, plan.LoweringPlan.ShortestPathFilter)
 }
 
+func TestLoweringPlanReportsEvidenceSafeSingletonExecutorFallback(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..16]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+	decision := plan.LoweringPlan.ShortestPathExecutor[0]
+	require.Equal(t, ShortestPathExecutorIncumbentWorkspace, decision.SelectedExecutor)
+	require.Equal(t, ShortestPathExecutorIncumbentWorkspace, decision.FallbackExecutor)
+	require.Equal(t, ShortestPathFallbackTournamentUnqualified, decision.FallbackReason)
+	require.Equal(t, ShortestPathObservationDistance, decision.ObservationMode)
+	require.Equal(t, int64(16), decision.MaximumDepth)
+	require.False(t, decision.ExperimentalWinner)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathExecutor})
+}
+
+func TestLoweringPlanShortestExecutorObservationModeRequiresPathForNodes(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		RETURN nodes(p)
+	`)
+	require.NoError(t, err)
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, ShortestPathObservationOnePath, plan.LoweringPlan.ShortestPathExecutor[0].ObservationMode)
+}
+
+func TestLoweringPlanRecordsStableShortestExecutorFallbackCodes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, query, reason string
+	}{
+		{name: "all shortest", query: `MATCH p = allShortestPaths((s)-[:MemberOf*1..4]->(e)) RETURN p`, reason: ShortestPathFallbackAllShortestPaths},
+		{name: "directionless", query: `MATCH p = shortestPath((s)-[:MemberOf*1..4]-(e)) RETURN p`, reason: ShortestPathFallbackDirectionless},
+		{name: "relationship variable", query: `MATCH p = shortestPath((s)-[r:MemberOf*1..4]->(e)) RETURN p`, reason: ShortestPathFallbackRelationshipVariable},
+		{name: "open depth", query: `MATCH p = shortestPath((s)-[:MemberOf*1..]->(e)) RETURN p`, reason: ShortestPathFallbackUnsupportedDepth},
+		{name: "non singleton", query: `MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e)) RETURN p`, reason: ShortestPathFallbackNonSingletonID},
+		{name: "multiple id equalities", query: `MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e)) WHERE id(s) = 1 AND id(s) = 2 AND id(e) = 3 RETURN p`, reason: ShortestPathFallbackMultipleIDEqualities},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), test.query)
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.NotEmpty(t, plan.LoweringPlan.ShortestPathExecutor)
+			require.Equal(t, test.reason, plan.LoweringPlan.ShortestPathExecutor[0].FallbackReason)
+		})
+	}
+}
+
 func TestLoweringPlanReportsShortestPathStrategyForBoundEndpointPairs(t *testing.T) {
 	t.Parallel()
 

@@ -28,6 +28,8 @@ Each JSON file contains a list of scale cases with:
 - `observes`: whether the query observes paths, nodes, relationships,
   properties, or only IDs internally.
 - `candidate_modes`: the execution modes that should attempt the case.
+- `unsupported_modes`: explicit backend-to-reason declarations for matrix
+  points retained as correctness oracles but not supported by that backend.
 - `reference_design`: optional design notes, including AGE observations when
   useful.
 
@@ -51,5 +53,16 @@ and `generated_scan_lookups` datasets are constructed by
 `testutil.NewScanLookupScaleFixture`; they are intentionally not large
 handwritten OpenGraph JSON files.
 
+The corpus also executes parameterized `generated_shortest_paths_d*_f*` and
+`generated_adcs_d*_f*_v*_p*` variants. The normal pairwise subset covers
+shortest depth 1/2/4/8/16, fanout 1/16/128, outbound/inbound/directionless,
+distance/path/all-shortest output, disconnected and diamond shapes. The ADCS
+subset covers depth 0/1/2/4/8/16, fanout 1/10/100/1000, none/sparse/half/all
+valid branch suffix density, endpoint/path output, decoys, and a 4 KiB payload.
+Each result records the exact configuration name, deterministic graph checksum,
+and node/edge cardinality.
+
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
-summaries.
+summaries. Exact case/dataset/category/tag selectors are intended for targeted
+diagnosis and mark their outputs diagnostic-only; they never replace a complete
+corpus capture.

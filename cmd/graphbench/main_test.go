@@ -35,3 +35,39 @@ func TestParseConfigRequiresCompleteGateInputs(t *testing.T) {
 
 	require.ErrorContains(t, err, "must be supplied together")
 }
+
+func TestParseConfigAcceptsPoolAndConcurrencySmokeLevels(t *testing.T) {
+	cfg, err := parseConfig([]string{"-pool-size", "4", "-concurrency", "1,4,8,4"}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, 4, cfg.PoolSize)
+	require.Equal(t, []int{1, 4, 8}, cfg.Concurrency)
+}
+
+func TestParseConfigRejectsPoolMemoryBelowPerSessionBudget(t *testing.T) {
+	_, err := parseConfig([]string{
+		"-pool-size", "4",
+		"-session-memory-ceiling-bytes", "100",
+		"-pool-memory-ceiling-bytes", "399",
+	}, func(string) string { return "" })
+
+	require.ErrorContains(t, err, "session memory ceiling times pool size")
+}
+
+func TestParseConfigAcceptsDiagnosticSelectorsAndRunMetadata(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-cases", "case-a,case-b", "-datasets", "fixture", "-categories", "lookup", "-tags", "primary,control",
+		"-warmup-iterations", "20", "-arm", "candidate", "-arm-order", "2", "-block", "7", "-run-uuid", "run-1",
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"case-a", "case-b"}, cfg.Cases)
+	require.Equal(t, 20, cfg.WarmupIterations)
+	require.Equal(t, "candidate", cfg.Arm)
+	require.Equal(t, 7, cfg.Block)
+}
+
+func TestParseConfigRejectsDuplicateExactSelectors(t *testing.T) {
+	_, err := parseConfig([]string{"-cases", "case-a,case-a"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "duplicate case selector")
+}

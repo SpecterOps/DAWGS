@@ -122,6 +122,7 @@ func appendQueryPartLowerings(
 	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
+	appendShortestPathExecutorDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	fieldRequirements, err := collectFieldRequirements(queryPartIndex, queryPart)
@@ -129,7 +130,177 @@ func appendQueryPartLowerings(
 		return err
 	}
 	plan.FieldRequirements = append(plan.FieldRequirements, fieldRequirements...)
+	applyShortestPathObservationModes(plan, queryPartIndex, readingClauses, fieldRequirements)
 	return nil
+}
+
+func applyShortestPathObservationModes(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, requirements []FieldRequirementDecision) {
+	fieldsBySymbol := map[string]map[FieldRequirement]struct{}{}
+	for _, requirement := range requirements {
+		fields := map[FieldRequirement]struct{}{}
+		for _, field := range requirement.Fields {
+			fields[field] = struct{}{}
+		}
+		fieldsBySymbol[requirement.Symbol] = fields
+	}
+	for idx := range plan.ShortestPathExecutor {
+		decision := &plan.ShortestPathExecutor[idx]
+		if decision.Target.QueryPartIndex != queryPartIndex || decision.Target.Predicate {
+			continue
+		}
+		if decision.Target.ClauseIndex >= len(readingClauses) {
+			continue
+		}
+		clause := readingClauses[decision.Target.ClauseIndex]
+		if clause == nil || clause.Match == nil || decision.Target.PatternIndex >= len(clause.Match.Pattern) {
+			continue
+		}
+		pattern := clause.Match.Pattern[decision.Target.PatternIndex]
+		if pattern == nil || pattern.Variable == nil {
+			continue
+		}
+		fields := fieldsBySymbol[pattern.Variable.Symbol]
+		if _, fullPath := fields[FieldRequirementFullPath]; fullPath {
+			decision.ObservationMode = ShortestPathObservationOnePath
+		} else if _, orderedIDs := fields[FieldRequirementOrderedPathEdgeIDs]; orderedIDs {
+			decision.ObservationMode = ShortestPathObservationDistance
+		}
+	}
+}
+
+func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
+	shortestCalls := 0
+	for _, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+		for _, patternPart := range readingClause.Match.Pattern {
+			if patternPart != nil && (patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern) {
+				shortestCalls++
+			}
+		}
+	}
+	_, updatingClauses := queryPartProjection(queryPart)
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			if patternPart == nil || (!patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern) {
+				continue
+			}
+			steps := traversalStepsForPattern(patternPart)
+			idEqualities := singletonIDEqualityCounts(readingClause.Match.Where)
+			pathPredicate := syntaxDependsOn(readingClause.Match.Where, variableSymbol(patternPart.Variable))
+			for stepIndex, step := range steps {
+				if step.Relationship == nil || step.Relationship.Range == nil {
+					continue
+				}
+				maxDepth := int64(0)
+				boundedDepth := step.Relationship.Range.EndIndex != nil
+				if boundedDepth {
+					maxDepth = *step.Relationship.Range.EndIndex
+				}
+				directionSupported := step.Relationship.Direction != graph.DirectionBoth
+				leftIDCount := idEqualities[variableSymbol(step.LeftNode.Variable)]
+				rightIDCount := idEqualities[variableSymbol(step.RightNode.Variable)]
+				singletonIDs := leftIDCount == 1 && rightIDCount == 1
+				facts := []ShortestPathEligibilityFact{
+					{Name: "shortest_path_not_all", Eligible: patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
+					{Name: "single_three_element_traversal", Eligible: len(patternPart.PatternElements) == 3 && len(steps) == 1},
+					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
+					{Name: "directed", Eligible: directionSupported},
+					{Name: "bounded_supported_depth", Eligible: boundedDepth && maxDepth >= 0 && maxDepth <= 64},
+					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil},
+					{Name: "no_relationship_predicate", Eligible: step.Relationship.Properties == nil},
+					{Name: "single_path_call", Eligible: shortestCalls == 1},
+					{Name: "read_only", Eligible: updatingClauses == 0},
+					{Name: "one_static_id_equality_per_endpoint", Eligible: singletonIDs},
+					{Name: "no_path_predicate", Eligible: !pathPredicate},
+				}
+				reason := ShortestPathFallbackTournamentUnqualified
+				switch {
+				case patternPart.AllShortestPathsPattern:
+					reason = ShortestPathFallbackAllShortestPaths
+				case readingClause.Match.Optional:
+					reason = ShortestPathFallbackOptionalMatch
+				case !directionSupported:
+					reason = ShortestPathFallbackDirectionless
+				case pathPredicate:
+					reason = ShortestPathFallbackPathPredicate
+				case step.Relationship.Variable != nil:
+					reason = ShortestPathFallbackRelationshipVariable
+				case step.Relationship.Properties != nil:
+					reason = ShortestPathFallbackRelationshipPredicate
+				case !boundedDepth || maxDepth < 0 || maxDepth > 64:
+					reason = ShortestPathFallbackUnsupportedDepth
+				case shortestCalls != 1:
+					reason = ShortestPathFallbackMultiplePathCalls
+				case updatingClauses != 0:
+					reason = ShortestPathFallbackMutation
+				case leftIDCount > 1 || rightIDCount > 1:
+					reason = ShortestPathFallbackMultipleIDEqualities
+				case !singletonIDs:
+					reason = ShortestPathFallbackNonSingletonID
+				}
+				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
+					Target:           PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
+					SelectedExecutor: ShortestPathExecutorIncumbentWorkspace,
+					ObservationMode:  ShortestPathObservationUnknown,
+					Eligibility:      facts, MaximumDepth: maxDepth,
+					FallbackExecutor: ShortestPathExecutorIncumbentWorkspace,
+					FallbackReason:   reason,
+				})
+			}
+		}
+	}
+}
+
+func syntaxDependsOn(node cypher.SyntaxNode, symbol string) bool {
+	if symbol == "" {
+		return false
+	}
+	for _, dependency := range sortedDependencies(node) {
+		if dependency == symbol {
+			return true
+		}
+	}
+	return false
+}
+
+func singletonIDEqualityCounts(where *cypher.Where) map[string]int {
+	counts := map[string]int{}
+	if where == nil {
+		return counts
+	}
+	for _, expression := range where.Expressions {
+		for _, term := range cypherConjunctionTerms(expression) {
+			comparison, ok := term.(*cypher.Comparison)
+			if !ok || comparison == nil || len(comparison.Partials) != 1 || comparison.Partials[0].Operator != cypher.OperatorEquals {
+				continue
+			}
+			partial := comparison.Partials[0]
+			if symbol, ok := identityFunctionSymbol(comparison.Left); ok && expressionIsConstant(partial.Right) {
+				counts[symbol]++
+			}
+			if symbol, ok := identityFunctionSymbol(partial.Right); ok && expressionIsConstant(comparison.Left) {
+				counts[symbol]++
+			}
+		}
+	}
+	return counts
+}
+
+func identityFunctionSymbol(expression cypher.Expression) (string, bool) {
+	function, ok := expression.(*cypher.FunctionInvocation)
+	if !ok || function == nil || !strings.EqualFold(function.Name, cypher.IdentityFunction) || len(function.Arguments) != 1 {
+		return "", false
+	}
+	variable, ok := function.Arguments[0].(*cypher.Variable)
+	if !ok || variable == nil || variable.Symbol == "" {
+		return "", false
+	}
+	return variable.Symbol, true
 }
 
 func appendExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {

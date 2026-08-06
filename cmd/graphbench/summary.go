@@ -35,6 +35,26 @@ type Summary struct {
 	Cases        []CaseSummary             `json:"cases"`
 	Regressions  []BaselineEntry           `json:"regressions,omitempty"`
 	Improvements []BaselineEntry           `json:"improvements,omitempty"`
+	CostModels   []CostModelCase           `json:"cost_models,omitempty"`
+}
+
+type CostModelCase struct {
+	Dataset     string               `json:"dataset"`
+	Name        string               `json:"name"`
+	Boundary    string               `json:"boundary"`
+	E2EMedian   time.Duration        `json:"e2e_median"`
+	Attribution float64              `json:"attribution"`
+	Components  []CostModelComponent `json:"components"`
+}
+
+type CostModelComponent struct {
+	Name       string        `json:"name"`
+	Interval   string        `json:"interval"`
+	Median     time.Duration `json:"median"`
+	P95        time.Duration `json:"p95"`
+	Rows       int64         `json:"rows,omitempty"`
+	ShareOfE2E float64       `json:"share_of_e2e,omitempty"`
+	Confidence string        `json:"confidence"`
 }
 
 type ModeSummary struct {
@@ -143,6 +163,9 @@ func buildSummary(records []CaseResult) Summary {
 				summary.Improvements = append(summary.Improvements, entry)
 			}
 		}
+		if record.RawPGXWaterfall != nil && len(record.RawPGXWaterfall.Samples) > 0 {
+			summary.CostModels = append(summary.CostModels, buildBoundaryCostModel(record))
+		}
 	}
 
 	for _, modeSummary := range modeSummaries {
@@ -169,7 +192,70 @@ func buildSummary(records []CaseResult) Summary {
 
 	sortBaselineEntries(summary.Regressions, true)
 	sortBaselineEntries(summary.Improvements, false)
+	sort.Slice(summary.CostModels, func(i, j int) bool {
+		if summary.CostModels[i].Dataset != summary.CostModels[j].Dataset {
+			return summary.CostModels[i].Dataset < summary.CostModels[j].Dataset
+		}
+		return summary.CostModels[i].Name < summary.CostModels[j].Name
+	})
 	return summary
+}
+
+func buildBoundaryCostModel(record CaseResult) CostModelCase {
+	samples := record.RawPGXWaterfall.Samples
+	total := boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.Total })
+	e2e := durationFromQuantile(total, 0.50)
+	components := []struct {
+		name   string
+		values []time.Duration
+	}{
+		{name: "Pool acquisition", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.PoolWait })},
+		{name: "Transaction setup", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.Transaction })},
+		{name: "Bind/prepare", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.BindPrepare })},
+		{name: "First-row transfer/decode", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.FirstRow })},
+		{name: "Remaining transfer/decode", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.AllRowsDecode })},
+		{name: "Drain/close", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.DrainClose })},
+	}
+	model := CostModelCase{Dataset: record.Dataset, Name: record.Name, Boundary: record.RawPGXWaterfall.Boundary, E2EMedian: e2e}
+	var attributed time.Duration
+	for _, component := range components {
+		median := durationFromQuantile(component.values, 0.50)
+		attributed += median
+		model.Components = append(model.Components, CostModelComponent{
+			Name: component.name, Interval: "exclusive", Median: median, P95: durationFromQuantile(component.values, 0.95),
+			Rows: samples[0].Rows, ShareOfE2E: durationShare(median, e2e), Confidence: "raw-pgx observed boundary",
+		})
+	}
+	residual := e2e - attributed
+	if residual < 0 {
+		residual = 0
+	}
+	model.Components = append(model.Components, CostModelComponent{Name: "Unexplained residual", Interval: "derived", Median: residual, ShareOfE2E: durationShare(residual, e2e), Confidence: "derived"})
+	model.Attribution = durationShare(e2e-residual, e2e)
+	if record.PostgresMetrics != nil && record.PostgresMetrics.ExecutionMS != nil {
+		server := time.Duration(*record.PostgresMetrics.ExecutionMS * float64(time.Millisecond))
+		model.Components = append(model.Components, CostModelComponent{Name: "Server execution", Interval: "inclusive/overlapping", Median: server, ShareOfE2E: durationShare(server, e2e), Confidence: "single EXPLAIN diagnostic"})
+	}
+	return model
+}
+
+func boundaryDurations(samples []BoundarySample, selectDuration func(BoundarySample) time.Duration) []time.Duration {
+	values := make([]time.Duration, len(samples))
+	for idx, sample := range samples {
+		values[idx] = selectDuration(sample)
+	}
+	return values
+}
+
+func durationFromQuantile(values []time.Duration, probability float64) time.Duration {
+	return time.Duration(durationQuantile(values, probability))
+}
+
+func durationShare(component, total time.Duration) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return float64(component) / float64(total)
 }
 
 func sortBaselineEntries(entries []BaselineEntry, descending bool) {
@@ -252,6 +338,18 @@ func writeMarkdownSummary(w io.Writer, summary Summary) error {
 	if len(summary.Improvements) > 0 {
 		fmt.Fprintf(w, "\n## Baseline Improvements\n\n")
 		writeBaselineTable(w, summary.Improvements)
+	}
+	if len(summary.CostModels) > 0 {
+		fmt.Fprintf(w, "\n## Raw PostgreSQL Cost Models\n\n")
+		for _, model := range summary.CostModels {
+			fmt.Fprintf(w, "### %s / %s\n\n", escapeMarkdown(model.Dataset), escapeMarkdown(model.Name))
+			fmt.Fprintf(w, "Boundary attribution: %.1f%% of %s.\n\n", model.Attribution*100, formatDuration(model.E2EMedian))
+			fmt.Fprintf(w, "| Component | Interval | Median | p95 | Share of E2E | Confidence |\n")
+			fmt.Fprintf(w, "| --- | --- | ---: | ---: | ---: | --- |\n")
+			for _, component := range model.Components {
+				fmt.Fprintf(w, "| %s | %s | %s | %s | %.1f%% | %s |\n", escapeMarkdown(component.Name), component.Interval, formatDuration(component.Median), formatDuration(component.P95), component.ShareOfE2E*100, escapeMarkdown(component.Confidence))
+			}
+		}
 	}
 
 	return nil

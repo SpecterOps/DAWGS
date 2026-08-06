@@ -628,6 +628,9 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 
 func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedProjection bool, allowProjectionPruning bool) error {
 	var scopeSnapshot *Scope
+	if part != nil && (part.ShortestPath || part.AllShortestPaths) {
+		s.recordLowering(optimize.LoweringShortestPathExecutor)
+	}
 
 	if isolatedProjection {
 		scopeSnapshot = s.scope.Snapshot()
