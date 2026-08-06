@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -209,4 +210,125 @@ func (s *Driver) WipeGraph(ctx context.Context, retain graph.TransactionDelegate
 
 		return nil
 	})
+}
+
+// resolveKindIDs maps kinds to their integer IDs, refreshing the schema cache once on a miss. It returns the resolved
+// IDs alongside any kinds that remain undefined after the refresh, so callers can decide whether an unresolved kind is
+// a tolerable no-op (include predicates) or must fail closed (exclude predicates).
+func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16, graph.Kinds, error) {
+	if len(kinds) == 0 {
+		return nil, nil, nil
+	}
+
+	s.lock.RLock()
+	if kindIDs, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
+		s.lock.RUnlock()
+		return kindIDs, nil, nil
+	}
+	s.lock.RUnlock()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if err := s.Fetch(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	kindIDs, missingKinds := s.mapKinds(kinds)
+	return kindIDs, missingKinds, nil
+}
+
+// DeleteNodesByKinds performs a server-side, set-based delete of nodes using the kind_ids GIN index instead of
+// streaming node IDs through the application. A node is deleted when its kind_ids overlap includeAny (or, when
+// includeAny is empty, for every node) and do not overlap excludeAny. Deleting nodes fires the delete_node_edges
+// trigger, cascading the attached edge deletes.
+//
+// includeAny is mapped to kind IDs tolerantly: include kinds that are not defined in the database map to no IDs and
+// therefore match no nodes, so a request that targets only undefined kinds is a safe no-op rather than an accidental
+// full delete. excludeAny is mapped fail-closed: if any exclude kind is undefined the delete is refused, because
+// silently dropping an exclusion would widen the delete and could remove protected nodes (e.g. an unresolved
+// MigrationData would turn a guarded wipe into an unguarded delete from node).
+func (s *Driver) DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds, excludeAny graph.Kinds) error {
+	includeIDs, _, err := s.resolveKindIDs(ctx, includeAny)
+	if err != nil {
+		return err
+	}
+
+	excludeIDs, excludeMissing, err := s.resolveKindIDs(ctx, excludeAny)
+	if err != nil {
+		return err
+	}
+	if len(excludeMissing) > 0 {
+		return fmt.Errorf("cannot exclude undefined kinds from node delete: %v", excludeMissing)
+	}
+
+	statement, arguments := buildNodeDeleteStatement(len(includeAny) > 0, includeIDs, excludeIDs)
+
+	return s.execDelete(ctx, "node", statement, arguments...)
+}
+
+// buildNodeDeleteStatement renders the node delete statement and its positional arguments for the given resolved kind
+// IDs. The include predicate is emitted whenever an include filter was requested (includeRequested), even if includeIDs
+// is empty, so that targeting only undefined kinds matches no nodes. The exclude predicate is emitted only when
+// excludeIDs is non-empty, so an unresolved exclusion can never widen the delete into an unguarded wipe.
+func buildNodeDeleteStatement(includeRequested bool, includeIDs []int16, excludeIDs []int16) (string, []any) {
+	var (
+		predicates []string
+		arguments  []any
+	)
+
+	if includeRequested {
+		arguments = append(arguments, includeIDs)
+		predicates = append(predicates, fmt.Sprintf("kind_ids operator (pg_catalog.&&) $%d::int2[]", len(arguments)))
+	}
+
+	if len(excludeIDs) > 0 {
+		arguments = append(arguments, excludeIDs)
+		predicates = append(predicates, fmt.Sprintf("not (kind_ids operator (pg_catalog.&&) $%d::int2[])", len(arguments)))
+	}
+
+	statement := "delete from node"
+	if len(predicates) > 0 {
+		statement += " where " + strings.Join(predicates, " and ")
+	}
+
+	return statement, arguments
+}
+
+// DeleteRelationshipsByKinds performs a server-side, set-based delete of relationships whose kind_id matches any of
+// the given kinds, using the edge_kind_id_id_start_id_end_id_index covering index instead of streaming relationship
+// IDs through the application.
+//
+// kinds are mapped to kind IDs tolerantly: kinds that are not defined in the database map to no IDs. An empty kinds
+// argument, or one that maps entirely to undefined kinds, deletes nothing rather than every relationship.
+func (s *Driver) DeleteRelationshipsByKinds(ctx context.Context, kinds graph.Kinds) error {
+	if len(kinds) == 0 {
+		return nil
+	}
+
+	kindIDs, _, err := s.resolveKindIDs(ctx, kinds)
+	if err != nil {
+		return err
+	}
+
+	const statement = "delete from edge where kind_id = any($1::int2[])"
+
+	return s.execDelete(ctx, "relationship", statement, kindIDs)
+}
+
+// execDelete acquires a pooled connection and runs a delete statement, wrapping acquisition and execution errors. label
+// names the delete for the acquire error message; statement and arguments are passed through unchanged so each caller
+// preserves its own SQL, positional arguments, and statement error wrapping.
+func (s *Driver) execDelete(ctx context.Context, label, statement string, arguments ...any) error {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for %s delete: %w", label, err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, statement, arguments...); err != nil {
+		return fmt.Errorf("%s: %w", statement, err)
+	}
+
+	return nil
 }
