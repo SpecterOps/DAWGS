@@ -432,7 +432,9 @@ func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
 			{ID: "scan-adcs-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-adcs-target"}},
 			{ID: "scan-local-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-local-target"}},
 			{ID: "lookup-tenant", Kinds: []string{"Tenant"}, Properties: map[string]any{"name": "lookup-tenant", "objectid": "tenant-scale"}},
-			{ID: "lookup-local-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "lookup-local-target"}},
+			// The extra isolated labels make negative Meta/MetaDetail predicates
+			// translatable without changing any fixture cardinality.
+			{ID: "lookup-local-target", Kinds: []string{"Computer", "Meta", "MetaDetail"}, Properties: map[string]any{"name": "lookup-local-target"}},
 		},
 	}
 

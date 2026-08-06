@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,27 @@ var scaleCorpusRequiredIDs = []string{
 	"HOP-01", "HOP-02", "HOP-03", "HOP-04", "HOP-05", "HOP-07", "HOP-09",
 	"SCAN-01", "SCAN-02", "SCAN-03", "SCAN-04", "SCAN-05", "SCAN-07", "SCAN-08",
 	"LOOKUP-02", "LOOKUP-04", "LOOKUP-05", "LOOKUP-09", "LOOKUP-11", "LOOKUP-13", "LOOKUP-15", "LOOKUP-16",
+}
+
+func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	covered := map[string]int{}
+	for _, testCase := range corpus.Cases {
+		if !strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") && !strings.HasPrefix(testCase.Dataset, "generated_adcs_") {
+			continue
+		}
+		_, err := frontend.ParseCypher(frontend.NewContext(), testCase.Cypher)
+		require.NoError(t, err, testCase.Name)
+		_, postgresUnsupported := testCase.UnsupportedReason(ModePostgresSQL)
+		_, neo4jUnsupported := testCase.UnsupportedReason(ModeNeo4j)
+		require.True(t, testCase.Supports(ModePostgresSQL) || postgresUnsupported, testCase.Name)
+		require.True(t, testCase.Supports(ModeNeo4j) || neo4jUnsupported, testCase.Name)
+		covered[strings.Split(testCase.Dataset, "_")[1]]++
+	}
+	require.Positive(t, covered["shortest"])
+	require.Positive(t, covered["adcs"])
 }
 
 func scaleCorpusCaseID(name string) string {

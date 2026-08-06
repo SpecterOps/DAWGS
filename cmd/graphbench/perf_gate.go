@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	perfGateVersion       = 1
+	perfGateVersion       = 2
 	defaultBootstrapCount = 10_000
 	minimumGateRounds     = 5
 	minimumP95Samples     = 150
@@ -40,6 +40,11 @@ type PerfGateOptions struct {
 	Confidence          float64
 	RegressionThreshold float64
 	BootstrapCount      int
+	DeclaredBackends    []DeclaredCaseBackend
+	TargetNames         []string
+	MaterialityRatio    float64
+	MaterialityAbsolute time.Duration
+	DiagnosticMode      bool
 }
 
 type RatioInterval struct {
@@ -48,20 +53,29 @@ type RatioInterval struct {
 	Upper    float64 `json:"upper"`
 }
 
+type DurationInterval struct {
+	Estimate time.Duration `json:"estimate"`
+	Lower    time.Duration `json:"lower"`
+	Upper    time.Duration `json:"upper"`
+}
+
 type PerfGateCase struct {
-	Dataset             string         `json:"dataset"`
-	Name                string         `json:"name"`
-	Backend             ExecutionMode  `json:"backend"`
-	Rounds              int            `json:"rounds"`
-	BaselineSamples     int            `json:"baseline_samples"`
-	CandidateSamples    int            `json:"candidate_samples"`
-	MedianRatio         RatioInterval  `json:"median_ratio"`
-	P95Ratio            *RatioInterval `json:"p95_ratio,omitempty"`
-	TargetBaselineLimit *float64       `json:"target_baseline_upper_limit,omitempty"`
-	BackendRatio        *RatioInterval `json:"postgres_neo4j_ratio,omitempty"`
-	BackendRatioLimit   *float64       `json:"postgres_neo4j_upper_limit,omitempty"`
-	Passed              bool           `json:"passed"`
-	Reasons             []string       `json:"reasons,omitempty"`
+	Dataset             string            `json:"dataset"`
+	Name                string            `json:"name"`
+	Backend             ExecutionMode     `json:"backend"`
+	Rounds              int               `json:"rounds"`
+	BaselineSamples     int               `json:"baseline_samples"`
+	CandidateSamples    int               `json:"candidate_samples"`
+	BaselineStatus      string            `json:"baseline_status,omitempty"`
+	CandidateStatus     string            `json:"candidate_status,omitempty"`
+	OracleOnly          bool              `json:"oracle_only,omitempty"`
+	MedianRatio         RatioInterval     `json:"median_ratio"`
+	P95Ratio            *RatioInterval    `json:"p95_ratio,omitempty"`
+	MedianSaving        *DurationInterval `json:"median_saving,omitempty"`
+	MaterialityRatio    *float64          `json:"materiality_ratio_upper_limit,omitempty"`
+	MaterialityAbsolute *time.Duration    `json:"materiality_absolute_lower_limit,omitempty"`
+	Passed              bool              `json:"passed"`
+	Reasons             []string          `json:"reasons,omitempty"`
 }
 
 type PerfGateReport struct {
@@ -71,6 +85,7 @@ type PerfGateReport struct {
 	RegressionThreshold float64        `json:"regression_threshold"`
 	BaselineSHA256      string         `json:"baseline_sha256"`
 	CandidateSHA256     string         `json:"candidate_sha256"`
+	DeclarationSHA256   string         `json:"declaration_sha256,omitempty"`
 	Passed              bool           `json:"passed"`
 	Cases               []PerfGateCase `json:"cases"`
 }
@@ -83,17 +98,6 @@ type performanceKey struct {
 
 type roundSamples map[int][]time.Duration
 
-type targetGate struct {
-	baselineUpper float64
-	backendUpper  float64
-}
-
-var targetPerformanceGates = map[string]targetGate{
-	"one_shortest_path_bound_pair": {baselineUpper: 0.40, backendUpper: 3.0},
-	"adcs_p1_endpoint_ids":         {baselineUpper: 0.60, backendUpper: 2.0},
-	"adcs_p1_path_observed":        {baselineUpper: 0.70, backendUpper: 2.5},
-}
-
 func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string, options PerfGateOptions) (bool, error) {
 	baseline, err := readJSONLFile(baselinePath)
 	if err != nil {
@@ -102,6 +106,9 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	candidate, err := readJSONLFile(candidatePath)
 	if err != nil {
 		return false, fmt.Errorf("read candidate: %w", err)
+	}
+	if err := validatePerformanceArtifactSelections(baseline, candidate, options.DiagnosticMode); err != nil {
+		return false, err
 	}
 	baselineChecksum, err := fileSHA256(baselinePath)
 	if err != nil {
@@ -124,6 +131,35 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	return report.Passed, nil
 }
 
+func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, diagnosticMode bool) error {
+	baselineSelection, baselineErr := selectionIdentity(baseline)
+	candidateSelection, candidateErr := selectionIdentity(candidate)
+	// Version-1 historical artifacts predate selection manifests and remain
+	// valid only for the ordinary complete-corpus gate.
+	if baselineErr != nil || candidateErr != nil {
+		if diagnosticMode {
+			return fmt.Errorf("diagnostic comparison requires selection manifests in both artifacts")
+		}
+		return nil
+	}
+	if baselineSelection.DiagnosticOnly || candidateSelection.DiagnosticOnly {
+		if !diagnosticMode {
+			return fmt.Errorf("diagnostic-only artifacts are refused by the complete performance gate")
+		}
+		if !baselineSelection.DiagnosticOnly || !candidateSelection.DiagnosticOnly {
+			return fmt.Errorf("diagnostic comparison requires two diagnostic-only artifacts")
+		}
+		if baselineSelection.DeclarationSHA256 != candidateSelection.DeclarationSHA256 {
+			return fmt.Errorf("diagnostic artifact declarations differ: %s != %s", baselineSelection.DeclarationSHA256, candidateSelection.DeclarationSHA256)
+		}
+		return nil
+	}
+	if diagnosticMode {
+		return fmt.Errorf("diagnostic comparison mode requires filtered diagnostic-only artifacts")
+	}
+	return nil
+}
+
 func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptions) (PerfGateReport, error) {
 	if options.Confidence <= 0 || options.Confidence >= 1 {
 		return PerfGateReport{}, fmt.Errorf("confidence level must be between 0 and 1")
@@ -137,15 +173,22 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 	if options.BootstrapCount < 1 {
 		return PerfGateReport{}, fmt.Errorf("bootstrap count must be positive")
 	}
+	if options.MaterialityRatio == 0 {
+		options.MaterialityRatio = 0.95
+	}
+	if options.MaterialityRatio <= 0 || options.MaterialityRatio >= 1 {
+		return PerfGateReport{}, fmt.Errorf("materiality ratio must be between 0 and 1")
+	}
+	if options.MaterialityAbsolute == 0 {
+		options.MaterialityAbsolute = 100 * time.Microsecond
+	}
+	if options.MaterialityAbsolute < 0 {
+		return PerfGateReport{}, fmt.Errorf("materiality absolute duration must not be negative")
+	}
 
 	baselineSeries := collectWarmSeries(baseline)
 	candidateSeries := collectWarmSeries(candidate)
-	keys := make([]performanceKey, 0, len(candidateSeries))
-	for key := range candidateSeries {
-		if _, found := baselineSeries[key]; found {
-			keys = append(keys, key)
-		}
-	}
+	keys := declaredPerformanceKeys(options.DeclaredBackends, baseline, candidate)
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].dataset != keys[j].dataset {
 			return keys[i].dataset < keys[j].dataset
@@ -156,7 +199,11 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 		return keys[i].backend < keys[j].backend
 	})
 	if len(keys) == 0 {
-		return PerfGateReport{}, fmt.Errorf("artifacts have no comparable warm samples")
+		return PerfGateReport{}, fmt.Errorf("artifacts and declaration contain no PostgreSQL or Neo4j cases")
+	}
+	targetNames := make(map[string]struct{}, len(options.TargetNames))
+	for _, name := range options.TargetNames {
+		targetNames[name] = struct{}{}
 	}
 
 	report := PerfGateReport{
@@ -166,7 +213,12 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 		RegressionThreshold: options.RegressionThreshold,
 		Passed:              true,
 	}
+	if len(options.DeclaredBackends) > 0 {
+		report.DeclarationSHA256 = declarationSHA256(options.DeclaredBackends)
+	}
 	for idx, key := range keys {
+		baselineStatus := artifactCaseStatus(baseline, key)
+		candidateStatus := artifactCaseStatus(candidate, key)
 		baselineRounds, candidateRounds := matchedRounds(baselineSeries[key], candidateSeries[key])
 		gateCase := PerfGateCase{
 			Dataset:          key.dataset,
@@ -175,7 +227,27 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 			Rounds:           len(baselineRounds),
 			BaselineSamples:  sampleCount(baselineRounds),
 			CandidateSamples: sampleCount(candidateRounds),
+			BaselineStatus:   baselineStatus,
+			CandidateStatus:  candidateStatus,
+			OracleOnly:       key.backend == ModeNeo4j,
 			Passed:           true,
+		}
+		if candidateStatus != StatusOK {
+			gateCase.Passed = false
+			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("required candidate record status is %s", candidateStatus))
+		}
+		// Neo4j is a correctness oracle. A successful record means its untimed
+		// exact observation checks passed; its latency never affects this gate.
+		if key.backend == ModeNeo4j {
+			if !gateCase.Passed {
+				report.Passed = false
+			}
+			report.Cases = append(report.Cases, gateCase)
+			continue
+		}
+		if baselineStatus != StatusOK {
+			gateCase.Passed = false
+			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("required baseline record status is %s", baselineStatus))
 		}
 		if len(baselineRounds) < minimumGateRounds {
 			gateCase.Passed = false
@@ -185,6 +257,8 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 		seed := options.Seed + int64(idx)*7919
 		if len(baselineRounds) > 0 {
 			gateCase.MedianRatio = bootstrapRoundMedianRatio(baselineRounds, candidateRounds, seed, options)
+			saving := bootstrapRoundMedianSaving(baselineRounds, candidateRounds, seed+3, options)
+			gateCase.MedianSaving = &saving
 			if gateCase.MedianRatio.Lower > 1+options.RegressionThreshold {
 				gateCase.Passed = false
 				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("median regression lower bound %.4f exceeds %.4f", gateCase.MedianRatio.Lower, 1+options.RegressionThreshold))
@@ -203,28 +277,14 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("need at least %d warm samples per side for p95, got %d/%d", minimumP95Samples, gateCase.BaselineSamples, gateCase.CandidateSamples))
 		}
 
-		if target, isTarget := targetPerformanceGates[key.name]; isTarget && key.backend == ModePostgresSQL {
-			gateCase.TargetBaselineLimit = &target.baselineUpper
-			if len(baselineRounds) > 0 && gateCase.MedianRatio.Upper > target.baselineUpper {
+		if _, isTarget := targetNames[key.name]; isTarget && len(baselineRounds) > 0 {
+			gateCase.MaterialityRatio = &options.MaterialityRatio
+			gateCase.MaterialityAbsolute = &options.MaterialityAbsolute
+			materialRatio := gateCase.MedianRatio.Upper <= options.MaterialityRatio
+			materialAbsolute := gateCase.MedianSaving != nil && gateCase.MedianSaving.Lower >= options.MaterialityAbsolute
+			if !materialRatio && !materialAbsolute {
 				gateCase.Passed = false
-				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("target median upper bound %.4f exceeds %.4f", gateCase.MedianRatio.Upper, target.baselineUpper))
-			}
-
-			neo4jKey := performanceKey{dataset: key.dataset, name: key.name, backend: ModeNeo4j}
-			neo4jRounds, postgresRounds := matchedRounds(candidateSeries[neo4jKey], candidateSeries[key])
-			gateCase.BackendRatioLimit = &target.backendUpper
-			if len(neo4jRounds) < minimumGateRounds {
-				gateCase.Passed = false
-				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("need at least %d matched PostgreSQL/Neo4j rounds, got %d", minimumGateRounds, len(neo4jRounds)))
-			} else {
-				// matchedRounds returns its first input as the denominator. Passing
-				// Neo4j first therefore yields PostgreSQL/Neo4j.
-				interval := bootstrapRoundMedianRatio(neo4jRounds, postgresRounds, seed+2, options)
-				gateCase.BackendRatio = &interval
-				if interval.Upper > target.backendUpper {
-					gateCase.Passed = false
-					gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("PostgreSQL/Neo4j upper bound %.4f exceeds %.4f", interval.Upper, target.backendUpper))
-				}
+				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("target improvement is not material: median ratio upper %.4f > %.4f and saving lower %s < %s", gateCase.MedianRatio.Upper, options.MaterialityRatio, gateCase.MedianSaving.Lower, options.MaterialityAbsolute))
 			}
 		}
 
@@ -235,6 +295,70 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 	}
 
 	return report, nil
+}
+
+func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate []CaseResult) []performanceKey {
+	unique := map[performanceKey]struct{}{}
+	for _, item := range declared {
+		if item.UnsupportedReason != "" {
+			continue
+		}
+		if item.Backend == ModePostgresSQL || item.Backend == ModeNeo4j {
+			unique[performanceKey{dataset: item.Dataset, name: item.Name, backend: item.Backend}] = struct{}{}
+		}
+	}
+	if len(declared) == 0 {
+		for _, records := range [][]CaseResult{baseline, candidate} {
+			for _, record := range records {
+				if record.ExecutionMode == ModePostgresSQL || record.ExecutionMode == ModeNeo4j {
+					unique[performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}] = struct{}{}
+				}
+			}
+		}
+	}
+	keys := make([]performanceKey, 0, len(unique))
+	for key := range unique {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func artifactCaseStatus(records []CaseResult, key performanceKey) string {
+	found := false
+	for _, record := range records {
+		if record.Dataset != key.dataset || record.Name != key.name || record.ExecutionMode != key.backend {
+			continue
+		}
+		found = true
+		if record.Status != StatusOK {
+			return record.Status
+		}
+	}
+	if !found {
+		return "missing"
+	}
+	return StatusOK
+}
+
+func declarationSHA256(declared []DeclaredCaseBackend) string {
+	items := append([]DeclaredCaseBackend(nil), declared...)
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Dataset != items[j].Dataset {
+			return items[i].Dataset < items[j].Dataset
+		}
+		if items[i].Name != items[j].Name {
+			return items[i].Name < items[j].Name
+		}
+		if items[i].Backend != items[j].Backend {
+			return items[i].Backend < items[j].Backend
+		}
+		return items[i].UnsupportedReason < items[j].UnsupportedReason
+	})
+	digest := sha256.New()
+	for _, item := range items {
+		fmt.Fprintf(digest, "%s\x00%s\x00%s\x00%s\n", item.Dataset, item.Name, item.Backend, item.UnsupportedReason)
+	}
+	return hex.EncodeToString(digest.Sum(nil))
 }
 
 func collectWarmSeries(records []CaseResult) map[performanceKey]roundSamples {
@@ -293,6 +417,35 @@ func bootstrapRoundMedianRatio(baseline, candidate roundSamples, seed int64, opt
 		ratios[iteration] = quantile(resampledCandidate, 0.5) / quantile(resampledBaseline, 0.5)
 	}
 	return confidenceInterval(estimate, ratios, options.Confidence)
+}
+
+func bootstrapRoundMedianSaving(baseline, candidate roundSamples, seed int64, options PerfGateOptions) DurationInterval {
+	rounds := sortedRounds(baseline)
+	baselineMedians := make([]float64, len(rounds))
+	candidateMedians := make([]float64, len(rounds))
+	for idx, round := range rounds {
+		baselineMedians[idx] = durationQuantile(baseline[round], 0.5)
+		candidateMedians[idx] = durationQuantile(candidate[round], 0.5)
+	}
+	estimate := quantile(baselineMedians, 0.5) - quantile(candidateMedians, 0.5)
+	rng := rand.New(rand.NewSource(seed)) // #nosec G404 -- deterministic statistical resampling
+	savings := make([]float64, options.BootstrapCount)
+	resampledBaseline := make([]float64, len(rounds))
+	resampledCandidate := make([]float64, len(rounds))
+	for iteration := range savings {
+		for idx := range rounds {
+			selected := rng.Intn(len(rounds))
+			resampledBaseline[idx] = baselineMedians[selected]
+			resampledCandidate[idx] = candidateMedians[selected]
+		}
+		savings[iteration] = quantile(resampledBaseline, 0.5) - quantile(resampledCandidate, 0.5)
+	}
+	interval := confidenceInterval(estimate, savings, options.Confidence)
+	return DurationInterval{
+		Estimate: time.Duration(interval.Estimate),
+		Lower:    time.Duration(interval.Lower),
+		Upper:    time.Duration(interval.Upper),
+	}
 }
 
 func bootstrapStratifiedP95Ratio(baseline, candidate roundSamples, seed int64, options PerfGateOptions) RatioInterval {

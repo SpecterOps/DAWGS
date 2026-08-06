@@ -21,6 +21,7 @@ const (
 	LoweringExactRangeExpansion       = "ExactRangeExpansion"
 	LoweringPathRelationshipPredicate = "PathRelationshipPredicate"
 	LoweringFieldRequirements         = "FieldRequirements"
+	LoweringShortestPathExecutor      = "ShortestPathExecutorDecision"
 )
 
 type LoweringDecision struct {
@@ -104,6 +105,60 @@ type ShortestPathStrategyDecision struct {
 	Target   TraversalStepTarget  `json:"target"`
 	Strategy ShortestPathStrategy `json:"strategy"`
 	Reason   string               `json:"reason,omitempty"`
+}
+
+type ShortestPathExecutor string
+
+const (
+	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "incumbent_workspace"
+	ShortestPathExecutorS1ArrayBFS         ShortestPathExecutor = "s1_array_bfs"
+	ShortestPathExecutorS2TraceRelation    ShortestPathExecutor = "s2_trace_relation"
+	ShortestPathExecutorS3Unidirectional   ShortestPathExecutor = "s3_unidirectional_cte"
+)
+
+type ShortestPathObservationMode string
+
+const (
+	ShortestPathObservationDistance ShortestPathObservationMode = "distance"
+	ShortestPathObservationOnePath  ShortestPathObservationMode = "one_path"
+	ShortestPathObservationUnknown  ShortestPathObservationMode = "unknown"
+)
+
+const (
+	ShortestPathFallbackAllShortestPaths      = "all_shortest_paths"
+	ShortestPathFallbackCorrelatedEndpoints   = "correlated_endpoints"
+	ShortestPathFallbackMultipleEndpointPairs = "multiple_endpoint_pairs"
+	ShortestPathFallbackNonSingletonID        = "non_singleton_id"
+	ShortestPathFallbackMultipleIDEqualities  = "multiple_id_equalities"
+	ShortestPathFallbackPathPredicate         = "path_predicate"
+	ShortestPathFallbackRelationshipPredicate = "relationship_predicate"
+	ShortestPathFallbackRelationshipVariable  = "relationship_variable"
+	ShortestPathFallbackDirectionless         = "directionless"
+	ShortestPathFallbackOptionalMatch         = "optional_match"
+	ShortestPathFallbackUnsupportedDepth      = "unsupported_depth"
+	ShortestPathFallbackMutation              = "mutation"
+	ShortestPathFallbackMultiplePathCalls     = "multiple_path_calls"
+	ShortestPathFallbackStateLimit            = "state_limit"
+	ShortestPathFallbackTournamentUnqualified = "tournament_unqualified"
+)
+
+type ShortestPathEligibilityFact struct {
+	Name     string `json:"name"`
+	Eligible bool   `json:"eligible"`
+}
+
+// ShortestPathExecutorDecision is emitted even while the incumbent remains
+// selected. This makes conservative fallback observable without enabling an
+// experimental executor before its performance/resource tournament passes.
+type ShortestPathExecutorDecision struct {
+	Target             TraversalStepTarget           `json:"target"`
+	SelectedExecutor   ShortestPathExecutor          `json:"selected_executor"`
+	ObservationMode    ShortestPathObservationMode   `json:"observation_mode"`
+	Eligibility        []ShortestPathEligibilityFact `json:"eligibility"`
+	MaximumDepth       int64                         `json:"maximum_depth,omitempty"`
+	FallbackExecutor   ShortestPathExecutor          `json:"fallback_executor"`
+	FallbackReason     string                        `json:"fallback_reason"`
+	ExperimentalWinner bool                          `json:"experimental_winner,omitempty"`
 }
 
 type ShortestPathFilterMode string
@@ -259,6 +314,7 @@ type LoweringPlan struct {
 	PathRelationshipPredicate []PathRelationshipPredicateDecision `json:"path_relationship_predicate,omitempty"`
 	AggregateTraversalCount   []AggregateTraversalCountDecision   `json:"aggregate_traversal_count,omitempty"`
 	FieldRequirements         []FieldRequirementDecision          `json:"field_requirements,omitempty"`
+	ShortestPathExecutor      []ShortestPathExecutorDecision      `json:"shortest_path_executor,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -276,7 +332,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.ExactRangeExpansion) == 0 &&
 		len(s.PathRelationshipPredicate) == 0 &&
 		len(s.AggregateTraversalCount) == 0 &&
-		len(s.FieldRequirements) == 0
+		len(s.FieldRequirements) == 0 &&
+		len(s.ShortestPathExecutor) == 0
 }
 
 func (s LoweringPlan) Decisions() []LoweringDecision {
@@ -301,6 +358,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringPathRelationshipPredicate, len(s.PathRelationshipPredicate) > 0)
 	add(LoweringAggregateTraversalCount, len(s.AggregateTraversalCount) > 0)
 	add(LoweringFieldRequirements, len(s.FieldRequirements) > 0)
+	add(LoweringShortestPathExecutor, len(s.ShortestPathExecutor) > 0)
 
 	return decisions
 }

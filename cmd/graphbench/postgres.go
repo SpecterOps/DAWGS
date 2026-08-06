@@ -18,9 +18,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -35,15 +37,19 @@ import (
 )
 
 type postgresSQLRunner struct {
-	datasetDir string
-	db         graph.Database
-	pgDriver   *pg.Driver
-	pool       *pgxpool.Pool
-	graphID    int32
-	backendPID string
+	datasetDir  string
+	db          graph.Database
+	pgDriver    *pg.Driver
+	pool        *pgxpool.Pool
+	graphID     int32
+	backendPID  string
+	poolSize    int
+	concurrency []int
+	environment PostgresEnvironment
+	references  bool
 }
 
-func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus) (*postgresSQLRunner, error) {
+func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize int, concurrency []int, references bool) (*postgresSQLRunner, error) {
 	poolCfg, err := pgxpool.ParseConfig(connection)
 	if err != nil {
 		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
@@ -51,9 +57,14 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 	// GraphBench needs first-call and steady-state samples from an identifiable
 	// physical session. A single-connection pool makes that relationship
 	// deterministic while retaining the production pool hooks.
-	poolCfg.MinConns = 1
-	poolCfg.MaxConns = 1
-	pool, err := pg.NewPool(poolCfg)
+	poolCfg.MinConns = int32(poolSize)
+	poolCfg.MaxConns = int32(poolSize)
+	// pg.NewPool applies the production driver's fixed 5/50 pool sizing. The
+	// benchmark must preserve the requested size so a size-one run can prove
+	// that all samples in a case used the same physical session.
+	poolCfg.AfterConnect = pg.AfterPooledConnectionEstablished
+	poolCfg.AfterRelease = pg.AfterPooledConnectionRelease
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
 	}
@@ -95,14 +106,33 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 		_ = db.Close(ctx)
 		return nil, fmt.Errorf("identify PostgreSQL benchmark connection: %w", err)
 	}
+	var postgresEnvironment PostgresEnvironment
+	if err := pool.QueryRow(ctx, `select version(), current_database(), current_setting('plan_cache_mode'), current_setting('work_mem'), current_setting('temp_file_limit'), (select count(*) from graph), pg_postmaster_start_time(), (select oid::int8 from pg_database where datname = current_database()), current_setting('autovacuum')`).Scan(
+		&postgresEnvironment.Version,
+		&postgresEnvironment.Database,
+		&postgresEnvironment.PlanCacheMode,
+		&postgresEnvironment.WorkMem,
+		&postgresEnvironment.TempFileLimit,
+		&postgresEnvironment.GraphPartitionCount,
+		&postgresEnvironment.PostmasterStartedAt,
+		&postgresEnvironment.DatabaseOID,
+		&postgresEnvironment.Autovacuum,
+	); err != nil {
+		_ = db.Close(ctx)
+		return nil, fmt.Errorf("capture PostgreSQL environment: %w", err)
+	}
 
 	return &postgresSQLRunner{
-		datasetDir: datasetDir,
-		db:         db,
-		pgDriver:   pgDriver,
-		pool:       pool,
-		graphID:    defaultGraph.ID,
-		backendPID: strconv.FormatInt(int64(backendPID), 10),
+		datasetDir:  datasetDir,
+		db:          db,
+		pgDriver:    pgDriver,
+		pool:        pool,
+		graphID:     defaultGraph.ID,
+		backendPID:  strconv.FormatInt(int64(backendPID), 10),
+		poolSize:    poolSize,
+		concurrency: append([]int(nil), concurrency...),
+		environment: postgresEnvironment,
+		references:  references,
 	}, nil
 }
 
@@ -114,13 +144,17 @@ func (s *postgresSQLRunner) Close(ctx context.Context) error {
 	return s.db.Close(ctx)
 }
 
-func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
+func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
 	var (
 		records        []CaseResult
 		casesByDataset = scaleCasesByDataset(corpus)
 	)
 
 	for _, datasetName := range scaleCorpusDatasets(corpus) {
+		fixture, err := fixtureMetadata(s.datasetDir, datasetName)
+		if err != nil {
+			return nil, err
+		}
 		if err := clearGraph(ctx, s.db); err != nil {
 			return nil, fmt.Errorf("clear graph for %s: %w", datasetName, err)
 		}
@@ -132,6 +166,11 @@ func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus Scal
 		if _, err := s.pool.Exec(ctx, "vacuum (analyze) node, edge"); err != nil {
 			return nil, fmt.Errorf("vacuum and analyze %s fixture: %w", datasetName, err)
 		}
+		if err := s.pool.QueryRow(ctx, `select pg_total_relation_size('node'), pg_total_relation_size('edge'), coalesce((select string_agg(relname || ':' || coalesce(last_analyze::text, 'never'), ',' order by relname) from pg_stat_all_tables where relname in ('node', 'edge')), '')`).Scan(
+			&s.environment.NodeRelationBytes, &s.environment.EdgeRelationBytes, &s.environment.AnalyzeState,
+		); err != nil {
+			return nil, fmt.Errorf("capture %s fixture relation sizes: %w", datasetName, err)
+		}
 
 		for _, testCase := range casesByDataset[datasetName] {
 			if !testCase.Supports(ModePostgresSQL) {
@@ -142,7 +181,8 @@ func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus Scal
 				return nil, fmt.Errorf("reset PostgreSQL session for %s: %w", testCase.Name, err)
 			}
 
-			record := s.runCase(ctx, iterations, testCase, idMap)
+			record := s.runCase(ctx, warmupIterations, iterations, testCase, idMap)
+			record.Fixture = &fixture
 			records = append(records, record)
 		}
 	}
@@ -152,6 +192,10 @@ func (s *postgresSQLRunner) Run(ctx context.Context, iterations int, corpus Scal
 
 func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	s.pool.Reset()
+	if s.poolSize != 1 {
+		s.backendPID = ""
+		return nil
+	}
 
 	var backendPID int32
 	if err := s.pool.QueryRow(ctx, "select pg_backend_pid()").Scan(&backendPID); err != nil {
@@ -161,7 +205,7 @@ func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	return nil
 }
 
-func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
+func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
 	params, err := resolveCaseParams(testCase, idMap)
 	record := newCaseResult(testCase, ModePostgresSQL, params)
 	if err != nil {
@@ -171,7 +215,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 	}
 
 	if testCase.WriteScenario == nil {
-		rowCount, observedRows, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, iterations)
+		rowCount, observedRows, stats, err := measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = err.Error()
@@ -194,7 +238,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 			return record
 		}
 
-		measurement, stats, err := measureWriteCypher(ctx, s.db, testCase.Cypher, params, scenario, iterations)
+		measurement, stats, err := measureWriteCypherWithWarmups(ctx, s.db, testCase.Cypher, params, scenario, warmupIterations, iterations)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = err.Error()
@@ -210,6 +254,19 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 			record.Stats.Samples[idx].ConnectionID = s.backendPID
 		}
 	}
+	if s.poolSize == 1 {
+		var backendPID int32
+		if err := s.pool.QueryRow(ctx, "select pg_backend_pid()").Scan(&backendPID); err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("verify PostgreSQL benchmark connection: %v", err)
+			return record
+		}
+		if current := strconv.FormatInt(int64(backendPID), 10); current != s.backendPID {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("PostgreSQL physical connection changed during case: %s -> %s", s.backendPID, current)
+			return record
+		}
+	}
 
 	explain, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)
 	if err != nil {
@@ -221,17 +278,76 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, iterations int, testCas
 	}
 
 	record.SQL = explain.SQL
+	record.SQLFingerprint = sqlFingerprint(explain.SQL)
+	postgresEnvironment := s.environment
+	record.PostgresEnvironment = &postgresEnvironment
 	record.PostgresPlan = explain.Plan
+	record.PostgresPlanJSON = explain.PlanJSON
 	record.PostgresMetrics = &explain.Metrics
 	record.Optimization = &explain.Optimization
+	if explain.Optimization.LoweringPlan != nil {
+		var fallbackReasons []string
+		for _, decision := range explain.Optimization.LoweringPlan.ShortestPathExecutor {
+			if decision.FallbackReason != "" && !slices.Contains(fallbackReasons, decision.FallbackReason) {
+				fallbackReasons = append(fallbackReasons, decision.FallbackReason)
+			}
+		}
+		record.FallbackReason = strings.Join(fallbackReasons, ",")
+	}
+	if s.references && testCase.WriteScenario == nil {
+		waterfall, err := measureCompileWaterfall(ctx, testCase.Cypher, params, s.pgDriver.KindMapper(), s.graphID, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("client compile waterfall: %v", err)
+			return record
+		}
+		record.ClientWaterfall = &waterfall
+		rawWaterfall, err := measureRawPGXWaterfall(ctx, s.pool, explain.SQL, explain.Parameters, warmupIterations, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("raw pgx waterfall: %v", err)
+			return record
+		}
+		if len(rawWaterfall.Samples) > 0 && rawWaterfall.Samples[0].Rows != record.RowCount {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("raw pgx row count %d differs from CySQL row count %d", rawWaterfall.Samples[0].Rows, record.RowCount)
+			return record
+		}
+		record.RawPGXWaterfall = &rawWaterfall
+		roundTrip, err := measureRawPGXWaterfall(ctx, s.pool, "select 1", nil, warmupIterations, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("raw pgx round trip: %v", err)
+			return record
+		}
+		record.RawPGXRoundTrip = &roundTrip
+		references, err := s.measureReferences(ctx, testCase, params, idMap, record.ObservedRows, warmupIterations, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("PostgreSQL references: %v", err)
+			return record
+		}
+		record.PostgresReferences = references
+	}
+	if testCase.WriteScenario == nil && len(s.concurrency) > 0 {
+		blocks, err := measurePostgresConcurrency(ctx, s.pool, explain.SQL, explain.Parameters, s.poolSize, s.concurrency, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("concurrency smoke: %v", err)
+			return record
+		}
+		record.Concurrency = blocks
+	}
 	return record
 }
 
 type postgresExplain struct {
 	SQL          string
 	Plan         []string
+	PlanJSON     json.RawMessage
 	Metrics      PostgresPlanMetrics
 	Optimization translate.OptimizationSummary
+	Parameters   map[string]any
 }
 
 func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (postgresExplain, error) {
@@ -250,7 +366,10 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		return postgresExplain{}, err
 	}
 
-	var plan []string
+	var (
+		plan     []string
+		planJSON json.RawMessage
+	)
 	runExplain := func(tx graph.Transaction) error {
 		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) "+sqlQuery, translation.Parameters)
 		defer result.Close()
@@ -266,6 +385,27 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 
 		if err := result.Error(); err != nil {
 			return err
+		}
+		if !write {
+			jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, FORMAT JSON) "+sqlQuery, translation.Parameters)
+			defer jsonResult.Close()
+			if jsonResult.Next() && len(jsonResult.Values()) > 0 {
+				switch value := jsonResult.Values()[0].(type) {
+				case []byte:
+					planJSON = append(json.RawMessage(nil), value...)
+				case string:
+					planJSON = append(json.RawMessage(nil), value...)
+				default:
+					encoded, err := json.Marshal(value)
+					if err != nil {
+						return err
+					}
+					planJSON = encoded
+				}
+			}
+			if err := jsonResult.Error(); err != nil {
+				return err
+			}
 		}
 		if write {
 			return errScaleWriteRollback
@@ -289,15 +429,17 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 	return postgresExplain{
 		SQL:          sqlQuery,
 		Plan:         plan,
+		PlanJSON:     planJSON,
 		Metrics:      parsePostgresPlanMetrics(plan),
 		Optimization: translation.Optimization,
+		Parameters:   translation.Parameters,
 	}, nil
 }
 
 var (
 	postgresPlanningPattern  = regexp.MustCompile(`Planning Time: ([0-9.]+) ms`)
 	postgresExecutionPattern = regexp.MustCompile(`Execution Time: ([0-9.]+) ms`)
-	postgresBufferPattern    = regexp.MustCompile(`(?:(shared|temp) )?(hit|read|dirtied|written)=([0-9]+)`)
+	postgresBufferPattern    = regexp.MustCompile(`(?:(shared|local|temp) )?(hit|read|dirtied|written)=([0-9]+)`)
 )
 
 func parsePostgresPlanMetrics(plan []string) PostgresPlanMetrics {
@@ -350,6 +492,16 @@ func parsePostgresBuffers(line string) Buffers {
 			buffers.SharedRead = value
 		case "shared_dirtied":
 			buffers.SharedDirtied = value
+		case "shared_written":
+			buffers.SharedWritten = value
+		case "local_hit":
+			buffers.LocalHit = value
+		case "local_read":
+			buffers.LocalRead = value
+		case "local_dirtied":
+			buffers.LocalDirtied = value
+		case "local_written":
+			buffers.LocalWritten = value
 		case "temp_read":
 			buffers.TempRead = value
 		case "temp_written":

@@ -118,6 +118,17 @@ func TestMeasureWriteCypherRollsBackWarmupAndEveryIteration(t *testing.T) {
 	require.Equal(t, int64(3), database.relationships, "every write transaction must roll back")
 }
 
+func TestMeasureWriteCypherRecordsConfiguredUntimedWarmups(t *testing.T) {
+	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 1}
+	scenario := resolvedWriteScenario{SelectionCypher: "selection", AffectedEntity: "relationship", ExpectedMatched: 1, ExpectedAffected: 1}
+
+	_, stats, err := measureWriteCypherWithWarmups(context.Background(), database, "delete", nil, scenario, 2, 1)
+	require.NoError(t, err)
+	require.Equal(t, 2, stats.WarmupIterations)
+	require.Len(t, stats.Samples, 2, "configured warmups must not become samples")
+	require.Equal(t, 4, database.writeTransactions, "cold + two warmups + one timed transaction")
+}
+
 func TestMeasureWriteCypherRejectsOverBroadMutation(t *testing.T) {
 	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 2}
 	scenario := resolvedWriteScenario{

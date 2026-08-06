@@ -52,13 +52,13 @@ func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, filtered)
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, filtered, 1, nil, true)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, runner.Close(ctx))
 	})
 
-	records, err := runner.Run(ctx, 1, filtered)
+	records, err := runner.Run(ctx, 1, 1, filtered)
 	require.NoError(t, err)
 	require.Len(t, records, len(filtered.Cases))
 

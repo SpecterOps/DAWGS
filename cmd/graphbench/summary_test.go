@@ -110,3 +110,20 @@ func TestWriteMarkdownSummary(t *testing.T) {
 	require.NoError(t, writeMarkdownSummary(&output, summary))
 	require.Contains(t, output.String(), "| case | base | counts | 2.0ms; rows=1 | not_implemented; local traversal executor unavailable | - |")
 }
+
+func TestBuildSummaryIncludesExclusiveRawPGXCostModel(t *testing.T) {
+	record := CaseResult{
+		Dataset: "base", Name: "large", ExecutionMode: ModePostgresSQL, Status: StatusOK,
+		RawPGXWaterfall: &PostgresBoundaryWaterfall{Boundary: "raw", Samples: []BoundarySample{{
+			PoolWait: time.Millisecond, Transaction: time.Millisecond, BindPrepare: 2 * time.Millisecond,
+			FirstRow: 2 * time.Millisecond, AllRowsDecode: 3 * time.Millisecond, DrainClose: time.Millisecond,
+			Total: 10 * time.Millisecond, Rows: 1000,
+		}}},
+	}
+
+	summary := buildSummary([]CaseResult{record})
+	require.Len(t, summary.CostModels, 1)
+	require.Equal(t, 10*time.Millisecond, summary.CostModels[0].E2EMedian)
+	require.InDelta(t, 1.0, summary.CostModels[0].Attribution, 0.0001)
+	require.Equal(t, "Unexplained residual", summary.CostModels[0].Components[6].Name)
+}

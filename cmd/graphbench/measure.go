@@ -262,6 +262,15 @@ func observedPathRows(rows []string) ([]string, error) {
 
 func observeCypherRows(tx graph.Transaction, cypher string, params map[string]any, idMap opengraph.IDMap, scalarNodeIDs bool, pathValues bool) (int64, []string, error) {
 	result := tx.Query(cypher, params)
+	return observeResultRows(result, idMap, scalarNodeIDs, pathValues)
+}
+
+func observeRawRows(tx graph.Transaction, sql string, params map[string]any, idMap opengraph.IDMap, scalarNodeIDs bool, pathValues bool) (int64, []string, error) {
+	result := tx.Raw(sql, params)
+	return observeResultRows(result, idMap, scalarNodeIDs, pathValues)
+}
+
+func observeResultRows(result graph.Result, idMap opengraph.IDMap, scalarNodeIDs bool, pathValues bool) (int64, []string, error) {
 	defer result.Close()
 
 	var (
@@ -291,6 +300,43 @@ func observeCypherRows(tx graph.Transaction, cypher string, params map[string]an
 	return rowCount, rows, nil
 }
 
+func validateExpectedObservations(expected ExpectedResult, observed []string) error {
+	if len(expected.IDRows) > 0 {
+		expectedRows := make([]string, len(expected.IDRows))
+		for idx, row := range expected.IDRows {
+			encoded, err := json.Marshal(row)
+			if err != nil {
+				return err
+			}
+			expectedRows[idx] = string(encoded)
+		}
+		sort.Strings(expectedRows)
+		if !slices.Equal(expectedRows, observed) {
+			return fmt.Errorf("stable ID rows differ: expected=%v observed=%v", expectedRows, observed)
+		}
+	}
+	if len(expected.PathRows) > 0 {
+		expectedRows, err := expectedPathRows(expected.PathRows)
+		if err != nil {
+			return err
+		}
+		observedRows, err := observedPathRows(observed)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(expectedRows, observedRows) {
+			return fmt.Errorf("stable path rows differ: expected=%v observed=%v", expectedRows, observedRows)
+		}
+	}
+	if expected.ScalarInt != nil {
+		expectedRow := fmt.Sprintf("[%d]", *expected.ScalarInt)
+		if len(observed) != 1 || observed[0] != expectedRow {
+			return fmt.Errorf("scalar result differs: expected=%s observed=%v", expectedRow, observed)
+		}
+	}
+	return nil
+}
+
 func observeCypher(tx graph.Transaction, cypher string, params map[string]any) (StateQueryResult, error) {
 	result := tx.Query(cypher, params)
 	defer result.Close()
@@ -317,8 +363,15 @@ func resultContainsPaths(expected ExpectedResult) bool {
 }
 
 func measureCypher(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, iterations int) (int64, []string, DurationStats, error) {
+	return measureCypherWithWarmups(ctx, db, cypher, params, expected, idMap, 0, iterations)
+}
+
+func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int) (int64, []string, DurationStats, error) {
 	if iterations < 1 {
 		return 0, nil, DurationStats{}, fmt.Errorf("iterations must be at least 1")
+	}
+	if warmupIterations < 0 {
+		return 0, nil, DurationStats{}, fmt.Errorf("warmup iterations must not be negative")
 	}
 
 	coldStart := time.Now()
@@ -329,6 +382,14 @@ func measureCypher(ctx context.Context, db graph.Database, cypher string, params
 		return 0, nil, DurationStats{}, err
 	}
 	coldDuration := time.Since(coldStart)
+	for range warmupIterations {
+		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			_, err := countCypherRows(tx, cypher, params)
+			return err
+		}); err != nil {
+			return 0, nil, DurationStats{}, err
+		}
+	}
 
 	var (
 		warmupRows        int64
@@ -373,38 +434,15 @@ func measureCypher(ctx context.Context, db graph.Database, cypher string, params
 	if !slices.Equal(preflightObserved, postflightObserved) {
 		return 0, nil, DurationStats{}, fmt.Errorf("postflight result changed despite stable row count")
 	}
-	if len(expected.IDRows) > 0 {
-		expectedRows := make([]string, len(expected.IDRows))
-		for idx, row := range expected.IDRows {
-			encoded, err := json.Marshal(row)
-			if err != nil {
-				return 0, nil, DurationStats{}, err
-			}
-			expectedRows[idx] = string(encoded)
-		}
-		sort.Strings(expectedRows)
-		if !slices.Equal(expectedRows, preflightObserved) {
-			return 0, nil, DurationStats{}, fmt.Errorf("stable ID rows differ: expected=%v observed=%v", expectedRows, preflightObserved)
-		}
-	}
-	if len(expected.PathRows) > 0 {
-		expectedRows, err := expectedPathRows(expected.PathRows)
-		if err != nil {
-			return 0, nil, DurationStats{}, err
-		}
-		observedRows, err := observedPathRows(preflightObserved)
-		if err != nil {
-			return 0, nil, DurationStats{}, err
-		}
-		if !slices.Equal(expectedRows, observedRows) {
-			return 0, nil, DurationStats{}, fmt.Errorf("stable path rows differ: expected=%v observed=%v", expectedRows, observedRows)
-		}
+	if err := validateExpectedObservations(expected, preflightObserved); err != nil {
+		return 0, nil, DurationStats{}, err
 	}
 
 	stats, err := computeDurationStats(durations)
 	if err != nil {
 		return 0, nil, DurationStats{}, err
 	}
+	stats.WarmupIterations = warmupIterations
 
 	stats.Samples = append([]LatencySample{{
 		Round:          1,
@@ -424,13 +462,39 @@ func measureWriteCypher(
 	scenario resolvedWriteScenario,
 	iterations int,
 ) (writeMeasurement, DurationStats, error) {
+	return measureWriteCypherWithWarmups(ctx, db, cypher, params, scenario, 0, iterations)
+}
+
+func measureWriteCypherWithWarmups(
+	ctx context.Context,
+	db graph.Database,
+	cypher string,
+	params map[string]any,
+	scenario resolvedWriteScenario,
+	warmupIterations int,
+	iterations int,
+) (writeMeasurement, DurationStats, error) {
 	if iterations < 1 {
 		return writeMeasurement{}, DurationStats{}, fmt.Errorf("iterations must be at least 1")
 	}
+	if warmupIterations < 0 {
+		return writeMeasurement{}, DurationStats{}, fmt.Errorf("warmup iterations must not be negative")
+	}
 
+	// The first untimed execution remains the cold diagnostic. Additional
+	// configured warmups are also untimed and must preserve its semantics.
 	warmup, err := measureWriteIteration(ctx, db, cypher, params, scenario)
 	if err != nil {
 		return writeMeasurement{}, DurationStats{}, err
+	}
+	for idx := 0; idx < warmupIterations; idx++ {
+		next, err := measureWriteIteration(ctx, db, cypher, params, scenario)
+		if err != nil {
+			return writeMeasurement{}, DurationStats{}, err
+		}
+		if next.Matched != warmup.Matched || next.Affected != warmup.Affected {
+			return writeMeasurement{}, DurationStats{}, fmt.Errorf("warm-up iteration %d changed cardinality", idx+1)
+		}
 	}
 
 	durations := make([]time.Duration, iterations)
@@ -456,6 +520,7 @@ func measureWriteCypher(
 	if err != nil {
 		return writeMeasurement{}, DurationStats{}, err
 	}
+	stats.WarmupIterations = warmupIterations
 
 	stats.Samples = append([]LatencySample{{
 		Round:          1,

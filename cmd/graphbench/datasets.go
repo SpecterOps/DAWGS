@@ -18,6 +18,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -87,6 +90,16 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 }
 
 func generatedDataset(name string) *opengraph.Graph {
+	var shortestDepth, shortestFanout int
+	if matched, _ := fmt.Sscanf(name, testutil.ShortestPathScaleDataset+"_d%d_f%d", &shortestDepth, &shortestFanout); matched == 2 && shortestDepth >= 1 && shortestFanout >= 1 && name == fmt.Sprintf(testutil.ShortestPathScaleDataset+"_d%d_f%d", shortestDepth, shortestFanout) {
+		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: shortestDepth, Fanout: shortestFanout})
+	}
+	var adcsDepth, adcsFanout, adcsValidEvery, adcsPayload int
+	if matched, _ := fmt.Sscanf(name, testutil.ADCSScaleDataset+"_d%d_f%d_v%d_p%d", &adcsDepth, &adcsFanout, &adcsValidEvery, &adcsPayload); matched == 4 && adcsDepth >= 0 && adcsFanout >= 1 && adcsValidEvery >= 1 && adcsPayload >= 0 && name == fmt.Sprintf(testutil.ADCSScaleDataset+"_d%d_f%d_v%d_p%d", adcsDepth, adcsFanout, adcsValidEvery, adcsPayload) {
+		return testutil.NewADCSScaleFixture(testutil.ADCSScaleConfig{
+			MemberOfDepth: adcsDepth, Fanout: adcsFanout, ValidSuffixEvery: adcsValidEvery, PropertyPayloadSize: adcsPayload,
+		})
+	}
 	switch name {
 	case testutil.ReconciliationScaleDataset:
 		return testutil.NewReconciliationScaleFixture(128)
@@ -103,6 +116,33 @@ func generatedDataset(name string) *opengraph.Graph {
 	default:
 		return nil
 	}
+}
+
+type FixtureMetadata struct {
+	Dataset       string `json:"dataset"`
+	Checksum      string `json:"checksum"`
+	NodeCount     int    `json:"node_count"`
+	EdgeCount     int    `json:"edge_count"`
+	Configuration string `json:"configuration,omitempty"`
+}
+
+func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
+	doc, err := parseDataset(datasetDir, name)
+	if err != nil {
+		return FixtureMetadata{}, err
+	}
+	raw, err := json.Marshal(doc.Graph)
+	if err != nil {
+		return FixtureMetadata{}, fmt.Errorf("encode dataset %s for checksum: %w", name, err)
+	}
+	digest := sha256.Sum256(raw)
+	configuration := "file"
+	if generatedDataset(name) != nil {
+		configuration = name
+	}
+	return FixtureMetadata{
+		Dataset: name, Checksum: hex.EncodeToString(digest[:]), NodeCount: len(doc.Graph.Nodes), EdgeCount: len(doc.Graph.Edges), Configuration: configuration,
+	}, nil
 }
 
 func clearGraph(ctx context.Context, db graph.Database) error {

@@ -93,6 +93,18 @@ multiset checks. PostgreSQL datasets are vacuumed and analyzed after loading and
 before measured reads. Node-ID expectations and recorded paths use stable
 fixture identities rather than backend-assigned IDs, while preserving duplicate
 rows and path order.
+The executable gate uses the complete corpus/backend declaration instead of the
+intersection of successful records, treats Neo4j only as an exact-result and
+informational latency oracle, and supports predeclared materiality thresholds.
+`make perf_aa` derives p50/p95 measurement resolution from repeated A/A
+captures. Exact case/dataset/category/tag selectors create diagnostic-only
+artifacts that the complete gate refuses; configured warmups and matched
+arm/block/run metadata support isolated confirmation. `make perf_confirm`
+reports paired absolute and relative p50/p95 changes with optional block/reload
+A/A floors. Capture bundles can retain the source patch, untracked sources,
+module state, binary, manifest, raw records, and checksums. Opt-in pool
+concurrency blocks and PostgreSQL component/full-query
+references are documented in `cmd/graphbench/README.md`.
 
 The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
