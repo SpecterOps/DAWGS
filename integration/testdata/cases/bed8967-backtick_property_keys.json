@@ -1,0 +1,47 @@
+{
+  "dataset": "bed8967",
+  "cases": [
+    {
+      "name": "BED-8967 read escaped node property keys",
+      "cypher": "match (n:BacktickNode) return n.`a-aaa`, n.`has``tick`, n.``, n.`a\u20dd` order by n.name",
+      "assert": {
+        "ordered_row_values": [
+          ["alpha-hyphen", "alpha-backtick", "alpha-empty", "alpha-enclosing"],
+          ["beta-hyphen", "beta-backtick", "beta-empty", "beta-enclosing"]
+        ]
+      }
+    },
+    {
+      "name": "BED-8967 filter node using escaped pattern property key",
+      "cypher": "match (n:BacktickNode {`a-aaa`: 'beta-hyphen'}) return n.name",
+      "assert": {"scalar_values": ["beta"]}
+    },
+    {
+      "name": "BED-8967 read escaped relationship property keys",
+      "cypher": "match (:BacktickNode {name: 'alpha'})-[r:BacktickEdge]->(:BacktickNode {name: 'beta'}) return r.`edge-key`, r.`has``tick`",
+      "assert": {"row_values": [["edge-hyphen", "edge-backtick"]]}
+    },
+    {
+      "name": "BED-8967 set escaped node property keys",
+      "cypher": "match (n:BacktickNode {name: 'mutable'}) set n.`set-key` = 'set-value', n.`has``tick` = 'updated-backtick' return n.`set-key`, n.`has``tick`",
+      "fixture": {
+        "nodes": [
+          {"id": "mutable", "kinds": ["BacktickNode"], "properties": {"name": "mutable", "has`tick": "old-backtick"}}
+        ],
+        "edges": []
+      },
+      "assert": {"row_values": [["set-value", "updated-backtick"]]}
+    },
+    {
+      "name": "BED-8967 remove escaped node property key",
+      "cypher": "match (n:BacktickNode {name: 'removable'}) remove n.`remove-key` return n.`remove-key`",
+      "fixture": {
+        "nodes": [
+          {"id": "removable", "kinds": ["BacktickNode"], "properties": {"name": "removable", "remove-key": "remove-me"}}
+        ],
+        "edges": []
+      },
+      "assert": {"scalar_values": [null]}
+    }
+  ]
+}
