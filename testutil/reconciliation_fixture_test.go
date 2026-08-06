@@ -129,6 +129,8 @@ func TestNewScanLookupScaleFixtureIncludesWideAndLargeListShapes(t *testing.T) {
 	require.Contains(t, nodeKinds, graph.StringKind("ADBase"))
 	require.Contains(t, nodeKinds, graph.StringKind("AZRole"))
 	require.Contains(t, nodeKinds, graph.StringKind("Hydrate"))
+	require.Contains(t, nodeKinds, graph.StringKind("Meta"))
+	require.Contains(t, nodeKinds, graph.StringKind("MetaDetail"))
 	require.Contains(t, edgeKinds, graph.StringKind("ScanPostProcessed"))
 	require.Contains(t, edgeKinds, graph.StringKind("Contains"))
 	for idx := 1; idx <= 9; idx++ {

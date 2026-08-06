@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildPerfGateReportPassesTargetAndComparableGates(t *testing.T) {
+func TestBuildPerfGateReportTreatsNeo4jAsCorrectnessOracle(t *testing.T) {
 	baseline := []CaseResult{
 		perfGateRecord("one_shortest_path_bound_pair", ModePostgresSQL, 10*time.Millisecond, 5, 30),
 		perfGateRecord("one_shortest_path_bound_pair", ModeNeo4j, 3*time.Millisecond, 5, 30),
@@ -48,8 +48,49 @@ func TestBuildPerfGateReportPassesTargetAndComparableGates(t *testing.T) {
 	postgres := findPerfGateCase(t, report.Cases, ModePostgresSQL)
 	require.InDelta(t, 0.3, postgres.MedianRatio.Estimate, 0.0001)
 	require.NotNil(t, postgres.P95Ratio)
-	require.NotNil(t, postgres.BackendRatio)
-	require.InDelta(t, 1.5, postgres.BackendRatio.Estimate, 0.0001)
+	neo4j := findPerfGateCase(t, report.Cases, ModeNeo4j)
+	require.True(t, neo4j.OracleOnly)
+	require.Nil(t, neo4j.P95Ratio)
+}
+
+func TestBuildPerfGateReportFailsMissingDeclaredPostgresCase(t *testing.T) {
+	baseline := []CaseResult{perfGateRecord("present", ModePostgresSQL, time.Millisecond, 5, 30)}
+	candidate := []CaseResult{perfGateRecord("present", ModePostgresSQL, time.Millisecond, 5, 30)}
+
+	report, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
+		Seed: 1, Confidence: 0.95, RegressionThreshold: 0.20, BootstrapCount: 100,
+		DeclaredBackends: []DeclaredCaseBackend{
+			{Dataset: "fixture", Name: "present", Backend: ModePostgresSQL},
+			{Dataset: "fixture", Name: "missing", Backend: ModePostgresSQL},
+		},
+	})
+
+	require.NoError(t, err)
+	require.False(t, report.Passed)
+	require.NotEmpty(t, report.DeclarationSHA256)
+	var missing PerfGateCase
+	for _, gateCase := range report.Cases {
+		if gateCase.Name == "missing" {
+			missing = gateCase
+		}
+	}
+	require.Equal(t, "missing", missing.CandidateStatus)
+	require.ErrorContains(t, reasonsError(missing.Reasons), "required candidate record status is missing")
+}
+
+func TestBuildPerfGateReportAppliesMaterialityOnlyToDeclaredTargets(t *testing.T) {
+	baseline := []CaseResult{perfGateRecord("target", ModePostgresSQL, 10*time.Millisecond, 5, 30)}
+	candidate := []CaseResult{perfGateRecord("target", ModePostgresSQL, 9_700*time.Microsecond, 5, 30)}
+
+	report, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
+		Seed: 1, Confidence: 0.95, RegressionThreshold: 0.20, BootstrapCount: 100,
+		TargetNames: []string{"target"}, MaterialityRatio: 0.95, MaterialityAbsolute: 100 * time.Microsecond,
+	})
+
+	require.NoError(t, err)
+	require.True(t, report.Passed, "%v", report.Cases[0].Reasons)
+	require.NotNil(t, report.Cases[0].MedianSaving)
+	require.Equal(t, 300*time.Microsecond, report.Cases[0].MedianSaving.Lower)
 }
 
 func TestBuildPerfGateReportFailsRegressionAndInsufficientP95(t *testing.T) {
@@ -84,6 +125,36 @@ func TestBuildPerfGateReportRequiresMatchedRounds(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, report.Passed)
 	require.ErrorContains(t, reasonsError(report.Cases[0].Reasons), "at least 5 matched rounds")
+}
+
+func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing.T) {
+	declared := []DeclaredCaseBackend{
+		{Dataset: "fixture", Name: "directionless", Backend: ModeNeo4j},
+		{Dataset: "fixture", Name: "directionless", Backend: ModePostgresSQL, UnsupportedReason: "unsupported form"},
+	}
+	records := []CaseResult{perfGateRecord("directionless", ModeNeo4j, time.Millisecond, 1, 1)}
+
+	report, err := buildPerfGateReport(records, records, PerfGateOptions{
+		Seed: 1, Confidence: 0.95, RegressionThreshold: 0.20, BootstrapCount: 10, DeclaredBackends: declared,
+	})
+	require.NoError(t, err)
+	require.True(t, report.Passed)
+	require.Len(t, report.Cases, 1)
+
+	changed := append([]DeclaredCaseBackend(nil), declared...)
+	changed[1].UnsupportedReason = "different reason"
+	require.NotEqual(t, declarationSHA256(declared), declarationSHA256(changed))
+}
+
+func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate(t *testing.T) {
+	manifest := &SelectionManifest{DiagnosticOnly: true, DeclarationSHA256: "subset"}
+	left := []CaseResult{{Dataset: "fixture", Name: "case", Environment: &RunEnvironment{Selection: manifest}}}
+	right := []CaseResult{{Dataset: "fixture", Name: "case", Environment: &RunEnvironment{Selection: manifest}}}
+
+	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, false), "refused")
+	require.NoError(t, validatePerformanceArtifactSelections(left, right, true))
+	right[0].Environment.Selection = &SelectionManifest{DiagnosticOnly: true, DeclarationSHA256: "different"}
+	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, true), "declarations differ")
 }
 
 func perfGateRecord(name string, mode ExecutionMode, duration time.Duration, rounds, samplesPerRound int) CaseResult {

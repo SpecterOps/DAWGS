@@ -78,6 +78,17 @@ func validateScaleCase(testCase ScaleCase) error {
 			return fmt.Errorf("unsupported candidate mode %q", mode)
 		}
 	}
+	for mode, reason := range testCase.UnsupportedModes {
+		if !mode.Valid() {
+			return fmt.Errorf("invalid unsupported mode %q", mode)
+		}
+		if reason == "" {
+			return fmt.Errorf("unsupported mode %q requires a reason", mode)
+		}
+		if testCase.Supports(mode) {
+			return fmt.Errorf("mode %q cannot be both candidate and unsupported", mode)
+		}
+	}
 
 	if len(testCase.Expected.IDRows) > 0 {
 		if testCase.Expected.ResultKind != "id_rows" {

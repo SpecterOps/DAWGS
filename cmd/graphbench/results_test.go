@@ -42,6 +42,8 @@ func TestComputeDurationStatsCopiesAndSortsDurations(t *testing.T) {
 	require.Equal(t, 3, stats.Iterations)
 	require.Equal(t, 20*time.Millisecond, stats.Median)
 	require.Equal(t, 30*time.Millisecond, stats.P95)
+	require.Equal(t, 30*time.Millisecond, stats.P99)
+	require.False(t, stats.P99Gated)
 	require.Equal(t, 30*time.Millisecond, stats.Max)
 	require.Equal(t, 30*time.Millisecond, durations[0])
 	require.Equal(t, 10*time.Millisecond, durations[1])

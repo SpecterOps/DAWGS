@@ -1,0 +1,148 @@
+{
+  "cases": [
+    {
+      "name": "GADCS-D00-F001-none_endpoint_ids",
+      "dataset": "generated_adcs_d0_f1_v1_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..0]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 1, "result_kind": "id_rows", "id_rows": [["adcs-ca", "adcs-domain"]]},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 0, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "endpoint-ids", "depth-0", "fanout-1", "density-none"]
+    },
+    {
+      "name": "GADCS-D00-F001-none_path",
+      "dataset": "generated_adcs_d0_f1_v1_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..0]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 1, "result_kind": "path_set"},
+      "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 0, "path_materialization_required": true},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "path", "depth-0", "fanout-1", "density-none"]
+    },
+    {
+      "name": "GADCS-D01-F010-sparse_endpoint_ids",
+      "dataset": "generated_adcs_d1_f10_v10_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..1]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 2},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 1, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "endpoint-ids", "depth-1", "fanout-10", "density-sparse"]
+    },
+    {
+      "name": "GADCS-D01-F010-sparse_path",
+      "dataset": "generated_adcs_d1_f10_v10_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..1]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 2, "result_kind": "path_set"},
+      "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 1, "path_materialization_required": true},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "path", "depth-1", "fanout-10", "density-sparse"]
+    },
+    {
+      "name": "GADCS-D02-F100-sparse_endpoint_ids",
+      "dataset": "generated_adcs_d2_f100_v10_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..2]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 11},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 2, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "endpoint-ids", "depth-2", "fanout-100", "density-sparse"]
+    },
+    {
+      "name": "GADCS-D02-F100-sparse_path",
+      "dataset": "generated_adcs_d2_f100_v10_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..2]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 11, "result_kind": "path_set"},
+      "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 2, "path_materialization_required": true},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "path", "depth-2", "fanout-100", "density-sparse"]
+    },
+    {
+      "name": "GADCS-D04-F010-half_payload_endpoint_ids",
+      "dataset": "generated_adcs_d4_f10_v2_p4096",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..4]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 6},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 4, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "endpoint-ids", "depth-4", "fanout-10", "density-half", "payload-4k"]
+    },
+    {
+      "name": "GADCS-D04-F010-half_payload_path",
+      "dataset": "generated_adcs_d4_f10_v2_p4096",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..4]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 6, "result_kind": "path_set"},
+      "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 4, "path_materialization_required": true},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "path", "depth-4", "fanout-10", "density-half", "payload-4k"]
+    },
+    {
+      "name": "GADCS-D08-F001-all_endpoint_ids",
+      "dataset": "generated_adcs_d8_f1_v1_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..8]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 2},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 8, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "endpoint-ids", "depth-8", "fanout-1", "density-all"]
+    },
+    {
+      "name": "GADCS-D08-F001-all_path",
+      "dataset": "generated_adcs_d8_f1_v1_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..8]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 2, "result_kind": "path_set"},
+      "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 8, "path_materialization_required": true},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "path", "depth-8", "fanout-1", "density-all"]
+    },
+    {
+      "name": "GADCS-D16-F1000-sparse_endpoint_ids",
+      "dataset": "generated_adcs_d16_f1000_v1000_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 2},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 16, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "endpoint-ids", "depth-16", "fanout-1000", "density-sparse"]
+    },
+    {
+      "name": "GADCS-D16-F1000-sparse_path",
+      "dataset": "generated_adcs_d16_f1000_v1000_p0",
+      "category": "generated_adcs",
+      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "params": {"objectid": "generated-adcs-root"},
+      "expected": {"row_count": 2, "result_kind": "path_set"},
+      "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"], "min_depth": 0, "max_depth": 16, "path_materialization_required": true},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "normal-tier", "adcs", "path", "depth-16", "fanout-1000", "density-sparse"]
+    }
+  ]
+}
