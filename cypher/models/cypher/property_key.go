@@ -5,12 +5,20 @@ import (
 	"unicode"
 )
 
+func isCypherIDStart(char rune) bool {
+	return unicode.IsLetter(char) || unicode.In(char, unicode.Nl, unicode.Other_ID_Start)
+}
+
+func isCypherIDContinue(char rune) bool {
+	return isCypherIDStart(char) || unicode.In(char, unicode.Mn, unicode.Mc, unicode.Nd, unicode.Pc, unicode.Other_ID_Continue)
+}
+
 func isCypherSymbolStart(char rune) bool {
-	return char == '_' || unicode.IsLetter(char) || unicode.In(char, unicode.Nl, unicode.Pc)
+	return isCypherIDStart(char) || unicode.In(char, unicode.Pc)
 }
 
 func isCypherSymbolPart(char rune) bool {
-	return isCypherSymbolStart(char) || unicode.IsDigit(char) || unicode.In(char, unicode.Mark, unicode.Sc)
+	return isCypherIDContinue(char) || unicode.In(char, unicode.Sc)
 }
 
 // CanEmitBarePropertyKeyName returns true when a raw property key can be emitted without backticks.

@@ -24,6 +24,21 @@ func TestParsePropertyLookupStoresRawPropertyKeyNames(t *testing.T) {
 	require.Equal(t, []string{"match", "a-aaa", "has`tick", ""}, symbols)
 }
 
+func TestParsePropertyLookupStoresUnicodePropertyKeyNames(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.\u2118, n.a\u00b7, n.a\u0301, n.a\u093e, n.a$, n.`a\u20dd`")
+	require.NoError(t, err)
+
+	var symbols []string
+	err = walk.CypherStructural(regularQuery, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if propertyLookup, typeOK := node.(*cypher.PropertyLookup); typeOK {
+			symbols = append(symbols, propertyLookup.Symbol)
+		}
+	}))
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"\u2118", "a\u00b7", "a\u0301", "a\u093e", "a$", "a\u20dd"}, symbols)
+}
+
 func TestParseMapLiteralStoresRawPropertyKeyNames(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN {match: 1, `a-aaa`: 2, `has``tick`: 3, ``: 4}")
 	require.NoError(t, err)

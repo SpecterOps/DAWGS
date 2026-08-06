@@ -16,10 +16,17 @@ func TestCanEmitBarePropertyKeyName(t *testing.T) {
 		{name: "simple", input: "name", expected: true},
 		{name: "underscore", input: "object_id", expected: true},
 		{name: "reserved word allowed in property key position", input: "match", expected: true},
+		{name: "other id start", input: "\u2118", expected: true},
+		{name: "other id continue", input: "a\u00b7", expected: true},
+		{name: "nonspacing mark part", input: "a\u0301", expected: true},
+		{name: "spacing mark part", input: "a\u093e", expected: true},
+		{name: "currency symbol part", input: "a$", expected: true},
 		{name: "empty", input: "", expected: false},
 		{name: "dash", input: "a-aaa", expected: false},
 		{name: "starts digit", input: "1name", expected: false},
+		{name: "starts currency symbol", input: "$a", expected: false},
 		{name: "literal backtick", input: "has`tick", expected: false},
+		{name: "enclosing mark part", input: "a\u20dd", expected: false},
 	}
 
 	for _, testCase := range testCases {
@@ -37,6 +44,12 @@ func TestEscapePropertyKeyName(t *testing.T) {
 	}{
 		{name: "simple", input: "name", expected: "name"},
 		{name: "reserved word allowed in property key position", input: "match", expected: "match"},
+		{name: "other id start", input: "\u2118", expected: "\u2118"},
+		{name: "other id continue", input: "a\u00b7", expected: "a\u00b7"},
+		{name: "nonspacing mark part", input: "a\u0301", expected: "a\u0301"},
+		{name: "spacing mark part", input: "a\u093e", expected: "a\u093e"},
+		{name: "currency symbol part", input: "a$", expected: "a$"},
+		{name: "enclosing mark part", input: "a\u20dd", expected: "`a\u20dd`"},
 		{name: "dash", input: "a-aaa", expected: "`a-aaa`"},
 		{name: "embedded backtick", input: "has`tick", expected: "`has``tick`"},
 		{name: "starts backtick", input: "`starts-tick", expected: "```starts-tick`"},
