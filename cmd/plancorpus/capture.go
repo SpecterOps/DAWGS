@@ -87,15 +87,20 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 
 		for _, file := range group.files {
 			for _, testCase := range file.Cases {
+				var idMap opengraph.IDMap
 				if testCase.Fixture == nil {
 					if err := ensureDatasetLoaded(); err != nil {
 						return nil, err
 					}
 				} else {
-					if err := loadCommittedFixture(ctx, backend.db, testCase.Fixture); err != nil {
+					if idMap, err = loadCommittedFixture(ctx, backend.db, testCase.Fixture); err != nil {
 						return nil, err
 					}
 					datasetLoaded = false
+				}
+				params, err := resolveFixtureParams(testCase.Params, testCase.NodeParams, testCase.NodeListParams, idMap)
+				if err != nil {
+					return nil, fmt.Errorf("%s/%s: %w", file.path, testCase.Name, err)
 				}
 
 				record := backend.capture(ctx, CorpusQuery{
@@ -103,7 +108,7 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 					Dataset: datasetName,
 					Name:    testCase.Name,
 					Cypher:  testCase.Cypher,
-					Params:  testCase.Params,
+					Params:  params,
 				})
 				records = append(records, record)
 			}
@@ -123,15 +128,25 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 				if err != nil {
 					return nil, fmt.Errorf("%s/%s/%s: %w", file.path, family.Name, variant.Name, err)
 				}
-				if err := loadCommittedFixture(ctx, backend.db, family.Fixture); err != nil {
+				idMap, err := loadCommittedFixture(ctx, backend.db, family.Fixture)
+				if err != nil {
 					return nil, err
+				}
+				params, err := resolveFixtureParams(
+					mergeParams(family.Params, variant.Params),
+					mergeStringMap(family.NodeParams, variant.NodeParams),
+					mergeStringListMap(family.NodeListParams, variant.NodeListParams),
+					idMap,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("%s/%s/%s: %w", file.path, family.Name, variant.Name, err)
 				}
 
 				record := backend.capture(ctx, CorpusQuery{
 					Source: file.path,
 					Name:   fileName + "/" + family.Name + "/" + variant.Name,
 					Cypher: rendered,
-					Params: mergeParams(family.Params, variant.Params),
+					Params: params,
 				})
 				records = append(records, record)
 			}
@@ -141,7 +156,7 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 			if family.Fixture == nil {
 				return nil, fmt.Errorf("%s/%s has no fixture", file.path, family.Name)
 			}
-			if err := loadCommittedFixture(ctx, backend.db, family.Fixture); err != nil {
+			if _, err := loadCommittedFixture(ctx, backend.db, family.Fixture); err != nil {
 				return nil, err
 			}
 
@@ -415,8 +430,38 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
 }
 
 func clearGraph(ctx context.Context, db graph.Database) error {
+	if pgDriver, isPostgres := db.(*pg.Driver); isPostgres {
+		graphTarget, hasDefaultGraph := pgDriver.DefaultGraph()
+		if !hasDefaultGraph {
+			return fmt.Errorf("PostgreSQL default graph is not set")
+		}
+
+		return clearPostgresGraph(ctx, db, graphTarget.ID)
+	}
+
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		return tx.Nodes().Delete()
+		if err := tx.Relationships().Delete(); err != nil {
+			return fmt.Errorf("delete relationships: %w", err)
+		}
+
+		if err := tx.Nodes().Delete(); err != nil {
+			return fmt.Errorf("delete nodes: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) error {
+	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		statement := fmt.Sprintf("truncate table edge_%d, node_%d", graphID, graphID)
+		result := tx.Raw(statement, nil)
+		result.Close()
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("execute PostgreSQL graph reset: %w", err)
+		}
+
+		return nil
 	})
 }
 
@@ -433,19 +478,22 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 	return nil
 }
 
-func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *opengraph.Graph) error {
+func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *opengraph.Graph) (opengraph.IDMap, error) {
 	if fixture == nil {
-		return fmt.Errorf("fixture is nil")
+		return nil, fmt.Errorf("fixture is nil")
 	}
 
 	if err := clearGraph(ctx, db); err != nil {
-		return err
+		return nil, err
 	}
 
-	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		_, err := opengraph.WriteGraphTx(tx, fixture)
+	var idMap opengraph.IDMap
+	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		var err error
+		idMap, err = opengraph.WriteGraphTx(tx, fixture)
 		return err
 	})
+	return idMap, err
 }
 
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {

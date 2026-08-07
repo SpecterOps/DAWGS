@@ -114,6 +114,20 @@ func TestValueMapperMapsCompositeArrays(t *testing.T) {
 		require.Equal(t, "Alice", nodes[0].Properties.Get("name").Any())
 	})
 
+	t.Run("typed node array preserves order", func(t *testing.T) {
+		rawNodes := []any{
+			nodeComposite{ID: 1, KindIDs: []int16{userKindID}, Properties: map[string]any{"name": "Alice"}},
+			nodeComposite{ID: 2, KindIDs: []int16{userKindID}, Properties: map[string]any{"name": "Bob"}},
+		}
+
+		var nodes []*graph.Node
+		require.True(t, valueMapper.Map(rawNodes, &nodes))
+		require.Len(t, nodes, 2)
+		require.Equal(t, graph.ID(1), nodes[0].ID)
+		require.Equal(t, graph.ID(2), nodes[1].ID)
+		require.Equal(t, "Alice", nodes[0].Properties.Get("name").Any())
+	})
+
 	t.Run("relationship array preserves order", func(t *testing.T) {
 		rawRelationships := []any{
 			map[string]any{
@@ -139,6 +153,60 @@ func TestValueMapperMapsCompositeArrays(t *testing.T) {
 		require.Equal(t, graph.ID(11), relationships[1].ID)
 		require.Equal(t, graph.StringKind("MemberOf"), relationships[0].Kind)
 	})
+
+	t.Run("typed relationship array preserves order", func(t *testing.T) {
+		rawRelationships := []edgeComposite{
+			{ID: 10, StartID: 1, EndID: 2, KindID: memberOfKindID, Properties: map[string]any{"ordinal": int64(1)}},
+			{ID: 11, StartID: 2, EndID: 3, KindID: memberOfKindID, Properties: map[string]any{"ordinal": int64(2)}},
+		}
+
+		var relationships []graph.Relationship
+		require.True(t, valueMapper.Map(rawRelationships, &relationships))
+		require.Len(t, relationships, 2)
+		require.Equal(t, graph.ID(10), relationships[0].ID)
+		require.Equal(t, graph.ID(11), relationships[1].ID)
+	})
+}
+
+func TestValueMapperMapsTypedComposites(t *testing.T) {
+	ctx := context.Background()
+	mapper := pgutil.NewInMemoryKindMapper()
+	userKindID := mapper.Put(graph.StringKind("User"))
+	memberOfKindID := mapper.Put(graph.StringKind("MemberOf"))
+	valueMapper := NewValueMapper(ctx, mapper)
+
+	rawNode := nodeComposite{
+		ID:         1,
+		KindIDs:    []int16{userKindID},
+		Properties: map[string]any{"name": "Alice"},
+	}
+	rawEdge := edgeComposite{
+		ID:         10,
+		StartID:    1,
+		EndID:      2,
+		KindID:     memberOfKindID,
+		Properties: map[string]any{"ordinal": int64(1)},
+	}
+
+	var node graph.Node
+	require.True(t, valueMapper.Map(rawNode, &node))
+	require.Equal(t, graph.ID(1), node.ID)
+	require.Equal(t, graph.StringKind("User"), node.Kinds[0])
+
+	var relationship graph.Relationship
+	require.True(t, valueMapper.Map(&rawEdge, &relationship))
+	require.Equal(t, graph.ID(10), relationship.ID)
+	require.Equal(t, graph.StringKind("MemberOf"), relationship.Kind)
+
+	var path graph.Path
+	require.True(t, valueMapper.Map(pathComposite{
+		Nodes: []nodeComposite{rawNode},
+		Edges: []edgeComposite{rawEdge},
+	}, &path))
+	require.Len(t, path.Nodes, 1)
+	require.Len(t, path.Edges, 1)
+	require.Equal(t, graph.ID(1), path.Nodes[0].ID)
+	require.Equal(t, graph.ID(10), path.Edges[0].ID)
 }
 
 func TestAsKindID(t *testing.T) {

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
 const (
@@ -53,29 +55,94 @@ type ScaleCorpus struct {
 	Cases []ScaleCase
 }
 
+// DeclaredCaseBackend is the version-controlled case/backend contract used by
+// the performance gate. CandidateModes is deliberately the source of truth:
+// adding, removing, or marking a backend unsupported therefore changes the
+// corpus declaration in the same review as the benchmark case.
+type DeclaredCaseBackend struct {
+	Dataset           string
+	Name              string
+	Backend           ExecutionMode
+	UnsupportedReason string
+}
+
+func (s ScaleCorpus) DeclaredBackends() []DeclaredCaseBackend {
+	declared := make([]DeclaredCaseBackend, 0, len(s.Cases)*2)
+	for _, testCase := range s.Cases {
+		for _, backend := range testCase.CandidateModes {
+			declared = append(declared, DeclaredCaseBackend{
+				Dataset: testCase.Dataset,
+				Name:    testCase.Name,
+				Backend: backend,
+			})
+		}
+		for backend, reason := range testCase.UnsupportedModes {
+			declared = append(declared, DeclaredCaseBackend{
+				Dataset: testCase.Dataset, Name: testCase.Name, Backend: backend, UnsupportedReason: reason,
+			})
+		}
+	}
+	return declared
+}
+
 type ScaleCaseFile struct {
 	Cases []ScaleCase `json:"cases"`
 }
 
 type ScaleCase struct {
-	Source          string            `json:"-"`
-	Name            string            `json:"name"`
-	Dataset         string            `json:"dataset"`
-	Category        string            `json:"category"`
-	Cypher          string            `json:"cypher"`
-	Params          map[string]any    `json:"params,omitempty"`
-	NodeParams      map[string]string `json:"node_params,omitempty"`
-	Expected        ExpectedResult    `json:"expected"`
-	Observes        ObservedValues    `json:"observes"`
-	Shape           WorkloadShape     `json:"shape"`
-	CandidateModes  []ExecutionMode   `json:"candidate_modes"`
-	Tags            []string          `json:"tags,omitempty"`
-	ReferenceDesign *ReferenceDesign  `json:"reference_design,omitempty"`
+	Source                  string                                     `json:"-"`
+	Name                    string                                     `json:"name"`
+	Dataset                 string                                     `json:"dataset"`
+	Category                string                                     `json:"category"`
+	Cypher                  string                                     `json:"cypher"`
+	Params                  testutil.Params                            `json:"params,omitempty"`
+	NodeParams              map[string]string                          `json:"node_params,omitempty"`
+	NodeListParams          map[string][]string                        `json:"node_list_params,omitempty"`
+	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
+	Expected                ExpectedResult                             `json:"expected"`
+	Observes                ObservedValues                             `json:"observes"`
+	Shape                   WorkloadShape                              `json:"shape"`
+	CandidateModes          []ExecutionMode                            `json:"candidate_modes"`
+	UnsupportedModes        map[ExecutionMode]string                   `json:"unsupported_modes,omitempty"`
+	Tags                    []string                                   `json:"tags,omitempty"`
+	ReferenceDesign         *ReferenceDesign                           `json:"reference_design,omitempty"`
+	WriteScenario           *WriteScenario                             `json:"write_scenario,omitempty"`
 }
 
 type ExpectedResult struct {
-	RowCount   *int64 `json:"row_count,omitempty"`
-	ResultKind string `json:"result_kind,omitempty"`
+	RowCount   *int64         `json:"row_count,omitempty"`
+	ScalarInt  *int64         `json:"scalar_int,omitempty"`
+	ResultKind string         `json:"result_kind,omitempty"`
+	IDRows     [][]string     `json:"id_rows,omitempty"`
+	PathRows   []ExpectedPath `json:"path_rows,omitempty"`
+}
+
+type ExpectedPath struct {
+	Nodes             []string `json:"nodes"`
+	RelationshipKinds []string `json:"relationship_kinds"`
+	RelationshipKeys  []string `json:"relationship_keys,omitempty"`
+}
+
+type WriteScenario struct {
+	SelectionCypher         string                                     `json:"selection_cypher"`
+	Params                  testutil.Params                            `json:"params,omitempty"`
+	NodeParams              map[string]string                          `json:"node_params,omitempty"`
+	NodeListParams          map[string][]string                        `json:"node_list_params,omitempty"`
+	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
+	AffectedEntity          string                                     `json:"affected_entity"`
+	ExpectedMatched         *int64                                     `json:"expected_matched"`
+	ExpectedAffected        *int64                                     `json:"expected_affected"`
+	PostState               []ScaleStateQuery                          `json:"post_state"`
+}
+
+type ScaleStateQuery struct {
+	Name                    string                                     `json:"name"`
+	Cypher                  string                                     `json:"cypher"`
+	Params                  testutil.Params                            `json:"params,omitempty"`
+	NodeParams              map[string]string                          `json:"node_params,omitempty"`
+	NodeListParams          map[string][]string                        `json:"node_list_params,omitempty"`
+	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
+	Expected                ExpectedResult                             `json:"expected"`
 }
 
 type ObservedValues struct {
@@ -101,4 +168,9 @@ type ReferenceDesign struct {
 
 func (s ScaleCase) Supports(mode ExecutionMode) bool {
 	return slices.Contains(s.CandidateModes, mode)
+}
+
+func (s ScaleCase) UnsupportedReason(mode ExecutionMode) (string, bool) {
+	reason, unsupported := s.UnsupportedModes[mode]
+	return reason, unsupported
 }

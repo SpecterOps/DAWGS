@@ -2,6 +2,7 @@ package translate
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/specterops/dawgs/cypher/models"
@@ -110,10 +111,19 @@ func (s *Frame) Reveal(identifier pgsql.Identifier) {
 // a frame.
 type Scope struct {
 	nextFrameID int
+	graphID     int32
 	stack       []*Frame
 	generator   IdentifierGenerator
 	aliases     map[pgsql.Identifier]pgsql.Identifier
 	definitions map[pgsql.Identifier]*BoundIdentifier
+}
+
+func (s *Scope) SetGraphID(graphID int32) {
+	s.graphID = graphID
+}
+
+func (s *Scope) GraphID() int32 {
+	return s.graphID
 }
 
 func NewScope() *Scope {
@@ -384,6 +394,8 @@ type BoundIdentifier struct {
 	LastProjection *Frame
 	Dependencies   []*BoundIdentifier
 	DataType       pgsql.DataType
+	IDOnly         bool
+	DistanceOnly   bool
 }
 
 func (s *BoundIdentifier) MaterializedBy(frame *Frame) {
@@ -401,7 +413,32 @@ func (s *BoundIdentifier) Copy() *BoundIdentifier {
 		LastProjection: s.LastProjection,
 		Dependencies:   dependenciesCopy,
 		DataType:       s.DataType,
+		IDOnly:         s.IDOnly,
+		DistanceOnly:   s.DistanceOnly,
 	}
+}
+
+func (s *Scope) Symbol(binding *BoundIdentifier) (pgsql.Identifier, bool) {
+	if symbols := s.Symbols(binding); len(symbols) > 0 {
+		return symbols[0], true
+	}
+
+	return "", false
+}
+
+func (s *Scope) Symbols(binding *BoundIdentifier) []pgsql.Identifier {
+	if binding == nil {
+		return nil
+	}
+
+	var symbols []pgsql.Identifier
+	for symbol, identifier := range s.aliases {
+		if identifier == binding.Identifier {
+			symbols = append(symbols, symbol)
+		}
+	}
+	sort.Slice(symbols, func(left, right int) bool { return symbols[left] < symbols[right] })
+	return symbols
 }
 
 func (s *BoundIdentifier) Dematerialize() {

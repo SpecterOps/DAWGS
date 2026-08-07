@@ -33,6 +33,23 @@ METRICS_ENFORCE ?= 0
 BENCHMARK_REPORT ?=
 BENCHMARK_BASELINE ?=
 BENCHMARK_REGRESSION ?= 0.20
+PERF_BASELINE ?=
+PERF_CANDIDATE ?=
+PERF_GATE_OUTPUT ?= $(METRICS_DIR)/perf-gate.json
+PERF_GATE_SEED ?= 1
+PERF_CONFIDENCE ?= 0.95
+PERF_TARGETS ?=
+PERF_MATERIALITY_RATIO ?= 0.95
+PERF_MATERIALITY_ABSOLUTE ?= 100us
+PERF_AA_ARTIFACT ?=
+PERF_AA_OUTPUT ?= $(METRICS_DIR)/perf-aa-resolution.json
+PERF_LEFT ?=
+PERF_RIGHT ?=
+PERF_CONFIRM_AA ?=
+PERF_CONFIRM_OUTPUT ?= $(METRICS_DIR)/perf-confirmation.json
+PERF_CASES ?=
+PERF_FILTER_CASES ?=
+PERF_DIAGNOSTIC_GATE ?= 0
 FUZZ_REPORT ?=
 MUTATION_REPORT ?=
 BACKEND_RESULT_ARGS ?=
@@ -56,7 +73,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus perf_gate perf_aa perf_confirm complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
@@ -126,6 +143,49 @@ test_update:
 plan_corpus: $(METRICS_DIR)
 	@echo "Capturing Cypher plan corpus..."
 	@$(GO_CMD) run ./cmd/plancorpus
+
+perf_gate: $(METRICS_DIR)
+	@if [ -z "$(PERF_BASELINE)" ] || [ -z "$(PERF_CANDIDATE)" ]; then \
+		echo "PERF_BASELINE and PERF_CANDIDATE are required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-gate-baseline "$(PERF_BASELINE)" \
+		-gate-candidate "$(PERF_CANDIDATE)" \
+		-gate-output "$(PERF_GATE_OUTPUT)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)" \
+		-regression-threshold "$(BENCHMARK_REGRESSION)" \
+		-gate-targets "$(PERF_TARGETS)" \
+		-materiality-ratio "$(PERF_MATERIALITY_RATIO)" \
+		-materiality-absolute "$(PERF_MATERIALITY_ABSOLUTE)" \
+		-cases "$(PERF_FILTER_CASES)" \
+		-diagnostic-gate="$(PERF_DIAGNOSTIC_GATE)"
+
+perf_aa: $(METRICS_DIR)
+	@if [ -z "$(PERF_AA_ARTIFACT)" ]; then \
+		echo "PERF_AA_ARTIFACT is required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-aa-artifact "$(PERF_AA_ARTIFACT)" \
+		-aa-output "$(PERF_AA_OUTPUT)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)"
+
+perf_confirm: $(METRICS_DIR)
+	@if [ -z "$(PERF_LEFT)" ] || [ -z "$(PERF_RIGHT)" ]; then \
+		echo "PERF_LEFT and PERF_RIGHT are required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-confirm-left "$(PERF_LEFT)" \
+		-confirm-right "$(PERF_RIGHT)" \
+		-confirm-aa "$(PERF_CONFIRM_AA)" \
+		-confirm-output "$(PERF_CONFIRM_OUTPUT)" \
+		-confirm-cases "$(PERF_CASES)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)"
 
 # Metric targets
 $(METRICS_DIR):
@@ -238,6 +298,8 @@ help:
 	@echo "  test_neo4j  - Run Neo4j integration tests"
 	@echo "  test_pg     - Run PostgreSQL integration tests"
 	@echo "  plan_corpus - Capture shared corpus query plans for configured backends"
+	@echo "  perf_gate   - Compare complete declared GraphBench artifacts"
+	@echo "  perf_aa     - Calculate A/A measurement resolution for GraphBench"
 	@echo "  test_update - Update test cases"
 	@echo "  complexity  - Report cyclomatic complexity"
 	@echo "  crap        - Report CRAP scores from unit test coverage"

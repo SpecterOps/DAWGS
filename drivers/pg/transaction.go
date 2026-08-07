@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
@@ -275,7 +274,7 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 }
 
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
-	if parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query); err != nil {
+	if parsedQuery, _, err := s.schemaManager.parseCache.Parse(query); err != nil {
 		return graph.NewErrorResult(err)
 	} else if graphTarget, err := s.getTargetGraph(); err != nil {
 		return graph.NewErrorResult(err)

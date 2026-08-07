@@ -29,21 +29,33 @@ func (s *queryResult) Keys() []string {
 
 func (s *queryResult) Next() bool {
 	if s.rows.Next() {
-		s.keys = []string{}
-		for _, desc := range s.rows.FieldDescriptions() {
-			s.keys = append(s.keys, desc.Name)
-		}
+		fields := s.rows.FieldDescriptions()
+		s.cacheKeys(fields)
 
 		// This error check exists just as a guard for a successful return of this function. The expectation is that
 		// the pgx type will have error information attached to it which is reflected by the Error receiver function
 		// of this type
 		if values, err := s.rows.Values(); err == nil {
-			s.values = decodeJSONValues(values, s.rows.FieldDescriptions())
+			s.values = decodeJSONValues(values, fields)
 			return true
 		}
 	}
 
 	return false
+}
+
+func (s *queryResult) cacheKeys(fields []pgconn.FieldDescription) {
+	if s.keys != nil {
+		return
+	}
+
+	// A pgx Rows value represents one result set, whose field descriptions do
+	// not change between rows. Retain the names once instead of rebuilding the
+	// same slice for every row.
+	s.keys = make([]string, len(fields))
+	for idx, field := range fields {
+		s.keys[idx] = field.Name
+	}
 }
 
 func (s *queryResult) Mapper() graph.ValueMapper {
@@ -63,19 +75,21 @@ func (s *queryResult) Close() {
 }
 
 func decodeJSONValues(values []any, fields []pgconn.FieldDescription) []any {
-	decodedValues := make([]any, len(values))
-	copy(decodedValues, values)
-
+	// pgx Rows.Values returns a decoded value slice for the current row. The old
+	// implementation made a shallow copy before replacing JSON scalars, but its
+	// nested values were still shared. Updating this otherwise-unexposed slice
+	// in place therefore preserves ownership while avoiding one allocation and
+	// copy per row.
 	for idx, field := range fields {
 		switch field.DataTypeOID {
 		case pgtype.JSONOID, pgtype.JSONBOID:
 			if decoded, ok := decodeJSONValue(values[idx]); ok {
-				decodedValues[idx] = decoded
+				values[idx] = decoded
 			}
 		}
 	}
 
-	return decodedValues
+	return values
 }
 
 func decodeJSONValue(value any) (any, bool) {

@@ -57,7 +57,10 @@ func TestWritePlanRecordsWritesJSONLines(t *testing.T) {
 		"driver": "pg",
 		"source": "cases/example.json",
 		"name": "example",
-		"cypher": "MATCH (n) RETURN n"
+		"cypher": "MATCH (n) RETURN n",
+		"metadata": {
+			"dawgs_version": ""
+		}
 	}`, string(bytes.TrimSpace(contents)))
 }
 

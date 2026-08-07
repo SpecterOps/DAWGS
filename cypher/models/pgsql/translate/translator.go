@@ -34,6 +34,8 @@ type Translator struct {
 	collectIDProjectionDepth   int
 
 	appliedLoweringCounts              map[string]int
+	appliedShortestPathExecutors       map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor
+	appliedExpansionSearchStrategies   map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy
 	patternTargets                     map[*cypher.PatternPart]optimize.PatternTarget
 	patternPredicateTargets            map[*cypher.PatternPredicate]optimize.PatternTarget
 	projectionPruningDecisions         map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
@@ -44,10 +46,13 @@ type Translator struct {
 	traversalDirectionDecisions        map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
 	shortestPathStrategyDecisions      map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
 	shortestPathFilterDecisions        map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
+	shortestPathExecutorDecisions      map[optimize.TraversalStepTarget]optimize.ShortestPathExecutorDecision
+	expansionSearchStrategyDecisions   map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision
 	limitPushdownDecisions             map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
 	patternPredicateDecisions          map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
 	exactRangeExpansionDecisions       map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
 	pathRelationshipPredicateDecisions map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision
+	fieldRequirementDecisions          map[int]map[string]optimize.FieldRequirementDecision
 	quantifierTargets                  []optimize.QuantifierTarget
 }
 
@@ -66,10 +71,11 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		ctxAwareKindMapper   = newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
 	)
 
-	return &Translator{
+	translator := &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
 			Parameters: translatedParameters,
+			GraphID:    graphID,
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
@@ -80,6 +86,9 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		scope:          NewScope(),
 		unwindTargets:  map[*cypher.Variable]struct{}{},
 	}
+
+	translator.scope.SetGraphID(graphID)
+	return translator
 }
 
 func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
@@ -93,10 +102,13 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.traversalDirectionDecisions = map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision{}
 	s.shortestPathStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision{}
 	s.shortestPathFilterDecisions = map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision{}
+	s.shortestPathExecutorDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathExecutorDecision{}
+	s.expansionSearchStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision{}
 	s.limitPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision{}
 	s.patternPredicateDecisions = map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision{}
 	s.exactRangeExpansionDecisions = map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision{}
 	s.pathRelationshipPredicateDecisions = map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision{}
+	s.fieldRequirementDecisions = map[int]map[string]optimize.FieldRequirementDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -130,6 +142,14 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 		s.shortestPathFilterDecisions[decision.Target] = append(s.shortestPathFilterDecisions[decision.Target], decision)
 	}
 
+	for _, decision := range plan.LoweringPlan.ShortestPathExecutor {
+		s.shortestPathExecutorDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		s.expansionSearchStrategyDecisions[decision.Target] = decision
+	}
+
 	for _, decision := range plan.LoweringPlan.LimitPushdown {
 		s.limitPushdownDecisions[decision.Target] = append(s.limitPushdownDecisions[decision.Target], decision)
 	}
@@ -144,6 +164,15 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 
 	for _, decision := range plan.LoweringPlan.PathRelationshipPredicate {
 		s.pathRelationshipPredicateDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.FieldRequirements {
+		bySymbol := s.fieldRequirementDecisions[decision.QueryPartIndex]
+		if bySymbol == nil {
+			bySymbol = map[string]optimize.FieldRequirementDecision{}
+			s.fieldRequirementDecisions[decision.QueryPartIndex] = bySymbol
+		}
+		bySymbol[decision.Symbol] = decision
 	}
 }
 
@@ -643,6 +672,7 @@ type Result struct {
 	Statement    pgsql.Statement
 	Parameters   map[string]any
 	Optimization OptimizationSummary
+	GraphID      int32
 }
 
 type OptimizationSummary struct {
@@ -651,7 +681,37 @@ type OptimizationSummary struct {
 	PlannedLowerings     []optimize.LoweringDecision    `json:"planned_lowerings,omitempty"`
 	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
 	SkippedLowerings     []SkippedLowering              `json:"skipped_lowerings,omitempty"`
+	TargetOutcomes       []TargetLoweringOutcome        `json:"target_outcomes,omitempty"`
 	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
+}
+
+type TargetLoweringOutcome struct {
+	Lowering          string                        `json:"lowering"`
+	TargetKind        string                        `json:"target_kind"`
+	TraversalTarget   *optimize.TraversalStepTarget `json:"traversal_target,omitempty"`
+	QueryPartIndex    *int                          `json:"query_part_index,omitempty"`
+	Symbol            string                        `json:"symbol,omitempty"`
+	Family            string                        `json:"family,omitempty"`
+	PlannedCandidates []string                      `json:"planned_candidates,omitempty"`
+	EligibilityFacts  []TargetEligibilityFact       `json:"eligibility_facts,omitempty"`
+	ObservationMode   string                        `json:"observation_mode,omitempty"`
+	Eligible          *bool                         `json:"eligible,omitempty"`
+	SelectionMode     string                        `json:"selection_mode,omitempty"`
+	SelectorVersion   string                        `json:"selector_version,omitempty"`
+	Fallback          string                        `json:"fallback,omitempty"`
+	MinimumDepth      *int64                        `json:"minimum_depth,omitempty"`
+	MaximumDepth      *int64                        `json:"maximum_depth,omitempty"`
+	StateLimit        int64                         `json:"state_limit,omitempty"`
+	SuffixProbeLimit  int64                         `json:"suffix_probe_limit,omitempty"`
+	ReverseStateLimit int64                         `json:"reverse_state_limit,omitempty"`
+	Selected          string                        `json:"selected,omitempty"`
+	Applied           string                        `json:"applied,omitempty"`
+	SkipReason        string                        `json:"skip_reason,omitempty"`
+}
+
+type TargetEligibilityFact struct {
+	Name     string `json:"name"`
+	Eligible bool   `json:"eligible"`
 }
 
 type SkippedLowering struct {
@@ -675,6 +735,22 @@ func (s *Translator) recordLowering(name string) {
 	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
 }
 
+func (s *Translator) recordShortestPathExecutor(target optimize.TraversalStepTarget, executor optimize.ShortestPathExecutor) {
+	if s.appliedShortestPathExecutors == nil {
+		s.appliedShortestPathExecutors = map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor{}
+	}
+	s.appliedShortestPathExecutors[target] = executor
+	s.recordLowering(optimize.LoweringShortestPathExecutor)
+}
+
+func (s *Translator) recordExpansionSearchStrategy(target optimize.TraversalStepTarget, strategy optimize.ExpansionSearchStrategy) {
+	if s.appliedExpansionSearchStrategies == nil {
+		s.appliedExpansionSearchStrategies = map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy{}
+	}
+	s.appliedExpansionSearchStrategies[target] = strategy
+	s.recordLowering(optimize.LoweringExpansionSearchStrategy)
+}
+
 func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
 	applied := map[string]int{}
 
@@ -695,6 +771,7 @@ func (s *Translator) recordSkippedLowerings() {
 	}
 
 	applied := s.appliedLoweringCountSnapshot()
+	s.recordTargetOutcomes(*s.translation.Optimization.LoweringPlan)
 
 	for _, planned := range plannedLoweringCounts(*s.translation.Optimization.LoweringPlan) {
 		if planned.Count == 0 {
@@ -712,6 +789,82 @@ func (s *Translator) recordSkippedLowerings() {
 			Count:  skippedCount,
 		})
 	}
+}
+
+func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
+	if len(s.translation.Optimization.TargetOutcomes) != 0 {
+		return
+	}
+	for _, decision := range plan.ShortestPathExecutor {
+		target := decision.Target
+		eligible := decision.StructurallyEligible
+		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
+		applied := string(s.appliedShortestPathExecutors[target])
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", TraversalTarget: &target,
+			Family: decision.Family, PlannedCandidates: shortestPathCandidateNames(decision.PlannedCandidates),
+			EligibilityFacts: shortestPathEligibilityFacts(decision.Eligibility),
+			ObservationMode:  string(decision.ObservationMode), Eligible: &eligible,
+			SelectionMode: decision.SelectionMode, SelectorVersion: decision.SelectorVersion,
+			Selected: string(decision.SelectedExecutor), Applied: applied, Fallback: string(decision.FallbackExecutor), SkipReason: decision.FallbackReason,
+			MinimumDepth: &minimumDepth, MaximumDepth: &maximumDepth, StateLimit: decision.StateLimit,
+		})
+	}
+	for _, decision := range plan.ExpansionSearchStrategy {
+		target := decision.Target
+		eligible := decision.StructurallyEligible
+		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
+		applied := string(s.appliedExpansionSearchStrategies[target])
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering: optimize.LoweringExpansionSearchStrategy, TargetKind: "traversal", TraversalTarget: &target,
+			Family: decision.Family, PlannedCandidates: expansionSearchCandidateNames(decision.PlannedCandidates),
+			EligibilityFacts: expansionSearchEligibilityFacts(decision.EligibilityFacts),
+			ObservationMode:  string(decision.ObservationMode), Eligible: &eligible,
+			SelectionMode: decision.SelectionMode, SelectorVersion: decision.SelectorVersion,
+			Selected: string(decision.SelectedStrategy), Applied: applied, Fallback: string(decision.FallbackStrategy), SkipReason: decision.FallbackReason,
+			MinimumDepth: &minimumDepth, MaximumDepth: &maximumDepth,
+			SuffixProbeLimit: decision.SuffixProbeLimit, ReverseStateLimit: decision.ReverseStateLimit,
+		})
+	}
+	for _, decision := range plan.FieldRequirements {
+		queryPartIndex := decision.QueryPartIndex
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering: optimize.LoweringFieldRequirements, TargetKind: "field_requirement", QueryPartIndex: &queryPartIndex,
+			Symbol: decision.Symbol, Selected: "analysis_only", SkipReason: "analysis_metadata_only",
+		})
+	}
+}
+
+func shortestPathCandidateNames(candidates []optimize.ShortestPathExecutor) []string {
+	names := make([]string, len(candidates))
+	for idx, candidate := range candidates {
+		names[idx] = string(candidate)
+	}
+	return names
+}
+
+func expansionSearchCandidateNames(candidates []optimize.ExpansionSearchStrategy) []string {
+	names := make([]string, len(candidates))
+	for idx, candidate := range candidates {
+		names[idx] = string(candidate)
+	}
+	return names
+}
+
+func shortestPathEligibilityFacts(facts []optimize.ShortestPathEligibilityFact) []TargetEligibilityFact {
+	outcomes := make([]TargetEligibilityFact, len(facts))
+	for idx, fact := range facts {
+		outcomes[idx] = TargetEligibilityFact{Name: fact.Name, Eligible: fact.Eligible}
+	}
+	return outcomes
+}
+
+func expansionSearchEligibilityFacts(facts []optimize.ExpansionSearchEligibilityFact) []TargetEligibilityFact {
+	outcomes := make([]TargetEligibilityFact, len(facts))
+	for idx, fact := range facts {
+		outcomes[idx] = TargetEligibilityFact{Name: fact.Name, Eligible: fact.Eligible}
+	}
+	return outcomes
 }
 
 func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
@@ -749,6 +902,10 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 			Count: len(plan.ExpansionSuffixPushdown),
 		},
 		{
+			Name:  optimize.LoweringExpansionSearchStrategy,
+			Count: len(plan.ExpansionSearchStrategy),
+		},
+		{
 			Name:  optimize.LoweringPredicatePlacement,
 			Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate),
 		},
@@ -768,10 +925,21 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 			Name:  optimize.LoweringAggregateTraversalCount,
 			Count: len(plan.AggregateTraversalCount),
 		},
+		{
+			Name:  optimize.LoweringFieldRequirements,
+			Count: len(plan.FieldRequirements),
+		},
+		{
+			Name:  optimize.LoweringShortestPathExecutor,
+			Count: len(plan.ShortestPathExecutor),
+		},
 	}
 }
 
 func skippedLoweringReason(name string, applied map[string]int, plan optimize.LoweringPlan) string {
+	if name == optimize.LoweringFieldRequirements {
+		return "analysis_metadata_only"
+	}
 	if applied[optimize.LoweringCountStoreFastPath] > 0 && name != optimize.LoweringCountStoreFastPath {
 		return "superseded by CountStoreFastPath"
 	}
@@ -785,6 +953,18 @@ func skippedLoweringReason(name string, applied map[string]int, plan optimize.Lo
 	case optimize.LoweringTraversalDirection:
 		if reason := skippedTraversalDirectionReason(plan); reason != "" {
 			return reason
+		}
+	case optimize.LoweringExpansionSearchStrategy:
+		for _, decision := range plan.ExpansionSearchStrategy {
+			if decision.FallbackReason != "" {
+				return decision.FallbackReason
+			}
+		}
+	case optimize.LoweringShortestPathExecutor:
+		for _, decision := range plan.ShortestPathExecutor {
+			if decision.FallbackReason != "" {
+				return decision.FallbackReason
+			}
 		}
 	default:
 		return "planned lowering did not change the emitted SQL"
@@ -803,9 +983,27 @@ func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 	return ""
 }
 
+type ToolOptions struct {
+	ForceShortestPathExecutor    optimize.ShortestPathExecutor
+	ForceExpansionSearchStrategy optimize.ExpansionSearchStrategy
+}
+
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
+	return translate(ctx, cypherQuery, kindMapper, parameters, graphID, ToolOptions{})
+}
+
+// TranslateForTool exposes qualified experimental lowerings to repository
+// tooling without making them selectable through the production query API.
+func TranslateForTool(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
+	return translate(ctx, cypherQuery, kindMapper, parameters, graphID, options)
+}
+
+func translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
 	optimizedPlan, err := optimize.Optimize(cypherQuery)
 	if err != nil {
+		return Result{}, err
+	}
+	if err := applyToolOptions(&optimizedPlan, options); err != nil {
 		return Result{}, err
 	}
 
@@ -841,9 +1039,87 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
 		return Result{}, err
 	}
+	if options.ForceExpansionSearchStrategy != "" && len(translator.appliedExpansionSearchStrategies) == 0 {
+		return Result{}, fmt.Errorf("forced expansion-search strategy %q was selected but not emitted", options.ForceExpansionSearchStrategy)
+	}
+	if options.ForceShortestPathExecutor != "" && len(translator.appliedShortestPathExecutors) == 0 {
+		return Result{}, fmt.Errorf("forced shortest-path executor %q was selected but not emitted", options.ForceShortestPathExecutor)
+	}
 
 	translator.recordSkippedLowerings()
 	return translator.translation, nil
+}
+
+func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
+	if err := applyForcedShortestPathExecutor(plan, options.ForceShortestPathExecutor); err != nil {
+		return err
+	}
+	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
+}
+
+func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.ShortestPathExecutor) error {
+	if executor == "" {
+		return nil
+	}
+	if executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 {
+		return fmt.Errorf("unsupported forced shortest-path executor %q", executor)
+	}
+	expectedObservation := optimize.ShortestPathObservationDistance
+	expectedDescription := "distance-only"
+	if executor == optimize.ShortestPathExecutorS3EdgeM0 {
+		expectedObservation = optimize.ShortestPathObservationOnePath
+		expectedDescription = "one-path"
+	}
+
+	forced := 0
+	for idx := range plan.LoweringPlan.ShortestPathExecutor {
+		decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+		if !decision.StructurallyEligible {
+			continue
+		}
+		if decision.ObservationMode != expectedObservation {
+			continue
+		}
+
+		decision.SelectedExecutor = executor
+		decision.SelectionMode = "forced_tool"
+		decision.SelectorVersion = "sp-tool-v1"
+		decision.FallbackReason = ""
+		forced++
+	}
+	if forced == 0 {
+		return fmt.Errorf("forced shortest-path executor %q has no structurally eligible %s target", executor, expectedDescription)
+	}
+
+	return nil
+}
+
+func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.ExpansionSearchStrategy) error {
+	if strategy == "" {
+		return nil
+	}
+	if strategy != optimize.ExpansionSearchSuffixSeededReverse {
+		return fmt.Errorf("unsupported forced expansion-search strategy %q", strategy)
+	}
+
+	forced := 0
+	for idx := range plan.LoweringPlan.ExpansionSearchStrategy {
+		decision := &plan.LoweringPlan.ExpansionSearchStrategy[idx]
+		if !decision.StructurallyEligible {
+			continue
+		}
+
+		decision.SelectedStrategy = strategy
+		decision.SelectionMode = "forced_tool"
+		decision.SelectorVersion = "adcs-tool-v1"
+		decision.FallbackReason = ""
+		forced++
+	}
+	if forced == 0 {
+		return fmt.Errorf("forced expansion-search strategy %q has no structurally eligible target", strategy)
+	}
+
+	return nil
 }
 
 func decodeCypherStringLiteral(raw string) (string, error) {

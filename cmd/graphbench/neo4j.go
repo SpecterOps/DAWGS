@@ -85,13 +85,17 @@ func (s *neo4jRunner) Close(ctx context.Context) error {
 	return closeErr
 }
 
-func (s *neo4jRunner) Run(ctx context.Context, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
+func (s *neo4jRunner) Run(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
 	var (
 		records        []CaseResult
 		casesByDataset = scaleCasesByDataset(corpus)
 	)
 
 	for _, datasetName := range scaleCorpusDatasets(corpus) {
+		fixture, err := fixtureMetadata(s.datasetDir, datasetName)
+		if err != nil {
+			return nil, err
+		}
 		if err := clearGraph(ctx, s.db); err != nil {
 			return nil, fmt.Errorf("clear graph for %s: %w", datasetName, err)
 		}
@@ -106,7 +110,8 @@ func (s *neo4jRunner) Run(ctx context.Context, iterations int, corpus ScaleCorpu
 				continue
 			}
 
-			record := s.runCase(ctx, iterations, testCase, idMap)
+			record := s.runCase(ctx, warmupIterations, iterations, testCase, idMap)
+			record.Fixture = &fixture
 			records = append(records, record)
 		}
 	}
@@ -114,7 +119,7 @@ func (s *neo4jRunner) Run(ctx context.Context, iterations int, corpus ScaleCorpu
 	return records, nil
 }
 
-func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
+func (s *neo4jRunner) runCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
 	params, err := resolveCaseParams(testCase, idMap)
 	record := newCaseResult(testCase, ModeNeo4j, params)
 	if err != nil {
@@ -123,18 +128,42 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 		return record
 	}
 
-	rowCount, stats, err := measureCypher(ctx, s.db, testCase.Cypher, params, iterations)
-	if err != nil {
-		record.Status = StatusError
-		record.Error = err.Error()
-		return record
+	if testCase.WriteScenario == nil {
+		rowCount, observedRows, stats, err := measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		record.RowCount = rowCount
+		record.ObservedRows = observedRows
+		record.Stats = stats
+		labelLatencySamples(&record.Stats, ModeNeo4j, testCase)
+		applyRowExpectation(&record)
+	} else {
+		scenario, err := resolveWriteScenario(testCase, idMap)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		measurement, stats, err := measureWriteCypherWithWarmups(ctx, s.db, testCase.Cypher, params, scenario, warmupIterations, iterations)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+
+		record.MatchedCount = &measurement.Matched
+		record.AffectedCount = &measurement.Affected
+		record.PostState = measurement.PostState
+		record.Stats = stats
+		labelLatencySamples(&record.Stats, ModeNeo4j, testCase)
 	}
 
-	record.RowCount = rowCount
-	record.Stats = stats
-	applyRowExpectation(&record)
-
-	plan, operators, err := s.explain(ctx, testCase.Cypher, params)
+	plan, operators, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)
 	if err != nil {
 		if record.Status == StatusOK {
 			record.Status = StatusError
@@ -148,9 +177,13 @@ func (s *neo4jRunner) runCase(ctx context.Context, iterations int, testCase Scal
 	return record
 }
 
-func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any) (plan *Neo4jPlanNode, operators []string, err error) {
+func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (plan *Neo4jPlanNode, operators []string, err error) {
+	accessMode := neo4jcore.AccessModeRead
+	if write {
+		accessMode = neo4jcore.AccessModeWrite
+	}
 	session := s.planDriver.NewSession(ctx, neo4jcore.SessionConfig{
-		AccessMode:   neo4jcore.AccessModeRead,
+		AccessMode:   accessMode,
 		DatabaseName: s.databaseName,
 	})
 	defer func() {

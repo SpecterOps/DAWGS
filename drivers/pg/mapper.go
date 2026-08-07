@@ -170,13 +170,9 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 	return func(value, target any) bool {
 		switch typedTarget := target.(type) {
 		case *graph.Relationship:
-			if compositeMap, typeOK := value.(map[string]any); typeOK {
-				edge := edgeComposite{}
-
-				if edge.TryMap(compositeMap) {
-					if err := edge.ToRelationship(ctx, kindMapper, typedTarget); err == nil {
-						return true
-					}
+			if edge, typeOK := edgeCompositeFromRaw(value); typeOK {
+				if err := edge.ToRelationship(ctx, kindMapper, typedTarget); err == nil {
+					return true
 				}
 			}
 
@@ -200,13 +196,9 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 			}
 
 		case *graph.Node:
-			if compositeMap, typeOK := value.(map[string]any); typeOK {
-				node := nodeComposite{}
-
-				if node.TryMap(compositeMap) {
-					if err := node.ToNode(ctx, kindMapper, typedTarget); err == nil {
-						return true
-					}
+			if node, typeOK := nodeCompositeFromRaw(value); typeOK {
+				if err := node.ToNode(ctx, kindMapper, typedTarget); err == nil {
+					return true
 				}
 			}
 
@@ -230,13 +222,9 @@ func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 			}
 
 		case *graph.Path:
-			if compositeMap, typeOK := value.(map[string]any); typeOK {
-				path := pathComposite{}
-
-				if path.TryMap(compositeMap) {
-					if err := path.ToPath(ctx, kindMapper, typedTarget); err == nil {
-						return true
-					}
+			if path, typeOK := pathCompositeFromRaw(value); typeOK {
+				if err := path.ToPath(ctx, kindMapper, typedTarget); err == nil {
+					return true
 				}
 			}
 

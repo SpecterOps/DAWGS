@@ -406,6 +406,7 @@ func (s *Parenthetical) AsExpression() Expression {
 
 type EdgeArrayFromPathIDs struct {
 	PathIDs Expression
+	GraphID Expression
 }
 
 func (s *EdgeArrayFromPathIDs) NodeType() string {
@@ -573,6 +574,7 @@ type FunctionCall struct {
 	Distinct   bool
 	Function   Identifier
 	Parameters []Expression
+	OrderBy    []*OrderBy
 	Over       *Window
 	CastType   DataType
 }

@@ -1,0 +1,143 @@
+{
+  "families": [
+    {
+      "name": "LOGIC-03 scoped kind negation with null-aware age predicate",
+      "template": "MATCH (n) WHERE NOT n:LogicProtected AND (n.lastseen IS NULL OR datetime(n.lastseen) < datetime($threshold)) RETURN n",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "fixture": {
+        "nodes": [
+          {"id": "missing", "kinds": ["LogicCandidate"], "properties": {"name": "missing"}},
+          {"id": "null", "kinds": ["LogicCandidate"], "properties": {"name": "null", "lastseen": null}},
+          {"id": "older", "kinds": ["LogicCandidate"], "properties": {"name": "older", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "equal", "kinds": ["LogicCandidate"], "properties": {"name": "equal", "lastseen": "2026-01-03T00:00:00Z"}},
+          {"id": "newer", "kinds": ["LogicCandidate"], "properties": {"name": "newer", "lastseen": "2026-01-04T00:00:00Z"}},
+          {"id": "protected-missing", "kinds": ["LogicProtected"], "properties": {"name": "protected-missing"}},
+          {"id": "protected-null", "kinds": ["LogicProtected"], "properties": {"name": "protected-null", "lastseen": null}},
+          {"id": "protected-older", "kinds": ["LogicProtected"], "properties": {"name": "protected-older", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "multi-kind-protected", "kinds": ["LogicCandidate", "LogicProtected"], "properties": {"name": "multi-kind-protected", "lastseen": "2026-01-02T00:00:00Z"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "missing null older equal newer and protected truth table",
+          "assert": {"node_id_set": ["missing", "null", "older"]}
+        }
+      ]
+    },
+    {
+      "name": "PRUNE-01 stale relationship selection with protected kinds",
+      "template": "MATCH ()-[r]->() WHERE {{excluded}} AND datetime(r.lastseen) < datetime($threshold) RETURN {{projection}}",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["PruneEndpoint"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["PruneEndpoint"], "properties": {"name": "b"}},
+          {"id": "b-equal", "kinds": ["PruneEndpoint"], "properties": {"name": "b-equal"}},
+          {"id": "b-new", "kinds": ["PruneEndpoint"], "properties": {"name": "b-new"}},
+          {"id": "b-missing", "kinds": ["PruneEndpoint"], "properties": {"name": "b-missing"}},
+          {"id": "b-null", "kinds": ["PruneEndpoint"], "properties": {"name": "b-null"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "candidate-old"}},
+          {"start_id": "a", "end_id": "b-equal", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "candidate-equal"}},
+          {"start_id": "a", "end_id": "b-new", "kind": "CandidateRel", "properties": {"lastseen": "2026-01-04T00:00:00Z", "marker": "candidate-new"}},
+          {"start_id": "a", "end_id": "b-missing", "kind": "CandidateRel", "properties": {"marker": "candidate-missing"}},
+          {"start_id": "a", "end_id": "b-null", "kind": "CandidateRel", "properties": {"lastseen": null, "marker": "candidate-null"}},
+          {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old"}},
+          {"start_id": "a", "end_id": "b", "kind": "MetaIncludes", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "meta-includes-old"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one excluded kind leaves other old kinds eligible",
+          "vars": {"excluded": "NOT r:HasSession", "projection": "r.marker"},
+          "assert": {"scalar_values": ["candidate-old", "meta-includes-old"]}
+        },
+        {
+          "name": "several excluded kinds select only old candidate relationship IDs",
+          "vars": {"excluded": "NOT (r:HasSession OR r:MetaIncludes)", "projection": "id(r)"},
+          "assert": {"keys": ["id(r)"], "row_count": 1}
+        },
+        {
+          "name": "several excluded kinds exact old equal new missing and null matrix",
+          "vars": {"excluded": "NOT (r:HasSession OR r:MetaIncludes)", "projection": "r.marker"},
+          "assert": {"scalar_values": ["candidate-old"]}
+        }
+      ]
+    },
+    {
+      "name": "PRUNE-02 stale or unobserved HasSession selection",
+      "template": "MATCH ()-[r:HasSession]->() WHERE r.lastseen IS NULL OR datetime(r.lastseen) < datetime($threshold) RETURN {{projection}}",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["PruneEndpoint"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["PruneEndpoint"], "properties": {"name": "b"}},
+          {"id": "b-null", "kinds": ["PruneEndpoint"], "properties": {"name": "b-null"}},
+          {"id": "b-old", "kinds": ["PruneEndpoint"], "properties": {"name": "b-old"}},
+          {"id": "b-equal", "kinds": ["PruneEndpoint"], "properties": {"name": "b-equal"}},
+          {"id": "b-new", "kinds": ["PruneEndpoint"], "properties": {"name": "b-new"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "HasSession", "properties": {"marker": "session-missing"}},
+          {"start_id": "a", "end_id": "b-null", "kind": "HasSession", "properties": {"lastseen": null, "marker": "session-null"}},
+          {"start_id": "a", "end_id": "b-old", "kind": "HasSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "session-old"}},
+          {"start_id": "a", "end_id": "b-equal", "kind": "HasSession", "properties": {"lastseen": "2026-01-03T00:00:00Z", "marker": "session-equal"}},
+          {"start_id": "a", "end_id": "b-new", "kind": "HasSession", "properties": {"lastseen": "2026-01-04T00:00:00Z", "marker": "session-new"}},
+          {"start_id": "a", "end_id": "b", "kind": "OtherSession", "properties": {"marker": "wrong-kind-missing"}},
+          {"start_id": "a", "end_id": "b-old", "kind": "OtherSession", "properties": {"lastseen": "2026-01-02T00:00:00Z", "marker": "wrong-kind-old"}}
+        ]
+      },
+      "variants": [
+        {"name": "returns missing null and old HasSession relationship IDs", "vars": {"projection": "id(r)"}, "assert": {"keys": ["id(r)"], "row_count": 3}},
+        {"name": "exact missing null old equal newer and wrong-kind matrix", "vars": {"projection": "r.marker"}, "assert": {"scalar_values": ["session-missing", "session-null", "session-old"]}}
+      ]
+    },
+    {
+      "name": "PRUNE-03 stale or unobserved node selection with protected kinds",
+      "template": "MATCH (n) WHERE NOT (n:Domain OR n:Tenant OR n:Meta OR n:MetaIncludes OR n:MigrationData) AND (n.lastseen IS NULL OR datetime(n.lastseen) < datetime($threshold)) RETURN {{projection}}",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "fixture": {
+        "nodes": [
+          {"id": "candidate-missing", "kinds": ["CandidateNode"], "properties": {"name": "candidate-missing"}},
+          {"id": "candidate-null", "kinds": ["CandidateNode"], "properties": {"name": "candidate-null", "lastseen": null}},
+          {"id": "candidate-old", "kinds": ["CandidateNode"], "properties": {"name": "candidate-old", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "candidate-equal", "kinds": ["CandidateNode"], "properties": {"name": "candidate-equal", "lastseen": "2026-01-03T00:00:00Z"}},
+          {"id": "candidate-new", "kinds": ["CandidateNode"], "properties": {"name": "candidate-new", "lastseen": "2026-01-04T00:00:00Z"}},
+          {"id": "domain-missing", "kinds": ["Domain"], "properties": {"name": "domain-missing"}},
+          {"id": "tenant-old", "kinds": ["Tenant"], "properties": {"name": "tenant-old", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "meta-null", "kinds": ["Meta"], "properties": {"name": "meta-null", "lastseen": null}},
+          {"id": "meta-includes-old", "kinds": ["MetaIncludes"], "properties": {"name": "meta-includes-old", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "migration-old", "kinds": ["MigrationData"], "properties": {"name": "migration-old", "lastseen": "2026-01-02T00:00:00Z"}},
+          {"id": "multi-kind-protected", "kinds": ["CandidateNode", "Domain"], "properties": {"name": "multi-kind-protected", "lastseen": "2026-01-02T00:00:00Z"}}
+        ]
+      },
+      "variants": [
+        {"name": "returns only candidate missing null and old node IDs", "vars": {"projection": "id(n)"}, "assert": {"keys": ["id(n)"], "row_count": 3}},
+        {"name": "exact protected multi-kind and age matrix", "vars": {"projection": "n"}, "assert": {"node_id_set": ["candidate-missing", "candidate-null", "candidate-old"]}}
+      ]
+    },
+    {
+      "name": "PRUNE-04 orphan SID node selection",
+      "template": "MATCH (n) WHERE NOT (n:Domain OR n:Tenant OR n:Meta OR n:MetaIncludes OR n:MigrationData) AND n.name IS NULL AND n.objectid STARTS WITH $sid_prefix RETURN {{projection}}",
+      "params": {"sid_prefix": "S-1-5"},
+      "fixture": {
+        "nodes": [
+          {"id": "missing-name", "kinds": ["CandidateNode"], "properties": {"objectid": "S-1-5-100"}},
+          {"id": "null-name", "kinds": ["CandidateNode"], "properties": {"name": null, "objectid": "S-1-5-101"}},
+          {"id": "empty-name", "kinds": ["CandidateNode"], "properties": {"name": "", "objectid": "S-1-5-102"}},
+          {"id": "named", "kinds": ["CandidateNode"], "properties": {"name": "named", "objectid": "S-1-5-103"}},
+          {"id": "wrong-prefix", "kinds": ["CandidateNode"], "properties": {"objectid": "X-1-5-104"}},
+          {"id": "missing-objectid", "kinds": ["CandidateNode"], "properties": {}},
+          {"id": "domain", "kinds": ["Domain"], "properties": {"objectid": "S-1-5-105"}},
+          {"id": "tenant", "kinds": ["Tenant"], "properties": {"name": null, "objectid": "S-1-5-106"}},
+          {"id": "multi-kind-protected", "kinds": ["CandidateNode", "MigrationData"], "properties": {"objectid": "S-1-5-107"}}
+        ]
+      },
+      "variants": [
+        {"name": "returns only missing and null name SID node IDs", "vars": {"projection": "id(n)"}, "assert": {"keys": ["id(n)"], "row_count": 2}},
+        {"name": "exact prefix name and protected-kind matrix", "vars": {"projection": "n"}, "assert": {"node_id_set": ["missing-name", "null-name"]}}
+      ]
+    }
+  ]
+}

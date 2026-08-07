@@ -638,31 +638,34 @@ $$
   parallel safe
   strict;
 
-create or replace function public.nodes_to_path(nodes variadic int8[]) returns pathComposite as
+create or replace function public.nodes_to_path(target_graph_id int4, nodes variadic int8[]) returns pathComposite as
 $$
 select row (array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)::nodeComposite[],
          array []::edgeComposite[])::pathComposite
 from node n
-where n.id = any (nodes);
+where n.graph_id = target_graph_id
+  and n.id = any (nodes);
 $$
   language sql
   immutable
   parallel safe
   strict;
 
-create or replace function public.edges_to_path(path variadic int8[]) returns pathComposite as
+create or replace function public.edges_to_path(target_graph_id int4, path variadic int8[]) returns pathComposite as
 $$
 select row (
   (select array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)
    from node n
-   where n.id in (
-     select start_id from edge where id = any(path)
+   where n.graph_id = target_graph_id
+     and n.id in (
+     select start_id from edge where graph_id = target_graph_id and id = any(path)
      union
-     select end_id from edge where id = any(path)
+     select end_id from edge where graph_id = target_graph_id and id = any(path)
    )),
   (select array_agg(distinct (r.id, r.start_id, r.end_id, r.kind_id, r.properties)::edgeComposite)
    from edge r
-   where r.id = any(path))
+   where r.graph_id = target_graph_id
+     and r.id = any(path))
 )::pathComposite;
 $$
   language sql
@@ -670,7 +673,7 @@ $$
   parallel safe
   strict;
 
-create or replace function public.ordered_edges_to_path(root nodeComposite, edges edgeComposite[], known_nodes nodeComposite[]) returns pathComposite as
+create or replace function public.ordered_edges_to_path(target_graph_id int4, root nodeComposite, edges edgeComposite[], known_nodes nodeComposite[]) returns pathComposite as
 $$
 with recursive edge_bounds(edge_count) as
 (
@@ -745,7 +748,7 @@ select row (
       where candidate.id = ordered_node.id
       limit 1
     ) known_node on true
-    left join node n on n.id = ordered_node.id and known_node.node is null
+    left join node n on n.id = ordered_node.id and n.graph_id = target_graph_id and known_node.node is null
   ),
   (
     select coalesce(
@@ -758,6 +761,87 @@ select row (
       on ordered_edge.input_ordinality = selected_edge.edge_ordinality
   )
 )::pathComposite;
+$$
+  language sql
+  stable
+  parallel safe
+  strict;
+
+-- ordered_edge_ids_to_path is the read-expansion materializer. Expansion
+-- lowering already knows the edge order, so this helper walks that order once
+-- instead of repeatedly searching the remaining edge array. Every persistent
+-- lookup is constrained by target_graph_id because entity IDs are only unique
+-- within a graph partition.
+create or replace function public.ordered_edge_ids_to_path(target_graph_id int4, root nodeComposite, edge_ids int8[], known_nodes nodeComposite[]) returns pathComposite as
+$$
+with recursive
+edge_count(value) as
+(
+  select coalesce(cardinality(edge_ids), 0)
+),
+hydrated_edges as materialized
+(
+  select path_edge.ordinality::int4 as ordinality,
+         (e.id, e.start_id, e.end_id, e.kind_id, e.properties)::edgeComposite as edge
+  from unnest(edge_ids) with ordinality as path_edge(id, ordinality)
+  join edge e
+    on e.id = path_edge.id
+   and e.graph_id = target_graph_id
+),
+path_walk(idx, current_node_id, node_ids) as
+(
+  select 0::int4, (root).id, array [(root).id]::int8[]
+  union all
+  select path_walk.idx + 1,
+         case
+           when path_walk.current_node_id = (next_edge.edge).start_id then (next_edge.edge).end_id
+           else (next_edge.edge).start_id
+         end,
+         path_walk.node_ids || case
+           when path_walk.current_node_id = (next_edge.edge).start_id then (next_edge.edge).end_id
+           else (next_edge.edge).start_id
+         end
+  from path_walk
+  join hydrated_edges next_edge
+    on next_edge.ordinality = path_walk.idx + 1
+   and path_walk.current_node_id in ((next_edge.edge).start_id, (next_edge.edge).end_id)
+),
+final_walk as
+(
+  select path_walk.node_ids
+  from path_walk
+  cross join edge_count
+  where path_walk.idx = edge_count.value
+)
+select row (
+  (
+    select coalesce(
+      array_agg(coalesce(known_node.node, (n.id, n.kind_ids, n.properties)::nodeComposite) order by ordered_node.ordinality)::nodeComposite[],
+      array []::nodeComposite[]
+    )
+    from final_walk
+    cross join lateral unnest(final_walk.node_ids) with ordinality as ordered_node(id, ordinality)
+    left join lateral
+    (
+      select (candidate.id, candidate.kind_ids, candidate.properties)::nodeComposite as node
+      from unnest(known_nodes) as candidate(id, kind_ids, properties)
+      where candidate.id = ordered_node.id
+      limit 1
+    ) known_node on true
+    left join node n
+      on n.id = ordered_node.id
+     and n.graph_id = target_graph_id
+     and known_node.node is null
+  ),
+  (
+    select coalesce(
+      array_agg(hydrated_edges.edge order by hydrated_edges.ordinality)::edgeComposite[],
+      array []::edgeComposite[]
+    )
+    from hydrated_edges
+  )
+)::pathComposite
+from final_walk;
 $$
   language sql
   stable
@@ -969,6 +1053,213 @@ begin
                      terminal_id);
 
   return false;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;
+
+create or replace function public.bsp_workspace_fragment(fragment text)
+  returns text as
+$$
+select replace(
+         replace(
+           replace(
+             case
+               when position('pg_temp.bsp_' in fragment) > 0 then fragment
+               else replace(
+                      replace(
+                        replace(
+                          replace(
+                            replace(
+                              replace(
+                                replace(fragment,
+                                  'on conflict on constraint forward_visited_pkey', 'on conflict on constraint bsp_forward_visited_pkey'),
+                                'on conflict on constraint backward_visited_pkey', 'on conflict on constraint bsp_backward_visited_pkey'),
+                              'forward_visited', 'pg_temp.bsp_forward_visited'),
+                            'backward_visited', 'pg_temp.bsp_backward_visited'),
+                          'forward_front', 'pg_temp.bsp_forward_front'),
+                        'backward_front', 'pg_temp.bsp_backward_front'),
+                      'next_front', 'pg_temp.bsp_next_front')
+             end,
+             'traversal_root_filter', 'pg_temp.bsp_root_filter'),
+           'traversal_terminal_filter', 'pg_temp.bsp_terminal_filter'),
+         'traversal_pair_filter', 'pg_temp.bsp_pair_filter');
+$$
+  language sql
+  immutable
+  parallel safe
+  strict;
+
+-- The bidirectional shortest-path workspace is session-local and survives
+-- transaction boundaries. Warm calls retain the table and index OIDs and only
+-- clear row state. The version marker lets upgrades rebuild the known object
+-- set without touching unrelated temporary objects in the session.
+create or replace function public.ensure_bsp_core_workspace()
+  returns void as
+$$
+declare
+  expected_version constant int4 := 1;
+  present_version int4;
+begin
+  if to_regclass('pg_temp.bsp_workspace_version') is not null then
+    select version into present_version from pg_temp.bsp_workspace_version limit 1;
+  end if;
+
+  if present_version is distinct from expected_version then
+    drop table if exists pg_temp.bsp_resolved_pairs;
+    drop table if exists pg_temp.bsp_unresolved_pairs;
+    drop table if exists pg_temp.bsp_pair_filter;
+    drop table if exists pg_temp.bsp_terminal_filter;
+    drop table if exists pg_temp.bsp_root_filter;
+    drop table if exists pg_temp.bsp_backward_visited;
+    drop table if exists pg_temp.bsp_forward_visited;
+    drop table if exists pg_temp.bsp_backward_front;
+    drop table if exists pg_temp.bsp_next_front;
+    drop table if exists pg_temp.bsp_forward_front;
+    drop table if exists pg_temp.bsp_workspace_version;
+  end if;
+
+  if to_regclass('pg_temp.bsp_workspace_version') is null then
+    create temporary table bsp_workspace_version
+    (
+      version int4 not null primary key
+    ) on commit preserve rows;
+
+    create temporary table bsp_forward_front
+    (
+      root_id int8 not null, next_id int8 not null, depth int4 not null,
+      satisfied bool, is_cycle bool not null, path int8[] not null
+    ) on commit preserve rows;
+    create index bsp_forward_front_next_id_index on bsp_forward_front using btree (next_id);
+    create index bsp_forward_front_root_id_next_id_index on bsp_forward_front using btree (root_id, next_id);
+
+    create temporary table bsp_backward_front
+    (
+      root_id int8 not null, next_id int8 not null, depth int4 not null,
+      satisfied bool, is_cycle bool not null, path int8[] not null
+    ) on commit preserve rows;
+    create index bsp_backward_front_next_id_index on bsp_backward_front using btree (next_id);
+    create index bsp_backward_front_root_id_next_id_index on bsp_backward_front using btree (root_id, next_id);
+
+    create temporary table bsp_next_front
+    (
+      root_id int8 not null, next_id int8 not null, depth int4 not null,
+      satisfied bool, is_cycle bool not null, path int8[] not null
+    ) on commit preserve rows;
+    create index bsp_next_front_next_id_index on bsp_next_front using btree (next_id);
+    create index bsp_next_front_root_id_next_id_index on bsp_next_front using btree (root_id, next_id);
+
+    create temporary table bsp_forward_visited
+    (
+      root_id int8 not null,
+      id int8 not null,
+      constraint bsp_forward_visited_pkey primary key (root_id, id)
+    ) on commit preserve rows;
+
+    create temporary table bsp_backward_visited
+    (
+      root_id int8 not null,
+      id int8 not null,
+      constraint bsp_backward_visited_pkey primary key (root_id, id)
+    ) on commit preserve rows;
+
+    insert into bsp_workspace_version(version) values (expected_version);
+  end if;
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.ensure_bsp_generic_workspace()
+  returns void as
+$$
+begin
+  perform public.ensure_bsp_core_workspace();
+
+  if to_regclass('pg_temp.bsp_root_filter') is null then
+    create temporary table bsp_root_filter
+    (
+      id int8 not null primary key
+    ) on commit preserve rows;
+    create temporary table bsp_terminal_filter
+    (
+      id int8 not null primary key
+    ) on commit preserve rows;
+    create temporary table bsp_pair_filter
+    (
+      root_id int8 not null,
+      terminal_id int8 not null,
+      primary key (root_id, terminal_id)
+    ) on commit preserve rows;
+    create index bsp_pair_filter_terminal_id_root_id_index on bsp_pair_filter using btree (terminal_id, root_id);
+
+    create temporary table bsp_unresolved_pairs
+    (
+      root_id int8 not null,
+      terminal_id int8 not null,
+      constraint bsp_unresolved_pairs_pkey primary key (root_id, terminal_id)
+    ) on commit preserve rows;
+    create index bsp_unresolved_pairs_terminal_id_root_id_index on bsp_unresolved_pairs using btree (terminal_id, root_id);
+
+    create temporary table bsp_resolved_pairs
+    (
+      root_id int8 not null, next_id int8 not null, depth int4 not null,
+      satisfied bool, is_cycle bool not null, path int8[] not null,
+      constraint bsp_resolved_pairs_pkey primary key (root_id, next_id)
+    ) on commit preserve rows;
+  end if;
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.reset_bsp_workspace(include_generic bool)
+  returns void as
+$$
+begin
+  if include_generic then
+    perform public.ensure_bsp_generic_workspace();
+    truncate table pg_temp.bsp_forward_front, pg_temp.bsp_backward_front, pg_temp.bsp_next_front,
+                   pg_temp.bsp_forward_visited, pg_temp.bsp_backward_visited,
+                   pg_temp.bsp_root_filter, pg_temp.bsp_terminal_filter, pg_temp.bsp_pair_filter,
+                   pg_temp.bsp_unresolved_pairs, pg_temp.bsp_resolved_pairs;
+  else
+    perform public.ensure_bsp_core_workspace();
+    truncate table pg_temp.bsp_forward_front, pg_temp.bsp_backward_front, pg_temp.bsp_next_front,
+                   pg_temp.bsp_forward_visited, pg_temp.bsp_backward_visited;
+  end if;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;
+
+create or replace function public.load_bsp_filter_tables(root_filter text, terminal_filter text, pair_filter text)
+  returns void as
+$$
+begin
+  if length(pair_filter) > 0 then
+    execute replace(pair_filter, 'traversal_pair_filter', 'pg_temp.bsp_pair_filter');
+  end if;
+  if length(root_filter) > 0 then
+    execute replace(root_filter, 'traversal_root_filter', 'pg_temp.bsp_root_filter');
+  elsif length(pair_filter) > 0 then
+    insert into pg_temp.bsp_root_filter
+    select distinct root_id from pg_temp.bsp_pair_filter
+    on conflict (id) do nothing;
+  end if;
+  if length(terminal_filter) > 0 then
+    execute replace(terminal_filter, 'traversal_terminal_filter', 'pg_temp.bsp_terminal_filter');
+  elsif length(pair_filter) > 0 then
+    insert into pg_temp.bsp_terminal_filter
+    select distinct terminal_id from pg_temp.bsp_pair_filter
+    on conflict (id) do nothing;
+  end if;
+
+  analyze pg_temp.bsp_root_filter;
+  analyze pg_temp.bsp_terminal_filter;
+  analyze pg_temp.bsp_pair_filter;
 end;
 $$
   language plpgsql
@@ -2034,6 +2325,7 @@ $$
 drop function if exists public._bidirectional_sp_harness(text, text, text, text, int4, text, text, int8[], int8[], bool);
 drop function if exists public._bidirectional_sp_harness(text, text, text, text, int4, text, text, text, int8[], int8[], bool);
 drop function if exists public._bidirectional_sp_harness(text, text, text, text, int4, text, text, text, int8[], int8[], int8, bool);
+drop function if exists public._bidirectional_sp_harness(text, text, text, text, int4, text, text, text, int8[], int8[], int8, bool, bool);
 
 -- _bidirectional_sp_harness implements the shortest-path bidirectional BFS in two control paths selected by
 -- `use_array_parameters`:
@@ -2051,6 +2343,7 @@ create or replace function public._bidirectional_sp_harness(forward_primer text,
                                                             root_filter text, terminal_filter text, pair_filter text,
                                                             root_ids int8[], terminal_ids int8[],
                                                             path_limit int8,
+                                                            allow_zero_depth bool,
                                                             use_array_parameters bool)
   returns table
           (
@@ -2074,42 +2367,56 @@ declare
   use_pair_filter      bool := not use_array_parameters and length(pair_filter) > 0;
   matched_count        int8 := 0;
   resolved_pairs_count int8 := 0;
+  unresolved_pairs_remaining bool := true;
 begin
   raise debug 'bidirectional_sp_harness start';
 
-  perform create_bidirectional_shortest_path_tables();
 
+  -- Validate the lean array mode before allocating its session workspace.
+  -- NULL endpoints represent an empty endpoint relation. Equal singleton IDs
+  -- retain the existing shortest-path error contract.
   if use_array_parameters then
-    perform create_traversal_filter_tables(root_ids, terminal_ids);
-  else
-    perform create_traversal_filter_tables(root_filter, terminal_filter, pair_filter);
+    if cardinality(root_ids) = 0 or cardinality(terminal_ids) = 0 or
+       root_ids[1] is null or terminal_ids[1] is null then
+      return;
+    end if;
+    if cardinality(root_ids) = 1 and cardinality(terminal_ids) = 1 and root_ids[1] = terminal_ids[1] then
+      if allow_zero_depth then
+        return query select root_ids[1], terminal_ids[1], 0::int4, true, false, array []::int8[];
+        return;
+      else
+        perform public.shortest_path_self_endpoint_error(root_ids[1], terminal_ids[1]);
+      end if;
+    end if;
   end if;
 
-  create temporary table unresolved_pairs
-  (
-    root_id     int8 not null,
-    terminal_id int8 not null,
-    primary key (root_id, terminal_id)
-  ) on commit drop;
 
-  create index unresolved_pairs_terminal_id_root_id_index on unresolved_pairs using btree (terminal_id, root_id);
+  -- Array-parameter calls (including the proven singleton lowering) need only
+  -- the frontier/visited core. Text-filter calls lazily add pair/filter state.
+  perform public.reset_bsp_workspace(not use_array_parameters);
 
-  create temporary table resolved_pairs
-  (
-    root_id   int8   not null,
-    next_id   int8   not null,
-    depth     int4   not null,
-    satisfied bool,
-    is_cycle  bool   not null,
-    path      int8[] not null,
-    primary key (root_id, next_id)
-  ) on commit drop;
+  if not use_array_parameters then
+    perform public.load_bsp_filter_tables(root_filter, terminal_filter, pair_filter);
+  end if;
 
   if use_pair_filter then
-    insert into unresolved_pairs (root_id, terminal_id)
+    insert into pg_temp.bsp_unresolved_pairs (root_id, terminal_id)
     select distinct root_id, terminal_id
-    from traversal_pair_filter
-    on conflict on constraint unresolved_pairs_pkey do nothing;
+    from pg_temp.bsp_pair_filter
+    on conflict on constraint bsp_unresolved_pairs_pkey do nothing;
+
+    if allow_zero_depth then
+      insert into pg_temp.bsp_resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
+      select root_id, terminal_id, 0::int4, true, false, array []::int8[]
+      from pg_temp.bsp_unresolved_pairs
+      where root_id = terminal_id
+      on conflict on constraint bsp_resolved_pairs_pkey do nothing;
+      get diagnostics resolved_pairs_count = row_count;
+
+      delete from pg_temp.bsp_unresolved_pairs where root_id = terminal_id;
+    end if;
+
+    select exists(select 1 from pg_temp.bsp_unresolved_pairs) into unresolved_pairs_remaining;
   end if;
 
   -- Pair-filter mode keeps expanding until each requested pair is resolved or
@@ -2117,29 +2424,29 @@ begin
   -- current BFS depth produces results.
   while forward_front_depth + backward_front_depth < max_depth and
         (path_limit <= 0 or resolved_pairs_count < path_limit) and
-        (not use_pair_filter or exists(select 1 from unresolved_pairs)) and
+        unresolved_pairs_remaining and
         (forward_front_depth = 0 or forward_front_count > 0) and
         (backward_front_depth = 0 or backward_front_count > 0)
     loop
       if forward_front_depth = 0 or (backward_front_depth > 0 and forward_front_count <= backward_front_count) then
         if forward_front_depth = 0 then
           if use_array_parameters then
-            execute forward_primer using root_ids, terminal_ids;
+            execute public.bsp_workspace_fragment(forward_primer) using root_ids, terminal_ids;
           else
-            execute forward_primer;
+            execute public.bsp_workspace_fragment(forward_primer);
           end if;
 
           get diagnostics next_front_count = row_count;
 
-          insert into forward_visited (root_id, id)
+          insert into pg_temp.bsp_forward_visited (root_id, id)
           select distinct f.root_id, f.root_id
-          from next_front f
-          on conflict on constraint forward_visited_pkey do nothing;
+          from pg_temp.bsp_next_front f
+          on conflict on constraint bsp_forward_visited_pkey do nothing;
         else
           if use_array_parameters then
-            execute forward_recursive using root_ids, terminal_ids;
+            execute public.bsp_workspace_fragment(forward_recursive) using root_ids, terminal_ids;
           else
-            execute forward_recursive;
+            execute public.bsp_workspace_fragment(forward_recursive);
           end if;
 
           get diagnostics next_front_count = row_count;
@@ -2147,65 +2454,66 @@ begin
 
         forward_front_depth = forward_front_depth + 1;
 
-        delete from next_front f where f.is_cycle;
+        delete from pg_temp.bsp_next_front f where f.is_cycle;
         get diagnostics deleted_count = row_count;
         next_front_count = next_front_count - deleted_count;
 
-        delete from next_front f where f.satisfied is null;
+        delete from pg_temp.bsp_next_front f where f.satisfied is null;
         get diagnostics deleted_count = row_count;
         next_front_count = next_front_count - deleted_count;
 
-        delete from next_front f using forward_visited v where f.root_id = v.root_id and f.next_id = v.id;
+        delete from pg_temp.bsp_next_front f using pg_temp.bsp_forward_visited v where f.root_id = v.root_id and f.next_id = v.id;
         get diagnostics deleted_count = row_count;
         next_front_count = next_front_count - deleted_count;
 
         raise debug 'Forward shortest expansion as step % - Available Root Paths %', forward_front_depth + backward_front_depth, next_front_count;
 
-        truncate table forward_front;
+        truncate table pg_temp.bsp_forward_front;
 
-        insert into forward_front
+        insert into pg_temp.bsp_forward_front
         select distinct on (f.root_id, f.next_id) f.root_id, f.next_id, f.depth, f.satisfied, f.is_cycle, f.path
-        from next_front f
+        from pg_temp.bsp_next_front f
         order by f.root_id, f.next_id, f.depth;
         get diagnostics forward_front_count = row_count;
 
-        truncate table next_front;
+        truncate table pg_temp.bsp_next_front;
 
-        insert into forward_visited (root_id, id)
+        insert into pg_temp.bsp_forward_visited (root_id, id)
         select f.root_id, f.next_id
-        from forward_front f
-        on conflict on constraint forward_visited_pkey do nothing;
+        from pg_temp.bsp_forward_front f
+        on conflict on constraint bsp_forward_visited_pkey do nothing;
 
-        if exists(select 1 from forward_front r where r.satisfied) then
+        if exists(select 1 from pg_temp.bsp_forward_front r where r.satisfied) then
           if use_pair_filter then
             -- A direct forward hit resolves only the requested pairs it satisfies.
             -- Frontiers for completed roots/terminals are pruned below.
-            insert into resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
+            insert into pg_temp.bsp_resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
             select distinct on (r.root_id, r.next_id) r.root_id,
                                                       r.next_id,
                                                       r.depth,
                                                       r.satisfied,
                                                       r.is_cycle,
                                                       r.path
-            from forward_front r
-                   join unresolved_pairs p on p.root_id = r.root_id and p.terminal_id = r.next_id
+            from pg_temp.bsp_forward_front r
+                   join pg_temp.bsp_unresolved_pairs p on p.root_id = r.root_id and p.terminal_id = r.next_id
             where r.satisfied
             order by r.root_id, r.next_id, r.depth
-            on conflict on constraint resolved_pairs_pkey do nothing;
+            on conflict on constraint bsp_resolved_pairs_pkey do nothing;
             get diagnostics matched_count = row_count;
             resolved_pairs_count = resolved_pairs_count + matched_count;
 
             delete
-            from unresolved_pairs p
-              using resolved_pairs r
+            from pg_temp.bsp_unresolved_pairs p
+              using pg_temp.bsp_resolved_pairs r
             where p.root_id = r.root_id
               and p.terminal_id = r.next_id;
+            select exists(select 1 from pg_temp.bsp_unresolved_pairs) into unresolved_pairs_remaining;
 
-            delete from forward_front f where not exists(select 1 from unresolved_pairs p where p.root_id = f.root_id);
+            delete from pg_temp.bsp_forward_front f where not exists(select 1 from pg_temp.bsp_unresolved_pairs p where p.root_id = f.root_id);
             get diagnostics deleted_count = row_count;
             forward_front_count = forward_front_count - deleted_count;
 
-            delete from backward_front b where not exists(select 1 from unresolved_pairs p where p.terminal_id = b.root_id);
+            delete from pg_temp.bsp_backward_front b where not exists(select 1 from pg_temp.bsp_unresolved_pairs p where p.terminal_id = b.root_id);
             get diagnostics deleted_count = row_count;
             backward_front_count = backward_front_count - deleted_count;
           else
@@ -2217,7 +2525,7 @@ begin
                                                                     r.satisfied,
                                                                     r.is_cycle,
                                                                     r.path
-                         from forward_front r
+                         from pg_temp.bsp_forward_front r
                          where r.satisfied
                          order by r.root_id, r.next_id, r.depth
                          limit case when path_limit > 0 then path_limit else null end;
@@ -2227,22 +2535,22 @@ begin
       else
         if backward_front_depth = 0 then
           if use_array_parameters then
-            execute backward_primer using root_ids, terminal_ids;
+            execute public.bsp_workspace_fragment(backward_primer) using root_ids, terminal_ids;
           else
-            execute backward_primer;
+            execute public.bsp_workspace_fragment(backward_primer);
           end if;
 
           get diagnostics next_front_count = row_count;
 
-          insert into backward_visited (root_id, id)
+          insert into pg_temp.bsp_backward_visited (root_id, id)
           select distinct f.root_id, f.root_id
-          from next_front f
-          on conflict on constraint backward_visited_pkey do nothing;
+          from pg_temp.bsp_next_front f
+          on conflict on constraint bsp_backward_visited_pkey do nothing;
         else
           if use_array_parameters then
-            execute backward_recursive using root_ids, terminal_ids;
+            execute public.bsp_workspace_fragment(backward_recursive) using root_ids, terminal_ids;
           else
-            execute backward_recursive;
+            execute public.bsp_workspace_fragment(backward_recursive);
           end if;
 
           get diagnostics next_front_count = row_count;
@@ -2250,65 +2558,66 @@ begin
 
         backward_front_depth = backward_front_depth + 1;
 
-        delete from next_front f where f.is_cycle;
+        delete from pg_temp.bsp_next_front f where f.is_cycle;
         get diagnostics deleted_count = row_count;
         next_front_count = next_front_count - deleted_count;
 
-        delete from next_front f where f.satisfied is null;
+        delete from pg_temp.bsp_next_front f where f.satisfied is null;
         get diagnostics deleted_count = row_count;
         next_front_count = next_front_count - deleted_count;
 
-        delete from next_front f using backward_visited v where f.root_id = v.root_id and f.next_id = v.id;
+        delete from pg_temp.bsp_next_front f using pg_temp.bsp_backward_visited v where f.root_id = v.root_id and f.next_id = v.id;
         get diagnostics deleted_count = row_count;
         next_front_count = next_front_count - deleted_count;
 
         raise debug 'Backward shortest expansion as step % - Available Terminal Paths %', forward_front_depth + backward_front_depth, next_front_count;
 
-        truncate table backward_front;
+        truncate table pg_temp.bsp_backward_front;
 
-        insert into backward_front
+        insert into pg_temp.bsp_backward_front
         select distinct on (f.root_id, f.next_id) f.root_id, f.next_id, f.depth, f.satisfied, f.is_cycle, f.path
-        from next_front f
+        from pg_temp.bsp_next_front f
         order by f.root_id, f.next_id, f.depth;
         get diagnostics backward_front_count = row_count;
 
-        truncate table next_front;
+        truncate table pg_temp.bsp_next_front;
 
-        insert into backward_visited (root_id, id)
+        insert into pg_temp.bsp_backward_visited (root_id, id)
         select f.root_id, f.next_id
-        from backward_front f
-        on conflict on constraint backward_visited_pkey do nothing;
+        from pg_temp.bsp_backward_front f
+        on conflict on constraint bsp_backward_visited_pkey do nothing;
 
-        if exists(select 1 from backward_front r where r.satisfied) then
+        if exists(select 1 from pg_temp.bsp_backward_front r where r.satisfied) then
           if use_pair_filter then
             -- Symmetric direct hit from the terminal side; swap root/terminal
             -- columns back into the function's result shape.
-            insert into resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
+            insert into pg_temp.bsp_resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
             select distinct on (r.next_id, r.root_id) r.next_id,
                                                       r.root_id,
                                                       r.depth,
                                                       r.satisfied,
                                                       r.is_cycle,
                                                       r.path
-            from backward_front r
-                   join unresolved_pairs p on p.root_id = r.next_id and p.terminal_id = r.root_id
+            from pg_temp.bsp_backward_front r
+                   join pg_temp.bsp_unresolved_pairs p on p.root_id = r.next_id and p.terminal_id = r.root_id
             where r.satisfied
             order by r.next_id, r.root_id, r.depth
-            on conflict on constraint resolved_pairs_pkey do nothing;
+            on conflict on constraint bsp_resolved_pairs_pkey do nothing;
             get diagnostics matched_count = row_count;
             resolved_pairs_count = resolved_pairs_count + matched_count;
 
             delete
-            from unresolved_pairs p
-              using resolved_pairs r
+            from pg_temp.bsp_unresolved_pairs p
+              using pg_temp.bsp_resolved_pairs r
             where p.root_id = r.root_id
               and p.terminal_id = r.next_id;
+            select exists(select 1 from pg_temp.bsp_unresolved_pairs) into unresolved_pairs_remaining;
 
-            delete from backward_front f where not exists(select 1 from unresolved_pairs p where p.terminal_id = f.root_id);
+            delete from pg_temp.bsp_backward_front f where not exists(select 1 from pg_temp.bsp_unresolved_pairs p where p.terminal_id = f.root_id);
             get diagnostics deleted_count = row_count;
             backward_front_count = backward_front_count - deleted_count;
 
-            delete from forward_front f where not exists(select 1 from unresolved_pairs p where p.root_id = f.root_id);
+            delete from pg_temp.bsp_forward_front f where not exists(select 1 from pg_temp.bsp_unresolved_pairs p where p.root_id = f.root_id);
             get diagnostics deleted_count = row_count;
             forward_front_count = forward_front_count - deleted_count;
           else
@@ -2318,7 +2627,7 @@ begin
                                                                     r.satisfied,
                                                                     r.is_cycle,
                                                                     r.path
-                         from backward_front r
+                         from pg_temp.bsp_backward_front r
                          where r.satisfied
                          order by r.next_id, r.root_id, r.depth
                          limit case when path_limit > 0 then path_limit else null end;
@@ -2330,39 +2639,40 @@ begin
       if use_pair_filter then
         -- For unresolved pairs that meet in the middle, keep one shortest
         -- stitched path per pair and leave already-resolved pairs untouched.
-        insert into resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
+        insert into pg_temp.bsp_resolved_pairs (root_id, next_id, depth, satisfied, is_cycle, path)
         select p.root_id,
                p.terminal_id,
                midpoint.depth,
                true,
                false,
                midpoint.path
-        from unresolved_pairs p
+        from pg_temp.bsp_unresolved_pairs p
                join lateral (
           select f.depth + b.depth as depth,
                  f.path || b.path as path
-          from forward_front f
-                 join backward_front b on b.root_id = p.terminal_id and b.next_id = f.next_id
+          from pg_temp.bsp_forward_front f
+                 join pg_temp.bsp_backward_front b on b.root_id = p.terminal_id and b.next_id = f.next_id
           where f.root_id = p.root_id
           order by f.depth + b.depth
           limit 1
           ) midpoint on true
-        on conflict on constraint resolved_pairs_pkey do nothing;
+        on conflict on constraint bsp_resolved_pairs_pkey do nothing;
         get diagnostics matched_count = row_count;
         resolved_pairs_count = resolved_pairs_count + matched_count;
 
         if matched_count > 0 then
           delete
-          from unresolved_pairs p
-            using resolved_pairs r
+          from pg_temp.bsp_unresolved_pairs p
+            using pg_temp.bsp_resolved_pairs r
           where p.root_id = r.root_id
             and p.terminal_id = r.next_id;
+          select exists(select 1 from pg_temp.bsp_unresolved_pairs) into unresolved_pairs_remaining;
 
-          delete from forward_front f where not exists(select 1 from unresolved_pairs p where p.root_id = f.root_id);
+          delete from pg_temp.bsp_forward_front f where not exists(select 1 from pg_temp.bsp_unresolved_pairs p where p.root_id = f.root_id);
           get diagnostics deleted_count = row_count;
           forward_front_count = forward_front_count - deleted_count;
 
-          delete from backward_front b where not exists(select 1 from unresolved_pairs p where p.terminal_id = b.root_id);
+          delete from pg_temp.bsp_backward_front b where not exists(select 1 from pg_temp.bsp_unresolved_pairs p where p.terminal_id = b.root_id);
           get diagnostics deleted_count = row_count;
           backward_front_count = backward_front_count - deleted_count;
         end if;
@@ -2373,8 +2683,8 @@ begin
                                                                true,
                                                                false,
                                                                f.path || b.path
-                     from forward_front f
-                            join backward_front b on f.next_id = b.next_id
+                     from pg_temp.bsp_forward_front f
+                            join pg_temp.bsp_backward_front b on f.next_id = b.next_id
                      order by f.root_id, b.root_id, f.depth + b.depth
                      limit case when path_limit > 0 then path_limit else null end;
         get diagnostics matched_count = row_count;
@@ -2390,12 +2700,12 @@ begin
     -- for unresolved pairs after the first frontier-level success.
     if path_limit > 0 then
       return query select *
-                   from resolved_pairs
+                   from pg_temp.bsp_resolved_pairs
                    order by root_id, next_id, depth
                    limit path_limit;
     else
       return query select *
-                   from resolved_pairs
+                   from pg_temp.bsp_resolved_pairs
                    order by root_id, next_id, depth;
     end if;
   end if;
@@ -2422,7 +2732,51 @@ create or replace function public.bidirectional_sp_harness(forward_primer text, 
 as
 $$
 select *
-from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, ''::text, ''::text, ''::text, root_ids, terminal_ids, path_limit, true);
+from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, ''::text, ''::text, ''::text, root_ids, terminal_ids, path_limit, false, true);
+$$
+  language sql volatile
+               strict;
+
+create or replace function public.bidirectional_sp_harness(forward_primer text, forward_recursive text,
+                                                           backward_primer text,
+                                                           backward_recursive text, max_depth int4,
+                                                           root_ids int8[], terminal_ids int8[],
+                                                           allow_zero_depth bool, path_limit int8)
+  returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+select *
+from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, ''::text, ''::text, ''::text, root_ids, terminal_ids, path_limit, allow_zero_depth, true);
+$$
+  language sql volatile
+               strict;
+
+create or replace function public.bidirectional_sp_harness(forward_primer text, forward_recursive text,
+                                                           backward_primer text,
+                                                           backward_recursive text, max_depth int4,
+                                                           root_ids int8[], terminal_ids int8[],
+                                                           allow_zero_depth bool)
+  returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+select *
+from public.bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_ids, terminal_ids, allow_zero_depth, 0::int8);
 $$
   language sql volatile
                strict;
@@ -2464,7 +2818,51 @@ create or replace function public.bidirectional_sp_harness(forward_primer text, 
 as
 $$
 select *
-from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, ''::text, array []::int8[], array []::int8[], path_limit, false);
+from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, ''::text, array []::int8[], array []::int8[], path_limit, false, false);
+$$
+  language sql volatile
+               strict;
+
+create or replace function public.bidirectional_sp_harness(forward_primer text, forward_recursive text,
+                                                           backward_primer text,
+                                                           backward_recursive text, max_depth int4,
+                                                           root_filter text, terminal_filter text,
+                                                           allow_zero_depth bool, path_limit int8)
+  returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+select *
+from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, ''::text, array []::int8[], array []::int8[], path_limit, allow_zero_depth, false);
+$$
+  language sql volatile
+               strict;
+
+create or replace function public.bidirectional_sp_harness(forward_primer text, forward_recursive text,
+                                                           backward_primer text,
+                                                           backward_recursive text, max_depth int4,
+                                                           root_filter text, terminal_filter text,
+                                                           allow_zero_depth bool)
+  returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+select *
+from public.bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, allow_zero_depth, 0::int8);
 $$
   language sql volatile
                strict;
@@ -2507,7 +2905,51 @@ create or replace function public.bidirectional_sp_harness(forward_primer text, 
 as
 $$
 select *
-from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, pair_filter, array []::int8[], array []::int8[], path_limit, false);
+from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, pair_filter, array []::int8[], array []::int8[], path_limit, false, false);
+$$
+  language sql volatile
+               strict;
+
+create or replace function public.bidirectional_sp_harness(forward_primer text, forward_recursive text,
+                                                           backward_primer text,
+                                                           backward_recursive text, max_depth int4,
+                                                           root_filter text, terminal_filter text, pair_filter text,
+                                                           allow_zero_depth bool, path_limit int8)
+  returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+select *
+from public._bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, pair_filter, array []::int8[], array []::int8[], path_limit, allow_zero_depth, false);
+$$
+  language sql volatile
+               strict;
+
+create or replace function public.bidirectional_sp_harness(forward_primer text, forward_recursive text,
+                                                           backward_primer text,
+                                                           backward_recursive text, max_depth int4,
+                                                           root_filter text, terminal_filter text, pair_filter text,
+                                                           allow_zero_depth bool)
+  returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+select *
+from public.bidirectional_sp_harness(forward_primer, forward_recursive, backward_primer, backward_recursive, max_depth, root_filter, terminal_filter, pair_filter, allow_zero_depth, 0::int8);
 $$
   language sql volatile
                strict;
@@ -2615,3 +3057,92 @@ from public.bidirectional_sp_harness(forward_primer, forward_recursive, backward
 $$
   language sql volatile
                strict;
+
+-- graphbench_s1_distance_bfs is the typed, array-resident SP-S1 distance
+-- prototype. It is additive and benchmark-only: production translation does
+-- not call it. The caller must transparently restart a correct fallback when
+-- overflow is true.
+create or replace function public.graphbench_s1_distance_bfs(target_graph_id int4, start_id int8, terminal_id int8,
+                                                              min_depth int4, max_depth int4, edge_kind_ids int2[],
+                                                              inbound bool, state_limit int4)
+  returns table
+          (
+            depth          int4,
+            matched        bool,
+            overflow       bool,
+            examined_edges int8,
+            retained_nodes int4
+          )
+as
+$$
+#variable_conflict use_variable
+declare
+  current_depth  int4 := 0;
+  frontier       int8[] := array[start_id]::int8[];
+  next_frontier  int8[];
+  visited        int8[] := array[start_id]::int8[];
+  edge_count     int8;
+begin
+  depth := null;
+  matched := false;
+  overflow := false;
+  examined_edges := 0;
+  retained_nodes := 1;
+
+  if state_limit < 1 then
+    overflow := true;
+    return next;
+    return;
+  end if;
+
+  if start_id = terminal_id and min_depth = 0 then
+    depth := 0;
+    matched := true;
+    return next;
+    return;
+  end if;
+
+  while current_depth < max_depth and cardinality(frontier) > 0 loop
+    select
+      coalesce(array_agg(distinct candidate.next_id order by candidate.next_id)
+        filter (where not candidate.next_id = any(visited)), array[]::int8[]),
+      count(*)
+    into next_frontier, edge_count
+    from (
+      select case when inbound then edge.start_id else edge.end_id end as next_id
+      from unnest(frontier) as active(node_id)
+      join edge on edge.graph_id = target_graph_id
+        and ((not inbound and edge.start_id = active.node_id)
+          or (inbound and edge.end_id = active.node_id))
+      where cardinality(edge_kind_ids) = 0 or edge.kind_id = any(edge_kind_ids)
+    ) candidate;
+
+    examined_edges := examined_edges + edge_count;
+    current_depth := current_depth + 1;
+
+    if terminal_id = any(next_frontier) and current_depth >= min_depth then
+      depth := current_depth;
+      matched := true;
+      retained_nodes := cardinality(visited) + cardinality(next_frontier);
+      return next;
+      return;
+    end if;
+
+    if cardinality(visited) + cardinality(next_frontier) > state_limit then
+      overflow := true;
+      retained_nodes := cardinality(visited);
+      return next;
+      return;
+    end if;
+
+    visited := visited || next_frontier;
+    frontier := next_frontier;
+    retained_nodes := cardinality(visited);
+  end loop;
+
+  return next;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;

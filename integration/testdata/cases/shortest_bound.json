@@ -1,0 +1,82 @@
+{
+  "dataset": "shortest_bound",
+  "cases": [
+    {
+      "name": "bound pair shortest prefers direct edge and hydrates in order",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "direct"},
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["start", "direct"]],
+        "path_edge_kinds": [["BoundEdge"]],
+        "contains_edge": {"start": "start", "end": "direct", "kind": "BoundEdge", "props": {"route": "direct"}}
+      }
+    },
+    {
+      "name": "bound pair shortest disconnected endpoints return empty",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "disconnected"},
+      "assert": "empty"
+    },
+    {
+      "name": "bound pair shortest respects direction",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "wrong-direction"},
+      "assert": "empty"
+    },
+    {
+      "name": "bound pair shortest respects relationship kind",
+      "cypher": "MATCH p = shortestPath((s)-[:BoundEdge*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "typed-end"},
+      "assert": "empty"
+    },
+    {
+      "name": "bound pair shortest respects maximum depth",
+      "cypher": "MATCH p = shortestPath((s)-[:BoundEdge*1..2]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "cycle-end"},
+      "assert": "empty"
+    },
+    {
+      "name": "bound pair shortest handles cycles without relationship reuse",
+      "cypher": "MATCH p = shortestPath((s)-[:BoundEdge*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "cycle-end"},
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["start", "cycle-a", "cycle-b", "cycle-end"]],
+        "path_edge_kinds": [["BoundEdge", "BoundEdge", "BoundEdge"]]
+      }
+    },
+    {
+      "name": "bound pair shortest missing endpoint id returns empty",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "params": {"start_id": -1},
+      "node_params": {"end_id": "direct"},
+      "assert": "empty"
+    },
+    {
+      "name": "bound pair shortest null endpoint parameter returns empty",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "params": {"start_id": null},
+      "node_params": {"end_id": "direct"},
+      "assert": "empty"
+    },
+    {
+      "name": "bound pair shortest same endpoint keeps error contract",
+      "cypher": "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "start"},
+      "assert": "query_error"
+    },
+    {
+      "name": "bound pair zero depth returns the same endpoint",
+      "cypher": "MATCH p = shortestPath((s)-[*0..0]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "start"},
+      "assert": {"row_count": 1, "path_node_ids": [["start"]], "path_edge_kinds": [[]]}
+    },
+    {
+      "name": "bound pair unbounded zero minimum returns the same endpoint",
+      "cypher": "MATCH p = shortestPath((s)-[*0..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p LIMIT 1",
+      "node_params": {"start_id": "start", "end_id": "start"},
+      "assert": {"row_count": 1, "path_node_ids": [["start"]], "path_edge_kinds": [[]]}
+    }
+  ]
+}

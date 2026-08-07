@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/testutil"
 )
 
 const defaultTopPlans = 25
@@ -17,16 +18,17 @@ const defaultTopPlans = 25
 var postgresCostPattern = regexp.MustCompile(`cost=[0-9.]+\.\.([0-9.]+)`)
 
 type PlanSummary struct {
-	Drivers           []DriverSummary `json:"drivers"`
-	TopPostgresPlans  []CostedPlan    `json:"top_postgres_plans,omitempty"`
-	PostgresOperators []Count         `json:"postgres_operators,omitempty"`
-	Neo4jOperators    []Count         `json:"neo4j_operators,omitempty"`
-	PlannedLowerings  []Count         `json:"planned_lowerings,omitempty"`
-	AppliedLowerings  []Count         `json:"applied_lowerings,omitempty"`
-	SkippedLowerings  []Count         `json:"skipped_lowerings,omitempty"`
-	SkippedReasons    []Count         `json:"skipped_reasons,omitempty"`
-	FeatureCounts     []Count         `json:"feature_counts,omitempty"`
-	Errors            []PlanError     `json:"errors,omitempty"`
+	Metadata          testutil.BaselineMetadata `json:"metadata"`
+	Drivers           []DriverSummary           `json:"drivers"`
+	TopPostgresPlans  []CostedPlan              `json:"top_postgres_plans,omitempty"`
+	PostgresOperators []Count                   `json:"postgres_operators,omitempty"`
+	Neo4jOperators    []Count                   `json:"neo4j_operators,omitempty"`
+	PlannedLowerings  []Count                   `json:"planned_lowerings,omitempty"`
+	AppliedLowerings  []Count                   `json:"applied_lowerings,omitempty"`
+	SkippedLowerings  []Count                   `json:"skipped_lowerings,omitempty"`
+	SkippedReasons    []Count                   `json:"skipped_reasons,omitempty"`
+	FeatureCounts     []Count                   `json:"feature_counts,omitempty"`
+	Errors            []PlanError               `json:"errors,omitempty"`
 }
 
 type DriverSummary struct {
@@ -74,11 +76,15 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 		skippedLoweringCounts  = map[string]int{}
 		skippedReasonCounts    = map[string]int{}
 		featureCounts          = map[string]int{}
+		summaryMetadata        testutil.BaselineMetadata
 		errors                 []PlanError
 		topPG                  []CostedPlan
 	)
 
 	for _, record := range records {
+		if summaryMetadata == (testutil.BaselineMetadata{}) {
+			summaryMetadata = record.Metadata
+		}
 		driver := driverCounts[record.Driver]
 		if driver == nil {
 			driver = &DriverSummary{Driver: record.Driver}
@@ -150,6 +156,7 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 	}
 
 	return PlanSummary{
+		Metadata:          summaryMetadata,
 		Drivers:           sortedDriverSummaries(driverCounts),
 		TopPostgresPlans:  topPG,
 		PostgresOperators: sortedCounts(postgresOperatorCounts),
@@ -270,6 +277,9 @@ func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
 	}
 
 	if err := writeln("# Cypher Plan Corpus Summary"); err != nil {
+		return err
+	}
+	if err := writef("\nDAWGS version: `%s`\n", summary.Metadata.DAWGSVersion); err != nil {
 		return err
 	}
 	if err := writeln("\n## Drivers\n\n| Driver | Records | Errors |\n| --- | ---: | ---: |"); err != nil {

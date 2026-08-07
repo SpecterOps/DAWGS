@@ -90,7 +90,7 @@ func DriverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
-func Open(t *testing.T, opts Options) *Session {
+func Open(t testing.TB, opts Options) *Session {
 	t.Helper()
 
 	ctx := context.Background()
@@ -243,7 +243,7 @@ func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction)
 	return err
 }
 
-func buildSchema(t *testing.T, opts Options) *graph.Schema {
+func buildSchema(t testing.TB, opts Options) *graph.Schema {
 	t.Helper()
 
 	nodeKinds, edgeKinds := collectKinds(t, opts.Datasets, opts.datasetPath())
@@ -270,7 +270,7 @@ func buildSchema(t *testing.T, opts Options) *graph.Schema {
 }
 
 // collectKinds parses the given datasets and returns the union of all node and edge kinds.
-func collectKinds(t *testing.T, datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds) {
+func collectKinds(t testing.TB, datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds) {
 	t.Helper()
 
 	var nodeKinds, edgeKinds graph.Kinds

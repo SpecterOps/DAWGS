@@ -10,11 +10,19 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.RowColumnReference {
+func projectedNodeIDReference(frameIdentifier pgsql.Identifier, binding *BoundIdentifier) pgsql.Expression {
+	if binding != nil && binding.IDOnly {
+		return pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier}
+	}
+
 	return pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{frame.Binding.Identifier, binding.Identifier},
+		Identifier: pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier},
 		Column:     pgsql.ColumnID,
 	}
+}
+
+func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.Expression {
+	return projectedNodeIDReference(frame.Binding.Identifier, binding)
 }
 
 func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.Expression {
@@ -41,6 +49,15 @@ func sourceTargetForTraversalStep(part *PatternPart, stepIndex int) (optimize.Tr
 	}
 
 	return part.Target.TraversalStep(stepIndex), true
+}
+
+func (s *Translator) shortestPathExecutorDecision(part *PatternPart, stepIndex int) (optimize.ShortestPathExecutorDecision, bool) {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
+		return optimize.ShortestPathExecutorDecision{}, false
+	}
+	decision, hasDecision := s.shortestPathExecutorDecisions[target]
+	return decision, hasDecision
 }
 
 func traversalStepIsFirstForSourceTarget(part *PatternPart, stepIndex int) bool {
@@ -691,6 +708,7 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 
 		for _, decision := range decisions {
 			if decision.SuffixLength <= 0 ||
+				!decision.ApplySupplemental ||
 				decision.SuffixStartStep <= target.StepIndex ||
 				decision.SuffixEndStep < decision.SuffixStartStep ||
 				decision.SuffixEndStep-decision.SuffixStartStep+1 != decision.SuffixLength {
@@ -744,6 +762,110 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 
 func traversalStepHasContinuation(part *PatternPart, stepIndex int) bool {
 	return part != nil && stepIndex+1 < len(part.TraversalSteps)
+}
+
+func fieldRequirementAllowsIDOnly(decision optimize.FieldRequirementDecision) bool {
+	observesID := false
+	for _, use := range decision.Uses {
+		for _, field := range use.Fields {
+			if !use.Internal && field == optimize.FieldRequirementEntityID {
+				observesID = true
+			}
+
+			if !use.Internal && field != optimize.FieldRequirementEntityID {
+				return false
+			}
+
+			if field == optimize.FieldRequirementFullEntity || field == optimize.FieldRequirementFullPath {
+				return false
+			}
+		}
+	}
+
+	return observesID
+}
+
+func fieldRequirementAllowsIDOnlyContinuation(decision optimize.FieldRequirementDecision) bool {
+	for _, use := range decision.Uses {
+		for _, field := range use.Fields {
+			if field == optimize.FieldRequirementFullEntity || field == optimize.FieldRequirementFullPath {
+				return false
+			}
+
+			if !use.Internal && field != optimize.FieldRequirementEntityID {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func traversalStepContinuesFromBinding(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if part == nil || binding == nil || stepIndex < 0 || stepIndex+1 >= len(part.TraversalSteps) {
+		return false
+	}
+
+	currentStep := part.TraversalSteps[stepIndex]
+	nextStep := part.TraversalSteps[stepIndex+1]
+
+	return currentStep != nil && nextStep != nil &&
+		currentStep.RightNode == binding && nextStep.LeftNode == binding
+}
+
+func (s *Translator) applyIDOnlyNodeProjection(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if part == nil || binding == nil || !part.HasTarget {
+		return false
+	}
+
+	var (
+		isContinuation = traversalStepContinuesFromBinding(part, stepIndex, binding)
+		isTerminal     = !traversalStepHasContinuation(part, stepIndex)
+	)
+	if !isContinuation && !isTerminal {
+		return false
+	}
+
+	if part.PatternBinding != nil {
+		for _, pathSymbol := range s.scope.Symbols(part.PatternBinding) {
+			if decision, found := s.fieldRequirementDecisions[part.Target.QueryPartIndex][pathSymbol.String()]; found {
+				for _, field := range decision.Fields {
+					if field == optimize.FieldRequirementFullPath {
+						return false
+					}
+				}
+			}
+		}
+	}
+
+	foundDecision := false
+	for _, symbol := range s.scope.Symbols(binding) {
+		if decision, found := s.fieldRequirementDecisions[part.Target.QueryPartIndex][symbol.String()]; found {
+			foundDecision = true
+			allowsIDOnly := fieldRequirementAllowsIDOnly(decision)
+			if isContinuation {
+				allowsIDOnly = fieldRequirementAllowsIDOnlyContinuation(decision)
+			}
+
+			if !allowsIDOnly {
+				return false
+			}
+		}
+	}
+	if foundDecision {
+		binding.IDOnly = true
+		return true
+	}
+
+	// Anonymous or otherwise unobserved intermediate nodes have no source-level
+	// field-requirement decision. Their identity is still required to join the
+	// next relationship, so carry that identity as a scalar between steps.
+	if isContinuation && !foundDecision {
+		binding.IDOnly = true
+		return true
+	}
+
+	return false
 }
 
 func relationshipIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
@@ -1021,6 +1143,12 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		if hasDecision && pruneTraversalStepProjectionExports(part, stepIndex, traversalStep) {
 			s.recordLowering(optimize.LoweringProjectionPruning)
 		}
+	}
+
+	leftNodeIDOnly := s.applyIDOnlyNodeProjection(part, stepIndex, traversalStep.LeftNode)
+	rightNodeIDOnly := s.applyIDOnlyNodeProjection(part, stepIndex, traversalStep.RightNode)
+	if leftNodeIDOnly || rightNodeIDOnly {
+		s.recordLowering(optimize.LoweringFieldRequirements)
 	}
 
 	if boundProjections, err := buildVisibleProjections(s.scope); err != nil {

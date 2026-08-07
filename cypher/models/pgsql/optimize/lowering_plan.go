@@ -93,6 +93,8 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	attachPredicatePlacementsToSuffixPushdowns(&plan)
 	appendCountStoreFastPathDecisions(&plan, query)
 	appendAggregateTraversalCountDecisions(&plan, query)
+	finalizeShortestPathExecutorDecisions(&plan, query)
+	finalizeExpansionSearchStrategyDecisions(&plan, query)
 	return plan, nil
 }
 
@@ -122,9 +124,655 @@ func appendQueryPartLowerings(
 	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
+	appendShortestPathExecutorDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
-	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses)
+	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	appendExpansionSearchStrategyDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences, initialDeclaredSymbols)
+	fieldRequirements, err := collectFieldRequirements(queryPartIndex, queryPart)
+	if err != nil {
+		return err
+	}
+	plan.FieldRequirements = append(plan.FieldRequirements, fieldRequirements...)
+	applyShortestPathObservationModes(plan, queryPartIndex, readingClauses, fieldRequirements)
+	applyExpansionSearchObservationModes(plan, queryPartIndex, readingClauses, fieldRequirements)
 	return nil
+}
+
+func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}, initialDeclaredSymbols map[string]struct{}) {
+	_, updatingClauses := queryPartProjection(queryPart)
+	declaredSymbols := copyStringSet(initialDeclaredSymbols)
+	queryPartVariableExpansions := 0
+	for _, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+		for _, patternPart := range readingClause.Match.Pattern {
+			for _, step := range traversalStepsForPattern(patternPart) {
+				if step.Relationship != nil && step.Relationship.Range != nil {
+					queryPartVariableExpansions++
+				}
+			}
+		}
+	}
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			steps := traversalStepsForPattern(patternPart)
+			pathDependentPredicate := patternPart != nil && patternPart.Variable != nil && syntaxDependsOn(readingClause.Match.Where, patternPart.Variable.Symbol)
+			for stepIndex, step := range steps {
+				if step.Relationship == nil || step.Relationship.Range == nil {
+					continue
+				}
+				target := PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex)
+				limitConflict := hasLimitPushdownForTarget(plan, target)
+				suffixLength := fixedSuffixLength(steps[stepIndex+1:])
+				suffixEnd := stepIndex + suffixLength
+				minDepth := int64(1)
+				if step.Relationship.Range.StartIndex != nil {
+					minDepth = *step.Relationship.Range.StartIndex
+				}
+				maxDepth := int64(0)
+				boundedDepth := step.Relationship.Range.EndIndex != nil
+				if boundedDepth {
+					maxDepth = *step.Relationship.Range.EndIndex
+				}
+				directedExpansion := step.Relationship.Direction != graph.DirectionBoth
+				directedSuffix := suffixLength > 0
+				noSuffixRelationshipVariables := true
+				noRelationshipPredicates := step.Relationship.Properties == nil && !syntaxDependsOn(readingClause.Match.Where, variableSymbol(step.Relationship.Variable))
+				suffixSteps := steps[stepIndex+1 : stepIndex+1+suffixLength]
+				uncorrelatedSuffix := true
+				for _, suffixStep := range suffixSteps {
+					directedSuffix = directedSuffix && suffixStep.Relationship.Direction != graph.DirectionBoth
+					noSuffixRelationshipVariables = noSuffixRelationshipVariables && suffixStep.Relationship.Variable == nil
+					noRelationshipPredicates = noRelationshipPredicates && suffixStep.Relationship.Properties == nil && !syntaxDependsOn(readingClause.Match.Where, variableSymbol(suffixStep.Relationship.Variable))
+					uncorrelatedSuffix = uncorrelatedSuffix && !symbolDeclared(declaredSymbols, variableSymbol(suffixStep.Relationship.Variable)) && !symbolDeclared(declaredSymbols, variableSymbol(suffixStep.RightNode.Variable))
+				}
+				noCrossRegionPredicate := !hasCrossRegionPredicate(readingClause.Match.Where, step, suffixSteps)
+				boundRoot := symbolDeclared(declaredSymbols, variableSymbol(step.LeftNode.Variable))
+				observation := ExpansionSearchObservationEndpointIDs
+				if patternPart != nil && patternPart.Variable != nil && referencesSourceIdentifier(sourceReferences, patternPart.Variable.Symbol) {
+					observation = ExpansionSearchObservationFullPath
+				}
+				facts := []ExpansionSearchEligibilityFact{
+					{Name: "read_only", Eligible: updatingClauses == 0},
+					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
+					{Name: "ordinary_path", Eligible: patternPart != nil && !patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
+					{Name: "single_variable_expansion", Eligible: queryPartVariableExpansions == 1},
+					{Name: "bound_root", Eligible: boundRoot},
+					{Name: "directed_expansion", Eligible: directedExpansion},
+					{Name: "bounded_supported_depth", Eligible: boundedDepth && maxDepth >= minDepth && maxDepth <= 64},
+					{Name: "exact_three_hop_suffix", Eligible: suffixLength == 3},
+					{Name: "qualified_adcs_topology", Eligible: qualifiedADCSSearchTopology(step, suffixSteps)},
+					{Name: "directed_suffix", Eligible: directedSuffix},
+					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil && noSuffixRelationshipVariables},
+					{Name: "no_relationship_predicate", Eligible: noRelationshipPredicates},
+					{Name: "uncorrelated_suffix", Eligible: uncorrelatedSuffix},
+					{Name: "no_cross_region_predicate", Eligible: noCrossRegionPredicate},
+					{Name: "no_path_dependent_predicate", Eligible: !pathDependentPredicate},
+					{Name: "no_limit_pushdown_conflict", Eligible: !limitConflict},
+					{Name: "supported_observation", Eligible: observation != ExpansionSearchObservationUnsupported},
+				}
+				eligible := true
+				for _, fact := range facts {
+					eligible = eligible && fact.Eligible
+				}
+				fallbackReason := ExpansionSearchFallbackTournamentUnqualified
+				switch {
+				case updatingClauses > 0:
+					fallbackReason = ExpansionSearchFallbackMutation
+				case readingClause.Match.Optional:
+					fallbackReason = ExpansionSearchFallbackOptionalMatch
+				case patternPart != nil && patternPart.AllShortestPathsPattern:
+					fallbackReason = ExpansionSearchFallbackAllShortestPaths
+				case patternPart != nil && patternPart.ShortestPathPattern:
+					fallbackReason = ExpansionSearchFallbackShortestPath
+				case queryPartVariableExpansions > 1:
+					fallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
+				case !directedExpansion:
+					fallbackReason = ExpansionSearchFallbackDirectionlessExpansion
+				case !boundedDepth:
+					fallbackReason = ExpansionSearchFallbackUnboundedDepth
+				case maxDepth < minDepth || maxDepth > 64:
+					fallbackReason = ExpansionSearchFallbackUnsupportedDepth
+				case suffixLength == 0:
+					fallbackReason = ExpansionSearchFallbackNoFixedSuffix
+				case suffixLength < 3:
+					fallbackReason = ExpansionSearchFallbackSuffixTooShort
+				case suffixLength != 3:
+					fallbackReason = ExpansionSearchFallbackTournamentUnqualified
+				case !directedSuffix:
+					fallbackReason = ExpansionSearchFallbackDirectionlessSuffix
+				case !noRelationshipPredicates:
+					fallbackReason = ExpansionSearchFallbackRelationshipPredicate
+				case !uncorrelatedSuffix:
+					fallbackReason = ExpansionSearchFallbackCorrelatedSuffix
+				case !noCrossRegionPredicate:
+					fallbackReason = ExpansionSearchFallbackCrossRegionPredicate
+				case step.Relationship.Variable != nil || !noSuffixRelationshipVariables:
+					fallbackReason = ExpansionSearchFallbackRelationshipVariable
+				case pathDependentPredicate:
+					fallbackReason = ExpansionSearchFallbackPathDependentPredicate
+				case limitConflict:
+					fallbackReason = ExpansionSearchFallbackLimitPushdownConflict
+				case !boundRoot && qualifiedADCSSearchTopology(step, suffixSteps):
+					fallbackReason = ExpansionSearchFallbackUnboundRoot
+				}
+				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, ExpansionSearchStrategyDecision{
+					Target: target, Family: "ADCS",
+					PlannedCandidates: []ExpansionSearchStrategy{
+						ExpansionSearchStepwiseForward,
+						ExpansionSearchLateHydratedForward,
+						ExpansionSearchFactoredSuffixForward,
+						ExpansionSearchSuffixSeededReverse,
+						ExpansionSearchBackwardViabilityForward,
+					},
+					SelectedStrategy:     ExpansionSearchStepwiseForward,
+					StructurallyEligible: eligible, EligibilityFacts: facts,
+					SuffixStartStep: stepIndex + 1, SuffixEndStep: suffixEnd, SuffixLength: suffixLength,
+					ObservationMode: observation, LogicalDirection: step.Relationship.Direction.String(),
+					MinimumDepth: minDepth, MaximumDepth: maxDepth,
+					SelectionMode: "incumbent_default", SelectorVersion: "adcs-static-v1",
+					FallbackStrategy: ExpansionSearchStepwiseForward, FallbackReason: fallbackReason,
+				})
+			}
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+		declareWhereSymbols(declaredSymbols, readingClause.Match)
+	}
+}
+
+func symbolDeclared(declared map[string]struct{}, symbol string) bool {
+	if symbol == "" {
+		return false
+	}
+	_, found := declared[symbol]
+	return found
+}
+
+func hasCrossRegionPredicate(where *cypher.Where, expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
+	if where == nil {
+		return false
+	}
+	prefixSymbols := map[string]struct{}{}
+	suffixSymbols := map[string]struct{}{}
+	addSymbol(prefixSymbols, variableSymbol(expansion.LeftNode.Variable))
+	addSymbol(prefixSymbols, variableSymbol(expansion.Relationship.Variable))
+	addSymbol(prefixSymbols, variableSymbol(expansion.RightNode.Variable))
+	for _, step := range suffix {
+		addSymbol(suffixSymbols, variableSymbol(step.Relationship.Variable))
+		addSymbol(suffixSymbols, variableSymbol(step.RightNode.Variable))
+	}
+	for _, expression := range where.Expressions {
+		var hasPrefix, hasSuffix bool
+		for _, dependency := range sortedDependencies(expression) {
+			if _, found := prefixSymbols[dependency]; found {
+				hasPrefix = true
+			}
+			if _, found := suffixSymbols[dependency]; found {
+				hasSuffix = true
+			}
+		}
+		if hasPrefix && hasSuffix {
+			return true
+		}
+	}
+	return false
+}
+
+func fixedSuffixLength(steps []sourceTraversalStep) int {
+	length := 0
+	for _, step := range steps {
+		if step.Relationship == nil || step.Relationship.Range != nil {
+			break
+		}
+		length++
+	}
+	return length
+}
+
+func hasLimitPushdownForTarget(plan *LoweringPlan, target TraversalStepTarget) bool {
+	for _, decision := range plan.LimitPushdown {
+		if decision.Target == target {
+			return true
+		}
+	}
+	return false
+}
+
+func qualifiedADCSSearchTopology(expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
+	if len(suffix) != 3 || expansion.Relationship == nil || len(expansion.Relationship.Kinds) != 1 || expansion.Relationship.Kinds[0].String() != "MemberOf" || expansion.Relationship.Direction != graph.DirectionOutbound {
+		return false
+	}
+	expectedRelationships := []string{"Enroll", "TrustedForNTAuth", "NTAuthStoreFor"}
+	expectedNodes := []string{"EnterpriseCA", "NTAuthStore", "Domain"}
+	for idx, step := range suffix {
+		if step.Relationship == nil || step.RightNode == nil || step.Relationship.Direction != graph.DirectionOutbound || len(step.Relationship.Kinds) != 1 || step.Relationship.Kinds[0].String() != expectedRelationships[idx] || len(step.RightNode.Kinds) != 1 || step.RightNode.Kinds[0].String() != expectedNodes[idx] {
+			return false
+		}
+	}
+	return true
+}
+
+func applyExpansionSearchObservationModes(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, requirements []FieldRequirementDecision) {
+	externalFieldsBySymbol := map[string]map[FieldRequirement]struct{}{}
+	for _, requirement := range requirements {
+		fields := map[FieldRequirement]struct{}{}
+		for _, use := range requirement.Uses {
+			if use.Internal {
+				continue
+			}
+			for _, field := range use.Fields {
+				fields[field] = struct{}{}
+			}
+		}
+		externalFieldsBySymbol[requirement.Symbol] = fields
+	}
+	for idx := range plan.ExpansionSearchStrategy {
+		decision := &plan.ExpansionSearchStrategy[idx]
+		if decision.Target.QueryPartIndex != queryPartIndex || decision.Target.Predicate || decision.Target.ClauseIndex >= len(readingClauses) {
+			continue
+		}
+		clause := readingClauses[decision.Target.ClauseIndex]
+		if clause == nil || clause.Match == nil || decision.Target.PatternIndex >= len(clause.Match.Pattern) {
+			continue
+		}
+		pattern := clause.Match.Pattern[decision.Target.PatternIndex]
+		if pattern == nil || pattern.Variable == nil {
+			decision.ObservationMode = ExpansionSearchObservationEndpointIDs
+			setExpansionSearchEligibilityFact(decision, "supported_observation", true)
+			continue
+		}
+		fields := externalFieldsBySymbol[pattern.Variable.Symbol]
+		switch {
+		case hasFieldRequirement(fields, FieldRequirementFullPath):
+			decision.ObservationMode = ExpansionSearchObservationFullPath
+		case hasFieldRequirement(fields, FieldRequirementOrderedPathEdgeIDs), hasFieldRequirement(fields, FieldRequirementRelationshipIDs):
+			decision.ObservationMode = ExpansionSearchObservationOrderedPathIDs
+		case hasFieldRequirement(fields, FieldRequirementFullEntity):
+			decision.ObservationMode = ExpansionSearchObservationFullPath
+		case len(fields) == 0:
+			decision.ObservationMode = ExpansionSearchObservationEndpointIDs
+		default:
+			decision.ObservationMode = ExpansionSearchObservationUnsupported
+		}
+		supported := decision.ObservationMode != ExpansionSearchObservationUnsupported
+		setExpansionSearchEligibilityFact(decision, "supported_observation", supported)
+		if !supported {
+			decision.StructurallyEligible = false
+			decision.FallbackReason = ExpansionSearchFallbackUnsupportedObservation
+		}
+	}
+}
+
+func hasFieldRequirement(fields map[FieldRequirement]struct{}, field FieldRequirement) bool {
+	_, found := fields[field]
+	return found
+}
+
+func setExpansionSearchEligibilityFact(decision *ExpansionSearchStrategyDecision, name string, eligible bool) {
+	for idx := range decision.EligibilityFacts {
+		if decision.EligibilityFacts[idx].Name == name {
+			decision.EligibilityFacts[idx].Eligible = eligible
+			return
+		}
+	}
+}
+
+func expansionSearchFactsEligible(facts []ExpansionSearchEligibilityFact) bool {
+	for _, fact := range facts {
+		if !fact.Eligible {
+			return false
+		}
+	}
+	return true
+}
+
+func applyShortestPathObservationModes(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, requirements []FieldRequirementDecision) {
+	fieldsBySymbol := map[string]map[FieldRequirement]struct{}{}
+	for _, requirement := range requirements {
+		fields := map[FieldRequirement]struct{}{}
+		for _, field := range requirement.Fields {
+			fields[field] = struct{}{}
+		}
+		fieldsBySymbol[requirement.Symbol] = fields
+	}
+	for idx := range plan.ShortestPathExecutor {
+		decision := &plan.ShortestPathExecutor[idx]
+		if decision.Target.QueryPartIndex != queryPartIndex || decision.Target.Predicate {
+			continue
+		}
+		if decision.Target.ClauseIndex >= len(readingClauses) {
+			continue
+		}
+		clause := readingClauses[decision.Target.ClauseIndex]
+		if clause == nil || clause.Match == nil || decision.Target.PatternIndex >= len(clause.Match.Pattern) {
+			continue
+		}
+		pattern := clause.Match.Pattern[decision.Target.PatternIndex]
+		if pattern == nil || pattern.Variable == nil {
+			continue
+		}
+		fields := fieldsBySymbol[pattern.Variable.Symbol]
+		if _, fullPath := fields[FieldRequirementFullPath]; fullPath {
+			decision.ObservationMode = ShortestPathObservationOnePath
+		} else if _, orderedIDs := fields[FieldRequirementOrderedPathEdgeIDs]; orderedIDs {
+			decision.ObservationMode = ShortestPathObservationDistance
+		}
+		setShortestPathEligibilityFact(decision, "known_observation_mode", decision.ObservationMode != ShortestPathObservationUnknown)
+	}
+}
+
+func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
+	var (
+		shortestCalls  int
+		patternSources int
+		hasUnwind      bool
+	)
+	for _, readingClause := range readingClauses {
+		if readingClause == nil {
+			continue
+		}
+		if readingClause.Unwind != nil {
+			hasUnwind = true
+		}
+		if readingClause.Match == nil {
+			continue
+		}
+		patternSources += len(readingClause.Match.Pattern)
+		for _, patternPart := range readingClause.Match.Pattern {
+			if patternPart != nil && (patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern) {
+				shortestCalls++
+			}
+		}
+	}
+	_, updatingClauses := queryPartProjection(queryPart)
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			if patternPart == nil || (!patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern) {
+				continue
+			}
+			steps := traversalStepsForPattern(patternPart)
+			idEqualities := singletonIDEqualityCounts(readingClause.Match.Where)
+			pathPredicate := syntaxDependsOn(readingClause.Match.Where, variableSymbol(patternPart.Variable))
+			for stepIndex, step := range steps {
+				if step.Relationship == nil || step.Relationship.Range == nil {
+					continue
+				}
+				minDepth := int64(1)
+				if step.Relationship.Range.StartIndex != nil {
+					minDepth = *step.Relationship.Range.StartIndex
+				}
+				maxDepth := int64(0)
+				boundedDepth := step.Relationship.Range.EndIndex != nil
+				if boundedDepth {
+					maxDepth = *step.Relationship.Range.EndIndex
+				}
+				supportedDepth := boundedDepth && (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
+				directionSupported := step.Relationship.Direction != graph.DirectionBoth
+				leftIDCount := idEqualities[variableSymbol(step.LeftNode.Variable)]
+				rightIDCount := idEqualities[variableSymbol(step.RightNode.Variable)]
+				singletonIDs := leftIDCount == 1 && rightIDCount == 1
+				uncorrelatedSource := queryPartIndex == 0 && !hasUnwind
+				singleEndpointPair := patternSources == 1
+				facts := []ShortestPathEligibilityFact{
+					{Name: "shortest_path_not_all", Eligible: patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
+					{Name: "single_three_element_traversal", Eligible: len(patternPart.PatternElements) == 3 && len(steps) == 1},
+					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
+					{Name: "directed", Eligible: directionSupported},
+					{Name: "bounded_supported_depth", Eligible: supportedDepth},
+					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil},
+					{Name: "no_relationship_predicate", Eligible: step.Relationship.Properties == nil},
+					{Name: "single_path_call", Eligible: shortestCalls == 1},
+					{Name: "read_only", Eligible: updatingClauses == 0},
+					{Name: "one_static_id_equality_per_endpoint", Eligible: singletonIDs},
+					{Name: "no_path_predicate", Eligible: !pathPredicate},
+					{Name: "uncorrelated_endpoint_source", Eligible: uncorrelatedSource},
+					{Name: "single_endpoint_pair", Eligible: singleEndpointPair},
+					{Name: "known_observation_mode", Eligible: false},
+				}
+				reason := ShortestPathFallbackTournamentUnqualified
+				switch {
+				case patternPart.AllShortestPathsPattern:
+					reason = ShortestPathFallbackAllShortestPaths
+				case readingClause.Match.Optional:
+					reason = ShortestPathFallbackOptionalMatch
+				case !directionSupported:
+					reason = ShortestPathFallbackDirectionless
+				case pathPredicate:
+					reason = ShortestPathFallbackPathPredicate
+				case step.Relationship.Variable != nil:
+					reason = ShortestPathFallbackRelationshipVariable
+				case step.Relationship.Properties != nil:
+					reason = ShortestPathFallbackRelationshipPredicate
+				case !supportedDepth:
+					reason = ShortestPathFallbackUnsupportedDepth
+				case shortestCalls != 1:
+					reason = ShortestPathFallbackMultiplePathCalls
+				case updatingClauses != 0:
+					reason = ShortestPathFallbackMutation
+				case !uncorrelatedSource:
+					reason = ShortestPathFallbackCorrelatedEndpoints
+				case !singleEndpointPair:
+					reason = ShortestPathFallbackMultipleEndpointPairs
+				case leftIDCount > 1 || rightIDCount > 1:
+					reason = ShortestPathFallbackMultipleIDEqualities
+				case !singletonIDs:
+					reason = ShortestPathFallbackNonSingletonID
+				}
+				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
+					Target:               PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
+					Family:               "SP",
+					PlannedCandidates:    []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0},
+					SelectedExecutor:     ShortestPathExecutorIncumbentWorkspace,
+					ObservationMode:      ShortestPathObservationUnknown,
+					Eligibility:          facts,
+					StructurallyEligible: shortestPathFactsEligible(facts),
+					MinimumDepth:         minDepth,
+					MaximumDepth:         maxDepth,
+					SelectorVersion:      "sp-static-v2",
+					SelectionMode:        "incumbent_default",
+					FallbackExecutor:     ShortestPathExecutorIncumbentWorkspace,
+					FallbackReason:       reason,
+				})
+			}
+		}
+	}
+}
+
+func shortestPathFactsEligible(facts []ShortestPathEligibilityFact) bool {
+	for _, fact := range facts {
+		if !fact.Eligible {
+			return false
+		}
+	}
+	return true
+}
+
+func setShortestPathEligibilityFact(decision *ShortestPathExecutorDecision, name string, eligible bool) {
+	for idx := range decision.Eligibility {
+		if decision.Eligibility[idx].Name == name {
+			decision.Eligibility[idx].Eligible = eligible
+			return
+		}
+	}
+}
+
+// finalizeShortestPathExecutorDecisions applies statement-wide safety facts
+// after every query part has been analyzed. Per-part counting can otherwise
+// misclassify two shortest calls separated by WITH, or a shortest read followed
+// by a mutation, as eligible singleton read-only execution.
+func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
+	if plan == nil || query == nil || query.SingleQuery == nil {
+		return
+	}
+
+	var (
+		shortestCalls   int
+		updatingClauses int
+	)
+	visitPart := func(part cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
+		for _, readingClause := range readingClauses {
+			if readingClause == nil || readingClause.Match == nil {
+				continue
+			}
+			for _, patternPart := range readingClause.Match.Pattern {
+				if patternPart != nil && (patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern) {
+					shortestCalls++
+				}
+			}
+		}
+		_, partUpdatingClauses := queryPartProjection(part)
+		updatingClauses += partUpdatingClauses
+	}
+
+	if multiPart := query.SingleQuery.MultiPartQuery; multiPart != nil {
+		for _, part := range multiPart.Parts {
+			if part != nil {
+				visitPart(part, part.ReadingClauses)
+			}
+		}
+		if finalPart := multiPart.SinglePartQuery; finalPart != nil {
+			visitPart(finalPart, finalPart.ReadingClauses)
+		}
+	} else if singlePart := query.SingleQuery.SinglePartQuery; singlePart != nil {
+		visitPart(singlePart, singlePart.ReadingClauses)
+	}
+
+	for idx := range plan.ShortestPathExecutor {
+		decision := &plan.ShortestPathExecutor[idx]
+		singlePathCall := shortestCalls == 1
+		readOnly := updatingClauses == 0
+		setShortestPathEligibilityFact(decision, "single_path_call", singlePathCall)
+		setShortestPathEligibilityFact(decision, "read_only", readOnly)
+		decision.StructurallyEligible = shortestPathFactsEligible(decision.Eligibility)
+
+		if !singlePathCall && (decision.FallbackReason == ShortestPathFallbackTournamentUnqualified || decision.FallbackReason == ShortestPathFallbackCorrelatedEndpoints) {
+			decision.FallbackReason = ShortestPathFallbackMultiplePathCalls
+		} else if !readOnly && decision.FallbackReason == ShortestPathFallbackTournamentUnqualified {
+			decision.FallbackReason = ShortestPathFallbackMutation
+		}
+
+		if decision.StructurallyEligible {
+			switch decision.ObservationMode {
+			case ShortestPathObservationDistance:
+				decision.SelectedExecutor = ShortestPathExecutorS3Unidirectional
+			case ShortestPathObservationOnePath:
+				decision.SelectedExecutor = ShortestPathExecutorS3EdgeM0
+			default:
+				continue
+			}
+			decision.SelectionMode = "static"
+			decision.SelectorVersion = "sp-static-v2"
+			decision.FallbackReason = ""
+			decision.ExperimentalWinner = true
+		}
+	}
+}
+
+// finalizeExpansionSearchStrategyDecisions applies statement-wide safety
+// facts after all query parts and field requirements are known. A compound
+// region must never be selected from a per-clause view that misses another
+// variable expansion or a later mutation across WITH boundaries.
+func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
+	if plan == nil || query == nil || query.SingleQuery == nil {
+		return
+	}
+	var variableExpansions, updatingClauses int
+	visitPart := func(part cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
+		for _, readingClause := range readingClauses {
+			if readingClause == nil || readingClause.Match == nil {
+				continue
+			}
+			for _, patternPart := range readingClause.Match.Pattern {
+				for _, step := range traversalStepsForPattern(patternPart) {
+					if step.Relationship != nil && step.Relationship.Range != nil {
+						variableExpansions++
+					}
+				}
+			}
+		}
+		_, partUpdatingClauses := queryPartProjection(part)
+		updatingClauses += partUpdatingClauses
+	}
+	if multiPart := query.SingleQuery.MultiPartQuery; multiPart != nil {
+		for _, part := range multiPart.Parts {
+			if part != nil {
+				visitPart(part, part.ReadingClauses)
+			}
+		}
+		if finalPart := multiPart.SinglePartQuery; finalPart != nil {
+			visitPart(finalPart, finalPart.ReadingClauses)
+		}
+	} else if singlePart := query.SingleQuery.SinglePartQuery; singlePart != nil {
+		visitPart(singlePart, singlePart.ReadingClauses)
+	}
+
+	for idx := range plan.ExpansionSearchStrategy {
+		decision := &plan.ExpansionSearchStrategy[idx]
+		singleExpansion := variableExpansions == 1
+		readOnly := updatingClauses == 0
+		setExpansionSearchEligibilityFact(decision, "single_variable_expansion", singleExpansion)
+		setExpansionSearchEligibilityFact(decision, "read_only", readOnly)
+		decision.StructurallyEligible = expansionSearchFactsEligible(decision.EligibilityFacts)
+		if !singleExpansion && (decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified || decision.FallbackReason == ExpansionSearchFallbackMultipleVariableExpansions || decision.FallbackReason == ExpansionSearchFallbackUnboundRoot) {
+			decision.FallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
+		} else if !readOnly && decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified {
+			decision.FallbackReason = ExpansionSearchFallbackMutation
+		}
+	}
+}
+
+func syntaxDependsOn(node cypher.SyntaxNode, symbol string) bool {
+	if symbol == "" {
+		return false
+	}
+	for _, dependency := range sortedDependencies(node) {
+		if dependency == symbol {
+			return true
+		}
+	}
+	return false
+}
+
+func singletonIDEqualityCounts(where *cypher.Where) map[string]int {
+	counts := map[string]int{}
+	if where == nil {
+		return counts
+	}
+	for _, expression := range where.Expressions {
+		for _, term := range cypherConjunctionTerms(expression) {
+			comparison, ok := term.(*cypher.Comparison)
+			if !ok || comparison == nil || len(comparison.Partials) != 1 || comparison.Partials[0].Operator != cypher.OperatorEquals {
+				continue
+			}
+			partial := comparison.Partials[0]
+			if symbol, ok := identityFunctionSymbol(comparison.Left); ok && expressionIsConstant(partial.Right) {
+				counts[symbol]++
+			}
+			if symbol, ok := identityFunctionSymbol(partial.Right); ok && expressionIsConstant(comparison.Left) {
+				counts[symbol]++
+			}
+		}
+	}
+	return counts
+}
+
+func identityFunctionSymbol(expression cypher.Expression) (string, bool) {
+	function, ok := expression.(*cypher.FunctionInvocation)
+	if !ok || function == nil || !strings.EqualFold(function.Name, cypher.IdentityFunction) || len(function.Arguments) != 1 {
+		return "", false
+	}
+	variable, ok := function.Arguments[0].(*cypher.Variable)
+	if !ok || variable == nil || variable.Symbol == "" {
+		return "", false
+	}
+	return variable.Symbol, true
 }
 
 func appendExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
@@ -1466,7 +2114,20 @@ func queryPartProjection(queryPart cypher.SyntaxNode) (*cypher.Projection, int) 
 	}
 }
 
-func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
+func suffixBindingsObserved(patternPart *cypher.PatternPart, steps []sourceTraversalStep, references map[string]struct{}) bool {
+	if patternPart != nil && patternPart.Variable != nil && referencesSourceIdentifier(references, patternPart.Variable.Symbol) {
+		return true
+	}
+	for _, step := range steps {
+		if (step.Relationship != nil && step.Relationship.Variable != nil && referencesSourceIdentifier(references, step.Relationship.Variable.Symbol)) ||
+			(step.RightNode != nil && step.RightNode.Variable != nil && referencesSourceIdentifier(references, step.RightNode.Variable.Symbol)) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	declaredSymbols := map[string]struct{}{}
 
 	for clauseIndex, readingClause := range readingClauses {
@@ -1505,11 +2166,22 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 				}
 
 				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:]); suffixLength > 0 {
+					suffixSteps := steps[stepIndex+1 : stepIndex+1+suffixLength]
+					// Start with the measured ADCS P1 shape: an observed immediate
+					// continuation of three or more fixed hops. Shorter suffixes retain
+					// the established prefilter until their own decoy-density A/B exists.
+					observed := suffixLength >= 3 && suffixBindingsObserved(patternPart, suffixSteps, sourceReferences)
+					reason := "supplemental suffix prefilter retained for unobserved continuation"
+					if observed {
+						reason = "immediate observed continuation produces suffix rows"
+					}
 					plan.ExpansionSuffixPushdown = append(plan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
-						Target:          target,
-						SuffixLength:    suffixLength,
-						SuffixStartStep: stepIndex + 1,
-						SuffixEndStep:   stepIndex + suffixLength,
+						Target:            target,
+						SuffixLength:      suffixLength,
+						SuffixStartStep:   stepIndex + 1,
+						SuffixEndStep:     stepIndex + suffixLength,
+						ApplySupplemental: !observed,
+						Reason:            reason,
 					})
 				}
 			}

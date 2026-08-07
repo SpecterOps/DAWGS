@@ -9,6 +9,10 @@ plugins. It exposes a backend abstraction for graph queries, with current backen
 The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
 support Cypher natively.
 
+The PostgreSQL driver bounds repeated parser work with an immutable 256-entry Cypher AST cache; optimization and SQL
+translation still run per execution so graph, schema, kind, and parameter changes remain visible. Cached query text is
+released by LRU eviction or driver close, and diagnostics expose aggregate counters without query text.
+
 ## Quick Start
 
 Build the repository:
@@ -47,6 +51,16 @@ Run the package benchmark suite with:
 make test_bench
 ```
 
+The direct-write regression benchmark is integration-scoped because it
+measures real driver batch APIs. It reloads or clears its fixture outside the
+timed region and validates post-state after every iteration:
+
+```bash
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+  go test -tags manual_integration ./integration -run '^$' \
+  -bench BenchmarkMutationSafeDirectWrites -benchtime=1x
+```
+
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 
 ```bash
@@ -70,12 +84,60 @@ edge-kind-selective, and multi-path shortest-path scenarios before recording tim
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the DAWGS source version, which
+can be overridden with a command flag when needed.
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
 current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
 comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
-against a previous JSONL baseline.
+against a previous JSONL baseline. Mutating scale cases must declare a `write_scenario`; each warm-up and timed iteration
+runs in a rollback transaction and verifies matched, affected, and post-state cardinality.
+Read timings retain every raw warm sample and are bracketed by untimed exact-row
+multiset checks. PostgreSQL datasets are vacuumed and analyzed after loading and
+before measured reads. Fixture reloads truncate the active relationship and node
+partitions together, and
+PostgreSQL captures fail before timing unless the active partitions' physical
+node and edge counts exactly match the declared fixture; active child-partition
+sizes are retained with each fixture. Node-ID expectations and recorded paths use stable
+fixture identities rather than backend-assigned IDs, while preserving duplicate
+rows and path order.
+The executable gate uses the complete corpus/backend declaration instead of the
+intersection of successful records, treats Neo4j only as an exact-result and
+informational latency oracle, and supports predeclared materiality thresholds.
+`make perf_aa` derives p50/p95 measurement resolution from repeated A/A
+captures. Exact case/dataset/category/tag selectors create diagnostic-only
+artifacts that the complete gate refuses; configured warmups and matched
+arm/block/run metadata support isolated confirmation. `make perf_confirm`
+reports paired absolute and relative p50/p95 changes with optional block/reload
+A/A floors. Capture bundles can retain the source patch, untracked sources,
+module state, binary, manifest, raw records, and checksums. Opt-in pool
+concurrency blocks and PostgreSQL component/full-query
+references are documented in `cmd/graphbench/README.md`. Path-observed
+singleton captures include exact benchmark-only M0/M1 materializer arms with a
+shared search boundary; they do not enable an experimental production executor.
+Generated ADCS captures also provide selectable exact A1a/A1b/A2/A3/A4
+forward, factored-suffix, reverse, and viability arms plus versioned fixtures
+with independent suffix-density and reverse-fan-in controls. The optimizer
+reports a typed expansion-search decision, but keeps production on its exact
+stepwise fallback until the predeclared live qualification gates pass.
+
+The PostgreSQL scale-plan gate runs as part of `make test_all` when
+`CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
+representative with `EXPLAIN ANALYZE`, enforces declared result or mutation
+cardinality, and checks stable mutation-target and anchored edge-index
+invariants. Run it directly with:
+
+```bash
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+  go test -tags manual_integration ./cmd/graphbench \
+  -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
+  -count=1
+```
+
+Runtime and plan captures are intentionally generated under the ignored
+`.coverage/` directory. Keep them as reviewed environment-specific artifacts;
+use the stable `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`, `SCAN-*`, and `LOOKUP-*`
+IDs to compare captures with their semantic fixtures and manifest entries.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports
@@ -115,6 +177,9 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
+- [Integration corpus](integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.
+- [BloodHound regression coverage manifest](regression_coverage_manifest.md): per-query-form layer status and existing primitive links.
+- [BloodHound source-parity workflow](docs/regression_source_parity.md): dormant-form activation rules and repeatable BHE/BHCE source audits.
 - [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
 
 ## Repository Map
