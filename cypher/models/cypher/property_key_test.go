@@ -55,6 +55,8 @@ func TestEscapePropertyKeyName(t *testing.T) {
 		{name: "starts backtick", input: "`starts-tick", expected: "```starts-tick`"},
 		{name: "wrapped backticks", input: "`super-wrapped`", expected: "```super-wrapped```"},
 		{name: "single backtick", input: "`", expected: "````"},
+		{name: "single quote", input: "'", expected: "`'`"},
+		{name: "double quote", input: "\"", expected: "`\"`"},
 		{name: "whitespace-only", input: "   ", expected: "`   `"},
 	}
 
@@ -82,6 +84,8 @@ func TestUnescapePropertyKeyName(t *testing.T) {
 		{name: "starts backtick", input: "```starts-tick`", expected: "`starts-tick"},
 		{name: "wrapped backticks", input: "```super-wrapped```", expected: "`super-wrapped`"},
 		{name: "single backtick", input: "````", expected: "`"},
+		{name: "single quote", input: "`'`", expected: "'"},
+		{name: "double quote", input: "`\"`", expected: "\""},
 		{name: "empty", input: "``", expected: ""},
 	}
 

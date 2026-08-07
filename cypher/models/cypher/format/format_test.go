@@ -56,10 +56,11 @@ func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 		"has`tick": cypher.NewLiteral(3, false),
 		"":         cypher.NewLiteral(4, false),
 		"   ":      cypher.NewLiteral(5, false),
+		"'":        cypher.NewLiteral(6, false),
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "{``: 4, `   `: 5, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
+	require.Equal(t, "{``: 4, `   `: 5, `'`: 6, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
 }
 
 func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
@@ -87,6 +88,11 @@ func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 			name:     "key with backtick",
 			symbol:   "has`tick",
 			expected: "n.`has``tick`",
+		},
+		{
+			name:     "key with single quote",
+			symbol:   "'",
+			expected: "n.`'`",
 		},
 		{
 			name:     "whitespace-only key",
