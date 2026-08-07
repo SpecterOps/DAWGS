@@ -53,8 +53,11 @@ func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, l
 		return s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup)
 	}
 }
-
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
+	if err := cypher.ValidatePropertyKeyName(lookup.Symbol); err != nil {
+		return err
+	}
+
 	if translatedAtom, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
 	} else {
@@ -300,7 +303,7 @@ func lookupRequiresElementType(typeHint pgsql.DataType, operator pgsql.Operator,
 
 func TypeCastExpression(expression pgsql.Expression, dataType pgsql.DataType) (pgsql.Expression, error) {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
-		var lookupTypeHint = dataType
+		lookupTypeHint := dataType
 
 		if lookupRequiresElementType(dataType, propertyLookup.Operator, propertyLookup.ROperand) {
 			// Take the base type of the array type hint: <unit> in <collection>
@@ -750,7 +753,6 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 					}
 				}
 			}
-
 		}
 	}
 
