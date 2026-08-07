@@ -55,10 +55,11 @@ func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 		"a-aaa":    cypher.NewLiteral(2, false),
 		"has`tick": cypher.NewLiteral(3, false),
 		"":         cypher.NewLiteral(4, false),
+		"   ":      cypher.NewLiteral(5, false),
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "{``: 4, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
+	require.Equal(t, "{``: 4, `   `: 5, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
 }
 
 func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
@@ -88,9 +89,9 @@ func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 			expected: "n.`has``tick`",
 		},
 		{
-			name:     "empty key",
-			symbol:   "",
-			expected: "n.``",
+			name:     "whitespace-only key",
+			symbol:   "   ",
+			expected: "n.`   `",
 		},
 	}
 
@@ -108,6 +109,18 @@ func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 			require.Equal(t, testCase.expected, buffer.String())
 		})
 	}
+}
+
+func TestCypherEmitter_RejectsEmptyPropertyLookupKey(t *testing.T) {
+	buffer := &bytes.Buffer{}
+	emitter := format.NewCypherEmitter(false)
+
+	err := emitter.WriteExpression(buffer, &cypher.PropertyLookup{
+		Atom:   cypher.NewVariableWithSymbol("n"),
+		Symbol: "",
+	})
+
+	require.ErrorIs(t, err, cypher.ErrEmptyPropertyKeyName)
 }
 
 func TestCypherEmitter_MapLiteralPropagatesExpressionError(t *testing.T) {

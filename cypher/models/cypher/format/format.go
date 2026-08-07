@@ -633,6 +633,10 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 			return err
 		}
 
+		if err := cypher.ValidatePropertyKeyName(typedExpression.Symbol); err != nil {
+			return err
+		}
+
 		if _, err := io.WriteString(output, cypher.EscapePropertyKeyName(typedExpression.Symbol)); err != nil {
 			return err
 		}

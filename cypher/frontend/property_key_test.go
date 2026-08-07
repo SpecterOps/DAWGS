@@ -10,7 +10,7 @@ import (
 )
 
 func TestParsePropertyLookupStoresRawPropertyKeyNames(t *testing.T) {
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.match, n.`a-aaa`, n.`has``tick`, n.``")
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.match, n.`a-aaa`, n.`has``tick`, n.`   `")
 	require.NoError(t, err)
 
 	var symbols []string
@@ -21,7 +21,7 @@ func TestParsePropertyLookupStoresRawPropertyKeyNames(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"match", "a-aaa", "has`tick", ""}, symbols)
+	require.Equal(t, []string{"match", "a-aaa", "has`tick", "   "}, symbols)
 }
 
 func TestParsePropertyLookupStoresUnicodePropertyKeyNames(t *testing.T) {
@@ -40,7 +40,7 @@ func TestParsePropertyLookupStoresUnicodePropertyKeyNames(t *testing.T) {
 }
 
 func TestParseMapLiteralStoresRawPropertyKeyNames(t *testing.T) {
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN {match: 1, `a-aaa`: 2, `has``tick`: 3, ``: 4}")
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN {match: 1, `a-aaa`: 2, `has``tick`: 3, ``: 4, `   `: 5}")
 	require.NoError(t, err)
 
 	var keys []string
@@ -51,5 +51,23 @@ func TestParseMapLiteralStoresRawPropertyKeyNames(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	require.ElementsMatch(t, []string{"match", "a-aaa", "has`tick", ""}, keys)
+	require.ElementsMatch(t, []string{"match", "a-aaa", "has`tick", "", "   "}, keys)
+}
+
+func TestParseRejectsEmptyPropertyKeyNames(t *testing.T) {
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{name: "property lookup", query: "RETURN n.``"},
+		{name: "set property", query: "MATCH (n) SET n.`` = 'value'"},
+		{name: "remove property", query: "MATCH (n) REMOVE n.``"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+			require.ErrorContains(t, err, cypher.ErrEmptyPropertyKeyName.Error())
+		})
+	}
 }

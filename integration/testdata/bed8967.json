@@ -8,7 +8,7 @@
           "name": "alpha",
           "a-aaa": "alpha-hyphen",
           "has`tick": "alpha-backtick",
-          "": "alpha-empty",
+          "   ": "alpha-whitespace",
           "a\u20dd": "alpha-enclosing"
         }
       },
@@ -19,7 +19,7 @@
           "name": "beta",
           "a-aaa": "beta-hyphen",
           "has`tick": "beta-backtick",
-          "": "beta-empty",
+          "   ": "beta-whitespace",
           "a\u20dd": "beta-enclosing"
         }
       }

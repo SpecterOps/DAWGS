@@ -83,7 +83,7 @@ func TestBuilderRendersRawPropertyKeys(t *testing.T) {
 	builder.Apply(query.Returning(
 		query.NodeProperty("a-aaa"),
 		query.Property(query.Node(), "has`tick"),
-		query.Property(query.Node(), ""),
+		query.Property(query.Node(), "   "),
 	))
 
 	regularQuery, err := builder.Build(false)
@@ -96,7 +96,7 @@ func TestBuilderRendersRawPropertyKeys(t *testing.T) {
 		t.Fatalf("render Cypher: %v", err)
 	}
 
-	expected := "match (n) return n.`a-aaa`, n.`has``tick`, n.``"
+	expected := "match (n) return n.`a-aaa`, n.`has``tick`, n.`   `"
 	if cypher.String() != expected {
 		t.Fatalf("expected %q, got %q", expected, cypher.String())
 	}

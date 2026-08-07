@@ -54,6 +54,10 @@ func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, l
 	}
 }
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
+	if err := cypher.ValidatePropertyKeyName(lookup.Symbol); err != nil {
+		return err
+	}
+
 	if translatedAtom, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
 	} else {

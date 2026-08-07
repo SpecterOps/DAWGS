@@ -424,5 +424,5 @@ func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_PropertyKeyName(ctx *pa
 }
 
 func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
-	s.PropertyKeyName = cypher.UnescapePropertyKeyName(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name)
+	s.PropertyKeyName = extractPropertyKeyName(s.ctx, ctx)
 }

@@ -3,13 +3,18 @@
   "cases": [
     {
       "name": "BED-8967 read escaped node property keys",
-      "cypher": "match (n:BacktickNode) return n.`a-aaa`, n.`has``tick`, n.``, n.`a\u20dd` order by n.name",
+      "cypher": "match (n:BacktickNode) return n.`a-aaa`, n.`has``tick`, n.`   `, n.`a\u20dd` order by n.name",
       "assert": {
         "ordered_row_values": [
-          ["alpha-hyphen", "alpha-backtick", "alpha-empty", "alpha-enclosing"],
-          ["beta-hyphen", "beta-backtick", "beta-empty", "beta-enclosing"]
+          ["alpha-hyphen", "alpha-backtick", "alpha-whitespace", "alpha-enclosing"],
+          ["beta-hyphen", "beta-backtick", "beta-whitespace", "beta-enclosing"]
         ]
       }
+    },
+    {
+      "name": "BED-8967 reject empty escaped property key",
+      "cypher": "match (n:BacktickNode) return n.``",
+      "assert": "query_error"
     },
     {
       "name": "BED-8967 filter node using escaped pattern property key",

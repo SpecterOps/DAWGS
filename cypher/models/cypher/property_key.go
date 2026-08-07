@@ -1,9 +1,12 @@
 package cypher
 
 import (
+	"errors"
 	"strings"
 	"unicode"
 )
+
+var ErrEmptyPropertyKeyName = errors.New("property key name must not be empty")
 
 func isCypherIDStart(char rune) bool {
 	return unicode.IsLetter(char) || unicode.In(char, unicode.Nl, unicode.Other_ID_Start)
@@ -25,8 +28,8 @@ func isCypherSymbolPart(char rune) bool {
 //
 // This is specific to Cypher property-key position, such as n.name and {name: value}. Property keys use
 // oC_PropertyKeyName -> oC_SchemaName, where reserved words are valid bare names, unlike variable or parameter
-// symbols. Empty keys and keys containing characters outside the unescaped symbolic-name grammar return false; they
-// are still representable by EscapePropertyKeyName using backticks.
+// symbols. Empty keys and keys containing characters outside the unescaped symbolic-name grammar return false; non-empty
+// keys outside the bare grammar are still representable by EscapePropertyKeyName using backticks.
 func CanEmitBarePropertyKeyName(name string) bool {
 	if name == "" {
 		return false
@@ -43,6 +46,14 @@ func CanEmitBarePropertyKeyName(name string) bool {
 	}
 
 	return true
+}
+
+func ValidatePropertyKeyName(name string) error {
+	if name == "" {
+		return ErrEmptyPropertyKeyName
+	}
+
+	return nil
 }
 
 // EscapePropertyKeyName formats a raw property key as a Cypher property-key token.

@@ -55,7 +55,7 @@ func TestEscapePropertyKeyName(t *testing.T) {
 		{name: "starts backtick", input: "`starts-tick", expected: "```starts-tick`"},
 		{name: "wrapped backticks", input: "`super-wrapped`", expected: "```super-wrapped```"},
 		{name: "single backtick", input: "`", expected: "````"},
-		{name: "empty", input: "", expected: "``"},
+		{name: "whitespace-only", input: "   ", expected: "`   `"},
 	}
 
 	for _, testCase := range testCases {
@@ -63,6 +63,11 @@ func TestEscapePropertyKeyName(t *testing.T) {
 			require.Equal(t, testCase.expected, cypher.EscapePropertyKeyName(testCase.input))
 		})
 	}
+}
+
+func TestValidatePropertyKeyName(t *testing.T) {
+	require.NoError(t, cypher.ValidatePropertyKeyName("   "))
+	require.ErrorIs(t, cypher.ValidatePropertyKeyName(""), cypher.ErrEmptyPropertyKeyName)
 }
 
 func TestUnescapePropertyKeyName(t *testing.T) {

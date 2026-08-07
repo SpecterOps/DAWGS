@@ -707,5 +707,5 @@ func (s *PropertyExpressionVisitor) EnterOC_PropertyKeyName(ctx *parser.OC_Prope
 }
 
 func (s *PropertyExpressionVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
-	s.PropertyLookup.SetSymbol(cypher.UnescapePropertyKeyName(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name))
+	s.PropertyLookup.SetSymbol(extractPropertyKeyName(s.ctx, ctx))
 }
