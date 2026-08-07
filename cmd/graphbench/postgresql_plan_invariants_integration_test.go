@@ -24,7 +24,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,7 +56,7 @@ func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, filtered, 1, nil, true)
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, filtered, 1, 1, nil, true, nil, "", "")
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, runner.Close(ctx))
@@ -111,6 +115,526 @@ func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 		require.Contains(t, strings.Join(edgeDelete.PostgresPlan, "\n"), "Delete on edge")
 		require.Contains(t, strings.Join(nodeDelete.PostgresPlan, "\n"), "Delete on node")
 	})
+}
+
+func TestPostgreSQLZeroLengthShortestMaterializersAreExact(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	var (
+		zeroDepth = 0
+		oneDepth  = 1
+		oneRow    = int64(1)
+	)
+	testCase := ScaleCase{
+		Name:     "GSP-D00-F001_path",
+		Dataset:  "generated_shortest_paths_d1_f1",
+		Category: "generated_shortest_path",
+		Cypher:   "MATCH p = shortestPath((s)-[:Traverse*0..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+		NodeParams: map[string]string{
+			"start_id": "sp-start",
+			"end_id":   "sp-start",
+		},
+		Expected: ExpectedResult{
+			RowCount:   &oneRow,
+			ResultKind: "path_set",
+			PathRows: []ExpectedPath{{
+				Nodes:             []string{"sp-start"},
+				RelationshipKinds: []string{},
+			}},
+		},
+		Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true},
+		Shape: WorkloadShape{
+			RootPredicate:               "bound_id",
+			TerminalPredicate:           "bound_id",
+			EdgeKinds:                   []string{"Traverse"},
+			MinDepth:                    &zeroDepth,
+			MaxDepth:                    &oneDepth,
+			PathMaterializationRequired: true,
+		},
+		CandidateModes: []ExecutionMode{ModePostgresSQL},
+	}
+	corpus := ScaleCorpus{Cases: []ScaleCase{testCase}}
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, corpus, 1, 1, nil, true, nil, "", "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, runner.Close(ctx))
+	})
+
+	records, err := runner.Run(ctx, 0, 1, corpus)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	require.Equal(t, oneRow, record.RowCount)
+
+	for _, name := range []string{
+		"m0_directed_hydration_only",
+		"m1_ordered_ids_hydration_only",
+		"s3_unidirectional_cte_m0_directed",
+		"s3_unidirectional_cte_m1_ordered_ids",
+	} {
+		reference := requirePostgresReference(t, record.PostgresReferences, name)
+		require.Equal(t, oneRow, reference.RowCount)
+		require.Equal(t, record.ObservedRows, reference.ObservedRows)
+		if strings.Contains(name, "hydration_only") {
+			require.NotContains(t, reference.SQL, "with recursive")
+		}
+	}
+}
+
+func TestPostgreSQLForcedShortestDistanceEndpointSemantics(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	var (
+		zeroDepth  = 0
+		oneDepth   = 1
+		oneRow     = int64(1)
+		zeroRows   = int64(0)
+		zeroScalar = int64(0)
+		maxDepth   = 1
+	)
+	baseShape := WorkloadShape{
+		RootPredicate: "bound_id", TerminalPredicate: "bound_id", EdgeKinds: []string{"Traverse"},
+		MaxDepth: &maxDepth, PathMaterializationRequired: false,
+	}
+	zeroShape := baseShape
+	zeroShape.MinDepth = &zeroDepth
+	oneShape := baseShape
+	oneShape.MinDepth = &oneDepth
+
+	corpus := ScaleCorpus{Cases: []ScaleCase{
+		{
+			Name: "forced-shortest-zero-depth", Dataset: "generated_shortest_paths_d1_f1", Category: "generated_shortest_path",
+			Cypher:     "MATCH p = shortestPath((s)-[:Traverse*0..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+			NodeParams: map[string]string{"start_id": "sp-start", "end_id": "sp-start"},
+			Expected:   ExpectedResult{RowCount: &oneRow, ScalarInt: &zeroScalar, ResultKind: "scalar"},
+			Shape:      zeroShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+		},
+		{
+			Name: "forced-shortest-missing-root", Dataset: "generated_shortest_paths_d1_f1", Category: "generated_shortest_path",
+			Cypher: "MATCH p = shortestPath((s)-[:Traverse*1..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+			Params: testutil.Params{"start_id": int64(9223372036854775807)}, NodeParams: map[string]string{"end_id": "sp-end"},
+			Expected: ExpectedResult{RowCount: &zeroRows}, Shape: oneShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+		},
+		{
+			Name: "forced-shortest-min-one-same-endpoint", Dataset: "generated_shortest_paths_d1_f1", Category: "generated_shortest_path",
+			Cypher:     "MATCH p = shortestPath((s)-[:Traverse*1..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+			NodeParams: map[string]string{"start_id": "sp-start", "end_id": "sp-start"},
+			Expected:   ExpectedResult{RowCount: &zeroRows}, Shape: oneShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+		},
+	}}
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, corpus, 1, 1, nil, false, nil, "SP-S3-U-D", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+
+	records, err := runner.Run(ctx, 0, 1, corpus)
+	require.NoError(t, err)
+	require.Len(t, records, 3)
+	require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+	require.Equal(t, []string{"[0]"}, records[0].ObservedRows)
+	require.Equal(t, StatusOK, records[1].Status, records[1].Error)
+	require.Equal(t, zeroRows, records[1].RowCount)
+	require.Equal(t, StatusError, records[2].Status)
+	require.Contains(t, records[2].Error, "shortest path")
+}
+
+func TestPostgreSQLForcedShortestDistanceCancellationReusesSession(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GSP-D64-F1000_distance"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "SP-S3-U-D", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+
+	translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+	require.NoError(t, err)
+	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+	connectionHandle, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer connectionHandle.Release()
+	backendPID := connectionHandle.Conn().PgConn().PID()
+
+	tx, err := connectionHandle.BeginTx(ctx, postgresConcurrencyTxOptions())
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, "set local statement_timeout = '1ms'")
+	require.NoError(t, err)
+	started := time.Now()
+	rows, queryErr := tx.Query(ctx, sqlQuery, queryArgs...)
+	if queryErr == nil {
+		for rows.Next() {
+			_, queryErr = rows.Values()
+			if queryErr != nil {
+				break
+			}
+		}
+		rows.Close()
+		if queryErr == nil {
+			queryErr = rows.Err()
+		}
+	}
+	cancellationLatency := time.Since(started)
+	var postgresError *pgconn.PgError
+	require.ErrorAs(t, queryErr, &postgresError)
+	require.Equal(t, "57014", postgresError.Code)
+	require.Less(t, cancellationLatency, 250*time.Millisecond)
+	require.NoError(t, tx.Rollback(ctx))
+
+	var reusedPID uint32
+	require.NoError(t, connectionHandle.QueryRow(ctx, "select pg_backend_pid()").Scan(&reusedPID))
+	require.Equal(t, backendPID, reusedPID)
+
+	rows, err = connectionHandle.Query(ctx, sqlQuery, queryArgs...)
+	require.NoError(t, err)
+	rowCount := 0
+	for rows.Next() {
+		_, err = rows.Values()
+		require.NoError(t, err)
+		rowCount++
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	require.Equal(t, 1, rowCount)
+	t.Logf("cancelled exact SP-S3-U-D SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
+}
+
+func TestPostgreSQLForcedShortestPathEdgeM0PlanResourcesAndConcurrency(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GSP-D16-F016_path"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+	zeroRows := int64(0)
+	missingEndpoint := selected.Cases[0]
+	missingEndpoint.Name = "forced-m0-missing-start-endpoint"
+	missingEndpoint.Params = testutil.Params{"start_id": int64(9223372036854775807)}
+	missingEndpoint.NodeParams = map[string]string{"end_id": "sp-end"}
+	missingEndpoint.Expected = ExpectedResult{RowCount: &zeroRows, ResultKind: "path_set"}
+	selected.Cases = append(selected.Cases, missingEndpoint)
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, []int{1, 2, 4}, true, nil, "SP-S3-U-E+MAT-M0", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+
+	records, err := runner.Run(ctx, 0, 25, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	require.Contains(t, record.SQL, "s1(next_id, depth, path)")
+	require.Equal(t, 1, strings.Count(record.SQL, "generate_subscripts(s1.path, 1)"), record.SQL)
+	require.NotContains(t, record.SQL, "ordered_edge_ids_to_path")
+	require.NotContains(t, record.SQL, "sp_harness")
+
+	require.NotNil(t, record.PostgresMetrics)
+	metrics := record.PostgresMetrics
+	require.Greater(t, metrics.RecursiveRows, int64(0))
+	require.Greater(t, metrics.HydrationLoops, int64(0))
+	require.Zero(t, metrics.Buffers.LocalHit)
+	require.Zero(t, metrics.Buffers.LocalRead)
+	require.Zero(t, metrics.Buffers.LocalDirtied)
+	require.Zero(t, metrics.Buffers.LocalWritten)
+	require.Zero(t, metrics.Buffers.TempRead)
+	require.Zero(t, metrics.Buffers.TempWritten)
+	require.Zero(t, metrics.TempFiles)
+	require.Zero(t, metrics.TempBytes)
+	require.Zero(t, metrics.WALRecords)
+	require.Zero(t, metrics.WALBytes)
+
+	require.Len(t, record.Concurrency, 3)
+	for index, level := range []int{1, 2, 4} {
+		block := record.Concurrency[index]
+		require.Equal(t, level, block.Concurrency)
+		require.Equal(t, 2, block.PoolSize)
+		require.Equal(t, level*25, block.Operations)
+		require.Len(t, block.Samples, level*25)
+	}
+
+	missingRecord := records[1]
+	require.Equal(t, StatusOK, missingRecord.Status, missingRecord.Error)
+	require.Zero(t, missingRecord.RowCount)
+	require.NotNil(t, missingRecord.PostgresMetrics)
+	require.Zero(t, missingRecord.PostgresMetrics.RecursiveRows)
+	var missingEdgeLoops int64
+	for _, node := range missingRecord.PostgresMetrics.PlanNodes {
+		if node.RelationName == "edge" || strings.HasPrefix(node.RelationName, "edge_") {
+			missingEdgeLoops += node.ActualLoops
+		}
+	}
+	require.Zero(t, missingEdgeLoops, "missing endpoint must execute zero edge-search loops")
+}
+
+func TestPostgreSQLForcedShortestPathEdgeM0CancellationReusesSession(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GSP-D64-F1000_path"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "SP-S3-U-E+MAT-M0", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+
+	translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+	require.NoError(t, err)
+	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+	connectionHandle, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer connectionHandle.Release()
+	backendPID := connectionHandle.Conn().PgConn().PID()
+
+	tx, err := connectionHandle.BeginTx(ctx, postgresConcurrencyTxOptions())
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, "set local statement_timeout = '1ms'")
+	require.NoError(t, err)
+	started := time.Now()
+	rows, queryErr := tx.Query(ctx, sqlQuery, queryArgs...)
+	if queryErr == nil {
+		for rows.Next() {
+			_, queryErr = rows.Values()
+			if queryErr != nil {
+				break
+			}
+		}
+		rows.Close()
+		if queryErr == nil {
+			queryErr = rows.Err()
+		}
+	}
+	cancellationLatency := time.Since(started)
+	var postgresError *pgconn.PgError
+	require.ErrorAs(t, queryErr, &postgresError)
+	require.Equal(t, "57014", postgresError.Code)
+	require.Less(t, cancellationLatency, 250*time.Millisecond)
+	require.NoError(t, tx.Rollback(ctx))
+
+	var reusedPID uint32
+	require.NoError(t, connectionHandle.QueryRow(ctx, "select pg_backend_pid()").Scan(&reusedPID))
+	require.Equal(t, backendPID, reusedPID)
+
+	rows, err = connectionHandle.Query(ctx, sqlQuery, queryArgs...)
+	require.NoError(t, err)
+	rowCount := 0
+	for rows.Next() {
+		_, err = rows.Values()
+		require.NoError(t, err)
+		rowCount++
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	require.Equal(t, 1, rowCount)
+	t.Logf("cancelled exact SP-S3-U-E+MAT-M0 SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
+}
+
+func TestPostgreSQLForcedADCSA3PlanResourcesAndConcurrency(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GADCS2-D16-F1000-R1-X1-M1-sparse_path"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, []int{1, 2, 4}, false, nil, "", "ADCS-A3")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+
+	records, err := runner.Run(ctx, 0, 25, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	require.Contains(t, record.SQL, "_a3_suffix as materialized")
+	require.Contains(t, record.SQL, "_a3_reverse(boundary_id, next_id, depth, path)")
+	require.Contains(t, record.SQL, "array_prepend")
+	require.Contains(t, record.SQL, "!= all (")
+	require.NotContains(t, record.SQL, "satisfied, is_cycle")
+
+	require.NotNil(t, record.PostgresMetrics)
+	metrics := record.PostgresMetrics
+	require.Greater(t, metrics.RecursiveRows, int64(0))
+	require.Zero(t, metrics.Buffers.LocalHit)
+	require.Zero(t, metrics.Buffers.LocalRead)
+	require.Zero(t, metrics.Buffers.LocalDirtied)
+	require.Zero(t, metrics.Buffers.LocalWritten)
+	require.Zero(t, metrics.Buffers.TempRead)
+	require.Zero(t, metrics.Buffers.TempWritten)
+	require.Zero(t, metrics.TempFiles)
+	require.Zero(t, metrics.TempBytes)
+	require.Zero(t, metrics.WALRecords)
+	require.Zero(t, metrics.WALBytes)
+
+	require.Len(t, record.Concurrency, 3)
+	for index, level := range []int{1, 2, 4} {
+		block := record.Concurrency[index]
+		require.Equal(t, level, block.Concurrency)
+		require.Equal(t, 2, block.PoolSize)
+		require.Equal(t, level*25, block.Operations)
+		require.Len(t, block.Samples, level*25)
+	}
+}
+
+func TestPostgreSQLForcedADCSA3CancellationReusesSession(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GADCS2-D08-F016-R1-I1000-high_reverse_fanin"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "ADCS-A3")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+
+	translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+	require.NoError(t, err)
+	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+	connectionHandle, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer connectionHandle.Release()
+	backendPID := connectionHandle.Conn().PgConn().PID()
+	tx, err := connectionHandle.BeginTx(ctx, postgresConcurrencyTxOptions())
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, "set local statement_timeout = '1ms'")
+	require.NoError(t, err)
+	started := time.Now()
+	rows, queryErr := tx.Query(ctx, sqlQuery, queryArgs...)
+	if queryErr == nil {
+		for rows.Next() {
+			_, queryErr = rows.Values()
+			if queryErr != nil {
+				break
+			}
+		}
+		rows.Close()
+		if queryErr == nil {
+			queryErr = rows.Err()
+		}
+	}
+	cancellationLatency := time.Since(started)
+	var postgresError *pgconn.PgError
+	require.ErrorAs(t, queryErr, &postgresError)
+	require.Equal(t, "57014", postgresError.Code)
+	require.Less(t, cancellationLatency, 250*time.Millisecond)
+	require.NoError(t, tx.Rollback(ctx))
+
+	var reusedPID uint32
+	require.NoError(t, connectionHandle.QueryRow(ctx, "select pg_backend_pid()").Scan(&reusedPID))
+	require.Equal(t, backendPID, reusedPID)
+	rows, err = connectionHandle.Query(ctx, sqlQuery, queryArgs...)
+	require.NoError(t, err)
+	rowCount := 0
+	for rows.Next() {
+		_, err = rows.Values()
+		require.NoError(t, err)
+		rowCount++
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	require.Equal(t, records[0].RowCount, int64(rowCount))
+	t.Logf("cancelled exact ADCS-A3 SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
+}
+
+func requirePostgresReference(t *testing.T, references []PostgresReferenceResult, name string) PostgresReferenceResult {
+	t.Helper()
+	for _, reference := range references {
+		if reference.Name == name {
+			return reference
+		}
+	}
+	t.Fatalf("missing PostgreSQL reference %s", name)
+	return PostgresReferenceResult{}
 }
 
 func requireSingleScaleRecord(t *testing.T, byID map[string][]CaseResult, id string) CaseResult {

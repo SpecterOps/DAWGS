@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/testutil"
 )
 
@@ -94,13 +95,17 @@ type PostgresReferenceResult struct {
 	ObservationShape   string               `json:"observation_shape"`
 	SemanticValidation string               `json:"semantic_validation"`
 	Boundary           string               `json:"boundary"`
+	TimingBoundary     string               `json:"timing_boundary"`
 	FullComparator     bool                 `json:"full_comparator"`
+	MeasurementOrder   int                  `json:"measurement_order,omitempty"`
+	AAAliasOf          string               `json:"aa_alias_of,omitempty"`
 	SQL                string               `json:"sql"`
 	SQLFingerprint     string               `json:"sql_fingerprint"`
 	RowCount           int64                `json:"row_count"`
 	ObservedRows       []string             `json:"observed_rows,omitempty"`
 	Stats              DurationStats        `json:"stats"`
 	PostgresPlan       []string             `json:"postgres_plan,omitempty"`
+	PostgresPlanJSON   json.RawMessage      `json:"postgres_plan_json,omitempty"`
 	PostgresMetrics    *PostgresPlanMetrics `json:"postgres_metrics,omitempty"`
 }
 
@@ -139,13 +144,44 @@ type PostgresBoundaryWaterfall struct {
 	Boundary         string           `json:"boundary"`
 	SQLFingerprint   string           `json:"sql_fingerprint"`
 	WarmupIterations int              `json:"warmup_iterations"`
+	MeasurementOrder int              `json:"measurement_order,omitempty"`
 	Samples          []BoundarySample `json:"samples"`
 }
 
 type PostgresPlanMetrics struct {
-	PlanningMS  *float64 `json:"planning_ms,omitempty"`
-	ExecutionMS *float64 `json:"execution_ms,omitempty"`
-	Buffers     Buffers  `json:"buffers,omitempty"`
+	PlanningMS          *float64                 `json:"planning_ms,omitempty"`
+	ExecutionMS         *float64                 `json:"execution_ms,omitempty"`
+	Buffers             Buffers                  `json:"buffers,omitempty"`
+	TempFiles           int64                    `json:"temp_files,omitempty"`
+	TempBytes           int64                    `json:"temp_bytes,omitempty"`
+	WALRecords          int64                    `json:"wal_records,omitempty"`
+	WALBytes            int64                    `json:"wal_bytes,omitempty"`
+	RootRows            int64                    `json:"root_rows,omitempty"`
+	RecursiveRows       int64                    `json:"recursive_rows,omitempty"`
+	RecursiveLoops      int64                    `json:"recursive_loops,omitempty"`
+	ForwardEdgeProbes   int64                    `json:"forward_edge_probes,omitempty"`
+	ReverseEdgeProbes   int64                    `json:"reverse_edge_probes,omitempty"`
+	RootLookupLoops     int64                    `json:"root_lookup_loops,omitempty"`
+	BoundaryLookupLoops int64                    `json:"boundary_lookup_loops,omitempty"`
+	HydrationLoops      int64                    `json:"hydration_loops,omitempty"`
+	PlanNodes           []PostgresPlanNodeMetric `json:"plan_nodes,omitempty"`
+	Provenance          map[string]string        `json:"provenance,omitempty"`
+}
+
+type PostgresPlanNodeMetric struct {
+	NodeType           string  `json:"node_type"`
+	ParentRelationship string  `json:"parent_relationship,omitempty"`
+	CTEName            string  `json:"cte_name,omitempty"`
+	RelationName       string  `json:"relation_name,omitempty"`
+	Alias              string  `json:"alias,omitempty"`
+	IndexName          string  `json:"index_name,omitempty"`
+	PlanRows           int64   `json:"plan_rows,omitempty"`
+	PlanWidth          int64   `json:"plan_width,omitempty"`
+	ActualRows         int64   `json:"actual_rows,omitempty"`
+	ActualLoops        int64   `json:"actual_loops,omitempty"`
+	ActualTotalMS      float64 `json:"actual_total_ms,omitempty"`
+	Buffers            Buffers `json:"buffers,omitempty"`
+	Provenance         string  `json:"provenance"`
 }
 
 type Buffers struct {
@@ -196,6 +232,7 @@ type CaseResult struct {
 	Neo4jPlan           *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
 	Neo4jOperators      []string                       `json:"neo4j_operators,omitempty"`
 	Optimization        *translate.OptimizationSummary `json:"optimization,omitempty"`
+	ParseCache          *pg.ParseCacheStats            `json:"parse_cache,omitempty"`
 	Baseline            *BaselineComparison            `json:"baseline,omitempty"`
 	FallbackReason      string                         `json:"fallback_reason,omitempty"`
 	Error               string                         `json:"error,omitempty"`
@@ -243,18 +280,20 @@ func validateBackendObservations(records []CaseResult) error {
 
 func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any) CaseResult {
 	return CaseResult{
-		Source:            testCase.Source,
-		Dataset:           testCase.Dataset,
-		Name:              testCase.Name,
-		Category:          testCase.Category,
-		ExecutionMode:     mode,
-		Status:            StatusOK,
-		Cypher:            testCase.Cypher,
-		Params:            params,
-		NodeParams:        testCase.NodeParams,
-		NodeListParams:    testCase.NodeListParams,
-		ExpectedRowCount:  testCase.Expected.RowCount,
-		StableObservation: testCase.Expected.ResultKind == "id_rows" || testCase.Expected.ResultKind == "path_set" || testCase.Expected.ResultKind == "scalar",
+		Source:           testCase.Source,
+		Dataset:          testCase.Dataset,
+		Name:             testCase.Name,
+		Category:         testCase.Category,
+		ExecutionMode:    mode,
+		Status:           StatusOK,
+		Cypher:           testCase.Cypher,
+		Params:           params,
+		NodeParams:       testCase.NodeParams,
+		NodeListParams:   testCase.NodeListParams,
+		ExpectedRowCount: testCase.Expected.RowCount,
+		StableObservation: testCase.Expected.ResultKind == "id_rows" ||
+			testCase.Expected.ResultKind == "scalar" ||
+			(testCase.Expected.ResultKind == "path_set" && len(testCase.Expected.PathRows) > 0),
 	}
 }
 
@@ -346,6 +385,77 @@ func writeJSONLFile(path string, records []CaseResult) (err error) {
 	return writeJSONL(output, records)
 }
 
+func appendJSONLFile(path string, records []CaseResult) (err error) {
+	if path == "" {
+		return errors.New("append JSONL path must not be empty")
+	}
+	if err := ensureOutputDir(path); err != nil {
+		return err
+	}
+
+	if existing, readErr := readJSONLFile(path); readErr == nil {
+		if err := validateJSONLAppend(existing, records); err != nil {
+			return err
+		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return readErr
+	}
+
+	output, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := output.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	return writeJSONL(output, records)
+}
+
+func validateJSONLAppend(existing, appended []CaseResult) error {
+	if len(existing) == 0 || len(appended) == 0 {
+		return nil
+	}
+
+	left, right := existing[0].Environment, appended[0].Environment
+	if left == nil || right == nil {
+		return errors.New("append JSONL requires run environment metadata")
+	}
+	if left.RunUUID != right.RunUUID || left.Arm != right.Arm || left.BinarySHA256 != right.BinarySHA256 || left.DirtyDiffSHA256 != right.DirtyDiffSHA256 {
+		return fmt.Errorf("append JSONL run identity mismatch: existing run=%q arm=%q binary=%q diff=%q, appended run=%q arm=%q binary=%q diff=%q",
+			left.RunUUID, left.Arm, left.BinarySHA256, left.DirtyDiffSHA256,
+			right.RunUUID, right.Arm, right.BinarySHA256, right.DirtyDiffSHA256)
+	}
+
+	type recordKey struct {
+		dataset string
+		name    string
+		mode    ExecutionMode
+		round   int
+	}
+	seen := make(map[recordKey]struct{}, len(existing))
+	for _, record := range existing {
+		round := 0
+		if record.Environment != nil {
+			round = record.Environment.Round
+		}
+		seen[recordKey{dataset: record.Dataset, name: record.Name, mode: record.ExecutionMode, round: round}] = struct{}{}
+	}
+	for _, record := range appended {
+		round := 0
+		if record.Environment != nil {
+			round = record.Environment.Round
+		}
+		key := recordKey{dataset: record.Dataset, name: record.Name, mode: record.ExecutionMode, round: round}
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("append JSONL duplicate record for %s/%s/%s round %d", key.dataset, key.name, key.mode, key.round)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
 func writeJSONL(w io.Writer, records []CaseResult) error {
 	encoder := json.NewEncoder(w)
 	for _, record := range records {
@@ -397,12 +507,12 @@ func normalizeHistoricalReferences(record *CaseResult) {
 		case "complete_reference_s1_array_cte":
 			reference.LegacyName = reference.Name
 			reference.Name = "s3_unidirectional_trail_cte"
-			reference.Architecture = "S3-U"
+			reference.Architecture = "SP-S3-U-NE"
 			reference.ImplementationID = "inline_recursive_cte_unidirectional_v1"
 		case "candidate_s2_bidirectional_cte":
 			reference.LegacyName = reference.Name
 			reference.Name = "s3_bidirectional_trail_cte"
-			reference.Architecture = "S3-B"
+			reference.Architecture = "SP-S3-B"
 			reference.ImplementationID = "inline_recursive_cte_bidirectional_trails_v1"
 		}
 		if reference.StateShape == "" {

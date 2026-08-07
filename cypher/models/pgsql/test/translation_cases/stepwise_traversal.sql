@@ -156,7 +156,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.
 -- case: match (s)-[r:RegressionKind60]->(e) where id(s) in $start_ids return id(e), r
 -- cypher_params: {"start_ids":[101]}
 -- pgsql_params:{"pi0":[101]}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n0.id as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = any (@pi0::float8[])) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [92]::int2[])) select (s0.n1).id as "id(e)", s0.e0 as r from s0;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n0.id as n0, n1.id as n1 from edge e0 join node n0 on (n0.id = any (@pi0::float8[])) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [92]::int2[])) select s0.n1 as "id(e)", s0.e0 as r from s0;
 
 -- case: match (s)-[r]->(e) where id(e) = $a and not (id(s) = $b) and (r:EdgeKind1 or r:EdgeKind2) and not (s.objectid ends with $c or e.objectid ends with $d) return distinct id(s), id(r), id(e)
 -- cypher_params: {"a":1,"b":2,"c":"123","d":"456"}
@@ -218,7 +218,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (n1.id <> n0.id)) select s0.n1 as n2 from s0;
 
 -- case: match ()-[r]->()-[e]->(n) where r <> e return n
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id), s1 as (select s0.e0 as e0, (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1, s0.n1 as n1, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s0 join edge e1 on (s0.n1).id = e1.start_id join node n2 on n2.id = e1.end_id where ((s0.e0).id <> e1.id) and e1.id != (s0.e0).id) select s1.n2 as n from s1;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n1.id as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id), s1 as (select s0.e0 as e0, (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1, s0.n1 as n1, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s0 join edge e1 on s0.n1 = e1.start_id join node n2 on n2.id = e1.end_id where ((s0.e0).id <> e1.id) and e1.id != (s0.e0).id) select s1.n2 as n from s1;
 
 -- case: match (s:NodeKind1:NodeKind2)-[r:EdgeKind1|EdgeKind2]->(e:NodeKind2:NodeKind1) return s.name, e.name
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.kind_ids operator (pg_catalog.@>) array [1, 2]::int2[] and n0.id = e0.start_id join node n1 on n1.kind_ids operator (pg_catalog.@>) array [2, 1]::int2[] and n1.id = e0.end_id where e0.kind_id = any (array [3, 4]::int2[])) select ((s0.n0).properties -> 'name') as "s.name", ((s0.n1).properties -> 'name') as "e.name" from s0;

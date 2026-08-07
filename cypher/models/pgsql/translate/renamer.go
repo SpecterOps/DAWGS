@@ -30,6 +30,10 @@ func rewriteIdentifierScopeReference(scope *Scope, identifier pgsql.Identifier) 
 func rewriteCompoundIdentifierScopeReference(scope *Scope, identifier pgsql.CompoundIdentifier) (pgsql.SelectItem, error) {
 	if binding, bound := scope.Lookup(identifier[0]); bound {
 		if binding.LastProjection != nil {
+			if binding.IDOnly && len(identifier) == 2 && identifier[1] == pgsql.ColumnID {
+				return pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier}, nil
+			}
+
 			return pgsql.RowColumnReference{
 				Identifier: pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier},
 				Column:     identifier[1],

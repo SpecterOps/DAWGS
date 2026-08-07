@@ -61,3 +61,16 @@ func TestLegacyPathMaterializersRequireTargetGraph(t *testing.T) {
 	require.Contains(t, sqlSchemaUp, "n.graph_id = target_graph_id")
 	require.Contains(t, sqlSchemaUp, "r.graph_id = target_graph_id")
 }
+
+func TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.graphbench_s1_distance_bfs")
+	require.NotEqual(t, -1, start)
+	prototype := sqlSchemaUp[start:]
+
+	require.Contains(t, prototype, "edge.graph_id = target_graph_id")
+	require.Contains(t, prototype, "cardinality(visited) + cardinality(next_frontier) > state_limit")
+	require.Contains(t, prototype, "overflow := true")
+	require.NotContains(t, prototype, "create temporary table")
+	require.NotContains(t, prototype, "insert into")
+	require.Contains(t, sqlSchemaDown, "drop function if exists graphbench_s1_distance_bfs")
+}

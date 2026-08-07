@@ -35,6 +35,7 @@ func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 type SchemaManager struct {
 	defaultGraph          model.Graph
 	pool                  *pgxpool.Pool
+	parseCache            *cypherParseCache
 	hasDefaultGraph       bool
 	graphs                map[string]model.Graph
 	kindsByID             map[graph.Kind]int16
@@ -46,6 +47,7 @@ type SchemaManager struct {
 func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
 	return &SchemaManager{
 		pool:                  pool,
+		parseCache:            newCypherParseCache(defaultCypherParseCacheEntries),
 		hasDefaultGraph:       false,
 		graphs:                map[string]model.Graph{},
 		kindsByID:             map[graph.Kind]int16{},

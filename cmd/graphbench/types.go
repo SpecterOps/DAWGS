@@ -120,6 +120,7 @@ type ExpectedResult struct {
 type ExpectedPath struct {
 	Nodes             []string `json:"nodes"`
 	RelationshipKinds []string `json:"relationship_kinds"`
+	RelationshipKeys  []string `json:"relationship_keys,omitempty"`
 }
 
 type WriteScenario struct {

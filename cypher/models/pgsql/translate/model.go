@@ -83,6 +83,8 @@ type Expansion struct {
 	BackwardRecursiveQueryParameter *BoundIdentifier
 
 	UseBidirectionalSearch bool
+	ShortestPathExecutor   optimize.ShortestPathExecutor
+	ShortestPathTarget     optimize.TraversalStepTarget
 	SingletonRootID        pgsql.Expression
 	SingletonTerminalID    pgsql.Expression
 

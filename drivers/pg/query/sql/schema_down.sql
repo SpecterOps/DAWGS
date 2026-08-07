@@ -38,6 +38,7 @@ drop function if exists load_bsp_filter_tables(text, text, text);
 drop function if exists reset_bsp_workspace(bool);
 drop function if exists ensure_bsp_generic_workspace();
 drop function if exists ensure_bsp_core_workspace();
+drop function if exists graphbench_s1_distance_bfs(int4, int8, int8, int4, int4, int2[], bool, int4);
 drop function if exists unidirectional_sp_harness(text, text, int4);
 drop function if exists unidirectional_sp_harness(text, text, int4, int8);
 drop function if exists unidirectional_sp_harness(text, text, int4, text, text);

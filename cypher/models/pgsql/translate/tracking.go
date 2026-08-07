@@ -400,6 +400,7 @@ type BoundIdentifier struct {
 	// from an optimizer-reversed pattern. Path materialization reverses the assembled node and
 	// edge references so the path renders in its original left-to-right logical order.
 	PathDirectionReversed bool
+	DistanceOnly          bool
 }
 
 func (s *BoundIdentifier) MaterializedBy(frame *Frame) {
@@ -419,6 +420,7 @@ func (s *BoundIdentifier) Copy() *BoundIdentifier {
 		DataType:              s.DataType,
 		IDOnly:                s.IDOnly,
 		PathDirectionReversed: s.PathDirectionReversed,
+		DistanceOnly:          s.DistanceOnly,
 	}
 }
 

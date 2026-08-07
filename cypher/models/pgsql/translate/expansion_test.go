@@ -71,6 +71,17 @@ const (
 	shortestPathSeedTestEdge          pgsql.Identifier = "e0"
 )
 
+func TestShortestDistanceColumnsCompactsOnlyIDOnlyState(t *testing.T) {
+	require.Equal(t,
+		[]pgsql.Identifier{expansionNextID, expansionDepth},
+		shortestDistanceColumns(true).Columns,
+	)
+	require.Equal(t,
+		[]pgsql.Identifier{expansionRootID, expansionNextID, expansionDepth},
+		shortestDistanceColumns(false).Columns,
+	)
+}
+
 func shortestPathSeedTestBoundColumn(nodeIdentifier pgsql.Identifier, column pgsql.Identifier) pgsql.RowColumnReference {
 	return pgsql.RowColumnReference{
 		Identifier: pgsql.CompoundIdentifier{shortestPathSeedTestPreviousFrame, nodeIdentifier},

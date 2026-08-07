@@ -256,7 +256,7 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 				)),
 				query.Returning(query.EndID(), query.Relationship()),
 			},
-			fragments:  []string{"select (s0.n1).id as \"id(e)\", s0.e0 as r"},
+			fragments:  []string{"select s0.n1 as \"id(e)\", s0.e0 as r"},
 			parameters: map[string]any{"pi0": []uint64{101}},
 		},
 	}

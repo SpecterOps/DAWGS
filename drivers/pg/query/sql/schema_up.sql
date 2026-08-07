@@ -3057,3 +3057,92 @@ from public.bidirectional_sp_harness(forward_primer, forward_recursive, backward
 $$
   language sql volatile
                strict;
+
+-- graphbench_s1_distance_bfs is the typed, array-resident SP-S1 distance
+-- prototype. It is additive and benchmark-only: production translation does
+-- not call it. The caller must transparently restart a correct fallback when
+-- overflow is true.
+create or replace function public.graphbench_s1_distance_bfs(target_graph_id int4, start_id int8, terminal_id int8,
+                                                              min_depth int4, max_depth int4, edge_kind_ids int2[],
+                                                              inbound bool, state_limit int4)
+  returns table
+          (
+            depth          int4,
+            matched        bool,
+            overflow       bool,
+            examined_edges int8,
+            retained_nodes int4
+          )
+as
+$$
+#variable_conflict use_variable
+declare
+  current_depth  int4 := 0;
+  frontier       int8[] := array[start_id]::int8[];
+  next_frontier  int8[];
+  visited        int8[] := array[start_id]::int8[];
+  edge_count     int8;
+begin
+  depth := null;
+  matched := false;
+  overflow := false;
+  examined_edges := 0;
+  retained_nodes := 1;
+
+  if state_limit < 1 then
+    overflow := true;
+    return next;
+    return;
+  end if;
+
+  if start_id = terminal_id and min_depth = 0 then
+    depth := 0;
+    matched := true;
+    return next;
+    return;
+  end if;
+
+  while current_depth < max_depth and cardinality(frontier) > 0 loop
+    select
+      coalesce(array_agg(distinct candidate.next_id order by candidate.next_id)
+        filter (where not candidate.next_id = any(visited)), array[]::int8[]),
+      count(*)
+    into next_frontier, edge_count
+    from (
+      select case when inbound then edge.start_id else edge.end_id end as next_id
+      from unnest(frontier) as active(node_id)
+      join edge on edge.graph_id = target_graph_id
+        and ((not inbound and edge.start_id = active.node_id)
+          or (inbound and edge.end_id = active.node_id))
+      where cardinality(edge_kind_ids) = 0 or edge.kind_id = any(edge_kind_ids)
+    ) candidate;
+
+    examined_edges := examined_edges + edge_count;
+    current_depth := current_depth + 1;
+
+    if terminal_id = any(next_frontier) and current_depth >= min_depth then
+      depth := current_depth;
+      matched := true;
+      retained_nodes := cardinality(visited) + cardinality(next_frontier);
+      return next;
+      return;
+    end if;
+
+    if cardinality(visited) + cardinality(next_frontier) > state_limit then
+      overflow := true;
+      retained_nodes := cardinality(visited);
+      return next;
+      return;
+    end if;
+
+    visited := visited || next_frontier;
+    frontier := next_frontier;
+    retained_nodes := cardinality(visited);
+  end loop;
+
+  return next;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;

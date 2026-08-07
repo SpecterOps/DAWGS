@@ -28,6 +28,8 @@ func AfterPooledConnectionEstablished(ctx context.Context, conn *pgx.Conn) error
 			if !StateObjectDoesNotExist.ErrorMatches(err) {
 				return fmt.Errorf("failed to match composite type %s to database: %w", dataType, err)
 			}
+		} else if err := installOwnedCompositeCodec(dataType, definition); err != nil {
+			return fmt.Errorf("failed to configure composite type %s: %w", dataType, err)
 		} else {
 			conn.TypeMap().RegisterType(definition)
 		}

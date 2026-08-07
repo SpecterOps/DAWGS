@@ -1,6 +1,7 @@
 package optimize
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -786,6 +787,121 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+func TestLoweringPlanReportsConservativeADCSSearchStrategy(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Group)
+		WHERE n.objectid = $objectid
+		MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpansionSearchStrategy})
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
+	require.Equal(t, "ADCS", decision.Family)
+	require.Equal(t, "incumbent_default", decision.SelectionMode)
+	require.Equal(t, "adcs-static-v1", decision.SelectorVersion)
+	require.Equal(t, []ExpansionSearchStrategy{
+		ExpansionSearchStepwiseForward,
+		ExpansionSearchLateHydratedForward,
+		ExpansionSearchFactoredSuffixForward,
+		ExpansionSearchSuffixSeededReverse,
+		ExpansionSearchBackwardViabilityForward,
+	}, decision.PlannedCandidates)
+	require.True(t, decision.StructurallyEligible)
+	require.Equal(t, ExpansionSearchStepwiseForward, decision.SelectedStrategy)
+	require.Equal(t, ExpansionSearchStepwiseForward, decision.FallbackStrategy)
+	require.Equal(t, ExpansionSearchFallbackTournamentUnqualified, decision.FallbackReason)
+	require.Equal(t, ExpansionSearchObservationFullPath, decision.ObservationMode)
+	require.Equal(t, int64(0), decision.MinimumDepth)
+	require.Equal(t, int64(16), decision.MaximumDepth)
+	require.Equal(t, 3, decision.SuffixLength)
+	require.Equal(t, "outbound", decision.LogicalDirection)
+}
+
+func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		projection  string
+		observation ExpansionSearchObservationMode
+	}{
+		{name: "endpoint IDs", projection: "id(ca), id(d)", observation: ExpansionSearchObservationEndpointIDs},
+		{name: "ordered IDs", projection: "length(p)", observation: ExpansionSearchObservationOrderedPathIDs},
+		{name: "full path", projection: "p", observation: ExpansionSearchObservationFullPath},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+				MATCH p = (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+				RETURN `+testCase.projection)
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+			require.Equal(t, testCase.observation, plan.LoweringPlan.ExpansionSearchStrategy[0].ObservationMode)
+		})
+	}
+}
+
+func TestExpansionSearchFinalizationRejectsVariableExpansionAcrossWith(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		WITH n, d
+		MATCH (n)-[:MemberOf*0..4]->(x)
+		RETURN id(d), id(x)
+	`)
+	require.NoError(t, err)
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 2)
+	require.Equal(t, ExpansionSearchFallbackMultipleVariableExpansions, plan.LoweringPlan.ExpansionSearchStrategy[0].FallbackReason)
+	require.False(t, plan.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
+}
+
+func TestLoweringPlanReportsStableADCSSearchFallbackCodes(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name   string
+		query  string
+		reason string
+	}{
+		{name: "no fixed suffix", query: `MATCH (n)-[:MemberOf*0..16]->(ca) RETURN id(ca)`, reason: ExpansionSearchFallbackNoFixedSuffix},
+		{name: "unbounded", query: `MATCH (n)-[:MemberOf*0..]->()-[:Enroll]->(ca) RETURN id(ca)`, reason: ExpansionSearchFallbackUnboundedDepth},
+		{name: "short suffix", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca) RETURN id(ca)`, reason: ExpansionSearchFallbackSuffixTooShort},
+		{name: "directionless", query: `MATCH (n)-[:MemberOf*0..16]-()-[:Enroll]->(ca)-[:A]->()-[:B]->(d) RETURN id(ca)`, reason: ExpansionSearchFallbackDirectionlessExpansion},
+		{name: "directionless suffix", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]-(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackDirectionlessSuffix},
+		{name: "optional", query: `OPTIONAL MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackOptionalMatch},
+		{name: "shortest path", query: `MATCH p = shortestPath((n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)) RETURN p`, reason: ExpansionSearchFallbackShortestPath},
+		{name: "all shortest paths", query: `MATCH p = allShortestPaths((n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)) RETURN p`, reason: ExpansionSearchFallbackAllShortestPaths},
+		{name: "unbound root", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)`, reason: ExpansionSearchFallbackUnboundRoot},
+		{name: "unsupported depth", query: `MATCH (n)-[:MemberOf*0..65]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackUnsupportedDepth},
+		{name: "relationship variable", query: `MATCH (n)-[r:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackRelationshipVariable},
+		{name: "relationship predicate", query: `MATCH (n)-[r:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) WHERE r.enabled = true RETURN id(ca)`, reason: ExpansionSearchFallbackRelationshipPredicate},
+		{name: "correlated suffix", query: `MATCH (ca:EnterpriseCA) MATCH p = (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(ca)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p`, reason: ExpansionSearchFallbackCorrelatedSuffix},
+		{name: "cross-region predicate", query: `MATCH p = (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) WHERE n.tenant = ca.tenant RETURN p`, reason: ExpansionSearchFallbackCrossRegionPredicate},
+		{name: "path predicate", query: `MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) WHERE length(p) > 0 RETURN p`, reason: ExpansionSearchFallbackPathDependentPredicate},
+		{name: "unsupported observation", query: `MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(p)`, reason: ExpansionSearchFallbackUnsupportedObservation},
+		{name: "mutation", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) CREATE (x) RETURN id(ca)`, reason: ExpansionSearchFallbackMutation},
+		{name: "limit pushdown conflict", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca) LIMIT 10`, reason: ExpansionSearchFallbackLimitPushdownConflict},
+		{name: "tournament unqualified", query: `MATCH (n)-[:Other*0..16]->()-[:A]->(ca:X)-[:B]->(:Y)-[:C]->(d:Z) RETURN id(ca)`, reason: ExpansionSearchFallbackTournamentUnqualified},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+			require.Equal(t, testCase.reason, plan.LoweringPlan.ExpansionSearchStrategy[0].FallbackReason)
+			require.False(t, plan.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
+		})
+	}
+}
+
 func TestLoweringPlanIncludesConstrainedBoundEndpointInExpansionSuffix(t *testing.T) {
 	t.Parallel()
 
@@ -1420,7 +1536,7 @@ func TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates(t *testing
 	}}, plan.LoweringPlan.ShortestPathFilter)
 }
 
-func TestLoweringPlanReportsEvidenceSafeSingletonExecutorFallback(t *testing.T) {
+func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..16]->(e))
@@ -1433,13 +1549,106 @@ func TestLoweringPlanReportsEvidenceSafeSingletonExecutorFallback(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
 	decision := plan.LoweringPlan.ShortestPathExecutor[0]
-	require.Equal(t, ShortestPathExecutorIncumbentWorkspace, decision.SelectedExecutor)
+	require.Equal(t, "SP", decision.Family)
+	require.Equal(t, "static", decision.SelectionMode)
+	require.Equal(t, "sp-static-v2", decision.SelectorVersion)
+	require.Equal(t, []ShortestPathExecutor{
+		ShortestPathExecutorIncumbentWorkspace,
+		ShortestPathExecutorS1ArrayBFS,
+		ShortestPathExecutorS2TraceRelation,
+		ShortestPathExecutorS3Unidirectional,
+		ShortestPathExecutorS3EdgeM0,
+	}, decision.PlannedCandidates)
+	require.Equal(t, ShortestPathExecutorS3Unidirectional, decision.SelectedExecutor)
 	require.Equal(t, ShortestPathExecutorIncumbentWorkspace, decision.FallbackExecutor)
-	require.Equal(t, ShortestPathFallbackTournamentUnqualified, decision.FallbackReason)
+	require.Empty(t, decision.FallbackReason)
 	require.Equal(t, ShortestPathObservationDistance, decision.ObservationMode)
+	require.True(t, decision.StructurallyEligible)
+	require.Equal(t, int64(1), decision.MinimumDepth)
 	require.Equal(t, int64(16), decision.MaximumDepth)
-	require.False(t, decision.ExperimentalWinner)
+	require.True(t, decision.ExperimentalWinner)
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathExecutor})
+}
+
+func TestLoweringPlanShortestExecutorRejectsUnsupportedMinimumDepth(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*2..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+	decision := plan.LoweringPlan.ShortestPathExecutor[0]
+	require.False(t, decision.StructurallyEligible)
+	require.Equal(t, int64(2), decision.MinimumDepth)
+	require.Equal(t, int64(4), decision.MaximumDepth)
+	require.Equal(t, ShortestPathFallbackUnsupportedDepth, decision.FallbackReason)
+}
+
+func TestLoweringPlanShortestExecutorRetainsZeroMaximumDepthInDiagnostics(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*0..0]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+	decision := plan.LoweringPlan.ShortestPathExecutor[0]
+	require.True(t, decision.StructurallyEligible)
+	require.Zero(t, decision.MinimumDepth)
+	require.Zero(t, decision.MaximumDepth)
+
+	diagnostic, err := json.Marshal(decision)
+	require.NoError(t, err)
+	require.Contains(t, string(diagnostic), `"maximum_depth":0`)
+}
+
+func TestLoweringPlanShortestExecutorUsesStatementWideCallCount(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH p
+		MATCH q = shortestPath((x)-[:MemberOf*1..4]->(y))
+		WHERE id(x) = $other_start_id AND id(y) = $other_end_id
+		RETURN length(p), length(q)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 2)
+	for _, decision := range plan.LoweringPlan.ShortestPathExecutor {
+		require.False(t, decision.StructurallyEligible)
+		require.Equal(t, ShortestPathFallbackMultiplePathCalls, decision.FallbackReason)
+	}
+}
+
+func TestLoweringPlanShortestExecutorUsesStatementWideReadOnlyFact(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH p
+		CREATE (:Group {name: 'updated'})
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+	decision := plan.LoweringPlan.ShortestPathExecutor[0]
+	require.False(t, decision.StructurallyEligible)
+	require.Equal(t, ShortestPathFallbackMutation, decision.FallbackReason)
 }
 
 func TestLoweringPlanShortestExecutorObservationModeRequiresPathForNodes(t *testing.T) {
@@ -1452,6 +1661,61 @@ func TestLoweringPlanShortestExecutorObservationModeRequiresPathForNodes(t *test
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Equal(t, ShortestPathObservationOnePath, plan.LoweringPlan.ShortestPathExecutor[0].ObservationMode)
+}
+
+func TestLoweringPlanShortestExecutorRequiresKnownObservationMode(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN s
+	`)
+	require.NoError(t, err)
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+	decision := plan.LoweringPlan.ShortestPathExecutor[0]
+	require.Equal(t, ShortestPathObservationUnknown, decision.ObservationMode)
+	require.False(t, decision.StructurallyEligible)
+}
+
+func TestLoweringPlanShortestExecutorRejectsAdditionalRowSources(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, query, reason string
+	}{
+		{
+			name: "unwind source",
+			query: `
+				UNWIND [1, 2] AS source
+				MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+				WHERE id(s) = $start_id AND id(e) = $end_id
+				RETURN length(p)
+			`,
+			reason: ShortestPathFallbackCorrelatedEndpoints,
+		},
+		{
+			name: "additional match pattern",
+			query: `
+				MATCH (source), p = shortestPath((s)-[:MemberOf*1..4]->(e))
+				WHERE id(s) = $start_id AND id(e) = $end_id
+				RETURN length(p)
+			`,
+			reason: ShortestPathFallbackMultipleEndpointPairs,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), test.query)
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+			decision := plan.LoweringPlan.ShortestPathExecutor[0]
+			require.False(t, decision.StructurallyEligible)
+			require.Equal(t, test.reason, decision.FallbackReason)
+		})
+	}
 }
 
 func TestLoweringPlanRecordsStableShortestExecutorFallbackCodes(t *testing.T) {
