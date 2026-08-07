@@ -33,8 +33,10 @@ type ExistingGraphAnchorManifest struct {
 }
 
 type ExistingGraphAnchor struct {
-	LogicalKey string `json:"logical_key"`
-	Kind       string `json:"kind,omitempty"`
+	LogicalKey    string `json:"logical_key,omitempty"`
+	PhysicalID    *int64 `json:"physical_id,omitempty"`
+	ContentSHA256 string `json:"content_sha256,omitempty"`
+	Kind          string `json:"kind,omitempty"`
 }
 
 type ExistingGraphAttempt struct {
@@ -93,8 +95,20 @@ func loadExistingGraphAnchorManifest(path string) (ExistingGraphAnchorManifest, 
 		return ExistingGraphAnchorManifest{}, fmt.Errorf("anchor manifest content_identity must be a lowercase sha256 digest")
 	}
 	for name, anchor := range manifest.Anchors {
-		if strings.TrimSpace(name) == "" || strings.TrimSpace(anchor.LogicalKey) == "" {
-			return ExistingGraphAnchorManifest{}, fmt.Errorf("anchor names and logical keys must not be empty")
+		if strings.TrimSpace(name) == "" {
+			return ExistingGraphAnchorManifest{}, fmt.Errorf("anchor names must not be empty")
+		}
+		hasLogicalKey := strings.TrimSpace(anchor.LogicalKey) != ""
+		hasPhysicalID := anchor.PhysicalID != nil
+		if hasLogicalKey == hasPhysicalID {
+			return ExistingGraphAnchorManifest{}, fmt.Errorf("anchor %s must declare exactly one of logical_key or physical_id", name)
+		}
+		if hasPhysicalID {
+			if matched, _ := regexp.MatchString(`^sha256:[0-9a-f]{64}$`, anchor.ContentSHA256); !matched {
+				return ExistingGraphAnchorManifest{}, fmt.Errorf("physical anchor %s content_sha256 must be a lowercase sha256 digest", name)
+			}
+		} else if anchor.ContentSHA256 != "" {
+			return ExistingGraphAnchorManifest{}, fmt.Errorf("logical-key anchor %s must not declare content_sha256", name)
 		}
 	}
 	digest := sha256.Sum256(raw)
@@ -244,7 +258,11 @@ func redactExistingGraphRecord(record *CaseResult, manifest ExistingGraphAnchorM
 		if !found {
 			continue
 		}
-		digest := sha256.Sum256([]byte(anchor.LogicalKey))
+		seed := anchor.LogicalKey
+		if seed == "" {
+			seed = anchor.ContentSHA256
+		}
+		digest := sha256.Sum256([]byte(seed))
 		redacted[parameter] = "sha256:" + hex.EncodeToString(digest[:])
 	}
 	record.NodeParams = redacted
@@ -278,6 +296,7 @@ func redactResolvedIDs(value string, resolved map[string]graph.ID) string {
 	for _, id := range resolved {
 		value = regexp.MustCompile(`\b`+regexp.QuoteMeta(fmt.Sprint(id))+`\b`).ReplaceAllString(value, "<anchor-id>")
 	}
+	value = regexp.MustCompile(`unmapped-(node|edge|relationship):[0-9]+`).ReplaceAllString(value, "unmapped-$1:<redacted-id>")
 	return value
 }
 

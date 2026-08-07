@@ -46,6 +46,11 @@ GraphBench clears and reloads fixtures. A non-blocking local lock at
 `.coverage/graphbench.lock` prevents overlapping processes; override it with
 `-destructive-lock`. Runners on different hosts must use distinct disposable
 databases because a filesystem lock cannot coordinate across machines.
+Fixture-loading runs also require `DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1` and
+an exact credential-free target in `DAWGS_INTEGRATION_DISPOSABLE_TARGETS`, for
+example `postgresql://localhost:65432/dawgs`. Non-mutating `-existing-graph`
+runs do not require this acknowledgement; their PostgreSQL sessions remain
+read-write so temporary workspace behavior matches production.
 
 ## Examples
 
@@ -231,6 +236,14 @@ same public distance or path boundary. It records selected/applied `SP-S0` and
 executes the existing workspace harness, making containment regret and
 candidate/reference comparisons explicit.
 
+`-postgres-force-shortest-executor SP-S0-DIRECT` is the tool-only direct-edge
+preflight arm for structurally eligible bound-endpoint searches whose minimum
+depth is one. A materialized indexed one-edge probe returns a valid singleton
+witness immediately; a dependency-gated lateral branch invokes exact `SP-S0`
+only when the probe is empty. Both branches share one SQL statement and
+snapshot. Production `sp-static-v3` selection remains unchanged until the arm
+passes exactness, zero-loop fallback, regret, resource, and concurrency gates.
+
 `-postgres-force-shortest-executor SP-S3-U-D` is a qualification-only seam for
 eligible bounded singleton distance cases. It executes the repository-native
 recursive AST directly, using compact `(next_id, depth)` state when both
@@ -384,12 +397,14 @@ column, relationship-kind count, wildcard state, and a static topology class.
 Deep `end_id` expansion and wildcard/multi-kind one-path state retain exact
 `SP-S0`; forced S3 remains available only as a qualification seam.
 
-## Existing graph read-only mode
+## Existing graph non-mutating mode
 
 `-existing-graph` runs a selected PostgreSQL corpus without asserting schema,
 clearing/loading fixtures, vacuuming, or creating persistent helpers. It
 requires a versioned logical-key anchor manifest and refuses `write_scenario`
-or mutation keywords before runner construction. Example:
+or mutation keywords before runner construction. It deliberately uses
+read-write PostgreSQL sessions so session-local workspace setup, reset, and
+statistics match production. Example:
 
 ```json
 {
@@ -420,6 +435,27 @@ schema/index fingerprints. Each completed record is checkpointed by stable
 backend/dataset/case identity using an atomic rename; `-resume` accepts only a
 matching manifest and corpus identity.
 
+Legacy graphs without `logical_key` properties may instead use a runtime-only
+physical anchor with a content proof:
+
+```json
+{"physical_id": 42, "content_sha256": "sha256:<64 lowercase hex characters>", "kind": "Group"}
+```
+
+The digest is SHA-256 over PostgreSQL's canonical `kind_ids::text`, a newline,
+and `properties::text` for that node. The runner accepts the ID only after the
+digest and optional kind match, then removes the ID and manifest values from
+durable records. Each anchor must use exactly one of `logical_key` or
+`physical_id`; a physical anchor always requires its content digest.
+For exact path observations on a legacy graph, include content-proved anchors
+for intermediate nodes as well as parameter endpoints so stable path identity
+can be reconstructed without persisting physical IDs.
+
+Existing-graph runs require the target database to have the DAWGS schema and
+workspace functions from the current checkout already deployed. The runner
+does not assert or upgrade schema in this mode because doing so would violate
+its non-mutating existing-graph contract.
+
 Adaptive discovery is explicit:
 
 ```bash
@@ -437,8 +473,12 @@ and uses fixed timeouts, arm order, warmups, and samples.
 The independent state/resource report is produced with
 `-resource-artifact results.jsonl -resource-output resources.json`. For
 non-stress portable PostgreSQL candidates it rejects temp spill, local
-workspace, and read-only WAL; exact incumbent fallback retains its documented
-temporary-workspace contract.
+workspace, and WAL for non-mutating reads; exact incumbent fallback retains
+its documented temporary-workspace contract. `SP-S0-DIRECT` records are
+attributed from the measured fallback function loops, so workspace use is
+accepted only when the incumbent branch actually ran. Exact full-comparator
+reference arms receive independent resource cases rather than inheriting the
+outer production result.
 
 Shortest tournament references are independently selectable with
 `-postgres-reference-arms s4_canonical_source_distance`,

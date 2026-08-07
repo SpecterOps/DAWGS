@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/specterops/dawgs/internal/integrationguard"
 	"github.com/specterops/dawgs/testutil"
 )
 
@@ -171,7 +172,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
-	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S3-U-D, SP-S3-U-E+MAT-M0)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0)")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: ADCS-A3)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
@@ -181,7 +182,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.DiagnosticGate, "diagnostic-gate", false, "allow comparison of matching diagnostic-only subsets")
 	flags.StringVar(&cfg.BundleDir, "bundle-dir", "", "write a reconstructible capture bundle to this directory")
 	flags.StringVar(&cfg.BuildCommand, "build-command", "go build -trimpath ./cmd/graphbench", "reproducible build command recorded in bundles")
-	flags.BoolVar(&cfg.ExistingGraph, "existing-graph", false, "run PostgreSQL read-only cases against an existing graph without schema, load, clear, vacuum, or persistent writes")
+	flags.BoolVar(&cfg.ExistingGraph, "existing-graph", false, "run non-mutating PostgreSQL cases against an existing graph in read-write sessions without schema, load, clear, vacuum, or persistent writes")
 	flags.StringVar(&cfg.AnchorManifest, "anchor-manifest", "", "versioned logical-key anchor manifest for existing-graph mode")
 	flags.StringVar(&cfg.Checkpoint, "checkpoint", "", "atomic existing-graph checkpoint path")
 	flags.BoolVar(&cfg.Resume, "resume", false, "resume completed records from the matching existing-graph checkpoint")
@@ -356,7 +357,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if len(cfg.PostgresReferenceArms) > 0 {
 		cfg.PostgresReferences = true
 	}
-	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S0" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" {
+	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S0" && cfg.PostgresForceShortest != "SP-S0-DIRECT" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced shortest executor %q", cfg.PostgresForceShortest)
 	}
 	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "ADCS-A3" {
@@ -526,6 +527,31 @@ func main() {
 	}
 
 	if !cfg.ExistingGraph {
+		for _, mode := range cfg.Modes {
+			var connection string
+			switch mode {
+			case ModePostgresSQL:
+				connection = cfg.PGConnection
+			case ModeNeo4j:
+				connection = cfg.Neo4jConnection
+			default:
+				continue
+			}
+			if connection == "" {
+				connection = cfg.Connection
+			}
+			if connection == "" {
+				continue
+			}
+			if err := integrationguard.Validate(
+				connection,
+				os.Getenv(integrationguard.AllowDestructiveEnv),
+				os.Getenv(integrationguard.DisposableTargetsEnv),
+			); err != nil {
+				fatal("refuse destructive GraphBench target: %v", err)
+			}
+		}
+
 		runLock, err := acquireDestructiveRunLock(cfg.DestructiveLock)
 		if err != nil {
 			fatal("acquire destructive run lock: %v", err)

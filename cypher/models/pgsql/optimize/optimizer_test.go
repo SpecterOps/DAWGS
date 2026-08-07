@@ -1550,6 +1550,7 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 	require.Equal(t, "sp-static-v3", decision.SelectorVersion)
 	require.Equal(t, []ShortestPathExecutor{
 		ShortestPathExecutorIncumbentWorkspace,
+		ShortestPathExecutorS0Direct,
 		ShortestPathExecutorS1ArrayBFS,
 		ShortestPathExecutorS2TraceRelation,
 		ShortestPathExecutorS3Unidirectional,

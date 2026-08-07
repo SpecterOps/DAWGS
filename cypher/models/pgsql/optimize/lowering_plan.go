@@ -580,7 +580,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
 					Target:                 PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
 					Family:                 "SP",
-					PlannedCandidates:      []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0},
+					PlannedCandidates:      []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS0Direct, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0},
 					SelectedExecutor:       ShortestPathExecutorIncumbentWorkspace,
 					ObservationMode:        ShortestPathObservationUnknown,
 					Direction:              step.Relationship.Direction,

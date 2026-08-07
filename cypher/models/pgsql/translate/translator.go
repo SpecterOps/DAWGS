@@ -1069,14 +1069,17 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	if executor == "" {
 		return nil
 	}
-	if executor != optimize.ShortestPathExecutorIncumbentWorkspace && executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 {
+	if executor != optimize.ShortestPathExecutorIncumbentWorkspace && executor != optimize.ShortestPathExecutorS0Direct && executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 {
 		return fmt.Errorf("unsupported forced shortest-path executor %q", executor)
 	}
-	if executor == optimize.ShortestPathExecutorIncumbentWorkspace {
+	if executor == optimize.ShortestPathExecutorIncumbentWorkspace || executor == optimize.ShortestPathExecutorS0Direct {
 		forced := 0
 		for idx := range plan.LoweringPlan.ShortestPathExecutor {
 			decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
 			if !decision.StructurallyEligible {
+				continue
+			}
+			if executor == optimize.ShortestPathExecutorS0Direct && (decision.MinimumDepth != 1 || decision.MaximumDepth < 1) {
 				continue
 			}
 			decision.SelectedExecutor = executor
@@ -1086,6 +1089,9 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 			forced++
 		}
 		if forced == 0 {
+			if executor == optimize.ShortestPathExecutorS0Direct {
+				return fmt.Errorf("forced shortest-path executor %q has no structurally eligible depth-one target", executor)
+			}
 			return fmt.Errorf("forced shortest-path executor %q has no structurally eligible target", executor)
 		}
 		return nil

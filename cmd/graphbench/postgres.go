@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -88,15 +87,6 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 	// that all samples in a case used the same physical session.
 	poolCfg.AfterConnect = pg.AfterPooledConnectionEstablished
 	poolCfg.AfterRelease = pg.AfterPooledConnectionRelease
-	if existing != nil {
-		poolCfg.AfterConnect = func(ctx context.Context, connection *pgx.Conn) error {
-			if err := pg.AfterPooledConnectionEstablished(ctx, connection); err != nil {
-				return err
-			}
-			_, err := connection.Exec(ctx, "set default_transaction_read_only = on")
-			return err
-		}
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
@@ -368,19 +358,33 @@ func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, man
 	anchors := make(map[string]graph.ID, len(manifest.Anchors))
 	for name, anchor := range manifest.Anchors {
 		var ids []int64
-		rows, err := s.pool.Query(ctx, `select id from node where graph_id = $1 and properties ->> 'logical_key' = $2 order by id limit 2`, s.graphID, anchor.LogicalKey)
-		if err != nil {
-			return nil, fmt.Errorf("resolve anchor %s: %w", name, err)
-		}
-		for rows.Next() {
+		if anchor.PhysicalID == nil {
+			rows, err := s.pool.Query(ctx, `select id from node where graph_id = $1 and properties ->> 'logical_key' = $2 order by id limit 2`, s.graphID, anchor.LogicalKey)
+			if err != nil {
+				return nil, fmt.Errorf("resolve anchor %s: %w", name, err)
+			}
+			for rows.Next() {
+				var id int64
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				ids = append(ids, id)
+			}
+			rows.Close()
+		} else {
+			var kindIDs, properties string
 			var id int64
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return nil, err
+			if err := s.pool.QueryRow(ctx, `select id, kind_ids::text, properties::text from node where graph_id = $1 and id = $2`, s.graphID, *anchor.PhysicalID).Scan(&id, &kindIDs, &properties); err != nil {
+				return nil, fmt.Errorf("resolve physical anchor %s: %w", name, err)
+			}
+			digest := sha256.Sum256([]byte(kindIDs + "\n" + properties))
+			actual := "sha256:" + hex.EncodeToString(digest[:])
+			if actual != anchor.ContentSHA256 {
+				return nil, fmt.Errorf("physical anchor %s content identity mismatch", name)
 			}
 			ids = append(ids, id)
 		}
-		rows.Close()
 		if len(ids) != 1 {
 			return nil, fmt.Errorf("anchor %s resolved to %d nodes; exactly one is required", name, len(ids))
 		}

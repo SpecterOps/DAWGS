@@ -15,6 +15,7 @@ func TestBidirectionalShortestPathWorkspaceIsReusable(t *testing.T) {
 	harness := sqlSchemaUp[start : start+end]
 
 	require.Contains(t, sqlSchemaUp, "create or replace function public.ensure_bsp_core_workspace()")
+	require.Contains(t, sqlSchemaUp, "if present_version is not null and present_version is distinct from expected_version then")
 	require.Contains(t, sqlSchemaUp, "on commit preserve rows")
 	require.Contains(t, harness, "perform public.reset_bsp_workspace(not use_array_parameters)")
 	require.Contains(t, harness, "pg_temp.bsp_forward_front")
@@ -22,6 +23,22 @@ func TestBidirectionalShortestPathWorkspaceIsReusable(t *testing.T) {
 	require.Contains(t, harness, "pg_temp.bsp_next_front")
 	require.NotContains(t, harness, "create temporary table")
 	require.NotContains(t, harness, "create index")
+	require.Contains(t, harness, "truncate table pg_temp.bsp_forward_front")
+	require.Contains(t, harness, "truncate table pg_temp.bsp_backward_front")
+	require.Contains(t, harness, "truncate table pg_temp.bsp_next_front")
+}
+
+func TestBidirectionalShortestPathWarmWorkspaceUsesTruncate(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.reset_bsp_workspace")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(sqlSchemaUp[start:], "create or replace function public.load_bsp_filter_tables")
+	require.NotEqual(t, -1, end)
+	reset := sqlSchemaUp[start : start+end]
+
+	require.Contains(t, reset, "truncate table pg_temp.bsp_forward_front")
+	require.Contains(t, reset, "pg_temp.bsp_resolved_pairs")
+	require.NotContains(t, reset, "delete from pg_temp.bsp_")
+	require.NotContains(t, sqlSchemaUp, "current_setting('transaction_read_only')")
 }
 
 func TestBidirectionalShortestPathArrayModeSkipsGenericWorkspace(t *testing.T) {

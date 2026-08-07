@@ -31,8 +31,17 @@ Run integration tests when a backend is available:
 
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+export DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1
+export DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs"
 make test_integration
 ```
+
+Integration suites and fixture-loading GraphBench runs delete graph data. The
+acknowledgement and credential-free target allowlist above are both required;
+an absent or mismatched target is rejected before testing. Existing-graph
+GraphBench runs reject mutating cases and do not require destructive
+acknowledgement. PostgreSQL sessions remain read-write so temporary traversal
+workspaces use the same reset strategy as production.
 
 Use this module from another Go project:
 

@@ -116,6 +116,7 @@ const (
 	ShortestPathExecutorS2TraceRelation    ShortestPathExecutor = "SP-S2"
 	ShortestPathExecutorS3Unidirectional   ShortestPathExecutor = "SP-S3-U-D"
 	ShortestPathExecutorS3EdgeM0           ShortestPathExecutor = "SP-S3-U-E+MAT-M0"
+	ShortestPathExecutorS0Direct           ShortestPathExecutor = "SP-S0-DIRECT"
 )
 
 type ShortestPathObservationMode string

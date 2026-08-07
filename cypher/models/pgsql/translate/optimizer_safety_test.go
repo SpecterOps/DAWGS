@@ -353,7 +353,7 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
 	require.Equal(t, "SP", outcome.Family)
-	require.Equal(t, []string{"SP-S0", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0"}, outcome.PlannedCandidates)
+	require.Equal(t, []string{"SP-S0", "SP-S0-DIRECT", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0"}, outcome.PlannedCandidates)
 	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "one_static_id_equality_per_endpoint", Eligible: true})
 	require.Equal(t, string(optimize.ShortestPathObservationDistance), outcome.ObservationMode)
 	require.NotNil(t, outcome.Eligible)
@@ -495,6 +495,82 @@ func TestForcedShortestIncumbentEmitsExactWorkspaceHarness(t *testing.T) {
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Applied)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
+}
+
+func TestForcedShortestDirectPreflightGatesWorkspaceFallback(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((e)<-[:MemberOf|Enroll*1..8]-(s))
+		WHERE id(e) = $end_id AND id(s) = $start_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "direct_shortest(root_id, next_id, depth, satisfied, is_cycle, path) as materialized")
+	require.Contains(t, formatted, "fallback_endpoints as (select * from singleton_endpoints where not exists")
+	require.Contains(t, formatted, "workspace_shortest(root_id, next_id, depth, satisfied, is_cycle, path)")
+	require.Contains(t, formatted, "from fallback_endpoints, bidirectional_sp_harness")
+	require.Contains(t, formatted, "select * from direct_shortest union all select * from workspace_shortest")
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS0Direct), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS0Direct), outcome.Applied)
+	require.Equal(t, "forced_tool", outcome.SelectionMode)
+}
+
+func TestForcedShortestDirectPreflightRejectsZeroMinimumDepth(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*0..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	require.ErrorContains(t, err, "no structurally eligible depth-one target")
+}
+
+func TestForcedShortestDirectPreflightRejectsMutation(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		CREATE (:Group)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	require.ErrorContains(t, err, "no structurally eligible depth-one target")
+}
+
+func TestForcedShortestDirectPreflightPreservesPathThroughWithAlias(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH p AS q
+		RETURN q
+	`)
+	require.NoError(t, err)
+
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "direct_shortest")
+	require.Contains(t, formatted, "ordered_edge_ids_to_path")
+	require.Contains(t, formatted, "as q")
 }
 
 func TestForcedShortestDistanceExecutorRejectsIneligibleObservation(t *testing.T) {
