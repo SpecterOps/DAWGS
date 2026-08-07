@@ -29,10 +29,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/internal/integrationguard"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 )
@@ -107,10 +107,10 @@ func Open(t testing.TB, opts Options) *Session {
 		}
 		t.Fatalf("%s env var is not set", connEnv)
 	}
-	if err := integrationguard.Validate(
+	if err := databaseguard.Validate(
 		connStr,
-		os.Getenv(integrationguard.AllowDestructiveEnv),
-		os.Getenv(integrationguard.DisposableTargetsEnv),
+		os.Getenv(databaseguard.AllowDestructiveEnv),
+		os.Getenv(databaseguard.DisposableTargetsEnv),
 	); err != nil {
 		t.Fatalf("integration database safety check failed: %v", err)
 	}

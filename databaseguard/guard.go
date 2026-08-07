@@ -3,10 +3,10 @@
 // Licensed under the Apache License, Version 2.0
 // SPDX-License-Identifier: Apache-2.0
 
-// Package integrationguard prevents destructive integration and benchmark
-// workflows from running against a database that was not explicitly named as
-// disposable by the operator.
-package integrationguard
+// Package databaseguard prevents destructive database workflows from running
+// against a target that was not explicitly named as disposable by the
+// operator.
+package databaseguard
 
 import (
 	"fmt"
@@ -49,12 +49,12 @@ func Validate(connection, acknowledgement, disposableTargets string) error {
 		return err
 	}
 	if acknowledgement != allowDestructiveValue {
-		return fmt.Errorf("destructive integration access to %s is disabled: set %s=%s and include the target in %s", target, AllowDestructiveEnv, allowDestructiveValue, DisposableTargetsEnv)
+		return fmt.Errorf("destructive database access to %s is disabled: set %s=%s and include the target in %s", target, AllowDestructiveEnv, allowDestructiveValue, DisposableTargetsEnv)
 	}
 
 	targets := splitTargets(disposableTargets)
 	if !slices.Contains(targets, target) {
-		return fmt.Errorf("destructive integration target %s is not confirmed in %s", target, DisposableTargetsEnv)
+		return fmt.Errorf("destructive database target %s is not confirmed in %s", target, DisposableTargetsEnv)
 	}
 
 	return nil
