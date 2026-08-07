@@ -48,6 +48,8 @@ type RunEnvironment struct {
 	Concurrency               []int              `json:"concurrency,omitempty"`
 	SessionMemoryCeilingBytes int64              `json:"session_memory_ceiling_bytes,omitempty"`
 	PoolMemoryCeilingBytes    int64              `json:"pool_memory_ceiling_bytes,omitempty"`
+	ExistingGraph             bool               `json:"existing_graph,omitempty"`
+	Protocol                  string             `json:"protocol,omitempty"`
 }
 
 type PostgresEnvironment struct {
@@ -63,6 +65,8 @@ type PostgresEnvironment struct {
 	NodeRelationBytes   int64     `json:"node_relation_bytes,omitempty"`
 	EdgeRelationBytes   int64     `json:"edge_relation_bytes,omitempty"`
 	AnalyzeState        string    `json:"analyze_state,omitempty"`
+	SchemaFingerprint   string    `json:"schema_fingerprint,omitempty"`
+	IndexFingerprint    string    `json:"index_fingerprint,omitempty"`
 }
 
 func resolveRunEnvironment(cfg config, args []string, selection SelectionManifest, startedAt, endedAt time.Time) RunEnvironment {
@@ -100,7 +104,16 @@ func resolveRunEnvironment(cfg config, args []string, selection SelectionManifes
 		Concurrency:               append([]int(nil), cfg.Concurrency...),
 		SessionMemoryCeilingBytes: cfg.SessionMemoryCeilingBytes,
 		PoolMemoryCeilingBytes:    cfg.PoolMemoryCeilingBytes,
+		ExistingGraph:             cfg.ExistingGraph,
+		Protocol:                  benchmarkProtocol(cfg),
 	}
+}
+
+func benchmarkProtocol(cfg config) string {
+	if cfg.Discovery {
+		return "adaptive_discovery"
+	}
+	return "fixed_confirmation"
 }
 
 func newRunUUID() string {

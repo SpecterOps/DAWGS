@@ -100,7 +100,7 @@ func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
 }
 
 func (s *SchemaManager) Fetch(ctx context.Context) error {
-	return s.WriteTransaction(ctx, func(tx graph.Transaction) error {
+	return s.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		return s.fetch(tx)
 	}, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol))
 }

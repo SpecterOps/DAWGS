@@ -156,6 +156,11 @@ type WorkloadShape struct {
 	RootPredicate               string   `json:"root_predicate,omitempty"`
 	TerminalPredicate           string   `json:"terminal_predicate,omitempty"`
 	EdgeKinds                   []string `json:"edge_kinds,omitempty"`
+	Direction                   string   `json:"direction,omitempty"`
+	RelationshipKindCount       int      `json:"relationship_kind_count,omitempty"`
+	FixtureTier                 string   `json:"fixture_tier,omitempty"`
+	ExpectedStateClass          string   `json:"expected_state_class,omitempty"`
+	ResultCardinalityClass      string   `json:"result_cardinality_class,omitempty"`
 	MinDepth                    *int     `json:"min_depth,omitempty"`
 	MaxDepth                    *int     `json:"max_depth,omitempty"`
 	PathMaterializationRequired bool     `json:"path_materialization_required"`

@@ -19,7 +19,7 @@ func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *tes
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(1), "end_id": int64(2), "max_depth": int32(15)}
 	specs := buildShortestReferenceSpecs(ScaleCase{Name: "one_shortest_path_bound_pair", Cypher: outboundShortestPathQuery}, params, []int64{1, 2, 3}, []int64{10, 11}, graph.DirectionOutbound)
 
-	require.Len(t, specs, 11)
+	require.Len(t, specs, 12)
 	require.Equal(t, "round_trip", specs[0].name)
 	require.Equal(t, int32(42), specs[1].parameters["graph_id"])
 	require.Equal(t, "minimum_graph_access", specs[2].name)
@@ -51,6 +51,23 @@ func TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState(t *testing.T)
 	require.Contains(t, reference.sql, "search(node_id, depth)")
 	require.NotContains(t, reference.sql, "node_ids")
 	require.NotContains(t, reference.sql, "edge_ids")
+}
+
+func TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirection(t *testing.T) {
+	params := map[string]any{"graph_id": int32(42), "start_id": int64(10), "end_id": int64(20), "min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1}}
+	testCase := ScaleCase{Name: "hidden_fanin", Expected: ExpectedResult{ResultKind: "scalar"}}
+	inbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionInbound)
+	canonical := inbound[referenceSpecIndex(inbound, "s4_canonical_source_distance")]
+	require.Equal(t, "SP-S4-C-D", canonical.architecture)
+	require.Equal(t, int64(20), canonical.parameters["start_id"])
+	require.Equal(t, int64(10), canonical.parameters["end_id"])
+	require.Contains(t, canonical.sql, "e.start_id = search.node_id")
+	require.Contains(t, canonical.sql, "select e.end_id")
+	require.NotContains(t, canonical.sql, "edge_ids")
+	require.True(t, canonical.fullComparator)
+
+	outbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionOutbound)
+	require.Equal(t, -1, referenceSpecIndexOrMissing(outbound, "s4_canonical_source_distance"))
 }
 
 func TestShortestS1DistancePrototypeIsDistinctBoundedAndFallsBack(t *testing.T) {
@@ -119,6 +136,42 @@ func TestShortestPathReferencesCompareM0AndM1WithMinimalSearchState(t *testing.T
 	require.Contains(t, m1.sql, "unnest(shortest.node_ids) with ordinality")
 	require.Contains(t, m0.sql, "edge.graph_id = @graph_id")
 	require.Contains(t, m1.sql, "node.graph_id = @graph_id")
+}
+
+func TestCanonicalWitnessReferenceUsesCompactDiscoveryAndRestoresInboundPathOrder(t *testing.T) {
+	params := map[string]any{"graph_id": int32(42), "start_id": int64(10), "end_id": int64(20), "min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1}}
+	testCase := ScaleCase{Name: "path", Expected: ExpectedResult{ResultKind: "path_set"}}
+	inbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionInbound)
+	witness := inbound[referenceSpecIndex(inbound, "s4_canonical_source_witness_m0")]
+	require.Equal(t, "SP-S4-C-WE+MAT-M0", witness.architecture)
+	require.Equal(t, int64(20), witness.parameters["search_start_id"])
+	require.Equal(t, int64(10), witness.parameters["search_end_id"])
+	require.Contains(t, witness.sql, "distance(node_id, depth)")
+	require.Contains(t, witness.sql, "witness(node_id, depth, edge_ids)")
+	require.Contains(t, witness.sql, "e.start_id = distance.node_id")
+	require.Contains(t, witness.sql, "order by reversed.ordinal desc")
+	require.Contains(t, witness.sql, "terminal.id = edge.start_id")
+	require.NotContains(t, witness.sql, "distance(node_id, depth, edge_ids)")
+	require.True(t, witness.fullComparator)
+
+	outbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionOutbound)
+	outboundWitness := outbound[referenceSpecIndex(outbound, "s4_canonical_source_witness_m0")]
+	require.Equal(t, int64(10), outboundWitness.parameters["search_start_id"])
+	require.NotContains(t, outboundWitness.sql, "reversed.ordinal")
+}
+
+func TestAllShortestDAGReferenceRetainsEveryShortestDepthPredecessor(t *testing.T) {
+	outbound := allShortestDAGSearch(graph.DirectionOutbound)
+	require.Contains(t, outbound, "distance(node_id, depth)")
+	require.Contains(t, outbound, "predecessor(node_id, depth, predecessor_id, edge_id)")
+	require.Contains(t, outbound, "paths(node_id, depth, edge_ids)")
+	require.Contains(t, outbound, "e.start_id = prior.node_id and e.end_id = paths.node_id")
+	require.Contains(t, outbound, "paths.depth <= target.depth")
+	require.NotContains(t, outbound, "limit 1\n  ) predecessor")
+
+	inbound := allShortestDAGSearch(graph.DirectionInbound)
+	require.Contains(t, inbound, "e.end_id = distance.node_id")
+	require.Contains(t, inbound, "e.end_id = prior.node_id and e.start_id = paths.node_id")
 }
 
 func TestShortestReferenceIdentitiesAndInboundMinimalState(t *testing.T) {
@@ -274,15 +327,16 @@ func referenceSpecNames(specs []postgresReferenceSpec) []string {
 	return names
 }
 
-func TestAllShortestPathCaseDoesNotUseSingletonReferences(t *testing.T) {
+func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
 	runner := &postgresSQLRunner{}
 	specs, err := runner.referenceSpecs(context.Background(), ScaleCase{
 		Category: "generated_shortest_path",
-		Cypher:   "MATCH p = allShortestPaths((s)-[*1..2]->(e)) RETURN p",
-	}, nil)
+		Cypher:   "MATCH p = allShortestPaths((s)-[:Traverse*1..2]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+	}, map[string]any{"start_id": int64(1), "end_id": int64(2)})
 
 	require.NoError(t, err)
-	require.Empty(t, specs)
+	require.Len(t, specs, 1)
+	require.Equal(t, "ASP-A1-DAG", specs[0].architecture)
 }
 
 func TestADCSReferenceSpecsAvoidAmbiguousArrayContainmentOperators(t *testing.T) {

@@ -30,8 +30,10 @@ Current PostgreSQL optimization coverage includes:
   filters, traversal direction selection, and limit pushdown where ordering and distinct semantics permit it.
 - Static shortest-path executor selection for one read-only, uncorrelated, directed, bounded traversal with one ID
   equality per endpoint and no relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state;
-  one-path observations use edge-trail `SP-S3-U-E+MAT-M0` with one ordered hydration pass. Unsupported or ambiguous
-  forms retain the incumbent `SP-S0` executor with a machine-readable fallback reason.
+  one-path observations use edge-trail `SP-S3-U-E+MAT-M0` with one ordered hydration pass. Selector `sp-static-v3`
+  contains deep physical-inbound searches and wildcard/multi-kind one-path state on exact `SP-S0`. Unsupported or
+  ambiguous forms retain the incumbent `SP-S0` executor with a machine-readable fallback reason. Singleton ties return
+  one valid minimal trail; physical edge-ID order is not public. See `docs/shortest_path_tie_policy.md`.
 - Expansion suffix pushdown and `ExpandInto` detection for fixed suffixes and shared-endpoint fanout patterns.
 - Typed compound expansion-search planning for directed bounded expansions followed by fixed suffixes. The decision
   records its ADCS family, planned candidates, exact eligibility facts, observation mode, suffix bounds,

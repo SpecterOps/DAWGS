@@ -18,6 +18,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +80,10 @@ func TestParseConfigRejectsDuplicateExactSelectors(t *testing.T) {
 }
 
 func TestParseConfigAcceptsOnlyQualifiedForcedShortestExecutor(t *testing.T) {
-	cfg, err := parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-D"}, func(string) string { return "" })
+	cfg, err := parseConfig([]string{"-postgres-force-shortest-executor", "SP-S0"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "SP-S0", cfg.PostgresForceShortest)
+	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-D"}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.Equal(t, "SP-S3-U-D", cfg.PostgresForceShortest)
 	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-E+MAT-M0"}, func(string) string { return "" })
@@ -88,6 +92,33 @@ func TestParseConfigAcceptsOnlyQualifiedForcedShortestExecutor(t *testing.T) {
 
 	_, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S1"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "unsupported PostgreSQL forced shortest executor")
+}
+
+func TestParseConfigExistingGraphWorkflow(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-existing-graph", "-anchor-manifest", "anchors.json", "-checkpoint", "checkpoint.json",
+		"-resume", "-progress", "progress.jsonl", "-discovery", "-timeout-classes", "100ms,1s",
+		"-discovery-sample-floor", "2",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.ExistingGraph)
+	require.True(t, cfg.Resume)
+	require.True(t, cfg.Discovery)
+	require.Equal(t, []time.Duration{100 * time.Millisecond, time.Second}, cfg.TimeoutClasses)
+	require.Equal(t, 2, cfg.DiscoverySampleFloor)
+}
+
+func TestParseConfigRejectsUnsafeExistingGraphCombinations(t *testing.T) {
+	for _, args := range [][]string{
+		{"-existing-graph"},
+		{"-existing-graph", "-anchor-manifest", "anchors.json", "-modes", "postgres_sql,neo4j"},
+		{"-existing-graph", "-anchor-manifest", "anchors.json", "-resume"},
+		{"-existing-graph", "-anchor-manifest", "anchors.json", "-timeout-classes", "1s"},
+		{"-anchor-manifest", "anchors.json"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
 }
 
 func TestParseConfigAcceptsOnlyQualifiedForcedExpansionSearch(t *testing.T) {

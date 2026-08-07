@@ -63,6 +63,23 @@ valid branch suffix density, endpoint/path output, decoys, and a 4 KiB payload.
 Each result records the exact configuration name, deterministic graph checksum,
 and node/edge cardinality.
 
+Version-two shortest fixtures use
+`generated_shortest_paths_v2_d<depth>_o<root-out>_r<root-in>_fo<intermediate-out>_fi<intermediate-in>_l<level>_k<parallel-kinds>_t<parallel-targets>_w<diamond-width>_x<disconnected-width>_p<payload>_c<cycle>_s<self-loop>`.
+Names are strict and round-trippable: negative values, partial scans, unknown
+suffixes, non-canonical numbers, impossible intermediate levels, and partial
+parallel configurations are rejected. The fixture has independent outbound
+and physical-inbound paths, so hidden downstream fan-in and its mirrored
+fan-out control coexist without changing legacy fixture identities. Every edge
+has a stable `logical_key`. Metadata records root and per-level degrees,
+physical edges by kind, distinct reachable nodes by level, minimum distance,
+path cardinalities, predecessor edges, disconnected state, parallel physical
+edges and distinct targets, checksum, and loaded physical cardinality.
+
+`shape.fixture_tier` is one of `normal`, `envelope`, or `stress`; direction,
+relationship-kind count, expected state class, and result-cardinality class
+are stored alongside it. Stress cases remain exact diagnostics and are not
+silently promoted to release p95 evidence.
+
 Version-two ADCS fixtures use
 `generated_adcs_v2_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_z<zero-depth>_p<payload>`.
 Unlike the legacy modulus form, every integer is exact: `r0` represents zero

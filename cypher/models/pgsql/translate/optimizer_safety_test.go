@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -358,11 +359,68 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	require.NotNil(t, outcome.Eligible)
 	require.True(t, *outcome.Eligible)
 	require.Equal(t, "static", outcome.SelectionMode)
-	require.Equal(t, "sp-static-v2", outcome.SelectorVersion)
+	require.Equal(t, "sp-static-v3", outcome.SelectorVersion)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Fallback)
 	require.Empty(t, outcome.SkipReason)
+}
+
+func TestShortestExecutorV3ContainsDeepInboundWithTruthfulDiagnostics(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "sp_harness")
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, "inbound", outcome.Direction)
+	require.Equal(t, "end_id", outcome.PhysicalExpansion)
+	require.Equal(t, 1, outcome.RelationshipKindCount)
+	require.False(t, outcome.UntypedRelationship)
+	require.Equal(t, "physical_inbound_deep", outcome.TopologyClassification)
+	require.NotNil(t, outcome.Eligible)
+	require.True(t, *outcome.Eligible)
+	require.NotNil(t, outcome.StaticallyEligible)
+	require.False(t, *outcome.StaticallyEligible)
+	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Selected)
+	require.Empty(t, outcome.Applied)
+	require.Equal(t, optimize.ShortestPathFallbackDeepInboundUnqualified, outcome.SkipReason)
+}
+
+func TestShortestExecutorV3ContainsMultiKindPathButNotDistance(t *testing.T) {
+	for _, test := range []struct {
+		observation string
+		selected    optimize.ShortestPathExecutor
+		reason      string
+	}{
+		{observation: "p", selected: optimize.ShortestPathExecutorIncumbentWorkspace, reason: optimize.ShortestPathFallbackNonSingleKindPathState},
+		{observation: "length(p)", selected: optimize.ShortestPathExecutorS3Unidirectional},
+	} {
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`
+			MATCH p = shortestPath((s)-[:MemberOf|Enroll*1..8]->(e))
+			WHERE id(s) = $start_id AND id(e) = $end_id
+			RETURN %s
+		`, test.observation))
+		require.NoError(t, err)
+		translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+			"start_id": int64(1), "end_id": int64(2),
+		}, DefaultGraphID)
+		require.NoError(t, err)
+		outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+			optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		require.Equal(t, 2, outcome.RelationshipKindCount)
+		require.Equal(t, string(test.selected), outcome.Selected)
+		require.Equal(t, test.reason, outcome.SkipReason)
+	}
 }
 
 func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
@@ -384,7 +442,7 @@ func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), productionOutcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), productionOutcome.Applied)
 	require.Equal(t, "static", productionOutcome.SelectionMode)
-	require.Equal(t, "sp-static-v2", productionOutcome.SelectorVersion)
+	require.Equal(t, "sp-static-v3", productionOutcome.SelectorVersion)
 
 	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
@@ -415,6 +473,28 @@ func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
 	require.Empty(t, outcome.SkipReason)
 	requireOptimizationLowering(t, forced.Optimization, optimize.LoweringShortestPathExecutor)
 	requireNoSkippedOptimizationLowering(t, forced.Optimization, optimize.LoweringShortestPathExecutor)
+}
+
+func TestForcedShortestIncumbentEmitsExactWorkspaceHarness(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorIncumbentWorkspace})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "sp_harness")
+	require.NotContains(t, formatted, "s1(next_id, depth)")
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Applied)
+	require.Equal(t, "forced_tool", outcome.SelectionMode)
 }
 
 func TestForcedShortestDistanceExecutorRejectsIneligibleObservation(t *testing.T) {
@@ -450,7 +530,7 @@ func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Applied)
 	require.Equal(t, "static", productionOutcome.SelectionMode)
-	require.Equal(t, "sp-static-v2", productionOutcome.SelectorVersion)
+	require.Equal(t, "sp-static-v3", productionOutcome.SelectorVersion)
 
 	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),

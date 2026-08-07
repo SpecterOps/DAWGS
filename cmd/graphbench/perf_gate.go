@@ -132,6 +132,9 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 }
 
 func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, diagnosticMode bool) error {
+	if !diagnosticMode && (hasAdaptiveDiscoveryRecord(baseline) || hasAdaptiveDiscoveryRecord(candidate)) {
+		return fmt.Errorf("adaptive-discovery artifacts are refused by the complete performance gate")
+	}
 	baselineSelection, baselineErr := selectionIdentity(baseline)
 	candidateSelection, candidateErr := selectionIdentity(candidate)
 	// Version-1 historical artifacts predate selection manifests and remain
@@ -158,6 +161,18 @@ func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, dia
 		return fmt.Errorf("diagnostic comparison mode requires filtered diagnostic-only artifacts")
 	}
 	return nil
+}
+
+func hasAdaptiveDiscoveryRecord(records []CaseResult) bool {
+	for _, record := range records {
+		if record.ExistingGraph != nil && record.ExistingGraph.Adaptive {
+			return true
+		}
+		if record.Environment != nil && record.Environment.Protocol == "adaptive_discovery" {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptions) (PerfGateReport, error) {

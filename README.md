@@ -101,6 +101,12 @@ node and edge counts exactly match the declared fixture; active child-partition
 sizes are retained with each fixture. Node-ID expectations and recorded paths use stable
 fixture identities rather than backend-assigned IDs, while preserving duplicate
 rows and path order.
+For sanitized production-like data, `-existing-graph` uses a versioned
+logical-key anchor manifest and bypasses every schema/load/clear/vacuum path.
+It rejects mutation cases, verifies before/after cardinalities, redacts anchor
+values, and supports atomic checkpoints, resume, progress JSONL, and explicitly
+labeled adaptive discovery. See `cmd/graphbench/README.md` for the fixed
+confirmation and timeout-class workflows.
 The executable gate uses the complete corpus/backend declaration instead of the
 intersection of successful records, treats Neo4j only as an exact-result and
 informational latency oracle, and supports predeclared materiality thresholds.

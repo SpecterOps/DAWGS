@@ -45,3 +45,19 @@ func TestParsePostgresPlanJSONMetricsRejectsMissingPlan(t *testing.T) {
 	_, err := parsePostgresPlanJSONMetrics(json.RawMessage(`[{"Planning Time":1}]`))
 	require.ErrorContains(t, err, "missing its root Plan")
 }
+
+func TestParsePostgresPlanJSONMetricsAttributesLabeledS4State(t *testing.T) {
+	raw := json.RawMessage(`[{"Plan":{"Node Type":"Result","Actual Rows":1,"Actual Loops":1,"Plans":[
+		{"Node Type":"CTE Scan","CTE Name":"forward_frontier","Actual Rows":3,"Actual Loops":2},
+		{"Node Type":"CTE Scan","CTE Name":"selected_witness","Actual Rows":4,"Actual Loops":1},
+		{"Node Type":"CTE Scan","CTE Name":"shortest_meeting","Actual Rows":1,"Actual Loops":1},
+		{"Node Type":"Subquery Scan","Alias":"m0_hydrated","Actual Rows":5,"Actual Loops":1}
+	]}}]`)
+	metrics, err := parsePostgresPlanJSONMetrics(raw)
+	require.NoError(t, err)
+	require.Equal(t, int64(6), metrics.FrontierRows)
+	require.Equal(t, int64(4), metrics.WitnessRows)
+	require.Equal(t, int64(1), metrics.MeetingRows)
+	require.Equal(t, int64(5), metrics.HydrationRows)
+	require.Equal(t, "plan_derived_labeled_state_rows", metrics.Provenance["witness_rows"])
+}

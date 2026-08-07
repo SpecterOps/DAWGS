@@ -70,6 +70,20 @@ func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 		metrics.Provenance["recursive_rows"] = "measured_plan_json"
 		metrics.Provenance["recursive_loops"] = "measured_plan_json"
 	}
+	for identity, target := range map[string]*int64{
+		"frontier": &metrics.FrontierRows,
+		"witness":  &metrics.WitnessRows,
+		"meeting":  &metrics.MeetingRows,
+	} {
+		if strings.Contains(lowerIdentity, identity) {
+			*target += rows
+			metrics.Provenance[identity+"_rows"] = "plan_derived_labeled_state_rows"
+		}
+	}
+	if strings.Contains(lowerIdentity, "hydrated") || strings.Contains(lowerIdentity, "materializ") {
+		metrics.HydrationRows += rows
+		metrics.Provenance["hydration_rows"] = "plan_derived_labeled_state_rows"
+	}
 	if metric.CTEName == "roots" || (strings.Contains(lowerIdentity, " roots") && strings.Contains(lowerIdentity, "cte scan")) {
 		metrics.RootRows += rows
 		metrics.Provenance["root_rows"] = "measured_plan_json"

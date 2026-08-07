@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "passed": true,
+  "cases": [
+    {
+      "dataset": "generated_adcs_d0_f1_v1_p0",
+      "name": "GADCS-D00-F001-none_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d0_f1_v1_p0",
+      "name": "GADCS-D00-F001-none_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d16_f1000_v1000_p0",
+      "name": "GADCS-D16-F1000-sparse_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d16_f1000_v1000_p0",
+      "name": "GADCS-D16-F1000-sparse_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d1_f10_v10_p0",
+      "name": "GADCS-D01-F010-sparse_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d1_f10_v10_p0",
+      "name": "GADCS-D01-F010-sparse_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d2_f100_v10_p0",
+      "name": "GADCS-D02-F100-sparse_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d2_f100_v10_p0",
+      "name": "GADCS-D02-F100-sparse_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d4_f10_v2_p4096",
+      "name": "GADCS-D04-F010-half_payload_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d4_f10_v2_p4096",
+      "name": "GADCS-D04-F010-half_payload_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d8_f1_v1_p0",
+      "name": "GADCS-D08-F001-all_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_d8_f1_v1_p0",
+      "name": "GADCS-D08-F001-all_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_v2_d16_f1000_r1_x1_i0_m1_z1_p0",
+      "name": "GADCS2-D16-F1000-R1-X1-M1-sparse_endpoint_ids",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_v2_d16_f1000_r1_x1_i0_m1_z1_p0",
+      "name": "GADCS2-D16-F1000-R1-X1-M1-sparse_path",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_v2_d8_f16_r1_x0_i1000_m1_z0_p0",
+      "name": "GADCS2-D08-F016-R1-I1000-high_reverse_fanin",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_adcs_v2_d8_f512_r0_x512_i0_m1_z0_p0",
+      "name": "GADCS2-D08-F512-R0-X512-zero_reachable",
+      "tier": "legacy",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d16_f16",
+      "name": "GSP-D16-F016_distance",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d16_f16",
+      "name": "GSP-D16-F016_path",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d1_f1",
+      "name": "GSP-D00-F001_path_zero",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d1_f1",
+      "name": "GSP-D01-F001_distance",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d1_f1",
+      "name": "GSP-D01-F001_path",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D01-F016_distance_parallel",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D01-F016_path_parallel",
+      "tier": "legacy",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_distance",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_distance_cycle",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_distance_self_loop",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_path",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_path_cycle",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_path_self_loop",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_all_shortest_diamond",
+      "tier": "legacy",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_disconnected",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_distance",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_path",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_path_disconnected",
+      "tier": "legacy",
+      "architecture": "SP-S3-U-E+MAT-M0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d8_f1",
+      "name": "GSP-D08-F001_distance_inbound",
+      "tier": "legacy",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_d8_f1",
+      "name": "GSP-D08-F001_path_inbound",
+      "tier": "legacy",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-diamond-all-shortest",
+      "tier": "normal",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-hidden-fanin-distance",
+      "tier": "normal",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-hidden-fanin-path",
+      "tier": "normal",
+      "architecture": "SP-S0",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-outbound-distance",
+      "tier": "normal",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-parallel-kind-distance",
+      "tier": "normal",
+      "architecture": "SP-S3-U-D",
+      "passed": true
+    },
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-parallel-kind-path",
+      "tier": "normal",
+      "architecture": "SP-S0",
+      "passed": true
+    }
+  ]
+}
