@@ -9,14 +9,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/specterops/dawgs/internal/integrationguard"
+	"github.com/specterops/dawgs/databaseguard"
 )
 
 func main() {
-	if err := integrationguard.Validate(
+	if err := databaseguard.Validate(
 		os.Getenv("CONNECTION_STRING"),
-		os.Getenv(integrationguard.AllowDestructiveEnv),
-		os.Getenv(integrationguard.DisposableTargetsEnv),
+		os.Getenv(databaseguard.AllowDestructiveEnv),
+		os.Getenv(databaseguard.DisposableTargetsEnv),
 	); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

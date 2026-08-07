@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/specterops/dawgs/internal/integrationguard"
+	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/testutil"
 )
 
@@ -543,10 +543,10 @@ func main() {
 			if connection == "" {
 				continue
 			}
-			if err := integrationguard.Validate(
+			if err := databaseguard.Validate(
 				connection,
-				os.Getenv(integrationguard.AllowDestructiveEnv),
-				os.Getenv(integrationguard.DisposableTargetsEnv),
+				os.Getenv(databaseguard.AllowDestructiveEnv),
+				os.Getenv(databaseguard.DisposableTargetsEnv),
 			); err != nil {
 				fatal("refuse destructive GraphBench target: %v", err)
 			}
