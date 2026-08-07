@@ -17,11 +17,32 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestAppendJSONLFileValidatesRunIdentityAndDuplicateRounds(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rounds.jsonl")
+	record := func(round int, arm, runUUID, binary string) CaseResult {
+		return CaseResult{
+			Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK,
+			Environment: &RunEnvironment{Round: round, Arm: arm, RunUUID: runUUID, BinarySHA256: binary, DirtyDiffSHA256: "diff"},
+		}
+	}
+
+	require.NoError(t, appendJSONLFile(path, []CaseResult{record(1, "candidate", "run-1", "binary")}))
+	require.NoError(t, appendJSONLFile(path, []CaseResult{record(2, "candidate", "run-1", "binary")}))
+	records, err := readJSONLFile(path)
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+
+	require.ErrorContains(t, appendJSONLFile(path, []CaseResult{record(2, "candidate", "run-1", "binary")}), "duplicate record")
+	require.ErrorContains(t, appendJSONLFile(path, []CaseResult{record(3, "incumbent", "run-1", "binary")}), "run identity mismatch")
+	require.ErrorContains(t, appendJSONLFile(path, []CaseResult{record(3, "candidate", "run-2", "binary")}), "run identity mismatch")
+}
 
 func TestComputeDurationStatsRejectsEmptyDurations(t *testing.T) {
 	_, err := computeDurationStats(nil)
@@ -102,4 +123,15 @@ func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
 
 	records[1].ObservedRows = []string{`["a"]`}
 	require.ErrorContains(t, validateBackendObservations(records), "backend observations differ")
+}
+
+func TestNewCaseResultOnlyCrossChecksExplicitPathRows(t *testing.T) {
+	record := newCaseResult(ScaleCase{Expected: ExpectedResult{ResultKind: "path_set"}}, ModePostgresSQL, nil)
+	require.False(t, record.StableObservation)
+
+	record = newCaseResult(ScaleCase{Expected: ExpectedResult{
+		ResultKind: "path_set",
+		PathRows:   []ExpectedPath{{Nodes: []string{"start"}}},
+	}}, ModePostgresSQL, nil)
+	require.True(t, record.StableObservation)
 }

@@ -226,6 +226,87 @@ func TestIDOnlyTerminalProjectionRetainsCompositeForObservedPath(t *testing.T) {
 	require.Contains(t, formatted, "ordered_edge_ids_to_path")
 }
 
+func TestIDOnlyExpansionContinuationCarriesScalarID(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[]->(e) RETURN id(mid), id(e)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "join lateral (select n1.id from node n1 where n1.id = s1.next_id offset 0) n1 on true")
+	require.Contains(t, formatted, "s0.n1 = e1.start_id")
+	require.Contains(t, formatted, "s0.n1 as n1")
+	require.NotContains(t, formatted, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.NotContains(t, formatted, "(s0.n1).id = e1.start_id")
+}
+
+func TestIDOnlyExpansionContinuationRetainsCompositeForPropertyUse(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[]->(e) RETURN mid.name`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted, "(s0.n1).id = e1.start_id")
+}
+
+func TestIDOnlyExpansionContinuationSeedsFollowingExpansionFromScalarID(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[*1..]->(e) RETURN id(mid), id(e)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "select distinct s0.n1 as root_id from s0")
+	require.Contains(t, formatted, "s0.n1 = s3.root_id")
+	require.NotContains(t, formatted, "select distinct (s0.n1).id as root_id from s0")
+}
+
+func TestIDOnlyExpansionContinuationRetainsCompositeForObservedPath(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = (s)-[*1..]->(mid)-[]->(e) RETURN p`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted, "(s0.n1).id = e1.start_id")
+	require.Contains(t, formatted, "ordered_edge_ids_to_path")
+}
+
+func TestIDOnlyExpansionContinuationRetainsCompositeForMutation(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[]->(e) DELETE mid`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted, "(s0.n1).id = e1.start_id")
+	require.Contains(t, formatted, "delete from node")
+}
+
 func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	translateQuery := func(cypherQuery string) (Result, string) {

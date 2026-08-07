@@ -17,6 +17,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,52 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 	}
 	require.Positive(t, covered["shortest"])
 	require.Positive(t, covered["adcs"])
+}
+
+func TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	requiredTags := map[string]bool{
+		"depth-32": false, "depth-64": false, "fanout-512": false, "fanout-1000": false,
+		"inbound": false, "disconnected": false, "cycle": false, "parallel-edges": false, "self-loop": false,
+	}
+	for _, testCase := range corpus.Cases {
+		if testCase.Category != "generated_shortest_path" || !slices.Contains(testCase.Tags, "distance") {
+			continue
+		}
+		for tag := range requiredTags {
+			if slices.Contains(testCase.Tags, tag) {
+				requiredTags[tag] = true
+			}
+		}
+	}
+	for tag, covered := range requiredTags {
+		require.True(t, covered, "shortest distance corpus is missing %s", tag)
+	}
+}
+
+func TestGeneratedShortestPathCorpusCoversMaterializerEnvelope(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	requiredTags := map[string]bool{
+		"depth-32": false, "depth-64": false, "fanout-512": false, "fanout-1000": false,
+		"inbound": false, "zero-depth": false, "disconnected": false, "cycle": false, "parallel-edges": false, "self-loop": false,
+	}
+	for _, testCase := range corpus.Cases {
+		if testCase.Category != "generated_shortest_path" || !slices.Contains(testCase.Tags, "path") {
+			continue
+		}
+		for tag := range requiredTags {
+			if slices.Contains(testCase.Tags, tag) {
+				requiredTags[tag] = true
+			}
+		}
+	}
+	for tag, covered := range requiredTags {
+		require.True(t, covered, "shortest path corpus is missing %s", tag)
+	}
 }
 
 func scaleCorpusCaseID(name string) string {

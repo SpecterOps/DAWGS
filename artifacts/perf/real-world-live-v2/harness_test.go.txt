@@ -1,0 +1,84 @@
+package main
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestLiveCasesAreUniqueAndDoNotContainGraphMutations(t *testing.T) {
+	ids := make([]int64, 1000)
+	for idx := range ids {
+		ids[idx] = int64(idx + 1)
+	}
+	cases := liveCases(ids)
+	if len(cases) < 130 {
+		t.Fatalf("expected expanded mutation matrix, got %d cases", len(cases))
+	}
+
+	seen := map[string]struct{}{}
+	for _, testCase := range cases {
+		if _, duplicate := seen[testCase.Name]; duplicate {
+			t.Fatalf("duplicate case name %q", testCase.Name)
+		}
+		seen[testCase.Name] = struct{}{}
+		if testCase.ExpectedRows == nil {
+			t.Fatalf("case %q has no row-count expectation", testCase.Name)
+		}
+		upperQuery := " " + strings.ToUpper(testCase.Cypher) + " "
+		for _, mutation := range []string{" CREATE ", " MERGE ", " DELETE ", " DETACH ", " SET ", " REMOVE "} {
+			if strings.Contains(upperQuery, mutation) {
+				t.Fatalf("case %q contains persistent graph mutation keyword %q", testCase.Name, strings.TrimSpace(mutation))
+			}
+		}
+	}
+}
+
+func TestAdaptiveSamples(t *testing.T) {
+	tests := []struct {
+		cold time.Duration
+		want int
+	}{
+		{cold: 10 * time.Millisecond, want: 9},
+		{cold: 50 * time.Millisecond, want: 5},
+		{cold: 250 * time.Millisecond, want: 3},
+		{cold: time.Second, want: 2},
+		{cold: 5 * time.Second, want: 1},
+	}
+	for _, test := range tests {
+		if got := adaptiveSamples(9, test.cold); got != test.want {
+			t.Errorf("adaptiveSamples(9, %s) = %d, want %d", test.cold, got, test.want)
+		}
+	}
+}
+
+func TestFilterCasesSupportsCommaSeparatedSubstrings(t *testing.T) {
+	cases := []caseSpec{
+		{Name: "shortest_out", Family: "shortest"},
+		{Name: "shortest_in", Family: "shortest"},
+		{Name: "count_all", Family: "count"},
+	}
+	selected := filterCases(cases, "_out,count_", "shortest,count")
+	if len(selected) != 2 || selected[0].Name != "shortest_out" || selected[1].Name != "count_all" {
+		t.Fatalf("unexpected selection: %#v", selected)
+	}
+}
+
+func TestPercentileUsesNearestRankIndex(t *testing.T) {
+	values := []time.Duration{time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond, 4 * time.Millisecond, 5 * time.Millisecond}
+	if got := percentile(values, 0.50); got != 3*time.Millisecond {
+		t.Fatalf("median = %s, want 3ms", got)
+	}
+	if got := percentile(values, 0.95); got != 5*time.Millisecond {
+		t.Fatalf("p95 = %s, want 5ms", got)
+	}
+}
+
+func TestStableValueRedactsComplexValues(t *testing.T) {
+	if got := stableValue(int64(3)); got != "3" {
+		t.Fatalf("stable integer = %q, want 3", got)
+	}
+	if got := stableValue(struct{ Secret string }{Secret: "hidden"}); got != "<struct { Secret string }>" {
+		t.Fatalf("complex value was not type-redacted: %q", got)
+	}
+}

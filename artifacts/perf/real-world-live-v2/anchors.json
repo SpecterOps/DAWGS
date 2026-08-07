@@ -1,0 +1,71 @@
+{
+  "discovery": {
+    "mode": "bounded_read_only_physical_sampling_followed_by_indexed_validation",
+    "statement_timeout_seconds": 5,
+    "table_sample_percent_range": [0.01, 1.0]
+  },
+  "outbound_member_of_fanout": [
+    {"root_id": 5489754, "target_id": 5487983, "degree": 1},
+    {"root_id": 6035249, "target_id": 5861842, "degree": 16},
+    {"root_id": 6031043, "target_id": 5861842, "degree": 128},
+    {"root_id": 6089362, "target_id": 5861842, "degree": 439},
+    {"root_id": 5495216, "target_id": 5572402, "degree": 987}
+  ],
+  "inbound_member_of_fanin": [
+    {"root_id": 5578756, "target_id": 5578820, "degree": 1},
+    {"root_id": 6107500, "target_id": 5873045, "degree": 16},
+    {"root_id": 5501396, "target_id": 5331076, "degree": 128},
+    {"root_id": 5508010, "target_id": 5330991, "degree": 524},
+    {"root_id": 5691345, "target_id": 5316676, "degree": 1025}
+  ],
+  "member_of_true_chain": {
+    "node_ids_in_outbound_order": [6229302, 5861842, 5861841, 5861840],
+    "shortest_depth": 3,
+    "incoming_outgoing_degrees": [
+      {"node_id": 5861840, "incoming": 2, "outgoing": 0},
+      {"node_id": 5861841, "incoming": 2, "outgoing": 3},
+      {"node_id": 5861842, "incoming": 170593, "outgoing": 3},
+      {"node_id": 6229302, "incoming": 0, "outgoing": 15}
+    ]
+  },
+  "member_of_diamond": {
+    "root_id": 5896875,
+    "target_id": 6432297,
+    "equal_shortest_paths": 10,
+    "shortest_depth": 2
+  },
+  "parallel_edge_pair": {
+    "root_id": 5863170,
+    "target_id": 6090078,
+    "relationship_kinds": [
+      "AllExtendedRights",
+      "GenericWrite",
+      "Owns",
+      "OwnsRaw",
+      "WriteDacl",
+      "WriteOwner",
+      "WriteOwnerRaw"
+    ],
+    "outgoing_degrees_by_kind": {
+      "AllExtendedRights": 170810,
+      "GenericWrite": 657302,
+      "Owns": 4967,
+      "OwnsRaw": 4967,
+      "WriteDacl": 657349,
+      "WriteOwner": 657292,
+      "WriteOwnerRaw": 657349
+    },
+    "physical_parallel_edges_between_pair": 7
+  },
+  "self_loop": {
+    "node_id": 6844661,
+    "relationship_kind": "AZRunsAs"
+  },
+  "adcs_reachable_enroll_control": {
+    "root_id": 5506725,
+    "member_of_boundary_id": 5506645,
+    "enterprise_ca_id": 5670921,
+    "complete_suffix_exists": false
+  },
+  "disconnected_target_id": 6844661
+}

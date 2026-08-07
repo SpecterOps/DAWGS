@@ -22,6 +22,7 @@ const (
 	LoweringPathRelationshipPredicate = "PathRelationshipPredicate"
 	LoweringFieldRequirements         = "FieldRequirements"
 	LoweringShortestPathExecutor      = "ShortestPathExecutorDecision"
+	LoweringExpansionSearchStrategy   = "ExpansionSearchStrategyDecision"
 )
 
 type LoweringDecision struct {
@@ -110,10 +111,11 @@ type ShortestPathStrategyDecision struct {
 type ShortestPathExecutor string
 
 const (
-	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "incumbent_workspace"
-	ShortestPathExecutorS1ArrayBFS         ShortestPathExecutor = "s1_array_bfs"
-	ShortestPathExecutorS2TraceRelation    ShortestPathExecutor = "s2_trace_relation"
-	ShortestPathExecutorS3Unidirectional   ShortestPathExecutor = "s3_unidirectional_cte"
+	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "SP-S0"
+	ShortestPathExecutorS1ArrayBFS         ShortestPathExecutor = "SP-S1"
+	ShortestPathExecutorS2TraceRelation    ShortestPathExecutor = "SP-S2"
+	ShortestPathExecutorS3Unidirectional   ShortestPathExecutor = "SP-S3-U-D"
+	ShortestPathExecutorS3EdgeM0           ShortestPathExecutor = "SP-S3-U-E+MAT-M0"
 )
 
 type ShortestPathObservationMode string
@@ -138,7 +140,6 @@ const (
 	ShortestPathFallbackUnsupportedDepth      = "unsupported_depth"
 	ShortestPathFallbackMutation              = "mutation"
 	ShortestPathFallbackMultiplePathCalls     = "multiple_path_calls"
-	ShortestPathFallbackStateLimit            = "state_limit"
 	ShortestPathFallbackTournamentUnqualified = "tournament_unqualified"
 )
 
@@ -147,18 +148,24 @@ type ShortestPathEligibilityFact struct {
 	Eligible bool   `json:"eligible"`
 }
 
-// ShortestPathExecutorDecision is emitted even while the incumbent remains
-// selected. This makes conservative fallback observable without enabling an
-// experimental executor before its performance/resource tournament passes.
+// ShortestPathExecutorDecision records either a qualified static executor or
+// the incumbent fallback, keeping every eligibility and fallback fact visible.
 type ShortestPathExecutorDecision struct {
-	Target             TraversalStepTarget           `json:"target"`
-	SelectedExecutor   ShortestPathExecutor          `json:"selected_executor"`
-	ObservationMode    ShortestPathObservationMode   `json:"observation_mode"`
-	Eligibility        []ShortestPathEligibilityFact `json:"eligibility"`
-	MaximumDepth       int64                         `json:"maximum_depth,omitempty"`
-	FallbackExecutor   ShortestPathExecutor          `json:"fallback_executor"`
-	FallbackReason     string                        `json:"fallback_reason"`
-	ExperimentalWinner bool                          `json:"experimental_winner,omitempty"`
+	Target               TraversalStepTarget           `json:"target"`
+	Family               string                        `json:"family"`
+	PlannedCandidates    []ShortestPathExecutor        `json:"planned_candidates"`
+	SelectedExecutor     ShortestPathExecutor          `json:"selected_executor"`
+	ObservationMode      ShortestPathObservationMode   `json:"observation_mode"`
+	Eligibility          []ShortestPathEligibilityFact `json:"eligibility"`
+	StructurallyEligible bool                          `json:"structurally_eligible"`
+	MinimumDepth         int64                         `json:"minimum_depth"`
+	MaximumDepth         int64                         `json:"maximum_depth"`
+	StateLimit           int64                         `json:"state_limit,omitempty"`
+	SelectorVersion      string                        `json:"selector_version"`
+	SelectionMode        string                        `json:"selection_mode"`
+	FallbackExecutor     ShortestPathExecutor          `json:"fallback_executor"`
+	FallbackReason       string                        `json:"fallback_reason"`
+	ExperimentalWinner   bool                          `json:"experimental_winner,omitempty"`
 }
 
 type ShortestPathFilterMode string
@@ -194,6 +201,76 @@ type ExpansionSuffixPushdownDecision struct {
 	ApplySupplemental    bool                  `json:"apply_supplemental"`
 	Reason               string                `json:"reason,omitempty"`
 	PredicateAttachments []PredicateAttachment `json:"predicate_attachments,omitempty"`
+}
+
+type ExpansionSearchStrategy string
+
+const (
+	ExpansionSearchStepwiseForward          ExpansionSearchStrategy = "ADCS-INCUMBENT-STEPWISE"
+	ExpansionSearchLateHydratedForward      ExpansionSearchStrategy = "ADCS-A0"
+	ExpansionSearchFactoredSuffixForward    ExpansionSearchStrategy = "ADCS-A2"
+	ExpansionSearchSuffixSeededReverse      ExpansionSearchStrategy = "ADCS-A3"
+	ExpansionSearchBackwardViabilityForward ExpansionSearchStrategy = "ADCS-A4"
+	ExpansionSearchBoundedReverseForward    ExpansionSearchStrategy = "ADCS-A5"
+)
+
+type ExpansionSearchObservationMode string
+
+const (
+	ExpansionSearchObservationEndpointIDs    ExpansionSearchObservationMode = "endpoint_ids"
+	ExpansionSearchObservationOrderedPathIDs ExpansionSearchObservationMode = "ordered_path_ids"
+	ExpansionSearchObservationFullPath       ExpansionSearchObservationMode = "full_path"
+	ExpansionSearchObservationUnsupported    ExpansionSearchObservationMode = "unsupported"
+)
+
+type ExpansionSearchEligibilityFact struct {
+	Name     string `json:"name"`
+	Eligible bool   `json:"eligible"`
+}
+
+const (
+	ExpansionSearchFallbackNoFixedSuffix              = "no_fixed_suffix"
+	ExpansionSearchFallbackSuffixTooShort             = "suffix_too_short"
+	ExpansionSearchFallbackOptionalMatch              = "optional_match"
+	ExpansionSearchFallbackShortestPath               = "shortest_path"
+	ExpansionSearchFallbackAllShortestPaths           = "all_shortest_paths"
+	ExpansionSearchFallbackDirectionlessExpansion     = "directionless_expansion"
+	ExpansionSearchFallbackDirectionlessSuffix        = "directionless_suffix"
+	ExpansionSearchFallbackUnboundedDepth             = "unbounded_depth"
+	ExpansionSearchFallbackUnsupportedDepth           = "unsupported_depth"
+	ExpansionSearchFallbackMultipleVariableExpansions = "multiple_variable_expansions"
+	ExpansionSearchFallbackCorrelatedSuffix           = "correlated_suffix"
+	ExpansionSearchFallbackCrossRegionPredicate       = "cross_region_predicate"
+	ExpansionSearchFallbackPathDependentPredicate     = "path_dependent_predicate"
+	ExpansionSearchFallbackRelationshipVariable       = "relationship_variable"
+	ExpansionSearchFallbackRelationshipPredicate      = "relationship_predicate"
+	ExpansionSearchFallbackLimitPushdownConflict      = "limit_pushdown_conflict"
+	ExpansionSearchFallbackUnsupportedObservation     = "unsupported_observation"
+	ExpansionSearchFallbackMutation                   = "mutation"
+	ExpansionSearchFallbackUnboundRoot                = "unbound_root"
+	ExpansionSearchFallbackTournamentUnqualified      = "tournament_unqualified"
+)
+
+type ExpansionSearchStrategyDecision struct {
+	Target               TraversalStepTarget              `json:"target"`
+	Family               string                           `json:"family"`
+	PlannedCandidates    []ExpansionSearchStrategy        `json:"planned_candidates"`
+	SelectedStrategy     ExpansionSearchStrategy          `json:"selected_strategy"`
+	StructurallyEligible bool                             `json:"structurally_eligible"`
+	EligibilityFacts     []ExpansionSearchEligibilityFact `json:"eligibility_facts"`
+	SuffixStartStep      int                              `json:"suffix_start_step,omitempty"`
+	SuffixEndStep        int                              `json:"suffix_end_step,omitempty"`
+	SuffixLength         int                              `json:"suffix_length,omitempty"`
+	ObservationMode      ExpansionSearchObservationMode   `json:"observation_mode"`
+	LogicalDirection     string                           `json:"logical_direction"`
+	MinimumDepth         int64                            `json:"minimum_depth"`
+	MaximumDepth         int64                            `json:"maximum_depth,omitempty"`
+	SelectionMode        string                           `json:"selection_mode"`
+	SelectorVersion      string                           `json:"selector_version"`
+	SuffixProbeLimit     int64                            `json:"suffix_probe_limit,omitempty"`
+	ReverseStateLimit    int64                            `json:"reverse_state_limit,omitempty"`
+	FallbackStrategy     ExpansionSearchStrategy          `json:"fallback_strategy"`
+	FallbackReason       string                           `json:"fallback_reason"`
 }
 
 type PredicatePlacementDecision struct {
@@ -315,6 +392,7 @@ type LoweringPlan struct {
 	AggregateTraversalCount   []AggregateTraversalCountDecision   `json:"aggregate_traversal_count,omitempty"`
 	FieldRequirements         []FieldRequirementDecision          `json:"field_requirements,omitempty"`
 	ShortestPathExecutor      []ShortestPathExecutorDecision      `json:"shortest_path_executor,omitempty"`
+	ExpansionSearchStrategy   []ExpansionSearchStrategyDecision   `json:"expansion_search_strategy,omitempty"`
 }
 
 func (s LoweringPlan) Empty() bool {
@@ -333,7 +411,8 @@ func (s LoweringPlan) Empty() bool {
 		len(s.PathRelationshipPredicate) == 0 &&
 		len(s.AggregateTraversalCount) == 0 &&
 		len(s.FieldRequirements) == 0 &&
-		len(s.ShortestPathExecutor) == 0
+		len(s.ShortestPathExecutor) == 0 &&
+		len(s.ExpansionSearchStrategy) == 0
 }
 
 func (s LoweringPlan) Decisions() []LoweringDecision {
@@ -359,6 +438,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringAggregateTraversalCount, len(s.AggregateTraversalCount) > 0)
 	add(LoweringFieldRequirements, len(s.FieldRequirements) > 0)
 	add(LoweringShortestPathExecutor, len(s.ShortestPathExecutor) > 0)
+	add(LoweringExpansionSearchStrategy, len(s.ExpansionSearchStrategy) > 0)
 
 	return decisions
 }

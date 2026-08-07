@@ -430,8 +430,38 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
 }
 
 func clearGraph(ctx context.Context, db graph.Database) error {
+	if pgDriver, isPostgres := db.(*pg.Driver); isPostgres {
+		graphTarget, hasDefaultGraph := pgDriver.DefaultGraph()
+		if !hasDefaultGraph {
+			return fmt.Errorf("PostgreSQL default graph is not set")
+		}
+
+		return clearPostgresGraph(ctx, db, graphTarget.ID)
+	}
+
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		return tx.Nodes().Delete()
+		if err := tx.Relationships().Delete(); err != nil {
+			return fmt.Errorf("delete relationships: %w", err)
+		}
+
+		if err := tx.Nodes().Delete(); err != nil {
+			return fmt.Errorf("delete nodes: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) error {
+	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		statement := fmt.Sprintf("truncate table edge_%d, node_%d", graphID, graphID)
+		result := tx.Raw(statement, nil)
+		result.Close()
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("execute PostgreSQL graph reset: %w", err)
+		}
+
+		return nil
 	})
 }
 

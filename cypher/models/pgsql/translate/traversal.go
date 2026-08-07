@@ -10,11 +10,19 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.RowColumnReference {
+func projectedNodeIDReference(frameIdentifier pgsql.Identifier, binding *BoundIdentifier) pgsql.Expression {
+	if binding != nil && binding.IDOnly {
+		return pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier}
+	}
+
 	return pgsql.RowColumnReference{
-		Identifier: pgsql.CompoundIdentifier{frame.Binding.Identifier, binding.Identifier},
+		Identifier: pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier},
 		Column:     pgsql.ColumnID,
 	}
+}
+
+func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.Expression {
+	return projectedNodeIDReference(frame.Binding.Identifier, binding)
 }
 
 func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.Expression {
@@ -41,6 +49,15 @@ func sourceTargetForTraversalStep(part *PatternPart, stepIndex int) (optimize.Tr
 	}
 
 	return part.Target.TraversalStep(stepIndex), true
+}
+
+func (s *Translator) shortestPathExecutorDecision(part *PatternPart, stepIndex int) (optimize.ShortestPathExecutorDecision, bool) {
+	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
+	if !hasTarget {
+		return optimize.ShortestPathExecutorDecision{}, false
+	}
+	decision, hasDecision := s.shortestPathExecutorDecisions[target]
+	return decision, hasDecision
 }
 
 func traversalStepIsFirstForSourceTarget(part *PatternPart, stepIndex int) bool {
@@ -628,9 +645,6 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 
 func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedProjection bool, allowProjectionPruning bool) error {
 	var scopeSnapshot *Scope
-	if part != nil && (part.ShortestPath || part.AllShortestPaths) {
-		s.recordLowering(optimize.LoweringShortestPathExecutor)
-	}
 
 	if isolatedProjection {
 		scopeSnapshot = s.scope.Snapshot()
@@ -771,8 +785,44 @@ func fieldRequirementAllowsIDOnly(decision optimize.FieldRequirementDecision) bo
 	return observesID
 }
 
-func (s *Translator) applyIDOnlyTerminalProjection(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
-	if part == nil || binding == nil || !part.HasTarget || traversalStepHasContinuation(part, stepIndex) {
+func fieldRequirementAllowsIDOnlyContinuation(decision optimize.FieldRequirementDecision) bool {
+	for _, use := range decision.Uses {
+		for _, field := range use.Fields {
+			if field == optimize.FieldRequirementFullEntity || field == optimize.FieldRequirementFullPath {
+				return false
+			}
+
+			if !use.Internal && field != optimize.FieldRequirementEntityID {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func traversalStepContinuesFromBinding(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if part == nil || binding == nil || stepIndex < 0 || stepIndex+1 >= len(part.TraversalSteps) {
+		return false
+	}
+
+	currentStep := part.TraversalSteps[stepIndex]
+	nextStep := part.TraversalSteps[stepIndex+1]
+
+	return currentStep != nil && nextStep != nil &&
+		currentStep.RightNode == binding && nextStep.LeftNode == binding
+}
+
+func (s *Translator) applyIDOnlyNodeProjection(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
+	if part == nil || binding == nil || !part.HasTarget {
+		return false
+	}
+
+	var (
+		isContinuation = traversalStepContinuesFromBinding(part, stepIndex, binding)
+		isTerminal     = !traversalStepHasContinuation(part, stepIndex)
+	)
+	if !isContinuation && !isTerminal {
 		return false
 	}
 
@@ -788,11 +838,31 @@ func (s *Translator) applyIDOnlyTerminalProjection(part *PatternPart, stepIndex 
 		}
 	}
 
+	foundDecision := false
 	for _, symbol := range s.scope.Symbols(binding) {
-		if decision, found := s.fieldRequirementDecisions[part.Target.QueryPartIndex][symbol.String()]; found && fieldRequirementAllowsIDOnly(decision) {
-			binding.IDOnly = true
-			return true
+		if decision, found := s.fieldRequirementDecisions[part.Target.QueryPartIndex][symbol.String()]; found {
+			foundDecision = true
+			allowsIDOnly := fieldRequirementAllowsIDOnly(decision)
+			if isContinuation {
+				allowsIDOnly = fieldRequirementAllowsIDOnlyContinuation(decision)
+			}
+
+			if !allowsIDOnly {
+				return false
+			}
 		}
+	}
+	if foundDecision {
+		binding.IDOnly = true
+		return true
+	}
+
+	// Anonymous or otherwise unobserved intermediate nodes have no source-level
+	// field-requirement decision. Their identity is still required to join the
+	// next relationship, so carry that identity as a scalar between steps.
+	if isContinuation && !foundDecision {
+		binding.IDOnly = true
+		return true
 	}
 
 	return false
@@ -1075,8 +1145,9 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 		}
 	}
 
-	if s.applyIDOnlyTerminalProjection(part, stepIndex, traversalStep.LeftNode) ||
-		s.applyIDOnlyTerminalProjection(part, stepIndex, traversalStep.RightNode) {
+	leftNodeIDOnly := s.applyIDOnlyNodeProjection(part, stepIndex, traversalStep.LeftNode)
+	rightNodeIDOnly := s.applyIDOnlyNodeProjection(part, stepIndex, traversalStep.RightNode)
+	if leftNodeIDOnly || rightNodeIDOnly {
 		s.recordLowering(optimize.LoweringFieldRequirements)
 	}
 

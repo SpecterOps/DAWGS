@@ -96,8 +96,18 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 }
 
 func (s *Driver) Close(ctx context.Context) error {
+	if s.SchemaManager != nil {
+		s.SchemaManager.parseCache.Close()
+	}
 	s.pool.Close()
 	return nil
+}
+
+func (s *Driver) ParseCacheStats() ParseCacheStats {
+	if s == nil || s.SchemaManager == nil {
+		return ParseCacheStats{}
+	}
+	return s.SchemaManager.parseCache.Stats()
 }
 
 func renderConfig(batchWriteSize int, pgxOptions pgx.TxOptions, userOptions []graph.TransactionOption) (*Config, error) {

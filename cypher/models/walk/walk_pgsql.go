@@ -220,6 +220,9 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Parameters); err != nil {
 			return nil, err
 		} else {
+			for _, orderBy := range typedNode.OrderBy {
+				branches = append(branches, orderBy)
+			}
 			return &Cursor[pgsql.SyntaxNode]{
 				Node:     node,
 				Branches: branches,
@@ -230,6 +233,9 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Parameters); err != nil {
 			return nil, err
 		} else {
+			for _, orderBy := range typedNode.OrderBy {
+				branches = append(branches, orderBy)
+			}
 			return &Cursor[pgsql.SyntaxNode]{
 				Node:     node,
 				Branches: branches,

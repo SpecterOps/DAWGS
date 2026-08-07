@@ -282,6 +282,15 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			if !typedNextExpr.Bare {
 				exprStack = append(exprStack, pgsql.FormattingLiteral(")"))
 			}
+			if len(typedNextExpr.OrderBy) > 0 {
+				for idx := len(typedNextExpr.OrderBy) - 1; idx >= 0; idx-- {
+					exprStack = append(exprStack, typedNextExpr.OrderBy[idx])
+					if idx > 0 {
+						exprStack = append(exprStack, pgsql.FormattingLiteral(", "))
+					}
+				}
+				exprStack = append(exprStack, pgsql.FormattingLiteral(" order by "))
+			}
 
 			for idx := len(typedNextExpr.Parameters) - 1; idx >= 0; idx-- {
 				exprStack = append(exprStack, typedNextExpr.Parameters[idx])

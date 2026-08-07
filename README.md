@@ -9,6 +9,10 @@ plugins. It exposes a backend abstraction for graph queries, with current backen
 The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
 support Cypher natively.
 
+The PostgreSQL driver bounds repeated parser work with an immutable 256-entry Cypher AST cache; optimization and SQL
+translation still run per execution so graph, schema, kind, and parameter changes remain visible. Cached query text is
+released by LRU eviction or driver close, and diagnostics expose aggregate counters without query text.
+
 ## Quick Start
 
 Build the repository:
@@ -90,7 +94,11 @@ against a previous JSONL baseline. Mutating scale cases must declare a `write_sc
 runs in a rollback transaction and verifies matched, affected, and post-state cardinality.
 Read timings retain every raw warm sample and are bracketed by untimed exact-row
 multiset checks. PostgreSQL datasets are vacuumed and analyzed after loading and
-before measured reads. Node-ID expectations and recorded paths use stable
+before measured reads. Fixture reloads truncate the active relationship and node
+partitions together, and
+PostgreSQL captures fail before timing unless the active partitions' physical
+node and edge counts exactly match the declared fixture; active child-partition
+sizes are retained with each fixture. Node-ID expectations and recorded paths use stable
 fixture identities rather than backend-assigned IDs, while preserving duplicate
 rows and path order.
 The executable gate uses the complete corpus/backend declaration instead of the
@@ -104,7 +112,14 @@ reports paired absolute and relative p50/p95 changes with optional block/reload
 A/A floors. Capture bundles can retain the source patch, untracked sources,
 module state, binary, manifest, raw records, and checksums. Opt-in pool
 concurrency blocks and PostgreSQL component/full-query
-references are documented in `cmd/graphbench/README.md`.
+references are documented in `cmd/graphbench/README.md`. Path-observed
+singleton captures include exact benchmark-only M0/M1 materializer arms with a
+shared search boundary; they do not enable an experimental production executor.
+Generated ADCS captures also provide selectable exact A1a/A1b/A2/A3/A4
+forward, factored-suffix, reverse, and viability arms plus versioned fixtures
+with independent suffix-density and reverse-fan-in controls. The optimizer
+reports a typed expansion-search decision, but keeps production on its exact
+stepwise fallback until the predeclared live qualification gates pass.
 
 The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale

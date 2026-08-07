@@ -250,6 +250,16 @@ func resolvePathCompositeFieldReferences(scope *Scope, expression pgsql.Expressi
 				typedExpression.Parameters[idx] = resolved
 			}
 		}
+		for _, orderBy := range typedExpression.OrderBy {
+			if orderBy == nil {
+				continue
+			}
+			resolved, err := resolvePathCompositeFieldReferences(scope, orderBy.Expression)
+			if err != nil {
+				return nil, err
+			}
+			orderBy.Expression = resolved
+		}
 
 		return typedExpression, nil
 

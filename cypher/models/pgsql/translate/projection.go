@@ -126,6 +126,19 @@ func buildVisibleProjections(scope *Scope) (BoundProjections, error) {
 }
 
 func buildProjectionForExpansionPath(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.DistanceOnly {
+		reference := scope.CurrentFrame().Binding.Identifier
+		column := expansionDepth
+		if projected.LastProjection != nil {
+			reference = referenceFrame.Binding.Identifier
+			column = projected.Identifier
+		}
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{reference, column},
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
@@ -272,7 +285,7 @@ func pathCompositeDependencyNullGuard(scope *Scope, dependency *BoundIdentifier)
 	}
 
 	switch dependency.DataType {
-	case pgsql.ExpansionPath:
+	case pgsql.ExpansionPath, pgsql.PathComposite:
 		return expressionIsNull(pathBindingReference(scope, dependency))
 
 	case pgsql.EdgeComposite:
@@ -315,6 +328,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		seenExpansionPath    = false
 		seenPathEdge         = false
 		seenDirectEdge       = false
+		directPath           pgsql.Expression
 		nullGuard            pgsql.Expression
 		pendingPathIDParts   []pgsql.Expression
 	)
@@ -338,6 +352,12 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		nullGuard = optionalOr(nullGuard, pathCompositeDependencyNullGuard(scope, dependency))
 
 		switch dependency.DataType {
+		case pgsql.PathComposite:
+			if directPath != nil {
+				return nil, fmt.Errorf("path rendering contains multiple complete path dependencies")
+			}
+			directPath = pathBindingReference(scope, dependency)
+
 		case pgsql.ExpansionPath:
 			seenExpansionPath = true
 			pathIDs := pathBindingReference(scope, dependency)
@@ -373,6 +393,12 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		}
 	}
 	flushPathIDParts()
+	if directPath != nil {
+		if seenExpansionPath || seenPathEdge || seenDirectEdge {
+			return nil, fmt.Errorf("complete path dependency cannot be mixed with edge path components")
+		}
+		return nullGuardPathCompositeExpression(directPath, nullGuard), nil
+	}
 
 	// Direct, non-expansion path bindings already have their node and edge composites in scope. Keep
 	// those explicit components instead of reconstructing the path from edge IDs: this preserves path
@@ -462,6 +488,19 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 }
 
 func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
+	if projected.DistanceOnly {
+		reference := scope.CurrentFrame().Binding.Identifier
+		column := expansionDepth
+		if projected.LastProjection != nil {
+			reference = projected.LastProjection.Binding.Identifier
+			column = projected.Identifier
+		}
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{reference, column},
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if expression, err := expressionForPathComposite(projected, scope); err != nil {
 		return nil, err
 	} else {
@@ -612,6 +651,19 @@ func buildProjectionForPathEdge(alias pgsql.Identifier, projected *BoundIdentifi
 }
 
 func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.DistanceOnly {
+		reference := scope.CurrentFrame().Binding.Identifier
+		column := expansionDepth
+		if projected.LastProjection != nil {
+			reference = referenceFrame.Binding.Identifier
+			column = projected.Identifier
+		}
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{reference, column},
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	switch projected.DataType {
 	case pgsql.ExpansionPath:
 		return buildProjectionForExpansionPath(alias, projected, scope, referenceFrame)

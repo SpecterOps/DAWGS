@@ -67,6 +67,18 @@ func countCypherRows(tx graph.Transaction, cypher string, params map[string]any)
 	return rowCount, result.Error()
 }
 
+func countRawRows(tx graph.Transaction, sql string, params map[string]any) (int64, error) {
+	result := tx.Raw(sql, params)
+	defer result.Close()
+
+	var rowCount int64
+	for result.Next() {
+		rowCount++
+	}
+
+	return rowCount, result.Error()
+}
+
 type stableNodeObservation struct {
 	Identity   string         `json:"identity"`
 	Kinds      []string       `json:"kinds,omitempty"`
@@ -74,6 +86,7 @@ type stableNodeObservation struct {
 }
 
 type stableRelationshipObservation struct {
+	Identity   string         `json:"identity,omitempty"`
 	Start      string         `json:"start"`
 	End        string         `json:"end"`
 	Kind       string         `json:"kind"`
@@ -122,7 +135,14 @@ func stableRelationship(relationship *graph.Relationship, reversed map[graph.ID]
 	if relationship.Kind != nil {
 		kind = relationship.Kind.String()
 	}
+	identity := ""
+	if relationship.Properties != nil {
+		if logicalKey, err := relationship.Properties.Get("logical_key").String(); err == nil {
+			identity = logicalKey
+		}
+	}
 	return stableRelationshipObservation{
+		Identity:   identity,
 		Start:      stableIdentity(relationship.StartID, reversed),
 		End:        stableIdentity(relationship.EndID, reversed),
 		Kind:       kind,
@@ -244,11 +264,21 @@ func observedPathRows(rows []string) ([]string, error) {
 			Nodes:             make([]string, len(path.Nodes)),
 			RelationshipKinds: make([]string, len(path.Relationships)),
 		}
+		includeRelationshipKeys := false
+		for _, relationship := range path.Relationships {
+			includeRelationshipKeys = includeRelationshipKeys || relationship.Identity != ""
+		}
+		if includeRelationshipKeys {
+			signature.RelationshipKeys = make([]string, len(path.Relationships))
+		}
 		for nodeIdx, node := range path.Nodes {
 			signature.Nodes[nodeIdx] = node.Identity
 		}
 		for relationshipIdx, relationship := range path.Relationships {
 			signature.RelationshipKinds[relationshipIdx] = relationship.Kind
+			if includeRelationshipKeys {
+				signature.RelationshipKeys[relationshipIdx] = relationship.Identity
+			}
 		}
 		value, err := json.Marshal(signature)
 		if err != nil {
@@ -367,6 +397,14 @@ func measureCypher(ctx context.Context, db graph.Database, cypher string, params
 }
 
 func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmups(ctx, db, cypher, params, expected, idMap, warmupIterations, iterations, false)
+}
+
+func measureRawSQLWithWarmups(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmups(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true)
+}
+
+func measureReadWithWarmups(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool) (int64, []string, DurationStats, error) {
 	if iterations < 1 {
 		return 0, nil, DurationStats{}, fmt.Errorf("iterations must be at least 1")
 	}
@@ -376,7 +414,7 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 
 	coldStart := time.Now()
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		_, err := countCypherRows(tx, cypher, params)
+		_, err := countReadRows(tx, query, params, raw)
 		return err
 	}); err != nil {
 		return 0, nil, DurationStats{}, err
@@ -384,7 +422,7 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	coldDuration := time.Since(coldStart)
 	for range warmupIterations {
 		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-			_, err := countCypherRows(tx, cypher, params)
+			_, err := countReadRows(tx, query, params, raw)
 			return err
 		}); err != nil {
 			return 0, nil, DurationStats{}, err
@@ -399,7 +437,7 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	)
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
-		warmupRows, preflightObserved, err = observeCypherRows(tx, cypher, params, idMap, stabilizeNodeIDs, stabilizePaths)
+		warmupRows, preflightObserved, err = observeReadRows(tx, query, params, idMap, stabilizeNodeIDs, stabilizePaths, raw)
 		return err
 	}); err != nil {
 		return 0, nil, DurationStats{}, err
@@ -409,7 +447,7 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	for idx := range iterations {
 		start := time.Now()
 		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-			_, err := countCypherRows(tx, cypher, params)
+			_, err := countReadRows(tx, query, params, raw)
 			return err
 		}); err != nil {
 			return 0, nil, DurationStats{}, err
@@ -423,7 +461,7 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	)
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
-		postflightRows, postflightObserved, err = observeCypherRows(tx, cypher, params, idMap, stabilizeNodeIDs, stabilizePaths)
+		postflightRows, postflightObserved, err = observeReadRows(tx, query, params, idMap, stabilizeNodeIDs, stabilizePaths, raw)
 		return err
 	}); err != nil {
 		return 0, nil, DurationStats{}, err
@@ -452,6 +490,20 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	}}, stats.Samples...)
 
 	return warmupRows, preflightObserved, stats, nil
+}
+
+func countReadRows(tx graph.Transaction, query string, params map[string]any, raw bool) (int64, error) {
+	if raw {
+		return countRawRows(tx, query, params)
+	}
+	return countCypherRows(tx, query, params)
+}
+
+func observeReadRows(tx graph.Transaction, query string, params map[string]any, idMap opengraph.IDMap, scalarNodeIDs, pathValues, raw bool) (int64, []string, error) {
+	if raw {
+		return observeRawRows(tx, query, params, idMap, scalarNodeIDs, pathValues)
+	}
+	return observeCypherRows(tx, query, params, idMap, scalarNodeIDs, pathValues)
 }
 
 func measureWriteCypher(

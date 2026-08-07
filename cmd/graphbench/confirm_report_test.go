@@ -37,6 +37,40 @@ func TestBuildConfirmationReportRecognizesSameBinaryBlockAA(t *testing.T) {
 	require.Equal(t, "cleared_non_inferior", report.Cases[0].Disposition)
 }
 
+func TestBuildConfirmationReportAllowsIntentionalCrossArmSQLAndPlanChanges(t *testing.T) {
+	left := []CaseResult{confirmationRecord("changed", "predecessor", "binary-a", 10*time.Millisecond)}
+	right := []CaseResult{confirmationRecord("changed", "candidate", "binary-b", 5*time.Millisecond)}
+	left[0].SQLFingerprint = "incumbent-sql"
+	right[0].SQLFingerprint = "candidate-sql"
+	left[0].PostgresPlan = []string{"CTE Scan on incumbent"}
+	right[0].PostgresPlan = []string{"Recursive Union"}
+
+	report, err := buildConfirmationReport(left, right, nil, ConfirmationOptions{
+		Seed: 1, Confidence: 0.95, BootstrapCount: 50, CaseNames: []string{"changed"},
+	})
+	require.NoError(t, err)
+	require.True(t, report.Cases[0].Comparable)
+}
+
+func TestConfirmationComparableRejectsFingerprintChangeWithinArm(t *testing.T) {
+	left := []CaseResult{
+		confirmationRecord("changed", "predecessor", "binary-a", 10*time.Millisecond),
+		confirmationRecord("changed", "predecessor", "binary-a", 10*time.Millisecond),
+	}
+	right := []CaseResult{confirmationRecord("changed", "candidate", "binary-b", 5*time.Millisecond)}
+	left[1].SQLFingerprint = "unstable-sql"
+
+	comparable, reasons := confirmationComparable(left, right, performanceKey{dataset: left[0].Dataset, name: "changed", backend: ModePostgresSQL})
+	require.False(t, comparable)
+	require.Contains(t, reasons, "SQL fingerprint changes within arm")
+}
+
+func TestPostgresPlanShapeIgnoresReloadedEntityIDs(t *testing.T) {
+	left := []string{"Index Cond: (id = '4624444'::bigint)", "Planning Time: 0.408 ms", "Execution Time: 0.224 ms"}
+	right := []string{"Index Cond: (id = '4630087'::bigint)", "Planning Time: 0.189 ms", "Execution Time: 0.093 ms"}
+	require.Equal(t, postgresPlanShapeSHA256(left), postgresPlanShapeSHA256(right))
+}
+
 func TestBuildConfirmationReportRejectsUnknownExactCase(t *testing.T) {
 	record := confirmationRecord("present", "arm", "binary", time.Millisecond)
 	_, err := buildConfirmationReport([]CaseResult{record}, []CaseResult{record}, nil, ConfirmationOptions{

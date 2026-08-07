@@ -49,6 +49,7 @@ type config struct {
 	Categories                []string
 	Tags                      []string
 	OutputJSONL               string
+	AppendJSONL               bool
 	Summary                   string
 	SummaryJSON               string
 	Baseline                  string
@@ -65,11 +66,22 @@ type config struct {
 	DestructiveLock           string
 	AAArtifact                string
 	AAOutput                  string
+	ReferenceClosureArtifact  string
+	ReferenceClosureOutput    string
+	ReferenceClosureArm       string
+	ReferencePairArtifact     string
+	ReferencePairOutput       string
+	ReferencePairBaseline     string
+	ReferencePairCandidate    string
+	ReferencePairProtocol     string
 	PoolSize                  int
 	Concurrency               []int
 	SessionMemoryCeilingBytes int64
 	PoolMemoryCeilingBytes    int64
 	PostgresReferences        bool
+	PostgresReferenceArms     []string
+	PostgresForceShortest     string
+	PostgresForceExpansion    string
 	ConfirmLeft               string
 	ConfirmRight              string
 	ConfirmAA                 string
@@ -85,15 +97,16 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.SetOutput(io.Discard)
 
 	var (
-		cfg             config
-		rawModes        string
-		rawGateTargets  string
-		rawConcurrency  string
-		rawCases        string
-		rawDatasets     string
-		rawCategories   string
-		rawTags         string
-		rawConfirmCases string
+		cfg              config
+		rawModes         string
+		rawGateTargets   string
+		rawConcurrency   string
+		rawCases         string
+		rawDatasets      string
+		rawCategories    string
+		rawTags          string
+		rawConfirmCases  string
+		rawReferenceArms string
 	)
 
 	flags.StringVar(&cfg.CorpusRoot, "corpus-root", "benchmark/testdata/scale", "scale corpus root")
@@ -114,6 +127,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&rawCategories, "categories", "", "comma-separated exact category names")
 	flags.StringVar(&rawTags, "tags", "", "comma-separated exact case tags")
 	flags.StringVar(&cfg.OutputJSONL, "jsonl-output", "", "JSONL output path (default: stdout)")
+	flags.BoolVar(&cfg.AppendJSONL, "append-jsonl", false, "append a validated round to an existing JSONL run-series artifact")
 	flags.StringVar(&cfg.Summary, "summary", "", "markdown summary output path")
 	flags.StringVar(&cfg.SummaryJSON, "summary-json", "", "JSON summary output path")
 	flags.StringVar(&cfg.Baseline, "baseline", "", "previous JSONL output for baseline comparison")
@@ -130,11 +144,22 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.DestructiveLock, "destructive-lock", ".coverage/graphbench.lock", "local lock file guarding destructive fixture reloads")
 	flags.StringVar(&cfg.AAArtifact, "aa-artifact", "", "JSONL artifact used to calculate baseline A/A measurement resolution")
 	flags.StringVar(&cfg.AAOutput, "aa-output", "", "A/A measurement-resolution JSON output path (default: stdout)")
+	flags.StringVar(&cfg.ReferenceClosureArtifact, "reference-closure-artifact", "", "JSONL artifact containing matched production raw-pgx and PostgreSQL reference samples")
+	flags.StringVar(&cfg.ReferenceClosureOutput, "reference-closure-output", "", "production/reference closure JSON output path (default: stdout)")
+	flags.StringVar(&cfg.ReferenceClosureArm, "reference-closure-arm", "s3_unidirectional_trail_cte", "PostgreSQL full-comparator reference arm")
+	flags.StringVar(&cfg.ReferencePairArtifact, "reference-pair-artifact", "", "JSONL artifact containing two matched PostgreSQL reference arms")
+	flags.StringVar(&cfg.ReferencePairOutput, "reference-pair-output", "", "matched PostgreSQL reference-pair JSON output path (default: stdout)")
+	flags.StringVar(&cfg.ReferencePairBaseline, "reference-pair-baseline", "", "baseline PostgreSQL reference arm")
+	flags.StringVar(&cfg.ReferencePairCandidate, "reference-pair-candidate", "", "candidate PostgreSQL reference arm")
+	flags.StringVar(&cfg.ReferencePairProtocol, "reference-pair-protocol", referencePairProtocolConfirmation, "reference-pair report protocol (confirmation or discovery)")
 	flags.IntVar(&cfg.PoolSize, "pool-size", 1, "PostgreSQL physical pool size")
 	flags.StringVar(&rawConcurrency, "concurrency", "", "comma-separated opt-in PostgreSQL concurrency smoke levels")
 	flags.Int64Var(&cfg.SessionMemoryCeilingBytes, "session-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes per PostgreSQL session")
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
+	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S3-U-D, SP-S3-U-E+MAT-M0)")
+	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: ADCS-A3)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -195,6 +220,18 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.ConfirmAA != "" && cfg.ConfirmLeft == "" {
 		return config{}, fmt.Errorf("confirm-aa requires confirm-left and confirm-right")
 	}
+	if cfg.ReferenceClosureOutput != "" && cfg.ReferenceClosureArtifact == "" {
+		return config{}, fmt.Errorf("reference-closure-output requires reference-closure-artifact")
+	}
+	if cfg.ReferencePairOutput != "" && cfg.ReferencePairArtifact == "" {
+		return config{}, fmt.Errorf("reference-pair-output requires reference-pair-artifact")
+	}
+	if cfg.ReferencePairArtifact != "" && (cfg.ReferencePairBaseline == "" || cfg.ReferencePairCandidate == "") {
+		return config{}, fmt.Errorf("reference-pair-artifact requires baseline and candidate arms")
+	}
+	if cfg.ReferencePairBaseline != "" && cfg.ReferencePairBaseline == cfg.ReferencePairCandidate {
+		return config{}, fmt.Errorf("reference-pair baseline and candidate must differ")
+	}
 	modeCount := 0
 	if cfg.GateBaseline != "" {
 		modeCount++
@@ -205,8 +242,14 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.ConfirmLeft != "" {
 		modeCount++
 	}
+	if cfg.ReferenceClosureArtifact != "" {
+		modeCount++
+	}
+	if cfg.ReferencePairArtifact != "" {
+		modeCount++
+	}
 	if modeCount > 1 {
-		return config{}, fmt.Errorf("performance-gate, A/A, and paired-confirmation modes are mutually exclusive")
+		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, and reference-pair modes are mutually exclusive")
 	}
 	if cfg.AAArtifact != "" && cfg.GateBaseline != "" {
 		return config{}, fmt.Errorf("aa-artifact and performance-gate mode are mutually exclusive")
@@ -222,6 +265,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	if cfg.MaterialityAbsolute < 0 {
 		return config{}, fmt.Errorf("materiality-absolute must not be negative")
+	}
+	if cfg.AppendJSONL && cfg.OutputJSONL == "" {
+		return config{}, fmt.Errorf("append-jsonl requires jsonl-output")
 	}
 	for _, target := range strings.Split(rawGateTargets, ",") {
 		if target = strings.TrimSpace(target); target != "" {
@@ -243,6 +289,29 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	if cfg.ConfirmCases, err = parseUniqueCSV("confirmation case", rawConfirmCases); err != nil {
 		return config{}, err
+	}
+	if cfg.PostgresReferenceArms, err = parseUniqueCSV("PostgreSQL reference arm", rawReferenceArms); err != nil {
+		return config{}, err
+	}
+	for _, arm := range cfg.PostgresReferenceArms {
+		if !validPostgresReferenceArm(arm) {
+			return config{}, fmt.Errorf("unknown PostgreSQL reference arm %q", arm)
+		}
+	}
+	if cfg.ReferenceClosureArtifact != "" && !validPostgresReferenceArm(cfg.ReferenceClosureArm) {
+		return config{}, fmt.Errorf("unknown PostgreSQL reference closure arm %q", cfg.ReferenceClosureArm)
+	}
+	if len(cfg.PostgresReferenceArms) > 0 {
+		cfg.PostgresReferences = true
+	}
+	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" {
+		return config{}, fmt.Errorf("unsupported PostgreSQL forced shortest executor %q", cfg.PostgresForceShortest)
+	}
+	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "ADCS-A3" {
+		return config{}, fmt.Errorf("unsupported PostgreSQL forced expansion search %q", cfg.PostgresForceExpansion)
+	}
+	if cfg.PostgresForceShortest != "" && cfg.PostgresForceExpansion != "" {
+		return config{}, fmt.Errorf("PostgreSQL shortest and expansion search forces are mutually exclusive")
 	}
 
 	modes, err := parseExecutionModes(rawModes)
@@ -349,6 +418,28 @@ func main() {
 		}
 		return
 	}
+	if cfg.ReferenceClosureArtifact != "" {
+		passed, err := createReferenceClosureReport(cfg.ReferenceClosureArtifact, cfg.ReferenceClosureOutput, ReferenceClosureOptions{
+			Seed: cfg.GateSeed, Confidence: cfg.Confidence, ReferenceName: cfg.ReferenceClosureArm,
+			RatioUpperLimit: 1.10, AbsoluteResolution: cfg.MaterialityAbsolute,
+		})
+		if err != nil {
+			fatal("calculate production/reference closure: %v", err)
+		}
+		if !passed {
+			fatal("production/reference closure failed")
+		}
+		return
+	}
+	if cfg.ReferencePairArtifact != "" {
+		if err := createReferencePairReport(cfg.ReferencePairArtifact, cfg.ReferencePairOutput, ReferencePairOptions{
+			Seed: cfg.GateSeed, Confidence: cfg.Confidence,
+			BaselineName: cfg.ReferencePairBaseline, CandidateName: cfg.ReferencePairCandidate, Protocol: cfg.ReferencePairProtocol,
+		}); err != nil {
+			fatal("calculate matched reference pair: %v", err)
+		}
+		return
+	}
 
 	runLock, err := acquireDestructiveRunLock(cfg.DestructiveLock)
 	if err != nil {
@@ -388,7 +479,7 @@ func main() {
 				fatal("postgres_sql mode requires -pg-connection, -connection, PG_CONNECTION_STRING, or CONNECTION_STRING")
 			}
 
-			runner, err := newPostgresSQLRunner(ctx, cfg.DatasetDir, pgConnection, corpus, cfg.PoolSize, cfg.Concurrency, cfg.PostgresReferences)
+			runner, err := newPostgresSQLRunner(ctx, cfg.DatasetDir, pgConnection, corpus, cfg.PoolSize, cfg.Round, cfg.Concurrency, cfg.PostgresReferences, cfg.PostgresReferenceArms, cfg.PostgresForceShortest, cfg.PostgresForceExpansion)
 			if err != nil {
 				fatal("open postgres_sql runner: %v", err)
 			}
@@ -458,8 +549,14 @@ func main() {
 		}
 	}
 
-	if err := writeJSONLFile(cfg.OutputJSONL, records); err != nil {
-		fatal("write JSONL: %v", err)
+	var writeErr error
+	if cfg.AppendJSONL {
+		writeErr = appendJSONLFile(cfg.OutputJSONL, records)
+	} else {
+		writeErr = writeJSONLFile(cfg.OutputJSONL, records)
+	}
+	if writeErr != nil {
+		fatal("write JSONL: %v", writeErr)
 	}
 	if cfg.BundleDir != "" {
 		if err := writeCaptureBundle(cfg.BundleDir, corpus, records, environment); err != nil {

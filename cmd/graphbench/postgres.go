@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -37,19 +38,22 @@ import (
 )
 
 type postgresSQLRunner struct {
-	datasetDir  string
-	db          graph.Database
-	pgDriver    *pg.Driver
-	pool        *pgxpool.Pool
-	graphID     int32
-	backendPID  string
-	poolSize    int
-	concurrency []int
-	environment PostgresEnvironment
-	references  bool
+	datasetDir    string
+	db            graph.Database
+	pgDriver      *pg.Driver
+	pool          *pgxpool.Pool
+	graphID       int32
+	backendPID    string
+	poolSize      int
+	round         int
+	concurrency   []int
+	environment   PostgresEnvironment
+	references    bool
+	referenceArms []string
+	toolOptions   translate.ToolOptions
 }
 
-func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize int, concurrency []int, references bool) (*postgresSQLRunner, error) {
+func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string) (*postgresSQLRunner, error) {
 	poolCfg, err := pgxpool.ParseConfig(connection)
 	if err != nil {
 		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
@@ -123,16 +127,22 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 	}
 
 	return &postgresSQLRunner{
-		datasetDir:  datasetDir,
-		db:          db,
-		pgDriver:    pgDriver,
-		pool:        pool,
-		graphID:     defaultGraph.ID,
-		backendPID:  strconv.FormatInt(int64(backendPID), 10),
-		poolSize:    poolSize,
-		concurrency: append([]int(nil), concurrency...),
-		environment: postgresEnvironment,
-		references:  references,
+		datasetDir:    datasetDir,
+		db:            db,
+		pgDriver:      pgDriver,
+		pool:          pool,
+		graphID:       defaultGraph.ID,
+		backendPID:    strconv.FormatInt(int64(backendPID), 10),
+		poolSize:      poolSize,
+		round:         round,
+		concurrency:   append([]int(nil), concurrency...),
+		environment:   postgresEnvironment,
+		references:    references,
+		referenceArms: append([]string(nil), referenceArms...),
+		toolOptions: translate.ToolOptions{
+			ForceShortestPathExecutor:    optimize.ShortestPathExecutor(forceShortest),
+			ForceExpansionSearchStrategy: optimize.ExpansionSearchStrategy(forceExpansion),
+		},
 	}, nil
 }
 
@@ -163,14 +173,20 @@ func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iteration
 		if err != nil {
 			return nil, err
 		}
-		if _, err := s.pool.Exec(ctx, "vacuum (analyze) node, edge"); err != nil {
+		if err := s.captureAndValidateFixture(ctx, &fixture); err != nil {
+			return nil, fmt.Errorf("validate %s fixture: %w", datasetName, err)
+		}
+		activePartitions := fmt.Sprintf("vacuum (analyze) node_%d, edge_%d", s.graphID, s.graphID)
+		if _, err := s.pool.Exec(ctx, activePartitions); err != nil {
 			return nil, fmt.Errorf("vacuum and analyze %s fixture: %w", datasetName, err)
 		}
-		if err := s.pool.QueryRow(ctx, `select pg_total_relation_size('node'), pg_total_relation_size('edge'), coalesce((select string_agg(relname || ':' || coalesce(last_analyze::text, 'never'), ',' order by relname) from pg_stat_all_tables where relname in ('node', 'edge')), '')`).Scan(
-			&s.environment.NodeRelationBytes, &s.environment.EdgeRelationBytes, &s.environment.AnalyzeState,
+		if err := s.pool.QueryRow(ctx, `select pg_total_relation_size(format('node_%s', $1::int4)::regclass), pg_total_relation_size(format('edge_%s', $1::int4)::regclass), coalesce((select string_agg(relname || ':' || coalesce(last_analyze::text, 'never'), ',' order by relname) from pg_stat_all_tables where relname in (format('node_%s', $1::int4), format('edge_%s', $1::int4))), '')`, s.graphID).Scan(
+			&fixture.NodeRelationBytes, &fixture.EdgeRelationBytes, &s.environment.AnalyzeState,
 		); err != nil {
 			return nil, fmt.Errorf("capture %s fixture relation sizes: %w", datasetName, err)
 		}
+		s.environment.NodeRelationBytes = fixture.NodeRelationBytes
+		s.environment.EdgeRelationBytes = fixture.EdgeRelationBytes
 
 		for _, testCase := range casesByDataset[datasetName] {
 			if !testCase.Supports(ModePostgresSQL) {
@@ -190,6 +206,27 @@ func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iteration
 	return records, nil
 }
 
+func (s *postgresSQLRunner) captureAndValidateFixture(ctx context.Context, fixture *FixtureMetadata) error {
+	if err := s.pool.QueryRow(ctx, `select (select count(*) from node where graph_id = $1), (select count(*) from edge where graph_id = $1)`, s.graphID).Scan(
+		&fixture.PhysicalNodeCount,
+		&fixture.PhysicalEdgeCount,
+	); err != nil {
+		return fmt.Errorf("count physical graph rows: %w", err)
+	}
+	if fixture.PhysicalNodeCount != int64(fixture.NodeCount) || fixture.PhysicalEdgeCount != int64(fixture.EdgeCount) {
+		return fmt.Errorf(
+			"physical cardinality mismatch: nodes=%d want=%d edges=%d want=%d",
+			fixture.PhysicalNodeCount,
+			fixture.NodeCount,
+			fixture.PhysicalEdgeCount,
+			fixture.EdgeCount,
+		)
+	}
+	fixture.PhysicalValidated = true
+
+	return nil
+}
+
 func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	s.pool.Reset()
 	if s.poolSize != 1 {
@@ -205,9 +242,13 @@ func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	return nil
 }
 
-func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
+func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) (record CaseResult) {
 	params, err := resolveCaseParams(testCase, idMap)
-	record := newCaseResult(testCase, ModePostgresSQL, params)
+	record = newCaseResult(testCase, ModePostgresSQL, params)
+	defer func() {
+		stats := s.pgDriver.ParseCacheStats()
+		record.ParseCache = &stats
+	}()
 	if err != nil {
 		record.Status = StatusError
 		record.Error = err.Error()
@@ -215,7 +256,19 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	}
 
 	if testCase.WriteScenario == nil {
-		rowCount, observedRows, stats, err := measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
+		var rowCount int64
+		var observedRows []string
+		var stats DurationStats
+		if !hasForcedToolOptions(s.toolOptions) {
+			rowCount, observedRows, stats, err = measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
+		} else {
+			translation, sqlQuery, translateErr := s.translateCypher(ctx, testCase.Cypher, params)
+			if translateErr != nil {
+				err = translateErr
+			} else {
+				rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+			}
+		}
 		if err != nil {
 			record.Status = StatusError
 			record.Error = err.Error()
@@ -292,16 +345,32 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 				fallbackReasons = append(fallbackReasons, decision.FallbackReason)
 			}
 		}
+		for _, decision := range explain.Optimization.LoweringPlan.ExpansionSearchStrategy {
+			if decision.FallbackReason != "" && !slices.Contains(fallbackReasons, decision.FallbackReason) {
+				fallbackReasons = append(fallbackReasons, decision.FallbackReason)
+			}
+		}
 		record.FallbackReason = strings.Join(fallbackReasons, ",")
 	}
 	if s.references && testCase.WriteScenario == nil {
-		waterfall, err := measureCompileWaterfall(ctx, testCase.Cypher, params, s.pgDriver.KindMapper(), s.graphID, iterations)
+		waterfall, err := measureCompileWaterfall(ctx, testCase.Cypher, params, s.pgDriver.KindMapper(), s.graphID, iterations, s.toolOptions)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = fmt.Sprintf("client compile waterfall: %v", err)
 			return record
 		}
 		record.ClientWaterfall = &waterfall
+		productionOrder, referenceOrder := referenceClosureMeasurementOrder(len(s.referenceArms) == 1, s.round)
+		var references []PostgresReferenceResult
+		if referenceOrder == 1 {
+			references, err = s.measureReferences(ctx, testCase, params, idMap, record.ObservedRows, warmupIterations, iterations)
+			if err != nil {
+				record.Status = StatusError
+				record.Error = fmt.Sprintf("PostgreSQL references: %v", err)
+				return record
+			}
+			setReferenceMeasurementOrder(references, referenceOrder)
+		}
 		rawWaterfall, err := measureRawPGXWaterfall(ctx, s.pool, explain.SQL, explain.Parameters, warmupIterations, iterations)
 		if err != nil {
 			record.Status = StatusError
@@ -313,7 +382,18 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			record.Error = fmt.Sprintf("raw pgx row count %d differs from CySQL row count %d", rawWaterfall.Samples[0].Rows, record.RowCount)
 			return record
 		}
+		rawWaterfall.MeasurementOrder = productionOrder
 		record.RawPGXWaterfall = &rawWaterfall
+		if referenceOrder != 1 {
+			references, err = s.measureReferences(ctx, testCase, params, idMap, record.ObservedRows, warmupIterations, iterations)
+			if err != nil {
+				record.Status = StatusError
+				record.Error = fmt.Sprintf("PostgreSQL references: %v", err)
+				return record
+			}
+			setReferenceMeasurementOrder(references, referenceOrder)
+		}
+		record.PostgresReferences = references
 		roundTrip, err := measureRawPGXWaterfall(ctx, s.pool, "select 1", nil, warmupIterations, iterations)
 		if err != nil {
 			record.Status = StatusError
@@ -321,13 +401,6 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			return record
 		}
 		record.RawPGXRoundTrip = &roundTrip
-		references, err := s.measureReferences(ctx, testCase, params, idMap, record.ObservedRows, warmupIterations, iterations)
-		if err != nil {
-			record.Status = StatusError
-			record.Error = fmt.Sprintf("PostgreSQL references: %v", err)
-			return record
-		}
-		record.PostgresReferences = references
 	}
 	if testCase.WriteScenario == nil && len(s.concurrency) > 0 {
 		blocks, err := measurePostgresConcurrency(ctx, s.pool, explain.SQL, explain.Parameters, s.poolSize, s.concurrency, iterations)
@@ -341,6 +414,19 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	return record
 }
 
+func referenceClosureMeasurementOrder(singleSelectedReference bool, round int) (production, reference int) {
+	if singleSelectedReference && round > 0 && round%2 == 0 {
+		return 2, 1
+	}
+	return 1, 2
+}
+
+func setReferenceMeasurementOrder(references []PostgresReferenceResult, order int) {
+	for idx := range references {
+		references[idx].MeasurementOrder = order + idx
+	}
+}
+
 type postgresExplain struct {
 	SQL          string
 	Plan         []string
@@ -351,17 +437,7 @@ type postgresExplain struct {
 }
 
 func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (postgresExplain, error) {
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
-	if err != nil {
-		return postgresExplain{}, err
-	}
-
-	translation, err := translate.Translate(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID)
-	if err != nil {
-		return postgresExplain{}, err
-	}
-
-	sqlQuery, err := translate.Translated(translation)
+	translation, sqlQuery, err := s.translateCypher(ctx, cypherQuery, params)
 	if err != nil {
 		return postgresExplain{}, err
 	}
@@ -387,20 +463,12 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 			return err
 		}
 		if !write {
-			jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, FORMAT JSON) "+sqlQuery, translation.Parameters)
+			jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING OFF, FORMAT JSON) "+sqlQuery, translation.Parameters)
 			defer jsonResult.Close()
 			if jsonResult.Next() && len(jsonResult.Values()) > 0 {
-				switch value := jsonResult.Values()[0].(type) {
-				case []byte:
-					planJSON = append(json.RawMessage(nil), value...)
-				case string:
-					planJSON = append(json.RawMessage(nil), value...)
-				default:
-					encoded, err := json.Marshal(value)
-					if err != nil {
-						return err
-					}
-					planJSON = encoded
+				planJSON, err = encodePostgresPlanJSON(jsonResult.Values()[0])
+				if err != nil {
+					return err
 				}
 			}
 			if err := jsonResult.Error(); err != nil {
@@ -426,14 +494,59 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		return postgresExplain{}, explainErr
 	}
 
+	metrics := parsePostgresPlanMetrics(plan)
+	if len(planJSON) > 0 {
+		if structured, err := parsePostgresPlanJSONMetrics(planJSON); err == nil {
+			metrics = structured
+		}
+	}
 	return postgresExplain{
 		SQL:          sqlQuery,
 		Plan:         plan,
 		PlanJSON:     planJSON,
-		Metrics:      parsePostgresPlanMetrics(plan),
+		Metrics:      metrics,
 		Optimization: translation.Optimization,
 		Parameters:   translation.Parameters,
 	}, nil
+}
+
+func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery string, params map[string]any) (translate.Result, string, error) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+	if err != nil {
+		return translate.Result{}, "", err
+	}
+
+	var translation translate.Result
+	if !hasForcedToolOptions(s.toolOptions) {
+		translation, err = translate.Translate(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID)
+	} else {
+		translation, err = translate.TranslateForTool(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID, s.toolOptions)
+	}
+	if err != nil {
+		return translate.Result{}, "", err
+	}
+
+	sqlQuery, err := translate.Translated(translation)
+	if err != nil {
+		return translate.Result{}, "", err
+	}
+	return translation, sqlQuery, nil
+}
+
+func hasForcedToolOptions(options translate.ToolOptions) bool {
+	return options.ForceShortestPathExecutor != "" || options.ForceExpansionSearchStrategy != ""
+}
+
+func encodePostgresPlanJSON(value any) (json.RawMessage, error) {
+	switch typed := value.(type) {
+	case []byte:
+		return append(json.RawMessage(nil), typed...), nil
+	case string:
+		return append(json.RawMessage(nil), typed...), nil
+	default:
+		encoded, err := json.Marshal(value)
+		return json.RawMessage(encoded), err
+	}
 }
 
 var (

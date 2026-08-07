@@ -123,7 +123,7 @@ func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.KindIn(query.Relationship(), scanLookupRegressionKinds(83, 84)...)),
 			query.Returning(query.StartID(), query.EndID()),
-		}, "array [115, 116]::int2[]", "select s0.n0 as \"id(s)\", (s0.n1).id as \"id(e)\"")
+		}, "array [115, 116]::int2[]", "select s0.n0 as \"id(s)\", s0.n1 as \"id(e)\"")
 	})
 
 	t.Run("SCAN-08 scenario A and B", func(t *testing.T) {
