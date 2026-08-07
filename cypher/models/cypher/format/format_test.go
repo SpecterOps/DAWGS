@@ -44,6 +44,91 @@ func TestCypherEmitter_FormatsMapLiteralInKeyOrder(t *testing.T) {
 	require.Equal(t, "{a: 1, b: 2}", buffer.String())
 }
 
+func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
+	var (
+		buffer  = &bytes.Buffer{}
+		emitter = format.NewCypherEmitter(false)
+	)
+
+	err := emitter.WriteExpression(buffer, cypher.MapLiteral{
+		"match":    cypher.NewLiteral(1, false),
+		"a-aaa":    cypher.NewLiteral(2, false),
+		"has`tick": cypher.NewLiteral(3, false),
+		"":         cypher.NewLiteral(4, false),
+		"   ":      cypher.NewLiteral(5, false),
+		"'":        cypher.NewLiteral(6, false),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "{``: 4, `   `: 5, `'`: 6, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
+}
+
+func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
+	testCases := []struct {
+		name     string
+		symbol   string
+		expected string
+	}{
+		{
+			name:     "simple key",
+			symbol:   "name",
+			expected: "n.name",
+		},
+		{
+			name:     "reserved word key",
+			symbol:   "match",
+			expected: "n.match",
+		},
+		{
+			name:     "key with hyphen",
+			symbol:   "a-aaa",
+			expected: "n.`a-aaa`",
+		},
+		{
+			name:     "key with backtick",
+			symbol:   "has`tick",
+			expected: "n.`has``tick`",
+		},
+		{
+			name:     "key with single quote",
+			symbol:   "'",
+			expected: "n.`'`",
+		},
+		{
+			name:     "whitespace-only key",
+			symbol:   "   ",
+			expected: "n.`   `",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			buffer := &bytes.Buffer{}
+			emitter := format.NewCypherEmitter(false)
+
+			err := emitter.WriteExpression(buffer, &cypher.PropertyLookup{
+				Atom:   cypher.NewVariableWithSymbol("n"),
+				Symbol: testCase.symbol,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, testCase.expected, buffer.String())
+		})
+	}
+}
+
+func TestCypherEmitter_RejectsEmptyPropertyLookupKey(t *testing.T) {
+	buffer := &bytes.Buffer{}
+	emitter := format.NewCypherEmitter(false)
+
+	err := emitter.WriteExpression(buffer, &cypher.PropertyLookup{
+		Atom:   cypher.NewVariableWithSymbol("n"),
+		Symbol: "",
+	})
+
+	require.ErrorIs(t, err, cypher.ErrEmptyPropertyKeyName)
+}
+
 func TestCypherEmitter_MapLiteralPropagatesExpressionError(t *testing.T) {
 	var (
 		buffer  = &bytes.Buffer{}

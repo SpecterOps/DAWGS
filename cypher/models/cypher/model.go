@@ -1307,7 +1307,10 @@ func (s *ProjectionItem) copy() *ProjectionItem {
 }
 
 type PropertyLookup struct {
-	Atom   Expression
+	Atom Expression
+
+	// Symbol is the raw property key, not an already-rendered Cypher token.
+	// Callers should not pre-wrap names in backticks; formatting handles that.
 	Symbol string
 }
 
