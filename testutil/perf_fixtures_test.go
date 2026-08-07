@@ -48,6 +48,47 @@ func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T
 	require.Equal(t, 1, selfLoops)
 }
 
+func TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact(t *testing.T) {
+	config := ShortestPathScaleV2Config{
+		Depth: 3, ForwardRootFanOut: 2, ReverseRootFanIn: 2,
+		IntermediateFanOut: 1, IntermediateReverseFanIn: 4, FanInLevel: 2,
+		ParallelKindCount: 3, ParallelTargetCount: 2, DiamondWidth: 2,
+		DisconnectedWidth: 3, PropertyPayloadSize: 8, AddCycle: true, AddSelfLoop: true,
+	}
+	first := NewShortestPathScaleV2Fixture(config)
+	second := NewShortestPathScaleV2Fixture(config)
+	firstJSON, err := json.Marshal(first)
+	require.NoError(t, err)
+	secondJSON, err := json.Marshal(second)
+	require.NoError(t, err)
+	require.Equal(t, firstJSON, secondJSON)
+	require.Len(t, first.Nodes, 32)
+	require.Len(t, first.Edges, 33)
+
+	logicalKeys := map[string]bool{}
+	for _, edge := range first.Edges {
+		key, ok := edge.Properties["logical_key"].(string)
+		require.True(t, ok)
+		require.NotEmpty(t, key)
+		require.False(t, logicalKeys[key], key)
+		logicalKeys[key] = true
+	}
+}
+
+func TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes(t *testing.T) {
+	for _, config := range []ShortestPathScaleV2Config{
+		{Depth: -1},
+		{Depth: 65},
+		{Depth: 3, FanInLevel: 2},
+		{Depth: 3, IntermediateReverseFanIn: 1, FanInLevel: 3},
+		{ParallelKindCount: 1},
+		{ParallelTargetCount: 1},
+	} {
+		require.Error(t, ValidateShortestPathScaleV2Config(config))
+	}
+	require.NoError(t, ValidateShortestPathScaleV2Config(ShortestPathScaleV2Config{}))
+}
+
 func TestADCSScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
 	config := ADCSScaleConfig{MemberOfDepth: 4, Fanout: 10, ValidSuffixEvery: 2, PropertyPayloadSize: 32}
 	first := NewADCSScaleFixture(config)

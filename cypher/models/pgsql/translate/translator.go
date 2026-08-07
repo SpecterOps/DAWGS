@@ -686,27 +686,33 @@ type OptimizationSummary struct {
 }
 
 type TargetLoweringOutcome struct {
-	Lowering          string                        `json:"lowering"`
-	TargetKind        string                        `json:"target_kind"`
-	TraversalTarget   *optimize.TraversalStepTarget `json:"traversal_target,omitempty"`
-	QueryPartIndex    *int                          `json:"query_part_index,omitempty"`
-	Symbol            string                        `json:"symbol,omitempty"`
-	Family            string                        `json:"family,omitempty"`
-	PlannedCandidates []string                      `json:"planned_candidates,omitempty"`
-	EligibilityFacts  []TargetEligibilityFact       `json:"eligibility_facts,omitempty"`
-	ObservationMode   string                        `json:"observation_mode,omitempty"`
-	Eligible          *bool                         `json:"eligible,omitempty"`
-	SelectionMode     string                        `json:"selection_mode,omitempty"`
-	SelectorVersion   string                        `json:"selector_version,omitempty"`
-	Fallback          string                        `json:"fallback,omitempty"`
-	MinimumDepth      *int64                        `json:"minimum_depth,omitempty"`
-	MaximumDepth      *int64                        `json:"maximum_depth,omitempty"`
-	StateLimit        int64                         `json:"state_limit,omitempty"`
-	SuffixProbeLimit  int64                         `json:"suffix_probe_limit,omitempty"`
-	ReverseStateLimit int64                         `json:"reverse_state_limit,omitempty"`
-	Selected          string                        `json:"selected,omitempty"`
-	Applied           string                        `json:"applied,omitempty"`
-	SkipReason        string                        `json:"skip_reason,omitempty"`
+	Lowering               string                        `json:"lowering"`
+	TargetKind             string                        `json:"target_kind"`
+	TraversalTarget        *optimize.TraversalStepTarget `json:"traversal_target,omitempty"`
+	QueryPartIndex         *int                          `json:"query_part_index,omitempty"`
+	Symbol                 string                        `json:"symbol,omitempty"`
+	Family                 string                        `json:"family,omitempty"`
+	PlannedCandidates      []string                      `json:"planned_candidates,omitempty"`
+	EligibilityFacts       []TargetEligibilityFact       `json:"eligibility_facts,omitempty"`
+	ObservationMode        string                        `json:"observation_mode,omitempty"`
+	Direction              string                        `json:"direction,omitempty"`
+	PhysicalExpansion      string                        `json:"physical_expansion,omitempty"`
+	RelationshipKindCount  int                           `json:"relationship_kind_count,omitempty"`
+	UntypedRelationship    bool                          `json:"untyped_relationship,omitempty"`
+	TopologyClassification string                        `json:"topology_classification,omitempty"`
+	Eligible               *bool                         `json:"eligible,omitempty"`
+	StaticallyEligible     *bool                         `json:"statically_eligible,omitempty"`
+	SelectionMode          string                        `json:"selection_mode,omitempty"`
+	SelectorVersion        string                        `json:"selector_version,omitempty"`
+	Fallback               string                        `json:"fallback,omitempty"`
+	MinimumDepth           *int64                        `json:"minimum_depth,omitempty"`
+	MaximumDepth           *int64                        `json:"maximum_depth,omitempty"`
+	StateLimit             int64                         `json:"state_limit,omitempty"`
+	SuffixProbeLimit       int64                         `json:"suffix_probe_limit,omitempty"`
+	ReverseStateLimit      int64                         `json:"reverse_state_limit,omitempty"`
+	Selected               string                        `json:"selected,omitempty"`
+	Applied                string                        `json:"applied,omitempty"`
+	SkipReason             string                        `json:"skip_reason,omitempty"`
 }
 
 type TargetEligibilityFact struct {
@@ -797,14 +803,16 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 	}
 	for _, decision := range plan.ShortestPathExecutor {
 		target := decision.Target
-		eligible := decision.StructurallyEligible
+		eligible, staticallyEligible := decision.StructurallyEligible, decision.StaticallyEligible
 		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
 		applied := string(s.appliedShortestPathExecutors[target])
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
 			Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", TraversalTarget: &target,
 			Family: decision.Family, PlannedCandidates: shortestPathCandidateNames(decision.PlannedCandidates),
 			EligibilityFacts: shortestPathEligibilityFacts(decision.Eligibility),
-			ObservationMode:  string(decision.ObservationMode), Eligible: &eligible,
+			ObservationMode:  string(decision.ObservationMode), Direction: decision.Direction.String(),
+			PhysicalExpansion: string(decision.PhysicalExpansion), RelationshipKindCount: decision.RelationshipKindCount,
+			UntypedRelationship: decision.UntypedRelationship, TopologyClassification: string(decision.TopologyClassification), Eligible: &eligible, StaticallyEligible: &staticallyEligible,
 			SelectionMode: decision.SelectionMode, SelectorVersion: decision.SelectorVersion,
 			Selected: string(decision.SelectedExecutor), Applied: applied, Fallback: string(decision.FallbackExecutor), SkipReason: decision.FallbackReason,
 			MinimumDepth: &minimumDepth, MaximumDepth: &maximumDepth, StateLimit: decision.StateLimit,
@@ -1061,8 +1069,26 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	if executor == "" {
 		return nil
 	}
-	if executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 {
+	if executor != optimize.ShortestPathExecutorIncumbentWorkspace && executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 {
 		return fmt.Errorf("unsupported forced shortest-path executor %q", executor)
+	}
+	if executor == optimize.ShortestPathExecutorIncumbentWorkspace {
+		forced := 0
+		for idx := range plan.LoweringPlan.ShortestPathExecutor {
+			decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+			if !decision.StructurallyEligible {
+				continue
+			}
+			decision.SelectedExecutor = executor
+			decision.SelectionMode = "forced_tool"
+			decision.SelectorVersion = "sp-tool-v1"
+			decision.FallbackReason = ""
+			forced++
+		}
+		if forced == 0 {
+			return fmt.Errorf("forced shortest-path executor %q has no structurally eligible target", executor)
+		}
+		return nil
 	}
 	expectedObservation := optimize.ShortestPathObservationDistance
 	expectedDescription := "distance-only"

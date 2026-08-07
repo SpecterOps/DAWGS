@@ -2,6 +2,7 @@ package optimize
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -1551,7 +1552,7 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 	decision := plan.LoweringPlan.ShortestPathExecutor[0]
 	require.Equal(t, "SP", decision.Family)
 	require.Equal(t, "static", decision.SelectionMode)
-	require.Equal(t, "sp-static-v2", decision.SelectorVersion)
+	require.Equal(t, "sp-static-v3", decision.SelectorVersion)
 	require.Equal(t, []ShortestPathExecutor{
 		ShortestPathExecutorIncumbentWorkspace,
 		ShortestPathExecutorS1ArrayBFS,
@@ -1568,6 +1569,71 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 	require.Equal(t, int64(16), decision.MaximumDepth)
 	require.True(t, decision.ExperimentalWinner)
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathExecutor})
+}
+
+func TestLoweringPlanShortestExecutorV3ContainmentMatrix(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, pattern, observation string
+		executor                   ShortestPathExecutor
+		reason                     string
+		direction                  graph.Direction
+		physicalExpansion          ShortestPathPhysicalExpansion
+		topology                   ShortestPathTopologyClassification
+		kindCount                  int
+		untyped                    bool
+		staticEligible             bool
+	}{
+		{name: "outbound distance depth 64 two kinds", pattern: `(s)-[:MemberOf|Contains*1..64]->(e)`, observation: `length(p)`, executor: ShortestPathExecutorS3Unidirectional, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, kindCount: 2, staticEligible: true},
+		{name: "outbound one path one kind", pattern: `(s)-[:MemberOf*1..16]->(e)`, observation: `p`, executor: ShortestPathExecutorS3EdgeM0, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, kindCount: 1, staticEligible: true},
+		{name: "outbound one path two kinds", pattern: `(s)-[:MemberOf|Contains*1..16]->(e)`, observation: `p`, executor: ShortestPathExecutorIncumbentWorkspace, reason: ShortestPathFallbackNonSingleKindPathState, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, kindCount: 2},
+		{name: "outbound one path wildcard", pattern: `(s)-[*1..16]->(e)`, observation: `p`, executor: ShortestPathExecutorIncumbentWorkspace, reason: ShortestPathFallbackNonSingleKindPathState, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, untyped: true},
+		{name: "inbound distance depth one", pattern: `(s)<-[:MemberOf*0..1]-(e)`, observation: `length(p)`, executor: ShortestPathExecutorS3Unidirectional, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundShallow, kindCount: 1, staticEligible: true},
+		{name: "inbound path depth one", pattern: `(s)<-[:MemberOf*1..1]-(e)`, observation: `p`, executor: ShortestPathExecutorS3EdgeM0, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundShallow, kindCount: 1, staticEligible: true},
+		{name: "inbound distance depth two", pattern: `(s)<-[:MemberOf*1..2]-(e)`, observation: `length(p)`, executor: ShortestPathExecutorIncumbentWorkspace, reason: ShortestPathFallbackDeepInboundUnqualified, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundDeep, kindCount: 1},
+		{name: "inbound path depth 64 two kinds uses direction reason", pattern: `(s)<-[:MemberOf|Contains*1..64]-(e)`, observation: `p`, executor: ShortestPathExecutorIncumbentWorkspace, reason: ShortestPathFallbackDeepInboundUnqualified, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundDeep, kindCount: 2},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`
+				MATCH p = shortestPath(%s)
+				WHERE id(s) = $start_id AND id(e) = $end_id
+				RETURN %s
+			`, test.pattern, test.observation))
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+			decision := plan.LoweringPlan.ShortestPathExecutor[0]
+			require.Equal(t, "sp-static-v3", decision.SelectorVersion)
+			require.True(t, decision.StructurallyEligible)
+			require.Equal(t, test.staticEligible, decision.StaticallyEligible)
+			require.Equal(t, test.executor, decision.SelectedExecutor)
+			require.Equal(t, test.reason, decision.FallbackReason)
+			require.Equal(t, test.direction, decision.Direction)
+			require.Equal(t, test.physicalExpansion, decision.PhysicalExpansion)
+			require.Equal(t, test.topology, decision.TopologyClassification)
+			require.Equal(t, test.kindCount, decision.RelationshipKindCount)
+			require.Equal(t, test.untyped, decision.UntypedRelationship)
+		})
+	}
+}
+
+func TestLoweringPlanShortestExecutorV3PreservesStructuralReasonPrecedence(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf|Contains*1..64]-(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	decision := plan.LoweringPlan.ShortestPathExecutor[0]
+	require.False(t, decision.StructurallyEligible)
+	require.False(t, decision.StaticallyEligible)
+	require.Equal(t, ShortestPathFallbackDirectionless, decision.FallbackReason)
 }
 
 func TestLoweringPlanShortestExecutorRejectsUnsupportedMinimumDepth(t *testing.T) {

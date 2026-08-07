@@ -90,6 +90,18 @@ type config struct {
 	DiagnosticGate            bool
 	BundleDir                 string
 	BuildCommand              string
+	ExistingGraph             bool
+	AnchorManifest            string
+	Checkpoint                string
+	Resume                    bool
+	Progress                  string
+	Discovery                 bool
+	TimeoutClasses            []time.Duration
+	DiscoverySampleFloor      int
+	ResourceArtifact          string
+	ResourceOutput            string
+	BackendDeltaArtifact      string
+	BackendDeltaOutput        string
 }
 
 func parseConfig(args []string, env func(string) string) (config, error) {
@@ -97,16 +109,17 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.SetOutput(io.Discard)
 
 	var (
-		cfg              config
-		rawModes         string
-		rawGateTargets   string
-		rawConcurrency   string
-		rawCases         string
-		rawDatasets      string
-		rawCategories    string
-		rawTags          string
-		rawConfirmCases  string
-		rawReferenceArms string
+		cfg               config
+		rawModes          string
+		rawGateTargets    string
+		rawConcurrency    string
+		rawCases          string
+		rawDatasets       string
+		rawCategories     string
+		rawTags           string
+		rawConfirmCases   string
+		rawReferenceArms  string
+		rawTimeoutClasses string
 	)
 
 	flags.StringVar(&cfg.CorpusRoot, "corpus-root", "benchmark/testdata/scale", "scale corpus root")
@@ -158,7 +171,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
-	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S3-U-D, SP-S3-U-E+MAT-M0)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S3-U-D, SP-S3-U-E+MAT-M0)")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: ADCS-A3)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
@@ -168,6 +181,18 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.DiagnosticGate, "diagnostic-gate", false, "allow comparison of matching diagnostic-only subsets")
 	flags.StringVar(&cfg.BundleDir, "bundle-dir", "", "write a reconstructible capture bundle to this directory")
 	flags.StringVar(&cfg.BuildCommand, "build-command", "go build -trimpath ./cmd/graphbench", "reproducible build command recorded in bundles")
+	flags.BoolVar(&cfg.ExistingGraph, "existing-graph", false, "run PostgreSQL read-only cases against an existing graph without schema, load, clear, vacuum, or persistent writes")
+	flags.StringVar(&cfg.AnchorManifest, "anchor-manifest", "", "versioned logical-key anchor manifest for existing-graph mode")
+	flags.StringVar(&cfg.Checkpoint, "checkpoint", "", "atomic existing-graph checkpoint path")
+	flags.BoolVar(&cfg.Resume, "resume", false, "resume completed records from the matching existing-graph checkpoint")
+	flags.StringVar(&cfg.Progress, "progress", "", "append-only existing-graph progress JSONL path")
+	flags.BoolVar(&cfg.Discovery, "discovery", false, "label the run adaptive discovery rather than fixed confirmation")
+	flags.StringVar(&rawTimeoutClasses, "timeout-classes", "", "comma-separated predeclared per-case timeout classes used by discovery")
+	flags.IntVar(&cfg.DiscoverySampleFloor, "discovery-sample-floor", 1, "minimum measured samples after adaptive discovery reduction")
+	flags.StringVar(&cfg.ResourceArtifact, "resource-artifact", "", "JSONL artifact used to calculate the state/resource gate")
+	flags.StringVar(&cfg.ResourceOutput, "resource-output", "", "state/resource gate JSON output path (default: stdout)")
+	flags.StringVar(&cfg.BackendDeltaArtifact, "backend-delta-artifact", "", "JSONL artifact used for descriptive matched PostgreSQL/Neo4j deltas")
+	flags.StringVar(&cfg.BackendDeltaOutput, "backend-delta-output", "", "descriptive backend-delta JSON output path (default: stdout)")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -248,8 +273,14 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.ReferencePairArtifact != "" {
 		modeCount++
 	}
+	if cfg.ResourceArtifact != "" {
+		modeCount++
+	}
+	if cfg.BackendDeltaArtifact != "" {
+		modeCount++
+	}
 	if modeCount > 1 {
-		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, and reference-pair modes are mutually exclusive")
+		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, resource-gate, and backend-delta modes are mutually exclusive")
 	}
 	if cfg.AAArtifact != "" && cfg.GateBaseline != "" {
 		return config{}, fmt.Errorf("aa-artifact and performance-gate mode are mutually exclusive")
@@ -268,6 +299,27 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	if cfg.AppendJSONL && cfg.OutputJSONL == "" {
 		return config{}, fmt.Errorf("append-jsonl requires jsonl-output")
+	}
+	if cfg.ResourceOutput != "" && cfg.ResourceArtifact == "" {
+		return config{}, fmt.Errorf("resource-output requires resource-artifact")
+	}
+	if cfg.BackendDeltaOutput != "" && cfg.BackendDeltaArtifact == "" {
+		return config{}, fmt.Errorf("backend-delta-output requires backend-delta-artifact")
+	}
+	if cfg.DiscoverySampleFloor < 1 {
+		return config{}, fmt.Errorf("discovery-sample-floor must be at least 1")
+	}
+	for _, raw := range strings.Split(rawTimeoutClasses, ",") {
+		if raw = strings.TrimSpace(raw); raw != "" {
+			timeout, err := time.ParseDuration(raw)
+			if err != nil || timeout <= 0 {
+				return config{}, fmt.Errorf("timeout classes must be positive durations, got %q", raw)
+			}
+			if len(cfg.TimeoutClasses) > 0 && timeout <= cfg.TimeoutClasses[len(cfg.TimeoutClasses)-1] {
+				return config{}, fmt.Errorf("timeout classes must be strictly increasing")
+			}
+			cfg.TimeoutClasses = append(cfg.TimeoutClasses, timeout)
+		}
 	}
 	for _, target := range strings.Split(rawGateTargets, ",") {
 		if target = strings.TrimSpace(target); target != "" {
@@ -304,7 +356,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if len(cfg.PostgresReferenceArms) > 0 {
 		cfg.PostgresReferences = true
 	}
-	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" {
+	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S0" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced shortest executor %q", cfg.PostgresForceShortest)
 	}
 	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "ADCS-A3" {
@@ -319,6 +371,22 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 		return config{}, err
 	}
 	cfg.Modes = modes
+	if cfg.ExistingGraph {
+		if cfg.AnchorManifest == "" {
+			return config{}, fmt.Errorf("existing-graph mode requires anchor-manifest")
+		}
+		if len(cfg.Modes) != 1 || cfg.Modes[0] != ModePostgresSQL {
+			return config{}, fmt.Errorf("existing-graph mode currently requires only postgres_sql mode")
+		}
+		if cfg.Resume && cfg.Checkpoint == "" {
+			return config{}, fmt.Errorf("resume requires checkpoint")
+		}
+		if len(cfg.TimeoutClasses) > 0 && !cfg.Discovery {
+			return config{}, fmt.Errorf("timeout-classes require discovery mode")
+		}
+	} else if cfg.Resume || cfg.AnchorManifest != "" || cfg.Checkpoint != "" || cfg.Progress != "" || cfg.Discovery || len(cfg.TimeoutClasses) > 0 {
+		return config{}, fmt.Errorf("existing-graph workflow flags require existing-graph mode")
+	}
 
 	return cfg, nil
 }
@@ -440,16 +508,34 @@ func main() {
 		}
 		return
 	}
-
-	runLock, err := acquireDestructiveRunLock(cfg.DestructiveLock)
-	if err != nil {
-		fatal("acquire destructive run lock: %v", err)
-	}
-	defer func() {
-		if err := runLock.Close(); err != nil {
-			fatal("release destructive run lock: %v", err)
+	if cfg.ResourceArtifact != "" {
+		passed, err := createResourceGateReport(cfg.ResourceArtifact, cfg.ResourceOutput)
+		if err != nil {
+			fatal("calculate state/resource gate: %v", err)
 		}
-	}()
+		if !passed {
+			fatal("state/resource gate failed")
+		}
+		return
+	}
+	if cfg.BackendDeltaArtifact != "" {
+		if err := createBackendDeltaReport(cfg.BackendDeltaArtifact, cfg.BackendDeltaOutput); err != nil {
+			fatal("calculate descriptive backend deltas: %v", err)
+		}
+		return
+	}
+
+	if !cfg.ExistingGraph {
+		runLock, err := acquireDestructiveRunLock(cfg.DestructiveLock)
+		if err != nil {
+			fatal("acquire destructive run lock: %v", err)
+		}
+		defer func() {
+			if err := runLock.Close(); err != nil {
+				fatal("release destructive run lock: %v", err)
+			}
+		}()
+	}
 
 	fullCorpus, err := loadScaleCorpus(cfg.CorpusRoot)
 	if err != nil {
@@ -467,6 +553,23 @@ func main() {
 		records   []CaseResult
 		startedAt = time.Now()
 	)
+	var existingManifest ExistingGraphAnchorManifest
+	checkpointCorpusHash := corpusIdentity(corpus)
+	if cfg.ExistingGraph {
+		existingManifest, err = loadExistingGraphAnchorManifest(cfg.AnchorManifest)
+		if err != nil {
+			fatal("load existing-graph anchor manifest: %v", err)
+		}
+		if err := validateExistingGraphCorpus(corpus, existingManifest); err != nil {
+			fatal("validate existing-graph corpus: %v", err)
+		}
+		if cfg.Resume {
+			records, err = readExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash)
+			if err != nil {
+				fatal("resume existing-graph checkpoint: %v", err)
+			}
+		}
+	}
 
 	for _, mode := range modesForRound(cfg.Modes, cfg.Round) {
 		switch mode {
@@ -479,7 +582,32 @@ func main() {
 				fatal("postgres_sql mode requires -pg-connection, -connection, PG_CONNECTION_STRING, or CONNECTION_STRING")
 			}
 
-			runner, err := newPostgresSQLRunner(ctx, cfg.DatasetDir, pgConnection, corpus, cfg.PoolSize, cfg.Round, cfg.Concurrency, cfg.PostgresReferences, cfg.PostgresReferenceArms, cfg.PostgresForceShortest, cfg.PostgresForceExpansion)
+			var existingOptions *existingGraphRunnerOptions
+			if cfg.ExistingGraph {
+				completed := map[string]bool{}
+				for _, key := range sortedCompletedKeys(records) {
+					completed[key] = true
+				}
+				existingOptions = &existingGraphRunnerOptions{
+					Manifest: existingManifest, ProgressPath: cfg.Progress, Discovery: cfg.Discovery,
+					TimeoutClasses: append([]time.Duration(nil), cfg.TimeoutClasses...), SampleFloor: cfg.DiscoverySampleFloor,
+					Completed: completed,
+					OnRecord: func(record CaseResult) error {
+						records = append(records, record)
+						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records)
+					},
+					OnComplete: func(postNodes, postEdges int64) error {
+						for idx := range records {
+							if records[idx].ExistingGraph != nil {
+								records[idx].ExistingGraph.PostNodeCount = postNodes
+								records[idx].ExistingGraph.PostEdgeCount = postEdges
+							}
+						}
+						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records)
+					},
+				}
+			}
+			runner, err := newPostgresSQLRunnerWithExistingGraph(ctx, cfg.DatasetDir, pgConnection, corpus, cfg.PoolSize, cfg.Round, cfg.Concurrency, cfg.PostgresReferences, cfg.PostgresReferenceArms, cfg.PostgresForceShortest, cfg.PostgresForceExpansion, existingOptions)
 			if err != nil {
 				fatal("open postgres_sql runner: %v", err)
 			}
@@ -493,7 +621,16 @@ func main() {
 				fatal("close postgres_sql: %v", closeErr)
 			}
 
-			records = append(records, nextRecords...)
+			if !cfg.ExistingGraph {
+				records = append(records, nextRecords...)
+			} else {
+				// OnRecord appends each completed record atomically. A resumed run
+				// may have no new records, while a complete run refreshes the final
+				// before/after cardinality proof below.
+				if err := writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records); err != nil {
+					fatal("finalize existing-graph checkpoint: %v", err)
+				}
+			}
 
 		case ModeNeo4j:
 			neo4jConnection := cfg.Neo4jConnection

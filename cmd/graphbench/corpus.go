@@ -89,6 +89,15 @@ func validateScaleCase(testCase ScaleCase) error {
 			return fmt.Errorf("mode %q cannot be both candidate and unsupported", mode)
 		}
 	}
+	if testCase.Shape.RelationshipKindCount < 0 {
+		return fmt.Errorf("shape.relationship_kind_count must not be negative")
+	}
+	if tier := testCase.Shape.FixtureTier; tier != "" && tier != "normal" && tier != "envelope" && tier != "stress" {
+		return fmt.Errorf("shape.fixture_tier must be normal, envelope, or stress")
+	}
+	if direction := testCase.Shape.Direction; direction != "" && direction != "outbound" && direction != "inbound" && direction != "directionless" && direction != "mirrored" {
+		return fmt.Errorf("shape.direction must be outbound, inbound, directionless, or mirrored")
+	}
 
 	if len(testCase.Expected.IDRows) > 0 {
 		if testCase.Expected.ResultKind != "id_rows" {

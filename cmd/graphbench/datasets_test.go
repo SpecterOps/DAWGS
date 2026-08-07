@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +26,52 @@ func TestGeneratedADCSV2DatasetCarriesExactExpectations(t *testing.T) {
 	require.Equal(t, int64(3), metadata.ADCS.DistinctBoundaries)
 	require.Equal(t, int64(19), metadata.ADCS.ExpectedReverseStates)
 	require.Equal(t, int64(4), metadata.ADCS.CompleteOutputTrails)
+}
+
+func TestGeneratedShortestPathV2DatasetRoundTripsAndCarriesExactExpectations(t *testing.T) {
+	config := testutil.ShortestPathScaleV2Config{
+		Depth: 3, ForwardRootFanOut: 2, ReverseRootFanIn: 2,
+		IntermediateFanOut: 1, IntermediateReverseFanIn: 4, FanInLevel: 2,
+		ParallelKindCount: 3, ParallelTargetCount: 2, DiamondWidth: 2,
+		DisconnectedWidth: 3, PropertyPayloadSize: 8, AddCycle: true, AddSelfLoop: true,
+	}
+	name := shortestPathV2DatasetName(config)
+	parsed, ok := parseShortestPathV2DatasetName(name)
+	require.True(t, ok)
+	require.Equal(t, config, parsed)
+
+	metadata, err := fixtureMetadata("unused", name)
+	require.NoError(t, err)
+	require.NotNil(t, metadata.Shortest)
+	require.Equal(t, 32, metadata.NodeCount)
+	require.Equal(t, 33, metadata.EdgeCount)
+	require.Equal(t, int64(5), metadata.Shortest.RootForwardDegree)
+	require.Equal(t, int64(3), metadata.Shortest.RootReverseDegree)
+	require.Equal(t, int64(2), metadata.Shortest.MaximumIntermediateForwardByLevel["2"])
+	require.Equal(t, int64(5), metadata.Shortest.MaximumIntermediateReverseByLevel["2"])
+	require.Equal(t, int64(23), metadata.Shortest.PhysicalTraversableEdgesByKind["Traverse"])
+	require.Equal(t, int64(6), metadata.Shortest.ParallelPhysicalEdges)
+	require.Equal(t, int64(2), metadata.Shortest.ParallelDistinctTargets)
+	require.Equal(t, int64(3), metadata.Shortest.ExpectedMinimumDistance)
+	require.Equal(t, int64(3), metadata.Shortest.ExpectedPredecessorEdges)
+	require.Equal(t, int64(4), metadata.Shortest.DisconnectedStateCardinality)
+	require.Equal(t, int64(5), metadata.Shortest.DistinctReachableNodesByLevel["1"])
+	require.NotEmpty(t, metadata.Checksum)
+}
+
+func TestGeneratedShortestPathV2DatasetRejectsInvalidOrNonCanonicalNames(t *testing.T) {
+	for _, name := range []string{
+		"generated_shortest_paths_v2_d3_o2_r2_fo1_fi4_l3_k3_t2_w2_x3_p8_c1_s1",
+		"generated_shortest_paths_v2_d3_o2_r2_fo1_fi4_l2_k3_t0_w2_x3_p8_c1_s1",
+		"generated_shortest_paths_v2_d03_o2_r2_fo1_fi4_l2_k3_t2_w2_x3_p8_c1_s1",
+		"generated_shortest_paths_v2_d3_o2_r2_fo1_fi4_l2_k3_t2_w2_x3_p8_c2_s1",
+		"generated_shortest_paths_v2_d3_o2_r2_fo1_fi4_l2_k3_t2_w2_x3_p8_c1_s1_unknown",
+		"generated_shortest_paths_v2_d-1_o2_r2_fo1_fi4_l2_k3_t2_w2_x3_p8_c1_s1",
+	} {
+		_, ok := parseShortestPathV2DatasetName(name)
+		require.False(t, ok, name)
+		require.Nil(t, generatedDataset(name), name)
+	}
 }
 
 func TestGeneratedADCSV2DatasetRejectsInvalidOrNonCanonicalNames(t *testing.T) {

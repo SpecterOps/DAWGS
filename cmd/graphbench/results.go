@@ -159,6 +159,10 @@ type PostgresPlanMetrics struct {
 	RootRows            int64                    `json:"root_rows,omitempty"`
 	RecursiveRows       int64                    `json:"recursive_rows,omitempty"`
 	RecursiveLoops      int64                    `json:"recursive_loops,omitempty"`
+	FrontierRows        int64                    `json:"frontier_rows,omitempty"`
+	WitnessRows         int64                    `json:"witness_rows,omitempty"`
+	MeetingRows         int64                    `json:"meeting_rows,omitempty"`
+	HydrationRows       int64                    `json:"hydration_rows,omitempty"`
 	ForwardEdgeProbes   int64                    `json:"forward_edge_probes,omitempty"`
 	ReverseEdgeProbes   int64                    `json:"reverse_edge_probes,omitempty"`
 	RootLookupLoops     int64                    `json:"root_lookup_loops,omitempty"`
@@ -206,6 +210,7 @@ type CaseResult struct {
 	Dataset             string                         `json:"dataset"`
 	Name                string                         `json:"name"`
 	Category            string                         `json:"category"`
+	Shape               WorkloadShape                  `json:"shape"`
 	ExecutionMode       ExecutionMode                  `json:"execution_mode"`
 	Status              string                         `json:"status"`
 	Cypher              string                         `json:"cypher"`
@@ -235,6 +240,7 @@ type CaseResult struct {
 	ParseCache          *pg.ParseCacheStats            `json:"parse_cache,omitempty"`
 	Baseline            *BaselineComparison            `json:"baseline,omitempty"`
 	FallbackReason      string                         `json:"fallback_reason,omitempty"`
+	ExistingGraph       *ExistingGraphRun              `json:"existing_graph,omitempty"`
 	Error               string                         `json:"error,omitempty"`
 	StableObservation   bool                           `json:"-"`
 }
@@ -284,6 +290,7 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 		Dataset:          testCase.Dataset,
 		Name:             testCase.Name,
 		Category:         testCase.Category,
+		Shape:            testCase.Shape,
 		ExecutionMode:    mode,
 		Status:           StatusOK,
 		Cypher:           testCase.Cypher,

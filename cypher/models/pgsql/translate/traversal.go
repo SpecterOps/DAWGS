@@ -60,6 +60,14 @@ func (s *Translator) shortestPathExecutorDecision(part *PatternPart, stepIndex i
 	return decision, hasDecision
 }
 
+func decisionIsForcedShortest(translator *Translator, target optimize.TraversalStepTarget) bool {
+	if translator == nil {
+		return false
+	}
+	decision, found := translator.shortestPathExecutorDecisions[target]
+	return found && decision.SelectionMode == "forced_tool"
+}
+
 func traversalStepIsFirstForSourceTarget(part *PatternPart, stepIndex int) bool {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget || stepIndex == 0 {

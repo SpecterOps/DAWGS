@@ -91,6 +91,9 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 }
 
 func generatedDataset(name string) *opengraph.Graph {
+	if config, ok := parseShortestPathV2DatasetName(name); ok {
+		return testutil.NewShortestPathScaleV2Fixture(config)
+	}
 	var shortestDepth, shortestFanout int
 	if matched, _ := fmt.Sscanf(name, testutil.ShortestPathScaleDataset+"_d%d_f%d", &shortestDepth, &shortestFanout); matched == 2 && shortestDepth >= 1 && shortestFanout >= 1 && name == fmt.Sprintf(testutil.ShortestPathScaleDataset+"_d%d_f%d", shortestDepth, shortestFanout) {
 		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: shortestDepth, Fanout: shortestFanout})
@@ -123,17 +126,34 @@ func generatedDataset(name string) *opengraph.Graph {
 }
 
 type FixtureMetadata struct {
-	Dataset           string                   `json:"dataset"`
-	Checksum          string                   `json:"checksum"`
-	NodeCount         int                      `json:"node_count"`
-	EdgeCount         int                      `json:"edge_count"`
-	PhysicalValidated bool                     `json:"physical_cardinality_validated,omitempty"`
-	PhysicalNodeCount int64                    `json:"physical_node_count,omitempty"`
-	PhysicalEdgeCount int64                    `json:"physical_edge_count,omitempty"`
-	NodeRelationBytes int64                    `json:"node_relation_bytes,omitempty"`
-	EdgeRelationBytes int64                    `json:"edge_relation_bytes,omitempty"`
-	Configuration     string                   `json:"configuration,omitempty"`
-	ADCS              *ADCSFixtureExpectations `json:"adcs,omitempty"`
+	Dataset           string                       `json:"dataset"`
+	Checksum          string                       `json:"checksum"`
+	NodeCount         int                          `json:"node_count"`
+	EdgeCount         int                          `json:"edge_count"`
+	PhysicalValidated bool                         `json:"physical_cardinality_validated,omitempty"`
+	PhysicalNodeCount int64                        `json:"physical_node_count,omitempty"`
+	PhysicalEdgeCount int64                        `json:"physical_edge_count,omitempty"`
+	NodeRelationBytes int64                        `json:"node_relation_bytes,omitempty"`
+	EdgeRelationBytes int64                        `json:"edge_relation_bytes,omitempty"`
+	Configuration     string                       `json:"configuration,omitempty"`
+	Shortest          *ShortestFixtureExpectations `json:"shortest,omitempty"`
+	ADCS              *ADCSFixtureExpectations     `json:"adcs,omitempty"`
+}
+
+type ShortestFixtureExpectations struct {
+	RootForwardDegree                 int64            `json:"root_forward_degree"`
+	RootReverseDegree                 int64            `json:"root_reverse_degree"`
+	MaximumIntermediateForwardByLevel map[string]int64 `json:"maximum_intermediate_forward_by_level"`
+	MaximumIntermediateReverseByLevel map[string]int64 `json:"maximum_intermediate_reverse_by_level"`
+	PhysicalTraversableEdgesByKind    map[string]int64 `json:"physical_traversable_edges_by_kind"`
+	DistinctReachableNodesByLevel     map[string]int64 `json:"distinct_reachable_nodes_by_level"`
+	ExpectedMinimumDistance           int64            `json:"expected_minimum_distance"`
+	ExpectedOnePathCardinality        int64            `json:"expected_one_path_cardinality"`
+	ExpectedAllShortestCardinality    int64            `json:"expected_all_shortest_cardinality"`
+	ExpectedPredecessorEdges          int64            `json:"expected_relationship_distinct_predecessor_edges"`
+	DisconnectedStateCardinality      int64            `json:"disconnected_state_cardinality"`
+	ParallelPhysicalEdges             int64            `json:"parallel_physical_edges"`
+	ParallelDistinctTargets           int64            `json:"parallel_distinct_targets"`
 }
 
 type ADCSFixtureExpectations struct {
@@ -168,7 +188,87 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 	if config, ok := parseADCSV2DatasetName(name); ok {
 		metadata.ADCS = adcsFixtureExpectations(config)
 	}
+	if config, ok := parseShortestPathV2DatasetName(name); ok {
+		metadata.Shortest = shortestFixtureExpectations(doc.Graph, config)
+	}
 	return metadata, nil
+}
+
+func parseShortestPathV2DatasetName(name string) (testutil.ShortestPathScaleV2Config, bool) {
+	var depth, rootOut, rootIn, intermediateOut, intermediateIn, level int
+	var kinds, targets, diamond, disconnected, payload, cycle, selfLoop int
+	format := testutil.ShortestPathScaleV2Dataset + "_d%d_o%d_r%d_fo%d_fi%d_l%d_k%d_t%d_w%d_x%d_p%d_c%d_s%d"
+	matched, _ := fmt.Sscanf(name, format, &depth, &rootOut, &rootIn, &intermediateOut, &intermediateIn, &level, &kinds, &targets, &diamond, &disconnected, &payload, &cycle, &selfLoop)
+	if matched != 13 || (cycle != 0 && cycle != 1) || (selfLoop != 0 && selfLoop != 1) {
+		return testutil.ShortestPathScaleV2Config{}, false
+	}
+	config := testutil.ShortestPathScaleV2Config{
+		Depth: depth, ForwardRootFanOut: rootOut, ReverseRootFanIn: rootIn,
+		IntermediateFanOut: intermediateOut, IntermediateReverseFanIn: intermediateIn,
+		FanInLevel: level, ParallelKindCount: kinds, ParallelTargetCount: targets,
+		DiamondWidth: diamond, DisconnectedWidth: disconnected, PropertyPayloadSize: payload,
+		AddCycle: cycle == 1, AddSelfLoop: selfLoop == 1,
+	}
+	if err := testutil.ValidateShortestPathScaleV2Config(config); err != nil || name != shortestPathV2DatasetName(config) {
+		return testutil.ShortestPathScaleV2Config{}, false
+	}
+	return config, true
+}
+
+func shortestPathV2DatasetName(config testutil.ShortestPathScaleV2Config) string {
+	cycle, selfLoop := 0, 0
+	if config.AddCycle {
+		cycle = 1
+	}
+	if config.AddSelfLoop {
+		selfLoop = 1
+	}
+	return fmt.Sprintf(testutil.ShortestPathScaleV2Dataset+"_d%d_o%d_r%d_fo%d_fi%d_l%d_k%d_t%d_w%d_x%d_p%d_c%d_s%d",
+		config.Depth, config.ForwardRootFanOut, config.ReverseRootFanIn,
+		config.IntermediateFanOut, config.IntermediateReverseFanIn, config.FanInLevel,
+		config.ParallelKindCount, config.ParallelTargetCount, config.DiamondWidth,
+		config.DisconnectedWidth, config.PropertyPayloadSize, cycle, selfLoop)
+}
+
+func shortestFixtureExpectations(fixture opengraph.Graph, config testutil.ShortestPathScaleV2Config) *ShortestFixtureExpectations {
+	expectations := &ShortestFixtureExpectations{
+		MaximumIntermediateForwardByLevel: map[string]int64{}, MaximumIntermediateReverseByLevel: map[string]int64{},
+		PhysicalTraversableEdgesByKind: map[string]int64{}, DistinctReachableNodesByLevel: map[string]int64{},
+		ExpectedMinimumDistance: int64(config.Depth), ExpectedOnePathCardinality: 1,
+		ExpectedAllShortestCardinality: 1, ExpectedPredecessorEdges: int64(config.Depth),
+		DisconnectedStateCardinality: int64(config.DisconnectedWidth + 1),
+		ParallelPhysicalEdges:        int64(config.ParallelKindCount * config.ParallelTargetCount),
+		ParallelDistinctTargets:      int64(config.ParallelTargetCount),
+	}
+	outgoing, incoming := map[string][]string{}, map[string][]string{}
+	for _, edge := range fixture.Edges {
+		expectations.PhysicalTraversableEdgesByKind[edge.Kind]++
+		outgoing[edge.StartID] = append(outgoing[edge.StartID], edge.EndID)
+		incoming[edge.EndID] = append(incoming[edge.EndID], edge.StartID)
+	}
+	expectations.RootForwardDegree = int64(len(outgoing["sp-v2-start"]))
+	expectations.RootReverseDegree = int64(len(incoming["sp-v2-inbound-root"]))
+	for level := 1; level < config.Depth; level++ {
+		id, key := fmt.Sprintf("sp-v2-linear-%02d", level), fmt.Sprintf("%d", level)
+		expectations.MaximumIntermediateForwardByLevel[key] = int64(len(outgoing[id]))
+		expectations.MaximumIntermediateReverseByLevel[key] = int64(len(incoming[fmt.Sprintf("sp-v2-inbound-linear-%02d", level)]))
+	}
+	seen := map[string]bool{"sp-v2-start": true}
+	frontier := []string{"sp-v2-start"}
+	for level := 0; len(frontier) > 0 && level <= 64; level++ {
+		expectations.DistinctReachableNodesByLevel[fmt.Sprintf("%d", level)] = int64(len(frontier))
+		next := []string{}
+		for _, source := range frontier {
+			for _, target := range outgoing[source] {
+				if !seen[target] {
+					seen[target] = true
+					next = append(next, target)
+				}
+			}
+		}
+		frontier = next
+	}
+	return expectations
 }
 
 func parseADCSV2DatasetName(name string) (testutil.ADCSScaleConfig, bool) {

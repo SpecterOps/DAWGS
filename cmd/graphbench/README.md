@@ -226,6 +226,11 @@ arms retain relationship IDs for trail uniqueness. When exactly five arms are
 selected, rounds follow the fixed ten-sequence carryover-balanced schedule from
 `perf_cont_3.md`; other arm counts retain the historical alternating order.
 
+`-postgres-force-shortest-executor SP-S0` is the exact-incumbent control at the
+same public distance or path boundary. It records selected/applied `SP-S0` and
+executes the existing workspace harness, making containment regret and
+candidate/reference comparisons explicit.
+
 `-postgres-force-shortest-executor SP-S3-U-D` is a qualification-only seam for
 eligible bounded singleton distance cases. It executes the repository-native
 recursive AST directly, using compact `(next_id, depth)` state when both
@@ -238,8 +243,8 @@ qualification-only seam for eligible one-path observations. It emits
 repository-native `(next_id, depth, edge_ids)` recursive state and hydrates the
 ordered path directly from direction-specific edge endpoints. Distance-only,
 directionless, correlated, optional, mutation, and other ineligible forms keep
-the incumbent unless explicitly rejected by the tool request. Automatic path
-dispatch remains disabled.
+the incumbent unless explicitly rejected by the tool request. Tool forcing
+never broadens the structural correctness envelope.
 
 `-postgres-force-expansion-search ADCS-A3` is the qualification-only seam for
 eligible directed, bounded variable expansions followed by the exact
@@ -368,12 +373,88 @@ SP family and planned candidate identities, observation mode, minimum/maximum
 depth, selected/fallback executor, selector version/mode, limits, and stable
 fallback code. These fields are also copied into each exact target outcome.
 Call count and read-only status are statement-wide, including shortest calls or
-mutations separated by `WITH`. Selector `sp-static-v2` chooses `SP-S3-U-D` for
+mutations separated by `WITH`. Selector `sp-static-v3` chooses `SP-S3-U-D` for
 qualified distance observations and `SP-S3-U-E+MAT-M0` for qualified one-path
 observations. Qualification requires one directed three-element shortest-path
 traversal, a supported bounded depth, one static ID equality per endpoint, no
 relationship variable or predicate, no path predicate, one uncorrelated
 endpoint pair, one statement-wide shortest call, and a read-only statement.
+Selector `sp-static-v3` also records graph direction, physical expansion
+column, relationship-kind count, wildcard state, and a static topology class.
+Deep `end_id` expansion and wildcard/multi-kind one-path state retain exact
+`SP-S0`; forced S3 remains available only as a qualification seam.
+
+## Existing graph read-only mode
+
+`-existing-graph` runs a selected PostgreSQL corpus without asserting schema,
+clearing/loading fixtures, vacuuming, or creating persistent helpers. It
+requires a versioned logical-key anchor manifest and refuses `write_scenario`
+or mutation keywords before runner construction. Example:
+
+```json
+{
+  "version": 1,
+  "graph": "integration_test",
+  "content_identity": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "anchors": {
+    "outbound_source": {"logical_key": "sanitized-source", "kind": "Group"},
+    "outbound_target": {"logical_key": "sanitized-target", "kind": "Domain"}
+  }
+}
+```
+
+```bash
+go run ./cmd/graphbench \
+  -existing-graph \
+  -anchor-manifest anchors.json \
+  -cases LIVE-outbound-distance \
+  -checkpoint artifacts/live/checkpoint.json \
+  -progress artifacts/live/progress.jsonl \
+  -jsonl-output artifacts/live/results.jsonl
+```
+
+Anchor values are used only at runtime. Durable records replace them with
+one-way hashes and omit rendered parameters and Cypher. The runner captures
+before/after graph cardinalities, relation sizes, PostgreSQL settings, and
+schema/index fingerprints. Each completed record is checkpointed by stable
+backend/dataset/case identity using an atomic rename; `-resume` accepts only a
+matching manifest and corpus identity.
+
+Adaptive discovery is explicit:
+
+```bash
+go run ./cmd/graphbench \
+  -existing-graph -anchor-manifest anchors.json \
+  -discovery -timeout-classes 100ms,1s,10s \
+  -discovery-sample-floor 1 \
+  -checkpoint artifacts/live/checkpoint.json
+```
+
+Every timeout and sample reduction stays in the case record. Adaptive artifacts
+are refused by the complete performance gate. Confirmation omits `-discovery`
+and uses fixed timeouts, arm order, warmups, and samples.
+
+The independent state/resource report is produced with
+`-resource-artifact results.jsonl -resource-output resources.json`. For
+non-stress portable PostgreSQL candidates it rejects temp spill, local
+workspace, and read-only WAL; exact incumbent fallback retains its documented
+temporary-workspace contract.
+
+Shortest tournament references are independently selectable with
+`-postgres-reference-arms s4_canonical_source_distance`,
+`s4_canonical_source_witness_m0`, and
+`asp_a1_predecessor_dag_m0`. They are exact full-query comparators at the same
+public observation boundary, not production selectors. The first canonicalizes
+inbound search to physical `start_id -> end_id`; the witness arm discovers
+compact node/depth state and reconstructs one deterministic predecessor trail;
+the ASP arm retains every relationship-distinct shortest-depth predecessor and
+enumerates the resulting DAG. Activation requires the saved plan/resource,
+holdout, concurrency, cancellation, and reference-closure gates.
+
+`-backend-delta-artifact combined.jsonl -backend-delta-output deltas.json`
+produces matched PostgreSQL/Neo4j median and p95 ratios only when both records
+exist, and reports logical-observation agreement. The report is explicitly
+descriptive and never participates in PostgreSQL pass/fail selection.
 Every other shape retains `SP-S0` and its specific fallback code.
 
 Ordinary variable expansions with fixed continuations similarly emit a typed

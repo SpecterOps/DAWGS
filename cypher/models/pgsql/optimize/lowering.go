@@ -127,20 +127,38 @@ const (
 )
 
 const (
-	ShortestPathFallbackAllShortestPaths      = "all_shortest_paths"
-	ShortestPathFallbackCorrelatedEndpoints   = "correlated_endpoints"
-	ShortestPathFallbackMultipleEndpointPairs = "multiple_endpoint_pairs"
-	ShortestPathFallbackNonSingletonID        = "non_singleton_id"
-	ShortestPathFallbackMultipleIDEqualities  = "multiple_id_equalities"
-	ShortestPathFallbackPathPredicate         = "path_predicate"
-	ShortestPathFallbackRelationshipPredicate = "relationship_predicate"
-	ShortestPathFallbackRelationshipVariable  = "relationship_variable"
-	ShortestPathFallbackDirectionless         = "directionless"
-	ShortestPathFallbackOptionalMatch         = "optional_match"
-	ShortestPathFallbackUnsupportedDepth      = "unsupported_depth"
-	ShortestPathFallbackMutation              = "mutation"
-	ShortestPathFallbackMultiplePathCalls     = "multiple_path_calls"
-	ShortestPathFallbackTournamentUnqualified = "tournament_unqualified"
+	ShortestPathFallbackAllShortestPaths       = "all_shortest_paths"
+	ShortestPathFallbackCorrelatedEndpoints    = "correlated_endpoints"
+	ShortestPathFallbackMultipleEndpointPairs  = "multiple_endpoint_pairs"
+	ShortestPathFallbackNonSingletonID         = "non_singleton_id"
+	ShortestPathFallbackMultipleIDEqualities   = "multiple_id_equalities"
+	ShortestPathFallbackPathPredicate          = "path_predicate"
+	ShortestPathFallbackRelationshipPredicate  = "relationship_predicate"
+	ShortestPathFallbackRelationshipVariable   = "relationship_variable"
+	ShortestPathFallbackDirectionless          = "directionless"
+	ShortestPathFallbackOptionalMatch          = "optional_match"
+	ShortestPathFallbackUnsupportedDepth       = "unsupported_depth"
+	ShortestPathFallbackMutation               = "mutation"
+	ShortestPathFallbackMultiplePathCalls      = "multiple_path_calls"
+	ShortestPathFallbackDeepInboundUnqualified = "deep_inbound_unqualified"
+	ShortestPathFallbackNonSingleKindPathState = "non_single_kind_path_state_unqualified"
+	ShortestPathFallbackTournamentUnqualified  = "tournament_unqualified"
+)
+
+type ShortestPathPhysicalExpansion string
+
+const (
+	ShortestPathPhysicalExpansionStartID ShortestPathPhysicalExpansion = "start_id"
+	ShortestPathPhysicalExpansionEndID   ShortestPathPhysicalExpansion = "end_id"
+)
+
+type ShortestPathTopologyClassification string
+
+const (
+	ShortestPathTopologyPhysicalOutbound       ShortestPathTopologyClassification = "physical_outbound"
+	ShortestPathTopologyPhysicalInboundShallow ShortestPathTopologyClassification = "physical_inbound_shallow"
+	ShortestPathTopologyPhysicalInboundDeep    ShortestPathTopologyClassification = "physical_inbound_deep"
+	ShortestPathTopologyDirectionless          ShortestPathTopologyClassification = "directionless"
 )
 
 type ShortestPathEligibilityFact struct {
@@ -151,21 +169,27 @@ type ShortestPathEligibilityFact struct {
 // ShortestPathExecutorDecision records either a qualified static executor or
 // the incumbent fallback, keeping every eligibility and fallback fact visible.
 type ShortestPathExecutorDecision struct {
-	Target               TraversalStepTarget           `json:"target"`
-	Family               string                        `json:"family"`
-	PlannedCandidates    []ShortestPathExecutor        `json:"planned_candidates"`
-	SelectedExecutor     ShortestPathExecutor          `json:"selected_executor"`
-	ObservationMode      ShortestPathObservationMode   `json:"observation_mode"`
-	Eligibility          []ShortestPathEligibilityFact `json:"eligibility"`
-	StructurallyEligible bool                          `json:"structurally_eligible"`
-	MinimumDepth         int64                         `json:"minimum_depth"`
-	MaximumDepth         int64                         `json:"maximum_depth"`
-	StateLimit           int64                         `json:"state_limit,omitempty"`
-	SelectorVersion      string                        `json:"selector_version"`
-	SelectionMode        string                        `json:"selection_mode"`
-	FallbackExecutor     ShortestPathExecutor          `json:"fallback_executor"`
-	FallbackReason       string                        `json:"fallback_reason"`
-	ExperimentalWinner   bool                          `json:"experimental_winner,omitempty"`
+	Target                 TraversalStepTarget                `json:"target"`
+	Family                 string                             `json:"family"`
+	PlannedCandidates      []ShortestPathExecutor             `json:"planned_candidates"`
+	SelectedExecutor       ShortestPathExecutor               `json:"selected_executor"`
+	ObservationMode        ShortestPathObservationMode        `json:"observation_mode"`
+	Direction              graph.Direction                    `json:"direction"`
+	PhysicalExpansion      ShortestPathPhysicalExpansion      `json:"physical_expansion"`
+	RelationshipKindCount  int                                `json:"relationship_kind_count"`
+	UntypedRelationship    bool                               `json:"untyped_relationship"`
+	TopologyClassification ShortestPathTopologyClassification `json:"topology_classification"`
+	Eligibility            []ShortestPathEligibilityFact      `json:"eligibility"`
+	StructurallyEligible   bool                               `json:"structurally_eligible"`
+	StaticallyEligible     bool                               `json:"statically_eligible"`
+	MinimumDepth           int64                              `json:"minimum_depth"`
+	MaximumDepth           int64                              `json:"maximum_depth"`
+	StateLimit             int64                              `json:"state_limit,omitempty"`
+	SelectorVersion        string                             `json:"selector_version"`
+	SelectionMode          string                             `json:"selection_mode"`
+	FallbackExecutor       ShortestPathExecutor               `json:"fallback_executor"`
+	FallbackReason         string                             `json:"fallback_reason"`
+	ExperimentalWinner     bool                               `json:"experimental_winner,omitempty"`
 }
 
 type ShortestPathFilterMode string

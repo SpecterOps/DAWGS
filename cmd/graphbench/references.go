@@ -49,6 +49,9 @@ var postgresReferenceArms = []string{
 	"s3_unidirectional_cte_m1_ordered_ids",
 	"s3_bidirectional_trail_cte",
 	"s1_array_bfs_distance",
+	"s4_canonical_source_distance",
+	"s4_canonical_source_witness_m0",
+	"asp_a1_predecessor_dag_m0",
 }
 
 func validPostgresReferenceArm(name string) bool {
@@ -396,12 +399,11 @@ func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCa
 	if testCase.Category == "generated_adcs" {
 		return s.adcsReferenceSpecs(ctx, testCase, params)
 	}
-	if testCase.Category == "generated_shortest_path" {
-		// The singleton references return one shortest path. They are not an
-		// all-shortest predecessor-DAG implementation and therefore cannot serve
-		// as an exact comparator for allShortestPaths.
+	if testCase.Category == "generated_shortest_path" || testCase.Category == "generated_shortest_path_v2" {
+		// Singleton and all-shortest architectures are kept as distinct arms;
+		// allShortestPaths uses its relationship-distinct predecessor DAG only.
 		if strings.Contains(strings.ToLower(testCase.Cypher), "allshortestpaths") {
-			return nil, nil
+			return s.allShortestReferenceSpecs(ctx, testCase, params)
 		}
 		return s.shortestReferenceSpecs(ctx, testCase, params)
 	}
@@ -413,6 +415,94 @@ func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCa
 	default:
 		return nil, nil
 	}
+}
+
+func allShortestDAGSearch(direction graph.Direction) string {
+	distanceJoin, distanceNext := "e.start_id = distance.node_id", "e.end_id"
+	predecessorJoin := "e.start_id = prior.node_id and e.end_id = paths.node_id"
+	if direction == graph.DirectionInbound {
+		distanceJoin, distanceNext = "e.end_id = distance.node_id", "e.start_id"
+		predecessorJoin = "e.end_id = prior.node_id and e.start_id = paths.node_id"
+	}
+	return `with recursive validated(start_id, end_id) as materialized (
+  select start_node.id, end_node.id
+  from node start_node, node end_node
+  where start_node.graph_id = @graph_id and start_node.id = @start_id
+    and end_node.graph_id = @graph_id and end_node.id = @end_id
+), distance(node_id, depth) as (
+  select validated.start_id, 0 from validated
+  union
+  select ` + distanceNext + `, distance.depth + 1
+  from distance
+  join edge e on e.graph_id = @graph_id and ` + distanceJoin + `
+  where distance.depth < @max_depth
+    and (cardinality(@edge_kind_ids::int2[]) = 0 or e.kind_id = any(@edge_kind_ids::int2[]))
+), target as materialized (
+  select depth from distance
+  where node_id = @end_id and depth >= @min_depth
+  order by depth limit 1
+), predecessor(node_id, depth, predecessor_id, edge_id) as materialized (
+  select paths.node_id, paths.depth, prior.node_id, e.id
+  from distance paths
+  join target on paths.depth > 0 and paths.depth <= target.depth
+  join distance prior on prior.depth = paths.depth - 1
+  join edge e on e.graph_id = @graph_id and ` + predecessorJoin + `
+  where (cardinality(@edge_kind_ids::int2[]) = 0 or e.kind_id = any(@edge_kind_ids::int2[]))
+), paths(node_id, depth, edge_ids) as (
+  select @end_id::int8, target.depth, array[]::int8[] from target
+  union all
+  select predecessor.predecessor_id, paths.depth - 1, array[predecessor.edge_id]::int8[] || paths.edge_ids
+  from paths join predecessor on predecessor.node_id = paths.node_id and predecessor.depth = paths.depth
+), shortest(depth, edge_ids) as materialized (
+  select target.depth, paths.edge_ids
+  from paths join target on true where paths.node_id = @start_id and paths.depth = 0
+)`
+}
+
+func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
+	probeParams := copyReferenceParams(params)
+	probeParams["graph_id"] = s.graphID
+	probeParams["min_depth"] = int32(1)
+	if testCase.Shape.MinDepth != nil {
+		probeParams["min_depth"] = int32(*testCase.Shape.MinDepth)
+	}
+	probeParams["max_depth"] = int32(15)
+	if testCase.Shape.MaxDepth != nil {
+		probeParams["max_depth"] = int32(*testCase.Shape.MaxDepth)
+	}
+	edgeKinds := make(graph.Kinds, 0, len(testCase.Shape.EdgeKinds))
+	for _, name := range testCase.Shape.EdgeKinds {
+		edgeKinds = append(edgeKinds, graph.StringKind(name))
+	}
+	var edgeKindIDs []int16
+	if len(edgeKinds) > 0 {
+		if s.pgDriver == nil {
+			return nil, fmt.Errorf("map all-shortest reference edge kinds: PostgreSQL driver is unavailable")
+		}
+		var err error
+		edgeKindIDs, err = s.pgDriver.KindMapper().MapKinds(ctx, edgeKinds)
+		if err != nil {
+			return nil, fmt.Errorf("map all-shortest reference edge kinds: %w", err)
+		}
+	}
+	probeParams["edge_kind_ids"] = edgeKindIDs
+	direction, err := shortestReferenceDirection(testCase.Cypher)
+	if err != nil || direction == graph.DirectionBoth {
+		return nil, err
+	}
+	rootParameter, terminalParameter, err := shortestReferenceEndpointParameters(testCase.Cypher)
+	if err != nil {
+		return nil, err
+	}
+	probeParams["start_id"] = probeParams[rootParameter]
+	probeParams["end_id"] = probeParams[terminalParameter]
+	search := allShortestDAGSearch(direction)
+	return []postgresReferenceSpec{{
+		name: "asp_a1_predecessor_dag_m0", architecture: "ASP-A1-DAG", implementationID: "shortest_depth_predecessor_dag_m0_v1",
+		stateShape:       "node/depth discovery plus every relationship-distinct shortest-depth predecessor edge",
+		observationShape: "complete all-shortest path multiset", semanticValidation: "exact_public_observation",
+		boundary: "complete path composites", fullComparator: true, sql: shortestM0FullSQL(search, direction), parameters: probeParams,
+	}}, nil
 }
 
 func (s *postgresSQLRunner) shortestReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
@@ -570,7 +660,7 @@ func shortestReferenceDirection(query string) (graph.Direction, error) {
 			continue
 		}
 		for _, patternPart := range readingClause.Match.Pattern {
-			if patternPart == nil || !patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern {
+			if patternPart == nil || (!patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern) {
 				continue
 			}
 			shortestParts++
@@ -659,6 +749,43 @@ func shortestDistanceReferenceSearchForDirection(direction graph.Direction) stri
 )`
 }
 
+func shortestCanonicalWitnessSearch(reverseForPublicPath bool) string {
+	edgeIDs := "witness.edge_ids"
+	if reverseForPublicPath {
+		edgeIDs = `(select coalesce(array_agg(reversed.edge_id order by reversed.ordinal desc), array[]::int8[])
+    from unnest(witness.edge_ids) with ordinality reversed(edge_id, ordinal))`
+	}
+	return `with recursive distance(node_id, depth) as (
+  select @search_start_id::int8, 0
+  union
+  select e.end_id, distance.depth + 1
+  from distance
+  join edge e on e.graph_id = @graph_id and e.start_id = distance.node_id
+  where distance.depth < @max_depth
+    and (cardinality(@edge_kind_ids::int2[]) = 0 or e.kind_id = any(@edge_kind_ids::int2[]))
+), target as materialized (
+  select depth from distance
+  where node_id = @search_end_id and depth >= @min_depth
+  order by depth limit 1
+), witness(node_id, depth, edge_ids) as (
+  select @search_end_id::int8, target.depth, array[]::int8[] from target
+  union all
+  select predecessor.node_id, witness.depth - 1, array[predecessor.edge_id]::int8[] || witness.edge_ids
+  from witness
+  join lateral (
+    select prior.node_id, e.id as edge_id
+    from distance prior
+    join edge e on e.graph_id = @graph_id and e.start_id = prior.node_id and e.end_id = witness.node_id
+    where prior.depth = witness.depth - 1
+      and (cardinality(@edge_kind_ids::int2[]) = 0 or e.kind_id = any(@edge_kind_ids::int2[]))
+    order by e.id, prior.node_id limit 1
+  ) predecessor on witness.depth > 0
+), shortest as materialized (
+  select target.depth, ` + edgeIDs + ` as edge_ids
+  from witness join target on true where witness.depth = 0
+)`
+}
+
 func buildShortestReferenceSpecs(testCase ScaleCase, probeParams map[string]any, nodeIDs, edgeIDs []int64, direction graph.Direction) []postgresReferenceSpec {
 	searchNE := shortestReferenceSearchForDirection(direction)
 	searchE := shortestEdgeReferenceSearch(direction)
@@ -714,6 +841,16 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 		}
 	}
 	specs = append(specs, postgresReferenceSpec{name: "s3_unidirectional_trail_cte", legacyName: "complete_reference_s1_array_cte", architecture: shortestArchitectureForCase(testCase), implementationID: "inline_recursive_cte_unidirectional_v3", stateShape: shortestS3UStateShape(testCase), observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: fullSQL, parameters: probeParams})
+	if !pathObserved && direction == graph.DirectionInbound {
+		canonicalParams := copyReferenceParams(probeParams)
+		canonicalParams["start_id"], canonicalParams["end_id"] = probeParams["end_id"], probeParams["start_id"]
+		specs = append(specs, postgresReferenceSpec{
+			name: "s4_canonical_source_distance", architecture: "SP-S4-C-D", implementationID: "canonical_relationship_source_distance_v1",
+			stateShape: "relationship-source-oriented node and depth set state", observationShape: "distance scalar",
+			semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
+			sql: shortestDistanceReferenceSearchForDirection(graph.DirectionOutbound) + ` select depth from shortest`, parameters: canonicalParams,
+		})
+	}
 	if shortestS1DistanceEligible(testCase, probeParams, direction, pathObserved) {
 		s1Params := copyReferenceParams(probeParams)
 		s1Params["state_limit"] = int32(100_000)
@@ -739,6 +876,20 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 				sql: shortestM1FullSQL(searchNE), parameters: probeParams,
 			},
 		)
+		witnessParams := copyReferenceParams(probeParams)
+		witnessParams["search_start_id"], witnessParams["search_end_id"] = probeParams["start_id"], probeParams["end_id"]
+		reverseForPublicPath := false
+		if direction == graph.DirectionInbound {
+			witnessParams["search_start_id"], witnessParams["search_end_id"] = probeParams["end_id"], probeParams["start_id"]
+			reverseForPublicPath = true
+		}
+		witnessSearch := shortestCanonicalWitnessSearch(reverseForPublicPath)
+		specs = append(specs, postgresReferenceSpec{
+			name: "s4_canonical_source_witness_m0", architecture: "SP-S4-C-WE+MAT-M0", implementationID: "canonical_source_compact_witness_m0_v1",
+			stateShape:       "node/depth discovery plus one deterministic predecessor per witness depth; no recursive full trails",
+			observationShape: "public_observation", semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
+			sql: shortestM0FullSQL(witnessSearch, direction), parameters: witnessParams,
+		})
 	}
 	specs = append(specs, postgresReferenceSpec{name: "s3_bidirectional_trail_cte", legacyName: "candidate_s2_bidirectional_cte", architecture: "SP-S3-B", implementationID: "inline_recursive_cte_bidirectional_trails_v2", stateShape: "paired per-row relationship trail arrays", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: shortestBidirectionalReferenceSQL(testCase, direction), parameters: probeParams})
 	return specs

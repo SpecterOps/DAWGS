@@ -18,6 +18,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,7 +27,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -51,9 +55,25 @@ type postgresSQLRunner struct {
 	references    bool
 	referenceArms []string
 	toolOptions   translate.ToolOptions
+	existingGraph *existingGraphRunnerOptions
+}
+
+type existingGraphRunnerOptions struct {
+	Manifest       ExistingGraphAnchorManifest
+	ProgressPath   string
+	Discovery      bool
+	TimeoutClasses []time.Duration
+	SampleFloor    int
+	Completed      map[string]bool
+	OnRecord       func(CaseResult) error
+	OnComplete     func(int64, int64) error
 }
 
 func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string) (*postgresSQLRunner, error) {
+	return newPostgresSQLRunnerWithExistingGraph(ctx, datasetDir, connection, corpus, poolSize, round, concurrency, references, referenceArms, forceShortest, forceExpansion, nil)
+}
+
+func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string, existing *existingGraphRunnerOptions) (*postgresSQLRunner, error) {
 	poolCfg, err := pgxpool.ParseConfig(connection)
 	if err != nil {
 		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
@@ -68,6 +88,15 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 	// that all samples in a case used the same physical session.
 	poolCfg.AfterConnect = pg.AfterPooledConnectionEstablished
 	poolCfg.AfterRelease = pg.AfterPooledConnectionRelease
+	if existing != nil {
+		poolCfg.AfterConnect = func(ctx context.Context, connection *pgx.Conn) error {
+			if err := pg.AfterPooledConnectionEstablished(ctx, connection); err != nil {
+				return err
+			}
+			_, err := connection.Exec(ctx, "set default_transaction_read_only = on")
+			return err
+		}
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
@@ -83,15 +112,17 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 		return nil, fmt.Errorf("open PostgreSQL database: %w", err)
 	}
 
-	nodeKinds, edgeKinds, err := scanDatasetKinds(datasetDir, scaleCorpusDatasets(corpus))
-	if err != nil {
-		_ = db.Close(ctx)
-		return nil, err
-	}
+	if existing == nil {
+		nodeKinds, edgeKinds, err := scanDatasetKinds(datasetDir, scaleCorpusDatasets(corpus))
+		if err != nil {
+			_ = db.Close(ctx)
+			return nil, err
+		}
 
-	if err := db.AssertSchema(ctx, benchmarkSchema(nodeKinds, edgeKinds)); err != nil {
-		_ = db.Close(ctx)
-		return nil, fmt.Errorf("assert PostgreSQL schema: %w", err)
+		if err := db.AssertSchema(ctx, benchmarkSchema(nodeKinds, edgeKinds)); err != nil {
+			_ = db.Close(ctx)
+			return nil, fmt.Errorf("assert PostgreSQL schema: %w", err)
+		}
 	}
 
 	pgDriver, ok := db.(*pg.Driver)
@@ -99,11 +130,25 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 		_ = db.Close(ctx)
 		return nil, fmt.Errorf("expected *pg.Driver, got %T", db)
 	}
+	if existing != nil {
+		if err := pgDriver.SetDefaultGraph(ctx, graph.Graph{Name: existing.Manifest.Graph}); err != nil {
+			_ = db.Close(ctx)
+			return nil, fmt.Errorf("select existing PostgreSQL graph: %w", err)
+		}
+		if err := pgDriver.Fetch(ctx); err != nil {
+			_ = db.Close(ctx)
+			return nil, fmt.Errorf("fetch existing PostgreSQL kinds: %w", err)
+		}
+	}
 
 	defaultGraph, ok := pgDriver.DefaultGraph()
 	if !ok {
 		_ = db.Close(ctx)
 		return nil, fmt.Errorf("PostgreSQL default graph is not set")
+	}
+	if existing != nil && existing.Manifest.Graph != "" && existing.Manifest.Graph != defaultGraph.Name {
+		_ = db.Close(ctx)
+		return nil, fmt.Errorf("anchor manifest graph %q does not match PostgreSQL default graph %q", existing.Manifest.Graph, defaultGraph.Name)
 	}
 	var backendPID int32
 	if err := pool.QueryRow(ctx, "select pg_backend_pid()").Scan(&backendPID); err != nil {
@@ -143,6 +188,7 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 			ForceShortestPathExecutor:    optimize.ShortestPathExecutor(forceShortest),
 			ForceExpansionSearchStrategy: optimize.ExpansionSearchStrategy(forceExpansion),
 		},
+		existingGraph: existing,
 	}, nil
 }
 
@@ -155,6 +201,9 @@ func (s *postgresSQLRunner) Close(ctx context.Context) error {
 }
 
 func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
+	if s.existingGraph != nil {
+		return s.runExistingGraph(ctx, warmupIterations, iterations, corpus)
+	}
 	var (
 		records        []CaseResult
 		casesByDataset = scaleCasesByDataset(corpus)
@@ -204,6 +253,164 @@ func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iteration
 	}
 
 	return records, nil
+}
+
+func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
+	options := s.existingGraph
+	if err := validateExistingGraphCorpus(corpus, options.Manifest); err != nil {
+		return nil, err
+	}
+	anchors, err := s.resolveExistingGraphAnchors(ctx, options.Manifest)
+	if err != nil {
+		return nil, err
+	}
+	idMap := idMapForManifest(anchors)
+	preNodes, preEdges, err := s.existingGraphCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.captureExistingGraphEnvironment(ctx); err != nil {
+		return nil, err
+	}
+	databaseDigest := sha256.Sum256([]byte(s.environment.Database))
+	s.environment.Database = "sha256:" + hex.EncodeToString(databaseDigest[:])
+	fixture := FixtureMetadata{
+		Dataset: "existing_graph", Checksum: s.environment.SchemaFingerprint + ":" + s.environment.IndexFingerprint,
+		PhysicalValidated: true, PhysicalNodeCount: preNodes, PhysicalEdgeCount: preEdges,
+		NodeRelationBytes: s.environment.NodeRelationBytes, EdgeRelationBytes: s.environment.EdgeRelationBytes,
+		Configuration: "existing_graph_read_only",
+	}
+	var records []CaseResult
+	for _, testCase := range corpus.Cases {
+		if !testCase.Supports(ModePostgresSQL) {
+			continue
+		}
+		caseKey := existingGraphCaseKey(ModePostgresSQL, testCase)
+		if options.Completed[caseKey] {
+			continue
+		}
+		if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{Stage: "case", CaseKey: caseKey}); err != nil {
+			return nil, err
+		}
+		if err := s.resetCaseSession(ctx); err != nil {
+			return nil, fmt.Errorf("reset PostgreSQL session for %s: %w", testCase.Name, err)
+		}
+		record := s.runExistingGraphCase(ctx, warmupIterations, iterations, testCase, idMap)
+		record.Fixture = &fixture
+		record.ExistingGraph.PreNodeCount, record.ExistingGraph.PreEdgeCount = preNodes, preEdges
+		redactExistingGraphRecord(&record, options.Manifest, anchors)
+		records = append(records, record)
+		if options.OnRecord != nil {
+			if err := options.OnRecord(record); err != nil {
+				return nil, err
+			}
+		}
+	}
+	postNodes, postEdges, err := s.existingGraphCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if preNodes != postNodes || preEdges != postEdges {
+		return nil, fmt.Errorf("existing graph cardinality changed: nodes %d -> %d, edges %d -> %d", preNodes, postNodes, preEdges, postEdges)
+	}
+	for idx := range records {
+		records[idx].ExistingGraph.PostNodeCount, records[idx].ExistingGraph.PostEdgeCount = postNodes, postEdges
+	}
+	if options.OnComplete != nil {
+		if err := options.OnComplete(postNodes, postEdges); err != nil {
+			return nil, err
+		}
+	}
+	if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{Stage: "complete", Detail: fmt.Sprintf("nodes=%d edges=%d", postNodes, postEdges)}); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func (s *postgresSQLRunner) runExistingGraphCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
+	options := s.existingGraph
+	timeouts := options.TimeoutClasses
+	if len(timeouts) == 0 {
+		timeouts = []time.Duration{0}
+	}
+	live := &ExistingGraphRun{ManifestSHA256: options.Manifest.Checksum, ContentIdentity: options.Manifest.ContentIdentity, Protocol: "fixed_confirmation", Adaptive: options.Discovery}
+	if options.Discovery {
+		live.Protocol = "adaptive_discovery"
+	}
+	var record CaseResult
+	for idx, timeout := range timeouts {
+		measured := iterations
+		warmups := warmupIterations
+		if options.Discovery && idx > 0 {
+			measured = max(options.SampleFloor, iterations>>idx)
+			warmups = warmupIterations >> idx
+		}
+		attemptCtx := ctx
+		cancel := func() {}
+		if timeout > 0 {
+			attemptCtx, cancel = context.WithTimeout(ctx, timeout)
+		}
+		record = s.runCase(attemptCtx, warmups, measured, testCase, idMap)
+		attemptErr := attemptCtx.Err()
+		cancel()
+		attempt := ExistingGraphAttempt{Timeout: timeout, WarmupSamples: warmups, MeasuredSamples: measured, Status: record.Status, Error: record.Error}
+		live.Attempts = append(live.Attempts, attempt)
+		if attemptErr == nil || !options.Discovery {
+			break
+		}
+		_ = appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{Stage: "timeout", CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase), Detail: timeout.String()})
+	}
+	record.ExistingGraph = live
+	return record
+}
+
+func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, manifest ExistingGraphAnchorManifest) (map[string]graph.ID, error) {
+	anchors := make(map[string]graph.ID, len(manifest.Anchors))
+	for name, anchor := range manifest.Anchors {
+		var ids []int64
+		rows, err := s.pool.Query(ctx, `select id from node where graph_id = $1 and properties ->> 'logical_key' = $2 order by id limit 2`, s.graphID, anchor.LogicalKey)
+		if err != nil {
+			return nil, fmt.Errorf("resolve anchor %s: %w", name, err)
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if len(ids) != 1 {
+			return nil, fmt.Errorf("anchor %s resolved to %d nodes; exactly one is required", name, len(ids))
+		}
+		if anchor.Kind != "" {
+			var matches bool
+			if err := s.pool.QueryRow(ctx, `select exists(select 1 from node n join kind k on k.id = any(n.kind_ids) where n.graph_id = $1 and n.id = $2 and k.name = $3)`, s.graphID, ids[0], anchor.Kind).Scan(&matches); err != nil {
+				return nil, err
+			}
+			if !matches {
+				return nil, fmt.Errorf("anchor %s does not have declared kind %s", name, anchor.Kind)
+			}
+		}
+		anchors[name] = graph.ID(ids[0])
+	}
+	return anchors, nil
+}
+
+func (s *postgresSQLRunner) existingGraphCounts(ctx context.Context) (int64, int64, error) {
+	var nodes, edges int64
+	err := s.pool.QueryRow(ctx, `select (select count(*) from node where graph_id = $1), (select count(*) from edge where graph_id = $1)`, s.graphID).Scan(&nodes, &edges)
+	return nodes, edges, err
+}
+
+func (s *postgresSQLRunner) captureExistingGraphEnvironment(ctx context.Context) error {
+	if err := s.pool.QueryRow(ctx, `select pg_total_relation_size(format('node_%s', $1::int4)::regclass), pg_total_relation_size(format('edge_%s', $1::int4)::regclass)`, s.graphID).Scan(&s.environment.NodeRelationBytes, &s.environment.EdgeRelationBytes); err != nil {
+		return err
+	}
+	return s.pool.QueryRow(ctx, `select
+		md5(coalesce((select string_agg(table_name || ':' || column_name || ':' || data_type, ',' order by table_name, ordinal_position) from information_schema.columns where table_schema = current_schema() and table_name in ('graph','kind','node','edge')), '')),
+		md5(coalesce((select string_agg(indexname || ':' || indexdef, ',' order by indexname) from pg_indexes where schemaname = current_schema() and (tablename in ('node','edge') or tablename in (format('node_%s',$1::int4), format('edge_%s',$1::int4)))), ''))`, s.graphID).Scan(&s.environment.SchemaFingerprint, &s.environment.IndexFingerprint)
 }
 
 func (s *postgresSQLRunner) captureAndValidateFixture(ctx context.Context, fixture *FixtureMetadata) error {
@@ -321,6 +528,9 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 		}
 	}
 
+	if s.existingGraph != nil {
+		_ = appendExistingGraphProgress(s.existingGraph.ProgressPath, ExistingGraphProgress{Stage: "plan", CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase)})
+	}
 	explain, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)
 	if err != nil {
 		if record.Status == StatusOK {
@@ -403,6 +613,9 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 		record.RawPGXRoundTrip = &roundTrip
 	}
 	if testCase.WriteScenario == nil && len(s.concurrency) > 0 {
+		if s.existingGraph != nil {
+			_ = appendExistingGraphProgress(s.existingGraph.ProgressPath, ExistingGraphProgress{Stage: "concurrency", CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase)})
+		}
 		blocks, err := measurePostgresConcurrency(ctx, s.pool, explain.SQL, explain.Parameters, s.poolSize, s.concurrency, iterations)
 		if err != nil {
 			record.Status = StatusError

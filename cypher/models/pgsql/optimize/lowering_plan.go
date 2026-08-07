@@ -520,6 +520,18 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				singletonIDs := leftIDCount == 1 && rightIDCount == 1
 				uncorrelatedSource := queryPartIndex == 0 && !hasUnwind
 				singleEndpointPair := patternSources == 1
+				physicalExpansion := ShortestPathPhysicalExpansionStartID
+				topologyClassification := ShortestPathTopologyPhysicalOutbound
+				if step.Relationship.Direction == graph.DirectionInbound {
+					physicalExpansion = ShortestPathPhysicalExpansionEndID
+					if maxDepth <= 1 {
+						topologyClassification = ShortestPathTopologyPhysicalInboundShallow
+					} else {
+						topologyClassification = ShortestPathTopologyPhysicalInboundDeep
+					}
+				} else if step.Relationship.Direction == graph.DirectionBoth {
+					topologyClassification = ShortestPathTopologyDirectionless
+				}
 				facts := []ShortestPathEligibilityFact{
 					{Name: "shortest_path_not_all", Eligible: patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
 					{Name: "single_three_element_traversal", Eligible: len(patternPart.PatternElements) == 3 && len(steps) == 1},
@@ -566,19 +578,25 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					reason = ShortestPathFallbackNonSingletonID
 				}
 				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
-					Target:               PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
-					Family:               "SP",
-					PlannedCandidates:    []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0},
-					SelectedExecutor:     ShortestPathExecutorIncumbentWorkspace,
-					ObservationMode:      ShortestPathObservationUnknown,
-					Eligibility:          facts,
-					StructurallyEligible: shortestPathFactsEligible(facts),
-					MinimumDepth:         minDepth,
-					MaximumDepth:         maxDepth,
-					SelectorVersion:      "sp-static-v2",
-					SelectionMode:        "incumbent_default",
-					FallbackExecutor:     ShortestPathExecutorIncumbentWorkspace,
-					FallbackReason:       reason,
+					Target:                 PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
+					Family:                 "SP",
+					PlannedCandidates:      []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0},
+					SelectedExecutor:       ShortestPathExecutorIncumbentWorkspace,
+					ObservationMode:        ShortestPathObservationUnknown,
+					Direction:              step.Relationship.Direction,
+					PhysicalExpansion:      physicalExpansion,
+					RelationshipKindCount:  len(step.Relationship.Kinds),
+					UntypedRelationship:    len(step.Relationship.Kinds) == 0,
+					TopologyClassification: topologyClassification,
+					Eligibility:            facts,
+					StructurallyEligible:   shortestPathFactsEligible(facts),
+					StaticallyEligible:     false,
+					MinimumDepth:           minDepth,
+					MaximumDepth:           maxDepth,
+					SelectorVersion:        "sp-static-v3",
+					SelectionMode:          "incumbent_default",
+					FallbackExecutor:       ShortestPathExecutorIncumbentWorkspace,
+					FallbackReason:         reason,
 				})
 			}
 		}
@@ -601,6 +619,7 @@ func setShortestPathEligibilityFact(decision *ShortestPathExecutorDecision, name
 			return
 		}
 	}
+	decision.Eligibility = append(decision.Eligibility, ShortestPathEligibilityFact{Name: name, Eligible: eligible})
 }
 
 // finalizeShortestPathExecutorDecisions applies statement-wide safety facts
@@ -650,7 +669,13 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 		readOnly := updatingClauses == 0
 		setShortestPathEligibilityFact(decision, "single_path_call", singlePathCall)
 		setShortestPathEligibilityFact(decision, "read_only", readOnly)
-		decision.StructurallyEligible = shortestPathFactsEligible(decision.Eligibility)
+		structurallyEligible := shortestPathFactsEligible(decision.Eligibility)
+		qualifiedPhysicalDepth := decision.Direction != graph.DirectionInbound || decision.MaximumDepth <= 1
+		qualifiedPathKinds := decision.ObservationMode != ShortestPathObservationOnePath || (!decision.UntypedRelationship && decision.RelationshipKindCount == 1)
+		setShortestPathEligibilityFact(decision, "qualified_physical_expansion_depth", qualifiedPhysicalDepth)
+		setShortestPathEligibilityFact(decision, "qualified_one_path_kind_state", qualifiedPathKinds)
+		decision.StructurallyEligible = structurallyEligible
+		decision.StaticallyEligible = structurallyEligible && qualifiedPhysicalDepth && qualifiedPathKinds
 
 		if !singlePathCall && (decision.FallbackReason == ShortestPathFallbackTournamentUnqualified || decision.FallbackReason == ShortestPathFallbackCorrelatedEndpoints) {
 			decision.FallbackReason = ShortestPathFallbackMultiplePathCalls
@@ -658,7 +683,15 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 			decision.FallbackReason = ShortestPathFallbackMutation
 		}
 
-		if decision.StructurallyEligible {
+		if structurallyEligible {
+			if !qualifiedPhysicalDepth {
+				decision.FallbackReason = ShortestPathFallbackDeepInboundUnqualified
+				continue
+			}
+			if !qualifiedPathKinds {
+				decision.FallbackReason = ShortestPathFallbackNonSingleKindPathState
+				continue
+			}
 			switch decision.ObservationMode {
 			case ShortestPathObservationDistance:
 				decision.SelectedExecutor = ShortestPathExecutorS3Unidirectional
@@ -668,7 +701,7 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 				continue
 			}
 			decision.SelectionMode = "static"
-			decision.SelectorVersion = "sp-static-v2"
+			decision.SelectorVersion = "sp-static-v3"
 			decision.FallbackReason = ""
 			decision.ExperimentalWinner = true
 		}

@@ -1,0 +1,831 @@
+{
+  "generated_at": "2026-08-07T17:51:41.606392755Z",
+  "metadata": {
+    "dawgs_version": "(devel)"
+  },
+  "modes": [
+    {
+      "mode": "neo4j",
+      "total": 43,
+      "ok": 43,
+      "row_mismatch": 0,
+      "error": 0,
+      "not_implemented": 0
+    },
+    {
+      "mode": "postgres_sql",
+      "total": 42,
+      "ok": 42,
+      "row_mismatch": 0,
+      "error": 0,
+      "not_implemented": 0
+    }
+  ],
+  "cases": [
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d0_f1_v1_p0",
+      "name": "GADCS-D00-F001-none_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1054395
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 2249892,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d0_f1_v1_p0",
+      "name": "GADCS-D00-F001-none_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1229767
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 4345222,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d16_f1000_v1000_p0",
+      "name": "GADCS-D16-F1000-sparse_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 953392
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 52931948,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d16_f1000_v1000_p0",
+      "name": "GADCS-D16-F1000-sparse_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 975683
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 63618919,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d1_f10_v10_p0",
+      "name": "GADCS-D01-F010-sparse_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 1488292
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 2919525,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d1_f10_v10_p0",
+      "name": "GADCS-D01-F010-sparse_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 998037
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 3710775,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d2_f100_v10_p0",
+      "name": "GADCS-D02-F100-sparse_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 11,
+          "median": 846973
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 11,
+          "median": 2869476,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d2_f100_v10_p0",
+      "name": "GADCS-D02-F100-sparse_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 11,
+          "median": 1297717
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 11,
+          "median": 4327766,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d4_f10_v2_p4096",
+      "name": "GADCS-D04-F010-half_payload_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 6,
+          "median": 942020
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 6,
+          "median": 2912239,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d4_f10_v2_p4096",
+      "name": "GADCS-D04-F010-half_payload_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 6,
+          "median": 1574673
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 6,
+          "median": 5341508,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d8_f1_v1_p0",
+      "name": "GADCS-D08-F001-all_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 1284787
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 2708735,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_d8_f1_v1_p0",
+      "name": "GADCS-D08-F001-all_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 1201747
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 4119155,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_v2_d16_f1000_r1_x1_i0_m1_z1_p0",
+      "name": "GADCS2-D16-F1000-R1-X1-M1-sparse_endpoint_ids",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 1653533
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 53354959,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_v2_d16_f1000_r1_x1_i0_m1_z1_p0",
+      "name": "GADCS2-D16-F1000-R1-X1-M1-sparse_path",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 949391
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 62832438,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_v2_d8_f16_r1_x0_i1000_m1_z0_p0",
+      "name": "GADCS2-D08-F016-R1-I1000-high_reverse_fanin",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 2102614
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 2849255,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_adcs.json",
+      "dataset": "generated_adcs_v2_d8_f512_r0_x512_i0_m1_z0_p0",
+      "name": "GADCS2-D08-F512-R0-X512-zero_reachable",
+      "category": "generated_adcs",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "median": 3274681
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "median": 15105005,
+          "fallback_reason": "tournament_unqualified"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d16_f16",
+      "name": "GSP-D16-F016_distance",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 859351
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 491436,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d16_f16",
+      "name": "GSP-D16-F016_path",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 964451
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 796893,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d1_f1",
+      "name": "GSP-D00-F001_path_zero",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 968163
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 797719,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d1_f1",
+      "name": "GSP-D01-F001_distance",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1031755
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 352534,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d1_f1",
+      "name": "GSP-D01-F001_path",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 866844
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 713930,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D01-F016_distance_parallel",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1120598
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 657344,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D01-F016_path_parallel",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1073836
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 6179642,
+          "fallback_reason": "non_single_kind_path_state_unqualified,shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_distance",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1128753
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 515811,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_distance_cycle",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1236293
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 725337,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_distance_self_loop",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1029940
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 614025,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_path",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 823584
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 977627,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_path_cycle",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1887396
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 950621,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d2_f16",
+      "name": "GSP-D02-F016_path_self_loop",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1811565
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 752922,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_all_shortest_diamond",
+      "category": "generated_all_shortest_paths",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 1031649
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 14348050,
+          "fallback_reason": "all_shortest_paths"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_disconnected",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "median": 907983
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "median": 610796,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_distance",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1201252
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 516349,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_path",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 893780
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 885050,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d4_f128",
+      "name": "GSP-D04-F128_path_disconnected",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "median": 1088942
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "median": 768046,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d8_f1",
+      "name": "GSP-D08-F001_distance_inbound",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1102758
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 12825719,
+          "fallback_reason": "deep_inbound_unqualified,shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d8_f1",
+      "name": "GSP-D08-F001_path_inbound",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1165535
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 13891498,
+          "fallback_reason": "deep_inbound_unqualified,shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths.json",
+      "dataset": "generated_shortest_paths_d8_f128",
+      "name": "GSP-D08-F128_path_directionless",
+      "category": "generated_shortest_path",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1849262
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-diamond-all-shortest",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 2,
+          "median": 1082858
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 13207577,
+          "fallback_reason": "all_shortest_paths"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-hidden-fanin-distance",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1033820
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 7562568,
+          "fallback_reason": "deep_inbound_unqualified,shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-hidden-fanin-path",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1238568
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 11828389,
+          "fallback_reason": "deep_inbound_unqualified,shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-outbound-distance",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1167588
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 515666,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-parallel-kind-distance",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1535134
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 762738,
+          "fallback_reason": "shortest_path"
+        }
+      }
+    },
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-parallel-kind-path",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "neo4j": {
+          "status": "ok",
+          "rows": 1,
+          "median": 1109183
+        },
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 1,
+          "median": 5989236,
+          "fallback_reason": "non_single_kind_path_state_unqualified,shortest_path"
+        }
+      }
+    }
+  ]
+}

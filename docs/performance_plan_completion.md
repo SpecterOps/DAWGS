@@ -4,8 +4,17 @@ Date: 2026-08-07
 
 Status: the `perf_cont_4.md` continuation is complete by implementation,
 qualification, or explicit gate disposition. Narrow shortest-path production
-selection is active through `sp-static-v2`; ADCS remains on its exact incumbent
+selection is active through `sp-static-v3`; ADCS remains on its exact incumbent
 because no safe automatic selector passed.
+
+> Production advisory (2026-08-07): Plan 4 remains complete, but expanded
+> live-v2 evidence found unbounded work in deep physical-inbound searches and
+> multi-kind singleton path state. Plan 5 narrows those shapes to exact `SP-S0`
+> fallback under `sp-static-v3`. The retained physical-outbound
+> distance and single-kind path envelope remains qualified. The live-v2 run is
+> discovery/qualification evidence and makes no same-data Neo4j claim. See
+> `artifacts/perf/continuation-5/manifest.json` for the frozen hashes and v3
+> policy identities.
 
 ## Phase disposition
 
@@ -48,8 +57,12 @@ observations and `SP-S3-U-E+MAT-M0` only for qualified one-path observations.
 The static envelope requires one non-optional directed traversal, supported
 bounded depth 0/1 through 64, no relationship variable or predicate, one static
 ID equality per endpoint, no path predicate, one uncorrelated endpoint pair,
-one statement-wide shortest call, and a read-only statement. Every failed fact
-retains `SP-S0` and its specific fallback code. Tool forcing remains a
+one statement-wide shortest call, and a read-only statement. V3 additionally
+retains S3 only for physical-outbound searches, physical-inbound caps zero/one,
+and single-kind one-path state. Deep physical-inbound queries use
+`deep_inbound_unqualified`; wildcard or multi-kind one-path queries use
+`non_single_kind_path_state_unqualified`. Every failed fact retains `SP-S0`
+and its specific fallback code. Tool forcing remains a
 qualification seam, not runtime configuration.
 
 ADCS continues to select `ADCS-INCUMBENT-STEPWISE`. Native A3 remains tool-only:
