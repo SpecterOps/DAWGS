@@ -33,7 +33,7 @@ func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
 	writeCase.WriteScenario = &WriteScenario{}
 	require.ErrorContains(t, validateExistingGraphCorpus(ScaleCorpus{Cases: []ScaleCase{writeCase}}, manifest), "write_scenario")
 
-	record := CaseResult{Cypher: readCase.Cypher, Params: map[string]any{"source": 42}, NodeParams: map[string]string{"source": "source"}, ObservedRows: []string{"sensitive-property"}, PostgresPlan: []string{"Index Cond: id = 42"}}
+	record := CaseResult{Cypher: readCase.Cypher, Params: map[string]any{"source": 42}, NodeParams: map[string]string{"source": "source"}, ObservedRows: []string{"sensitive-property"}, PostgresPlan: []string{"Index Cond: id = 42"}, Error: "unmapped-node:77"}
 	redactExistingGraphRecord(&record, manifest, map[string]graph.ID{"source": 42})
 	require.Empty(t, record.Cypher)
 	require.Empty(t, record.Params)
@@ -41,6 +41,8 @@ func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
 	require.NotContains(t, record.NodeParams["source"], "safe-source")
 	require.NotContains(t, record.ObservedRows[0], "sensitive-property")
 	require.NotContains(t, record.PostgresPlan[0], "42")
+	require.NotContains(t, record.Error, "77")
+	require.Contains(t, record.Error, "unmapped-node:<redacted-id>")
 }
 
 func TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity(t *testing.T) {
@@ -52,9 +54,34 @@ func TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity(t *testing.
 	require.Equal(t, "integration_test", manifest.Graph)
 	require.Regexp(t, `^[0-9a-f]{64}$`, manifest.Checksum)
 
+	physical := `{"version":1,"graph":"integration_test","content_identity":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","anchors":{"source":{"physical_id":42,"content_sha256":"sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"}}}`
+	require.NoError(t, os.WriteFile(path, []byte(physical), 0o600))
+	manifest, err = loadExistingGraphAnchorManifest(path)
+	require.NoError(t, err)
+	require.Equal(t, int64(42), *manifest.Anchors["source"].PhysicalID)
+
+	require.NoError(t, os.WriteFile(path, []byte(`{"version":1,"graph":"integration_test","content_identity":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","anchors":{"source":{"physical_id":42}}}`), 0o600))
+	_, err = loadExistingGraphAnchorManifest(path)
+	require.ErrorContains(t, err, "content_sha256")
+
+	require.NoError(t, os.WriteFile(path, []byte(`{"version":1,"graph":"integration_test","content_identity":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","anchors":{"source":{"logical_key":"safe-source","physical_id":42,"content_sha256":"sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"}}}`), 0o600))
+	_, err = loadExistingGraphAnchorManifest(path)
+	require.ErrorContains(t, err, "exactly one")
+
 	require.NoError(t, os.WriteFile(path, []byte(`{"version":1,"graph":"integration_test","anchors":{"source":{"logical_key":"safe-source"}}}`), 0o600))
 	_, err = loadExistingGraphAnchorManifest(path)
 	require.ErrorContains(t, err, "content_identity")
+}
+
+func TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity(t *testing.T) {
+	id := int64(42)
+	manifest := ExistingGraphAnchorManifest{Anchors: map[string]ExistingGraphAnchor{
+		"source": {PhysicalID: &id, ContentSHA256: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
+	}}
+	record := CaseResult{NodeParams: map[string]string{"source": "source"}}
+	redactExistingGraphRecord(&record, manifest, map[string]graph.ID{"source": graph.ID(id)})
+	require.Regexp(t, `^sha256:[0-9a-f]{64}$`, record.NodeParams["source"])
+	require.NotContains(t, record.NodeParams["source"], "42")
 }
 
 func TestExistingGraphCheckpointIsIdentityBoundAndResumable(t *testing.T) {

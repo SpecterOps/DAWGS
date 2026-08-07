@@ -21,6 +21,8 @@ Run the integration suite when a backend is available:
 
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+export DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1
+export DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs"
 make test_integration
 ```
 
@@ -33,6 +35,15 @@ Benign local examples:
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
 export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 ```
+
+`DAWGS_INTEGRATION_DISPOSABLE_TARGETS` is a comma-separated list of exact,
+credential-free targets in `<scheme>://<host>/<database>` form. Use
+`/<default>` when the connection URL selects the driver's default database.
+`make test_all`, `make test_pg`, `make test_neo4j`, and fixture-loading
+GraphBench runs refuse targets absent from the list. GraphBench
+`-existing-graph` mode remains exempt because it rejects writes and validates
+before/after cardinalities. Its PostgreSQL sessions remain read-write so
+temporary traversal workspaces retain production behavior.
 
 Use backend-specific targets when needed:
 

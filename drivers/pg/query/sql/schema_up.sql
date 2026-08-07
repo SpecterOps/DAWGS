@@ -1106,7 +1106,7 @@ begin
     select version into present_version from pg_temp.bsp_workspace_version limit 1;
   end if;
 
-  if present_version is distinct from expected_version then
+  if present_version is not null and present_version is distinct from expected_version then
     drop table if exists pg_temp.bsp_resolved_pairs;
     drop table if exists pg_temp.bsp_unresolved_pairs;
     drop table if exists pg_temp.bsp_pair_filter;

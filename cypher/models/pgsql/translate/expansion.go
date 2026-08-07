@@ -1527,7 +1527,10 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 }
 
 func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression) pgsql.CommonTableExpression {
-	const validatedEndpoints pgsql.Identifier = "singleton_endpoints"
+	return shortestPathSearchCTEFrom(functionName, expansionModel, harnessParameters, "singleton_endpoints", expansionModel.Frame.Binding.Identifier)
+}
+
+func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression, validatedEndpoints, searchAlias pgsql.Identifier) pgsql.CommonTableExpression {
 
 	if expansionModel.UsesSingletonEndpointPair() {
 		harnessParameters = append([]pgsql.Expression(nil), harnessParameters...)
@@ -1575,7 +1578,7 @@ func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expans
 
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
-			Name:  expansionModel.Frame.Binding.Identifier,
+			Name:  searchAlias,
 			Shape: expansionColumns(),
 		},
 		Query: innerQuery,
@@ -2412,6 +2415,132 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 
 func (s *ExpansionBuilder) BuildBiDirectionalShortestPathsRoot() (pgsql.Query, error) {
 	return s.buildBiDirectionalShortestPathsHarnessCall(pgsql.FunctionBidirectionalSPHarness)
+}
+
+// BuildBiDirectionalShortestPathsRootWithDirectPreflight emits the tool-only
+// SP-S0-DIRECT arm. A materialized one-edge probe returns immediately when it
+// finds a valid bound-endpoint witness. The workspace-backed incumbent is
+// dependent on a zero-or-one-row fallback endpoint CTE, so PostgreSQL cannot
+// invoke it on a direct hit. Both branches execute in one statement snapshot.
+func (s *ExpansionBuilder) BuildBiDirectionalShortestPathsRootWithDirectPreflight() (pgsql.Query, error) {
+	const (
+		validatedEndpoints pgsql.Identifier = "singleton_endpoints"
+		directHit          pgsql.Identifier = "direct_shortest"
+		fallbackEndpoints  pgsql.Identifier = "fallback_endpoints"
+		workspaceSearch    pgsql.Identifier = "workspace_shortest"
+	)
+
+	expansionModel := s.traversalStep.Expansion
+	if !expansionModel.UsesSingletonEndpointPair() {
+		return pgsql.Query{}, errors.New("SP-S0-DIRECT requires one validated endpoint pair")
+	}
+	if expansionModel.Options.MinDepth.GetOr(1) != 1 || expansionModel.Options.MaxDepth.GetOr(0) < 1 {
+		return pgsql.Query{}, errors.New("SP-S0-DIRECT requires minimum depth one and a positive bounded maximum depth")
+	}
+
+	forwardFrontPrimerQuery, forwardSeedProjectionConstraints, err := s.prepareForwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	forwardFrontRecursiveQuery, err := s.prepareForwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	backwardFrontPrimerQuery, backwardSeedProjectionConstraints, err := s.prepareBackwardFrontPrimerQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	backwardFrontRecursiveQuery, err := s.prepareBackwardFrontRecursiveQuery(expansionModel)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	harnessParameters, err := s.bidirectionalShortestPathsParameters(
+		expansionModel,
+		forwardFrontPrimerQuery,
+		forwardFrontRecursiveQuery,
+		backwardFrontPrimerQuery,
+		backwardFrontRecursiveQuery,
+		true,
+	)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	projectionQuery := pgsql.Select{
+		Projection: expansionModel.Projection,
+		From: []pgsql.FromClause{{
+			Source: pgsql.TableReference{Name: expansionModel.Frame.Binding.Identifier.AsCompoundIdentifier()},
+			Joins: []pgsql.Join{
+				{Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
+				)}},
+				{Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
+				)}},
+			},
+		}},
+	}
+	s.applyShortestPathSeedProjectionConstraints(&projectionQuery, pgsql.OptionalAnd(forwardSeedProjectionConstraints, backwardSeedProjectionConstraints))
+	s.appendUnwindSources(&projectionQuery)
+	s.applyShortestPathSelfEndpointGuard(&projectionQuery, expansionModel)
+
+	directQuery := pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{
+				pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
+				pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
+				pgsql.NewLiteral(int64(1), pgsql.Int8),
+				pgsql.NewLiteral(true, pgsql.Boolean),
+				pgd.Equals(pgd.StartID(s.traversalStep.Edge.Identifier), pgd.EndID(s.traversalStep.Edge.Identifier)),
+				pgd.ExpressionArrayLiteral(pgd.EntityID(s.traversalStep.Edge.Identifier)),
+			},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()},
+				Joins: []pgsql.Join{{
+					Table: expansionEdgeTableReference(s.traversalStep.Edge.Identifier),
+					JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.OptionalAnd(
+						pgd.Equals(expansionModel.EdgeStartColumn, pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID}),
+						pgd.Equals(expansionModel.EdgeEndColumn, pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID}),
+					)},
+				}},
+			}},
+			Where: expansionModel.EdgeConstraints,
+		},
+		OrderBy: []*pgsql.OrderBy{{Expression: pgd.EntityID(s.traversalStep.Edge.Identifier), Ascending: true}},
+		Limit:   pgsql.NewLiteral(int64(1), pgsql.Int8),
+	}
+
+	fallbackEndpointQuery := pgsql.Query{Body: pgsql.Select{
+		Projection: pgsql.Projection{pgsql.Wildcard{}},
+		From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}}},
+		Where: pgsql.ExistsExpression{Negated: true, Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
+			From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: directHit.AsCompoundIdentifier()}}},
+		}}}},
+	}}
+
+	stateQuery := pgsql.Query{Body: pgsql.SetOperation{
+		LOperand: pgsql.Select{Projection: pgsql.Projection{pgsql.Wildcard{}}, From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: directHit.AsCompoundIdentifier()}}}},
+		ROperand: pgsql.Select{Projection: pgsql.Projection{pgsql.Wildcard{}}, From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: workspaceSearch.AsCompoundIdentifier()}}}},
+		Operator: pgsql.OperatorUnion,
+		All:      true,
+	}}
+
+	query := pgsql.Query{CommonTableExpressions: &pgsql.With{}, Body: projectionQuery}
+	query.AddCTE(singletonEndpointValidationCTE(s.traversalStep, expansionModel))
+	query.AddCTE(pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: directHit, Shape: expansionColumns()},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query:        directQuery,
+	})
+	query.AddCTE(pgsql.CommonTableExpression{Alias: pgsql.TableAlias{Name: fallbackEndpoints}, Query: fallbackEndpointQuery})
+	query.AddCTE(shortestPathSearchCTEFrom(pgsql.FunctionBidirectionalSPHarness, expansionModel, harnessParameters, fallbackEndpoints, workspaceSearch))
+	query.AddCTE(pgsql.CommonTableExpression{Alias: pgsql.TableAlias{Name: expansionModel.Frame.Binding.Identifier, Shape: expansionColumns()}, Query: stateQuery})
+
+	return query, nil
 }
 
 func (s *ExpansionBuilder) BuildBiDirectionalAllShortestPathsRoot() (pgsql.Query, error) {

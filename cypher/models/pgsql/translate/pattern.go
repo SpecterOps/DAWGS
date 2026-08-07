@@ -175,6 +175,8 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 				traversalStepQuery, err = expansion.BuildShortestDistanceRoot()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 {
 				traversalStepQuery, err = expansion.BuildShortestPathEdgeM0Root()
+			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct {
+				traversalStepQuery, err = expansion.BuildBiDirectionalShortestPathsRootWithDirectPreflight()
 			} else if traversalStep.Expansion.UseBidirectionalSearch {
 				traversalStepQuery, err = expansion.BuildBiDirectionalShortestPathsRoot()
 			} else {
@@ -184,7 +186,7 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 			if err != nil {
 				return err
 			}
-			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 ||
+			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct ||
 				(traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorIncumbentWorkspace && decisionIsForcedShortest(s, traversalStep.Expansion.ShortestPathTarget)) {
 				s.recordShortestPathExecutor(traversalStep.Expansion.ShortestPathTarget, traversalStep.Expansion.ShortestPathExecutor)
 			}

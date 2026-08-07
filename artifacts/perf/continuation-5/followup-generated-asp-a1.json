@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-08-07T19:50:12.443330746Z",
+  "metadata": {
+    "dawgs_version": "(devel)"
+  },
+  "modes": [
+    {
+      "mode": "postgres_sql",
+      "total": 1,
+      "ok": 1,
+      "row_mismatch": 0,
+      "error": 0,
+      "not_implemented": 0
+    }
+  ],
+  "cases": [
+    {
+      "source": "benchmark/testdata/scale/cases/generated_shortest_paths_v2.json",
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-diamond-all-shortest",
+      "category": "generated_shortest_path_v2",
+      "modes": {
+        "postgres_sql": {
+          "status": "ok",
+          "rows": 2,
+          "median": 10658080,
+          "fallback_reason": "all_shortest_paths"
+        }
+      }
+    }
+  ],
+  "cost_models": [
+    {
+      "dataset": "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1",
+      "name": "GSPV2-NORMAL-diamond-all-shortest",
+      "boundary": "identical translated SQL through raw pgx pool/transaction/decode/drain",
+      "e2e_median": 8300451,
+      "attribution": 0.9794284672001558,
+      "components": [
+        {
+          "name": "Pool acquisition",
+          "interval": "exclusive",
+          "median": 4727,
+          "p95": 8114,
+          "rows": 2,
+          "share_of_e2e": 0.0005694871278681122,
+          "confidence": "raw-pgx observed boundary"
+        },
+        {
+          "name": "Transaction setup",
+          "interval": "exclusive",
+          "median": 91668,
+          "p95": 256453,
+          "rows": 2,
+          "share_of_e2e": 0.01104373726198733,
+          "confidence": "raw-pgx observed boundary"
+        },
+        {
+          "name": "Bind/prepare",
+          "interval": "exclusive",
+          "median": 7396381,
+          "p95": 8951333,
+          "rows": 2,
+          "share_of_e2e": 0.8910818219395549,
+          "confidence": "raw-pgx observed boundary"
+        },
+        {
+          "name": "First-row transfer/decode",
+          "interval": "exclusive",
+          "median": 30704,
+          "p95": 47732,
+          "rows": 2,
+          "share_of_e2e": 0.0036990761104426736,
+          "confidence": "raw-pgx observed boundary"
+        },
+        {
+          "name": "Remaining transfer/decode",
+          "interval": "exclusive",
+          "median": 7014,
+          "p95": 17786,
+          "rows": 2,
+          "share_of_e2e": 0.0008450143251252251,
+          "confidence": "raw-pgx observed boundary"
+        },
+        {
+          "name": "Drain/close",
+          "interval": "exclusive",
+          "median": 599204,
+          "p95": 725383,
+          "rows": 2,
+          "share_of_e2e": 0.07218933043517756,
+          "confidence": "raw-pgx observed boundary"
+        },
+        {
+          "name": "Unexplained residual",
+          "interval": "derived",
+          "median": 170753,
+          "p95": 0,
+          "share_of_e2e": 0.02057153279984425,
+          "confidence": "derived"
+        },
+        {
+          "name": "Server execution",
+          "interval": "inclusive/overlapping",
+          "median": 8006000,
+          "p95": 0,
+          "share_of_e2e": 0.9645259034719921,
+          "confidence": "single EXPLAIN diagnostic"
+        }
+      ]
+    }
+  ]
+}

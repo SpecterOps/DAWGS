@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"os"
 	"strings"
@@ -31,6 +32,35 @@ import (
 	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+func postgresPlanNodeLoops(t *testing.T, raw json.RawMessage, alias string) []int64 {
+	t.Helper()
+	var document []map[string]any
+	require.NoError(t, json.Unmarshal(raw, &document))
+	require.NotEmpty(t, document)
+	root, ok := document[0]["Plan"].(map[string]any)
+	require.True(t, ok)
+
+	var loops []int64
+	var walk func(map[string]any)
+	walk = func(node map[string]any) {
+		nodeAlias, _ := node["Alias"].(string)
+		functionName, _ := node["Function Name"].(string)
+		if nodeAlias == alias || functionName == alias {
+			if actualLoops, ok := node["Actual Loops"].(float64); ok {
+				loops = append(loops, int64(actualLoops))
+			}
+		}
+		children, _ := node["Plans"].([]any)
+		for _, child := range children {
+			if childNode, ok := child.(map[string]any); ok {
+				walk(childNode)
+			}
+		}
+	}
+	walk(root)
+	return loops
+}
 
 func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
@@ -256,6 +286,88 @@ func TestPostgreSQLForcedShortestDistanceEndpointSemantics(t *testing.T) {
 	require.Equal(t, zeroRows, records[1].RowCount)
 	require.Equal(t, StatusError, records[2].Status)
 	require.Contains(t, records[2].Error, "shortest path")
+}
+
+func TestPostgreSQLForcedShortestDirectPreflightSkipsAndFallsBackExactly(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	oneRow := int64(1)
+	minDepth, maxDepth := 1, 3
+	dataset := "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1"
+	shape := WorkloadShape{
+		RootPredicate: "bound_id", TerminalPredicate: "bound_id", EdgeKinds: []string{"Traverse"},
+		Direction: "inbound", RelationshipKindCount: 1, MinDepth: &minDepth, MaxDepth: &maxDepth,
+		PathMaterializationRequired: true,
+	}
+	multiKindMaxDepth := 2
+	multiKindShape := WorkloadShape{
+		RootPredicate: "bound_id", TerminalPredicate: "bound_id",
+		EdgeKinds: []string{"ParallelKind00", "ParallelKind01", "ParallelKind02", "ParallelKind03", "ParallelKind04", "ParallelKind05", "ParallelKind06"},
+		Direction: "outbound", RelationshipKindCount: 7, MinDepth: &minDepth, MaxDepth: &multiKindMaxDepth,
+		PathMaterializationRequired: true,
+	}
+	corpus := ScaleCorpus{Cases: []ScaleCase{
+		{
+			Name: "direct-hit", Dataset: dataset, Category: "generated_shortest_path",
+			Cypher:     "MATCH p = shortestPath((root)<-[:Traverse*1..3]-(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
+			NodeParams: map[string]string{"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-01"},
+			Expected: ExpectedResult{RowCount: &oneRow, ResultKind: "path_set", PathRows: []ExpectedPath{{
+				Nodes: []string{"sp-v2-inbound-root", "sp-v2-inbound-linear-01"}, RelationshipKinds: []string{"Traverse"}, RelationshipKeys: []string{"inbound-primary-03"},
+			}}},
+			Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, Shape: shape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+		},
+		{
+			Name: "fallback-hit", Dataset: dataset, Category: "generated_shortest_path",
+			Cypher:     "MATCH p = shortestPath((root)<-[:Traverse*1..3]-(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
+			NodeParams: map[string]string{"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+			Expected: ExpectedResult{RowCount: &oneRow, ResultKind: "path_set", PathRows: []ExpectedPath{{
+				Nodes:             []string{"sp-v2-inbound-root", "sp-v2-inbound-linear-01", "sp-v2-inbound-linear-02", "sp-v2-inbound-end"},
+				RelationshipKinds: []string{"Traverse", "Traverse", "Traverse"}, RelationshipKeys: []string{"inbound-primary-03", "inbound-primary-02", "inbound-primary-01"},
+			}}},
+			Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, Shape: shape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+		},
+		{
+			Name: "direct-multi-kind", Dataset: dataset, Category: "generated_shortest_path",
+			Cypher:     "MATCH p = shortestPath((root)-[:ParallelKind00|ParallelKind01|ParallelKind02|ParallelKind03|ParallelKind04|ParallelKind05|ParallelKind06*1..2]->(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
+			NodeParams: map[string]string{"root_id": "sp-v2-parallel-start", "end_id": "sp-v2-parallel-target-000000"},
+			Expected: ExpectedResult{RowCount: &oneRow, ResultKind: "path_set", PathRows: []ExpectedPath{{
+				Nodes: []string{"sp-v2-parallel-start", "sp-v2-parallel-target-000000"}, RelationshipKinds: []string{"ParallelKind00"}, RelationshipKeys: []string{"parallel-k00-t000000"},
+			}}},
+			Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, Shape: multiKindShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+		},
+	}}
+
+	ctx := context.Background()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, corpus, 1, 1, nil, false, nil, "SP-S0-DIRECT", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+
+	records, err := runner.Run(ctx, 0, 1, corpus)
+	require.NoError(t, err)
+	require.Len(t, records, 3)
+	for _, record := range records {
+		require.Equal(t, StatusOK, record.Status, record.Error)
+		require.Equal(t, oneRow, record.RowCount)
+		require.NotEmpty(t, record.PostgresPlanJSON)
+	}
+
+	directLoops := postgresPlanNodeLoops(t, records[0].PostgresPlanJSON, "bidirectional_sp_harness")
+	require.NotEmpty(t, directLoops)
+	require.Equal(t, int64(0), directLoops[0], records[0].PostgresPlan)
+	fallbackLoops := postgresPlanNodeLoops(t, records[1].PostgresPlanJSON, "bidirectional_sp_harness")
+	require.NotEmpty(t, fallbackLoops)
+	require.Positive(t, fallbackLoops[0], records[1].PostgresPlan)
+	multiKindLoops := postgresPlanNodeLoops(t, records[2].PostgresPlanJSON, "bidirectional_sp_harness")
+	require.NotEmpty(t, multiKindLoops)
+	require.Equal(t, int64(0), multiKindLoops[0], records[2].PostgresPlan)
 }
 
 func TestPostgreSQLForcedShortestDistanceCancellationReusesSession(t *testing.T) {

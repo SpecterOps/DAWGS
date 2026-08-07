@@ -32,6 +32,7 @@ import (
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/integrationguard"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/util/size"
 )
@@ -105,6 +106,13 @@ func Open(t testing.TB, opts Options) *Session {
 			t.Skipf("%s env var is not set", connEnv)
 		}
 		t.Fatalf("%s env var is not set", connEnv)
+	}
+	if err := integrationguard.Validate(
+		connStr,
+		os.Getenv(integrationguard.AllowDestructiveEnv),
+		os.Getenv(integrationguard.DisposableTargetsEnv),
+	); err != nil {
+		t.Fatalf("integration database safety check failed: %v", err)
 	}
 
 	driver, err := DriverFromConnectionString(connStr)
