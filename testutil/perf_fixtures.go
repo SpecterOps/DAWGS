@@ -34,9 +34,9 @@ type ShortestPathScaleConfig struct {
 }
 
 // NewShortestPathScaleFixture builds deterministic linear, diamond, dead-end,
-// cycle, wrong-direction, and disconnected shapes around a bound endpoint
-// pair. Fanout controls parallel dead ends without changing the unique linear
-// route's requested depth.
+// cycle, parallel-edge, self-loop, wrong-direction, and disconnected shapes
+// around a bound endpoint pair. Fanout controls parallel dead ends without
+// changing the unique linear route's requested depth.
 func NewShortestPathScaleFixture(config ShortestPathScaleConfig) *opengraph.Graph {
 	depth := max(config.Depth, 1)
 	fanout := max(config.Fanout, 1)
@@ -71,6 +71,9 @@ func NewShortestPathScaleFixture(config ShortestPathScaleConfig) *opengraph.Grap
 		opengraph.Node{ID: "sp-diamond-end", Kinds: []string{"ShortestNode"}},
 		opengraph.Node{ID: "sp-cycle-a", Kinds: []string{"ShortestNode"}},
 		opengraph.Node{ID: "sp-cycle-b", Kinds: []string{"ShortestNode"}},
+		opengraph.Node{ID: "sp-parallel-end", Kinds: []string{"ShortestNode"}},
+		opengraph.Node{ID: "sp-self-loop", Kinds: []string{"ShortestNode"}},
+		opengraph.Node{ID: "sp-self-loop-exit", Kinds: []string{"ShortestNode"}},
 	)
 	fixture.Edges = append(fixture.Edges,
 		opengraph.Edge{StartID: "sp-start", EndID: "sp-diamond-left", Kind: "Traverse"},
@@ -80,6 +83,11 @@ func NewShortestPathScaleFixture(config ShortestPathScaleConfig) *opengraph.Grap
 		opengraph.Edge{StartID: "sp-start", EndID: "sp-cycle-a", Kind: "Traverse"},
 		opengraph.Edge{StartID: "sp-cycle-a", EndID: "sp-cycle-b", Kind: "Traverse"},
 		opengraph.Edge{StartID: "sp-cycle-b", EndID: "sp-cycle-a", Kind: "Traverse"},
+		opengraph.Edge{StartID: "sp-start", EndID: "sp-parallel-end", Kind: "Traverse", Properties: map[string]any{"logical_key": "sp-parallel-0"}},
+		opengraph.Edge{StartID: "sp-start", EndID: "sp-parallel-end", Kind: "TypedTraverse", Properties: map[string]any{"logical_key": "sp-parallel-1"}},
+		opengraph.Edge{StartID: "sp-start", EndID: "sp-self-loop", Kind: "Traverse"},
+		opengraph.Edge{StartID: "sp-self-loop", EndID: "sp-self-loop", Kind: "Traverse"},
+		opengraph.Edge{StartID: "sp-self-loop", EndID: "sp-self-loop-exit", Kind: "Traverse"},
 	)
 
 	return fixture
@@ -90,17 +98,125 @@ type ADCSScaleConfig struct {
 	Fanout              int
 	ValidSuffixEvery    int
 	PropertyPayloadSize int
+	// ExactReachableSuffixSources decouples reachable suffix density from the
+	// legacy modulus control. Nil preserves ValidSuffixEvery behavior; zero is
+	// an exact zero and is therefore materially different from nil.
+	ExactReachableSuffixSources *int
+	ReachableSuffixDepths       []int
+	DisconnectedSuffixSources   int
+	ReverseFanIn                int
+	SuffixPathsPerBoundary      int
+	RootMatchCount              int
+	RootHasZeroDepthSuffix      *bool
 }
 
 // NewADCSScaleFixture builds a deterministic MemberOf fanout feeding a shared
 // ADCS suffix. It also emits independent wrong-kind, wrong-direction,
 // wrong-endpoint-kind, and disconnected suffix decoys.
 func NewADCSScaleFixture(config ADCSScaleConfig) *opengraph.Graph {
+	if config.ExactReachableSuffixSources == nil && len(config.ReachableSuffixDepths) == 0 && config.DisconnectedSuffixSources == 0 && config.ReverseFanIn == 0 && config.SuffixPathsPerBoundary == 0 && config.RootMatchCount == 0 && config.RootHasZeroDepthSuffix == nil {
+		return newLegacyADCSScaleFixture(config)
+	}
+	depth := max(config.MemberOfDepth, 0)
+	fanout := max(config.Fanout, 1)
+	validEvery := max(config.ValidSuffixEvery, 1)
+	reachableSources := -1
+	if config.ExactReachableSuffixSources != nil {
+		reachableSources = min(max(*config.ExactReachableSuffixSources, 0), fanout)
+	}
+	suffixPaths := max(config.SuffixPathsPerBoundary, 1)
+	rootCount := max(config.RootMatchCount, 1)
+	rootHasSuffix := true
+	if config.RootHasZeroDepthSuffix != nil {
+		rootHasSuffix = *config.RootHasZeroDepthSuffix
+	}
+	payload := strings.Repeat("x", max(config.PropertyPayloadSize, 0))
+
+	fixture := &opengraph.Graph{Nodes: []opengraph.Node{
+		{ID: "adcs-domain", Kinds: []string{"Domain"}},
+		{ID: "adcs-wrong-endpoint", Kinds: []string{"Group"}},
+	}}
+	for rootIdx := range rootCount {
+		rootID := "adcs-root"
+		if rootIdx > 0 {
+			rootID = fmt.Sprintf("adcs-root-%02d", rootIdx)
+		}
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: rootID, Kinds: []string{"Group"}, Properties: map[string]any{"objectid": "generated-adcs-root", "payload": payload}})
+	}
+	addSuffix := func(source, key string) {
+		for pathIdx := range suffixPaths {
+			caID := fmt.Sprintf("adcs-ca-%s-%02d", key, pathIdx)
+			storeID := fmt.Sprintf("adcs-store-%s-%02d", key, pathIdx)
+			fixture.Nodes = append(fixture.Nodes,
+				opengraph.Node{ID: caID, Kinds: []string{"EnterpriseCA"}, Properties: map[string]any{"payload": payload}},
+				opengraph.Node{ID: storeID, Kinds: []string{"NTAuthStore"}},
+			)
+			fixture.Edges = append(fixture.Edges,
+				opengraph.Edge{StartID: source, EndID: caID, Kind: "Enroll", Properties: map[string]any{"payload": payload, "logical_key": key + ":enroll"}},
+				opengraph.Edge{StartID: caID, EndID: storeID, Kind: "TrustedForNTAuth", Properties: map[string]any{"logical_key": key + ":trusted"}},
+				opengraph.Edge{StartID: storeID, EndID: "adcs-domain", Kind: "NTAuthStoreFor", Properties: map[string]any{"logical_key": key + ":store-for"}},
+			)
+		}
+	}
+	if rootHasSuffix {
+		addSuffix("adcs-root", "root")
+	}
+
+	productiveBoundary := "adcs-root"
+	if depth > 0 {
+		for branch := range fanout {
+			previous := "adcs-root"
+			for level := 1; level <= depth; level++ {
+				next := fmt.Sprintf("adcs-branch-%04d-level-%02d", branch, level)
+				fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: next, Kinds: []string{"Group"}, Properties: map[string]any{"payload": payload}})
+				fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: previous, EndID: next, Kind: "MemberOf", Properties: map[string]any{"logical_key": fmt.Sprintf("branch-%04d-level-%02d", branch, level)}})
+				previous = next
+			}
+			reachable := branch%validEvery == 0
+			if reachableSources >= 0 {
+				reachable = branch < reachableSources
+			}
+			if reachable && (len(config.ReachableSuffixDepths) == 0 || containsInt(config.ReachableSuffixDepths, depth)) {
+				addSuffix(previous, fmt.Sprintf("branch-%04d-depth-%02d", branch, depth))
+				if branch == 0 {
+					productiveBoundary = previous
+				}
+			}
+		}
+	}
+	for idx := range max(config.DisconnectedSuffixSources, 0) {
+		source := fmt.Sprintf("adcs-disconnected-%05d", idx)
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: source, Kinds: []string{"Group"}})
+		addSuffix(source, fmt.Sprintf("disconnected-%05d", idx))
+	}
+	for idx := range max(config.ReverseFanIn, 0) {
+		source := fmt.Sprintf("adcs-fanin-%05d", idx)
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: source, Kinds: []string{"Group"}})
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: source, EndID: productiveBoundary, Kind: "MemberOf", Properties: map[string]any{"logical_key": fmt.Sprintf("fanin-%05d", idx)}})
+	}
+
+	decoySource := "adcs-root"
+	if depth > 0 {
+		decoySource = "adcs-branch-0000-level-01"
+	}
+	fixture.Nodes = append(fixture.Nodes,
+		opengraph.Node{ID: "adcs-decoy-ca", Kinds: []string{"EnterpriseCA"}},
+		opengraph.Node{ID: "adcs-decoy-store", Kinds: []string{"NTAuthStore"}},
+	)
+	fixture.Edges = append(fixture.Edges,
+		opengraph.Edge{StartID: decoySource, EndID: "adcs-decoy-ca", Kind: "WrongEnrollKind"},
+		opengraph.Edge{StartID: "adcs-decoy-ca", EndID: decoySource, Kind: "Enroll"},
+		opengraph.Edge{StartID: decoySource, EndID: "adcs-wrong-endpoint", Kind: "Enroll"},
+	)
+
+	return fixture
+}
+
+func newLegacyADCSScaleFixture(config ADCSScaleConfig) *opengraph.Graph {
 	depth := max(config.MemberOfDepth, 0)
 	fanout := max(config.Fanout, 1)
 	validEvery := max(config.ValidSuffixEvery, 1)
 	payload := strings.Repeat("x", max(config.PropertyPayloadSize, 0))
-
 	fixture := &opengraph.Graph{Nodes: []opengraph.Node{
 		{ID: "adcs-root", Kinds: []string{"Group"}, Properties: map[string]any{"objectid": "generated-adcs-root", "payload": payload}},
 		{ID: "adcs-ca", Kinds: []string{"EnterpriseCA"}, Properties: map[string]any{"payload": payload}},
@@ -114,7 +230,6 @@ func NewADCSScaleFixture(config ADCSScaleConfig) *opengraph.Graph {
 		opengraph.Edge{StartID: "adcs-ca", EndID: "adcs-store", Kind: "TrustedForNTAuth"},
 		opengraph.Edge{StartID: "adcs-store", EndID: "adcs-domain", Kind: "NTAuthStoreFor"},
 	)
-
 	if depth > 0 {
 		for branch := range fanout {
 			previous := "adcs-root"
@@ -129,7 +244,6 @@ func NewADCSScaleFixture(config ADCSScaleConfig) *opengraph.Graph {
 			}
 		}
 	}
-
 	decoySource := "adcs-root"
 	if depth > 0 {
 		decoySource = "adcs-branch-0000-level-01"
@@ -140,6 +254,14 @@ func NewADCSScaleFixture(config ADCSScaleConfig) *opengraph.Graph {
 		opengraph.Edge{StartID: decoySource, EndID: "adcs-wrong-endpoint", Kind: "Enroll"},
 		opengraph.Edge{StartID: "adcs-disconnected", EndID: "adcs-ca", Kind: "Enroll"},
 	)
-
 	return fixture
+}
+
+func containsInt(values []int, target int) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

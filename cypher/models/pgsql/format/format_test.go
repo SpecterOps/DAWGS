@@ -128,6 +128,19 @@ func TestFormat_LateralSubqueryJoin(t *testing.T) {
 	require.Equal(t, "select n.id, e.id from node n join lateral (select e.id from edge e where e.start_id = n.id offset 0) e on true;", formattedQuery)
 }
 
+func TestFormat_FunctionAggregateOrderBy(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
+		pgsql.FunctionCall{
+			Function:   pgsql.FunctionArrayAggregate,
+			Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{"edge", "id"}},
+			OrderBy:    []*pgsql.OrderBy{{Expression: pgsql.Identifier("ordinality"), Ascending: true}},
+		},
+	}}}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "select array_agg(edge.id order by ordinality);", formattedQuery)
+}
+
 func TestFormat_Delete(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Delete{
 		From: []pgsql.TableReference{{

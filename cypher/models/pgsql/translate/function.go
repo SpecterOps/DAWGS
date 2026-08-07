@@ -521,6 +521,21 @@ func (s *Translator) translatePathLengthFunction(functionInvocation *cypher.Func
 		if !bound {
 			return fmt.Errorf("unable to resolve path identifier %s", identifier)
 		}
+		if binding.DistanceOnly {
+			var distance pgsql.Expression = binding.Identifier
+			if binding.LastProjection != nil {
+				distance = pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier}
+			} else {
+				for _, dependency := range binding.Dependencies {
+					if dependency.DistanceOnly && dependency.LastProjection != nil {
+						distance = pgsql.CompoundIdentifier{dependency.LastProjection.Binding.Identifier, dependency.Identifier}
+						break
+					}
+				}
+			}
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(distance, pgsql.Int))
+			return nil
+		}
 		if binding.DataType != pgsql.PathComposite {
 			return fmt.Errorf("expected path expression but received %s", binding.DataType)
 		}

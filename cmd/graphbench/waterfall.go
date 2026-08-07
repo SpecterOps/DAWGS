@@ -26,6 +26,7 @@ func measureCompileWaterfall(
 	kindMapper pgsql.KindMapper,
 	graphID int32,
 	iterations int,
+	toolOptions translate.ToolOptions,
 ) (ClientWaterfall, error) {
 	waterfall := ClientWaterfall{
 		IntervalsOverlap: true,
@@ -51,7 +52,12 @@ func measureCompileWaterfall(
 		optimizeDuration := time.Since(optimizeStart)
 
 		translateStart := time.Now()
-		translation, err := translate.Translate(ctx, query, kindMapper, params, graphID)
+		var translation translate.Result
+		if !hasForcedToolOptions(toolOptions) {
+			translation, err = translate.Translate(ctx, query, kindMapper, params, graphID)
+		} else {
+			translation, err = translate.TranslateForTool(ctx, query, kindMapper, params, graphID, toolOptions)
+		}
 		if err != nil {
 			return ClientWaterfall{}, fmt.Errorf("translate: %w", err)
 		}

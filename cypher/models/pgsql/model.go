@@ -574,6 +574,7 @@ type FunctionCall struct {
 	Distinct   bool
 	Function   Identifier
 	Parameters []Expression
+	OrderBy    []*OrderBy
 	Over       *Window
 	CastType   DataType
 }

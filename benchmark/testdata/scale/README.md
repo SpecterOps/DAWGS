@@ -55,12 +55,24 @@ handwritten OpenGraph JSON files.
 
 The corpus also executes parameterized `generated_shortest_paths_d*_f*` and
 `generated_adcs_d*_f*_v*_p*` variants. The normal pairwise subset covers
-shortest depth 1/2/4/8/16, fanout 1/16/128, outbound/inbound/directionless,
-distance/path/all-shortest output, disconnected and diamond shapes. The ADCS
+shortest depth 1/2/4/8/16/32/64, fanout 1/16/128/512/1000,
+outbound/inbound/directionless, distance/path/all-shortest output, and
+disconnected, diamond, cycle, parallel-edge, and self-loop shapes. The ADCS
 subset covers depth 0/1/2/4/8/16, fanout 1/10/100/1000, none/sparse/half/all
 valid branch suffix density, endpoint/path output, decoys, and a 4 KiB payload.
 Each result records the exact configuration name, deterministic graph checksum,
 and node/edge cardinality.
+
+Version-two ADCS fixtures use
+`generated_adcs_v2_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_z<zero-depth>_p<payload>`.
+Unlike the legacy modulus form, every integer is exact: `r0` represents zero
+reachable branch suffixes, `x` varies false boundaries independently, `i`
+controls reverse fan-in, `m` controls physical suffix multiplicity, and `z` is
+either zero or one. Fixture records include declared root rows, forward member
+states, suffix rows/boundaries, expected reverse states, output trails, physical
+cardinality, and checksum. Semantic relationships carry deterministic
+`logical_key` properties so relationship-distinct paths can be compared across
+backends whose physical IDs differ.
 
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
 summaries. Exact case/dataset/category/tag selectors are intended for targeted

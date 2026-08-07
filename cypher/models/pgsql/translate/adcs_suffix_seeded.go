@@ -1,0 +1,400 @@
+package translate
+
+import (
+	"fmt"
+
+	"github.com/specterops/dawgs/cypher/models"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
+	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
+)
+
+const (
+	adcsBoundaryID pgsql.Identifier = "boundary_id"
+)
+
+type adcsA3Identifiers struct {
+	rootPresence pgsql.Identifier
+	suffix       pgsql.Identifier
+	boundaries   pgsql.Identifier
+	reverse      pgsql.Identifier
+}
+
+func newADCSA3Identifiers(finalFrame pgsql.Identifier) adcsA3Identifiers {
+	prefix := string(finalFrame) + "_a3_"
+	return adcsA3Identifiers{
+		rootPresence: pgsql.Identifier(prefix + "root_presence"),
+		suffix:       pgsql.Identifier(prefix + "suffix"),
+		boundaries:   pgsql.Identifier(prefix + "boundaries"),
+		reverse:      pgsql.Identifier(prefix + "reverse"),
+	}
+}
+
+func selectedADCSA3Decision(part *PatternPart, decisions map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision) (optimize.ExpansionSearchStrategyDecision, bool) {
+	for _, step := range part.TraversalSteps {
+		if step == nil || !step.HasSourceTarget {
+			continue
+		}
+		if decision, found := decisions[step.SourceTarget]; found && decision.SelectedStrategy == optimize.ExpansionSearchSuffixSeededReverse {
+			return decision, true
+		}
+	}
+
+	return optimize.ExpansionSearchStrategyDecision{}, false
+}
+
+func (s *Translator) rewriteTraversalPatternAsADCSA3(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
+	if len(part.TraversalSteps) != decision.SuffixEndStep+1 || decision.SuffixLength != 3 || decision.Target.StepIndex < 0 || decision.Target.StepIndex >= len(part.TraversalSteps) {
+		return fmt.Errorf("forced ADCS-A3 target requires one expansion followed by exactly three terminal suffix steps")
+	}
+
+	expansionStep := part.TraversalSteps[decision.Target.StepIndex]
+	if expansionStep == nil || expansionStep.Expansion == nil || expansionStep.Frame == nil || expansionStep.Frame.Previous == nil || !expansionStep.LeftNodeBound {
+		return fmt.Errorf("forced ADCS-A3 target requires a bound root materialized by a previous frame")
+	}
+
+	suffix := part.TraversalSteps[decision.SuffixStartStep : decision.SuffixEndStep+1]
+	for _, step := range suffix {
+		if step == nil || step.Frame == nil || step.Edge == nil || step.LeftNode == nil || step.RightNode == nil {
+			return fmt.Errorf("forced ADCS-A3 target has an incomplete fixed suffix step")
+		}
+	}
+
+	ctes := s.query.CurrentPart().Model.CommonTableExpressions.Expressions
+	if firstCTE < 0 || firstCTE >= len(ctes) {
+		return fmt.Errorf("forced ADCS-A3 target did not emit an incumbent frame chain")
+	}
+	incumbentFinal := ctes[len(ctes)-1]
+	if incumbentFinal.Alias.Name != suffix[len(suffix)-1].Frame.Binding.Identifier {
+		return fmt.Errorf("forced ADCS-A3 final frame mismatch: expected %s but found %s", suffix[len(suffix)-1].Frame.Binding.Identifier, incumbentFinal.Alias.Name)
+	}
+
+	finalSelect, ok := incumbentFinal.Query.Body.(pgsql.Select)
+	if !ok {
+		return fmt.Errorf("forced ADCS-A3 final frame must be a select")
+	}
+
+	ids := newADCSA3Identifiers(incumbentFinal.Alias.Name)
+	rootFrame := expansionStep.Frame.Previous.Binding.Identifier
+	a3Query, err := s.buildADCSA3Query(part, decision, expansionStep, suffix, rootFrame, ids, finalSelect.Projection)
+	if err != nil {
+		return err
+	}
+
+	replacement := pgsql.CommonTableExpression{Alias: incumbentFinal.Alias, Query: a3Query}
+	s.query.CurrentPart().Model.CommonTableExpressions.Expressions = append(ctes[:firstCTE], replacement)
+	s.recordExpansionSearchStrategy(decision.Target, optimize.ExpansionSearchSuffixSeededReverse)
+	return nil
+}
+
+func (s *Translator) buildADCSA3Query(
+	part *PatternPart,
+	decision optimize.ExpansionSearchStrategyDecision,
+	expansionStep *TraversalStep,
+	suffix []*TraversalStep,
+	rootFrame pgsql.Identifier,
+	ids adcsA3Identifiers,
+	incumbentProjection pgsql.Projection,
+) (pgsql.Query, error) {
+	rootPresence := pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{Name: ids.rootPresence},
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: []pgsql.SelectItem{pgsql.NewLiteral(int64(1), pgsql.Int8)},
+				From:       []pgsql.FromClause{tableFrom(rootFrame)},
+			},
+			Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
+		},
+	}
+
+	suffixCTE, err := s.buildADCSA3SuffixCTE(expansionStep, suffix, ids)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	boundaries := pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: ids.boundaries},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Distinct: true,
+			Projection: []pgsql.SelectItem{&pgsql.AliasedExpression{
+				Expression: pgsql.CompoundIdentifier{ids.suffix, adcsBoundaryID},
+				Alias:      models.OptionalValue(adcsBoundaryID),
+			}},
+			From: []pgsql.FromClause{tableFrom(ids.suffix)},
+		}},
+	}
+	reverse, err := buildADCSA3ReverseCTE(expansionStep, decision, ids)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	projection, err := adcsA3FinalProjection(part, expansionStep, suffix, rootFrame, ids, incumbentProjection)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+
+	suffixEdgeIDs := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+	for _, step := range suffix {
+		suffixEdgeIDs.Values = append(suffixEdgeIDs.Values, pgsql.CompoundIdentifier{ids.suffix, step.Edge.Identifier})
+	}
+	reversePath := pgsql.CompoundIdentifier{ids.reverse, expansionPath}
+	finalWhere := pgsql.OptionalAnd(
+		pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{ids.reverse, expansionDepth},
+			pgsql.OperatorGreaterThanOrEqualTo,
+			pgsql.NewLiteral(decision.MinimumDepth, pgsql.Int8),
+		),
+		pgd.Not(pgsql.NewBinaryExpression(reversePath, pgsql.OperatorArrayOverlap, suffixEdgeIDs)),
+	)
+
+	return pgsql.Query{
+		CommonTableExpressions: &pgsql.With{Recursive: true, Expressions: []pgsql.CommonTableExpression{
+			rootPresence,
+			suffixCTE,
+			boundaries,
+			reverse,
+		}},
+		Body: pgsql.Select{
+			Projection: projection,
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{Name: rootFrame.AsCompoundIdentifier()},
+				Joins: []pgsql.Join{
+					{
+						Table: pgsql.TableReference{Name: ids.reverse.AsCompoundIdentifier()},
+						JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+							projectedNodeIDReference(rootFrame, expansionStep.LeftNode),
+							pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
+						)},
+					},
+					{
+						Table: pgsql.TableReference{Name: ids.suffix.AsCompoundIdentifier()},
+						JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{ids.suffix, adcsBoundaryID},
+							pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{ids.reverse, adcsBoundaryID},
+						)},
+					},
+				},
+			}},
+			Where: finalWhere,
+		},
+	}, nil
+}
+
+func (s *Translator) buildADCSA3SuffixCTE(expansionStep *TraversalStep, suffix []*TraversalStep, ids adcsA3Identifiers) (pgsql.CommonTableExpression, error) {
+	localScope := pgsql.NewIdentifierSet()
+	for _, step := range suffix {
+		localScope.Add(step.Edge.Identifier)
+		localScope.Add(step.LeftNode.Identifier)
+		localScope.Add(step.RightNode.Identifier)
+	}
+
+	projection := pgsql.Projection{&pgsql.AliasedExpression{
+		Expression: pgd.EntityID(suffix[0].LeftNode.Identifier),
+		Alias:      models.OptionalValue(adcsBoundaryID),
+	}}
+	for _, step := range suffix {
+		projection = append(projection, &pgsql.AliasedExpression{
+			Expression: pgd.EntityID(step.Edge.Identifier),
+			Alias:      models.OptionalValue(step.Edge.Identifier),
+		})
+	}
+	for idx, step := range suffix {
+		binding := step.RightNode
+		projection = append(projection, &pgsql.AliasedExpression{
+			Expression: adcsA3NodeValue(binding),
+			Alias:      models.OptionalValue(binding.Identifier),
+		})
+		if idx == 0 {
+			projection = append(projection, &pgsql.AliasedExpression{
+				Expression: adcsA3NodeValue(step.LeftNode),
+				Alias:      models.OptionalValue(step.LeftNode.Identifier),
+			})
+		}
+	}
+
+	first := suffix[0]
+	from := pgsql.FromClause{
+		Source: pgsql.TableReference{Name: ids.rootPresence.AsCompoundIdentifier()},
+		Joins: []pgsql.Join{
+			{Table: expansionEdgeTableReference(first.Edge.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewLiteral(true, pgsql.Boolean)}},
+			{Table: expansionNodeTableReference(first.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+				pgd.EntityID(first.LeftNode.Identifier), pgsql.OperatorEquals, pgsql.CompoundIdentifier{first.Edge.Identifier, pgsql.ColumnStartID},
+			)}},
+			{Table: expansionNodeTableReference(first.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+				pgd.EntityID(first.RightNode.Identifier), pgsql.OperatorEquals, pgsql.CompoundIdentifier{first.Edge.Identifier, pgsql.ColumnEndID},
+			)}},
+		},
+	}
+	for _, step := range suffix[1:] {
+		from.Joins = append(from.Joins,
+			pgsql.Join{Table: expansionEdgeTableReference(step.Edge.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{step.Edge.Identifier, pgsql.ColumnStartID}, pgsql.OperatorEquals, pgd.EntityID(step.LeftNode.Identifier),
+			)}},
+			pgsql.Join{Table: expansionNodeTableReference(step.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+				pgd.EntityID(step.RightNode.Identifier), pgsql.OperatorEquals, pgsql.CompoundIdentifier{step.Edge.Identifier, pgsql.ColumnEndID},
+			)}},
+		)
+	}
+
+	var boundaryConstraint pgsql.Expression
+	if expansionStep.Expansion != nil {
+		boundaryConstraint = expansionStep.Expansion.TerminalNodeConstraints
+	}
+	localBoundaryConstraint, _ := partitionConstraintByLocality(boundaryConstraint, localScope)
+	where := localBoundaryConstraint
+	for _, step := range suffix {
+		localLeftConstraint, _ := partitionConstraintByLocality(step.LeftNodeConstraints, localScope)
+		localEdgeConstraint, _ := partitionConstraintByLocality(step.EdgeConstraints.Expression, localScope)
+		localRightConstraint, _ := partitionConstraintByLocality(step.RightNodeConstraints, localScope)
+		where = pgsql.OptionalAnd(where, localLeftConstraint)
+		where = pgsql.OptionalAnd(where, localEdgeConstraint)
+		where = pgsql.OptionalAnd(where, localRightConstraint)
+	}
+
+	return pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: ids.suffix},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: projection,
+			From:       []pgsql.FromClause{from},
+			Where:      where,
+		}},
+	}, nil
+}
+
+func buildADCSA3ReverseCTE(expansionStep *TraversalStep, decision optimize.ExpansionSearchStrategyDecision, ids adcsA3Identifiers) (pgsql.CommonTableExpression, error) {
+	if expansionStep.Edge == nil || expansionStep.RightNode == nil {
+		return pgsql.CommonTableExpression{}, fmt.Errorf("forced ADCS-A3 expansion step is incomplete")
+	}
+
+	emptyPath := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+	seed := pgsql.Select{
+		Projection: []pgsql.SelectItem{
+			pgsql.CompoundIdentifier{ids.boundaries, adcsBoundaryID},
+			pgsql.CompoundIdentifier{ids.boundaries, adcsBoundaryID},
+			pgsql.NewLiteral(int64(0), pgsql.Int8),
+			emptyPath,
+		},
+		From: []pgsql.FromClause{tableFrom(ids.boundaries)},
+	}
+
+	path := pgsql.CompoundIdentifier{ids.reverse, expansionPath}
+	localEdgeConstraint, _ := partitionConstraintByLocality(
+		expansionStep.Expansion.EdgeConstraints,
+		pgsql.AsIdentifierSet(expansionStep.Edge.Identifier),
+	)
+	recursiveWhere := pgsql.OptionalAnd(
+		pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{ids.reverse, expansionDepth},
+			pgsql.OperatorLessThan,
+			pgsql.NewLiteral(decision.MaximumDepth, pgsql.Int8),
+		),
+		pgsql.NewBinaryExpression(
+			pgd.EntityID(expansionStep.Edge.Identifier),
+			pgsql.OperatorNotEquals,
+			pgsql.NewAllExpression(path),
+		),
+	)
+	recursiveWhere = pgsql.OptionalAnd(recursiveWhere, localEdgeConstraint)
+
+	recursive := pgsql.Select{
+		Projection: []pgsql.SelectItem{
+			pgsql.CompoundIdentifier{ids.reverse, adcsBoundaryID},
+			pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, pgsql.ColumnStartID},
+			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{ids.reverse, expansionDepth}, pgsql.OperatorAdd, pgsql.NewLiteral(int64(1), pgsql.Int8)),
+			pgsql.FunctionCall{Function: pgsql.Identifier("array_prepend"), Parameters: []pgsql.Expression{
+				pgd.EntityID(expansionStep.Edge.Identifier), path,
+			}, CastType: pgsql.Int8Array},
+		},
+		From: []pgsql.FromClause{{
+			Source: pgsql.TableReference{Name: ids.reverse.AsCompoundIdentifier()},
+			Joins: []pgsql.Join{
+				{Table: expansionEdgeTableReference(expansionStep.Edge.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, pgsql.ColumnEndID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
+				)}},
+				{Table: expansionNodeTableReference(expansionStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+					pgd.EntityID(expansionStep.LeftNode.Identifier), pgsql.OperatorEquals, pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, pgsql.ColumnStartID},
+				)}},
+			},
+		}},
+		Where: recursiveWhere,
+	}
+
+	return pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{Name: ids.reverse, Shape: pgsql.NewRecordShape([]pgsql.Identifier{
+			adcsBoundaryID, expansionNextID, expansionDepth, expansionPath,
+		})},
+		Query: pgsql.Query{Body: pgsql.SetOperation{
+			Operator: pgsql.OperatorUnion,
+			All:      true,
+			LOperand: seed,
+			ROperand: recursive,
+		}},
+	}, nil
+}
+
+func adcsA3FinalProjection(
+	part *PatternPart,
+	expansionStep *TraversalStep,
+	suffix []*TraversalStep,
+	rootFrame pgsql.Identifier,
+	ids adcsA3Identifiers,
+	incumbent pgsql.Projection,
+) (pgsql.Projection, error) {
+	suffixBindings := map[pgsql.Identifier]struct{}{}
+	for _, step := range suffix {
+		suffixBindings[step.Edge.Identifier] = struct{}{}
+		suffixBindings[step.LeftNode.Identifier] = struct{}{}
+		suffixBindings[step.RightNode.Identifier] = struct{}{}
+	}
+
+	projection := make(pgsql.Projection, 0, len(incumbent))
+	for _, item := range incumbent {
+		alias, ok := selectItemAlias(item)
+		if !ok {
+			return nil, fmt.Errorf("forced ADCS-A3 final projection contains an unaliased item %T", item)
+		}
+
+		var expression pgsql.Expression
+		switch {
+		case expansionStep.Expansion != nil && expansionStep.Expansion.PathBinding != nil && alias == expansionStep.Expansion.PathBinding.Identifier:
+			expression = pgsql.CompoundIdentifier{ids.reverse, expansionPath}
+		case alias == expansionStep.LeftNode.Identifier:
+			expression = pgsql.CompoundIdentifier{rootFrame, alias}
+		case alias == expansionStep.RightNode.Identifier:
+			expression = pgsql.CompoundIdentifier{ids.suffix, alias}
+		default:
+			if _, found := suffixBindings[alias]; found {
+				expression = pgsql.CompoundIdentifier{ids.suffix, alias}
+			} else {
+				expression = pgsql.CompoundIdentifier{rootFrame, alias}
+			}
+		}
+		projection = append(projection, &pgsql.AliasedExpression{Expression: expression, Alias: models.OptionalValue(alias)})
+	}
+
+	return projection, nil
+}
+
+func selectItemAlias(item pgsql.SelectItem) (pgsql.Identifier, bool) {
+	switch typed := item.(type) {
+	case *pgsql.AliasedExpression:
+		return typed.Alias.Value, typed.Alias.Set
+	case pgsql.AliasedExpression:
+		return typed.Alias.Value, typed.Alias.Set
+	default:
+		return "", false
+	}
+}
+
+func adcsA3NodeValue(binding *BoundIdentifier) pgsql.Expression {
+	if binding.IDOnly {
+		return pgd.EntityID(binding.Identifier)
+	}
+	return aggregateNodeComposite(binding.Identifier)
+}
+
+func tableFrom(identifier pgsql.Identifier) pgsql.FromClause {
+	return pgsql.FromClause{Source: pgsql.TableReference{Name: identifier.AsCompoundIdentifier()}}
+}

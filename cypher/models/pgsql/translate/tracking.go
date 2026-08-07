@@ -395,6 +395,7 @@ type BoundIdentifier struct {
 	Dependencies   []*BoundIdentifier
 	DataType       pgsql.DataType
 	IDOnly         bool
+	DistanceOnly   bool
 }
 
 func (s *BoundIdentifier) MaterializedBy(frame *Frame) {
@@ -413,6 +414,7 @@ func (s *BoundIdentifier) Copy() *BoundIdentifier {
 		Dependencies:   dependenciesCopy,
 		DataType:       s.DataType,
 		IDOnly:         s.IDOnly,
+		DistanceOnly:   s.DistanceOnly,
 	}
 }
 

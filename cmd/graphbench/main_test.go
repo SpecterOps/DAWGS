@@ -44,6 +44,12 @@ func TestParseConfigAcceptsPoolAndConcurrencySmokeLevels(t *testing.T) {
 	require.Equal(t, []int{1, 4, 8}, cfg.Concurrency)
 }
 
+func TestParseConfigAcceptsReferencePairDiscoveryProtocol(t *testing.T) {
+	cfg, err := parseConfig([]string{"-reference-pair-protocol", "discovery"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, referencePairProtocolDiscovery, cfg.ReferencePairProtocol)
+}
+
 func TestParseConfigRejectsPoolMemoryBelowPerSessionBudget(t *testing.T) {
 	_, err := parseConfig([]string{
 		"-pool-size", "4",
@@ -70,4 +76,70 @@ func TestParseConfigAcceptsDiagnosticSelectorsAndRunMetadata(t *testing.T) {
 func TestParseConfigRejectsDuplicateExactSelectors(t *testing.T) {
 	_, err := parseConfig([]string{"-cases", "case-a,case-a"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "duplicate case selector")
+}
+
+func TestParseConfigAcceptsOnlyQualifiedForcedShortestExecutor(t *testing.T) {
+	cfg, err := parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-D"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "SP-S3-U-D", cfg.PostgresForceShortest)
+	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-E+MAT-M0"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "SP-S3-U-E+MAT-M0", cfg.PostgresForceShortest)
+
+	_, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S1"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "unsupported PostgreSQL forced shortest executor")
+}
+
+func TestParseConfigAcceptsOnlyQualifiedForcedExpansionSearch(t *testing.T) {
+	cfg, err := parseConfig([]string{"-postgres-force-expansion-search", "ADCS-A3"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "ADCS-A3", cfg.PostgresForceExpansion)
+
+	_, err = parseConfig([]string{"-postgres-force-expansion-search", "ADCS-A4"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "unsupported PostgreSQL forced expansion search")
+
+	_, err = parseConfig([]string{
+		"-postgres-force-shortest-executor", "SP-S3-U-D",
+		"-postgres-force-expansion-search", "ADCS-A3",
+	}, func(string) string { return "" })
+	require.ErrorContains(t, err, "mutually exclusive")
+}
+
+func TestParseConfigRequiresOutputForJSONLAppend(t *testing.T) {
+	_, err := parseConfig([]string{"-append-jsonl"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "append-jsonl requires jsonl-output")
+
+	cfg, err := parseConfig([]string{"-append-jsonl", "-jsonl-output", "rounds.jsonl"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.AppendJSONL)
+}
+
+func TestParseConfigAcceptsReferenceClosureMode(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-reference-closure-artifact", "reference.jsonl",
+		"-reference-closure-output", "report.json",
+		"-reference-closure-arm", "s3_unidirectional_trail_cte",
+		"-confidence-level", "0.975",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "reference.jsonl", cfg.ReferenceClosureArtifact)
+	require.Equal(t, 0.975, cfg.Confidence)
+
+	_, err = parseConfig([]string{"-reference-closure-output", "report.json"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "requires reference-closure-artifact")
+	_, err = parseConfig([]string{"-reference-closure-artifact", "reference.jsonl", "-aa-artifact", "aa.jsonl"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "mutually exclusive")
+}
+
+func TestParseConfigAcceptsReferencePairMode(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-reference-pair-artifact", "pair.jsonl",
+		"-reference-pair-baseline", "s3",
+		"-reference-pair-candidate", "s1",
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, "pair.jsonl", cfg.ReferencePairArtifact)
+	require.Equal(t, "s3", cfg.ReferencePairBaseline)
+	require.Equal(t, "s1", cfg.ReferencePairCandidate)
 }

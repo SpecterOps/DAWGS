@@ -208,31 +208,184 @@ allocations), a raw prepared round-trip, the C1 prepared round-trip,
 endpoint validation, minimum graph-access ID floor, raw ordered-ID search,
 path hydration from precomputed ordered edge IDs, and complete hand-written
 PostgreSQL references for the active shortest-path and ADCS targets. The main
-case record is the seventh, translated-CySQL rung. Component floors need not
-match the full query's row count; complete references do. It also records
+case record remains the translated-CySQL boundary rather than a fixed ordinal
+among the additive references. Component floors need not match the full query's
+row count; complete references do. It also records
 compile-stage timings and allocations. JSON/Markdown summaries include a
 versioned exclusive-boundary cost table and its unexplained residual. The waterfall marks its translation
 interval as overlapping optimization, so those fields must not be summed as an
 additive attribution.
+
+Use `-postgres-reference-arms` to run only named tournament arms; it implies
+`-postgres-references` and rejects unknown or duplicate names. Generated ADCS
+cases expose `current_forward_ordered_ids`, `a1a_root_reuse_*`,
+`a1b_late_hydration_*`, `a2_factored_suffix_forward_*`,
+`a3_suffix_seeded_reverse_*`, and `a4_viability_forward_*` boundaries. Complete
+arms are exact-multiset checked against the public CySQL observation. Ordered-ID
+arms retain relationship IDs for trail uniqueness. When exactly five arms are
+selected, rounds follow the fixed ten-sequence carryover-balanced schedule from
+`perf_cont_3.md`; other arm counts retain the historical alternating order.
+
+`-postgres-force-shortest-executor SP-S3-U-D` is a qualification-only seam for
+eligible bounded singleton distance cases. It executes the repository-native
+recursive AST directly, using compact `(next_id, depth)` state when both
+endpoints are ID-only and retaining `(root_id, next_id, depth)` otherwise. It
+reports the exact forced/applied target and rejects path-observed or otherwise
+ineligible cases. It does not enable the executor in the public query API.
+
+`-postgres-force-shortest-executor SP-S3-U-E+MAT-M0` is the corresponding
+qualification-only seam for eligible one-path observations. It emits
+repository-native `(next_id, depth, edge_ids)` recursive state and hydrates the
+ordered path directly from direction-specific edge endpoints. Distance-only,
+directionless, correlated, optional, mutation, and other ineligible forms keep
+the incumbent unless explicitly rejected by the tool request. Automatic path
+dispatch remains disabled.
+
+`-postgres-force-expansion-search ADCS-A3` is the qualification-only seam for
+eligible directed, bounded variable expansions followed by the exact
+three-relationship ADCS suffix. It emits the repository-native suffix-seeded
+reverse recursive AST, preserves relationship-trail uniqueness and exact suffix
+multiplicity, and supports endpoint-ID and complete-path observations. The
+request fails closed when the target is structurally ineligible or translation
+does not record A3 as applied. It is mutually exclusive with forced shortest
+execution. Automatic A3 dispatch remains disabled because query shape does not
+bound suffix density or reverse fan-in.
+
+Independent benchmark rounds can be accumulated with `-append-jsonl`. The
+append path must be supplied with `-jsonl-output`; GraphBench rejects mismatched
+run UUIDs, arms, binary/diff identities, and duplicate case rounds before
+writing. This is the intended input shape for paired confirmation and the
+round-stratified performance gate.
+
+Use `-reference-closure-artifact` with a capture containing the translated
+raw-pgx boundary and one exact PostgreSQL full-comparator arm to generate a
+seeded production/reference closure report. The report requires 10-20 matched
+rounds, at least 20 untimed warmups and 50 measured samples per side in every
+round, and exact public observations. It passes when the production/reference
+median-ratio upper bound is at most 1.10 or the absolute median-gap interval is
+within the greater of the case's within-session A/A resolution and
+`-materiality-absolute` (100 microseconds by default). The report derives and
+records A/A resolution independently for the production and reference raw
+boundaries by splitting alternating samples within each round. Single selected
+reference captures run production first in odd rounds and the reference first
+in even rounds; the order is recorded on both boundaries and enforced by the
+reporter:
+
+```bash
+go run ./cmd/graphbench \
+  -reference-closure-artifact .coverage/shortest-reference.jsonl \
+  -reference-closure-arm s3_unidirectional_trail_cte \
+  -reference-closure-output .coverage/shortest-reference-gate.json \
+  -confidence-level 0.975 \
+  -seed 1
+```
+
+ADCS JSON plans are retained in both text and structured forms. Structured
+metrics include per-node planned/actual rows, loops, width, timing, buffers,
+relation/index identity, recursive rows, access-direction probe counts, and
+hydration lookup loops. Derived fields state their provenance and do not present
+fixture-derived per-depth counts as PostgreSQL measurements.
 
 Supported generated singleton-shortest cases also run two additive comparators:
 `s3_unidirectional_trail_cte` (legacy name
 `complete_reference_s1_array_cte`) and `s3_bidirectional_trail_cte` (legacy name
 `candidate_s2_bidirectional_cte`). New reference records declare a schema
 version, architecture, implementation/state/observation shape, and semantic
-validation level. Full comparators are checked against untimed exact public
+validation level, raw-pgx timing boundary, normalized SQL fingerprint, and any
+explicit A/A alias. A requested arm that is unavailable for a case fails the
+run, and distinct architecture IDs with identical normalized SQL fail unless
+the alias is declared. Full comparators are checked against untimed exact public
 observations rather than row count alone. Distance S3-U uses node/depth frontier
 state with no path or predecessor arrays. Historical readers preserve the old
-labels in `legacy_name` while mapping them to S3-U/S3-B. These remain
+labels in `legacy_name` while mapping them to `SP-S3-U-NE`/`SP-S3-B`. These remain
 benchmark-only; S3-B is not evidence for the compact S2 architecture.
 
+Distance-only generated cases also expose `s1_array_bfs_distance`, a genuine
+typed PL/pgSQL SP-S1 prototype. It keeps frontier and visited node IDs in
+bounded arrays, records a fixed 100,000-node state ceiling, and restarts the
+exact S3-U distance reference in the same statement on overflow. It is a
+benchmark arm only and is never selected by production translation.
+
+Capture S3-U-D and SP-S1 together with 20 warmups and 50 observations, then
+produce their seeded, order-balanced matched comparison with:
+
+```bash
+go run ./cmd/graphbench \
+  -reference-pair-artifact .coverage/shortest-alternatives.jsonl \
+  -reference-pair-baseline s3_unidirectional_trail_cte \
+  -reference-pair-candidate s1_array_bfs_distance \
+  -reference-pair-output .coverage/shortest-alternatives.json \
+  -confidence-level 0.975 \
+  -seed 1
+```
+
+The default confirmation pair reporter requires 10-20 independent rounds, 20
+warmups, 50 samples per arm per round, and distinct recorded measurement order.
+`-reference-pair-protocol discovery` produces an explicitly labeled exploratory
+report from 5-20 rounds, five warmups, and ten samples per arm; it cannot be
+mistaken for confirmation evidence because the protocol and requirements are
+written into the report. The reporter accepts two exact public-observation
+comparators, two exact ordered-ID comparators, or two hydration-only arms
+independently validated from the same precomputed exact path inputs; mixed
+boundaries are rejected. ADCS ordered-ID candidates are checked against the
+canonical A0 node/edge-ID arrays before their timing is retained. Reports show
+candidate/baseline median and p95 ratios, absolute median change, and
+within-session A/A resolution without turning architecture selection into a
+post-hoc pass threshold.
+
+Path-observed singleton cases additionally capture benchmark-only M0 and M1
+materializer arms. Whole-query comparison uses each architecture's minimal
+state: `SP-S3-U-E+MAT-M0` carries edge IDs only and derives node order from the
+directed edge endpoints, while `SP-S3-U-NE+MAT-M1` carries node and edge IDs and
+hydrates both streams independently by ordinality. Outbound and inbound M0 use
+distinct implementation identities. Separate
+hydration-only arms use precomputed IDs so search cost stays outside the timed
+materializer boundary. These arms are exact-result checked but do not change
+production path rendering. Odd benchmark rounds execute references in declared
+order and even rounds reverse that order, balancing which M0/M1 arm runs first
+across the required independently reloaded rounds.
+
+Every PostgreSQL dataset reload truncates the active relationship and node
+partitions together. Other backends delete relationships before nodes. PostgreSQL then checks
+the physical row counts in the active `node_<graph>` and `edge_<graph>`
+partitions against the fixture declaration before vacuuming or measuring. A
+stale/orphan row therefore fails the run instead of silently contaminating scan
+and count cases. Fixture records also retain active child-partition sizes rather
+than the zero-sized partitioned-parent relations.
+
+```bash
+go run ./cmd/graphbench \
+  -modes postgres_sql -postgres-references \
+  -cases 'GSP-D01-F001_path,GSP-D02-F016_path,GSP-D04-F128_path,GSP-D08-F001_path_inbound,GSP-D16-F016_path,GSP-D32-F512_path,GSP-D64-F1000_path' \
+  -warmup-iterations 20 -iterations 50 -pool-size 1 \
+  -pg-connection "$PG_CONNECTION_STRING" \
+  -jsonl-output .coverage/materializer-round-1.jsonl
+```
+
 The optimizer also emits a typed `ShortestPathExecutorDecision` for every
-shortest traversal. It records structural eligibility facts, observation mode,
-depth bound, selected/fallback executor, and a stable fallback code. Until a
-reconstructible live S0-S3 tournament satisfies the C2Q resource and semantic
-gates, the selected executor remains `incumbent_workspace` and otherwise
-eligible singleton forms report `tournament_unqualified`; this diagnostic does
-not silently activate benchmark SQL in production.
+shortest traversal. It records a machine-readable structural-eligibility result,
+SP family and planned candidate identities, observation mode, minimum/maximum
+depth, selected/fallback executor, selector version/mode, limits, and stable
+fallback code. These fields are also copied into each exact target outcome.
+Call count and read-only status are statement-wide, including shortest calls or
+mutations separated by `WITH`. Selector `sp-static-v2` chooses `SP-S3-U-D` for
+qualified distance observations and `SP-S3-U-E+MAT-M0` for qualified one-path
+observations. Qualification requires one directed three-element shortest-path
+traversal, a supported bounded depth, one static ID equality per endpoint, no
+relationship variable or predicate, no path predicate, one uncorrelated
+endpoint pair, one statement-wide shortest call, and a read-only statement.
+Every other shape retains `SP-S0` and its specific fallback code.
+
+Ordinary variable expansions with fixed continuations similarly emit a typed
+`ExpansionSearchStrategyDecision`. It records suffix bounds, logical direction,
+observation mode, depth bounds, structural facts, selection mode, and stable
+fallback codes. It also reports the ADCS family, planned candidate set, selector
+version, limits, and distinct correlated-suffix/cross-region fallback reasons.
+A2/A4 SQL remains reference-only. A3 additionally has a repository-native
+forced emitter for qualification, but it is not selected by the public query
+API. Until a bounded selector and exact same-snapshot overflow fallback pass
+the required tournament, structurally eligible forms select
+`ADCS-INCUMBENT-STEPWISE` with `tournament_unqualified`.
 
 ## Outputs
 
@@ -240,6 +393,10 @@ JSONL output contains one `CaseResult` record per case and execution mode.
 Markdown and JSON summaries aggregate mode status counts, per-case timings, row
 counts, fallback reasons, and baseline regressions or improvements when a
 baseline capture is supplied.
+
+PostgreSQL case records also include aggregate query-text-free parse-cache
+counters. Optimization diagnostics retain target-specific selected, applied,
+and skipped identities; compile-time records do not claim a runtime branch.
 
 Each timing record retains the unsorted cold and warm latency samples with round,
 iteration, case, dataset, backend, and connection/session fields so confidence

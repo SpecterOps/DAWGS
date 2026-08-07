@@ -32,8 +32,20 @@ func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T
 	secondJSON, err := json.Marshal(second)
 	require.NoError(t, err)
 	require.Equal(t, firstJSON, secondJSON)
-	require.Len(t, first.Nodes, 4+(config.Depth-1)+config.Fanout+5)
-	require.Len(t, first.Edges, config.Depth+1+config.Fanout+7)
+	require.Len(t, first.Nodes, 4+(config.Depth-1)+config.Fanout+8)
+	require.Len(t, first.Edges, config.Depth+1+config.Fanout+12)
+
+	var parallel, selfLoops int
+	for _, edge := range first.Edges {
+		if edge.StartID == "sp-start" && edge.EndID == "sp-parallel-end" {
+			parallel++
+		}
+		if edge.StartID == "sp-self-loop" && edge.EndID == "sp-self-loop" {
+			selfLoops++
+		}
+	}
+	require.Equal(t, 2, parallel)
+	require.Equal(t, 1, selfLoops)
 }
 
 func TestADCSScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
@@ -50,4 +62,32 @@ func TestADCSScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
 
 	_, edgeKinds := first.Kinds()
 	require.Contains(t, edgeKinds.Strings(), "WrongEnrollKind")
+}
+
+func TestADCSScaleFixtureV2ControlsSuffixPopulationsIndependently(t *testing.T) {
+	reachable := 0
+	zeroDepth := false
+	fixture := NewADCSScaleFixture(ADCSScaleConfig{
+		MemberOfDepth: 2, Fanout: 4, ExactReachableSuffixSources: &reachable,
+		DisconnectedSuffixSources: 3, ReverseFanIn: 2, SuffixPathsPerBoundary: 2,
+		RootMatchCount: 1, RootHasZeroDepthSuffix: &zeroDepth,
+	})
+
+	var enroll, memberOf int
+	for _, edge := range fixture.Edges {
+		switch edge.Kind {
+		case "Enroll":
+			enroll++
+		case "MemberOf":
+			memberOf++
+		}
+	}
+	require.Equal(t, 8, enroll)
+	require.Equal(t, 10, memberOf)
+	nodeIDs := make([]string, 0, len(fixture.Nodes))
+	for _, node := range fixture.Nodes {
+		nodeIDs = append(nodeIDs, node.ID)
+	}
+	require.NotContains(t, nodeIDs, "adcs-disconnected")
+	require.Contains(t, nodeIDs, "adcs-disconnected-00002")
 }

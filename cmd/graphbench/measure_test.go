@@ -89,6 +89,16 @@ func TestStableRowValuesRejectsRelationshipReuseWithinPath(t *testing.T) {
 	require.ErrorContains(t, err, "reuses relationship ID 10")
 }
 
+func TestStableRelationshipUsesLogicalFixtureKeyAsCrossBackendIdentity(t *testing.T) {
+	properties := graph.NewProperties().Set("logical_key", "branch-0001-level-02")
+	relationship := graph.NewRelationship(99, 1, 2, properties, graph.StringKind("MemberOf"))
+
+	stable := stableRelationship(relationship, map[graph.ID]string{1: "start", 2: "end"})
+	require.Equal(t, "branch-0001-level-02", stable.Identity)
+	require.Equal(t, "start", stable.Start)
+	require.Equal(t, "end", stable.End)
+}
+
 func TestMeasureWriteCypherRollsBackWarmupAndEveryIteration(t *testing.T) {
 	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 1}
 	postStateCount := int64(2)

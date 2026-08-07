@@ -189,6 +189,435 @@ func TestOptimizerSafetyReportsPartiallySkippedLowerings(t *testing.T) {
 	requireSkippedOptimizationLoweringCount(t, translator.translation.Optimization, optimize.LoweringPredicatePlacement, 1)
 }
 
+func TestADCSSearchStrategyIsPlannedButConservativelySkipped(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `
+		MATCH (n:Group)
+		WHERE n.objectid = $objectid
+		MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN p
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
+	requireNoOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
+	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, optimize.ExpansionSearchFallbackTournamentUnqualified)
+	require.Len(t, translation.Optimization.LoweringPlan.ExpansionSearchStrategy, 1)
+	require.True(t, translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, "ADCS", outcome.Family)
+	require.Equal(t, []string{"ADCS-INCUMBENT-STEPWISE", "ADCS-A0", "ADCS-A2", "ADCS-A3", "ADCS-A4"}, outcome.PlannedCandidates)
+	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "qualified_adcs_topology", Eligible: true})
+	require.Equal(t, string(optimize.ExpansionSearchObservationFullPath), outcome.ObservationMode)
+	require.NotNil(t, outcome.Eligible)
+	require.True(t, *outcome.Eligible)
+	require.Equal(t, "incumbent_default", outcome.SelectionMode)
+	require.Equal(t, "adcs-static-v1", outcome.SelectorVersion)
+	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), outcome.Selected)
+	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), outcome.Fallback)
+	require.Equal(t, optimize.ExpansionSearchFallbackTournamentUnqualified, outcome.SkipReason)
+}
+
+func TestForcedADCSSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Group)
+		WHERE n.objectid = $objectid
+		MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := optimize.Optimize(regularQuery)
+	require.NoError(t, err)
+	require.NoError(t, applyToolOptions(&plan, ToolOptions{
+		ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse,
+	}))
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
+	require.Equal(t, optimize.ExpansionSearchSuffixSeededReverse, decision.SelectedStrategy)
+	require.Equal(t, "forced_tool", decision.SelectionMode)
+	require.Equal(t, "adcs-tool-v1", decision.SelectorVersion)
+	require.Empty(t, decision.FallbackReason)
+
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"objectid": "forced-adcs-root",
+	}, DefaultGraphID, ToolOptions{ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "with recursive")
+	require.Contains(t, formatted, "_a3_suffix as materialized")
+	require.Contains(t, formatted, "_a3_reverse(boundary_id, next_id, depth, path)")
+	require.Contains(t, formatted, "array_prepend(e0.id")
+	require.Contains(t, formatted, "e0.id != all (s5_a3_reverse.path)")
+	require.Contains(t, formatted, "e0.end_id = s5_a3_reverse.next_id")
+	require.Contains(t, formatted, "s5_a3_reverse.path && array [s5_a3_suffix.e1, s5_a3_suffix.e2, s5_a3_suffix.e3]::int8[]")
+	require.NotContains(t, formatted, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), outcome.Selected)
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), outcome.Applied)
+	require.Equal(t, "forced_tool", outcome.SelectionMode)
+	require.Empty(t, outcome.SkipReason)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
+	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
+}
+
+func TestForcedADCSSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Group)
+		WHERE n.objectid = $objectid
+		MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN id(ca), id(d)
+	`)
+	require.NoError(t, err)
+
+	translateForced := func(objectID string) string {
+		translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+			"objectid": objectID,
+		}, DefaultGraphID, ToolOptions{ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse})
+		require.NoError(t, err)
+		formatted, err := Translated(translation)
+		require.NoError(t, err)
+		return formatted
+	}
+
+	first := translateForced("root-a")
+	second := translateForced("root-b")
+	require.Equal(t, first, second)
+	require.Contains(t, first, "s5_a3_reverse.path")
+	require.Contains(t, first, "select s5.n2 as \"id(ca)\", s5.n4 as \"id(d)\"")
+	require.NotContains(t, first, "ordered_edge_ids_to_path")
+	require.NotContains(t, first, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
+}
+
+func TestForcedADCSSuffixSeededReversePreservesBoundaryConstraints(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:Group)
+		WHERE n.objectid = $objectid
+		MATCH (n)-[:MemberOf*0..16]->(boundary:User {enabled: true})-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN id(ca), id(d)
+	`)
+	require.NoError(t, err)
+
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"objectid": "forced-adcs-root",
+	}, DefaultGraphID, ToolOptions{ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "_a3_suffix as materialized")
+	require.Contains(t, formatted, "n1.kind_ids operator (pg_catalog.@>)")
+	require.Contains(t, formatted, "n1.properties -> 'enabled'")
+	require.Contains(t, formatted, "to_jsonb((true)::bool)")
+}
+
+func TestForcedADCSSearchRejectsUnsupportedStrategy(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		RETURN id(ca), id(d)
+	`)
+	require.NoError(t, err)
+
+	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID, ToolOptions{
+		ForceExpansionSearchStrategy: optimize.ExpansionSearchFactoredSuffixForward,
+	})
+	require.ErrorContains(t, err, "unsupported forced expansion-search strategy")
+}
+
+func TestForcedADCSSearchRejectsStructurallyIneligibleTarget(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)
+		RETURN id(ca)
+	`)
+	require.NoError(t, err)
+
+	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, DefaultGraphID, ToolOptions{
+		ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse,
+	})
+	require.ErrorContains(t, err, "has no structurally eligible target")
+}
+
+func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+
+	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringShortestPathExecutor)
+	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringShortestPathExecutor)
+	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringShortestPathExecutor)
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, "SP", outcome.Family)
+	require.Equal(t, []string{"SP-S0", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0"}, outcome.PlannedCandidates)
+	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "one_static_id_equality_per_endpoint", Eligible: true})
+	require.Equal(t, string(optimize.ShortestPathObservationDistance), outcome.ObservationMode)
+	require.NotNil(t, outcome.Eligible)
+	require.True(t, *outcome.Eligible)
+	require.Equal(t, "static", outcome.SelectionMode)
+	require.Equal(t, "sp-static-v2", outcome.SelectorVersion)
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
+	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Fallback)
+	require.Empty(t, outcome.SkipReason)
+}
+
+func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	incumbent, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID)
+	require.NoError(t, err)
+	incumbentSQL, err := Translated(incumbent)
+	require.NoError(t, err)
+	productionOutcome := requireTraversalTargetOutcome(t, incumbent.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), productionOutcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), productionOutcome.Applied)
+	require.Equal(t, "static", productionOutcome.SelectionMode)
+	require.Equal(t, "sp-static-v2", productionOutcome.SelectorVersion)
+
+	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3Unidirectional})
+	require.NoError(t, err)
+	forcedSQL, err := Translated(forced)
+	require.NoError(t, err)
+
+	require.Equal(t, incumbentSQL, forcedSQL)
+	require.Contains(t, forcedSQL, "with recursive")
+	require.Contains(t, forcedSQL, "s1(next_id, depth)")
+	require.NotContains(t, forcedSQL, "s1(root_id, next_id, depth)")
+	require.Contains(t, forcedSQL, "select singleton_endpoints.root_id, 0 from singleton_endpoints")
+	require.Contains(t, forcedSQL, "(select singleton_endpoints.root_id from singleton_endpoints) as n0")
+	require.NotContains(t, forcedSQL, "sp_harness")
+	require.NotContains(t, forcedSQL, "path)")
+	require.NotContains(t, forcedSQL, "is_cycle")
+	require.NotContains(t, forcedSQL, "cardinality")
+	require.Contains(t, forcedSQL, "order by")
+	require.Contains(t, forcedSQL, "depth limit 1")
+	require.NotContains(t, forcedSQL, "join node")
+
+	outcome := requireTraversalTargetOutcome(t, forced.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
+	require.Equal(t, "forced_tool", outcome.SelectionMode)
+	require.Empty(t, outcome.SkipReason)
+	requireOptimizationLowering(t, forced.Optimization, optimize.LoweringShortestPathExecutor)
+	requireNoSkippedOptimizationLowering(t, forced.Optimization, optimize.LoweringShortestPathExecutor)
+}
+
+func TestForcedShortestDistanceExecutorRejectsIneligibleObservation(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3Unidirectional})
+	require.ErrorContains(t, err, "no structurally eligible distance-only target")
+}
+
+func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	incumbent, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID)
+	require.NoError(t, err)
+	incumbentSQL, err := Translated(incumbent)
+	require.NoError(t, err)
+	productionOutcome := requireTraversalTargetOutcome(t, incumbent.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Applied)
+	require.Equal(t, "static", productionOutcome.SelectionMode)
+	require.Equal(t, "sp-static-v2", productionOutcome.SelectorVersion)
+
+	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3EdgeM0})
+	require.NoError(t, err)
+	forcedSQL, err := Translated(forced)
+	require.NoError(t, err)
+
+	require.Equal(t, incumbentSQL, forcedSQL)
+	require.Contains(t, forcedSQL, "with recursive")
+	require.Contains(t, forcedSQL, "s1(next_id, depth, path)")
+	require.Contains(t, forcedSQL, "generate_subscripts(s1.path, 1)")
+	require.Equal(t, 1, strings.Count(forcedSQL, "generate_subscripts(s1.path, 1)"), forcedSQL)
+	require.Contains(t, forcedSQL, "array_agg((m0_terminal.id, m0_terminal.kind_ids, m0_terminal.properties)::nodecomposite order by m0_path_index)")
+	require.Contains(t, forcedSQL, "m0_hydrated.hydrated_count = cardinality(s1.path)")
+	require.Contains(t, forcedSQL, "m0_terminal.id = m0_edge.end_id")
+	require.Contains(t, forcedSQL, "::pathcomposite")
+	require.NotContains(t, forcedSQL, "sp_harness")
+	require.NotContains(t, forcedSQL, "ordered_edge_ids_to_path")
+
+	outcome := requireTraversalTargetOutcome(t, forced.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Applied)
+	require.Equal(t, "forced_tool", outcome.SelectionMode)
+	require.Empty(t, outcome.SkipReason)
+}
+
+func TestForcedShortestPathEdgeM0ExecutorIsDirectionAware(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3EdgeM0})
+	require.NoError(t, err)
+	forcedSQL, err := Translated(forced)
+	require.NoError(t, err)
+
+	require.Contains(t, forcedSQL, "join edge e0 on e0.end_id = s1.next_id")
+	require.Contains(t, forcedSQL, "m0_terminal.id = m0_edge.start_id")
+}
+
+func TestForcedShortestPathEdgeM0ExecutorRejectsDistanceObservation(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3EdgeM0})
+	require.ErrorContains(t, err, "no structurally eligible one-path target")
+}
+
+func TestForcedShortestPathEdgeM0ExecutorPreservesPathThroughWithAlias(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH p AS q
+		RETURN q
+	`)
+	require.NoError(t, err)
+
+	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3EdgeM0})
+	require.NoError(t, err)
+	forcedSQL, err := Translated(forced)
+	require.NoError(t, err)
+
+	require.Contains(t, forcedSQL, "::pathcomposite")
+	require.Contains(t, forcedSQL, "as q")
+	require.NotContains(t, forcedSQL, "ordered_edge_ids_to_path")
+
+	outcome := requireTraversalTargetOutcome(t, forced.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Applied)
+}
+
+func TestForcedShortestDistanceExecutorIsDirectionAwareAndParameterStable(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	translateForced := func(startID, endID int64) string {
+		translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+			"start_id": startID, "end_id": endID,
+		}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3Unidirectional})
+		require.NoError(t, err)
+		formatted, err := Translated(translation)
+		require.NoError(t, err)
+		return formatted
+	}
+
+	firstSQL := translateForced(1, 2)
+	secondSQL := translateForced(100, 200)
+	require.Equal(t, firstSQL, secondSQL)
+	require.Contains(t, firstSQL, "select e0.start_id, s1.depth + 1")
+	require.NotContains(t, firstSQL, "select s1.root_id, e0.start_id, s1.depth + 1")
+	require.Contains(t, firstSQL, "join edge e0 on e0.end_id = s1.next_id")
+}
+
+func TestForcedShortestDistanceExecutorSupportsZeroDepthWithoutSelfEndpointError(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*0..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p) AS distance
+	`)
+	require.NoError(t, err)
+
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(1),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3Unidirectional})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted, "s1.depth >= 0")
+	require.NotContains(t, formatted, "shortest_path_self_endpoint_error")
+	require.Contains(t, formatted, "(s0.ep0)::int as distance")
+}
+
+func TestForcedShortestDistanceExecutorPreservesDistanceThroughWithAlias(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH length(p) AS distance
+		RETURN distance
+	`)
+	require.NoError(t, err)
+
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS3Unidirectional})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.NotContains(t, formatted, "cardinality")
+	require.NotContains(t, formatted, "ordered_edge_ids_to_path")
+	require.Contains(t, formatted, "::int as i0")
+	require.Contains(t, formatted, "s0.i0 as distance")
+}
+
+func requireTraversalTargetOutcome(t *testing.T, summary OptimizationSummary, lowering string, target optimize.TraversalStepTarget) TargetLoweringOutcome {
+	t.Helper()
+
+	for _, outcome := range summary.TargetOutcomes {
+		if outcome.Lowering == lowering && outcome.TraversalTarget != nil && *outcome.TraversalTarget == target {
+			return outcome
+		}
+	}
+
+	require.FailNowf(t, "missing target outcome", "lowering %s target %+v", lowering, target)
+	return TargetLoweringOutcome{}
+}
+
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 	t.Helper()
 
@@ -209,7 +638,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseNodeCount(t *testing.T) {
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
-	require.Empty(t, translation.Optimization.SkippedLowerings)
+	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringFieldRequirements, "analysis_metadata_only")
 	require.Equal(t, "select count(*)::int8 from node n0;", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
@@ -658,11 +1087,11 @@ RETURN a
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
-	require.Contains(t, normalizedQuery, "on (s1.n2).id = e2.start_id")
+	require.Contains(t, normalizedQuery, "on s1.n2 = e2.start_id")
 	require.NotContains(t, normalizedQuery, "on n2.id = e2.start_id")
 }
 
-func TestOptimizerSafetyExactTwoHopRangeKeepsSyntheticIntermediateNode(t *testing.T) {
+func TestOptimizerSafetyExactTwoHopRangeCarriesSyntheticIntermediateNodeID(t *testing.T) {
 	t.Parallel()
 
 	normalizedQuery := strings.ToLower(optimizerSafetySQL(t, `
@@ -670,7 +1099,7 @@ MATCH (a)-[:MemberOf*2..2]->(b)
 RETURN a
 	`))
 
-	require.Contains(t, normalizedQuery, "on (s0.n1).id = e1.start_id")
+	require.Contains(t, normalizedQuery, "on s0.n1 = e1.start_id")
 	require.NotContains(t, normalizedQuery, "on n1.id = e1.start_id")
 }
 

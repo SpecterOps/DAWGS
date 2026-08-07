@@ -3,6 +3,7 @@ package translate
 import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 type BindingResult struct {
@@ -165,7 +166,11 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 				err                error
 			)
 
-			if traversalStep.Expansion.UseBidirectionalSearch {
+			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional {
+				traversalStepQuery, err = expansion.BuildShortestDistanceRoot()
+			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 {
+				traversalStepQuery, err = expansion.BuildShortestPathEdgeM0Root()
+			} else if traversalStep.Expansion.UseBidirectionalSearch {
 				traversalStepQuery, err = expansion.BuildBiDirectionalShortestPathsRoot()
 			} else {
 				traversalStepQuery, err = expansion.BuildShortestPathsRoot()
@@ -173,6 +178,9 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 
 			if err != nil {
 				return err
+			}
+			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 {
+				s.recordShortestPathExecutor(traversalStep.Expansion.ShortestPathTarget, traversalStep.Expansion.ShortestPathExecutor)
 			}
 
 			s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
@@ -205,6 +213,9 @@ type TraversalStepContext struct {
 }
 
 func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
+	firstCTE := len(s.query.CurrentPart().Model.CommonTableExpressions.Expressions)
+	adcsA3Decision, useADCSA3 := selectedADCSA3Decision(part, s.expansionSearchStrategyDecisions)
+
 	for idx, traversalStep := range part.TraversalSteps {
 		var (
 			isRootStep           = idx == 0
@@ -233,6 +244,10 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 		}
 
 		s.allowLimitPushdownForStep(part, idx, traversalStep)
+	}
+
+	if useADCSA3 {
+		return s.rewriteTraversalPatternAsADCSA3(part, adcsA3Decision, firstCTE)
 	}
 
 	return nil

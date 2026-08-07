@@ -9,12 +9,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMeasureCompileWaterfallMarksOverlappingIntervals(t *testing.T) {
-	waterfall, err := measureCompileWaterfall(context.Background(), "MATCH (n) RETURN id(n)", nil, pgutil.NewInMemoryKindMapper(), 1, 2)
+	waterfall, err := measureCompileWaterfall(context.Background(), "MATCH (n) RETURN id(n)", nil, pgutil.NewInMemoryKindMapper(), 1, 2, translate.ToolOptions{})
 
 	require.NoError(t, err)
 	require.True(t, waterfall.IntervalsOverlap)

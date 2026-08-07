@@ -268,34 +268,10 @@ func confirmationComparable(left, right []CaseResult, key performanceKey) (bool,
 		return false, reasons
 	}
 	leftRecord, rightRecord := leftRecords[0], rightRecords[0]
-	for _, record := range append(leftRecords[1:], rightRecords...) {
-		if record.Status != StatusOK {
-			reasons = append(reasons, "non-ok status")
-		}
-		if record.SQLFingerprint != leftRecord.SQLFingerprint {
-			reasons = append(reasons, "SQL fingerprint differs")
-		}
-		if record.Fixture == nil || leftRecord.Fixture == nil || record.Fixture.Checksum != leftRecord.Fixture.Checksum {
-			reasons = append(reasons, "fixture checksum differs")
-		}
-		if fmt.Sprint(record.ObservedRows) != fmt.Sprint(leftRecord.ObservedRows) {
-			reasons = append(reasons, "exact observations differ")
-		}
-		if record.RowCount != leftRecord.RowCount {
-			reasons = append(reasons, "row count differs")
-		}
-		if !comparablePostgresEnvironment(leftRecord.PostgresEnvironment, record.PostgresEnvironment) {
-			reasons = append(reasons, "PostgreSQL settings or relation sizes differ")
-		}
-		if postgresPlanShapeSHA256(record.PostgresPlan) != postgresPlanShapeSHA256(leftRecord.PostgresPlan) {
-			reasons = append(reasons, "intended plan shape differs")
-		}
-	}
+	reasons = append(reasons, confirmationArmConsistency(leftRecords)...)
+	reasons = append(reasons, confirmationArmConsistency(rightRecords)...)
 	if leftRecord.Status != StatusOK || rightRecord.Status != StatusOK {
 		reasons = append(reasons, "non-ok status")
-	}
-	if leftRecord.SQLFingerprint != rightRecord.SQLFingerprint {
-		reasons = append(reasons, "SQL fingerprint differs")
 	}
 	if leftRecord.Fixture == nil || rightRecord.Fixture == nil || leftRecord.Fixture.Checksum != rightRecord.Fixture.Checksum {
 		reasons = append(reasons, "fixture checksum differs")
@@ -303,17 +279,61 @@ func confirmationComparable(left, right []CaseResult, key performanceKey) (bool,
 	if fmt.Sprint(leftRecord.ObservedRows) != fmt.Sprint(rightRecord.ObservedRows) {
 		reasons = append(reasons, "exact observations differ")
 	}
+	if leftRecord.RowCount != rightRecord.RowCount {
+		reasons = append(reasons, "row count differs")
+	}
+	if !comparablePostgresEnvironment(leftRecord.PostgresEnvironment, rightRecord.PostgresEnvironment) {
+		reasons = append(reasons, "PostgreSQL settings or relation sizes differ")
+	}
 	return len(reasons) == 0, uniqueStrings(reasons)
 }
 
-var volatilePlanDetails = regexp.MustCompile(`\s+\((?:cost|actual)[^)]*\)|\s+Buffers:.*|\s+Planning Time:.*|\s+Execution Time:.*`)
+func confirmationArmConsistency(records []CaseResult) []string {
+	if len(records) == 0 {
+		return []string{"missing record"}
+	}
+
+	baseline := records[0]
+	var reasons []string
+	for _, record := range records[1:] {
+		if record.Status != StatusOK {
+			reasons = append(reasons, "non-ok status")
+		}
+		if record.SQLFingerprint != baseline.SQLFingerprint {
+			reasons = append(reasons, "SQL fingerprint changes within arm")
+		}
+		if record.Fixture == nil || baseline.Fixture == nil || record.Fixture.Checksum != baseline.Fixture.Checksum {
+			reasons = append(reasons, "fixture checksum differs")
+		}
+		if fmt.Sprint(record.ObservedRows) != fmt.Sprint(baseline.ObservedRows) {
+			reasons = append(reasons, "exact observations differ")
+		}
+		if record.RowCount != baseline.RowCount {
+			reasons = append(reasons, "row count differs")
+		}
+		if !comparablePostgresEnvironment(baseline.PostgresEnvironment, record.PostgresEnvironment) {
+			reasons = append(reasons, "PostgreSQL settings or relation sizes differ")
+		}
+		if postgresPlanShapeSHA256(record.PostgresPlan) != postgresPlanShapeSHA256(baseline.PostgresPlan) {
+			reasons = append(reasons, "intended plan shape changes within arm")
+		}
+	}
+	return reasons
+}
+
+var (
+	volatilePlanDetails = regexp.MustCompile(`\s+\((?:cost|actual)[^)]*\)`)
+	volatilePlanIDs     = regexp.MustCompile(`'[0-9]+'::bigint`)
+	volatilePlanLine    = regexp.MustCompile(`^(?:Buffers|Planning Time|Execution Time):`)
+)
 
 func postgresPlanShapeSHA256(plan []string) string {
 	digest := sha256.New()
 	for _, line := range plan {
 		line = volatilePlanDetails.ReplaceAllString(line, "")
+		line = volatilePlanIDs.ReplaceAllString(line, "'$id'::bigint")
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || volatilePlanLine.MatchString(line) {
 			continue
 		}
 		fmt.Fprintln(digest, line)
