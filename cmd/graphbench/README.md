@@ -228,8 +228,23 @@ cases expose `current_forward_ordered_ids`, `a1a_root_reuse_*`,
 `a3_suffix_seeded_reverse_*`, and `a4_viability_forward_*` boundaries. Complete
 arms are exact-multiset checked against the public CySQL observation. Ordered-ID
 arms retain relationship IDs for trail uniqueness. When exactly five arms are
-selected, rounds follow the fixed ten-sequence carryover-balanced schedule from
-`perf_cont_3.md`; other arm counts retain the historical alternating order.
+selected, rounds use this fixed Williams/carryover-balanced slot schedule;
+other arm counts retain the historical alternating order:
+
+```text
+0 1 4 2 3
+1 2 0 3 4
+2 3 1 4 0
+3 4 2 0 1
+4 0 3 1 2
+3 2 4 1 0
+4 3 0 2 1
+0 4 1 3 2
+1 0 2 4 3
+2 1 3 0 4
+```
+
+The slots are the caller-selected arms, and rounds wrap after the tenth row.
 
 `-postgres-force-shortest-executor SP-S0` is the exact-incumbent control at the
 same public distance or path boundary. It records selected/applied `SP-S0` and
@@ -427,9 +442,9 @@ go run ./cmd/graphbench \
   -existing-graph \
   -anchor-manifest anchors.json \
   -cases LIVE-outbound-distance \
-  -checkpoint artifacts/live/checkpoint.json \
-  -progress artifacts/live/progress.jsonl \
-  -jsonl-output artifacts/live/results.jsonl
+  -checkpoint .coverage/live/checkpoint.json \
+  -progress .coverage/live/progress.jsonl \
+  -jsonl-output .coverage/live/results.jsonl
 ```
 
 Anchor values are used only at runtime. Durable records replace them with
@@ -467,7 +482,7 @@ go run ./cmd/graphbench \
   -existing-graph -anchor-manifest anchors.json \
   -discovery -timeout-classes 100ms,1s,10s \
   -discovery-sample-floor 1 \
-  -checkpoint artifacts/live/checkpoint.json
+  -checkpoint .coverage/live/checkpoint.json
 ```
 
 Every timeout and sample reduction stays in the case record. Adaptive artifacts

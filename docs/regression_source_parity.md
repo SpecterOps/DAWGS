@@ -33,7 +33,7 @@ When a reviewed source snapshot enables the caller:
 2. Move the manifest row from dormant to active and update the corpus gates in
    the same change.
 3. Add the exact outbound builder composition and the `PG`, `IT`, `PC`, and
-   `SC` layers required by `regression_plan.md`.
+   `SC` layers required by `regression_coverage_manifest.md`.
 4. Cover empty, single-item, 1,000-item, boundary, and stress tenant lists;
    include direction, kind, tenant, endpoint, and missing/null decoys.
 5. Use exact mutation post-state and rollback/reset isolation. Reuse the
@@ -76,8 +76,28 @@ For each candidate:
    add a test that sequences the application traversal.
 5. Recheck projection independently from predicates, and recheck relationship
    kind-list and ID-list cardinalities after schema-set changes.
-6. Apply the required coverage layers from `regression_plan.md`, then run both
-   backend suites and refresh PostgreSQL plan/scale captures when applicable.
+6. Apply the coverage contract from `regression_coverage_manifest.md`, then run
+   both backend suites and refresh PostgreSQL plan/scale captures when
+   applicable.
+
+## Ongoing parity checklist
+
+For each reviewed BHE/BHCE update:
+
+- [ ] Search active reconciliation and post-processing entry points for new
+  `Filter`, `Filterf`, `Query`, `First`, `Count`, `Fetch*`, `Create*`,
+  `Delete*`, `Update*`, and `BatchOperation` calls.
+- [ ] Trace helpers to an active entry point and label helper-only, test-only,
+  commented-out, or dormant forms accurately.
+- [ ] Normalize every active call with the tuple in
+  `regression_coverage_manifest.md`.
+- [ ] Map the tuple to an existing stable ID or add a new ID and source link.
+- [ ] If stepwise traversal criteria change, update only the corresponding
+  standalone `HOP-*` cases; do not sequence the downstream traversal.
+- [ ] Recheck projections independently from predicates.
+- [ ] Recheck relationship-kind and ID-list cardinalities when schema sets
+  change.
+- [ ] Record the BHE, BHCE, and DAWGS commits used for the audit.
 
 ## Audit record template
 
