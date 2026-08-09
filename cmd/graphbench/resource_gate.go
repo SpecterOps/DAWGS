@@ -45,6 +45,7 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		}
 		gateCase.Architecture = appliedShortestArchitecture(record)
 		portableCandidate := gateCase.Architecture != "" && gateCase.Architecture != "SP-S0"
+		workspaceCandidate := gateCase.Architecture == "ASP-A1-DAG" || gateCase.Architecture == "SP-S4-C-D" || gateCase.Architecture == "SP-S4-C-WE+MAT-M0"
 		if gateCase.Architecture == "SP-S0-DIRECT" {
 			if loops, found, err := postgresPlanFunctionLoops(record.PostgresPlanJSON, "bidirectional_sp_harness"); err != nil {
 				gateCase.Reasons = append(gateCase.Reasons, "direct preflight fallback attribution failed: "+err.Error())
@@ -58,7 +59,9 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		if record.Status != StatusOK {
 			gateCase.Reasons = append(gateCase.Reasons, "record status is "+record.Status)
 		}
-		if portableCandidate && record.PostgresMetrics != nil {
+		if workspaceCandidate && record.PostgresMetrics != nil {
+			appendWorkspaceResourceReasons(&gateCase, record.PostgresMetrics)
+		} else if portableCandidate && record.PostgresMetrics != nil {
 			appendPortableResourceReasons(&gateCase, record.PostgresMetrics)
 		}
 		gateCase.Passed = len(gateCase.Reasons) == 0
@@ -106,6 +109,15 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		err = os.WriteFile(output, append(raw, '\n'), 0o644)
 	}
 	return report.Passed, err
+}
+
+func appendWorkspaceResourceReasons(gateCase *ResourceGateCase, metrics *PostgresPlanMetrics) {
+	if metrics.Buffers.TempRead != 0 || metrics.Buffers.TempWritten != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, "compact workspace candidate spilled to executor temporary storage")
+	}
+	if metrics.WALRecords != 0 || metrics.WALBytes != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, "non-mutating compact workspace candidate emitted WAL")
+	}
 }
 
 func appendPortableResourceReasons(gateCase *ResourceGateCase, metrics *PostgresPlanMetrics) {
@@ -164,7 +176,7 @@ func appliedShortestArchitecture(record CaseResult) string {
 		return ""
 	}
 	for _, outcome := range record.Optimization.TargetOutcomes {
-		if outcome.Family == "SP" {
+		if outcome.Family == "SP" || outcome.Family == "ASP" {
 			if outcome.Applied != "" {
 				return outcome.Applied
 			}

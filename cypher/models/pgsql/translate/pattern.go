@@ -144,7 +144,17 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 		expansion.SetUnwindClauses(s.query.CurrentPart().ConsumeUnwindClauses())
 
 		if allPaths {
-			if traversalStep.Expansion.UseBidirectionalSearch {
+			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorASPA1DAG {
+				if traversalStepQuery, err := expansion.BuildAllShortestPathsDAGRoot(); err != nil {
+					return err
+				} else {
+					s.recordShortestPathExecutor(traversalStep.Expansion.ShortestPathTarget, traversalStep.Expansion.ShortestPathExecutor)
+					s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
+						Alias: pgsql.TableAlias{Name: traversalStep.Frame.Binding.Identifier},
+						Query: traversalStepQuery,
+					})
+				}
+			} else if traversalStep.Expansion.UseBidirectionalSearch {
 				if traversalStepQuery, err := expansion.BuildBiDirectionalAllShortestPathsRoot(); err != nil {
 					return err
 				} else {
@@ -175,6 +185,8 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 				traversalStepQuery, err = expansion.BuildShortestDistanceRoot()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 {
 				traversalStepQuery, err = expansion.BuildShortestPathEdgeM0Root()
+			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS4CanonicalDistance || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS4CanonicalWitness {
+				traversalStepQuery, err = expansion.BuildCompactShortestPathRoot()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct {
 				traversalStepQuery, err = expansion.BuildBiDirectionalShortestPathsRootWithDirectPreflight()
 			} else if traversalStep.Expansion.UseBidirectionalSearch {
@@ -186,7 +198,7 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 			if err != nil {
 				return err
 			}
-			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct ||
+			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS4CanonicalDistance || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS4CanonicalWitness || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct ||
 				(traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorIncumbentWorkspace && decisionIsForcedShortest(s, traversalStep.Expansion.ShortestPathTarget)) {
 				s.recordShortestPathExecutor(traversalStep.Expansion.ShortestPathTarget, traversalStep.Expansion.ShortestPathExecutor)
 			}

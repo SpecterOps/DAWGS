@@ -87,6 +87,7 @@ type Expansion struct {
 	ShortestPathTarget     optimize.TraversalStepTarget
 	SingletonRootID        pgsql.Expression
 	SingletonTerminalID    pgsql.Expression
+	RelationshipKindIDs    []int16
 
 	EdgeStartIdentifier pgsql.Identifier
 	EdgeStartColumn     pgsql.CompoundIdentifier

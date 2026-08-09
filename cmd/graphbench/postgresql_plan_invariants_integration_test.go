@@ -774,14 +774,14 @@ func assertAnchorPlanIndex(t *testing.T, id, plan string) {
 		// PostgreSQL may prefer the covering kind index when the edge kind is
 		// more selective than the bound endpoint. Both choices remain scoped
 		// to the graph partition and avoid a heap-wide edge scan.
-		require.Regexp(t, `Index Scan using edge_[0-9]+_(start_id|kind_id)`, plan)
+		require.Regexp(t, `(Bitmap Index Scan on|Index Scan using) edge_[0-9]+_(start_id|kind_id)`, plan)
 		require.Contains(t, plan, "start_id =")
 	case "HOP-02":
-		require.Regexp(t, `Index Scan using edge_[0-9]+_end_id`, plan)
+		require.Regexp(t, `(Bitmap Index Scan on|Index Scan using) edge_[0-9]+_end_id`, plan)
 	case "HOP-07":
 		// The selective terminal predicate can legitimately reverse the join
 		// order, but either endpoint orientation must stay indexed.
-		require.Regexp(t, `Index Scan using edge_[0-9]+_(start|end)_id`, plan)
+		require.Regexp(t, `(Bitmap Index Scan on|Index Scan using) edge_[0-9]+_(start|end)_id`, plan)
 	case "REC-01", "REC-02", "REC-04", "REC-06", "REC-08", "SCAN-05",
 		"LOOKUP-02", "LOOKUP-04", "LOOKUP-05", "LOOKUP-09", "LOOKUP-11", "LOOKUP-13", "LOOKUP-16",
 		"TRUST-01", "TRUST-02", "PRUNE-02", "PRUNE-03":

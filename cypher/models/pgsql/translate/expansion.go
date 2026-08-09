@@ -2316,6 +2316,97 @@ func (s *ExpansionBuilder) BuildAllShortestPathsRoot() (pgsql.Query, error) {
 	return s.buildShortestPathsHarnessCall(pgsql.FunctionUnidirectionalASPHarness)
 }
 
+func compactShortestExecutor(executor optimize.ShortestPathExecutor) bool {
+	switch executor {
+	case optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorS4CanonicalDistance,
+		optimize.ShortestPathExecutorS4CanonicalWitness:
+		return true
+	default:
+		return false
+	}
+}
+
+// buildCompactBoundShortestPathsRoot invokes a typed, static bound-pair
+// executor and keeps the legacy expansion row shape at its boundary. That lets
+// existing projection and path materialization code consume compact search
+// results without carrying entity composites through discovery.
+func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql.Identifier, stateLimit bool) (pgsql.Query, error) {
+	const validatedEndpoints pgsql.Identifier = "singleton_endpoints"
+
+	expansionModel := s.traversalStep.Expansion
+	if !expansionModel.UsesSingletonEndpointPair() {
+		return pgsql.Query{}, fmt.Errorf("%s requires one validated endpoint pair", functionName)
+	}
+
+	endpointCTE := singletonEndpointValidationCTE(s.traversalStep, expansionModel)
+	if expansionModel.Options.MinDepth.GetOr(1) > 0 {
+		endpointSelect := endpointCTE.Query.Body.(pgsql.Select)
+		endpointSelect.Where = pgsql.OptionalAnd(endpointSelect.Where, shortestPathSelfEndpointGuardCase(
+			pgd.EntityID(s.traversalStep.LeftNode.Identifier),
+			pgd.EntityID(s.traversalStep.RightNode.Identifier),
+		))
+		endpointCTE.Query.Body = endpointSelect
+	}
+
+	maxDepth := expansionModel.Options.MaxDepth.GetOr(translateDefaultMaxTraversalDepth)
+	parameters := []pgsql.Expression{
+		pgsql.NewLiteral(s.graphID, pgsql.Int4),
+		pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
+		pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
+		pgsql.NewLiteral(expansionModel.Options.MinDepth.GetOr(1), pgsql.Int4),
+		pgsql.NewLiteral(maxDepth, pgsql.Int4),
+		pgsql.NewLiteral(append([]int16(nil), expansionModel.RelationshipKindIDs...), pgsql.Int2Array),
+		pgsql.NewLiteral(s.traversalStep.Direction == graph.DirectionInbound, pgsql.Boolean),
+	}
+	if stateLimit {
+		const compactStateLimit int64 = 100_000
+		parameters = append(parameters, pgsql.NewLiteral(compactStateLimit, pgsql.Int8))
+	}
+
+	stateID := expansionModel.Frame.Binding.Identifier
+	search := pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{Name: stateID, Shape: expansionColumns()},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.CompoundIdentifier{functionName, pgsql.WildcardIdentifier}},
+			From: []pgsql.FromClause{
+				{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}},
+				{Source: pgsql.FunctionCall{Function: functionName, Parameters: parameters}},
+			},
+		}},
+	}
+
+	projection := pgsql.Select{
+		Projection: expansionModel.Projection,
+		From: []pgsql.FromClause{{
+			Source: pgsql.TableReference{Name: stateID.AsCompoundIdentifier()},
+			Joins: []pgsql.Join{
+				{Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{stateID, expansionRootID},
+				)}},
+				{Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{stateID, expansionNextID},
+				)}},
+			},
+		}},
+	}
+
+	query := pgsql.Query{CommonTableExpressions: &pgsql.With{}, Body: projection}
+	query.AddCTE(endpointCTE)
+	query.AddCTE(search)
+	return query, nil
+}
+
+func (s *ExpansionBuilder) BuildAllShortestPathsDAGRoot() (pgsql.Query, error) {
+	return s.buildCompactBoundShortestPathsRoot(pgsql.FunctionAllShortestPathsDAG, false)
+}
+
+func (s *ExpansionBuilder) BuildCompactShortestPathRoot() (pgsql.Query, error) {
+	return s.buildCompactBoundShortestPathsRoot(pgsql.FunctionShortestPathCompact, true)
+}
+
 func (s *ExpansionBuilder) canMaterializeTerminalFilter(expansionModel *Expansion) bool {
 	return canMaterializeTerminalFilterForStep(s.traversalStep, expansionModel)
 }
@@ -3904,7 +3995,10 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	if decision, selected := s.shortestPathExecutorDecision(part, stepIndex); selected {
 		expansionModel.ShortestPathExecutor = decision.SelectedExecutor
 		expansionModel.ShortestPathTarget = decision.Target
-		if decision.SelectedExecutor == optimize.ShortestPathExecutorS3Unidirectional {
+		if !expansionModel.Options.MaxDepth.Set && decision.MaximumDepth > 0 {
+			expansionModel.Options.MaxDepth = models.OptionalValue(decision.MaximumDepth)
+		}
+		if decision.SelectedExecutor == optimize.ShortestPathExecutorS3Unidirectional || decision.SelectedExecutor == optimize.ShortestPathExecutorS4CanonicalDistance {
 			expansionModel.PathBinding.DistanceOnly = true
 			expansionModel.PathBinding.DataType = pgsql.Int
 			if part.PatternBinding != nil {
@@ -4092,17 +4186,16 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 		return err
 	}
 
-	expansionModel.UseBidirectionalSearch = useBidirectionalSearch && expansionModel.ShortestPathExecutor != optimize.ShortestPathExecutorS3Unidirectional && expansionModel.ShortestPathExecutor != optimize.ShortestPathExecutorS3EdgeM0
+	expansionModel.UseBidirectionalSearch = useBidirectionalSearch && expansionModel.ShortestPathExecutor != optimize.ShortestPathExecutorS3Unidirectional && expansionModel.ShortestPathExecutor != optimize.ShortestPathExecutorS3EdgeM0 && !compactShortestExecutor(expansionModel.ShortestPathExecutor)
 	expansionModel.HasExplicitEndpointInequality = s.treeTranslator.HasEndpointInequality(
 		traversalStep.LeftNode.Identifier,
 		traversalStep.RightNode.Identifier,
 	)
 	s.applyShortestPathFilterMaterialization(part, stepIndex, traversalStep, expansionModel)
-	if (expansionModel.UseBidirectionalSearch || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0) &&
-		!expansionModel.Options.FindAllShortestPaths &&
+	if (compactShortestExecutor(expansionModel.ShortestPathExecutor) || expansionModel.UseBidirectionalSearch || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0) &&
 		!traversalStep.LeftNodeBound &&
 		!traversalStep.RightNodeBound &&
-		(!expansionModel.Options.MinDepth.Set || expansionModel.Options.MinDepth.Value > 0 || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0) {
+		(!expansionModel.Options.MinDepth.Set || expansionModel.Options.MinDepth.Value > 0 || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || compactShortestExecutor(expansionModel.ShortestPathExecutor)) {
 		rootAnchor, hasRootAnchor := singletonIDAnchor(expansionModel.PrimerNodeConstraints, traversalStep.LeftNode.Identifier)
 		terminalAnchor, hasTerminalAnchor := singletonIDAnchor(expansionModel.TerminalNodeConstraints, traversalStep.RightNode.Identifier)
 		if hasRootAnchor && hasTerminalAnchor {
@@ -4127,7 +4220,7 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 		}
 	}
 
-	if expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 {
+	if expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || compactShortestExecutor(expansionModel.ShortestPathExecutor) {
 		return nil
 	}
 

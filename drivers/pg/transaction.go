@@ -278,12 +278,17 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		return graph.NewErrorResult(err)
 	} else if graphTarget, err := s.getTargetGraph(); err != nil {
 		return graph.NewErrorResult(err)
-	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID); err != nil {
-		return graph.NewErrorResult(err)
-	} else if sqlQuery, err := translate.Translated(translated); err != nil {
+	} else if sqlQuery, translatedParameters, err := s.schemaManager.translationCache.Translate(query, graphTarget.ID, parameters, func() (translate.Result, string, error) {
+		translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
+		if err != nil {
+			return translate.Result{}, "", err
+		}
+		formatted, err := translate.Translated(translated)
+		return translated, formatted, err
+	}); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
-		return s.Raw(sqlQuery, translated.Parameters)
+		return s.Raw(sqlQuery, translatedParameters)
 	}
 }
 

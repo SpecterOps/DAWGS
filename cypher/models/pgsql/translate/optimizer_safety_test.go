@@ -353,7 +353,7 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
 	require.Equal(t, "SP", outcome.Family)
-	require.Equal(t, []string{"SP-S0", "SP-S0-DIRECT", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0"}, outcome.PlannedCandidates)
+	require.Equal(t, []string{"SP-S0", "SP-S0-DIRECT", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0", "SP-S4-C-D", "SP-S4-C-WE+MAT-M0"}, outcome.PlannedCandidates)
 	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "one_static_id_equality_per_endpoint", Eligible: true})
 	require.Equal(t, string(optimize.ShortestPathObservationDistance), outcome.ObservationMode)
 	require.NotNil(t, outcome.Eligible)
@@ -366,7 +366,7 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	require.Empty(t, outcome.SkipReason)
 }
 
-func TestShortestExecutorV3ContainsDeepInboundWithTruthfulDiagnostics(t *testing.T) {
+func TestShortestExecutorV4SelectsDeepInboundCompactDistance(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
 		WHERE id(s) = $start_id AND id(e) = $end_id
@@ -379,7 +379,8 @@ func TestShortestExecutorV3ContainsDeepInboundWithTruthfulDiagnostics(t *testing
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, "sp_harness")
+	require.Contains(t, formatted, "shortest_path_compact")
+	require.NotContains(t, formatted, "sp_harness")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
 	require.Equal(t, "inbound", outcome.Direction)
@@ -390,19 +391,19 @@ func TestShortestExecutorV3ContainsDeepInboundWithTruthfulDiagnostics(t *testing
 	require.NotNil(t, outcome.Eligible)
 	require.True(t, *outcome.Eligible)
 	require.NotNil(t, outcome.StaticallyEligible)
-	require.False(t, *outcome.StaticallyEligible)
-	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Selected)
-	require.Empty(t, outcome.Applied)
-	require.Equal(t, optimize.ShortestPathFallbackDeepInboundUnqualified, outcome.SkipReason)
+	require.True(t, *outcome.StaticallyEligible)
+	require.Equal(t, string(optimize.ShortestPathExecutorS4CanonicalDistance), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS4CanonicalDistance), outcome.Applied)
+	require.Empty(t, outcome.SkipReason)
 }
 
-func TestShortestExecutorV3ContainsMultiKindPathButNotDistance(t *testing.T) {
+func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *testing.T) {
 	for _, test := range []struct {
 		observation string
 		selected    optimize.ShortestPathExecutor
 		reason      string
 	}{
-		{observation: "p", selected: optimize.ShortestPathExecutorIncumbentWorkspace, reason: optimize.ShortestPathFallbackNonSingleKindPathState},
+		{observation: "p", selected: optimize.ShortestPathExecutorS4CanonicalWitness},
 		{observation: "length(p)", selected: optimize.ShortestPathExecutorS3Unidirectional},
 	} {
 		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`
@@ -421,6 +422,31 @@ func TestShortestExecutorV3ContainsMultiKindPathButNotDistance(t *testing.T) {
 		require.Equal(t, string(test.selected), outcome.Selected)
 		require.Equal(t, test.reason, outcome.SkipReason)
 	}
+}
+
+func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *testing.T) {
+	translation := optimizerSafetyTranslationWithParameters(t, `
+		MATCH p = allShortestPaths((s)-[*1..]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`, map[string]any{"start_id": int64(1), "end_id": int64(2)})
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "all_shortest_paths_dag")
+	require.NotContains(t, formatted, "bidirectional_asp_harness")
+	require.NotContains(t, formatted, "traversal_pair_filter")
+	require.Contains(t, formatted, "array []::int2[]")
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, "ASP", outcome.Family)
+	require.Equal(t, []string{"SP-S0", "ASP-A1-DAG"}, outcome.PlannedCandidates)
+	require.Equal(t, string(optimize.ShortestPathObservationAllPaths), outcome.ObservationMode)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAG), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAG), outcome.Applied)
+	require.Equal(t, "asp-static-v1", outcome.SelectorVersion)
+	require.Empty(t, outcome.SkipReason)
 }
 
 func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {

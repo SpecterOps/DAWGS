@@ -39,7 +39,11 @@ const (
 	boundSourceSelectivityTopN
 )
 
-const maxExactRangeExpansionDepth int64 = 2
+const (
+	maxExactRangeExpansionDepth       int64 = 2
+	defaultShortestPathExpansionDepth int64 = 15
+	defaultShortestPathStateLimit     int64 = 100_000
+)
 
 func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
 	if query == nil || query.SingleQuery == nil {
@@ -124,7 +128,7 @@ func appendQueryPartLowerings(
 	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
-	appendShortestPathExecutorDecisions(plan, queryPartIndex, queryPart, readingClauses)
+	appendShortestPathExecutorDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendExpansionSearchStrategyDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences, initialDeclaredSymbols)
@@ -456,7 +460,13 @@ func applyShortestPathObservationModes(plan *LoweringPlan, queryPartIndex int, r
 			continue
 		}
 		fields := fieldsBySymbol[pattern.Variable.Symbol]
-		if _, fullPath := fields[FieldRequirementFullPath]; fullPath {
+		if pattern.AllShortestPathsPattern {
+			if _, fullPath := fields[FieldRequirementFullPath]; fullPath {
+				decision.ObservationMode = ShortestPathObservationAllPaths
+			} else if _, orderedIDs := fields[FieldRequirementOrderedPathEdgeIDs]; orderedIDs {
+				decision.ObservationMode = ShortestPathObservationAllPaths
+			}
+		} else if _, fullPath := fields[FieldRequirementFullPath]; fullPath {
 			decision.ObservationMode = ShortestPathObservationOnePath
 		} else if _, orderedIDs := fields[FieldRequirementOrderedPathEdgeIDs]; orderedIDs {
 			decision.ObservationMode = ShortestPathObservationDistance
@@ -465,7 +475,7 @@ func applyShortestPathObservationModes(plan *LoweringPlan, queryPartIndex int, r
 	}
 }
 
-func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
+func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	var (
 		shortestCalls  int
 		patternSources int
@@ -508,13 +518,15 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				if step.Relationship.Range.StartIndex != nil {
 					minDepth = *step.Relationship.Range.StartIndex
 				}
-				maxDepth := int64(0)
+				maxDepth := defaultShortestPathExpansionDepth
 				boundedDepth := step.Relationship.Range.EndIndex != nil
 				if boundedDepth {
 					maxDepth = *step.Relationship.Range.EndIndex
 				}
-				supportedDepth := boundedDepth && (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
+				supportedDepth := (boundedDepth || patternPart.AllShortestPathsPattern) && (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
 				directionSupported := step.Relationship.Direction != graph.DirectionBoth
+				relationshipVariableObserved := step.Relationship.Variable != nil && referencesSourceIdentifier(sourceReferences, step.Relationship.Variable.Symbol)
+				noRelationshipVariable := step.Relationship.Variable == nil || (patternPart.AllShortestPathsPattern && !relationshipVariableObserved)
 				leftIDCount := idEqualities[variableSymbol(step.LeftNode.Variable)]
 				rightIDCount := idEqualities[variableSymbol(step.RightNode.Variable)]
 				singletonIDs := leftIDCount == 1 && rightIDCount == 1
@@ -533,12 +545,12 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					topologyClassification = ShortestPathTopologyDirectionless
 				}
 				facts := []ShortestPathEligibilityFact{
-					{Name: "shortest_path_not_all", Eligible: patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
+					{Name: "supported_shortest_path_mode", Eligible: patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern},
 					{Name: "single_three_element_traversal", Eligible: len(patternPart.PatternElements) == 3 && len(steps) == 1},
 					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
 					{Name: "directed", Eligible: directionSupported},
 					{Name: "bounded_supported_depth", Eligible: supportedDepth},
-					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil},
+					{Name: "no_relationship_variable", Eligible: noRelationshipVariable},
 					{Name: "no_relationship_predicate", Eligible: step.Relationship.Properties == nil},
 					{Name: "single_path_call", Eligible: shortestCalls == 1},
 					{Name: "read_only", Eligible: updatingClauses == 0},
@@ -550,7 +562,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				}
 				reason := ShortestPathFallbackTournamentUnqualified
 				switch {
-				case patternPart.AllShortestPathsPattern:
+				case patternPart.AllShortestPathsPattern && !singletonIDs:
 					reason = ShortestPathFallbackAllShortestPaths
 				case readingClause.Match.Optional:
 					reason = ShortestPathFallbackOptionalMatch
@@ -558,7 +570,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					reason = ShortestPathFallbackDirectionless
 				case pathPredicate:
 					reason = ShortestPathFallbackPathPredicate
-				case step.Relationship.Variable != nil:
+				case !noRelationshipVariable:
 					reason = ShortestPathFallbackRelationshipVariable
 				case step.Relationship.Properties != nil:
 					reason = ShortestPathFallbackRelationshipPredicate
@@ -577,10 +589,16 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				case !singletonIDs:
 					reason = ShortestPathFallbackNonSingletonID
 				}
+				family := "SP"
+				plannedCandidates := []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS0Direct, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0, ShortestPathExecutorS4CanonicalDistance, ShortestPathExecutorS4CanonicalWitness}
+				if patternPart.AllShortestPathsPattern {
+					family = "ASP"
+					plannedCandidates = []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorASPA1DAG}
+				}
 				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
 					Target:                 PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
-					Family:                 "SP",
-					PlannedCandidates:      []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS0Direct, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0},
+					Family:                 family,
+					PlannedCandidates:      plannedCandidates,
 					SelectedExecutor:       ShortestPathExecutorIncumbentWorkspace,
 					ObservationMode:        ShortestPathObservationUnknown,
 					Direction:              step.Relationship.Direction,
@@ -593,6 +611,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					StaticallyEligible:     false,
 					MinimumDepth:           minDepth,
 					MaximumDepth:           maxDepth,
+					StateLimit:             defaultShortestPathStateLimit,
 					SelectorVersion:        "sp-static-v3",
 					SelectionMode:          "incumbent_default",
 					FallbackExecutor:       ShortestPathExecutorIncumbentWorkspace,
@@ -683,12 +702,52 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 			decision.FallbackReason = ShortestPathFallbackMutation
 		}
 
+		if structurallyEligible && decision.ObservationMode == ShortestPathObservationAllPaths {
+			// The compact all-shortest search is deliberately narrower than the
+			// singleton witness executors. Minimum-depth zero and self-endpoint
+			// searches can require cyclic relationship-simple paths, which cannot
+			// use a minimum-node-depth predecessor DAG without changing semantics.
+			if decision.MinimumDepth != 1 {
+				decision.FallbackReason = ShortestPathFallbackUnsupportedDepth
+				continue
+			}
+			decision.SelectedExecutor = ShortestPathExecutorASPA1DAG
+			decision.StaticallyEligible = true
+			decision.SelectionMode = "static"
+			decision.SelectorVersion = "asp-static-v1"
+			decision.FallbackReason = ""
+			decision.ExperimentalWinner = true
+			continue
+		}
+
 		if structurallyEligible {
 			if !qualifiedPhysicalDepth {
-				decision.FallbackReason = ShortestPathFallbackDeepInboundUnqualified
+				switch decision.ObservationMode {
+				case ShortestPathObservationDistance:
+					decision.SelectedExecutor = ShortestPathExecutorS4CanonicalDistance
+				case ShortestPathObservationOnePath:
+					decision.SelectedExecutor = ShortestPathExecutorS4CanonicalWitness
+				default:
+					decision.FallbackReason = ShortestPathFallbackDeepInboundUnqualified
+					continue
+				}
+				decision.SelectionMode = "static"
+				decision.SelectorVersion = "sp-static-v4"
+				decision.StaticallyEligible = true
+				decision.FallbackReason = ""
+				decision.ExperimentalWinner = true
 				continue
 			}
 			if !qualifiedPathKinds {
+				if decision.ObservationMode == ShortestPathObservationOnePath {
+					decision.SelectedExecutor = ShortestPathExecutorS4CanonicalWitness
+					decision.SelectionMode = "static"
+					decision.SelectorVersion = "sp-static-v4"
+					decision.StaticallyEligible = true
+					decision.FallbackReason = ""
+					decision.ExperimentalWinner = true
+					continue
+				}
 				decision.FallbackReason = ShortestPathFallbackNonSingleKindPathState
 				continue
 			}

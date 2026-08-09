@@ -36,6 +36,7 @@ type SchemaManager struct {
 	defaultGraph          model.Graph
 	pool                  *pgxpool.Pool
 	parseCache            *cypherParseCache
+	translationCache      *cypherTranslationCache
 	hasDefaultGraph       bool
 	graphs                map[string]model.Graph
 	kindsByID             map[graph.Kind]int16
@@ -48,6 +49,7 @@ func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *Sche
 	return &SchemaManager{
 		pool:                  pool,
 		parseCache:            newCypherParseCache(defaultCypherParseCacheEntries),
+		translationCache:      newCypherTranslationCache(defaultCypherTranslationCacheEntries),
 		hasDefaultGraph:       false,
 		graphs:                map[string]model.Graph{},
 		kindsByID:             map[graph.Kind]int16{},

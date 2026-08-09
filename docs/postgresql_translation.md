@@ -28,12 +28,18 @@ Current PostgreSQL optimization coverage includes:
   `size(relationships(p))`, `startNode`, `endNode`, and `type`.
 - Recursive traversal optimizations for endpoint kind/property predicates, relationship type predicates, bound-node
   filters, traversal direction selection, and limit pushdown where ordering and distinct semantics permit it.
-- Static shortest-path executor selection for one read-only, uncorrelated, directed, bounded traversal with one ID
-  equality per endpoint and no relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state;
-  one-path observations use edge-trail `SP-S3-U-E+MAT-M0` with one ordered hydration pass. Selector `sp-static-v3`
-  contains deep physical-inbound searches and wildcard/multi-kind one-path state on exact `SP-S0`. Unsupported or
-  ambiguous forms retain the incumbent `SP-S0` executor with a machine-readable fallback reason. Singleton ties return
-  one valid minimal trail; physical edge-ID order is not public. See `docs/shortest_path_tie_policy.md`.
+- Static shortest-path executor selection for one read-only, uncorrelated, directed traversal with one ID equality per
+  endpoint and no observed relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state and
+  one-path observations use edge-trail `SP-S3-U-E+MAT-M0` where their qualified physical envelope applies. Selector
+  `sp-static-v4` sends deep physical-inbound distance searches to `SP-S4-C-D` and wildcard/multi-kind witnesses to
+  `SP-S4-C-WE+MAT-M0`. Both S4 executors canonicalize expansion, keep recursive state ID-only, enforce a bounded state
+  ceiling, and fall back to an exact relationship-trail query in the same statement and snapshot before returning a
+  row. Singleton ties return one valid minimal trail; physical edge-ID order is not public. See
+  `docs/shortest_path_tie_policy.md`.
+- Static `allShortestPaths` selection through `asp-static-v1` for a single directed, read-only endpoint pair with
+  minimum depth one. `ASP-A1-DAG` has exact one- and two-hop arms, discovers minimum node-depth layers, retains every
+  relationship-distinct predecessor at those layers, and enumerates the predecessor DAG. Open maximum ranges use the
+  documented depth cap of 15. Unsupported or ambiguous forms retain exact `SP-S0` with a machine-readable reason.
 - Expansion suffix pushdown and `ExpandInto` detection for fixed suffixes and shared-endpoint fanout patterns.
 - Typed compound expansion-search planning for directed bounded expansions followed by fixed suffixes. The decision
   records its ADCS family, planned candidates, exact eligibility facts, observation mode, suffix bounds,
@@ -68,7 +74,8 @@ Current PostgreSQL optimization coverage includes:
 
 ## Repeated-query compilation
 
-Each PostgreSQL driver keeps a bounded least-recently-used cache of 256 successfully parsed Cypher ASTs. Cache keys are
+Each PostgreSQL driver keeps bounded least-recently-used caches of 256 successfully parsed Cypher ASTs and 256 safe SQL
+translations. Parse-cache keys are
 the trimmed query text; invalid input is not retained, and queries larger than 64 KiB bypass the cache. Concurrent misses
 for the same text are coalesced. Cached ASTs remain immutable: the optimizer copies an AST before applying rules, so
 parallel executions cannot mutate shared parser output.
@@ -79,9 +86,18 @@ prevents in-flight misses from repopulating the cache. Queries whose source text
 diagnostics expose aggregate hit, miss, bypass, eviction, coalesced-miss, entry, and pending counts only—never query
 text, literals, parameters, or credentials.
 
-Only parsing is cached. Optimization, kind mapping, graph selection, translation, parameter binding, and SQL rendering
-still run for every execution, which means schema, graph, parameter-shape, and kind-generation changes cannot reuse a
-stale translated plan. Later compilation stages should only be cached with explicit dependency keys and invalidation.
+The translation cache is keyed by trimmed query text, graph ID, parameter names, and the PostgreSQL data type negotiated
+for each parameter. Values are rebound on every hit. This deliberately separates empty untyped lists from typed lists
+and separates different graph partitions. A translation containing generated/static fragment parameters is not cached,
+because those values cannot be reconstructed safely from caller parameters. Concurrent cacheable misses are coalesced;
+waiters rebuild uncacheable translations rather than inheriting the first caller's values. Driver close clears both
+caches. `ParseCacheStats` and `TranslationCacheStats` expose aggregate, query-text-free counters.
+
+The shortest-path functions use session-local `ON COMMIT PRESERVE ROWS` tables with invocation versions. Calls truncate
+or version row state instead of creating, dropping, or renaming tables at every breadth-first level. The functions set a
+local `recursive_worktable_factor`, declare explicit `COST`/`ROWS` estimates, and carry graph/node/edge IDs until one
+outer hydration boundary. Temporary-workspace buffers are expected for S4/ASP; executor temp-file spill and WAL remain
+resource-gate failures.
 
 Raw PostgreSQL graph-composite values are driver implementation details. Use the result value mapper or
 `graph.ScanNextResult` for nodes, relationships, paths, and their arrays instead of depending on pgx's historical
