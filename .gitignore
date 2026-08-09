@@ -13,3 +13,7 @@ integration/testdata/local/
 
 # Local benchmark comparison output
 .bench/
+
+# Local performance captures and live-run artifacts
+/artifacts/perf/
+/artifacts/live/

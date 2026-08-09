@@ -1,9 +1,63 @@
 # BloodHound Regression Coverage Manifest
 
-Baseline audit for `regression_plan.md`, recorded when the regression harness
-was established. This file is
-the authoritative gap map for the stable query-form IDs; update a cell when a
-case is added, and link the exact test or generated case that changed it.
+Baseline audit for the source-derived regression program, recorded when the
+regression harness was established. The original delivery plan is archived
+verbatim in [`learning.md`](learning.md). This file is the authoritative
+coverage contract and gap map for the stable query-form IDs; update a cell when
+a case is added, and link the exact test or generated case that changed it.
+
+## Coverage contract
+
+The corpus represents query shapes found in reviewed BHE and BHCE source; it
+does not import application business logic or reproduce complete downstream
+traversal algorithms. Normalize every discovered query into this tuple:
+
+```text
+query target
++ direction
++ start/end ID anchor
++ start/end kind constraints
++ relationship kind constraints
++ node/relationship property predicates
++ logical grouping
++ projection
++ terminal operation
+```
+
+Two call sites may share a stable ID only when the entire tuple is equivalent.
+Add a new ID for a new operator, grouping, direction, anchor location,
+projection, mutation target, or execution path. Relationship names may share a
+case, but kind-list and parameter-list cardinality remain test dimensions.
+Audit existing primitive coverage before adding a production composition,
+builder path, projection, cardinality, or scale case.
+
+| ID | Layer | Contract |
+| --- | --- | --- |
+| `QB` | Legacy query-builder pipeline | Preserve the AST and backend forms built from reviewed criteria; raw Cypher alone is insufficient for rewrite-sensitive forms. |
+| `CY` | Cypher parser/mutation cases | Preserve accepted syntax, formatting, and mutation parsing. |
+| `PG` | PostgreSQL translation goldens | Preserve SQL, parameters, correlation, projection, and mutation targets. |
+| `IT` | Shared integration cases | Prove backend-equivalent observations and exact mutation effects. |
+| `PC` | Plan corpus | Capture translated SQL, lowering metadata, and PostgreSQL plans for comparison. |
+| `PI` | PostgreSQL plan-invariant tests | Assert stable index, orientation, filter, cardinality, or mutation-target properties. |
+| `SC` | Scale/runtime corpus | Exercise representative cardinality and selectivity with repeatable fixtures. |
+| `DR` | Driver integration/benchmark | Exercise direct driver and batch APIs that bypass Cypher translation. |
+
+Coverage rules:
+
+1. Every active form with a Cypher equivalent requires `PG` and `IT` coverage.
+2. Every legacy-builder form requires `QB`; rewrite-sensitive forms also run
+   through the builder API in `IT` rather than only through an equivalent raw
+   query.
+3. Every Cypher mutation requires `CY`, `PG`, and exact `IT` post-state;
+   direct-driver mutations require exact `DR` post-state instead.
+4. High-cardinality or join-sensitive forms require `PC`; declared
+   representatives additionally require `SC` and stable plan-sensitive forms
+   require `PI`.
+5. Direct batched mutations require semantic `DR` coverage across flush
+   boundaries.
+6. Shared integration cases remain backend-equivalent. PostgreSQL-only plan,
+   resource, and runtime assertions stay in PostgreSQL-scoped tests or the
+   scale corpus.
 
 Status values:
 
@@ -12,16 +66,16 @@ Status values:
   cardinality, mutation target, or scale dimension is missing.
 - `C` — production-complete coverage added by this regression project.
 - `A` — absent.
-- `—` — the layer is not required by the plan.
+- `—` — the layer is not required by this coverage contract.
 
 No active production ID was complete when the audit began. The following
 references are the existing primitives used by the table; they are linked here
 instead of being cloned under BloodHound-specific names:
 
 - `QB-PRED`: [`TestQueryBuilder_Render` predicate, temporal, kind, ID, string,
-  null, and mutation subtests](query/neo4j/neo4j_test.go#L209).
+  null, and mutation subtests](query/neo4j/neo4j_test.go).
 - `QB-PROJ`: [`TestQueryBuilder_Render` relationship projection
-  subtests](query/neo4j/neo4j_test.go#L740).
+  subtests](query/neo4j/neo4j_test.go).
 - `CY-MUT`: [Cypher create/update/delete parser cases](cypher/test/cases/mutation_tests.json).
 - `PG-PRED`: [PostgreSQL node/predicate translation goldens](cypher/models/pgsql/test/translation_cases/nodes.sql).
 - `PG-DEL`: [PostgreSQL delete translation goldens](cypher/models/pgsql/test/translation_cases/delete.sql).
@@ -259,8 +313,8 @@ and therefore does not change the primitive or absent cells below.
 
 ## Completion audit
 
-The executable manifest gate and the following evidence close the completion
-definition in `regression_plan.md`:
+The executable manifest gate and the following evidence close the coverage
+contract:
 
 1. All 64 active stable IDs are present at their required layers without an
    absent or primitive-only cell (`COMPLETION-GATE`).
