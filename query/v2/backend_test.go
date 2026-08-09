@@ -332,7 +332,7 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			).Return(
 				v2.Path(),
 			),
-			expectedHarness: "bidirectional_asp_harness",
+			expectedHarness: "all_shortest_paths_dag",
 		},
 	}
 
@@ -348,23 +348,23 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, sql, testCase.expectedHarness)
 			require.Contains(t, sql, "ordered_edge_ids_to_path")
-			if name == "shortest path" {
-				require.Contains(t, sql, "n0.id = @pi0::int8")
-				require.Contains(t, sql, "n1.id = @pi1::int8")
-				require.Contains(t, sql, "singleton_endpoints")
-			} else {
-				require.Contains(t, sql, "n0.id = 1")
-				require.Contains(t, sql, "n1.id = 2")
-			}
+			require.Contains(t, sql, "n0.id = @pi0::int8")
+			require.Contains(t, sql, "n1.id = @pi1::int8")
+			require.Contains(t, sql, "singleton_endpoints")
 
-			serializedHarnessQueryHasKindConstraint := false
-			for _, parameterValue := range translation.Parameters {
-				if serializedQuery, typeOK := parameterValue.(string); typeOK && strings.Contains(serializedQuery, "array [1]::int2[]") {
-					serializedHarnessQueryHasKindConstraint = true
-					break
+			if name == "shortest path" {
+				serializedHarnessQueryHasKindConstraint := false
+				for _, parameterValue := range translation.Parameters {
+					if serializedQuery, typeOK := parameterValue.(string); typeOK && strings.Contains(serializedQuery, "array [1]::int2[]") {
+						serializedHarnessQueryHasKindConstraint = true
+						break
+					}
 				}
+				require.True(t, serializedHarnessQueryHasKindConstraint, "expected serialized shortest-path harness query to contain edge kind constraint: %#v", translation.Parameters)
+			} else {
+				require.Contains(t, sql, "array [1]::int2[]")
+				require.NotContains(t, sql, "bidirectional_asp_harness")
 			}
-			require.True(t, serializedHarnessQueryHasKindConstraint, "expected serialized shortest-path harness query to contain edge kind constraint: %#v", translation.Parameters)
 		})
 	}
 }

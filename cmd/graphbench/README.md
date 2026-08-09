@@ -386,16 +386,20 @@ SP family and planned candidate identities, observation mode, minimum/maximum
 depth, selected/fallback executor, selector version/mode, limits, and stable
 fallback code. These fields are also copied into each exact target outcome.
 Call count and read-only status are statement-wide, including shortest calls or
-mutations separated by `WITH`. Selector `sp-static-v3` chooses `SP-S3-U-D` for
+mutations separated by `WITH`. Selector `sp-static-v4` chooses `SP-S3-U-D` for
 qualified distance observations and `SP-S3-U-E+MAT-M0` for qualified one-path
 observations. Qualification requires one directed three-element shortest-path
 traversal, a supported bounded depth, one static ID equality per endpoint, no
 relationship variable or predicate, no path predicate, one uncorrelated
 endpoint pair, one statement-wide shortest call, and a read-only statement.
-Selector `sp-static-v3` also records graph direction, physical expansion
+Selector `sp-static-v4` also records graph direction, physical expansion
 column, relationship-kind count, wildcard state, and a static topology class.
-Deep `end_id` expansion and wildcard/multi-kind one-path state retain exact
-`SP-S0`; forced S3 remains available only as a qualification seam.
+Deep `end_id` distance expansion selects canonical `SP-S4-C-D`, while
+wildcard/multi-kind one-path state selects `SP-S4-C-WE+MAT-M0`. S4 uses compact
+ID state, a bounded ceiling, and exact same-statement overflow fallback.
+`asp-static-v1` selects `ASP-A1-DAG` for the narrow singleton all-shortest
+envelope and retains all minimum-depth predecessor edges before enumeration.
+Forced executors remain qualification seams.
 
 ## Existing graph non-mutating mode
 
@@ -473,8 +477,10 @@ and uses fixed timeouts, arm order, warmups, and samples.
 The independent state/resource report is produced with
 `-resource-artifact results.jsonl -resource-output resources.json`. For
 non-stress portable PostgreSQL candidates it rejects temp spill, local
-workspace, and WAL for non-mutating reads; exact incumbent fallback retains
-its documented temporary-workspace contract. `SP-S0-DIRECT` records are
+workspace, and WAL for non-mutating reads. S4 and ASP explicitly permit their
+session-local compact workspace but still reject executor temp-file spill and
+WAL; exact incumbent fallback retains its documented temporary-workspace
+contract. `SP-S0-DIRECT` records are
 attributed from the measured fallback function loops, so workspace use is
 accepted only when the incumbent branch actually ran. Exact full-comparator
 reference arms receive independent resource cases rather than inheriting the
@@ -488,8 +494,10 @@ public observation boundary, not production selectors. The first canonicalizes
 inbound search to physical `start_id -> end_id`; the witness arm discovers
 compact node/depth state and reconstructs one deterministic predecessor trail;
 the ASP arm retains every relationship-distinct shortest-depth predecessor and
-enumerates the resulting DAG. Activation requires the saved plan/resource,
-holdout, concurrency, cancellation, and reference-closure gates.
+enumerates the resulting DAG. The corresponding production identities are
+forceable with `-postgres-force-shortest-executor SP-S4-C-D`,
+`SP-S4-C-WE+MAT-M0`, or `ASP-A1-DAG`; activation evidence still requires the
+saved plan/resource, holdout, concurrency, cancellation, and reference-closure gates.
 
 `-backend-delta-artifact combined.jsonl -backend-delta-output deltas.json`
 produces matched PostgreSQL/Neo4j median and p95 ratios only when both records

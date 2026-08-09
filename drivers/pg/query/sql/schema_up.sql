@@ -855,7 +855,7 @@ begin
   -- The path column is not used as a primary key. Deduplication is handled by DISTINCT ON clauses in the
   -- harness functions. Removing the PK on the variable-length int8[] array eliminates O(n)-key B-tree
   -- maintenance that grows with traversal depth.
-  create temporary table forward_front
+  create temporary table if not exists forward_front
   (
     root_id   int8   not null,
     next_id   int8   not null,
@@ -863,9 +863,9 @@ begin
     satisfied bool,
     is_cycle  bool   not null,
     path      int8[] not null
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create temporary table next_front
+  create temporary table if not exists next_front
   (
     root_id   int8   not null,
     next_id   int8   not null,
@@ -873,15 +873,17 @@ begin
     satisfied bool,
     is_cycle  bool   not null,
     path      int8[] not null
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create index forward_front_next_id_index on forward_front using btree (next_id);
-  create index forward_front_satisfied_index on forward_front using btree (root_id, next_id, depth) where satisfied;
-  create index forward_front_is_cycle_index on forward_front using btree (root_id, next_id) where is_cycle;
+  create index if not exists forward_front_next_id_index on forward_front using btree (next_id);
+  create index if not exists forward_front_satisfied_index on forward_front using btree (root_id, next_id, depth) where satisfied;
+  create index if not exists forward_front_is_cycle_index on forward_front using btree (root_id, next_id) where is_cycle;
 
-  create index next_front_next_id_index on next_front using btree (next_id);
-  create index next_front_satisfied_index on next_front using btree (root_id, next_id, depth) where satisfied;
-  create index next_front_is_cycle_index on next_front using btree (root_id, next_id) where is_cycle;
+  create index if not exists next_front_next_id_index on next_front using btree (next_id);
+  create index if not exists next_front_satisfied_index on next_front using btree (root_id, next_id, depth) where satisfied;
+  create index if not exists next_front_is_cycle_index on next_front using btree (root_id, next_id) where is_cycle;
+
+  truncate table forward_front, next_front;
 end;
 $$
   language plpgsql
@@ -893,14 +895,14 @@ create or replace function public.create_unidirectional_shortest_path_tables()
   returns void as
 $$
 begin
-  create temporary table visited
+  create temporary table if not exists visited
   (
     root_id int8 not null,
     id      int8 not null,
     primary key (root_id, id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create temporary table paths
+  create temporary table if not exists paths
   (
     root_id   int8   not null,
     next_id   int8   not null,
@@ -908,19 +910,21 @@ begin
     satisfied bool,
     is_cycle  bool   not null,
     path      int8[] not null
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create temporary table resolved_roots
+  create temporary table if not exists resolved_roots
   (
     root_id int8 not null,
     primary key (root_id)
-  ) on commit drop;
+  ) on commit preserve rows;
+
+  truncate table visited, paths, resolved_roots;
 
   perform create_unidirectional_pathspace_tables();
 
-  create index forward_front_root_id_next_id_index on forward_front using btree (root_id, next_id);
-  create index next_front_root_id_next_id_index on next_front using btree (root_id, next_id);
-  create index paths_root_id_next_id_index on paths using btree (root_id, next_id);
+  create index if not exists forward_front_root_id_next_id_index on forward_front using btree (root_id, next_id);
+  create index if not exists next_front_root_id_next_id_index on next_front using btree (root_id, next_id);
+  create index if not exists paths_root_id_next_id_index on paths using btree (root_id, next_id);
 end;
 $$
   language plpgsql
@@ -928,9 +932,8 @@ $$
   strict;
 
 -- create_traversal_filter_tables materializes the root, terminal and pair filter sets into temporary tables that the
--- harness functions join against. The tables use `on commit drop`, so a single transaction can only host one harness
--- invocation that depends on these tables; concurrent or sequential expansions in the same transaction will conflict
--- on the temporary table names.
+-- harness functions join against. Definitions persist for the physical
+-- session; each invocation truncates its row state before loading a new filter.
 create or replace function public.create_traversal_filter_tables()
   returns void as
 $$
@@ -939,20 +942,20 @@ begin
   (
     id int8 not null,
     primary key (id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
   create temporary table if not exists traversal_terminal_filter
   (
     id int8 not null,
     primary key (id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
   create temporary table if not exists traversal_pair_filter
   (
     root_id     int8 not null,
     terminal_id int8 not null,
     primary key (root_id, terminal_id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
   create index if not exists traversal_pair_filter_terminal_id_root_id_index on traversal_pair_filter using btree (terminal_id, root_id);
 
@@ -1058,6 +1061,492 @@ $$
   language plpgsql
   volatile
   strict;
+
+-- Compact bound-pair shortest-path searches share a session-local workspace.
+-- The tables survive transaction boundaries so their catalog objects and
+-- indexes are paid for once per physical connection. Every public executor
+-- resets row state before use; an aborted call is therefore harmless to the
+-- next invocation on the same pooled connection.
+create or replace function public.ensure_shortest_dag_workspace()
+  returns void as
+$$
+declare
+  expected_version constant int4 := 1;
+  present_version int4;
+begin
+  if to_regclass('pg_temp.spd_workspace_version') is not null then
+    select version into present_version from pg_temp.spd_workspace_version limit 1;
+  end if;
+
+  if present_version is not null and present_version is distinct from expected_version then
+    drop table if exists pg_temp.spd_predecessor;
+    drop table if exists pg_temp.spd_candidate;
+    drop table if exists pg_temp.spd_seen;
+    drop table if exists pg_temp.spd_next;
+    drop table if exists pg_temp.spd_front;
+    drop table if exists pg_temp.spd_workspace_version;
+  end if;
+
+  if to_regclass('pg_temp.spd_workspace_version') is null then
+    create temporary table spd_workspace_version
+    (
+      version int4 not null primary key
+    ) on commit preserve rows;
+
+    create temporary table spd_front
+    (
+      node_id int8 not null primary key
+    ) on commit preserve rows;
+
+    create temporary table spd_next
+    (
+      node_id int8 not null primary key
+    ) on commit preserve rows;
+
+    create temporary table spd_seen
+    (
+      node_id int8 not null primary key,
+      depth int4 not null
+    ) on commit preserve rows;
+
+    create temporary table spd_candidate
+    (
+      node_id int8 not null,
+      predecessor_id int8 not null,
+      edge_id int8 not null,
+      primary key (node_id, predecessor_id, edge_id)
+    ) on commit preserve rows;
+
+    create temporary table spd_predecessor
+    (
+      node_id int8 not null,
+      depth int4 not null,
+      predecessor_id int8 not null,
+      edge_id int8 not null,
+      primary key (node_id, depth, predecessor_id, edge_id)
+    ) on commit preserve rows;
+    create index spd_predecessor_predecessor_id_depth_index
+      on spd_predecessor using btree (predecessor_id, depth);
+
+    insert into spd_workspace_version(version) values (expected_version);
+  end if;
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.reset_shortest_dag_workspace()
+  returns void as
+$$
+begin
+  perform public.ensure_shortest_dag_workspace();
+  truncate table pg_temp.spd_front, pg_temp.spd_next, pg_temp.spd_seen,
+                 pg_temp.spd_candidate, pg_temp.spd_predecessor;
+end;
+$$
+  language plpgsql
+  volatile;
+
+-- all_shortest_paths_dag separates minimum-depth discovery from path
+-- enumeration. It retains every relationship-distinct predecessor edge at a
+-- node's minimum depth, then enumerates only the resulting predecessor DAG.
+-- The min_depth=1/distinct-endpoint contract is enforced by the production
+-- selector; the guards below keep direct SQL callers honest as well.
+create or replace function public.all_shortest_paths_dag(target_graph_id int4, source_id int8, target_id int8,
+                                                          min_depth int4, max_depth int4,
+                                                          edge_kind_ids int2[], inbound bool)
+  returns table
+          (
+            root_id int8,
+            next_id int8,
+            depth int4,
+            satisfied bool,
+            is_cycle bool,
+            path int8[]
+          )
+as
+$$
+#variable_conflict use_column
+declare
+  search_depth int4;
+  target_depth int4;
+  emitted_count int8;
+begin
+  if source_id is null or target_id is null or max_depth < 1 then
+    return;
+  end if;
+  if min_depth <> 1 then
+    raise exception using errcode = '22023', message = 'all_shortest_paths_dag requires min_depth = 1';
+  end if;
+  if source_id = target_id then
+    perform public.shortest_path_self_endpoint_error(source_id, target_id);
+  end if;
+
+  -- Exact depth-one fast arm. Every qualifying parallel edge is observable.
+  if not inbound then
+    return query
+      select source_id, target_id, 1::int4, true, false, array[e.id]::int8[]
+      from edge e
+      where e.graph_id = target_graph_id
+        and e.start_id = source_id and e.end_id = target_id
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+      order by e.id;
+  else
+    return query
+      select source_id, target_id, 1::int4, true, false, array[e.id]::int8[]
+      from edge e
+      where e.graph_id = target_graph_id
+        and e.end_id = source_id and e.start_id = target_id
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+      order by e.id;
+  end if;
+  get diagnostics emitted_count = row_count;
+  if emitted_count > 0 then
+    return;
+  end if;
+
+  -- Exact depth-two fast arm. Relationship uniqueness is explicit so self
+  -- loops and reciprocal patterns cannot reuse one physical relationship.
+  if max_depth >= 2 then
+    if not inbound then
+      return query
+        select source_id, target_id, 2::int4, true, false, array[e1.id, e2.id]::int8[]
+        from edge e1
+        join edge e2 on e2.graph_id = target_graph_id and e2.start_id = e1.end_id
+        where e1.graph_id = target_graph_id
+          and e1.start_id = source_id and e2.end_id = target_id
+          and e1.id <> e2.id
+          and (cardinality(edge_kind_ids) = 0 or e1.kind_id = any(edge_kind_ids))
+          and (cardinality(edge_kind_ids) = 0 or e2.kind_id = any(edge_kind_ids))
+        order by e1.id, e2.id;
+    else
+      return query
+        select source_id, target_id, 2::int4, true, false, array[e1.id, e2.id]::int8[]
+        from edge e1
+        join edge e2 on e2.graph_id = target_graph_id and e2.end_id = e1.start_id
+        where e1.graph_id = target_graph_id
+          and e1.end_id = source_id and e2.start_id = target_id
+          and e1.id <> e2.id
+          and (cardinality(edge_kind_ids) = 0 or e1.kind_id = any(edge_kind_ids))
+          and (cardinality(edge_kind_ids) = 0 or e2.kind_id = any(edge_kind_ids))
+        order by e1.id, e2.id;
+    end if;
+    get diagnostics emitted_count = row_count;
+    if emitted_count > 0 then
+      return;
+    end if;
+  end if;
+
+  if max_depth <= 2 then
+    return;
+  end if;
+
+  perform public.reset_shortest_dag_workspace();
+  insert into pg_temp.spd_front(node_id) values (source_id);
+  insert into pg_temp.spd_seen(node_id, depth) values (source_id, 0);
+
+  for search_depth in 1..max_depth loop
+    truncate table pg_temp.spd_candidate, pg_temp.spd_next;
+
+    if not inbound then
+      insert into pg_temp.spd_candidate(node_id, predecessor_id, edge_id)
+      select e.end_id, f.node_id, e.id
+      from pg_temp.spd_front f
+      join edge e on e.graph_id = target_graph_id and e.start_id = f.node_id
+      where (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.end_id)
+      on conflict do nothing;
+    else
+      insert into pg_temp.spd_candidate(node_id, predecessor_id, edge_id)
+      select e.start_id, f.node_id, e.id
+      from pg_temp.spd_front f
+      join edge e on e.graph_id = target_graph_id and e.end_id = f.node_id
+      where (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.start_id)
+      on conflict do nothing;
+    end if;
+
+    if not exists (select 1 from pg_temp.spd_candidate) then
+      exit;
+    end if;
+
+    insert into pg_temp.spd_predecessor(node_id, depth, predecessor_id, edge_id)
+    select node_id, search_depth, predecessor_id, edge_id
+    from pg_temp.spd_candidate
+    on conflict do nothing;
+
+    insert into pg_temp.spd_next(node_id)
+    select distinct node_id from pg_temp.spd_candidate
+    on conflict do nothing;
+
+    insert into pg_temp.spd_seen(node_id, depth)
+    select node_id, search_depth from pg_temp.spd_next
+    on conflict do nothing;
+
+    if exists (select 1 from pg_temp.spd_next where node_id = target_id) then
+      target_depth = search_depth;
+      exit;
+    end if;
+
+    truncate table pg_temp.spd_front;
+    insert into pg_temp.spd_front(node_id) select node_id from pg_temp.spd_next;
+  end loop;
+
+  if target_depth is null then
+    return;
+  end if;
+
+  return query
+    with recursive shortest_paths(node_id, path_depth, edge_ids) as (
+      select target_id, target_depth, array []::int8[]
+      union all
+      select predecessor.predecessor_id,
+             shortest_paths.path_depth - 1,
+             array[predecessor.edge_id]::int8[] || shortest_paths.edge_ids
+      from shortest_paths
+      join pg_temp.spd_predecessor predecessor
+        on predecessor.node_id = shortest_paths.node_id
+       and predecessor.depth = shortest_paths.path_depth
+    )
+    select source_id, target_id, target_depth, true, false, shortest_paths.edge_ids
+    from shortest_paths
+    where shortest_paths.node_id = source_id and shortest_paths.path_depth = 0
+    order by shortest_paths.edge_ids;
+end;
+$$
+  language plpgsql
+  volatile
+  strict
+  cost 100
+  set recursive_worktable_factor = 1
+  rows 100;
+
+-- shortest_path_compact keeps one deterministic predecessor per minimum-depth
+-- node. If its bounded state budget is exceeded it restarts an exact
+-- relationship-trail recursive search before returning any row, preserving the
+-- transaction snapshot and the incumbent relationship-simple semantics.
+create or replace function public.shortest_path_compact(target_graph_id int4, source_id int8, target_id int8,
+                                                         min_depth int4, max_depth int4,
+                                                         edge_kind_ids int2[], inbound bool,
+                                                         state_limit int8)
+  returns table
+          (
+            root_id int8,
+            next_id int8,
+            depth int4,
+            satisfied bool,
+            is_cycle bool,
+            path int8[]
+          )
+as
+$$
+#variable_conflict use_column
+declare
+  search_depth int4;
+  target_depth int4;
+  emitted_count int8;
+  retained_state int8;
+  overflowed bool := false;
+begin
+  if source_id is null or target_id is null or max_depth < min_depth then
+    return;
+  end if;
+  if min_depth <> 0 and min_depth <> 1 then
+    raise exception using errcode = '22023', message = 'shortest_path_compact requires min_depth = 0 or 1';
+  end if;
+  if source_id = target_id then
+    if min_depth = 0 then
+      return query select source_id, target_id, 0::int4, true, false, array []::int8[];
+      return;
+    end if;
+    perform public.shortest_path_self_endpoint_error(source_id, target_id);
+  end if;
+
+  if min_depth <= 1 and max_depth >= 1 then
+    if not inbound then
+      return query
+        select source_id, target_id, 1::int4, true, false, array[e.id]::int8[]
+        from edge e
+        where e.graph_id = target_graph_id
+          and e.start_id = source_id and e.end_id = target_id
+          and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        order by e.id limit 1;
+    else
+      return query
+        select source_id, target_id, 1::int4, true, false, array[e.id]::int8[]
+        from edge e
+        where e.graph_id = target_graph_id
+          and e.end_id = source_id and e.start_id = target_id
+          and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        order by e.id limit 1;
+    end if;
+    get diagnostics emitted_count = row_count;
+    if emitted_count > 0 then
+      return;
+    end if;
+  end if;
+
+  if min_depth <= 2 and max_depth >= 2 then
+    if not inbound then
+      return query
+        select source_id, target_id, 2::int4, true, false, array[e1.id, e2.id]::int8[]
+        from edge e1
+        join edge e2 on e2.graph_id = target_graph_id and e2.start_id = e1.end_id
+        where e1.graph_id = target_graph_id
+          and e1.start_id = source_id and e2.end_id = target_id and e1.id <> e2.id
+          and (cardinality(edge_kind_ids) = 0 or e1.kind_id = any(edge_kind_ids))
+          and (cardinality(edge_kind_ids) = 0 or e2.kind_id = any(edge_kind_ids))
+        order by e1.id, e2.id limit 1;
+    else
+      return query
+        select source_id, target_id, 2::int4, true, false, array[e1.id, e2.id]::int8[]
+        from edge e1
+        join edge e2 on e2.graph_id = target_graph_id and e2.end_id = e1.start_id
+        where e1.graph_id = target_graph_id
+          and e1.end_id = source_id and e2.start_id = target_id and e1.id <> e2.id
+          and (cardinality(edge_kind_ids) = 0 or e1.kind_id = any(edge_kind_ids))
+          and (cardinality(edge_kind_ids) = 0 or e2.kind_id = any(edge_kind_ids))
+        order by e1.id, e2.id limit 1;
+    end if;
+    get diagnostics emitted_count = row_count;
+    if emitted_count > 0 then
+      return;
+    end if;
+  end if;
+
+  if max_depth <= 2 then
+    return;
+  end if;
+
+  perform public.reset_shortest_dag_workspace();
+  insert into pg_temp.spd_front(node_id) values (source_id);
+  insert into pg_temp.spd_seen(node_id, depth) values (source_id, 0);
+
+  for search_depth in 1..max_depth loop
+    truncate table pg_temp.spd_candidate, pg_temp.spd_next;
+
+    if not inbound then
+      insert into pg_temp.spd_candidate(node_id, predecessor_id, edge_id)
+      select e.end_id, f.node_id, e.id
+      from pg_temp.spd_front f
+      join edge e on e.graph_id = target_graph_id and e.start_id = f.node_id
+      where (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.end_id)
+      on conflict do nothing;
+    else
+      insert into pg_temp.spd_candidate(node_id, predecessor_id, edge_id)
+      select e.start_id, f.node_id, e.id
+      from pg_temp.spd_front f
+      join edge e on e.graph_id = target_graph_id and e.end_id = f.node_id
+      where (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.start_id)
+      on conflict do nothing;
+    end if;
+
+    if not exists (select 1 from pg_temp.spd_candidate) then
+      exit;
+    end if;
+
+    if state_limit > 0 then
+      select (select count(*) from pg_temp.spd_seen) +
+             (select count(distinct node_id) from pg_temp.spd_candidate)
+      into retained_state;
+      if retained_state > state_limit then
+        overflowed = true;
+        exit;
+      end if;
+    end if;
+
+    insert into pg_temp.spd_predecessor(node_id, depth, predecessor_id, edge_id)
+    select distinct on (node_id) node_id, search_depth, predecessor_id, edge_id
+    from pg_temp.spd_candidate
+    order by node_id, edge_id, predecessor_id
+    on conflict do nothing;
+
+    insert into pg_temp.spd_next(node_id)
+    select distinct node_id from pg_temp.spd_candidate
+    on conflict do nothing;
+    insert into pg_temp.spd_seen(node_id, depth)
+    select node_id, search_depth from pg_temp.spd_next
+    on conflict do nothing;
+
+    if search_depth >= min_depth and exists (select 1 from pg_temp.spd_next where node_id = target_id) then
+      target_depth = search_depth;
+      exit;
+    end if;
+
+    truncate table pg_temp.spd_front;
+    insert into pg_temp.spd_front(node_id) select node_id from pg_temp.spd_next;
+  end loop;
+
+  if overflowed then
+    if not inbound then
+      return query
+        with recursive trails(node_id, trail_depth, edge_ids) as (
+          select source_id, 0::int4, array []::int8[]
+          union all
+          select e.end_id, trails.trail_depth + 1, trails.edge_ids || e.id
+          from trails
+          join edge e on e.graph_id = target_graph_id and e.start_id = trails.node_id
+          where trails.trail_depth < max_depth
+            and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+            and not e.id = any(trails.edge_ids)
+        )
+        select source_id, target_id, trails.trail_depth, true, false, trails.edge_ids
+        from trails
+        where trails.node_id = target_id and trails.trail_depth >= min_depth
+        order by trails.trail_depth, trails.edge_ids
+        limit 1;
+    else
+      return query
+        with recursive trails(node_id, trail_depth, edge_ids) as (
+          select source_id, 0::int4, array []::int8[]
+          union all
+          select e.start_id, trails.trail_depth + 1, trails.edge_ids || e.id
+          from trails
+          join edge e on e.graph_id = target_graph_id and e.end_id = trails.node_id
+          where trails.trail_depth < max_depth
+            and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+            and not e.id = any(trails.edge_ids)
+        )
+        select source_id, target_id, trails.trail_depth, true, false, trails.edge_ids
+        from trails
+        where trails.node_id = target_id and trails.trail_depth >= min_depth
+        order by trails.trail_depth, trails.edge_ids
+        limit 1;
+    end if;
+    return;
+  end if;
+
+  if target_depth is null then
+    return;
+  end if;
+
+  return query
+    with recursive witness(node_id, path_depth, edge_ids) as (
+      select target_id, target_depth, array []::int8[]
+      union all
+      select predecessor.predecessor_id,
+             witness.path_depth - 1,
+             array[predecessor.edge_id]::int8[] || witness.edge_ids
+      from witness
+      join pg_temp.spd_predecessor predecessor
+        on predecessor.node_id = witness.node_id
+       and predecessor.depth = witness.path_depth
+    )
+    select source_id, target_id, target_depth, true, false, witness.edge_ids
+    from witness
+    where witness.node_id = source_id and witness.path_depth = 0
+    order by witness.edge_ids
+    limit 1;
+end;
+$$
+  language plpgsql
+  volatile
+  strict
+  cost 100
+  set recursive_worktable_factor = 1
+  rows 1;
 
 create or replace function public.bsp_workspace_fragment(fragment text)
   returns text as
@@ -1272,7 +1761,7 @@ $$
 begin
   perform create_unidirectional_pathspace_tables();
 
-  create temporary table backward_front
+  create temporary table if not exists backward_front
   (
     root_id   int8   not null,
     next_id   int8   not null,
@@ -1280,11 +1769,13 @@ begin
     satisfied bool,
     is_cycle  bool   not null,
     path      int8[] not null
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create index backward_front_next_id_index on backward_front using btree (next_id);
-  create index backward_front_satisfied_index on backward_front using btree (root_id, next_id, depth) where satisfied;
-  create index backward_front_is_cycle_index on backward_front using btree (root_id, next_id) where is_cycle;
+  create index if not exists backward_front_next_id_index on backward_front using btree (next_id);
+  create index if not exists backward_front_satisfied_index on backward_front using btree (root_id, next_id, depth) where satisfied;
+  create index if not exists backward_front_is_cycle_index on backward_front using btree (root_id, next_id) where is_cycle;
+
+  truncate table backward_front;
 end;
 $$
   language plpgsql
@@ -1295,9 +1786,9 @@ create or replace function public.create_bidirectional_pair_pathspace_indexes()
   returns void as
 $$
 begin
-  create index forward_front_root_id_next_id_index on forward_front using btree (root_id, next_id);
-  create index backward_front_root_id_next_id_index on backward_front using btree (root_id, next_id);
-  create index next_front_root_id_next_id_index on next_front using btree (root_id, next_id);
+  create index if not exists forward_front_root_id_next_id_index on forward_front using btree (root_id, next_id);
+  create index if not exists backward_front_root_id_next_id_index on backward_front using btree (root_id, next_id);
+  create index if not exists next_front_root_id_next_id_index on next_front using btree (root_id, next_id);
 end;
 $$
   language plpgsql
@@ -1308,19 +1799,21 @@ create or replace function public.create_bidirectional_shortest_path_tables()
   returns void as
 $$
 begin
-  create temporary table forward_visited
+  create temporary table if not exists forward_visited
   (
     root_id int8 not null,
     id      int8 not null,
     primary key (root_id, id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create temporary table backward_visited
+  create temporary table if not exists backward_visited
   (
     root_id int8 not null,
     id      int8 not null,
     primary key (root_id, id)
-  ) on commit drop;
+  ) on commit preserve rows;
+
+  truncate table forward_visited, backward_visited;
 
   perform create_bidirectional_pathspace_tables();
   perform create_bidirectional_pair_pathspace_indexes();
@@ -1334,13 +1827,9 @@ create or replace function public.swap_forward_front()
   returns void as
 $$
 begin
-  alter table forward_front
-    rename to forward_front_old;
-  alter table next_front
-    rename to forward_front;
-  alter table forward_front_old
-    rename to next_front;
 
+  truncate table forward_front;
+  insert into forward_front select * from next_front;
   truncate table next_front;
 
   delete from forward_front r where r.is_cycle;
@@ -1358,13 +1847,9 @@ create or replace function public.swap_backward_front()
   returns void as
 $$
 begin
-  alter table backward_front
-    rename to backward_front_old;
-  alter table next_front
-    rename to backward_front;
-  alter table backward_front_old
-    rename to next_front;
 
+  truncate table backward_front;
+  insert into backward_front select * from next_front;
   truncate table next_front;
 
   delete from backward_front r where r.is_cycle;
@@ -2009,24 +2494,24 @@ begin
     perform create_bidirectional_pair_pathspace_indexes();
   end if;
 
-  create temporary table unresolved_pairs
+  create temporary table if not exists unresolved_pairs
   (
     root_id     int8 not null,
     terminal_id int8 not null,
     primary key (root_id, terminal_id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create index unresolved_pairs_terminal_id_root_id_index on unresolved_pairs using btree (terminal_id, root_id);
+  create index if not exists unresolved_pairs_terminal_id_root_id_index on unresolved_pairs using btree (terminal_id, root_id);
 
-  create temporary table resolved_pair_depths
+  create temporary table if not exists resolved_pair_depths
   (
     root_id     int8 not null,
     terminal_id int8 not null,
     depth       int4 not null,
     primary key (root_id, terminal_id)
-  ) on commit drop;
+  ) on commit preserve rows;
 
-  create temporary table resolved_paths
+  create temporary table if not exists resolved_paths
   (
     root_id   int8   not null,
     next_id   int8   not null,
@@ -2034,7 +2519,9 @@ begin
     satisfied bool,
     is_cycle  bool   not null,
     path      int8[] not null
-  ) on commit drop;
+  ) on commit preserve rows;
+
+  truncate table unresolved_pairs, resolved_pair_depths, resolved_paths;
 
   if use_pair_filter then
     insert into unresolved_pairs (root_id, terminal_id)

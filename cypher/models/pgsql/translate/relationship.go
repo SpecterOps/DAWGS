@@ -41,6 +41,11 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 				return fmt.Errorf("failed to translate kinds: %w", err)
 			} else {
 				for _, edgeBinding := range edgeBindings {
+					for _, step := range patternPart.TraversalSteps {
+						if step.Edge == edgeBinding && step.Expansion != nil {
+							step.Expansion.RelationshipKindIDs = append([]int16(nil), kindIDs...)
+						}
+					}
 					if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(edgeBinding.Identifier), pgsql.NewBinaryExpression(
 						pgsql.CompoundIdentifier{edgeBinding.Identifier, pgsql.ColumnKindID},
 						pgsql.OperatorEquals,

@@ -111,12 +111,15 @@ type ShortestPathStrategyDecision struct {
 type ShortestPathExecutor string
 
 const (
-	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "SP-S0"
-	ShortestPathExecutorS1ArrayBFS         ShortestPathExecutor = "SP-S1"
-	ShortestPathExecutorS2TraceRelation    ShortestPathExecutor = "SP-S2"
-	ShortestPathExecutorS3Unidirectional   ShortestPathExecutor = "SP-S3-U-D"
-	ShortestPathExecutorS3EdgeM0           ShortestPathExecutor = "SP-S3-U-E+MAT-M0"
-	ShortestPathExecutorS0Direct           ShortestPathExecutor = "SP-S0-DIRECT"
+	ShortestPathExecutorIncumbentWorkspace  ShortestPathExecutor = "SP-S0"
+	ShortestPathExecutorS1ArrayBFS          ShortestPathExecutor = "SP-S1"
+	ShortestPathExecutorS2TraceRelation     ShortestPathExecutor = "SP-S2"
+	ShortestPathExecutorS3Unidirectional    ShortestPathExecutor = "SP-S3-U-D"
+	ShortestPathExecutorS3EdgeM0            ShortestPathExecutor = "SP-S3-U-E+MAT-M0"
+	ShortestPathExecutorS0Direct            ShortestPathExecutor = "SP-S0-DIRECT"
+	ShortestPathExecutorS4CanonicalDistance ShortestPathExecutor = "SP-S4-C-D"
+	ShortestPathExecutorS4CanonicalWitness  ShortestPathExecutor = "SP-S4-C-WE+MAT-M0"
+	ShortestPathExecutorASPA1DAG            ShortestPathExecutor = "ASP-A1-DAG"
 )
 
 type ShortestPathObservationMode string
@@ -124,6 +127,7 @@ type ShortestPathObservationMode string
 const (
 	ShortestPathObservationDistance ShortestPathObservationMode = "distance"
 	ShortestPathObservationOnePath  ShortestPathObservationMode = "one_path"
+	ShortestPathObservationAllPaths ShortestPathObservationMode = "all_paths"
 	ShortestPathObservationUnknown  ShortestPathObservationMode = "unknown"
 )
 

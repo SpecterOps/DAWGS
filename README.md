@@ -136,6 +136,13 @@ with independent suffix-density and reverse-fan-in controls. The optimizer
 reports a typed expansion-search decision, but keeps production on its exact
 stepwise fallback until the predeclared live qualification gates pass.
 
+PostgreSQL recursive shortest-path execution also includes bounded S4
+singleton executors and an all-shortest predecessor-DAG executor, with exact
+same-statement fallback, reusable session-local workspaces, late hydration, and
+a parameter-shape-aware translation cache. The implementation and its
+qualification boundaries are documented in
+[Recursive-descent cost controls](docs/recursive_descent_cost_controls.md).
+
 The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
 representative with `EXPLAIN ANALYZE`, enforces declared result or mutation

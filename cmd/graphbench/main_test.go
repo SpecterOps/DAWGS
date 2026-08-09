@@ -92,6 +92,12 @@ func TestParseConfigAcceptsOnlyQualifiedForcedShortestExecutor(t *testing.T) {
 	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-E+MAT-M0"}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.Equal(t, "SP-S3-U-E+MAT-M0", cfg.PostgresForceShortest)
+	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S4-C-WE+MAT-M0"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "SP-S4-C-WE+MAT-M0", cfg.PostgresForceShortest)
+	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "ASP-A1-DAG"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "ASP-A1-DAG", cfg.PostgresForceShortest)
 
 	_, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S1"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "unsupported PostgreSQL forced shortest executor")

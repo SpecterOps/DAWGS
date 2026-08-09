@@ -16,6 +16,14 @@ because no safe automatic selector passed.
 > `artifacts/perf/continuation-5/manifest.json` for the frozen hashes and v3
 > policy identities.
 
+> Implementation update (2026-08-09): the follow-on recursive-cost work adds
+> `ASP-A1-DAG`, `SP-S4-C-D`, and `SP-S4-C-WE+MAT-M0`, reusable session-local
+> workspaces, shallow fast paths, exact same-statement overflow fallback, late
+> hydration, planner contracts, and a parameter-shape-aware translation cache.
+> This does not rewrite the qualification record below; new PostgreSQL/Neo4j
+> captures are still required to quantify the resulting deltas. See
+> `docs/recursive_descent_cost_controls.md`.
+
 ## Phase disposition
 
 | Phase | Disposition |

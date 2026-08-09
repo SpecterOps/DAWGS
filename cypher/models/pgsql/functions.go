@@ -5,6 +5,8 @@ const (
 	FunctionUnidirectionalSPHarness       Identifier = "unidirectional_sp_harness"
 	FunctionBidirectionalASPHarness       Identifier = "bidirectional_asp_harness"
 	FunctionBidirectionalSPHarness        Identifier = "bidirectional_sp_harness"
+	FunctionAllShortestPathsDAG           Identifier = "all_shortest_paths_dag"
+	FunctionShortestPathCompact           Identifier = "shortest_path_compact"
 	FunctionShortestPathSelfEndpointError Identifier = "shortest_path_self_endpoint_error"
 	FunctionIntArrayUnique                Identifier = "uniq"
 	FunctionIntArraySort                  Identifier = "sort"

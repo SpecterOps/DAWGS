@@ -98,9 +98,19 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 func (s *Driver) Close(ctx context.Context) error {
 	if s.SchemaManager != nil {
 		s.SchemaManager.parseCache.Close()
+		s.SchemaManager.translationCache.Close()
 	}
 	s.pool.Close()
 	return nil
+}
+
+// TranslationCacheStats returns query-text-free counters for this driver's
+// bounded Cypher-to-SQL translation cache.
+func (s *Driver) TranslationCacheStats() TranslationCacheStats {
+	if s == nil || s.SchemaManager == nil {
+		return TranslationCacheStats{}
+	}
+	return s.SchemaManager.translationCache.Stats()
 }
 
 func (s *Driver) ParseCacheStats() ParseCacheStats {

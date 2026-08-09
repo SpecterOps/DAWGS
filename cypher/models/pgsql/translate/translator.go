@@ -74,8 +74,9 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 	translator := &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
-			Parameters: translatedParameters,
-			GraphID:    graphID,
+			Parameters:       translatedParameters,
+			ParameterSources: map[string]string{},
+			GraphID:          graphID,
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
@@ -256,6 +257,9 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 				} else {
 					// Lift the parameter value into the parameters map
 					s.translation.Parameters[parameterBinding.Identifier.String()] = negotiatedValue
+					if typedExpression.Symbol != "" {
+						s.translation.ParameterSources[parameterBinding.Identifier.String()] = typedExpression.Symbol
+					}
 					parameterBinding.Parameter = newParameter
 				}
 
@@ -669,10 +673,11 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 }
 
 type Result struct {
-	Statement    pgsql.Statement
-	Parameters   map[string]any
-	Optimization OptimizationSummary
-	GraphID      int32
+	Statement        pgsql.Statement
+	Parameters       map[string]any
+	ParameterSources map[string]string
+	Optimization     OptimizationSummary
+	GraphID          int32
 }
 
 type OptimizationSummary struct {
@@ -1069,7 +1074,7 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	if executor == "" {
 		return nil
 	}
-	if executor != optimize.ShortestPathExecutorIncumbentWorkspace && executor != optimize.ShortestPathExecutorS0Direct && executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 {
+	if executor != optimize.ShortestPathExecutorIncumbentWorkspace && executor != optimize.ShortestPathExecutorS0Direct && executor != optimize.ShortestPathExecutorS3Unidirectional && executor != optimize.ShortestPathExecutorS3EdgeM0 && executor != optimize.ShortestPathExecutorS4CanonicalDistance && executor != optimize.ShortestPathExecutorS4CanonicalWitness && executor != optimize.ShortestPathExecutorASPA1DAG {
 		return fmt.Errorf("unsupported forced shortest-path executor %q", executor)
 	}
 	if executor == optimize.ShortestPathExecutorIncumbentWorkspace || executor == optimize.ShortestPathExecutorS0Direct {
@@ -1098,9 +1103,12 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	}
 	expectedObservation := optimize.ShortestPathObservationDistance
 	expectedDescription := "distance-only"
-	if executor == optimize.ShortestPathExecutorS3EdgeM0 {
+	if executor == optimize.ShortestPathExecutorS3EdgeM0 || executor == optimize.ShortestPathExecutorS4CanonicalWitness {
 		expectedObservation = optimize.ShortestPathObservationOnePath
 		expectedDescription = "one-path"
+	} else if executor == optimize.ShortestPathExecutorASPA1DAG {
+		expectedObservation = optimize.ShortestPathObservationAllPaths
+		expectedDescription = "all-paths"
 	}
 
 	forced := 0

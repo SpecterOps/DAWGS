@@ -91,3 +91,61 @@ func TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped(t *testing.T) {
 	require.NotContains(t, prototype, "insert into")
 	require.Contains(t, sqlSchemaDown, "drop function if exists graphbench_s1_distance_bfs")
 }
+
+func TestCompactShortestExecutorsUseReusableTypedWorkspace(t *testing.T) {
+	require.Contains(t, sqlSchemaUp, "create or replace function public.ensure_shortest_dag_workspace()")
+	require.Contains(t, sqlSchemaUp, "create or replace function public.reset_shortest_dag_workspace()")
+	require.Contains(t, sqlSchemaUp, "on commit preserve rows")
+	require.Contains(t, sqlSchemaUp, "create or replace function public.all_shortest_paths_dag(")
+	require.Contains(t, sqlSchemaUp, "create or replace function public.shortest_path_compact(")
+	require.Contains(t, sqlSchemaUp, "rows 100")
+	require.Contains(t, sqlSchemaUp, "rows 1")
+	require.Contains(t, sqlSchemaDown, "drop function if exists all_shortest_paths_dag")
+	require.Contains(t, sqlSchemaDown, "drop function if exists shortest_path_compact")
+}
+
+func TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.all_shortest_paths_dag")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(sqlSchemaUp[start:], "create or replace function public.shortest_path_compact")
+	require.NotEqual(t, -1, end)
+	executor := sqlSchemaUp[start : start+end]
+
+	require.Contains(t, executor, "array[e.id]::int8[]")
+	require.Contains(t, executor, "array[e1.id, e2.id]::int8[]")
+	require.Contains(t, executor, "e1.id <> e2.id")
+	require.Contains(t, executor, "perform public.reset_shortest_dag_workspace()")
+	require.Contains(t, executor, "insert into pg_temp.spd_predecessor")
+	require.Contains(t, executor, "with recursive shortest_paths")
+	require.Contains(t, executor, "if exists (select 1 from pg_temp.spd_next where node_id = target_id) then")
+	require.NotContains(t, executor, "execute ")
+}
+
+func TestCompactSingletonOverflowFallsBackBeforeReturning(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.shortest_path_compact")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(sqlSchemaUp[start:], "create or replace function public.bsp_workspace_fragment")
+	require.NotEqual(t, -1, end)
+	executor := sqlSchemaUp[start : start+end]
+
+	require.Contains(t, executor, "retained_state > state_limit")
+	require.Contains(t, executor, "if overflowed then")
+	require.Contains(t, executor, "with recursive trails")
+	require.Contains(t, executor, "not e.id = any(trails.edge_ids)")
+	require.NotContains(t, executor, "execute ")
+}
+
+func TestLegacyASPFallbackReusesWorkspaceWithoutCatalogSwaps(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.create_unidirectional_pathspace_tables")
+	require.NotEqual(t, -1, start)
+	legacyWorkspace := sqlSchemaUp[start:]
+
+	require.Contains(t, legacyWorkspace, "create temporary table if not exists forward_front")
+	require.Contains(t, legacyWorkspace, "create temporary table if not exists backward_front")
+	require.Contains(t, legacyWorkspace, "on commit preserve rows")
+	require.Contains(t, legacyWorkspace, "truncate table forward_front, next_front")
+	require.Contains(t, legacyWorkspace, "insert into forward_front select * from next_front")
+	require.Contains(t, legacyWorkspace, "insert into backward_front select * from next_front")
+	require.NotContains(t, legacyWorkspace, "alter table forward_front")
+	require.NotContains(t, legacyWorkspace, "alter table backward_front")
+}

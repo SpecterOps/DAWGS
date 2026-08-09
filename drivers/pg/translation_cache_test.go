@@ -1,0 +1,180 @@
+package pg
+
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"testing"
+
+	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCypherTranslationCacheRebindsTranslatedListParameters(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	const cypherQuery = `MATCH (n) WHERE n.objectid IN $object_ids RETURN n`
+	mapper := pgutil.NewInMemoryKindMapper()
+	builds := 0
+
+	translateWith := func(parameters map[string]any) (string, map[string]any, error) {
+		parsed, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+		require.NoError(t, err)
+		return cache.Translate(cypherQuery, translate.DefaultGraphID, parameters, func() (translate.Result, string, error) {
+			builds++
+			result, err := translate.Translate(context.Background(), parsed, mapper, parameters, translate.DefaultGraphID)
+			if err != nil {
+				return translate.Result{}, "", err
+			}
+			sql, err := translate.Translated(result)
+			return result, sql, err
+		})
+	}
+
+	_, first, err := translateWith(map[string]any{"object_ids": []any{}})
+	require.NoError(t, err)
+	_, second, err := translateWith(map[string]any{"object_ids": []any{"selected"}})
+	require.NoError(t, err)
+	_, third, err := translateWith(map[string]any{"object_ids": []any{"other"}})
+	require.NoError(t, err)
+	require.Equal(t, 2, builds)
+	require.NotEqual(t, first, second)
+	require.NotEqual(t, second, third)
+}
+
+func TestCypherTranslationCacheRebindsNamedParameters(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	var builds int
+	build := func(value int64) func() (translate.Result, string, error) {
+		return func() (translate.Result, string, error) {
+			builds++
+			return translate.Result{
+				Parameters:       map[string]any{"i0": value},
+				ParameterSources: map[string]string{"i0": "id"},
+			}, "select @i0", nil
+		}
+	}
+
+	sql, parameters, err := cache.Translate(" MATCH (n) WHERE id(n) = $id RETURN n ", 1, map[string]any{"id": int64(1)}, build(1))
+	require.NoError(t, err)
+	require.Equal(t, "select @i0", sql)
+	require.Equal(t, int64(1), parameters["i0"])
+
+	sql, parameters, err = cache.Translate("MATCH (n) WHERE id(n) = $id RETURN n", 1, map[string]any{"id": int64(2)}, build(999))
+	require.NoError(t, err)
+	require.Equal(t, "select @i0", sql)
+	require.Equal(t, int64(2), parameters["i0"])
+	require.Equal(t, 1, builds)
+	require.Equal(t, TranslationCacheStats{Hits: 1, Misses: 1, Entries: 1}, cache.Stats())
+}
+
+func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
+	cache := newCypherTranslationCache(4)
+	var builds int
+	build := func() (translate.Result, string, error) {
+		builds++
+		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
+	}
+
+	_, _, err := cache.Translate("RETURN $value", 1, map[string]any{"value": int64(1)}, build)
+	require.NoError(t, err)
+	_, _, err = cache.Translate("RETURN $value", 2, map[string]any{"value": int64(1)}, build)
+	require.NoError(t, err)
+	_, _, err = cache.Translate("RETURN $value", 1, map[string]any{"value": "1"}, build)
+	require.NoError(t, err)
+	require.Equal(t, 3, builds)
+}
+
+func TestCypherTranslationCacheBypassesGeneratedParameters(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	var builds int
+	build := func() (translate.Result, string, error) {
+		builds++
+		return translate.Result{
+			Parameters: map[string]any{"pi0": "insert into traversal_pair_filter ..."},
+		}, "select @pi0", nil
+	}
+
+	for range 2 {
+		_, _, err := cache.Translate("MATCH p = shortestPath((a)-[*]->(b)) RETURN p", 1, nil, build)
+		require.NoError(t, err)
+	}
+	require.Equal(t, 2, builds)
+	require.Equal(t, uint64(2), cache.Stats().Bypasses)
+	require.Zero(t, cache.Stats().Entries)
+}
+
+func TestCypherTranslationCacheCoalescesConcurrentMisses(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	const workers = 16
+	var builds atomic.Int64
+	start := make(chan struct{})
+	release := make(chan struct{})
+	build := func() (translate.Result, string, error) {
+		if builds.Add(1) == 1 {
+			close(start)
+		}
+		<-release
+		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
+	}
+
+	var group sync.WaitGroup
+	group.Add(workers)
+	errs := make([]error, workers)
+	for idx := 0; idx < workers; idx++ {
+		go func(index int) {
+			defer group.Done()
+			_, _, errs[index] = cache.Translate("MATCH (n) RETURN n", 1, nil, build)
+		}(idx)
+	}
+	<-start
+	close(release)
+	group.Wait()
+
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+	require.Equal(t, int64(1), builds.Load())
+	require.Equal(t, uint64(workers-1), cache.Stats().Hits+cache.Stats().CoalescedMisses)
+}
+
+func TestCypherTranslationCacheDoesNotShareUncacheableParametersWithWaiters(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	start := make(chan struct{})
+	release := make(chan struct{})
+	var builds atomic.Int64
+	build := func(value string, wait bool) func() (translate.Result, string, error) {
+		return func() (translate.Result, string, error) {
+			builds.Add(1)
+			if wait {
+				close(start)
+				<-release
+			}
+			return translate.Result{Parameters: map[string]any{"pi0": value}}, "select @pi0", nil
+		}
+	}
+
+	var first, second map[string]any
+	var firstErr, secondErr error
+	done := make(chan struct{})
+	go func() {
+		_, first, firstErr = cache.Translate("RETURN 1", 1, nil, build("first", true))
+		close(done)
+	}()
+	<-start
+	secondDone := make(chan struct{})
+	go func() {
+		_, second, secondErr = cache.Translate("RETURN 1", 1, nil, build("second", false))
+		close(secondDone)
+	}()
+	close(release)
+	<-done
+	<-secondDone
+
+	require.NoError(t, firstErr)
+	require.NoError(t, secondErr)
+	require.Equal(t, "first", first["pi0"])
+	require.Equal(t, "second", second["pi0"])
+	require.Equal(t, int64(2), builds.Load())
+}
