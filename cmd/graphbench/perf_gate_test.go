@@ -58,10 +58,21 @@ func TestBuildPerfGateReportFailsMissingDeclaredPostgresCase(t *testing.T) {
 	candidate := []CaseResult{perfGateRecord("present", ModePostgresSQL, time.Millisecond, 5, 30)}
 
 	report, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
-		Seed: 1, Confidence: 0.95, RegressionThreshold: 0.20, BootstrapCount: 100,
+		Seed:                1,
+		Confidence:          0.95,
+		RegressionThreshold: 0.20,
+		BootstrapCount:      100,
 		DeclaredBackends: []DeclaredCaseBackend{
-			{Dataset: "fixture", Name: "present", Backend: ModePostgresSQL},
-			{Dataset: "fixture", Name: "missing", Backend: ModePostgresSQL},
+			{
+				Dataset: "fixture",
+				Name:    "present",
+				Backend: ModePostgresSQL,
+			},
+			{
+				Dataset: "fixture",
+				Name:    "missing",
+				Backend: ModePostgresSQL,
+			},
 		},
 	})
 
@@ -83,8 +94,13 @@ func TestBuildPerfGateReportAppliesMaterialityOnlyToDeclaredTargets(t *testing.T
 	candidate := []CaseResult{perfGateRecord("target", ModePostgresSQL, 9_700*time.Microsecond, 5, 30)}
 
 	report, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
-		Seed: 1, Confidence: 0.95, RegressionThreshold: 0.20, BootstrapCount: 100,
-		TargetNames: []string{"target"}, MaterialityRatio: 0.95, MaterialityAbsolute: 100 * time.Microsecond,
+		Seed:                1,
+		Confidence:          0.95,
+		RegressionThreshold: 0.20,
+		BootstrapCount:      100,
+		TargetNames:         []string{"target"},
+		MaterialityRatio:    0.95,
+		MaterialityAbsolute: 100 * time.Microsecond,
 	})
 
 	require.NoError(t, err)
@@ -129,13 +145,26 @@ func TestBuildPerfGateReportRequiresMatchedRounds(t *testing.T) {
 
 func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing.T) {
 	declared := []DeclaredCaseBackend{
-		{Dataset: "fixture", Name: "directionless", Backend: ModeNeo4j},
-		{Dataset: "fixture", Name: "directionless", Backend: ModePostgresSQL, UnsupportedReason: "unsupported form"},
+		{
+			Dataset: "fixture",
+			Name:    "directionless",
+			Backend: ModeNeo4j,
+		},
+		{
+			Dataset:           "fixture",
+			Name:              "directionless",
+			Backend:           ModePostgresSQL,
+			UnsupportedReason: "unsupported form",
+		},
 	}
 	records := []CaseResult{perfGateRecord("directionless", ModeNeo4j, time.Millisecond, 1, 1)}
 
 	report, err := buildPerfGateReport(records, records, PerfGateOptions{
-		Seed: 1, Confidence: 0.95, RegressionThreshold: 0.20, BootstrapCount: 10, DeclaredBackends: declared,
+		Seed:                1,
+		Confidence:          0.95,
+		RegressionThreshold: 0.20,
+		BootstrapCount:      10,
+		DeclaredBackends:    declared,
 	})
 	require.NoError(t, err)
 	require.True(t, report.Passed)
@@ -147,13 +176,31 @@ func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing
 }
 
 func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate(t *testing.T) {
-	manifest := &SelectionManifest{DiagnosticOnly: true, DeclarationSHA256: "subset"}
-	left := []CaseResult{{Dataset: "fixture", Name: "case", Environment: &RunEnvironment{Selection: manifest}}}
-	right := []CaseResult{{Dataset: "fixture", Name: "case", Environment: &RunEnvironment{Selection: manifest}}}
+	manifest := &SelectionManifest{
+		DiagnosticOnly:    true,
+		DeclarationSHA256: "subset",
+	}
+	left := []CaseResult{{
+		Dataset: "fixture",
+		Name:    "case",
+		Environment: &RunEnvironment{
+			Selection: manifest,
+		},
+	}}
+	right := []CaseResult{{
+		Dataset: "fixture",
+		Name:    "case",
+		Environment: &RunEnvironment{
+			Selection: manifest,
+		},
+	}}
 
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, false), "refused")
 	require.NoError(t, validatePerformanceArtifactSelections(left, right, true))
-	right[0].Environment.Selection = &SelectionManifest{DiagnosticOnly: true, DeclarationSHA256: "different"}
+	right[0].Environment.Selection = &SelectionManifest{
+		DiagnosticOnly:    true,
+		DeclarationSHA256: "different",
+	}
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, true), "declarations differ")
 }
 

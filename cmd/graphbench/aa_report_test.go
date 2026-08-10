@@ -14,7 +14,11 @@ import (
 
 func TestBuildAAResolutionReportSplitsMatchedSamplesAndKeepsP99Diagnostic(t *testing.T) {
 	record := perfGateRecord("case", ModePostgresSQL, time.Millisecond, 5, 40)
-	report, err := buildAAResolutionReport([]CaseResult{record}, PerfGateOptions{Seed: 1, Confidence: 0.95, BootstrapCount: 100})
+	report, err := buildAAResolutionReport([]CaseResult{record}, PerfGateOptions{
+		Seed:           1,
+		Confidence:     0.95,
+		BootstrapCount: 100,
+	})
 
 	require.NoError(t, err)
 	require.Len(t, report.Cases, 1)

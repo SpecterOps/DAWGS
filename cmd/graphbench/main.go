@@ -449,7 +449,12 @@ func main() {
 		if err != nil {
 			fatal("load gate corpus declaration: %v", err)
 		}
-		selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: cfg.Cases, Datasets: cfg.Datasets, Categories: cfg.Categories, Tags: cfg.Tags})
+		selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
+			Cases:      cfg.Cases,
+			Datasets:   cfg.Datasets,
+			Categories: cfg.Categories,
+			Tags:       cfg.Tags,
+		})
 		if err != nil {
 			fatal("select gate corpus: %v", err)
 		}
@@ -473,7 +478,8 @@ func main() {
 	}
 	if cfg.AAArtifact != "" {
 		if err := createAAResolutionReport(cfg.AAArtifact, cfg.AAOutput, PerfGateOptions{
-			Seed: cfg.GateSeed, Confidence: cfg.Confidence,
+			Seed:       cfg.GateSeed,
+			Confidence: cfg.Confidence,
 		}); err != nil {
 			fatal("calculate A/A measurement resolution: %v", err)
 		}
@@ -481,7 +487,9 @@ func main() {
 	}
 	if cfg.ConfirmLeft != "" {
 		if err := createConfirmationReport(cfg.ConfirmLeft, cfg.ConfirmRight, cfg.ConfirmAA, cfg.ConfirmOutput, ConfirmationOptions{
-			Seed: cfg.GateSeed, Confidence: cfg.Confidence, CaseNames: cfg.ConfirmCases,
+			Seed:       cfg.GateSeed,
+			Confidence: cfg.Confidence,
+			CaseNames:  cfg.ConfirmCases,
 		}); err != nil {
 			fatal("calculate paired confirmation: %v", err)
 		}
@@ -489,8 +497,11 @@ func main() {
 	}
 	if cfg.ReferenceClosureArtifact != "" {
 		passed, err := createReferenceClosureReport(cfg.ReferenceClosureArtifact, cfg.ReferenceClosureOutput, ReferenceClosureOptions{
-			Seed: cfg.GateSeed, Confidence: cfg.Confidence, ReferenceName: cfg.ReferenceClosureArm,
-			RatioUpperLimit: 1.10, AbsoluteResolution: cfg.MaterialityAbsolute,
+			Seed:               cfg.GateSeed,
+			Confidence:         cfg.Confidence,
+			ReferenceName:      cfg.ReferenceClosureArm,
+			RatioUpperLimit:    1.10,
+			AbsoluteResolution: cfg.MaterialityAbsolute,
 		})
 		if err != nil {
 			fatal("calculate production/reference closure: %v", err)
@@ -502,8 +513,11 @@ func main() {
 	}
 	if cfg.ReferencePairArtifact != "" {
 		if err := createReferencePairReport(cfg.ReferencePairArtifact, cfg.ReferencePairOutput, ReferencePairOptions{
-			Seed: cfg.GateSeed, Confidence: cfg.Confidence,
-			BaselineName: cfg.ReferencePairBaseline, CandidateName: cfg.ReferencePairCandidate, Protocol: cfg.ReferencePairProtocol,
+			Seed:          cfg.GateSeed,
+			Confidence:    cfg.Confidence,
+			BaselineName:  cfg.ReferencePairBaseline,
+			CandidateName: cfg.ReferencePairCandidate,
+			Protocol:      cfg.ReferencePairProtocol,
 		}); err != nil {
 			fatal("calculate matched reference pair: %v", err)
 		}
@@ -568,7 +582,10 @@ func main() {
 		fatal("load corpus: %v", err)
 	}
 	corpus, selection, err := selectScaleCorpus(fullCorpus, CorpusSelectors{
-		Cases: cfg.Cases, Datasets: cfg.Datasets, Categories: cfg.Categories, Tags: cfg.Tags,
+		Cases:      cfg.Cases,
+		Datasets:   cfg.Datasets,
+		Categories: cfg.Categories,
+		Tags:       cfg.Tags,
 	})
 	if err != nil {
 		fatal("select corpus: %v", err)
@@ -615,9 +632,12 @@ func main() {
 					completed[key] = true
 				}
 				existingOptions = &existingGraphRunnerOptions{
-					Manifest: existingManifest, ProgressPath: cfg.Progress, Discovery: cfg.Discovery,
-					TimeoutClasses: append([]time.Duration(nil), cfg.TimeoutClasses...), SampleFloor: cfg.DiscoverySampleFloor,
-					Completed: completed,
+					Manifest:       existingManifest,
+					ProgressPath:   cfg.Progress,
+					Discovery:      cfg.Discovery,
+					TimeoutClasses: append([]time.Duration(nil), cfg.TimeoutClasses...),
+					SampleFloor:    cfg.DiscoverySampleFloor,
+					Completed:      completed,
 					OnRecord: func(record CaseResult) error {
 						records = append(records, record)
 						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records)

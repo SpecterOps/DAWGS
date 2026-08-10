@@ -42,11 +42,22 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	types.node = &pgtype.Type{
 		Name: pgsql.NodeComposite.String(),
 		OID:  testNodeCompositeOID,
-		Codec: &pgtype.CompositeCodec{Fields: []pgtype.CompositeCodecField{
-			{Name: "id", Type: requirePGType(t, typeMap, pgtype.Int8OID)},
-			{Name: "kind_ids", Type: requirePGType(t, typeMap, pgtype.Int2ArrayOID)},
-			{Name: "properties", Type: requirePGType(t, typeMap, pgtype.JSONBOID)},
-		}},
+		Codec: &pgtype.CompositeCodec{
+			Fields: []pgtype.CompositeCodecField{
+				{
+					Name: "id",
+					Type: requirePGType(t, typeMap, pgtype.Int8OID),
+				},
+				{
+					Name: "kind_ids",
+					Type: requirePGType(t, typeMap, pgtype.Int2ArrayOID),
+				},
+				{
+					Name: "properties",
+					Type: requirePGType(t, typeMap, pgtype.JSONBOID),
+				},
+			},
+		},
 	}
 	if owned {
 		require.NoError(t, installOwnedCompositeCodec(pgsql.NodeComposite, types.node))
@@ -66,13 +77,30 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	types.edge = &pgtype.Type{
 		Name: pgsql.EdgeComposite.String(),
 		OID:  testEdgeCompositeOID,
-		Codec: &pgtype.CompositeCodec{Fields: []pgtype.CompositeCodecField{
-			{Name: "id", Type: requirePGType(t, typeMap, pgtype.Int8OID)},
-			{Name: "start_id", Type: requirePGType(t, typeMap, pgtype.Int8OID)},
-			{Name: "end_id", Type: requirePGType(t, typeMap, pgtype.Int8OID)},
-			{Name: "kind_id", Type: requirePGType(t, typeMap, pgtype.Int2OID)},
-			{Name: "properties", Type: requirePGType(t, typeMap, pgtype.JSONBOID)},
-		}},
+		Codec: &pgtype.CompositeCodec{
+			Fields: []pgtype.CompositeCodecField{
+				{
+					Name: "id",
+					Type: requirePGType(t, typeMap, pgtype.Int8OID),
+				},
+				{
+					Name: "start_id",
+					Type: requirePGType(t, typeMap, pgtype.Int8OID),
+				},
+				{
+					Name: "end_id",
+					Type: requirePGType(t, typeMap, pgtype.Int8OID),
+				},
+				{
+					Name: "kind_id",
+					Type: requirePGType(t, typeMap, pgtype.Int2OID),
+				},
+				{
+					Name: "properties",
+					Type: requirePGType(t, typeMap, pgtype.JSONBOID),
+				},
+			},
+		},
 	}
 	if owned {
 		require.NoError(t, installOwnedCompositeCodec(pgsql.EdgeComposite, types.edge))
@@ -92,10 +120,18 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	types.path = &pgtype.Type{
 		Name: pgsql.PathComposite.String(),
 		OID:  testPathCompositeOID,
-		Codec: &pgtype.CompositeCodec{Fields: []pgtype.CompositeCodecField{
-			{Name: "nodes", Type: types.nodeArray},
-			{Name: "edges", Type: types.edgeArray},
-		}},
+		Codec: &pgtype.CompositeCodec{
+			Fields: []pgtype.CompositeCodecField{
+				{
+					Name: "nodes",
+					Type: types.nodeArray,
+				},
+				{
+					Name: "edges",
+					Type: types.edgeArray,
+				},
+			},
+		},
 	}
 	if owned {
 		require.NoError(t, installOwnedCompositeCodec(pgsql.PathComposite, types.path))
@@ -138,12 +174,42 @@ func TestOwnedCompositeCodecDecodeValue(t *testing.T) {
 		dataType *pgtype.Type
 		value    any
 	}{
-		{name: "node/binary", format: pgtype.BinaryFormatCode, dataType: types.node, value: expectedNode},
-		{name: "node/text", format: pgtype.TextFormatCode, dataType: types.node, value: expectedNode},
-		{name: "edge/binary", format: pgtype.BinaryFormatCode, dataType: types.edge, value: expectedEdge},
-		{name: "edge/text", format: pgtype.TextFormatCode, dataType: types.edge, value: expectedEdge},
-		{name: "path/binary", format: pgtype.BinaryFormatCode, dataType: types.path, value: expectedPath},
-		{name: "path/text", format: pgtype.TextFormatCode, dataType: types.path, value: expectedPath},
+		{
+			name:     "node/binary",
+			format:   pgtype.BinaryFormatCode,
+			dataType: types.node,
+			value:    expectedNode,
+		},
+		{
+			name:     "node/text",
+			format:   pgtype.TextFormatCode,
+			dataType: types.node,
+			value:    expectedNode,
+		},
+		{
+			name:     "edge/binary",
+			format:   pgtype.BinaryFormatCode,
+			dataType: types.edge,
+			value:    expectedEdge,
+		},
+		{
+			name:     "edge/text",
+			format:   pgtype.TextFormatCode,
+			dataType: types.edge,
+			value:    expectedEdge,
+		},
+		{
+			name:     "path/binary",
+			format:   pgtype.BinaryFormatCode,
+			dataType: types.path,
+			value:    expectedPath,
+		},
+		{
+			name:     "path/text",
+			format:   pgtype.TextFormatCode,
+			dataType: types.path,
+			value:    expectedPath,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			src, err := typeMap.Encode(testCase.dataType.OID, testCase.format, testCase.value, nil)
@@ -265,9 +331,18 @@ func TestInstallOwnedCompositeCodec(t *testing.T) {
 		dataType pgsql.DataType
 		value    any
 	}{
-		{dataType: pgsql.NodeComposite, value: nodeComposite{}},
-		{dataType: pgsql.EdgeComposite, value: edgeComposite{}},
-		{dataType: pgsql.PathComposite, value: pathComposite{}},
+		{
+			dataType: pgsql.NodeComposite,
+			value:    nodeComposite{},
+		},
+		{
+			dataType: pgsql.EdgeComposite,
+			value:    edgeComposite{},
+		},
+		{
+			dataType: pgsql.PathComposite,
+			value:    pathComposite{},
+		},
 	} {
 		t.Run(testCase.dataType.String(), func(t *testing.T) {
 			definition := &pgtype.Type{
@@ -321,8 +396,14 @@ func BenchmarkNodeCompositeDecodeValue(b *testing.B) {
 		name  string
 		owned bool
 	}{
-		{name: "map", owned: false},
-		{name: "owned", owned: true},
+		{
+			name:  "map",
+			owned: false,
+		},
+		{
+			name:  "owned",
+			owned: true,
+		},
 	} {
 		b.Run(testCase.name, func(b *testing.B) {
 			benchmarkCompositeDecodeValue(b, testCase.owned, func(types compositeCodecTestTypes) *pgtype.Type {
@@ -342,8 +423,14 @@ func BenchmarkNodeCompositeArrayDecodeValue(b *testing.B) {
 		name  string
 		owned bool
 	}{
-		{name: "map", owned: false},
-		{name: "owned", owned: true},
+		{
+			name:  "map",
+			owned: false,
+		},
+		{
+			name:  "owned",
+			owned: true,
+		},
 	} {
 		b.Run(testCase.name, func(b *testing.B) {
 			benchmarkCompositeDecodeValue(b, testCase.owned, func(types compositeCodecTestTypes) *pgtype.Type {
@@ -369,8 +456,14 @@ func BenchmarkPathCompositeDecodeValue(b *testing.B) {
 		name  string
 		owned bool
 	}{
-		{name: "map", owned: false},
-		{name: "owned", owned: true},
+		{
+			name:  "map",
+			owned: false,
+		},
+		{
+			name:  "owned",
+			owned: true,
+		},
 	} {
 		b.Run(testCase.name, func(b *testing.B) {
 			benchmarkCompositeDecodeValue(b, testCase.owned, func(types compositeCodecTestTypes) *pgtype.Type {

@@ -150,6 +150,7 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		),
 		"match (n) where (n:Group or n:User) return id(n)",
 	))
+
 	t.Run("LOOKUP-01 exact kind full hydration", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.Kind(query.Node(), graph.StringKind("Tenant"))),
@@ -170,6 +171,7 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		"match (n) where n:Computer and n.objectid = $p0 return n limit 1",
 		map[string]any{"p0": "S-1-5-21"},
 	))
+
 	t.Run("LOOKUP-02 no-kind two-property equality", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
@@ -206,6 +208,7 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		"match (n) where n:Container and n.distinguishedname starts with $p0 and n.domainsid = $p1 return n",
 		map[string]any{"p0": "CN=ADMINSDHOLDER,CN=SYSTEM,", "p1": "S-1-5-21"},
 	))
+
 	t.Run("LOOKUP-04 suffix disjunction", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
@@ -229,6 +232,7 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		"match (n) where toLower(n.name) starts with $p0 return id(n)",
 		map[string]any{"p0": "remote desktop users%_"},
 	))
+
 	t.Run("LOOKUP-05 case-insensitive contains", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.CaseInsensitiveStringContains(query.NodeProperty("objectid"), "Approver_GUID")),
@@ -251,6 +255,7 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		"match (n) where (n:Group or n:User) and n:Entity and n.objectid ends with $p0 and n.domainsid = $p1 return n",
 		map[string]any{"p0": "-512", "p1": "S-1-5-21"},
 	))
+
 	t.Run("LOOKUP-06 required and excluded kinds", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
@@ -358,6 +363,7 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		"match (s)-[r:LocalToComputer]->(e) where s.objectid ends with $p0 and id(e) = $p1 return s",
 		map[string]any{"p0": "-555", "p1": graph.ID(202)},
 	))
+
 	t.Run("LOOKUP-13 suffix and bound endpoint start ID", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
@@ -387,11 +393,13 @@ func TestQueryBuilder_NodeLookups(t *testing.T) {
 		query.Equals(query.NodeProperty("ldapavailable"), true),
 		query.Equals(query.NodeProperty("ldapsigning"), false),
 	)
+
 	t.Run("LOOKUP-16 typed NTLM ID projection", assertQueryResult(
 		query.SinglePartQuery(query.Where(ntlmCriteria), query.Returning(query.NodeID())),
 		"match (n) where n:Computer and n.domainsid = $p0 and n.isdc = $p1 and n.ldapavailable = $p2 and n.ldapsigning = $p3 return id(n)",
 		map[string]any{"p0": "S-1-5-21", "p1": true, "p2": true, "p3": false},
 	))
+
 	t.Run("LOOKUP-16 untyped NTLM full hydration", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(

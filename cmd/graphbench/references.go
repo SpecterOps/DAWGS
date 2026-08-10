@@ -115,8 +115,11 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 				return nil, fmt.Errorf("%s exact observation row count changed from %d to %d", spec.name, rowCount, observedCount)
 			}
 			if spec.validationSQL != "" {
-				var validationCount int64
-				var validationRows []string
+				var (
+					validationCount int64
+					validationRows  []string
+				)
+
 				err := s.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 					var err error
 					validationCount, validationRows, err = observeRawRows(tx, spec.validationSQL, spec.validationParams, idMap, resultContainsNodeIDs(testCase.Expected), resultContainsPaths(testCase.Expected))
@@ -151,12 +154,26 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 			return nil, fmt.Errorf("%s explain: %w", spec.name, err)
 		}
 		results = append(results, PostgresReferenceResult{
-			SchemaVersion: postgresReferenceSchemaVersion, Name: spec.name, LegacyName: spec.legacyName,
-			Architecture: spec.architecture, ImplementationID: spec.implementationID, StateShape: spec.stateShape,
-			ObservationShape: spec.observationShape, SemanticValidation: spec.semanticValidation,
-			Boundary: spec.boundary, TimingBoundary: spec.timingBoundary, FullComparator: spec.fullComparator, AAAliasOf: spec.aaAliasOf,
-			SQL: spec.sql, SQLFingerprint: normalizedSQLFingerprint(spec.sql), RowCount: rowCount, ObservedRows: observedRows, Stats: stats,
-			PostgresPlan: plan, PostgresPlanJSON: planJSON, PostgresMetrics: &metrics,
+			SchemaVersion:      postgresReferenceSchemaVersion,
+			Name:               spec.name,
+			LegacyName:         spec.legacyName,
+			Architecture:       spec.architecture,
+			ImplementationID:   spec.implementationID,
+			StateShape:         spec.stateShape,
+			ObservationShape:   spec.observationShape,
+			SemanticValidation: spec.semanticValidation,
+			Boundary:           spec.boundary,
+			TimingBoundary:     spec.timingBoundary,
+			FullComparator:     spec.fullComparator,
+			AAAliasOf:          spec.aaAliasOf,
+			SQL:                spec.sql,
+			SQLFingerprint:     normalizedSQLFingerprint(spec.sql),
+			RowCount:           rowCount,
+			ObservedRows:       observedRows,
+			Stats:              stats,
+			PostgresPlan:       plan,
+			PostgresPlanJSON:   planJSON,
+			PostgresMetrics:    &metrics,
 		})
 	}
 	return results, nil
@@ -175,8 +192,11 @@ func selectReferenceSpecs(specs []postgresReferenceSpec, names []string) ([]post
 }
 
 func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any) ([]string, json.RawMessage, PostgresPlanMetrics, error) {
-	var plan []string
-	var planJSON json.RawMessage
+	var (
+		plan     []string
+		planJSON json.RawMessage
+	)
+
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING OFF) "+sqlQuery, params)
 		defer result.Close()
@@ -498,10 +518,16 @@ func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testC
 	probeParams["end_id"] = probeParams[terminalParameter]
 	search := allShortestDAGSearch(direction)
 	return []postgresReferenceSpec{{
-		name: "asp_a1_predecessor_dag_m0", architecture: "ASP-A1-DAG", implementationID: "shortest_depth_predecessor_dag_m0_v1",
-		stateShape:       "node/depth discovery plus every relationship-distinct shortest-depth predecessor edge",
-		observationShape: "complete all-shortest path multiset", semanticValidation: "exact_public_observation",
-		boundary: "complete path composites", fullComparator: true, sql: shortestM0FullSQL(search, direction), parameters: probeParams,
+		name:               "asp_a1_predecessor_dag_m0",
+		architecture:       "ASP-A1-DAG",
+		implementationID:   "shortest_depth_predecessor_dag_m0_v1",
+		stateShape:         "node/depth discovery plus every relationship-distinct shortest-depth predecessor edge",
+		observationShape:   "complete all-shortest path multiset",
+		semanticValidation: "exact_public_observation",
+		boundary:           "complete path composites",
+		fullComparator:     true,
+		sql:                shortestM0FullSQL(search, direction),
+		parameters:         probeParams,
 	}}, nil
 }
 
@@ -638,13 +664,17 @@ func identityReferenceSymbol(expression cypher.Expression) (string, bool) {
 
 func shortestReferenceIsProvablyOutbound(query string) (bool, error) {
 	direction, err := shortestReferenceDirection(query)
-	return direction == graph.DirectionOutbound, err
+	if err != nil {
+		return false, err
+	}
+
+	return direction == graph.DirectionOutbound, nil
 }
 
 func shortestReferenceDirection(query string) (graph.Direction, error) {
 	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 	if err != nil {
-		return graph.DirectionBoth, err
+		return 0, err
 	}
 	if parsed == nil || parsed.SingleQuery == nil || parsed.SingleQuery.SinglePartQuery == nil || parsed.SingleQuery.MultiPartQuery != nil {
 		return graph.DirectionBoth, nil
@@ -814,66 +844,142 @@ from shortest join node root on root.graph_id = @graph_id and root.id = @start_i
 )::pathComposite
 from node root where root.graph_id = @graph_id and root.id = @start_id`
 	specs := []postgresReferenceSpec{
-		{name: "round_trip", boundary: "prepared protocol and transaction", sql: `select 1`, parameters: nil},
-		{name: "endpoint_validation", boundary: "validated endpoint IDs", sql: `select id from node where graph_id = @graph_id and id = any(array[@start_id::int8, @end_id::int8]) order by id`, parameters: probeParams},
-		{name: "minimum_graph_access", boundary: "root adjacency edge IDs", sql: `select e.id from edge e where e.graph_id = @graph_id and e.start_id = @start_id and (cardinality(@edge_kind_ids::int2[]) = 0 or e.kind_id = any(@edge_kind_ids::int2[])) order by e.id`, parameters: probeParams},
-		{name: "search_ordered_ids", architecture: "SP-S3-U-NE", observationShape: "ordered_ids", stateShape: "ordered node and edge ID arrays", boundary: "depth plus ordered node/edge IDs", sql: searchNE + ` select depth, node_ids, edge_ids from shortest`, parameters: probeParams},
+		{
+			name:       "round_trip",
+			boundary:   "prepared protocol and transaction",
+			sql:        `select 1`,
+			parameters: nil,
+		},
+		{
+			name:       "endpoint_validation",
+			boundary:   "validated endpoint IDs",
+			sql:        `select id from node where graph_id = @graph_id and id = any(array[@start_id::int8, @end_id::int8]) order by id`,
+			parameters: probeParams,
+		},
+		{
+			name:       "minimum_graph_access",
+			boundary:   "root adjacency edge IDs",
+			sql:        `select e.id from edge e where e.graph_id = @graph_id and e.start_id = @start_id and (cardinality(@edge_kind_ids::int2[]) = 0 or e.kind_id = any(@edge_kind_ids::int2[])) order by e.id`,
+			parameters: probeParams,
+		},
+		{
+			name:             "search_ordered_ids",
+			architecture:     "SP-S3-U-NE",
+			observationShape: "ordered_ids",
+			stateShape:       "ordered node and edge ID arrays",
+			boundary:         "depth plus ordered node/edge IDs",
+			sql:              searchNE + ` select depth, node_ids, edge_ids from shortest`,
+			parameters:       probeParams,
+		},
 	}
 	if edgeIDs != nil {
-		specs = append(specs, postgresReferenceSpec{name: "hydration_only", boundary: "complete path composite from precomputed ordered edge IDs", sql: hydrationSQL, parameters: hydrationParams})
+		specs = append(specs, postgresReferenceSpec{
+			name:       "hydration_only",
+			boundary:   "complete path composite from precomputed ordered edge IDs",
+			sql:        hydrationSQL,
+			parameters: hydrationParams,
+		})
 		if pathObserved && direction != graph.DirectionBoth {
 			specs = append(specs,
 				postgresReferenceSpec{
-					name: "m0_directed_hydration_only", architecture: "MAT-M0", implementationID: "directed_set_hydration_" + strings.ToLower(direction.String()) + "_v1",
-					stateShape:       "precomputed ordered edge IDs; node order derived from directed edge endpoints",
-					observationShape: "complete path composite", semanticValidation: "precomputed_exact_path_inputs",
-					boundary: "directed complete path composite from precomputed ordered edge IDs", sql: shortestM0HydrationSQL(direction), parameters: hydrationParams,
-					validationSQL: hydrationSQL, validationParams: hydrationParams,
+					name:               "m0_directed_hydration_only",
+					architecture:       "MAT-M0",
+					implementationID:   "directed_set_hydration_" + strings.ToLower(direction.String()) + "_v1",
+					stateShape:         "precomputed ordered edge IDs; node order derived from directed edge endpoints",
+					observationShape:   "complete path composite",
+					semanticValidation: "precomputed_exact_path_inputs",
+					boundary:           "directed complete path composite from precomputed ordered edge IDs",
+					sql:                shortestM0HydrationSQL(direction),
+					parameters:         hydrationParams,
+					validationSQL:      hydrationSQL,
+					validationParams:   hydrationParams,
 				},
 				postgresReferenceSpec{
-					name: "m1_ordered_ids_hydration_only", architecture: "MAT-M1", implementationID: "ordered_ids_set_hydration_v1",
-					stateShape:       "precomputed ordered node and edge IDs",
-					observationShape: "complete path composite", semanticValidation: "precomputed_exact_path_inputs",
-					boundary: "complete path composite from precomputed ordered node and edge IDs", sql: shortestM1HydrationSQL(), parameters: hydrationParams,
-					validationSQL: hydrationSQL, validationParams: hydrationParams,
+					name:               "m1_ordered_ids_hydration_only",
+					architecture:       "MAT-M1",
+					implementationID:   "ordered_ids_set_hydration_v1",
+					stateShape:         "precomputed ordered node and edge IDs",
+					observationShape:   "complete path composite",
+					semanticValidation: "precomputed_exact_path_inputs",
+					boundary:           "complete path composite from precomputed ordered node and edge IDs",
+					sql:                shortestM1HydrationSQL(),
+					parameters:         hydrationParams,
+					validationSQL:      hydrationSQL,
+					validationParams:   hydrationParams,
 				},
 			)
 		}
 	}
-	specs = append(specs, postgresReferenceSpec{name: "s3_unidirectional_trail_cte", legacyName: "complete_reference_s1_array_cte", architecture: shortestArchitectureForCase(testCase), implementationID: "inline_recursive_cte_unidirectional_v3", stateShape: shortestS3UStateShape(testCase), observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: fullSQL, parameters: probeParams})
+	specs = append(specs, postgresReferenceSpec{
+		name:               "s3_unidirectional_trail_cte",
+		legacyName:         "complete_reference_s1_array_cte",
+		architecture:       shortestArchitectureForCase(testCase),
+		implementationID:   "inline_recursive_cte_unidirectional_v3",
+		stateShape:         shortestS3UStateShape(testCase),
+		observationShape:   observationShapeForCase(testCase),
+		semanticValidation: "exact_public_observation",
+		boundary:           boundary,
+		fullComparator:     true,
+		sql:                fullSQL,
+		parameters:         probeParams,
+	})
 	if !pathObserved && direction == graph.DirectionInbound {
 		canonicalParams := copyReferenceParams(probeParams)
 		canonicalParams["start_id"], canonicalParams["end_id"] = probeParams["end_id"], probeParams["start_id"]
 		specs = append(specs, postgresReferenceSpec{
-			name: "s4_canonical_source_distance", architecture: "SP-S4-C-D", implementationID: "canonical_relationship_source_distance_v1",
-			stateShape: "relationship-source-oriented node and depth set state", observationShape: "distance scalar",
-			semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
-			sql: shortestDistanceReferenceSearchForDirection(graph.DirectionOutbound) + ` select depth from shortest`, parameters: canonicalParams,
+			name:               "s4_canonical_source_distance",
+			architecture:       "SP-S4-C-D",
+			implementationID:   "canonical_relationship_source_distance_v1",
+			stateShape:         "relationship-source-oriented node and depth set state",
+			observationShape:   "distance scalar",
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                shortestDistanceReferenceSearchForDirection(graph.DirectionOutbound) + ` select depth from shortest`,
+			parameters:         canonicalParams,
 		})
 	}
 	if shortestS1DistanceEligible(testCase, probeParams, direction, pathObserved) {
 		s1Params := copyReferenceParams(probeParams)
 		s1Params["state_limit"] = int32(100_000)
 		specs = append(specs, postgresReferenceSpec{
-			name: "s1_array_bfs_distance", architecture: "SP-S1", implementationID: "typed_plpgsql_array_bfs_distance_v1",
-			stateShape:       "array-resident frontier and visited node IDs with explicit state ceiling; no path or predecessor state",
-			observationShape: "distance scalar", semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
-			sql: shortestS1DistanceSQL(fullSQL, direction), parameters: s1Params,
+			name:               "s1_array_bfs_distance",
+			architecture:       "SP-S1",
+			implementationID:   "typed_plpgsql_array_bfs_distance_v1",
+			stateShape:         "array-resident frontier and visited node IDs with explicit state ceiling; no path or predecessor state",
+			observationShape:   "distance scalar",
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                shortestS1DistanceSQL(fullSQL, direction),
+			parameters:         s1Params,
 		})
 	}
 	if pathObserved && direction != graph.DirectionBoth {
 		specs = append(specs,
 			postgresReferenceSpec{
-				name: "s3_unidirectional_cte_m0_directed", architecture: "SP-S3-U-E+MAT-M0", implementationID: "s3_u_edge_search_directed_set_materializer_" + strings.ToLower(direction.String()) + "_v1",
-				stateShape:       "edge-only recursive trail; materializer derives node order from directed edge endpoints",
-				observationShape: "public_observation", semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
-				sql: shortestM0FullSQL(searchE, direction), parameters: probeParams,
+				name:               "s3_unidirectional_cte_m0_directed",
+				architecture:       "SP-S3-U-E+MAT-M0",
+				implementationID:   "s3_u_edge_search_directed_set_materializer_" + strings.ToLower(direction.String()) + "_v1",
+				stateShape:         "edge-only recursive trail; materializer derives node order from directed edge endpoints",
+				observationShape:   "public_observation",
+				semanticValidation: "exact_public_observation",
+				boundary:           boundary,
+				fullComparator:     true,
+				sql:                shortestM0FullSQL(searchE, direction),
+				parameters:         probeParams,
 			},
 			postgresReferenceSpec{
-				name: "s3_unidirectional_cte_m1_ordered_ids", architecture: "SP-S3-U-NE+MAT-M1", implementationID: "s3_u_node_edge_search_ordered_ids_set_materializer_v1",
-				stateShape:       "ordered node-and-edge recursive trails; materializer hydrates both streams by ordinal",
-				observationShape: "public_observation", semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
-				sql: shortestM1FullSQL(searchNE), parameters: probeParams,
+				name:               "s3_unidirectional_cte_m1_ordered_ids",
+				architecture:       "SP-S3-U-NE+MAT-M1",
+				implementationID:   "s3_u_node_edge_search_ordered_ids_set_materializer_v1",
+				stateShape:         "ordered node-and-edge recursive trails; materializer hydrates both streams by ordinal",
+				observationShape:   "public_observation",
+				semanticValidation: "exact_public_observation",
+				boundary:           boundary,
+				fullComparator:     true,
+				sql:                shortestM1FullSQL(searchNE),
+				parameters:         probeParams,
 			},
 		)
 		witnessParams := copyReferenceParams(probeParams)
@@ -885,13 +991,31 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 		}
 		witnessSearch := shortestCanonicalWitnessSearch(reverseForPublicPath)
 		specs = append(specs, postgresReferenceSpec{
-			name: "s4_canonical_source_witness_m0", architecture: "SP-S4-C-WE+MAT-M0", implementationID: "canonical_source_compact_witness_m0_v1",
-			stateShape:       "node/depth discovery plus one deterministic predecessor per witness depth; no recursive full trails",
-			observationShape: "public_observation", semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true,
-			sql: shortestM0FullSQL(witnessSearch, direction), parameters: witnessParams,
+			name:               "s4_canonical_source_witness_m0",
+			architecture:       "SP-S4-C-WE+MAT-M0",
+			implementationID:   "canonical_source_compact_witness_m0_v1",
+			stateShape:         "node/depth discovery plus one deterministic predecessor per witness depth; no recursive full trails",
+			observationShape:   "public_observation",
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                shortestM0FullSQL(witnessSearch, direction),
+			parameters:         witnessParams,
 		})
 	}
-	specs = append(specs, postgresReferenceSpec{name: "s3_bidirectional_trail_cte", legacyName: "candidate_s2_bidirectional_cte", architecture: "SP-S3-B", implementationID: "inline_recursive_cte_bidirectional_trails_v2", stateShape: "paired per-row relationship trail arrays", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: shortestBidirectionalReferenceSQL(testCase, direction), parameters: probeParams})
+	specs = append(specs, postgresReferenceSpec{
+		name:               "s3_bidirectional_trail_cte",
+		legacyName:         "candidate_s2_bidirectional_cte",
+		architecture:       "SP-S3-B",
+		implementationID:   "inline_recursive_cte_bidirectional_trails_v2",
+		stateShape:         "paired per-row relationship trail arrays",
+		observationShape:   observationShapeForCase(testCase),
+		semanticValidation: "exact_public_observation",
+		boundary:           boundary,
+		fullComparator:     true,
+		sql:                shortestBidirectionalReferenceSQL(testCase, direction),
+		parameters:         probeParams,
+	})
 	return specs
 }
 
@@ -1088,10 +1212,15 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 	if len(values) == 0 {
 		completeIdx := referenceSpecIndex(specs, "complete_reference")
 		specs = slices.Insert(specs, completeIdx, postgresReferenceSpec{
-			name: "hydration_only", architecture: "hydration", implementationID: "typed_empty_v1",
-			stateShape: "empty ordered ID input", observationShape: "typed empty path result",
-			semanticValidation: "not_applicable_empty_input", boundary: "typed empty path result",
-			sql: `select null::pathComposite where false`, parameters: probeParams,
+			name:               "hydration_only",
+			architecture:       "hydration",
+			implementationID:   "typed_empty_v1",
+			stateShape:         "empty ordered ID input",
+			observationShape:   "typed empty path result",
+			semanticValidation: "not_applicable_empty_input",
+			boundary:           "typed empty path result",
+			sql:                `select null::pathComposite where false`,
+			parameters:         probeParams,
 		})
 		return specs, nil
 	}
@@ -1110,7 +1239,8 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 	hydrationParams["root_id"] = nodeIDs[0]
 	hydrationParams["edge_ids"] = edgeIDs
 	hydration := postgresReferenceSpec{
-		name: "hydration_only", boundary: "one complete path composite from precomputed ordered edge IDs",
+		name:     "hydration_only",
+		boundary: "one complete path composite from precomputed ordered edge IDs",
 		sql: `select ordered_edge_ids_to_path(
   @graph_id,
   (root.id, root.kind_ids, root.properties)::nodeComposite,
@@ -1286,23 +1416,169 @@ from paths join node root on root.graph_id = @graph_id and root.id = paths.node_
 		return spec
 	}
 	return []postgresReferenceSpec{
-		{name: "round_trip", architecture: "protocol", stateShape: "none", boundary: "prepared protocol and transaction", sql: `select 1`},
-		{name: "endpoint_validation", architecture: "root_validation", stateShape: "root ID bag", boundary: "validated root ID", sql: `select n.id from node n where n.graph_id = @graph_id and @ExpansionRoot_kind::int2 = any(n.kind_ids) and n.properties ->> 'root_key' = @root_key`, parameters: probeParams},
-		{name: "fixed_suffix_rows", architecture: "factored_suffix", stateShape: "boundary and ordered suffix IDs", boundary: "exact suffix rows and distinct boundary IDs", sql: `with ` + roots + `, ` + suffix + ` select boundary_id, head_id, terminal_id, suffix_edge_ids from suffix_rows`, parameters: probeParams},
-		{name: "minimum_graph_access", architecture: "root_adjacency", stateShape: "edge IDs", boundary: "root adjacency edge IDs", sql: `with ` + roots + ` select e.id from roots join edge e on e.graph_id = @graph_id and e.start_id = roots.root_id and e.kind_id = @Expand_kind order by e.id`, parameters: probeParams},
-		orderedReference(postgresReferenceSpec{name: "search_ordered_ids", architecture: "EXPANSION-STEPWISE-FORWARD-SQL", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs without hydration", sql: orderedLegacy, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "stepwise_forward_aa_ordered_ids", architecture: "EXPANSION-STEPWISE-FORWARD-AA", aaAliasOf: "search_ordered_ids", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs", sql: orderedLegacy, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "root_reuse_ordered_ids", architecture: "EXPANSION-STEPWISE-FORWARD-AA", aaAliasOf: "search_ordered_ids", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs", sql: orderedLegacy, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "late_hydration_ordered_ids", architecture: "EXPANSION-LATE-HYDRATED-FORWARD", observationShape: "ordered_ids", stateShape: "scalar expansion state and ordered relationship trail", boundary: "ordered node/edge IDs", sql: lateHydratedForward + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "factored_suffix_forward_ordered_ids", architecture: "EXPANSION-FACTORED-SUFFIX-FORWARD", observationShape: "ordered_ids", stateShape: "scalar forward trails joined to exact suffix bag", boundary: "ordered node/edge IDs", sql: factoredForward + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "suffix_seeded_reverse_ordered_ids", architecture: "EXPANSION-SUFFIX-SEEDED-REVERSE", observationShape: "ordered_ids", stateShape: "scalar reverse trails with prepended relationship IDs", boundary: "ordered node/edge IDs", sql: reverse + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "backward_viability_forward_ordered_ids", architecture: "EXPANSION-BACKWARD-VIABILITY-FORWARD", observationShape: "ordered_ids", stateShape: "depth-aware viability filter plus exact forward trails", boundary: "ordered node/edge IDs", sql: viability + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
-		{name: "complete_reference", architecture: "EXPANSION-STEPWISE-FORWARD-SQL", stateShape: "forward relationship trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: fullSQL, parameters: probeParams},
-		{name: "root_reuse_complete", architecture: "EXPANSION-STEPWISE-FORWARD-AA", aaAliasOf: "complete_reference", stateShape: "forward relationship trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(legacyForward), parameters: probeParams},
-		{name: "late_hydration_complete", architecture: "EXPANSION-LATE-HYDRATED-FORWARD", stateShape: "scalar expansion state with final-only hydration", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(lateHydratedForward), parameters: probeParams},
-		{name: "factored_suffix_forward_complete", architecture: "EXPANSION-FACTORED-SUFFIX-FORWARD", stateShape: "exact forward trails joined to suffix bag", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(factoredForward), parameters: probeParams},
-		{name: "suffix_seeded_reverse_complete", architecture: "EXPANSION-SUFFIX-SEEDED-REVERSE", stateShape: "exact reverse trails joined back to suffix bag", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(reverse), parameters: probeParams},
-		{name: "backward_viability_forward_complete", architecture: "EXPANSION-BACKWARD-VIABILITY-FORWARD", stateShape: "permissive viability plus exact forward trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(viability), parameters: probeParams},
+		{
+			name:         "round_trip",
+			architecture: "protocol",
+			stateShape:   "none",
+			boundary:     "prepared protocol and transaction",
+			sql:          `select 1`,
+		},
+		{
+			name:         "endpoint_validation",
+			architecture: "root_validation",
+			stateShape:   "root ID bag",
+			boundary:     "validated root ID",
+			sql:          `select n.id from node n where n.graph_id = @graph_id and @ExpansionRoot_kind::int2 = any(n.kind_ids) and n.properties ->> 'root_key' = @root_key`,
+			parameters:   probeParams,
+		},
+		{
+			name:         "fixed_suffix_rows",
+			architecture: "factored_suffix",
+			stateShape:   "boundary and ordered suffix IDs",
+			boundary:     "exact suffix rows and distinct boundary IDs",
+			sql:          `with ` + roots + `, ` + suffix + ` select boundary_id, head_id, terminal_id, suffix_edge_ids from suffix_rows`,
+			parameters:   probeParams,
+		},
+		{
+			name:         "minimum_graph_access",
+			architecture: "root_adjacency",
+			stateShape:   "edge IDs",
+			boundary:     "root adjacency edge IDs",
+			sql:          `with ` + roots + ` select e.id from roots join edge e on e.graph_id = @graph_id and e.start_id = roots.root_id and e.kind_id = @Expand_kind order by e.id`,
+			parameters:   probeParams,
+		},
+		orderedReference(postgresReferenceSpec{
+			name:             "search_ordered_ids",
+			architecture:     "EXPANSION-STEPWISE-FORWARD-SQL",
+			observationShape: "ordered_ids",
+			stateShape:       "root/boundary IDs and ordered relationship trail",
+			boundary:         "ordered node/edge IDs without hydration",
+			sql:              orderedLegacy,
+			parameters:       probeParams,
+		}),
+		orderedReference(postgresReferenceSpec{
+			name:             "stepwise_forward_aa_ordered_ids",
+			architecture:     "EXPANSION-STEPWISE-FORWARD-AA",
+			aaAliasOf:        "search_ordered_ids",
+			observationShape: "ordered_ids",
+			stateShape:       "root/boundary IDs and ordered relationship trail",
+			boundary:         "ordered node/edge IDs",
+			sql:              orderedLegacy,
+			parameters:       probeParams,
+		}),
+		orderedReference(postgresReferenceSpec{
+			name:             "root_reuse_ordered_ids",
+			architecture:     "EXPANSION-STEPWISE-FORWARD-AA",
+			aaAliasOf:        "search_ordered_ids",
+			observationShape: "ordered_ids",
+			stateShape:       "root/boundary IDs and ordered relationship trail",
+			boundary:         "ordered node/edge IDs",
+			sql:              orderedLegacy,
+			parameters:       probeParams,
+		}),
+		orderedReference(postgresReferenceSpec{
+			name:             "late_hydration_ordered_ids",
+			architecture:     "EXPANSION-LATE-HYDRATED-FORWARD",
+			observationShape: "ordered_ids",
+			stateShape:       "scalar expansion state and ordered relationship trail",
+			boundary:         "ordered node/edge IDs",
+			sql:              lateHydratedForward + ` select node_ids, head_id, edge_ids from paths`,
+			parameters:       probeParams,
+		}),
+		orderedReference(postgresReferenceSpec{
+			name:             "factored_suffix_forward_ordered_ids",
+			architecture:     "EXPANSION-FACTORED-SUFFIX-FORWARD",
+			observationShape: "ordered_ids",
+			stateShape:       "scalar forward trails joined to exact suffix bag",
+			boundary:         "ordered node/edge IDs",
+			sql:              factoredForward + ` select node_ids, head_id, edge_ids from paths`,
+			parameters:       probeParams,
+		}),
+		orderedReference(postgresReferenceSpec{
+			name:             "suffix_seeded_reverse_ordered_ids",
+			architecture:     "EXPANSION-SUFFIX-SEEDED-REVERSE",
+			observationShape: "ordered_ids",
+			stateShape:       "scalar reverse trails with prepended relationship IDs",
+			boundary:         "ordered node/edge IDs",
+			sql:              reverse + ` select node_ids, head_id, edge_ids from paths`,
+			parameters:       probeParams,
+		}),
+		orderedReference(postgresReferenceSpec{
+			name:             "backward_viability_forward_ordered_ids",
+			architecture:     "EXPANSION-BACKWARD-VIABILITY-FORWARD",
+			observationShape: "ordered_ids",
+			stateShape:       "depth-aware viability filter plus exact forward trails",
+			boundary:         "ordered node/edge IDs",
+			sql:              viability + ` select node_ids, head_id, edge_ids from paths`,
+			parameters:       probeParams,
+		}),
+		{
+			name:               "complete_reference",
+			architecture:       "EXPANSION-STEPWISE-FORWARD-SQL",
+			stateShape:         "forward relationship trails",
+			observationShape:   observationShapeForCase(testCase),
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                fullSQL,
+			parameters:         probeParams,
+		},
+		{
+			name:               "root_reuse_complete",
+			architecture:       "EXPANSION-STEPWISE-FORWARD-AA",
+			aaAliasOf:          "complete_reference",
+			stateShape:         "forward relationship trails",
+			observationShape:   observationShapeForCase(testCase),
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                complete(legacyForward),
+			parameters:         probeParams,
+		},
+		{
+			name:               "late_hydration_complete",
+			architecture:       "EXPANSION-LATE-HYDRATED-FORWARD",
+			stateShape:         "scalar expansion state with final-only hydration",
+			observationShape:   observationShapeForCase(testCase),
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                complete(lateHydratedForward),
+			parameters:         probeParams,
+		},
+		{
+			name:               "factored_suffix_forward_complete",
+			architecture:       "EXPANSION-FACTORED-SUFFIX-FORWARD",
+			stateShape:         "exact forward trails joined to suffix bag",
+			observationShape:   observationShapeForCase(testCase),
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                complete(factoredForward),
+			parameters:         probeParams,
+		},
+		{
+			name:               "suffix_seeded_reverse_complete",
+			architecture:       "EXPANSION-SUFFIX-SEEDED-REVERSE",
+			stateShape:         "exact reverse trails joined back to suffix bag",
+			observationShape:   observationShapeForCase(testCase),
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                complete(reverse),
+			parameters:         probeParams,
+		},
+		{
+			name:               "backward_viability_forward_complete",
+			architecture:       "EXPANSION-BACKWARD-VIABILITY-FORWARD",
+			stateShape:         "permissive viability plus exact forward trails",
+			observationShape:   observationShapeForCase(testCase),
+			semanticValidation: "exact_public_observation",
+			boundary:           boundary,
+			fullComparator:     true,
+			sql:                complete(viability),
+			parameters:         probeParams,
+		},
 	}
 }
 
@@ -1345,7 +1621,11 @@ func readReferenceRow(ctx context.Context, db graph.Database, sqlQuery string, p
 		values = append(values, result.Values()...)
 		return result.Error()
 	})
-	return values, err
+	if err != nil {
+		return nil, err
+	}
+
+	return values, nil
 }
 
 func referenceInt64Slice(value any) ([]int64, error) {
@@ -1398,7 +1678,11 @@ func measureRawPostgres(ctx context.Context, db graph.Database, sqlQuery string,
 			}
 			return result.Error()
 		})
-		return count, err
+		if err != nil {
+			return 0, err
+		}
+
+		return count, nil
 	}
 	coldStart := time.Now()
 	rowCount, err := run()
@@ -1432,6 +1716,10 @@ func measureRawPostgres(ctx context.Context, db graph.Database, sqlQuery string,
 		return 0, DurationStats{}, err
 	}
 	stats.WarmupIterations = warmupIterations
-	stats.Samples = append([]LatencySample{{Iteration: 0, Classification: "cold", Duration: coldDuration}}, stats.Samples...)
+	stats.Samples = append([]LatencySample{{
+		Iteration:      0,
+		Classification: "cold",
+		Duration:       coldDuration,
+	}}, stats.Samples...)
 	return rowCount, stats, nil
 }

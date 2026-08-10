@@ -134,25 +134,38 @@ func cloneSources(values map[string]string) map[string]string {
 func (s *cypherTranslationCache) Translate(query string, graphID int32, parameters map[string]any, build func() (translate.Result, string, error)) (string, map[string]any, error) {
 	trimmed := strings.TrimSpace(query)
 	if s == nil || s.capacity <= 0 || len(query) > maxCachedCypherQueryBytes {
-		result, sql, err := build()
-		return sql, result.Parameters, err
+		if result, sql, err := build(); err != nil {
+			return "", nil, err
+		} else {
+			return sql, result.Parameters, nil
+		}
 	}
-	key := cypherTranslationCacheKey{query: trimmed, graphID: graphID, parameterType: translationParameterTypeKey(parameters)}
+	key := cypherTranslationCacheKey{
+		query:         trimmed,
+		graphID:       graphID,
+		parameterType: translationParameterTypeKey(parameters),
+	}
 
 	s.lock.Lock()
 	if s.closed {
 		s.stats.Bypasses++
 		s.lock.Unlock()
-		result, sql, err := build()
-		return sql, result.Parameters, err
+		if result, sql, err := build(); err != nil {
+			return "", nil, err
+		} else {
+			return sql, result.Parameters, nil
+		}
 	}
 	if element, found := s.entries[key]; found {
 		s.stats.Hits++
 		s.lru.MoveToFront(element)
 		value := element.Value.(cypherTranslationCacheValue)
 		s.lock.Unlock()
-		bound, err := value.bind(parameters)
-		return value.sql, bound, err
+		if bound, err := value.bind(parameters); err != nil {
+			return "", nil, err
+		} else {
+			return value.sql, bound, nil
+		}
 	}
 	if call, found := s.pending[key]; found {
 		s.stats.CoalescedMisses++
@@ -162,22 +175,33 @@ func (s *cypherTranslationCache) Translate(query string, graphID int32, paramete
 			return "", nil, call.err
 		}
 		if !call.cacheable {
-			result, sql, err := build()
-			return sql, result.Parameters, err
+			if result, sql, err := build(); err != nil {
+				return "", nil, err
+			} else {
+				return sql, result.Parameters, nil
+			}
 		}
-		bound, err := call.value.bind(parameters)
-		return call.value.sql, bound, err
+		if bound, err := call.value.bind(parameters); err != nil {
+			return "", nil, err
+		} else {
+			return call.value.sql, bound, nil
+		}
 	}
 
 	key.query = strings.Clone(key.query)
 	s.stats.Misses++
-	call := &cypherTranslationCall{done: make(chan struct{})}
+	call := &cypherTranslationCall{
+		done: make(chan struct{}),
+	}
 	s.pending[key] = call
 	s.lock.Unlock()
 
 	result, sql, err := build()
 	value := cypherTranslationCacheValue{
-		key: key, sql: sql, defaults: cloneValues(result.Parameters), parameterSources: cloneSources(result.ParameterSources),
+		key:              key,
+		sql:              sql,
+		defaults:         cloneValues(result.Parameters),
+		parameterSources: cloneSources(result.ParameterSources),
 	}
 	cacheable := err == nil && cacheableTranslation(result)
 
@@ -199,7 +223,11 @@ func (s *cypherTranslationCache) Translate(query string, graphID int32, paramete
 	close(call.done)
 	s.lock.Unlock()
 
-	return sql, result.Parameters, err
+	if err != nil {
+		return "", nil, err
+	}
+
+	return sql, result.Parameters, nil
 }
 
 func (s *cypherTranslationCache) Stats() TranslationCacheStats {

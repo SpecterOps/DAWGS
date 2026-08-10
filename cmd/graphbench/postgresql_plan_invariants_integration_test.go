@@ -41,8 +41,11 @@ func postgresPlanNodeLoops(t *testing.T, raw json.RawMessage, alias string) []in
 	root, ok := document[0]["Plan"].(map[string]any)
 	require.True(t, ok)
 
-	var loops []int64
-	var walk func(map[string]any)
+	var (
+		loops []int64
+		walk  func(map[string]any)
+	)
+
 	walk = func(node map[string]any) {
 		nodeAlias, _ := node["Alias"].(string)
 		functionName, _ := node["Function Name"].(string)
@@ -180,7 +183,12 @@ func TestPostgreSQLZeroLengthShortestMaterializersAreExact(t *testing.T) {
 				RelationshipKinds: []string{},
 			}},
 		},
-		Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true},
+		Observes: ObservedValues{
+			Paths:         true,
+			Nodes:         true,
+			Relationships: true,
+			Properties:    true,
+		},
 		Shape: WorkloadShape{
 			RootPredicate:               "bound_id",
 			TerminalPredicate:           "bound_id",
@@ -242,35 +250,60 @@ func TestPostgreSQLForcedShortestDistanceEndpointSemantics(t *testing.T) {
 		maxDepth   = 1
 	)
 	baseShape := WorkloadShape{
-		RootPredicate: "bound_id", TerminalPredicate: "bound_id", EdgeKinds: []string{"Traverse"},
-		MaxDepth: &maxDepth, PathMaterializationRequired: false,
+		RootPredicate:               "bound_id",
+		TerminalPredicate:           "bound_id",
+		EdgeKinds:                   []string{"Traverse"},
+		MaxDepth:                    &maxDepth,
+		PathMaterializationRequired: false,
 	}
 	zeroShape := baseShape
 	zeroShape.MinDepth = &zeroDepth
 	oneShape := baseShape
 	oneShape.MinDepth = &oneDepth
 
-	corpus := ScaleCorpus{Cases: []ScaleCase{
-		{
-			Name: "forced-shortest-zero-depth", Dataset: "generated_shortest_paths_d1_f1", Category: "generated_shortest_path",
-			Cypher:     "MATCH p = shortestPath((s)-[:Traverse*0..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
-			NodeParams: map[string]string{"start_id": "sp-start", "end_id": "sp-start"},
-			Expected:   ExpectedResult{RowCount: &oneRow, ScalarInt: &zeroScalar, ResultKind: "scalar"},
-			Shape:      zeroShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+	corpus := ScaleCorpus{
+		Cases: []ScaleCase{
+			{
+				Name:       "forced-shortest-zero-depth",
+				Dataset:    "generated_shortest_paths_d1_f1",
+				Category:   "generated_shortest_path",
+				Cypher:     "MATCH p = shortestPath((s)-[:Traverse*0..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+				NodeParams: map[string]string{"start_id": "sp-start", "end_id": "sp-start"},
+				Expected: ExpectedResult{
+					RowCount:   &oneRow,
+					ScalarInt:  &zeroScalar,
+					ResultKind: "scalar",
+				},
+				Shape:          zeroShape,
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+			{
+				Name:       "forced-shortest-missing-root",
+				Dataset:    "generated_shortest_paths_d1_f1",
+				Category:   "generated_shortest_path",
+				Cypher:     "MATCH p = shortestPath((s)-[:Traverse*1..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+				Params:     testutil.Params{"start_id": int64(9223372036854775807)},
+				NodeParams: map[string]string{"end_id": "sp-end"},
+				Expected: ExpectedResult{
+					RowCount: &zeroRows,
+				},
+				Shape:          oneShape,
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+			{
+				Name:       "forced-shortest-min-one-same-endpoint",
+				Dataset:    "generated_shortest_paths_d1_f1",
+				Category:   "generated_shortest_path",
+				Cypher:     "MATCH p = shortestPath((s)-[:Traverse*1..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
+				NodeParams: map[string]string{"start_id": "sp-start", "end_id": "sp-start"},
+				Expected: ExpectedResult{
+					RowCount: &zeroRows,
+				},
+				Shape:          oneShape,
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
 		},
-		{
-			Name: "forced-shortest-missing-root", Dataset: "generated_shortest_paths_d1_f1", Category: "generated_shortest_path",
-			Cypher: "MATCH p = shortestPath((s)-[:Traverse*1..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
-			Params: testutil.Params{"start_id": int64(9223372036854775807)}, NodeParams: map[string]string{"end_id": "sp-end"},
-			Expected: ExpectedResult{RowCount: &zeroRows}, Shape: oneShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
-		},
-		{
-			Name: "forced-shortest-min-one-same-endpoint", Dataset: "generated_shortest_paths_d1_f1", Category: "generated_shortest_path",
-			Cypher:     "MATCH p = shortestPath((s)-[:Traverse*1..1]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)",
-			NodeParams: map[string]string{"start_id": "sp-start", "end_id": "sp-start"},
-			Expected:   ExpectedResult{RowCount: &zeroRows}, Shape: oneShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
-		},
-	}}
+	}
 
 	ctx := context.Background()
 	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, corpus, 1, 1, nil, false, nil, "SP-S3-U-D", "")
@@ -303,47 +336,102 @@ func TestPostgreSQLForcedShortestDirectPreflightSkipsAndFallsBackExactly(t *test
 	minDepth, maxDepth := 1, 3
 	dataset := "generated_shortest_paths_v2_d3_o2_r1_fo2_fi128_l2_k7_t16_w2_x16_p0_c1_s1"
 	shape := WorkloadShape{
-		RootPredicate: "bound_id", TerminalPredicate: "bound_id", EdgeKinds: []string{"Traverse"},
-		Direction: "inbound", RelationshipKindCount: 1, MinDepth: &minDepth, MaxDepth: &maxDepth,
+		RootPredicate:               "bound_id",
+		TerminalPredicate:           "bound_id",
+		EdgeKinds:                   []string{"Traverse"},
+		Direction:                   "inbound",
+		RelationshipKindCount:       1,
+		MinDepth:                    &minDepth,
+		MaxDepth:                    &maxDepth,
 		PathMaterializationRequired: true,
 	}
 	multiKindMaxDepth := 2
 	multiKindShape := WorkloadShape{
-		RootPredicate: "bound_id", TerminalPredicate: "bound_id",
-		EdgeKinds: []string{"ParallelKind00", "ParallelKind01", "ParallelKind02", "ParallelKind03", "ParallelKind04", "ParallelKind05", "ParallelKind06"},
-		Direction: "outbound", RelationshipKindCount: 7, MinDepth: &minDepth, MaxDepth: &multiKindMaxDepth,
+		RootPredicate:               "bound_id",
+		TerminalPredicate:           "bound_id",
+		EdgeKinds:                   []string{"ParallelKind00", "ParallelKind01", "ParallelKind02", "ParallelKind03", "ParallelKind04", "ParallelKind05", "ParallelKind06"},
+		Direction:                   "outbound",
+		RelationshipKindCount:       7,
+		MinDepth:                    &minDepth,
+		MaxDepth:                    &multiKindMaxDepth,
 		PathMaterializationRequired: true,
 	}
-	corpus := ScaleCorpus{Cases: []ScaleCase{
-		{
-			Name: "direct-hit", Dataset: dataset, Category: "generated_shortest_path",
-			Cypher:     "MATCH p = shortestPath((root)<-[:Traverse*1..3]-(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
-			NodeParams: map[string]string{"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-01"},
-			Expected: ExpectedResult{RowCount: &oneRow, ResultKind: "path_set", PathRows: []ExpectedPath{{
-				Nodes: []string{"sp-v2-inbound-root", "sp-v2-inbound-linear-01"}, RelationshipKinds: []string{"Traverse"}, RelationshipKeys: []string{"inbound-primary-03"},
-			}}},
-			Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, Shape: shape, CandidateModes: []ExecutionMode{ModePostgresSQL},
+	corpus := ScaleCorpus{
+		Cases: []ScaleCase{
+			{
+				Name:       "direct-hit",
+				Dataset:    dataset,
+				Category:   "generated_shortest_path",
+				Cypher:     "MATCH p = shortestPath((root)<-[:Traverse*1..3]-(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
+				NodeParams: map[string]string{"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-01"},
+				Expected: ExpectedResult{
+					RowCount:   &oneRow,
+					ResultKind: "path_set",
+					PathRows: []ExpectedPath{{
+						Nodes:             []string{"sp-v2-inbound-root", "sp-v2-inbound-linear-01"},
+						RelationshipKinds: []string{"Traverse"},
+						RelationshipKeys:  []string{"inbound-primary-03"},
+					}},
+				},
+				Observes: ObservedValues{
+					Paths:         true,
+					Nodes:         true,
+					Relationships: true,
+					Properties:    true,
+				},
+				Shape:          shape,
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+			{
+				Name:       "fallback-hit",
+				Dataset:    dataset,
+				Category:   "generated_shortest_path",
+				Cypher:     "MATCH p = shortestPath((root)<-[:Traverse*1..3]-(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
+				NodeParams: map[string]string{"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+				Expected: ExpectedResult{
+					RowCount:   &oneRow,
+					ResultKind: "path_set",
+					PathRows: []ExpectedPath{{
+						Nodes:             []string{"sp-v2-inbound-root", "sp-v2-inbound-linear-01", "sp-v2-inbound-linear-02", "sp-v2-inbound-end"},
+						RelationshipKinds: []string{"Traverse", "Traverse", "Traverse"},
+						RelationshipKeys:  []string{"inbound-primary-03", "inbound-primary-02", "inbound-primary-01"},
+					}},
+				},
+				Observes: ObservedValues{
+					Paths:         true,
+					Nodes:         true,
+					Relationships: true,
+					Properties:    true,
+				},
+				Shape:          shape,
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+			{
+				Name:       "direct-multi-kind",
+				Dataset:    dataset,
+				Category:   "generated_shortest_path",
+				Cypher:     "MATCH p = shortestPath((root)-[:ParallelKind00|ParallelKind01|ParallelKind02|ParallelKind03|ParallelKind04|ParallelKind05|ParallelKind06*1..2]->(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
+				NodeParams: map[string]string{"root_id": "sp-v2-parallel-start", "end_id": "sp-v2-parallel-target-000000"},
+				Expected: ExpectedResult{
+					RowCount:   &oneRow,
+					ResultKind: "path_set",
+					PathRows: []ExpectedPath{{
+						Nodes:             []string{"sp-v2-parallel-start", "sp-v2-parallel-target-000000"},
+						RelationshipKinds: []string{"ParallelKind00"},
+						RelationshipKeys:  []string{"parallel-k00-t000000"},
+					}},
+				},
+				Observes: ObservedValues{
+					Paths:         true,
+					Nodes:         true,
+					Relationships: true,
+					Properties:    true,
+				},
+				Shape:          multiKindShape,
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
 		},
-		{
-			Name: "fallback-hit", Dataset: dataset, Category: "generated_shortest_path",
-			Cypher:     "MATCH p = shortestPath((root)<-[:Traverse*1..3]-(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
-			NodeParams: map[string]string{"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
-			Expected: ExpectedResult{RowCount: &oneRow, ResultKind: "path_set", PathRows: []ExpectedPath{{
-				Nodes:             []string{"sp-v2-inbound-root", "sp-v2-inbound-linear-01", "sp-v2-inbound-linear-02", "sp-v2-inbound-end"},
-				RelationshipKinds: []string{"Traverse", "Traverse", "Traverse"}, RelationshipKeys: []string{"inbound-primary-03", "inbound-primary-02", "inbound-primary-01"},
-			}}},
-			Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, Shape: shape, CandidateModes: []ExecutionMode{ModePostgresSQL},
-		},
-		{
-			Name: "direct-multi-kind", Dataset: dataset, Category: "generated_shortest_path",
-			Cypher:     "MATCH p = shortestPath((root)-[:ParallelKind00|ParallelKind01|ParallelKind02|ParallelKind03|ParallelKind04|ParallelKind05|ParallelKind06*1..2]->(terminal)) WHERE id(root) = $root_id AND id(terminal) = $end_id RETURN p",
-			NodeParams: map[string]string{"root_id": "sp-v2-parallel-start", "end_id": "sp-v2-parallel-target-000000"},
-			Expected: ExpectedResult{RowCount: &oneRow, ResultKind: "path_set", PathRows: []ExpectedPath{{
-				Nodes: []string{"sp-v2-parallel-start", "sp-v2-parallel-target-000000"}, RelationshipKinds: []string{"ParallelKind00"}, RelationshipKeys: []string{"parallel-k00-t000000"},
-			}}},
-			Observes: ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, Shape: multiKindShape, CandidateModes: []ExecutionMode{ModePostgresSQL},
-		},
-	}}
+	}
 
 	ctx := context.Background()
 	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, corpus, 1, 1, nil, false, nil, "SP-S0-DIRECT", "")
@@ -470,7 +558,10 @@ func TestPostgreSQLForcedShortestPathEdgeM0PlanResourcesAndConcurrency(t *testin
 	missingEndpoint.Name = "forced-m0-missing-start-endpoint"
 	missingEndpoint.Params = testutil.Params{"start_id": int64(9223372036854775807)}
 	missingEndpoint.NodeParams = map[string]string{"end_id": "sp-end"}
-	missingEndpoint.Expected = ExpectedResult{RowCount: &zeroRows, ResultKind: "path_set"}
+	missingEndpoint.Expected = ExpectedResult{
+		RowCount:   &zeroRows,
+		ResultKind: "path_set",
+	}
 	selected.Cases = append(selected.Cases, missingEndpoint)
 
 	ctx := context.Background()
@@ -618,7 +709,9 @@ func TestPostgreSQLForcedSuffixSeededReversePlanResourcesAndConcurrency(t *testi
 
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
-	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GFSE-V2-D16-F1000-R1-X1-M1-sparse_path"}})
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
+		Cases: []string{"GFSE-V2-D16-F1000-R1-X1-M1-sparse_path"},
+	})
 	require.NoError(t, err)
 	require.Len(t, selected.Cases, 1)
 
@@ -675,7 +768,9 @@ func TestPostgreSQLForcedSuffixSeededReverseCancellationReusesSession(t *testing
 
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
-	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GFSE-V2-D08-F016-R1-I1000-high_reverse_fanin"}})
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
+		Cases: []string{"GFSE-V2-D08-F016-R1-I1000-high_reverse_fanin"},
+	})
 	require.NoError(t, err)
 	require.Len(t, selected.Cases, 1)
 

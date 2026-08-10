@@ -24,25 +24,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type staticKindMapper struct{}
+type staticKindMapper struct {
+}
 
-func (staticKindMapper) MapKindID(context.Context, int16) (graph.Kind, error) {
+func (s staticKindMapper) MapKindID(context.Context, int16) (graph.Kind, error) {
 	return graph.StringKind("WriteCreateRelationship"), nil
 }
 
-func (staticKindMapper) MapKindIDs(context.Context, []int16) (graph.Kinds, error) {
+func (s staticKindMapper) MapKindIDs(context.Context, []int16) (graph.Kinds, error) {
 	return graph.Kinds{graph.StringKind("WriteCreateRelationship")}, nil
 }
 
-func (staticKindMapper) MapKind(context.Context, graph.Kind) (int16, error) {
+func (s staticKindMapper) MapKind(context.Context, graph.Kind) (int16, error) {
 	return 1, nil
 }
 
-func (staticKindMapper) MapKinds(context.Context, graph.Kinds) ([]int16, error) {
+func (s staticKindMapper) MapKinds(context.Context, graph.Kinds) ([]int16, error) {
 	return []int16{1}, nil
 }
 
-func (staticKindMapper) AssertKinds(context.Context, graph.Kinds) ([]int16, error) {
+func (s staticKindMapper) AssertKinds(context.Context, graph.Kinds) ([]int16, error) {
 	return []int16{1}, nil
 }
 

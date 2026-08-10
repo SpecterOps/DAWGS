@@ -44,11 +44,13 @@ func TestCypherParseCacheEvictsLeastRecentlyUsedQuery(t *testing.T) {
 func TestCypherParseCacheDoesNotRetainErrorsOrOversizedQueries(t *testing.T) {
 	cache := newCypherParseCache(2)
 
-	_, hit, err := cache.Parse("MATCH (")
+	parsed, hit, err := cache.Parse("MATCH (")
 	require.Error(t, err)
+	require.Nil(t, parsed)
 	require.False(t, hit)
-	_, hit, err = cache.Parse("MATCH (")
+	parsed, hit, err = cache.Parse("MATCH (")
 	require.Error(t, err)
+	require.Nil(t, parsed)
 	require.False(t, hit)
 	require.Empty(t, cache.entries)
 
@@ -126,7 +128,12 @@ func TestCypherParseCacheStatsAndCloseReleaseEntries(t *testing.T) {
 	require.True(t, hit)
 	_, _, err = cache.Parse("MATCH (n) RETURN id(n)")
 	require.NoError(t, err)
-	require.Equal(t, ParseCacheStats{Hits: 1, Misses: 2, Evictions: 1, Entries: 1}, cache.Stats())
+	require.Equal(t, ParseCacheStats{
+		Hits:      1,
+		Misses:    2,
+		Evictions: 1,
+		Entries:   1,
+	}, cache.Stats())
 
 	cache.Close()
 	require.Zero(t, cache.Stats().Entries)

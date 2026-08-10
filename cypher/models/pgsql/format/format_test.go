@@ -129,13 +129,20 @@ func TestFormat_LateralSubqueryJoin(t *testing.T) {
 }
 
 func TestFormat_FunctionAggregateOrderBy(t *testing.T) {
-	formattedQuery, err := format.Statement(pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
-		pgsql.FunctionCall{
-			Function:   pgsql.FunctionArrayAggregate,
-			Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{"edge", "id"}},
-			OrderBy:    []*pgsql.OrderBy{{Expression: pgsql.Identifier("ordinality"), Ascending: true}},
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{
+				pgsql.FunctionCall{
+					Function:   pgsql.FunctionArrayAggregate,
+					Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{"edge", "id"}},
+					OrderBy: []*pgsql.OrderBy{{
+						Expression: pgsql.Identifier("ordinality"),
+						Ascending:  true,
+					}},
+				},
+			},
 		},
-	}}}, format.NewOutputBuilder())
+	}, format.NewOutputBuilder())
 
 	require.NoError(t, err)
 	require.Equal(t, "select array_agg(edge.id order by ordinality);", formattedQuery)
@@ -688,18 +695,37 @@ func TestFormat_CTEs(t *testing.T) {
 }
 
 func TestFormat_SetOperationParenthesizesQueryOperand(t *testing.T) {
-	formattedQuery, err := format.Statement(pgsql.Query{Body: pgsql.SetOperation{
-		Operator: pgsql.OperatorUnion,
-		All:      true,
-		LOperand: pgsql.Select{Projection: pgsql.Projection{mustAsLiteral(1)}},
-		ROperand: pgsql.Query{
-			CommonTableExpressions: &pgsql.With{Expressions: []pgsql.CommonTableExpression{{
-				Alias: pgsql.TableAlias{Name: "value"},
-				Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{mustAsLiteral(2)}}},
-			}}},
-			Body: pgsql.Select{Projection: pgsql.Projection{pgsql.Wildcard{}}, From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: pgsql.CompoundIdentifier{"value"}}}}},
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.SetOperation{
+			Operator: pgsql.OperatorUnion,
+			All:      true,
+			LOperand: pgsql.Select{
+				Projection: pgsql.Projection{mustAsLiteral(1)},
+			},
+			ROperand: pgsql.Query{
+				CommonTableExpressions: &pgsql.With{
+					Expressions: []pgsql.CommonTableExpression{{
+						Alias: pgsql.TableAlias{
+							Name: "value",
+						},
+						Query: pgsql.Query{
+							Body: pgsql.Select{
+								Projection: pgsql.Projection{mustAsLiteral(2)},
+							},
+						},
+					}},
+				},
+				Body: pgsql.Select{
+					Projection: pgsql.Projection{pgsql.Wildcard{}},
+					From: []pgsql.FromClause{{
+						Source: pgsql.TableReference{
+							Name: pgsql.CompoundIdentifier{"value"},
+						},
+					}},
+				},
+			},
 		},
-	}}, format.NewOutputBuilder())
+	}, format.NewOutputBuilder())
 
 	require.NoError(t, err)
 	require.Equal(t, "select 1 union all (with value as (select 2) select * from value);", formattedQuery)

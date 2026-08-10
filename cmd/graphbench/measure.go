@@ -64,7 +64,11 @@ func countCypherRows(tx graph.Transaction, cypher string, params map[string]any)
 		rowCount++
 	}
 
-	return rowCount, result.Error()
+	if err := result.Error(); err != nil {
+		return 0, err
+	}
+
+	return rowCount, nil
 }
 
 func countRawRows(tx graph.Transaction, sql string, params map[string]any) (int64, error) {
@@ -76,7 +80,11 @@ func countRawRows(tx graph.Transaction, sql string, params map[string]any) (int6
 		rowCount++
 	}
 
-	return rowCount, result.Error()
+	if err := result.Error(); err != nil {
+		return 0, err
+	}
+
+	return rowCount, nil
 }
 
 type stableNodeObservation struct {
@@ -381,7 +389,11 @@ func observeCypher(tx graph.Transaction, cypher string, params map[string]any) (
 		}
 	}
 
-	return observation, result.Error()
+	if err := result.Error(); err != nil {
+		return StateQueryResult{}, err
+	}
+
+	return observation, nil
 }
 
 func resultContainsNodeIDs(expected ExpectedResult) bool {

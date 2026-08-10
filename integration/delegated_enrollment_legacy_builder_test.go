@@ -34,7 +34,10 @@ func TestLegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
 
-	WithLegacyRelationshipQuery(t, &Session{DB: db, Ctx: ctx}, fixture, func(opengraph.IDMap) graph.Criteria {
+	WithLegacyRelationshipQuery(t, &Session{
+		DB:  db,
+		Ctx: ctx,
+	}, fixture, func(opengraph.IDMap) graph.Criteria {
 		return query.And(
 			query.In(query.EndProperty("objectid"), []string{"ca-a", "ca-b"}),
 			query.Kind(query.Relationship(), graph.StringKind("PublishedTo")),
@@ -57,18 +60,63 @@ func TestLegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
 func delegatedEnrollmentFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
-			{ID: "template-a", Kinds: []string{"CertTemplate"}, Properties: map[string]any{"objectid": "template-a"}},
-			{ID: "template-b", Kinds: []string{"CertTemplate"}, Properties: map[string]any{"objectid": "template-b"}},
-			{ID: "wrong-start", Kinds: []string{"OtherTemplate"}, Properties: map[string]any{"objectid": "wrong-start"}},
-			{ID: "ca-a", Kinds: []string{"EnterpriseCA"}, Properties: map[string]any{"objectid": "ca-a"}},
-			{ID: "ca-b", Kinds: []string{"EnterpriseCA"}, Properties: map[string]any{"objectid": "ca-b"}},
+			{
+				ID:         "template-a",
+				Kinds:      []string{"CertTemplate"},
+				Properties: map[string]any{"objectid": "template-a"},
+			},
+			{
+				ID:         "template-b",
+				Kinds:      []string{"CertTemplate"},
+				Properties: map[string]any{"objectid": "template-b"},
+			},
+			{
+				ID:         "wrong-start",
+				Kinds:      []string{"OtherTemplate"},
+				Properties: map[string]any{"objectid": "wrong-start"},
+			},
+			{
+				ID:         "ca-a",
+				Kinds:      []string{"EnterpriseCA"},
+				Properties: map[string]any{"objectid": "ca-a"},
+			},
+			{
+				ID:         "ca-b",
+				Kinds:      []string{"EnterpriseCA"},
+				Properties: map[string]any{"objectid": "ca-b"},
+			},
 		},
 		Edges: []opengraph.Edge{
-			{StartID: "template-a", EndID: "ca-a", Kind: "PublishedTo", Properties: map[string]any{"marker": "published-a"}},
-			{StartID: "template-a", EndID: "ca-b", Kind: "PublishedTo", Properties: map[string]any{"marker": "published-b"}},
-			{StartID: "template-b", EndID: "ca-a", Kind: "PublishedTo", Properties: map[string]any{"marker": "published-c"}},
-			{StartID: "wrong-start", EndID: "ca-a", Kind: "PublishedTo", Properties: map[string]any{"marker": "wrong-start"}},
-			{StartID: "template-a", EndID: "ca-a", Kind: "OtherPublication", Properties: map[string]any{"marker": "wrong-edge"}},
+			{
+				StartID:    "template-a",
+				EndID:      "ca-a",
+				Kind:       "PublishedTo",
+				Properties: map[string]any{"marker": "published-a"},
+			},
+			{
+				StartID:    "template-a",
+				EndID:      "ca-b",
+				Kind:       "PublishedTo",
+				Properties: map[string]any{"marker": "published-b"},
+			},
+			{
+				StartID:    "template-b",
+				EndID:      "ca-a",
+				Kind:       "PublishedTo",
+				Properties: map[string]any{"marker": "published-c"},
+			},
+			{
+				StartID:    "wrong-start",
+				EndID:      "ca-a",
+				Kind:       "PublishedTo",
+				Properties: map[string]any{"marker": "wrong-start"},
+			},
+			{
+				StartID:    "template-a",
+				EndID:      "ca-a",
+				Kind:       "OtherPublication",
+				Properties: map[string]any{"marker": "wrong-edge"},
+			},
 		},
 	}
 }

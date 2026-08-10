@@ -28,8 +28,17 @@ func TestAppendJSONLFileValidatesRunIdentityAndDuplicateRounds(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rounds.jsonl")
 	record := func(round int, arm, runUUID, binary string) CaseResult {
 		return CaseResult{
-			Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-			Environment: &RunEnvironment{Round: round, Arm: arm, RunUUID: runUUID, BinarySHA256: binary, DirtyDiffSHA256: "diff"},
+			Dataset:       "fixture",
+			Name:          "case",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			Environment: &RunEnvironment{
+				Round:           round,
+				Arm:             arm,
+				RunUUID:         runUUID,
+				BinarySHA256:    binary,
+				DirtyDiffSHA256: "diff",
+			},
 		}
 	}
 
@@ -70,12 +79,30 @@ func TestComputeDurationStatsCopiesAndSortsDurations(t *testing.T) {
 	require.Equal(t, 10*time.Millisecond, durations[1])
 	require.Equal(t, 20*time.Millisecond, durations[2])
 	require.Equal(t, []LatencySample{
-		{Round: 1, Iteration: 1, Classification: "warm", Duration: 30 * time.Millisecond},
-		{Round: 1, Iteration: 2, Classification: "warm", Duration: 10 * time.Millisecond},
-		{Round: 1, Iteration: 3, Classification: "warm", Duration: 20 * time.Millisecond},
+		{
+			Round:          1,
+			Iteration:      1,
+			Classification: "warm",
+			Duration:       30 * time.Millisecond,
+		},
+		{
+			Round:          1,
+			Iteration:      2,
+			Classification: "warm",
+			Duration:       10 * time.Millisecond,
+		},
+		{
+			Round:          1,
+			Iteration:      3,
+			Classification: "warm",
+			Duration:       20 * time.Millisecond,
+		},
 	}, stats.Samples)
 
-	labelLatencySamples(&stats, ModePostgresSQL, ScaleCase{Name: "case", Dataset: "fixture"})
+	labelLatencySamples(&stats, ModePostgresSQL, ScaleCase{
+		Name:    "case",
+		Dataset: "fixture",
+	})
 	require.Equal(t, ModePostgresSQL, stats.Samples[0].Backend)
 	require.Equal(t, "case", stats.Samples[0].Case)
 	require.Equal(t, "fixture", stats.Samples[0].Dataset)
@@ -103,21 +130,44 @@ func TestCheckStateExpectationChecksRowsAndScalar(t *testing.T) {
 	scalar := int64(3)
 
 	require.NoError(t, checkStateExpectation(
-		StateQueryResult{RowCount: 1, ScalarInt: &scalar},
-		ExpectedResult{RowCount: &rowCount, ScalarInt: &scalar},
+		StateQueryResult{
+			RowCount:  1,
+			ScalarInt: &scalar,
+		},
+		ExpectedResult{
+			RowCount:  &rowCount,
+			ScalarInt: &scalar,
+		},
 	))
 
 	wrong := int64(4)
 	require.ErrorContains(t, checkStateExpectation(
-		StateQueryResult{RowCount: 1, ScalarInt: &scalar},
+		StateQueryResult{
+			RowCount:  1,
+			ScalarInt: &scalar,
+		},
 		ExpectedResult{ScalarInt: &wrong},
 	), "expected scalar integer 4")
 }
 
 func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
 	records := []CaseResult{
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK, StableObservation: true, ObservedRows: []string{`["a"]`, `["a"]`}},
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModeNeo4j, Status: StatusOK, StableObservation: true, ObservedRows: []string{`["a"]`, `["a"]`}},
+		{
+			Dataset:           "fixture",
+			Name:              "case",
+			ExecutionMode:     ModePostgresSQL,
+			Status:            StatusOK,
+			StableObservation: true,
+			ObservedRows:      []string{`["a"]`, `["a"]`},
+		},
+		{
+			Dataset:           "fixture",
+			Name:              "case",
+			ExecutionMode:     ModeNeo4j,
+			Status:            StatusOK,
+			StableObservation: true,
+			ObservedRows:      []string{`["a"]`, `["a"]`},
+		},
 	}
 	require.NoError(t, validateBackendObservations(records))
 
@@ -126,12 +176,20 @@ func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
 }
 
 func TestNewCaseResultOnlyCrossChecksExplicitPathRows(t *testing.T) {
-	record := newCaseResult(ScaleCase{Expected: ExpectedResult{ResultKind: "path_set"}}, ModePostgresSQL, nil)
+	record := newCaseResult(ScaleCase{
+		Expected: ExpectedResult{
+			ResultKind: "path_set",
+		},
+	}, ModePostgresSQL, nil)
 	require.False(t, record.StableObservation)
 
-	record = newCaseResult(ScaleCase{Expected: ExpectedResult{
-		ResultKind: "path_set",
-		PathRows:   []ExpectedPath{{Nodes: []string{"start"}}},
-	}}, ModePostgresSQL, nil)
+	record = newCaseResult(ScaleCase{
+		Expected: ExpectedResult{
+			ResultKind: "path_set",
+			PathRows: []ExpectedPath{{
+				Nodes: []string{"start"},
+			}},
+		},
+	}, ModePostgresSQL, nil)
 	require.True(t, record.StableObservation)
 }

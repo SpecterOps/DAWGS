@@ -39,7 +39,11 @@ func TestResolveCaseParams(t *testing.T) {
 			"end_ids": {"n2", "n1"},
 		},
 		GeneratedNodeListParams: map[string]testutil.GeneratedNodeListParam{
-			"generated_ids": {Prefix: "generated", Count: 2, Include: []string{"n2"}},
+			"generated_ids": {
+				Prefix:  "generated",
+				Count:   2,
+				Include: []string{"n2"},
+			},
 		},
 	}, opengraph.IDMap{
 		"n1":           graph.ID(42),

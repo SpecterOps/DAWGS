@@ -37,7 +37,10 @@ func TestLegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 	nodeKinds, edgeKinds := fixture.Kinds()
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 	threshold := regressionDay(3)
 
 	t.Run("TRUST-01 SameForestTrust IDs", func(t *testing.T) {
@@ -183,9 +186,24 @@ func TestDirectBatchPruning(t *testing.T) {
 			expected  int
 			remaining int64
 		}{
-			{name: "empty", criteria: func() graph.Criteria { return query.Equals(query.RelationshipProperty("marker"), "absent") }, expected: 0, remaining: 3},
-			{name: "single", criteria: func() graph.Criteria { return query.Equals(query.RelationshipProperty("marker"), "single") }, expected: 1, remaining: 2},
-			{name: "many", criteria: func() graph.Criteria { return query.Kind(query.Relationship(), graph.StringKind("PruneDelete")) }, expected: 3, remaining: 0},
+			{
+				name:      "empty",
+				criteria:  func() graph.Criteria { return query.Equals(query.RelationshipProperty("marker"), "absent") },
+				expected:  0,
+				remaining: 3,
+			},
+			{
+				name:      "single",
+				criteria:  func() graph.Criteria { return query.Equals(query.RelationshipProperty("marker"), "single") },
+				expected:  1,
+				remaining: 2,
+			},
+			{
+				name:      "many",
+				criteria:  func() graph.Criteria { return query.Kind(query.Relationship(), graph.StringKind("PruneDelete")) },
+				expected:  3,
+				remaining: 0,
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				loadFixture(t)
@@ -220,9 +238,27 @@ func TestDirectBatchPruning(t *testing.T) {
 			expectedCandidates int64
 			expectedIncidents  int64
 		}{
-			{name: "empty", criteria: func() graph.Criteria { return query.Equals(query.NodeProperty("objectid"), "absent") }, expected: 0, expectedCandidates: 3, expectedIncidents: 34},
-			{name: "single", criteria: func() graph.Criteria { return query.Equals(query.NodeProperty("objectid"), "single") }, expected: 1, expectedCandidates: 2, expectedIncidents: 34},
-			{name: "many including high degree", criteria: func() graph.Criteria { return query.Equals(query.NodeProperty("remove"), true) }, expected: 2, expectedCandidates: 1, expectedIncidents: 1},
+			{
+				name:               "empty",
+				criteria:           func() graph.Criteria { return query.Equals(query.NodeProperty("objectid"), "absent") },
+				expected:           0,
+				expectedCandidates: 3,
+				expectedIncidents:  34,
+			},
+			{
+				name:               "single",
+				criteria:           func() graph.Criteria { return query.Equals(query.NodeProperty("objectid"), "single") },
+				expected:           1,
+				expectedCandidates: 2,
+				expectedIncidents:  34,
+			},
+			{
+				name:               "many including high degree",
+				criteria:           func() graph.Criteria { return query.Equals(query.NodeProperty("remove"), true) },
+				expected:           2,
+				expectedCandidates: 1,
+				expectedIncidents:  1,
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				loadFixture(t)
@@ -376,52 +412,248 @@ func trustPruningFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID)
 func trustPruningFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
-			{ID: "early", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(2)}},
-			{ID: "late-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "late-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "candidate-rel-equal", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "candidate-rel-new", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "candidate-rel-missing", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "candidate-rel-null", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "session-null", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "session-old", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "session-equal", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "session-new", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(4)}},
-			{ID: "equal-a", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(3)}},
-			{ID: "equal-b", Kinds: []string{"Domain"}, Properties: map[string]any{"lastcollected": regressionDay(3)}},
-			{ID: "wrong-end", Kinds: []string{"Computer"}, Properties: map[string]any{"lastcollected": regressionDay(4), "lastseen": regressionDay(4)}},
-			{ID: "candidate-missing", Kinds: []string{"CandidateNode"}, Properties: map[string]any{}},
-			{ID: "candidate-null", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": nil}},
-			{ID: "candidate-old", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": regressionDay(2)}},
-			{ID: "candidate-equal", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": regressionDay(3)}},
-			{ID: "candidate-new", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"lastseen": regressionDay(4)}},
-			{ID: "orphan-missing", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"objectid": "S-1-5-100"}},
-			{ID: "orphan-null", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"name": nil, "objectid": "S-1-5-101"}},
-			{ID: "orphan-empty", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"name": "", "objectid": "S-1-5-102"}},
-			{ID: "orphan-wrong-prefix", Kinds: []string{"CandidateNode"}, Properties: map[string]any{"objectid": "X-1-5-103"}},
-			{ID: "orphan-protected", Kinds: []string{"CandidateNode", "Domain"}, Properties: map[string]any{"objectid": "S-1-5-104"}},
+			{
+				ID:         "early",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(2)},
+			},
+			{
+				ID:         "late-a",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "late-b",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "candidate-rel-equal",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "candidate-rel-new",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "candidate-rel-missing",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "candidate-rel-null",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "session-null",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "session-old",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "session-equal",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "session-new",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(4)},
+			},
+			{
+				ID:         "equal-a",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(3)},
+			},
+			{
+				ID:         "equal-b",
+				Kinds:      []string{"Domain"},
+				Properties: map[string]any{"lastcollected": regressionDay(3)},
+			},
+			{
+				ID:         "wrong-end",
+				Kinds:      []string{"Computer"},
+				Properties: map[string]any{"lastcollected": regressionDay(4), "lastseen": regressionDay(4)},
+			},
+			{
+				ID:         "candidate-missing",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{},
+			},
+			{
+				ID:         "candidate-null",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"lastseen": nil},
+			},
+			{
+				ID:         "candidate-old",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"lastseen": regressionDay(2)},
+			},
+			{
+				ID:         "candidate-equal",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"lastseen": regressionDay(3)},
+			},
+			{
+				ID:         "candidate-new",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"lastseen": regressionDay(4)},
+			},
+			{
+				ID:         "orphan-missing",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"objectid": "S-1-5-100"},
+			},
+			{
+				ID:         "orphan-null",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"name": nil, "objectid": "S-1-5-101"},
+			},
+			{
+				ID:         "orphan-empty",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"name": "", "objectid": "S-1-5-102"},
+			},
+			{
+				ID:         "orphan-wrong-prefix",
+				Kinds:      []string{"CandidateNode"},
+				Properties: map[string]any{"objectid": "X-1-5-103"},
+			},
+			{
+				ID:         "orphan-protected",
+				Kinds:      []string{"CandidateNode", "Domain"},
+				Properties: map[string]any{"objectid": "S-1-5-104"},
+			},
 		},
 		Edges: []opengraph.Edge{
-			{StartID: "late-a", EndID: "early", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-old"}},
-			{StartID: "equal-a", EndID: "equal-b", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-equal"}},
-			{StartID: "late-a", EndID: "wrong-end", Kind: "SameForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-wrong-end"}},
-			{StartID: "late-a", EndID: "early", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "cross-old"}},
-			{StartID: "equal-a", EndID: "equal-b", Kind: "CrossForestTrust", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "cross-equal"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "AbuseTGTDelegation", Properties: map[string]any{"marker": "valid-forward-abuse"}},
-			{StartID: "late-b", EndID: "late-a", Kind: "SpoofSIDHistory", Properties: map[string]any{"marker": "valid-reverse-spoof"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "SpoofSIDHistory", Properties: map[string]any{"marker": "invalid-forward-spoof"}},
-			{StartID: "late-b", EndID: "late-a", Kind: "AbuseTGTDelegation", Properties: map[string]any{"marker": "invalid-reverse-abuse"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "CandidateRel", Properties: map[string]any{"lastseen": regressionDay(2), "marker": "candidate-old"}},
-			{StartID: "late-a", EndID: "candidate-rel-equal", Kind: "CandidateRel", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "candidate-equal"}},
-			{StartID: "late-a", EndID: "candidate-rel-new", Kind: "CandidateRel", Properties: map[string]any{"lastseen": regressionDay(4), "marker": "candidate-new"}},
-			{StartID: "late-a", EndID: "candidate-rel-missing", Kind: "CandidateRel", Properties: map[string]any{"marker": "candidate-missing"}},
-			{StartID: "late-a", EndID: "candidate-rel-null", Kind: "CandidateRel", Properties: map[string]any{"lastseen": nil, "marker": "candidate-null"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "HasSession", Properties: map[string]any{"marker": "session-missing"}},
-			{StartID: "late-a", EndID: "session-null", Kind: "HasSession", Properties: map[string]any{"lastseen": nil, "marker": "session-null"}},
-			{StartID: "late-a", EndID: "session-old", Kind: "HasSession", Properties: map[string]any{"lastseen": regressionDay(2), "marker": "session-old"}},
-			{StartID: "late-a", EndID: "session-equal", Kind: "HasSession", Properties: map[string]any{"lastseen": regressionDay(3), "marker": "session-equal"}},
-			{StartID: "late-a", EndID: "session-new", Kind: "HasSession", Properties: map[string]any{"lastseen": regressionDay(4), "marker": "session-new"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "MetaIncludes", Properties: map[string]any{"lastseen": regressionDay(2), "marker": "meta-includes-old"}},
+			{
+				StartID:    "late-a",
+				EndID:      "early",
+				Kind:       "SameForestTrust",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-old"},
+			},
+			{
+				StartID:    "equal-a",
+				EndID:      "equal-b",
+				Kind:       "SameForestTrust",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-equal"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "wrong-end",
+				Kind:       "SameForestTrust",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "same-wrong-end"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "early",
+				Kind:       "CrossForestTrust",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "cross-old"},
+			},
+			{
+				StartID:    "equal-a",
+				EndID:      "equal-b",
+				Kind:       "CrossForestTrust",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "cross-equal"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b",
+				Kind:       "AbuseTGTDelegation",
+				Properties: map[string]any{"marker": "valid-forward-abuse"},
+			},
+			{
+				StartID:    "late-b",
+				EndID:      "late-a",
+				Kind:       "SpoofSIDHistory",
+				Properties: map[string]any{"marker": "valid-reverse-spoof"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b",
+				Kind:       "SpoofSIDHistory",
+				Properties: map[string]any{"marker": "invalid-forward-spoof"},
+			},
+			{
+				StartID:    "late-b",
+				EndID:      "late-a",
+				Kind:       "AbuseTGTDelegation",
+				Properties: map[string]any{"marker": "invalid-reverse-abuse"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b",
+				Kind:       "CandidateRel",
+				Properties: map[string]any{"lastseen": regressionDay(2), "marker": "candidate-old"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "candidate-rel-equal",
+				Kind:       "CandidateRel",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "candidate-equal"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "candidate-rel-new",
+				Kind:       "CandidateRel",
+				Properties: map[string]any{"lastseen": regressionDay(4), "marker": "candidate-new"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "candidate-rel-missing",
+				Kind:       "CandidateRel",
+				Properties: map[string]any{"marker": "candidate-missing"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "candidate-rel-null",
+				Kind:       "CandidateRel",
+				Properties: map[string]any{"lastseen": nil, "marker": "candidate-null"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b",
+				Kind:       "HasSession",
+				Properties: map[string]any{"marker": "session-missing"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "session-null",
+				Kind:       "HasSession",
+				Properties: map[string]any{"lastseen": nil, "marker": "session-null"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "session-old",
+				Kind:       "HasSession",
+				Properties: map[string]any{"lastseen": regressionDay(2), "marker": "session-old"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "session-equal",
+				Kind:       "HasSession",
+				Properties: map[string]any{"lastseen": regressionDay(3), "marker": "session-equal"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "session-new",
+				Kind:       "HasSession",
+				Properties: map[string]any{"lastseen": regressionDay(4), "marker": "session-new"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b",
+				Kind:       "MetaIncludes",
+				Properties: map[string]any{"lastseen": regressionDay(2), "marker": "meta-includes-old"},
+			},
 		},
 	}
 }
@@ -429,30 +661,93 @@ func trustPruningFixture() *opengraph.Graph {
 func batchPruningFixture(fanout int) *opengraph.Graph {
 	fixture := &opengraph.Graph{
 		Nodes: []opengraph.Node{
-			{ID: "rel-a", Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": "rel-a"}},
-			{ID: "rel-b", Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": "rel-b"}},
-			{ID: "rel-c", Kinds: []string{"PruneEndpoint"}, Properties: map[string]any{"name": "rel-c"}},
-			{ID: "single", Kinds: []string{"PruneDeleteNode"}, Properties: map[string]any{"objectid": "single", "remove": true}},
-			{ID: "high", Kinds: []string{"PruneDeleteNode"}, Properties: map[string]any{"objectid": "high", "remove": true}},
-			{ID: "survivor", Kinds: []string{"PruneDeleteNode"}, Properties: map[string]any{"objectid": "survivor", "remove": false}},
+			{
+				ID:         "rel-a",
+				Kinds:      []string{"PruneEndpoint"},
+				Properties: map[string]any{"name": "rel-a"},
+			},
+			{
+				ID:         "rel-b",
+				Kinds:      []string{"PruneEndpoint"},
+				Properties: map[string]any{"name": "rel-b"},
+			},
+			{
+				ID:         "rel-c",
+				Kinds:      []string{"PruneEndpoint"},
+				Properties: map[string]any{"name": "rel-c"},
+			},
+			{
+				ID:         "single",
+				Kinds:      []string{"PruneDeleteNode"},
+				Properties: map[string]any{"objectid": "single", "remove": true},
+			},
+			{
+				ID:         "high",
+				Kinds:      []string{"PruneDeleteNode"},
+				Properties: map[string]any{"objectid": "high", "remove": true},
+			},
+			{
+				ID:         "survivor",
+				Kinds:      []string{"PruneDeleteNode"},
+				Properties: map[string]any{"objectid": "survivor", "remove": false},
+			},
 		},
 		Edges: []opengraph.Edge{
-			{StartID: "rel-a", EndID: "rel-b", Kind: "PruneDelete", Properties: map[string]any{"marker": "single"}},
-			{StartID: "rel-a", EndID: "rel-c", Kind: "PruneDelete", Properties: map[string]any{"marker": "many-a"}},
-			{StartID: "rel-b", EndID: "rel-a", Kind: "PruneDelete", Properties: map[string]any{"marker": "many-b"}},
-			{StartID: "rel-a", EndID: "rel-b", Kind: "PruneSurvivor", Properties: map[string]any{"marker": "survivor"}},
-			{StartID: "survivor", EndID: "rel-a", Kind: "PruneIncident", Properties: map[string]any{"marker": "survivor-incident"}},
-			{StartID: "high", EndID: "high", Kind: "PruneIncident", Properties: map[string]any{"marker": "high-self"}},
+			{
+				StartID:    "rel-a",
+				EndID:      "rel-b",
+				Kind:       "PruneDelete",
+				Properties: map[string]any{"marker": "single"},
+			},
+			{
+				StartID:    "rel-a",
+				EndID:      "rel-c",
+				Kind:       "PruneDelete",
+				Properties: map[string]any{"marker": "many-a"},
+			},
+			{
+				StartID:    "rel-b",
+				EndID:      "rel-a",
+				Kind:       "PruneDelete",
+				Properties: map[string]any{"marker": "many-b"},
+			},
+			{
+				StartID:    "rel-a",
+				EndID:      "rel-b",
+				Kind:       "PruneSurvivor",
+				Properties: map[string]any{"marker": "survivor"},
+			},
+			{
+				StartID:    "survivor",
+				EndID:      "rel-a",
+				Kind:       "PruneIncident",
+				Properties: map[string]any{"marker": "survivor-incident"},
+			},
+			{
+				StartID:    "high",
+				EndID:      "high",
+				Kind:       "PruneIncident",
+				Properties: map[string]any{"marker": "high-self"},
+			},
 		},
 	}
 
 	for idx, neighborID := range FixtureNames("neighbor", fanout) {
-		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: neighborID, Kinds: []string{"PruneNeighbor"}, Properties: map[string]any{"name": neighborID}})
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+			ID:         neighborID,
+			Kinds:      []string{"PruneNeighbor"},
+			Properties: map[string]any{"name": neighborID},
+		})
 		startID, endID := "high", neighborID
 		if idx%2 == 0 {
 			startID, endID = neighborID, "high"
 		}
-		fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: startID, EndID: endID, Kind: "PruneIncident", Properties: map[string]any{"marker": neighborID}})
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{
+			StartID:    startID,
+			EndID:      endID,
+			Kind:       "PruneIncident",
+			Properties: map[string]any{"marker": neighborID},
+		})
 	}
 	return fixture
 }
@@ -473,16 +768,20 @@ func pruneRelationshipsInBatches(ctx context.Context, db graph.Database, criteri
 	}
 
 	deleted := 0
-	err := db.BatchOperation(ctx, func(batch graph.Batch) error {
+	if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
 		for _, id := range ids {
 			if err := batch.DeleteRelationship(id); err != nil {
 				return err
 			}
+
 			deleted++
 		}
 		return nil
-	})
-	return deleted, err
+	}); err != nil {
+		return 0, err
+	}
+
+	return deleted, nil
 }
 
 func pruneNodesInBatches(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
@@ -501,16 +800,20 @@ func pruneNodesInBatches(ctx context.Context, db graph.Database, criteria graph.
 	}
 
 	deleted := 0
-	err := db.BatchOperation(ctx, func(batch graph.Batch) error {
+	if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
 		for _, id := range ids {
 			if err := batch.DeleteNode(id); err != nil {
 				return err
 			}
+
 			deleted++
 		}
 		return nil
-	})
-	return deleted, err
+	}); err != nil {
+		return 0, err
+	}
+
+	return deleted, nil
 }
 
 func regressionDay(day int) time.Time {

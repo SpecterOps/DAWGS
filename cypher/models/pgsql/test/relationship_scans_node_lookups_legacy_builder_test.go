@@ -132,7 +132,10 @@ func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 			relKinds graph.Kinds
 		}{
 			"scenario A": {relKinds: scanLookupRegressionKinds(87, 88, 89, 90, 91, 92)},
-			"scenario B": {endKinds: scanLookupRegressionKinds(81), relKinds: scanLookupRegressionKinds(87, 88, 89, 90, 91)},
+			"scenario B": {
+				endKinds: scanLookupRegressionKinds(81),
+				relKinds: scanLookupRegressionKinds(87, 88, 89, 90, 91),
+			},
 		} {
 			t.Run(name, func(t *testing.T) {
 				criteria := []graph.Criteria{

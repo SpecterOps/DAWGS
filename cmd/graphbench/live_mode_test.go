@@ -16,24 +16,49 @@ import (
 )
 
 func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
-	manifest := ExistingGraphAnchorManifest{Version: 1, Checksum: "manifest", Anchors: map[string]ExistingGraphAnchor{
-		"source": {LogicalKey: "safe-source"}, "target": {LogicalKey: "safe-target"},
-	}}
-	readCase := ScaleCase{
-		Name: "read", Dataset: "live", Category: "live", Cypher: `MATCH (n) WHERE n.note = 'create is text' AND id(n) = $source RETURN n`,
-		NodeParams: map[string]string{"source": "source"}, CandidateModes: []ExecutionMode{ModePostgresSQL},
+	manifest := ExistingGraphAnchorManifest{
+		Version:  1,
+		Checksum: "manifest",
+		Anchors: map[string]ExistingGraphAnchor{
+			"source": {
+				LogicalKey: "safe-source",
+			}, "target": {
+				LogicalKey: "safe-target",
+			},
+		},
 	}
-	require.NoError(t, validateExistingGraphCorpus(ScaleCorpus{Cases: []ScaleCase{readCase}}, manifest))
+	readCase := ScaleCase{
+		Name:           "read",
+		Dataset:        "live",
+		Category:       "live",
+		Cypher:         `MATCH (n) WHERE n.note = 'create is text' AND id(n) = $source RETURN n`,
+		NodeParams:     map[string]string{"source": "source"},
+		CandidateModes: []ExecutionMode{ModePostgresSQL},
+	}
+	require.NoError(t, validateExistingGraphCorpus(ScaleCorpus{
+		Cases: []ScaleCase{readCase},
+	}, manifest))
 
 	writeCase := readCase
 	writeCase.Name = "write"
 	writeCase.Cypher = "MATCH (n) DELETE n"
-	require.ErrorContains(t, validateExistingGraphCorpus(ScaleCorpus{Cases: []ScaleCase{writeCase}}, manifest), "mutation keyword")
+	require.ErrorContains(t, validateExistingGraphCorpus(ScaleCorpus{
+		Cases: []ScaleCase{writeCase},
+	}, manifest), "mutation keyword")
 	writeCase.Cypher = "MATCH (n) RETURN n"
 	writeCase.WriteScenario = &WriteScenario{}
-	require.ErrorContains(t, validateExistingGraphCorpus(ScaleCorpus{Cases: []ScaleCase{writeCase}}, manifest), "write_scenario")
+	require.ErrorContains(t, validateExistingGraphCorpus(ScaleCorpus{
+		Cases: []ScaleCase{writeCase},
+	}, manifest), "write_scenario")
 
-	record := CaseResult{Cypher: readCase.Cypher, Params: map[string]any{"source": 42}, NodeParams: map[string]string{"source": "source"}, ObservedRows: []string{"sensitive-property"}, PostgresPlan: []string{"Index Cond: id = 42"}, Error: "unmapped-node:77"}
+	record := CaseResult{
+		Cypher:       readCase.Cypher,
+		Params:       map[string]any{"source": 42},
+		NodeParams:   map[string]string{"source": "source"},
+		ObservedRows: []string{"sensitive-property"},
+		PostgresPlan: []string{"Index Cond: id = 42"},
+		Error:        "unmapped-node:77",
+	}
 	redactExistingGraphRecord(&record, manifest, map[string]graph.ID{"source": 42})
 	require.Empty(t, record.Cypher)
 	require.Empty(t, record.Params)
@@ -75,10 +100,17 @@ func TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity(t *testing.
 
 func TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity(t *testing.T) {
 	id := int64(42)
-	manifest := ExistingGraphAnchorManifest{Anchors: map[string]ExistingGraphAnchor{
-		"source": {PhysicalID: &id, ContentSHA256: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
-	}}
-	record := CaseResult{NodeParams: map[string]string{"source": "source"}}
+	manifest := ExistingGraphAnchorManifest{
+		Anchors: map[string]ExistingGraphAnchor{
+			"source": {
+				PhysicalID:    &id,
+				ContentSHA256: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			},
+		},
+	}
+	record := CaseResult{
+		NodeParams: map[string]string{"source": "source"},
+	}
 	redactExistingGraphRecord(&record, manifest, map[string]graph.ID{"source": graph.ID(id)})
 	require.Regexp(t, `^sha256:[0-9a-f]{64}$`, record.NodeParams["source"])
 	require.NotContains(t, record.NodeParams["source"], "42")
@@ -86,7 +118,12 @@ func TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity(t *testing.T) {
 
 func TestExistingGraphCheckpointIsIdentityBoundAndResumable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "checkpoint.json")
-	records := []CaseResult{{Dataset: "live", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK}}
+	records := []CaseResult{{
+		Dataset:       "live",
+		Name:          "case",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+	}}
 	require.NoError(t, writeExistingGraphCheckpoint(path, "manifest", "corpus", records))
 	loaded, err := readExistingGraphCheckpoint(path, "manifest", "corpus")
 	require.NoError(t, err)
@@ -109,8 +146,14 @@ func TestExistingGraphPlanRedactionPreservesJSONNumbers(t *testing.T) {
 
 func TestExistingGraphProgressIsAppendOnlyJSONL(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "progress.jsonl")
-	require.NoError(t, appendExistingGraphProgress(path, ExistingGraphProgress{Stage: "case", CaseKey: "one"}))
-	require.NoError(t, appendExistingGraphProgress(path, ExistingGraphProgress{Stage: "plan", CaseKey: "one"}))
+	require.NoError(t, appendExistingGraphProgress(path, ExistingGraphProgress{
+		Stage:   "case",
+		CaseKey: "one",
+	}))
+	require.NoError(t, appendExistingGraphProgress(path, ExistingGraphProgress{
+		Stage:   "plan",
+		CaseKey: "one",
+	}))
 	require.NoError(t, scanCheckpointJSONL(path))
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -118,16 +161,29 @@ func TestExistingGraphProgressIsAppendOnlyJSONL(t *testing.T) {
 }
 
 func TestCompleteGateRejectsAdaptiveExistingGraphArtifacts(t *testing.T) {
-	records := []CaseResult{{ExistingGraph: &ExistingGraphRun{Adaptive: true}}}
+	records := []CaseResult{{
+		ExistingGraph: &ExistingGraphRun{
+			Adaptive: true,
+		},
+	}}
 	require.ErrorContains(t, validatePerformanceArtifactSelections(records, records, false), "adaptive-discovery")
 }
 
 func TestExistingGraphCorpusIdentityIsStable(t *testing.T) {
 	zero := int64(0)
-	corpus := ScaleCorpus{Cases: []ScaleCase{{
-		Name: "case", Dataset: "live", Category: "live", Cypher: "RETURN 1",
-		Expected: ExpectedResult{RowCount: &zero}, Params: testutil.Params{}, CandidateModes: []ExecutionMode{ModePostgresSQL},
-	}}}
+	corpus := ScaleCorpus{
+		Cases: []ScaleCase{{
+			Name:     "case",
+			Dataset:  "live",
+			Category: "live",
+			Cypher:   "RETURN 1",
+			Expected: ExpectedResult{
+				RowCount: &zero,
+			},
+			Params:         testutil.Params{},
+			CandidateModes: []ExecutionMode{ModePostgresSQL},
+		}},
+	}
 	require.Equal(t, corpusIdentity(corpus), corpusIdentity(corpus))
 }
 

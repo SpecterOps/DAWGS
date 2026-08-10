@@ -24,7 +24,10 @@ import (
 )
 
 func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T) {
-	config := ShortestPathScaleConfig{Depth: 16, Fanout: 10}
+	config := ShortestPathScaleConfig{
+		Depth:  16,
+		Fanout: 10,
+	}
 	first := NewShortestPathScaleFixture(config)
 	second := NewShortestPathScaleFixture(config)
 	firstJSON, err := json.Marshal(first)
@@ -50,10 +53,19 @@ func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T
 
 func TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact(t *testing.T) {
 	config := ShortestPathScaleV2Config{
-		Depth: 3, ForwardRootFanOut: 2, ReverseRootFanIn: 2,
-		IntermediateFanOut: 1, IntermediateReverseFanIn: 4, FanInLevel: 2,
-		ParallelKindCount: 3, ParallelTargetCount: 2, DiamondWidth: 2,
-		DisconnectedWidth: 3, PropertyPayloadSize: 8, AddCycle: true, AddSelfLoop: true,
+		Depth:                    3,
+		ForwardRootFanOut:        2,
+		ReverseRootFanIn:         2,
+		IntermediateFanOut:       1,
+		IntermediateReverseFanIn: 4,
+		FanInLevel:               2,
+		ParallelKindCount:        3,
+		ParallelTargetCount:      2,
+		DiamondWidth:             2,
+		DisconnectedWidth:        3,
+		PropertyPayloadSize:      8,
+		AddCycle:                 true,
+		AddSelfLoop:              true,
 	}
 	first := NewShortestPathScaleV2Fixture(config)
 	second := NewShortestPathScaleV2Fixture(config)
@@ -77,12 +89,27 @@ func TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact(t *testing.T)
 
 func TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes(t *testing.T) {
 	for _, config := range []ShortestPathScaleV2Config{
-		{Depth: -1},
-		{Depth: 65},
-		{Depth: 3, FanInLevel: 2},
-		{Depth: 3, IntermediateReverseFanIn: 1, FanInLevel: 3},
-		{ParallelKindCount: 1},
-		{ParallelTargetCount: 1},
+		{
+			Depth: -1,
+		},
+		{
+			Depth: 65,
+		},
+		{
+			Depth:      3,
+			FanInLevel: 2,
+		},
+		{
+			Depth:                    3,
+			IntermediateReverseFanIn: 1,
+			FanInLevel:               3,
+		},
+		{
+			ParallelKindCount: 1,
+		},
+		{
+			ParallelTargetCount: 1,
+		},
 	} {
 		require.Error(t, ValidateShortestPathScaleV2Config(config))
 	}
@@ -90,7 +117,12 @@ func TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes(t *testing.T) {
 }
 
 func TestFixedSuffixExpansionScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
-	config := FixedSuffixExpansionScaleConfig{ExpansionDepth: 4, Fanout: 10, ValidSuffixEvery: 2, PropertyPayloadSize: 32}
+	config := FixedSuffixExpansionScaleConfig{
+		ExpansionDepth:      4,
+		Fanout:              10,
+		ValidSuffixEvery:    2,
+		PropertyPayloadSize: 32,
+	}
 	first := NewFixedSuffixExpansionScaleFixture(config)
 	second := NewFixedSuffixExpansionScaleFixture(config)
 	firstJSON, err := json.Marshal(first)
@@ -109,9 +141,14 @@ func TestFixedSuffixExpansionScaleFixtureV2ControlsSuffixPopulationsIndependentl
 	reachable := 0
 	zeroDepth := false
 	fixture := NewFixedSuffixExpansionScaleFixture(FixedSuffixExpansionScaleConfig{
-		ExpansionDepth: 2, Fanout: 4, ExactReachableSuffixSources: &reachable,
-		DisconnectedSuffixSources: 3, ReverseFanIn: 2, SuffixPathsPerBoundary: 2,
-		RootMatchCount: 1, RootHasZeroDepthSuffix: &zeroDepth,
+		ExpansionDepth:              2,
+		Fanout:                      4,
+		ExactReachableSuffixSources: &reachable,
+		DisconnectedSuffixSources:   3,
+		ReverseFanIn:                2,
+		SuffixPathsPerBoundary:      2,
+		RootMatchCount:              1,
+		RootHasZeroDepthSuffix:      &zeroDepth,
 	})
 
 	var enterSuffix, expand int

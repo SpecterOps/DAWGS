@@ -121,7 +121,9 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 		return nil, fmt.Errorf("expected *pg.Driver, got %T", db)
 	}
 	if existing != nil {
-		if err := pgDriver.SetDefaultGraph(ctx, graph.Graph{Name: existing.Manifest.Graph}); err != nil {
+		if err := pgDriver.SetDefaultGraph(ctx, graph.Graph{
+			Name: existing.Manifest.Graph,
+		}); err != nil {
 			_ = db.Close(ctx)
 			return nil, fmt.Errorf("select existing PostgreSQL graph: %w", err)
 		}
@@ -265,10 +267,14 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 	databaseDigest := sha256.Sum256([]byte(s.environment.Database))
 	s.environment.Database = "sha256:" + hex.EncodeToString(databaseDigest[:])
 	fixture := FixtureMetadata{
-		Dataset: "existing_graph", Checksum: s.environment.SchemaFingerprint + ":" + s.environment.IndexFingerprint,
-		PhysicalValidated: true, PhysicalNodeCount: preNodes, PhysicalEdgeCount: preEdges,
-		NodeRelationBytes: s.environment.NodeRelationBytes, EdgeRelationBytes: s.environment.EdgeRelationBytes,
-		Configuration: "existing_graph_read_only",
+		Dataset:           "existing_graph",
+		Checksum:          s.environment.SchemaFingerprint + ":" + s.environment.IndexFingerprint,
+		PhysicalValidated: true,
+		PhysicalNodeCount: preNodes,
+		PhysicalEdgeCount: preEdges,
+		NodeRelationBytes: s.environment.NodeRelationBytes,
+		EdgeRelationBytes: s.environment.EdgeRelationBytes,
+		Configuration:     "existing_graph_read_only",
 	}
 	var records []CaseResult
 	for _, testCase := range corpus.Cases {
@@ -279,7 +285,10 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 		if options.Completed[caseKey] {
 			continue
 		}
-		if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{Stage: "case", CaseKey: caseKey}); err != nil {
+		if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{
+			Stage:   "case",
+			CaseKey: caseKey,
+		}); err != nil {
 			return nil, err
 		}
 		if err := s.resetCaseSession(ctx); err != nil {
@@ -311,7 +320,10 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 			return nil, err
 		}
 	}
-	if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{Stage: "complete", Detail: fmt.Sprintf("nodes=%d edges=%d", postNodes, postEdges)}); err != nil {
+	if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{
+		Stage:  "complete",
+		Detail: fmt.Sprintf("nodes=%d edges=%d", postNodes, postEdges),
+	}); err != nil {
 		return nil, err
 	}
 	return records, nil
@@ -323,7 +335,12 @@ func (s *postgresSQLRunner) runExistingGraphCase(ctx context.Context, warmupIter
 	if len(timeouts) == 0 {
 		timeouts = []time.Duration{0}
 	}
-	live := &ExistingGraphRun{ManifestSHA256: options.Manifest.Checksum, ContentIdentity: options.Manifest.ContentIdentity, Protocol: "fixed_confirmation", Adaptive: options.Discovery}
+	live := &ExistingGraphRun{
+		ManifestSHA256:  options.Manifest.Checksum,
+		ContentIdentity: options.Manifest.ContentIdentity,
+		Protocol:        "fixed_confirmation",
+		Adaptive:        options.Discovery,
+	}
 	if options.Discovery {
 		live.Protocol = "adaptive_discovery"
 	}
@@ -343,15 +360,48 @@ func (s *postgresSQLRunner) runExistingGraphCase(ctx context.Context, warmupIter
 		record = s.runCase(attemptCtx, warmups, measured, testCase, idMap)
 		attemptErr := attemptCtx.Err()
 		cancel()
-		attempt := ExistingGraphAttempt{Timeout: timeout, WarmupSamples: warmups, MeasuredSamples: measured, Status: record.Status, Error: record.Error}
+		attempt := ExistingGraphAttempt{
+			Timeout:         timeout,
+			WarmupSamples:   warmups,
+			MeasuredSamples: measured,
+			Status:          record.Status,
+			Error:           record.Error,
+		}
 		live.Attempts = append(live.Attempts, attempt)
 		if attemptErr == nil || !options.Discovery {
 			break
 		}
-		_ = appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{Stage: "timeout", CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase), Detail: timeout.String()})
+		_ = appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{
+			Stage:   "timeout",
+			CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase),
+			Detail:  timeout.String(),
+		})
 	}
 	record.ExistingGraph = live
 	return record
+}
+
+func (s *postgresSQLRunner) resolveLogicalExistingGraphAnchor(ctx context.Context, name, logicalKey string) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, `select id from node where graph_id = $1 and properties ->> 'logical_key' = $2 order by id limit 2`, s.graphID, logicalKey)
+	if err != nil {
+		return nil, fmt.Errorf("resolve anchor %s: %w", name, err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("resolve anchor %s rows: %w", name, err)
+	}
+
+	return ids, nil
 }
 
 func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, manifest ExistingGraphAnchorManifest) (map[string]graph.ID, error) {
@@ -359,53 +409,59 @@ func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, man
 	for name, anchor := range manifest.Anchors {
 		var ids []int64
 		if anchor.PhysicalID == nil {
-			rows, err := s.pool.Query(ctx, `select id from node where graph_id = $1 and properties ->> 'logical_key' = $2 order by id limit 2`, s.graphID, anchor.LogicalKey)
-			if err != nil {
-				return nil, fmt.Errorf("resolve anchor %s: %w", name, err)
+			if resolvedIDs, err := s.resolveLogicalExistingGraphAnchor(ctx, name, anchor.LogicalKey); err != nil {
+				return nil, err
+			} else {
+				ids = resolvedIDs
 			}
-			for rows.Next() {
-				var id int64
-				if err := rows.Scan(&id); err != nil {
-					rows.Close()
-					return nil, err
-				}
-				ids = append(ids, id)
-			}
-			rows.Close()
 		} else {
-			var kindIDs, properties string
-			var id int64
+			var (
+				kindIDs    string
+				properties string
+				id         int64
+			)
+
 			if err := s.pool.QueryRow(ctx, `select id, kind_ids::text, properties::text from node where graph_id = $1 and id = $2`, s.graphID, *anchor.PhysicalID).Scan(&id, &kindIDs, &properties); err != nil {
 				return nil, fmt.Errorf("resolve physical anchor %s: %w", name, err)
 			}
+
 			digest := sha256.Sum256([]byte(kindIDs + "\n" + properties))
 			actual := "sha256:" + hex.EncodeToString(digest[:])
 			if actual != anchor.ContentSHA256 {
 				return nil, fmt.Errorf("physical anchor %s content identity mismatch", name)
 			}
+
 			ids = append(ids, id)
 		}
+
 		if len(ids) != 1 {
 			return nil, fmt.Errorf("anchor %s resolved to %d nodes; exactly one is required", name, len(ids))
 		}
+
 		if anchor.Kind != "" {
 			var matches bool
 			if err := s.pool.QueryRow(ctx, `select exists(select 1 from node n join kind k on k.id = any(n.kind_ids) where n.graph_id = $1 and n.id = $2 and k.name = $3)`, s.graphID, ids[0], anchor.Kind).Scan(&matches); err != nil {
 				return nil, err
 			}
+
 			if !matches {
 				return nil, fmt.Errorf("anchor %s does not have declared kind %s", name, anchor.Kind)
 			}
 		}
+
 		anchors[name] = graph.ID(ids[0])
 	}
+
 	return anchors, nil
 }
 
 func (s *postgresSQLRunner) existingGraphCounts(ctx context.Context) (int64, int64, error) {
 	var nodes, edges int64
-	err := s.pool.QueryRow(ctx, `select (select count(*) from node where graph_id = $1), (select count(*) from edge where graph_id = $1)`, s.graphID).Scan(&nodes, &edges)
-	return nodes, edges, err
+	if err := s.pool.QueryRow(ctx, `select (select count(*) from node where graph_id = $1), (select count(*) from edge where graph_id = $1)`, s.graphID).Scan(&nodes, &edges); err != nil {
+		return 0, 0, err
+	}
+
+	return nodes, edges, nil
 }
 
 func (s *postgresSQLRunner) captureExistingGraphEnvironment(ctx context.Context) error {
@@ -467,9 +523,12 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	}
 
 	if testCase.WriteScenario == nil {
-		var rowCount int64
-		var observedRows []string
-		var stats DurationStats
+		var (
+			rowCount     int64
+			observedRows []string
+			stats        DurationStats
+		)
+
 		if !hasForcedToolOptions(s.toolOptions) {
 			rowCount, observedRows, stats, err = measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
 		} else {
@@ -533,7 +592,10 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	}
 
 	if s.existingGraph != nil {
-		_ = appendExistingGraphProgress(s.existingGraph.ProgressPath, ExistingGraphProgress{Stage: "plan", CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase)})
+		_ = appendExistingGraphProgress(s.existingGraph.ProgressPath, ExistingGraphProgress{
+			Stage:   "plan",
+			CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase),
+		})
 	}
 	explain, err := s.explain(ctx, testCase.Cypher, params, testCase.WriteScenario != nil)
 	if err != nil {
@@ -618,7 +680,10 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	}
 	if testCase.WriteScenario == nil && len(s.concurrency) > 0 {
 		if s.existingGraph != nil {
-			_ = appendExistingGraphProgress(s.existingGraph.ProgressPath, ExistingGraphProgress{Stage: "concurrency", CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase)})
+			_ = appendExistingGraphProgress(s.existingGraph.ProgressPath, ExistingGraphProgress{
+				Stage:   "concurrency",
+				CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase),
+			})
 		}
 		blocks, err := measurePostgresConcurrency(ctx, s.pool, explain.SQL, explain.Parameters, s.poolSize, s.concurrency, iterations)
 		if err != nil {
@@ -762,7 +827,11 @@ func encodePostgresPlanJSON(value any) (json.RawMessage, error) {
 		return append(json.RawMessage(nil), typed...), nil
 	default:
 		encoded, err := json.Marshal(value)
-		return json.RawMessage(encoded), err
+		if err != nil {
+			return nil, err
+		}
+
+		return json.RawMessage(encoded), nil
 	}
 }
 

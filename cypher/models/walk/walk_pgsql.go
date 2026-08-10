@@ -214,7 +214,10 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		if typedNode.GraphID != nil {
 			branches = append(branches, typedNode.GraphID)
 		}
-		return &Cursor[pgsql.SyntaxNode]{Node: node, Branches: branches}, nil
+		return &Cursor[pgsql.SyntaxNode]{
+			Node:     node,
+			Branches: branches,
+		}, nil
 
 	case pgsql.FunctionCall:
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Parameters); err != nil {

@@ -1590,23 +1590,25 @@ func singletonEndpointValidationCTE(traversalStep *TraversalStep, expansionModel
 
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{Name: validatedEndpoints},
-		Query: pgsql.Query{Body: pgsql.Select{
-			Projection: []pgsql.SelectItem{
-				&pgsql.AliasedExpression{
-					Expression: pgd.EntityID(traversalStep.LeftNode.Identifier),
-					Alias:      models.OptionalValue(expansionRootID),
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: []pgsql.SelectItem{
+					&pgsql.AliasedExpression{
+						Expression: pgd.EntityID(traversalStep.LeftNode.Identifier),
+						Alias:      models.OptionalValue(expansionRootID),
+					},
+					&pgsql.AliasedExpression{
+						Expression: pgd.EntityID(traversalStep.RightNode.Identifier),
+						Alias:      models.OptionalValue(expansionTerminalID),
+					},
 				},
-				&pgsql.AliasedExpression{
-					Expression: pgd.EntityID(traversalStep.RightNode.Identifier),
-					Alias:      models.OptionalValue(expansionTerminalID),
+				From: []pgsql.FromClause{
+					{Source: expansionNodeTableReference(traversalStep.LeftNode.Identifier)},
+					{Source: expansionNodeTableReference(traversalStep.RightNode.Identifier)},
 				},
+				Where: pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints),
 			},
-			From: []pgsql.FromClause{
-				{Source: expansionNodeTableReference(traversalStep.LeftNode.Identifier)},
-				{Source: expansionNodeTableReference(traversalStep.RightNode.Identifier)},
-			},
-			Where: pgsql.OptionalAnd(expansionModel.PrimerNodeConstraints, expansionModel.TerminalNodeConstraints),
-		}},
+		},
 	}
 }
 
@@ -1916,10 +1918,18 @@ func shortestDistanceColumns(idOnly bool) *pgsql.RecordShape {
 }
 
 func shortestDistanceEndpointID(validatedEndpoints, endpointID pgsql.Identifier) pgsql.Subquery {
-	return pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
-		Projection: pgsql.Projection{pgsql.CompoundIdentifier{validatedEndpoints, endpointID}},
-		From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}}},
-	}}}
+	return pgsql.Subquery{
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{pgsql.CompoundIdentifier{validatedEndpoints, endpointID}},
+				From: []pgsql.FromClause{{
+					Source: pgsql.TableReference{
+						Name: validatedEndpoints.AsCompoundIdentifier(),
+					},
+				}},
+			},
+		},
+	}
 }
 
 func shortestDistanceIDProjection(projection pgsql.Projection, traversalStep *TraversalStep, stateID, validatedEndpoints pgsql.Identifier) pgsql.Projection {
@@ -1989,7 +1999,11 @@ func (s *ExpansionBuilder) BuildShortestDistanceRoot() (pgsql.Query, error) {
 	}
 	anchor := pgsql.Select{
 		Projection: anchorProjection,
-		From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}}},
+		From: []pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: validatedEndpoints.AsCompoundIdentifier(),
+			},
+		}},
 	}
 
 	recursiveProjection := pgsql.Projection{
@@ -2034,16 +2048,19 @@ func (s *ExpansionBuilder) BuildShortestDistanceRoot() (pgsql.Query, error) {
 	var endpointConstraint pgsql.Expression
 	joins := []pgsql.Join{{
 		Table: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()},
-		JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.OptionalAnd(
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{stateID, expansionRootID}, pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.OptionalAnd(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{stateID, expansionRootID}, pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
+				),
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{stateID, expansionNextID}, pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
+				),
 			),
-			pgsql.NewBinaryExpression(
-				pgsql.CompoundIdentifier{stateID, expansionNextID}, pgsql.OperatorEquals,
-				pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
-			),
-		)},
+		},
 	}}
 	if idOnly {
 		projectionItems = shortestDistanceIDProjection(projectionItems, s.traversalStep, stateID, validatedEndpoints)
@@ -2057,17 +2074,23 @@ func (s *ExpansionBuilder) BuildShortestDistanceRoot() (pgsql.Query, error) {
 		joins = append(joins,
 			pgsql.Join{
 				Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier),
-				JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{stateID, expansionRootID},
-				)},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{stateID, expansionRootID},
+					),
+				},
 			},
 			pgsql.Join{
 				Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier),
-				JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{stateID, expansionNextID},
-				)},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{stateID, expansionNextID},
+					),
+				},
 			},
 		)
 	}
@@ -2099,12 +2122,17 @@ func (s *ExpansionBuilder) BuildShortestDistanceRoot() (pgsql.Query, error) {
 	}
 	query.AddCTE(endpointCTE)
 	query.AddCTE(pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: stateID, Shape: shortestDistanceColumns(idOnly)},
-		Query: pgsql.Query{Body: pgsql.SetOperation{
-			LOperand: anchor,
-			ROperand: recursive,
-			Operator: pgsql.OperatorUnion,
-		}},
+		Alias: pgsql.TableAlias{
+			Name:  stateID,
+			Shape: shortestDistanceColumns(idOnly),
+		},
+		Query: pgsql.Query{
+			Body: pgsql.SetOperation{
+				LOperand: anchor,
+				ROperand: recursive,
+				Operator: pgsql.OperatorUnion,
+			},
+		},
 	})
 
 	return query, nil
@@ -2141,40 +2169,72 @@ func shortestPathM0Hydration(stateID pgsql.Identifier, direction graph.Direction
 	}
 	joins := []pgsql.Join{{
 		Table: expansionEdgeTableReference(pathEdge),
-		JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{pathEdge, pgsql.ColumnID}, pgsql.OperatorEquals, edgeID,
-		)},
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{pathEdge, pgsql.ColumnID}, pgsql.OperatorEquals, edgeID,
+			),
+		},
 	}, {
 		Table: expansionNodeTableReference(pathTerminal),
-		JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{pathTerminal, pgsql.ColumnID}, pgsql.OperatorEquals,
-			pgsql.CompoundIdentifier{pathEdge, nextNodeColumn},
-		)},
+		JoinOperator: pgsql.JoinOperator{
+			JoinType: pgsql.JoinTypeInner,
+			Constraint: pgsql.NewBinaryExpression(
+				pgsql.CompoundIdentifier{pathTerminal, pgsql.ColumnID}, pgsql.OperatorEquals,
+				pgsql.CompoundIdentifier{pathEdge, nextNodeColumn},
+			),
+		},
 	}}
 
 	return pgsql.LateralSubquery{
-		Query: pgsql.Query{Body: pgsql.Select{
-			Projection: pgsql.Projection{
-				&pgsql.AliasedExpression{Expression: pgsql.FunctionCall{
-					Function: pgsql.FunctionArrayAggregate, Parameters: []pgsql.Expression{shortestPathNodeComposite(pathTerminal)},
-					OrderBy: []*pgsql.OrderBy{{Expression: pathIndex, Ascending: true}}, CastType: pgsql.NodeCompositeArray,
-				}, Alias: pgsql.AsOptionalIdentifier(hydratedNodes)},
-				&pgsql.AliasedExpression{Expression: pgsql.FunctionCall{
-					Function: pgsql.FunctionArrayAggregate, Parameters: []pgsql.Expression{edgeCompositeValue(pathEdge)},
-					OrderBy: []*pgsql.OrderBy{{Expression: pathIndex, Ascending: true}}, CastType: pgsql.EdgeCompositeArray,
-				}, Alias: pgsql.AsOptionalIdentifier(hydratedEdges)},
-				&pgsql.AliasedExpression{Expression: pgsql.FunctionCall{
-					Function: pgsql.FunctionCount, Parameters: []pgsql.Expression{pgsql.Wildcard{}}, CastType: pgsql.Int8,
-				}, Alias: pgsql.AsOptionalIdentifier(hydratedCount)},
-			},
-			From: []pgsql.FromClause{{
-				Source: pgsql.AliasedExpression{
-					Expression: pgsql.FunctionCall{Function: pgsql.FunctionGenerateSubscripts, Parameters: []pgsql.Expression{pathIDs, pgsql.NewLiteral(1, pgsql.Int)}},
-					Alias:      pgsql.AsOptionalIdentifier(pathIndex),
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{
+					&pgsql.AliasedExpression{
+						Expression: pgsql.FunctionCall{
+							Function:   pgsql.FunctionArrayAggregate,
+							Parameters: []pgsql.Expression{shortestPathNodeComposite(pathTerminal)},
+							OrderBy: []*pgsql.OrderBy{{
+								Expression: pathIndex,
+								Ascending:  true,
+							}},
+							CastType: pgsql.NodeCompositeArray,
+						},
+						Alias: pgsql.AsOptionalIdentifier(hydratedNodes),
+					},
+					&pgsql.AliasedExpression{
+						Expression: pgsql.FunctionCall{
+							Function:   pgsql.FunctionArrayAggregate,
+							Parameters: []pgsql.Expression{edgeCompositeValue(pathEdge)},
+							OrderBy: []*pgsql.OrderBy{{
+								Expression: pathIndex,
+								Ascending:  true,
+							}},
+							CastType: pgsql.EdgeCompositeArray,
+						},
+						Alias: pgsql.AsOptionalIdentifier(hydratedEdges),
+					},
+					&pgsql.AliasedExpression{
+						Expression: pgsql.FunctionCall{
+							Function:   pgsql.FunctionCount,
+							Parameters: []pgsql.Expression{pgsql.Wildcard{}},
+							CastType:   pgsql.Int8,
+						},
+						Alias: pgsql.AsOptionalIdentifier(hydratedCount),
+					},
 				},
-				Joins: joins,
-			}},
-		}},
+				From: []pgsql.FromClause{{
+					Source: pgsql.AliasedExpression{
+						Expression: pgsql.FunctionCall{
+							Function:   pgsql.FunctionGenerateSubscripts,
+							Parameters: []pgsql.Expression{pathIDs, pgsql.NewLiteral(1, pgsql.Int)},
+						},
+						Alias: pgsql.AsOptionalIdentifier(pathIndex),
+					},
+					Joins: joins,
+				}},
+			},
+		},
 		Binding: pgsql.AsOptionalIdentifier(hydrated),
 	}
 }
@@ -2235,23 +2295,31 @@ func (s *ExpansionBuilder) BuildShortestPathEdgeM0Root() (pgsql.Query, error) {
 			pgsql.NewLiteral(int64(0), pgsql.Int8),
 			pgsql.ArrayLiteral{CastType: pgsql.Int8Array},
 		},
-		From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}}},
+		From: []pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: validatedEndpoints.AsCompoundIdentifier(),
+			},
+		}},
 	}
 	recursive := pgsql.Select{
 		Projection: pgsql.Projection{
 			expansionModel.EdgeEndColumn,
 			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{stateID, expansionDepth}, pgsql.OperatorAdd, pgsql.NewLiteral(int64(1), pgsql.Int8)),
 			pgsql.NewBinaryExpression(pathIDs, pgsql.OperatorConcatenate, pgsql.ArrayLiteral{
-				Values: []pgsql.Expression{pgsql.CompoundIdentifier{s.traversalStep.Edge.Identifier, pgsql.ColumnID}}, CastType: pgsql.Int8Array,
+				Values:   []pgsql.Expression{pgsql.CompoundIdentifier{s.traversalStep.Edge.Identifier, pgsql.ColumnID}},
+				CastType: pgsql.Int8Array,
 			}),
 		},
 		From: []pgsql.FromClause{{
 			Source: pgsql.TableReference{Name: stateID.AsCompoundIdentifier()},
 			Joins: []pgsql.Join{{
 				Table: expansionEdgeTableReference(s.traversalStep.Edge.Identifier),
-				JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					expansionModel.EdgeStartColumn, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionNextID},
-				)},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.NewBinaryExpression(
+						expansionModel.EdgeStartColumn, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionNextID},
+					),
+				},
 			}},
 		}},
 		Where: pgsql.OptionalAnd(
@@ -2264,50 +2332,114 @@ func (s *ExpansionBuilder) BuildShortestPathEdgeM0Root() (pgsql.Query, error) {
 	}
 
 	hydration := shortestPathM0Hydration(stateID, s.traversalStep.Direction)
-	rootArray := pgsql.ArrayLiteral{Values: []pgsql.Expression{shortestPathNodeComposite(s.traversalStep.LeftNode.Identifier)}, CastType: pgsql.NodeCompositeArray}
-	nodes := pgsql.FunctionCall{Function: pgsql.FunctionCoalesce, Parameters: []pgsql.Expression{
-		pgsql.CompoundIdentifier{hydrated, hydratedNodes}, pgsql.ArrayLiteral{CastType: pgsql.NodeCompositeArray},
-	}}
-	edges := pgsql.FunctionCall{Function: pgsql.FunctionCoalesce, Parameters: []pgsql.Expression{
-		pgsql.CompoundIdentifier{hydrated, hydratedEdges}, pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray},
-	}}
-	path := pgsql.CompositeValue{DataType: pgsql.PathComposite, Values: []pgsql.Expression{
-		pgsql.NewBinaryExpression(rootArray, pgsql.OperatorConcatenate, nodes),
-		edges,
-	}}
+	rootArray := pgsql.ArrayLiteral{
+		Values:   []pgsql.Expression{shortestPathNodeComposite(s.traversalStep.LeftNode.Identifier)},
+		CastType: pgsql.NodeCompositeArray,
+	}
+	nodes := pgsql.FunctionCall{
+		Function: pgsql.FunctionCoalesce,
+		Parameters: []pgsql.Expression{
+			pgsql.CompoundIdentifier{hydrated, hydratedNodes}, pgsql.ArrayLiteral{
+				CastType: pgsql.NodeCompositeArray,
+			},
+		},
+	}
+	edges := pgsql.FunctionCall{
+		Function: pgsql.FunctionCoalesce,
+		Parameters: []pgsql.Expression{
+			pgsql.CompoundIdentifier{hydrated, hydratedEdges}, pgsql.ArrayLiteral{
+				CastType: pgsql.EdgeCompositeArray,
+			},
+		},
+	}
+	path := pgsql.CompositeValue{
+		DataType: pgsql.PathComposite,
+		Values: []pgsql.Expression{
+			pgsql.NewBinaryExpression(rootArray, pgsql.OperatorConcatenate, nodes),
+			edges,
+		},
+	}
 
 	projection := pgsql.Select{
 		Projection: shortestPathM0Projection(expansionModel.Projection, stateID, path),
 		From: []pgsql.FromClause{{
 			Source: pgsql.TableReference{Name: stateID.AsCompoundIdentifier()},
 			Joins: []pgsql.Join{
-				{Table: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}, JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{stateID, expansionNextID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
-				)}},
-				{Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
-				)}},
-				{Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionNextID},
-				)}},
-				{Table: hydration, JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewLiteral(true, pgsql.Boolean)}},
+				{
+					Table: pgsql.TableReference{
+						Name: validatedEndpoints.AsCompoundIdentifier(),
+					},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{stateID, expansionNextID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
+						),
+					},
+				},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
+						),
+					},
+				},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionNextID},
+						),
+					},
+				},
+				{
+					Table: hydration,
+					JoinOperator: pgsql.JoinOperator{
+						JoinType:   pgsql.JoinTypeInner,
+						Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
+					},
+				},
 			},
 		}},
 		Where: pgsql.OptionalAnd(
 			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{stateID, expansionDepth}, pgsql.OperatorGreaterThanOrEqualTo, pgsql.NewLiteral(expansionModel.Options.MinDepth.GetOr(1), pgsql.Int8)),
-			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{hydrated, hydratedCount}, pgsql.OperatorEquals, pgsql.FunctionCall{Function: pgsql.FunctionCardinality, Parameters: []pgsql.Expression{pathIDs}}),
+			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{hydrated, hydratedCount}, pgsql.OperatorEquals, pgsql.FunctionCall{
+				Function:   pgsql.FunctionCardinality,
+				Parameters: []pgsql.Expression{pathIDs},
+			}),
 		),
 	}
 
 	query := pgsql.Query{
-		CommonTableExpressions: &pgsql.With{Recursive: true}, Body: projection,
-		OrderBy: []*pgsql.OrderBy{{Expression: pgsql.CompoundIdentifier{stateID, expansionDepth}, Ascending: true}, {Expression: pathIDs, Ascending: true}},
-		Limit:   pgsql.NewLiteral(int64(1), pgsql.Int8),
+		CommonTableExpressions: &pgsql.With{
+			Recursive: true,
+		},
+		Body: projection,
+		OrderBy: []*pgsql.OrderBy{{
+			Expression: pgsql.CompoundIdentifier{stateID, expansionDepth},
+			Ascending:  true,
+		}, {
+			Expression: pathIDs,
+			Ascending:  true,
+		}},
+		Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
 	}
 	query.AddCTE(endpointCTE)
 	query.AddCTE(pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: stateID, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionNextID, expansionDepth, expansionPath})},
-		Query: pgsql.Query{Body: pgsql.SetOperation{LOperand: anchor, ROperand: recursive, Operator: pgsql.OperatorUnion, All: true}},
+		Alias: pgsql.TableAlias{
+			Name:  stateID,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionNextID, expansionDepth, expansionPath}),
+		},
+		Query: pgsql.Query{
+			Body: pgsql.SetOperation{
+				LOperand: anchor,
+				ROperand: recursive,
+				Operator: pgsql.OperatorUnion,
+				All:      true,
+			},
+		},
 	})
 	return query, nil
 }
@@ -2366,34 +2498,65 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 
 	stateID := expansionModel.Frame.Binding.Identifier
 	search := pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: stateID, Shape: expansionColumns()},
-		Query: pgsql.Query{Body: pgsql.Select{
-			Projection: pgsql.Projection{pgsql.CompoundIdentifier{functionName, pgsql.WildcardIdentifier}},
-			From: []pgsql.FromClause{
-				{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}},
-				{Source: pgsql.FunctionCall{Function: functionName, Parameters: parameters}},
+		Alias: pgsql.TableAlias{
+			Name:  stateID,
+			Shape: expansionColumns(),
+		},
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{pgsql.CompoundIdentifier{functionName, pgsql.WildcardIdentifier}},
+				From: []pgsql.FromClause{
+					{
+						Source: pgsql.TableReference{
+							Name: validatedEndpoints.AsCompoundIdentifier(),
+						},
+					},
+					{
+						Source: pgsql.FunctionCall{
+							Function:   functionName,
+							Parameters: parameters,
+						},
+					},
+				},
 			},
-		}},
+		},
 	}
 
 	projection := pgsql.Select{
 		Projection: expansionModel.Projection,
 		From: []pgsql.FromClause{{
-			Source: pgsql.TableReference{Name: stateID.AsCompoundIdentifier()},
+			Source: pgsql.TableReference{
+				Name: stateID.AsCompoundIdentifier(),
+			},
 			Joins: []pgsql.Join{
-				{Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{stateID, expansionRootID},
-				)}},
-				{Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{stateID, expansionNextID},
-				)}},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{stateID, expansionRootID},
+						),
+					},
+				},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{stateID, expansionNextID},
+						),
+					},
+				},
 			},
 		}},
 	}
 
-	query := pgsql.Query{CommonTableExpressions: &pgsql.With{}, Body: projection}
+	query := pgsql.Query{
+		CommonTableExpressions: &pgsql.With{},
+		Body:                   projection,
+	}
 	query.AddCTE(endpointCTE)
 	query.AddCTE(search)
 	return query, nil
@@ -2561,16 +2724,30 @@ func (s *ExpansionBuilder) BuildBiDirectionalShortestPathsRootWithDirectPrefligh
 	projectionQuery := pgsql.Select{
 		Projection: expansionModel.Projection,
 		From: []pgsql.FromClause{{
-			Source: pgsql.TableReference{Name: expansionModel.Frame.Binding.Identifier.AsCompoundIdentifier()},
+			Source: pgsql.TableReference{
+				Name: expansionModel.Frame.Binding.Identifier.AsCompoundIdentifier(),
+			},
 			Joins: []pgsql.Join{
-				{Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-				)}},
-				{Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-				)}},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
+						),
+					},
+				},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
+						),
+					},
+				},
 			},
 		}},
 	}
@@ -2589,47 +2766,107 @@ func (s *ExpansionBuilder) BuildBiDirectionalShortestPathsRootWithDirectPrefligh
 				pgd.ExpressionArrayLiteral(pgd.EntityID(s.traversalStep.Edge.Identifier)),
 			},
 			From: []pgsql.FromClause{{
-				Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()},
+				Source: pgsql.TableReference{
+					Name: validatedEndpoints.AsCompoundIdentifier(),
+				},
 				Joins: []pgsql.Join{{
 					Table: expansionEdgeTableReference(s.traversalStep.Edge.Identifier),
-					JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.OptionalAnd(
-						pgd.Equals(expansionModel.EdgeStartColumn, pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID}),
-						pgd.Equals(expansionModel.EdgeEndColumn, pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID}),
-					)},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.OptionalAnd(
+							pgd.Equals(expansionModel.EdgeStartColumn, pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID}),
+							pgd.Equals(expansionModel.EdgeEndColumn, pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID}),
+						),
+					},
 				}},
 			}},
 			Where: expansionModel.EdgeConstraints,
 		},
-		OrderBy: []*pgsql.OrderBy{{Expression: pgd.EntityID(s.traversalStep.Edge.Identifier), Ascending: true}},
-		Limit:   pgsql.NewLiteral(int64(1), pgsql.Int8),
+		OrderBy: []*pgsql.OrderBy{{
+			Expression: pgd.EntityID(s.traversalStep.Edge.Identifier),
+			Ascending:  true,
+		}},
+		Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
 	}
 
-	fallbackEndpointQuery := pgsql.Query{Body: pgsql.Select{
-		Projection: pgsql.Projection{pgsql.Wildcard{}},
-		From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()}}},
-		Where: pgsql.ExistsExpression{Negated: true, Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
-			Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
-			From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: directHit.AsCompoundIdentifier()}}},
-		}}}},
-	}}
+	fallbackEndpointQuery := pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.Wildcard{}},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name: validatedEndpoints.AsCompoundIdentifier(),
+				},
+			}},
+			Where: pgsql.ExistsExpression{
+				Negated: true,
+				Subquery: pgsql.Subquery{
+					Query: pgsql.Query{
+						Body: pgsql.Select{
+							Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
+							From: []pgsql.FromClause{{
+								Source: pgsql.TableReference{
+									Name: directHit.AsCompoundIdentifier(),
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
 
-	stateQuery := pgsql.Query{Body: pgsql.SetOperation{
-		LOperand: pgsql.Select{Projection: pgsql.Projection{pgsql.Wildcard{}}, From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: directHit.AsCompoundIdentifier()}}}},
-		ROperand: pgsql.Select{Projection: pgsql.Projection{pgsql.Wildcard{}}, From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: workspaceSearch.AsCompoundIdentifier()}}}},
-		Operator: pgsql.OperatorUnion,
-		All:      true,
-	}}
+	stateQuery := pgsql.Query{
+		Body: pgsql.SetOperation{
+			LOperand: pgsql.Select{
+				Projection: pgsql.Projection{pgsql.Wildcard{}},
+				From: []pgsql.FromClause{{
+					Source: pgsql.TableReference{
+						Name: directHit.AsCompoundIdentifier(),
+					},
+				}},
+			},
+			ROperand: pgsql.Select{
+				Projection: pgsql.Projection{pgsql.Wildcard{}},
+				From: []pgsql.FromClause{{
+					Source: pgsql.TableReference{
+						Name: workspaceSearch.AsCompoundIdentifier(),
+					},
+				}},
+			},
+			Operator: pgsql.OperatorUnion,
+			All:      true,
+		},
+	}
 
-	query := pgsql.Query{CommonTableExpressions: &pgsql.With{}, Body: projectionQuery}
+	query := pgsql.Query{
+		CommonTableExpressions: &pgsql.With{},
+		Body:                   projectionQuery,
+	}
 	query.AddCTE(singletonEndpointValidationCTE(s.traversalStep, expansionModel))
 	query.AddCTE(pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: directHit, Shape: expansionColumns()},
-		Materialized: &pgsql.Materialized{Materialized: true},
-		Query:        directQuery,
+		Alias: pgsql.TableAlias{
+			Name:  directHit,
+			Shape: expansionColumns(),
+		},
+		Materialized: &pgsql.Materialized{
+			Materialized: true,
+		},
+		Query: directQuery,
 	})
-	query.AddCTE(pgsql.CommonTableExpression{Alias: pgsql.TableAlias{Name: fallbackEndpoints}, Query: fallbackEndpointQuery})
+	query.AddCTE(pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{
+			Name: fallbackEndpoints,
+		},
+		Query: fallbackEndpointQuery,
+	})
 	query.AddCTE(shortestPathSearchCTEFrom(pgsql.FunctionBidirectionalSPHarness, expansionModel, harnessParameters, fallbackEndpoints, workspaceSearch))
-	query.AddCTE(pgsql.CommonTableExpression{Alias: pgsql.TableAlias{Name: expansionModel.Frame.Binding.Identifier, Shape: expansionColumns()}, Query: stateQuery})
+	query.AddCTE(pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{
+			Name:  expansionModel.Frame.Binding.Identifier,
+			Shape: expansionColumns(),
+		},
+		Query: stateQuery,
+	})
 
 	return query, nil
 }
@@ -3557,7 +3794,7 @@ func applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
 		)
 
 		if candidateApplied, err := applyExpansionSuffixPushdownCandidate(currentStep, suffixSteps); err != nil {
-			return applied, err
+			return 0, err
 		} else if candidateApplied {
 			applied++
 		}
@@ -3867,7 +4104,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 	}
 
 	if constraints, err = s.treeTranslator.ConsumeConstraintsFromVisibleSet(expansionModel.Frame.Visible); err != nil {
-		return projectionConstraints, err
+		return nil, err
 	} else {
 		// Constraints that target the terminal node may crop up here where it's finally in scope. Additionally,
 		// only accept paths that are marked satisfied from the recursive descent CTE
@@ -3879,7 +4116,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 			}
 
 			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, expressions); err != nil {
-				return projectionConstraints, err
+				return nil, err
 			}
 
 			// Append any deferred (non-local) constraints onto the projection constraints
@@ -3888,7 +4125,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 			}
 		} else {
 			if projectionConstraints, err = ConjoinExpressions(s.kindMapper, []pgsql.Expression{constraints.Expression, joinCondition}); err != nil {
-				return projectionConstraints, err
+				return nil, err
 			}
 		}
 	}

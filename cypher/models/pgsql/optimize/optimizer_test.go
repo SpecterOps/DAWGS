@@ -813,7 +813,10 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 		ExpansionSearchBackwardViabilityForward,
 	}, decision.PlannedCandidates)
 	require.True(t, decision.StructurallyEligible)
-	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "qualified_fixed_suffix_topology", Eligible: true})
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{
+		Name:     "qualified_fixed_suffix_topology",
+		Eligible: true,
+	})
 	require.Equal(t, ExpansionSearchStepwiseForward, decision.SelectedStrategy)
 	require.Equal(t, ExpansionSearchStepwiseForward, decision.FallbackStrategy)
 	require.Equal(t, ExpansionSearchFallbackTournamentUnqualified, decision.FallbackReason)
@@ -840,7 +843,10 @@ func TestFixedSuffixSearchRejectsPredicateFunctionReevaluation(t *testing.T) {
 	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
 	require.False(t, decision.StructurallyEligible)
 	require.Equal(t, ExpansionSearchFallbackNonDeterministicPredicate, decision.FallbackReason)
-	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "deterministic_predicates", Eligible: false})
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{
+		Name:     "deterministic_predicates",
+		Eligible: false,
+	})
 }
 
 func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
@@ -849,9 +855,21 @@ func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
 		projection  string
 		observation ExpansionSearchObservationMode
 	}{
-		{name: "endpoint IDs", projection: "id(head), id(terminal)", observation: ExpansionSearchObservationEndpointIDs},
-		{name: "ordered IDs", projection: "length(path)", observation: ExpansionSearchObservationOrderedPathIDs},
-		{name: "full path", projection: "path", observation: ExpansionSearchObservationFullPath},
+		{
+			name:        "endpoint IDs",
+			projection:  "id(head), id(terminal)",
+			observation: ExpansionSearchObservationEndpointIDs,
+		},
+		{
+			name:        "ordered IDs",
+			projection:  "length(path)",
+			observation: ExpansionSearchObservationOrderedPathIDs,
+		},
+		{
+			name:        "full path",
+			projection:  "path",
+			observation: ExpansionSearchObservationFullPath,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -889,25 +907,101 @@ func TestLoweringPlanReportsStableFixedSuffixSearchFallbackCodes(t *testing.T) {
 		query  string
 		reason string
 	}{
-		{name: "no fixed suffix", query: `MATCH (root)-[:Expand*0..16]->(head) RETURN id(head)`, reason: ExpansionSearchFallbackNoFixedSuffix},
-		{name: "unbounded", query: `MATCH (root)-[:Expand*0..]->()-[:EnterSuffix]->(head) RETURN id(head)`, reason: ExpansionSearchFallbackUnboundedDepth},
-		{name: "short suffix", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head) RETURN id(head)`, reason: ExpansionSearchFallbackSuffixTooShort},
-		{name: "directionless", query: `MATCH (root)-[:Expand*0..16]-()-[:EnterSuffix]->(head)-[:ContinueSuffix]->()-[:CompleteSuffix]->(terminal) RETURN id(head)`, reason: ExpansionSearchFallbackDirectionlessExpansion},
-		{name: "directionless suffix", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]-(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackDirectionlessSuffix},
-		{name: "optional", query: `OPTIONAL MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackOptionalMatch},
-		{name: "shortest path", query: `MATCH path = shortestPath((root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)) RETURN path`, reason: ExpansionSearchFallbackShortestPath},
-		{name: "all shortest paths", query: `MATCH path = allShortestPaths((root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)) RETURN path`, reason: ExpansionSearchFallbackAllShortestPaths},
-		{name: "unbound root", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)`, reason: ExpansionSearchFallbackUnboundRoot},
-		{name: "unsupported depth", query: `MATCH (root)-[:Expand*0..65]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackUnsupportedDepth},
-		{name: "relationship variable", query: `MATCH (root)-[edges:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackRelationshipVariable},
-		{name: "relationship predicate", query: `MATCH (root)-[edges:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE edges.enabled = true RETURN id(head)`, reason: ExpansionSearchFallbackRelationshipPredicate},
-		{name: "correlated suffix", query: `MATCH (head:SuffixHead) MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path`, reason: ExpansionSearchFallbackCorrelatedSuffix},
-		{name: "cross-region predicate", query: `MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE root.partition = head.partition RETURN path`, reason: ExpansionSearchFallbackCrossRegionPredicate},
-		{name: "path predicate", query: `MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE length(path) > 0 RETURN path`, reason: ExpansionSearchFallbackPathDependentPredicate},
-		{name: "unsupported observation", query: `MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(path)`, reason: ExpansionSearchFallbackUnsupportedObservation},
-		{name: "mutation", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) CREATE (created) RETURN id(head)`, reason: ExpansionSearchFallbackMutation},
-		{name: "limit pushdown conflict", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head) LIMIT 10`, reason: ExpansionSearchFallbackLimitPushdownConflict},
-		{name: "tournament unqualified", query: `MATCH (root)-[:Other|Alternate*0..16]->()-[:A]->(head:X)-[:B]->(:Y)-[:C]->(terminal:Z) RETURN id(head)`, reason: ExpansionSearchFallbackTournamentUnqualified},
+		{
+			name:   "no fixed suffix",
+			query:  `MATCH (root)-[:Expand*0..16]->(head) RETURN id(head)`,
+			reason: ExpansionSearchFallbackNoFixedSuffix,
+		},
+		{
+			name:   "unbounded",
+			query:  `MATCH (root)-[:Expand*0..]->()-[:EnterSuffix]->(head) RETURN id(head)`,
+			reason: ExpansionSearchFallbackUnboundedDepth,
+		},
+		{
+			name:   "short suffix",
+			query:  `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head) RETURN id(head)`,
+			reason: ExpansionSearchFallbackSuffixTooShort,
+		},
+		{
+			name:   "directionless",
+			query:  `MATCH (root)-[:Expand*0..16]-()-[:EnterSuffix]->(head)-[:ContinueSuffix]->()-[:CompleteSuffix]->(terminal) RETURN id(head)`,
+			reason: ExpansionSearchFallbackDirectionlessExpansion,
+		},
+		{
+			name:   "directionless suffix",
+			query:  `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]-(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`,
+			reason: ExpansionSearchFallbackDirectionlessSuffix,
+		},
+		{
+			name:   "optional",
+			query:  `OPTIONAL MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`,
+			reason: ExpansionSearchFallbackOptionalMatch,
+		},
+		{
+			name:   "shortest path",
+			query:  `MATCH path = shortestPath((root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)) RETURN path`,
+			reason: ExpansionSearchFallbackShortestPath,
+		},
+		{
+			name:   "all shortest paths",
+			query:  `MATCH path = allShortestPaths((root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)) RETURN path`,
+			reason: ExpansionSearchFallbackAllShortestPaths,
+		},
+		{
+			name:   "unbound root",
+			query:  `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)`,
+			reason: ExpansionSearchFallbackUnboundRoot,
+		},
+		{
+			name:   "unsupported depth",
+			query:  `MATCH (root)-[:Expand*0..65]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`,
+			reason: ExpansionSearchFallbackUnsupportedDepth,
+		},
+		{
+			name:   "relationship variable",
+			query:  `MATCH (root)-[edges:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`,
+			reason: ExpansionSearchFallbackRelationshipVariable,
+		},
+		{
+			name:   "relationship predicate",
+			query:  `MATCH (root)-[edges:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE edges.enabled = true RETURN id(head)`,
+			reason: ExpansionSearchFallbackRelationshipPredicate,
+		},
+		{
+			name:   "correlated suffix",
+			query:  `MATCH (head:SuffixHead) MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path`,
+			reason: ExpansionSearchFallbackCorrelatedSuffix,
+		},
+		{
+			name:   "cross-region predicate",
+			query:  `MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE root.partition = head.partition RETURN path`,
+			reason: ExpansionSearchFallbackCrossRegionPredicate,
+		},
+		{
+			name:   "path predicate",
+			query:  `MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE length(path) > 0 RETURN path`,
+			reason: ExpansionSearchFallbackPathDependentPredicate,
+		},
+		{
+			name:   "unsupported observation",
+			query:  `MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(path)`,
+			reason: ExpansionSearchFallbackUnsupportedObservation,
+		},
+		{
+			name:   "mutation",
+			query:  `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) CREATE (created) RETURN id(head)`,
+			reason: ExpansionSearchFallbackMutation,
+		},
+		{
+			name:   "limit pushdown conflict",
+			query:  `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head) LIMIT 10`,
+			reason: ExpansionSearchFallbackLimitPushdownConflict,
+		},
+		{
+			name:   "tournament unqualified",
+			query:  `MATCH (root)-[:Other|Alternate*0..16]->()-[:A]->(head:X)-[:B]->(:Y)-[:C]->(terminal:Z) RETURN id(head)`,
+			reason: ExpansionSearchFallbackTournamentUnqualified,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
@@ -1630,14 +1724,102 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 		staticEligible             bool
 		selector                   string
 	}{
-		{name: "outbound distance depth 64 two kinds", pattern: `(s)-[:MemberOf|Contains*1..64]->(e)`, observation: `length(p)`, executor: ShortestPathExecutorS3Unidirectional, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, kindCount: 2, staticEligible: true, selector: "sp-static-v3"},
-		{name: "outbound one path one kind", pattern: `(s)-[:MemberOf*1..16]->(e)`, observation: `p`, executor: ShortestPathExecutorS3EdgeM0, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, kindCount: 1, staticEligible: true, selector: "sp-static-v3"},
-		{name: "outbound one path two kinds", pattern: `(s)-[:MemberOf|Contains*1..16]->(e)`, observation: `p`, executor: ShortestPathExecutorS4CanonicalWitness, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, kindCount: 2, staticEligible: true, selector: "sp-static-v4"},
-		{name: "outbound one path wildcard", pattern: `(s)-[*1..16]->(e)`, observation: `p`, executor: ShortestPathExecutorS4CanonicalWitness, direction: graph.DirectionOutbound, physicalExpansion: ShortestPathPhysicalExpansionStartID, topology: ShortestPathTopologyPhysicalOutbound, untyped: true, staticEligible: true, selector: "sp-static-v4"},
-		{name: "inbound distance depth one", pattern: `(s)<-[:MemberOf*0..1]-(e)`, observation: `length(p)`, executor: ShortestPathExecutorS3Unidirectional, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundShallow, kindCount: 1, staticEligible: true, selector: "sp-static-v3"},
-		{name: "inbound path depth one", pattern: `(s)<-[:MemberOf*1..1]-(e)`, observation: `p`, executor: ShortestPathExecutorS3EdgeM0, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundShallow, kindCount: 1, staticEligible: true, selector: "sp-static-v3"},
-		{name: "inbound distance depth two", pattern: `(s)<-[:MemberOf*1..2]-(e)`, observation: `length(p)`, executor: ShortestPathExecutorS4CanonicalDistance, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundDeep, kindCount: 1, staticEligible: true, selector: "sp-static-v4"},
-		{name: "inbound path depth 64 two kinds", pattern: `(s)<-[:MemberOf|Contains*1..64]-(e)`, observation: `p`, executor: ShortestPathExecutorS4CanonicalWitness, direction: graph.DirectionInbound, physicalExpansion: ShortestPathPhysicalExpansionEndID, topology: ShortestPathTopologyPhysicalInboundDeep, kindCount: 2, staticEligible: true, selector: "sp-static-v4"},
+		{
+			name:              "outbound distance depth 64 two kinds",
+			pattern:           `(s)-[:MemberOf|Contains*1..64]->(e)`,
+			observation:       `length(p)`,
+			executor:          ShortestPathExecutorS3Unidirectional,
+			direction:         graph.DirectionOutbound,
+			physicalExpansion: ShortestPathPhysicalExpansionStartID,
+			topology:          ShortestPathTopologyPhysicalOutbound,
+			kindCount:         2,
+			staticEligible:    true,
+			selector:          "sp-static-v3",
+		},
+		{
+			name:              "outbound one path one kind",
+			pattern:           `(s)-[:MemberOf*1..16]->(e)`,
+			observation:       `p`,
+			executor:          ShortestPathExecutorS3EdgeM0,
+			direction:         graph.DirectionOutbound,
+			physicalExpansion: ShortestPathPhysicalExpansionStartID,
+			topology:          ShortestPathTopologyPhysicalOutbound,
+			kindCount:         1,
+			staticEligible:    true,
+			selector:          "sp-static-v3",
+		},
+		{
+			name:              "outbound one path two kinds",
+			pattern:           `(s)-[:MemberOf|Contains*1..16]->(e)`,
+			observation:       `p`,
+			executor:          ShortestPathExecutorS4CanonicalWitness,
+			direction:         graph.DirectionOutbound,
+			physicalExpansion: ShortestPathPhysicalExpansionStartID,
+			topology:          ShortestPathTopologyPhysicalOutbound,
+			kindCount:         2,
+			staticEligible:    true,
+			selector:          "sp-static-v4",
+		},
+		{
+			name:              "outbound one path wildcard",
+			pattern:           `(s)-[*1..16]->(e)`,
+			observation:       `p`,
+			executor:          ShortestPathExecutorS4CanonicalWitness,
+			direction:         graph.DirectionOutbound,
+			physicalExpansion: ShortestPathPhysicalExpansionStartID,
+			topology:          ShortestPathTopologyPhysicalOutbound,
+			untyped:           true,
+			staticEligible:    true,
+			selector:          "sp-static-v4",
+		},
+		{
+			name:              "inbound distance depth one",
+			pattern:           `(s)<-[:MemberOf*0..1]-(e)`,
+			observation:       `length(p)`,
+			executor:          ShortestPathExecutorS3Unidirectional,
+			direction:         graph.DirectionInbound,
+			physicalExpansion: ShortestPathPhysicalExpansionEndID,
+			topology:          ShortestPathTopologyPhysicalInboundShallow,
+			kindCount:         1,
+			staticEligible:    true,
+			selector:          "sp-static-v3",
+		},
+		{
+			name:              "inbound path depth one",
+			pattern:           `(s)<-[:MemberOf*1..1]-(e)`,
+			observation:       `p`,
+			executor:          ShortestPathExecutorS3EdgeM0,
+			direction:         graph.DirectionInbound,
+			physicalExpansion: ShortestPathPhysicalExpansionEndID,
+			topology:          ShortestPathTopologyPhysicalInboundShallow,
+			kindCount:         1,
+			staticEligible:    true,
+			selector:          "sp-static-v3",
+		},
+		{
+			name:              "inbound distance depth two",
+			pattern:           `(s)<-[:MemberOf*1..2]-(e)`,
+			observation:       `length(p)`,
+			executor:          ShortestPathExecutorS4CanonicalDistance,
+			direction:         graph.DirectionInbound,
+			physicalExpansion: ShortestPathPhysicalExpansionEndID,
+			topology:          ShortestPathTopologyPhysicalInboundDeep,
+			kindCount:         1,
+			staticEligible:    true,
+			selector:          "sp-static-v4",
+		},
+		{
+			name:              "inbound path depth 64 two kinds",
+			pattern:           `(s)<-[:MemberOf|Contains*1..64]-(e)`,
+			observation:       `p`,
+			executor:          ShortestPathExecutorS4CanonicalWitness,
+			direction:         graph.DirectionInbound,
+			physicalExpansion: ShortestPathPhysicalExpansionEndID,
+			topology:          ShortestPathTopologyPhysicalInboundDeep,
+			kindCount:         2,
+			staticEligible:    true,
+			selector:          "sp-static-v4",
+		},
 	}
 
 	for _, test := range tests {
@@ -1835,12 +2017,36 @@ func TestLoweringPlanRecordsStableShortestExecutorFallbackCodes(t *testing.T) {
 	tests := []struct {
 		name, query, reason string
 	}{
-		{name: "all shortest", query: `MATCH p = allShortestPaths((s)-[:MemberOf*1..4]->(e)) RETURN p`, reason: ShortestPathFallbackAllShortestPaths},
-		{name: "directionless", query: `MATCH p = shortestPath((s)-[:MemberOf*1..4]-(e)) RETURN p`, reason: ShortestPathFallbackDirectionless},
-		{name: "relationship variable", query: `MATCH p = shortestPath((s)-[r:MemberOf*1..4]->(e)) RETURN p`, reason: ShortestPathFallbackRelationshipVariable},
-		{name: "open depth", query: `MATCH p = shortestPath((s)-[:MemberOf*1..]->(e)) RETURN p`, reason: ShortestPathFallbackUnsupportedDepth},
-		{name: "non singleton", query: `MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e)) RETURN p`, reason: ShortestPathFallbackNonSingletonID},
-		{name: "multiple id equalities", query: `MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e)) WHERE id(s) = 1 AND id(s) = 2 AND id(e) = 3 RETURN p`, reason: ShortestPathFallbackMultipleIDEqualities},
+		{
+			name:   "all shortest",
+			query:  `MATCH p = allShortestPaths((s)-[:MemberOf*1..4]->(e)) RETURN p`,
+			reason: ShortestPathFallbackAllShortestPaths,
+		},
+		{
+			name:   "directionless",
+			query:  `MATCH p = shortestPath((s)-[:MemberOf*1..4]-(e)) RETURN p`,
+			reason: ShortestPathFallbackDirectionless,
+		},
+		{
+			name:   "relationship variable",
+			query:  `MATCH p = shortestPath((s)-[r:MemberOf*1..4]->(e)) RETURN p`,
+			reason: ShortestPathFallbackRelationshipVariable,
+		},
+		{
+			name:   "open depth",
+			query:  `MATCH p = shortestPath((s)-[:MemberOf*1..]->(e)) RETURN p`,
+			reason: ShortestPathFallbackUnsupportedDepth,
+		},
+		{
+			name:   "non singleton",
+			query:  `MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e)) RETURN p`,
+			reason: ShortestPathFallbackNonSingletonID,
+		},
+		{
+			name:   "multiple id equalities",
+			query:  `MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e)) WHERE id(s) = 1 AND id(s) = 2 AND id(e) = 3 RETURN p`,
+			reason: ShortestPathFallbackMultipleIDEqualities,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

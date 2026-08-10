@@ -53,6 +53,7 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 	if options.BootstrapCount < 1 {
 		return AAResolutionReport{}, fmt.Errorf("bootstrap count must be positive")
 	}
+
 	all := collectWarmSeries(records)
 	keys := make([]performanceKey, 0, len(all))
 	for key := range all {
@@ -71,35 +72,54 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 	}
 
 	report := AAResolutionReport{
-		Version: aaReportVersion, Seed: options.Seed, Confidence: options.Confidence, MinimumP99SamplesPerArm: 10_000,
+		Version:                 aaReportVersion,
+		Seed:                    options.Seed,
+		Confidence:              options.Confidence,
+		MinimumP99SamplesPerArm: 10_000,
 	}
 	for idx, key := range keys {
-		armA, armB := splitAASeries(all[key])
+		var (
+			armA, armB = splitAASeries(all[key])
+			seed       = options.Seed + int64(idx)*7919
+		)
+
 		armA, armB = matchedRounds(armA, armB)
 		if len(armA) == 0 {
 			return AAResolutionReport{}, fmt.Errorf("%s/%s has fewer than two warm samples in every round", key.dataset, key.name)
 		}
-		seed := options.Seed + int64(idx)*7919
-		p50 := bootstrapRoundMedianRatio(armA, armB, seed, options)
-		p95 := bootstrapStratifiedP95Ratio(armA, armB, seed+1, options)
-		armSamples := min(sampleCount(armA), sampleCount(armB))
+
+		var (
+			p50        = bootstrapRoundMedianRatio(armA, armB, seed, options)
+			p95        = bootstrapStratifiedP95Ratio(armA, armB, seed+1, options)
+			armSamples = min(sampleCount(armA), sampleCount(armB))
+		)
+
 		entry := AAResolutionCase{
-			Dataset: key.dataset, Name: key.name, Backend: key.backend, Rounds: len(armA), SamplesPerArm: armSamples,
-			P50:      aaMetricResolution(p50, durationQuantile(flattenSamples(armA, sortedRounds(armA)), 0.50)),
-			P95:      aaMetricResolution(p95, durationQuantile(flattenSamples(armA, sortedRounds(armA)), 0.95)),
-			P99Gated: armSamples >= 10_000,
+			Dataset:       key.dataset,
+			Name:          key.name,
+			Backend:       key.backend,
+			Rounds:        len(armA),
+			SamplesPerArm: armSamples,
+			P50:           aaMetricResolution(p50, durationQuantile(flattenSamples(armA, sortedRounds(armA)), 0.50)),
+			P95:           aaMetricResolution(p95, durationQuantile(flattenSamples(armA, sortedRounds(armA)), 0.95)),
+			P99Gated:      armSamples >= 10_000,
 		}
 		if !entry.P99Gated {
 			entry.P99Reason = fmt.Sprintf("diagnostic only: need at least 10000 samples per A/A arm, got %d", armSamples)
 		}
+
 		report.Cases = append(report.Cases, entry)
 	}
+
 	return report, nil
 }
 
 func splitAASeries(samples roundSamples) (roundSamples, roundSamples) {
-	armA := roundSamples{}
-	armB := roundSamples{}
+	var (
+		armA = roundSamples{}
+		armB = roundSamples{}
+	)
+
 	for round, values := range samples {
 		for idx, value := range values {
 			if idx%2 == 0 {
@@ -109,13 +129,16 @@ func splitAASeries(samples roundSamples) (roundSamples, roundSamples) {
 			}
 		}
 	}
+
 	return armA, armB
 }
 
 func aaMetricResolution(interval RatioInterval, baselineQuantile float64) AAMetricResolution {
 	resolution := math.Max(math.Abs(1-interval.Lower), math.Abs(interval.Upper-1))
 	return AAMetricResolution{
-		Ratio: interval, RatioResolution: resolution, AbsoluteResolution: time.Duration(resolution * baselineQuantile),
+		Ratio:              interval,
+		RatioResolution:    resolution,
+		AbsoluteResolution: time.Duration(resolution * baselineQuantile),
 	}
 }
 

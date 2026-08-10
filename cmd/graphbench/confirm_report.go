@@ -152,7 +152,11 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 	}
 	aaReports := []*AAResolutionReport{}
 	for _, artifact := range [][]CaseResult{left, right} {
-		within, err := buildAAResolutionReport(artifact, PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount})
+		within, err := buildAAResolutionReport(artifact, PerfGateOptions{
+			Seed:           options.Seed,
+			Confidence:     options.Confidence,
+			BootstrapCount: options.BootstrapCount,
+		})
 		if err != nil {
 			return ConfirmationReport{}, fmt.Errorf("calculate within-run A/A: %w", err)
 		}
@@ -162,13 +166,22 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 		aaReports = append(aaReports, aa)
 	}
 
-	report := ConfirmationReport{Version: confirmationReportVersion, Kind: "causal_confirmation", Seed: options.Seed, Confidence: options.Confidence}
+	report := ConfirmationReport{
+		Version:    confirmationReportVersion,
+		Kind:       "causal_confirmation",
+		Seed:       options.Seed,
+		Confidence: options.Confidence,
+	}
 	report.LeftArm = artifactArm(left)
 	report.RightArm = artifactArm(right)
 	if blockAA {
 		report.Kind = "block_reload_aa"
 	}
-	gateOptions := PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount}
+	gateOptions := PerfGateOptions{
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BootstrapCount: options.BootstrapCount,
+	}
 	for idx, key := range keys {
 		leftRounds, rightRounds := matchedRounds(leftSeries[key], rightSeries[key])
 		if len(leftRounds) < 10 || len(leftRounds) > 20 {
@@ -188,10 +201,16 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 		p95NoiseRatio, p95NoiseAbsolute := confirmationNoise(aaReports, key, true)
 		comparable, reasons := confirmationComparable(left, right, key)
 		entry := ConfirmationCase{
-			Dataset: key.dataset, Name: key.name, Backend: key.backend, MatchedRounds: len(leftRounds),
-			LeftSamples: sampleCount(leftRounds), RightSamples: sampleCount(rightRounds), Comparable: comparable, Comparability: reasons,
-			P50: classifyConfirmationMetric(p50Ratio, p50Change, p50NoiseRatio, p50NoiseAbsolute),
-			P95: classifyConfirmationMetric(p95Ratio, p95Change, p95NoiseRatio, p95NoiseAbsolute),
+			Dataset:       key.dataset,
+			Name:          key.name,
+			Backend:       key.backend,
+			MatchedRounds: len(leftRounds),
+			LeftSamples:   sampleCount(leftRounds),
+			RightSamples:  sampleCount(rightRounds),
+			Comparable:    comparable,
+			Comparability: reasons,
+			P50:           classifyConfirmationMetric(p50Ratio, p50Change, p50NoiseRatio, p50NoiseAbsolute),
+			P95:           classifyConfirmationMetric(p95Ratio, p95Change, p95NoiseRatio, p95NoiseAbsolute),
 		}
 		entry.Disposition = entry.P95.Classification
 		if !comparable {
@@ -235,7 +254,13 @@ func classifyConfirmationMetric(ratio RatioInterval, change DurationInterval, no
 	if ratio.Upper <= 1+noiseRatio && change.Upper <= noiseAbsolute {
 		classification = "cleared_non_inferior"
 	}
-	return ConfirmationMetric{Ratio: ratio, AbsoluteChange: change, NoiseRatio: noiseRatio, NoiseAbsolute: noiseAbsolute, Classification: classification}
+	return ConfirmationMetric{
+		Ratio:          ratio,
+		AbsoluteChange: change,
+		NoiseRatio:     noiseRatio,
+		NoiseAbsolute:  noiseAbsolute,
+		Classification: classification,
+	}
 }
 
 func bootstrapStratifiedQuantileChange(left, right roundSamples, probability float64, seed int64, options PerfGateOptions) DurationInterval {
@@ -252,11 +277,19 @@ func bootstrapStratifiedQuantileChange(left, right roundSamples, probability flo
 		changes[idx] = durationQuantile(sampledRight, probability) - durationQuantile(sampledLeft, probability)
 	}
 	interval := confidenceInterval(estimate, changes, options.Confidence)
-	return DurationInterval{Estimate: time.Duration(interval.Estimate), Lower: time.Duration(interval.Lower), Upper: time.Duration(interval.Upper)}
+	return DurationInterval{
+		Estimate: time.Duration(interval.Estimate),
+		Lower:    time.Duration(interval.Lower),
+		Upper:    time.Duration(interval.Upper),
+	}
 }
 
 func negateDurationInterval(value DurationInterval) DurationInterval {
-	return DurationInterval{Estimate: -value.Estimate, Lower: -value.Upper, Upper: -value.Lower}
+	return DurationInterval{
+		Estimate: -value.Estimate,
+		Lower:    -value.Upper,
+		Upper:    -value.Lower,
+	}
 }
 
 func confirmationComparable(left, right []CaseResult, key performanceKey) (bool, []string) {

@@ -15,7 +15,9 @@ import (
 func TestBuildReferenceClosureReportPassesRatioOrResolution(t *testing.T) {
 	records := referenceClosureRecords(10, 50, time.Millisecond, 1050*time.Microsecond)
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
-		Seed: 7, Confidence: 0.975, BootstrapCount: 250,
+		Seed:           7,
+		Confidence:     0.975,
+		BootstrapCount: 250,
 	})
 
 	require.NoError(t, err)
@@ -41,7 +43,9 @@ func TestBuildReferenceClosureReportUsesCaseAAResolution(t *testing.T) {
 		}
 	}
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
-		Seed: 1, Confidence: 0.975, BootstrapCount: 100,
+		Seed:           1,
+		Confidence:     0.975,
+		BootstrapCount: 100,
 	})
 
 	require.NoError(t, err)
@@ -53,7 +57,9 @@ func TestBuildReferenceClosureReportUsesCaseAAResolution(t *testing.T) {
 func TestBuildReferenceClosureReportFailsMaterialGap(t *testing.T) {
 	records := referenceClosureRecords(10, 50, time.Millisecond, 1500*time.Microsecond)
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
-		Seed: 1, Confidence: 0.975, BootstrapCount: 100,
+		Seed:           1,
+		Confidence:     0.975,
+		BootstrapCount: 100,
 	})
 
 	require.NoError(t, err)
@@ -64,7 +70,9 @@ func TestBuildReferenceClosureReportFailsMaterialGap(t *testing.T) {
 func TestBuildReferenceClosureReportEnforcesProtocolAndExactComparator(t *testing.T) {
 	records := referenceClosureRecords(9, 49, time.Millisecond, time.Millisecond)
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
-		Seed: 1, Confidence: 0.975, BootstrapCount: 100,
+		Seed:           1,
+		Confidence:     0.975,
+		BootstrapCount: 100,
 	})
 	require.NoError(t, err)
 	require.False(t, report.Passed)
@@ -73,12 +81,18 @@ func TestBuildReferenceClosureReportEnforcesProtocolAndExactComparator(t *testin
 
 	records = referenceClosureRecords(10, 50, time.Millisecond, time.Millisecond)
 	records[0].PostgresReferences[0].ObservedRows = []string{"[2]"}
-	_, err = buildReferenceClosureReport(records, ReferenceClosureOptions{Seed: 1, Confidence: 0.975})
+	_, err = buildReferenceClosureReport(records, ReferenceClosureOptions{
+		Seed:       1,
+		Confidence: 0.975,
+	})
 	require.ErrorContains(t, err, "observation differs")
 
 	records = referenceClosureRecords(10, 50, time.Millisecond, time.Millisecond)
 	records[1].PostgresReferences[0].MeasurementOrder = 2
-	_, err = buildReferenceClosureReport(records, ReferenceClosureOptions{Seed: 1, Confidence: 0.975})
+	_, err = buildReferenceClosureReport(records, ReferenceClosureOptions{
+		Seed:       1,
+		Confidence: 0.975,
+	})
 	require.ErrorContains(t, err, "lacks carryover-balanced")
 }
 
@@ -87,21 +101,44 @@ func referenceClosureRecords(rounds, samples int, referenceDuration, productionD
 	for round := 1; round <= rounds; round++ {
 		productionOrder, referenceOrder := referenceClosureMeasurementOrder(true, round)
 		record := CaseResult{
-			Dataset: "fixture", Name: "distance", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-			RowCount: 1, ObservedRows: []string{"[1]"},
-			Environment:     &RunEnvironment{Round: round, WarmupIterations: 20},
-			RawPGXWaterfall: &PostgresBoundaryWaterfall{WarmupIterations: 20, MeasurementOrder: productionOrder},
+			Dataset:       "fixture",
+			Name:          "distance",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			RowCount:      1,
+			ObservedRows:  []string{"[1]"},
+			Environment: &RunEnvironment{
+				Round:            round,
+				WarmupIterations: 20,
+			},
+			RawPGXWaterfall: &PostgresBoundaryWaterfall{
+				WarmupIterations: 20,
+				MeasurementOrder: productionOrder,
+			},
 			PostgresReferences: []PostgresReferenceResult{{
-				Name: "s3_unidirectional_trail_cte", Architecture: "SP-S3-U-D",
-				FullComparator: true, SemanticValidation: "exact_public_observation",
-				MeasurementOrder: referenceOrder,
-				RowCount:         1, ObservedRows: []string{"[1]"}, Stats: DurationStats{WarmupIterations: 20},
+				Name:               "s3_unidirectional_trail_cte",
+				Architecture:       "SP-S3-U-D",
+				FullComparator:     true,
+				SemanticValidation: "exact_public_observation",
+				MeasurementOrder:   referenceOrder,
+				RowCount:           1,
+				ObservedRows:       []string{"[1]"},
+				Stats: DurationStats{
+					WarmupIterations: 20,
+				},
 			}},
 		}
 		for iteration := 1; iteration <= samples; iteration++ {
-			record.RawPGXWaterfall.Samples = append(record.RawPGXWaterfall.Samples, BoundarySample{Iteration: iteration, Total: productionDuration, Rows: 1})
+			record.RawPGXWaterfall.Samples = append(record.RawPGXWaterfall.Samples, BoundarySample{
+				Iteration: iteration,
+				Total:     productionDuration,
+				Rows:      1,
+			})
 			record.PostgresReferences[0].Stats.Samples = append(record.PostgresReferences[0].Stats.Samples, LatencySample{
-				Round: round, Iteration: iteration, Classification: "warm", Duration: referenceDuration,
+				Round:          round,
+				Iteration:      iteration,
+				Classification: "warm",
+				Duration:       referenceDuration,
 			})
 		}
 		records = append(records, record)

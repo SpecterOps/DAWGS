@@ -112,8 +112,9 @@ func measurePostgresConcurrentIteration(
 	if err != nil {
 		return ConcurrencySample{}, 0, err
 	}
-	poolWait := time.Since(acquireStart)
 	defer conn.Release()
+
+	poolWait := time.Since(acquireStart)
 	pid := conn.Conn().PgConn().PID()
 
 	txStart := time.Now()
@@ -124,8 +125,9 @@ func measurePostgresConcurrentIteration(
 	if err != nil {
 		return ConcurrencySample{}, 0, err
 	}
-	transactionDuration := time.Since(txStart)
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	transactionDuration := time.Since(txStart)
 
 	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}}
 	if len(parameters) > 0 {
@@ -152,8 +154,13 @@ func measurePostgresConcurrentIteration(
 	}
 
 	return ConcurrencySample{
-		Worker: worker, Iteration: iteration, ConnectionID: strconv.FormatUint(uint64(pid), 10),
-		PoolWait: poolWait, Transaction: transactionDuration, ExecuteDrain: executeDuration, Total: time.Since(totalStart),
+		Worker:       worker,
+		Iteration:    iteration,
+		ConnectionID: strconv.FormatUint(uint64(pid), 10),
+		PoolWait:     poolWait,
+		Transaction:  transactionDuration,
+		ExecuteDrain: executeDuration,
+		Total:        time.Since(totalStart),
 	}, pid, nil
 }
 

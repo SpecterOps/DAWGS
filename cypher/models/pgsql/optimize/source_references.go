@@ -48,12 +48,19 @@ func (s *fieldRequirementCollector) add(symbol string, internal bool, fields ...
 	s.ordinal++
 	decision, found := s.decisions[symbol]
 	if !found {
-		decision = &FieldRequirementDecision{QueryPartIndex: s.queryPartIndex, Symbol: symbol}
+		decision = &FieldRequirementDecision{
+			QueryPartIndex: s.queryPartIndex,
+			Symbol:         symbol,
+		}
 		s.decisions[symbol] = decision
 	}
 
 	useFields := append([]FieldRequirement(nil), fields...)
-	decision.Uses = append(decision.Uses, FieldRequirementUse{Ordinal: s.ordinal, Fields: useFields, Internal: internal})
+	decision.Uses = append(decision.Uses, FieldRequirementUse{
+		Ordinal:  s.ordinal,
+		Fields:   useFields,
+		Internal: internal,
+	})
 	decision.LastUse = s.ordinal
 
 	present := make(map[FieldRequirement]struct{}, len(decision.Fields))
@@ -288,7 +295,7 @@ func collectReferencedSourceIdentifiers(root cypher.SyntaxNode) (map[string]stru
 
 	collector := newSourceReferenceCollector()
 	if err := walk.Cypher(root, collector); err != nil {
-		return collector.referencedIdentifiers, err
+		return nil, err
 	}
 
 	collector.collectRepeatedMatchPatternDeclarations()

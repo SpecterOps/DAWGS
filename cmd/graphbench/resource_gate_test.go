@@ -16,10 +16,24 @@ import (
 func TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
-		Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape:           WorkloadShape{FixtureTier: "normal"},
-		Optimization:    &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S4-C-D"}}},
-		PostgresMetrics: &PostgresPlanMetrics{Buffers: Buffers{LocalWritten: 1}},
+		Dataset:       "fixture",
+		Name:          "case",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier: "normal",
+		},
+		Optimization: &translate.OptimizationSummary{
+			TargetOutcomes: []translate.TargetLoweringOutcome{{
+				Family:  "SP",
+				Applied: "SP-S4-C-D",
+			}},
+		},
+		PostgresMetrics: &PostgresPlanMetrics{
+			Buffers: Buffers{
+				LocalWritten: 1,
+			},
+		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
 	passed, err := createResourceGateReport(artifact, filepath.Join(t.TempDir(), "report.json"))
@@ -34,18 +48,36 @@ func TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill(t *tes
 }
 
 func TestResourceGateRecognizesASPProductionArchitecture(t *testing.T) {
-	record := CaseResult{Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "ASP", Applied: "ASP-A1-DAG"}}}}
+	record := CaseResult{
+		Optimization: &translate.OptimizationSummary{
+			TargetOutcomes: []translate.TargetLoweringOutcome{{
+				Family:  "ASP",
+				Applied: "ASP-A1-DAG",
+			}},
+		},
+	}
 	require.Equal(t, "ASP-A1-DAG", appliedPostgresArchitecture(record))
 }
 
 func TestResourceGateChecksFullComparatorReferenceResources(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
-		Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape: WorkloadShape{FixtureTier: "normal"},
+		Dataset:       "fixture",
+		Name:          "case",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier: "normal",
+		},
 		PostgresReferences: []PostgresReferenceResult{{
-			Name: "s4", Architecture: "SP-S4-C-D", FullComparator: true,
-			PostgresMetrics: &PostgresPlanMetrics{Buffers: Buffers{TempWritten: 1}},
+			Name:           "s4",
+			Architecture:   "SP-S4-C-D",
+			FullComparator: true,
+			PostgresMetrics: &PostgresPlanMetrics{
+				Buffers: Buffers{
+					TempWritten: 1,
+				},
+			},
 		}},
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
@@ -67,16 +99,40 @@ func TestResourceGateAttributesDirectPreflightIncumbentFallback(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	records := []CaseResult{
 		{
-			Dataset: "fixture", Name: "fallback", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-			Shape:            WorkloadShape{FixtureTier: "normal"},
-			Optimization:     &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S0-DIRECT"}}},
-			PostgresMetrics:  &PostgresPlanMetrics{Buffers: Buffers{LocalWritten: 1}},
+			Dataset:       "fixture",
+			Name:          "fallback",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			Shape: WorkloadShape{
+				FixtureTier: "normal",
+			},
+			Optimization: &translate.OptimizationSummary{
+				TargetOutcomes: []translate.TargetLoweringOutcome{{
+					Family:  "SP",
+					Applied: "SP-S0-DIRECT",
+				}},
+			},
+			PostgresMetrics: &PostgresPlanMetrics{
+				Buffers: Buffers{
+					LocalWritten: 1,
+				},
+			},
 			PostgresPlanJSON: json.RawMessage(`[{"Plan":{"Plans":[{"Alias":"bidirectional_sp_harness","Actual Loops":1}]}}]`),
 		},
 		{
-			Dataset: "fixture", Name: "direct", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-			Shape:            WorkloadShape{FixtureTier: "normal"},
-			Optimization:     &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S0-DIRECT"}}},
+			Dataset:       "fixture",
+			Name:          "direct",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			Shape: WorkloadShape{
+				FixtureTier: "normal",
+			},
+			Optimization: &translate.OptimizationSummary{
+				TargetOutcomes: []translate.TargetLoweringOutcome{{
+					Family:  "SP",
+					Applied: "SP-S0-DIRECT",
+				}},
+			},
 			PostgresPlanJSON: json.RawMessage(`[{"Plan":{"Plans":[{"Function Name":"bidirectional_sp_harness","Actual Loops":0}]}}]`),
 		},
 	}
@@ -96,10 +152,24 @@ func TestResourceGateAttributesDirectPreflightIncumbentFallback(t *testing.T) {
 func TestResourceGateRejectsDirectPreflightWorkspaceOnDirectHit(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
-		Dataset: "fixture", Name: "direct", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape:            WorkloadShape{FixtureTier: "normal"},
-		Optimization:     &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S0-DIRECT"}}},
-		PostgresMetrics:  &PostgresPlanMetrics{Buffers: Buffers{LocalWritten: 1}},
+		Dataset:       "fixture",
+		Name:          "direct",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier: "normal",
+		},
+		Optimization: &translate.OptimizationSummary{
+			TargetOutcomes: []translate.TargetLoweringOutcome{{
+				Family:  "SP",
+				Applied: "SP-S0-DIRECT",
+			}},
+		},
+		PostgresMetrics: &PostgresPlanMetrics{
+			Buffers: Buffers{
+				LocalWritten: 1,
+			},
+		},
 		PostgresPlanJSON: json.RawMessage(`[{"Plan":{"Plans":[{"Alias":"bidirectional_sp_harness","Actual Loops":0}]}}]`),
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
@@ -111,8 +181,40 @@ func TestResourceGateRejectsDirectPreflightWorkspaceOnDirectHit(t *testing.T) {
 func TestResourceGateAllowsStressDiagnosticsAndExactFallback(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	records := []CaseResult{
-		{Dataset: "fixture", Name: "stress", ExecutionMode: ModePostgresSQL, Status: StatusOK, Shape: WorkloadShape{FixtureTier: "stress"}, PostgresMetrics: &PostgresPlanMetrics{Buffers: Buffers{TempWritten: 1}}},
-		{Dataset: "fixture", Name: "fallback", ExecutionMode: ModePostgresSQL, Status: StatusOK, Shape: WorkloadShape{FixtureTier: "normal"}, Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Selected: "SP-S0"}}}, PostgresMetrics: &PostgresPlanMetrics{Buffers: Buffers{LocalWritten: 1}}},
+		{
+			Dataset:       "fixture",
+			Name:          "stress",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			Shape: WorkloadShape{
+				FixtureTier: "stress",
+			},
+			PostgresMetrics: &PostgresPlanMetrics{
+				Buffers: Buffers{
+					TempWritten: 1,
+				},
+			},
+		},
+		{
+			Dataset:       "fixture",
+			Name:          "fallback",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			Shape: WorkloadShape{
+				FixtureTier: "normal",
+			},
+			Optimization: &translate.OptimizationSummary{
+				TargetOutcomes: []translate.TargetLoweringOutcome{{
+					Family:   "SP",
+					Selected: "SP-S0",
+				}},
+			},
+			PostgresMetrics: &PostgresPlanMetrics{
+				Buffers: Buffers{
+					LocalWritten: 1,
+				},
+			},
+		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, records))
 	passed, err := createResourceGateReport(artifact, filepath.Join(t.TempDir(), "report.json"))

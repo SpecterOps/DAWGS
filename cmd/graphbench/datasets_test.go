@@ -30,10 +30,19 @@ func TestGeneratedFixedSuffixExpansionV2DatasetCarriesExactExpectations(t *testi
 
 func TestGeneratedShortestPathV2DatasetRoundTripsAndCarriesExactExpectations(t *testing.T) {
 	config := testutil.ShortestPathScaleV2Config{
-		Depth: 3, ForwardRootFanOut: 2, ReverseRootFanIn: 2,
-		IntermediateFanOut: 1, IntermediateReverseFanIn: 4, FanInLevel: 2,
-		ParallelKindCount: 3, ParallelTargetCount: 2, DiamondWidth: 2,
-		DisconnectedWidth: 3, PropertyPayloadSize: 8, AddCycle: true, AddSelfLoop: true,
+		Depth:                    3,
+		ForwardRootFanOut:        2,
+		ReverseRootFanIn:         2,
+		IntermediateFanOut:       1,
+		IntermediateReverseFanIn: 4,
+		FanInLevel:               2,
+		ParallelKindCount:        3,
+		ParallelTargetCount:      2,
+		DiamondWidth:             2,
+		DisconnectedWidth:        3,
+		PropertyPayloadSize:      8,
+		AddCycle:                 true,
+		AddSelfLoop:              true,
 	}
 	name := shortestPathV2DatasetName(config)
 	parsed, ok := parseShortestPathV2DatasetName(name)

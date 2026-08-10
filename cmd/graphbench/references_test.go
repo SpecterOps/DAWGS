@@ -17,7 +17,10 @@ const outboundShortestPathQuery = "MATCH p = shortestPath((s)-[*0..4]->(e)) WHER
 
 func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(1), "end_id": int64(2), "max_depth": int32(15)}
-	specs := buildShortestReferenceSpecs(ScaleCase{Name: "one_shortest_path_bound_pair", Cypher: outboundShortestPathQuery}, params, []int64{1, 2, 3}, []int64{10, 11}, graph.DirectionOutbound)
+	specs := buildShortestReferenceSpecs(ScaleCase{
+		Name:   "one_shortest_path_bound_pair",
+		Cypher: outboundShortestPathQuery,
+	}, params, []int64{1, 2, 3}, []int64{10, 11}, graph.DirectionOutbound)
 
 	require.Len(t, specs, 12)
 	require.Equal(t, "round_trip", specs[0].name)
@@ -44,7 +47,12 @@ func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *tes
 }
 
 func TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState(t *testing.T) {
-	specs := buildShortestReferenceSpecs(ScaleCase{Name: "shortest_distance_bound_pair", Expected: ExpectedResult{ResultKind: "scalar"}}, map[string]any{}, nil, nil, graph.DirectionOutbound)
+	specs := buildShortestReferenceSpecs(ScaleCase{
+		Name: "shortest_distance_bound_pair",
+		Expected: ExpectedResult{
+			ResultKind: "scalar",
+		},
+	}, map[string]any{}, nil, nil, graph.DirectionOutbound)
 	reference := specs[len(specs)-2]
 
 	require.Equal(t, "distance frontier node and depth only; no path or predecessor state", reference.stateShape)
@@ -55,7 +63,12 @@ func TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState(t *testing.T)
 
 func TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirection(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(10), "end_id": int64(20), "min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1}}
-	testCase := ScaleCase{Name: "hidden_fanin", Expected: ExpectedResult{ResultKind: "scalar"}}
+	testCase := ScaleCase{
+		Name: "hidden_fanin",
+		Expected: ExpectedResult{
+			ResultKind: "scalar",
+		},
+	}
 	inbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionInbound)
 	canonical := inbound[referenceSpecIndex(inbound, "s4_canonical_source_distance")]
 	require.Equal(t, "SP-S4-C-D", canonical.architecture)
@@ -77,8 +90,14 @@ func TestShortestS1DistancePrototypeIsDistinctBoundedAndFallsBack(t *testing.T) 
 		"min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{2},
 	}
 	testCase := ScaleCase{
-		Name: "distance", Expected: ExpectedResult{ResultKind: "scalar"},
-		Shape: WorkloadShape{MinDepth: &minDepth, MaxDepth: &maxDepth},
+		Name: "distance",
+		Expected: ExpectedResult{
+			ResultKind: "scalar",
+		},
+		Shape: WorkloadShape{
+			MinDepth: &minDepth,
+			MaxDepth: &maxDepth,
+		},
 	}
 	specs := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionOutbound)
 	s1 := specs[referenceSpecIndex(specs, "s1_array_bfs_distance")]
@@ -98,11 +117,27 @@ func TestShortestS1DistancePrototypeIsDistinctBoundedAndFallsBack(t *testing.T) 
 func TestShortestS1DistancePrototypeRejectsUnsupportedShapes(t *testing.T) {
 	minDepth, maxDepth := 2, 8
 	params := map[string]any{"start_id": int64(10), "end_id": int64(20)}
-	distance := ScaleCase{Expected: ExpectedResult{ResultKind: "scalar"}, Shape: WorkloadShape{MinDepth: &minDepth, MaxDepth: &maxDepth}}
+	distance := ScaleCase{
+		Expected: ExpectedResult{
+			ResultKind: "scalar",
+		},
+		Shape: WorkloadShape{
+			MinDepth: &minDepth,
+			MaxDepth: &maxDepth,
+		},
+	}
 	require.Equal(t, -1, referenceSpecIndexOrMissing(buildShortestReferenceSpecs(distance, params, nil, nil, graph.DirectionOutbound), "s1_array_bfs_distance"))
 
 	minDepth = 1
-	path := ScaleCase{Expected: ExpectedResult{ResultKind: "path_set"}, Shape: WorkloadShape{MinDepth: &minDepth, MaxDepth: &maxDepth}}
+	path := ScaleCase{
+		Expected: ExpectedResult{
+			ResultKind: "path_set",
+		},
+		Shape: WorkloadShape{
+			MinDepth: &minDepth,
+			MaxDepth: &maxDepth,
+		},
+	}
 	require.Equal(t, -1, referenceSpecIndexOrMissing(buildShortestReferenceSpecs(path, params, nil, nil, graph.DirectionOutbound), "s1_array_bfs_distance"))
 
 	params["end_id"] = int64(10)
@@ -112,7 +147,10 @@ func TestShortestS1DistancePrototypeRejectsUnsupportedShapes(t *testing.T) {
 func TestShortestPathReferencesCompareM0AndM1WithMinimalSearchState(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(1), "end_id": int64(3), "max_depth": int32(4)}
 	specs := buildShortestReferenceSpecs(
-		ScaleCase{Name: "one_shortest_path_bound_pair", Cypher: outboundShortestPathQuery},
+		ScaleCase{
+			Name:   "one_shortest_path_bound_pair",
+			Cypher: outboundShortestPathQuery,
+		},
 		params,
 		[]int64{1, 2, 3},
 		[]int64{10, 11},
@@ -140,7 +178,12 @@ func TestShortestPathReferencesCompareM0AndM1WithMinimalSearchState(t *testing.T
 
 func TestCanonicalWitnessReferenceUsesCompactDiscoveryAndRestoresInboundPathOrder(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(10), "end_id": int64(20), "min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1}}
-	testCase := ScaleCase{Name: "path", Expected: ExpectedResult{ResultKind: "path_set"}}
+	testCase := ScaleCase{
+		Name: "path",
+		Expected: ExpectedResult{
+			ResultKind: "path_set",
+		},
+	}
 	inbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionInbound)
 	witness := inbound[referenceSpecIndex(inbound, "s4_canonical_source_witness_m0")]
 	require.Equal(t, "SP-S4-C-WE+MAT-M0", witness.architecture)
@@ -176,7 +219,13 @@ func TestAllShortestDAGReferenceRetainsEveryShortestDepthPredecessor(t *testing.
 
 func TestShortestReferenceIdentitiesAndInboundMinimalState(t *testing.T) {
 	specs := buildShortestReferenceSpecs(
-		ScaleCase{Name: "one_shortest_path_bound_pair", Cypher: "MATCH p = shortestPath((s)<-[*1..4]-(e)) RETURN p", Expected: ExpectedResult{ResultKind: "path_set"}},
+		ScaleCase{
+			Name:   "one_shortest_path_bound_pair",
+			Cypher: "MATCH p = shortestPath((s)<-[*1..4]-(e)) RETURN p",
+			Expected: ExpectedResult{
+				ResultKind: "path_set",
+			},
+		},
 		map[string]any{"graph_id": int32(42), "start_id": int64(1), "end_id": int64(3), "max_depth": int32(4)},
 		[]int64{1, 2, 3}, []int64{10, 11}, graph.DirectionInbound,
 	)
@@ -192,7 +241,10 @@ func TestShortestReferenceIdentitiesAndInboundMinimalState(t *testing.T) {
 
 func TestShortestPathMaterializerOnlyReferencesExcludeSearch(t *testing.T) {
 	specs := buildShortestReferenceSpecs(
-		ScaleCase{Name: "one_shortest_path_bound_pair", Cypher: outboundShortestPathQuery},
+		ScaleCase{
+			Name:   "one_shortest_path_bound_pair",
+			Cypher: outboundShortestPathQuery,
+		},
 		map[string]any{},
 		[]int64{1, 2},
 		[]int64{10},
@@ -227,7 +279,13 @@ func TestShortestReferencesPreserveZeroLengthPathInputs(t *testing.T) {
 		"edge_kind_ids": []int16{},
 	}
 	specs := buildShortestReferenceSpecs(
-		ScaleCase{Name: "zero_shortest_path", Cypher: outboundShortestPathQuery, Expected: ExpectedResult{ResultKind: "path_set"}},
+		ScaleCase{
+			Name:   "zero_shortest_path",
+			Cypher: outboundShortestPathQuery,
+			Expected: ExpectedResult{
+				ResultKind: "path_set",
+			},
+		},
 		params,
 		[]int64{1},
 		zeroEdges,
@@ -248,9 +306,21 @@ func TestShortestMaterializersRequireProvablyOutboundPattern(t *testing.T) {
 		outbound  bool
 		supported bool
 	}{
-		{name: "outbound", query: "MATCH p = shortestPath((s)-[*1..4]->(e)) RETURN p", outbound: true, supported: true},
-		{name: "inbound", query: "MATCH p = shortestPath((s)<-[*1..4]-(e)) RETURN p", supported: true},
-		{name: "directionless", query: "MATCH p = shortestPath((s)-[*1..4]-(e)) RETURN p"},
+		{
+			name:      "outbound",
+			query:     "MATCH p = shortestPath((s)-[*1..4]->(e)) RETURN p",
+			outbound:  true,
+			supported: true,
+		},
+		{
+			name:      "inbound",
+			query:     "MATCH p = shortestPath((s)<-[*1..4]-(e)) RETURN p",
+			supported: true,
+		},
+		{
+			name:  "directionless",
+			query: "MATCH p = shortestPath((s)-[*1..4]-(e)) RETURN p",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			direction, err := shortestReferenceDirection(testCase.query)
@@ -258,7 +328,12 @@ func TestShortestMaterializersRequireProvablyOutboundPattern(t *testing.T) {
 			require.Equal(t, testCase.outbound, direction == graph.DirectionOutbound)
 
 			specs := buildShortestReferenceSpecs(
-				ScaleCase{Cypher: testCase.query, Expected: ExpectedResult{ResultKind: "path_set"}},
+				ScaleCase{
+					Cypher: testCase.query,
+					Expected: ExpectedResult{
+						ResultKind: "path_set",
+					},
+				},
 				map[string]any{},
 				[]int64{1, 2},
 				[]int64{10},
@@ -278,9 +353,24 @@ func TestShortestReferenceEndpointParametersFollowPatternRootOrder(t *testing.T)
 	for _, testCase := range []struct {
 		name, query, root, terminal string
 	}{
-		{name: "outbound", query: `MATCH p = shortestPath((s)-[:Traverse*1..8]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)`, root: "start_id", terminal: "end_id"},
-		{name: "inbound same symbols", query: `MATCH p = shortestPath((s)<-[:Traverse*1..8]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)`, root: "start_id", terminal: "end_id"},
-		{name: "inbound reversed symbols", query: `MATCH p = shortestPath((e)<-[:Traverse*1..8]-(s)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)`, root: "end_id", terminal: "start_id"},
+		{
+			name:     "outbound",
+			query:    `MATCH p = shortestPath((s)-[:Traverse*1..8]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)`,
+			root:     "start_id",
+			terminal: "end_id",
+		},
+		{
+			name:     "inbound same symbols",
+			query:    `MATCH p = shortestPath((s)<-[:Traverse*1..8]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)`,
+			root:     "start_id",
+			terminal: "end_id",
+		},
+		{
+			name:     "inbound reversed symbols",
+			query:    `MATCH p = shortestPath((e)<-[:Traverse*1..8]-(s)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)`,
+			root:     "end_id",
+			terminal: "start_id",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			root, terminal, err := shortestReferenceEndpointParameters(testCase.query)
@@ -292,7 +382,15 @@ func TestShortestReferenceEndpointParametersFollowPatternRootOrder(t *testing.T)
 }
 
 func TestAlternativeOneShortestPathTieIsSemanticallyValid(t *testing.T) {
-	testCase := ScaleCase{Cypher: outboundShortestPathQuery, Expected: ExpectedResult{ResultKind: "path_set"}, Shape: WorkloadShape{EdgeKinds: []string{"Edge"}}}
+	testCase := ScaleCase{
+		Cypher: outboundShortestPathQuery,
+		Expected: ExpectedResult{
+			ResultKind: "path_set",
+		},
+		Shape: WorkloadShape{
+			EdgeKinds: []string{"Edge"},
+		},
+	}
 	public := []string{`[{"nodes":[{"identity":"start"},{"identity":"left"},{"identity":"end"}],"relationships":[{"start":"start","end":"left","kind":"Edge"},{"start":"left","end":"end","kind":"Edge"}]}]`}
 	alternative := []string{`[{"nodes":[{"identity":"start"},{"identity":"right"},{"identity":"end"}],"relationships":[{"start":"start","end":"right","kind":"Edge"},{"start":"right","end":"end","kind":"Edge"}]}]`}
 	longer := []string{`[{"nodes":[{"identity":"start"},{"identity":"right"},{"identity":"other"},{"identity":"end"}],"relationships":[{"start":"start","end":"right","kind":"Edge"},{"start":"right","end":"other","kind":"Edge"},{"start":"other","end":"end","kind":"Edge"}]}]`}
@@ -340,7 +438,9 @@ func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
 }
 
 func TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperators(t *testing.T) {
-	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{Name: "fixed_suffix_expansion_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
+	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{
+		Name: "fixed_suffix_expansion_endpoint_ids",
+	}, map[string]any{"graph_id": int32(42)})
 
 	require.Len(t, specs, 17)
 	for _, spec := range specs {
@@ -362,9 +462,13 @@ func TestGeneratedFixedSuffixExpansionReferencesUseDeclaredDepthAndObservation(t
 	minDepth, maxDepth := 0, 16
 	runner := &postgresSQLRunner{}
 	testCase := ScaleCase{
-		Name: "generated_fixed_suffix_expansion_endpoint_d16_f1000", Category: "generated_fixed_suffix_expansion",
+		Name:     "generated_fixed_suffix_expansion_endpoint_d16_f1000",
+		Category: "generated_fixed_suffix_expansion",
 		Expected: ExpectedResult{ResultKind: "id_rows"},
-		Shape:    WorkloadShape{MinDepth: &minDepth, MaxDepth: &maxDepth},
+		Shape: WorkloadShape{
+			MinDepth: &minDepth,
+			MaxDepth: &maxDepth,
+		},
 	}
 	// Reference routing occurs before kind mapping; the generated category is
 	// asserted separately from the SQL builder so this remains a unit test.
@@ -399,8 +503,20 @@ func TestRequestedReferenceArmCannotDisappearFromCase(t *testing.T) {
 
 func TestReferenceIdentityRejectsUndeclaredDuplicateSQL(t *testing.T) {
 	specs := []postgresReferenceSpec{
-		normalizedReferenceSpec(postgresReferenceSpec{name: "one", architecture: "SP-S1", stateShape: "state", observationShape: "ordered_ids", sql: "select 1"}),
-		normalizedReferenceSpec(postgresReferenceSpec{name: "two", architecture: "SP-S2", stateShape: "state", observationShape: "ordered_ids", sql: " select  1 "}),
+		normalizedReferenceSpec(postgresReferenceSpec{
+			name:             "one",
+			architecture:     "SP-S1",
+			stateShape:       "state",
+			observationShape: "ordered_ids",
+			sql:              "select 1",
+		}),
+		normalizedReferenceSpec(postgresReferenceSpec{
+			name:             "two",
+			architecture:     "SP-S2",
+			stateShape:       "state",
+			observationShape: "ordered_ids",
+			sql:              " select  1 ",
+		}),
 	}
 	require.ErrorContains(t, validateReferenceSpecs(specs), "without a declared A/A alias")
 
@@ -410,14 +526,30 @@ func TestReferenceIdentityRejectsUndeclaredDuplicateSQL(t *testing.T) {
 
 func TestReferenceIdentityRejectsImplementationShapeDrift(t *testing.T) {
 	specs := []postgresReferenceSpec{
-		normalizedReferenceSpec(postgresReferenceSpec{name: "one", architecture: "SP-S1", implementationID: "same", stateShape: "edge IDs", observationShape: "ordered_ids", sql: "select 1"}),
-		normalizedReferenceSpec(postgresReferenceSpec{name: "two", architecture: "SP-S1", implementationID: "same", stateShape: "node and edge IDs", observationShape: "ordered_ids", sql: "select 2"}),
+		normalizedReferenceSpec(postgresReferenceSpec{
+			name:             "one",
+			architecture:     "SP-S1",
+			implementationID: "same",
+			stateShape:       "edge IDs",
+			observationShape: "ordered_ids",
+			sql:              "select 1",
+		}),
+		normalizedReferenceSpec(postgresReferenceSpec{
+			name:             "two",
+			architecture:     "SP-S1",
+			implementationID: "same",
+			stateShape:       "node and edge IDs",
+			observationShape: "ordered_ids",
+			sql:              "select 2",
+		}),
 	}
 	require.ErrorContains(t, validateReferenceSpecs(specs), "changes state, observation, or SQL identity")
 }
 
 func TestFixedSuffixExpansionRootReuseIsExplicitAAAlias(t *testing.T) {
-	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{Name: "fixed_suffix_expansion_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
+	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{
+		Name: "fixed_suffix_expansion_endpoint_ids",
+	}, map[string]any{"graph_id": int32(42)})
 	for idx := range specs {
 		specs[idx] = normalizedReferenceSpec(specs[idx])
 	}
@@ -427,7 +559,9 @@ func TestFixedSuffixExpansionRootReuseIsExplicitAAAlias(t *testing.T) {
 }
 
 func TestFixedSuffixExpansionOrderedIDReferencesValidateAgainstCanonicalObservation(t *testing.T) {
-	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{Name: "fixed_suffix_expansion_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
+	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{
+		Name: "fixed_suffix_expansion_endpoint_ids",
+	}, map[string]any{"graph_id": int32(42)})
 	canonical := specs[referenceSpecIndex(specs, "search_ordered_ids")]
 
 	for _, name := range []string{

@@ -103,6 +103,7 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	if err != nil {
 		return false, fmt.Errorf("read baseline: %w", err)
 	}
+
 	candidate, err := readJSONLFile(candidatePath)
 	if err != nil {
 		return false, fmt.Errorf("read candidate: %w", err)
@@ -110,6 +111,7 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	if err := validatePerformanceArtifactSelections(baseline, candidate, options.DiagnosticMode); err != nil {
 		return false, err
 	}
+
 	baselineChecksum, err := fileSHA256(baselinePath)
 	if err != nil {
 		return false, err
@@ -125,6 +127,7 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	}
 	report.BaselineSHA256 = baselineChecksum
 	report.CandidateSHA256 = candidateChecksum
+
 	if err := writePerfGateReport(outputPath, report); err != nil {
 		return false, err
 	}
@@ -319,14 +322,22 @@ func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate
 			continue
 		}
 		if item.Backend == ModePostgresSQL || item.Backend == ModeNeo4j {
-			unique[performanceKey{dataset: item.Dataset, name: item.Name, backend: item.Backend}] = struct{}{}
+			unique[performanceKey{
+				dataset: item.Dataset,
+				name:    item.Name,
+				backend: item.Backend,
+			}] = struct{}{}
 		}
 	}
 	if len(declared) == 0 {
 		for _, records := range [][]CaseResult{baseline, candidate} {
 			for _, record := range records {
 				if record.ExecutionMode == ModePostgresSQL || record.ExecutionMode == ModeNeo4j {
-					unique[performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}] = struct{}{}
+					unique[performanceKey{
+						dataset: record.Dataset,
+						name:    record.Name,
+						backend: record.ExecutionMode,
+					}] = struct{}{}
 				}
 			}
 		}
@@ -373,6 +384,7 @@ func declarationSHA256(declared []DeclaredCaseBackend) string {
 	for _, item := range items {
 		fmt.Fprintf(digest, "%s\x00%s\x00%s\x00%s\n", item.Dataset, item.Name, item.Backend, item.UnsupportedReason)
 	}
+
 	return hex.EncodeToString(digest.Sum(nil))
 }
 
@@ -382,17 +394,24 @@ func collectWarmSeries(records []CaseResult) map[performanceKey]roundSamples {
 		if record.Status != StatusOK {
 			continue
 		}
-		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+		key := performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: record.ExecutionMode,
+		}
+
 		for _, sample := range record.Stats.Samples {
 			if sample.Classification != "warm" || sample.Duration <= 0 {
 				continue
 			}
+
 			if series[key] == nil {
 				series[key] = roundSamples{}
 			}
 			series[key][sample.Round] = append(series[key][sample.Round], sample.Duration)
 		}
 	}
+
 	return series
 }
 
@@ -404,9 +423,11 @@ func matchedRounds(baseline, candidate roundSamples) (roundSamples, roundSamples
 		if !found || len(baselineSamples) == 0 || len(candidateSamples) == 0 {
 			continue
 		}
+
 		matchedBaseline[round] = baselineSamples
 		matchedCandidate[round] = candidateSamples
 	}
+
 	return matchedBaseline, matchedCandidate
 }
 
