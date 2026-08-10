@@ -43,7 +43,7 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		if gateCase.Tier == "" {
 			gateCase.Tier = "legacy"
 		}
-		gateCase.Architecture = appliedShortestArchitecture(record)
+		gateCase.Architecture = appliedPostgresArchitecture(record)
 		portableCandidate := gateCase.Architecture != "" && gateCase.Architecture != "SP-S0"
 		workspaceCandidate := gateCase.Architecture == "ASP-A1-DAG" || gateCase.Architecture == "SP-S4-C-D" || gateCase.Architecture == "SP-S4-C-WE+MAT-M0"
 		if gateCase.Architecture == "SP-S0-DIRECT" {
@@ -171,12 +171,12 @@ func postgresPlanFunctionLoops(raw json.RawMessage, function string) (int64, boo
 	return loops, found, nil
 }
 
-func appliedShortestArchitecture(record CaseResult) string {
+func appliedPostgresArchitecture(record CaseResult) string {
 	if record.Optimization == nil {
 		return ""
 	}
 	for _, outcome := range record.Optimization.TargetOutcomes {
-		if outcome.Family == "SP" || outcome.Family == "ASP" {
+		if outcome.Family == "SP" || outcome.Family == "ASP" || outcome.Family == "fixed_suffix_expansion" {
 			if outcome.Applied != "" {
 				return outcome.Applied
 			}

@@ -73,7 +73,7 @@ func TestTraversalShapesScenariosDeclareExpectedRows(t *testing.T) {
 
 func TestDefaultDatasetsIncludeTraversalShapes(t *testing.T) {
 	require.Contains(t, defaultDatasets, traversalShapesDataset)
-	require.Contains(t, defaultDatasets, "adcs_fanout")
+	require.Contains(t, defaultDatasets, "fixed_suffix_expansion_fanout")
 }
 
 func TestValidateScenarioRows(t *testing.T) {

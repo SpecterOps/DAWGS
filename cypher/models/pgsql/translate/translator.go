@@ -698,6 +698,7 @@ type TargetLoweringOutcome struct {
 	Symbol                 string                        `json:"symbol,omitempty"`
 	Family                 string                        `json:"family,omitempty"`
 	PlannedCandidates      []string                      `json:"planned_candidates,omitempty"`
+	Candidate              string                        `json:"candidate,omitempty"`
 	EligibilityFacts       []TargetEligibilityFact       `json:"eligibility_facts,omitempty"`
 	ObservationMode        string                        `json:"observation_mode,omitempty"`
 	Direction              string                        `json:"direction,omitempty"`
@@ -713,8 +714,6 @@ type TargetLoweringOutcome struct {
 	MinimumDepth           *int64                        `json:"minimum_depth,omitempty"`
 	MaximumDepth           *int64                        `json:"maximum_depth,omitempty"`
 	StateLimit             int64                         `json:"state_limit,omitempty"`
-	SuffixProbeLimit       int64                         `json:"suffix_probe_limit,omitempty"`
-	ReverseStateLimit      int64                         `json:"reverse_state_limit,omitempty"`
 	Selected               string                        `json:"selected,omitempty"`
 	Applied                string                        `json:"applied,omitempty"`
 	SkipReason             string                        `json:"skip_reason,omitempty"`
@@ -825,18 +824,17 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 	}
 	for _, decision := range plan.ExpansionSearchStrategy {
 		target := decision.Target
-		eligible := decision.StructurallyEligible
+		eligible, staticallyEligible := decision.StructurallyEligible, decision.StaticallyEligible
 		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
 		applied := string(s.appliedExpansionSearchStrategies[target])
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
 			Lowering: optimize.LoweringExpansionSearchStrategy, TargetKind: "traversal", TraversalTarget: &target,
-			Family: decision.Family, PlannedCandidates: expansionSearchCandidateNames(decision.PlannedCandidates),
+			Family: decision.Family, PlannedCandidates: expansionSearchCandidateNames(decision.PlannedCandidates), Candidate: string(decision.CandidateStrategy),
 			EligibilityFacts: expansionSearchEligibilityFacts(decision.EligibilityFacts),
-			ObservationMode:  string(decision.ObservationMode), Eligible: &eligible,
+			ObservationMode:  string(decision.ObservationMode), Eligible: &eligible, StaticallyEligible: &staticallyEligible,
 			SelectionMode: decision.SelectionMode, SelectorVersion: decision.SelectorVersion,
 			Selected: string(decision.SelectedStrategy), Applied: applied, Fallback: string(decision.FallbackStrategy), SkipReason: decision.FallbackReason,
 			MinimumDepth: &minimumDepth, MaximumDepth: &maximumDepth,
-			SuffixProbeLimit: decision.SuffixProbeLimit, ReverseStateLimit: decision.ReverseStateLimit,
 		})
 	}
 	for _, decision := range plan.FieldRequirements {
@@ -1151,7 +1149,7 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 
 		decision.SelectedStrategy = strategy
 		decision.SelectionMode = "forced_tool"
-		decision.SelectorVersion = "adcs-tool-v1"
+		decision.SelectorVersion = "suffix-seeded-reverse-tool-v1"
 		decision.FallbackReason = ""
 		forced++
 	}

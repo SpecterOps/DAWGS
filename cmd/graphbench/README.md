@@ -212,7 +212,8 @@ go run ./cmd/graphbench \
 allocations), a raw prepared round-trip, the C1 prepared round-trip,
 endpoint validation, minimum graph-access ID floor, raw ordered-ID search,
 path hydration from precomputed ordered edge IDs, and complete hand-written
-PostgreSQL references for the active shortest-path and ADCS targets. The main
+PostgreSQL references for the active shortest-path and fixed-suffix expansion
+targets. The main
 case record remains the translated-CySQL boundary rather than a fixed ordinal
 among the additive references. Component floors need not match the full query's
 row count; complete references do. It also records
@@ -222,14 +223,15 @@ interval as overlapping optimization, so those fields must not be summed as an
 additive attribution.
 
 Use `-postgres-reference-arms` to run only named tournament arms; it implies
-`-postgres-references` and rejects unknown or duplicate names. Generated ADCS
-cases expose `current_forward_ordered_ids`, `a1a_root_reuse_*`,
-`a1b_late_hydration_*`, `a2_factored_suffix_forward_*`,
-`a3_suffix_seeded_reverse_*`, and `a4_viability_forward_*` boundaries. Complete
-arms are exact-multiset checked against the public CySQL observation. Ordered-ID
-arms retain relationship IDs for trail uniqueness. When exactly five arms are
-selected, rounds use this fixed Williams/carryover-balanced slot schedule;
-other arm counts retain the historical alternating order:
+`-postgres-references` and rejects unknown or duplicate names. Generated
+fixed-suffix expansion cases expose `search_ordered_ids`,
+`stepwise_forward_aa_ordered_ids`, `root_reuse_*`, `late_hydration_*`,
+`factored_suffix_forward_*`, `suffix_seeded_reverse_*`, and
+`backward_viability_forward_*` boundaries. Complete arms are exact-multiset
+checked against the public CySQL observation. Ordered-ID arms retain
+relationship IDs for trail uniqueness. When exactly five arms are selected,
+rounds use this fixed Williams/carryover-balanced slot schedule; other arm
+counts retain the historical alternating order:
 
 ```text
 0 1 4 2 3
@@ -274,15 +276,21 @@ directionless, correlated, optional, mutation, and other ineligible forms keep
 the incumbent unless explicitly rejected by the tool request. Tool forcing
 never broadens the structural correctness envelope.
 
-`-postgres-force-expansion-search ADCS-A3` is the qualification-only seam for
-eligible directed, bounded variable expansions followed by the exact
-three-relationship ADCS suffix. It emits the repository-native suffix-seeded
-reverse recursive AST, preserves relationship-trail uniqueness and exact suffix
-multiplicity, and supports endpoint-ID and complete-path observations. The
-request fails closed when the target is structurally ineligible or translation
-does not record A3 as applied. It is mutually exclusive with forced shortest
-execution. Automatic A3 dispatch remains disabled because query shape does not
-bound suffix density or reverse fan-in.
+`-postgres-force-expansion-search EXPANSION-SUFFIX-SEEDED-REVERSE` is the
+qualification-only seam for an eligible directed, bounded variable expansion
+followed by exactly three fixed directed relationships. It emits the
+repository-native suffix-seeded reverse recursive AST, preserves
+relationship-trail uniqueness and exact suffix multiplicity, and supports
+endpoint-ID and complete-path observations. The request fails closed when the
+target is structurally ineligible or translation does not record the requested
+strategy as applied. It is mutually exclusive with forced shortest execution.
+Automatic suffix-seeded reverse dispatch remains disabled because query shape
+does not bound suffix density or reverse fan-in.
+
+The bounded same-statement fallback and keyset-continuation experiments are
+retired. They are not exposed by GraphBench or production translation. Their
+negative results remain under `docs/experiments`; the active `GFSE-BOUNDARY-*`
+cases are optimization-neutral cardinality holdouts.
 
 Independent benchmark rounds can be accumulated with `-append-jsonl`. The
 append path must be supplied with `-jsonl-output`; GraphBench rejects mismatched
@@ -313,11 +321,25 @@ go run ./cmd/graphbench \
   -seed 1
 ```
 
-ADCS JSON plans are retained in both text and structured forms. Structured
-metrics include per-node planned/actual rows, loops, width, timing, buffers,
+Fixed-suffix expansion JSON plans are retained in both text and structured
+forms. Structured metrics include per-node planned/actual rows, loops, width,
+timing, buffers,
 relation/index identity, recursive rows, access-direction probe counts, and
 hydration lookup loops. Derived fields state their provenance and do not present
-fixture-derived per-depth counts as PostgreSQL measurements.
+fixture-derived per-depth counts as PostgreSQL measurements. Resource gate
+version 1 applies the portable resource checks to the first upstream artifact
+schema.
+
+The keyset-continuation v1 design and its GraphBench arm are retired. In the
+10-round confirmation run, S513 had a 1.791
+median ratio (97.5% CI 1.752–1.875) and S600 had a 5.898 ratio (5.649–6.462)
+against `complete_reference`. S511/S512 selected the existing bounded reverse
+branch, so their improvements are not evidence for keyset continuation. The
+resource gate passed without spill, local workspace, or WAL. See
+`docs/experiments/guarded_suffix_keyset_continuation_v1.md` and its compact JSON
+evidence. Generic `GFSE-BOUNDARY-*` holdouts preserve exact-limit, overflow,
+path, multiplicity, and cyclic-trail coverage without retaining an executable
+copy of the rejected arm.
 
 Supported generated singleton-shortest cases also run two additive comparators:
 `s3_unidirectional_trail_cte` (legacy name
@@ -360,8 +382,9 @@ mistaken for confirmation evidence because the protocol and requirements are
 written into the report. The reporter accepts two exact public-observation
 comparators, two exact ordered-ID comparators, or two hydration-only arms
 independently validated from the same precomputed exact path inputs; mixed
-boundaries are rejected. ADCS ordered-ID candidates are checked against the
-canonical A0 node/edge-ID arrays before their timing is retained. Reports show
+boundaries are rejected. Fixed-suffix expansion ordered-ID candidates are
+checked against the canonical stepwise-forward node/edge-ID arrays before their
+timing is retained. Reports show
 candidate/baseline median and p95 ratios, absolute median change, and
 within-session A/A resolution without turning architecture selection into a
 post-hoc pass threshold.
@@ -431,8 +454,8 @@ statistics match production. Example:
   "graph": "integration_test",
   "content_identity": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "anchors": {
-    "outbound_source": {"logical_key": "sanitized-source", "kind": "Group"},
-    "outbound_target": {"logical_key": "sanitized-target", "kind": "Domain"}
+    "outbound_source": {"logical_key": "sanitized-source", "kind": "Source"},
+    "outbound_target": {"logical_key": "sanitized-target", "kind": "Target"}
   }
 }
 ```
@@ -458,7 +481,7 @@ Legacy graphs without `logical_key` properties may instead use a runtime-only
 physical anchor with a content proof:
 
 ```json
-{"physical_id": 42, "content_sha256": "sha256:<64 lowercase hex characters>", "kind": "Group"}
+{"physical_id": 42, "content_sha256": "sha256:<64 lowercase hex characters>", "kind": "Entity"}
 ```
 
 The digest is SHA-256 over PostgreSQL's canonical `kind_ids::text`, a newline,
@@ -523,13 +546,14 @@ Every other shape retains `SP-S0` and its specific fallback code.
 Ordinary variable expansions with fixed continuations similarly emit a typed
 `ExpansionSearchStrategyDecision`. It records suffix bounds, logical direction,
 observation mode, depth bounds, structural facts, selection mode, and stable
-fallback codes. It also reports the ADCS family, planned candidate set, selector
-version, limits, and distinct correlated-suffix/cross-region fallback reasons.
-A2/A4 SQL remains reference-only. A3 additionally has a repository-native
-forced emitter for qualification, but it is not selected by the public query
-API. Until a bounded selector and exact same-snapshot overflow fallback pass
-the required tournament, structurally eligible forms select
-`ADCS-INCUMBENT-STEPWISE` with `tournament_unqualified`.
+fallback codes. It also reports the fixed-suffix expansion family, planned
+candidate set, selector version, and distinct correlated-suffix/cross-region
+fallback reasons.
+Factored-suffix and backward-viability SQL remains reference-only.
+`EXPANSION-SUFFIX-SEEDED-REVERSE` has a repository-native emitter for
+qualification, but it is not selected by the public query API. Structurally
+eligible forms select `EXPANSION-STEPWISE-FORWARD` with
+`tournament_unqualified`.
 
 ## Outputs
 

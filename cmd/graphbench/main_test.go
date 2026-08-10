@@ -131,16 +131,16 @@ func TestParseConfigRejectsUnsafeExistingGraphCombinations(t *testing.T) {
 }
 
 func TestParseConfigAcceptsOnlyQualifiedForcedExpansionSearch(t *testing.T) {
-	cfg, err := parseConfig([]string{"-postgres-force-expansion-search", "ADCS-A3"}, func(string) string { return "" })
+	cfg, err := parseConfig([]string{"-postgres-force-expansion-search", "EXPANSION-SUFFIX-SEEDED-REVERSE"}, func(string) string { return "" })
 	require.NoError(t, err)
-	require.Equal(t, "ADCS-A3", cfg.PostgresForceExpansion)
+	require.Equal(t, "EXPANSION-SUFFIX-SEEDED-REVERSE", cfg.PostgresForceExpansion)
 
-	_, err = parseConfig([]string{"-postgres-force-expansion-search", "ADCS-A4"}, func(string) string { return "" })
+	_, err = parseConfig([]string{"-postgres-force-expansion-search", "unknown-strategy"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "unsupported PostgreSQL forced expansion search")
 
 	_, err = parseConfig([]string{
 		"-postgres-force-shortest-executor", "SP-S3-U-D",
-		"-postgres-force-expansion-search", "ADCS-A3",
+		"-postgres-force-expansion-search", "EXPANSION-SUFFIX-SEEDED-REVERSE",
 	}, func(string) string { return "" })
 	require.ErrorContains(t, err, "mutually exclusive")
 }

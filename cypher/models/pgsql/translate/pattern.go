@@ -234,7 +234,7 @@ type TraversalStepContext struct {
 
 func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 	firstCTE := len(s.query.CurrentPart().Model.CommonTableExpressions.Expressions)
-	adcsA3Decision, useADCSA3 := selectedADCSA3Decision(part, s.expansionSearchStrategyDecisions)
+	fixedSuffixDecision, useFixedSuffixStrategy := selectedFixedSuffixDecision(part, s.expansionSearchStrategyDecisions)
 
 	for idx, traversalStep := range part.TraversalSteps {
 		var (
@@ -266,8 +266,8 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 		s.allowLimitPushdownForStep(part, idx, traversalStep)
 	}
 
-	if useADCSA3 {
-		return s.rewriteTraversalPatternAsADCSA3(part, adcsA3Decision, firstCTE)
+	if useFixedSuffixStrategy {
+		return s.rewriteTraversalPatternAsSuffixSeededReverse(part, fixedSuffixDecision, firstCTE)
 	}
 
 	return nil

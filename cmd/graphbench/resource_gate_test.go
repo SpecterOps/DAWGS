@@ -35,7 +35,7 @@ func TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill(t *tes
 
 func TestResourceGateRecognizesASPProductionArchitecture(t *testing.T) {
 	record := CaseResult{Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "ASP", Applied: "ASP-A1-DAG"}}}}
-	require.Equal(t, "ASP-A1-DAG", appliedShortestArchitecture(record))
+	require.Equal(t, "ASP-A1-DAG", appliedPostgresArchitecture(record))
 }
 
 func TestResourceGateChecksFullComparatorReferenceResources(t *testing.T) {

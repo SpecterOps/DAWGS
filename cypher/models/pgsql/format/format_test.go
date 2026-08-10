@@ -687,6 +687,24 @@ func TestFormat_CTEs(t *testing.T) {
 	require.Equal(t, "with recursive expansion_1(root_id, next_id, depth, stop, is_cycle, path) as materialized (select r.start_id, r.end_id, 1, false, r.start_id = r.end_id, array [r.id] from edge r join node a on a.id = r.start_id where a.kind_ids operator (pg_catalog.&&) array [23]::int2[] union all select expansion_1.root_id, r.end_id, expansion_1.depth + 1, b.kind_ids operator (pg_catalog.&&) array [24]::int2[], r.id = any(expansion_1.path), expansion_1.path || r.id from expansion_1 join edge r on r.start_id = expansion_1.next_id join node b on b.id = r.end_id where not expansion_1.is_cycle and not expansion_1.stop) select a.properties, b.properties from expansion_1 join node a on a.id = expansion_1.root_id join node b on b.id = expansion_1.next_id where not expansion_1.is_cycle and expansion_1.stop;", formattedQuery)
 }
 
+func TestFormat_SetOperationParenthesizesQueryOperand(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{Body: pgsql.SetOperation{
+		Operator: pgsql.OperatorUnion,
+		All:      true,
+		LOperand: pgsql.Select{Projection: pgsql.Projection{mustAsLiteral(1)}},
+		ROperand: pgsql.Query{
+			CommonTableExpressions: &pgsql.With{Expressions: []pgsql.CommonTableExpression{{
+				Alias: pgsql.TableAlias{Name: "value"},
+				Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{mustAsLiteral(2)}}},
+			}}},
+			Body: pgsql.Select{Projection: pgsql.Projection{pgsql.Wildcard{}}, From: []pgsql.FromClause{{Source: pgsql.TableReference{Name: pgsql.CompoundIdentifier{"value"}}}}},
+		},
+	}}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "select 1 union all (with value as (select 2) select * from value);", formattedQuery)
+}
+
 func TestFormat_QueryInjection(t *testing.T) {
 	query := pgsql.Query{
 		Body: pgsql.Select{

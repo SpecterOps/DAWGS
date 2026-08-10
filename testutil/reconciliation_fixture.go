@@ -429,7 +429,7 @@ func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
 		Nodes: []opengraph.Node{
 			{ID: "scan-base-root", Kinds: []string{"ADBase"}, Properties: map[string]any{"name": "scan-base-root"}},
 			{ID: "scan-tracker-root", Kinds: []string{"Plain"}, Properties: map[string]any{"name": "scan-tracker-root"}},
-			{ID: "scan-adcs-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-adcs-target"}},
+			{ID: "scan-nine-kind-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-nine-kind-target"}},
 			{ID: "scan-local-target", Kinds: []string{"Computer"}, Properties: map[string]any{"name": "scan-local-target"}},
 			{ID: "lookup-tenant", Kinds: []string{"Tenant"}, Properties: map[string]any{"name": "lookup-tenant", "objectid": "tenant-scale"}},
 			// The extra isolated labels make negative Meta/MetaDetail predicates
@@ -491,7 +491,7 @@ func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
 			opengraph.Edge{StartID: "scan-tracker-root", EndID: scanEndID, Kind: "TrackerB", Properties: map[string]any{"marker": "tracker-b-" + suffix}},
 			opengraph.Edge{StartID: "scan-tracker-root", EndID: scanEndID, Kind: "MigratedEdge", Properties: migrationProperties},
 			opengraph.Edge{StartID: scanEntityID, EndID: scanEndID, Kind: "OwnsRaw", Properties: map[string]any{"marker": "owns-" + suffix}},
-			opengraph.Edge{StartID: scanEntityID, EndID: "scan-adcs-target", Kind: fmt.Sprintf("ADCSEdge%02d", idx%9+1), Properties: map[string]any{"marker": "adcs-" + suffix}},
+			opengraph.Edge{StartID: scanEntityID, EndID: "scan-nine-kind-target", Kind: fmt.Sprintf("ScanEdge%02d", idx%9+1), Properties: map[string]any{"marker": "scan-" + suffix}},
 			opengraph.Edge{StartID: scanEntityID, EndID: "scan-local-target", Kind: "LocalToComputer", Properties: map[string]any{"marker": "scan-local-" + suffix}},
 			opengraph.Edge{StartID: scanEntityID, EndID: scanEndID, Kind: "MemberOf", Properties: map[string]any{"marker": "member-" + suffix}},
 			opengraph.Edge{StartID: scanEntityID, EndID: scanEndID, Kind: "MemberOfLocalGroup", Properties: map[string]any{"marker": "member-local-" + suffix}},

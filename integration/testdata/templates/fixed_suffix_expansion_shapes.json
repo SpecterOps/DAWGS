@@ -1,0 +1,48 @@
+{
+  "families": [
+    {
+      "name": "Bounded fixed-suffix expansion semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "fse-root", "kinds": ["ExpansionRoot"], "properties": {"root_key": "semantic-fse-root"}},
+          {"id": "fse-mid", "kinds": ["ExpansionNode"], "properties": {"name": "mid"}},
+          {"id": "fse-boundary-a", "kinds": ["ExpansionNode"], "properties": {"enabled": true}},
+          {"id": "fse-boundary-b", "kinds": ["ExpansionNode"], "properties": {"enabled": true}},
+          {"id": "fse-head", "kinds": ["SuffixHead"], "properties": {"name": "head"}},
+          {"id": "fse-middle", "kinds": ["SuffixMiddle"], "properties": {"name": "middle"}},
+          {"id": "fse-terminal", "kinds": ["SuffixTerminal"], "properties": {"name": "terminal"}},
+          {"id": "fse-decoy-head", "kinds": ["SuffixHead"], "properties": {"name": "decoy"}}
+        ],
+        "edges": [
+          {"start_id": "fse-root", "end_id": "fse-mid", "kind": "Expand", "properties": {"ordinal": 1}},
+          {"start_id": "fse-mid", "end_id": "fse-mid", "kind": "Expand", "properties": {"ordinal": 2}},
+          {"start_id": "fse-mid", "end_id": "fse-boundary-a", "kind": "Expand", "properties": {"ordinal": 3}},
+          {"start_id": "fse-mid", "end_id": "fse-boundary-b", "kind": "Expand", "properties": {"ordinal": 4}},
+          {"start_id": "fse-boundary-a", "end_id": "fse-head", "kind": "EnterSuffix", "properties": {"ordinal": 5}},
+          {"start_id": "fse-boundary-b", "end_id": "fse-head", "kind": "EnterSuffix", "properties": {"ordinal": 6}},
+          {"start_id": "fse-head", "end_id": "fse-middle", "kind": "ContinueSuffix", "properties": {"ordinal": 7}},
+          {"start_id": "fse-middle", "end_id": "fse-terminal", "kind": "CompleteSuffix", "properties": {"ordinal": 8}},
+          {"start_id": "fse-boundary-a", "end_id": "fse-decoy-head", "kind": "WrongEnterSuffix", "properties": {"ordinal": 9}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "Bounded endpoint observation preserves physical suffix multiplicity",
+          "vars": {"query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'semantic-fse-root' MATCH (root)-[:Expand*0..2]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)"},
+          "assert": {"keys": ["id(head)", "id(terminal)"], "row_count": 2}
+        },
+        {
+          "name": "Bounded full path observation retains relationship-distinct paths",
+          "vars": {"query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'semantic-fse-root' MATCH p = (root)-[:Expand*0..2]->()-[:EnterSuffix]->(:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(:SuffixTerminal) RETURN p"},
+          "assert": {"keys": ["p"], "row_count": 2}
+        },
+        {
+          "name": "Bounded downstream WITH aggregation preserves bag semantics",
+          "vars": {"query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'semantic-fse-root' MATCH (root)-[:Expand*0..2]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WITH head, terminal, count(*) AS trails RETURN trails"},
+          "assert": {"keys": ["trails"], "row_values": [[2]], "row_count": 1}
+        }
+      ]
+    }
+  ]
+}

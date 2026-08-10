@@ -45,15 +45,15 @@ type Scenario struct {
 const traversalShapesDataset = "traversal_shapes"
 
 // defaultDatasets is the set of datasets committed to the repo.
-var defaultDatasets = []string{"base", "adcs_fanout", traversalShapesDataset}
+var defaultDatasets = []string{"base", "fixed_suffix_expansion_fanout", traversalShapesDataset}
 
 // scenariosForDataset returns all benchmark scenarios for a given dataset and its loaded ID map.
 func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	switch dataset {
 	case "base":
 		return baseScenarios(idMap)
-	case "adcs_fanout":
-		return adcsFanoutScenarios()
+	case "fixed_suffix_expansion_fanout":
+		return fixedSuffixExpansionFanoutScenarios()
 	case traversalShapesDataset:
 		return traversalShapesScenarios(idMap)
 	case "local/phantom":
@@ -235,41 +235,41 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	}
 }
 
-const adcsFanoutObjectID = "S-1-5-21-2643190041-1319121918-239771340-513"
+const fixedSuffixFanoutRootKey = "fixed-suffix-fanout-root"
 
-func adcsFanoutScenarios() []Scenario {
+func fixedSuffixExpansionFanoutScenarios() []Scenario {
 	var (
-		ds = "adcs_fanout"
+		ds = "fixed_suffix_expansion_fanout"
 		p1 = fmt.Sprintf(`
-		MATCH (n:Group) WHERE n.objectid = '%s'
-		MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		MATCH (root:ExpansionRoot) WHERE root.root_key = '%s'
+		MATCH p1 = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
 		RETURN p1
-		`, adcsFanoutObjectID)
+		`, fixedSuffixFanoutRootKey)
 		p2 = fmt.Sprintf(`
-		MATCH (n:Group) WHERE n.objectid = '%s'
-		MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain)
-		WHERE ct.authenticationenabled = true
-		AND ct.requiresmanagerapproval = false
-		AND ct.enrolleesuppliessubject = true
-		AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+		MATCH (root:ExpansionRoot) WHERE root.root_key = '%s'
+		MATCH p2 = (root)-[:Expand*0..16]->()-[:OptionA|OptionB|OptionC]->(predicate:PredicateNode)-[:JoinSuffix]->(head:SuffixHead)-[:HeadToBridge|HeadToAlternateBridge*1..16]->(:BridgeNode)-[:ReachTerminal]->(terminal:SuffixTerminal)
+		WHERE predicate.eligible = true
+		AND predicate.requires_review = false
+		AND predicate.allows_direct = true
+		AND (predicate.version = 1 OR predicate.required_approvals = 0)
 		RETURN p2
-		`, adcsFanoutObjectID)
+		`, fixedSuffixFanoutRootKey)
 		combinedMatch = fmt.Sprintf(`
-		MATCH (n:Group) WHERE n.objectid = '%s'
-		MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
-		WHERE ct.authenticationenabled = true
-		AND ct.requiresmanagerapproval = false
-		AND ct.enrolleesuppliessubject = true
-		AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
-		`, adcsFanoutObjectID)
+		MATCH (root:ExpansionRoot) WHERE root.root_key = '%s'
+		MATCH p1 = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		MATCH p2 = (root)-[:Expand*0..16]->()-[:OptionA|OptionB|OptionC]->(predicate:PredicateNode)-[:JoinSuffix]->(head)-[:HeadToBridge|HeadToAlternateBridge*1..16]->(:BridgeNode)-[:ReachTerminal]->(terminal)
+		WHERE predicate.eligible = true
+		AND predicate.requires_review = false
+		AND predicate.allows_direct = true
+		AND (predicate.version = 1 OR predicate.required_approvals = 0)
+		`, fixedSuffixFanoutRootKey)
 	)
 
 	return []Scenario{
-		cypherPathScenario("ADCS Fanout", ds, "p1 only", p1, 1),
-		cypherPathScenario("ADCS Fanout", ds, "p2 only", p2, 1),
-		cypherPathScenario("ADCS Fanout", ds, "combined", combinedMatch+"RETURN p1,p2", 2),
-		cypherScenario("ADCS Fanout", ds, "combined endpoints", combinedMatch+"RETURN id(ca), id(d), id(ct)"),
+		cypherPathScenario("Fixed Suffix Expansion Fanout", ds, "p1 only", p1, 1),
+		cypherPathScenario("Fixed Suffix Expansion Fanout", ds, "p2 only", p2, 1),
+		cypherPathScenario("Fixed Suffix Expansion Fanout", ds, "combined", combinedMatch+"RETURN p1,p2", 2),
+		cypherScenario("Fixed Suffix Expansion Fanout", ds, "combined endpoints", combinedMatch+"RETURN id(head), id(terminal), id(predicate)"),
 	}
 }
 

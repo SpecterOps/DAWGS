@@ -904,7 +904,7 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 			return fmt.Errorf("set operation for query may not be both ALL and DISTINCT")
 		}
 
-		if err := formatSetExpression(builder, typedSetExpression.LOperand); err != nil {
+		if err := formatSetOperationOperand(builder, typedSetExpression.LOperand); err != nil {
 			return err
 		}
 
@@ -924,7 +924,7 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 			builder.Write("distinct ")
 		}
 
-		if err := formatSetExpression(builder, typedSetExpression.ROperand); err != nil {
+		if err := formatSetOperationOperand(builder, typedSetExpression.ROperand); err != nil {
 			return err
 		}
 
@@ -941,6 +941,18 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 		return fmt.Errorf("unsupported set expression type %T", expression)
 	}
 
+	return nil
+}
+
+func formatSetOperationOperand(builder *OutputBuilder, operand pgsql.SetExpression) error {
+	if _, isQuery := operand.(pgsql.Query); !isQuery {
+		return formatSetExpression(builder, operand)
+	}
+	builder.Write("(")
+	if err := formatSetExpression(builder, operand); err != nil {
+		return err
+	}
+	builder.Write(")")
 	return nil
 }
 

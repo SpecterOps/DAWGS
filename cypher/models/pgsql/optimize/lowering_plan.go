@@ -164,6 +164,7 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 		}
 		for patternIndex, patternPart := range readingClause.Match.Pattern {
 			steps := traversalStepsForPattern(patternPart)
+			deterministicPredicates := !syntaxContainsFunctionInvocation(patternPart) && !syntaxContainsFunctionInvocation(readingClause.Match.Where)
 			pathDependentPredicate := patternPart != nil && patternPart.Variable != nil && syntaxDependsOn(readingClause.Match.Where, patternPart.Variable.Symbol)
 			for stepIndex, step := range steps {
 				if step.Relationship == nil || step.Relationship.Range == nil {
@@ -209,13 +210,14 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					{Name: "directed_expansion", Eligible: directedExpansion},
 					{Name: "bounded_supported_depth", Eligible: boundedDepth && maxDepth >= minDepth && maxDepth <= 64},
 					{Name: "exact_three_hop_suffix", Eligible: suffixLength == 3},
-					{Name: "qualified_adcs_topology", Eligible: qualifiedADCSSearchTopology(step, suffixSteps)},
+					{Name: "qualified_fixed_suffix_topology", Eligible: qualifiedFixedSuffixTopology(step, suffixSteps)},
 					{Name: "directed_suffix", Eligible: directedSuffix},
 					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil && noSuffixRelationshipVariables},
 					{Name: "no_relationship_predicate", Eligible: noRelationshipPredicates},
 					{Name: "uncorrelated_suffix", Eligible: uncorrelatedSuffix},
 					{Name: "no_cross_region_predicate", Eligible: noCrossRegionPredicate},
 					{Name: "no_path_dependent_predicate", Eligible: !pathDependentPredicate},
+					{Name: "deterministic_predicates", Eligible: deterministicPredicates},
 					{Name: "no_limit_pushdown_conflict", Eligible: !limitConflict},
 					{Name: "supported_observation", Eligible: observation != ExpansionSearchObservationUnsupported},
 				}
@@ -259,13 +261,15 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					fallbackReason = ExpansionSearchFallbackRelationshipVariable
 				case pathDependentPredicate:
 					fallbackReason = ExpansionSearchFallbackPathDependentPredicate
+				case !deterministicPredicates:
+					fallbackReason = ExpansionSearchFallbackNonDeterministicPredicate
 				case limitConflict:
 					fallbackReason = ExpansionSearchFallbackLimitPushdownConflict
-				case !boundRoot && qualifiedADCSSearchTopology(step, suffixSteps):
+				case !boundRoot && qualifiedFixedSuffixTopology(step, suffixSteps):
 					fallbackReason = ExpansionSearchFallbackUnboundRoot
 				}
 				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, ExpansionSearchStrategyDecision{
-					Target: target, Family: "ADCS",
+					Target: target, Family: "fixed_suffix_expansion",
 					PlannedCandidates: []ExpansionSearchStrategy{
 						ExpansionSearchStepwiseForward,
 						ExpansionSearchLateHydratedForward,
@@ -273,12 +277,13 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 						ExpansionSearchSuffixSeededReverse,
 						ExpansionSearchBackwardViabilityForward,
 					},
+					CandidateStrategy:    ExpansionSearchSuffixSeededReverse,
 					SelectedStrategy:     ExpansionSearchStepwiseForward,
-					StructurallyEligible: eligible, EligibilityFacts: facts,
+					StructurallyEligible: eligible, StaticallyEligible: eligible, EligibilityFacts: facts,
 					SuffixStartStep: stepIndex + 1, SuffixEndStep: suffixEnd, SuffixLength: suffixLength,
 					ObservationMode: observation, LogicalDirection: step.Relationship.Direction.String(),
 					MinimumDepth: minDepth, MaximumDepth: maxDepth,
-					SelectionMode: "incumbent_default", SelectorVersion: "adcs-static-v1",
+					SelectionMode: "incumbent_default", SelectorVersion: "fixed-suffix-static-v1",
 					FallbackStrategy: ExpansionSearchStepwiseForward, FallbackReason: fallbackReason,
 				})
 			}
@@ -286,6 +291,19 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 		}
 		declareWhereSymbols(declaredSymbols, readingClause.Match)
 	}
+}
+
+func syntaxContainsFunctionInvocation(node cypher.SyntaxNode) bool {
+	if node == nil {
+		return false
+	}
+	found := false
+	_ = walk.Cypher(node, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if _, isFunction := node.(*cypher.FunctionInvocation); isFunction {
+			found = true
+		}
+	}))
+	return found
 }
 
 func symbolDeclared(declared map[string]struct{}, symbol string) bool {
@@ -346,14 +364,12 @@ func hasLimitPushdownForTarget(plan *LoweringPlan, target TraversalStepTarget) b
 	return false
 }
 
-func qualifiedADCSSearchTopology(expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
-	if len(suffix) != 3 || expansion.Relationship == nil || len(expansion.Relationship.Kinds) != 1 || expansion.Relationship.Kinds[0].String() != "MemberOf" || expansion.Relationship.Direction != graph.DirectionOutbound {
+func qualifiedFixedSuffixTopology(expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
+	if len(suffix) != 3 || expansion.Relationship == nil || len(expansion.Relationship.Kinds) != 1 || expansion.Relationship.Direction != graph.DirectionOutbound {
 		return false
 	}
-	expectedRelationships := []string{"Enroll", "TrustedForNTAuth", "NTAuthStoreFor"}
-	expectedNodes := []string{"EnterpriseCA", "NTAuthStore", "Domain"}
-	for idx, step := range suffix {
-		if step.Relationship == nil || step.RightNode == nil || step.Relationship.Direction != graph.DirectionOutbound || len(step.Relationship.Kinds) != 1 || step.Relationship.Kinds[0].String() != expectedRelationships[idx] || len(step.RightNode.Kinds) != 1 || step.RightNode.Kinds[0].String() != expectedNodes[idx] {
+	for _, step := range suffix {
+		if step.Relationship == nil || step.RightNode == nil || step.Relationship.Direction != graph.DirectionOutbound || len(step.Relationship.Kinds) != 1 || len(step.RightNode.Kinds) != 1 {
 			return false
 		}
 	}
@@ -812,6 +828,7 @@ func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.
 		setExpansionSearchEligibilityFact(decision, "single_variable_expansion", singleExpansion)
 		setExpansionSearchEligibilityFact(decision, "read_only", readOnly)
 		decision.StructurallyEligible = expansionSearchFactsEligible(decision.EligibilityFacts)
+		decision.StaticallyEligible = decision.StructurallyEligible
 		if !singleExpansion && (decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified || decision.FallbackReason == ExpansionSearchFallbackMultipleVariableExpansions || decision.FallbackReason == ExpansionSearchFallbackUnboundRoot) {
 			decision.FallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
 		} else if !readOnly && decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified {
@@ -2259,7 +2276,7 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 
 				if suffixLength := expansionSuffixPushdownLength(steps[stepIndex+1:]); suffixLength > 0 {
 					suffixSteps := steps[stepIndex+1 : stepIndex+1+suffixLength]
-					// Start with the measured ADCS P1 shape: an observed immediate
+					// Start with the measured fixed-suffix shape: an observed immediate
 					// continuation of three or more fixed hops. Shorter suffixes retain
 					// the established prefilter until their own decoy-density A/B exists.
 					observed := suffixLength >= 3 && suffixBindingsObserved(patternPart, suffixSteps, sourceReferences)

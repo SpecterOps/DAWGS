@@ -98,14 +98,14 @@ func generatedDataset(name string) *opengraph.Graph {
 	if matched, _ := fmt.Sscanf(name, testutil.ShortestPathScaleDataset+"_d%d_f%d", &shortestDepth, &shortestFanout); matched == 2 && shortestDepth >= 1 && shortestFanout >= 1 && name == fmt.Sprintf(testutil.ShortestPathScaleDataset+"_d%d_f%d", shortestDepth, shortestFanout) {
 		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: shortestDepth, Fanout: shortestFanout})
 	}
-	var adcsDepth, adcsFanout, adcsValidEvery, adcsPayload int
-	if matched, _ := fmt.Sscanf(name, testutil.ADCSScaleDataset+"_d%d_f%d_v%d_p%d", &adcsDepth, &adcsFanout, &adcsValidEvery, &adcsPayload); matched == 4 && adcsDepth >= 0 && adcsFanout >= 1 && adcsValidEvery >= 1 && adcsPayload >= 0 && name == fmt.Sprintf(testutil.ADCSScaleDataset+"_d%d_f%d_v%d_p%d", adcsDepth, adcsFanout, adcsValidEvery, adcsPayload) {
-		return testutil.NewADCSScaleFixture(testutil.ADCSScaleConfig{
-			MemberOfDepth: adcsDepth, Fanout: adcsFanout, ValidSuffixEvery: adcsValidEvery, PropertyPayloadSize: adcsPayload,
+	var expansionDepth, expansionFanout, validSuffixEvery, expansionPayload int
+	if matched, _ := fmt.Sscanf(name, testutil.FixedSuffixExpansionScaleDataset+"_d%d_f%d_v%d_p%d", &expansionDepth, &expansionFanout, &validSuffixEvery, &expansionPayload); matched == 4 && expansionDepth >= 0 && expansionFanout >= 1 && validSuffixEvery >= 1 && expansionPayload >= 0 && name == fmt.Sprintf(testutil.FixedSuffixExpansionScaleDataset+"_d%d_f%d_v%d_p%d", expansionDepth, expansionFanout, validSuffixEvery, expansionPayload) {
+		return testutil.NewFixedSuffixExpansionScaleFixture(testutil.FixedSuffixExpansionScaleConfig{
+			ExpansionDepth: expansionDepth, Fanout: expansionFanout, ValidSuffixEvery: validSuffixEvery, PropertyPayloadSize: expansionPayload,
 		})
 	}
-	if config, ok := parseADCSV2DatasetName(name); ok {
-		return testutil.NewADCSScaleFixture(config)
+	if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
+		return testutil.NewFixedSuffixExpansionScaleFixture(config)
 	}
 	switch name {
 	case testutil.ReconciliationScaleDataset:
@@ -118,26 +118,26 @@ func generatedDataset(name string) *opengraph.Graph {
 		return testutil.NewScanLookupScaleFixture(128)
 	case testutil.ShortestPathScaleDataset:
 		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: 16, Fanout: 128})
-	case testutil.ADCSScaleDataset:
-		return testutil.NewADCSScaleFixture(testutil.ADCSScaleConfig{MemberOfDepth: 8, Fanout: 100, ValidSuffixEvery: 10, PropertyPayloadSize: 4096})
+	case testutil.FixedSuffixExpansionScaleDataset:
+		return testutil.NewFixedSuffixExpansionScaleFixture(testutil.FixedSuffixExpansionScaleConfig{ExpansionDepth: 8, Fanout: 100, ValidSuffixEvery: 10, PropertyPayloadSize: 4096})
 	default:
 		return nil
 	}
 }
 
 type FixtureMetadata struct {
-	Dataset           string                       `json:"dataset"`
-	Checksum          string                       `json:"checksum"`
-	NodeCount         int                          `json:"node_count"`
-	EdgeCount         int                          `json:"edge_count"`
-	PhysicalValidated bool                         `json:"physical_cardinality_validated,omitempty"`
-	PhysicalNodeCount int64                        `json:"physical_node_count,omitempty"`
-	PhysicalEdgeCount int64                        `json:"physical_edge_count,omitempty"`
-	NodeRelationBytes int64                        `json:"node_relation_bytes,omitempty"`
-	EdgeRelationBytes int64                        `json:"edge_relation_bytes,omitempty"`
-	Configuration     string                       `json:"configuration,omitempty"`
-	Shortest          *ShortestFixtureExpectations `json:"shortest,omitempty"`
-	ADCS              *ADCSFixtureExpectations     `json:"adcs,omitempty"`
+	Dataset              string                                   `json:"dataset"`
+	Checksum             string                                   `json:"checksum"`
+	NodeCount            int                                      `json:"node_count"`
+	EdgeCount            int                                      `json:"edge_count"`
+	PhysicalValidated    bool                                     `json:"physical_cardinality_validated,omitempty"`
+	PhysicalNodeCount    int64                                    `json:"physical_node_count,omitempty"`
+	PhysicalEdgeCount    int64                                    `json:"physical_edge_count,omitempty"`
+	NodeRelationBytes    int64                                    `json:"node_relation_bytes,omitempty"`
+	EdgeRelationBytes    int64                                    `json:"edge_relation_bytes,omitempty"`
+	Configuration        string                                   `json:"configuration,omitempty"`
+	Shortest             *ShortestFixtureExpectations             `json:"shortest,omitempty"`
+	FixedSuffixExpansion *FixedSuffixExpansionFixtureExpectations `json:"fixed_suffix_expansion,omitempty"`
 }
 
 type ShortestFixtureExpectations struct {
@@ -156,10 +156,10 @@ type ShortestFixtureExpectations struct {
 	ParallelDistinctTargets           int64            `json:"parallel_distinct_targets"`
 }
 
-type ADCSFixtureExpectations struct {
+type FixedSuffixExpansionFixtureExpectations struct {
 	RootSourceRows         int64 `json:"root_source_rows"`
 	DistinctRoots          int64 `json:"distinct_roots"`
-	ForwardMemberStates    int64 `json:"forward_member_states"`
+	ForwardExpansionStates int64 `json:"forward_expansion_states"`
 	SuffixRows             int64 `json:"suffix_rows"`
 	DistinctBoundaries     int64 `json:"distinct_boundaries"`
 	ReachableBoundaries    int64 `json:"reachable_boundaries"`
@@ -185,8 +185,8 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 	metadata := FixtureMetadata{
 		Dataset: name, Checksum: hex.EncodeToString(digest[:]), NodeCount: len(doc.Graph.Nodes), EdgeCount: len(doc.Graph.Edges), Configuration: configuration,
 	}
-	if config, ok := parseADCSV2DatasetName(name); ok {
-		metadata.ADCS = adcsFixtureExpectations(config)
+	if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
+		metadata.FixedSuffixExpansion = fixedSuffixExpansionFixtureExpectations(config)
 	}
 	if config, ok := parseShortestPathV2DatasetName(name); ok {
 		metadata.Shortest = shortestFixtureExpectations(doc.Graph, config)
@@ -271,23 +271,23 @@ func shortestFixtureExpectations(fixture opengraph.Graph, config testutil.Shorte
 	return expectations
 }
 
-func parseADCSV2DatasetName(name string) (testutil.ADCSScaleConfig, bool) {
+func parseFixedSuffixExpansionV2DatasetName(name string) (testutil.FixedSuffixExpansionScaleConfig, bool) {
 	var depth, fanout, reachable, disconnected, fanIn, multiplicity, zeroDepth, payload int
-	format := testutil.ADCSScaleDataset + "_v2_d%d_f%d_r%d_x%d_i%d_m%d_z%d_p%d"
+	format := testutil.FixedSuffixExpansionScaleDataset + "_v2_d%d_f%d_r%d_x%d_i%d_m%d_z%d_p%d"
 	matched, _ := fmt.Sscanf(name, format, &depth, &fanout, &reachable, &disconnected, &fanIn, &multiplicity, &zeroDepth, &payload)
 	if matched != 8 || depth < 0 || fanout < 1 || reachable < 0 || reachable > fanout || disconnected < 0 || fanIn < 0 || multiplicity < 1 || (zeroDepth != 0 && zeroDepth != 1) || payload < 0 || name != fmt.Sprintf(format, depth, fanout, reachable, disconnected, fanIn, multiplicity, zeroDepth, payload) {
-		return testutil.ADCSScaleConfig{}, false
+		return testutil.FixedSuffixExpansionScaleConfig{}, false
 	}
 	rootSuffix := zeroDepth == 1
-	return testutil.ADCSScaleConfig{
-		MemberOfDepth: depth, Fanout: fanout, ExactReachableSuffixSources: &reachable,
+	return testutil.FixedSuffixExpansionScaleConfig{
+		ExpansionDepth: depth, Fanout: fanout, ExactReachableSuffixSources: &reachable,
 		DisconnectedSuffixSources: disconnected, ReverseFanIn: fanIn,
 		SuffixPathsPerBoundary: multiplicity, RootMatchCount: 1,
 		RootHasZeroDepthSuffix: &rootSuffix, PropertyPayloadSize: payload,
 	}, true
 }
 
-func adcsFixtureExpectations(config testutil.ADCSScaleConfig) *ADCSFixtureExpectations {
+func fixedSuffixExpansionFixtureExpectations(config testutil.FixedSuffixExpansionScaleConfig) *FixedSuffixExpansionFixtureExpectations {
 	reachable := 0
 	if config.ExactReachableSuffixSources != nil {
 		reachable = *config.ExactReachableSuffixSources
@@ -303,13 +303,13 @@ func adcsFixtureExpectations(config testutil.ADCSScaleConfig) *ADCSFixtureExpect
 	if zero+reachable > 0 {
 		productiveFanIn = config.ReverseFanIn
 	}
-	return &ADCSFixtureExpectations{
+	return &FixedSuffixExpansionFixtureExpectations{
 		RootSourceRows: int64(rootCount), DistinctRoots: int64(rootCount),
-		ForwardMemberStates: int64(rootCount + config.Fanout*config.MemberOfDepth),
-		SuffixRows:          int64((zero + reachable + config.DisconnectedSuffixSources) * multiplicity),
-		DistinctBoundaries:  int64(zero + reachable + config.DisconnectedSuffixSources),
-		ReachableBoundaries: int64(zero + reachable), DisconnectedBoundaries: int64(config.DisconnectedSuffixSources),
-		ExpectedReverseStates: int64(zero + reachable*(config.MemberOfDepth+1) + config.DisconnectedSuffixSources + productiveFanIn),
+		ForwardExpansionStates: int64(rootCount + config.Fanout*config.ExpansionDepth),
+		SuffixRows:             int64((zero + reachable + config.DisconnectedSuffixSources) * multiplicity),
+		DistinctBoundaries:     int64(zero + reachable + config.DisconnectedSuffixSources),
+		ReachableBoundaries:    int64(zero + reachable), DisconnectedBoundaries: int64(config.DisconnectedSuffixSources),
+		ExpectedReverseStates: int64(zero + reachable*(config.ExpansionDepth+1) + config.DisconnectedSuffixSources + productiveFanIn),
 		CompleteOutputTrails:  int64((zero + reachable) * multiplicity),
 	}
 }

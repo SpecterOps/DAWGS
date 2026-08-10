@@ -104,7 +104,7 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, anchoredFixture, func(idMap opengraph.IDMap) graph.Criteria {
 			return query.And(
 				query.Kind(query.Start(), graph.StringKind("Entity")),
-				query.KindIn(query.Relationship(), scanLookupADCSKinds()...),
+				query.KindIn(query.Relationship(), scanLookupNineKinds()...),
 				query.Equals(query.EndID(), idMap["target"]),
 			)
 		}, func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {
@@ -461,10 +461,10 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 	})
 }
 
-func scanLookupADCSKinds() graph.Kinds {
+func scanLookupNineKinds() graph.Kinds {
 	kinds := make(graph.Kinds, 9)
 	for idx := range kinds {
-		kinds[idx] = graph.StringKind("ADCSEdge0" + string(rune('1'+idx)))
+		kinds[idx] = graph.StringKind("ScanEdge0" + string(rune('1'+idx)))
 	}
 	return kinds
 }

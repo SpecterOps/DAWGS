@@ -87,7 +87,8 @@ The harness writes raw outputs and a Markdown report under `.bench/runs/` by def
 findings, includes the raw `benchstat` output for each benchmark suite, and ends with a table of all captured benchmark
 numbers.
 
-The integration benchmark runner includes committed `base`, `adcs_fanout`, and `traversal_shapes` datasets by default.
+The integration benchmark runner includes committed `base`,
+`fixed_suffix_expansion_fanout`, and `traversal_shapes` datasets by default.
 The traversal shape suite checks expected result counts for chain, fanout, bounded cycle, disconnected,
 edge-kind-selective, and multi-path shortest-path scenarios before recording timings.
 
@@ -130,11 +131,14 @@ concurrency blocks and PostgreSQL component/full-query
 references are documented in `cmd/graphbench/README.md`. Path-observed
 singleton captures include exact benchmark-only M0/M1 materializer arms with a
 shared search boundary; they do not enable an experimental production executor.
-Generated ADCS captures also provide selectable exact A1a/A1b/A2/A3/A4
-forward, factored-suffix, reverse, and viability arms plus versioned fixtures
-with independent suffix-density and reverse-fan-in controls. The optimizer
-reports a typed expansion-search decision, but keeps production on its exact
-stepwise fallback until the predeclared live qualification gates pass.
+Generated fixed-suffix expansion captures provide selectable exact root-reuse,
+late-hydration, factored-suffix forward, suffix-seeded reverse, and
+backward-viability forward arms plus versioned fixtures with independent
+suffix-density and reverse-fan-in controls. The optimizer reports a typed
+expansion-search decision. Repository-native
+`EXPANSION-SUFFIX-SEEDED-REVERSE` is an exact qualification-only implementation.
+Production selection remains on the stepwise incumbent because query shape and
+available metadata do not provide hard suffix-density or reverse-state bounds.
 
 PostgreSQL recursive shortest-path execution also includes bounded S4
 singleton executors and an all-shortest predecessor-DAG executor, with exact
@@ -158,8 +162,9 @@ CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawg
 
 Runtime and plan captures are intentionally generated under the ignored
 `.coverage/` directory. Keep them as reviewed environment-specific artifacts;
-use the stable `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`, `SCAN-*`, and `LOOKUP-*`
-IDs to compare captures with their semantic fixtures and manifest entries.
+use the stable `GFSE-*`, `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`, `SCAN-*`, and
+`LOOKUP-*` IDs to compare captures with their semantic fixtures and manifest
+entries.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports

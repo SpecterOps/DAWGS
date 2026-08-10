@@ -103,9 +103,9 @@ func TestGeneratedDatasetVariantsAreParameterizedAndRepeatable(t *testing.T) {
 	require.NotNil(t, first)
 	require.Equal(t, first, second)
 
-	adcs := generatedDataset("generated_adcs_d2_f10_v2_p4096")
-	require.NotNil(t, adcs)
-	require.Contains(t, adcs.Nodes[0].Properties["payload"], "xxxx")
+	fixedSuffix := generatedDataset("generated_fixed_suffix_expansion_d2_f10_v2_p4096")
+	require.NotNil(t, fixedSuffix)
+	require.Contains(t, fixedSuffix.Nodes[0].Properties["payload"], "xxxx")
 }
 
 func TestFixtureMetadataIncludesCardinalityAndChecksum(t *testing.T) {

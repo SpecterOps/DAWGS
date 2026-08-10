@@ -35,7 +35,7 @@ func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.Da
 func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	t.Parallel()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), adcsQuery)
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fixedSuffixExpansionQuery)
 	require.NoError(t, err)
 
 	plan, err := Optimize(regularQuery)
@@ -79,23 +79,23 @@ func TestFieldRequirementAnalysisDistinguishesObservationBoundaries(t *testing.T
 	require.NotContains(t, bySymbol["p"].Fields, FieldRequirementFullPath)
 }
 
-func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
+func TestOptimizePlansFixedSuffixFanoutRewrite(t *testing.T) {
 	t.Parallel()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), adcsQuery)
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fixedSuffixExpansionQuery)
 	require.NoError(t, err)
 
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 
-	ctPredicate := PredicateAttachment{
+	predicateAttachment := PredicateAttachment{
 		QueryPartIndex:  0,
 		RegionIndex:     0,
 		ClauseIndex:     2,
 		ExpressionIndex: 0,
 		Scope:           PredicateAttachmentScopeBinding,
-		BindingSymbols:  []string{"ct"},
-		Dependencies:    []string{"ct"},
+		BindingSymbols:  []string{"predicate"},
+		Dependencies:    []string{"predicate"},
 	}
 
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpansionSuffixPushdown})
@@ -127,7 +127,7 @@ func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
 		SuffixEndStep:        2,
 		ApplySupplemental:    true,
 		Reason:               "supplemental suffix prefilter retained for unobserved continuation",
-		PredicateAttachments: []PredicateAttachment{ctPredicate},
+		PredicateAttachments: []PredicateAttachment{predicateAttachment},
 	})
 	require.Contains(t, plan.LoweringPlan.ExpansionSuffixPushdown, ExpansionSuffixPushdownDecision{
 		Target: TraversalStepTarget{
@@ -166,7 +166,7 @@ func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
 			PatternIndex:   0,
 			StepIndex:      1,
 		},
-		Attachment: ctPredicate,
+		Attachment: predicateAttachment,
 		Placement:  PredicateAttachmentScopeBinding,
 	})
 }
@@ -765,8 +765,8 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ca:EnterpriseCA)
-		RETURN p
+		MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->(boundary:ExpansionNode)-[:EnterSuffix]->(head:SuffixHead)
+		RETURN path
 	`)
 	require.NoError(t, err)
 
@@ -788,14 +788,14 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
-func TestLoweringPlanReportsConservativeADCSSearchStrategy(t *testing.T) {
+func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) {
 	t.Parallel()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n:Group)
-		WHERE n.objectid = $objectid
-		MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		RETURN p
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = $root_key
+		MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN path
 	`)
 	require.NoError(t, err)
 
@@ -804,9 +804,9 @@ func TestLoweringPlanReportsConservativeADCSSearchStrategy(t *testing.T) {
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringExpansionSearchStrategy})
 	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
 	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
-	require.Equal(t, "ADCS", decision.Family)
+	require.Equal(t, "fixed_suffix_expansion", decision.Family)
 	require.Equal(t, "incumbent_default", decision.SelectionMode)
-	require.Equal(t, "adcs-static-v1", decision.SelectorVersion)
+	require.Equal(t, "fixed-suffix-static-v1", decision.SelectorVersion)
 	require.Equal(t, []ExpansionSearchStrategy{
 		ExpansionSearchStepwiseForward,
 		ExpansionSearchLateHydratedForward,
@@ -815,6 +815,7 @@ func TestLoweringPlanReportsConservativeADCSSearchStrategy(t *testing.T) {
 		ExpansionSearchBackwardViabilityForward,
 	}, decision.PlannedCandidates)
 	require.True(t, decision.StructurallyEligible)
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "qualified_fixed_suffix_topology", Eligible: true})
 	require.Equal(t, ExpansionSearchStepwiseForward, decision.SelectedStrategy)
 	require.Equal(t, ExpansionSearchStepwiseForward, decision.FallbackStrategy)
 	require.Equal(t, ExpansionSearchFallbackTournamentUnqualified, decision.FallbackReason)
@@ -825,19 +826,38 @@ func TestLoweringPlanReportsConservativeADCSSearchStrategy(t *testing.T) {
 	require.Equal(t, "outbound", decision.LogicalDirection)
 }
 
+func TestFixedSuffixSearchRejectsPredicateFunctionReevaluation(t *testing.T) {
+	t.Parallel()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = 'root'
+		MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(:SuffixTerminal)
+		WHERE root.marker = toString(1)
+		RETURN root
+	`)
+	require.NoError(t, err)
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
+	require.False(t, decision.StructurallyEligible)
+	require.Equal(t, ExpansionSearchFallbackNonDeterministicPredicate, decision.FallbackReason)
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "deterministic_predicates", Eligible: false})
+}
+
 func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
 	for _, testCase := range []struct {
 		name        string
 		projection  string
 		observation ExpansionSearchObservationMode
 	}{
-		{name: "endpoint IDs", projection: "id(ca), id(d)", observation: ExpansionSearchObservationEndpointIDs},
-		{name: "ordered IDs", projection: "length(p)", observation: ExpansionSearchObservationOrderedPathIDs},
-		{name: "full path", projection: "p", observation: ExpansionSearchObservationFullPath},
+		{name: "endpoint IDs", projection: "id(head), id(terminal)", observation: ExpansionSearchObservationEndpointIDs},
+		{name: "ordered IDs", projection: "length(path)", observation: ExpansionSearchObservationOrderedPathIDs},
+		{name: "full path", projection: "path", observation: ExpansionSearchObservationFullPath},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-				MATCH p = (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+				MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
 				RETURN `+testCase.projection)
 			require.NoError(t, err)
 			plan, err := Optimize(regularQuery)
@@ -850,10 +870,10 @@ func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
 
 func TestExpansionSearchFinalizationRejectsVariableExpansionAcrossWith(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		WITH n, d
-		MATCH (n)-[:MemberOf*0..4]->(x)
-		RETURN id(d), id(x)
+		MATCH (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		WITH root, terminal
+		MATCH (root)-[:Expand*0..4]->(other)
+		RETURN id(terminal), id(other)
 	`)
 	require.NoError(t, err)
 	plan, err := Optimize(regularQuery)
@@ -863,7 +883,7 @@ func TestExpansionSearchFinalizationRejectsVariableExpansionAcrossWith(t *testin
 	require.False(t, plan.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
 }
 
-func TestLoweringPlanReportsStableADCSSearchFallbackCodes(t *testing.T) {
+func TestLoweringPlanReportsStableFixedSuffixSearchFallbackCodes(t *testing.T) {
 	t.Parallel()
 
 	for _, testCase := range []struct {
@@ -871,25 +891,25 @@ func TestLoweringPlanReportsStableADCSSearchFallbackCodes(t *testing.T) {
 		query  string
 		reason string
 	}{
-		{name: "no fixed suffix", query: `MATCH (n)-[:MemberOf*0..16]->(ca) RETURN id(ca)`, reason: ExpansionSearchFallbackNoFixedSuffix},
-		{name: "unbounded", query: `MATCH (n)-[:MemberOf*0..]->()-[:Enroll]->(ca) RETURN id(ca)`, reason: ExpansionSearchFallbackUnboundedDepth},
-		{name: "short suffix", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca) RETURN id(ca)`, reason: ExpansionSearchFallbackSuffixTooShort},
-		{name: "directionless", query: `MATCH (n)-[:MemberOf*0..16]-()-[:Enroll]->(ca)-[:A]->()-[:B]->(d) RETURN id(ca)`, reason: ExpansionSearchFallbackDirectionlessExpansion},
-		{name: "directionless suffix", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]-(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackDirectionlessSuffix},
-		{name: "optional", query: `OPTIONAL MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackOptionalMatch},
-		{name: "shortest path", query: `MATCH p = shortestPath((n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)) RETURN p`, reason: ExpansionSearchFallbackShortestPath},
-		{name: "all shortest paths", query: `MATCH p = allShortestPaths((n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)) RETURN p`, reason: ExpansionSearchFallbackAllShortestPaths},
-		{name: "unbound root", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)`, reason: ExpansionSearchFallbackUnboundRoot},
-		{name: "unsupported depth", query: `MATCH (n)-[:MemberOf*0..65]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackUnsupportedDepth},
-		{name: "relationship variable", query: `MATCH (n)-[r:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca)`, reason: ExpansionSearchFallbackRelationshipVariable},
-		{name: "relationship predicate", query: `MATCH (n)-[r:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) WHERE r.enabled = true RETURN id(ca)`, reason: ExpansionSearchFallbackRelationshipPredicate},
-		{name: "correlated suffix", query: `MATCH (ca:EnterpriseCA) MATCH p = (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(ca)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p`, reason: ExpansionSearchFallbackCorrelatedSuffix},
-		{name: "cross-region predicate", query: `MATCH p = (n:Group)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) WHERE n.tenant = ca.tenant RETURN p`, reason: ExpansionSearchFallbackCrossRegionPredicate},
-		{name: "path predicate", query: `MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) WHERE length(p) > 0 RETURN p`, reason: ExpansionSearchFallbackPathDependentPredicate},
-		{name: "unsupported observation", query: `MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(p)`, reason: ExpansionSearchFallbackUnsupportedObservation},
-		{name: "mutation", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) CREATE (x) RETURN id(ca)`, reason: ExpansionSearchFallbackMutation},
-		{name: "limit pushdown conflict", query: `MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca) LIMIT 10`, reason: ExpansionSearchFallbackLimitPushdownConflict},
-		{name: "tournament unqualified", query: `MATCH (n)-[:Other*0..16]->()-[:A]->(ca:X)-[:B]->(:Y)-[:C]->(d:Z) RETURN id(ca)`, reason: ExpansionSearchFallbackTournamentUnqualified},
+		{name: "no fixed suffix", query: `MATCH (root)-[:Expand*0..16]->(head) RETURN id(head)`, reason: ExpansionSearchFallbackNoFixedSuffix},
+		{name: "unbounded", query: `MATCH (root)-[:Expand*0..]->()-[:EnterSuffix]->(head) RETURN id(head)`, reason: ExpansionSearchFallbackUnboundedDepth},
+		{name: "short suffix", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head) RETURN id(head)`, reason: ExpansionSearchFallbackSuffixTooShort},
+		{name: "directionless", query: `MATCH (root)-[:Expand*0..16]-()-[:EnterSuffix]->(head)-[:ContinueSuffix]->()-[:CompleteSuffix]->(terminal) RETURN id(head)`, reason: ExpansionSearchFallbackDirectionlessExpansion},
+		{name: "directionless suffix", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]-(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackDirectionlessSuffix},
+		{name: "optional", query: `OPTIONAL MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackOptionalMatch},
+		{name: "shortest path", query: `MATCH path = shortestPath((root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)) RETURN path`, reason: ExpansionSearchFallbackShortestPath},
+		{name: "all shortest paths", query: `MATCH path = allShortestPaths((root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)) RETURN path`, reason: ExpansionSearchFallbackAllShortestPaths},
+		{name: "unbound root", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)`, reason: ExpansionSearchFallbackUnboundRoot},
+		{name: "unsupported depth", query: `MATCH (root)-[:Expand*0..65]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackUnsupportedDepth},
+		{name: "relationship variable", query: `MATCH (root)-[edges:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head)`, reason: ExpansionSearchFallbackRelationshipVariable},
+		{name: "relationship predicate", query: `MATCH (root)-[edges:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE edges.enabled = true RETURN id(head)`, reason: ExpansionSearchFallbackRelationshipPredicate},
+		{name: "correlated suffix", query: `MATCH (head:SuffixHead) MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path`, reason: ExpansionSearchFallbackCorrelatedSuffix},
+		{name: "cross-region predicate", query: `MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE root.partition = head.partition RETURN path`, reason: ExpansionSearchFallbackCrossRegionPredicate},
+		{name: "path predicate", query: `MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE length(path) > 0 RETURN path`, reason: ExpansionSearchFallbackPathDependentPredicate},
+		{name: "unsupported observation", query: `MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(path)`, reason: ExpansionSearchFallbackUnsupportedObservation},
+		{name: "mutation", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) CREATE (created) RETURN id(head)`, reason: ExpansionSearchFallbackMutation},
+		{name: "limit pushdown conflict", query: `MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head) LIMIT 10`, reason: ExpansionSearchFallbackLimitPushdownConflict},
+		{name: "tournament unqualified", query: `MATCH (root)-[:Other|Alternate*0..16]->()-[:A]->(head:X)-[:B]->(:Y)-[:C]->(terminal:Z) RETURN id(head)`, reason: ExpansionSearchFallbackTournamentUnqualified},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
@@ -907,9 +927,9 @@ func TestLoweringPlanIncludesConstrainedBoundEndpointInExpansionSuffix(t *testin
 	t.Parallel()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (ca)
-		MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)
-		RETURN p
+		MATCH (terminal)
+		MATCH path = (root:ExpansionRoot)-[:Expand*0..16]->(boundary:ExpansionNode)-[:EnterSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN path
 	`)
 	require.NoError(t, err)
 
@@ -2194,7 +2214,7 @@ func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
 func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 	t.Parallel()
 
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), adcsQuery)
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fixedSuffixExpansionQuery)
 	require.NoError(t, err)
 
 	plan, err := Optimize(regularQuery)
@@ -2207,8 +2227,8 @@ func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 		ClauseIndex:     0,
 		ExpressionIndex: 0,
 		Scope:           PredicateAttachmentScopeBinding,
-		BindingSymbols:  []string{"n"},
-		Dependencies:    []string{"n"},
+		BindingSymbols:  []string{"root"},
+		Dependencies:    []string{"root"},
 	}, plan.PredicateAttachments[0])
 
 	require.Equal(t, PredicateAttachment{
@@ -2217,8 +2237,8 @@ func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 		ClauseIndex:     2,
 		ExpressionIndex: 0,
 		Scope:           PredicateAttachmentScopeBinding,
-		BindingSymbols:  []string{"ct"},
-		Dependencies:    []string{"ct"},
+		BindingSymbols:  []string{"predicate"},
+		Dependencies:    []string{"predicate"},
 	}, plan.PredicateAttachments[1])
 }
 

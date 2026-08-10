@@ -354,7 +354,7 @@ func TestPostgreSQLForcedShortestDirectPreflightSkipsAndFallsBackExactly(t *test
 	require.NoError(t, err)
 	require.Len(t, records, 3)
 	for _, record := range records {
-		require.Equal(t, StatusOK, record.Status, record.Error)
+		require.Equal(t, StatusOK, record.Status, "%s: %s", record.Name, record.Error)
 		require.Equal(t, oneRow, record.RowCount)
 		require.NotEmpty(t, record.PostgresPlanJSON)
 	}
@@ -605,7 +605,7 @@ func TestPostgreSQLForcedShortestPathEdgeM0CancellationReusesSession(t *testing.
 	t.Logf("cancelled exact SP-S3-U-E+MAT-M0 SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
 }
 
-func TestPostgreSQLForcedADCSA3PlanResourcesAndConcurrency(t *testing.T) {
+func TestPostgreSQLForcedSuffixSeededReversePlanResourcesAndConcurrency(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING env var is not set")
@@ -618,12 +618,12 @@ func TestPostgreSQLForcedADCSA3PlanResourcesAndConcurrency(t *testing.T) {
 
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
-	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GADCS2-D16-F1000-R1-X1-M1-sparse_path"}})
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GFSE-V2-D16-F1000-R1-X1-M1-sparse_path"}})
 	require.NoError(t, err)
 	require.Len(t, selected.Cases, 1)
 
 	ctx := context.Background()
-	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, []int{1, 2, 4}, false, nil, "", "ADCS-A3")
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, []int{1, 2, 4}, false, nil, "", "EXPANSION-SUFFIX-SEEDED-REVERSE")
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
 
@@ -632,8 +632,8 @@ func TestPostgreSQLForcedADCSA3PlanResourcesAndConcurrency(t *testing.T) {
 	require.Len(t, records, 1)
 	record := records[0]
 	require.Equal(t, StatusOK, record.Status, record.Error)
-	require.Contains(t, record.SQL, "_a3_suffix as materialized")
-	require.Contains(t, record.SQL, "_a3_reverse(boundary_id, next_id, depth, path)")
+	require.Contains(t, record.SQL, "_suffix_seeded_suffix as materialized")
+	require.Contains(t, record.SQL, "_suffix_seeded_reverse(boundary_id, next_id, depth, path)")
 	require.Contains(t, record.SQL, "array_prepend")
 	require.Contains(t, record.SQL, "!= all (")
 	require.NotContains(t, record.SQL, "satisfied, is_cycle")
@@ -662,7 +662,7 @@ func TestPostgreSQLForcedADCSA3PlanResourcesAndConcurrency(t *testing.T) {
 	}
 }
 
-func TestPostgreSQLForcedADCSA3CancellationReusesSession(t *testing.T) {
+func TestPostgreSQLForcedSuffixSeededReverseCancellationReusesSession(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING env var is not set")
@@ -675,12 +675,12 @@ func TestPostgreSQLForcedADCSA3CancellationReusesSession(t *testing.T) {
 
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
-	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GADCS2-D08-F016-R1-I1000-high_reverse_fanin"}})
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GFSE-V2-D08-F016-R1-I1000-high_reverse_fanin"}})
 	require.NoError(t, err)
 	require.Len(t, selected.Cases, 1)
 
 	ctx := context.Background()
-	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "ADCS-A3")
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "EXPANSION-SUFFIX-SEEDED-REVERSE")
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
 	records, err := runner.Run(ctx, 0, 1, selected)
@@ -735,7 +735,7 @@ func TestPostgreSQLForcedADCSA3CancellationReusesSession(t *testing.T) {
 	rows.Close()
 	require.NoError(t, rows.Err())
 	require.Equal(t, records[0].RowCount, int64(rowCount))
-	t.Logf("cancelled exact ADCS-A3 SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
+	t.Logf("cancelled exact EXPANSION-SUFFIX-SEEDED-REVERSE SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
 }
 
 func requirePostgresReference(t *testing.T, references []PostgresReferenceResult, name string) PostgresReferenceResult {

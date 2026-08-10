@@ -235,12 +235,11 @@ type ExpansionSuffixPushdownDecision struct {
 type ExpansionSearchStrategy string
 
 const (
-	ExpansionSearchStepwiseForward          ExpansionSearchStrategy = "ADCS-INCUMBENT-STEPWISE"
-	ExpansionSearchLateHydratedForward      ExpansionSearchStrategy = "ADCS-A0"
-	ExpansionSearchFactoredSuffixForward    ExpansionSearchStrategy = "ADCS-A2"
-	ExpansionSearchSuffixSeededReverse      ExpansionSearchStrategy = "ADCS-A3"
-	ExpansionSearchBackwardViabilityForward ExpansionSearchStrategy = "ADCS-A4"
-	ExpansionSearchBoundedReverseForward    ExpansionSearchStrategy = "ADCS-A5"
+	ExpansionSearchStepwiseForward          ExpansionSearchStrategy = "EXPANSION-STEPWISE-FORWARD"
+	ExpansionSearchLateHydratedForward      ExpansionSearchStrategy = "EXPANSION-LATE-HYDRATED-FORWARD"
+	ExpansionSearchFactoredSuffixForward    ExpansionSearchStrategy = "EXPANSION-FACTORED-SUFFIX-FORWARD"
+	ExpansionSearchSuffixSeededReverse      ExpansionSearchStrategy = "EXPANSION-SUFFIX-SEEDED-REVERSE"
+	ExpansionSearchBackwardViabilityForward ExpansionSearchStrategy = "EXPANSION-BACKWARD-VIABILITY-FORWARD"
 )
 
 type ExpansionSearchObservationMode string
@@ -276,6 +275,7 @@ const (
 	ExpansionSearchFallbackLimitPushdownConflict      = "limit_pushdown_conflict"
 	ExpansionSearchFallbackUnsupportedObservation     = "unsupported_observation"
 	ExpansionSearchFallbackMutation                   = "mutation"
+	ExpansionSearchFallbackNonDeterministicPredicate  = "non_deterministic_predicate"
 	ExpansionSearchFallbackUnboundRoot                = "unbound_root"
 	ExpansionSearchFallbackTournamentUnqualified      = "tournament_unqualified"
 )
@@ -284,8 +284,10 @@ type ExpansionSearchStrategyDecision struct {
 	Target               TraversalStepTarget              `json:"target"`
 	Family               string                           `json:"family"`
 	PlannedCandidates    []ExpansionSearchStrategy        `json:"planned_candidates"`
+	CandidateStrategy    ExpansionSearchStrategy          `json:"candidate_strategy,omitempty"`
 	SelectedStrategy     ExpansionSearchStrategy          `json:"selected_strategy"`
 	StructurallyEligible bool                             `json:"structurally_eligible"`
+	StaticallyEligible   bool                             `json:"statically_eligible"`
 	EligibilityFacts     []ExpansionSearchEligibilityFact `json:"eligibility_facts"`
 	SuffixStartStep      int                              `json:"suffix_start_step,omitempty"`
 	SuffixEndStep        int                              `json:"suffix_end_step,omitempty"`
@@ -296,8 +298,6 @@ type ExpansionSearchStrategyDecision struct {
 	MaximumDepth         int64                            `json:"maximum_depth,omitempty"`
 	SelectionMode        string                           `json:"selection_mode"`
 	SelectorVersion      string                           `json:"selector_version"`
-	SuffixProbeLimit     int64                            `json:"suffix_probe_limit,omitempty"`
-	ReverseStateLimit    int64                            `json:"reverse_state_limit,omitempty"`
 	FallbackStrategy     ExpansionSearchStrategy          `json:"fallback_strategy"`
 	FallbackReason       string                           `json:"fallback_reason"`
 }
