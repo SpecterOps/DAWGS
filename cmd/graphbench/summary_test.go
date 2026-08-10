@@ -113,12 +113,23 @@ func TestWriteMarkdownSummary(t *testing.T) {
 
 func TestBuildSummaryIncludesExclusiveRawPGXCostModel(t *testing.T) {
 	record := CaseResult{
-		Dataset: "base", Name: "large", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		RawPGXWaterfall: &PostgresBoundaryWaterfall{Boundary: "raw", Samples: []BoundarySample{{
-			PoolWait: time.Millisecond, Transaction: time.Millisecond, BindPrepare: 2 * time.Millisecond,
-			FirstRow: 2 * time.Millisecond, AllRowsDecode: 3 * time.Millisecond, DrainClose: time.Millisecond,
-			Total: 10 * time.Millisecond, Rows: 1000,
-		}}},
+		Dataset:       "base",
+		Name:          "large",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		RawPGXWaterfall: &PostgresBoundaryWaterfall{
+			Boundary: "raw",
+			Samples: []BoundarySample{{
+				PoolWait:      time.Millisecond,
+				Transaction:   time.Millisecond,
+				BindPrepare:   2 * time.Millisecond,
+				FirstRow:      2 * time.Millisecond,
+				AllRowsDecode: 3 * time.Millisecond,
+				DrainClose:    time.Millisecond,
+				Total:         10 * time.Millisecond,
+				Rows:          1000,
+			}},
+		},
 	}
 
 	summary := buildSummary([]CaseResult{record})

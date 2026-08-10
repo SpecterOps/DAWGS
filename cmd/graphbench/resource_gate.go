@@ -34,12 +34,20 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	report := ResourceGateReport{Version: resourceGateVersion, Passed: true}
+	report := ResourceGateReport{
+		Version: resourceGateVersion,
+		Passed:  true,
+	}
 	for _, record := range records {
 		if record.ExecutionMode != ModePostgresSQL || record.Shape.FixtureTier == "stress" {
 			continue
 		}
-		gateCase := ResourceGateCase{Dataset: record.Dataset, Name: record.Name, Tier: record.Shape.FixtureTier, Passed: true}
+		gateCase := ResourceGateCase{
+			Dataset: record.Dataset,
+			Name:    record.Name,
+			Tier:    record.Shape.FixtureTier,
+			Passed:  true,
+		}
 		if gateCase.Tier == "" {
 			gateCase.Tier = "legacy"
 		}
@@ -74,8 +82,12 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 				continue
 			}
 			referenceCase := ResourceGateCase{
-				Dataset: record.Dataset, Name: record.Name, Reference: reference.Name,
-				Tier: gateCase.Tier, Architecture: reference.Architecture, Passed: true,
+				Dataset:      record.Dataset,
+				Name:         record.Name,
+				Reference:    reference.Name,
+				Tier:         gateCase.Tier,
+				Architecture: reference.Architecture,
+				Passed:       true,
 			}
 			if reference.Architecture != "SP-S0" && reference.PostgresMetrics != nil {
 				appendPortableResourceReasons(&referenceCase, reference.PostgresMetrics)
@@ -108,7 +120,11 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 	} else {
 		err = os.WriteFile(output, append(raw, '\n'), 0o644)
 	}
-	return report.Passed, err
+	if err != nil {
+		return false, err
+	}
+
+	return report.Passed, nil
 }
 
 func appendWorkspaceResourceReasons(gateCase *ResourceGateCase, metrics *PostgresPlanMetrics) {

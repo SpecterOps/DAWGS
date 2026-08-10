@@ -56,7 +56,9 @@ func selectScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorp
 		if matchesSelectors(testCase, selectors) {
 			selected.Cases = append(selected.Cases, testCase)
 			manifest.Resolved = append(manifest.Resolved, ResolvedCaseSelector{
-				Dataset: testCase.Dataset, Name: testCase.Name, Category: testCase.Category,
+				Dataset:  testCase.Dataset,
+				Name:     testCase.Name,
+				Category: testCase.Category,
 			})
 		}
 	}
@@ -96,9 +98,21 @@ func validateCorpusSelectors(corpus ScaleCorpus, selectors CorpusSelectors) erro
 		values []string
 		known  map[string]struct{}
 	}{
-		{kind: "dataset", values: selectors.Datasets, known: datasets},
-		{kind: "category", values: selectors.Categories, known: categories},
-		{kind: "tag", values: selectors.Tags, known: tags},
+		{
+			kind:   "dataset",
+			values: selectors.Datasets,
+			known:  datasets,
+		},
+		{
+			kind:   "category",
+			values: selectors.Categories,
+			known:  categories,
+		},
+		{
+			kind:   "tag",
+			values: selectors.Tags,
+			known:  tags,
+		},
 	} {
 		for _, value := range selector.values {
 			if _, found := selector.known[value]; !found {

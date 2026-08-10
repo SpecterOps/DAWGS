@@ -102,8 +102,14 @@ func TestPostgresOwnedCompositeCodecRowsValues(t *testing.T) {
 		name   string
 		format int16
 	}{
-		{name: "binary", format: pgtype.BinaryFormatCode},
-		{name: "text", format: pgtype.TextFormatCode},
+		{
+			name:   "binary",
+			format: pgtype.BinaryFormatCode,
+		},
+		{
+			name:   "text",
+			format: pgtype.TextFormatCode,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			rows, err := conn.Query(ctx, `
@@ -148,8 +154,14 @@ func TestPostgresOwnedCompositeCodecArraysAndPaths(t *testing.T) {
 		name   string
 		format int16
 	}{
-		{name: "binary", format: pgtype.BinaryFormatCode},
-		{name: "text", format: pgtype.TextFormatCode},
+		{
+			name:   "binary",
+			format: pgtype.BinaryFormatCode,
+		},
+		{
+			name:   "text",
+			format: pgtype.TextFormatCode,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			rows, err := conn.Query(ctx, `
@@ -204,8 +216,14 @@ func TestPostgresOwnedCompositeCodecNullInternalFieldFallback(t *testing.T) {
 		name   string
 		format int16
 	}{
-		{name: "binary", format: pgtype.BinaryFormatCode},
-		{name: "text", format: pgtype.TextFormatCode},
+		{
+			name:   "binary",
+			format: pgtype.BinaryFormatCode,
+		},
+		{
+			name:   "text",
+			format: pgtype.TextFormatCode,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			rows, err := conn.Query(ctx, `

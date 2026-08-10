@@ -316,6 +316,21 @@ func TypeCastExpression(expression pgsql.Expression, dataType pgsql.DataType) (p
 	return pgsql.NewTypeCast(expression, dataType), nil
 }
 
+func jsonNullLiteral() pgsql.Expression {
+	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text), pgsql.JSONB)
+}
+
+func nullifyJSONPropertyLookup(propertyLookup *pgsql.BinaryExpression) pgsql.Expression {
+	return pgsql.FunctionCall{
+		Function: pgsql.FunctionNullIf,
+		Parameters: []pgsql.Expression{
+			propertyLookup,
+			jsonNullLiteral(),
+		},
+		CastType: pgsql.JSONB,
+	}
+}
+
 func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
 	var (
 		leftPropertyLookup, hasLeftPropertyLookup   = expressionToPropertyLookupBinaryExpression(expression.LOperand)
@@ -531,9 +546,12 @@ func mergeUserAndTranslationConstraints(userConstraints, translationConstraints 
 }
 
 func (s *ExpressionTreeTranslator) HasAnyConstraints(scope *pgsql.IdentifierSet) (bool, error) {
-	if hasUser, err := s.UserConstraints.HasConstraints(scope); err != nil || hasUser {
-		return hasUser, err
+	if hasUser, err := s.UserConstraints.HasConstraints(scope); err != nil {
+		return false, err
+	} else if hasUser {
+		return true, nil
 	}
+
 	return s.TranslationConstraints.HasConstraints(scope)
 }
 
@@ -840,21 +858,6 @@ func isKnownEmptyArrayExpression(expression pgsql.Expression) bool {
 		return typedExpression.CastType == pgsql.Null
 	default:
 		return false
-	}
-}
-
-func jsonNullLiteral() pgsql.Expression {
-	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text), pgsql.JSONB)
-}
-
-func nullifyJSONPropertyLookup(propertyLookup *pgsql.BinaryExpression) pgsql.Expression {
-	return pgsql.FunctionCall{
-		Function: pgsql.FunctionNullIf,
-		Parameters: []pgsql.Expression{
-			propertyLookup,
-			jsonNullLiteral(),
-		},
-		CastType: pgsql.JSONB,
 	}
 }
 

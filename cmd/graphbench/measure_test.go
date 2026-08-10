@@ -36,7 +36,10 @@ func TestStableRowValuesReverseMapsNodeIDs(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, "start", values[0])
-	require.Equal(t, stableNodeObservation{Identity: "end", Kinds: []string{"Group"}}, values[1])
+	require.Equal(t, stableNodeObservation{
+		Identity: "end",
+		Kinds:    []string{"Group"},
+	}, values[1])
 }
 
 func TestResultContainsNodeIDs(t *testing.T) {
@@ -54,7 +57,10 @@ func TestStableRowValuesMapsNativePathValues(t *testing.T) {
 		path, sourceOK := value.(string)
 		mapped, targetOK := target.(*graph.Path)
 		if sourceOK && targetOK && path == "native-path" {
-			*mapped = graph.Path{Nodes: []*graph.Node{start, end}, Edges: []*graph.Relationship{edge}}
+			*mapped = graph.Path{
+				Nodes: []*graph.Node{start, end},
+				Edges: []*graph.Relationship{edge},
+			}
 			return true
 		}
 		return false
@@ -71,10 +77,20 @@ func TestStableRowValuesMapsNativePathValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, stablePathObservation{
 		Nodes: []stableNodeObservation{
-			{Identity: "start", Kinds: []string{"Start"}},
-			{Identity: "end", Kinds: []string{"End"}},
+			{
+				Identity: "start",
+				Kinds:    []string{"Start"},
+			},
+			{
+				Identity: "end",
+				Kinds:    []string{"End"},
+			},
 		},
-		Relationships: []stableRelationshipObservation{{Start: "start", End: "end", Kind: "Edge"}},
+		Relationships: []stableRelationshipObservation{{
+			Start: "start",
+			End:   "end",
+			Kind:  "Edge",
+		}},
 	}, values[0])
 }
 
@@ -99,8 +115,23 @@ func TestStableRelationshipUsesLogicalFixtureKeyAsCrossBackendIdentity(t *testin
 	require.Equal(t, "end", stable.End)
 }
 
+func TestObserveCypherReturnsZeroValueOnResultError(t *testing.T) {
+	tx := &scaleWriteTestTransaction{
+		database: &scaleWriteTestDatabase{},
+	}
+
+	observation, err := observeCypher(tx, "unexpected", nil)
+
+	require.ErrorContains(t, err, "unexpected query")
+	require.Equal(t, StateQueryResult{}, observation)
+}
+
 func TestMeasureWriteCypherRollsBackWarmupAndEveryIteration(t *testing.T) {
-	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 1}
+	database := &scaleWriteTestDatabase{
+		nodes:         2,
+		relationships: 3,
+		deleteCount:   1,
+	}
 	postStateCount := int64(2)
 	scenario := resolvedWriteScenario{
 		SelectionCypher:  "selection",
@@ -129,8 +160,17 @@ func TestMeasureWriteCypherRollsBackWarmupAndEveryIteration(t *testing.T) {
 }
 
 func TestMeasureWriteCypherRecordsConfiguredUntimedWarmups(t *testing.T) {
-	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 1}
-	scenario := resolvedWriteScenario{SelectionCypher: "selection", AffectedEntity: "relationship", ExpectedMatched: 1, ExpectedAffected: 1}
+	database := &scaleWriteTestDatabase{
+		nodes:         2,
+		relationships: 3,
+		deleteCount:   1,
+	}
+	scenario := resolvedWriteScenario{
+		SelectionCypher:  "selection",
+		AffectedEntity:   "relationship",
+		ExpectedMatched:  1,
+		ExpectedAffected: 1,
+	}
 
 	_, stats, err := measureWriteCypherWithWarmups(context.Background(), database, "delete", nil, scenario, 2, 1)
 	require.NoError(t, err)
@@ -140,7 +180,11 @@ func TestMeasureWriteCypherRecordsConfiguredUntimedWarmups(t *testing.T) {
 }
 
 func TestMeasureWriteCypherRejectsOverBroadMutation(t *testing.T) {
-	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 2}
+	database := &scaleWriteTestDatabase{
+		nodes:         2,
+		relationships: 3,
+		deleteCount:   2,
+	}
 	scenario := resolvedWriteScenario{
 		SelectionCypher:  "selection",
 		AffectedEntity:   "relationship",
@@ -159,7 +203,11 @@ func TestMeasureWriteCypherRejectsOverBroadMutation(t *testing.T) {
 }
 
 func TestMeasureWriteCypherRejectsUnderBroadMutation(t *testing.T) {
-	database := &scaleWriteTestDatabase{nodes: 2, relationships: 3, deleteCount: 0}
+	database := &scaleWriteTestDatabase{
+		nodes:         2,
+		relationships: 3,
+		deleteCount:   0,
+	}
 	scenario := resolvedWriteScenario{
 		SelectionCypher:  "selection",
 		AffectedEntity:   "relationship",

@@ -67,7 +67,11 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 	// backing allocation through an LRU key.
 	if s == nil {
 		parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
-		return parsed, false, err
+		if err != nil {
+			return nil, false, err
+		}
+
+		return parsed, false, nil
 	}
 
 	s.lock.Lock()
@@ -75,7 +79,11 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 		s.stats.Bypasses++
 		s.lock.Unlock()
 		parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
-		return parsed, false, err
+		if err != nil {
+			return nil, false, err
+		}
+
+		return parsed, false, nil
 	}
 	if element, found := s.entries[query]; found {
 		s.stats.Hits++
@@ -88,7 +96,11 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 		s.stats.CoalescedMisses++
 		s.lock.Unlock()
 		<-call.done
-		return call.parsed, call.err == nil, call.err
+		if call.err != nil {
+			return nil, false, call.err
+		}
+
+		return call.parsed, true, nil
 	}
 
 	// Lookups do not retain the caller's string. Clone only a true miss before
@@ -106,7 +118,10 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 	call.parsed = parsed
 	call.err = err
 	if err == nil && !s.closed {
-		element := s.lru.PushFront(cypherParseCacheEntry{query: query, parsed: parsed})
+		element := s.lru.PushFront(cypherParseCacheEntry{
+			query:  query,
+			parsed: parsed,
+		})
 		s.entries[query] = element
 		if s.lru.Len() > s.capacity {
 			evicted := s.lru.Back()
@@ -119,7 +134,11 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 	close(call.done)
 	s.lock.Unlock()
 
-	return parsed, false, err
+	if err != nil {
+		return nil, false, err
+	}
+
+	return parsed, false, nil
 }
 
 func (s *cypherParseCache) Stats() ParseCacheStats {

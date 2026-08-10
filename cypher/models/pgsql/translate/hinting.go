@@ -123,8 +123,10 @@ func inferAllExpressionType(expression pgsql.AllExpression) (pgsql.DataType, err
 }
 
 func inferCaseExpressionType(expression pgsql.Case) (pgsql.DataType, error) {
-	resultType := pgsql.UnknownDataType
-	branches := append(append([]pgsql.Expression(nil), expression.Then...), expression.Else)
+	var (
+		resultType = pgsql.UnknownDataType
+		branches   = append(append([]pgsql.Expression(nil), expression.Then...), expression.Else)
+	)
 
 	for _, branch := range branches {
 		if branch == nil {
@@ -138,13 +140,16 @@ func inferCaseExpressionType(expression pgsql.Case) (pgsql.DataType, error) {
 		if branchType == pgsql.Null || !branchType.IsKnown() {
 			continue
 		}
+
 		if !resultType.IsKnown() {
 			resultType = branchType
 			continue
 		}
+
 		if resultType == branchType {
 			continue
 		}
+
 		if supertype, valid := resultType.CoerceToSupertype(branchType); valid {
 			resultType = supertype
 		} else {

@@ -96,12 +96,18 @@ func generatedDataset(name string) *opengraph.Graph {
 	}
 	var shortestDepth, shortestFanout int
 	if matched, _ := fmt.Sscanf(name, testutil.ShortestPathScaleDataset+"_d%d_f%d", &shortestDepth, &shortestFanout); matched == 2 && shortestDepth >= 1 && shortestFanout >= 1 && name == fmt.Sprintf(testutil.ShortestPathScaleDataset+"_d%d_f%d", shortestDepth, shortestFanout) {
-		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: shortestDepth, Fanout: shortestFanout})
+		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{
+			Depth:  shortestDepth,
+			Fanout: shortestFanout,
+		})
 	}
 	var expansionDepth, expansionFanout, validSuffixEvery, expansionPayload int
 	if matched, _ := fmt.Sscanf(name, testutil.FixedSuffixExpansionScaleDataset+"_d%d_f%d_v%d_p%d", &expansionDepth, &expansionFanout, &validSuffixEvery, &expansionPayload); matched == 4 && expansionDepth >= 0 && expansionFanout >= 1 && validSuffixEvery >= 1 && expansionPayload >= 0 && name == fmt.Sprintf(testutil.FixedSuffixExpansionScaleDataset+"_d%d_f%d_v%d_p%d", expansionDepth, expansionFanout, validSuffixEvery, expansionPayload) {
 		return testutil.NewFixedSuffixExpansionScaleFixture(testutil.FixedSuffixExpansionScaleConfig{
-			ExpansionDepth: expansionDepth, Fanout: expansionFanout, ValidSuffixEvery: validSuffixEvery, PropertyPayloadSize: expansionPayload,
+			ExpansionDepth:      expansionDepth,
+			Fanout:              expansionFanout,
+			ValidSuffixEvery:    validSuffixEvery,
+			PropertyPayloadSize: expansionPayload,
 		})
 	}
 	if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
@@ -117,9 +123,17 @@ func generatedDataset(name string) *opengraph.Graph {
 	case testutil.ScanLookupScaleDataset:
 		return testutil.NewScanLookupScaleFixture(128)
 	case testutil.ShortestPathScaleDataset:
-		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{Depth: 16, Fanout: 128})
+		return testutil.NewShortestPathScaleFixture(testutil.ShortestPathScaleConfig{
+			Depth:  16,
+			Fanout: 128,
+		})
 	case testutil.FixedSuffixExpansionScaleDataset:
-		return testutil.NewFixedSuffixExpansionScaleFixture(testutil.FixedSuffixExpansionScaleConfig{ExpansionDepth: 8, Fanout: 100, ValidSuffixEvery: 10, PropertyPayloadSize: 4096})
+		return testutil.NewFixedSuffixExpansionScaleFixture(testutil.FixedSuffixExpansionScaleConfig{
+			ExpansionDepth:      8,
+			Fanout:              100,
+			ValidSuffixEvery:    10,
+			PropertyPayloadSize: 4096,
+		})
 	default:
 		return nil
 	}
@@ -183,7 +197,11 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 		configuration = name
 	}
 	metadata := FixtureMetadata{
-		Dataset: name, Checksum: hex.EncodeToString(digest[:]), NodeCount: len(doc.Graph.Nodes), EdgeCount: len(doc.Graph.Edges), Configuration: configuration,
+		Dataset:       name,
+		Checksum:      hex.EncodeToString(digest[:]),
+		NodeCount:     len(doc.Graph.Nodes),
+		EdgeCount:     len(doc.Graph.Edges),
+		Configuration: configuration,
 	}
 	if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
 		metadata.FixedSuffixExpansion = fixedSuffixExpansionFixtureExpectations(config)
@@ -195,19 +213,30 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 }
 
 func parseShortestPathV2DatasetName(name string) (testutil.ShortestPathScaleV2Config, bool) {
-	var depth, rootOut, rootIn, intermediateOut, intermediateIn, level int
-	var kinds, targets, diamond, disconnected, payload, cycle, selfLoop int
+	var (
+		depth, rootOut, rootIn, intermediateOut, intermediateIn, level  int
+		kinds, targets, diamond, disconnected, payload, cycle, selfLoop int
+	)
+
 	format := testutil.ShortestPathScaleV2Dataset + "_d%d_o%d_r%d_fo%d_fi%d_l%d_k%d_t%d_w%d_x%d_p%d_c%d_s%d"
 	matched, _ := fmt.Sscanf(name, format, &depth, &rootOut, &rootIn, &intermediateOut, &intermediateIn, &level, &kinds, &targets, &diamond, &disconnected, &payload, &cycle, &selfLoop)
 	if matched != 13 || (cycle != 0 && cycle != 1) || (selfLoop != 0 && selfLoop != 1) {
 		return testutil.ShortestPathScaleV2Config{}, false
 	}
 	config := testutil.ShortestPathScaleV2Config{
-		Depth: depth, ForwardRootFanOut: rootOut, ReverseRootFanIn: rootIn,
-		IntermediateFanOut: intermediateOut, IntermediateReverseFanIn: intermediateIn,
-		FanInLevel: level, ParallelKindCount: kinds, ParallelTargetCount: targets,
-		DiamondWidth: diamond, DisconnectedWidth: disconnected, PropertyPayloadSize: payload,
-		AddCycle: cycle == 1, AddSelfLoop: selfLoop == 1,
+		Depth:                    depth,
+		ForwardRootFanOut:        rootOut,
+		ReverseRootFanIn:         rootIn,
+		IntermediateFanOut:       intermediateOut,
+		IntermediateReverseFanIn: intermediateIn,
+		FanInLevel:               level,
+		ParallelKindCount:        kinds,
+		ParallelTargetCount:      targets,
+		DiamondWidth:             diamond,
+		DisconnectedWidth:        disconnected,
+		PropertyPayloadSize:      payload,
+		AddCycle:                 cycle == 1,
+		AddSelfLoop:              selfLoop == 1,
 	}
 	if err := testutil.ValidateShortestPathScaleV2Config(config); err != nil || name != shortestPathV2DatasetName(config) {
 		return testutil.ShortestPathScaleV2Config{}, false
@@ -232,13 +261,17 @@ func shortestPathV2DatasetName(config testutil.ShortestPathScaleV2Config) string
 
 func shortestFixtureExpectations(fixture opengraph.Graph, config testutil.ShortestPathScaleV2Config) *ShortestFixtureExpectations {
 	expectations := &ShortestFixtureExpectations{
-		MaximumIntermediateForwardByLevel: map[string]int64{}, MaximumIntermediateReverseByLevel: map[string]int64{},
-		PhysicalTraversableEdgesByKind: map[string]int64{}, DistinctReachableNodesByLevel: map[string]int64{},
-		ExpectedMinimumDistance: int64(config.Depth), ExpectedOnePathCardinality: 1,
-		ExpectedAllShortestCardinality: 1, ExpectedPredecessorEdges: int64(config.Depth),
-		DisconnectedStateCardinality: int64(config.DisconnectedWidth + 1),
-		ParallelPhysicalEdges:        int64(config.ParallelKindCount * config.ParallelTargetCount),
-		ParallelDistinctTargets:      int64(config.ParallelTargetCount),
+		MaximumIntermediateForwardByLevel: map[string]int64{},
+		MaximumIntermediateReverseByLevel: map[string]int64{},
+		PhysicalTraversableEdgesByKind:    map[string]int64{},
+		DistinctReachableNodesByLevel:     map[string]int64{},
+		ExpectedMinimumDistance:           int64(config.Depth),
+		ExpectedOnePathCardinality:        1,
+		ExpectedAllShortestCardinality:    1,
+		ExpectedPredecessorEdges:          int64(config.Depth),
+		DisconnectedStateCardinality:      int64(config.DisconnectedWidth + 1),
+		ParallelPhysicalEdges:             int64(config.ParallelKindCount * config.ParallelTargetCount),
+		ParallelDistinctTargets:           int64(config.ParallelTargetCount),
 	}
 	outgoing, incoming := map[string][]string{}, map[string][]string{}
 	for _, edge := range fixture.Edges {
@@ -280,10 +313,15 @@ func parseFixedSuffixExpansionV2DatasetName(name string) (testutil.FixedSuffixEx
 	}
 	rootSuffix := zeroDepth == 1
 	return testutil.FixedSuffixExpansionScaleConfig{
-		ExpansionDepth: depth, Fanout: fanout, ExactReachableSuffixSources: &reachable,
-		DisconnectedSuffixSources: disconnected, ReverseFanIn: fanIn,
-		SuffixPathsPerBoundary: multiplicity, RootMatchCount: 1,
-		RootHasZeroDepthSuffix: &rootSuffix, PropertyPayloadSize: payload,
+		ExpansionDepth:              depth,
+		Fanout:                      fanout,
+		ExactReachableSuffixSources: &reachable,
+		DisconnectedSuffixSources:   disconnected,
+		ReverseFanIn:                fanIn,
+		SuffixPathsPerBoundary:      multiplicity,
+		RootMatchCount:              1,
+		RootHasZeroDepthSuffix:      &rootSuffix,
+		PropertyPayloadSize:         payload,
 	}, true
 }
 
@@ -304,13 +342,15 @@ func fixedSuffixExpansionFixtureExpectations(config testutil.FixedSuffixExpansio
 		productiveFanIn = config.ReverseFanIn
 	}
 	return &FixedSuffixExpansionFixtureExpectations{
-		RootSourceRows: int64(rootCount), DistinctRoots: int64(rootCount),
+		RootSourceRows:         int64(rootCount),
+		DistinctRoots:          int64(rootCount),
 		ForwardExpansionStates: int64(rootCount + config.Fanout*config.ExpansionDepth),
 		SuffixRows:             int64((zero + reachable + config.DisconnectedSuffixSources) * multiplicity),
 		DistinctBoundaries:     int64(zero + reachable + config.DisconnectedSuffixSources),
-		ReachableBoundaries:    int64(zero + reachable), DisconnectedBoundaries: int64(config.DisconnectedSuffixSources),
-		ExpectedReverseStates: int64(zero + reachable*(config.ExpansionDepth+1) + config.DisconnectedSuffixSources + productiveFanIn),
-		CompleteOutputTrails:  int64((zero + reachable) * multiplicity),
+		ReachableBoundaries:    int64(zero + reachable),
+		DisconnectedBoundaries: int64(config.DisconnectedSuffixSources),
+		ExpectedReverseStates:  int64(zero + reachable*(config.ExpansionDepth+1) + config.DisconnectedSuffixSources + productiveFanIn),
+		CompleteOutputTrails:   int64((zero + reachable) * multiplicity),
 	}
 }
 

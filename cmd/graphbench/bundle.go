@@ -68,7 +68,11 @@ func writeCaptureBundle(root string, corpus ScaleCorpus, records []CaseResult, e
 		if err != nil {
 			return err
 		}
-		untrackedManifest = append(untrackedManifest, UntrackedSource{Path: filepath.ToSlash(source), SHA256: checksum, Copy: filepath.ToSlash(filepath.Join("source-untracked", source))})
+		untrackedManifest = append(untrackedManifest, UntrackedSource{
+			Path:   filepath.ToSlash(source),
+			SHA256: checksum,
+			Copy:   filepath.ToSlash(filepath.Join("source-untracked", source)),
+		})
 	}
 	if err := writeIndentedJSON(filepath.Join(root, "source-untracked-manifest.json"), untrackedManifest); err != nil {
 		return err
@@ -96,9 +100,14 @@ func writeCaptureBundle(root string, corpus ScaleCorpus, records []CaseResult, e
 	}
 
 	manifest := CaptureBundleManifest{
-		Version: captureBundleVersion, Environment: environment, RecordCount: len(records),
-		CorpusDeclaration: "corpus-declaration.json", RawArtifact: "combined.jsonl", Executable: filepath.ToSlash(filepath.Join("bin", binaryName)),
-		SourcePatch: "source.patch", UntrackedManifest: "source-untracked-manifest.json",
+		Version:           captureBundleVersion,
+		Environment:       environment,
+		RecordCount:       len(records),
+		CorpusDeclaration: "corpus-declaration.json",
+		RawArtifact:       "combined.jsonl",
+		Executable:        filepath.ToSlash(filepath.Join("bin", binaryName)),
+		SourcePatch:       "source.patch",
+		UntrackedManifest: "source-untracked-manifest.json",
 	}
 	if err := writeIndentedJSON(filepath.Join(root, "manifest.json"), manifest); err != nil {
 		return err

@@ -44,7 +44,10 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 	}
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 
 	t.Run("SCAN-01 base endpoints and relationship IDs", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, wideFixture, func(opengraph.IDMap) graph.Criteria {
@@ -173,8 +176,15 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 			scenarioB bool
 			expected  int
 		}{
-			{name: "scenario A", expected: 3},
-			{name: "scenario B", scenarioB: true, expected: 2},
+			{
+				name:     "scenario A",
+				expected: 3,
+			},
+			{
+				name:      "scenario B",
+				scenarioB: true,
+				expected:  2,
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				WithLegacyRelationshipQuery(t, session, anchoredFixture, func(idMap opengraph.IDMap) graph.Criteria {
@@ -236,8 +246,11 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 			return nodeQuery.Query(func(results graph.Result) error {
 				count := 0
 				for results.Next() {
-					var id graph.ID
-					var hasURA bool
+					var (
+						id     graph.ID
+						hasURA bool
+					)
+
 					require.NoError(t, results.Scan(&id, &hasURA))
 					require.NotZero(t, id)
 					require.True(t, hasURA)
@@ -412,9 +425,20 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 			expectedEdges int64
 		}{
 			{family: "LOOKUP-15 empty graph counts"},
-			{family: "LOOKUP-15 node-only graph counts", expectedNodes: 3},
-			{family: "LOOKUP-15 edge-bearing graph counts", expectedNodes: 2, expectedEdges: 1},
-			{family: "LOOKUP-15 dense graph counts", expectedNodes: 4, expectedEdges: 6},
+			{
+				family:        "LOOKUP-15 node-only graph counts",
+				expectedNodes: 3,
+			},
+			{
+				family:        "LOOKUP-15 edge-bearing graph counts",
+				expectedNodes: 2,
+				expectedEdges: 1,
+			},
+			{
+				family:        "LOOKUP-15 dense graph counts",
+				expectedNodes: 4,
+				expectedEdges: 6,
+			},
 		} {
 			t.Run(testCase.family, func(t *testing.T) {
 				fixture := regressionTemplateFixture(t, testCase.family)
@@ -440,8 +464,19 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 			protection string
 			expected   string
 		}{
-			{name: "typed LDAP", kind: graph.StringKind("Computer"), available: "ldapavailable", protection: "ldapsigning", expected: "ntlm-ldap-good"},
-			{name: "untyped LDAPS", available: "ldapsavailable", protection: "epa", expected: "ntlm-ldaps-good"},
+			{
+				name:       "typed LDAP",
+				kind:       graph.StringKind("Computer"),
+				available:  "ldapavailable",
+				protection: "ldapsigning",
+				expected:   "ntlm-ldap-good",
+			},
+			{
+				name:       "untyped LDAPS",
+				available:  "ldapsavailable",
+				protection: "epa",
+				expected:   "ntlm-ldaps-good",
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				assertScanLookupNodeIDs(t, session, advancedFixture, []string{testCase.expected}, func(opengraph.IDMap) graph.Criteria {

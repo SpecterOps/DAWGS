@@ -170,7 +170,11 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 				if step.Relationship == nil || step.Relationship.Range == nil {
 					continue
 				}
-				target := PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex)
+				target := PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}.TraversalStep(stepIndex)
 				limitConflict := hasLimitPushdownForTarget(plan, target)
 				suffixLength := fixedSuffixLength(steps[stepIndex+1:])
 				suffixEnd := stepIndex + suffixLength
@@ -202,24 +206,78 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					observation = ExpansionSearchObservationFullPath
 				}
 				facts := []ExpansionSearchEligibilityFact{
-					{Name: "read_only", Eligible: updatingClauses == 0},
-					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
-					{Name: "ordinary_path", Eligible: patternPart != nil && !patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
-					{Name: "single_variable_expansion", Eligible: queryPartVariableExpansions == 1},
-					{Name: "bound_root", Eligible: boundRoot},
-					{Name: "directed_expansion", Eligible: directedExpansion},
-					{Name: "bounded_supported_depth", Eligible: boundedDepth && maxDepth >= minDepth && maxDepth <= 64},
-					{Name: "exact_three_hop_suffix", Eligible: suffixLength == 3},
-					{Name: "qualified_fixed_suffix_topology", Eligible: qualifiedFixedSuffixTopology(step, suffixSteps)},
-					{Name: "directed_suffix", Eligible: directedSuffix},
-					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil && noSuffixRelationshipVariables},
-					{Name: "no_relationship_predicate", Eligible: noRelationshipPredicates},
-					{Name: "uncorrelated_suffix", Eligible: uncorrelatedSuffix},
-					{Name: "no_cross_region_predicate", Eligible: noCrossRegionPredicate},
-					{Name: "no_path_dependent_predicate", Eligible: !pathDependentPredicate},
-					{Name: "deterministic_predicates", Eligible: deterministicPredicates},
-					{Name: "no_limit_pushdown_conflict", Eligible: !limitConflict},
-					{Name: "supported_observation", Eligible: observation != ExpansionSearchObservationUnsupported},
+					{
+						Name:     "read_only",
+						Eligible: updatingClauses == 0,
+					},
+					{
+						Name:     "non_optional",
+						Eligible: !readingClause.Match.Optional,
+					},
+					{
+						Name:     "ordinary_path",
+						Eligible: patternPart != nil && !patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern,
+					},
+					{
+						Name:     "single_variable_expansion",
+						Eligible: queryPartVariableExpansions == 1,
+					},
+					{
+						Name:     "bound_root",
+						Eligible: boundRoot,
+					},
+					{
+						Name:     "directed_expansion",
+						Eligible: directedExpansion,
+					},
+					{
+						Name:     "bounded_supported_depth",
+						Eligible: boundedDepth && maxDepth >= minDepth && maxDepth <= 64,
+					},
+					{
+						Name:     "exact_three_hop_suffix",
+						Eligible: suffixLength == 3,
+					},
+					{
+						Name:     "qualified_fixed_suffix_topology",
+						Eligible: qualifiedFixedSuffixTopology(step, suffixSteps),
+					},
+					{
+						Name:     "directed_suffix",
+						Eligible: directedSuffix,
+					},
+					{
+						Name:     "no_relationship_variable",
+						Eligible: step.Relationship.Variable == nil && noSuffixRelationshipVariables,
+					},
+					{
+						Name:     "no_relationship_predicate",
+						Eligible: noRelationshipPredicates,
+					},
+					{
+						Name:     "uncorrelated_suffix",
+						Eligible: uncorrelatedSuffix,
+					},
+					{
+						Name:     "no_cross_region_predicate",
+						Eligible: noCrossRegionPredicate,
+					},
+					{
+						Name:     "no_path_dependent_predicate",
+						Eligible: !pathDependentPredicate,
+					},
+					{
+						Name:     "deterministic_predicates",
+						Eligible: deterministicPredicates,
+					},
+					{
+						Name:     "no_limit_pushdown_conflict",
+						Eligible: !limitConflict,
+					},
+					{
+						Name:     "supported_observation",
+						Eligible: observation != ExpansionSearchObservationUnsupported,
+					},
 				}
 				eligible := true
 				for _, fact := range facts {
@@ -269,7 +327,8 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					fallbackReason = ExpansionSearchFallbackUnboundRoot
 				}
 				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, ExpansionSearchStrategyDecision{
-					Target: target, Family: "fixed_suffix_expansion",
+					Target: target,
+					Family: "fixed_suffix_expansion",
 					PlannedCandidates: []ExpansionSearchStrategy{
 						ExpansionSearchStepwiseForward,
 						ExpansionSearchLateHydratedForward,
@@ -279,12 +338,20 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					},
 					CandidateStrategy:    ExpansionSearchSuffixSeededReverse,
 					SelectedStrategy:     ExpansionSearchStepwiseForward,
-					StructurallyEligible: eligible, StaticallyEligible: eligible, EligibilityFacts: facts,
-					SuffixStartStep: stepIndex + 1, SuffixEndStep: suffixEnd, SuffixLength: suffixLength,
-					ObservationMode: observation, LogicalDirection: step.Relationship.Direction.String(),
-					MinimumDepth: minDepth, MaximumDepth: maxDepth,
-					SelectionMode: "incumbent_default", SelectorVersion: "fixed-suffix-static-v1",
-					FallbackStrategy: ExpansionSearchStepwiseForward, FallbackReason: fallbackReason,
+					StructurallyEligible: eligible,
+					StaticallyEligible:   eligible,
+					EligibilityFacts:     facts,
+					SuffixStartStep:      stepIndex + 1,
+					SuffixEndStep:        suffixEnd,
+					SuffixLength:         suffixLength,
+					ObservationMode:      observation,
+					LogicalDirection:     step.Relationship.Direction.String(),
+					MinimumDepth:         minDepth,
+					MaximumDepth:         maxDepth,
+					SelectionMode:        "incumbent_default",
+					SelectorVersion:      "fixed-suffix-static-v1",
+					FallbackStrategy:     ExpansionSearchStepwiseForward,
+					FallbackReason:       fallbackReason,
 				})
 			}
 			declarePatternSymbols(declaredSymbols, patternPart)
@@ -561,20 +628,62 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					topologyClassification = ShortestPathTopologyDirectionless
 				}
 				facts := []ShortestPathEligibilityFact{
-					{Name: "supported_shortest_path_mode", Eligible: patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern},
-					{Name: "single_three_element_traversal", Eligible: len(patternPart.PatternElements) == 3 && len(steps) == 1},
-					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
-					{Name: "directed", Eligible: directionSupported},
-					{Name: "bounded_supported_depth", Eligible: supportedDepth},
-					{Name: "no_relationship_variable", Eligible: noRelationshipVariable},
-					{Name: "no_relationship_predicate", Eligible: step.Relationship.Properties == nil},
-					{Name: "single_path_call", Eligible: shortestCalls == 1},
-					{Name: "read_only", Eligible: updatingClauses == 0},
-					{Name: "one_static_id_equality_per_endpoint", Eligible: singletonIDs},
-					{Name: "no_path_predicate", Eligible: !pathPredicate},
-					{Name: "uncorrelated_endpoint_source", Eligible: uncorrelatedSource},
-					{Name: "single_endpoint_pair", Eligible: singleEndpointPair},
-					{Name: "known_observation_mode", Eligible: false},
+					{
+						Name:     "supported_shortest_path_mode",
+						Eligible: patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern,
+					},
+					{
+						Name:     "single_three_element_traversal",
+						Eligible: len(patternPart.PatternElements) == 3 && len(steps) == 1,
+					},
+					{
+						Name:     "non_optional",
+						Eligible: !readingClause.Match.Optional,
+					},
+					{
+						Name:     "directed",
+						Eligible: directionSupported,
+					},
+					{
+						Name:     "bounded_supported_depth",
+						Eligible: supportedDepth,
+					},
+					{
+						Name:     "no_relationship_variable",
+						Eligible: noRelationshipVariable,
+					},
+					{
+						Name:     "no_relationship_predicate",
+						Eligible: step.Relationship.Properties == nil,
+					},
+					{
+						Name:     "single_path_call",
+						Eligible: shortestCalls == 1,
+					},
+					{
+						Name:     "read_only",
+						Eligible: updatingClauses == 0,
+					},
+					{
+						Name:     "one_static_id_equality_per_endpoint",
+						Eligible: singletonIDs,
+					},
+					{
+						Name:     "no_path_predicate",
+						Eligible: !pathPredicate,
+					},
+					{
+						Name:     "uncorrelated_endpoint_source",
+						Eligible: uncorrelatedSource,
+					},
+					{
+						Name:     "single_endpoint_pair",
+						Eligible: singleEndpointPair,
+					},
+					{
+						Name:     "known_observation_mode",
+						Eligible: false,
+					},
 				}
 				reason := ShortestPathFallbackTournamentUnqualified
 				switch {
@@ -612,7 +721,11 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					plannedCandidates = []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorASPA1DAG}
 				}
 				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
-					Target:                 PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex),
+					Target: PatternTarget{
+						QueryPartIndex: queryPartIndex,
+						ClauseIndex:    clauseIndex,
+						PatternIndex:   patternIndex,
+					}.TraversalStep(stepIndex),
 					Family:                 family,
 					PlannedCandidates:      plannedCandidates,
 					SelectedExecutor:       ShortestPathExecutorIncumbentWorkspace,
@@ -654,7 +767,10 @@ func setShortestPathEligibilityFact(decision *ShortestPathExecutorDecision, name
 			return
 		}
 	}
-	decision.Eligibility = append(decision.Eligibility, ShortestPathEligibilityFact{Name: name, Eligible: eligible})
+	decision.Eligibility = append(decision.Eligibility, ShortestPathEligibilityFact{
+		Name:     name,
+		Eligible: eligible,
+	})
 }
 
 // finalizeShortestPathExecutorDecisions applies statement-wide safety facts

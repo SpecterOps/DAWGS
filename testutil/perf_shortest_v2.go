@@ -88,14 +88,23 @@ func NewShortestPathScaleV2Fixture(config ShortestPathScaleV2Config) *opengraph.
 		if payload != "" {
 			properties["payload"] = payload
 		}
-		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: id, Kinds: []string{"ShortestNode"}, Properties: properties})
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+			ID:         id,
+			Kinds:      []string{"ShortestNode"},
+			Properties: properties,
+		})
 	}
 	addEdge := func(start, end, kind, key string) {
 		properties := map[string]any{"logical_key": key}
 		if payload != "" {
 			properties["payload"] = payload
 		}
-		fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: start, EndID: end, Kind: kind, Properties: properties})
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{
+			StartID:    start,
+			EndID:      end,
+			Kind:       kind,
+			Properties: properties,
+		})
 	}
 
 	addNode("sp-v2-start", map[string]any{"role": "start", "level": 0})

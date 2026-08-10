@@ -150,7 +150,9 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 				} else {
 					s.recordShortestPathExecutor(traversalStep.Expansion.ShortestPathTarget, traversalStep.Expansion.ShortestPathExecutor)
 					s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
-						Alias: pgsql.TableAlias{Name: traversalStep.Frame.Binding.Identifier},
+						Alias: pgsql.TableAlias{
+							Name: traversalStep.Frame.Binding.Identifier,
+						},
 						Query: traversalStepQuery,
 					})
 				}

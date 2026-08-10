@@ -37,10 +37,19 @@ func createBackendDeltaReport(artifact, output string) error {
 	if err != nil {
 		return err
 	}
-	type key struct{ dataset, name string }
+
+	type key struct {
+		dataset string
+		name    string
+	}
+
 	postgres, neo4j := map[key]CaseResult{}, map[key]CaseResult{}
 	for _, record := range records {
-		nextKey := key{record.Dataset, record.Name}
+		nextKey := key{
+			dataset: record.Dataset,
+			name:    record.Name,
+		}
+
 		switch record.ExecutionMode {
 		case ModePostgresSQL:
 			postgres[nextKey] = record
@@ -48,16 +57,25 @@ func createBackendDeltaReport(artifact, output string) error {
 			neo4j[nextKey] = record
 		}
 	}
-	report := BackendDeltaReport{Version: 1, Notice: "Descriptive only: PostgreSQL release gates compare PostgreSQL predecessors and exact PostgreSQL references, not Neo4j latency."}
+
+	report := BackendDeltaReport{
+		Version: 1,
+		Notice:  "Descriptive only: PostgreSQL release gates compare PostgreSQL predecessors and exact PostgreSQL references, not Neo4j latency.",
+	}
 	for nextKey, pgRecord := range postgres {
 		neoRecord, found := neo4j[nextKey]
 		if !found {
 			continue
 		}
 		next := BackendDeltaCase{
-			Dataset: nextKey.dataset, Name: nextKey.name, PostgresStatus: pgRecord.Status, Neo4jStatus: neoRecord.Status,
-			PostgresMedian: pgRecord.Stats.Median, PostgresP95: pgRecord.Stats.P95,
-			Neo4jMedian: neoRecord.Stats.Median, Neo4jP95: neoRecord.Stats.P95,
+			Dataset:           nextKey.dataset,
+			Name:              nextKey.name,
+			PostgresStatus:    pgRecord.Status,
+			Neo4jStatus:       neoRecord.Status,
+			PostgresMedian:    pgRecord.Stats.Median,
+			PostgresP95:       pgRecord.Stats.P95,
+			Neo4jMedian:       neoRecord.Stats.Median,
+			Neo4jP95:          neoRecord.Stats.P95,
 			ObservationsMatch: pgRecord.RowCount == neoRecord.RowCount && slices.Equal(pgRecord.ObservedRows, neoRecord.ObservedRows),
 		}
 		if next.PostgresMedian > 0 {

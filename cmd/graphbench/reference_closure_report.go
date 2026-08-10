@@ -129,7 +129,11 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s round %d lacks carryover-balanced production/reference order: got %d/%d, expected %d/%d", record.Dataset, record.Name, record.Environment.Round, record.RawPGXWaterfall.MeasurementOrder, reference.MeasurementOrder, expectedProductionOrder, expectedReferenceOrder)
 		}
 
-		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: ModePostgresSQL,
+		}
 		if seenRounds[key] == nil {
 			seenRounds[key] = map[int]struct{}{}
 		}
@@ -138,7 +142,11 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		}
 		seenRounds[key][record.Environment.Round] = struct{}{}
 		if series[key] == nil {
-			series[key] = &closureSeries{production: roundSamples{}, reference: roundSamples{}, architecture: reference.Architecture}
+			series[key] = &closureSeries{
+				production:   roundSamples{},
+				reference:    roundSamples{},
+				architecture: reference.Architecture,
+			}
 		} else if series[key].architecture != reference.Architecture {
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s reference architecture changed across rounds", record.Dataset, record.Name)
 		}
@@ -168,17 +176,30 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		return keys[i].name < keys[j].name
 	})
 	report := ReferenceClosureReport{
-		Version: referenceClosureReportVersion, Seed: options.Seed, Confidence: options.Confidence,
-		ReferenceName: options.ReferenceName, Passed: true,
+		Version:       referenceClosureReportVersion,
+		Seed:          options.Seed,
+		Confidence:    options.Confidence,
+		ReferenceName: options.ReferenceName,
+		Passed:        true,
 	}
-	gateOptions := PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount}
+	gateOptions := PerfGateOptions{
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BootstrapCount: options.BootstrapCount,
+	}
 	for idx, key := range keys {
 		candidate, baseline := matchedRounds(series[key].production, series[key].reference)
 		entry := ReferenceClosureCase{
-			Dataset: key.dataset, Name: key.name, ReferenceName: options.ReferenceName,
-			ReferenceArchitecture: series[key].architecture, Rounds: len(candidate),
-			ProductionSamples: sampleCount(candidate), ReferenceSamples: sampleCount(baseline),
-			RatioUpperLimit: options.RatioUpperLimit, AbsoluteFloor: options.AbsoluteResolution, Passed: true,
+			Dataset:               key.dataset,
+			Name:                  key.name,
+			ReferenceName:         options.ReferenceName,
+			ReferenceArchitecture: series[key].architecture,
+			Rounds:                len(candidate),
+			ProductionSamples:     sampleCount(candidate),
+			ReferenceSamples:      sampleCount(baseline),
+			RatioUpperLimit:       options.RatioUpperLimit,
+			AbsoluteFloor:         options.AbsoluteResolution,
+			Passed:                true,
 		}
 		if entry.Rounds < 10 || entry.Rounds > 20 {
 			entry.Passed = false

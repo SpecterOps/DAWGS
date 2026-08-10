@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,22 @@ import (
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCypherTranslationCacheReturnsZeroValuesOnBuildError(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	expectedErr := errors.New("translation failed")
+
+	sql, parameters, err := cache.Translate("RETURN 1", 1, nil, func() (translate.Result, string, error) {
+		return translate.Result{
+			Parameters: map[string]any{"partial": true},
+		}, "partial sql", expectedErr
+	})
+
+	require.ErrorIs(t, err, expectedErr)
+	require.Empty(t, sql)
+	require.Nil(t, parameters)
+	require.Zero(t, cache.Stats().Entries)
+}
 
 func TestCypherTranslationCacheRebindsTranslatedListParameters(t *testing.T) {
 	cache := newCypherTranslationCache(2)
@@ -28,7 +45,11 @@ func TestCypherTranslationCacheRebindsTranslatedListParameters(t *testing.T) {
 				return translate.Result{}, "", err
 			}
 			sql, err := translate.Translated(result)
-			return result, sql, err
+			if err != nil {
+				return translate.Result{}, "", err
+			}
+
+			return result, sql, nil
 		})
 	}
 
@@ -66,7 +87,11 @@ func TestCypherTranslationCacheRebindsNamedParameters(t *testing.T) {
 	require.Equal(t, "select @i0", sql)
 	require.Equal(t, int64(2), parameters["i0"])
 	require.Equal(t, 1, builds)
-	require.Equal(t, TranslationCacheStats{Hits: 1, Misses: 1, Entries: 1}, cache.Stats())
+	require.Equal(t, TranslationCacheStats{
+		Hits:    1,
+		Misses:  1,
+		Entries: 1,
+	}, cache.Stats())
 }
 
 func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
@@ -74,7 +99,10 @@ func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
 	var builds int
 	build := func() (translate.Result, string, error) {
 		builds++
-		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
+		return translate.Result{
+			Parameters:       map[string]any{},
+			ParameterSources: map[string]string{},
+		}, "select 1", nil
 	}
 
 	_, _, err := cache.Translate("RETURN $value", 1, map[string]any{"value": int64(1)}, build)
@@ -116,7 +144,10 @@ func TestCypherTranslationCacheCoalescesConcurrentMisses(t *testing.T) {
 			close(start)
 		}
 		<-release
-		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
+		return translate.Result{
+			Parameters:       map[string]any{},
+			ParameterSources: map[string]string{},
+		}, "select 1", nil
 	}
 
 	var group sync.WaitGroup
@@ -151,12 +182,17 @@ func TestCypherTranslationCacheDoesNotShareUncacheableParametersWithWaiters(t *t
 				close(start)
 				<-release
 			}
-			return translate.Result{Parameters: map[string]any{"pi0": value}}, "select @pi0", nil
+			return translate.Result{
+				Parameters: map[string]any{"pi0": value},
+			}, "select @pi0", nil
 		}
 	}
 
-	var first, second map[string]any
-	var firstErr, secondErr error
+	var (
+		first, second       map[string]any
+		firstErr, secondErr error
+	)
+
 	done := make(chan struct{})
 	go func() {
 		_, first, firstErr = cache.Translate("RETURN 1", 1, nil, build("first", true))

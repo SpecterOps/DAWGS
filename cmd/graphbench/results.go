@@ -267,7 +267,10 @@ func validateBackendObservations(records []CaseResult) error {
 	postgres := map[observationKey][]string{}
 	for _, record := range records {
 		if record.ExecutionMode == ModePostgresSQL && record.Status == StatusOK && record.StableObservation && record.ObservedRows != nil {
-			postgres[observationKey{dataset: record.Dataset, name: record.Name}] = record.ObservedRows
+			postgres[observationKey{
+				dataset: record.Dataset,
+				name:    record.Name,
+			}] = record.ObservedRows
 		}
 	}
 
@@ -275,7 +278,10 @@ func validateBackendObservations(records []CaseResult) error {
 		if record.ExecutionMode != ModeNeo4j || record.Status != StatusOK || !record.StableObservation || record.ObservedRows == nil {
 			continue
 		}
-		key := observationKey{dataset: record.Dataset, name: record.Name}
+		key := observationKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+		}
 		if expected, found := postgres[key]; found && !slices.Equal(expected, record.ObservedRows) {
 			return fmt.Errorf("backend observations differ for %s/%s: postgres=%v neo4j=%v", record.Dataset, record.Name, expected, record.ObservedRows)
 		}
@@ -447,14 +453,24 @@ func validateJSONLAppend(existing, appended []CaseResult) error {
 		if record.Environment != nil {
 			round = record.Environment.Round
 		}
-		seen[recordKey{dataset: record.Dataset, name: record.Name, mode: record.ExecutionMode, round: round}] = struct{}{}
+		seen[recordKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			mode:    record.ExecutionMode,
+			round:   round,
+		}] = struct{}{}
 	}
 	for _, record := range appended {
 		round := 0
 		if record.Environment != nil {
 			round = record.Environment.Round
 		}
-		key := recordKey{dataset: record.Dataset, name: record.Name, mode: record.ExecutionMode, round: round}
+		key := recordKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			mode:    record.ExecutionMode,
+			round:   round,
+		}
 		if _, duplicate := seen[key]; duplicate {
 			return fmt.Errorf("append JSONL duplicate record for %s/%s/%s round %d", key.dataset, key.name, key.mode, key.round)
 		}

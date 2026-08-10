@@ -119,7 +119,11 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		if baseline.Stats.WarmupIterations < minimumWarmups || candidate.Stats.WarmupIterations < minimumWarmups || baseline.MeasurementOrder == candidate.MeasurementOrder {
 			return ReferencePairReport{}, fmt.Errorf("%s/%s round %d lacks warm, ordered reference-pair measurements", record.Dataset, record.Name, record.Environment.Round)
 		}
-		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: ModePostgresSQL,
+		}
 		if seen[key] == nil {
 			seen[key] = map[int]struct{}{}
 		}
@@ -129,9 +133,14 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		seen[key][record.Environment.Round] = struct{}{}
 		if series[key] == nil {
 			series[key] = &pairSeries{
-				baseline: roundSamples{}, candidate: roundSamples{}, baselineArchitecture: baseline.Architecture, candidateArchitecture: candidate.Architecture,
-				baselineBoundary: baseline.Boundary, candidateBoundary: candidate.Boundary,
-				baselineValidation: baseline.SemanticValidation, candidateValidation: candidate.SemanticValidation,
+				baseline:              roundSamples{},
+				candidate:             roundSamples{},
+				baselineArchitecture:  baseline.Architecture,
+				candidateArchitecture: candidate.Architecture,
+				baselineBoundary:      baseline.Boundary,
+				candidateBoundary:     candidate.Boundary,
+				baselineValidation:    baseline.SemanticValidation,
+				candidateValidation:   candidate.SemanticValidation,
 			}
 		} else if series[key].baselineArchitecture != baseline.Architecture || series[key].candidateArchitecture != candidate.Architecture ||
 			series[key].baselineBoundary != baseline.Boundary || series[key].candidateBoundary != candidate.Boundary ||
@@ -160,11 +169,22 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		return keys[i].dataset < keys[j].dataset || keys[i].dataset == keys[j].dataset && keys[i].name < keys[j].name
 	})
 	report := ReferencePairReport{
-		Version: referencePairReportVersion, Seed: options.Seed, Confidence: options.Confidence,
-		BaselineName: options.BaselineName, CandidateName: options.CandidateName, Protocol: protocol,
-		MinimumWarmups: minimumWarmups, MinimumRounds: minimumRounds, MaximumRounds: maximumRounds, MinimumSamples: minimumSamples,
+		Version:        referencePairReportVersion,
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BaselineName:   options.BaselineName,
+		CandidateName:  options.CandidateName,
+		Protocol:       protocol,
+		MinimumWarmups: minimumWarmups,
+		MinimumRounds:  minimumRounds,
+		MaximumRounds:  maximumRounds,
+		MinimumSamples: minimumSamples,
 	}
-	gateOptions := PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount}
+	gateOptions := PerfGateOptions{
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BootstrapCount: options.BootstrapCount,
+	}
 	for idx, key := range keys {
 		baseline, candidate := matchedRounds(series[key].baseline, series[key].candidate)
 		if len(baseline) < minimumRounds || len(baseline) > maximumRounds {
@@ -177,13 +197,22 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		}
 		seed := options.Seed + int64(idx)*7919
 		report.Cases = append(report.Cases, ReferencePairCase{
-			Dataset: key.dataset, Name: key.name, Rounds: len(baseline), BaselineArchitecture: series[key].baselineArchitecture, CandidateArchitecture: series[key].candidateArchitecture,
-			BaselineBoundary: series[key].baselineBoundary, CandidateBoundary: series[key].candidateBoundary,
-			BaselineSemanticValidation: series[key].baselineValidation, CandidateSemanticValidation: series[key].candidateValidation,
-			BaselineSamples: sampleCount(baseline), CandidateSamples: sampleCount(candidate), MedianRatio: bootstrapRoundMedianRatio(baseline, candidate, seed, gateOptions),
-			P95Ratio:             bootstrapStratifiedP95Ratio(baseline, candidate, seed+4, gateOptions),
-			MedianChange:         negateDurationInterval(bootstrapRoundMedianSaving(baseline, candidate, seed+1, gateOptions)),
-			BaselineAAResolution: withinSessionAAResolution(baseline, seed+2, gateOptions), CandidateAAResolution: withinSessionAAResolution(candidate, seed+3, gateOptions),
+			Dataset:                     key.dataset,
+			Name:                        key.name,
+			Rounds:                      len(baseline),
+			BaselineArchitecture:        series[key].baselineArchitecture,
+			CandidateArchitecture:       series[key].candidateArchitecture,
+			BaselineBoundary:            series[key].baselineBoundary,
+			CandidateBoundary:           series[key].candidateBoundary,
+			BaselineSemanticValidation:  series[key].baselineValidation,
+			CandidateSemanticValidation: series[key].candidateValidation,
+			BaselineSamples:             sampleCount(baseline),
+			CandidateSamples:            sampleCount(candidate),
+			MedianRatio:                 bootstrapRoundMedianRatio(baseline, candidate, seed, gateOptions),
+			P95Ratio:                    bootstrapStratifiedP95Ratio(baseline, candidate, seed+4, gateOptions),
+			MedianChange:                negateDurationInterval(bootstrapRoundMedianSaving(baseline, candidate, seed+1, gateOptions)),
+			BaselineAAResolution:        withinSessionAAResolution(baseline, seed+2, gateOptions),
+			CandidateAAResolution:       withinSessionAAResolution(candidate, seed+3, gateOptions),
 		})
 	}
 	return report, nil

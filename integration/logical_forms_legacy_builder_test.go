@@ -41,7 +41,10 @@ func TestLegacyBuilderLogicalForms(t *testing.T) {
 		logicEdgeKinds.Add(projectionEdgeKinds...),
 	)
 	ClearGraph(t, db, ctx)
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 
 	t.Run("LOGIC-01 branch-local relationship kinds", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, logicFixture, func(idMap opengraph.IDMap) graph.Criteria {
@@ -152,9 +155,12 @@ func TestLegacyBuilderLogicalForms(t *testing.T) {
 
 			err = relationshipQuery.Query(func(result graph.Result) error {
 				require.True(t, result.Next())
-				var nodeID, relationshipID graph.ID
-				var nodeKinds graph.Kinds
-				var relationshipKind graph.Kind
+				var (
+					nodeID, relationshipID graph.ID
+					nodeKinds              graph.Kinds
+					relationshipKind       graph.Kind
+				)
+
 				require.NoError(t, result.Scan(&nodeID, &nodeKinds, &relationshipID, &relationshipKind))
 				require.Equal(t, idMap["projection-end"], nodeID)
 				require.Equal(t, graph.StringKind("LogicProjectionEdge"), relationshipKind)
@@ -220,39 +226,174 @@ func logicalFormsFixture() *opengraph.Graph {
 
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
-			{ID: "direction-forward", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"name": "forward"}},
-			{ID: "direction-reverse", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"name": "reverse"}},
-			{ID: "early-a", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(2)}},
-			{ID: "early-b", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(2)}},
-			{ID: "equal-a", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(3)}},
-			{ID: "equal-b", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(3)}},
-			{ID: "late-a", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4)}},
-			{ID: "late-b", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4)}},
-			{ID: "late-b-newer", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)}},
-			{ID: "late-b-missing", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)}},
-			{ID: "late-b-null", Kinds: []string{"LogicDomain"}, Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)}},
-			{ID: "candidate-missing", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{}},
-			{ID: "candidate-null", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{"lastseen": nil}},
-			{ID: "candidate-older", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{"lastseen": day(2)}},
-			{ID: "candidate-equal", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{"lastseen": day(3)}},
-			{ID: "candidate-newer", Kinds: []string{"LogicCandidate"}, Properties: map[string]any{"lastseen": day(4)}},
-			{ID: "protected-missing", Kinds: []string{"LogicProtected"}, Properties: map[string]any{}},
-			{ID: "protected-null", Kinds: []string{"LogicProtected"}, Properties: map[string]any{"lastseen": nil}},
-			{ID: "protected-older", Kinds: []string{"LogicProtected"}, Properties: map[string]any{"lastseen": day(2)}},
-			{ID: "multi-kind-protected", Kinds: []string{"LogicCandidate", "LogicProtected"}, Properties: map[string]any{"lastseen": day(2)}},
+			{
+				ID:         "direction-forward",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"name": "forward"},
+			},
+			{
+				ID:         "direction-reverse",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"name": "reverse"},
+			},
+			{
+				ID:         "early-a",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(2)},
+			},
+			{
+				ID:         "early-b",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(2)},
+			},
+			{
+				ID:         "equal-a",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(3)},
+			},
+			{
+				ID:         "equal-b",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(3)},
+			},
+			{
+				ID:         "late-a",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(4)},
+			},
+			{
+				ID:         "late-b",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(4)},
+			},
+			{
+				ID:         "late-b-newer",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)},
+			},
+			{
+				ID:         "late-b-missing",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)},
+			},
+			{
+				ID:         "late-b-null",
+				Kinds:      []string{"LogicDomain"},
+				Properties: map[string]any{"lastcollected": day(4), "lastseen": day(4)},
+			},
+			{
+				ID:         "candidate-missing",
+				Kinds:      []string{"LogicCandidate"},
+				Properties: map[string]any{},
+			},
+			{
+				ID:         "candidate-null",
+				Kinds:      []string{"LogicCandidate"},
+				Properties: map[string]any{"lastseen": nil},
+			},
+			{
+				ID:         "candidate-older",
+				Kinds:      []string{"LogicCandidate"},
+				Properties: map[string]any{"lastseen": day(2)},
+			},
+			{
+				ID:         "candidate-equal",
+				Kinds:      []string{"LogicCandidate"},
+				Properties: map[string]any{"lastseen": day(3)},
+			},
+			{
+				ID:         "candidate-newer",
+				Kinds:      []string{"LogicCandidate"},
+				Properties: map[string]any{"lastseen": day(4)},
+			},
+			{
+				ID:         "protected-missing",
+				Kinds:      []string{"LogicProtected"},
+				Properties: map[string]any{},
+			},
+			{
+				ID:         "protected-null",
+				Kinds:      []string{"LogicProtected"},
+				Properties: map[string]any{"lastseen": nil},
+			},
+			{
+				ID:         "protected-older",
+				Kinds:      []string{"LogicProtected"},
+				Properties: map[string]any{"lastseen": day(2)},
+			},
+			{
+				ID:         "multi-kind-protected",
+				Kinds:      []string{"LogicCandidate", "LogicProtected"},
+				Properties: map[string]any{"lastseen": day(2)},
+			},
 		},
 		Edges: []opengraph.Edge{
-			{StartID: "direction-forward", EndID: "direction-reverse", Kind: "LogicKindA", Properties: map[string]any{"marker": "valid-forward"}},
-			{StartID: "direction-reverse", EndID: "direction-forward", Kind: "LogicKindB", Properties: map[string]any{"marker": "valid-reverse"}},
-			{StartID: "direction-forward", EndID: "direction-reverse", Kind: "LogicKindB", Properties: map[string]any{"marker": "invalid-forward-kind"}},
-			{StartID: "direction-reverse", EndID: "direction-forward", Kind: "LogicKindA", Properties: map[string]any{"marker": "invalid-reverse-kind"}},
-			{StartID: "late-a", EndID: "early-a", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "older-start-only"}},
-			{StartID: "early-a", EndID: "late-a", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "older-end-only"}},
-			{StartID: "late-a", EndID: "late-b", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "older-both"}},
-			{StartID: "equal-a", EndID: "equal-b", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(3), "marker": "equal"}},
-			{StartID: "late-a", EndID: "late-b-newer", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": day(5), "marker": "newer"}},
-			{StartID: "late-a", EndID: "late-b-missing", Kind: "LogicStaleTrust", Properties: map[string]any{"marker": "missing"}},
-			{StartID: "late-a", EndID: "late-b-null", Kind: "LogicStaleTrust", Properties: map[string]any{"lastseen": nil, "marker": "null"}},
+			{
+				StartID:    "direction-forward",
+				EndID:      "direction-reverse",
+				Kind:       "LogicKindA",
+				Properties: map[string]any{"marker": "valid-forward"},
+			},
+			{
+				StartID:    "direction-reverse",
+				EndID:      "direction-forward",
+				Kind:       "LogicKindB",
+				Properties: map[string]any{"marker": "valid-reverse"},
+			},
+			{
+				StartID:    "direction-forward",
+				EndID:      "direction-reverse",
+				Kind:       "LogicKindB",
+				Properties: map[string]any{"marker": "invalid-forward-kind"},
+			},
+			{
+				StartID:    "direction-reverse",
+				EndID:      "direction-forward",
+				Kind:       "LogicKindA",
+				Properties: map[string]any{"marker": "invalid-reverse-kind"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "early-a",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"lastseen": day(3), "marker": "older-start-only"},
+			},
+			{
+				StartID:    "early-a",
+				EndID:      "late-a",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"lastseen": day(3), "marker": "older-end-only"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"lastseen": day(3), "marker": "older-both"},
+			},
+			{
+				StartID:    "equal-a",
+				EndID:      "equal-b",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"lastseen": day(3), "marker": "equal"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b-newer",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"lastseen": day(5), "marker": "newer"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b-missing",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"marker": "missing"},
+			},
+			{
+				StartID:    "late-a",
+				EndID:      "late-b-null",
+				Kind:       "LogicStaleTrust",
+				Properties: map[string]any{"lastseen": nil, "marker": "null"},
+			},
 		},
 	}
 }
@@ -260,11 +401,24 @@ func logicalFormsFixture() *opengraph.Graph {
 func logicalProjectionFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
-			{ID: "projection-start", Kinds: []string{"LogicProjectionStart"}, Properties: map[string]any{"name": "start"}},
-			{ID: "projection-end", Kinds: []string{"LogicProjectionEnd", "LogicProjectionEntity"}, Properties: map[string]any{"name": "end"}},
+			{
+				ID:         "projection-start",
+				Kinds:      []string{"LogicProjectionStart"},
+				Properties: map[string]any{"name": "start"},
+			},
+			{
+				ID:         "projection-end",
+				Kinds:      []string{"LogicProjectionEnd", "LogicProjectionEntity"},
+				Properties: map[string]any{"name": "end"},
+			},
 		},
 		Edges: []opengraph.Edge{
-			{StartID: "projection-start", EndID: "projection-end", Kind: "LogicProjectionEdge", Properties: map[string]any{"marker": "projection"}},
+			{
+				StartID:    "projection-start",
+				EndID:      "projection-end",
+				Kind:       "LogicProjectionEdge",
+				Properties: map[string]any{"marker": "projection"},
+			},
 		},
 	}
 }

@@ -209,32 +209,72 @@ func buildBoundaryCostModel(record CaseResult) CostModelCase {
 		name   string
 		values []time.Duration
 	}{
-		{name: "Pool acquisition", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.PoolWait })},
-		{name: "Transaction setup", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.Transaction })},
-		{name: "Bind/prepare", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.BindPrepare })},
-		{name: "First-row transfer/decode", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.FirstRow })},
-		{name: "Remaining transfer/decode", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.AllRowsDecode })},
-		{name: "Drain/close", values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.DrainClose })},
+		{
+			name:   "Pool acquisition",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.PoolWait }),
+		},
+		{
+			name:   "Transaction setup",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.Transaction }),
+		},
+		{
+			name:   "Bind/prepare",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.BindPrepare }),
+		},
+		{
+			name:   "First-row transfer/decode",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.FirstRow }),
+		},
+		{
+			name:   "Remaining transfer/decode",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.AllRowsDecode }),
+		},
+		{
+			name:   "Drain/close",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.DrainClose }),
+		},
 	}
-	model := CostModelCase{Dataset: record.Dataset, Name: record.Name, Boundary: record.RawPGXWaterfall.Boundary, E2EMedian: e2e}
+	model := CostModelCase{
+		Dataset:   record.Dataset,
+		Name:      record.Name,
+		Boundary:  record.RawPGXWaterfall.Boundary,
+		E2EMedian: e2e,
+	}
 	var attributed time.Duration
 	for _, component := range components {
 		median := durationFromQuantile(component.values, 0.50)
 		attributed += median
 		model.Components = append(model.Components, CostModelComponent{
-			Name: component.name, Interval: "exclusive", Median: median, P95: durationFromQuantile(component.values, 0.95),
-			Rows: samples[0].Rows, ShareOfE2E: durationShare(median, e2e), Confidence: "raw-pgx observed boundary",
+			Name:       component.name,
+			Interval:   "exclusive",
+			Median:     median,
+			P95:        durationFromQuantile(component.values, 0.95),
+			Rows:       samples[0].Rows,
+			ShareOfE2E: durationShare(median, e2e),
+			Confidence: "raw-pgx observed boundary",
 		})
 	}
 	residual := e2e - attributed
 	if residual < 0 {
 		residual = 0
 	}
-	model.Components = append(model.Components, CostModelComponent{Name: "Unexplained residual", Interval: "derived", Median: residual, ShareOfE2E: durationShare(residual, e2e), Confidence: "derived"})
+	model.Components = append(model.Components, CostModelComponent{
+		Name:       "Unexplained residual",
+		Interval:   "derived",
+		Median:     residual,
+		ShareOfE2E: durationShare(residual, e2e),
+		Confidence: "derived",
+	})
 	model.Attribution = durationShare(e2e-residual, e2e)
 	if record.PostgresMetrics != nil && record.PostgresMetrics.ExecutionMS != nil {
 		server := time.Duration(*record.PostgresMetrics.ExecutionMS * float64(time.Millisecond))
-		model.Components = append(model.Components, CostModelComponent{Name: "Server execution", Interval: "inclusive/overlapping", Median: server, ShareOfE2E: durationShare(server, e2e), Confidence: "single EXPLAIN diagnostic"})
+		model.Components = append(model.Components, CostModelComponent{
+			Name:       "Server execution",
+			Interval:   "inclusive/overlapping",
+			Median:     server,
+			ShareOfE2E: durationShare(server, e2e),
+			Confidence: "single EXPLAIN diagnostic",
+		})
 	}
 	return model
 }

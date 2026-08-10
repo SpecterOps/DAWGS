@@ -78,7 +78,10 @@ func (s ScaleCorpus) DeclaredBackends() []DeclaredCaseBackend {
 		}
 		for backend, reason := range testCase.UnsupportedModes {
 			declared = append(declared, DeclaredCaseBackend{
-				Dataset: testCase.Dataset, Name: testCase.Name, Backend: backend, UnsupportedReason: reason,
+				Dataset:           testCase.Dataset,
+				Name:              testCase.Name,
+				Backend:           backend,
+				UnsupportedReason: reason,
 			})
 		}
 	}

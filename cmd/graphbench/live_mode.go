@@ -141,9 +141,12 @@ func validateExistingGraphCorpus(corpus ScaleCorpus, manifest ExistingGraphAncho
 }
 
 func stripCypherStringLiterals(query string) string {
-	var result strings.Builder
-	var quote rune
-	escaped := false
+	var (
+		result  strings.Builder
+		quote   rune
+		escaped bool
+	)
+
 	for _, value := range query {
 		if quote != 0 {
 			if escaped {
@@ -203,7 +206,12 @@ func writeExistingGraphCheckpoint(path, manifestHash, corpusHash string, records
 	if path == "" {
 		return nil
 	}
-	checkpoint := existingGraphCheckpoint{Version: existingGraphCheckpointVersion, ManifestSHA256: manifestHash, CorpusSHA256: corpusHash, Records: records}
+	checkpoint := existingGraphCheckpoint{
+		Version:        existingGraphCheckpointVersion,
+		ManifestSHA256: manifestHash,
+		CorpusSHA256:   corpusHash,
+		Records:        records,
+	}
 	raw, err := json.MarshalIndent(checkpoint, "", "  ")
 	if err != nil {
 		return err

@@ -811,15 +811,29 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
 		applied := string(s.appliedShortestPathExecutors[target])
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
-			Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", TraversalTarget: &target,
-			Family: decision.Family, PlannedCandidates: shortestPathCandidateNames(decision.PlannedCandidates),
-			EligibilityFacts: shortestPathEligibilityFacts(decision.Eligibility),
-			ObservationMode:  string(decision.ObservationMode), Direction: decision.Direction.String(),
-			PhysicalExpansion: string(decision.PhysicalExpansion), RelationshipKindCount: decision.RelationshipKindCount,
-			UntypedRelationship: decision.UntypedRelationship, TopologyClassification: string(decision.TopologyClassification), Eligible: &eligible, StaticallyEligible: &staticallyEligible,
-			SelectionMode: decision.SelectionMode, SelectorVersion: decision.SelectorVersion,
-			Selected: string(decision.SelectedExecutor), Applied: applied, Fallback: string(decision.FallbackExecutor), SkipReason: decision.FallbackReason,
-			MinimumDepth: &minimumDepth, MaximumDepth: &maximumDepth, StateLimit: decision.StateLimit,
+			Lowering:               optimize.LoweringShortestPathExecutor,
+			TargetKind:             "traversal",
+			TraversalTarget:        &target,
+			Family:                 decision.Family,
+			PlannedCandidates:      shortestPathCandidateNames(decision.PlannedCandidates),
+			EligibilityFacts:       shortestPathEligibilityFacts(decision.Eligibility),
+			ObservationMode:        string(decision.ObservationMode),
+			Direction:              decision.Direction.String(),
+			PhysicalExpansion:      string(decision.PhysicalExpansion),
+			RelationshipKindCount:  decision.RelationshipKindCount,
+			UntypedRelationship:    decision.UntypedRelationship,
+			TopologyClassification: string(decision.TopologyClassification),
+			Eligible:               &eligible,
+			StaticallyEligible:     &staticallyEligible,
+			SelectionMode:          decision.SelectionMode,
+			SelectorVersion:        decision.SelectorVersion,
+			Selected:               string(decision.SelectedExecutor),
+			Applied:                applied,
+			Fallback:               string(decision.FallbackExecutor),
+			SkipReason:             decision.FallbackReason,
+			MinimumDepth:           &minimumDepth,
+			MaximumDepth:           &maximumDepth,
+			StateLimit:             decision.StateLimit,
 		})
 	}
 	for _, decision := range plan.ExpansionSearchStrategy {
@@ -828,20 +842,35 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
 		applied := string(s.appliedExpansionSearchStrategies[target])
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
-			Lowering: optimize.LoweringExpansionSearchStrategy, TargetKind: "traversal", TraversalTarget: &target,
-			Family: decision.Family, PlannedCandidates: expansionSearchCandidateNames(decision.PlannedCandidates), Candidate: string(decision.CandidateStrategy),
-			EligibilityFacts: expansionSearchEligibilityFacts(decision.EligibilityFacts),
-			ObservationMode:  string(decision.ObservationMode), Eligible: &eligible, StaticallyEligible: &staticallyEligible,
-			SelectionMode: decision.SelectionMode, SelectorVersion: decision.SelectorVersion,
-			Selected: string(decision.SelectedStrategy), Applied: applied, Fallback: string(decision.FallbackStrategy), SkipReason: decision.FallbackReason,
-			MinimumDepth: &minimumDepth, MaximumDepth: &maximumDepth,
+			Lowering:           optimize.LoweringExpansionSearchStrategy,
+			TargetKind:         "traversal",
+			TraversalTarget:    &target,
+			Family:             decision.Family,
+			PlannedCandidates:  expansionSearchCandidateNames(decision.PlannedCandidates),
+			Candidate:          string(decision.CandidateStrategy),
+			EligibilityFacts:   expansionSearchEligibilityFacts(decision.EligibilityFacts),
+			ObservationMode:    string(decision.ObservationMode),
+			Eligible:           &eligible,
+			StaticallyEligible: &staticallyEligible,
+			SelectionMode:      decision.SelectionMode,
+			SelectorVersion:    decision.SelectorVersion,
+			Selected:           string(decision.SelectedStrategy),
+			Applied:            applied,
+			Fallback:           string(decision.FallbackStrategy),
+			SkipReason:         decision.FallbackReason,
+			MinimumDepth:       &minimumDepth,
+			MaximumDepth:       &maximumDepth,
 		})
 	}
 	for _, decision := range plan.FieldRequirements {
 		queryPartIndex := decision.QueryPartIndex
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
-			Lowering: optimize.LoweringFieldRequirements, TargetKind: "field_requirement", QueryPartIndex: &queryPartIndex,
-			Symbol: decision.Symbol, Selected: "analysis_only", SkipReason: "analysis_metadata_only",
+			Lowering:       optimize.LoweringFieldRequirements,
+			TargetKind:     "field_requirement",
+			QueryPartIndex: &queryPartIndex,
+			Symbol:         decision.Symbol,
+			Selected:       "analysis_only",
+			SkipReason:     "analysis_metadata_only",
 		})
 	}
 }
@@ -865,7 +894,10 @@ func expansionSearchCandidateNames(candidates []optimize.ExpansionSearchStrategy
 func shortestPathEligibilityFacts(facts []optimize.ShortestPathEligibilityFact) []TargetEligibilityFact {
 	outcomes := make([]TargetEligibilityFact, len(facts))
 	for idx, fact := range facts {
-		outcomes[idx] = TargetEligibilityFact{Name: fact.Name, Eligible: fact.Eligible}
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
 	}
 	return outcomes
 }
@@ -873,7 +905,10 @@ func shortestPathEligibilityFacts(facts []optimize.ShortestPathEligibilityFact) 
 func expansionSearchEligibilityFacts(facts []optimize.ExpansionSearchEligibilityFact) []TargetEligibilityFact {
 	outcomes := make([]TargetEligibilityFact, len(facts))
 	for idx, fact := range facts {
-		outcomes[idx] = TargetEligibilityFact{Name: fact.Name, Eligible: fact.Eligible}
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
 	}
 	return outcomes
 }

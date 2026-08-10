@@ -116,8 +116,16 @@ func TestValueMapperMapsCompositeArrays(t *testing.T) {
 
 	t.Run("typed node array preserves order", func(t *testing.T) {
 		rawNodes := []any{
-			nodeComposite{ID: 1, KindIDs: []int16{userKindID}, Properties: map[string]any{"name": "Alice"}},
-			nodeComposite{ID: 2, KindIDs: []int16{userKindID}, Properties: map[string]any{"name": "Bob"}},
+			nodeComposite{
+				ID:         1,
+				KindIDs:    []int16{userKindID},
+				Properties: map[string]any{"name": "Alice"},
+			},
+			nodeComposite{
+				ID:         2,
+				KindIDs:    []int16{userKindID},
+				Properties: map[string]any{"name": "Bob"},
+			},
 		}
 
 		var nodes []*graph.Node
@@ -156,8 +164,20 @@ func TestValueMapperMapsCompositeArrays(t *testing.T) {
 
 	t.Run("typed relationship array preserves order", func(t *testing.T) {
 		rawRelationships := []edgeComposite{
-			{ID: 10, StartID: 1, EndID: 2, KindID: memberOfKindID, Properties: map[string]any{"ordinal": int64(1)}},
-			{ID: 11, StartID: 2, EndID: 3, KindID: memberOfKindID, Properties: map[string]any{"ordinal": int64(2)}},
+			{
+				ID:         10,
+				StartID:    1,
+				EndID:      2,
+				KindID:     memberOfKindID,
+				Properties: map[string]any{"ordinal": int64(1)},
+			},
+			{
+				ID:         11,
+				StartID:    2,
+				EndID:      3,
+				KindID:     memberOfKindID,
+				Properties: map[string]any{"ordinal": int64(2)},
+			},
 		}
 
 		var relationships []graph.Relationship

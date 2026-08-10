@@ -58,11 +58,19 @@ func TestValidateScaleCaseRequiresConsistentUnsupportedModes(t *testing.T) {
 }
 
 func TestScaleCorpusDatasets(t *testing.T) {
-	corpus := ScaleCorpus{Cases: []ScaleCase{
-		{Name: "a", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
-		{Name: "b", Dataset: "fixed_suffix_expansion_fanout", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
-		{Name: "c", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
-	}}
+	corpus := ScaleCorpus{
+		Cases: []ScaleCase{
+			{Name: "a", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
+			{
+				Name:           "b",
+				Dataset:        "fixed_suffix_expansion_fanout",
+				Category:       "counts",
+				Cypher:         "return 1",
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+			{Name: "c", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
+		},
+	}
 
 	require.Equal(t, []string{"base", "fixed_suffix_expansion_fanout"}, scaleCorpusDatasets(corpus))
 }
@@ -168,13 +176,35 @@ func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 }
 
 func TestSelectScaleCorpusUsesExactSelectorsAndMarksDiagnostics(t *testing.T) {
-	corpus := ScaleCorpus{Cases: []ScaleCase{
-		{Name: "lookup", Dataset: "base", Category: "lookup", Tags: []string{"primary"}, CandidateModes: []ExecutionMode{ModePostgresSQL}},
-		{Name: "control", Dataset: "base", Category: "lookup", Tags: []string{"control"}, CandidateModes: []ExecutionMode{ModePostgresSQL, ModeNeo4j}},
-		{Name: "other", Dataset: "other", Category: "count", CandidateModes: []ExecutionMode{ModePostgresSQL}},
-	}}
+	corpus := ScaleCorpus{
+		Cases: []ScaleCase{
+			{
+				Name:           "lookup",
+				Dataset:        "base",
+				Category:       "lookup",
+				Tags:           []string{"primary"},
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+			{
+				Name:           "control",
+				Dataset:        "base",
+				Category:       "lookup",
+				Tags:           []string{"control"},
+				CandidateModes: []ExecutionMode{ModePostgresSQL, ModeNeo4j},
+			},
+			{
+				Name:           "other",
+				Dataset:        "other",
+				Category:       "count",
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
+		},
+	}
 
-	selected, manifest, err := selectScaleCorpus(corpus, CorpusSelectors{Datasets: []string{"base"}, Tags: []string{"primary", "control"}})
+	selected, manifest, err := selectScaleCorpus(corpus, CorpusSelectors{
+		Datasets: []string{"base"},
+		Tags:     []string{"primary", "control"},
+	})
 	require.NoError(t, err)
 	require.Len(t, selected.Cases, 2)
 	require.True(t, manifest.DiagnosticOnly)
@@ -186,7 +216,15 @@ func TestSelectScaleCorpusUsesExactSelectorsAndMarksDiagnostics(t *testing.T) {
 }
 
 func TestSelectScaleCorpusRejectsAmbiguousExactNames(t *testing.T) {
-	corpus := ScaleCorpus{Cases: []ScaleCase{{Name: "same", Dataset: "one"}, {Name: "same", Dataset: "two"}}}
+	corpus := ScaleCorpus{
+		Cases: []ScaleCase{{
+			Name:    "same",
+			Dataset: "one",
+		}, {
+			Name:    "same",
+			Dataset: "two",
+		}},
+	}
 	_, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"same"}})
 	require.ErrorContains(t, err, "ambiguous case selector")
 }

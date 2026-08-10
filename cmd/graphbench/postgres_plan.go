@@ -122,11 +122,16 @@ func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 
 func postgresJSONBuffers(node map[string]any) Buffers {
 	return Buffers{
-		SharedHit: jsonInt64(node["Shared Hit Blocks"]), SharedRead: jsonInt64(node["Shared Read Blocks"]),
-		SharedDirtied: jsonInt64(node["Shared Dirtied Blocks"]), SharedWritten: jsonInt64(node["Shared Written Blocks"]),
-		LocalHit: jsonInt64(node["Local Hit Blocks"]), LocalRead: jsonInt64(node["Local Read Blocks"]),
-		LocalDirtied: jsonInt64(node["Local Dirtied Blocks"]), LocalWritten: jsonInt64(node["Local Written Blocks"]),
-		TempRead: jsonInt64(node["Temp Read Blocks"]), TempWritten: jsonInt64(node["Temp Written Blocks"]),
+		SharedHit:     jsonInt64(node["Shared Hit Blocks"]),
+		SharedRead:    jsonInt64(node["Shared Read Blocks"]),
+		SharedDirtied: jsonInt64(node["Shared Dirtied Blocks"]),
+		SharedWritten: jsonInt64(node["Shared Written Blocks"]),
+		LocalHit:      jsonInt64(node["Local Hit Blocks"]),
+		LocalRead:     jsonInt64(node["Local Read Blocks"]),
+		LocalDirtied:  jsonInt64(node["Local Dirtied Blocks"]),
+		LocalWritten:  jsonInt64(node["Local Written Blocks"]),
+		TempRead:      jsonInt64(node["Temp Read Blocks"]),
+		TempWritten:   jsonInt64(node["Temp Written Blocks"]),
 	}
 }
 

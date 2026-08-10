@@ -17,8 +17,32 @@ func TestBackendDeltaReportIsDescriptiveAndRequiresMatchedObservations(t *testin
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
 	records := []CaseResult{
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK, RowCount: 1, StableObservation: true, ObservedRows: []string{"one"}, Stats: DurationStats{Median: time.Millisecond, P95: 2 * time.Millisecond}},
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModeNeo4j, Status: StatusOK, RowCount: 1, StableObservation: true, ObservedRows: []string{"one"}, Stats: DurationStats{Median: 2 * time.Millisecond, P95: 3 * time.Millisecond}},
+		{
+			Dataset:           "fixture",
+			Name:              "case",
+			ExecutionMode:     ModePostgresSQL,
+			Status:            StatusOK,
+			RowCount:          1,
+			StableObservation: true,
+			ObservedRows:      []string{"one"},
+			Stats: DurationStats{
+				Median: time.Millisecond,
+				P95:    2 * time.Millisecond,
+			},
+		},
+		{
+			Dataset:           "fixture",
+			Name:              "case",
+			ExecutionMode:     ModeNeo4j,
+			Status:            StatusOK,
+			RowCount:          1,
+			StableObservation: true,
+			ObservedRows:      []string{"one"},
+			Stats: DurationStats{
+				Median: 2 * time.Millisecond,
+				P95:    3 * time.Millisecond,
+			},
+		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, records))
 	require.NoError(t, createBackendDeltaReport(artifact, output))
@@ -36,8 +60,24 @@ func TestBackendDeltaReportComparesPersistedObservations(t *testing.T) {
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
 	records := []CaseResult{
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK, RowCount: 1, StableObservation: true, ObservedRows: []string{"postgres"}},
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModeNeo4j, Status: StatusOK, RowCount: 1, StableObservation: true, ObservedRows: []string{"neo4j"}},
+		{
+			Dataset:           "fixture",
+			Name:              "case",
+			ExecutionMode:     ModePostgresSQL,
+			Status:            StatusOK,
+			RowCount:          1,
+			StableObservation: true,
+			ObservedRows:      []string{"postgres"},
+		},
+		{
+			Dataset:           "fixture",
+			Name:              "case",
+			ExecutionMode:     ModeNeo4j,
+			Status:            StatusOK,
+			RowCount:          1,
+			StableObservation: true,
+			ObservedRows:      []string{"neo4j"},
+		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, records))
 	require.NoError(t, createBackendDeltaReport(artifact, output))

@@ -175,16 +175,47 @@ func TestDirectWriteCreateRelationshipConflictMerge(t *testing.T) {
 
 	require.NoError(t, db.BatchOperation(ctx, func(batch graph.Batch) error {
 		updates := []struct {
-			start, end graph.ID
+			start      graph.ID
+			end        graph.ID
 			kind       graph.Kind
 			properties *graph.Properties
 		}{
-			{a.ID, b.ID, directWriteCreateRelationshipKind, directWriteProperties("firstseen", "2026-01-01T00:00:00Z", "custom", "first", "preserved", "yes")},
-			{a.ID, b.ID, directWriteCreateRelationshipKind, directWriteProperties("lastseen", "2026-01-02T00:00:00Z", "custom", "within")},
-			{a.ID, b.ID, directWriteCreateRelationshipKind, directWriteProperties("custom", "last", "nullable", nil)},
-			{b.ID, a.ID, directWriteCreateRelationshipKind, directWriteProperties("marker", "reverse")},
-			{a.ID, b.ID, directWriteCreateRelationshipOther, directWriteProperties("marker", "other-kind")},
-			{a.ID, c.ID, directWriteCreateRelationshipKind, graph.NewProperties()},
+			{
+				start:      a.ID,
+				end:        b.ID,
+				kind:       directWriteCreateRelationshipKind,
+				properties: directWriteProperties("firstseen", "2026-01-01T00:00:00Z", "custom", "first", "preserved", "yes"),
+			},
+			{
+				start:      a.ID,
+				end:        b.ID,
+				kind:       directWriteCreateRelationshipKind,
+				properties: directWriteProperties("lastseen", "2026-01-02T00:00:00Z", "custom", "within"),
+			},
+			{
+				start:      a.ID,
+				end:        b.ID,
+				kind:       directWriteCreateRelationshipKind,
+				properties: directWriteProperties("custom", "last", "nullable", nil),
+			},
+			{
+				start:      b.ID,
+				end:        a.ID,
+				kind:       directWriteCreateRelationshipKind,
+				properties: directWriteProperties("marker", "reverse"),
+			},
+			{
+				start:      a.ID,
+				end:        b.ID,
+				kind:       directWriteCreateRelationshipOther,
+				properties: directWriteProperties("marker", "other-kind"),
+			},
+			{
+				start:      a.ID,
+				end:        c.ID,
+				kind:       directWriteCreateRelationshipKind,
+				properties: graph.NewProperties(),
+			},
 		}
 		for _, update := range updates {
 			if err := batch.CreateRelationshipByIDs(update.start, update.end, update.kind, update.properties); err != nil {
@@ -856,12 +887,15 @@ func directWriteFetchRelationshipIDs(t *testing.T, ctx context.Context, db graph
 
 func directWriteRelationshipIDs(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider) ([]graph.ID, error) {
 	var ids []graph.ID
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
 		ids, err = ops.FetchRelationshipIDs(tx.Relationships().Filterf(criteria))
 		return err
-	})
-	return ids, err
+	}); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
 }
 
 func directWriteFetchRelationship(t *testing.T, ctx context.Context, db graph.Database, startID, endID graph.ID, kind graph.Kind) *graph.Relationship {
@@ -890,14 +924,17 @@ func directWriteFetchNodeByObjectID(t *testing.T, ctx context.Context, db graph.
 
 func directWriteFindNodeByObjectID(ctx context.Context, db graph.Database, objectID string) (*graph.Node, error) {
 	var node *graph.Node
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
 		node, err = tx.Nodes().Filterf(func() graph.Criteria {
 			return query.Equals(query.NodeProperty(directWriteObjectID), objectID)
 		}).First()
 		return err
-	})
-	return node, err
+	}); err != nil {
+		return nil, err
+	}
+
+	return node, nil
 }
 
 func directWriteFetchNodeByID(t *testing.T, ctx context.Context, db graph.Database, id graph.ID) *graph.Node {
@@ -923,32 +960,35 @@ func directWriteEnsureRelationship(ctx context.Context, db graph.Database, start
 		id      graph.ID
 		created bool
 	)
-	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		relationship, err := tx.Relationships().Filterf(func() graph.Criteria {
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		if relationship, err := tx.Relationships().Filterf(func() graph.Criteria {
 			return query.And(
 				query.Equals(query.StartID(), startID),
 				query.Equals(query.EndID(), endID),
 				query.Kind(query.Relationship(), kind),
 			)
-		}).First()
-		if err != nil && !graph.IsErrNotFound(err) {
-			return err
-		}
-		if graph.IsErrNotFound(err) {
-			createdRelationship, err := tx.CreateRelationshipByIDs(startID, endID, kind, properties)
-			if err != nil {
+		}).First(); err != nil {
+			if !graph.IsErrNotFound(err) {
 				return err
 			}
-			id = createdRelationship.ID
-			created = true
-			return nil
-		}
 
-		relationship.Properties.Merge(properties)
-		id = relationship.ID
-		return tx.UpdateRelationship(relationship)
-	})
-	return id, created, err
+			if createdRelationship, err := tx.CreateRelationshipByIDs(startID, endID, kind, properties); err != nil {
+				return err
+			} else {
+				id = createdRelationship.ID
+				created = true
+				return nil
+			}
+		} else {
+			relationship.Properties.Merge(properties)
+			id = relationship.ID
+			return tx.UpdateRelationship(relationship)
+		}
+	}); err != nil {
+		return 0, false, err
+	}
+
+	return id, created, nil
 }
 
 func directWriteGetOrCreateGroup(ctx context.Context, db graph.Database, properties *graph.Properties) (*graph.Node, bool, error) {
@@ -961,27 +1001,35 @@ func directWriteGetOrCreateGroup(ctx context.Context, db graph.Database, propert
 		result  *graph.Node
 		created bool
 	)
-	err = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		existing, err := tx.Nodes().Filterf(func() graph.Criteria {
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		if existing, err := tx.Nodes().Filterf(func() graph.Criteria {
 			return query.Equals(query.NodeProperty(directWriteObjectID), objectID)
-		}).First()
-		if err != nil && !graph.IsErrNotFound(err) {
-			return err
-		}
-		if graph.IsErrNotFound(err) {
-			result, err = tx.CreateNode(properties.Clone(), directWriteEntityKind, directWriteGroupKind)
-			created = err == nil
-			return err
-		}
+		}).First(); err != nil {
+			if !graph.IsErrNotFound(err) {
+				return err
+			}
 
-		result = existing
-		if !result.Kinds.ContainsOneOf(directWriteGroupKind) {
-			result.AddKinds(directWriteGroupKind)
-			return tx.UpdateNode(result)
+			if createdNode, err := tx.CreateNode(properties.Clone(), directWriteEntityKind, directWriteGroupKind); err != nil {
+				return err
+			} else {
+				result = createdNode
+				created = true
+				return nil
+			}
+		} else {
+			result = existing
+			if !result.Kinds.ContainsOneOf(directWriteGroupKind) {
+				result.AddKinds(directWriteGroupKind)
+				return tx.UpdateNode(result)
+			}
+
+			return nil
 		}
-		return nil
-	})
-	return result, created, err
+	}); err != nil {
+		return nil, false, err
+	}
+
+	return result, created, nil
 }
 
 func directWriteClearBenchmarkGraph(b *testing.B, session *Session) {
@@ -995,9 +1043,10 @@ func directWriteClearBenchmarkGraph(b *testing.B, session *Session) {
 
 func directWriteCount(ctx context.Context, db graph.Database, cypher string) (int64, error) {
 	var count int64
-	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Query(cypher, nil)
 		defer result.Close()
+
 		if !result.Next() {
 			return result.Error()
 		}
@@ -1005,6 +1054,9 @@ func directWriteCount(ctx context.Context, db graph.Database, cypher string) (in
 			return err
 		}
 		return result.Error()
-	})
-	return count, err
+	}); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

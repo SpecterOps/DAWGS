@@ -29,17 +29,19 @@ func TestRegressionCoverageManifestClosesEveryActiveID(t *testing.T) {
 	raw, err := os.ReadFile("regression_coverage_manifest.md")
 	require.NoError(t, err)
 
-	rows := parseRegressionManifestRows(string(raw))
-	activeFamilies := map[string]int{
-		"LOGIC":  5,
-		"REC":    8,
-		"TRUST":  3,
-		"PRUNE":  6,
-		"HOP":    10,
-		"SCAN":   8,
-		"LOOKUP": 16,
-		"WRITE":  8,
-	}
+	var (
+		rows           = parseRegressionManifestRows(string(raw))
+		activeFamilies = map[string]int{
+			"LOGIC":  5,
+			"REC":    8,
+			"TRUST":  3,
+			"PRUNE":  6,
+			"HOP":    10,
+			"SCAN":   8,
+			"LOOKUP": 16,
+			"WRITE":  8,
+		}
+	)
 
 	for family, count := range activeFamilies {
 		for idx := 1; idx <= count; idx++ {

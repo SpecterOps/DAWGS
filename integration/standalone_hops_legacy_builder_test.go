@@ -44,7 +44,10 @@ func TestLegacyBuilderStandaloneHops(t *testing.T) {
 	}
 	db, ctx := SetupDBWithKindsNoGraphCleanup(t, nodeKinds, edgeKinds)
 	ClearGraph(t, db, ctx)
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 
 	t.Run("HOP-01 outbound full direction", func(t *testing.T) {
 		WithLegacyRelationshipQuery(t, session, anchorFixture, func(idMap opengraph.IDMap) graph.Criteria {
@@ -121,8 +124,16 @@ func TestLegacyBuilderStandaloneHops(t *testing.T) {
 			allowedRoot string
 			expected    []string
 		}{
-			{name: "matching", allowedRoot: "root", expected: []string{"id-a", "id-b"}},
-			{name: "contradictory", allowedRoot: "other-root", expected: nil},
+			{
+				name:        "matching",
+				allowedRoot: "root",
+				expected:    []string{"id-a", "id-b"},
+			},
+			{
+				name:        "contradictory",
+				allowedRoot: "other-root",
+				expected:    nil,
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				WithLegacyRelationshipQuery(t, session, idFixture, func(idMap opengraph.IDMap) graph.Criteria {

@@ -488,12 +488,15 @@ func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *openg
 	}
 
 	var idMap opengraph.IDMap
-	err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
 		idMap, err = opengraph.WriteGraphTx(tx, fixture)
 		return err
-	})
-	return idMap, err
+	}); err != nil {
+		return nil, err
+	}
+
+	return idMap, nil
 }
 
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {

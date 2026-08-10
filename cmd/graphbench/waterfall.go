@@ -72,9 +72,14 @@ func measureCompileWaterfall(
 		runtime.ReadMemStats(&after)
 
 		waterfall.Samples = append(waterfall.Samples, CompileSample{
-			Iteration: iteration, Parse: parseDuration, Optimize: optimizeDuration,
-			TranslateIncludingOptimize: translateDuration, Render: renderDuration, Total: totalDuration,
-			Allocations: after.Mallocs - before.Mallocs, AllocatedBytes: after.TotalAlloc - before.TotalAlloc,
+			Iteration:                  iteration,
+			Parse:                      parseDuration,
+			Optimize:                   optimizeDuration,
+			TranslateIncludingOptimize: translateDuration,
+			Render:                     renderDuration,
+			Total:                      totalDuration,
+			Allocations:                after.Mallocs - before.Mallocs,
+			AllocatedBytes:             after.TotalAlloc - before.TotalAlloc,
 		})
 	}
 	return waterfall, nil
@@ -93,8 +98,9 @@ func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery st
 		if err != nil {
 			return BoundarySample{}, err
 		}
-		poolWait := time.Since(acquireStart)
 		defer connection.Release()
+
+		poolWait := time.Since(acquireStart)
 		transactionStart := time.Now()
 		// DAWGS read queries may invoke the incumbent shortest-path workspace,
 		// whose SQL performs session-local DDL/DML. Use a rollback-only
@@ -104,8 +110,9 @@ func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery st
 		if err != nil {
 			return BoundarySample{}, err
 		}
-		transactionDuration := time.Since(transactionStart)
 		defer func() { _ = tx.Rollback(ctx) }()
+
+		transactionDuration := time.Since(transactionStart)
 		bindStart := time.Now()
 		queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}}
 		if len(params) > 0 {
@@ -146,9 +153,15 @@ func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery st
 		drainDuration := time.Since(drainStart)
 		runtime.ReadMemStats(&after)
 		sample := BoundarySample{
-			Iteration: iteration, PoolWait: poolWait, Transaction: transactionDuration, BindPrepare: bindDuration,
-			FirstRow: firstRowDuration, AllRowsDecode: allRowsDuration, DrainClose: drainDuration,
-			Total: time.Since(totalStart), Rows: rowCount,
+			Iteration:     iteration,
+			PoolWait:      poolWait,
+			Transaction:   transactionDuration,
+			BindPrepare:   bindDuration,
+			FirstRow:      firstRowDuration,
+			AllRowsDecode: allRowsDuration,
+			DrainClose:    drainDuration,
+			Total:         time.Since(totalStart),
+			Rows:          rowCount,
 		}
 		if retain {
 			sample.Allocations = after.Mallocs - before.Mallocs
@@ -162,9 +175,10 @@ func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery st
 		}
 	}
 	result := PostgresBoundaryWaterfall{
-		Boundary:       "identical translated SQL through raw pgx pool/transaction/decode/drain",
-		SQLFingerprint: sqlFingerprint(sqlQuery), WarmupIterations: warmupIterations,
-		Samples: make([]BoundarySample, 0, iterations),
+		Boundary:         "identical translated SQL through raw pgx pool/transaction/decode/drain",
+		SQLFingerprint:   sqlFingerprint(sqlQuery),
+		WarmupIterations: warmupIterations,
+		Samples:          make([]BoundarySample, 0, iterations),
 	}
 	var expectedRows int64 = -1
 	for iteration := 1; iteration <= iterations; iteration++ {

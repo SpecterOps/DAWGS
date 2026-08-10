@@ -222,10 +222,18 @@ func TestFixedSuffixSearchStrategyIsPlannedButConservativelySkipped(t *testing.T
 	require.Len(t, translation.Optimization.LoweringPlan.ExpansionSearchStrategy, 1)
 	require.True(t, translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, "fixed_suffix_expansion", outcome.Family)
 	require.Equal(t, []string{"EXPANSION-STEPWISE-FORWARD", "EXPANSION-LATE-HYDRATED-FORWARD", "EXPANSION-FACTORED-SUFFIX-FORWARD", "EXPANSION-SUFFIX-SEEDED-REVERSE", "EXPANSION-BACKWARD-VIABILITY-FORWARD"}, outcome.PlannedCandidates)
-	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "qualified_fixed_suffix_topology", Eligible: true})
+	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{
+		Name:     "qualified_fixed_suffix_topology",
+		Eligible: true,
+	})
 	require.Equal(t, string(optimize.ExpansionSearchObservationFullPath), outcome.ObservationMode)
 	require.NotNil(t, outcome.Eligible)
 	require.True(t, *outcome.Eligible)
@@ -273,7 +281,12 @@ func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	require.NotContains(t, formatted, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), outcome.Selected)
 	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), outcome.Applied)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
@@ -369,10 +382,18 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringShortestPathExecutor)
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringShortestPathExecutor)
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, "SP", outcome.Family)
 	require.Equal(t, []string{"SP-S0", "SP-S0-DIRECT", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0", "SP-S4-C-D", "SP-S4-C-WE+MAT-M0"}, outcome.PlannedCandidates)
-	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "one_static_id_equality_per_endpoint", Eligible: true})
+	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{
+		Name:     "one_static_id_equality_per_endpoint",
+		Eligible: true,
+	})
 	require.Equal(t, string(optimize.ShortestPathObservationDistance), outcome.ObservationMode)
 	require.NotNil(t, outcome.Eligible)
 	require.True(t, *outcome.Eligible)
@@ -400,7 +421,12 @@ func TestShortestExecutorV4SelectsDeepInboundCompactDistance(t *testing.T) {
 	require.Contains(t, formatted, "shortest_path_compact")
 	require.NotContains(t, formatted, "sp_harness")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, "inbound", outcome.Direction)
 	require.Equal(t, "end_id", outcome.PhysicalExpansion)
 	require.Equal(t, 1, outcome.RelationshipKindCount)
@@ -421,8 +447,14 @@ func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *test
 		selected    optimize.ShortestPathExecutor
 		reason      string
 	}{
-		{observation: "p", selected: optimize.ShortestPathExecutorS4CanonicalWitness},
-		{observation: "length(p)", selected: optimize.ShortestPathExecutorS3Unidirectional},
+		{
+			observation: "p",
+			selected:    optimize.ShortestPathExecutorS4CanonicalWitness,
+		},
+		{
+			observation: "length(p)",
+			selected:    optimize.ShortestPathExecutorS3Unidirectional,
+		},
 	} {
 		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`
 			MATCH p = shortestPath((s)-[:MemberOf|SuffixEdgeOne*1..8]->(e))
@@ -435,7 +467,12 @@ func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *test
 		}, DefaultGraphID)
 		require.NoError(t, err)
 		outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
-			optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+			optimize.TraversalStepTarget{
+				QueryPartIndex: 0,
+				ClauseIndex:    0,
+				PatternIndex:   0,
+				StepIndex:      0,
+			})
 		require.Equal(t, 2, outcome.RelationshipKindCount)
 		require.Equal(t, string(test.selected), outcome.Selected)
 		require.Equal(t, test.reason, outcome.SkipReason)
@@ -457,7 +494,12 @@ func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *test
 	require.Contains(t, formatted, "array []::int2[]")
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, "ASP", outcome.Family)
 	require.Equal(t, []string{"SP-S0", "ASP-A1-DAG"}, outcome.PlannedCandidates)
 	require.Equal(t, string(optimize.ShortestPathObservationAllPaths), outcome.ObservationMode)
@@ -482,7 +524,12 @@ func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
 	incumbentSQL, err := Translated(incumbent)
 	require.NoError(t, err)
 	productionOutcome := requireTraversalTargetOutcome(t, incumbent.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), productionOutcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), productionOutcome.Applied)
 	require.Equal(t, "static", productionOutcome.SelectionMode)
@@ -510,7 +557,12 @@ func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
 	require.NotContains(t, forcedSQL, "join node")
 
 	outcome := requireTraversalTargetOutcome(t, forced.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
@@ -528,14 +580,21 @@ func TestForcedShortestIncumbentEmitsExactWorkspaceHarness(t *testing.T) {
 	require.NoError(t, err)
 	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
-	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorIncumbentWorkspace})
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor: optimize.ShortestPathExecutorIncumbentWorkspace,
+	})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted, "sp_harness")
 	require.NotContains(t, formatted, "s1(next_id, depth)")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Applied)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
@@ -550,7 +609,9 @@ func TestForcedShortestDirectPreflightGatesWorkspaceFallback(t *testing.T) {
 	require.NoError(t, err)
 	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
-	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct,
+	})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
@@ -562,7 +623,12 @@ func TestForcedShortestDirectPreflightGatesWorkspaceFallback(t *testing.T) {
 	require.Contains(t, formatted, "select * from direct_shortest union all select * from workspace_shortest")
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorS0Direct), outcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS0Direct), outcome.Applied)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
@@ -578,7 +644,9 @@ func TestForcedShortestDirectPreflightRejectsZeroMinimumDepth(t *testing.T) {
 
 	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
-	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct,
+	})
 	require.ErrorContains(t, err, "no structurally eligible depth-one target")
 }
 
@@ -593,7 +661,9 @@ func TestForcedShortestDirectPreflightRejectsMutation(t *testing.T) {
 
 	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
-	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct,
+	})
 	require.ErrorContains(t, err, "no structurally eligible depth-one target")
 }
 
@@ -608,7 +678,9 @@ func TestForcedShortestDirectPreflightPreservesPathThroughWithAlias(t *testing.T
 
 	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
-	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct})
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor: optimize.ShortestPathExecutorS0Direct,
+	})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
@@ -646,7 +718,12 @@ func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *
 	incumbentSQL, err := Translated(incumbent)
 	require.NoError(t, err)
 	productionOutcome := requireTraversalTargetOutcome(t, incumbent.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Applied)
 	require.Equal(t, "static", productionOutcome.SelectionMode)
@@ -672,7 +749,12 @@ func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *
 	require.NotContains(t, forcedSQL, "ordered_edge_ids_to_path")
 
 	outcome := requireTraversalTargetOutcome(t, forced.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Selected)
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Applied)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
@@ -733,7 +815,12 @@ func TestForcedShortestPathEdgeM0ExecutorPreservesPathThroughWithAlias(t *testin
 	require.NotContains(t, forcedSQL, "ordered_edge_ids_to_path")
 
 	outcome := requireTraversalTargetOutcome(t, forced.Optimization, optimize.LoweringShortestPathExecutor,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Applied)
 }
 
