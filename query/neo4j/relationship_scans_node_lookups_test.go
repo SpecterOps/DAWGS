@@ -80,7 +80,7 @@ func TestQueryBuilder_RelationshipScans(t *testing.T) {
 		"match (s)-[r:OwnsRaw]->() where s:Entity return r",
 	))
 
-	nineKinds := scanLookupKinds("ADCSEdge01", "ADCSEdge02", "ADCSEdge03", "ADCSEdge04", "ADCSEdge05", "ADCSEdge06", "ADCSEdge07", "ADCSEdge08", "ADCSEdge09")
+	nineKinds := scanLookupKinds("ScanEdge01", "ScanEdge02", "ScanEdge03", "ScanEdge04", "ScanEdge05", "ScanEdge06", "ScanEdge07", "ScanEdge08", "ScanEdge09")
 	t.Run("SCAN-05 consolidated nine-kind inbound scan", assertQueryResult(
 		query.SinglePartQuery(
 			query.Where(query.And(
@@ -90,7 +90,7 @@ func TestQueryBuilder_RelationshipScans(t *testing.T) {
 			)),
 			query.Returning(query.Relationship(), query.Start()),
 		),
-		"match (s)-[r:ADCSEdge01|ADCSEdge02|ADCSEdge03|ADCSEdge04|ADCSEdge05|ADCSEdge06|ADCSEdge07|ADCSEdge08|ADCSEdge09]->(e) where s:Entity and id(e) = $p0 return r, s",
+		"match (s)-[r:ScanEdge01|ScanEdge02|ScanEdge03|ScanEdge04|ScanEdge05|ScanEdge06|ScanEdge07|ScanEdge08|ScanEdge09]->(e) where s:Entity and id(e) = $p0 return r, s",
 		map[string]any{"p0": graph.ID(202)},
 	))
 

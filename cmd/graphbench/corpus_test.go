@@ -60,11 +60,11 @@ func TestValidateScaleCaseRequiresConsistentUnsupportedModes(t *testing.T) {
 func TestScaleCorpusDatasets(t *testing.T) {
 	corpus := ScaleCorpus{Cases: []ScaleCase{
 		{Name: "a", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
-		{Name: "b", Dataset: "adcs_fanout", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
+		{Name: "b", Dataset: "fixed_suffix_expansion_fanout", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
 		{Name: "c", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
 	}}
 
-	require.Equal(t, []string{"adcs_fanout", "base"}, scaleCorpusDatasets(corpus))
+	require.Equal(t, []string{"base", "fixed_suffix_expansion_fanout"}, scaleCorpusDatasets(corpus))
 }
 
 func TestGeneratedReconciliationDatasetRegistersThirtyKinds(t *testing.T) {
@@ -113,7 +113,7 @@ func TestGeneratedScanLookupDatasetRegistersWideAndLargeShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("ScanPostProcessed"))
 	require.Contains(t, edgeKinds, graph.StringKind("Contains"))
 	for idx := 1; idx <= 9; idx++ {
-		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("ADCSEdge%02d", idx)))
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("ScanEdge%02d", idx)))
 	}
 }
 
@@ -128,15 +128,15 @@ func TestGeneratedShortestPathDatasetRegistersMatrixShapes(t *testing.T) {
 	require.NotEmpty(t, doc.Graph.Nodes)
 }
 
-func TestGeneratedADCSDatasetRegistersSuffixAndDecoyShapes(t *testing.T) {
-	doc, err := parseDataset("unused", testutil.ADCSScaleDataset)
+func TestGeneratedFixedSuffixExpansionDatasetRegistersSuffixAndDecoyShapes(t *testing.T) {
+	doc, err := parseDataset("unused", testutil.FixedSuffixExpansionScaleDataset)
 	require.NoError(t, err)
 	nodeKinds, edgeKinds := doc.Graph.Kinds()
 
-	for _, kind := range []string{"Group", "EnterpriseCA", "NTAuthStore", "Domain"} {
+	for _, kind := range []string{"ExpansionRoot", "ExpansionNode", "SuffixHead", "SuffixMiddle", "SuffixTerminal"} {
 		require.Contains(t, nodeKinds, graph.StringKind(kind))
 	}
-	for _, kind := range []string{"MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor", "WrongEnrollKind"} {
+	for _, kind := range []string{"Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix", "WrongEnterSuffix"} {
 		require.Contains(t, edgeKinds, graph.StringKind(kind))
 	}
 }

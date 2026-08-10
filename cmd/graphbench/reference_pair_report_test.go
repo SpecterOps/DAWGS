@@ -95,8 +95,8 @@ func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T)
 			Dataset: "fixture", Name: "ordered", ExecutionMode: ModePostgresSQL, Status: StatusOK,
 			RowCount: 1, ObservedRows: []string{"[public]"}, Environment: &RunEnvironment{Round: round, WarmupIterations: 5},
 			PostgresReferences: []PostgresReferenceResult{
-				{Name: "a0", Architecture: "ADCS-A0", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[[1,2],3,[4]]"}, MeasurementOrder: 2, Stats: DurationStats{WarmupIterations: 5}},
-				{Name: "a3", Architecture: "ADCS-A3", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[[1,2],3,[4]]"}, MeasurementOrder: 3, Stats: DurationStats{WarmupIterations: 5}},
+				{Name: "search_ordered_ids", Architecture: "EXPANSION-STEPWISE-FORWARD", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[[1,2],3,[4]]"}, MeasurementOrder: 2, Stats: DurationStats{WarmupIterations: 5}},
+				{Name: "suffix_seeded_reverse_ordered_ids", Architecture: "EXPANSION-SUFFIX-SEEDED-REVERSE", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[[1,2],3,[4]]"}, MeasurementOrder: 3, Stats: DurationStats{WarmupIterations: 5}},
 			},
 		}
 		for iteration := 1; iteration <= 10; iteration++ {
@@ -107,7 +107,7 @@ func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T)
 	}
 
 	report, err := buildReferencePairReport(records, ReferencePairOptions{
-		Seed: 1, Confidence: 0.975, BootstrapCount: 100, BaselineName: "a0", CandidateName: "a3", Protocol: referencePairProtocolDiscovery,
+		Seed: 1, Confidence: 0.975, BootstrapCount: 100, BaselineName: "search_ordered_ids", CandidateName: "suffix_seeded_reverse_ordered_ids", Protocol: referencePairProtocolDiscovery,
 	})
 	require.NoError(t, err)
 	require.Equal(t, referencePairProtocolDiscovery, report.Protocol)
@@ -123,13 +123,13 @@ func TestBuildReferencePairReportRejectsMismatchedOrderedIDObservations(t *testi
 		Dataset: "fixture", Name: "ordered", ExecutionMode: ModePostgresSQL, Status: StatusOK,
 		Environment: &RunEnvironment{Round: 1, WarmupIterations: 5},
 		PostgresReferences: []PostgresReferenceResult{
-			{Name: "a0", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[a]"}, MeasurementOrder: 2, Stats: DurationStats{WarmupIterations: 5}},
-			{Name: "a3", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[b]"}, MeasurementOrder: 3, Stats: DurationStats{WarmupIterations: 5}},
+			{Name: "search_ordered_ids", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[a]"}, MeasurementOrder: 2, Stats: DurationStats{WarmupIterations: 5}},
+			{Name: "suffix_seeded_reverse_ordered_ids", ObservationShape: "ordered_ids", SemanticValidation: "exact_ordered_ids", RowCount: 1, ObservedRows: []string{"[b]"}, MeasurementOrder: 3, Stats: DurationStats{WarmupIterations: 5}},
 		},
 	}
 
 	_, err := buildReferencePairReport([]CaseResult{record}, ReferencePairOptions{
-		Seed: 1, Confidence: 0.975, BaselineName: "a0", CandidateName: "a3", Protocol: referencePairProtocolDiscovery,
+		Seed: 1, Confidence: 0.975, BaselineName: "search_ordered_ids", CandidateName: "suffix_seeded_reverse_ordered_ids", Protocol: referencePairProtocolDiscovery,
 	})
 	require.ErrorContains(t, err, "ordered-ID reference-pair observations differ")
 }

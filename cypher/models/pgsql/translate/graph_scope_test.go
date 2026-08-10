@@ -44,8 +44,8 @@ func TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL(t *testing.T) {
 	}
 }
 
-func TestADCSTargetGraphUsesOnlyConcreteRelations(t *testing.T) {
-	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), optimizerADCSQuery)
+func TestFixedSuffixTargetGraphUsesOnlyConcreteRelations(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), optimizerFixedSuffixQuery)
 	require.NoError(t, err)
 
 	translation, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), nil, 42)

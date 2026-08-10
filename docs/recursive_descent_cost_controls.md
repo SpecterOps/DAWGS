@@ -26,8 +26,11 @@ shapes retain the incumbent exact executor.
 one-path wildcard or multi-kind work that S3 deliberately excludes. The compact function checks its state ceiling before
 emitting any row; overflow invokes the exact relationship-trail fallback inside the same SQL statement and snapshot.
 
-ADCS-A3 remains tool-only. Existing evidence showed a topology crossover that query shape alone does not safely bound,
-so this work does not activate it in production.
+`EXPANSION-SUFFIX-SEEDED-REVERSE` remains tool-only. Existing evidence showed a
+fixed-suffix expansion topology crossover that query shape alone does not safely
+bound, so this work does not activate the strategy in production. The rejected
+bounded-fallback and continuation experiments are retained only as historical
+decision records under `docs/experiments`.
 
 ## Qualification contract
 

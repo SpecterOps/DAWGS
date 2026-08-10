@@ -115,8 +115,8 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 			Date:       "2026-05-14",
 			Iterations: 3,
 			Results: []Result{{
-				Section:           "ADCS Fanout",
-				Dataset:           "adcs_fanout",
+				Section:           "Fixed Suffix Expansion Fanout",
+				Dataset:           "fixed_suffix_expansion_fanout",
 				Label:             "combined",
 				RowCount:          2,
 				DistinctRowCount:  &distinctRows,
@@ -138,7 +138,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 	for _, expected := range []string{
 		"Distinct Rows",
 		"Duplicate Rows",
-		"| ADCS Fanout / combined | adcs_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
+		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
 	} {
 		require.Contains(t, text, expected)
 	}

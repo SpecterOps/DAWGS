@@ -13,15 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const optimizerADCSQuery = `
-MATCH (n:Group)
-WHERE n.objectid = 'S-1-5-21-2643190041-1319121918-239771340-513'
-MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
-WHERE ct.authenticationenabled = true
-AND ct.requiresmanagerapproval = false
-AND ct.enrolleesuppliessubject = true
-AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+const optimizerFixedSuffixQuery = `
+MATCH (root:ExpansionRoot)
+WHERE root.root_key = 'root'
+MATCH p1 = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+MATCH p2 = (root)-[:Expand*0..16]->()-[:OptionA|OptionB|OptionC]->(predicate:PredicateNode)-[:JoinSuffix]->(head)-[:HeadToBridge|HeadToAlternateBridge*1..16]->(:BridgeNode)-[:ReachTerminal]->(terminal)
+WHERE predicate.eligible = true
+AND predicate.requires_review = false
+AND predicate.allows_direct = true
+AND (predicate.version = 1 OR predicate.required_approvals = 0)
 RETURN p1, p2
 `
 
@@ -32,23 +32,41 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 		"AllExtendedRights",
 		"CertTemplate",
 		"Domain",
-		"Enroll",
-		"EnterpriseCA",
-		"EnterpriseCAFor",
+		"SuffixEdgeOne",
+		"SuffixNodeOne",
+		"SuffixNodeOneFor",
 		"GenericAll",
 		"Group",
 		"IssuedSignedBy",
 		"MemberOf",
-		"NTAuthStore",
-		"NTAuthStoreFor",
+		"SuffixNodeTwo",
+		"SuffixEdgeThree",
 		"PublishedTo",
 		"RootCA",
 		"RootCAFor",
-		"TrustedForNTAuth",
+		"SuffixEdgeTwo",
 		"AdminTo",
 		"Computer",
 		"Tag_Tier_Zero",
 		"User",
+		"ExpansionRoot",
+		"ExpansionNode",
+		"Expand",
+		"SuffixHead",
+		"EnterSuffix",
+		"SuffixMiddle",
+		"ContinueSuffix",
+		"SuffixTerminal",
+		"CompleteSuffix",
+		"OptionA",
+		"OptionB",
+		"OptionC",
+		"PredicateNode",
+		"JoinSuffix",
+		"HeadToBridge",
+		"HeadToAlternateBridge",
+		"BridgeNode",
+		"ReachTerminal",
 	}) {
 		mapper.Put(kind)
 	}
@@ -190,12 +208,12 @@ func TestOptimizerSafetyReportsPartiallySkippedLowerings(t *testing.T) {
 	requireSkippedOptimizationLoweringCount(t, translator.translation.Optimization, optimize.LoweringPredicatePlacement, 1)
 }
 
-func TestADCSSearchStrategyIsPlannedButConservativelySkipped(t *testing.T) {
+func TestFixedSuffixSearchStrategyIsPlannedButConservativelySkipped(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
-		MATCH (n:Group)
-		WHERE n.objectid = $objectid
-		MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		RETURN p
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = $root_key
+		MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN path
 	`)
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
@@ -205,25 +223,25 @@ func TestADCSSearchStrategyIsPlannedButConservativelySkipped(t *testing.T) {
 	require.True(t, translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
-	require.Equal(t, "ADCS", outcome.Family)
-	require.Equal(t, []string{"ADCS-INCUMBENT-STEPWISE", "ADCS-A0", "ADCS-A2", "ADCS-A3", "ADCS-A4"}, outcome.PlannedCandidates)
-	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "qualified_adcs_topology", Eligible: true})
+	require.Equal(t, "fixed_suffix_expansion", outcome.Family)
+	require.Equal(t, []string{"EXPANSION-STEPWISE-FORWARD", "EXPANSION-LATE-HYDRATED-FORWARD", "EXPANSION-FACTORED-SUFFIX-FORWARD", "EXPANSION-SUFFIX-SEEDED-REVERSE", "EXPANSION-BACKWARD-VIABILITY-FORWARD"}, outcome.PlannedCandidates)
+	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{Name: "qualified_fixed_suffix_topology", Eligible: true})
 	require.Equal(t, string(optimize.ExpansionSearchObservationFullPath), outcome.ObservationMode)
 	require.NotNil(t, outcome.Eligible)
 	require.True(t, *outcome.Eligible)
 	require.Equal(t, "incumbent_default", outcome.SelectionMode)
-	require.Equal(t, "adcs-static-v1", outcome.SelectorVersion)
+	require.Equal(t, "fixed-suffix-static-v1", outcome.SelectorVersion)
 	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), outcome.Selected)
 	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), outcome.Fallback)
 	require.Equal(t, optimize.ExpansionSearchFallbackTournamentUnqualified, outcome.SkipReason)
 }
 
-func TestForcedADCSSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
+func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n:Group)
-		WHERE n.objectid = $objectid
-		MATCH p = (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		RETURN p
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = $root_key
+		MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN path
 	`)
 	require.NoError(t, err)
 
@@ -236,22 +254,22 @@ func TestForcedADCSSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T)
 	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
 	require.Equal(t, optimize.ExpansionSearchSuffixSeededReverse, decision.SelectedStrategy)
 	require.Equal(t, "forced_tool", decision.SelectionMode)
-	require.Equal(t, "adcs-tool-v1", decision.SelectorVersion)
+	require.Equal(t, "suffix-seeded-reverse-tool-v1", decision.SelectorVersion)
 	require.Empty(t, decision.FallbackReason)
 
 	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
-		"objectid": "forced-adcs-root",
+		"root_key": "forced-fixed-suffix-root",
 	}, DefaultGraphID, ToolOptions{ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted, "with recursive")
-	require.Contains(t, formatted, "_a3_suffix as materialized")
-	require.Contains(t, formatted, "_a3_reverse(boundary_id, next_id, depth, path)")
+	require.Contains(t, formatted, "_suffix_seeded_suffix as materialized")
+	require.Contains(t, formatted, "_suffix_seeded_reverse(boundary_id, next_id, depth, path)")
 	require.Contains(t, formatted, "array_prepend(e0.id")
-	require.Contains(t, formatted, "e0.id != all (s5_a3_reverse.path)")
-	require.Contains(t, formatted, "e0.end_id = s5_a3_reverse.next_id")
-	require.Contains(t, formatted, "s5_a3_reverse.path && array [s5_a3_suffix.e1, s5_a3_suffix.e2, s5_a3_suffix.e3]::int8[]")
+	require.Contains(t, formatted, "e0.id != all (s5_suffix_seeded_reverse.path)")
+	require.Contains(t, formatted, "e0.end_id = s5_suffix_seeded_reverse.next_id")
+	require.Contains(t, formatted, "s5_suffix_seeded_reverse.path && array [s5_suffix_seeded_suffix.e1, s5_suffix_seeded_suffix.e2, s5_suffix_seeded_suffix.e3]::int8[]")
 	require.NotContains(t, formatted, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
@@ -264,18 +282,18 @@ func TestForcedADCSSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T)
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
 }
 
-func TestForcedADCSSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
+func TestForcedSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n:Group)
-		WHERE n.objectid = $objectid
-		MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		RETURN id(ca), id(d)
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = $root_key
+		MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN id(head), id(terminal)
 	`)
 	require.NoError(t, err)
 
-	translateForced := func(objectID string) string {
+	translateForced := func(rootKey string) string {
 		translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
-			"objectid": objectID,
+			"root_key": rootKey,
 		}, DefaultGraphID, ToolOptions{ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse})
 		require.NoError(t, err)
 		formatted, err := Translated(translation)
@@ -286,38 +304,38 @@ func TestForcedADCSSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T)
 	first := translateForced("root-a")
 	second := translateForced("root-b")
 	require.Equal(t, first, second)
-	require.Contains(t, first, "s5_a3_reverse.path")
-	require.Contains(t, first, "select s5.n2 as \"id(ca)\", s5.n4 as \"id(d)\"")
+	require.Contains(t, first, "s5_suffix_seeded_reverse.path")
+	require.Contains(t, first, "select s5.n2 as \"id(head)\", s5.n4 as \"id(terminal)\"")
 	require.NotContains(t, first, "ordered_edge_ids_to_path")
 	require.NotContains(t, first, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
 }
 
-func TestForcedADCSSuffixSeededReversePreservesBoundaryConstraints(t *testing.T) {
+func TestForcedSuffixSeededReversePreservesBoundaryConstraints(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n:Group)
-		WHERE n.objectid = $objectid
-		MATCH (n)-[:MemberOf*0..16]->(boundary:User {enabled: true})-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		RETURN id(ca), id(d)
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = $root_key
+		MATCH (root)-[:Expand*0..16]->(boundary:ExpansionNode {enabled: true})-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN id(head), id(terminal)
 	`)
 	require.NoError(t, err)
 
 	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
-		"objectid": "forced-adcs-root",
+		"root_key": "forced-fixed-suffix-root",
 	}, DefaultGraphID, ToolOptions{ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	require.Contains(t, formatted, "_a3_suffix as materialized")
+	require.Contains(t, formatted, "_suffix_seeded_suffix as materialized")
 	require.Contains(t, formatted, "n1.kind_ids operator (pg_catalog.@>)")
 	require.Contains(t, formatted, "n1.properties -> 'enabled'")
 	require.Contains(t, formatted, "to_jsonb((true)::bool)")
 }
 
-func TestForcedADCSSearchRejectsUnsupportedStrategy(t *testing.T) {
+func TestForcedFixedSuffixSearchRejectsUnsupportedStrategy(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		RETURN id(ca), id(d)
+		MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN id(head), id(terminal)
 	`)
 	require.NoError(t, err)
 
@@ -327,10 +345,10 @@ func TestForcedADCSSearchRejectsUnsupportedStrategy(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported forced expansion-search strategy")
 }
 
-func TestForcedADCSSearchRejectsStructurallyIneligibleTarget(t *testing.T) {
+func TestForcedFixedSuffixSearchRejectsStructurallyIneligibleTarget(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (n)-[:MemberOf*0..16]->()-[:Enroll]->(ca:EnterpriseCA)
-		RETURN id(ca)
+		MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)
+		RETURN id(head)
 	`)
 	require.NoError(t, err)
 
@@ -407,7 +425,7 @@ func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *test
 		{observation: "length(p)", selected: optimize.ShortestPathExecutorS3Unidirectional},
 	} {
 		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`
-			MATCH p = shortestPath((s)-[:MemberOf|Enroll*1..8]->(e))
+			MATCH p = shortestPath((s)-[:MemberOf|SuffixEdgeOne*1..8]->(e))
 			WHERE id(s) = $start_id AND id(e) = $end_id
 			RETURN %s
 		`, test.observation))
@@ -525,7 +543,7 @@ func TestForcedShortestIncumbentEmitsExactWorkspaceHarness(t *testing.T) {
 
 func TestForcedShortestDirectPreflightGatesWorkspaceFallback(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = shortestPath((e)<-[:MemberOf|Enroll*1..8]-(s))
+		MATCH p = shortestPath((e)<-[:MemberOf|SuffixEdgeOne*1..8]-(s))
 		WHERE id(e) = $end_id AND id(s) = $start_id
 		RETURN p
 	`)
@@ -864,7 +882,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
 func TestOptimizerSafetyCountStoreFastPathUsesSparseEdgeKindCount(t *testing.T) {
 	t.Parallel()
 
-	translation := optimizerSafetyTranslation(t, `MATCH ()-[r:Enroll]->() RETURN count(r)`)
+	translation := optimizerSafetyTranslation(t, `MATCH ()-[r:SuffixEdgeOne]->() RETURN count(r)`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
@@ -906,10 +924,10 @@ func TestOptimizerSafetyCountStoreFastPathSupportsEdgeCountStar(t *testing.T) {
 	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
-func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
+func TestOptimizerSafetyFixedSuffixQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	t.Parallel()
 
-	translation := optimizerSafetyTranslation(t, optimizerADCSQuery)
+	translation := optimizerSafetyTranslation(t, optimizerFixedSuffixQuery)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
@@ -934,7 +952,7 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "from s5, s7")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"where s7.satisfied and exists (select 1 from edge e5 join node n6",
-		"properties -> 'authenticationenabled'",
+		"properties -> 'eligible'",
 		"join edge e6 on n6.id = e6.start_id",
 		"e6.end_id = (s5.n2).id",
 		"and (s5.n0).id = s7.root_id",
@@ -1052,7 +1070,7 @@ func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
 	var (
 		normalizedQuery = optimizerSafetySQL(t, `
 		MATCH (a)
-		MATCH (b:EnterpriseCA {name: 'target'})
+		MATCH (b:SuffixNodeOne {name: 'target'})
 		MATCH p = (a)-[:MemberOf]->(b)
 		RETURN p
 		`)
@@ -1071,7 +1089,7 @@ func TestOptimizerSafetyExpansionTerminalPushdownForFixedSuffix(t *testing.T) {
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
-MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:SuffixEdgeOne]->(ca:SuffixNodeOne)
 RETURN p
 `)
 
@@ -1085,7 +1103,7 @@ func TestOptimizerSafetySuffixPredicatePlacementStaysInsideTerminalExists(t *tes
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
-MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:SuffixEdgeOne]->(ca:SuffixNodeOne)
 WHERE ca.name = 'target'
 RETURN p
 `)
@@ -1101,7 +1119,7 @@ func TestOptimizerSafetyPredicatePlacementRecordsExpansionRootConstraint(t *test
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
-MATCH p = (src:Group)-[:MemberOf*1..]->(mid)-[:Enroll]->(ca:EnterpriseCA)
+MATCH p = (src:Group)-[:MemberOf*1..]->(mid)-[:SuffixEdgeOne]->(ca:SuffixNodeOne)
 WHERE src.name = 'source'
 RETURN p
 `)
@@ -1164,7 +1182,7 @@ func TestOptimizerSafetyContinuationRelationshipsExcludePriorPathRelationships(t
 	t.Parallel()
 
 	expandedPrefixQuery := optimizerSafetySQL(t, `
-MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]-(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:SuffixEdgeOne]-(ca:SuffixNodeOne)
 RETURN p
 `)
 
@@ -1172,7 +1190,7 @@ RETURN p
 	require.Contains(t, expandedPrefixQuery, "ep0")
 
 	fixedPrefixQuery := optimizerSafetySQL(t, `
-MATCH p = (n:Group)-[:MemberOf]->(m)-[:Enroll]->(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf]->(m)-[:SuffixEdgeOne]->(ca:SuffixNodeOne)
 RETURN p
 `)
 
@@ -1183,7 +1201,7 @@ func TestOptimizerSafetyDirectionBalancedExpansionDoesNotPlanStaleSuffixPushdown
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
-MATCH p = (n)-[:MemberOf*1..]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(d:Domain)
+MATCH p = (n)-[:MemberOf*1..]->(ca:SuffixNodeOne)-[:SuffixEdgeTwo]->(d:Domain)
 RETURN p
 	`)
 
@@ -1260,7 +1278,7 @@ func TestOptimizerSafetyExactTwoHopRangePreservesLaterSourceStepTargets(t *testi
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
-MATCH (a)-[:MemberOf*2..2]->(b)-[:Enroll]->(c)
+MATCH (a)-[:MemberOf*2..2]->(b)-[:SuffixEdgeOne]->(c)
 RETURN a
 	`)
 	formattedQuery, err := Translated(translation)
@@ -1289,7 +1307,7 @@ func TestOptimizerSafetyConsecutiveExactRangesUseSourceStepTargets(t *testing.T)
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
-MATCH p = (a)-[:MemberOf*2..2]->(b)-[:Enroll*1..1]->(c)
+MATCH p = (a)-[:MemberOf*2..2]->(b)-[:SuffixEdgeOne*1..1]->(c)
 RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
@@ -1308,7 +1326,7 @@ func TestOptimizerSafetyExactRangePrefixPreservesSuffixPushdownTargets(t *testin
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
-MATCH p = (a)-[:MemberOf*2..2]->(b)-[:AdminTo*1..]->(c)-[:Enroll]->(d)
+MATCH p = (a)-[:MemberOf*2..2]->(b)-[:AdminTo*1..]->(c)-[:SuffixEdgeOne]->(d)
 RETURN p
 	`)
 
@@ -1866,7 +1884,7 @@ func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {
 	t.Parallel()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:SuffixEdgeOne]->(ca:SuffixNodeOne)
 WHERE ca.name = 'target'
 RETURN p
 `)
@@ -1896,7 +1914,7 @@ func TestOptimizerSafetyExpansionTerminalPushdownForZeroDepthExpansion(t *testin
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
-MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:SuffixEdgeOne]->(ca:SuffixNodeOne)
 RETURN p
 `)
 
@@ -1910,8 +1928,8 @@ func TestOptimizerSafetyExpansionTerminalPushdownForBoundEndpointSuffixChain(t *
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
-MATCH (ca:EnterpriseCA {name: 'target'})
-MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ct:CertTemplate)-[:PublishedTo]->(ca)
+MATCH (ca:SuffixNodeOne {name: 'target'})
+MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:SuffixEdgeOne]->(ct:CertTemplate)-[:PublishedTo]->(ca)
 WHERE ct.authenticationenabled = true
 RETURN p
 `)
@@ -1936,7 +1954,7 @@ func TestOptimizerSafetyExpansionTerminalPushdownIncludesConstrainedBoundEndpoin
 
 	translation := optimizerSafetyTranslation(t, `
 MATCH (ca)
-MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:Enroll]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*0..]->(m)-[:SuffixEdgeOne]->(ct:CertTemplate)-[:PublishedTo]->(ca:SuffixNodeOne)
 RETURN p
 `)
 	formattedQuery, err := Translated(translation)
@@ -1958,7 +1976,7 @@ func TestOptimizerSafetyExpansionTerminalPushdownForBoundDomainSuffix(t *testing
 
 	normalizedQuery := optimizerSafetySQL(t, `
 MATCH (d:Domain {name: 'target'})
-MATCH p = (ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(root:RootCA)-[:RootCAFor]->(d)
+MATCH p = (ca:SuffixNodeOne)-[:IssuedSignedBy|SuffixNodeOneFor*1..]->(root:RootCA)-[:RootCAFor]->(d)
 RETURN p
 `)
 
@@ -1973,7 +1991,7 @@ func TestOptimizerSafetyExpansionTerminalPushdownForInboundFixedSuffix(t *testin
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
-MATCH p = (ca:EnterpriseCA)<-[:PublishedTo*1..]-(ct)<-[:Enroll]-(m:Group)
+MATCH p = (ca:SuffixNodeOne)<-[:PublishedTo*1..]-(ct)<-[:SuffixEdgeOne]-(m:Group)
 RETURN p
 `)
 
@@ -1987,7 +2005,7 @@ func TestOptimizerSafetyExpansionTerminalPushdownSkipsDirectionlessSuffix(t *tes
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
-MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]-(ca:EnterpriseCA)
+MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:SuffixEdgeOne]-(ca:SuffixNodeOne)
 RETURN p
 `)
 

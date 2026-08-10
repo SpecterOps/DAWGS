@@ -134,6 +134,6 @@ func TestNewScanLookupScaleFixtureIncludesWideAndLargeListShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("ScanPostProcessed"))
 	require.Contains(t, edgeKinds, graph.StringKind("Contains"))
 	for idx := 1; idx <= 9; idx++ {
-		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("ADCSEdge%02d", idx)))
+		require.Contains(t, edgeKinds, graph.StringKind(fmt.Sprintf("ScanEdge%02d", idx)))
 	}
 }

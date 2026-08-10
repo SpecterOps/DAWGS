@@ -89,46 +89,46 @@ func TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes(t *testing.T) {
 	require.NoError(t, ValidateShortestPathScaleV2Config(ShortestPathScaleV2Config{}))
 }
 
-func TestADCSScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
-	config := ADCSScaleConfig{MemberOfDepth: 4, Fanout: 10, ValidSuffixEvery: 2, PropertyPayloadSize: 32}
-	first := NewADCSScaleFixture(config)
-	second := NewADCSScaleFixture(config)
+func TestFixedSuffixExpansionScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
+	config := FixedSuffixExpansionScaleConfig{ExpansionDepth: 4, Fanout: 10, ValidSuffixEvery: 2, PropertyPayloadSize: 32}
+	first := NewFixedSuffixExpansionScaleFixture(config)
+	second := NewFixedSuffixExpansionScaleFixture(config)
 	firstJSON, err := json.Marshal(first)
 	require.NoError(t, err)
 	secondJSON, err := json.Marshal(second)
 	require.NoError(t, err)
 	require.Equal(t, firstJSON, secondJSON)
-	require.Len(t, first.Nodes, 6+config.MemberOfDepth*config.Fanout)
-	require.Len(t, first.Edges, 3+config.MemberOfDepth*config.Fanout+5+4)
+	require.Len(t, first.Nodes, 6+config.ExpansionDepth*config.Fanout)
+	require.Len(t, first.Edges, 3+config.ExpansionDepth*config.Fanout+5+4)
 
 	_, edgeKinds := first.Kinds()
-	require.Contains(t, edgeKinds.Strings(), "WrongEnrollKind")
+	require.Contains(t, edgeKinds.Strings(), "WrongEnterSuffix")
 }
 
-func TestADCSScaleFixtureV2ControlsSuffixPopulationsIndependently(t *testing.T) {
+func TestFixedSuffixExpansionScaleFixtureV2ControlsSuffixPopulationsIndependently(t *testing.T) {
 	reachable := 0
 	zeroDepth := false
-	fixture := NewADCSScaleFixture(ADCSScaleConfig{
-		MemberOfDepth: 2, Fanout: 4, ExactReachableSuffixSources: &reachable,
+	fixture := NewFixedSuffixExpansionScaleFixture(FixedSuffixExpansionScaleConfig{
+		ExpansionDepth: 2, Fanout: 4, ExactReachableSuffixSources: &reachable,
 		DisconnectedSuffixSources: 3, ReverseFanIn: 2, SuffixPathsPerBoundary: 2,
 		RootMatchCount: 1, RootHasZeroDepthSuffix: &zeroDepth,
 	})
 
-	var enroll, memberOf int
+	var enterSuffix, expand int
 	for _, edge := range fixture.Edges {
 		switch edge.Kind {
-		case "Enroll":
-			enroll++
-		case "MemberOf":
-			memberOf++
+		case "EnterSuffix":
+			enterSuffix++
+		case "Expand":
+			expand++
 		}
 	}
-	require.Equal(t, 8, enroll)
-	require.Equal(t, 10, memberOf)
+	require.Equal(t, 8, enterSuffix)
+	require.Equal(t, 10, expand)
 	nodeIDs := make([]string, 0, len(fixture.Nodes))
 	for _, node := range fixture.Nodes {
 		nodeIDs = append(nodeIDs, node.ID)
 	}
-	require.NotContains(t, nodeIDs, "adcs-disconnected")
-	require.Contains(t, nodeIDs, "adcs-disconnected-00002")
+	require.NotContains(t, nodeIDs, "fse-disconnected")
+	require.Contains(t, nodeIDs, "fse-disconnected-00002")
 }

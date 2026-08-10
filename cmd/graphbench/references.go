@@ -21,7 +21,7 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
-const postgresReferenceSchemaVersion = 3
+const postgresReferenceSchemaVersion = 1
 
 var postgresReferenceArms = []string{
 	"round_trip",
@@ -29,19 +29,19 @@ var postgresReferenceArms = []string{
 	"fixed_suffix_rows",
 	"minimum_graph_access",
 	"search_ordered_ids",
-	"current_forward_ordered_ids",
-	"a1a_root_reuse_ordered_ids",
-	"a1b_late_hydration_ordered_ids",
-	"a2_factored_suffix_forward_ordered_ids",
-	"a3_suffix_seeded_reverse_ordered_ids",
-	"a4_viability_forward_ordered_ids",
+	"stepwise_forward_aa_ordered_ids",
+	"root_reuse_ordered_ids",
+	"late_hydration_ordered_ids",
+	"factored_suffix_forward_ordered_ids",
+	"suffix_seeded_reverse_ordered_ids",
+	"backward_viability_forward_ordered_ids",
 	"hydration_only",
 	"complete_reference",
-	"a1a_root_reuse_complete",
-	"a1b_late_hydration_complete",
-	"a2_factored_suffix_forward_complete",
-	"a3_suffix_seeded_reverse_complete",
-	"a4_viability_forward_complete",
+	"root_reuse_complete",
+	"late_hydration_complete",
+	"factored_suffix_forward_complete",
+	"suffix_seeded_reverse_complete",
+	"backward_viability_forward_complete",
 	"m0_directed_hydration_only",
 	"m1_ordered_ids_hydration_only",
 	"s3_unidirectional_trail_cte",
@@ -375,7 +375,7 @@ func validOutboundStablePath(path stablePathObservation, allowedKinds []string) 
 func referenceSpecsForRound(specs []postgresReferenceSpec, round int) []postgresReferenceSpec {
 	if len(specs) == 5 && round > 0 {
 		// Ten-sequence Williams/carryover-balanced schedule predeclared by the
-		// ADCS tournament. Slots are the caller-selected arms, so B1/B2/B3 can
+		// fixed-suffix expansion tournament. Slots are the caller-selected arms, so B1/B2/B3 can
 		// share this schedule without hard-coding architecture names here.
 		schedule := [10][5]int{
 			{0, 1, 4, 2, 3}, {1, 2, 0, 3, 4}, {2, 3, 1, 4, 0}, {3, 4, 2, 0, 1}, {4, 0, 3, 1, 2},
@@ -396,8 +396,8 @@ func referenceSpecsForRound(specs []postgresReferenceSpec, round int) []postgres
 }
 
 func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
-	if testCase.Category == "generated_adcs" {
-		return s.adcsReferenceSpecs(ctx, testCase, params)
+	if testCase.Category == "generated_fixed_suffix_expansion" {
+		return s.fixedSuffixExpansionReferenceSpecs(ctx, testCase, params)
 	}
 	if testCase.Category == "generated_shortest_path" || testCase.Category == "generated_shortest_path_v2" {
 		// Singleton and all-shortest architectures are kept as distinct arms;
@@ -410,8 +410,8 @@ func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCa
 	switch testCase.Name {
 	case "shortest_distance_bound_pair", "one_shortest_path_bound_pair":
 		return s.shortestReferenceSpecs(ctx, testCase, params)
-	case "adcs_p1_endpoint_ids", "adcs_p1_path_observed":
-		return s.adcsReferenceSpecs(ctx, testCase, params)
+	case "fixed_suffix_expansion_endpoint_ids", "fixed_suffix_expansion_path_observed":
+		return s.fixedSuffixExpansionReferenceSpecs(ctx, testCase, params)
 	default:
 		return nil, nil
 	}
@@ -1057,8 +1057,8 @@ select ordered_edge_ids_to_path(
 from shortest join node root on root.graph_id = @graph_id and root.id = @start_id`
 }
 
-func (s *postgresSQLRunner) adcsReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
-	kindNames := []string{"Group", "EnterpriseCA", "NTAuthStore", "Domain", "MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"}
+func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
+	kindNames := []string{"ExpansionRoot", "SuffixHead", "SuffixMiddle", "SuffixTerminal", "Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"}
 	probeParams := copyReferenceParams(params)
 	probeParams["graph_id"] = s.graphID
 	for _, name := range kindNames {
@@ -1076,11 +1076,14 @@ func (s *postgresSQLRunner) adcsReferenceSpecs(ctx context.Context, testCase Sca
 	if testCase.Shape.MaxDepth != nil {
 		probeParams["max_depth"] = int32(*testCase.Shape.MaxDepth)
 	}
-	specs := buildADCSReferenceSpecs(testCase, probeParams)
-	searchIdx := referenceSpecIndex(specs, "a3_suffix_seeded_reverse_ordered_ids")
+	specs := buildFixedSuffixExpansionReferenceSpecs(testCase, probeParams)
+	if !referenceHydrationRequested(s.referenceArms) {
+		return specs, nil
+	}
+	searchIdx := referenceSpecIndex(specs, "suffix_seeded_reverse_ordered_ids")
 	values, err := readReferenceRow(ctx, s.db, specs[searchIdx].sql, specs[searchIdx].parameters)
 	if err != nil {
-		return nil, fmt.Errorf("precompute ADCS hydration IDs: %w", err)
+		return nil, fmt.Errorf("precompute fixed-suffix expansion hydration IDs: %w", err)
 	}
 	if len(values) == 0 {
 		completeIdx := referenceSpecIndex(specs, "complete_reference")
@@ -1093,15 +1096,15 @@ func (s *postgresSQLRunner) adcsReferenceSpecs(ctx context.Context, testCase Sca
 		return specs, nil
 	}
 	if len(values) != 3 {
-		return nil, fmt.Errorf("precompute ADCS hydration IDs returned %d columns, expected 3", len(values))
+		return nil, fmt.Errorf("precompute fixed-suffix expansion hydration IDs returned %d columns, expected 3", len(values))
 	}
 	nodeIDs, err := referenceInt64Slice(values[0])
 	if err != nil || len(nodeIDs) == 0 {
-		return nil, fmt.Errorf("decode ADCS hydration node IDs: %w", err)
+		return nil, fmt.Errorf("decode fixed-suffix expansion hydration node IDs: %w", err)
 	}
 	edgeIDs, err := referenceInt64Slice(values[2])
 	if err != nil {
-		return nil, fmt.Errorf("decode ADCS hydration edge IDs: %w", err)
+		return nil, fmt.Errorf("decode fixed-suffix expansion hydration edge IDs: %w", err)
 	}
 	hydrationParams := copyReferenceParams(probeParams)
 	hydrationParams["root_id"] = nodeIDs[0]
@@ -1122,82 +1125,86 @@ from node root where root.graph_id = @graph_id and root.id = @root_id`,
 	return specs, nil
 }
 
-func buildADCSReferenceSpecs(testCase ScaleCase, probeParams map[string]any) []postgresReferenceSpec {
+func referenceHydrationRequested(referenceArms []string) bool {
+	return len(referenceArms) == 0 || slices.Contains(referenceArms, "hydration_only")
+}
+
+func buildFixedSuffixExpansionReferenceSpecs(testCase ScaleCase, probeParams map[string]any) []postgresReferenceSpec {
 	roots := `roots(root_id) as materialized (
   select n.id from node n
   where n.graph_id = @graph_id
-    and @Group_kind::int2 = any(n.kind_ids)
-    and n.properties ->> 'objectid' = @objectid
+    and @ExpansionRoot_kind::int2 = any(n.kind_ids)
+    and n.properties ->> 'root_key' = @root_key
 )`
-	suffix := `suffix_rows(boundary_id, ca_id, domain_id, suffix_edge_ids, suffix_node_ids) as materialized (
-  select boundary.id, ca.id, domain_node.id,
-         array[enroll.id, trusted.id, store_for.id]::int8[],
-         array[boundary.id, ca.id, store.id, domain_node.id]::int8[]
+	suffix := `suffix_rows(boundary_id, head_id, terminal_id, suffix_edge_ids, suffix_node_ids) as materialized (
+  select boundary.id, suffix_head.id, suffix_terminal.id,
+         array[enter_suffix.id, continue_suffix.id, complete_suffix.id]::int8[],
+         array[boundary.id, suffix_head.id, suffix_middle.id, suffix_terminal.id]::int8[]
   from (select 1 from roots limit 1) root_presence
-  cross join edge enroll
-  join node boundary on boundary.graph_id = @graph_id and boundary.id = enroll.start_id
-  join node ca on ca.graph_id = @graph_id and ca.id = enroll.end_id and @EnterpriseCA_kind::int2 = any(ca.kind_ids)
-  join edge trusted on trusted.graph_id = @graph_id and trusted.start_id = ca.id and trusted.kind_id = @TrustedForNTAuth_kind
-  join node store on store.graph_id = @graph_id and store.id = trusted.end_id and @NTAuthStore_kind::int2 = any(store.kind_ids)
-  join edge store_for on store_for.graph_id = @graph_id and store_for.start_id = store.id and store_for.kind_id = @NTAuthStoreFor_kind
-  join node domain_node on domain_node.graph_id = @graph_id and domain_node.id = store_for.end_id and @Domain_kind::int2 = any(domain_node.kind_ids)
-  where enroll.graph_id = @graph_id and enroll.kind_id = @Enroll_kind
-    and trusted.id <> enroll.id
-    and store_for.id <> enroll.id and store_for.id <> trusted.id
+  cross join edge enter_suffix
+  join node boundary on boundary.graph_id = @graph_id and boundary.id = enter_suffix.start_id
+  join node suffix_head on suffix_head.graph_id = @graph_id and suffix_head.id = enter_suffix.end_id and @SuffixHead_kind::int2 = any(suffix_head.kind_ids)
+  join edge continue_suffix on continue_suffix.graph_id = @graph_id and continue_suffix.start_id = suffix_head.id and continue_suffix.kind_id = @ContinueSuffix_kind
+  join node suffix_middle on suffix_middle.graph_id = @graph_id and suffix_middle.id = continue_suffix.end_id and @SuffixMiddle_kind::int2 = any(suffix_middle.kind_ids)
+  join edge complete_suffix on complete_suffix.graph_id = @graph_id and complete_suffix.start_id = suffix_middle.id and complete_suffix.kind_id = @CompleteSuffix_kind
+  join node suffix_terminal on suffix_terminal.graph_id = @graph_id and suffix_terminal.id = complete_suffix.end_id and @SuffixTerminal_kind::int2 = any(suffix_terminal.kind_ids)
+  where enter_suffix.graph_id = @graph_id and enter_suffix.kind_id = @EnterSuffix_kind
+    and continue_suffix.id <> enter_suffix.id
+    and complete_suffix.id <> enter_suffix.id and complete_suffix.id <> continue_suffix.id
 )`
-	forwardMembers := `members(root_id, node_id, node_ids, edge_ids, depth) as (
+	forwardExpansion := `expansion_paths(root_id, node_id, node_ids, edge_ids, depth) as (
   select root_id, root_id, array[root_id]::int8[], array[]::int8[], 0 from roots
   union all
-  select members.root_id, e.end_id, members.node_ids || e.end_id, members.edge_ids || e.id, members.depth + 1
-  from members join edge e
-    on e.graph_id = @graph_id and e.start_id = members.node_id and e.kind_id = @MemberOf_kind
+  select expansion_paths.root_id, e.end_id, expansion_paths.node_ids || e.end_id, expansion_paths.edge_ids || e.id, expansion_paths.depth + 1
+  from expansion_paths join edge e
+    on e.graph_id = @graph_id and e.start_id = expansion_paths.node_id and e.kind_id = @Expand_kind
   join node next_node on next_node.graph_id = @graph_id and next_node.id = e.end_id
-  where members.depth < @max_depth and e.id != all(members.edge_ids)
+  where expansion_paths.depth < @max_depth and e.id != all(expansion_paths.edge_ids)
 )`
-	scalarForwardMembers := strings.Replace(forwardMembers, "\n  join node next_node on next_node.graph_id = @graph_id and next_node.id = e.end_id", "", 1)
-	allMemberNodesExist := `not exists (
-	      select 1 from unnest(members.node_ids) as member_node_id(id)
-	      left join node member_node on member_node.graph_id = @graph_id and member_node.id = member_node_id.id
-      where member_node.id is null
+	scalarForwardExpansion := strings.Replace(forwardExpansion, "\n  join node next_node on next_node.graph_id = @graph_id and next_node.id = e.end_id", "", 1)
+	allExpansionNodesExist := `not exists (
+	      select 1 from unnest(expansion_paths.node_ids) as expansion_node_id(id)
+	      left join node expansion_node on expansion_node.graph_id = @graph_id and expansion_node.id = expansion_node_id.id
+      where expansion_node.id is null
     )`
-	legacyForward := `with recursive ` + roots + `, ` + forwardMembers + `, paths as materialized (
-  select members.node_ids || array[ca.id, store.id, domain_node.id]::int8[] as node_ids,
-         ca.id as ca_id, domain_node.id as domain_id,
-         members.edge_ids || enroll.id || trusted.id || store_for.id as edge_ids
-  from members
-  join edge enroll on enroll.graph_id = @graph_id and enroll.start_id = members.node_id and enroll.kind_id = @Enroll_kind and enroll.id != all(members.edge_ids)
-  join node ca on ca.graph_id = @graph_id and ca.id = enroll.end_id and @EnterpriseCA_kind::int2 = any(ca.kind_ids)
-  join edge trusted on trusted.graph_id = @graph_id and trusted.start_id = ca.id and trusted.kind_id = @TrustedForNTAuth_kind
-    and trusted.id != enroll.id and trusted.id != all(members.edge_ids)
-  join node store on store.graph_id = @graph_id and store.id = trusted.end_id and @NTAuthStore_kind::int2 = any(store.kind_ids)
-  join edge store_for on store_for.graph_id = @graph_id and store_for.start_id = store.id and store_for.kind_id = @NTAuthStoreFor_kind
-    and store_for.id != enroll.id and store_for.id != trusted.id and store_for.id != all(members.edge_ids)
-  join node domain_node on domain_node.graph_id = @graph_id and domain_node.id = store_for.end_id and @Domain_kind::int2 = any(domain_node.kind_ids)
-  where members.depth >= @min_depth
+	legacyForward := `with recursive ` + roots + `, ` + forwardExpansion + `, paths as materialized (
+  select expansion_paths.node_ids || array[suffix_head.id, suffix_middle.id, suffix_terminal.id]::int8[] as node_ids,
+         suffix_head.id as head_id, suffix_terminal.id as terminal_id,
+         expansion_paths.edge_ids || enter_suffix.id || continue_suffix.id || complete_suffix.id as edge_ids
+  from expansion_paths
+  join edge enter_suffix on enter_suffix.graph_id = @graph_id and enter_suffix.start_id = expansion_paths.node_id and enter_suffix.kind_id = @EnterSuffix_kind and enter_suffix.id != all(expansion_paths.edge_ids)
+  join node suffix_head on suffix_head.graph_id = @graph_id and suffix_head.id = enter_suffix.end_id and @SuffixHead_kind::int2 = any(suffix_head.kind_ids)
+  join edge continue_suffix on continue_suffix.graph_id = @graph_id and continue_suffix.start_id = suffix_head.id and continue_suffix.kind_id = @ContinueSuffix_kind
+    and continue_suffix.id != enter_suffix.id and continue_suffix.id != all(expansion_paths.edge_ids)
+  join node suffix_middle on suffix_middle.graph_id = @graph_id and suffix_middle.id = continue_suffix.end_id and @SuffixMiddle_kind::int2 = any(suffix_middle.kind_ids)
+  join edge complete_suffix on complete_suffix.graph_id = @graph_id and complete_suffix.start_id = suffix_middle.id and complete_suffix.kind_id = @CompleteSuffix_kind
+    and complete_suffix.id != enter_suffix.id and complete_suffix.id != continue_suffix.id and complete_suffix.id != all(expansion_paths.edge_ids)
+  join node suffix_terminal on suffix_terminal.graph_id = @graph_id and suffix_terminal.id = complete_suffix.end_id and @SuffixTerminal_kind::int2 = any(suffix_terminal.kind_ids)
+  where expansion_paths.depth >= @min_depth
 )`
-	lateHydratedForward := `with recursive ` + roots + `, ` + scalarForwardMembers + `, paths as materialized (
-  select members.node_ids || array[ca.id, store.id, domain_node.id]::int8[] as node_ids,
-         ca.id as ca_id, domain_node.id as domain_id,
-         members.edge_ids || enroll.id || trusted.id || store_for.id as edge_ids
-  from members
-  join edge enroll on enroll.graph_id = @graph_id and enroll.start_id = members.node_id and enroll.kind_id = @Enroll_kind and enroll.id != all(members.edge_ids)
-  join node ca on ca.graph_id = @graph_id and ca.id = enroll.end_id and @EnterpriseCA_kind::int2 = any(ca.kind_ids)
-  join edge trusted on trusted.graph_id = @graph_id and trusted.start_id = ca.id and trusted.kind_id = @TrustedForNTAuth_kind
-    and trusted.id != enroll.id and trusted.id != all(members.edge_ids)
-  join node store on store.graph_id = @graph_id and store.id = trusted.end_id and @NTAuthStore_kind::int2 = any(store.kind_ids)
-  join edge store_for on store_for.graph_id = @graph_id and store_for.start_id = store.id and store_for.kind_id = @NTAuthStoreFor_kind
-    and store_for.id != enroll.id and store_for.id != trusted.id and store_for.id != all(members.edge_ids)
-  join node domain_node on domain_node.graph_id = @graph_id and domain_node.id = store_for.end_id and @Domain_kind::int2 = any(domain_node.kind_ids)
-  where members.depth >= @min_depth and ` + allMemberNodesExist + `
+	lateHydratedForward := `with recursive ` + roots + `, ` + scalarForwardExpansion + `, paths as materialized (
+  select expansion_paths.node_ids || array[suffix_head.id, suffix_middle.id, suffix_terminal.id]::int8[] as node_ids,
+         suffix_head.id as head_id, suffix_terminal.id as terminal_id,
+         expansion_paths.edge_ids || enter_suffix.id || continue_suffix.id || complete_suffix.id as edge_ids
+  from expansion_paths
+  join edge enter_suffix on enter_suffix.graph_id = @graph_id and enter_suffix.start_id = expansion_paths.node_id and enter_suffix.kind_id = @EnterSuffix_kind and enter_suffix.id != all(expansion_paths.edge_ids)
+  join node suffix_head on suffix_head.graph_id = @graph_id and suffix_head.id = enter_suffix.end_id and @SuffixHead_kind::int2 = any(suffix_head.kind_ids)
+  join edge continue_suffix on continue_suffix.graph_id = @graph_id and continue_suffix.start_id = suffix_head.id and continue_suffix.kind_id = @ContinueSuffix_kind
+    and continue_suffix.id != enter_suffix.id and continue_suffix.id != all(expansion_paths.edge_ids)
+  join node suffix_middle on suffix_middle.graph_id = @graph_id and suffix_middle.id = continue_suffix.end_id and @SuffixMiddle_kind::int2 = any(suffix_middle.kind_ids)
+  join edge complete_suffix on complete_suffix.graph_id = @graph_id and complete_suffix.start_id = suffix_middle.id and complete_suffix.kind_id = @CompleteSuffix_kind
+    and complete_suffix.id != enter_suffix.id and complete_suffix.id != continue_suffix.id and complete_suffix.id != all(expansion_paths.edge_ids)
+  join node suffix_terminal on suffix_terminal.graph_id = @graph_id and suffix_terminal.id = complete_suffix.end_id and @SuffixTerminal_kind::int2 = any(suffix_terminal.kind_ids)
+  where expansion_paths.depth >= @min_depth and ` + allExpansionNodesExist + `
 )`
-	factoredForward := `with recursive ` + roots + `, ` + suffix + `, ` + scalarForwardMembers + `, paths as materialized (
-  select members.node_ids || suffix_rows.suffix_node_ids[2:4] as node_ids,
-         suffix_rows.ca_id, suffix_rows.domain_id,
-         members.edge_ids || suffix_rows.suffix_edge_ids as edge_ids
-  from members join suffix_rows on suffix_rows.boundary_id = members.node_id
-  where members.depth >= @min_depth
-	    and not exists (select 1 from unnest(members.edge_ids) as member_edge(id) where member_edge.id = any(suffix_rows.suffix_edge_ids))
-    and ` + allMemberNodesExist + `
+	factoredForward := `with recursive ` + roots + `, ` + suffix + `, ` + scalarForwardExpansion + `, paths as materialized (
+  select expansion_paths.node_ids || suffix_rows.suffix_node_ids[2:4] as node_ids,
+         suffix_rows.head_id, suffix_rows.terminal_id,
+         expansion_paths.edge_ids || suffix_rows.suffix_edge_ids as edge_ids
+  from expansion_paths join suffix_rows on suffix_rows.boundary_id = expansion_paths.node_id
+  where expansion_paths.depth >= @min_depth
+	    and not exists (select 1 from unnest(expansion_paths.edge_ids) as expansion_edge(id) where expansion_edge.id = any(suffix_rows.suffix_edge_ids))
+    and ` + allExpansionNodesExist + `
 )`
 	reverse := `with recursive ` + roots + `, ` + suffix + `, boundary_ids(boundary_id) as materialized (
   select distinct boundary_id from suffix_rows
@@ -1207,21 +1214,21 @@ func buildADCSReferenceSpecs(testCase ScaleCase, probeParams map[string]any) []p
 	  select reverse_trails.boundary_id, e.start_id, array_prepend(e.start_id, reverse_trails.node_ids),
 	         array_prepend(e.id, reverse_trails.edge_ids), reverse_trails.depth + 1
   from reverse_trails join edge e
-    on e.graph_id = @graph_id and e.end_id = reverse_trails.node_id and e.kind_id = @MemberOf_kind
+    on e.graph_id = @graph_id and e.end_id = reverse_trails.node_id and e.kind_id = @Expand_kind
   where reverse_trails.depth < @max_depth and e.id != all(reverse_trails.edge_ids)
 ), paths as materialized (
   select reverse_trails.node_ids || suffix_rows.suffix_node_ids[2:4] as node_ids,
-         suffix_rows.ca_id, suffix_rows.domain_id,
+         suffix_rows.head_id, suffix_rows.terminal_id,
          reverse_trails.edge_ids || suffix_rows.suffix_edge_ids as edge_ids
   from reverse_trails
   join roots on roots.root_id = reverse_trails.node_id
   join suffix_rows on suffix_rows.boundary_id = reverse_trails.boundary_id
   where reverse_trails.depth >= @min_depth
-	    and not exists (select 1 from unnest(reverse_trails.edge_ids) as member_edge(id) where member_edge.id = any(suffix_rows.suffix_edge_ids))
+	    and not exists (select 1 from unnest(reverse_trails.edge_ids) as expansion_edge(id) where expansion_edge.id = any(suffix_rows.suffix_edge_ids))
 	    and not exists (
-	      select 1 from unnest(reverse_trails.node_ids) as member_node_id(id)
-	      left join node member_node on member_node.graph_id = @graph_id and member_node.id = member_node_id.id
-      where member_node.id is null
+	      select 1 from unnest(reverse_trails.node_ids) as expansion_node_id(id)
+	      left join node expansion_node on expansion_node.graph_id = @graph_id and expansion_node.id = expansion_node_id.id
+      where expansion_node.id is null
     )
 )`
 	viability := `with recursive ` + roots + `, ` + suffix + `, boundary_ids(boundary_id) as materialized (
@@ -1231,33 +1238,32 @@ func buildADCSReferenceSpecs(testCase ScaleCase, probeParams map[string]any) []p
   union
   select e.start_id, viable.reverse_distance + 1
   from viable join edge e
-    on e.graph_id = @graph_id and e.end_id = viable.node_id and e.kind_id = @MemberOf_kind
+    on e.graph_id = @graph_id and e.end_id = viable.node_id and e.kind_id = @Expand_kind
   where viable.reverse_distance < @max_depth
-), members(root_id, node_id, node_ids, edge_ids, depth) as (
+), expansion_paths(root_id, node_id, node_ids, edge_ids, depth) as (
   select root_id, root_id, array[root_id]::int8[], array[]::int8[], 0 from roots
   where exists (select 1 from viable where viable.node_id = roots.root_id and viable.reverse_distance <= @max_depth)
   union all
-  select members.root_id, e.end_id, members.node_ids || e.end_id, members.edge_ids || e.id, members.depth + 1
-  from members join edge e
-    on e.graph_id = @graph_id and e.start_id = members.node_id and e.kind_id = @MemberOf_kind
-  where members.depth < @max_depth and e.id != all(members.edge_ids)
-    and exists (select 1 from viable where viable.node_id = e.end_id and viable.reverse_distance <= @max_depth - members.depth - 1)
+  select expansion_paths.root_id, e.end_id, expansion_paths.node_ids || e.end_id, expansion_paths.edge_ids || e.id, expansion_paths.depth + 1
+  from expansion_paths join edge e
+    on e.graph_id = @graph_id and e.start_id = expansion_paths.node_id and e.kind_id = @Expand_kind
+  where expansion_paths.depth < @max_depth and e.id != all(expansion_paths.edge_ids)
+    and exists (select 1 from viable where viable.node_id = e.end_id and viable.reverse_distance <= @max_depth - expansion_paths.depth - 1)
 ), paths as materialized (
-  select members.node_ids || suffix_rows.suffix_node_ids[2:4] as node_ids,
-         suffix_rows.ca_id, suffix_rows.domain_id,
-         members.edge_ids || suffix_rows.suffix_edge_ids as edge_ids
-  from members join suffix_rows on suffix_rows.boundary_id = members.node_id
-  where members.depth >= @min_depth
-	    and not exists (select 1 from unnest(members.edge_ids) as member_edge(id) where member_edge.id = any(suffix_rows.suffix_edge_ids))
-    and ` + allMemberNodesExist + `
+  select expansion_paths.node_ids || suffix_rows.suffix_node_ids[2:4] as node_ids,
+         suffix_rows.head_id, suffix_rows.terminal_id,
+         expansion_paths.edge_ids || suffix_rows.suffix_edge_ids as edge_ids
+  from expansion_paths join suffix_rows on suffix_rows.boundary_id = expansion_paths.node_id
+  where expansion_paths.depth >= @min_depth
+	    and not exists (select 1 from unnest(expansion_paths.edge_ids) as expansion_edge(id) where expansion_edge.id = any(suffix_rows.suffix_edge_ids))
+    and ` + allExpansionNodesExist + `
 )`
-
-	fullSQL := legacyForward + ` select ca_id, domain_id from paths`
+	fullSQL := legacyForward + ` select head_id, terminal_id from paths`
 	boundary := "endpoint ID pairs"
 	pathObserved := testCase.Observes.Paths || testCase.Expected.ResultKind == "path_set"
 	complete := func(search string) string {
 		if !pathObserved {
-			return search + ` select ca_id, domain_id from paths`
+			return search + ` select head_id, terminal_id from paths`
 		}
 		return search + `
 select ordered_edge_ids_to_path(
@@ -1272,7 +1278,7 @@ from paths join node root on root.graph_id = @graph_id and root.id = paths.node_
 		fullSQL = complete(legacyForward)
 		boundary = "complete path composite"
 	}
-	orderedLegacy := legacyForward + ` select node_ids, ca_id, edge_ids from paths`
+	orderedLegacy := legacyForward + ` select node_ids, head_id, edge_ids from paths`
 	orderedReference := func(spec postgresReferenceSpec) postgresReferenceSpec {
 		spec.semanticValidation = "exact_ordered_ids"
 		spec.validationSQL = orderedLegacy
@@ -1281,22 +1287,22 @@ from paths join node root on root.graph_id = @graph_id and root.id = paths.node_
 	}
 	return []postgresReferenceSpec{
 		{name: "round_trip", architecture: "protocol", stateShape: "none", boundary: "prepared protocol and transaction", sql: `select 1`},
-		{name: "endpoint_validation", architecture: "root_validation", stateShape: "root ID bag", boundary: "validated root ID", sql: `select n.id from node n where n.graph_id = @graph_id and @Group_kind::int2 = any(n.kind_ids) and n.properties ->> 'objectid' = @objectid`, parameters: probeParams},
-		{name: "fixed_suffix_rows", architecture: "factored_suffix", stateShape: "boundary and ordered suffix IDs", boundary: "exact suffix rows and distinct boundary IDs", sql: `with ` + roots + `, ` + suffix + ` select boundary_id, ca_id, domain_id, suffix_edge_ids from suffix_rows`, parameters: probeParams},
-		{name: "minimum_graph_access", architecture: "root_adjacency", stateShape: "edge IDs", boundary: "root adjacency edge IDs", sql: `with ` + roots + ` select e.id from roots join edge e on e.graph_id = @graph_id and e.start_id = roots.root_id and e.kind_id = @MemberOf_kind order by e.id`, parameters: probeParams},
-		orderedReference(postgresReferenceSpec{name: "search_ordered_ids", legacyName: "current_forward_ordered_ids", architecture: "ADCS-A0-SQL", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs without hydration", sql: orderedLegacy, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "current_forward_ordered_ids", architecture: "ADCS-A0-AA", aaAliasOf: "search_ordered_ids", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs", sql: orderedLegacy, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "a1a_root_reuse_ordered_ids", architecture: "ADCS-A0-AA", aaAliasOf: "search_ordered_ids", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs", sql: orderedLegacy, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "a1b_late_hydration_ordered_ids", architecture: "ADCS-A1b", observationShape: "ordered_ids", stateShape: "scalar expansion state and ordered relationship trail", boundary: "ordered node/edge IDs", sql: lateHydratedForward + ` select node_ids, ca_id, edge_ids from paths`, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "a2_factored_suffix_forward_ordered_ids", architecture: "ADCS-A2", observationShape: "ordered_ids", stateShape: "scalar forward trails joined to exact suffix bag", boundary: "ordered node/edge IDs", sql: factoredForward + ` select node_ids, ca_id, edge_ids from paths`, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "a3_suffix_seeded_reverse_ordered_ids", architecture: "ADCS-A3", observationShape: "ordered_ids", stateShape: "scalar reverse trails with prepended relationship IDs", boundary: "ordered node/edge IDs", sql: reverse + ` select node_ids, ca_id, edge_ids from paths`, parameters: probeParams}),
-		orderedReference(postgresReferenceSpec{name: "a4_viability_forward_ordered_ids", architecture: "ADCS-A4", observationShape: "ordered_ids", stateShape: "depth-aware viability filter plus exact forward trails", boundary: "ordered node/edge IDs", sql: viability + ` select node_ids, ca_id, edge_ids from paths`, parameters: probeParams}),
-		{name: "complete_reference", architecture: "ADCS-A0-SQL", stateShape: "forward relationship trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: fullSQL, parameters: probeParams},
-		{name: "a1a_root_reuse_complete", architecture: "ADCS-A0-AA", aaAliasOf: "complete_reference", stateShape: "forward relationship trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(legacyForward), parameters: probeParams},
-		{name: "a1b_late_hydration_complete", architecture: "ADCS-A1b", stateShape: "scalar expansion state with final-only hydration", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(lateHydratedForward), parameters: probeParams},
-		{name: "a2_factored_suffix_forward_complete", architecture: "ADCS-A2", stateShape: "exact forward trails joined to suffix bag", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(factoredForward), parameters: probeParams},
-		{name: "a3_suffix_seeded_reverse_complete", architecture: "ADCS-A3", stateShape: "exact reverse trails joined back to suffix bag", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(reverse), parameters: probeParams},
-		{name: "a4_viability_forward_complete", architecture: "ADCS-A4", stateShape: "permissive viability plus exact forward trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(viability), parameters: probeParams},
+		{name: "endpoint_validation", architecture: "root_validation", stateShape: "root ID bag", boundary: "validated root ID", sql: `select n.id from node n where n.graph_id = @graph_id and @ExpansionRoot_kind::int2 = any(n.kind_ids) and n.properties ->> 'root_key' = @root_key`, parameters: probeParams},
+		{name: "fixed_suffix_rows", architecture: "factored_suffix", stateShape: "boundary and ordered suffix IDs", boundary: "exact suffix rows and distinct boundary IDs", sql: `with ` + roots + `, ` + suffix + ` select boundary_id, head_id, terminal_id, suffix_edge_ids from suffix_rows`, parameters: probeParams},
+		{name: "minimum_graph_access", architecture: "root_adjacency", stateShape: "edge IDs", boundary: "root adjacency edge IDs", sql: `with ` + roots + ` select e.id from roots join edge e on e.graph_id = @graph_id and e.start_id = roots.root_id and e.kind_id = @Expand_kind order by e.id`, parameters: probeParams},
+		orderedReference(postgresReferenceSpec{name: "search_ordered_ids", architecture: "EXPANSION-STEPWISE-FORWARD-SQL", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs without hydration", sql: orderedLegacy, parameters: probeParams}),
+		orderedReference(postgresReferenceSpec{name: "stepwise_forward_aa_ordered_ids", architecture: "EXPANSION-STEPWISE-FORWARD-AA", aaAliasOf: "search_ordered_ids", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs", sql: orderedLegacy, parameters: probeParams}),
+		orderedReference(postgresReferenceSpec{name: "root_reuse_ordered_ids", architecture: "EXPANSION-STEPWISE-FORWARD-AA", aaAliasOf: "search_ordered_ids", observationShape: "ordered_ids", stateShape: "root/boundary IDs and ordered relationship trail", boundary: "ordered node/edge IDs", sql: orderedLegacy, parameters: probeParams}),
+		orderedReference(postgresReferenceSpec{name: "late_hydration_ordered_ids", architecture: "EXPANSION-LATE-HYDRATED-FORWARD", observationShape: "ordered_ids", stateShape: "scalar expansion state and ordered relationship trail", boundary: "ordered node/edge IDs", sql: lateHydratedForward + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
+		orderedReference(postgresReferenceSpec{name: "factored_suffix_forward_ordered_ids", architecture: "EXPANSION-FACTORED-SUFFIX-FORWARD", observationShape: "ordered_ids", stateShape: "scalar forward trails joined to exact suffix bag", boundary: "ordered node/edge IDs", sql: factoredForward + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
+		orderedReference(postgresReferenceSpec{name: "suffix_seeded_reverse_ordered_ids", architecture: "EXPANSION-SUFFIX-SEEDED-REVERSE", observationShape: "ordered_ids", stateShape: "scalar reverse trails with prepended relationship IDs", boundary: "ordered node/edge IDs", sql: reverse + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
+		orderedReference(postgresReferenceSpec{name: "backward_viability_forward_ordered_ids", architecture: "EXPANSION-BACKWARD-VIABILITY-FORWARD", observationShape: "ordered_ids", stateShape: "depth-aware viability filter plus exact forward trails", boundary: "ordered node/edge IDs", sql: viability + ` select node_ids, head_id, edge_ids from paths`, parameters: probeParams}),
+		{name: "complete_reference", architecture: "EXPANSION-STEPWISE-FORWARD-SQL", stateShape: "forward relationship trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: fullSQL, parameters: probeParams},
+		{name: "root_reuse_complete", architecture: "EXPANSION-STEPWISE-FORWARD-AA", aaAliasOf: "complete_reference", stateShape: "forward relationship trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(legacyForward), parameters: probeParams},
+		{name: "late_hydration_complete", architecture: "EXPANSION-LATE-HYDRATED-FORWARD", stateShape: "scalar expansion state with final-only hydration", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(lateHydratedForward), parameters: probeParams},
+		{name: "factored_suffix_forward_complete", architecture: "EXPANSION-FACTORED-SUFFIX-FORWARD", stateShape: "exact forward trails joined to suffix bag", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(factoredForward), parameters: probeParams},
+		{name: "suffix_seeded_reverse_complete", architecture: "EXPANSION-SUFFIX-SEEDED-REVERSE", stateShape: "exact reverse trails joined back to suffix bag", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(reverse), parameters: probeParams},
+		{name: "backward_viability_forward_complete", architecture: "EXPANSION-BACKWARD-VIABILITY-FORWARD", stateShape: "permissive viability plus exact forward trails", observationShape: observationShapeForCase(testCase), semanticValidation: "exact_public_observation", boundary: boundary, fullComparator: true, sql: complete(viability), parameters: probeParams},
 	}
 }
 

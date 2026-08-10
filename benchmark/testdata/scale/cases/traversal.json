@@ -83,21 +83,21 @@
       "tags": ["path-materialization"]
     },
     {
-      "name": "adcs_p1_endpoint_ids",
-      "dataset": "adcs_fanout",
-      "category": "bloodhound_search",
-      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN id(ca), id(d)",
+      "name": "fixed_suffix_expansion_endpoint_ids",
+      "dataset": "fixed_suffix_expansion_fanout",
+      "category": "fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
       "params": {
-        "objectid": "S-1-5-21-2643190041-1319121918-239771340-513"
+        "root_key": "fixed-suffix-fanout-root"
       },
       "expected": {
         "row_count": 4,
         "result_kind": "id_rows",
         "id_rows": [
-          ["ca", "domain"],
-          ["ca", "domain"],
-          ["ca", "domain"],
-          ["ca", "domain"]
+          ["fse-head", "fse-terminal"],
+          ["fse-head", "fse-terminal"],
+          ["fse-head", "fse-terminal"],
+          ["fse-head", "fse-terminal"]
         ]
       },
       "observes": {
@@ -109,29 +109,42 @@
       "shape": {
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
-        "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+        "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"],
         "min_depth": 0,
+        "max_depth": 16,
         "path_materialization_required": false
       },
       "candidate_modes": ["postgres_sql", "local_traversal", "neo4j"],
-      "tags": ["bloodhound", "adcs", "id-only", "local-traversal-candidate"]
+      "tags": ["fixed-suffix-expansion", "fanout", "id-only", "local-traversal-candidate"]
     },
     {
-      "name": "adcs_p1_path_observed",
-      "dataset": "adcs_fanout",
-      "category": "bloodhound_search",
-      "cypher": "MATCH (n:Group) WHERE n.objectid = $objectid MATCH p = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain) RETURN p",
+      "name": "GFSE-BOUNDARY-cyclic-relationship-distinct-bag",
+      "dataset": "fixed_suffix_expansion_adversarial",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..3]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
+      "params": {"root_key": "suffix-overflow-adversarial-root"},
+      "expected": {"row_count": 68, "result_kind": "id_rows"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"fixture_tier": "normal", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 3, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["normal-tier", "fixed-suffix-expansion-boundary", "suffix-overflow", "cycle", "relationship-distinct", "physical-bag-multiplicity", "noncanonical-logical-ids", "holdout"]
+    },
+    {
+      "name": "fixed_suffix_expansion_path_observed",
+      "dataset": "fixed_suffix_expansion_fanout",
+      "category": "fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH p = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(:SuffixTerminal) RETURN p",
       "params": {
-        "objectid": "S-1-5-21-2643190041-1319121918-239771340-513"
+        "root_key": "fixed-suffix-fanout-root"
       },
       "expected": {
         "row_count": 4,
         "result_kind": "path_set",
         "path_rows": [
-          {"nodes": ["n", "ca", "store", "domain"], "relationship_kinds": ["Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]},
-          {"nodes": ["n", "p1-a", "ca", "store", "domain"], "relationship_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]},
-          {"nodes": ["n", "p1-b", "ca", "store", "domain"], "relationship_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]},
-          {"nodes": ["n", "p1-b", "p1-c", "ca", "store", "domain"], "relationship_kinds": ["MemberOf", "MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"]}
+          {"nodes": ["fse-root", "fse-head", "fse-middle", "fse-terminal"], "relationship_kinds": ["EnterSuffix", "ContinueSuffix", "CompleteSuffix"]},
+          {"nodes": ["fse-root", "fse-expansion-a", "fse-head", "fse-middle", "fse-terminal"], "relationship_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"]},
+          {"nodes": ["fse-root", "fse-expansion-b", "fse-head", "fse-middle", "fse-terminal"], "relationship_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"]},
+          {"nodes": ["fse-root", "fse-expansion-b", "fse-expansion-c", "fse-head", "fse-middle", "fse-terminal"], "relationship_kinds": ["Expand", "Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"]}
         ]
       },
       "observes": {
@@ -143,12 +156,13 @@
       "shape": {
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
-        "edge_kinds": ["MemberOf", "Enroll", "TrustedForNTAuth", "NTAuthStoreFor"],
+        "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"],
         "min_depth": 0,
+        "max_depth": 16,
         "path_materialization_required": true
       },
       "candidate_modes": ["postgres_sql", "neo4j"],
-      "tags": ["bloodhound", "adcs", "path-materialization"]
+      "tags": ["fixed-suffix-expansion", "fanout", "path-materialization"]
     }
   ]
 }

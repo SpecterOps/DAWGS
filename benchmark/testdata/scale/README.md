@@ -54,12 +54,15 @@ and `generated_scan_lookups` datasets are constructed by
 handwritten OpenGraph JSON files.
 
 The corpus also executes parameterized `generated_shortest_paths_d*_f*` and
-`generated_adcs_d*_f*_v*_p*` variants. The normal pairwise subset covers
-shortest depth 1/2/4/8/16/32/64, fanout 1/16/128/512/1000,
+`generated_fixed_suffix_expansion_d*_f*_v*_p*` variants. Cases in
+`cases/generated_fixed_suffix_expansion.json` use stable `GFSE-*` identifiers.
+The normal pairwise subset covers shortest depth 1/2/4/8/16/32/64, fanout
+1/16/128/512/1000,
 outbound/inbound/directionless, distance/path/all-shortest output, and
-disconnected, diamond, cycle, parallel-edge, and self-loop shapes. The ADCS
-subset covers depth 0/1/2/4/8/16, fanout 1/10/100/1000, none/sparse/half/all
-valid branch suffix density, endpoint/path output, decoys, and a 4 KiB payload.
+disconnected, diamond, cycle, parallel-edge, and self-loop shapes. The
+fixed-suffix expansion subset covers depth 0/1/2/4/8/16, fanout
+1/10/100/1000, none/sparse/half/all valid branch suffix density, endpoint/path
+output, decoys, and a 4 KiB payload.
 Each result records the exact configuration name, deterministic graph checksum,
 and node/edge cardinality.
 
@@ -80,16 +83,28 @@ relationship-kind count, expected state class, and result-cardinality class
 are stored alongside it. Stress cases remain exact diagnostics and are not
 silently promoted to release p95 evidence.
 
-Version-two ADCS fixtures use
-`generated_adcs_v2_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_z<zero-depth>_p<payload>`.
+Version-two fixed-suffix expansion fixtures use
+`generated_fixed_suffix_expansion_v2_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_z<zero-depth>_p<payload>`.
 Unlike the legacy modulus form, every integer is exact: `r0` represents zero
 reachable branch suffixes, `x` varies false boundaries independently, `i`
 controls reverse fan-in, `m` controls physical suffix multiplicity, and `z` is
-either zero or one. Fixture records include declared root rows, forward member
-states, suffix rows/boundaries, expected reverse states, output trails, physical
-cardinality, and checksum. Semantic relationships carry deterministic
-`logical_key` properties so relationship-distinct paths can be compared across
-backends whose physical IDs differ.
+either zero or one. Fixture records include declared root rows, forward
+expansion states, suffix rows/boundaries, expected reverse states, output
+trails, physical cardinality, and checksum. Semantic relationships carry
+deterministic `logical_key` properties so relationship-distinct paths can be
+compared across backends whose physical IDs differ.
+
+`cases/fixed_suffix_expansion_limits.json` is an optimization-neutral cardinality
+holdout suite. It covers 511, 512, 513, and 600 physical suffix rows, productive
+endpoint and full-path observations, and exactly 512 physical rows with two
+suffix paths per boundary to prove bag multiplicity. These `GFSE-BOUNDARY-*`
+cases are not owned by any one optimization design; archived experiment reports
+retain their historical case names.
+The file-backed `fixed_suffix_expansion_adversarial` fixture adds 17 distinct
+root lanes converging on one boundary, a reusable-node cycle, two physical suffix
+paths, and noncanonical logical IDs. Its 68-row endpoint bag proves
+relationship-trail rejection and multiplicity independently of the generated
+limit fixtures.
 
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
 summaries. Exact case/dataset/category/tag selectors are intended for targeted

@@ -339,47 +339,52 @@ func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
 	require.Equal(t, "ASP-A1-DAG", specs[0].architecture)
 }
 
-func TestADCSReferenceSpecsAvoidAmbiguousArrayContainmentOperators(t *testing.T) {
-	specs := buildADCSReferenceSpecs(ScaleCase{Name: "adcs_p1_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
+func TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperators(t *testing.T) {
+	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{Name: "fixed_suffix_expansion_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
 
 	require.Len(t, specs, 17)
 	for _, spec := range specs {
 		require.NotContains(t, spec.sql, " @> ")
 	}
 	require.Contains(t, specs[1].sql, "= any(n.kind_ids)")
-	require.Contains(t, specs[referenceSpecIndex(specs, "a3_suffix_seeded_reverse_ordered_ids")].sql, "array_prepend(e.id, reverse_trails.edge_ids)")
-	require.Contains(t, specs[referenceSpecIndex(specs, "a3_suffix_seeded_reverse_ordered_ids")].sql, "union all")
-	require.Contains(t, specs[referenceSpecIndex(specs, "a4_viability_forward_ordered_ids")].sql, "viable(node_id, reverse_distance)")
-	require.Contains(t, specs[referenceSpecIndex(specs, "a2_factored_suffix_forward_ordered_ids")].sql, "suffix_rows")
+	require.Contains(t, specs[referenceSpecIndex(specs, "suffix_seeded_reverse_ordered_ids")].sql, "array_prepend(e.id, reverse_trails.edge_ids)")
+	require.Contains(t, specs[referenceSpecIndex(specs, "suffix_seeded_reverse_ordered_ids")].sql, "union all")
+	require.Contains(t, specs[referenceSpecIndex(specs, "backward_viability_forward_ordered_ids")].sql, "viable(node_id, reverse_distance)")
+	require.Contains(t, specs[referenceSpecIndex(specs, "factored_suffix_forward_ordered_ids")].sql, "suffix_rows")
 }
 
-func TestGeneratedADCSReferencesUseDeclaredDepthAndObservation(t *testing.T) {
+func TestFixedSuffixHydrationPrecomputeIsSelectionAware(t *testing.T) {
+	require.True(t, referenceHydrationRequested(nil))
+	require.True(t, referenceHydrationRequested([]string{"hydration_only"}))
+}
+
+func TestGeneratedFixedSuffixExpansionReferencesUseDeclaredDepthAndObservation(t *testing.T) {
 	minDepth, maxDepth := 0, 16
 	runner := &postgresSQLRunner{}
 	testCase := ScaleCase{
-		Name: "generated_adcs_endpoint_d16_f1000", Category: "generated_adcs",
+		Name: "generated_fixed_suffix_expansion_endpoint_d16_f1000", Category: "generated_fixed_suffix_expansion",
 		Expected: ExpectedResult{ResultKind: "id_rows"},
 		Shape:    WorkloadShape{MinDepth: &minDepth, MaxDepth: &maxDepth},
 	}
 	// Reference routing occurs before kind mapping; the generated category is
 	// asserted separately from the SQL builder so this remains a unit test.
 	require.NotNil(t, runner)
-	specs := buildADCSReferenceSpecs(testCase, map[string]any{"min_depth": int32(0), "max_depth": int32(16)})
-	require.Contains(t, specs[referenceSpecIndex(specs, "complete_reference")].sql, "select ca_id, domain_id")
+	specs := buildFixedSuffixExpansionReferenceSpecs(testCase, map[string]any{"min_depth": int32(0), "max_depth": int32(16)})
+	require.Contains(t, specs[referenceSpecIndex(specs, "complete_reference")].sql, "select head_id, terminal_id")
 	require.NotContains(t, specs[referenceSpecIndex(specs, "complete_reference")].sql, "ordered_edge_ids_to_path")
-	require.Equal(t, int32(16), specs[referenceSpecIndex(specs, "a3_suffix_seeded_reverse_ordered_ids")].parameters["max_depth"])
+	require.Equal(t, int32(16), specs[referenceSpecIndex(specs, "suffix_seeded_reverse_ordered_ids")].parameters["max_depth"])
 
 	testCase.Observes.Paths = true
 	testCase.Expected.ResultKind = "path_set"
-	pathSpecs := buildADCSReferenceSpecs(testCase, map[string]any{"min_depth": int32(0), "max_depth": int32(16)})
-	require.Contains(t, pathSpecs[referenceSpecIndex(pathSpecs, "a3_suffix_seeded_reverse_complete")].sql, "ordered_edge_ids_to_path")
+	pathSpecs := buildFixedSuffixExpansionReferenceSpecs(testCase, map[string]any{"min_depth": int32(0), "max_depth": int32(16)})
+	require.Contains(t, pathSpecs[referenceSpecIndex(pathSpecs, "suffix_seeded_reverse_complete")].sql, "ordered_edge_ids_to_path")
 }
 
 func TestParseConfigValidatesPostgresReferenceArmSelector(t *testing.T) {
-	cfg, err := parseConfig([]string{"-postgres-reference-arms", "a3_suffix_seeded_reverse_ordered_ids,a2_factored_suffix_forward_complete"}, func(string) string { return "" })
+	cfg, err := parseConfig([]string{"-postgres-reference-arms", "suffix_seeded_reverse_ordered_ids,factored_suffix_forward_complete"}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.True(t, cfg.PostgresReferences)
-	require.Equal(t, []string{"a3_suffix_seeded_reverse_ordered_ids", "a2_factored_suffix_forward_complete"}, cfg.PostgresReferenceArms)
+	require.Equal(t, []string{"suffix_seeded_reverse_ordered_ids", "factored_suffix_forward_complete"}, cfg.PostgresReferenceArms)
 
 	_, err = parseConfig([]string{"-postgres-reference-arms", "does_not_exist"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "unknown PostgreSQL reference arm")
@@ -411,25 +416,25 @@ func TestReferenceIdentityRejectsImplementationShapeDrift(t *testing.T) {
 	require.ErrorContains(t, validateReferenceSpecs(specs), "changes state, observation, or SQL identity")
 }
 
-func TestADCSHistoricalA1AIsExplicitAAAlias(t *testing.T) {
-	specs := buildADCSReferenceSpecs(ScaleCase{Name: "adcs_p1_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
+func TestFixedSuffixExpansionRootReuseIsExplicitAAAlias(t *testing.T) {
+	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{Name: "fixed_suffix_expansion_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
 	for idx := range specs {
 		specs[idx] = normalizedReferenceSpec(specs[idx])
 	}
 	require.NoError(t, validateReferenceSpecs(specs))
-	require.Equal(t, "search_ordered_ids", specs[referenceSpecIndex(specs, "a1a_root_reuse_ordered_ids")].aaAliasOf)
-	require.Equal(t, "complete_reference", specs[referenceSpecIndex(specs, "a1a_root_reuse_complete")].aaAliasOf)
+	require.Equal(t, "search_ordered_ids", specs[referenceSpecIndex(specs, "root_reuse_ordered_ids")].aaAliasOf)
+	require.Equal(t, "complete_reference", specs[referenceSpecIndex(specs, "root_reuse_complete")].aaAliasOf)
 }
 
-func TestADCSOrderedIDReferencesValidateAgainstCanonicalObservation(t *testing.T) {
-	specs := buildADCSReferenceSpecs(ScaleCase{Name: "adcs_p1_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
+func TestFixedSuffixExpansionOrderedIDReferencesValidateAgainstCanonicalObservation(t *testing.T) {
+	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{Name: "fixed_suffix_expansion_endpoint_ids"}, map[string]any{"graph_id": int32(42)})
 	canonical := specs[referenceSpecIndex(specs, "search_ordered_ids")]
 
 	for _, name := range []string{
 		"search_ordered_ids",
-		"a2_factored_suffix_forward_ordered_ids",
-		"a3_suffix_seeded_reverse_ordered_ids",
-		"a4_viability_forward_ordered_ids",
+		"factored_suffix_forward_ordered_ids",
+		"suffix_seeded_reverse_ordered_ids",
+		"backward_viability_forward_ordered_ids",
 	} {
 		spec := specs[referenceSpecIndex(specs, name)]
 		require.Equal(t, "exact_ordered_ids", spec.semanticValidation)

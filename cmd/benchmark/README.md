@@ -5,14 +5,14 @@ Runs query scenarios against a real database and outputs markdown, JSON, or benc
 ## Usage
 
 ```bash
-# Default datasets (base, adcs_fanout, and traversal_shapes)
+# Default datasets (base, fixed_suffix_expansion_fanout, and traversal_shapes)
 go run ./cmd/benchmark -connection "postgresql://dawgs:dawgs@localhost:5432/dawgs"
 
 # Traversal shape dataset only
 go run ./cmd/benchmark -connection "..." -dataset traversal_shapes
 
-# ADCS fanout dataset with PostgreSQL EXPLAIN diagnostics
-go run ./cmd/benchmark -connection "..." -dataset adcs_fanout -json-output report.json -explain
+# Fixed-suffix expansion fanout dataset with PostgreSQL EXPLAIN diagnostics
+go run ./cmd/benchmark -connection "..." -dataset fixed_suffix_expansion_fanout -json-output report.json -explain
 
 # Local dataset (not committed to repo)
 go run ./cmd/benchmark -connection "..." -dataset local/phantom
@@ -50,9 +50,11 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 
 Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each timed scenario iteration is emitted as a separate `ns/op` sample so two benchmark runs can be compared directly.
 
-The committed default datasets are `base`, `adcs_fanout`, and `traversal_shapes`. `traversal_shapes` covers chain,
-fanout, bounded cycle, disconnected, edge-kind-selective, and multi-path shortest-path traversal shapes. Scenarios with
-declared expected row counts fail before reporting timings if a query returns the wrong result shape.
+The committed default datasets are `base`, `fixed_suffix_expansion_fanout`, and
+`traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded cycle,
+disconnected, edge-kind-selective, and multi-path shortest-path traversal
+shapes. Scenarios with declared expected row counts fail before reporting
+timings if a query returns the wrong result shape.
 
 ## Example: Neo4j on local/phantom
 

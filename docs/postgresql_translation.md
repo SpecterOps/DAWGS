@@ -42,15 +42,17 @@ Current PostgreSQL optimization coverage includes:
   documented depth cap of 15. Unsupported or ambiguous forms retain exact `SP-S0` with a machine-readable reason.
 - Expansion suffix pushdown and `ExpandInto` detection for fixed suffixes and shared-endpoint fanout patterns.
 - Typed compound expansion-search planning for directed bounded expansions followed by fixed suffixes. The decision
-  records its ADCS family, planned candidates, exact eligibility facts, observation mode, suffix bounds,
-  selected/fallback strategy, selector version/mode, limits, and stable fallback code separately from the legacy
+  records its fixed-suffix expansion family, planned candidates, exact eligibility facts, observation mode, suffix
+  bounds,
+  selected/fallback strategy, selector version/mode, and stable fallback code separately from the legacy
   boolean suffix prefilter. Correlated suffix bindings and predicates spanning the expansion/suffix boundary have
   distinct conservative fallback codes. Candidate factored-forward and backward-viability SQL remains
-  reference-only. Suffix-seeded reverse has a repository-native, qualification-only `ADCS-A3` emitter that is
-  selected through explicit tool options and fails closed unless translation records the matching target as applied.
-  Until its bounded selector and exact same-snapshot overflow fallback pass the required tournament, production
-  deliberately retains the `ADCS-INCUMBENT-STEPWISE` translator and reports `tournament_unqualified` for otherwise
-  eligible three-hop forms.
+  reference-only. `EXPANSION-SUFFIX-SEEDED-REVERSE` has a repository-native,
+  qualification-only emitter. Explicit tool options select it and fail closed
+  unless translation records the matching target as applied. Production deliberately
+  retains the `EXPANSION-STEPWISE-FORWARD` translator and reports
+  `tournament_unqualified` for otherwise eligible three-hop forms because no
+  hard suffix-density or reverse-state bound is available before translation.
 - Strict string property equality lowering through `jsonb_typeof(properties -> key) = 'string'` plus
   `properties ->> key = value`, preserving JSON scalar semantics while allowing existing text expression indexes on
   selective fields such as `objectid` and `name`.

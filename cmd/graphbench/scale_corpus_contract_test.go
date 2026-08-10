@@ -40,7 +40,7 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 
 	covered := map[string]int{}
 	for _, testCase := range corpus.Cases {
-		if !strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") && !strings.HasPrefix(testCase.Dataset, "generated_adcs_") {
+		if !strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") && !strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_") {
 			continue
 		}
 		_, err := frontend.ParseCypher(frontend.NewContext(), testCase.Cypher)
@@ -49,10 +49,14 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 		_, neo4jUnsupported := testCase.UnsupportedReason(ModeNeo4j)
 		require.True(t, testCase.Supports(ModePostgresSQL) || postgresUnsupported, testCase.Name)
 		require.True(t, testCase.Supports(ModeNeo4j) || neo4jUnsupported, testCase.Name)
-		covered[strings.Split(testCase.Dataset, "_")[1]]++
+		if strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") {
+			covered["shortest"]++
+		} else {
+			covered["fixed_suffix_expansion"]++
+		}
 	}
 	require.Positive(t, covered["shortest"])
-	require.Positive(t, covered["adcs"])
+	require.Positive(t, covered["fixed_suffix_expansion"])
 }
 
 func TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope(t *testing.T) {
@@ -182,23 +186,23 @@ func TestScaleCorpusDistinguishesProjectionClasses(t *testing.T) {
 	}
 }
 
-func TestADCSIDRowsUseStableFixtureIdentitiesAndPreserveDuplicates(t *testing.T) {
+func TestFixedSuffixExpansionIDRowsUseStableFixtureIdentitiesAndPreserveDuplicates(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
 
 	for _, testCase := range corpus.Cases {
-		if testCase.Name != "adcs_p1_endpoint_ids" {
+		if testCase.Name != "fixed_suffix_expansion_endpoint_ids" {
 			continue
 		}
 
 		require.Equal(t, [][]string{
-			{"ca", "domain"},
-			{"ca", "domain"},
-			{"ca", "domain"},
-			{"ca", "domain"},
+			{"fse-head", "fse-terminal"},
+			{"fse-head", "fse-terminal"},
+			{"fse-head", "fse-terminal"},
+			{"fse-head", "fse-terminal"},
 		}, testCase.Expected.IDRows)
 		return
 	}
 
-	t.Fatal("adcs_p1_endpoint_ids case not found")
+	t.Fatal("fixed_suffix_expansion_endpoint_ids case not found")
 }

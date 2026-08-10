@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "decision": "rejected",
+  "implementation_id": "t16_s512_r512_e1_e2_e3_boundary_keyset_v1",
+  "source_artifact_sha256": "e6aa00733de4861b9684d8f1276e922ff1e8059671e57400703a8266ca88ee25",
+  "environment": "isolated local PostgreSQL 18.4, plan_cache_mode=auto",
+  "protocol": {
+    "reload_rounds": 10,
+    "warmups_per_round": 20,
+    "samples_per_arm_per_round": 50,
+    "samples_per_arm": 500,
+    "confidence_level": 0.975
+  },
+  "baseline": "complete_reference",
+  "candidate": "guarded_suffix_keyset_continuation",
+  "cases": [
+    {
+      "name": "GFSE-GUARDED-S511-admitted-suffix-limit-minus-one",
+      "baseline_p50_ns": 11254109,
+      "candidate_p50_ns": 4758027,
+      "baseline_p95_ns": 12290083,
+      "candidate_p95_ns": 5301188,
+      "median_ratio": {"estimate": 0.41555464313812607, "lower": 0.40705827827777386, "upper": 0.4385313114263852},
+      "p95_ratio": {"estimate": 0.43133866549151867, "lower": 0.42443171773646776, "upper": 0.44452360755289955},
+      "median_change_ns": {"estimate": -6587660, "lower": -6747944, "upper": -6252829}
+    },
+    {
+      "name": "GFSE-GUARDED-S512-admitted-suffix-limit-exact",
+      "baseline_p50_ns": 11164527,
+      "candidate_p50_ns": 4747871,
+      "baseline_p95_ns": 12142325,
+      "candidate_p95_ns": 5565890,
+      "median_ratio": {"estimate": 0.427560127676012, "lower": 0.40752095743455247, "upper": 0.4528344352178298},
+      "p95_ratio": {"estimate": 0.4583874999227907, "lower": 0.4396809723294706, "upper": 0.4702413504336159},
+      "median_change_ns": {"estimate": -6335235, "lower": -6732953, "upper": -6004886}
+    },
+    {
+      "name": "GFSE-GUARDED-S513-admitted-suffix-limit-plus-one",
+      "baseline_p50_ns": 11247438,
+      "candidate_p50_ns": 20064748,
+      "baseline_p95_ns": 12188292,
+      "candidate_p95_ns": 21819920,
+      "median_ratio": {"estimate": 1.7906082254074516, "lower": 1.7518498795013928, "upper": 1.8748309114021493},
+      "p95_ratio": {"estimate": 1.7902360724537942, "lower": 1.7578466359917437, "upper": 1.827209494526714},
+      "median_change_ns": {"estimate": 8847280, "lower": 8396170, "upper": 9581455}
+    },
+    {
+      "name": "GFSE-KEYSET-S600-productive-nonempty-remainder",
+      "baseline_p50_ns": 11565607,
+      "candidate_p50_ns": 68949562,
+      "baseline_p95_ns": 12595535,
+      "candidate_p95_ns": 75773743,
+      "median_ratio": {"estimate": 5.898025791399814, "lower": 5.649302617882263, "upper": 6.462465544247631},
+      "p95_ratio": {"estimate": 6.015920959292321, "lower": 5.936216979766291, "upper": 6.159786543310964},
+      "median_change_ns": {"estimate": 56902893, "lower": 56055344, "upper": 60770683}
+    }
+  ]
+}

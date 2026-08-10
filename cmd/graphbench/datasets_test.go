@@ -10,22 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGeneratedADCSV2DatasetCarriesExactExpectations(t *testing.T) {
-	name := "generated_adcs_v2_d16_f1000_r1_x1_i0_m2_z1_p0"
-	config, ok := parseADCSV2DatasetName(name)
+func TestGeneratedFixedSuffixExpansionV2DatasetCarriesExactExpectations(t *testing.T) {
+	name := "generated_fixed_suffix_expansion_v2_d16_f1000_r1_x1_i0_m2_z1_p0"
+	config, ok := parseFixedSuffixExpansionV2DatasetName(name)
 	require.True(t, ok)
-	require.Equal(t, 16, config.MemberOfDepth)
+	require.Equal(t, 16, config.ExpansionDepth)
 	require.Equal(t, 1, *config.ExactReachableSuffixSources)
 	require.Equal(t, 2, config.SuffixPathsPerBoundary)
 
 	metadata, err := fixtureMetadata("unused", name)
 	require.NoError(t, err)
-	require.NotNil(t, metadata.ADCS)
-	require.Equal(t, int64(16_001), metadata.ADCS.ForwardMemberStates)
-	require.Equal(t, int64(6), metadata.ADCS.SuffixRows)
-	require.Equal(t, int64(3), metadata.ADCS.DistinctBoundaries)
-	require.Equal(t, int64(19), metadata.ADCS.ExpectedReverseStates)
-	require.Equal(t, int64(4), metadata.ADCS.CompleteOutputTrails)
+	require.NotNil(t, metadata.FixedSuffixExpansion)
+	require.Equal(t, int64(16_001), metadata.FixedSuffixExpansion.ForwardExpansionStates)
+	require.Equal(t, int64(6), metadata.FixedSuffixExpansion.SuffixRows)
+	require.Equal(t, int64(3), metadata.FixedSuffixExpansion.DistinctBoundaries)
+	require.Equal(t, int64(19), metadata.FixedSuffixExpansion.ExpectedReverseStates)
+	require.Equal(t, int64(4), metadata.FixedSuffixExpansion.CompleteOutputTrails)
 }
 
 func TestGeneratedShortestPathV2DatasetRoundTripsAndCarriesExactExpectations(t *testing.T) {
@@ -74,14 +74,14 @@ func TestGeneratedShortestPathV2DatasetRejectsInvalidOrNonCanonicalNames(t *test
 	}
 }
 
-func TestGeneratedADCSV2DatasetRejectsInvalidOrNonCanonicalNames(t *testing.T) {
+func TestGeneratedFixedSuffixExpansionV2DatasetRejectsInvalidOrNonCanonicalNames(t *testing.T) {
 	for _, name := range []string{
-		"generated_adcs_v2_d16_f1000_r1001_x1_i0_m1_z1_p0",
-		"generated_adcs_v2_d16_f1000_r1_x1_i0_m0_z1_p0",
-		"generated_adcs_v2_d16_f1000_r1_x1_i0_m1_z2_p0",
-		"generated_adcs_v2_d016_f1000_r1_x1_i0_m1_z1_p0",
+		"generated_fixed_suffix_expansion_v2_d16_f1000_r1001_x1_i0_m1_z1_p0",
+		"generated_fixed_suffix_expansion_v2_d16_f1000_r1_x1_i0_m0_z1_p0",
+		"generated_fixed_suffix_expansion_v2_d16_f1000_r1_x1_i0_m1_z2_p0",
+		"generated_fixed_suffix_expansion_v2_d016_f1000_r1_x1_i0_m1_z1_p0",
 	} {
-		_, ok := parseADCSV2DatasetName(name)
+		_, ok := parseFixedSuffixExpansionV2DatasetName(name)
 		require.False(t, ok, name)
 		require.Nil(t, generatedDataset(name), name)
 	}

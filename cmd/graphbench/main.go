@@ -173,7 +173,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
 	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, ASP-A1-DAG)")
-	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: ADCS-A3)")
+	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -360,7 +360,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S0" && cfg.PostgresForceShortest != "SP-S0-DIRECT" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" && cfg.PostgresForceShortest != "SP-S4-C-D" && cfg.PostgresForceShortest != "SP-S4-C-WE+MAT-M0" && cfg.PostgresForceShortest != "ASP-A1-DAG" {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced shortest executor %q", cfg.PostgresForceShortest)
 	}
-	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "ADCS-A3" {
+	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "EXPANSION-SUFFIX-SEEDED-REVERSE" {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced expansion search %q", cfg.PostgresForceExpansion)
 	}
 	if cfg.PostgresForceShortest != "" && cfg.PostgresForceExpansion != "" {
@@ -637,7 +637,6 @@ func main() {
 			if err != nil {
 				fatal("open postgres_sql runner: %v", err)
 			}
-
 			nextRecords, err := runner.Run(ctx, cfg.WarmupIterations, cfg.Iterations, corpus)
 			closeErr := runner.Close(ctx)
 			if err != nil {
