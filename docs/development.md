@@ -72,6 +72,10 @@ make format
 
 The target uses `goimports`; install it locally if it is missing from your environment.
 
+`make lint` runs the standard Go vet analyzers across the repository. The unreachable-code analyzer is rerun only for
+handwritten packages because ANTLR emits intentional terminal branches in `cypher/parser`; generated parser code still
+receives every other vet analyzer.
+
 ## Quality And Metrics
 
 Cyclomatic complexity, CRAP, and quality signal reports are available through dedicated metric targets:
@@ -119,7 +123,8 @@ The defaults can be adjusted with `CYCLO_TOP`, `CYCLO_OVER`, `CRAP_TOP`, `CRAP_O
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+writes JSONL captures and markdown/JSON summaries under `.coverage/`. Fixture loading requires the same destructive
+acknowledgement and exact credential-free allowlist entries as integration testing.
 
 Run it when changing PostgreSQL Cypher planning, lowering, or SQL emission. The summaries rank expensive PostgreSQL
 plans and report recursive CTEs, `SubPlan`, `Function Scan on unnest`, planned/applied optimizer lowerings, and
@@ -131,11 +136,12 @@ See [Plan Corpus Capture](../cmd/plancorpus/README.md) for flags and review guid
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`.
 
-Current modes are:
+Implemented modes are:
 
 - `postgres_sql`
-- `local_traversal`
 - `neo4j`
+
+`local_traversal` emits non-gating `not_implemented` diagnostics only; it is not an implemented executor.
 
 AGE is reference-design input only and is not a direct comparison mode. The command can emit JSONL records plus
 Markdown and JSON summaries, and can compare current timings against a previous JSONL baseline.
@@ -146,7 +152,9 @@ mutation post-state, `EXPLAIN ANALYZE` capture, and stable plan invariants. It
 runs under `make test_all` for PostgreSQL or can be selected directly:
 
 ```bash
-CONNECTION_STRING="$PG_CONNECTION_STRING" \
+DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
+DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
+  CONNECTION_STRING="$PG_CONNECTION_STRING" \
   go test -tags manual_integration ./cmd/graphbench \
   -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1

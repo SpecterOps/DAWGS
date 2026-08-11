@@ -91,9 +91,12 @@ drop function if exists _format_traversal_initial_query;
 drop function if exists expand_traversal_step;
 drop function if exists traverse;
 drop function if exists ordered_edges_to_path(int4, nodeComposite, edgeComposite[], nodeComposite[]);
+drop function if exists ordered_edges_to_path(nodeComposite, edgeComposite[], nodeComposite[]);
 drop function if exists ordered_edge_ids_to_path(int4, nodeComposite, int8[], nodeComposite[]);
-drop function if exists nodes_to_path;
-drop function if exists edges_to_path;
+drop function if exists nodes_to_path(int4, int8[]);
+drop function if exists nodes_to_path(int8[]);
+drop function if exists edges_to_path(int4, int8[]);
+drop function if exists edges_to_path(int8[]);
 drop function if exists traverse_paths;
 
 -- Drop all tables in order of dependency.

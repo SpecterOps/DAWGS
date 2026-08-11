@@ -1604,7 +1604,50 @@ func (s *Translator) ensureSortItemProjectionAliases() error {
 	return nil
 }
 
+func isGreedyProjectionItem(projectionItem *cypher.ProjectionItem) bool {
+	variable, isVariable := projectionItem.Expression.(*cypher.Variable)
+	return isVariable && variable.Symbol == cypher.TokenLiteralAsterisk
+}
+
+func (s *Translator) translateGreedyProjection(scope *Scope) error {
+	currentPart := s.query.CurrentPart()
+	if _, err := s.treeTranslator.PopOperand(); err != nil {
+		return err
+	}
+	if currentPart.projections == nil || len(currentPart.projections.Items) == 0 {
+		return fmt.Errorf("greedy projection has no prepared projection item")
+	}
+
+	// Entering the projection item reserves one slot. Replace that placeholder
+	// with a projection for every named binding visible at this boundary.
+	currentPart.projections.Items = currentPart.projections.Items[:len(currentPart.projections.Items)-1]
+	projected := 0
+	for _, identifier := range scope.CurrentFrame().Known().Slice() {
+		binding, found := scope.Lookup(identifier)
+		if !found {
+			return fmt.Errorf("unable to resolve greedy projection binding %s", identifier)
+		}
+		for _, symbol := range scope.Symbols(binding) {
+			currentPart.projections.Items = append(currentPart.projections.Items, &Projection{
+				SelectItem: binding.Identifier,
+				Alias:      models.OptionalValue(symbol),
+			})
+			projected++
+		}
+	}
+
+	if projected == 0 {
+		return fmt.Errorf("greedy projection requires at least one named binding")
+	}
+	currentPart.projections.Frame = scope.CurrentFrame()
+	return nil
+}
+
 func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cypher.ProjectionItem) error {
+	if isGreedyProjectionItem(projectionItem) {
+		return s.translateGreedyProjection(scope)
+	}
+
 	if alias, hasAlias, err := extractIdentifierFromCypherExpression(projectionItem); err != nil {
 		return err
 	} else if nextExpression, err := s.treeTranslator.PopOperand(); err != nil {

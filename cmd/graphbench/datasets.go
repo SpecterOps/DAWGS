@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -91,6 +92,9 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 }
 
 func generatedDataset(name string) *opengraph.Graph {
+	if config, ok := parseEndpointSeededExpansionDatasetName(name); ok {
+		return testutil.NewEndpointSeededExpansionScaleFixture(config)
+	}
 	if config, ok := parseShortestPathV2DatasetName(name); ok {
 		return testutil.NewShortestPathScaleV2Fixture(config)
 	}
@@ -140,18 +144,19 @@ func generatedDataset(name string) *opengraph.Graph {
 }
 
 type FixtureMetadata struct {
-	Dataset              string                                   `json:"dataset"`
-	Checksum             string                                   `json:"checksum"`
-	NodeCount            int                                      `json:"node_count"`
-	EdgeCount            int                                      `json:"edge_count"`
-	PhysicalValidated    bool                                     `json:"physical_cardinality_validated,omitempty"`
-	PhysicalNodeCount    int64                                    `json:"physical_node_count,omitempty"`
-	PhysicalEdgeCount    int64                                    `json:"physical_edge_count,omitempty"`
-	NodeRelationBytes    int64                                    `json:"node_relation_bytes,omitempty"`
-	EdgeRelationBytes    int64                                    `json:"edge_relation_bytes,omitempty"`
-	Configuration        string                                   `json:"configuration,omitempty"`
-	Shortest             *ShortestFixtureExpectations             `json:"shortest,omitempty"`
-	FixedSuffixExpansion *FixedSuffixExpansionFixtureExpectations `json:"fixed_suffix_expansion,omitempty"`
+	Dataset                 string                                      `json:"dataset"`
+	Checksum                string                                      `json:"checksum"`
+	NodeCount               int                                         `json:"node_count"`
+	EdgeCount               int                                         `json:"edge_count"`
+	PhysicalValidated       bool                                        `json:"physical_cardinality_validated,omitempty"`
+	PhysicalNodeCount       int64                                       `json:"physical_node_count,omitempty"`
+	PhysicalEdgeCount       int64                                       `json:"physical_edge_count,omitempty"`
+	NodeRelationBytes       int64                                       `json:"node_relation_bytes,omitempty"`
+	EdgeRelationBytes       int64                                       `json:"edge_relation_bytes,omitempty"`
+	Configuration           string                                      `json:"configuration,omitempty"`
+	Shortest                *ShortestFixtureExpectations                `json:"shortest,omitempty"`
+	FixedSuffixExpansion    *FixedSuffixExpansionFixtureExpectations    `json:"fixed_suffix_expansion,omitempty"`
+	EndpointSeededExpansion *EndpointSeededExpansionFixtureExpectations `json:"endpoint_seeded_expansion,omitempty"`
 }
 
 type ShortestFixtureExpectations struct {
@@ -182,6 +187,15 @@ type FixedSuffixExpansionFixtureExpectations struct {
 	CompleteOutputTrails   int64 `json:"complete_output_trails"`
 }
 
+type EndpointSeededExpansionFixtureExpectations struct {
+	MatchingEndpoints       int64 `json:"matching_endpoints"`
+	OtherEndpoints          int64 `json:"other_endpoints"`
+	EligiblePrefixRows      int64 `json:"eligible_prefix_rows"`
+	MatchingIneligibleLanes int64 `json:"matching_ineligible_lanes"`
+	ExpectedReverseStates   int64 `json:"expected_reverse_states"`
+	ExpectedOutputTrails    int64 `json:"expected_output_trails"`
+}
+
 func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 	doc, err := parseDataset(datasetDir, name)
 	if err != nil {
@@ -209,7 +223,82 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 	if config, ok := parseShortestPathV2DatasetName(name); ok {
 		metadata.Shortest = shortestFixtureExpectations(doc.Graph, config)
 	}
+	if config, ok := parseEndpointSeededExpansionDatasetName(name); ok {
+		metadata.EndpointSeededExpansion = endpointSeededExpansionFixtureExpectations(doc.Graph, config)
+	}
 	return metadata, nil
+}
+
+func parseEndpointSeededExpansionDatasetName(name string) (testutil.EndpointSeededExpansionScaleConfig, bool) {
+	var depth, matchingEndpoints, otherEndpoints, matchingEligible, otherEligible, matchingIneligible, parallel, cycle, payload int
+	format := testutil.EndpointSeededExpansionScaleDataset + "_d%d_e%d_q%d_w%d_o%d_x%d_m%d_c%d_p%d"
+	matched, _ := fmt.Sscanf(name, format, &depth, &matchingEndpoints, &otherEndpoints, &matchingEligible, &otherEligible, &matchingIneligible, &parallel, &cycle, &payload)
+	config := testutil.EndpointSeededExpansionScaleConfig{
+		Depth: depth, MatchingEndpoints: matchingEndpoints, OtherEndpoints: otherEndpoints,
+		MatchingEligibleLanes: matchingEligible, OtherEligibleLanes: otherEligible,
+		MatchingIneligibleLanes: matchingIneligible, ParallelEdges: parallel,
+		AddCycle: cycle == 1, PropertyPayloadSize: payload,
+	}
+	if matched != 9 || (cycle != 0 && cycle != 1) || testutil.ValidateEndpointSeededExpansionScaleConfig(config) != nil || name != endpointSeededExpansionDatasetName(config) {
+		return testutil.EndpointSeededExpansionScaleConfig{}, false
+	}
+	return config, true
+}
+
+func endpointSeededExpansionDatasetName(config testutil.EndpointSeededExpansionScaleConfig) string {
+	cycle := 0
+	if config.AddCycle {
+		cycle = 1
+	}
+	return fmt.Sprintf(testutil.EndpointSeededExpansionScaleDataset+"_d%d_e%d_q%d_w%d_o%d_x%d_m%d_c%d_p%d",
+		config.Depth, config.MatchingEndpoints, config.OtherEndpoints, config.MatchingEligibleLanes,
+		config.OtherEligibleLanes, config.MatchingIneligibleLanes, config.ParallelEdges, cycle, config.PropertyPayloadSize)
+}
+
+func endpointSeededExpansionFixtureExpectations(fixture opengraph.Graph, config testutil.EndpointSeededExpansionScaleConfig) *EndpointSeededExpansionFixtureExpectations {
+	incoming := map[string][]int{}
+	matching := map[string]bool{}
+	eligibleUsers := map[string]bool{}
+	for _, node := range fixture.Nodes {
+		if objectID, ok := node.Properties["objectid"].(string); ok && strings.HasSuffix(objectID, "-512") {
+			matching[node.ID] = true
+		}
+	}
+	for edgeIdx, edge := range fixture.Edges {
+		if edge.Kind == "MemberOf" {
+			incoming[edge.EndID] = append(incoming[edge.EndID], edgeIdx)
+		} else if edge.Kind == "HasSession" {
+			eligibleUsers[edge.EndID] = true
+		}
+	}
+	var states, outputs int64
+	var visit func(string, int, map[int]bool)
+	visit = func(nodeID string, depth int, used map[int]bool) {
+		states++
+		if depth > 0 && eligibleUsers[nodeID] {
+			outputs++
+		}
+		if depth == 64 {
+			return
+		}
+		for _, edgeIdx := range incoming[nodeID] {
+			if used[edgeIdx] {
+				continue
+			}
+			used[edgeIdx] = true
+			visit(fixture.Edges[edgeIdx].StartID, depth+1, used)
+			delete(used, edgeIdx)
+		}
+	}
+	for endpoint := range matching {
+		visit(endpoint, 0, map[int]bool{})
+	}
+	return &EndpointSeededExpansionFixtureExpectations{
+		MatchingEndpoints: int64(config.MatchingEndpoints), OtherEndpoints: int64(config.OtherEndpoints),
+		EligiblePrefixRows:      int64(config.MatchingEligibleLanes + config.OtherEligibleLanes),
+		MatchingIneligibleLanes: int64(config.MatchingIneligibleLanes),
+		ExpectedReverseStates:   states, ExpectedOutputTrails: outputs,
+	}
 }
 
 func parseShortestPathV2DatasetName(name string) (testutil.ShortestPathScaleV2Config, bool) {

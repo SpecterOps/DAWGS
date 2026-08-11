@@ -1,6 +1,7 @@
 package optimize
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
@@ -131,6 +132,7 @@ func appendQueryPartLowerings(
 	appendShortestPathExecutorDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
+	appendEndpointSeededExpansionDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences, initialDeclaredSymbols)
 	appendExpansionSearchStrategyDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences, initialDeclaredSymbols)
 	fieldRequirements, err := collectFieldRequirements(queryPartIndex, queryPart)
 	if err != nil {
@@ -140,6 +142,207 @@ func appendQueryPartLowerings(
 	applyShortestPathObservationModes(plan, queryPartIndex, readingClauses, fieldRequirements)
 	applyExpansionSearchObservationModes(plan, queryPartIndex, readingClauses, fieldRequirements)
 	return nil
+}
+
+func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}, initialDeclaredSymbols map[string]struct{}) {
+	_, updatingClauses := queryPartProjection(queryPart)
+	declaredSymbols := copyStringSet(initialDeclaredSymbols)
+	for clauseIndex, readingClause := range readingClauses {
+		if readingClause == nil || readingClause.Match == nil {
+			continue
+		}
+		searchSymbols := shortestPathSearchPredicateSymbols([]*cypher.ReadingClause{readingClause})
+		idEqualities := singletonIDEqualityCounts(readingClause.Match.Where)
+		for patternIndex, patternPart := range readingClause.Match.Pattern {
+			steps := traversalStepsForPattern(patternPart)
+			variableExpansions := 0
+			for _, step := range steps {
+				if step.Relationship != nil && step.Relationship.Range != nil {
+					variableExpansions++
+				}
+			}
+			for stepIndex, step := range steps {
+				if step.Relationship == nil || step.Relationship.Range == nil || stepIndex == 0 {
+					continue
+				}
+				target := PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex)
+				prefixLength := stepIndex
+				terminal := stepIndex == len(steps)-1
+				directedPrefix := true
+				prefixFixed := true
+				for _, prefixStep := range steps[:stepIndex] {
+					directedPrefix = directedPrefix && prefixStep.Relationship != nil && prefixStep.Relationship.Direction != graph.DirectionBoth
+					prefixFixed = prefixFixed && prefixStep.Relationship != nil && prefixStep.Relationship.Range == nil
+				}
+				minDepth := int64(1)
+				if step.Relationship.Range.StartIndex != nil {
+					minDepth = *step.Relationship.Range.StartIndex
+				}
+				maxDepth := int64(15)
+				if step.Relationship.Range.EndIndex != nil {
+					maxDepth = *step.Relationship.Range.EndIndex
+				}
+				terminalSymbol := variableSymbol(step.RightNode.Variable)
+				_, propertySearch := searchSymbols[terminalSymbol]
+				idSearch := idEqualities[terminalSymbol] == 1
+				seedClass := ""
+				if idSearch {
+					seedClass = "id_equality"
+				} else if propertySearch {
+					seedClass = endpointSeedPredicateClass(readingClause.Match.Where, terminalSymbol)
+				}
+				terminalSelective := idSearch || propertySearch
+				terminalCorrelated := symbolDeclared(declaredSymbols, terminalSymbol)
+				terminalPredicateLocal := predicateTermsForSymbolAreLocal(readingClause.Match.Where, terminalSymbol)
+				relationshipPredicate := step.Relationship.Properties != nil || syntaxDependsOn(readingClause.Match.Where, variableSymbol(step.Relationship.Variable))
+				pathDependentPredicate := patternPart != nil && patternPart.Variable != nil && syntaxDependsOn(readingClause.Match.Where, patternPart.Variable.Symbol)
+				deterministicPredicates := !syntaxContainsNonIdentityFunctionInvocation(patternPart) && !syntaxContainsNonIdentityFunctionInvocation(readingClause.Match.Where)
+				observation := ExpansionSearchObservationEndpointIDs
+				if patternPart != nil && patternPart.Variable != nil && referencesSourceIdentifier(sourceReferences, patternPart.Variable.Symbol) {
+					observation = ExpansionSearchObservationFullPath
+				}
+				facts := []ExpansionSearchEligibilityFact{
+					{Name: "read_only", Eligible: updatingClauses == 0},
+					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
+					{Name: "ordinary_path", Eligible: patternPart != nil && !patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
+					{Name: "single_variable_expansion_in_region", Eligible: variableExpansions == 1},
+					{Name: "terminal_expansion", Eligible: terminal},
+					{Name: "exact_one_hop_prefix", Eligible: prefixLength == 1 && prefixFixed},
+					{Name: "directed_prefix", Eligible: directedPrefix},
+					{Name: "directed_expansion", Eligible: step.Relationship.Direction != graph.DirectionBoth},
+					{Name: "supported_effective_depth", Eligible: maxDepth >= minDepth && maxDepth <= 64},
+					{Name: "minimum_depth_one", Eligible: minDepth >= 1},
+					{Name: "terminal_unbound", Eligible: !terminalCorrelated},
+					{Name: "selective_terminal_predicate", Eligible: terminalSelective},
+					{Name: "terminal_predicate_local", Eligible: terminalPredicateLocal},
+					{Name: "single_relationship_kind", Eligible: len(step.Relationship.Kinds) == 1},
+					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil},
+					{Name: "no_relationship_predicate", Eligible: !relationshipPredicate},
+					{Name: "no_path_dependent_predicate", Eligible: !pathDependentPredicate},
+					{Name: "deterministic_predicates", Eligible: deterministicPredicates},
+					{Name: "supported_observation", Eligible: observation != ExpansionSearchObservationUnsupported},
+				}
+				eligible := expansionSearchFactsEligible(facts)
+				fallbackReason := ExpansionSearchFallbackTournamentUnqualified
+				switch {
+				case updatingClauses > 0:
+					fallbackReason = ExpansionSearchFallbackMutation
+				case readingClause.Match.Optional:
+					fallbackReason = ExpansionSearchFallbackOptionalMatch
+				case !terminal:
+					fallbackReason = ExpansionSearchFallbackExpansionNotTerminal
+				case prefixLength == 0:
+					fallbackReason = ExpansionSearchFallbackNoFixedPrefix
+				case prefixLength != 1 || !prefixFixed:
+					fallbackReason = ExpansionSearchFallbackPrefixTooLong
+				case !directedPrefix:
+					fallbackReason = ExpansionSearchFallbackDirectionlessPrefix
+				case step.Relationship.Direction == graph.DirectionBoth:
+					fallbackReason = ExpansionSearchFallbackDirectionlessExpansion
+				case minDepth < 1:
+					fallbackReason = ExpansionSearchFallbackZeroDepth
+				case maxDepth < minDepth || maxDepth > 64:
+					fallbackReason = ExpansionSearchFallbackUnsupportedDepth
+				case variableExpansions != 1:
+					fallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
+				case terminalCorrelated || !terminalPredicateLocal:
+					fallbackReason = ExpansionSearchFallbackCorrelatedTerminal
+				case !terminalSelective:
+					fallbackReason = ExpansionSearchFallbackTerminalNotSelective
+				case len(step.Relationship.Kinds) != 1:
+					fallbackReason = ExpansionSearchFallbackTournamentUnqualified
+				case step.Relationship.Variable != nil:
+					fallbackReason = ExpansionSearchFallbackRelationshipVariable
+				case relationshipPredicate:
+					fallbackReason = ExpansionSearchFallbackRelationshipPredicate
+				case pathDependentPredicate:
+					fallbackReason = ExpansionSearchFallbackPathDependentPredicate
+				case !deterministicPredicates:
+					fallbackReason = ExpansionSearchFallbackNonDeterministicPredicate
+				}
+				selected := ExpansionSearchStepwiseForward
+				selectionMode := "incumbent_default"
+				if eligible {
+					selected = ExpansionSearchEndpointSeededReverse
+					selectionMode = "static_guarded"
+					fallbackReason = ""
+				}
+				projection, _ := queryPartProjection(queryPart)
+				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, ExpansionSearchStrategyDecision{
+					Target: target, Family: "fixed_prefix_terminal_expansion",
+					PlannedCandidates: []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse},
+					CandidateStrategy: ExpansionSearchEndpointSeededReverse, SelectedStrategy: selected,
+					StructurallyEligible: eligible, StaticallyEligible: eligible, EligibilityFacts: facts,
+					PrefixStartStep: 0, PrefixEndStep: stepIndex - 1, PrefixLength: prefixLength,
+					SeedPredicateClass: seedClass, EndpointLimit: 32, StateLimit: 4096,
+					HasFinalLimit:   projection != nil && projection.Limit != nil,
+					ObservationMode: observation, LogicalDirection: step.Relationship.Direction.String(),
+					MinimumDepth: minDepth, MaximumDepth: maxDepth, SelectionMode: selectionMode,
+					SelectorVersion: "endpoint-seeded-guarded-v1", FallbackStrategy: ExpansionSearchStepwiseForward,
+					FallbackReason: fallbackReason,
+				})
+			}
+			declarePatternSymbols(declaredSymbols, patternPart)
+		}
+		declareWhereSymbols(declaredSymbols, readingClause.Match)
+	}
+}
+
+func predicateTermsForSymbolAreLocal(where *cypher.Where, symbol string) bool {
+	if where == nil || symbol == "" {
+		return true
+	}
+	for _, expression := range where.Expressions {
+		for _, term := range cypherConjunctionTerms(expression) {
+			dependencies := sortedDependencies(term)
+			if !slices.Contains(dependencies, symbol) {
+				continue
+			}
+			for _, dependency := range dependencies {
+				if dependency != symbol {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func endpointSeedPredicateClass(where *cypher.Where, symbol string) string {
+	if where == nil {
+		return ""
+	}
+	for _, expression := range where.Expressions {
+		for _, term := range cypherConjunctionTerms(expression) {
+			comparison, ok := term.(*cypher.Comparison)
+			if !ok || comparison == nil || len(comparison.Partials) != 1 {
+				continue
+			}
+			partial := comparison.Partials[0]
+			leftSymbol, leftOK := propertyLookupVariableSymbol(comparison.Left)
+			rightSymbol, rightOK := propertyLookupVariableSymbol(partial.Right)
+			if (leftOK && leftSymbol == symbol && !expressionReferencesAnySource(partial.Right)) || (rightOK && rightSymbol == symbol && !expressionReferencesAnySource(comparison.Left)) {
+				switch partial.Operator {
+				case cypher.OperatorEquals:
+					return "property_equality"
+				case cypher.OperatorEndsWith:
+					return "property_ends_with"
+				default:
+					return "property_search"
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func hasExpansionSearchDecision(plan *LoweringPlan, target TraversalStepTarget) bool {
+	for _, decision := range plan.ExpansionSearchStrategy {
+		if decision.Target == target {
+			return true
+		}
+	}
+	return false
 }
 
 func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}, initialDeclaredSymbols map[string]struct{}) {
@@ -175,6 +378,9 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					ClauseIndex:    clauseIndex,
 					PatternIndex:   patternIndex,
 				}.TraversalStep(stepIndex)
+				if hasExpansionSearchDecision(plan, target) {
+					continue
+				}
 				limitConflict := hasLimitPushdownForTarget(plan, target)
 				suffixLength := fixedSuffixLength(steps[stepIndex+1:])
 				suffixEnd := stepIndex + suffixLength
@@ -373,6 +579,19 @@ func syntaxContainsFunctionInvocation(node cypher.SyntaxNode) bool {
 	return found
 }
 
+func syntaxContainsNonIdentityFunctionInvocation(node cypher.SyntaxNode) bool {
+	if node == nil {
+		return false
+	}
+	found := false
+	_ = walk.Cypher(node, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if function, isFunction := node.(*cypher.FunctionInvocation); isFunction && function != nil && !strings.EqualFold(function.Name, cypher.IdentityFunction) {
+			found = true
+		}
+	}))
+	return found
+}
+
 func symbolDeclared(declared map[string]struct{}, symbol string) bool {
 	if symbol == "" {
 		return false
@@ -489,6 +708,8 @@ func applyExpansionSearchObservationModes(plan *LoweringPlan, queryPartIndex int
 		setExpansionSearchEligibilityFact(decision, "supported_observation", supported)
 		if !supported {
 			decision.StructurallyEligible = false
+			decision.StaticallyEligible = false
+			decision.SelectedStrategy = decision.FallbackStrategy
 			decision.FallbackReason = ExpansionSearchFallbackUnsupportedObservation
 		}
 	}
@@ -886,13 +1107,18 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 			switch decision.ObservationMode {
 			case ShortestPathObservationDistance:
 				decision.SelectedExecutor = ShortestPathExecutorS3Unidirectional
+				decision.SelectorVersion = "sp-static-v3"
 			case ShortestPathObservationOnePath:
-				decision.SelectedExecutor = ShortestPathExecutorS3EdgeM0
+				// EdgeM0 enumerates every relationship-simple trail before its
+				// final ORDER BY/LIMIT and has no runtime state budget. Keep it
+				// available to the tool-only tournament, but use the compact
+				// state-limited witness executor for production selection.
+				decision.SelectedExecutor = ShortestPathExecutorS4CanonicalWitness
+				decision.SelectorVersion = "sp-static-v4"
 			default:
 				continue
 			}
 			decision.SelectionMode = "static"
-			decision.SelectorVersion = "sp-static-v3"
 			decision.FallbackReason = ""
 			decision.ExperimentalWinner = true
 		}
@@ -945,6 +1171,10 @@ func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.
 		setExpansionSearchEligibilityFact(decision, "read_only", readOnly)
 		decision.StructurallyEligible = expansionSearchFactsEligible(decision.EligibilityFacts)
 		decision.StaticallyEligible = decision.StructurallyEligible
+		if !decision.StructurallyEligible && decision.SelectedStrategy == ExpansionSearchEndpointSeededReverse {
+			decision.SelectedStrategy = decision.FallbackStrategy
+			decision.SelectionMode = "incumbent_default"
+		}
 		if !singleExpansion && (decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified || decision.FallbackReason == ExpansionSearchFallbackMultipleVariableExpansions || decision.FallbackReason == ExpansionSearchFallbackUnboundRoot) {
 			decision.FallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
 		} else if !readOnly && decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified {

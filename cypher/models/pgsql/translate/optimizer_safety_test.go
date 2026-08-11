@@ -295,6 +295,53 @@ func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
 }
 
+func TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied(t *testing.T) {
+	translation := optimizerSafetyTranslationWithParameters(t, `
+		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
+		WHERE excluded.objectid ENDS WITH '-516'
+		WITH collect(s) AS exclude
+		MATCH p = (c:Computer)-[:AdminTo]->(:User)-[:MemberOf*1..]->(g:Group)
+		WHERE g.objectid ENDS WITH $suffix AND NOT c IN exclude
+		RETURN p
+		LIMIT 1000
+	`, map[string]any{"suffix": "-512"})
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "_endpoint_seeded_endpoints as materialized")
+	require.Contains(t, formatted, "limit 33")
+	require.Contains(t, formatted, "_endpoint_seeded_states as materialized")
+	require.Contains(t, formatted, "_endpoint_seeded_incumbent as materialized")
+	require.Contains(t, formatted, "limit 4097")
+	require.Contains(t, formatted, "array_prepend")
+	require.Contains(t, formatted, "end_id = s4_endpoint_seeded_reverse.next_id")
+	require.Contains(t, formatted, "not exists (select 1 from s4_endpoint_seeded_endpoints offset 32 limit 1)")
+	require.Contains(t, formatted, "not exists (select 1 from s4_endpoint_seeded_states offset 4096 limit 1)")
+	require.Contains(t, formatted, "union all select s4_endpoint_seeded_incumbent")
+	require.Contains(t, formatted, "s5.path && array [s3.e1]::int8[]")
+	require.Contains(t, formatted, "s4_endpoint_seeded_states.path && array [s3.e1]::int8[]")
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, optimize.TraversalStepTarget{
+		QueryPartIndex: 1,
+		ClauseIndex:    0,
+		PatternIndex:   0,
+		StepIndex:      1,
+	})
+	require.Equal(t, string(optimize.ExpansionSearchEndpointSeededReverse), outcome.Selected)
+	require.Equal(t, string(optimize.ExpansionSearchEndpointSeededReverse), outcome.Applied)
+	require.Equal(t, int64(32), outcome.EndpointLimit)
+	require.Equal(t, int64(4096), outcome.StateLimit)
+	require.Equal(t, "property_ends_with", outcome.SeedPredicateClass)
+	require.Equal(t, 1, outcome.PrefixLength)
+	require.True(t, outcome.HasFinalLimit)
+}
+
+func TestOrdinaryExpansionMayContinueAfterSelfLoop(t *testing.T) {
+	formatted := optimizerSafetySQL(t, `MATCH p = (s)-[:MemberOf*1..3]->(g) RETURN p`)
+	require.Contains(t, formatted, "1, false, false, array [e0.id]")
+	require.NotContains(t, formatted, "e0.start_id = e0.end_id, array [e0.id]")
+}
+
 func TestForcedSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root:ExpansionRoot)
@@ -403,6 +450,52 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Fallback)
 	require.Empty(t, outcome.SkipReason)
+}
+
+func TestGreedyProjectionMaterializesShortestPathAndEntities(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `
+		MATCH p = shortestPath((s:Group)-[:MemberOf*1..4]->(e:Group))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN *
+	`)
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    0,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
+	require.Equal(t, string(optimize.ShortestPathObservationOnePath), outcome.ObservationMode)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "::pathcomposite")
+	require.Contains(t, formatted, "::nodecomposite")
+}
+
+func TestGreedyProjectionMaterializesRelationships(t *testing.T) {
+	formatted := optimizerSafetySQL(t, `
+		MATCH (s:Group)-[r:MemberOf]->(e:Group)
+		RETURN *
+	`)
+
+	require.Contains(t, formatted, "::nodecomposite")
+	require.Contains(t, formatted, "::edgecomposite")
+}
+
+func TestGreedyWithProjectionCarriesFullShortestPath(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `
+		MATCH p = shortestPath((s:Group)-[:MemberOf*1..4]->(e:Group))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH *
+		RETURN p
+	`)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "::pathcomposite")
+	require.Contains(t, formatted, "ordered_edge_ids_to_path(0, s1.n0")
 }
 
 func TestShortestExecutorV4SelectsDeepInboundCompactDistance(t *testing.T) {
@@ -724,10 +817,12 @@ func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *
 			PatternIndex:   0,
 			StepIndex:      0,
 		})
-	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Selected)
-	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), productionOutcome.Applied)
+	require.Equal(t, string(optimize.ShortestPathExecutorS4CanonicalWitness), productionOutcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorS4CanonicalWitness), productionOutcome.Applied)
 	require.Equal(t, "static", productionOutcome.SelectionMode)
-	require.Equal(t, "sp-static-v3", productionOutcome.SelectorVersion)
+	require.Equal(t, "sp-static-v4", productionOutcome.SelectorVersion)
+	require.Contains(t, incumbentSQL, "shortest_path_compact")
+	require.Contains(t, incumbentSQL, "100000")
 
 	forced, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
@@ -736,7 +831,7 @@ func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *
 	forcedSQL, err := Translated(forced)
 	require.NoError(t, err)
 
-	require.Equal(t, incumbentSQL, forcedSQL)
+	require.NotEqual(t, incumbentSQL, forcedSQL)
 	require.Contains(t, forcedSQL, "with recursive")
 	require.Contains(t, forcedSQL, "s1(next_id, depth, path)")
 	require.Contains(t, forcedSQL, "generate_subscripts(s1.path, 1)")

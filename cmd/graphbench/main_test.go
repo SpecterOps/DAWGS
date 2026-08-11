@@ -134,6 +134,9 @@ func TestParseConfigAcceptsOnlyQualifiedForcedExpansionSearch(t *testing.T) {
 	cfg, err := parseConfig([]string{"-postgres-force-expansion-search", "EXPANSION-SUFFIX-SEEDED-REVERSE"}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.Equal(t, "EXPANSION-SUFFIX-SEEDED-REVERSE", cfg.PostgresForceExpansion)
+	cfg, err = parseConfig([]string{"-postgres-force-expansion-search", "EXPANSION-ENDPOINT-SEEDED-REVERSE"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "EXPANSION-ENDPOINT-SEEDED-REVERSE", cfg.PostgresForceExpansion)
 
 	_, err = parseConfig([]string{"-postgres-force-expansion-search", "unknown-strategy"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "unsupported PostgreSQL forced expansion search")

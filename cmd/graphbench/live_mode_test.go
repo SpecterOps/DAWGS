@@ -58,6 +58,12 @@ func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
 		ObservedRows: []string{"sensitive-property"},
 		PostgresPlan: []string{"Index Cond: id = 42"},
 		Error:        "unmapped-node:77",
+		PostgresReferences: []PostgresReferenceResult{{
+			ObservedRows: []string{"reference-sensitive-property"},
+		}},
+		ExistingGraph: &ExistingGraphRun{Attempts: []ExistingGraphAttempt{{
+			Error: "attempt-sensitive-property 42",
+		}}},
 	}
 	redactExistingGraphRecord(&record, manifest, map[string]graph.ID{"source": 42})
 	require.Empty(t, record.Cypher)
@@ -66,8 +72,12 @@ func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
 	require.NotContains(t, record.NodeParams["source"], "safe-source")
 	require.NotContains(t, record.ObservedRows[0], "sensitive-property")
 	require.NotContains(t, record.PostgresPlan[0], "42")
+	require.Regexp(t, `^sha256:[0-9a-f]{64}$`, record.Error)
 	require.NotContains(t, record.Error, "77")
-	require.Contains(t, record.Error, "unmapped-node:<redacted-id>")
+	require.Regexp(t, `^sha256:[0-9a-f]{64}$`, record.PostgresReferences[0].ObservedRows[0])
+	require.NotContains(t, record.PostgresReferences[0].ObservedRows[0], "reference-sensitive-property")
+	require.Regexp(t, `^sha256:[0-9a-f]{64}$`, record.ExistingGraph.Attempts[0].Error)
+	require.NotContains(t, record.ExistingGraph.Attempts[0].Error, "attempt-sensitive-property")
 }
 
 func TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity(t *testing.T) {
@@ -119,16 +129,25 @@ func TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity(t *testing.T) {
 func TestExistingGraphCheckpointIsIdentityBoundAndResumable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "checkpoint.json")
 	records := []CaseResult{{
-		Dataset:       "live",
-		Name:          "case",
-		ExecutionMode: ModePostgresSQL,
-		Status:        StatusOK,
+		Dataset:        "live",
+		Name:           "case",
+		WorkloadSHA256: "workload",
+		ExecutionMode:  ModePostgresSQL,
+		Status:         StatusOK,
+		Environment: &RunEnvironment{
+			ArtifactSchemaVersion: 2,
+			CorpusSHA256:          "corpus",
+			RunIdentitySHA256:     "run",
+			RunUUID:               "run-uuid",
+		},
 	}}
-	require.NoError(t, writeExistingGraphCheckpoint(path, "manifest", "corpus", records))
-	loaded, err := readExistingGraphCheckpoint(path, "manifest", "corpus")
+	require.NoError(t, writeExistingGraphCheckpoint(path, "manifest", "corpus", "run", records))
+	loaded, err := readExistingGraphCheckpoint(path, "manifest", "corpus", "run")
 	require.NoError(t, err)
 	require.Equal(t, records, loaded)
-	_, err = readExistingGraphCheckpoint(path, "other", "corpus")
+	_, err = readExistingGraphCheckpoint(path, "other", "corpus", "run")
+	require.ErrorContains(t, err, "identity")
+	_, err = readExistingGraphCheckpoint(path, "manifest", "corpus", "other-run")
 	require.ErrorContains(t, err, "identity")
 
 	raw, err := os.ReadFile(path)
@@ -136,6 +155,13 @@ func TestExistingGraphCheckpointIsIdentityBoundAndResumable(t *testing.T) {
 	var checkpoint existingGraphCheckpoint
 	require.NoError(t, json.Unmarshal(raw, &checkpoint))
 	require.Equal(t, existingGraphCheckpointVersion, checkpoint.Version)
+
+	checkpoint.Records = append(checkpoint.Records, checkpoint.Records[0])
+	raw, err = json.Marshal(checkpoint)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+	_, err = readExistingGraphCheckpoint(path, "manifest", "corpus", "run")
+	require.ErrorContains(t, err, "duplicate record")
 }
 
 func TestExistingGraphPlanRedactionPreservesJSONNumbers(t *testing.T) {
@@ -185,6 +211,35 @@ func TestExistingGraphCorpusIdentityIsStable(t *testing.T) {
 		}},
 	}
 	require.Equal(t, corpusIdentity(corpus), corpusIdentity(corpus))
+	changedQuery := corpus
+	changedQuery.Cases = append([]ScaleCase(nil), corpus.Cases...)
+	changedQuery.Cases[0].Cypher = "RETURN 2"
+	require.NotEqual(t, corpusIdentity(corpus), corpusIdentity(changedQuery))
+
+	changedExpected := corpus
+	changedExpected.Cases = append([]ScaleCase(nil), corpus.Cases...)
+	one := int64(1)
+	changedExpected.Cases[0].Expected.RowCount = &one
+	require.NotEqual(t, corpusIdentity(corpus), corpusIdentity(changedExpected))
+}
+
+func TestExistingGraphCompletedWorkloadsAreFixtureBound(t *testing.T) {
+	corpus := ScaleCorpus{Cases: []ScaleCase{{
+		Name:           "case",
+		Dataset:        "live",
+		Cypher:         "RETURN 1",
+		CandidateModes: []ExecutionMode{ModePostgresSQL},
+	}}}
+	fixture := FixtureMetadata{Dataset: "existing_graph", Checksum: "manifest:content:schema:index"}
+	expected := newCaseResult(corpus.Cases[0], ModePostgresSQL, nil)
+	attachFixtureMetadata(&expected, fixture)
+	completed := map[string]string{existingGraphCaseKey(ModePostgresSQL, corpus.Cases[0]): expected.WorkloadSHA256}
+	require.NoError(t, validateCompletedWorkloads(completed, corpus, fixture))
+
+	changedFixture := fixture
+	changedFixture.Checksum = "manifest:other-content:schema:index"
+	require.ErrorContains(t, validateCompletedWorkloads(completed, corpus, changedFixture), "workload identity")
+	require.ErrorContains(t, validateCompletedWorkloads(map[string]string{"postgres_sql/other/case": "digest"}, corpus, fixture), "unknown workload")
 }
 
 func splitNonEmptyLines(value string) []string {

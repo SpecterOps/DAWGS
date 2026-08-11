@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
@@ -124,6 +125,25 @@ func TestShortestPathSelfEndpointGuardsUseCaseErrorHelper(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, endpointPairFilterGuard, "case when (select count(*)::int8 from traversal_pair_filter where traversal_pair_filter.root_id = e0.start_id and traversal_pair_filter.terminal_id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
 	require.NotContains(t, endpointPairFilterGuard, " / ")
+}
+
+func TestForwardPrimerSkipsSelfEndpointGuardWhenZeroDepthIsAllowed(t *testing.T) {
+	builder, expansionModel := newShortestPathSeedTestBuilder(false, false)
+	expansionModel.UseMaterializedEndpointPairFilter = true
+	expansionModel.Options.MinDepth = models.OptionalValue[int64](0)
+
+	query, _, err := builder.prepareForwardFrontPrimerQuery(expansionModel)
+	require.NoError(t, err)
+	formatted, err := format.SyntaxNode(query)
+	require.NoError(t, err)
+	require.NotContains(t, formatted, "shortest_path_self_endpoint_error")
+
+	expansionModel.Options.MinDepth = models.OptionalValue[int64](1)
+	query, _, err = builder.prepareForwardFrontPrimerQuery(expansionModel)
+	require.NoError(t, err)
+	formatted, err = format.SyntaxNode(query)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "shortest_path_self_endpoint_error")
 }
 
 func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) {

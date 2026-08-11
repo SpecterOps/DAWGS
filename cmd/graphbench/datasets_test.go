@@ -28,6 +28,40 @@ func TestGeneratedFixedSuffixExpansionV2DatasetCarriesExactExpectations(t *testi
 	require.Equal(t, int64(4), metadata.FixedSuffixExpansion.CompleteOutputTrails)
 }
 
+func TestGeneratedEndpointSeededExpansionDatasetRoundTripsWithExactExpectations(t *testing.T) {
+	config := testutil.EndpointSeededExpansionScaleConfig{
+		Depth: 3, MatchingEndpoints: 2, OtherEndpoints: 1,
+		MatchingEligibleLanes: 2, OtherEligibleLanes: 1, MatchingIneligibleLanes: 1,
+		ParallelEdges: 1, AddCycle: false, PropertyPayloadSize: 8,
+	}
+	name := endpointSeededExpansionDatasetName(config)
+	parsed, ok := parseEndpointSeededExpansionDatasetName(name)
+	require.True(t, ok)
+	require.Equal(t, config, parsed)
+	metadata, err := fixtureMetadata("unused", name)
+	require.NoError(t, err)
+	require.NotNil(t, metadata.EndpointSeededExpansion)
+	require.Equal(t, int64(2), metadata.EndpointSeededExpansion.MatchingEndpoints)
+	require.Equal(t, int64(3), metadata.EndpointSeededExpansion.EligiblePrefixRows)
+	require.Equal(t, int64(2), metadata.EndpointSeededExpansion.ExpectedOutputTrails)
+	require.Greater(t, metadata.EndpointSeededExpansion.ExpectedReverseStates, metadata.EndpointSeededExpansion.ExpectedOutputTrails)
+}
+
+func TestGeneratedEndpointSeededExpansionRejectsInvalidNames(t *testing.T) {
+	for _, name := range []string{
+		"generated_endpoint_seeded_expansion_v1_d0_e1_q0_w1_o0_x0_m1_c0_p0",
+		"generated_endpoint_seeded_expansion_v1_d3_e0_q0_w1_o0_x0_m1_c0_p0",
+		"generated_endpoint_seeded_expansion_v1_d3_e1_q0_w1_o0_x0_m0_c0_p0",
+		"generated_endpoint_seeded_expansion_v1_d03_e1_q0_w1_o0_x0_m1_c0_p0",
+		"generated_endpoint_seeded_expansion_v1_d3_e1_q0_w1_o0_x0_m1_c2_p0",
+		"generated_endpoint_seeded_expansion_v1_d3_e1_q0_w1_o0_x0_m2_c0_p0",
+	} {
+		_, ok := parseEndpointSeededExpansionDatasetName(name)
+		require.False(t, ok, name)
+		require.Nil(t, generatedDataset(name), name)
+	}
+}
+
 func TestGeneratedShortestPathV2DatasetRoundTripsAndCarriesExactExpectations(t *testing.T) {
 	config := testutil.ShortestPathScaleV2Config{
 		Depth:                    3,

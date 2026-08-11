@@ -134,6 +134,7 @@ func TestResourceGateAttributesDirectPreflightIncumbentFallback(t *testing.T) {
 				}},
 			},
 			PostgresPlanJSON: json.RawMessage(`[{"Plan":{"Plans":[{"Function Name":"bidirectional_sp_harness","Actual Loops":0}]}}]`),
+			PostgresMetrics:  &PostgresPlanMetrics{},
 		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, records))
@@ -147,6 +148,31 @@ func TestResourceGateAttributesDirectPreflightIncumbentFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(raw, &report))
 	require.Equal(t, "SP-S0", report.Cases[1].FallbackArchitecture)
+}
+
+func TestResourceGateFailsClosedWithoutStructuredMetrics(t *testing.T) {
+	artifact := filepath.Join(t.TempDir(), "records.jsonl")
+	record := CaseResult{
+		Dataset:       "fixture",
+		Name:          "missing-metrics",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape:         WorkloadShape{FixtureTier: "normal"},
+		Optimization: &translate.OptimizationSummary{
+			TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S4-C-D"}},
+		},
+	}
+	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
+	output := filepath.Join(t.TempDir(), "report.json")
+	passed, err := createResourceGateReport(artifact, output)
+	require.NoError(t, err)
+	require.False(t, passed)
+
+	var report ResourceGateReport
+	raw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &report))
+	require.Contains(t, report.Cases[0].Reasons, "structured PostgreSQL plan metrics are missing")
 }
 
 func TestResourceGateRejectsDirectPreflightWorkspaceOnDirectHit(t *testing.T) {

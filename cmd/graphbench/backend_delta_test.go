@@ -51,6 +51,7 @@ func TestBackendDeltaReportIsDescriptiveAndRequiresMatchedObservations(t *testin
 	var report BackendDeltaReport
 	require.NoError(t, json.Unmarshal(raw, &report))
 	require.Len(t, report.Cases, 1)
+	require.True(t, report.Cases[0].ObservationsComparable)
 	require.True(t, report.Cases[0].ObservationsMatch)
 	require.Equal(t, 2.0, report.Cases[0].MedianNeo4jOverPG)
 	require.Contains(t, report.Notice, "Descriptive only")
@@ -87,4 +88,51 @@ func TestBackendDeltaReportComparesPersistedObservations(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &report))
 	require.Len(t, report.Cases, 1)
 	require.False(t, report.Cases[0].ObservationsMatch)
+}
+
+func TestBackendDeltaReportDoesNotTreatAbsentObservationsAsMatching(t *testing.T) {
+	root := t.TempDir()
+	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
+	records := []CaseResult{
+		{Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK, RowCount: 1},
+		{Dataset: "fixture", Name: "case", ExecutionMode: ModeNeo4j, Status: StatusOK, RowCount: 1},
+	}
+	require.NoError(t, writeJSONLFile(artifact, records))
+	require.NoError(t, createBackendDeltaReport(artifact, output))
+	raw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	var report BackendDeltaReport
+	require.NoError(t, json.Unmarshal(raw, &report))
+	require.False(t, report.Cases[0].ObservationsComparable)
+	require.False(t, report.Cases[0].ObservationsMatch)
+}
+
+func TestBackendDeltaReportPreservesRepeatedRounds(t *testing.T) {
+	root := t.TempDir()
+	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
+	var records []CaseResult
+	for round := 1; round <= 2; round++ {
+		for _, mode := range []ExecutionMode{ModePostgresSQL, ModeNeo4j} {
+			records = append(records, CaseResult{
+				Dataset:           "fixture",
+				Name:              "case",
+				ExecutionMode:     mode,
+				Status:            StatusOK,
+				StableObservation: true,
+				ObservedRows:      []string{"one"},
+				RowCount:          1,
+				Environment:       &RunEnvironment{Round: round},
+				Stats:             DurationStats{Median: time.Duration(round) * time.Millisecond},
+			})
+		}
+	}
+	require.NoError(t, writeJSONLFile(artifact, records))
+	require.NoError(t, createBackendDeltaReport(artifact, output))
+	raw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	var report BackendDeltaReport
+	require.NoError(t, json.Unmarshal(raw, &report))
+	require.Len(t, report.Cases, 2)
+	require.Equal(t, 1, report.Cases[0].Round)
+	require.Equal(t, 2, report.Cases[1].Round)
 }

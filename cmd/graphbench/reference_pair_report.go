@@ -85,10 +85,14 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		return ReferencePairReport{}, fmt.Errorf("unsupported reference-pair protocol %q", protocol)
 	}
 	type pairSeries struct {
-		baseline, candidate                         roundSamples
-		baselineArchitecture, candidateArchitecture string
-		baselineBoundary, candidateBoundary         string
-		baselineValidation, candidateValidation     string
+		baseline, candidate                             roundSamples
+		baselineArchitecture, candidateArchitecture     string
+		baselineBoundary, candidateBoundary             string
+		baselineValidation, candidateValidation         string
+		baselineImplementation, candidateImplementation string
+		baselineSQLFingerprint, candidateSQLFingerprint string
+		binaryIdentity                                  string
+		baselineFirst                                   map[int]bool
 	}
 	series := map[performanceKey]*pairSeries{}
 	seen := map[performanceKey]map[int]struct{}{}
@@ -116,9 +120,13 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		if orderedComparators && (baseline.RowCount != candidate.RowCount || !slices.Equal(baseline.ObservedRows, candidate.ObservedRows)) {
 			return ReferencePairReport{}, fmt.Errorf("%s/%s ordered-ID reference-pair observations differ", record.Dataset, record.Name)
 		}
-		if baseline.Stats.WarmupIterations < minimumWarmups || candidate.Stats.WarmupIterations < minimumWarmups || baseline.MeasurementOrder == candidate.MeasurementOrder {
+		if baseline.ImplementationID == "" || candidate.ImplementationID == "" || baseline.SQLFingerprint == "" || candidate.SQLFingerprint == "" || record.Environment.BinarySHA256 == "" {
+			return ReferencePairReport{}, fmt.Errorf("%s/%s round %d lacks complete reference-pair implementation identity", record.Dataset, record.Name, record.Environment.Round)
+		}
+		if baseline.Stats.WarmupIterations < minimumWarmups || candidate.Stats.WarmupIterations < minimumWarmups || baseline.MeasurementOrder <= 0 || candidate.MeasurementOrder <= 0 || baseline.MeasurementOrder == candidate.MeasurementOrder {
 			return ReferencePairReport{}, fmt.Errorf("%s/%s round %d lacks warm, ordered reference-pair measurements", record.Dataset, record.Name, record.Environment.Round)
 		}
+		binaryIdentity := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", record.Environment.BinarySHA256, record.Environment.DirtyDiffSHA256, record.Environment.SourceCommit, record.Environment.GOOS, record.Environment.GOARCH)
 		key := performanceKey{
 			dataset: record.Dataset,
 			name:    record.Name,
@@ -133,20 +141,30 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		seen[key][record.Environment.Round] = struct{}{}
 		if series[key] == nil {
 			series[key] = &pairSeries{
-				baseline:              roundSamples{},
-				candidate:             roundSamples{},
-				baselineArchitecture:  baseline.Architecture,
-				candidateArchitecture: candidate.Architecture,
-				baselineBoundary:      baseline.Boundary,
-				candidateBoundary:     candidate.Boundary,
-				baselineValidation:    baseline.SemanticValidation,
-				candidateValidation:   candidate.SemanticValidation,
+				baseline:                roundSamples{},
+				candidate:               roundSamples{},
+				baselineArchitecture:    baseline.Architecture,
+				candidateArchitecture:   candidate.Architecture,
+				baselineBoundary:        baseline.Boundary,
+				candidateBoundary:       candidate.Boundary,
+				baselineValidation:      baseline.SemanticValidation,
+				candidateValidation:     candidate.SemanticValidation,
+				baselineImplementation:  baseline.ImplementationID,
+				candidateImplementation: candidate.ImplementationID,
+				baselineSQLFingerprint:  baseline.SQLFingerprint,
+				candidateSQLFingerprint: candidate.SQLFingerprint,
+				binaryIdentity:          binaryIdentity,
+				baselineFirst:           map[int]bool{},
 			}
 		} else if series[key].baselineArchitecture != baseline.Architecture || series[key].candidateArchitecture != candidate.Architecture ||
 			series[key].baselineBoundary != baseline.Boundary || series[key].candidateBoundary != candidate.Boundary ||
-			series[key].baselineValidation != baseline.SemanticValidation || series[key].candidateValidation != candidate.SemanticValidation {
+			series[key].baselineValidation != baseline.SemanticValidation || series[key].candidateValidation != candidate.SemanticValidation ||
+			series[key].baselineImplementation != baseline.ImplementationID || series[key].candidateImplementation != candidate.ImplementationID ||
+			series[key].baselineSQLFingerprint != baseline.SQLFingerprint || series[key].candidateSQLFingerprint != candidate.SQLFingerprint ||
+			series[key].binaryIdentity != binaryIdentity {
 			return ReferencePairReport{}, fmt.Errorf("%s/%s reference-pair identity changed across rounds", record.Dataset, record.Name)
 		}
+		series[key].baselineFirst[record.Environment.Round] = baseline.MeasurementOrder < candidate.MeasurementOrder
 		for _, sample := range baseline.Stats.Samples {
 			if sample.Classification == "warm" && sample.Duration > 0 {
 				series[key].baseline[record.Environment.Round] = append(series[key].baseline[record.Environment.Round], sample.Duration)
@@ -190,7 +208,22 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 		if len(baseline) < minimumRounds || len(baseline) > maximumRounds {
 			return ReferencePairReport{}, fmt.Errorf("%s/%s requires %d-%d matched rounds, got %d", key.dataset, key.name, minimumRounds, maximumRounds, len(baseline))
 		}
-		for _, round := range sortedRounds(baseline) {
+		rounds := sortedRounds(baseline)
+		baselineFirstCount := 0
+		for roundIdx, round := range rounds {
+			baselineFirst := series[key].baselineFirst[round]
+			if baselineFirst {
+				baselineFirstCount++
+			}
+			if roundIdx > 0 && series[key].baselineFirst[rounds[roundIdx-1]] == baselineFirst {
+				return ReferencePairReport{}, fmt.Errorf("%s/%s reference-pair arm order does not alternate across rounds", key.dataset, key.name)
+			}
+		}
+		candidateFirstCount := len(rounds) - baselineFirstCount
+		if baselineFirstCount-candidateFirstCount > 1 || candidateFirstCount-baselineFirstCount > 1 {
+			return ReferencePairReport{}, fmt.Errorf("%s/%s reference-pair arm order is not balanced", key.dataset, key.name)
+		}
+		for _, round := range rounds {
 			if len(baseline[round]) < minimumSamples || len(candidate[round]) < minimumSamples {
 				return ReferencePairReport{}, fmt.Errorf("%s/%s round %d requires %d samples per arm", key.dataset, key.name, round, minimumSamples)
 			}

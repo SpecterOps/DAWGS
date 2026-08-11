@@ -239,6 +239,7 @@ const (
 	ExpansionSearchLateHydratedForward      ExpansionSearchStrategy = "EXPANSION-LATE-HYDRATED-FORWARD"
 	ExpansionSearchFactoredSuffixForward    ExpansionSearchStrategy = "EXPANSION-FACTORED-SUFFIX-FORWARD"
 	ExpansionSearchSuffixSeededReverse      ExpansionSearchStrategy = "EXPANSION-SUFFIX-SEEDED-REVERSE"
+	ExpansionSearchEndpointSeededReverse    ExpansionSearchStrategy = "EXPANSION-ENDPOINT-SEEDED-REVERSE"
 	ExpansionSearchBackwardViabilityForward ExpansionSearchStrategy = "EXPANSION-BACKWARD-VIABILITY-FORWARD"
 )
 
@@ -278,6 +279,13 @@ const (
 	ExpansionSearchFallbackNonDeterministicPredicate  = "non_deterministic_predicate"
 	ExpansionSearchFallbackUnboundRoot                = "unbound_root"
 	ExpansionSearchFallbackTournamentUnqualified      = "tournament_unqualified"
+	ExpansionSearchFallbackNoFixedPrefix              = "no_fixed_prefix"
+	ExpansionSearchFallbackExpansionNotTerminal       = "expansion_not_terminal"
+	ExpansionSearchFallbackPrefixTooLong              = "prefix_too_long"
+	ExpansionSearchFallbackDirectionlessPrefix        = "directionless_prefix"
+	ExpansionSearchFallbackTerminalNotSelective       = "terminal_not_selective"
+	ExpansionSearchFallbackCorrelatedTerminal         = "correlated_terminal"
+	ExpansionSearchFallbackZeroDepth                  = "zero_depth"
 )
 
 type ExpansionSearchStrategyDecision struct {
@@ -292,6 +300,13 @@ type ExpansionSearchStrategyDecision struct {
 	SuffixStartStep      int                              `json:"suffix_start_step,omitempty"`
 	SuffixEndStep        int                              `json:"suffix_end_step,omitempty"`
 	SuffixLength         int                              `json:"suffix_length,omitempty"`
+	PrefixStartStep      int                              `json:"prefix_start_step,omitempty"`
+	PrefixEndStep        int                              `json:"prefix_end_step,omitempty"`
+	PrefixLength         int                              `json:"prefix_length,omitempty"`
+	SeedPredicateClass   string                           `json:"seed_predicate_class,omitempty"`
+	EndpointLimit        int64                            `json:"endpoint_limit,omitempty"`
+	StateLimit           int64                            `json:"state_limit,omitempty"`
+	HasFinalLimit        bool                             `json:"has_final_limit,omitempty"`
 	ObservationMode      ExpansionSearchObservationMode   `json:"observation_mode"`
 	LogicalDirection     string                           `json:"logical_direction"`
 	MinimumDepth         int64                            `json:"minimum_depth"`

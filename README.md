@@ -9,9 +9,11 @@ plugins. It exposes a backend abstraction for graph queries, with current backen
 The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
 support Cypher natively.
 
-The PostgreSQL driver bounds repeated parser work with an immutable 256-entry Cypher AST cache; optimization and SQL
-translation still run per execution so graph, schema, kind, and parameter changes remain visible. Cached query text is
-released by LRU eviction or driver close, and diagnostics expose aggregate counters without query text.
+The PostgreSQL driver bounds repeated work with immutable 256-entry Cypher AST and SQL translation caches. Translation
+entries are keyed by normalized query text, graph ID, and a collision-safe parameter-name/type shape; they retain SQL
+and parameter-source mappings, never request values or defaults, and fail closed when a required source value is absent.
+Cached query text is released by LRU eviction or driver close, and diagnostics expose aggregate counters without query
+text.
 
 ## Quick Start
 
@@ -65,7 +67,9 @@ measures real driver batch APIs. It reloads or clears its fixture outside the
 timed region and validates post-state after every iteration:
 
 ```bash
-CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
+DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
+  CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
   go test -tags manual_integration ./integration -run '^$' \
   -bench BenchmarkMutationSafeDirectWrites -benchtime=1x
 ```
@@ -95,13 +99,16 @@ edge-kind-selective, and multi-path shortest-path scenarios before recording tim
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
 writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the DAWGS source version, which
-can be overridden with a command flag when needed.
+can be overridden with a command flag when needed. Because it reloads fixtures, it also requires
+`DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1` and every selected credential-free target in
+`DAWGS_INTEGRATION_DISPOSABLE_TARGETS`.
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
-current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
-comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
-against a previous JSONL baseline. Mutating scale cases must declare a `write_scenario`; each warm-up and timed iteration
-runs in a rollback transaction and verifies matched, affected, and post-state cardinality.
+implemented execution modes are `postgres_sql` and `neo4j`; `local_traversal` is an explicit, non-gating
+`not_implemented` diagnostic placeholder, and AGE is reference-design input only. The command can emit JSONL records
+plus Markdown and JSON summaries, and can compare current timings against a previous JSONL baseline. Mutating scale
+cases must declare a `write_scenario`; each warm-up and timed iteration runs in a rollback transaction and verifies
+matched, affected, and post-state cardinality.
 Read timings retain every raw warm sample and are bracketed by untimed exact-row
 multiset checks. PostgreSQL datasets are vacuumed and analyzed after loading and
 before measured reads. Fixture reloads truncate the active relationship and node
@@ -139,6 +146,10 @@ expansion-search decision. Repository-native
 `EXPANSION-SUFFIX-SEEDED-REVERSE` is an exact qualification-only implementation.
 Production selection remains on the stepwise incumbent because query shape and
 available metadata do not provide hard suffix-density or reverse-state bounds.
+For the distinct one-fixed-prefix plus selective-terminal-expansion shape,
+production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
+4096 reverse-state caps select either the reverse candidate or an exact
+same-statement forward fallback without exposing partial candidate rows.
 
 PostgreSQL recursive shortest-path execution also includes bounded S4
 singleton executors and an all-shortest predecessor-DAG executor, with exact
@@ -154,7 +165,9 @@ cardinality, and checks stable mutation-target and anchored edge-index
 invariants. Run it directly with:
 
 ```bash
-CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
+DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
+  CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
   go test -tags manual_integration ./cmd/graphbench \
   -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1

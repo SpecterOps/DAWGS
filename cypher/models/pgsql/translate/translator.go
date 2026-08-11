@@ -271,7 +271,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushOperand(binding.Parameter)
 
 	case *cypher.Variable:
-		if binding, isUnwindTarget, err := s.prepareUnwindTarget(typedExpression); err != nil {
+		if typedExpression.Symbol == cypher.TokenLiteralAsterisk {
+			// Greedy projections are expanded to their named scope bindings when
+			// the enclosing projection item is completed.
+			s.treeTranslator.PushOperand(pgsql.Identifier(cypher.TokenLiteralAsterisk))
+		} else if binding, isUnwindTarget, err := s.prepareUnwindTarget(typedExpression); err != nil {
 			s.SetError(err)
 		} else if isUnwindTarget {
 			s.treeTranslator.PushOperand(binding.Identifier)
@@ -714,6 +718,10 @@ type TargetLoweringOutcome struct {
 	MinimumDepth           *int64                        `json:"minimum_depth,omitempty"`
 	MaximumDepth           *int64                        `json:"maximum_depth,omitempty"`
 	StateLimit             int64                         `json:"state_limit,omitempty"`
+	EndpointLimit          int64                         `json:"endpoint_limit,omitempty"`
+	SeedPredicateClass     string                        `json:"seed_predicate_class,omitempty"`
+	PrefixLength           int                           `json:"prefix_length,omitempty"`
+	HasFinalLimit          bool                          `json:"has_final_limit,omitempty"`
 	Selected               string                        `json:"selected,omitempty"`
 	Applied                string                        `json:"applied,omitempty"`
 	SkipReason             string                        `json:"skip_reason,omitempty"`
@@ -860,6 +868,11 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 			SkipReason:         decision.FallbackReason,
 			MinimumDepth:       &minimumDepth,
 			MaximumDepth:       &maximumDepth,
+			StateLimit:         decision.StateLimit,
+			EndpointLimit:      decision.EndpointLimit,
+			SeedPredicateClass: decision.SeedPredicateClass,
+			PrefixLength:       decision.PrefixLength,
+			HasFinalLimit:      decision.HasFinalLimit,
 		})
 	}
 	for _, decision := range plan.FieldRequirements {
@@ -1171,7 +1184,7 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 	if strategy == "" {
 		return nil
 	}
-	if strategy != optimize.ExpansionSearchSuffixSeededReverse {
+	if strategy != optimize.ExpansionSearchSuffixSeededReverse && strategy != optimize.ExpansionSearchEndpointSeededReverse {
 		return fmt.Errorf("unsupported forced expansion-search strategy %q", strategy)
 	}
 
@@ -1181,10 +1194,20 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 		if !decision.StructurallyEligible {
 			continue
 		}
+		if strategy == optimize.ExpansionSearchSuffixSeededReverse && decision.CandidateStrategy != optimize.ExpansionSearchSuffixSeededReverse {
+			continue
+		}
+		if strategy == optimize.ExpansionSearchEndpointSeededReverse && decision.CandidateStrategy != optimize.ExpansionSearchEndpointSeededReverse {
+			continue
+		}
 
 		decision.SelectedStrategy = strategy
 		decision.SelectionMode = "forced_tool"
-		decision.SelectorVersion = "suffix-seeded-reverse-tool-v1"
+		if strategy == optimize.ExpansionSearchSuffixSeededReverse {
+			decision.SelectorVersion = "suffix-seeded-reverse-tool-v1"
+		} else {
+			decision.SelectorVersion = "endpoint-seeded-reverse-tool-v1"
+		}
 		decision.FallbackReason = ""
 		forced++
 	}

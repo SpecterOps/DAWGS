@@ -72,11 +72,20 @@ func TestLinearPathMaterializerScopesPersistentLookups(t *testing.T) {
 }
 
 func TestLegacyPathMaterializersRequireTargetGraph(t *testing.T) {
+	require.Contains(t, sqlSchemaUp, "drop function if exists public.nodes_to_path(int8[])")
+	require.Contains(t, sqlSchemaUp, "drop function if exists public.edges_to_path(int8[])")
+	require.Contains(t, sqlSchemaUp, "drop function if exists public.ordered_edges_to_path(nodeComposite, edgeComposite[], nodeComposite[])")
 	require.Contains(t, sqlSchemaUp, "nodes_to_path(target_graph_id int4")
 	require.Contains(t, sqlSchemaUp, "edges_to_path(target_graph_id int4")
 	require.Contains(t, sqlSchemaUp, "ordered_edges_to_path(target_graph_id int4")
 	require.Contains(t, sqlSchemaUp, "n.graph_id = target_graph_id")
 	require.Contains(t, sqlSchemaUp, "r.graph_id = target_graph_id")
+	require.Contains(t, sqlSchemaDown, "drop function if exists nodes_to_path(int4, int8[])")
+	require.Contains(t, sqlSchemaDown, "drop function if exists nodes_to_path(int8[])")
+	require.Contains(t, sqlSchemaDown, "drop function if exists edges_to_path(int4, int8[])")
+	require.Contains(t, sqlSchemaDown, "drop function if exists edges_to_path(int8[])")
+	require.NotContains(t, sqlSchemaDown, "drop function if exists nodes_to_path;")
+	require.NotContains(t, sqlSchemaDown, "drop function if exists edges_to_path;")
 }
 
 func TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped(t *testing.T) {

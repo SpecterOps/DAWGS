@@ -162,4 +162,3 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- cypher_params: {"domain":"S-1-5-21"}
 -- pgsql_params:{"pi0":"S-1-5-21"}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'domainsid')) = 'string' and (n0.properties ->> 'domainsid') = @pi0::text) and ((n0.properties -> 'isdc'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> 'ldapsavailable'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> 'epa'))::jsonb = to_jsonb((false)::bool)::jsonb)) select s0.n0 as n from s0;
-

@@ -232,6 +232,7 @@ type TraversalStepContext struct {
 func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 	firstCTE := len(s.query.CurrentPart().Model.CommonTableExpressions.Expressions)
 	fixedSuffixDecision, useFixedSuffixStrategy := selectedFixedSuffixDecision(part, s.expansionSearchStrategyDecisions)
+	endpointSeededDecision, useEndpointSeededStrategy := selectedEndpointSeededDecision(part, s.expansionSearchStrategyDecisions)
 
 	for idx, traversalStep := range part.TraversalSteps {
 		var (
@@ -265,6 +266,9 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 
 	if useFixedSuffixStrategy {
 		return s.rewriteTraversalPatternAsSuffixSeededReverse(part, fixedSuffixDecision, firstCTE)
+	}
+	if useEndpointSeededStrategy {
+		return s.rewriteTraversalPatternAsEndpointSeededReverse(part, endpointSeededDecision, firstCTE)
 	}
 
 	return nil

@@ -15,6 +15,7 @@ import (
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -55,6 +56,10 @@ func driverFromConnectionString(connStr string) (string, error) {
 }
 
 func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec captureSpec) ([]PlanRecord, error) {
+	if err := databaseguard.ValidateEnvironment(spec.Connection); err != nil {
+		return nil, fmt.Errorf("refuse destructive plan-corpus target: %w", err)
+	}
+
 	backend, err := openBackend(ctx, suite, spec)
 	if err != nil {
 		return nil, err
