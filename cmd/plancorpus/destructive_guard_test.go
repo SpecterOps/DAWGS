@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCaptureCorpusRequiresTargetAuthorization verifies that plan capture refuses an unallowlisted PostgreSQL target before loading destructive fixture data.
 func TestCaptureCorpusRequiresTargetAuthorization(t *testing.T) {
 	t.Setenv(databaseguard.AllowDestructiveEnv, "")
 	t.Setenv(databaseguard.DisposableTargetsEnv, "")

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCypherParseCacheReusesTrimmedQuery verifies whitespace-equivalent queries share one immutable AST entry.
 func TestCypherParseCacheReusesTrimmedQuery(t *testing.T) {
 	cache := newCypherParseCache(2)
 
@@ -22,6 +23,7 @@ func TestCypherParseCacheReusesTrimmedQuery(t *testing.T) {
 	require.Same(t, first, second)
 }
 
+// TestCypherParseCacheEvictsLeastRecentlyUsedQuery verifies capacity pressure removes the coldest completed parse.
 func TestCypherParseCacheEvictsLeastRecentlyUsedQuery(t *testing.T) {
 	cache := newCypherParseCache(2)
 
@@ -41,6 +43,7 @@ func TestCypherParseCacheEvictsLeastRecentlyUsedQuery(t *testing.T) {
 	require.NotSame(t, second, reparsed)
 }
 
+// TestCypherParseCacheDoesNotRetainErrorsOrOversizedQueries verifies failed and over-limit parses always bypass retention.
 func TestCypherParseCacheDoesNotRetainErrorsOrOversizedQueries(t *testing.T) {
 	cache := newCypherParseCache(2)
 
@@ -68,6 +71,7 @@ func TestCypherParseCacheDoesNotRetainErrorsOrOversizedQueries(t *testing.T) {
 	require.Equal(t, uint64(2), cache.Stats().Bypasses)
 }
 
+// TestCypherParseCacheCoalescesConcurrentMissesAndSupportsConcurrentOptimization verifies one parse can safely serve simultaneous callers.
 func TestCypherParseCacheCoalescesConcurrentMissesAndSupportsConcurrentOptimization(t *testing.T) {
 	cache := newCypherParseCache(2)
 	const workers = 32
@@ -99,6 +103,7 @@ func TestCypherParseCacheCoalescesConcurrentMissesAndSupportsConcurrentOptimizat
 	require.Equal(t, uint64(workers-1), cache.Stats().Hits+cache.Stats().CoalescedMisses)
 }
 
+// TestCypherParseCacheSupportsConcurrentDifferentKeys verifies independent queries can populate the cache concurrently.
 func TestCypherParseCacheSupportsConcurrentDifferentKeys(t *testing.T) {
 	cache := newCypherParseCache(64)
 	const workers = 32
@@ -119,6 +124,7 @@ func TestCypherParseCacheSupportsConcurrentDifferentKeys(t *testing.T) {
 	require.Equal(t, workers, cache.Stats().Entries)
 }
 
+// TestCypherParseCacheStatsAndCloseReleaseEntries verifies snapshots reflect activity and Close releases retained ASTs.
 func TestCypherParseCacheStatsAndCloseReleaseEntries(t *testing.T) {
 	cache := newCypherParseCache(1)
 	_, _, err := cache.Parse("MATCH (n) RETURN n")
@@ -144,6 +150,7 @@ func TestCypherParseCacheStatsAndCloseReleaseEntries(t *testing.T) {
 	require.Equal(t, uint64(1), cache.Stats().Bypasses)
 }
 
+// BenchmarkCypherParseCache measures repeated lookup of a normalized cached query.
 func BenchmarkCypherParseCache(b *testing.B) {
 	const query = "MATCH (n) WHERE id(n) = $id RETURN n"
 	b.Run("uncached", func(b *testing.B) {

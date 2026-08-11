@@ -11,11 +11,21 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// queryResult adapts pgx rows to graph.Result, caching column names and decoding JSON values for each current row.
 type queryResult struct {
-	ctx        context.Context
-	rows       pgx.Rows
-	values     []any
-	keys       []string
+	// ctx supplies cancellation and request scope when decoded graph values require kind mapping.
+	ctx context.Context
+
+	// rows is the pgx result set being adapted.
+	rows pgx.Rows
+
+	// values contains the decoded values for the current row.
+	values []any
+
+	// keys caches immutable column names shared by every row in the result set.
+	keys []string
+
+	// kindMapper resolves database kind identifiers while scanning graph values.
 	kindMapper KindMapper
 }
 
@@ -27,6 +37,7 @@ func (s *queryResult) Keys() []string {
 	return s.keys
 }
 
+// Next advances to the next row, caching its column names and decoding JSON values before exposing it.
 func (s *queryResult) Next() bool {
 	if s.rows.Next() {
 		fields := s.rows.FieldDescriptions()
@@ -44,6 +55,7 @@ func (s *queryResult) Next() bool {
 	return false
 }
 
+// cacheKeys records immutable column names once for the lifetime of the result set.
 func (s *queryResult) cacheKeys(fields []pgconn.FieldDescription) {
 	if s.keys != nil {
 		return
@@ -74,6 +86,7 @@ func (s *queryResult) Close() {
 	s.rows.Close()
 }
 
+// decodeJSONValues replaces raw JSON and JSONB fields in the caller-owned row slice with decoded Go values.
 func decodeJSONValues(values []any, fields []pgconn.FieldDescription) []any {
 	// pgx Rows.Values returns a decoded value slice for the current row. The old
 	// implementation made a shallow copy before replacing JSON scalars, but its
@@ -92,6 +105,7 @@ func decodeJSONValues(values []any, fields []pgconn.FieldDescription) []any {
 	return values
 }
 
+// decodeJSONValue decodes byte JSON and structured string JSON while preserving already-decoded scalar strings.
 func decodeJSONValue(value any) (any, bool) {
 	switch typedValue := value.(type) {
 	case []byte:

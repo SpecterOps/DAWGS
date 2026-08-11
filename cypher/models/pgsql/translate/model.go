@@ -12,17 +12,35 @@ import (
 )
 
 const (
-	expansionRootID        pgsql.Identifier = "root_id"
-	expansionNextID        pgsql.Identifier = "next_id"
-	expansionDepth         pgsql.Identifier = "depth"
-	expansionSatisfied     pgsql.Identifier = "satisfied"
-	expansionIsCycle       pgsql.Identifier = "is_cycle"
-	expansionPath          pgsql.Identifier = "path"
-	expansionForwardFront  pgsql.Identifier = "forward_front"
+	// expansionRootID names the recursive-state column containing the traversal's initial node ID.
+	expansionRootID pgsql.Identifier = "root_id"
+
+	// expansionNextID names the recursive-state column containing the current frontier node ID.
+	expansionNextID pgsql.Identifier = "next_id"
+
+	// expansionDepth names the recursive-state column containing the number of traversed edges.
+	expansionDepth pgsql.Identifier = "depth"
+
+	// expansionSatisfied names the recursive-state column that marks a satisfied terminal predicate.
+	expansionSatisfied pgsql.Identifier = "satisfied"
+
+	// expansionIsCycle names the recursive-state column that marks an edge-reusing path.
+	expansionIsCycle pgsql.Identifier = "is_cycle"
+
+	// expansionPath names the recursive-state column containing ordered traversed edge IDs.
+	expansionPath pgsql.Identifier = "path"
+
+	// expansionForwardFront names the current forward frontier in bidirectional search.
+	expansionForwardFront pgsql.Identifier = "forward_front"
+
+	// expansionBackwardFront names the current backward frontier in bidirectional search.
 	expansionBackwardFront pgsql.Identifier = "backward_front"
-	expansionNextFront     pgsql.Identifier = "next_front"
+
+	// expansionNextFront names the staging relation for the next bidirectional-search frontier.
+	expansionNextFront pgsql.Identifier = "next_front"
 )
 
+// expansionColumns returns the canonical root, frontier, depth, satisfaction, cycle, and path state shape.
 func expansionColumns() *pgsql.RecordShape {
 	return pgsql.NewRecordShape([]pgsql.Identifier{
 		expansionRootID,
@@ -48,6 +66,7 @@ type ExpansionOptions struct {
 	MaxDepth             models.Optional[int64]
 }
 
+// newExpansionOptions derives shortest-path and depth options from a pattern part and relationship range.
 func newExpansionOptions(part *PatternPart, relationshipPattern *cypher.RelationshipPattern) ExpansionOptions {
 	return ExpansionOptions{
 		FindShortestPath:     part.ShortestPath,
@@ -57,46 +76,80 @@ func newExpansionOptions(part *PatternPart, relationshipPattern *cypher.Relation
 	}
 }
 
+// Expansion contains the bindings, constraints, and execution choices for one variable-length traversal.
 type Expansion struct {
-	Frame       *Frame
+	// Frame is the scope frame that materializes the expansion result.
+	Frame *Frame
+	// PathBinding is the optional Cypher path variable backed by recursive path state.
 	PathBinding *BoundIdentifier
-	Options     ExpansionOptions
+	// Options records shortest-path mode and traversal depth bounds.
+	Options ExpansionOptions
 
-	PrimerNodeConstraints              pgsql.Expression
-	PrimerNodeSatisfactionProjection   pgsql.SelectItem
-	PrimerNodeJoinCondition            pgsql.Expression
-	EdgeConstraints                    pgsql.Expression
-	PreviousRelationshipUniqueness     pgsql.Expression
-	EdgeJoinCondition                  pgsql.Expression
-	RecursiveConstraints               pgsql.Expression
-	ExpansionNodeJoinCondition         pgsql.Expression
-	TerminalNodeConstraints            pgsql.Expression
+	// PrimerNodeConstraints restricts root nodes used to seed recursive traversal.
+	PrimerNodeConstraints pgsql.Expression
+	// PrimerNodeSatisfactionProjection evaluates terminal satisfaction at the seed node.
+	PrimerNodeSatisfactionProjection pgsql.SelectItem
+	// PrimerNodeJoinCondition joins the expansion seed to its root node.
+	PrimerNodeJoinCondition pgsql.Expression
+	// EdgeConstraints restricts relationships admitted into the expansion.
+	EdgeConstraints pgsql.Expression
+	// PreviousRelationshipUniqueness rejects relationships already traversed by preceding fixed steps.
+	PreviousRelationshipUniqueness pgsql.Expression
+	// EdgeJoinCondition joins a relationship to the current traversal frontier.
+	EdgeJoinCondition pgsql.Expression
+	// RecursiveConstraints restricts recursive states independently of edge and node predicates.
+	RecursiveConstraints pgsql.Expression
+	// ExpansionNodeJoinCondition joins the traversed relationship to its next node.
+	ExpansionNodeJoinCondition pgsql.Expression
+	// TerminalNodeConstraints restricts nodes considered valid expansion terminals.
+	TerminalNodeConstraints pgsql.Expression
+	// TerminalNodeSatisfactionProjection computes whether a recursive state satisfies terminal predicates.
 	TerminalNodeSatisfactionProjection pgsql.SelectItem
+	// DeferredNodeSatisfactionConstraint retains terminal predicates that require outer bindings.
 	DeferredNodeSatisfactionConstraint pgsql.Expression
-	UseMaterializedTerminalFilter      bool
-	UseMaterializedEndpointPairFilter  bool
-	HasExplicitEndpointInequality      bool
+	// UseMaterializedTerminalFilter enables lookup against precomputed terminal node IDs.
+	UseMaterializedTerminalFilter bool
+	// UseMaterializedEndpointPairFilter enables lookup against precomputed root-terminal ID pairs.
+	UseMaterializedEndpointPairFilter bool
+	// HasExplicitEndpointInequality reports whether the source query already excludes identical endpoints.
+	HasExplicitEndpointInequality bool
 
-	PrimerQueryParameter            *BoundIdentifier
-	BackwardPrimerQueryParameter    *BoundIdentifier
-	RecursiveQueryParameter         *BoundIdentifier
+	// PrimerQueryParameter identifies the harness parameter containing the forward primer query.
+	PrimerQueryParameter *BoundIdentifier
+	// BackwardPrimerQueryParameter identifies the harness parameter containing the backward primer query.
+	BackwardPrimerQueryParameter *BoundIdentifier
+	// RecursiveQueryParameter identifies the harness parameter containing the forward recursive query.
+	RecursiveQueryParameter *BoundIdentifier
+	// BackwardRecursiveQueryParameter identifies the harness parameter containing the backward recursive query.
 	BackwardRecursiveQueryParameter *BoundIdentifier
 
+	// UseBidirectionalSearch reports whether shortest-path traversal expands from both endpoints.
 	UseBidirectionalSearch bool
-	ShortestPathExecutor   optimize.ShortestPathExecutor
-	ShortestPathTarget     optimize.TraversalStepTarget
-	SingletonRootID        pgsql.Expression
-	SingletonTerminalID    pgsql.Expression
-	RelationshipKindIDs    []int16
+	// ShortestPathExecutor selects the physical implementation for this shortest-path expansion.
+	ShortestPathExecutor optimize.ShortestPathExecutor
+	// ShortestPathTarget locates this expansion in the optimizer's lowering plan.
+	ShortestPathTarget optimize.TraversalStepTarget
+	// SingletonRootID holds the statically resolved root ID when exactly one root is known.
+	SingletonRootID pgsql.Expression
+	// SingletonTerminalID holds the statically resolved terminal ID when exactly one terminal is known.
+	SingletonTerminalID pgsql.Expression
+	// RelationshipKindIDs contains the statically resolved relationship kinds admitted by the expansion.
+	RelationshipKindIDs []int16
 
+	// EdgeStartIdentifier is the unqualified edge endpoint column from which the chosen direction advances.
 	EdgeStartIdentifier pgsql.Identifier
-	EdgeStartColumn     pgsql.CompoundIdentifier
-	EdgeEndIdentifier   pgsql.Identifier
-	EdgeEndColumn       pgsql.CompoundIdentifier
+	// EdgeStartColumn is the qualified edge endpoint expression from which the chosen direction advances.
+	EdgeStartColumn pgsql.CompoundIdentifier
+	// EdgeEndIdentifier is the unqualified edge endpoint column reached by the chosen direction.
+	EdgeEndIdentifier pgsql.Identifier
+	// EdgeEndColumn is the qualified edge endpoint expression reached by the chosen direction.
+	EdgeEndColumn pgsql.CompoundIdentifier
 
+	// Projection contains the select items exposed by the completed expansion frame.
 	Projection []pgsql.SelectItem
 }
 
+// UsesSingletonEndpointPair reports whether both expansion endpoints are statically singleton IDs.
 func (s *Expansion) UsesSingletonEndpointPair() bool {
 	return s != nil && s.SingletonRootID != nil && s.SingletonTerminalID != nil
 }
@@ -147,18 +200,22 @@ func (s *TraversalStep) CanExecuteBidirectionalSearch() bool {
 		(s.LeftNodeBound && s.RightNodeBound && s.Frame != nil && s.Frame.Previous != nil)
 }
 
+// hasPreviousFrameBinding reports whether the step can reference bindings materialized by a prior frame.
 func (s *TraversalStep) hasPreviousFrameBinding() bool {
 	return s.Frame != nil && s.Frame.Previous != nil
 }
 
+// usesBoundEndpointPairs reports whether both endpoints come from a previous frame.
 func (s *TraversalStep) usesBoundEndpointPairs() bool {
 	return s.LeftNodeBound && s.RightNodeBound && s.hasPreviousFrameBinding()
 }
 
+// usesBoundTerminalIDs reports whether the terminal endpoint comes from a previous frame.
 func (s *TraversalStep) usesBoundTerminalIDs() bool {
 	return s.RightNodeBound && s.hasPreviousFrameBinding()
 }
 
+// canMaterializeTerminalFilterForStep reports whether terminal constraints are local and useful as an independent filter.
 func canMaterializeTerminalFilterForStep(traversalStep *TraversalStep, expansionModel *Expansion) bool {
 	if traversalStep == nil || expansionModel == nil || traversalStep.RightNode == nil ||
 		expansionModel.TerminalNodeConstraints == nil ||
@@ -177,6 +234,7 @@ func canMaterializeTerminalFilterForStep(traversalStep *TraversalStep, expansion
 	return externalConstraints == nil
 }
 
+// canMaterializeEndpointPairFilterForStep reports whether both local endpoint constraints restrict harness search columns.
 func canMaterializeEndpointPairFilterForStep(traversalStep *TraversalStep, expansionModel *Expansion) bool {
 	// Pair filters enumerate the exact root/terminal combinations the
 	// bidirectional harness must resolve. Kind-only endpoint predicates are not
@@ -195,14 +253,17 @@ func canMaterializeEndpointPairFilterForStep(traversalStep *TraversalStep, expan
 	return true
 }
 
+// endpointSelectivity scores an endpoint expression using binding and previous-frame context.
 func (s *TraversalStep) endpointSelectivity(scope *Scope, expression pgsql.Expression, bound bool) (int, error) {
 	return optimize.NewSelectivityModel(scope).EndpointSelectivity(expression, bound, s.hasPreviousFrameBinding())
 }
 
+// isBidirectionalSearchAnchor reports whether a selectivity score is strong enough to seed bidirectional search.
 func isBidirectionalSearchAnchor(selectivity int) bool {
 	return optimize.IsBidirectionalSearchAnchor(selectivity)
 }
 
+// hasIDEqualityConstraint reports whether identifier's ID equals a row-independent value in a conjunction.
 func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	for _, term := range flattenConjunction(expression) {
 		binaryExpression, isBinaryExpression := unwrapParenthetical(term).(*pgsql.BinaryExpression)
@@ -227,6 +288,7 @@ func hasIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Ident
 	return false
 }
 
+// hasLocalIDEqualityConstraint reports whether an ID equality depends only on identifier and static values.
 func hasLocalIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	if !hasIDEqualityConstraint(expression, identifier) {
 		return false
@@ -235,6 +297,7 @@ func hasLocalIDEqualityConstraint(expression pgsql.Expression, identifier pgsql.
 	return hasLocalEndpointConstraint(expression, identifier)
 }
 
+// hasLocalEndpointConstraint reports whether expression references identifier without any external binding.
 func hasLocalEndpointConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	if expression == nil || !referencesIdentifier(expression, identifier) {
 		return false
@@ -244,6 +307,7 @@ func hasLocalEndpointConstraint(expression pgsql.Expression, identifier pgsql.Id
 	return externalConstraints == nil
 }
 
+// referencesIdentifier reports whether expression contains a direct, compound, or row-column reference rooted at identifier.
 func referencesIdentifier(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	references := false
 
@@ -276,11 +340,13 @@ func referencesIdentifier(expression pgsql.Expression, identifier pgsql.Identifi
 	return references
 }
 
+// hasPairAwareEndpointConstraint reports whether a local constraint restricts endpoint values beyond node kinds.
 func hasPairAwareEndpointConstraint(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	return hasLocalEndpointConstraint(expression, identifier) &&
 		referencesEndpointSearchColumn(expression, identifier)
 }
 
+// referencesEndpointSearchColumn reports whether expression reads a non-kind field used to restrict endpoint search.
 func referencesEndpointSearchColumn(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	references := false
 
@@ -301,6 +367,7 @@ func referencesEndpointSearchColumn(expression pgsql.Expression, identifier pgsq
 	return references
 }
 
+// isStaticIDEqualityOperand reports whether expression contains no row or identifier references.
 func isStaticIDEqualityOperand(expression pgsql.Expression) bool {
 	if expression == nil {
 		return false
@@ -321,6 +388,7 @@ func isStaticIDEqualityOperand(expression pgsql.Expression) bool {
 	return isStatic
 }
 
+// isIdentifierIDReference reports whether expression is exactly identifier.id.
 func isIdentifierIDReference(expression pgsql.Expression, identifier pgsql.Identifier) bool {
 	compoundIdentifier, isCompoundIdentifier := unwrapParenthetical(expression).(pgsql.CompoundIdentifier)
 	return isCompoundIdentifier && len(compoundIdentifier) == 2 &&
@@ -328,6 +396,7 @@ func isIdentifierIDReference(expression pgsql.Expression, identifier pgsql.Ident
 		compoundIdentifier[1] == pgsql.ColumnID
 }
 
+// isSingletonIDOperand reports whether expression denotes one non-null integer ID literal or parameter.
 func isSingletonIDOperand(expression pgsql.Expression) bool {
 	switch typedExpression := unwrapParenthetical(expression).(type) {
 	case pgsql.Literal:
@@ -346,6 +415,7 @@ func isSingletonIDOperand(expression pgsql.Expression) bool {
 	}
 }
 
+// singletonIDAnchor returns the sole static value equated with identifier.id, rejecting ambiguous multiple equalities.
 func singletonIDAnchor(expression pgsql.Expression, identifier pgsql.Identifier) (pgsql.Expression, bool) {
 	var anchor pgsql.Expression
 
@@ -376,6 +446,7 @@ func singletonIDAnchor(expression pgsql.Expression, identifier pgsql.Identifier)
 	return anchor, anchor != nil
 }
 
+// replaceSingletonIDAnchor substitutes replacement for the static side of identifier's singleton ID equality.
 func replaceSingletonIDAnchor(expression pgsql.Expression, identifier pgsql.Identifier, replacement pgsql.Expression) pgsql.Expression {
 	switch typedExpression := expression.(type) {
 	case *pgsql.Parenthetical:
@@ -460,42 +531,52 @@ func (s *TraversalStep) CanExecutePairAwareBidirectionalSearch(scope *Scope) (bo
 	}
 }
 
+// flattenConjunction returns the independent terms of a nested PostgreSQL AND expression.
 func flattenConjunction(expr pgsql.Expression) []pgsql.Expression {
 	return optimize.FlattenConjunction(expr)
 }
 
+// expressionReferencesOnlyLocalIdentifiers reports whether every binding referenced by expression belongs to localScope.
 func expressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
 	return optimize.ExpressionReferencesOnlyLocalIdentifiers(expression, localScope)
 }
 
+// subqueryReferencesOnlyLocalIdentifiers reports whether a subquery has no dependencies outside localScope.
 func subqueryReferencesOnlyLocalIdentifiers(subquery pgsql.Subquery, localScope *pgsql.IdentifierSet) bool {
 	return optimize.SubqueryReferencesOnlyLocalIdentifiers(subquery, localScope)
 }
 
+// queryReferencesOnlyLocalIdentifiers reports whether a query has no dependencies outside localScope.
 func queryReferencesOnlyLocalIdentifiers(query pgsql.Query, localScope *pgsql.IdentifierSet) bool {
 	return optimize.QueryReferencesOnlyLocalIdentifiers(query, localScope)
 }
 
+// addFromClauseBindings adds every alias introduced by fromClauses to localScope.
 func addFromClauseBindings(localScope *pgsql.IdentifierSet, fromClauses []pgsql.FromClause) {
 	optimize.AddFromClauseBindings(localScope, fromClauses)
 }
 
+// addFromExpressionBinding adds the alias introduced by a FROM expression to localScope.
 func addFromExpressionBinding(localScope *pgsql.IdentifierSet, expression pgsql.Expression) {
 	optimize.AddFromExpressionBinding(localScope, expression)
 }
 
+// selectReferencesOnlyLocalIdentifiers reports whether a SELECT body has no dependencies outside localScope.
 func selectReferencesOnlyLocalIdentifiers(selectBody pgsql.Select, localScope *pgsql.IdentifierSet) bool {
 	return optimize.SelectReferencesOnlyLocalIdentifiers(selectBody, localScope)
 }
 
+// fromExpressionReferencesOnlyLocalIdentifiers reports whether a FROM expression has no dependencies outside localScope.
 func fromExpressionReferencesOnlyLocalIdentifiers(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
 	return optimize.FromExpressionReferencesOnlyLocalIdentifiers(expression, localScope)
 }
 
+// isLocalToScope reports whether expression can be evaluated using only identifiers in localScope.
 func isLocalToScope(expression pgsql.Expression, localScope *pgsql.IdentifierSet) bool {
 	return optimize.IsLocalToScope(expression, localScope)
 }
 
+// partitionConstraintByLocality separates conjuncts evaluable in localScope from those requiring outer bindings.
 func partitionConstraintByLocality(expression pgsql.Expression, localScope *pgsql.IdentifierSet) (pgsql.Expression, pgsql.Expression) {
 	return optimize.PartitionConstraintByLocality(expression, localScope)
 }
@@ -603,6 +684,7 @@ type PatternPart struct {
 	nextSourceStep        int
 }
 
+// nextSourceTarget returns the optimizer coordinates for the next traversal step and advances the step cursor.
 func (s *PatternPart) nextSourceTarget() (optimize.TraversalStepTarget, bool) {
 	if s == nil {
 		return optimize.TraversalStepTarget{}, false
@@ -943,6 +1025,7 @@ func (s *Mutations) AddDeletion(scope *Scope, targetIdentifier pgsql.Identifier,
 	}
 }
 
+// newIdentifierAssignment allocates a distinct update binding and empty assignment collections for targetBinding.
 func (s *Mutations) newIdentifierAssignment(scope *Scope, targetBinding *BoundIdentifier) (*Update, error) {
 	if updateBinding, err := scope.DefineNew(targetBinding.DataType); err != nil {
 		return nil, err
@@ -961,6 +1044,7 @@ func (s *Mutations) newIdentifierAssignment(scope *Scope, targetBinding *BoundId
 	}
 }
 
+// getIdentifierMutation returns the existing update for targetIdentifier or creates its first assignment state.
 func (s *Mutations) getIdentifierMutation(scope *Scope, targetIdentifier pgsql.Identifier) (*Update, error) {
 	if targetBinding, bound := scope.Lookup(targetIdentifier); !bound {
 		return nil, fmt.Errorf("invalid identifier: %s", targetIdentifier)
@@ -1035,6 +1119,7 @@ func (s *Projections) Current() *Projection {
 	return s.Items[len(s.Items)-1]
 }
 
+// extractIdentifierFromCypherExpression returns the variable or alias directly declared by a supported Cypher expression.
 func extractIdentifierFromCypherExpression(expression cypher.Expression) (pgsql.Identifier, bool, error) {
 	if expression == nil {
 		return "", false, nil

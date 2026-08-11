@@ -20,60 +20,101 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
+// existingGraphCheckpointVersion identifies the serialized schema revision for existing graph checkpoint.
 const existingGraphCheckpointVersion = 2
 
+// mutationKeyword matches Cypher keywords that can mutate an existing graph.
 var mutationKeyword = regexp.MustCompile(`(?i)\b(create|merge|delete|detach|set|remove|drop|alter|truncate|grant|revoke|call|foreach|load\s+csv)\b`)
 
+// ExistingGraphAnchorManifest authorizes read-only live-graph workloads against validated logical or redacted physical anchors.
 type ExistingGraphAnchorManifest struct {
-	Version         int                            `json:"version"`
-	Graph           string                         `json:"graph"`
-	ContentIdentity string                         `json:"content_identity"`
-	Anchors         map[string]ExistingGraphAnchor `json:"anchors"`
-	Checksum        string                         `json:"-"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Graph identifies the graph addressed by the artifact.
+	Graph string `json:"graph"`
+	// ContentIdentity binds resumable work to the logical contents of the live graph.
+	ContentIdentity string `json:"content_identity"`
+	// Anchors maps manifest anchor names to their logical or redacted physical identities.
+	Anchors map[string]ExistingGraphAnchor `json:"anchors"`
+	// Checksum records the digest of the validated manifest file.
+	Checksum string `json:"-"`
 }
 
+// ExistingGraphAnchor maps a logical fixture key to either a logical or redacted physical identity.
 type ExistingGraphAnchor struct {
-	LogicalKey    string `json:"logical_key,omitempty"`
-	PhysicalID    *int64 `json:"physical_id,omitempty"`
+	// LogicalKey identifies an anchor using a corpus-visible fixture key.
+	LogicalKey string `json:"logical_key,omitempty"`
+	// PhysicalID selects a backend node directly when no corpus-visible logical key is available.
+	PhysicalID *int64 `json:"physical_id,omitempty"`
+	// ContentSHA256 identifies scrubbed physical anchor content without exposing it.
 	ContentSHA256 string `json:"content_sha256,omitempty"`
-	Kind          string `json:"kind,omitempty"`
+	// Kind optionally requires the resolved anchor node to carry this graph kind.
+	Kind string `json:"kind,omitempty"`
 }
 
+// ExistingGraphAttempt captures the applied deadline, collected samples, and outcome of one live-graph execution.
 type ExistingGraphAttempt struct {
-	Timeout         time.Duration `json:"timeout"`
-	WarmupSamples   int           `json:"warmup_samples"`
-	MeasuredSamples int           `json:"measured_samples"`
-	Status          string        `json:"status"`
-	Error           string        `json:"error,omitempty"`
+	// Timeout records the deadline applied to this live-graph attempt; zero means no deadline.
+	Timeout time.Duration `json:"timeout"`
+	// WarmupSamples records untimed samples collected before live-graph measurement.
+	WarmupSamples int `json:"warmup_samples"`
+	// MeasuredSamples records timed samples collected for the live-graph attempt.
+	MeasuredSamples int `json:"measured_samples"`
+	// Status records the execution outcome.
+	Status string `json:"status"`
+	// Error records the failure message when the operation did not succeed.
+	Error string `json:"error,omitempty"`
 }
 
+// ExistingGraphRun describes a resumable live-graph run and all attempts made in it.
 type ExistingGraphRun struct {
-	ManifestSHA256  string                 `json:"manifest_sha256"`
-	ContentIdentity string                 `json:"content_identity"`
-	Protocol        string                 `json:"protocol"`
-	Adaptive        bool                   `json:"adaptive"`
-	Attempts        []ExistingGraphAttempt `json:"attempts,omitempty"`
-	PreNodeCount    int64                  `json:"pre_node_count"`
-	PreEdgeCount    int64                  `json:"pre_edge_count"`
-	PostNodeCount   int64                  `json:"post_node_count"`
-	PostEdgeCount   int64                  `json:"post_edge_count"`
+	// ManifestSHA256 identifies the anchor manifest that authorized the run.
+	ManifestSHA256 string `json:"manifest_sha256"`
+	// ContentIdentity binds resumable work to the logical contents of the live graph.
+	ContentIdentity string `json:"content_identity"`
+	// Protocol identifies the measurement protocol.
+	Protocol string `json:"protocol"`
+	// Adaptive indicates that adaptive discovery, rather than a fixed protocol, produced the record.
+	Adaptive bool `json:"adaptive"`
+	// Attempts lists live-graph attempts in execution order.
+	Attempts []ExistingGraphAttempt `json:"attempts,omitempty"`
+	// PreNodeCount records graph nodes present before the live-graph run.
+	PreNodeCount int64 `json:"pre_node_count"`
+	// PreEdgeCount records graph relationships present before the live-graph run.
+	PreEdgeCount int64 `json:"pre_edge_count"`
+	// PostNodeCount records graph nodes present after the live-graph run.
+	PostNodeCount int64 `json:"post_node_count"`
+	// PostEdgeCount records graph relationships present after the live-graph run.
+	PostEdgeCount int64 `json:"post_edge_count"`
 }
 
+// ExistingGraphProgress is one append-only progress event emitted during a live-graph run.
 type ExistingGraphProgress struct {
-	At      time.Time `json:"at"`
-	Stage   string    `json:"stage"`
-	CaseKey string    `json:"case_key,omitempty"`
-	Detail  string    `json:"detail,omitempty"`
+	// At records when the progress event was emitted.
+	At time.Time `json:"at"`
+	// Stage identifies the stage reached by a live-graph progress event.
+	Stage string `json:"stage"`
+	// CaseKey identifies the dataset/case pair addressed by a progress event.
+	CaseKey string `json:"case_key,omitempty"`
+	// Detail contains the progress or failure detail safe to persist.
+	Detail string `json:"detail,omitempty"`
 }
 
+// existingGraphCheckpoint binds completed live-graph cases to a corpus, run configuration, and fixture identity.
 type existingGraphCheckpoint struct {
-	Version        int          `json:"version"`
-	ManifestSHA256 string       `json:"manifest_sha256"`
-	CorpusSHA256   string       `json:"corpus_sha256"`
-	RunSHA256      string       `json:"run_sha256"`
-	Records        []CaseResult `json:"records"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// ManifestSHA256 identifies the anchor manifest that authorized the run.
+	ManifestSHA256 string `json:"manifest_sha256"`
+	// CorpusSHA256 binds checkpoint records to the exact canonical workload declarations.
+	CorpusSHA256 string `json:"corpus_sha256"`
+	// RunSHA256 binds completed records to the exact resumable run configuration.
+	RunSHA256 string `json:"run_sha256"`
+	// Records contains completed CaseResults retained for resumable execution.
+	Records []CaseResult `json:"records"`
 }
 
+// loadExistingGraphAnchorManifest reads and validates a live-graph anchor manifest and records its checksum.
 func loadExistingGraphAnchorManifest(path string) (ExistingGraphAnchorManifest, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -117,6 +158,7 @@ func loadExistingGraphAnchorManifest(path string) (ExistingGraphAnchorManifest, 
 	return manifest, nil
 }
 
+// validateExistingGraphCorpus rejects mutations and anchors absent from the live-graph manifest.
 func validateExistingGraphCorpus(corpus ScaleCorpus, manifest ExistingGraphAnchorManifest) error {
 	for _, testCase := range corpus.Cases {
 		if testCase.WriteScenario != nil {
@@ -141,6 +183,7 @@ func validateExistingGraphCorpus(corpus ScaleCorpus, manifest ExistingGraphAncho
 	return nil
 }
 
+// stripCypherStringLiterals replaces quoted Cypher contents with spaces before mutation-keyword scanning.
 func stripCypherStringLiterals(query string) string {
 	var (
 		result  strings.Builder
@@ -164,6 +207,7 @@ func stripCypherStringLiterals(query string) string {
 			result.WriteRune(' ')
 			continue
 		}
+
 		if value == '\'' || value == '"' {
 			quote = value
 			result.WriteRune(' ')
@@ -171,13 +215,16 @@ func stripCypherStringLiterals(query string) string {
 		}
 		result.WriteRune(value)
 	}
+
 	return result.String()
 }
 
+// existingGraphCaseKey joins execution mode, dataset, and case name into the checkpoint lookup key.
 func existingGraphCaseKey(mode ExecutionMode, testCase ScaleCase) string {
 	return strings.Join([]string{string(mode), testCase.Dataset, testCase.Name}, "/")
 }
 
+// corpusIdentity hashes the canonical corpus declaration used to bind checkpoints to workloads.
 func corpusIdentity(corpus ScaleCorpus) string {
 	cases := append([]ScaleCase(nil), corpus.Cases...)
 	sort.Slice(cases, func(i, j int) bool {
@@ -190,40 +237,68 @@ func corpusIdentity(corpus ScaleCorpus) string {
 		return cases[i].Name < cases[j].Name
 	})
 	raw, _ := json.Marshal(struct {
-		Version int         `json:"version"`
-		Cases   []ScaleCase `json:"cases"`
+		// Version identifies the serialized schema revision.
+		Version int `json:"version"`
+		// Cases contains the canonically ordered workload declarations bound into the corpus digest.
+		Cases []ScaleCase `json:"cases"`
 	}{Version: 2, Cases: cases})
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
 }
 
+// runConfigurationIdentity hashes execution-affecting configuration and environment fields for checkpoint compatibility.
 func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 	payload := struct {
-		Version                   int             `json:"version"`
-		SourceCommit              string          `json:"source_commit"`
-		DirtyDiffSHA256           string          `json:"dirty_diff_sha256"`
-		BinarySHA256              string          `json:"binary_sha256"`
-		GOOS                      string          `json:"goos"`
-		GOARCH                    string          `json:"goarch"`
-		GoVersion                 string          `json:"go_version"`
-		Modes                     []ExecutionMode `json:"modes"`
-		Iterations                int             `json:"iterations"`
-		WarmupIterations          int             `json:"warmup_iterations"`
-		Round                     int             `json:"round"`
-		Block                     int             `json:"block"`
-		Arm                       string          `json:"arm"`
-		ArmOrder                  int             `json:"arm_order"`
-		PoolSize                  int             `json:"pool_size"`
-		Concurrency               []int           `json:"concurrency"`
-		SessionMemoryCeilingBytes int64           `json:"session_memory_ceiling_bytes"`
-		PoolMemoryCeilingBytes    int64           `json:"pool_memory_ceiling_bytes"`
-		PostgresReferences        bool            `json:"postgres_references"`
-		PostgresReferenceArms     []string        `json:"postgres_reference_arms"`
-		PostgresForceShortest     string          `json:"postgres_force_shortest"`
-		PostgresForceExpansion    string          `json:"postgres_force_expansion"`
-		Discovery                 bool            `json:"discovery"`
-		TimeoutClasses            []time.Duration `json:"timeout_classes"`
-		DiscoverySampleFloor      int             `json:"discovery_sample_floor"`
+		// Version identifies the serialized schema revision.
+		Version int `json:"version"`
+		// SourceCommit identifies the source commit used to build the benchmark executable.
+		SourceCommit string `json:"source_commit"`
+		// DirtyDiffSHA256 identifies uncommitted source changes present during the run.
+		DirtyDiffSHA256 string `json:"dirty_diff_sha256"`
+		// BinarySHA256 identifies the benchmark executable used for the run.
+		BinarySHA256 string `json:"binary_sha256"`
+		// GOOS records the target operating system of the benchmark executable.
+		GOOS string `json:"goos"`
+		// GOARCH records the target architecture of the benchmark executable.
+		GOARCH string `json:"goarch"`
+		// GoVersion records the Go toolchain version used to build the executable.
+		GoVersion string `json:"go_version"`
+		// Modes records execution-mode order as part of resumable run identity.
+		Modes []ExecutionMode `json:"modes"`
+		// Iterations records the number of measured iterations.
+		Iterations int `json:"iterations"`
+		// WarmupIterations records the untimed iterations run before measurement.
+		WarmupIterations int `json:"warmup_iterations"`
+		// Round identifies the measurement round.
+		Round int `json:"round"`
+		// Block identifies the measurement block used to control carryover effects.
+		Block int `json:"block"`
+		// Arm identifies the measurement arm that produced the sample.
+		Arm string `json:"arm"`
+		// ArmOrder records the arm's position within its balanced measurement block.
+		ArmOrder int `json:"arm_order"`
+		// PoolSize sets the database connection-pool size.
+		PoolSize int `json:"pool_size"`
+		// Concurrency records the requested worker counts as part of resumable run identity.
+		Concurrency []int `json:"concurrency"`
+		// SessionMemoryCeilingBytes sets the per-session memory ceiling in bytes.
+		SessionMemoryCeilingBytes int64 `json:"session_memory_ceiling_bytes"`
+		// PoolMemoryCeilingBytes sets the aggregate pool memory ceiling in bytes.
+		PoolMemoryCeilingBytes int64 `json:"pool_memory_ceiling_bytes"`
+		// PostgresReferences records whether independent PostgreSQL references are enabled for the run identity.
+		PostgresReferences bool `json:"postgres_references"`
+		// PostgresReferenceArms lists independent PostgreSQL reference arms selected for measurement.
+		PostgresReferenceArms []string `json:"postgres_reference_arms"`
+		// PostgresForceShortest selects a forced shortest-path executor for diagnostic runs.
+		PostgresForceShortest string `json:"postgres_force_shortest"`
+		// PostgresForceExpansion selects a forced expansion search strategy for diagnostic runs.
+		PostgresForceExpansion string `json:"postgres_force_expansion"`
+		// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
+		Discovery bool `json:"discovery"`
+		// TimeoutClasses lists the increasing per-attempt deadlines included in resumable run identity.
+		TimeoutClasses []time.Duration `json:"timeout_classes"`
+		// DiscoverySampleFloor sets the minimum live-graph samples required before adaptive discovery may stop.
+		DiscoverySampleFloor int `json:"discovery_sample_floor"`
 	}{
 		Version:                   1,
 		SourceCommit:              environment.SourceCommit,
@@ -256,6 +331,7 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 	return hex.EncodeToString(digest[:])
 }
 
+// readExistingGraphCheckpoint reads a checkpoint, returning an empty checkpoint when the file does not exist.
 func readExistingGraphCheckpoint(path, manifestHash, corpusHash, runHash string) ([]CaseResult, error) {
 	if path == "" {
 		return nil, nil
@@ -291,6 +367,7 @@ func readExistingGraphCheckpoint(path, manifestHash, corpusHash, runHash string)
 	return checkpoint.Records, nil
 }
 
+// writeExistingGraphCheckpoint atomically persists live-graph completion state with restrictive permissions.
 func writeExistingGraphCheckpoint(path, manifestHash, corpusHash, runHash string, records []CaseResult) error {
 	if path == "" {
 		return nil
@@ -329,6 +406,7 @@ func writeExistingGraphCheckpoint(path, manifestHash, corpusHash, runHash string
 	return os.Rename(temporaryName, path)
 }
 
+// appendExistingGraphProgress appends one progress event as a durable JSON Lines record.
 func appendExistingGraphProgress(path string, event ExistingGraphProgress) error {
 	if path == "" {
 		return nil
@@ -345,6 +423,7 @@ func appendExistingGraphProgress(path string, event ExistingGraphProgress) error
 	return json.NewEncoder(file).Encode(event)
 }
 
+// redactExistingGraphRecord removes raw parameters and Cypher text, pseudonymizes anchor values, and scrubs resolved IDs from diagnostics and plans before a live-run record is persisted.
 func redactExistingGraphRecord(record *CaseResult, manifest ExistingGraphAnchorManifest, resolved map[string]graph.ID) {
 	if record == nil {
 		return
@@ -393,6 +472,7 @@ func redactExistingGraphRecord(record *CaseResult, manifest ExistingGraphAnchorM
 	}
 }
 
+// redactObservedRows replaces each normalized observation with a SHA-256 digest for live-graph persistence.
 func redactObservedRows(rows []string) []string {
 	for idx := range rows {
 		digest := sha256.Sum256([]byte(rows[idx]))
@@ -401,6 +481,7 @@ func redactObservedRows(rows []string) []string {
 	return rows
 }
 
+// redactDiagnostic replaces a nonempty diagnostic with its SHA-256 digest.
 func redactDiagnostic(value string) string {
 	if value == "" {
 		return ""
@@ -409,6 +490,7 @@ func redactDiagnostic(value string) string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
+// redactResolvedIDs replaces resolved physical node IDs and unmapped entity IDs with stable redaction markers.
 func redactResolvedIDs(value string, resolved map[string]graph.ID) string {
 	for _, id := range resolved {
 		value = regexp.MustCompile(`\b`+regexp.QuoteMeta(fmt.Sprint(id))+`\b`).ReplaceAllString(value, "<anchor-id>")
@@ -417,6 +499,7 @@ func redactResolvedIDs(value string, resolved map[string]graph.ID) string {
 	return value
 }
 
+// redactPlanJSON recursively replaces resolved graph IDs in a PostgreSQL JSON plan so live-run artifacts cannot disclose dataset identifiers.
 func redactPlanJSON(raw json.RawMessage, resolved map[string]graph.ID) json.RawMessage {
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
@@ -445,6 +528,7 @@ func redactPlanJSON(raw json.RawMessage, resolved map[string]graph.ID) json.RawM
 	return encoded
 }
 
+// validateCompletedWorkloads rejects checkpoint entries that are unknown or bound to stale workload identities.
 func validateCompletedWorkloads(completed map[string]string, corpus ScaleCorpus, fixture FixtureMetadata) error {
 	expectedKeys := map[string]struct{}{}
 	for _, testCase := range corpus.Cases {
@@ -471,6 +555,7 @@ func validateCompletedWorkloads(completed map[string]string, corpus ScaleCorpus,
 	return nil
 }
 
+// idMapForManifest builds an ID map from logical and redacted physical anchor identities.
 func idMapForManifest(anchors map[string]graph.ID) opengraph.IDMap {
 	result := make(opengraph.IDMap, len(anchors))
 	for name, id := range anchors {

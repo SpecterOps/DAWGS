@@ -7,6 +7,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
 
+// rewriteCompositeTypeFieldReference rewrites the binding portion of a composite-field reference through mappings.
 func rewriteCompositeTypeFieldReference(scopeIdentifier pgsql.Identifier, compositeReference pgsql.CompoundIdentifier) pgsql.RowColumnReference {
 	return pgsql.RowColumnReference{
 		Identifier: pgsql.CompoundIdentifier{scopeIdentifier, compositeReference.Root()},
@@ -14,6 +15,7 @@ func rewriteCompositeTypeFieldReference(scopeIdentifier pgsql.Identifier, compos
 	}
 }
 
+// rewriteIdentifierScopeReference replaces an identifier when mappings contains a scoped rename.
 func rewriteIdentifierScopeReference(scope *Scope, identifier pgsql.Identifier) (pgsql.SelectItem, error) {
 	if !pgsql.IsReservedIdentifier(identifier) {
 		if binding, bound := scope.Lookup(identifier); bound {
@@ -27,6 +29,7 @@ func rewriteIdentifierScopeReference(scope *Scope, identifier pgsql.Identifier) 
 	return identifier, nil
 }
 
+// rewriteCompoundIdentifierScopeReference replaces the root binding of a compound identifier through mappings.
 func rewriteCompoundIdentifierScopeReference(scope *Scope, identifier pgsql.CompoundIdentifier) (pgsql.SelectItem, error) {
 	if binding, bound := scope.Lookup(identifier[0]); bound {
 		if binding.LastProjection != nil {
@@ -45,6 +48,7 @@ func rewriteCompoundIdentifierScopeReference(scope *Scope, identifier pgsql.Comp
 	return identifier, nil
 }
 
+// rewriteExpressionScopeReference rewrites identifier-bearing expression variants through mappings.
 func rewriteExpressionScopeReference(scope *Scope, expression pgsql.Expression) (pgsql.Expression, bool, error) {
 	switch typedExpression := expression.(type) {
 	case pgsql.Identifier:
@@ -66,6 +70,7 @@ type FrameBindingRewriter struct {
 	scope *Scope
 }
 
+// rewriteArraySlice rewrites identifier references in an array expression and its slice bounds.
 func (s *FrameBindingRewriter) rewriteArraySlice(slice *pgsql.ArraySlice) error {
 	if slice == nil {
 		return nil
@@ -96,6 +101,7 @@ func (s *FrameBindingRewriter) rewriteArraySlice(slice *pgsql.ArraySlice) error 
 	return nil
 }
 
+// rewriteArrayLiteral rewrites identifier references in every array literal element.
 func (s *FrameBindingRewriter) rewriteArrayLiteral(literal *pgsql.ArrayLiteral) error {
 	if literal == nil {
 		return nil
@@ -110,6 +116,7 @@ func (s *FrameBindingRewriter) rewriteArrayLiteral(literal *pgsql.ArrayLiteral) 
 	return nil
 }
 
+// rewriteExpression recursively rewrites every supported identifier-bearing SQL expression.
 func (s *FrameBindingRewriter) rewriteExpression(expression *pgsql.Expression) error {
 	if expression == nil || *expression == nil {
 		return nil
@@ -152,6 +159,7 @@ func (s *FrameBindingRewriter) rewriteExpression(expression *pgsql.Expression) e
 	return nil
 }
 
+// rewriteCase rewrites identifier references in a CASE operand, branches, and fallback.
 func (s *FrameBindingRewriter) rewriteCase(caseExpression *pgsql.Case) error {
 	if caseExpression == nil {
 		return nil
@@ -176,6 +184,7 @@ func (s *FrameBindingRewriter) rewriteCase(caseExpression *pgsql.Case) error {
 	return s.rewriteExpression(&caseExpression.Else)
 }
 
+// enter rewrites a node's inbound references and pushes aliases that become visible to its children.
 func (s *FrameBindingRewriter) enter(node pgsql.SyntaxNode) error {
 	switch typedExpression := node.(type) {
 	case pgsql.Case:
@@ -663,6 +672,7 @@ func (s *FrameBindingRewriter) Enter(node pgsql.SyntaxNode) {
 	}
 }
 
+// exit removes aliases whose scope ends after the visited node.
 func (s *FrameBindingRewriter) exit(node pgsql.SyntaxNode) error {
 	switch node.(type) {
 	}

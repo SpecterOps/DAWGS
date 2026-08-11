@@ -13,18 +13,33 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// translateDefaultMaxTraversalDepth caps unbounded recursive traversals to prevent runaway expansion.
 const translateDefaultMaxTraversalDepth int64 = 15
 
 var (
-	expansionRootFilter      = pgsql.Identifier("traversal_root_filter")
-	expansionTerminalFilter  = pgsql.Identifier("traversal_terminal_filter")
-	expansionPairFilter      = pgsql.Identifier("traversal_pair_filter")
-	expansionTerminalID      = pgsql.Identifier("terminal_id")
-	expansionVisited         = pgsql.Identifier("visited")
-	expansionForwardVisited  = pgsql.Identifier("forward_visited")
+	// expansionRootFilter names the CTE that materializes admissible traversal roots.
+	expansionRootFilter = pgsql.Identifier("traversal_root_filter")
+
+	// expansionTerminalFilter names the CTE that materializes admissible traversal terminals.
+	expansionTerminalFilter = pgsql.Identifier("traversal_terminal_filter")
+
+	// expansionPairFilter names the CTE that materializes admissible root-terminal pairs.
+	expansionPairFilter = pgsql.Identifier("traversal_pair_filter")
+
+	// expansionTerminalID names the filtered terminal-ID column.
+	expansionTerminalID = pgsql.Identifier("terminal_id")
+
+	// expansionVisited names the relation that records states visited by shortest-path search.
+	expansionVisited = pgsql.Identifier("visited")
+
+	// expansionForwardVisited names states visited from the root side of bidirectional search.
+	expansionForwardVisited = pgsql.Identifier("forward_visited")
+
+	// expansionBackwardVisited names states visited from the terminal side of bidirectional search.
 	expansionBackwardVisited = pgsql.Identifier("backward_visited")
 )
 
+// expansionEdgeJoinCondition matches the current node to the start of the next directed edge.
 func expansionEdgeJoinCondition(traversalStep *TraversalStep) (pgsql.Expression, error) {
 	return pgd.Equals(
 		pgd.EntityID(traversalStep.LeftNode.Identifier),
@@ -32,6 +47,7 @@ func expansionEdgeJoinCondition(traversalStep *TraversalStep) (pgsql.Expression,
 	), nil
 }
 
+// expansionConstraints limits recursion by maximum depth and rejects cyclic expansion states.
 func expansionConstraints(traversalStep *TraversalStep) pgsql.Expression {
 	expansionModel := traversalStep.Expansion
 
@@ -46,25 +62,46 @@ func expansionConstraints(traversalStep *TraversalStep) pgsql.Expression {
 	)
 }
 
-var (
-	ErrUnsupportedExpansionDirection = errors.New("unsupported expansion direction")
-)
+// ErrUnsupportedExpansionDirection reports a traversal direction that cannot be lowered to SQL.
+var ErrUnsupportedExpansionDirection = errors.New("unsupported expansion direction")
 
+// ExpansionBuilder assembles the seed, recursive, and projection statements for one traversal expansion.
 type ExpansionBuilder struct {
-	PrimerStatement     pgsql.Select
-	RecursiveStatement  pgsql.Select
-	ProjectionStatement pgsql.Select
-	ZeroDepthStatement  *pgsql.Select
-	UseUnionAll         bool
+	// PrimerStatement produces the first traversal edge for each root.
+	PrimerStatement pgsql.Select
 
+	// RecursiveStatement advances each eligible expansion state by one edge.
+	RecursiveStatement pgsql.Select
+
+	// ProjectionStatement converts internal expansion state into the requested result shape.
+	ProjectionStatement pgsql.Select
+
+	// ZeroDepthStatement produces empty-path rows when the traversal admits depth zero.
+	ZeroDepthStatement *pgsql.Select
+
+	// UseUnionAll controls whether recursive branches retain duplicate states.
+	UseUnionAll bool
+
+	// queryParameters contains literal values lifted while constructing harness calls.
 	queryParameters map[string]any
-	graphID         int32
-	traversalStep   *TraversalStep
-	model           *Expansion
-	unwindClauses   []UnwindClause
-	unwindSources   []pgsql.FromClause
+
+	// graphID identifies the graph partitions referenced by generated traversal SQL.
+	graphID int32
+
+	// traversalStep describes the edge, endpoints, direction, and constraints being expanded.
+	traversalStep *TraversalStep
+
+	// model contains the frame and search options shared by the generated statements.
+	model *Expansion
+
+	// unwindClauses contains active UNWIND bindings that expansion predicates may reference.
+	unwindClauses []UnwindClause
+
+	// unwindSources caches the SQL sources corresponding to unwindClauses.
+	unwindSources []pgsql.FromClause
 }
 
+// NewExpansionBuilder validates traversal expansion state and constructs its SQL builder.
 func NewExpansionBuilder(queryParameters map[string]any, traversalStep *TraversalStep, graphID int32) (*ExpansionBuilder, error) {
 	if traversalStep.Expansion == nil {
 		return nil, errors.New("traversal step must have expansion set")
@@ -78,11 +115,13 @@ func NewExpansionBuilder(queryParameters map[string]any, traversalStep *Traversa
 	}, nil
 }
 
+// SetUnwindClauses registers the active UNWIND bindings and their SQL sources for expansion queries.
 func (s *ExpansionBuilder) SetUnwindClauses(clauses []UnwindClause) {
 	s.unwindClauses = clauses
 	s.unwindSources = unwindFromClauses(clauses)
 }
 
+// nextFrontInsert wraps a frontier-producing expression in an insert into the next-front workspace.
 func nextFrontInsert(body pgsql.SetExpression) pgsql.Insert {
 	return pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -95,6 +134,7 @@ func nextFrontInsert(body pgsql.SetExpression) pgsql.Insert {
 	}
 }
 
+// expansionNodeTableReference aliases the graph node table for an expansion binding.
 func expansionNodeTableReference(binding pgsql.Identifier) pgsql.TableReference {
 	return pgsql.TableReference{
 		Name:    pgsql.TableNode.AsCompoundIdentifier(),
@@ -102,6 +142,7 @@ func expansionNodeTableReference(binding pgsql.Identifier) pgsql.TableReference 
 	}
 }
 
+// expansionEdgeTableReference aliases the graph edge table for an expansion binding.
 func expansionEdgeTableReference(binding pgsql.Identifier) pgsql.TableReference {
 	return pgsql.TableReference{
 		Name:    pgsql.TableEdge.AsCompoundIdentifier(),
@@ -109,21 +150,28 @@ func expansionEdgeTableReference(binding pgsql.Identifier) pgsql.TableReference 
 	}
 }
 
+// expansionSeed describes the query and record shape that supply traversal root identifiers.
 type expansionSeed struct {
+	// identifier names the seed common table expression.
 	identifier pgsql.Identifier
-	query      pgsql.Select
+
+	// query selects the root identifiers supplied to the expansion.
+	query pgsql.Select
 }
 
+// expansionSeedIdentifier derives the CTE name reserved for an expansion's seed rows.
 func expansionSeedIdentifier(expansionIdentifier pgsql.Identifier) pgsql.Identifier {
 	return pgsql.Identifier(string(expansionIdentifier) + "_seed")
 }
 
+// expansionSeedColumns returns the single root-identifier column emitted by every seed query.
 func expansionSeedColumns() *pgsql.RecordShape {
 	return pgsql.NewRecordShape([]pgsql.Identifier{
 		expansionRootID,
 	})
 }
 
+// newExpansionSeed builds a seed query that projects a root expression from the supplied sources and predicate.
 func newExpansionSeed(identifier pgsql.Identifier, rootExpression pgsql.Expression, from []pgsql.FromClause, where pgsql.Expression) expansionSeed {
 	return expansionSeed{
 		identifier: identifier,
@@ -140,12 +188,14 @@ func newExpansionSeed(identifier pgsql.Identifier, rootExpression pgsql.Expressi
 	}
 }
 
+// newExpansionNodeSeed builds a seed by scanning candidate root nodes under the supplied constraints.
 func newExpansionNodeSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
 	return newExpansionSeed(identifier, pgd.EntityID(nodeIdentifier), []pgsql.FromClause{{
 		Source: expansionNodeTableReference(nodeIdentifier),
 	}}, constraints)
 }
 
+// newExpansionNodeFilterSeed reads root identifiers from a materialized filter and joins nodes when constraints require hydration.
 func newExpansionNodeFilterSeed(identifier, filterIdentifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
 	var (
 		filterAlias = pgsql.Identifier(string(identifier) + "_filter")
@@ -182,6 +232,7 @@ func newExpansionNodeFilterSeed(identifier, filterIdentifier, nodeIdentifier pgs
 	return seed
 }
 
+// newExpansionBoundNodeSeed projects distinct bound-node identifiers from the preceding frame.
 func newExpansionBoundNodeSeed(identifier pgsql.Identifier, previousFrame *Frame, binding *BoundIdentifier, constraints pgsql.Expression) expansionSeed {
 	seed := newExpansionSeed(identifier, boundEndpointIDReference(previousFrame, binding), []pgsql.FromClause{{
 		Source: pgsql.TableReference{
@@ -193,6 +244,7 @@ func newExpansionBoundNodeSeed(identifier pgsql.Identifier, previousFrame *Frame
 	return seed
 }
 
+// fromClausesContainSource reports whether a FROM list directly names the requested table source.
 func fromClausesContainSource(fromClauses []pgsql.FromClause, identifier pgsql.Identifier) bool {
 	for _, fromClause := range fromClauses {
 		if tableReference, isTableReference := fromClause.Source.(pgsql.TableReference); isTableReference &&
@@ -205,6 +257,7 @@ func fromClausesContainSource(fromClauses []pgsql.FromClause, identifier pgsql.I
 	return false
 }
 
+// prependFrameSourceIfMissing ensures the preceding frame is the first source in a FROM list.
 func prependFrameSourceIfMissing(fromClauses []pgsql.FromClause, frame *Frame) []pgsql.FromClause {
 	if frame == nil || fromClausesContainSource(fromClauses, frame.Binding.Identifier) {
 		return fromClauses
@@ -217,6 +270,7 @@ func prependFrameSourceIfMissing(fromClauses []pgsql.FromClause, frame *Frame) [
 	}}, fromClauses...)
 }
 
+// expressionReferencesUnwindBinding reports whether an expression depends on any active UNWIND binding.
 func expressionReferencesUnwindBinding(expression pgsql.Expression, unwindClauses []UnwindClause) (bool, error) {
 	if expression == nil || len(unwindClauses) == 0 {
 		return false, nil
@@ -236,6 +290,7 @@ func expressionReferencesUnwindBinding(expression pgsql.Expression, unwindClause
 	return false, nil
 }
 
+// seedEndpointConstraintSplit rewrites bound endpoint references for the seed and separates local predicates from deferred ones.
 func (s *ExpansionBuilder) seedEndpointConstraintSplit(expression pgsql.Expression, nodeIdentifier pgsql.Identifier, previousFrameIdentifier pgsql.Identifier) (pgsql.Expression, pgsql.Expression) {
 	var (
 		seedExpression = rewriteBoundEndpointSeedReference(expression, previousFrameIdentifier, nodeIdentifier)
@@ -251,6 +306,7 @@ func (s *ExpansionBuilder) seedEndpointConstraintSplit(expression pgsql.Expressi
 	return partitionConstraintByLocality(seedExpression, localScope)
 }
 
+// appendUnwindSourcesIfReferenced adds frame and UNWIND sources only when the supplied expressions use an UNWIND binding.
 func (s *ExpansionBuilder) appendUnwindSourcesIfReferenced(selectBody *pgsql.Select, expressions ...pgsql.Expression) error {
 	for _, expression := range expressions {
 		if referencesUnwind, err := expressionReferencesUnwindBinding(expression, s.unwindClauses); err != nil {
@@ -270,18 +326,22 @@ func (s *ExpansionBuilder) appendUnwindSourcesIfReferenced(selectBody *pgsql.Sel
 	return nil
 }
 
+// appendUnwindSources appends every active UNWIND source to a select body.
 func (s *ExpansionBuilder) appendUnwindSources(selectBody *pgsql.Select) {
 	selectBody.From = append(selectBody.From, s.unwindSources...)
 }
 
+// newExpansionRootIDsParameterSeed builds a root seed from the materialized root-identifier parameter.
 func newExpansionRootIDsParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
 	return newExpansionNodeFilterSeed(identifier, expansionRootFilter, nodeIdentifier, constraints)
 }
 
+// newExpansionTerminalIDsParameterSeed builds a root seed from the materialized terminal-identifier parameter.
 func newExpansionTerminalIDsParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) expansionSeed {
 	return newExpansionNodeFilterSeed(identifier, expansionTerminalFilter, nodeIdentifier, constraints)
 }
 
+// newExpansionArrayParameterSeed unnests an identifier-array parameter and filters the corresponding nodes.
 func newExpansionArrayParameterSeed(identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression, parameterPosition int) expansionSeed {
 	parameterAlias := pgsql.Identifier(string(identifier) + "_parameter")
 	parameterID := pgsql.CompoundIdentifier{parameterAlias, pgsql.ColumnID}
@@ -306,6 +366,7 @@ func newExpansionArrayParameterSeed(identifier, nodeIdentifier pgsql.Identifier,
 	return seed
 }
 
+// CTE exposes the seed query as a non-materialized common table expression.
 func (s expansionSeed) CTE() pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
@@ -319,10 +380,12 @@ func (s expansionSeed) CTE() pgsql.CommonTableExpression {
 	}
 }
 
+// rootID returns the qualified root-identifier column of the seed CTE.
 func (s expansionSeed) rootID() pgsql.CompoundIdentifier {
 	return pgsql.CompoundIdentifier{s.identifier, expansionRootID}
 }
 
+// fromClause references the seed CTE and attaches the supplied joins.
 func (s expansionSeed) fromClause(joins ...pgsql.Join) pgsql.FromClause {
 	return pgsql.FromClause{
 		Source: pgsql.TableReference{
@@ -332,6 +395,7 @@ func (s expansionSeed) fromClause(joins ...pgsql.Join) pgsql.FromClause {
 	}
 }
 
+// edgeJoin joins a seed root identifier to the starting endpoint of an edge binding.
 func (s expansionSeed) edgeJoin(edgeIdentifier pgsql.Identifier, edgeStartColumn pgsql.CompoundIdentifier) pgsql.Join {
 	return pgsql.Join{
 		Table: expansionEdgeTableReference(edgeIdentifier),
@@ -342,6 +406,7 @@ func (s expansionSeed) edgeJoin(edgeIdentifier pgsql.Identifier, edgeStartColumn
 	}
 }
 
+// expansionEdgeFromClause references the graph edge table with the joins needed by an expansion query.
 func expansionEdgeFromClause(edgeIdentifier pgsql.Identifier, joins ...pgsql.Join) pgsql.FromClause {
 	return pgsql.FromClause{
 		Source: expansionEdgeTableReference(edgeIdentifier),
@@ -349,6 +414,7 @@ func expansionEdgeFromClause(edgeIdentifier pgsql.Identifier, joins ...pgsql.Joi
 	}
 }
 
+// recursiveExpansionEdgeProjection projects every stored column of the recursively selected edge.
 func recursiveExpansionEdgeProjection(edgeIdentifier pgsql.Identifier) pgsql.Projection {
 	projection := make(pgsql.Projection, len(pgsql.EdgeTableColumns))
 
@@ -359,6 +425,7 @@ func recursiveExpansionEdgeProjection(edgeIdentifier pgsql.Identifier) pgsql.Pro
 	return projection
 }
 
+// expansionEdgeNotInPath rejects an edge identifier already present in the accumulated path.
 func expansionEdgeNotInPath(edgeIdentifier, frameIdentifier pgsql.Identifier) *pgsql.BinaryExpression {
 	return pgsql.NewBinaryExpression(
 		pgd.EntityID(edgeIdentifier),
@@ -369,6 +436,7 @@ func expansionEdgeNotInPath(edgeIdentifier, frameIdentifier pgsql.Identifier) *p
 	)
 }
 
+// recursiveExpansionEdgeLookupJoin builds the correlated lateral lookup for unused edges leaving the current frontier node.
 func recursiveExpansionEdgeLookupJoin(traversalStep *TraversalStep) pgsql.Join {
 	var (
 		expansionModel = traversalStep.Expansion
@@ -407,6 +475,7 @@ func recursiveExpansionEdgeLookupJoin(traversalStep *TraversalStep) pgsql.Join {
 	}
 }
 
+// expansionNodeProjection projects either a node identifier or the complete node record required by its binding.
 func expansionNodeProjection(binding *BoundIdentifier) pgsql.Projection {
 	if binding.IDOnly {
 		return pgsql.Projection{pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnID}}
@@ -421,6 +490,7 @@ func expansionNodeProjection(binding *BoundIdentifier) pgsql.Projection {
 	return projection
 }
 
+// expansionNodeLookupJoin builds a correlated lateral lookup that hydrates a node by identifier.
 func expansionNodeLookupJoin(binding *BoundIdentifier, nodeID pgsql.Expression) pgsql.Join {
 	nodeLookup := pgsql.Select{
 		Projection: expansionNodeProjection(binding),
@@ -650,6 +720,7 @@ func rewriteBoundEndpointSeedReference(expression pgsql.Expression, previousFram
 	}
 }
 
+// seededFrontPrimerQuery places a seed CTE in front of the query that initializes a search frontier.
 func seededFrontPrimerQuery(seed expansionSeed, primer pgsql.Select) pgsql.Query {
 	return pgsql.Query{
 		CommonTableExpressions: &pgsql.With{
@@ -659,6 +730,7 @@ func seededFrontPrimerQuery(seed expansionSeed, primer pgsql.Select) pgsql.Query
 	}
 }
 
+// frontPrimerQuery returns a frontier primer with its optional seed CTE attached.
 func frontPrimerQuery(seed *expansionSeed, primer pgsql.Select) pgsql.Query {
 	if seed == nil {
 		return pgsql.Query{Body: primer}
@@ -667,10 +739,12 @@ func frontPrimerQuery(seed *expansionSeed, primer pgsql.Select) pgsql.Query {
 	return seededFrontPrimerQuery(*seed, primer)
 }
 
+// expansionAllowsZeroDepth reports whether the traversal's lower bound explicitly admits an empty path.
 func expansionAllowsZeroDepth(expansionModel *Expansion) bool {
 	return expansionModel.Options.MinDepth.Set && expansionModel.Options.MinDepth.Value == 0
 }
 
+// zeroDepthNodeJoin joins a node binding to the identifier representing an empty path's endpoint.
 func zeroDepthNodeJoin(nodeIdentifier pgsql.Identifier, nodeID pgsql.Expression) pgsql.Join {
 	return pgsql.Join{
 		Table: expansionNodeTableReference(nodeIdentifier),
@@ -681,6 +755,7 @@ func zeroDepthNodeJoin(nodeIdentifier pgsql.Identifier, nodeID pgsql.Expression)
 	}
 }
 
+// zeroDepthTerminalSatisfaction returns the terminal predicate that can be evaluated without traversing an edge.
 func zeroDepthTerminalSatisfaction(traversalStep *TraversalStep) pgsql.Expression {
 	localSatisfaction, _ := expansionTerminalSatisfactionLocality(traversalStep)
 	if localSatisfaction == nil {
@@ -696,6 +771,7 @@ func zeroDepthTerminalSatisfaction(traversalStep *TraversalStep) pgsql.Expressio
 	return localSatisfaction
 }
 
+// buildZeroDepthExpansionSelect emits the depth-zero expansion state for roots that already satisfy the terminal predicate.
 func (s *ExpansionBuilder) buildZeroDepthExpansionSelect(seed *expansionSeed) (pgsql.Select, error) {
 	var (
 		expansionModel      = s.traversalStep.Expansion
@@ -750,18 +826,22 @@ func (s *ExpansionBuilder) buildZeroDepthExpansionSelect(seed *expansionSeed) (p
 	}, nil
 }
 
+// usesBoundRootIDs reports whether roots must be read from a binding in the preceding frame.
 func (s *ExpansionBuilder) usesBoundRootIDs() bool {
 	return s.traversalStep.LeftNodeBound && s.traversalStep.Frame != nil && s.traversalStep.Frame.Previous != nil
 }
 
+// usesBoundTerminalIDs reports whether terminals must be read from a binding in the preceding frame.
 func (s *ExpansionBuilder) usesBoundTerminalIDs() bool {
 	return s.traversalStep.RightNodeBound && s.traversalStep.Frame != nil && s.traversalStep.Frame.Previous != nil
 }
 
+// usesBoundEndpointPairs reports whether both endpoints are paired bindings from the preceding frame.
 func (s *ExpansionBuilder) usesBoundEndpointPairs() bool {
 	return s.usesBoundRootIDs() && s.usesBoundTerminalIDs()
 }
 
+// boundNodeIDsFilterStatement inserts distinct non-null bound node identifiers into a filter table.
 func (s *ExpansionBuilder) boundNodeIDsFilterStatement(filterIdentifier pgsql.Identifier, nodeIdentifier pgsql.Identifier) pgsql.Insert {
 	var (
 		previousFrameIdentifier = s.traversalStep.Frame.Previous.Binding.Identifier
@@ -797,6 +877,7 @@ func (s *ExpansionBuilder) boundNodeIDsFilterStatement(filterIdentifier pgsql.Id
 	}
 }
 
+// boundRootIDsFilterStatement builds the root-filter insert when the traversal has a bound root.
 func (s *ExpansionBuilder) boundRootIDsFilterStatement() (pgsql.Insert, bool) {
 	if !s.usesBoundRootIDs() {
 		return pgsql.Insert{}, false
@@ -805,6 +886,7 @@ func (s *ExpansionBuilder) boundRootIDsFilterStatement() (pgsql.Insert, bool) {
 	return s.boundNodeIDsFilterStatement(expansionRootFilter, s.traversalStep.LeftNode.Identifier), true
 }
 
+// boundTerminalIDsFilterStatement builds the terminal-filter insert when the traversal has a bound terminal.
 func (s *ExpansionBuilder) boundTerminalIDsFilterStatement() (pgsql.Insert, bool) {
 	if !s.usesBoundTerminalIDs() {
 		return pgsql.Insert{}, false
@@ -813,6 +895,7 @@ func (s *ExpansionBuilder) boundTerminalIDsFilterStatement() (pgsql.Insert, bool
 	return s.boundNodeIDsFilterStatement(expansionTerminalFilter, s.traversalStep.RightNode.Identifier), true
 }
 
+// unboundTerminalIDsFilterStatement materializes terminal node identifiers selected by terminal constraints.
 func (s *ExpansionBuilder) unboundTerminalIDsFilterStatement() (pgsql.Insert, bool) {
 	expansionModel := s.traversalStep.Expansion
 	if !expansionModel.UseMaterializedTerminalFilter {
@@ -822,6 +905,7 @@ func (s *ExpansionBuilder) unboundTerminalIDsFilterStatement() (pgsql.Insert, bo
 	return s.nodeIDsFilterStatement(expansionTerminalFilter, s.traversalStep.RightNode.Identifier, expansionModel.TerminalNodeConstraints), true
 }
 
+// nodeIDsFilterStatement inserts distinct constrained node identifiers into a filter table.
 func (s *ExpansionBuilder) nodeIDsFilterStatement(filterIdentifier pgsql.Identifier, nodeIdentifier pgsql.Identifier, constraints pgsql.Expression) pgsql.Insert {
 	nodeIDExpression := pgsql.CompoundIdentifier{nodeIdentifier, pgsql.ColumnID}
 
@@ -852,6 +936,7 @@ func (s *ExpansionBuilder) nodeIDsFilterStatement(filterIdentifier pgsql.Identif
 	}
 }
 
+// boundEndpointPairFilterStatement inserts distinct non-null bound root and terminal pairs from the preceding frame.
 func (s *ExpansionBuilder) boundEndpointPairFilterStatement() (pgsql.Insert, bool) {
 	if !s.usesBoundEndpointPairs() {
 		return pgsql.Insert{}, false
@@ -903,6 +988,7 @@ func (s *ExpansionBuilder) boundEndpointPairFilterStatement() (pgsql.Insert, boo
 	}, true
 }
 
+// materializedEndpointPairFilterStatement inserts root and terminal pairs selected independently by endpoint constraints.
 func (s *ExpansionBuilder) materializedEndpointPairFilterStatement() (pgsql.Insert, bool) {
 	expansionModel := s.traversalStep.Expansion
 	if !expansionModel.UseMaterializedEndpointPairFilter {
@@ -949,6 +1035,7 @@ func (s *ExpansionBuilder) materializedEndpointPairFilterStatement() (pgsql.Inse
 	}, true
 }
 
+// boundTerminalFilterSatisfaction tests whether an expansion endpoint occurs in the materialized terminal filter.
 func boundTerminalFilterSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -973,6 +1060,7 @@ func boundTerminalFilterSatisfaction(expansionModel *Expansion) pgsql.Expression
 	}
 }
 
+// boundTerminalPairFilterSatisfaction tests whether a root and terminal form a materialized endpoint pair.
 func boundTerminalPairFilterSatisfaction(rootIDExpression pgsql.Expression, terminalIDExpression pgsql.Expression) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1003,6 +1091,7 @@ func boundTerminalPairFilterSatisfaction(rootIDExpression pgsql.Expression, term
 	}
 }
 
+// boundRootFilterSatisfaction tests whether an expansion root occurs in the materialized root filter.
 func boundRootFilterSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1027,6 +1116,7 @@ func boundRootFilterSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	}
 }
 
+// shortestPathVisitedPruningCondition rejects a root and frontier-node pair already recorded by the search.
 func shortestPathVisitedPruningCondition(visitedTable pgsql.Identifier, rootIDExpression pgsql.Expression, nextIDExpression pgsql.Expression) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1057,6 +1147,7 @@ func shortestPathVisitedPruningCondition(visitedTable pgsql.Identifier, rootIDEx
 	}
 }
 
+// forwardContinuationSatisfaction tests whether another eligible edge leaves the forward frontier endpoint.
 func forwardContinuationSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1081,6 +1172,7 @@ func forwardContinuationSatisfaction(expansionModel *Expansion) pgsql.Expression
 	}
 }
 
+// forwardTerminalSatisfaction selects the cheapest available test that marks a forward frontier row terminal.
 func (s *ExpansionBuilder) forwardTerminalSatisfaction(expansionModel *Expansion, rootIDExpression pgsql.Expression) pgsql.SelectItem {
 	var satisfied pgsql.Expression
 
@@ -1102,6 +1194,7 @@ func (s *ExpansionBuilder) forwardTerminalSatisfaction(expansionModel *Expansion
 	return satisfiedSelectItem
 }
 
+// forwardTerminalSatisfactionProjection returns a local terminal predicate when no materialized filter supplies it.
 func forwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expression {
 	if expansionModel.TerminalNodeSatisfactionProjection != nil &&
 		!expansionModel.UseMaterializedTerminalFilter &&
@@ -1112,6 +1205,7 @@ func forwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expr
 	return nil
 }
 
+// backwardContinuationSatisfaction tests whether another eligible edge enters the backward frontier endpoint.
 func backwardContinuationSatisfaction(expansionModel *Expansion) pgsql.Expression {
 	return pgsql.ExistsExpression{
 		Subquery: pgsql.Subquery{
@@ -1136,6 +1230,7 @@ func backwardContinuationSatisfaction(expansionModel *Expansion) pgsql.Expressio
 	}
 }
 
+// backwardTerminalSatisfaction selects the cheapest available test that marks a backward frontier row terminal.
 func (s *ExpansionBuilder) backwardTerminalSatisfaction(expansionModel *Expansion, terminalIDExpression pgsql.Expression) pgsql.SelectItem {
 	var satisfied pgsql.Expression
 
@@ -1155,6 +1250,7 @@ func (s *ExpansionBuilder) backwardTerminalSatisfaction(expansionModel *Expansio
 	return satisfiedSelectItem
 }
 
+// backwardTerminalSatisfactionProjection returns a local root predicate when no materialized filter supplies it.
 func backwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Expression {
 	if expansionModel.PrimerNodeSatisfactionProjection != nil && !expansionModel.UseMaterializedEndpointPairFilter {
 		return pgsql.Expression(expansionModel.PrimerNodeSatisfactionProjection)
@@ -1163,6 +1259,7 @@ func backwardTerminalSatisfactionProjection(expansionModel *Expansion) pgsql.Exp
 	return nil
 }
 
+// prepareForwardFrontPrimerQuery builds the first-edge query and deferred predicate for the forward search frontier.
 func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
 	var (
 		primerSeedConstraints     pgsql.Expression
@@ -1272,6 +1369,7 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 	return frontPrimerQuery(seed, nextQuery), primerProjectionPredicate, nil
 }
 
+// prepareForwardFrontRecursiveQuery builds the query that advances the forward frontier by one unused edge.
 func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Expansion) (pgsql.Select, error) {
 	nextQuery := pgsql.Select{
 		Where: expansionModel.EdgeConstraints,
@@ -1359,6 +1457,7 @@ func (s *ExpansionBuilder) prepareForwardFrontRecursiveQuery(expansionModel *Exp
 	return nextQuery, nil
 }
 
+// prepareBackwardFrontPrimerQuery builds the first-edge query and deferred predicate for the backward search frontier.
 func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expansion) (pgsql.Query, pgsql.Expression, error) {
 	var (
 		terminalSeedConstraints     pgsql.Expression
@@ -1456,6 +1555,7 @@ func (s *ExpansionBuilder) prepareBackwardFrontPrimerQuery(expansionModel *Expan
 	return frontPrimerQuery(seed, nextQuery), terminalProjectionPredicate, nil
 }
 
+// prepareBackwardFrontRecursiveQuery builds the query that advances the backward frontier by one unused edge.
 func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Expansion) (pgsql.Select, error) {
 	nextQuery := pgsql.Select{
 		Where: expansionModel.EdgeConstraints,
@@ -1528,10 +1628,12 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 	return nextQuery, nil
 }
 
+// shortestPathSearchCTE invokes a shortest-path harness and exposes its rows through the standard search CTE.
 func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression) pgsql.CommonTableExpression {
 	return shortestPathSearchCTEFrom(functionName, expansionModel, harnessParameters, "singleton_endpoints", expansionModel.Frame.Binding.Identifier)
 }
 
+// shortestPathSearchCTEFrom builds the search CTE, substituting validated singleton endpoint identifiers when present.
 func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression, validatedEndpoints, searchAlias pgsql.Identifier) pgsql.CommonTableExpression {
 
 	if expansionModel.UsesSingletonEndpointPair() {
@@ -1587,6 +1689,7 @@ func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Ex
 	}
 }
 
+// singletonEndpointValidationCTE validates a single root and terminal pair against both endpoint predicates.
 func singletonEndpointValidationCTE(traversalStep *TraversalStep, expansionModel *Expansion) pgsql.CommonTableExpression {
 	const validatedEndpoints pgsql.Identifier = "singleton_endpoints"
 
@@ -1614,6 +1717,7 @@ func singletonEndpointValidationCTE(traversalStep *TraversalStep, expansionModel
 	}
 }
 
+// boundEndpointProjectionConstraint equates a projected expansion endpoint with its binding in the preceding frame.
 func boundEndpointProjectionConstraint(prevFrameID pgsql.Identifier, binding *BoundIdentifier, expansionFrameID, expansionColumn pgsql.Identifier) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		projectedNodeIDReference(prevFrameID, binding),
@@ -1622,6 +1726,7 @@ func boundEndpointProjectionConstraint(prevFrameID pgsql.Identifier, binding *Bo
 	)
 }
 
+// applyBoundEndpointProjectionConstraints attaches preceding-frame sources and equalities for bound expansion endpoints.
 func (s *ExpansionBuilder) applyBoundEndpointProjectionConstraints(projectionQuery *pgsql.Select, expansionModel *Expansion) {
 	if s.traversalStep.Frame == nil || s.traversalStep.Frame.Previous == nil {
 		return
@@ -1658,6 +1763,7 @@ func (s *ExpansionBuilder) applyBoundEndpointProjectionConstraints(projectionQue
 	}
 }
 
+// ensureProjectionFrameSource ensures a projection query reads from the requested frame.
 func ensureProjectionFrameSource(projectionQuery *pgsql.Select, frameIdentifier pgsql.Identifier) {
 	for _, from := range projectionQuery.From {
 		if tableReference, ok := from.Source.(pgsql.TableReference); ok && len(tableReference.Name) == 1 && tableReference.Name[0] == frameIdentifier {
@@ -1672,6 +1778,7 @@ func ensureProjectionFrameSource(projectionQuery *pgsql.Select, frameIdentifier 
 	}}, projectionQuery.From...)
 }
 
+// applyShortestPathSeedProjectionConstraints adds deferred seed predicates and any frame source they reference.
 func (s *ExpansionBuilder) applyShortestPathSeedProjectionConstraints(projectionQuery *pgsql.Select, projectionConstraints pgsql.Expression) {
 	if projectionConstraints == nil {
 		return
@@ -1687,6 +1794,7 @@ func (s *ExpansionBuilder) applyShortestPathSeedProjectionConstraints(projection
 	projectionQuery.Where = pgsql.OptionalAnd(projectionQuery.Where, projectionConstraints)
 }
 
+// shortestPathSelfEndpointGuard rejects a shortest-path request whose root and terminal are identical.
 // Match Neo4j's shortest-path behavior by surfacing an error for result rows
 // where the resolved root and terminal endpoints are the same node.
 func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expression {
@@ -1698,6 +1806,7 @@ func shortestPathSelfEndpointGuard(expansionFrame pgsql.Identifier) pgsql.Expres
 	return shortestPathSelfEndpointGuardCase(rootID, terminalID)
 }
 
+// shortestPathSelfEndpointGuardCase emits the conditional expression that raises the self-endpoint error.
 func shortestPathSelfEndpointGuardCase(rootID, terminalID pgsql.Expression) pgsql.Expression {
 	return shortestPathSelfEndpointConditionGuard(
 		pgsql.NewBinaryExpression(rootID, pgsql.OperatorNotEquals, terminalID),
@@ -1706,6 +1815,7 @@ func shortestPathSelfEndpointGuardCase(rootID, terminalID pgsql.Expression) pgsq
 	)
 }
 
+// shortestPathSelfEndpointConditionGuard applies the self-endpoint check only to rows matching a predicate.
 func shortestPathSelfEndpointConditionGuard(condition pgsql.Expression, rootID, terminalID pgsql.Expression) pgsql.Expression {
 	return &pgsql.Case{
 		Conditions: []pgsql.Expression{
@@ -1724,6 +1834,7 @@ func shortestPathSelfEndpointConditionGuard(condition pgsql.Expression, rootID, 
 	}
 }
 
+// shortestPathTerminalFilterSelfEndpointGuard rejects a root present in a singleton terminal filter.
 // PostgreSQL has no portable expression-level RAISE. Keep the normal path
 // visible in generated SQL and call the schema helper only for the error path.
 func shortestPathTerminalFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.Expression {
@@ -1774,6 +1885,7 @@ func shortestPathTerminalFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.
 	}
 }
 
+// shortestPathEndpointPairFilterSelfEndpointGuard rejects a self-pair present in the endpoint-pair filter.
 func shortestPathEndpointPairFilterSelfEndpointGuard(rootID pgsql.Expression) pgsql.Expression {
 	matchingEndpointPairCount := pgsql.Subquery{
 		Query: pgsql.Query{
@@ -1819,6 +1931,7 @@ func shortestPathEndpointPairFilterSelfEndpointGuard(rootID pgsql.Expression) pg
 	)
 }
 
+// shortestPathSeedSelfEndpointGuard selects the appropriate self-endpoint check for the active seed filters.
 func shortestPathSeedSelfEndpointGuard(rootID pgsql.Expression, useEndpointPairFilter bool) pgsql.Expression {
 	if useEndpointPairFilter {
 		return shortestPathEndpointPairFilterSelfEndpointGuard(rootID)
@@ -1827,6 +1940,7 @@ func shortestPathSeedSelfEndpointGuard(rootID pgsql.Expression, useEndpointPairF
 	return shortestPathTerminalFilterSelfEndpointGuard(rootID)
 }
 
+// applyShortestPathSelfEndpointGuard adds self-endpoint validation unless an existing inequality already excludes it.
 func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *pgsql.Select, expansionModel *Expansion) {
 	if expansionModel.HasExplicitEndpointInequality || expansionAllowsZeroDepth(expansionModel) {
 		return
@@ -1838,6 +1952,7 @@ func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *p
 	)
 }
 
+// buildShortestPathsHarnessCall assembles the seeded search, harness invocation, and final shortest-path projection.
 func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgsql.Identifier) (pgsql.Query, error) {
 	var (
 		expansionModel  = s.traversalStep.Expansion
@@ -1908,10 +2023,12 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 	}
 }
 
+// BuildShortestPathsRoot builds a unidirectional single-shortest-path harness query.
 func (s *ExpansionBuilder) BuildShortestPathsRoot() (pgsql.Query, error) {
 	return s.buildShortestPathsHarnessCall(pgsql.FunctionUnidirectionalSPHarness)
 }
 
+// shortestDistanceColumns returns the harness result shape for identifier-only or rooted distance searches.
 func shortestDistanceColumns(idOnly bool) *pgsql.RecordShape {
 	if idOnly {
 		return pgsql.NewRecordShape([]pgsql.Identifier{expansionNextID, expansionDepth})
@@ -1919,6 +2036,7 @@ func shortestDistanceColumns(idOnly bool) *pgsql.RecordShape {
 	return pgsql.NewRecordShape([]pgsql.Identifier{expansionRootID, expansionNextID, expansionDepth})
 }
 
+// shortestDistanceEndpointID reads a validated singleton endpoint identifier through a scalar subquery.
 func shortestDistanceEndpointID(validatedEndpoints, endpointID pgsql.Identifier) pgsql.Subquery {
 	return pgsql.Subquery{
 		Query: pgsql.Query{
@@ -1934,6 +2052,7 @@ func shortestDistanceEndpointID(validatedEndpoints, endpointID pgsql.Identifier)
 	}
 }
 
+// shortestDistanceIDProjection rewrites endpoint identifier projections to use validated search-state columns.
 func shortestDistanceIDProjection(projection pgsql.Projection, traversalStep *TraversalStep, stateID, validatedEndpoints pgsql.Identifier) pgsql.Projection {
 	result := append(pgsql.Projection(nil), projection...)
 	for idx, item := range result {
@@ -2140,6 +2259,7 @@ func (s *ExpansionBuilder) BuildShortestDistanceRoot() (pgsql.Query, error) {
 	return query, nil
 }
 
+// shortestPathNodeComposite constructs the stored composite value for a hydrated path node.
 func shortestPathNodeComposite(identifier pgsql.Identifier) pgsql.CompositeValue {
 	value := pgsql.CompositeValue{DataType: pgsql.NodeComposite}
 	for _, column := range pgsql.NodeTableColumns {
@@ -2148,6 +2268,7 @@ func shortestPathNodeComposite(identifier pgsql.Identifier) pgsql.CompositeValue
 	return value
 }
 
+// shortestPathM0Hydration expands an edge-identifier path into ordered node and edge composites.
 func shortestPathM0Hydration(stateID pgsql.Identifier, direction graph.Direction) pgsql.LateralSubquery {
 	const (
 		pathIndex     pgsql.Identifier = "m0_path_index"
@@ -2241,6 +2362,7 @@ func shortestPathM0Hydration(stateID pgsql.Identifier, direction graph.Direction
 	}
 }
 
+// shortestPathM0Projection replaces the raw path state with its hydrated graph-path value.
 func shortestPathM0Projection(projection pgsql.Projection, stateID pgsql.Identifier, path pgsql.Expression) pgsql.Projection {
 	result := append(pgsql.Projection(nil), projection...)
 	for idx, item := range result {
@@ -2446,10 +2568,12 @@ func (s *ExpansionBuilder) BuildShortestPathEdgeM0Root() (pgsql.Query, error) {
 	return query, nil
 }
 
+// BuildAllShortestPathsRoot builds a unidirectional all-shortest-paths harness query.
 func (s *ExpansionBuilder) BuildAllShortestPathsRoot() (pgsql.Query, error) {
 	return s.buildShortestPathsHarnessCall(pgsql.FunctionUnidirectionalASPHarness)
 }
 
+// compactShortestExecutor reports whether executor emits the compact distance/witness row shape that requires legacy expansion-shape adaptation.
 func compactShortestExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorASPA1DAG,
@@ -2564,22 +2688,27 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 	return query, nil
 }
 
+// BuildAllShortestPathsDAGRoot builds the bound-endpoint query that enumerates all shortest paths from a predecessor DAG.
 func (s *ExpansionBuilder) BuildAllShortestPathsDAGRoot() (pgsql.Query, error) {
 	return s.buildCompactBoundShortestPathsRoot(pgsql.FunctionAllShortestPathsDAG, false)
 }
 
+// BuildCompactShortestPathRoot builds the bound-endpoint query that returns one compact shortest-path witness.
 func (s *ExpansionBuilder) BuildCompactShortestPathRoot() (pgsql.Query, error) {
 	return s.buildCompactBoundShortestPathsRoot(pgsql.FunctionShortestPathCompact, true)
 }
 
+// canMaterializeTerminalFilter reports whether terminal constraints can be precomputed as an identifier filter.
 func (s *ExpansionBuilder) canMaterializeTerminalFilter(expansionModel *Expansion) bool {
 	return canMaterializeTerminalFilterForStep(s.traversalStep, expansionModel)
 }
 
+// canMaterializeEndpointPairFilter reports whether root and terminal constraints can be precomputed as endpoint pairs.
 func (s *ExpansionBuilder) canMaterializeEndpointPairFilter(expansionModel *Expansion) bool {
 	return canMaterializeEndpointPairFilterForStep(s.traversalStep, expansionModel)
 }
 
+// buildBiDirectionalShortestPathsHarnessCall assembles both search fronts, the bidirectional harness, and its final projection.
 func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFunctionName pgsql.Identifier) (pgsql.Query, error) {
 	var (
 		expansionModel  = s.traversalStep.Expansion
@@ -2669,6 +2798,7 @@ func (s *ExpansionBuilder) buildBiDirectionalShortestPathsHarnessCall(harnessFun
 	}
 }
 
+// BuildBiDirectionalShortestPathsRoot builds a bidirectional single-shortest-path harness query.
 func (s *ExpansionBuilder) BuildBiDirectionalShortestPathsRoot() (pgsql.Query, error) {
 	return s.buildBiDirectionalShortestPathsHarnessCall(pgsql.FunctionBidirectionalSPHarness)
 }
@@ -2873,10 +3003,12 @@ func (s *ExpansionBuilder) BuildBiDirectionalShortestPathsRootWithDirectPrefligh
 	return query, nil
 }
 
+// BuildBiDirectionalAllShortestPathsRoot builds a bidirectional all-shortest-paths harness query.
 func (s *ExpansionBuilder) BuildBiDirectionalAllShortestPathsRoot() (pgsql.Query, error) {
 	return s.buildBiDirectionalShortestPathsHarnessCall(pgsql.FunctionBidirectionalASPHarness)
 }
 
+// boundEndpointFilterParameters renders the available bound endpoint inserts as harness SQL parameters.
 func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, error) {
 	var (
 		rootFilterStatement, hasRootFilter         = s.boundRootIDsFilterStatement()
@@ -2938,6 +3070,7 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 	return filterParameters, nil
 }
 
+// shortestPathsParameters renders a forward search's query fragments, depth limit, and filter inserts as harness parameters.
 func (s *ExpansionBuilder) shortestPathsParameters(expansionModel *Expansion, forwardFrontPrimerQuery pgsql.SetExpression, forwardFrontRecursiveQuery pgsql.SetExpression) ([]pgsql.Expression, error) {
 	var (
 		harnessParameters []pgsql.Expression
@@ -2982,6 +3115,7 @@ func (s *ExpansionBuilder) shortestPathsParameters(expansionModel *Expansion, fo
 	return harnessParameters, nil
 }
 
+// shortestPathWorkspaceFragment rewrites generic workspace identifiers to the reusable bidirectional-search namespace.
 func shortestPathWorkspaceFragment(fragment string) string {
 	return strings.NewReplacer(
 		"on conflict on constraint forward_visited_pkey", "on conflict on constraint bsp_forward_visited_pkey",
@@ -2994,6 +3128,7 @@ func shortestPathWorkspaceFragment(fragment string) string {
 	).Replace(fragment)
 }
 
+// bidirectionalShortestPathsParameters renders both search fronts and endpoint inputs for the bidirectional harness.
 func (s *ExpansionBuilder) bidirectionalShortestPathsParameters(expansionModel *Expansion, forwardFrontPrimerQuery pgsql.SetExpression, forwardFrontRecursiveQuery pgsql.SetExpression, backwardFrontPrimerQuery pgsql.SetExpression, backwardFrontRecursiveQuery pgsql.SetExpression, useReusableWorkspace bool) ([]pgsql.Expression, error) {
 	var (
 		harnessParameters []pgsql.Expression
@@ -3105,6 +3240,7 @@ func (s *ExpansionBuilder) bidirectionalShortestPathsParameters(expansionModel *
 	return harnessParameters, nil
 }
 
+// Build combines the configured expansion stages into a recursive CTE and final projection query.
 func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTableExpressions ...pgsql.CommonTableExpression) pgsql.Query {
 	expansionBody := pgsql.SetExpression(pgsql.SetOperation{
 		LOperand: s.PrimerStatement,
@@ -3161,6 +3297,7 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTab
 	return query
 }
 
+// projectionAliasExpressions indexes each projected alias or identifier by its underlying expression.
 func projectionAliasExpressions(projection pgsql.Projection) map[pgsql.Identifier]pgsql.Expression {
 	aliases := make(map[pgsql.Identifier]pgsql.Expression)
 
@@ -3189,6 +3326,7 @@ func projectionAliasExpressions(projection pgsql.Projection) map[pgsql.Identifie
 	return aliases
 }
 
+// rewriteCurrentFrameProjectionSetExpression substitutes current-frame aliases throughout a set expression.
 func rewriteCurrentFrameProjectionSetExpression(setExpression pgsql.SetExpression, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.SetExpression {
 	switch typedSetExpression := setExpression.(type) {
 	case pgsql.Select:
@@ -3204,6 +3342,7 @@ func rewriteCurrentFrameProjectionSetExpression(setExpression pgsql.SetExpressio
 	}
 }
 
+// rewriteCurrentFrameProjectionQuery substitutes current-frame aliases throughout a query and its CTEs.
 func rewriteCurrentFrameProjectionQuery(query pgsql.Query, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Query {
 	query.Body = rewriteCurrentFrameProjectionSetExpression(query.Body, frameID, aliases)
 
@@ -3219,6 +3358,7 @@ func rewriteCurrentFrameProjectionQuery(query pgsql.Query, frameID pgsql.Identif
 	return query
 }
 
+// rewriteCurrentFrameProjectionSelect substitutes current-frame aliases in every expression-bearing select clause.
 func rewriteCurrentFrameProjectionSelect(selectBody pgsql.Select, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Select {
 	for idx, selectItem := range selectBody.Projection {
 		if rewritten, isSelectItem := rewriteCurrentFrameProjectionReferences(selectItem, frameID, aliases).(pgsql.SelectItem); isSelectItem {
@@ -3246,6 +3386,7 @@ func rewriteCurrentFrameProjectionSelect(selectBody pgsql.Select, frameID pgsql.
 	return selectBody
 }
 
+// rewriteCurrentFrameProjectionReferences replaces qualified current-frame references with their projected expressions.
 func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Expression {
 	if expression == nil {
 		return nil
@@ -3510,6 +3651,7 @@ func selfLoopIdentityConstraint(traversalStep *TraversalStep, frameID pgsql.Iden
 	)
 }
 
+// buildExpansionPatternRoot builds the seed and recursive query for a variable-length traversal that starts a pattern.
 func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
 	var (
 		traversalStep  = traversalStepContext.CurrentStep
@@ -3727,6 +3869,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 	return expansion.Build(expansionModel.Frame.Binding.Identifier), nil
 }
 
+// buildExpansionPatternStep builds the seed and recursive query for a variable-length traversal after an existing pattern step.
 func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
 	var (
 		traversalStep  = traversalStepContext.CurrentStep
@@ -3846,6 +3989,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 	return expansion.Build(expansionModel.Frame.Binding.Identifier, seed.CTE()), nil
 }
 
+// expansionTerminalSatisfactionLocality partitions terminal predicates into traversal-local and deferred expressions.
 func expansionTerminalSatisfactionLocality(traversalStep *TraversalStep) (pgsql.Expression, pgsql.Expression) {
 	return partitionConstraintByLocality(
 		pgsql.Expression(traversalStep.Expansion.TerminalNodeSatisfactionProjection),
@@ -3857,6 +4001,7 @@ func expansionTerminalSatisfactionLocality(traversalStep *TraversalStep) (pgsql.
 	)
 }
 
+// applyExpansionSuffixPushdown pushes an eligible fixed-length suffix into the preceding variable expansion's terminal test.
 func applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
 	var applied int
 
@@ -3876,6 +4021,7 @@ func applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
 	return applied, nil
 }
 
+// applyExpansionSuffixPushdownCandidate attaches a suffix-existence predicate when all suffix steps can be evaluated locally.
 func applyExpansionSuffixPushdownCandidate(currentStep *TraversalStep, suffixSteps []*TraversalStep) (bool, error) {
 	if suffixSatisfaction, satisfied := expansionSuffixTerminalSatisfaction(currentStep, suffixSteps); satisfied {
 		currentStep.Expansion.TerminalNodeConstraints = pgsql.OptionalAnd(
@@ -3895,6 +4041,7 @@ func applyExpansionSuffixPushdownCandidate(currentStep *TraversalStep, suffixSte
 	return false, nil
 }
 
+// suffixEdgeLeftEndpoint returns the edge endpoint connected to a suffix step's left node for its direction.
 func suffixEdgeLeftEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
 	switch direction {
 	case graph.DirectionOutbound:
@@ -3906,6 +4053,7 @@ func suffixEdgeLeftEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Dir
 	}
 }
 
+// suffixEdgeRightEndpoint returns the edge endpoint connected to a suffix step's right node for its direction.
 func suffixEdgeRightEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Direction) (pgsql.Expression, bool) {
 	switch direction {
 	case graph.DirectionOutbound:
@@ -3917,6 +4065,7 @@ func suffixEdgeRightEndpoint(edgeIdentifier pgsql.Identifier, direction graph.Di
 	}
 }
 
+// suffixBoundNodeIDReference resolves a suffix node to its identifier projection in the preceding frame.
 func suffixBoundNodeIDReference(currentStep *TraversalStep, node *BoundIdentifier) (pgsql.Expression, bool) {
 	if currentStep == nil ||
 		currentStep.Frame == nil ||
@@ -3930,6 +4079,7 @@ func suffixBoundNodeIDReference(currentStep *TraversalStep, node *BoundIdentifie
 	return projectedNodeIDReference(currentStep.Frame.Previous.Binding.Identifier, node), true
 }
 
+// suffixStepEdgeConstraints returns only the predicates local to a suffix step's edge binding.
 func suffixStepEdgeConstraints(step *TraversalStep) pgsql.Expression {
 	if step == nil || step.EdgeConstraints == nil {
 		return nil
@@ -3943,6 +4093,7 @@ func suffixStepEdgeConstraints(step *TraversalStep) pgsql.Expression {
 	return localConstraints
 }
 
+// expansionSuffixTerminalSatisfaction builds an existence test proving that a fixed suffix continues from an expansion endpoint.
 func expansionSuffixTerminalSatisfaction(currentStep *TraversalStep, suffixSteps []*TraversalStep) (pgsql.Expression, bool) {
 	if currentStep == nil ||
 		currentStep.Expansion == nil ||
@@ -4042,6 +4193,7 @@ func expansionSuffixTerminalSatisfaction(currentStep *TraversalStep, suffixSteps
 	}, true
 }
 
+// expansionLocalTerminalSatisfactionProjection projects the local terminal predicate, defaulting to true when none exists.
 func expansionLocalTerminalSatisfactionProjection(traversalStep *TraversalStep) (pgsql.SelectItem, error) {
 	localSatisfiedConstraint, _ := expansionTerminalSatisfactionLocality(traversalStep)
 
@@ -4052,6 +4204,7 @@ func expansionLocalTerminalSatisfactionProjection(traversalStep *TraversalStep) 
 	return pgsql.As[pgsql.SelectItem](localSatisfiedConstraint)
 }
 
+// buildExpansionPrimerProjection constructs the root, endpoint, depth, satisfaction, cycle, and path columns for the first edge.
 func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep) ([]pgsql.SelectItem, error) {
 	expansionModel := traversalStep.Expansion
 	isCycleProjection := pgsql.SelectItem(pgsql.NewLiteral(false, pgsql.Boolean))
@@ -4097,6 +4250,7 @@ func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep
 	}
 }
 
+// expansionRecursivePathExpression appends or prepends the next edge identifier according to traversal direction.
 func expansionRecursivePathExpression(traversalStep *TraversalStep) *pgsql.BinaryExpression {
 	var (
 		expansionModel = traversalStep.Expansion
@@ -4111,6 +4265,7 @@ func expansionRecursivePathExpression(traversalStep *TraversalStep) *pgsql.Binar
 	return pgsql.NewBinaryExpression(path, pgsql.OperatorConcatenate, edgeID)
 }
 
+// buildExpansionRecursiveProjection advances the expansion state and accumulated path by one edge.
 func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalStep) ([]pgsql.SelectItem, error) {
 	expansionModel := traversalStep.Expansion
 
@@ -4158,6 +4313,7 @@ func (s *Translator) buildExpansionRecursiveProjection(traversalStep *TraversalS
 	}
 }
 
+// buildExpansionProjectionConstraints combines join, depth, satisfaction, and deferred predicates for projected expansion rows.
 func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext TraversalStepContext) (pgsql.Expression, error) {
 	var (
 		currentStep           = traversalStepContext.CurrentStep
@@ -4223,6 +4379,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 	return projectionConstraints, nil
 }
 
+// translateTraversalPatternPartWithExpansion lowers a variable-length pattern step and updates frame bindings for its projected state.
 func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPart, stepIndex int, isFirstTraversalStep bool, traversalStep *TraversalStep, allowProjectionPruning bool) error {
 	expansionModel := traversalStep.Expansion
 
@@ -4338,6 +4495,7 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	return nil
 }
 
+// translateExpansionConstraints consumes applicable constraints and partitions them among expansion bindings and outer frames.
 func (s *Translator) translateExpansionConstraints(part *PatternPart, stepIndex int, isFirstTraversalStep bool, step *TraversalStep, expansionModel *Expansion) error {
 	if constraints, err := consumePatternConstraints(isFirstTraversalStep, recursivePattern, step, s.treeTranslator); err != nil {
 		return err
@@ -4413,6 +4571,7 @@ func (s *Translator) translateExpansionConstraints(part *PatternPart, stepIndex 
 	return nil
 }
 
+// translateShortestPathTraversal selects and parameterizes the physical shortest-path harness for a traversal step.
 func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) error {
 	var (
 		useBidirectionalSearch bool
@@ -4497,6 +4656,7 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 	return nil
 }
 
+// liftSingletonIDAnchor converts a literal or parameter singleton identifier into a typed harness parameter.
 func (s *Translator) liftSingletonIDAnchor(expression pgsql.Expression) (pgsql.Expression, error) {
 	switch typedExpression := unwrapParenthetical(expression).(type) {
 	case pgsql.Literal:
@@ -4527,6 +4687,7 @@ func (s *Translator) liftSingletonIDAnchor(expression pgsql.Expression) (pgsql.E
 	}
 }
 
+// translateNonTraversalPatternPart lowers a fixed-length pattern part into a new frame and materialized projection.
 func (s *Translator) translateNonTraversalPatternPart(part *PatternPart) error {
 	if nextFrame, err := s.scope.PushFrame(); err != nil {
 		return err

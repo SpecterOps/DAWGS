@@ -41,38 +41,64 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// postgresSQLRunner owns PostgreSQL translation, connection, graph, and executor settings.
 type postgresSQLRunner struct {
-	datasetDir    string
-	db            graph.Database
-	pgDriver      *pg.Driver
-	pool          *pgxpool.Pool
-	graphID       int32
-	backendPID    string
-	poolSize      int
-	round         int
-	concurrency   []int
-	environment   PostgresEnvironment
-	references    bool
+	// datasetDir locates fixture and corpus files on disk.
+	datasetDir string
+	// db provides graph transactions for fixture preparation and query execution.
+	db graph.Database
+	// pgDriver provides PostgreSQL graph access and kind mapping.
+	pgDriver *pg.Driver
+	// pool supplies PostgreSQL connections for translated and raw execution.
+	pool *pgxpool.Pool
+	// graphID selects the PostgreSQL graph partition used for translation, fixture validation, and execution.
+	graphID int32
+	// backendPID records the physical PostgreSQL session used to label samples and detect connection changes.
+	backendPID string
+	// poolSize records the maximum PostgreSQL connections available to the runner.
+	poolSize int
+	// round identifies the measurement round used to balance execution order.
+	round int
+	// concurrency lists worker counts measured by the PostgreSQL runner.
+	concurrency []int
+	// environment accumulates PostgreSQL environment evidence for the current runner.
+	environment PostgresEnvironment
+	// references enables independent PostgreSQL reference execution for the runner.
+	references bool
+	// referenceArms lists independent PostgreSQL reference arms measured by the runner.
 	referenceArms []string
-	toolOptions   translate.ToolOptions
+	// toolOptions carries forced translation-executor selections for diagnostic runs.
+	toolOptions translate.ToolOptions
+	// existingGraph supplies live-graph anchors, checkpoints, and callbacks to the runner.
 	existingGraph *existingGraphRunnerOptions
 }
 
+// existingGraphRunnerOptions supplies live-graph anchors and completed-workload state to the PostgreSQL runner.
 type existingGraphRunnerOptions struct {
-	Manifest       ExistingGraphAnchorManifest
-	ProgressPath   string
-	Discovery      bool
+	// Manifest supplies validated live-graph anchors and identity metadata to the runner.
+	Manifest ExistingGraphAnchorManifest
+	// ProgressPath selects the append-only progress artifact written by the runner.
+	ProgressPath string
+	// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
+	Discovery bool
+	// TimeoutClasses lists the increasing per-attempt deadlines applied during adaptive discovery.
 	TimeoutClasses []time.Duration
-	SampleFloor    int
-	Completed      map[string]string
-	OnRecord       func(CaseResult) error
-	OnComplete     func(int64, int64) error
+	// SampleFloor sets the minimum timed samples required for each live-graph attempt.
+	SampleFloor int
+	// Completed maps completed live-graph case keys to fixture-bound identities.
+	Completed map[string]string
+	// OnRecord receives each completed live-graph CaseResult for immediate persistence.
+	OnRecord func(CaseResult) error
+	// OnComplete records final live-graph node and relationship counts after successful execution.
+	OnComplete func(int64, int64) error
 }
 
+// newPostgresSQLRunner opens a PostgreSQL benchmark runner for managed-fixture execution.
 func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string) (*postgresSQLRunner, error) {
 	return newPostgresSQLRunnerWithExistingGraph(ctx, datasetDir, connection, corpus, poolSize, round, concurrency, references, referenceArms, forceShortest, forceExpansion, nil)
 }
 
+// newPostgresSQLRunnerWithExistingGraph opens a PostgreSQL benchmark runner with optional live-graph state.
 func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string, existing *existingGraphRunnerOptions) (*postgresSQLRunner, error) {
 	if existing == nil {
 		if err := databaseguard.ValidateEnvironment(connection); err != nil {
@@ -191,6 +217,7 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 	}, nil
 }
 
+// Close releases the graph database and PostgreSQL pool owned by the runner.
 func (s *postgresSQLRunner) Close(ctx context.Context) error {
 	if s.db == nil {
 		return nil
@@ -199,6 +226,7 @@ func (s *postgresSQLRunner) Close(ctx context.Context) error {
 	return s.db.Close(ctx)
 }
 
+// Run measures supported corpus cases against managed fixtures or the configured preexisting graph.
 func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
 	if s.existingGraph != nil {
 		return s.runExistingGraph(ctx, warmupIterations, iterations, corpus)
@@ -254,6 +282,7 @@ func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iteration
 	return records, nil
 }
 
+// runExistingGraph executes eligible live-graph cases, honoring checkpoints and progress callbacks.
 func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
 	options := s.existingGraph
 	if err := validateExistingGraphCorpus(corpus, options.Manifest); err != nil {
@@ -344,6 +373,7 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 	return records, nil
 }
 
+// runExistingGraphCase executes the fixed-confirmation or adaptive timeout protocol for one read-only workload against a preexisting graph.
 func (s *postgresSQLRunner) runExistingGraphCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
 	options := s.existingGraph
 	timeouts := options.TimeoutClasses
@@ -396,6 +426,7 @@ func (s *postgresSQLRunner) runExistingGraphCase(ctx context.Context, warmupIter
 	return record
 }
 
+// resolveLogicalExistingGraphAnchor looks up one logical-key anchor and rejects missing or ambiguous matches.
 func (s *postgresSQLRunner) resolveLogicalExistingGraphAnchor(ctx context.Context, name, logicalKey string) ([]int64, error) {
 	rows, err := s.pool.Query(ctx, `select id from node where graph_id = $1 and properties ->> 'logical_key' = $2 order by id limit 2`, s.graphID, logicalKey)
 	if err != nil {
@@ -419,6 +450,7 @@ func (s *postgresSQLRunner) resolveLogicalExistingGraphAnchor(ctx context.Contex
 	return ids, nil
 }
 
+// resolveExistingGraphAnchors resolves every manifest anchor to exactly one PostgreSQL node identifier.
 func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, manifest ExistingGraphAnchorManifest) (map[string]graph.ID, error) {
 	anchors := make(map[string]graph.ID, len(manifest.Anchors))
 	for name, anchor := range manifest.Anchors {
@@ -470,6 +502,7 @@ func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, man
 	return anchors, nil
 }
 
+// existingGraphCounts returns node and relationship counts for the selected PostgreSQL graph.
 func (s *postgresSQLRunner) existingGraphCounts(ctx context.Context) (int64, int64, error) {
 	var nodes, edges int64
 	if err := s.pool.QueryRow(ctx, `select (select count(*) from node where graph_id = $1), (select count(*) from edge where graph_id = $1)`, s.graphID).Scan(&nodes, &edges); err != nil {
@@ -479,6 +512,7 @@ func (s *postgresSQLRunner) existingGraphCounts(ctx context.Context) (int64, int
 	return nodes, edges, nil
 }
 
+// captureExistingGraphEnvironment records live graph relation sizes and normalized schema and index fingerprints.
 func (s *postgresSQLRunner) captureExistingGraphEnvironment(ctx context.Context) error {
 	if err := s.pool.QueryRow(ctx, `select pg_total_relation_size(format('node_%s', $1::int4)::regclass), pg_total_relation_size(format('edge_%s', $1::int4)::regclass)`, s.graphID).Scan(&s.environment.NodeRelationBytes, &s.environment.EdgeRelationBytes); err != nil {
 		return err
@@ -488,6 +522,7 @@ func (s *postgresSQLRunner) captureExistingGraphEnvironment(ctx context.Context)
 		md5(coalesce((select string_agg(indexname || ':' || indexdef, ',' order by indexname) from pg_indexes where schemaname = current_schema() and (tablename in ('node','edge') or tablename in (format('node_%s',$1::int4), format('edge_%s',$1::int4)))), ''))`, s.graphID).Scan(&s.environment.SchemaFingerprint, &s.environment.IndexFingerprint)
 }
 
+// captureAndValidateFixture records physical fixture sizes and rejects cardinality or checksum drift.
 func (s *postgresSQLRunner) captureAndValidateFixture(ctx context.Context, fixture *FixtureMetadata) error {
 	if err := s.pool.QueryRow(ctx, `select (select count(*) from node where graph_id = $1), (select count(*) from edge where graph_id = $1)`, s.graphID).Scan(
 		&fixture.PhysicalNodeCount,
@@ -509,6 +544,7 @@ func (s *postgresSQLRunner) captureAndValidateFixture(ctx context.Context, fixtu
 	return nil
 }
 
+// resetCaseSession drops pooled session state between cases and, for single-connection runs, records the replacement backend PID used to verify isolation.
 func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	s.pool.Reset()
 	if s.poolSize != 1 {
@@ -524,6 +560,7 @@ func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	return nil
 }
 
+// runCase resolves fixture parameters, executes the PostgreSQL read or write measurement path, captures plans and cache statistics, and returns one CaseResult.
 func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) (record CaseResult) {
 	params, err := resolveCaseParams(testCase, idMap)
 	record = newCaseResult(testCase, ModePostgresSQL, params)
@@ -711,6 +748,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	return record
 }
 
+// referenceClosureMeasurementOrder returns the balanced production/reference order for a measurement round.
 func referenceClosureMeasurementOrder(singleSelectedReference bool, round int) (production, reference int) {
 	if singleSelectedReference && round > 0 && round%2 == 0 {
 		return 2, 1
@@ -718,21 +756,30 @@ func referenceClosureMeasurementOrder(singleSelectedReference bool, round int) (
 	return 1, 2
 }
 
+// setReferenceMeasurementOrder assigns consecutive execution positions to reference results beginning at order.
 func setReferenceMeasurementOrder(references []PostgresReferenceResult, order int) {
 	for idx := range references {
 		references[idx].MeasurementOrder = order + idx
 	}
 }
 
+// postgresExplain contains translated SQL and normalized PostgreSQL EXPLAIN evidence.
 type postgresExplain struct {
-	SQL          string
-	Plan         []string
-	PlanJSON     json.RawMessage
-	Metrics      PostgresPlanMetrics
+	// SQL contains the rendered SQL statement.
+	SQL string
+	// Plan contains normalized PostgreSQL text-plan lines.
+	Plan []string
+	// PlanJSON contains structured backend plan evidence.
+	PlanJSON json.RawMessage
+	// Metrics contains normalized PostgreSQL plan counters and resources.
+	Metrics PostgresPlanMetrics
+	// Optimization captures translation optimization and lowering decisions.
 	Optimization translate.OptimizationSummary
-	Parameters   map[string]any
+	// Parameters contains translated SQL parameters keyed by placeholder name.
+	Parameters map[string]any
 }
 
+// explain translates a Cypher query and returns normalized SQL and PostgreSQL EXPLAIN evidence.
 func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (postgresExplain, error) {
 	translation, sqlQuery, err := s.translateCypher(ctx, cypherQuery, params)
 	if err != nil {
@@ -807,6 +854,7 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 	}, nil
 }
 
+// translateCypher parses and translates Cypher, applying forced tool options when configured.
 func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery string, params map[string]any) (translate.Result, string, error) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	if err != nil {
@@ -830,10 +878,12 @@ func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery str
 	return translation, sqlQuery, nil
 }
 
+// hasForcedToolOptions reports whether either executor-selection override is configured.
 func hasForcedToolOptions(options translate.ToolOptions) bool {
 	return options.ForceShortestPathExecutor != "" || options.ForceExpansionSearchStrategy != ""
 }
 
+// encodePostgresPlanJSON normalizes byte, string, or structured EXPLAIN JSON into json.RawMessage.
 func encodePostgresPlanJSON(value any) (json.RawMessage, error) {
 	switch typed := value.(type) {
 	case []byte:
@@ -851,11 +901,17 @@ func encodePostgresPlanJSON(value any) (json.RawMessage, error) {
 }
 
 var (
-	postgresPlanningPattern  = regexp.MustCompile(`Planning Time: ([0-9.]+) ms`)
+	// postgresPlanningPattern extracts milliseconds from a PostgreSQL Planning Time summary line.
+	postgresPlanningPattern = regexp.MustCompile(`Planning Time: ([0-9.]+) ms`)
+
+	// postgresExecutionPattern extracts milliseconds from a PostgreSQL Execution Time summary line.
 	postgresExecutionPattern = regexp.MustCompile(`Execution Time: ([0-9.]+) ms`)
-	postgresBufferPattern    = regexp.MustCompile(`(?:(shared|local|temp) )?(hit|read|dirtied|written)=([0-9]+)`)
+
+	// postgresBufferPattern extracts storage class, operation, and page count from PostgreSQL buffer counters.
+	postgresBufferPattern = regexp.MustCompile(`(?:(shared|local|temp) )?(hit|read|dirtied|written)=([0-9]+)`)
 )
 
+// parsePostgresPlanMetrics extracts planning, execution, and buffer counters from PostgreSQL text-plan lines.
 func parsePostgresPlanMetrics(plan []string) PostgresPlanMetrics {
 	var metrics PostgresPlanMetrics
 	for _, line := range plan {
@@ -883,6 +939,7 @@ func parsePostgresPlanMetrics(plan []string) PostgresPlanMetrics {
 	return metrics
 }
 
+// parsePostgresBuffers extracts shared, local, and temporary buffer counters from one plan line.
 func parsePostgresBuffers(line string) Buffers {
 	var (
 		buffers     Buffers

@@ -23,22 +23,34 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// defaultGraphName names the isolated graph populated while capturing corpus plans.
 const defaultGraphName = "integration_test"
 
+// captureSpec binds a requested driver name to the connection string used for capture.
 type captureSpec struct {
+	// DriverName identifies the database driver selected for this capture.
 	DriverName string
+	// Connection contains the backend connection string.
 	Connection string
 }
 
+// backendCapture owns one plan-capture backend and its graph database handle.
 type backendCapture struct {
-	spec        captureSpec
-	db          graph.Database
-	pgDriver    *pg.Driver
-	pgGraphID   int32
+	// spec identifies the backend connection and driver being captured.
+	spec captureSpec
+	// db provides graph transactions for fixture preparation and query execution.
+	db graph.Database
+	// pgDriver provides PostgreSQL graph access and kind mapping.
+	pgDriver *pg.Driver
+	// pgGraphID selects the PostgreSQL graph partition cleared, populated, and queried during capture.
+	pgGraphID int32
+	// neo4jDriver owns the Neo4j connection used for plan capture.
 	neo4jDriver neo4jcore.Driver
+	// neo4jDBName selects the Neo4j database used for plan capture.
 	neo4jDBName string
 }
 
+// driverFromConnectionString selects a graph driver from the connection URI scheme.
 func driverFromConnectionString(connStr string) (string, error) {
 	u, err := url.Parse(connStr)
 	if err != nil {
@@ -55,6 +67,7 @@ func driverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
+// captureCorpus loads each required fixture and captures every corpus query for one backend.
 func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec captureSpec) ([]PlanRecord, error) {
 	if err := databaseguard.ValidateEnvironment(spec.Connection); err != nil {
 		return nil, fmt.Errorf("refuse destructive plan-corpus target: %w", err)
@@ -180,6 +193,7 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 	return records, nil
 }
 
+// openBackend opens the requested graph backend, asserts the capture schema, and retains driver-specific plan handles.
 func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendCapture, error) {
 	cfg := dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte,
@@ -252,6 +266,7 @@ func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendC
 	return backend, nil
 }
 
+// close closes the backend driver resources owned by a capture.
 func (s *backendCapture) close(ctx context.Context) {
 	if s.neo4jDriver != nil {
 		_ = s.neo4jDriver.Close()
@@ -261,6 +276,7 @@ func (s *backendCapture) close(ctx context.Context) {
 	}
 }
 
+// capture captures one query plan with driver, workload, and fixture metadata.
 func (s *backendCapture) capture(ctx context.Context, query CorpusQuery) PlanRecord {
 	record := PlanRecord{
 		Driver:  s.spec.DriverName,
@@ -281,6 +297,7 @@ func (s *backendCapture) capture(ctx context.Context, query CorpusQuery) PlanRec
 	return record
 }
 
+// capturePostgres translates a Cypher query and attaches PostgreSQL EXPLAIN evidence to its record.
 func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string, params map[string]any, record *PlanRecord) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	if err != nil {
@@ -327,6 +344,7 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 	record.Optimization = &translation.Optimization
 }
 
+// captureNeo4j runs Neo4j EXPLAIN and attaches its normalized operator tree to the record.
 func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any, record *PlanRecord) {
 	session := s.neo4jDriver.NewSession(neo4jcore.SessionConfig{
 		AccessMode:   neo4jcore.AccessModeWrite,
@@ -353,13 +371,19 @@ func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any,
 	}
 }
 
+// neo4jPlanDriverConfig contains a Neo4j server URI and optional target database parsed from a connection string.
 type neo4jPlanDriverConfig struct {
-	Target       string
-	Username     string
-	Password     string
+	// Target contains the Neo4j server URI without a database path.
+	Target string
+	// Username contains the Neo4j username decoded from the connection URI.
+	Username string
+	// Password contains the Neo4j password decoded from the connection URI.
+	Password string
+	// DatabaseName selects the Neo4j database targeted by the session.
 	DatabaseName string
 }
 
+// parseNeo4jPlanDriverConfig parses a Neo4j connection string while preserving its server URI and database path.
 func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	connectionURL, err := url.Parse(connStr)
 	if err != nil {
@@ -396,6 +420,7 @@ func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	}, nil
 }
 
+// neo4jDatabaseName returns the optional single-segment database name encoded in a Neo4j URI path.
 func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	databasePath := strings.Trim(connectionURL.EscapedPath(), "/")
 	if databasePath == "" {
@@ -417,6 +442,7 @@ func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	return databaseName, nil
 }
 
+// openNeo4jPlanDriver parses the capture connection settings and returns a driver together with the selected Neo4j database name.
 func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
 	cfg, err := parseNeo4jPlanDriverConfig(connStr)
 	if err != nil {
@@ -434,6 +460,7 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
 	return driver, cfg.DatabaseName, nil
 }
 
+// clearGraph removes relationships before nodes, using PostgreSQL partition truncation when available.
 func clearGraph(ctx context.Context, db graph.Database) error {
 	if pgDriver, isPostgres := db.(*pg.Driver); isPostgres {
 		graphTarget, hasDefaultGraph := pgDriver.DefaultGraph()
@@ -457,6 +484,7 @@ func clearGraph(ctx context.Context, db graph.Database) error {
 	})
 }
 
+// clearPostgresGraph truncates one PostgreSQL graph's edge and node partitions in a transaction.
 func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) error {
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		statement := fmt.Sprintf("truncate table edge_%d, node_%d", graphID, graphID)
@@ -470,6 +498,7 @@ func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) e
 	})
 }
 
+// loadDataset decodes and loads a named fixture dataset into an empty graph.
 func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string) error {
 	f, err := os.Open(filepath.Join(datasetDir, name+".json"))
 	if err != nil {
@@ -483,6 +512,7 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 	return nil
 }
 
+// loadCommittedFixture loads an inline fixture graph and returns its stable key-to-ID mapping.
 func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *opengraph.Graph) (opengraph.IDMap, error) {
 	if fixture == nil {
 		return nil, fmt.Errorf("fixture is nil")
@@ -504,6 +534,7 @@ func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *openg
 	return idMap, nil
 }
 
+// convertNeo4jPlan recursively converts a Neo4j plan into the stable serialized plan-node schema.
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	node := Neo4jPlanNode{
 		Operator:    plan.Operator(),
@@ -518,6 +549,7 @@ func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	return node
 }
 
+// stringifyArguments converts plan arguments to stable strings in a fresh map.
 func stringifyArguments(arguments map[string]any) map[string]string {
 	if len(arguments) == 0 {
 		return nil
@@ -530,6 +562,7 @@ func stringifyArguments(arguments map[string]any) map[string]string {
 	return values
 }
 
+// postgresOperators extracts normalized operator names from PostgreSQL text plans.
 func postgresOperators(plan []string) []string {
 	operators := make([]string, 0, len(plan))
 	for _, line := range plan {
@@ -547,6 +580,7 @@ func postgresOperators(plan []string) []string {
 	return operators
 }
 
+// neo4jOperators flattens a Neo4j plan tree into sorted unique operator names.
 func neo4jOperators(root Neo4jPlanNode) []string {
 	var (
 		operators []string
@@ -563,6 +597,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	return operators
 }
 
+// loweringNames returns sorted unique names of applied SQL lowering decisions.
 func loweringNames(decisions []optimize.LoweringDecision) []string {
 	if len(decisions) == 0 {
 		return nil
@@ -585,6 +620,7 @@ func loweringNames(decisions []optimize.LoweringDecision) []string {
 	return names
 }
 
+// cypherWithoutTerminator trims surrounding whitespace and one trailing Cypher semicolon.
 func cypherWithoutTerminator(cypherQuery string) string {
 	return strings.TrimSuffix(strings.TrimSpace(cypherQuery), ";")
 }

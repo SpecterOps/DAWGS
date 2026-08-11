@@ -24,12 +24,21 @@ import (
 )
 
 const (
-	ShortestPathScaleDataset         = "generated_shortest_paths"
+	// ShortestPathScaleDataset identifies the generated shortest-path fixture.
+	ShortestPathScaleDataset = "generated_shortest_paths"
+
+	// FixedSuffixExpansionScaleDataset identifies the generated fixed-suffix
+	// expansion fixture.
 	FixedSuffixExpansionScaleDataset = "generated_fixed_suffix_expansion"
 )
 
+// ShortestPathScaleConfig controls the depth and dead-end fanout of the
+// generated shortest-path fixture.
 type ShortestPathScaleConfig struct {
-	Depth  int
+	// Depth sets the length of the fixture's unique linear route.
+	Depth int
+
+	// Fanout sets the number of dead ends attached to the route's start.
 	Fanout int
 }
 
@@ -203,21 +212,48 @@ func NewShortestPathScaleFixture(config ShortestPathScaleConfig) *opengraph.Grap
 	return fixture
 }
 
+// FixedSuffixExpansionScaleConfig controls expansion work, suffix density,
+// decoys, and payload size in a fixed-suffix fixture.
 type FixedSuffixExpansionScaleConfig struct {
-	ExpansionDepth      int
-	Fanout              int
-	ValidSuffixEvery    int
+	// ExpansionDepth sets the number of Expand hops in each branch.
+	ExpansionDepth int
+
+	// Fanout sets the number of expansion branches rooted at the fixture root.
+	Fanout int
+
+	// ValidSuffixEvery attaches a suffix to every nth legacy branch.
+	ValidSuffixEvery int
+
+	// PropertyPayloadSize sets the length of synthetic payload properties.
 	PropertyPayloadSize int
+
 	// ExactReachableSuffixSources decouples reachable suffix density from the
 	// legacy modulus control. Nil preserves ValidSuffixEvery behavior; zero is
 	// an exact zero and is therefore materially different from nil.
 	ExactReachableSuffixSources *int
-	ReachableSuffixDepths       []int
-	DisconnectedSuffixSources   int
-	ReverseFanIn                int
-	SuffixPathsPerBoundary      int
-	RootMatchCount              int
-	RootHasZeroDepthSuffix      *bool
+
+	// ReachableSuffixDepths restricts suffix attachment to the listed expansion
+	// depths when nonempty.
+	ReachableSuffixDepths []int
+
+	// DisconnectedSuffixSources sets the number of suffix sources unreachable
+	// from any expansion root.
+	DisconnectedSuffixSources int
+
+	// ReverseFanIn sets the number of decoy Expand edges entering a productive
+	// branch boundary.
+	ReverseFanIn int
+
+	// SuffixPathsPerBoundary sets the number of distinct suffix paths attached
+	// to each selected boundary.
+	SuffixPathsPerBoundary int
+
+	// RootMatchCount sets the number of roots matching the fixture root key.
+	RootMatchCount int
+
+	// RootHasZeroDepthSuffix controls whether the primary root has a suffix;
+	// nil preserves the enabled default.
+	RootHasZeroDepthSuffix *bool
 }
 
 // NewFixedSuffixExpansionScaleFixture builds a deterministic expansion fanout
@@ -394,6 +430,8 @@ func NewFixedSuffixExpansionScaleFixture(config FixedSuffixExpansionScaleConfig)
 	return fixture
 }
 
+// newLegacyFixedSuffixExpansionScaleFixture builds the original shared-suffix
+// topology used when no independent population controls are configured.
 func newLegacyFixedSuffixExpansionScaleFixture(config FixedSuffixExpansionScaleConfig) *opengraph.Graph {
 	depth := max(config.ExpansionDepth, 0)
 	fanout := max(config.Fanout, 1)
@@ -502,6 +540,7 @@ func newLegacyFixedSuffixExpansionScaleFixture(config FixedSuffixExpansionScaleC
 	return fixture
 }
 
+// containsInt reports whether target occurs in values.
 func containsInt(values []int, target int) bool {
 	for _, value := range values {
 		if value == target {

@@ -25,23 +25,33 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
-// Measurement captures the warm-up result shape for a benchmark scenario.
+// Measurement pairs a benchmark duration with the number of rows observed.
 type Measurement struct {
-	RowCount          int64
-	DistinctRowCount  *int64
+	// RowCount records the number of rows produced.
+	RowCount int64
+	// DistinctRowCount records unique rows returned by the benchmark scenario.
+	DistinctRowCount *int64
+	// DuplicateRowCount records repeated rows retained by the benchmark scenario.
 	DuplicateRowCount *int64
 }
 
-// Scenario defines a single benchmark query to run against a loaded dataset.
+// Scenario defines one query, its parameters, and expected cardinality.
 type Scenario struct {
-	Section      string // grouping key in the report (e.g. "Match Nodes")
-	Dataset      string
-	Label        string // human-readable row label
+	// Section groups baseline rows under a Markdown summary section.
+	Section string // grouping key in the report (e.g. "Match Nodes")
+	// Dataset identifies the fixture dataset.
+	Dataset string
+	// Label provides the benchfmt label for the benchmark scenario.
+	Label string // human-readable row label
+	// ExpectedRows sets the row count required for a scenario to succeed.
 	ExpectedRows *int64
-	Cypher       string
-	Query        func(tx graph.Transaction) (Measurement, error)
+	// Cypher contains the Cypher statement under test.
+	Cypher string
+	// Query executes the scenario in a transaction and returns its duration and observed row count.
+	Query func(tx graph.Transaction) (Measurement, error)
 }
 
+// traversalShapesDataset is the fixture key shared by traversal-shape scenario selection and dataset loading.
 const traversalShapesDataset = "traversal_shapes"
 
 // defaultDatasets is the set of datasets committed to the repo.
@@ -63,18 +73,22 @@ func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	}
 }
 
+// expectRows returns an addressable row expectation so zero expected rows remains distinguishable from an unspecified expectation.
 func expectRows(rows int64) *int64 {
 	return &rows
 }
 
+// countNodes measures the transaction-visible node cardinality for dataset sanity benchmarks.
 func countNodes(tx graph.Transaction) (int64, error) {
 	return tx.Nodes().Count()
 }
 
+// countEdges measures the transaction-visible relationship cardinality for dataset sanity benchmarks.
 func countEdges(tx graph.Transaction) (int64, error) {
 	return tx.Relationships().Count()
 }
 
+// cypherQuery adapts Cypher text into a benchmark callback that drains the result and records returned row count.
 func cypherQuery(cypher string) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
 		result := tx.Query(cypher, nil)
@@ -89,6 +103,7 @@ func cypherQuery(cypher string) func(tx graph.Transaction) (Measurement, error) 
 	}
 }
 
+// countQuery adapts a cardinality callback into a benchmark Measurement while preserving the callback error.
 func countQuery(query func(tx graph.Transaction) (int64, error)) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
 		rowCount, err := query(tx)
@@ -100,6 +115,7 @@ func countQuery(query func(tx graph.Transaction) (int64, error)) func(tx graph.T
 	}
 }
 
+// cypherScenario builds a row-counting Scenario from its corpus identity and Cypher text.
 func cypherScenario(section, dataset, label, cypher string) Scenario {
 	return Scenario{
 		Section: section,
@@ -110,6 +126,7 @@ func cypherScenario(section, dataset, label, cypher string) Scenario {
 	}
 }
 
+// cypherPathScenario builds a Scenario that validates and counts path-valued columns while consuming results.
 func cypherPathScenario(section, dataset, label, cypher string, pathColumns int) Scenario {
 	return Scenario{
 		Section: section,
@@ -120,11 +137,13 @@ func cypherPathScenario(section, dataset, label, cypher string, pathColumns int)
 	}
 }
 
+// expectScenarioRows returns scenario with an explicit correctness expectation attached.
 func expectScenarioRows(scenario Scenario, rows int64) Scenario {
 	scenario.ExpectedRows = expectRows(rows)
 	return scenario
 }
 
+// cypherPathQuery adapts Cypher text into a benchmark callback that validates path columns and hashes their node/edge identities while draining rows.
 func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
 		result := tx.Query(cypher, nil)
@@ -171,6 +190,7 @@ func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) 
 	}
 }
 
+// pathRowKey serializes path node and edge IDs into an unambiguous key used to prevent result materialization from being optimized away.
 func pathRowKey(paths []graph.Path) string {
 	var builder strings.Builder
 
@@ -213,6 +233,7 @@ func pathRowKey(paths []graph.Path) string {
 
 // --- Base dataset scenarios (n1 -> n2 -> n3) ---
 
+// baseScenarios defines cardinality, lookup, and one-hop checks for the three-node base fixture.
 func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := "base"
 	return []Scenario{
@@ -235,8 +256,10 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	}
 }
 
+// fixedSuffixFanoutRootKey identifies the fanout fixture root whose generated ID is injected into fixed-suffix scenarios.
 const fixedSuffixFanoutRootKey = "fixed-suffix-fanout-root"
 
+// fixedSuffixExpansionFanoutScenarios exercises bounded reverse-suffix expansion at increasing depths and with path projection enabled.
 func fixedSuffixExpansionFanoutScenarios() []Scenario {
 	var (
 		ds = "fixed_suffix_expansion_fanout"
@@ -275,6 +298,7 @@ func fixedSuffixExpansionFanoutScenarios() []Scenario {
 
 // --- Traversal shape scenarios ---
 
+// traversalShapesScenarios covers single-hop, bounded variable-length, shortest-path, and repeated-edge traversal forms over the shared fixture.
 func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := traversalShapesDataset
 	return []Scenario{
@@ -333,6 +357,7 @@ func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
 
 // --- Phantom scenarios (hardcoded node IDs from the dataset) ---
 
+// phantomScenarios preserves legacy benchmark cases that intentionally address the phantom fixture by its stable generated IDs.
 func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 	var (
 		ds        = "local/phantom"

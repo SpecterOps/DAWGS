@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill verifies that local workspace writes are permitted for the compact architecture while temporary-buffer spill fails the gate.
 func TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
@@ -47,6 +48,7 @@ func TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill(t *tes
 	require.False(t, passed)
 }
 
+// TestResourceGateRecognizesASPProductionArchitecture verifies that the applied all-shortest-path lowering, rather than a fallback label, identifies the production architecture.
 func TestResourceGateRecognizesASPProductionArchitecture(t *testing.T) {
 	record := CaseResult{
 		Optimization: &translate.OptimizationSummary{
@@ -59,6 +61,7 @@ func TestResourceGateRecognizesASPProductionArchitecture(t *testing.T) {
 	require.Equal(t, "ASP-A1-DAG", appliedPostgresArchitecture(record))
 }
 
+// TestResourceGateChecksFullComparatorReferenceResources verifies that temporary-buffer usage in a full comparator becomes its own failing report case with arm attribution.
 func TestResourceGateChecksFullComparatorReferenceResources(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
@@ -95,6 +98,7 @@ func TestResourceGateChecksFullComparatorReferenceResources(t *testing.T) {
 	require.Contains(t, report.Cases[1].Reasons, "portable candidate used temporary buffers")
 }
 
+// TestResourceGateAttributesDirectPreflightIncumbentFallback verifies that a direct-preflight plan executing the recursive harness is attributed to SP-S0 fallback while a skipped harness remains direct.
 func TestResourceGateAttributesDirectPreflightIncumbentFallback(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	records := []CaseResult{
@@ -150,6 +154,7 @@ func TestResourceGateAttributesDirectPreflightIncumbentFallback(t *testing.T) {
 	require.Equal(t, "SP-S0", report.Cases[1].FallbackArchitecture)
 }
 
+// TestResourceGateFailsClosedWithoutStructuredMetrics verifies that a successful portable candidate still fails resource gating when structured PostgreSQL metrics are absent.
 func TestResourceGateFailsClosedWithoutStructuredMetrics(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
@@ -175,6 +180,7 @@ func TestResourceGateFailsClosedWithoutStructuredMetrics(t *testing.T) {
 	require.Contains(t, report.Cases[0].Reasons, "structured PostgreSQL plan metrics are missing")
 }
 
+// TestResourceGateRejectsDirectPreflightWorkspaceOnDirectHit verifies that a true direct hit cannot claim local workspace writes when the recursive harness executed zero times.
 func TestResourceGateRejectsDirectPreflightWorkspaceOnDirectHit(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
@@ -204,6 +210,7 @@ func TestResourceGateRejectsDirectPreflightWorkspaceOnDirectHit(t *testing.T) {
 	require.False(t, passed)
 }
 
+// TestResourceGateAllowsStressDiagnosticsAndExactFallback verifies that spill is diagnostic on stress fixtures and compact workspace use is allowed for an explicitly selected exact fallback.
 func TestResourceGateAllowsStressDiagnosticsAndExactFallback(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	records := []CaseResult{

@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBuildPerfGateReportTreatsNeo4jAsCorrectnessOracle verifies that PostgreSQL receives latency ratios while Neo4j contributes correctness observations without performance gating.
 func TestBuildPerfGateReportTreatsNeo4jAsCorrectnessOracle(t *testing.T) {
 	baseline := []CaseResult{
 		perfGateRecord("one_shortest_path_bound_pair", ModePostgresSQL, 10*time.Millisecond, 5, 30),
@@ -53,6 +54,7 @@ func TestBuildPerfGateReportTreatsNeo4jAsCorrectnessOracle(t *testing.T) {
 	require.Nil(t, neo4j.P95Ratio)
 }
 
+// TestBuildPerfGateReportFailsMissingDeclaredPostgresCase verifies that every declared PostgreSQL workload must have a candidate record and that the declaration set is fingerprinted.
 func TestBuildPerfGateReportFailsMissingDeclaredPostgresCase(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("present", ModePostgresSQL, time.Millisecond, 5, 30)}
 	candidate := []CaseResult{perfGateRecord("present", ModePostgresSQL, time.Millisecond, 5, 30)}
@@ -89,6 +91,7 @@ func TestBuildPerfGateReportFailsMissingDeclaredPostgresCase(t *testing.T) {
 	require.ErrorContains(t, reasonsError(missing.Reasons), "required candidate record status is missing")
 }
 
+// TestBuildPerfGateReportAppliesMaterialityOnlyToDeclaredTargets verifies that a named target passes only when the confidence-bound saving clears both ratio and absolute thresholds.
 func TestBuildPerfGateReportAppliesMaterialityOnlyToDeclaredTargets(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("target", ModePostgresSQL, 10*time.Millisecond, 5, 30)}
 	candidate := []CaseResult{perfGateRecord("target", ModePostgresSQL, 9_700*time.Microsecond, 5, 30)}
@@ -109,6 +112,7 @@ func TestBuildPerfGateReportAppliesMaterialityOnlyToDeclaredTargets(t *testing.T
 	require.Equal(t, 300*time.Microsecond, report.Cases[0].MedianSaving.Lower)
 }
 
+// TestBuildPerfGateReportFailsRegressionAndInsufficientP95 verifies that an excessive median slowdown and fewer than 150 warm samples independently fail a PostgreSQL gate case.
 func TestBuildPerfGateReportFailsRegressionAndInsufficientP95(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 10*time.Millisecond, 5, 10)}
 	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 13*time.Millisecond, 5, 10)}
@@ -127,6 +131,7 @@ func TestBuildPerfGateReportFailsRegressionAndInsufficientP95(t *testing.T) {
 	require.ErrorContains(t, reasonsError(report.Cases[0].Reasons), "at least 150 warm samples")
 }
 
+// TestBuildPerfGateReportRequiresMatchedRounds verifies that four baseline/candidate rounds are insufficient for an inferential gate even with ample samples.
 func TestBuildPerfGateReportRequiresMatchedRounds(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 10*time.Millisecond, 4, 40)}
 	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 9*time.Millisecond, 4, 40)}
@@ -143,6 +148,7 @@ func TestBuildPerfGateReportRequiresMatchedRounds(t *testing.T) {
 	require.ErrorContains(t, reasonsError(report.Cases[0].Reasons), "at least 5 matched rounds")
 }
 
+// TestBuildPerfGateReportRejectsChangedLogicalWorkload verifies that baseline and candidate records with different workload digests cannot be compared.
 func TestBuildPerfGateReportRejectsChangedLogicalWorkload(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 10*time.Millisecond, 5, 30)}
 	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 9*time.Millisecond, 5, 30)}
@@ -157,6 +163,7 @@ func TestBuildPerfGateReportRejectsChangedLogicalWorkload(t *testing.T) {
 	require.ErrorContains(t, err, "logical workload differs")
 }
 
+// TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord verifies that an explicitly unsupported backend needs no measurement but its reason remains part of declaration identity.
 func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing.T) {
 	declared := []DeclaredCaseBackend{
 		{
@@ -189,6 +196,7 @@ func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing
 	require.NotEqual(t, declarationSHA256(declared), declarationSHA256(changed))
 }
 
+// TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate verifies that subset artifacts require an explicit diagnostic override and still must share the same declaration digest.
 func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate(t *testing.T) {
 	manifest := &SelectionManifest{
 		DiagnosticOnly:    true,
@@ -218,6 +226,7 @@ func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, true), "declarations differ")
 }
 
+// perfGateRecord returns one successful workload observation with identical warm samples arranged into the requested rounds.
 func perfGateRecord(name string, mode ExecutionMode, duration time.Duration, rounds, samplesPerRound int) CaseResult {
 	record := CaseResult{
 		Dataset:        "fixture",
@@ -239,6 +248,7 @@ func perfGateRecord(name string, mode ExecutionMode, duration time.Duration, rou
 	return record
 }
 
+// findPerfGateCase returns the report entry for a backend or fails the calling test when the gate omitted it.
 func findPerfGateCase(t *testing.T, cases []PerfGateCase, mode ExecutionMode) PerfGateCase {
 	t.Helper()
 	for _, gateCase := range cases {
@@ -250,6 +260,7 @@ func findPerfGateCase(t *testing.T, cases []PerfGateCase, mode ExecutionMode) Pe
 	return PerfGateCase{}
 }
 
+// reasonsError joins gate-failure reasons into one diagnostic error.
 func reasonsError(reasons []string) error {
 	return fmt.Errorf("%s", strings.Join(reasons, "; "))
 }

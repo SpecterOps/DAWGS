@@ -10,6 +10,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// projectedNodeIDReference returns the scalar ID expression exposed for node by frame.
 func projectedNodeIDReference(frameIdentifier pgsql.Identifier, binding *BoundIdentifier) pgsql.Expression {
 	if binding != nil && binding.IDOnly {
 		return pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier}
@@ -21,10 +22,12 @@ func projectedNodeIDReference(frameIdentifier pgsql.Identifier, binding *BoundId
 	}
 }
 
+// boundEndpointIDReference returns the previous-frame scalar ID for a bound traversal endpoint.
 func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.Expression {
 	return projectedNodeIDReference(frame.Binding.Identifier, binding)
 }
 
+// boundEndpointInequality builds the Cypher inequality that excludes identical bound endpoints.
 func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.Expression {
 	return pgsql.NewParenthetical(
 		pgsql.NewBinaryExpression(
@@ -35,6 +38,7 @@ func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.E
 	)
 }
 
+// sourceTargetForTraversalStep returns optimizer coordinates for a step that originated in the source query.
 func sourceTargetForTraversalStep(part *PatternPart, stepIndex int) (optimize.TraversalStepTarget, bool) {
 	if part == nil || stepIndex < 0 || stepIndex >= len(part.TraversalSteps) {
 		return optimize.TraversalStepTarget{}, false
@@ -51,6 +55,7 @@ func sourceTargetForTraversalStep(part *PatternPart, stepIndex int) (optimize.Tr
 	return part.Target.TraversalStep(stepIndex), true
 }
 
+// shortestPathExecutorDecision returns the planned physical executor for a source traversal step.
 func (s *Translator) shortestPathExecutorDecision(part *PatternPart, stepIndex int) (optimize.ShortestPathExecutorDecision, bool) {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -60,6 +65,7 @@ func (s *Translator) shortestPathExecutorDecision(part *PatternPart, stepIndex i
 	return decision, hasDecision
 }
 
+// decisionIsForcedShortest reports whether tooling forced a non-incumbent shortest-path executor.
 func decisionIsForcedShortest(translator *Translator, target optimize.TraversalStepTarget) bool {
 	if translator == nil {
 		return false
@@ -68,6 +74,7 @@ func decisionIsForcedShortest(translator *Translator, target optimize.TraversalS
 	return found && decision.SelectionMode == "forced_tool"
 }
 
+// traversalStepIsFirstForSourceTarget reports whether step is the first translated step for its source target.
 func traversalStepIsFirstForSourceTarget(part *PatternPart, stepIndex int) bool {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget || stepIndex == 0 {
@@ -78,6 +85,7 @@ func traversalStepIsFirstForSourceTarget(part *PatternPart, stepIndex int) bool 
 	return !previousHasTarget || previousTarget != target
 }
 
+// traversalStepIsLastForSourceTarget reports whether step is the final translated step for its source target.
 func traversalStepIsLastForSourceTarget(part *PatternPart, stepIndex int) bool {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget || stepIndex+1 >= len(part.TraversalSteps) {
@@ -88,6 +96,7 @@ func traversalStepIsLastForSourceTarget(part *PatternPart, stepIndex int) bool {
 	return !nextHasTarget || nextTarget != target
 }
 
+// shouldUseExpandInto reports whether a planned bound-endpoint traversal applies to this source step.
 func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
 	if traversalStep == nil || traversalStep.Expansion != nil || !traversalStep.LeftNodeBound || !traversalStep.RightNodeBound {
 		return false
@@ -104,6 +113,7 @@ func (s *Translator) shouldUseExpandInto(part *PatternPart, stepIndex int, trave
 	return true
 }
 
+// traversalDirectionDecision returns the planned direction choice for a source traversal step.
 func (s *Translator) traversalDirectionDecision(part *PatternPart, stepIndex int) (optimize.TraversalDirectionDecision, bool) {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -114,6 +124,7 @@ func (s *Translator) traversalDirectionDecision(part *PatternPart, stepIndex int
 	return decision, hasDecision
 }
 
+// applyPatternConstraintBalance swaps endpoint constraints and reverses path state when the plan flips traversal direction.
 func (s *Translator) applyPatternConstraintBalance(part *PatternPart, stepIndex int, constraints *PatternConstraints, traversalStep *TraversalStep) error {
 	if decision, hasDecision := s.traversalDirectionDecision(part, stepIndex); hasDecision {
 		if decision.Flip {
@@ -142,6 +153,7 @@ func (s *Translator) applyPatternConstraintBalance(part *PatternPart, stepIndex 
 	return nil
 }
 
+// shortestPathStrategyDecision returns the planned unidirectional or bidirectional strategy for a source step.
 func (s *Translator) shortestPathStrategyDecision(part *PatternPart, stepIndex int) (optimize.ShortestPathStrategyDecision, bool) {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -152,6 +164,7 @@ func (s *Translator) shortestPathStrategyDecision(part *PatternPart, stepIndex i
 	return decision, hasDecision
 }
 
+// useBidirectionalShortestPathStrategy reports whether a qualified plan selects bidirectional search for step.
 func (s *Translator) useBidirectionalShortestPathStrategy(part *PatternPart, stepIndex int, traversalStep *TraversalStep) (bool, error) {
 	if decision, hasDecision := s.shortestPathStrategyDecision(part, stepIndex); hasDecision {
 		if decision.Strategy != optimize.ShortestPathStrategyBidirectional {
@@ -178,6 +191,7 @@ func (s *Translator) useBidirectionalShortestPathStrategy(part *PatternPart, ste
 	return false, nil
 }
 
+// shortestPathFilterDecisionsForStep returns every planned filter materialization for a source traversal step.
 func (s *Translator) shortestPathFilterDecisionsForStep(part *PatternPart, stepIndex int) []optimize.ShortestPathFilterDecision {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -187,6 +201,7 @@ func (s *Translator) shortestPathFilterDecisionsForStep(part *PatternPart, stepI
 	return s.shortestPathFilterDecisions[target]
 }
 
+// applyShortestPathFilterMaterialization enables terminal or endpoint-pair filters selected for the source step.
 func (s *Translator) applyShortestPathFilterMaterialization(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) {
 	for _, decision := range s.shortestPathFilterDecisionsForStep(part, stepIndex) {
 		switch decision.Mode {
@@ -205,6 +220,7 @@ func (s *Translator) applyShortestPathFilterMaterialization(part *PatternPart, s
 	}
 }
 
+// hasLimitPushdownDecision reports whether target has the requested limit-pushdown mode.
 func (s *Translator) hasLimitPushdownDecision(part *PatternPart, stepIndex int, mode optimize.LimitPushdownMode) bool {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -220,6 +236,7 @@ func (s *Translator) hasLimitPushdownDecision(part *PatternPart, stepIndex int, 
 	return false
 }
 
+// allowLimitPushdownForStep authorizes the step's frame to consume a matching planned limit internally.
 func (s *Translator) allowLimitPushdownForStep(part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
 	if traversalStep == nil || traversalStep.Frame == nil {
 		return
@@ -240,6 +257,7 @@ func (s *Translator) allowLimitPushdownForStep(part *PatternPart, stepIndex int,
 	}
 }
 
+// buildBoundEndpointTraversalPattern emits a one-hop join between two endpoints already visible in the previous frame.
 func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
 	if partFrame == nil || partFrame.Previous == nil {
 		return pgsql.Query{}, errors.New("expected previous frame for bound endpoint traversal")
@@ -393,6 +411,7 @@ func (s *Translator) buildTraversalPatternRootWithOuterCorrelation(partFrame *Fr
 	}
 }
 
+// buildTraversalPatternRoot emits the first node source, constraints, and projection for a traversal pattern.
 func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
 	if traversalStep.Direction == graph.DirectionBoth {
 		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
@@ -583,6 +602,7 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 	}, nil
 }
 
+// buildTraversalPatternStep emits one relationship join, terminal node join, constraints, and projection frame.
 func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
 	if traversalStep.UseExpandInto {
 		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
@@ -651,6 +671,7 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 	}, nil
 }
 
+// translateTraversalPatternPart prepares source targets, constraints, and state for translating one pattern part.
 func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedProjection bool, allowProjectionPruning bool) error {
 	var scopeSnapshot *Scope
 
@@ -704,6 +725,7 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 	return nil
 }
 
+// applyExpansionSuffixPushdown attaches planned fixed-suffix predicates and records any applied predicate placement.
 func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error) {
 	if part == nil || !part.HasTarget {
 		return applyExpansionSuffixPushdown(part)
@@ -776,10 +798,12 @@ func (s *Translator) applyExpansionSuffixPushdown(part *PatternPart) (int, error
 	return applied, nil
 }
 
+// traversalStepHasContinuation reports whether another translated step follows in the pattern part.
 func traversalStepHasContinuation(part *PatternPart, stepIndex int) bool {
 	return part != nil && stepIndex+1 < len(part.TraversalSteps)
 }
 
+// fieldRequirementAllowsIDOnly reports whether all external uses of symbol can consume a scalar entity ID.
 func fieldRequirementAllowsIDOnly(decision optimize.FieldRequirementDecision) bool {
 	observesID := false
 	for _, use := range decision.Uses {
@@ -801,6 +825,7 @@ func fieldRequirementAllowsIDOnly(decision optimize.FieldRequirementDecision) bo
 	return observesID
 }
 
+// fieldRequirementAllowsIDOnlyContinuation reports whether later pattern use can continue from scalar ID state.
 func fieldRequirementAllowsIDOnlyContinuation(decision optimize.FieldRequirementDecision) bool {
 	for _, use := range decision.Uses {
 		for _, field := range use.Fields {
@@ -817,6 +842,7 @@ func fieldRequirementAllowsIDOnlyContinuation(decision optimize.FieldRequirement
 	return true
 }
 
+// traversalStepContinuesFromBinding reports whether the next step starts from binding.
 func traversalStepContinuesFromBinding(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
 	if part == nil || binding == nil || stepIndex < 0 || stepIndex+1 >= len(part.TraversalSteps) {
 		return false
@@ -829,6 +855,7 @@ func traversalStepContinuesFromBinding(part *PatternPart, stepIndex int, binding
 		currentStep.RightNode == binding && nextStep.LeftNode == binding
 }
 
+// applyIDOnlyNodeProjection replaces an eligible node composite projection with its scalar ID.
 func (s *Translator) applyIDOnlyNodeProjection(part *PatternPart, stepIndex int, binding *BoundIdentifier) bool {
 	if part == nil || binding == nil || !part.HasTarget {
 		return false
@@ -884,6 +911,7 @@ func (s *Translator) applyIDOnlyNodeProjection(part *PatternPart, stepIndex int,
 	return false
 }
 
+// relationshipIDReference returns the scalar relationship ID exposed by a composite or ID-only binding.
 func relationshipIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
 	if binding != nil && binding.DataType == pgsql.EdgeComposite {
 		return pathCompositeColumnReference(scope, binding, pgsql.ColumnID)
@@ -892,6 +920,7 @@ func relationshipIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expre
 	return pathEdgeIDReference(scope, binding)
 }
 
+// relationshipIDNotInPath builds the edge-uniqueness predicate for a relationship and accumulated path.
 func relationshipIDNotInPath(edgeID, pathIDs pgsql.Expression) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		edgeID,
@@ -900,6 +929,7 @@ func relationshipIDNotInPath(edgeID, pathIDs pgsql.Expression) pgsql.Expression 
 	)
 }
 
+// previousRelationshipUniquenessConstraint excludes a relationship ID already used by a prior fixed step.
 func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, stepIndex int, traversalStep *TraversalStep) pgsql.Expression {
 	if scope == nil || part == nil || stepIndex <= 0 || traversalStep == nil || traversalStep.Edge == nil {
 		return nil
@@ -970,6 +1000,7 @@ func expansionPreviousRelationshipUniquenessConstraint(scope *Scope, part *Patte
 	return constraint
 }
 
+// projectionPruningDecision returns the planned omitted fields for a source traversal step.
 func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int) (optimize.ProjectionPruningDecision, bool) {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -980,6 +1011,7 @@ func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int)
 	return decision, hasDecision
 }
 
+// prepareProjectionPruning applies pruning flags and records the bindings removed from a traversal projection.
 func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
 	decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
 	if !hasDecision || traversalStep == nil {
@@ -1003,6 +1035,7 @@ func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, 
 	}
 }
 
+// latePathMaterializationDecision returns the requested deferred materialization mode for target.
 func (s *Translator) latePathMaterializationDecision(part *PatternPart, stepIndex int, mode optimize.LatePathMaterializationMode) (optimize.LatePathMaterializationDecision, bool) {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
@@ -1018,6 +1051,7 @@ func (s *Translator) latePathMaterializationDecision(part *PatternPart, stepInde
 	return optimize.LatePathMaterializationDecision{}, false
 }
 
+// applyPathEdgeIDMaterialization replaces a path binding with ordered edge-ID state for later hydration.
 func (s *Translator) applyPathEdgeIDMaterialization(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
 	if traversalStep == nil ||
 		traversalStep.Edge == nil ||
@@ -1033,6 +1067,7 @@ func (s *Translator) applyPathEdgeIDMaterialization(part *PatternPart, stepIndex
 	return true
 }
 
+// unexportFrameBinding removes binding and its alias from a frame's exported identifiers.
 func unexportFrameBinding(frame *Frame, identifier pgsql.Identifier) bool {
 	if frame == nil {
 		return false
@@ -1043,6 +1078,7 @@ func unexportFrameBinding(frame *Frame, identifier pgsql.Identifier) bool {
 	return exported
 }
 
+// traversalStepBindingBound reports whether binding is an endpoint or relationship already bound for step.
 func traversalStepBindingBound(traversalStep *TraversalStep, binding *BoundIdentifier) bool {
 	if traversalStep == nil || binding == nil {
 		return false
@@ -1059,6 +1095,7 @@ func traversalStepBindingBound(traversalStep *TraversalStep, binding *BoundIdent
 	return false
 }
 
+// unexportPrunedNodeBinding removes a pruned node and its aliases unless another step still requires the binding.
 func unexportPrunedNodeBinding(traversalStep *TraversalStep, binding *BoundIdentifier) bool {
 	if binding == nil || traversalStepBindingBound(traversalStep, binding) {
 		return false
@@ -1067,6 +1104,7 @@ func unexportPrunedNodeBinding(traversalStep *TraversalStep, binding *BoundIdent
 	return unexportFrameBinding(traversalStep.Frame, binding.Identifier)
 }
 
+// pruneTraversalStepProjectionExports removes planned node, relationship, and path exports from a fixed step.
 func pruneTraversalStepProjectionExports(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
 	var applied bool
 
@@ -1079,6 +1117,7 @@ func pruneTraversalStepProjectionExports(part *PatternPart, stepIndex int, trave
 	return applied
 }
 
+// pruneExpansionStepProjectionExports removes planned node, relationship, and path exports from an expansion step.
 func pruneExpansionStepProjectionExports(part *PatternPart, stepIndex int, traversalStep *TraversalStep) bool {
 	if traversalStep == nil || traversalStep.Expansion == nil {
 		return false
@@ -1096,6 +1135,7 @@ func pruneExpansionStepProjectionExports(part *PatternPart, stepIndex int, trave
 	return applied
 }
 
+// translateTraversalPatternPartWithoutExpansion emits each fixed step, applying pruning and scalar-ID continuation where qualified.
 func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *PatternPart, stepIndex int, traversalStep *TraversalStep, allowProjectionPruning bool) error {
 	isFirstTraversalStep := stepIndex == 0
 

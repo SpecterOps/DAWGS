@@ -78,6 +78,7 @@ func TestBuilderProjectionModifiersAreOrderIndependent(t *testing.T) {
 	}
 }
 
+// TestBuilderRendersRawPropertyKeys verifies the legacy builder preserves escaped property-key syntax in rendered Cypher.
 func TestBuilderRendersRawPropertyKeys(t *testing.T) {
 	builder := query.NewBuilder(nil)
 	builder.Apply(query.Returning(

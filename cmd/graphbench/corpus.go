@@ -24,6 +24,7 @@ import (
 	"sort"
 )
 
+// loadScaleCorpus loads all scale-case JSON files and rejects duplicate or invalid declarations.
 func loadScaleCorpus(root string) (ScaleCorpus, error) {
 	casePaths, err := filepath.Glob(filepath.Join(root, "cases", "*.json"))
 	if err != nil {
@@ -56,6 +57,7 @@ func loadScaleCorpus(root string) (ScaleCorpus, error) {
 	return corpus, nil
 }
 
+// validateScaleCase checks case identity, modes, parameters, expectations, and workload shape.
 func validateScaleCase(testCase ScaleCase) error {
 	if testCase.Name == "" {
 		return fmt.Errorf("name is required")
@@ -130,6 +132,7 @@ func validateScaleCase(testCase ScaleCase) error {
 	return nil
 }
 
+// validateWriteScenario checks mutation expectations and post-state query completeness.
 func validateWriteScenario(scenario WriteScenario) error {
 	if scenario.SelectionCypher == "" {
 		return fmt.Errorf("write_scenario.selection_cypher is required")
@@ -162,6 +165,7 @@ func validateWriteScenario(scenario WriteScenario) error {
 	return nil
 }
 
+// decodeJSONFile reads a JSON file and decodes it into the supplied destination.
 func decodeJSONFile(path string, target any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -174,6 +178,7 @@ func decodeJSONFile(path string, target any) error {
 	return nil
 }
 
+// scaleCorpusDatasets returns unique corpus dataset names in sorted order.
 func scaleCorpusDatasets(corpus ScaleCorpus) []string {
 	var (
 		seen     = map[string]struct{}{}
@@ -193,6 +198,7 @@ func scaleCorpusDatasets(corpus ScaleCorpus) []string {
 	return datasets
 }
 
+// scaleCasesByDataset indexes scale cases by dataset while preserving corpus order.
 func scaleCasesByDataset(corpus ScaleCorpus) map[string][]ScaleCase {
 	grouped := map[string][]ScaleCase{}
 	for _, testCase := range corpus.Cases {

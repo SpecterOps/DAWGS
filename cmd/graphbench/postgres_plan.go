@@ -44,6 +44,7 @@ func parsePostgresPlanJSONMetrics(raw json.RawMessage) (PostgresPlanMetrics, err
 	return metrics, nil
 }
 
+// walkPostgresPlanNode flattens one EXPLAIN node into aggregate metrics, then recursively visits child plans and CTE subplans.
 func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 	metric := PostgresPlanNodeMetric{
 		NodeType:           jsonString(node["Node Type"]),
@@ -134,6 +135,7 @@ func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 	}
 }
 
+// postgresJSONBuffers converts optional JSON buffer counters to integer metrics.
 func postgresJSONBuffers(node map[string]any) Buffers {
 	return Buffers{
 		SharedHit:     jsonInt64(node["Shared Hit Blocks"]),
@@ -149,6 +151,7 @@ func postgresJSONBuffers(node map[string]any) Buffers {
 	}
 }
 
+// jsonFloatPointer decodes a JSON number as an optional floating-point value.
 func jsonFloatPointer(value any) *float64 {
 	if value == nil {
 		return nil
@@ -157,6 +160,7 @@ func jsonFloatPointer(value any) *float64 {
 	return &parsed
 }
 
+// jsonFloat64 decodes a JSON number as a floating-point value, returning zero when absent or invalid.
 func jsonFloat64(value any) float64 {
 	switch typed := value.(type) {
 	case float64:
@@ -169,8 +173,10 @@ func jsonFloat64(value any) float64 {
 	}
 }
 
+// jsonInt64 decodes a JSON number as an integer, returning zero when absent or invalid.
 func jsonInt64(value any) int64 { return int64(jsonFloat64(value)) }
 
+// jsonString decodes a JSON string, returning an empty string for other values.
 func jsonString(value any) string {
 	valueString, _ := value.(string)
 	return valueString

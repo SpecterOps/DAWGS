@@ -14,14 +14,19 @@ import (
 )
 
 const (
+	// DriverName is the connection-string scheme registered by the PostgreSQL
+	// driver.
 	DriverName = "pg"
 
 	// defaultBatchWriteSize is currently set to 2k. This is meant to strike a balance between the cost of thousands
 	// of round-trips against the cost of locking tables for too long.
-	defaultBatchWriteSize     = 2_000
+	defaultBatchWriteSize = 2_000
+
+	// poolInitConnectionTimeout limits how long pool setup waits for the first connection to initialize.
 	poolInitConnectionTimeout = time.Second * 10
 )
 
+// AfterPooledConnectionEstablished loads and registers the driver's owned graph composite types on a new pooled connection.
 func AfterPooledConnectionEstablished(ctx context.Context, conn *pgx.Conn) error {
 	for _, dataType := range pgsql.CompositeTypes {
 		if definition, err := conn.LoadType(ctx, dataType.String()); err != nil {

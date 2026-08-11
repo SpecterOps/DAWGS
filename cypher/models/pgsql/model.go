@@ -404,8 +404,11 @@ func (s *Parenthetical) AsExpression() Expression {
 	return s
 }
 
+// EdgeArrayFromPathIDs hydrates edge composites from a path's ordered edge identifiers.
 type EdgeArrayFromPathIDs struct {
+	// PathIDs is the ordered edge-ID array to hydrate.
 	PathIDs Expression
+	// GraphID identifies the graph whose edge IDs are hydrated into edge composites.
 	GraphID Expression
 }
 
@@ -420,9 +423,16 @@ func (s *EdgeArrayFromPathIDs) AsExpression() Expression {
 type JoinType int
 
 const (
+	// JoinTypeInner retains rows that satisfy the join constraint on both sides.
 	JoinTypeInner JoinType = iota
+
+	// JoinTypeLeftOuter retains every left row even when no right row matches.
 	JoinTypeLeftOuter
+
+	// JoinTypeRightOuter retains every right row even when no left row matches.
 	JoinTypeRightOuter
+
+	// JoinTypeFullOuter retains unmatched rows from both sides.
 	JoinTypeFullOuter
 )
 
@@ -457,16 +467,26 @@ func (s OrderBy) NodeType() string {
 type WindowFrameUnit int
 
 const (
+	// WindowFrameUnitRows measures frame boundaries in physical rows.
 	WindowFrameUnitRows WindowFrameUnit = iota
+
+	// WindowFrameUnitRange measures frame boundaries by ordering-key value ranges.
 	WindowFrameUnitRange
+
+	// WindowFrameUnitGroups measures frame boundaries in peer groups.
 	WindowFrameUnitGroups
 )
 
 type WindowFrameBoundaryType int
 
 const (
+	// WindowFrameBoundaryTypeCurrentRow anchors a window boundary at the current row or peer group.
 	WindowFrameBoundaryTypeCurrentRow WindowFrameBoundaryType = iota
+
+	// WindowFrameBoundaryTypePreceding places a window boundary before the current row.
 	WindowFrameBoundaryTypePreceding
+
+	// WindowFrameBoundaryTypeFollowing places a window boundary after the current row.
 	WindowFrameBoundaryTypeFollowing
 )
 
@@ -569,14 +589,22 @@ func AsParameter(identifier Identifier, value any) (*Parameter, error) {
 	return parameter, nil
 }
 
+// FunctionCall represents a PostgreSQL function invocation and its aggregate or window options.
 type FunctionCall struct {
-	Bare       bool
-	Distinct   bool
-	Function   Identifier
+	// Bare omits the usual argument parentheses for SQL keyword-like functions.
+	Bare bool
+	// Distinct deduplicates argument rows before aggregate evaluation.
+	Distinct bool
+	// Function identifies the PostgreSQL function to invoke.
+	Function Identifier
+	// Parameters contains the function arguments in call order.
 	Parameters []Expression
-	OrderBy    []*OrderBy
-	Over       *Window
-	CastType   DataType
+	// OrderBy orders aggregate inputs before the function is evaluated.
+	OrderBy []*OrderBy
+	// Over supplies the window specification for a window-function call.
+	Over *Window
+	// CastType records the function result type known to the translator.
+	CastType DataType
 }
 
 func (s FunctionCall) AsAssignment() Assignment {

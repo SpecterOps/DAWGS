@@ -13,32 +13,52 @@ import (
 	"sort"
 )
 
+// selectionManifestVersion identifies the serialized schema revision for selection manifest.
 const selectionManifestVersion = 1
 
+// CorpusSelectors contains exact dataset, category, case, and tag filters supplied by the user.
 type CorpusSelectors struct {
-	Cases      []string `json:"cases,omitempty"`
-	Datasets   []string `json:"datasets,omitempty"`
+	// Cases lists exact case names requested by the user.
+	Cases []string `json:"cases,omitempty"`
+	// Datasets lists exact dataset selectors supplied by the user.
+	Datasets []string `json:"datasets,omitempty"`
+	// Categories lists workload categories used to filter the corpus.
 	Categories []string `json:"categories,omitempty"`
-	Tags       []string `json:"tags,omitempty"`
+	// Tags lists exact tag selectors supplied by the user.
+	Tags []string `json:"tags,omitempty"`
 }
 
+// ResolvedCaseSelector identifies a selected case together with its declared category.
 type ResolvedCaseSelector struct {
-	Dataset  string `json:"dataset"`
-	Name     string `json:"name"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Category groups cases by workload category.
 	Category string `json:"category"`
 }
 
+// SelectionManifest records requested filters, resolved workloads, and completeness evidence for one run.
 type SelectionManifest struct {
-	Version                  int                    `json:"version"`
-	Requested                CorpusSelectors        `json:"requested"`
-	Resolved                 []ResolvedCaseSelector `json:"resolved"`
-	DiagnosticOnly           bool                   `json:"diagnostic_only"`
-	FullDeclarationCount     int                    `json:"full_declaration_count"`
-	SelectedDeclarationCount int                    `json:"selected_declaration_count"`
-	OmittedDeclarationCount  int                    `json:"omitted_declaration_count"`
-	DeclarationSHA256        string                 `json:"declaration_sha256"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Requested preserves the exact corpus filters supplied by the user.
+	Requested CorpusSelectors `json:"requested"`
+	// Resolved lists exact case selectors retained after corpus filtering.
+	Resolved []ResolvedCaseSelector `json:"resolved"`
+	// DiagnosticOnly marks a selection that is informative but ineligible for complete gating.
+	DiagnosticOnly bool `json:"diagnostic_only"`
+	// FullDeclarationCount records all case/backend declarations before selection.
+	FullDeclarationCount int `json:"full_declaration_count"`
+	// SelectedDeclarationCount records declarations retained by the resolved selection.
+	SelectedDeclarationCount int `json:"selected_declaration_count"`
+	// OmittedDeclarationCount records declarations omitted by the resolved selection.
+	OmittedDeclarationCount int `json:"omitted_declaration_count"`
+	// DeclarationSHA256 identifies the canonical set of declared workloads.
+	DeclarationSHA256 string `json:"declaration_sha256"`
 }
 
+// selectScaleCorpus filters corpus cases and returns both selected cases and a hashed selection manifest.
 func selectScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorpus, SelectionManifest, error) {
 	filtered := len(selectors.Cases)+len(selectors.Datasets)+len(selectors.Categories)+len(selectors.Tags) > 0
 	manifest := SelectionManifest{
@@ -71,6 +91,7 @@ func selectScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorp
 	return selected, manifest, nil
 }
 
+// validateCorpusSelectors rejects duplicate, ambiguous, or unknown exact selectors.
 func validateCorpusSelectors(corpus ScaleCorpus, selectors CorpusSelectors) error {
 	caseMatches := map[string][]ScaleCase{}
 	datasets := map[string]struct{}{}
@@ -94,9 +115,12 @@ func validateCorpusSelectors(corpus ScaleCorpus, selectors CorpusSelectors) erro
 		}
 	}
 	for _, selector := range []struct {
-		kind   string
+		// kind names the selector dimension for validation errors.
+		kind string
+		// values contains the requested selectors to validate in this dimension.
 		values []string
-		known  map[string]struct{}
+		// known indexes accepted selector values for exact validation.
+		known map[string]struct{}
 	}{
 		{
 			kind:   "dataset",
@@ -123,6 +147,7 @@ func validateCorpusSelectors(corpus ScaleCorpus, selectors CorpusSelectors) erro
 	return nil
 }
 
+// matchesSelectors reports whether a scale case matches every nonempty selector dimension.
 func matchesSelectors(testCase ScaleCase, selectors CorpusSelectors) bool {
 	if len(selectors.Cases) > 0 && !slices.Contains(selectors.Cases, testCase.Name) {
 		return false
@@ -145,6 +170,7 @@ func matchesSelectors(testCase ScaleCase, selectors CorpusSelectors) bool {
 	return true
 }
 
+// selectionIdentity returns the common selection manifest shared by every artifact record.
 func selectionIdentity(records []CaseResult) (SelectionManifest, error) {
 	var selected *SelectionManifest
 	for _, record := range records {
@@ -160,12 +186,14 @@ func selectionIdentity(records []CaseResult) (SelectionManifest, error) {
 			return SelectionManifest{}, fmt.Errorf("artifact contains inconsistent selection manifests")
 		}
 	}
+
 	if selected == nil {
 		return SelectionManifest{}, fmt.Errorf("artifact contains no records")
 	}
 	return *selected, nil
 }
 
+// resolvedSelectionSHA256 hashes selected dataset, case, and category tuples in deterministic order.
 func resolvedSelectionSHA256(resolved []ResolvedCaseSelector) string {
 	items := append([]ResolvedCaseSelector(nil), resolved...)
 	sort.Slice(items, func(i, j int) bool {
@@ -174,6 +202,7 @@ func resolvedSelectionSHA256(resolved []ResolvedCaseSelector) string {
 		}
 		return items[i].Name < items[j].Name
 	})
+
 	digest := sha256.New()
 	for _, item := range items {
 		fmt.Fprintf(digest, "%s\x00%s\x00%s\n", item.Dataset, item.Name, item.Category)

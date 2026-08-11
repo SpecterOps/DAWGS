@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// optimizerFixedSuffixQuery exercises a bounded variable expansion followed by a selective three-edge suffix.
 const optimizerFixedSuffixQuery = `
 MATCH (root:ExpansionRoot)
 WHERE root.root_key = 'root'
@@ -25,6 +26,7 @@ AND (predicate.version = 1 OR predicate.required_approvals = 0)
 RETURN p1, p2
 `
 
+// optimizerSafetyKindMapper returns deterministic numeric IDs for the kinds used by optimizer-safety fixtures.
 func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 	mapper := pgutil.NewInMemoryKindMapper()
 
@@ -74,6 +76,7 @@ func optimizerSafetyKindMapper() *pgutil.InMemoryKindMapper {
 	return mapper
 }
 
+// optimizerSafetySQL translates cypherQuery and returns its rendered PostgreSQL text.
 func optimizerSafetySQL(t *testing.T, cypherQuery string) string {
 	t.Helper()
 
@@ -85,12 +88,14 @@ func optimizerSafetySQL(t *testing.T, cypherQuery string) string {
 	return strings.Join(strings.Fields(formattedQuery), " ")
 }
 
+// optimizerSafetyTranslation parses and translates cypherQuery with the optimizer-safety kind mapper.
 func optimizerSafetyTranslation(t *testing.T, cypherQuery string) Result {
 	t.Helper()
 
 	return optimizerSafetyTranslationWithParameters(t, cypherQuery, nil)
 }
 
+// optimizerSafetyTranslationWithParameters parses and translates cypherQuery with the supplied parameter values.
 func optimizerSafetyTranslationWithParameters(t *testing.T, cypherQuery string, parameters map[string]any) Result {
 	t.Helper()
 
@@ -103,6 +108,7 @@ func optimizerSafetyTranslationWithParameters(t *testing.T, cypherQuery string, 
 	return translation
 }
 
+// requireOptimizationLowering requires name to appear among the lowerings applied during translation.
 func requireOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
 	t.Helper()
 
@@ -115,6 +121,7 @@ func requireOptimizationLowering(t *testing.T, summary OptimizationSummary, name
 	require.Failf(t, "missing optimization lowering", "expected lowering %q in %#v", name, summary.Lowerings)
 }
 
+// requireNoOptimizationLowering requires name to be absent from applied lowering diagnostics.
 func requireNoOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
 	t.Helper()
 
@@ -123,6 +130,7 @@ func requireNoOptimizationLowering(t *testing.T, summary OptimizationSummary, na
 	}
 }
 
+// requirePlannedOptimizationLowering requires name to appear in the optimizer's planned lowerings.
 func requirePlannedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
 	t.Helper()
 
@@ -135,6 +143,7 @@ func requirePlannedOptimizationLowering(t *testing.T, summary OptimizationSummar
 	require.Failf(t, "missing planned optimization lowering", "expected planned lowering %q in %#v", name, summary.PlannedLowerings)
 }
 
+// requireNoPlannedOptimizationLowering requires name to be absent from the optimizer's planned lowerings.
 func requireNoPlannedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
 	t.Helper()
 
@@ -143,6 +152,7 @@ func requireNoPlannedOptimizationLowering(t *testing.T, summary OptimizationSumm
 	}
 }
 
+// requirePlanParameterContains requires at least one translated parameter value to contain expected.
 func requirePlanParameterContains(t *testing.T, translation Result, expected string) {
 	t.Helper()
 
@@ -155,6 +165,7 @@ func requirePlanParameterContains(t *testing.T, translation Result, expected str
 	require.Failf(t, "missing plan parameter content", "expected a plan parameter to contain %q in %#v", expected, translation.Parameters)
 }
 
+// requireSkippedOptimizationLowering requires a skipped-lowering diagnostic with the expected name and reason.
 func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string, reason string) {
 	t.Helper()
 
@@ -168,6 +179,7 @@ func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummar
 	require.Failf(t, "missing skipped optimization lowering", "expected skipped lowering %q in %#v", name, summary.SkippedLowerings)
 }
 
+// requireSkippedOptimizationLoweringCount requires a skipped-lowering diagnostic with the expected occurrence count.
 func requireSkippedOptimizationLoweringCount(t *testing.T, summary OptimizationSummary, name string, count int) {
 	t.Helper()
 
@@ -181,6 +193,7 @@ func requireSkippedOptimizationLoweringCount(t *testing.T, summary OptimizationS
 	require.Failf(t, "missing skipped optimization lowering", "expected skipped lowering %q in %#v", name, summary.SkippedLowerings)
 }
 
+// requireNoSkippedOptimizationLowering requires name to be absent from skipped-lowering diagnostics.
 func requireNoSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string) {
 	t.Helper()
 
@@ -208,6 +221,7 @@ func TestOptimizerSafetyReportsPartiallySkippedLowerings(t *testing.T) {
 	requireSkippedOptimizationLoweringCount(t, translator.translation.Optimization, optimize.LoweringPredicatePlacement, 1)
 }
 
+// TestFixedSuffixSearchStrategyIsPlannedButConservativelySkipped verifies that an unforced candidate remains diagnostic-only.
 func TestFixedSuffixSearchStrategyIsPlannedButConservativelySkipped(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
 		MATCH (root:ExpansionRoot)
@@ -244,6 +258,7 @@ func TestFixedSuffixSearchStrategyIsPlannedButConservativelySkipped(t *testing.T
 	require.Equal(t, optimize.ExpansionSearchFallbackTournamentUnqualified, outcome.SkipReason)
 }
 
+// TestForcedSuffixSeededReverseEmitsNativeReverseTrailState verifies the reverse-search CTE and ordered edge-ID state emitted by a forced strategy.
 func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root:ExpansionRoot)
@@ -295,6 +310,7 @@ func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
 }
 
+// TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied verifies that qualified endpoint seeding emits bounded probes and reports application.
 func TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied(t *testing.T) {
 	translation := optimizerSafetyTranslationWithParameters(t, `
 		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
@@ -336,12 +352,14 @@ func TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied(t *testing.T) {
 	require.True(t, outcome.HasFinalLimit)
 }
 
+// TestOrdinaryExpansionMayContinueAfterSelfLoop verifies that encountering a self-loop does not stop unrelated recursive expansion.
 func TestOrdinaryExpansionMayContinueAfterSelfLoop(t *testing.T) {
 	formatted := optimizerSafetySQL(t, `MATCH p = (s)-[:MemberOf*1..3]->(g) RETURN p`)
 	require.Contains(t, formatted, "1, false, false, array [e0.id]")
 	require.NotContains(t, formatted, "e0.start_id = e0.end_id, array [e0.id]")
 }
 
+// TestForcedSuffixSeededReverseEndpointSQLIsParameterStable verifies deterministic parameter numbering in forced reverse-search SQL.
 func TestForcedSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root:ExpansionRoot)
@@ -370,6 +388,7 @@ func TestForcedSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
 	require.NotContains(t, first, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
 }
 
+// TestForcedSuffixSeededReversePreservesBoundaryConstraints verifies that predicates attached at the suffix boundary survive reversal.
 func TestForcedSuffixSeededReversePreservesBoundaryConstraints(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root:ExpansionRoot)
@@ -392,6 +411,7 @@ func TestForcedSuffixSeededReversePreservesBoundaryConstraints(t *testing.T) {
 	require.Contains(t, formatted, "to_jsonb((true)::bool)")
 }
 
+// TestForcedFixedSuffixSearchRejectsUnsupportedStrategy verifies that tooling cannot force a strategy outside the candidate family.
 func TestForcedFixedSuffixSearchRejectsUnsupportedStrategy(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
@@ -405,6 +425,7 @@ func TestForcedFixedSuffixSearchRejectsUnsupportedStrategy(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported forced expansion-search strategy")
 }
 
+// TestForcedFixedSuffixSearchRejectsStructurallyIneligibleTarget verifies that forcing does not bypass structural qualification.
 func TestForcedFixedSuffixSearchRejectsStructurallyIneligibleTarget(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)
@@ -418,6 +439,7 @@ func TestForcedFixedSuffixSearchRejectsStructurallyIneligibleTarget(t *testing.T
 	require.ErrorContains(t, err, "has no structurally eligible target")
 }
 
+// TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied verifies automatic scalar-distance selection and matching diagnostics.
 func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -452,6 +474,7 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	require.Empty(t, outcome.SkipReason)
 }
 
+// TestGreedyProjectionMaterializesShortestPathAndEntities verifies that RETURN * hydrates the path and every visible endpoint.
 func TestGreedyProjectionMaterializesShortestPathAndEntities(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
 		MATCH p = shortestPath((s:Group)-[:MemberOf*1..4]->(e:Group))
@@ -474,6 +497,7 @@ func TestGreedyProjectionMaterializesShortestPathAndEntities(t *testing.T) {
 	require.Contains(t, formatted, "::nodecomposite")
 }
 
+// TestGreedyProjectionMaterializesRelationships verifies that RETURN * hydrates relationship bindings.
 func TestGreedyProjectionMaterializesRelationships(t *testing.T) {
 	formatted := optimizerSafetySQL(t, `
 		MATCH (s:Group)-[r:MemberOf]->(e:Group)
@@ -484,6 +508,7 @@ func TestGreedyProjectionMaterializesRelationships(t *testing.T) {
 	require.Contains(t, formatted, "::edgecomposite")
 }
 
+// TestGreedyWithProjectionCarriesFullShortestPath verifies that WITH * preserves a complete shortest-path value across query parts.
 func TestGreedyWithProjectionCarriesFullShortestPath(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
 		MATCH p = shortestPath((s:Group)-[:MemberOf*1..4]->(e:Group))
@@ -498,6 +523,7 @@ func TestGreedyWithProjectionCarriesFullShortestPath(t *testing.T) {
 	require.Contains(t, formatted, "ordered_edge_ids_to_path(0, s1.n0")
 }
 
+// TestShortestExecutorV4SelectsDeepInboundCompactDistance verifies canonical distance selection and inbound physical topology diagnostics.
 func TestShortestExecutorV4SelectsDeepInboundCompactDistance(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
@@ -534,11 +560,15 @@ func TestShortestExecutorV4SelectsDeepInboundCompactDistance(t *testing.T) {
 	require.Empty(t, outcome.SkipReason)
 }
 
+// TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance verifies observation-dependent selection for multi-kind paths.
 func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *testing.T) {
 	for _, test := range []struct {
+		// observation is the return expression that consumes the shortest path.
 		observation string
-		selected    optimize.ShortestPathExecutor
-		reason      string
+		// selected is the executor expected for that observation.
+		selected optimize.ShortestPathExecutor
+		// reason is the expected translation skip reason, if any.
+		reason string
 	}{
 		{
 			observation: "p",
@@ -572,6 +602,7 @@ func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *test
 	}
 }
 
+// TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor verifies typed predecessor-DAG execution for bound all-shortest paths.
 func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *testing.T) {
 	translation := optimizerSafetyTranslationWithParameters(t, `
 		MATCH p = allShortestPaths((s)-[*1..]->(e))
@@ -602,6 +633,7 @@ func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *test
 	require.Empty(t, outcome.SkipReason)
 }
 
+// TestForcedShortestDistanceExecutorEmitsNativeScalarState verifies the scalar recursive state emitted by a forced distance executor.
 func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -664,6 +696,7 @@ func TestForcedShortestDistanceExecutorEmitsNativeScalarState(t *testing.T) {
 	requireNoSkippedOptimizationLowering(t, forced.Optimization, optimize.LoweringShortestPathExecutor)
 }
 
+// TestForcedShortestIncumbentEmitsExactWorkspaceHarness verifies that forcing the incumbent preserves its workspace-table harness.
 func TestForcedShortestIncumbentEmitsExactWorkspaceHarness(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -693,6 +726,7 @@ func TestForcedShortestIncumbentEmitsExactWorkspaceHarness(t *testing.T) {
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
 }
 
+// TestForcedShortestDirectPreflightGatesWorkspaceFallback verifies that direct preflight gates the incumbent workspace branch.
 func TestForcedShortestDirectPreflightGatesWorkspaceFallback(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((e)<-[:MemberOf|SuffixEdgeOne*1..8]-(s))
@@ -727,6 +761,7 @@ func TestForcedShortestDirectPreflightGatesWorkspaceFallback(t *testing.T) {
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
 }
 
+// TestForcedShortestDirectPreflightRejectsZeroMinimumDepth verifies that forcing cannot bypass the direct executor's positive-depth requirement.
 func TestForcedShortestDirectPreflightRejectsZeroMinimumDepth(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*0..4]->(e))
@@ -743,6 +778,7 @@ func TestForcedShortestDirectPreflightRejectsZeroMinimumDepth(t *testing.T) {
 	require.ErrorContains(t, err, "no structurally eligible depth-one target")
 }
 
+// TestForcedShortestDirectPreflightRejectsMutation verifies that statement mutation prevents direct shortest-path execution.
 func TestForcedShortestDirectPreflightRejectsMutation(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -760,6 +796,7 @@ func TestForcedShortestDirectPreflightRejectsMutation(t *testing.T) {
 	require.ErrorContains(t, err, "no structurally eligible depth-one target")
 }
 
+// TestForcedShortestDirectPreflightPreservesPathThroughWithAlias verifies that a path witness survives aliasing across WITH.
 func TestForcedShortestDirectPreflightPreservesPathThroughWithAlias(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -782,6 +819,7 @@ func TestForcedShortestDirectPreflightPreservesPathThroughWithAlias(t *testing.T
 	require.Contains(t, formatted, "as q")
 }
 
+// TestForcedShortestDistanceExecutorRejectsIneligibleObservation verifies that a path consumer cannot force distance-only execution.
 func TestForcedShortestDistanceExecutorRejectsIneligibleObservation(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -796,6 +834,7 @@ func TestForcedShortestDistanceExecutorRejectsIneligibleObservation(t *testing.T
 	require.ErrorContains(t, err, "no structurally eligible distance-only target")
 }
 
+// TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer verifies ordered edge-trail state and deferred path hydration.
 func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -856,6 +895,7 @@ func TestForcedShortestPathEdgeM0ExecutorEmitsNativeEdgeTrailAndMaterializer(t *
 	require.Empty(t, outcome.SkipReason)
 }
 
+// TestForcedShortestPathEdgeM0ExecutorIsDirectionAware verifies that edge-trail recursion joins the correct physical endpoint for each direction.
 func TestForcedShortestPathEdgeM0ExecutorIsDirectionAware(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
@@ -875,6 +915,7 @@ func TestForcedShortestPathEdgeM0ExecutorIsDirectionAware(t *testing.T) {
 	require.Contains(t, forcedSQL, "m0_terminal.id = m0_edge.start_id")
 }
 
+// TestForcedShortestPathEdgeM0ExecutorRejectsDistanceObservation verifies that distance-only consumers cannot force witness materialization.
 func TestForcedShortestPathEdgeM0ExecutorRejectsDistanceObservation(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -889,6 +930,7 @@ func TestForcedShortestPathEdgeM0ExecutorRejectsDistanceObservation(t *testing.T
 	require.ErrorContains(t, err, "no structurally eligible one-path target")
 }
 
+// TestForcedShortestPathEdgeM0ExecutorPreservesPathThroughWithAlias verifies that a materialized witness survives aliasing across WITH.
 func TestForcedShortestPathEdgeM0ExecutorPreservesPathThroughWithAlias(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -919,6 +961,7 @@ func TestForcedShortestPathEdgeM0ExecutorPreservesPathThroughWithAlias(t *testin
 	require.Equal(t, string(optimize.ShortestPathExecutorS3EdgeM0), outcome.Applied)
 }
 
+// TestForcedShortestDistanceExecutorIsDirectionAwareAndParameterStable verifies physical direction and deterministic parameters for scalar search.
 func TestForcedShortestDistanceExecutorIsDirectionAwareAndParameterStable(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((e)<-[:MemberOf*1..8]-(s))
@@ -945,6 +988,7 @@ func TestForcedShortestDistanceExecutorIsDirectionAwareAndParameterStable(t *tes
 	require.Contains(t, firstSQL, "join edge e0 on e0.end_id = s1.next_id")
 }
 
+// TestForcedShortestDistanceExecutorSupportsZeroDepthWithoutSelfEndpointError verifies legal same-endpoint zero-length paths.
 func TestForcedShortestDistanceExecutorSupportsZeroDepthWithoutSelfEndpointError(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*0..4]->(e))
@@ -965,6 +1009,7 @@ func TestForcedShortestDistanceExecutorSupportsZeroDepthWithoutSelfEndpointError
 	require.Contains(t, formatted, "(s0.ep0)::int as distance")
 }
 
+// TestForcedShortestDistanceExecutorPreservesDistanceThroughWithAlias verifies that scalar distance survives aliasing across WITH.
 func TestForcedShortestDistanceExecutorPreservesDistanceThroughWithAlias(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
@@ -987,6 +1032,7 @@ func TestForcedShortestDistanceExecutorPreservesDistanceThroughWithAlias(t *test
 	require.Contains(t, formatted, "s0.i0 as distance")
 }
 
+// requireTraversalTargetOutcome returns the diagnostic outcome for one lowering and traversal target.
 func requireTraversalTargetOutcome(t *testing.T, summary OptimizationSummary, lowering string, target optimize.TraversalStepTarget) TargetLoweringOutcome {
 	t.Helper()
 
@@ -1000,6 +1046,7 @@ func requireTraversalTargetOutcome(t *testing.T, summary OptimizationSummary, lo
 	return TargetLoweringOutcome{}
 }
 
+// requireSQLContainsInOrder requires each SQL fragment to occur after the preceding fragment.
 func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 	t.Helper()
 
@@ -1011,6 +1058,7 @@ func requireSQLContainsInOrder(t *testing.T, sql string, parts ...string) {
 	}
 }
 
+// TestOptimizerSafetyCountStoreFastPathUsesBaseNodeCount verifies unconstrained node counts use the graph-wide node count source.
 func TestOptimizerSafetyCountStoreFastPathUsesBaseNodeCount(t *testing.T) {
 	t.Parallel()
 
@@ -1061,6 +1109,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
 	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
+// TestOptimizerSafetyCountStoreFastPathUsesSparseEdgeKindCount verifies a typed edge count reads only the selected kind's sparse count.
 func TestOptimizerSafetyCountStoreFastPathUsesSparseEdgeKindCount(t *testing.T) {
 	t.Parallel()
 
@@ -1106,6 +1155,7 @@ func TestOptimizerSafetyCountStoreFastPathSupportsEdgeCountStar(t *testing.T) {
 	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
 }
 
+// TestOptimizerSafetyFixedSuffixQueryPrunesExpansionEdgeCarry verifies that unobserved expansion edges are omitted from recursive state.
 func TestOptimizerSafetyFixedSuffixQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	t.Parallel()
 
@@ -1146,6 +1196,7 @@ func TestOptimizerSafetyFixedSuffixQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	)
 }
 
+// assertOptimizerSafetyRelationshipStaysComposite requires a relationship consumer to retain composite rather than scalar-ID state.
 func assertOptimizerSafetyRelationshipStaysComposite(t *testing.T, cypherQuery string) {
 	t.Helper()
 
@@ -1246,6 +1297,7 @@ RETURN p
 	requireOptimizationLowering(t, translation.Optimization, "ExpandIntoDetection")
 }
 
+// TestOptimizerSafetyReordersIndependentNodeAnchor verifies an independent selective node can become the traversal anchor without changing semantics.
 func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
 	t.Parallel()
 
@@ -1267,6 +1319,7 @@ func TestOptimizerSafetyReordersIndependentNodeAnchor(t *testing.T) {
 	require.Contains(t, normalizedQuery, "(s1.n0).id = e0.end_id")
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownForFixedSuffix verifies an eligible fixed suffix is pushed into terminal expansion filtering.
 func TestOptimizerSafetyExpansionTerminalPushdownForFixedSuffix(t *testing.T) {
 	t.Parallel()
 
@@ -1281,7 +1334,8 @@ RETURN p
 	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
 }
 
-func TestOptimizerSafetyReversalAnchorsTerminalPredicateAtDriveRoot(t *testing.T) {
+// TestOptimizerSafetySuffixPredicatePlacementStaysInsideTerminalExists verifies suffix predicates remain scoped to the terminal existence check.
+func TestOptimizerSafetySuffixPredicatePlacementStaysInsideTerminalExists(t *testing.T) {
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
@@ -1302,6 +1356,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [10]::int2[])")
 }
 
+// TestOptimizerSafetyPredicatePlacementRecordsExpansionRootConstraint verifies root predicates are recorded and emitted at the expansion root.
 func TestOptimizerSafetyPredicatePlacementRecordsExpansionRootConstraint(t *testing.T) {
 	t.Parallel()
 
@@ -1365,6 +1420,7 @@ RETURN s
 	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 }
 
+// TestOptimizerSafetyContinuationRelationshipsExcludePriorPathRelationships verifies suffix traversal cannot reuse relationships from the expanded prefix.
 func TestOptimizerSafetyContinuationRelationshipsExcludePriorPathRelationships(t *testing.T) {
 	t.Parallel()
 
@@ -1384,6 +1440,7 @@ RETURN p
 	require.Contains(t, fixedPrefixQuery, "e1.id != s0.e0")
 }
 
+// TestOptimizerSafetyDirectionBalancedExpansionDoesNotPlanStaleSuffixPushdown verifies reoriented traversal targets do not retain obsolete suffix decisions.
 func TestOptimizerSafetyDirectionBalancedExpansionDoesNotPlanStaleSuffixPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -1461,6 +1518,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "array [")
 }
 
+// TestOptimizerSafetyExactTwoHopRangePreservesLaterSourceStepTargets verifies exact-range expansion does not renumber later source-step decisions.
 func TestOptimizerSafetyExactTwoHopRangePreservesLaterSourceStepTargets(t *testing.T) {
 	t.Parallel()
 
@@ -1478,6 +1536,7 @@ RETURN a
 	require.NotContains(t, normalizedQuery, "on n2.id = e2.start_id")
 }
 
+// TestOptimizerSafetyExactTwoHopRangeCarriesSyntheticIntermediateNodeID verifies that exact-range lowering retains the intermediate join identity.
 func TestOptimizerSafetyExactTwoHopRangeCarriesSyntheticIntermediateNodeID(t *testing.T) {
 	t.Parallel()
 
@@ -1490,6 +1549,7 @@ RETURN a
 	require.NotContains(t, normalizedQuery, "on n1.id = e1.start_id")
 }
 
+// TestOptimizerSafetyConsecutiveExactRangesUseSourceStepTargets verifies consecutive expansions retain their original source-step coordinates.
 func TestOptimizerSafetyConsecutiveExactRangesUseSourceStepTargets(t *testing.T) {
 	t.Parallel()
 
@@ -1509,6 +1569,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "join edge e2")
 }
 
+// TestOptimizerSafetyExactRangePrefixPreservesSuffixPushdownTargets verifies prefix expansion leaves fixed-suffix decisions keyed to source coordinates.
 func TestOptimizerSafetyExactRangePrefixPreservesSuffixPushdownTargets(t *testing.T) {
 	t.Parallel()
 
@@ -2067,6 +2128,7 @@ func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
 	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name') = i0")
 }
 
+// TestOptimizerSafetyTranslationReportsOptimizerMetadata verifies translation reports planned, applied, and targeted lowering diagnostics.
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -2098,6 +2160,7 @@ RETURN p
 	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownForZeroDepthExpansion verifies terminal filtering preserves the zero-edge expansion alternative.
 func TestOptimizerSafetyExpansionTerminalPushdownForZeroDepthExpansion(t *testing.T) {
 	t.Parallel()
 
@@ -2112,6 +2175,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownForBoundEndpointSuffixChain verifies a bound suffix endpoint is honored inside supplemental search.
 func TestOptimizerSafetyExpansionTerminalPushdownForBoundEndpointSuffixChain(t *testing.T) {
 	t.Parallel()
 
@@ -2137,6 +2201,7 @@ RETURN p
 	)
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownIncludesConstrainedBoundEndpoint verifies bound-endpoint predicates are included in terminal filtering.
 func TestOptimizerSafetyExpansionTerminalPushdownIncludesConstrainedBoundEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -2159,6 +2224,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "(s0.n0).kind_ids operator (pg_catalog.@>)")
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownForBoundDomainSuffix verifies domain-bound suffix nodes remain constrained during supplemental search.
 func TestOptimizerSafetyExpansionTerminalPushdownForBoundDomainSuffix(t *testing.T) {
 	t.Parallel()
 
@@ -2175,6 +2241,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "e1.end_id = (s0.n0).id")
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownForInboundFixedSuffix verifies inbound suffix direction is preserved in terminal filtering.
 func TestOptimizerSafetyExpansionTerminalPushdownForInboundFixedSuffix(t *testing.T) {
 	t.Parallel()
 
@@ -2189,6 +2256,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>)")
 }
 
+// TestOptimizerSafetyExpansionTerminalPushdownSkipsDirectionlessSuffix verifies undirected suffixes are excluded from terminal-filter pushdown.
 func TestOptimizerSafetyExpansionTerminalPushdownSkipsDirectionlessSuffix(t *testing.T) {
 	t.Parallel()
 

@@ -64,14 +64,26 @@ func TestSelfLoopExpansionCarriedNodeStaysBound(t *testing.T) {
 }
 
 const (
+	// shortestPathSeedTestPreviousFrame identifies the frame that supplies bound endpoint values in seed tests.
 	shortestPathSeedTestPreviousFrame pgsql.Identifier = "s0"
-	shortestPathSeedTestFrame         pgsql.Identifier = "s1"
-	shortestPathSeedTestRoot          pgsql.Identifier = "n0"
-	shortestPathSeedTestTerminal      pgsql.Identifier = "n1"
-	shortestPathSeedTestOther         pgsql.Identifier = "x"
-	shortestPathSeedTestEdge          pgsql.Identifier = "e0"
+
+	// shortestPathSeedTestFrame identifies the generated shortest-path frame in seed tests.
+	shortestPathSeedTestFrame pgsql.Identifier = "s1"
+
+	// shortestPathSeedTestRoot identifies the root-node binding in seed tests.
+	shortestPathSeedTestRoot pgsql.Identifier = "n0"
+
+	// shortestPathSeedTestTerminal identifies the terminal-node binding in seed tests.
+	shortestPathSeedTestTerminal pgsql.Identifier = "n1"
+
+	// shortestPathSeedTestOther identifies an unrelated binding used to test locality rejection.
+	shortestPathSeedTestOther pgsql.Identifier = "x"
+
+	// shortestPathSeedTestEdge identifies the relationship binding in seed tests.
+	shortestPathSeedTestEdge pgsql.Identifier = "e0"
 )
 
+// TestShortestDistanceColumnsCompactsOnlyIDOnlyState verifies that compact state omits root ID only when endpoint identity is already carried.
 func TestShortestDistanceColumnsCompactsOnlyIDOnlyState(t *testing.T) {
 	require.Equal(t,
 		[]pgsql.Identifier{expansionNextID, expansionDepth},
@@ -83,6 +95,7 @@ func TestShortestDistanceColumnsCompactsOnlyIDOnlyState(t *testing.T) {
 	)
 }
 
+// shortestPathSeedTestBoundColumn references a composite field from the fixture's preceding frame.
 func shortestPathSeedTestBoundColumn(nodeIdentifier pgsql.Identifier, column pgsql.Identifier) pgsql.RowColumnReference {
 	return pgsql.RowColumnReference{
 		Identifier: pgsql.CompoundIdentifier{shortestPathSeedTestPreviousFrame, nodeIdentifier},
@@ -90,6 +103,7 @@ func shortestPathSeedTestBoundColumn(nodeIdentifier pgsql.Identifier, column pgs
 	}
 }
 
+// shortestPathSeedTestLocalFunctionPredicate builds a deterministic predicate that depends only on the selected node.
 func shortestPathSeedTestLocalFunctionPredicate(nodeIdentifier pgsql.Identifier, value string) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		pgsql.FunctionCall{
@@ -104,6 +118,7 @@ func shortestPathSeedTestLocalFunctionPredicate(nodeIdentifier pgsql.Identifier,
 	)
 }
 
+// shortestPathSeedTestExternalPredicate builds a predicate that deliberately depends on an unrelated binding.
 func shortestPathSeedTestExternalPredicate(nodeIdentifier pgsql.Identifier) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		shortestPathSeedTestBoundColumn(nodeIdentifier, pgsql.ColumnID),
@@ -112,6 +127,7 @@ func shortestPathSeedTestExternalPredicate(nodeIdentifier pgsql.Identifier) pgsq
 	)
 }
 
+// newShortestPathSeedTestBuilder creates a shortest-path builder with deterministic fixture bindings and parameters.
 func newShortestPathSeedTestBuilder(leftBound, rightBound bool) (*ExpansionBuilder, *Expansion) {
 	previousFrame := &Frame{
 		Binding: &BoundIdentifier{Identifier: shortestPathSeedTestPreviousFrame},
@@ -179,6 +195,7 @@ func TestShortestPathSelfEndpointGuardsUseCaseErrorHelper(t *testing.T) {
 	require.NotContains(t, endpointPairFilterGuard, " / ")
 }
 
+// TestForwardPrimerSkipsSelfEndpointGuardWhenZeroDepthIsAllowed verifies that a zero-length path may use the same root and terminal.
 func TestForwardPrimerSkipsSelfEndpointGuardWhenZeroDepthIsAllowed(t *testing.T) {
 	builder, expansionModel := newShortestPathSeedTestBuilder(false, false)
 	expansionModel.UseMaterializedEndpointPairFilter = true

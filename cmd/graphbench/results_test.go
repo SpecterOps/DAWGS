@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAppendJSONLFileValidatesRunIdentityAndDuplicateRounds verifies append-only accumulation across rounds while rejecting duplicate keys and changes to arm or run UUID.
 func TestAppendJSONLFileValidatesRunIdentityAndDuplicateRounds(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rounds.jsonl")
 	record := func(round int, arm, runUUID, binary string) CaseResult {
@@ -53,12 +54,14 @@ func TestAppendJSONLFileValidatesRunIdentityAndDuplicateRounds(t *testing.T) {
 	require.ErrorContains(t, appendJSONLFile(path, []CaseResult{record(3, "candidate", "run-2", "binary")}), "run identity mismatch")
 }
 
+// TestComputeDurationStatsRejectsEmptyDurations verifies that aggregate statistics cannot be fabricated without at least one timing observation.
 func TestComputeDurationStatsRejectsEmptyDurations(t *testing.T) {
 	_, err := computeDurationStats(nil)
 
 	require.ErrorContains(t, err, "at least one duration")
 }
 
+// TestComputeDurationStatsCopiesAndSortsDurations verifies aggregate values, preservation of input/sample order, default warm labels, backend metadata, and round relabeling.
 func TestComputeDurationStatsCopiesAndSortsDurations(t *testing.T) {
 	durations := []time.Duration{
 		30 * time.Millisecond,
@@ -112,6 +115,7 @@ func TestComputeDurationStatsCopiesAndSortsDurations(t *testing.T) {
 	require.Equal(t, 7, stats.Samples[2].Round)
 }
 
+// TestComputeDurationStatsUsesNearestRankP95 verifies that twenty ordered samples select the nineteenth value for P95 while retaining the twentieth as maximum.
 func TestComputeDurationStatsUsesNearestRankP95(t *testing.T) {
 	durations := make([]time.Duration, 20)
 	for idx := range durations {
@@ -125,6 +129,7 @@ func TestComputeDurationStatsUsesNearestRankP95(t *testing.T) {
 	require.Equal(t, 20*time.Millisecond, stats.Max)
 }
 
+// TestCheckStateExpectationChecksRowsAndScalar verifies simultaneous row/scalar acceptance and a scalar-specific diagnostic on mismatch.
 func TestCheckStateExpectationChecksRowsAndScalar(t *testing.T) {
 	rowCount := int64(1)
 	scalar := int64(3)
@@ -150,6 +155,7 @@ func TestCheckStateExpectationChecksRowsAndScalar(t *testing.T) {
 	), "expected scalar integer 4")
 }
 
+// TestValidateBackendObservationsPreservesDuplicateStableRows verifies multiset semantics: equal duplicate rows match across backends, but dropping one duplicate does not.
 func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
 	records := []CaseResult{
 		{
@@ -175,6 +181,7 @@ func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
 	require.ErrorContains(t, validateBackendObservations(records), "backend observations differ")
 }
 
+// TestNewCaseResultOnlyCrossChecksExplicitPathRows verifies that path observations become stable cross-backend evidence only when an exact expected path set is declared.
 func TestNewCaseResultOnlyCrossChecksExplicitPathRows(t *testing.T) {
 	record := newCaseResult(ScaleCase{
 		Expected: ExpectedResult{

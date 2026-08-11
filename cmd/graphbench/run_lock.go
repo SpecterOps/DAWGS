@@ -12,14 +12,13 @@ import (
 	"syscall"
 )
 
-// destructiveRunLock prevents two local GraphBench processes from clearing
-// and reloading the same benchmark targets concurrently. Distributed runners
-// must additionally allocate a unique disposable database, as documented by
-// the command.
+// destructiveRunLock holds the filesystem lock that serializes destructive benchmark runs.
 type destructiveRunLock struct {
+	// file owns the lock file descriptor until the destructive run completes.
 	file *os.File
 }
 
+// acquireDestructiveRunLock acquires a nonblocking filesystem lock that serializes destructive runs.
 func acquireDestructiveRunLock(path string) (*destructiveRunLock, error) {
 	if path == "" {
 		return nil, fmt.Errorf("destructive lock path must not be empty")
@@ -41,6 +40,7 @@ func acquireDestructiveRunLock(path string) (*destructiveRunLock, error) {
 	return &destructiveRunLock{file: file}, nil
 }
 
+// Close releases the advisory process lock and closes its file descriptor.
 func (s *destructiveRunLock) Close() error {
 	if s == nil || s.file == nil {
 		return nil

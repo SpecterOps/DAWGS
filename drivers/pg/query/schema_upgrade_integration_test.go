@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSchemaUpgradeRemovesLegacyPathMaterializerOverloads verifies an upgrade drops obsolete unscoped path functions while retaining graph-scoped signatures.
 func TestSchemaUpgradeRemovesLegacyPathMaterializerOverloads(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {

@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLoadScaleCorpus verifies that every loaded case identifies its source, declares PostgreSQL support status, and excludes the reference-only AGE mode.
 func TestLoadScaleCorpus(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -39,6 +40,7 @@ func TestLoadScaleCorpus(t *testing.T) {
 	}
 }
 
+// TestValidateScaleCaseRequiresConsistentUnsupportedModes verifies that a backend cannot be both runnable and unsupported and that every exclusion has a reason.
 func TestValidateScaleCaseRequiresConsistentUnsupportedModes(t *testing.T) {
 	testCase := ScaleCase{
 		Name:             "directionless",
@@ -57,6 +59,7 @@ func TestValidateScaleCaseRequiresConsistentUnsupportedModes(t *testing.T) {
 	require.ErrorContains(t, validateScaleCase(testCase), "requires a reason")
 }
 
+// TestScaleCorpusDatasets verifies that corpus dataset discovery removes repeated names and returns a deterministic lexical order.
 func TestScaleCorpusDatasets(t *testing.T) {
 	corpus := ScaleCorpus{
 		Cases: []ScaleCase{
@@ -75,6 +78,7 @@ func TestScaleCorpusDatasets(t *testing.T) {
 	require.Equal(t, []string{"base", "fixed_suffix_expansion_fanout"}, scaleCorpusDatasets(corpus))
 }
 
+// TestGeneratedReconciliationDatasetRegistersThirtyKinds verifies that reconciliation generation exposes every RecKind01 through RecKind30 relationship kind.
 func TestGeneratedReconciliationDatasetRegistersThirtyKinds(t *testing.T) {
 	doc, err := parseDataset("unused", testutil.ReconciliationScaleDataset)
 	require.NoError(t, err)
@@ -85,6 +89,7 @@ func TestGeneratedReconciliationDatasetRegistersThirtyKinds(t *testing.T) {
 	}
 }
 
+// TestGeneratedTrustPruningDatasetRegistersProductionShapes verifies that trust-pruning fixtures contain the domain, candidate, same-forest, cross-forest, and batch labels used by production queries.
 func TestGeneratedTrustPruningDatasetRegistersProductionShapes(t *testing.T) {
 	doc, err := parseDataset("unused", testutil.TrustPruningScaleDataset)
 	require.NoError(t, err)
@@ -97,6 +102,7 @@ func TestGeneratedTrustPruningDatasetRegistersProductionShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("PruneBatch"))
 }
 
+// TestGeneratedHopDatasetRegistersThirtyKindsAndEndpointSets verifies that hop fixtures expose both endpoint node classes, all thirty numbered relationship kinds, and the set-membership edge.
 func TestGeneratedHopDatasetRegistersThirtyKindsAndEndpointSets(t *testing.T) {
 	doc, err := parseDataset("unused", testutil.HopScaleDataset)
 	require.NoError(t, err)
@@ -110,6 +116,7 @@ func TestGeneratedHopDatasetRegistersThirtyKindsAndEndpointSets(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("HopSetEdge"))
 }
 
+// TestGeneratedScanLookupDatasetRegistersWideAndLargeShapes verifies that scan fixtures contain the base, role, and hydration nodes plus every relationship kind used by wide lookup plans.
 func TestGeneratedScanLookupDatasetRegistersWideAndLargeShapes(t *testing.T) {
 	doc, err := parseDataset("unused", testutil.ScanLookupScaleDataset)
 	require.NoError(t, err)
@@ -125,6 +132,7 @@ func TestGeneratedScanLookupDatasetRegistersWideAndLargeShapes(t *testing.T) {
 	}
 }
 
+// TestGeneratedShortestPathDatasetRegistersMatrixShapes verifies that shortest-path generation produces nonempty nodes and both generic and typed traversal relationships.
 func TestGeneratedShortestPathDatasetRegistersMatrixShapes(t *testing.T) {
 	doc, err := parseDataset("unused", testutil.ShortestPathScaleDataset)
 	require.NoError(t, err)
@@ -136,6 +144,7 @@ func TestGeneratedShortestPathDatasetRegistersMatrixShapes(t *testing.T) {
 	require.NotEmpty(t, doc.Graph.Nodes)
 }
 
+// TestGeneratedFixedSuffixExpansionDatasetRegistersSuffixAndDecoyShapes verifies that fixed-suffix fixtures register all path stages and the wrong-entry decoy needed to detect over-broad matching.
 func TestGeneratedFixedSuffixExpansionDatasetRegistersSuffixAndDecoyShapes(t *testing.T) {
 	doc, err := parseDataset("unused", testutil.FixedSuffixExpansionScaleDataset)
 	require.NoError(t, err)
@@ -149,6 +158,7 @@ func TestGeneratedFixedSuffixExpansionDatasetRegistersSuffixAndDecoyShapes(t *te
 	}
 }
 
+// TestValidateScaleCaseRequiresCompleteWriteScenario verifies that destructive cases include at least one post-state assertion after selection and affected-count expectations.
 func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 	zero := int64(0)
 	testCase := ScaleCase{
@@ -175,6 +185,7 @@ func TestValidateScaleCaseRequiresCompleteWriteScenario(t *testing.T) {
 	require.ErrorContains(t, validateScaleCase(testCase), "post_state is required")
 }
 
+// TestSelectScaleCorpusUsesExactSelectorsAndMarksDiagnostics verifies that partial dataset/tag selection records omitted declarations, marks the manifest diagnostic-only, and rejects unresolved exact selectors.
 func TestSelectScaleCorpusUsesExactSelectorsAndMarksDiagnostics(t *testing.T) {
 	corpus := ScaleCorpus{
 		Cases: []ScaleCase{
@@ -215,6 +226,7 @@ func TestSelectScaleCorpusUsesExactSelectorsAndMarksDiagnostics(t *testing.T) {
 	require.ErrorContains(t, err, "unknown case selector")
 }
 
+// TestSelectScaleCorpusRejectsAmbiguousExactNames verifies that a bare case selector cannot choose between identically named cases from different datasets.
 func TestSelectScaleCorpusRejectsAmbiguousExactNames(t *testing.T) {
 	corpus := ScaleCorpus{
 		Cases: []ScaleCase{{

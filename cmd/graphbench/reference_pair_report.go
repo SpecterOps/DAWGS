@@ -14,56 +14,98 @@ import (
 	"time"
 )
 
+// referencePairReportVersion identifies the serialized schema revision for reference pair report.
 const referencePairReportVersion = 2
 
 const (
+	// referencePairProtocolConfirmation requires 20 warmups, 10 to 20 rounds, and 50 samples per arm and round.
 	referencePairProtocolConfirmation = "confirmation"
-	referencePairProtocolDiscovery    = "discovery"
+
+	// referencePairProtocolDiscovery permits exploratory comparison with five warmups, five rounds, and ten samples per arm and round.
+	referencePairProtocolDiscovery = "discovery"
 )
 
+// ReferencePairOptions selects two reference arms and the statistical protocol used for their paired comparison.
 type ReferencePairOptions struct {
-	Seed           int64
-	Confidence     float64
+	// Seed controls deterministic random sampling.
+	Seed int64
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64
+	// BootstrapCount sets the number of bootstrap resamples.
 	BootstrapCount int
-	BaselineName   string
-	CandidateName  string
-	Protocol       string
+	// BaselineName identifies the reference arm treated as the comparison baseline.
+	BaselineName string
+	// CandidateName identifies the reference arm evaluated against the baseline.
+	CandidateName string
+	// Protocol identifies the measurement protocol.
+	Protocol string
 }
 
+// ReferencePairCase reports identity, sample, ratio, and absolute-change evidence for one reference-arm pair.
 type ReferencePairCase struct {
-	Dataset                     string           `json:"dataset"`
-	Name                        string           `json:"name"`
-	Rounds                      int              `json:"rounds"`
-	BaselineArchitecture        string           `json:"baseline_architecture"`
-	CandidateArchitecture       string           `json:"candidate_architecture"`
-	BaselineBoundary            string           `json:"baseline_boundary"`
-	CandidateBoundary           string           `json:"candidate_boundary"`
-	BaselineSemanticValidation  string           `json:"baseline_semantic_validation"`
-	CandidateSemanticValidation string           `json:"candidate_semantic_validation"`
-	BaselineSamples             int              `json:"baseline_samples"`
-	CandidateSamples            int              `json:"candidate_samples"`
-	MedianRatio                 RatioInterval    `json:"median_ratio"`
-	P95Ratio                    RatioInterval    `json:"p95_ratio"`
-	MedianChange                DurationInterval `json:"median_change"`
-	BaselineAAResolution        time.Duration    `json:"baseline_aa_resolution"`
-	CandidateAAResolution       time.Duration    `json:"candidate_aa_resolution"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Rounds records the number of independent measurement rounds.
+	Rounds int `json:"rounds"`
+	// BaselineArchitecture records the executor architecture declared by the baseline arm.
+	BaselineArchitecture string `json:"baseline_architecture"`
+	// CandidateArchitecture records the executor architecture declared by the candidate arm.
+	CandidateArchitecture string `json:"candidate_architecture"`
+	// BaselineBoundary records the portion of baseline execution included in its latency samples.
+	BaselineBoundary string `json:"baseline_boundary"`
+	// CandidateBoundary records the portion of candidate execution included in its latency samples.
+	CandidateBoundary string `json:"candidate_boundary"`
+	// BaselineSemanticValidation identifies the observation contract enforced for the baseline arm.
+	BaselineSemanticValidation string `json:"baseline_semantic_validation"`
+	// CandidateSemanticValidation identifies the observation contract enforced for the candidate arm.
+	CandidateSemanticValidation string `json:"candidate_semantic_validation"`
+	// BaselineSamples records warm timing samples available from the baseline arm.
+	BaselineSamples int `json:"baseline_samples"`
+	// CandidateSamples records warm timing samples available from the candidate arm.
+	CandidateSamples int `json:"candidate_samples"`
+	// MedianRatio reports the candidate-to-baseline median latency ratio and confidence bounds.
+	MedianRatio RatioInterval `json:"median_ratio"`
+	// P95Ratio reports the candidate-to-baseline P95 latency ratio and confidence bounds.
+	P95Ratio RatioInterval `json:"p95_ratio"`
+	// MedianChange reports the absolute median latency difference and confidence bounds.
+	MedianChange DurationInterval `json:"median_change"`
+	// BaselineAAResolution records the baseline arm's A/A-derived absolute noise floor.
+	BaselineAAResolution time.Duration `json:"baseline_aa_resolution"`
+	// CandidateAAResolution records the candidate arm's A/A-derived absolute noise floor.
+	CandidateAAResolution time.Duration `json:"candidate_aa_resolution"`
 }
 
+// ReferencePairReport contains the input identity, protocol thresholds, and results of paired reference analysis.
 type ReferencePairReport struct {
-	Version        int                 `json:"version"`
-	Seed           int64               `json:"seed"`
-	Confidence     float64             `json:"confidence_level"`
-	ArtifactSHA256 string              `json:"artifact_sha256"`
-	BaselineName   string              `json:"baseline_name"`
-	CandidateName  string              `json:"candidate_name"`
-	Protocol       string              `json:"protocol"`
-	MinimumWarmups int                 `json:"minimum_warmups"`
-	MinimumRounds  int                 `json:"minimum_rounds"`
-	MaximumRounds  int                 `json:"maximum_rounds"`
-	MinimumSamples int                 `json:"minimum_samples_per_round"`
-	Cases          []ReferencePairCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Seed controls deterministic random sampling.
+	Seed int64 `json:"seed"`
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64 `json:"confidence_level"`
+	// ArtifactSHA256 identifies the exact input artifact summarized by the report.
+	ArtifactSHA256 string `json:"artifact_sha256"`
+	// BaselineName identifies the reference arm treated as the comparison baseline.
+	BaselineName string `json:"baseline_name"`
+	// CandidateName identifies the reference arm evaluated against the baseline.
+	CandidateName string `json:"candidate_name"`
+	// Protocol identifies the measurement protocol.
+	Protocol string `json:"protocol"`
+	// MinimumWarmups records the minimum untimed iterations required for each compared arm.
+	MinimumWarmups int `json:"minimum_warmups"`
+	// MinimumRounds records the minimum independent rounds required for comparison.
+	MinimumRounds int `json:"minimum_rounds"`
+	// MaximumRounds records the maximum rounds accepted by the selected protocol.
+	MaximumRounds int `json:"maximum_rounds"`
+	// MinimumSamples records the minimum warm samples required from each arm and round.
+	MinimumSamples int `json:"minimum_samples_per_round"`
+	// Cases contains paired statistical evidence for each workload present in the selected reference arms.
+	Cases []ReferencePairCase `json:"cases"`
 }
 
+// buildReferencePairReport validates two reference arms and computes paired ratio and duration intervals by case.
 func buildReferencePairReport(records []CaseResult, options ReferencePairOptions) (ReferencePairReport, error) {
 	if options.Confidence <= 0 || options.Confidence >= 1 {
 		return ReferencePairReport{}, fmt.Errorf("confidence level must be between 0 and 1")
@@ -84,15 +126,36 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 	} else if protocol != referencePairProtocolConfirmation {
 		return ReferencePairReport{}, fmt.Errorf("unsupported reference-pair protocol %q", protocol)
 	}
+	// pairSeries groups the two reference arms and the identities that must remain stable across rounds.
 	type pairSeries struct {
-		baseline, candidate                             roundSamples
-		baselineArchitecture, candidateArchitecture     string
-		baselineBoundary, candidateBoundary             string
-		baselineValidation, candidateValidation         string
-		baselineImplementation, candidateImplementation string
-		baselineSQLFingerprint, candidateSQLFingerprint string
-		binaryIdentity                                  string
-		baselineFirst                                   map[int]bool
+		// baseline groups duration samples from the designated baseline arm by round.
+		baseline roundSamples
+		// candidate groups duration samples from the designated candidate arm by round.
+		candidate roundSamples
+		// baselineArchitecture identifies the execution architecture reported by the baseline arm.
+		baselineArchitecture string
+		// candidateArchitecture identifies the execution architecture reported by the candidate arm.
+		candidateArchitecture string
+		// baselineBoundary identifies the measurement boundary reported by the baseline arm.
+		baselineBoundary string
+		// candidateBoundary identifies the measurement boundary reported by the candidate arm.
+		candidateBoundary string
+		// baselineValidation retains the baseline observation contract that must remain stable across rounds.
+		baselineValidation string
+		// candidateValidation retains the candidate observation contract that must remain stable across rounds.
+		candidateValidation string
+		// baselineImplementation identifies the baseline reference implementation.
+		baselineImplementation string
+		// candidateImplementation identifies the candidate reference implementation.
+		candidateImplementation string
+		// baselineSQLFingerprint identifies the normalized SQL executed by the baseline arm.
+		baselineSQLFingerprint string
+		// candidateSQLFingerprint identifies the normalized SQL executed by the candidate arm.
+		candidateSQLFingerprint string
+		// binaryIdentity binds all paired rounds to the same executable and source state.
+		binaryIdentity string
+		// baselineFirst records by round whether the baseline arm executed before the candidate.
+		baselineFirst map[int]bool
 	}
 	series := map[performanceKey]*pairSeries{}
 	seen := map[performanceKey]map[int]struct{}{}
@@ -139,6 +202,7 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 			return ReferencePairReport{}, fmt.Errorf("%s/%s has duplicate round %d", record.Dataset, record.Name, record.Environment.Round)
 		}
 		seen[key][record.Environment.Round] = struct{}{}
+
 		if series[key] == nil {
 			series[key] = &pairSeries{
 				baseline:                roundSamples{},
@@ -164,6 +228,7 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 			series[key].binaryIdentity != binaryIdentity {
 			return ReferencePairReport{}, fmt.Errorf("%s/%s reference-pair identity changed across rounds", record.Dataset, record.Name)
 		}
+
 		series[key].baselineFirst[record.Environment.Round] = baseline.MeasurementOrder < candidate.MeasurementOrder
 		for _, sample := range baseline.Stats.Samples {
 			if sample.Classification == "warm" && sample.Duration > 0 {
@@ -251,6 +316,7 @@ func buildReferencePairReport(records []CaseResult, options ReferencePairOptions
 	return report, nil
 }
 
+// findReference returns the named PostgreSQL reference result or nil when it is absent.
 func findReference(references []PostgresReferenceResult, name string) *PostgresReferenceResult {
 	for idx := range references {
 		if references[idx].Name == name {
@@ -260,6 +326,7 @@ func findReference(references []PostgresReferenceResult, name string) *PostgresR
 	return nil
 }
 
+// createReferencePairReport loads benchmark records, builds a reference-pair report, and writes it as JSON.
 func createReferencePairReport(artifactPath, outputPath string, options ReferencePairOptions) error {
 	records, err := readJSONLFile(artifactPath)
 	if err != nil {

@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testRule is a configurable optimizer rule used to assert rewrite ordering and error propagation.
 type testRule struct {
+	// name is the stable rule name returned to the optimizer.
 	name string
 }
 
@@ -25,6 +27,7 @@ func (s testRule) Apply(plan *Plan) (bool, error) {
 	return false, nil
 }
 
+// testBindingLookup supplies deterministic binding resolution to optimizer tests.
 type testBindingLookup map[pgsql.Identifier]pgsql.DataType
 
 func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
@@ -32,6 +35,7 @@ func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.Da
 	return dataType, found
 }
 
+// TestOptimizeCopiesAndAnalyzesQuery verifies that optimization preserves the input AST and records query-part metadata.
 func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	t.Parallel()
 
@@ -52,6 +56,7 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	require.Len(t, plan.PredicateAttachments, 2)
 }
 
+// TestFieldRequirementAnalysisDistinguishesObservationBoundaries verifies that each consumer requests only the binding fields it observes.
 func TestFieldRequirementAnalysisDistinguishesObservationBoundaries(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +84,7 @@ func TestFieldRequirementAnalysisDistinguishesObservationBoundaries(t *testing.T
 	require.NotContains(t, bySymbol["p"].Fields, FieldRequirementFullPath)
 }
 
+// TestFieldRequirementAnalysisExpandsGreedyProjection verifies that RETURN * requires complete representations of visible bindings.
 func TestFieldRequirementAnalysisExpandsGreedyProjection(t *testing.T) {
 	t.Parallel()
 
@@ -107,6 +113,7 @@ func TestFieldRequirementAnalysisExpandsGreedyProjection(t *testing.T) {
 	require.Equal(t, ShortestPathObservationOnePath, plan.LoweringPlan.ShortestPathExecutor[0].ObservationMode)
 }
 
+// TestFieldRequirementAnalysisTreatsWithGreedyProjectionAsFullObservation verifies that WITH * prevents scalar-only path state.
 func TestFieldRequirementAnalysisTreatsWithGreedyProjectionAsFullObservation(t *testing.T) {
 	t.Parallel()
 
@@ -130,6 +137,7 @@ func TestFieldRequirementAnalysisTreatsWithGreedyProjectionAsFullObservation(t *
 	require.Fail(t, "missing path field-requirement decision")
 }
 
+// TestOptimizePlansFixedSuffixFanoutRewrite verifies that an eligible terminal suffix receives supplemental pushdown metadata.
 func TestOptimizePlansFixedSuffixFanoutRewrite(t *testing.T) {
 	t.Parallel()
 
@@ -251,6 +259,7 @@ func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *te
 	require.Empty(t, plan.PredicateAttachments)
 }
 
+// TestLoweringPlanReportsProjectionPruning verifies that unused traversal bindings produce explicit pruning decisions.
 func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
 	t.Parallel()
 
@@ -575,6 +584,7 @@ func TestLoweringPlanReportsExactTwoHopRangeExpansion(t *testing.T) {
 	}}, plan.LoweringPlan.ExactRangeExpansion)
 }
 
+// TestExactRangeDependentPlanningRequiresDecision verifies that downstream planning changes only after exact-range expansion is selected.
 func TestExactRangeDependentPlanningRequiresDecision(t *testing.T) {
 	t.Parallel()
 
@@ -812,6 +822,7 @@ func TestLoweringPlanSkipsPathRelationshipPredicateAfterWithProjection(t *testin
 	require.Empty(t, plan.LoweringPlan.PathRelationshipPredicate)
 }
 
+// TestLoweringPlanReportsExpansionSuffixPushdown verifies that an eligible fixed suffix produces a supplemental-search decision.
 func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -839,6 +850,7 @@ func TestLoweringPlanReportsExpansionSuffixPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+// TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy verifies that eligible suffix topology remains on the incumbent strategy unless qualified.
 func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) {
 	t.Parallel()
 
@@ -880,6 +892,7 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 	require.Equal(t, "outbound", decision.LogicalDirection)
 }
 
+// TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith verifies guarded endpoint seeding after a preceding WITH query part.
 func TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
@@ -914,10 +927,14 @@ func TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith(t *testing.
 	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "single_variable_expansion_in_region", Eligible: true})
 }
 
+// TestGuardedEndpointSeededExpansionFallbackReasons verifies stable rejection reasons for unsafe endpoint-seeded shapes.
 func TestGuardedEndpointSeededExpansionFallbackReasons(t *testing.T) {
 	for _, testCase := range []struct {
-		name   string
-		query  string
+		// name labels the structural rejection case.
+		name string
+		// query produces the endpoint-seeding candidate under test.
+		query string
+		// reason is the expected stable fallback code.
 		reason string
 	}{
 		{name: "terminal not selective", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) RETURN p`, reason: ExpansionSearchFallbackTerminalNotSelective},
@@ -943,6 +960,7 @@ func TestGuardedEndpointSeededExpansionFallbackReasons(t *testing.T) {
 	}
 }
 
+// TestGuardedEndpointSeededExpansionAcceptsTerminalIDEquality verifies that a singleton terminal ID is a selective reverse-search seed.
 func TestGuardedEndpointSeededExpansionAcceptsTerminalIDEquality(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..8]->(g)
@@ -959,6 +977,7 @@ func TestGuardedEndpointSeededExpansionAcceptsTerminalIDEquality(t *testing.T) {
 	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
 }
 
+// TestFixedSuffixSearchRejectsPredicateFunctionReevaluation verifies that reordered function evaluation disqualifies suffix search.
 func TestFixedSuffixSearchRejectsPredicateFunctionReevaluation(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -981,10 +1000,14 @@ func TestFixedSuffixSearchRejectsPredicateFunctionReevaluation(t *testing.T) {
 	})
 }
 
+// TestExpansionSearchObservationUsesExternalFieldRequirements verifies that downstream field requirements select the search observation mode.
 func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
 	for _, testCase := range []struct {
-		name        string
-		projection  string
+		// name labels the downstream observation form.
+		name string
+		// projection contains the downstream expression being classified.
+		projection string
+		// observation is the expected search-state representation.
 		observation ExpansionSearchObservationMode
 	}{
 		{
@@ -1016,6 +1039,7 @@ func TestExpansionSearchObservationUsesExternalFieldRequirements(t *testing.T) {
 	}
 }
 
+// TestExpansionSearchFinalizationRejectsVariableExpansionAcrossWith verifies that multiple statement-wide expansions prevent specialized search.
 func TestExpansionSearchFinalizationRejectsVariableExpansionAcrossWith(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root:ExpansionRoot)-[:Expand*0..16]->()-[:EnterSuffix]->(:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
@@ -1031,12 +1055,16 @@ func TestExpansionSearchFinalizationRejectsVariableExpansionAcrossWith(t *testin
 	require.False(t, plan.LoweringPlan.ExpansionSearchStrategy[0].StructurallyEligible)
 }
 
+// TestLoweringPlanReportsStableFixedSuffixSearchFallbackCodes verifies diagnostic codes for structurally unsafe suffix searches.
 func TestLoweringPlanReportsStableFixedSuffixSearchFallbackCodes(t *testing.T) {
 	t.Parallel()
 
 	for _, testCase := range []struct {
-		name   string
-		query  string
+		// name labels the structural rejection case.
+		name string
+		// query produces the fixed-suffix candidate under test.
+		query string
+		// reason is the expected stable fallback code.
 		reason string
 	}{
 		{
@@ -1147,6 +1175,7 @@ func TestLoweringPlanReportsStableFixedSuffixSearchFallbackCodes(t *testing.T) {
 	}
 }
 
+// TestLoweringPlanIncludesConstrainedBoundEndpointInExpansionSuffix verifies that a pre-bound terminal remains part of suffix metadata.
 func TestLoweringPlanIncludesConstrainedBoundEndpointInExpansionSuffix(t *testing.T) {
 	t.Parallel()
 
@@ -1781,6 +1810,7 @@ func TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates(t *testing
 	}}, plan.LoweringPlan.ShortestPathFilter)
 }
 
+// TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor verifies scalar-distance selection for a statically bound endpoint pair.
 func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -1818,6 +1848,7 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringShortestPathExecutor})
 }
 
+// TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor verifies predecessor-DAG selection for bound all-shortest-path endpoints.
 func TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -1845,19 +1876,34 @@ func TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor(t *testing.T) {
 	require.Empty(t, decision.FallbackReason)
 }
 
+// TestLoweringPlanShortestExecutorV4SelectionMatrix verifies executor selection across direction, depth, kind, and observation combinations.
 func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name, pattern, observation string
-		executor                   ShortestPathExecutor
-		reason                     string
-		direction                  graph.Direction
-		physicalExpansion          ShortestPathPhysicalExpansion
-		topology                   ShortestPathTopologyClassification
-		kindCount                  int
-		untyped                    bool
-		staticEligible             bool
-		selector                   string
+		// name labels the executor-selection case.
+		name string
+		// pattern is the relationship pattern supplied to shortestPath.
+		pattern string
+		// observation is the return expression that consumes the path.
+		observation string
+		// executor is the physical implementation expected from selection.
+		executor ShortestPathExecutor
+		// reason is the expected fallback code when selection is ineligible.
+		reason string
+		// direction is the logical traversal direction recorded in diagnostics.
+		direction graph.Direction
+		// physicalExpansion is the edge endpoint used to advance recursive search.
+		physicalExpansion ShortestPathPhysicalExpansion
+		// topology is the expected physical topology classification.
+		topology ShortestPathTopologyClassification
+		// kindCount is the expected number of statically resolved relationship kinds.
+		kindCount int
+		// untyped reports whether the pattern is expected to omit relationship kinds.
+		untyped bool
+		// staticEligible is the expected static qualification result.
+		staticEligible bool
+		// selector identifies the policy version expected to make the decision.
+		selector string
 	}{
 		{
 			name:              "outbound distance depth 64 two kinds",
@@ -1983,6 +2029,7 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 	}
 }
 
+// TestLoweringPlanShortestExecutorV3PreservesStructuralReasonPrecedence verifies that directionless topology wins over later static failures.
 func TestLoweringPlanShortestExecutorV3PreservesStructuralReasonPrecedence(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -1999,6 +2046,7 @@ func TestLoweringPlanShortestExecutorV3PreservesStructuralReasonPrecedence(t *te
 	require.Equal(t, ShortestPathFallbackDirectionless, decision.FallbackReason)
 }
 
+// TestLoweringPlanShortestExecutorRejectsUnsupportedMinimumDepth verifies rejection of a minimum depth greater than one.
 func TestLoweringPlanShortestExecutorRejectsUnsupportedMinimumDepth(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -2018,6 +2066,7 @@ func TestLoweringPlanShortestExecutorRejectsUnsupportedMinimumDepth(t *testing.T
 	require.Equal(t, ShortestPathFallbackUnsupportedDepth, decision.FallbackReason)
 }
 
+// TestLoweringPlanShortestExecutorRetainsZeroMaximumDepthInDiagnostics verifies that an explicit zero maximum is not omitted from JSON.
 func TestLoweringPlanShortestExecutorRetainsZeroMaximumDepthInDiagnostics(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -2040,6 +2089,7 @@ func TestLoweringPlanShortestExecutorRetainsZeroMaximumDepthInDiagnostics(t *tes
 	require.Contains(t, string(diagnostic), `"maximum_depth":0`)
 }
 
+// TestLoweringPlanShortestExecutorUsesStatementWideCallCount verifies that multiple path calls across query parts disqualify static execution.
 func TestLoweringPlanShortestExecutorUsesStatementWideCallCount(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -2061,6 +2111,7 @@ func TestLoweringPlanShortestExecutorUsesStatementWideCallCount(t *testing.T) {
 	}
 }
 
+// TestLoweringPlanShortestExecutorUsesStatementWideReadOnlyFact verifies that a later mutation disqualifies an earlier shortest-path candidate.
 func TestLoweringPlanShortestExecutorUsesStatementWideReadOnlyFact(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -2080,6 +2131,7 @@ func TestLoweringPlanShortestExecutorUsesStatementWideReadOnlyFact(t *testing.T)
 	require.Equal(t, ShortestPathFallbackMutation, decision.FallbackReason)
 }
 
+// TestLoweringPlanShortestExecutorObservationModeRequiresPathForNodes verifies that nodes(path) requires a path witness.
 func TestLoweringPlanShortestExecutorObservationModeRequiresPathForNodes(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -2092,6 +2144,7 @@ func TestLoweringPlanShortestExecutorObservationModeRequiresPathForNodes(t *test
 	require.Equal(t, ShortestPathObservationOnePath, plan.LoweringPlan.ShortestPathExecutor[0].ObservationMode)
 }
 
+// TestLoweringPlanShortestExecutorRequiresKnownObservationMode verifies that an unbound path result prevents static executor selection.
 func TestLoweringPlanShortestExecutorRequiresKnownObservationMode(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -2108,10 +2161,16 @@ func TestLoweringPlanShortestExecutorRequiresKnownObservationMode(t *testing.T) 
 	require.False(t, decision.StructurallyEligible)
 }
 
+// TestLoweringPlanShortestExecutorRejectsAdditionalRowSources verifies fallback classification for correlated or ambiguous endpoint sources.
 func TestLoweringPlanShortestExecutorRejectsAdditionalRowSources(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name, query, reason string
+		// name labels the additional-row-source case.
+		name string
+		// query produces the shortest-path candidate under test.
+		query string
+		// reason is the expected stable fallback code.
+		reason string
 	}{
 		{
 			name: "unwind source",
@@ -2147,10 +2206,16 @@ func TestLoweringPlanShortestExecutorRejectsAdditionalRowSources(t *testing.T) {
 	}
 }
 
+// TestLoweringPlanRecordsStableShortestExecutorFallbackCodes verifies diagnostic codes for unsupported shortest-path shapes.
 func TestLoweringPlanRecordsStableShortestExecutorFallbackCodes(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name, query, reason string
+		// name labels the unsupported shortest-path shape.
+		name string
+		// query produces the shortest-path candidate under test.
+		query string
+		// reason is the expected stable fallback code.
+		reason string
 	}{
 		{
 			name:   "all shortest",
@@ -2547,6 +2612,7 @@ func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
 	require.Empty(t, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+// TestPredicateAttachmentRuleAssignsSingleBindingPredicates verifies that single-symbol predicates attach to their binding scopes.
 func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 	t.Parallel()
 
@@ -2603,6 +2669,7 @@ func TestPredicateAttachmentRuleKeepsMultiBindingPredicatesAtRegionScope(t *test
 	}, plan.PredicateAttachments[0])
 }
 
+// firstNodeSymbol returns the first node variable encountered during a structural query walk.
 func firstNodeSymbol(readingClause *cypher.ReadingClause) string {
 	if readingClause == nil || readingClause.Match == nil || len(readingClause.Match.Pattern) == 0 {
 		return ""

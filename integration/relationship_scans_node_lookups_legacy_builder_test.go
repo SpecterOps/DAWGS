@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderRelationshipScansAndNodeLookups verifies legacy scan and lookup forms preserve expected records and ordering.
 func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 	wideFixture := regressionTemplateFixture(t, "SCAN-01 through SCAN-04 wide relationship filters")
 	anchoredFixture := regressionTemplateFixture(t, "SCAN-05 through SCAN-08 anchored scans and projections")
@@ -172,9 +173,14 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 
 	t.Run("SCAN-08 both ESC scenarios", func(t *testing.T) {
 		for _, testCase := range []struct {
-			name      string
+			// name identifies the ESC scenario subtest.
+			name string
+
+			// scenarioB selects the alternate endpoint exclusion criteria.
 			scenarioB bool
-			expected  int
+
+			// expected is the number of relationships the scenario should return.
+			expected int
 		}{
 			{
 				name:     "scenario A",
@@ -420,8 +426,13 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 
 	t.Run("LOOKUP-15 direct sequential counts", func(t *testing.T) {
 		for _, testCase := range []struct {
-			family        string
+			// family names the template fixture used by the count subtest.
+			family string
+
+			// expectedNodes is the fixture's expected node count.
 			expectedNodes int64
+
+			// expectedEdges is the fixture's expected relationship count.
 			expectedEdges int64
 		}{
 			{family: "LOOKUP-15 empty graph counts"},
@@ -458,11 +469,20 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 
 	t.Run("LOOKUP-16 four-property LDAP and LDAPS forms", func(t *testing.T) {
 		for _, testCase := range []struct {
-			name       string
-			kind       graph.Kind
-			available  string
+			// name identifies the LDAP or LDAPS property combination.
+			name string
+
+			// kind optionally restricts the matched endpoint kind.
+			kind graph.Kind
+
+			// available names the property that records protocol availability.
+			available string
+
+			// protection names the protocol protection property.
 			protection string
-			expected   string
+
+			// expected is the object ID of the endpoint that should match.
+			expected string
 		}{
 			{
 				name:       "typed LDAP",
@@ -496,6 +516,7 @@ func TestLegacyBuilderRelationshipScansAndNodeLookups(t *testing.T) {
 	})
 }
 
+// scanLookupNineKinds returns the nine synthetic relationship kinds used by wide-kind scan cases.
 func scanLookupNineKinds() graph.Kinds {
 	kinds := make(graph.Kinds, 9)
 	for idx := range kinds {
@@ -504,6 +525,7 @@ func scanLookupNineKinds() graph.Kinds {
 	return kinds
 }
 
+// scanLookupNodeIDs extracts database IDs from a node result slice without reordering it.
 func scanLookupNodeIDs(nodes []*graph.Node) []graph.ID {
 	ids := make([]graph.ID, len(nodes))
 	for idx, node := range nodes {
@@ -512,6 +534,7 @@ func scanLookupNodeIDs(nodes []*graph.Node) []graph.ID {
 	return ids
 }
 
+// scanLookupFixtureIDs maps database IDs to fixture IDs and sorts them for stable comparison.
 func scanLookupFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) []string {
 	t.Helper()
 	fixtureIDs := make([]string, len(ids))
@@ -522,6 +545,7 @@ func scanLookupFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) [
 	return fixtureIDs
 }
 
+// assertScanLookupNodeIDs executes criteria through the legacy node query and compares the resulting fixture IDs.
 func assertScanLookupNodeIDs(t *testing.T, session *Session, fixture *opengraph.Graph, expected []string, criteria func(opengraph.IDMap) graph.Criteria) {
 	t.Helper()
 	WithLegacyNodeQuery(t, session, fixture, criteria, func(nodeQuery graph.NodeQuery, idMap opengraph.IDMap) error {

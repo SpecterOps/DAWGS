@@ -12,11 +12,15 @@ import (
 )
 
 var (
-	batchWriteSize    = defaultBatchWriteSize
+	// batchWriteSize is the process-wide flush threshold used by new batch operations.
+	batchWriteSize = defaultBatchWriteSize
+
+	// readOnlyTxOptions configures transactions that must not mutate PostgreSQL state.
 	readOnlyTxOptions = pgx.TxOptions{
 		AccessMode: pgx.ReadOnly,
 	}
 
+	// readWriteTxOptions configures transactions that may mutate PostgreSQL state.
 	readWriteTxOptions = pgx.TxOptions{
 		AccessMode: pgx.ReadWrite,
 	}
@@ -95,6 +99,7 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 	}
 }
 
+// Close stops the driver's query caches before releasing its PostgreSQL pool.
 func (s *Driver) Close(ctx context.Context) error {
 	if s.SchemaManager != nil {
 		s.SchemaManager.parseCache.Close()
@@ -113,6 +118,7 @@ func (s *Driver) TranslationCacheStats() TranslationCacheStats {
 	return s.SchemaManager.translationCache.Stats()
 }
 
+// ParseCacheStats returns query-text-free counters for this driver's bounded Cypher parse cache.
 func (s *Driver) ParseCacheStats() ParseCacheStats {
 	if s == nil || s.SchemaManager == nil {
 		return ParseCacheStats{}
@@ -120,6 +126,8 @@ func (s *Driver) ParseCacheStats() ParseCacheStats {
 	return s.SchemaManager.parseCache.Stats()
 }
 
+// renderConfig applies transaction options to PostgreSQL defaults and rejects
+// a driver configuration of the wrong concrete type.
 func renderConfig(batchWriteSize int, pgxOptions pgx.TxOptions, userOptions []graph.TransactionOption) (*Config, error) {
 	graphCfg := graph.TransactionConfig{
 		DriverConfig: &Config{

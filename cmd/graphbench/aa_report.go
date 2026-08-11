@@ -14,35 +14,58 @@ import (
 	"time"
 )
 
+// aaReportVersion identifies the serialized schema revision for A/A report.
 const aaReportVersion = 1
 
+// AAMetricResolution captures relative and absolute within-arm noise for one latency quantile.
 type AAMetricResolution struct {
-	Ratio              RatioInterval `json:"ratio"`
-	RatioResolution    float64       `json:"ratio_resolution"`
+	// Ratio reports the candidate-to-baseline latency ratio.
+	Ratio RatioInterval `json:"ratio"`
+	// RatioResolution records the relative A/A noise floor for ratio classification.
+	RatioResolution float64 `json:"ratio_resolution"`
+	// AbsoluteResolution records the absolute A/A noise floor used for materiality decisions.
 	AbsoluteResolution time.Duration `json:"absolute_resolution"`
 }
 
+// AAResolutionCase reports matched sample counts and median and P95 noise floors for one case.
 type AAResolutionCase struct {
-	Dataset       string             `json:"dataset"`
-	Name          string             `json:"name"`
-	Backend       ExecutionMode      `json:"backend"`
-	Rounds        int                `json:"rounds"`
-	SamplesPerArm int                `json:"samples_per_arm"`
-	P50           AAMetricResolution `json:"p50"`
-	P95           AAMetricResolution `json:"p95"`
-	P99Gated      bool               `json:"p99_gated"`
-	P99Reason     string             `json:"p99_reason,omitempty"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Backend identifies the execution backend.
+	Backend ExecutionMode `json:"backend"`
+	// Rounds records the number of independent measurement rounds.
+	Rounds int `json:"rounds"`
+	// SamplesPerArm records matched timing samples available from each A/A arm.
+	SamplesPerArm int `json:"samples_per_arm"`
+	// P50 records relative and absolute A/A noise at median latency.
+	P50 AAMetricResolution `json:"p50"`
+	// P95 records relative and absolute A/A noise at 95th-percentile latency.
+	P95 AAMetricResolution `json:"p95"`
+	// P99Gated reports whether the sample count is sufficient to enforce the P99 noise threshold.
+	P99Gated bool `json:"p99_gated"`
+	// P99Reason explains why P99 gating was applied or omitted.
+	P99Reason string `json:"p99_reason,omitempty"`
 }
 
+// AAResolutionReport contains per-case A/A noise floors and the artifact identity used to derive them.
 type AAResolutionReport struct {
-	Version                 int                `json:"version"`
-	Seed                    int64              `json:"seed"`
-	Confidence              float64            `json:"confidence_level"`
-	ArtifactSHA256          string             `json:"artifact_sha256"`
-	MinimumP99SamplesPerArm int                `json:"minimum_p99_samples_per_arm"`
-	Cases                   []AAResolutionCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Seed controls deterministic random sampling.
+	Seed int64 `json:"seed"`
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64 `json:"confidence_level"`
+	// ArtifactSHA256 identifies the exact input artifact summarized by the report.
+	ArtifactSHA256 string `json:"artifact_sha256"`
+	// MinimumP99SamplesPerArm sets the per-arm sample floor required before P99 gating.
+	MinimumP99SamplesPerArm int `json:"minimum_p99_samples_per_arm"`
+	// Cases contains per-workload A/A noise estimates and resolution thresholds.
+	Cases []AAResolutionCase `json:"cases"`
 }
 
+// buildAAResolutionReport splits matched A/A samples and estimates per-case median and P95 noise floors.
 func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAResolutionReport, error) {
 	if options.Confidence <= 0 || options.Confidence >= 1 {
 		return AAResolutionReport{}, fmt.Errorf("confidence level must be between 0 and 1")
@@ -114,6 +137,7 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 	return report, nil
 }
 
+// splitAASeries separates A/A samples into the first and second measurements for each matched block.
 func splitAASeries(samples roundSamples) (roundSamples, roundSamples) {
 	var (
 		armA = roundSamples{}
@@ -133,6 +157,7 @@ func splitAASeries(samples roundSamples) (roundSamples, roundSamples) {
 	return armA, armB
 }
 
+// aaMetricResolution returns the larger absolute difference between paired A/A metric samples.
 func aaMetricResolution(interval RatioInterval, baselineQuantile float64) AAMetricResolution {
 	resolution := math.Max(math.Abs(1-interval.Lower), math.Abs(interval.Upper-1))
 	return AAMetricResolution{
@@ -142,6 +167,7 @@ func aaMetricResolution(interval RatioInterval, baselineQuantile float64) AAMetr
 	}
 }
 
+// writeAAResolutionReport writes an A/A resolution report as indented JSON.
 func writeAAResolutionReport(path string, report AAResolutionReport) (err error) {
 	var output *os.File
 	if path == "" {
@@ -165,6 +191,7 @@ func writeAAResolutionReport(path string, report AAResolutionReport) (err error)
 	return encoder.Encode(report)
 }
 
+// createAAResolutionReport loads an artifact, builds its A/A resolution report, and writes the result.
 func createAAResolutionReport(artifactPath, outputPath string, options PerfGateOptions) error {
 	records, err := readJSONLFile(artifactPath)
 	if err != nil {

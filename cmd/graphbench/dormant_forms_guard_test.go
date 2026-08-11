@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDormantFormsStayOutOfScaleCorpus verifies that active scale-case names and tags never publish FUTURE-prefixed query forms.
 func TestDormantFormsStayOutOfScaleCorpus(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -35,6 +36,7 @@ func TestDormantFormsStayOutOfScaleCorpus(t *testing.T) {
 	}
 }
 
+// requireNoDormantQueryFormID rejects a case field containing the reserved FUTURE marker, independent of letter case.
 func requireNoDormantQueryFormID(t *testing.T, field, value string) {
 	t.Helper()
 	require.False(t, strings.Contains(strings.ToUpper(value), "FUTURE-"),

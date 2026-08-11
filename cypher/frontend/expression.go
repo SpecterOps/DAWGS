@@ -423,6 +423,7 @@ func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_PropertyKeyName(ctx *pa
 	s.ctx.Enter(&SymbolicNameOrReservedWordVisitor{})
 }
 
+// ExitOC_PropertyKeyName assigns the parsed key to the property lookup under construction.
 func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
 	s.PropertyKeyName = extractPropertyKeyName(s.ctx, ctx)
 }

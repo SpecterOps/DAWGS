@@ -24,24 +24,63 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
+// ShortestPathScaleV2Dataset identifies the second-generation generated
+// shortest-path fixture.
 const ShortestPathScaleV2Dataset = ShortestPathScaleDataset + "_v2"
 
+// ShortestPathScaleV2Config controls independent path, decoy, fanout, and
+// payload dimensions in the second-generation shortest-path fixture.
 type ShortestPathScaleV2Config struct {
-	Depth                    int
-	ForwardRootFanOut        int
-	ReverseRootFanIn         int
-	IntermediateFanOut       int
+	// Depth sets the number of edges in each primary path.
+	Depth int
+
+	// ForwardRootFanOut sets the number of forward dead ends at the primary
+	// start node.
+	ForwardRootFanOut int
+
+	// ReverseRootFanIn sets the number of reverse dead ends entering the inbound
+	// root node.
+	ReverseRootFanIn int
+
+	// IntermediateFanOut sets the number of forward dead ends at FanInLevel.
+	IntermediateFanOut int
+
+	// IntermediateReverseFanIn sets the number of reverse dead ends entering
+	// the inbound path at FanInLevel.
 	IntermediateReverseFanIn int
-	FanInLevel               int
-	ParallelKindCount        int
-	ParallelTargetCount      int
-	DiamondWidth             int
-	DisconnectedWidth        int
-	PropertyPayloadSize      int
-	AddCycle                 bool
-	AddSelfLoop              bool
+
+	// FanInLevel selects the intermediate level used for fanout and reverse
+	// fan-in decoys.
+	FanInLevel int
+
+	// ParallelKindCount sets the number of distinct relationship kinds between
+	// each parallel start and target pair.
+	ParallelKindCount int
+
+	// ParallelTargetCount sets the number of targets in the parallel-edge
+	// subgraph.
+	ParallelTargetCount int
+
+	// DiamondWidth sets the number of equal-length branches in the diamond
+	// subgraph.
+	DiamondWidth int
+
+	// DisconnectedWidth sets the number of intermediate nodes in the
+	// disconnected path.
+	DisconnectedWidth int
+
+	// PropertyPayloadSize sets the length of synthetic payload properties.
+	PropertyPayloadSize int
+
+	// AddCycle includes a reachable two-node cycle.
+	AddCycle bool
+
+	// AddSelfLoop includes a reachable self-loop.
+	AddSelfLoop bool
 }
 
+// ValidateShortestPathScaleV2Config rejects negative, inconsistent, or
+// unsupported fixture dimensions.
 func ValidateShortestPathScaleV2Config(config ShortestPathScaleV2Config) error {
 	values := []int{
 		config.Depth, config.ForwardRootFanOut, config.ReverseRootFanIn,

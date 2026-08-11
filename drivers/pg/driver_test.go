@@ -64,7 +64,9 @@ func TestBuildNodeDeleteStatement(t *testing.T) {
 func TestResolveKindIDsDefinedFastPath(t *testing.T) {
 	ctx := context.Background()
 
-	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	driver := &Driver{
+		SchemaManager: NewSchemaManager(nil, 0),
+	}
 
 	var (
 		userKind  = graph.StringKind("User")

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mustAsLiteral converts value to a PostgreSQL literal and panics when the value type is unsupported.
 func mustAsLiteral(value any) pgsql.Literal {
 	if literal, err := pgsql.AsLiteral(value); err != nil {
 		panic(fmt.Sprintf("%v", err))
@@ -225,6 +226,7 @@ func TestInferUnaryExpressionType(t *testing.T) {
 	}
 }
 
+// TestInferWrappedExpressionType verifies that wrappers preserve or derive the data type of their enclosed expressions.
 func TestInferWrappedExpressionType(t *testing.T) {
 	testCases := []struct {
 		Name         string
@@ -307,6 +309,7 @@ func TestInferWrappedExpressionType(t *testing.T) {
 	}
 }
 
+// TestPropertyLookupEqualityScalarRewrites verifies scalar equality operators receive type-aware property extraction.
 func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 	var (
 		propertyLookup = func(property string) *pgsql.BinaryExpression {
@@ -517,6 +520,7 @@ func TestExpressionTreeTranslator(t *testing.T) {
 	validateConstraints(t, treeTranslator, idents, expectedTranslation)
 }
 
+// validateConstraints requires the generated constraint collection to contain exactly the expected SQL expressions.
 func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTreeTranslator, idents *pgsql.IdentifierSet, expectedTranslation string) {
 	constraint, err := constraintTracker.ConsumeConstraintsFromVisibleSet(idents)
 

@@ -44,6 +44,7 @@ func TestCypherEmitter_FormatsMapLiteralInKeyOrder(t *testing.T) {
 	require.Equal(t, "{a: 1, b: 2}", buffer.String())
 }
 
+// TestCypherEmitter_FormatsMapLiteralPropertyKeys verifies that map keys are emitted bare or escaped according to property-key grammar.
 func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 	var (
 		buffer  = &bytes.Buffer{}
@@ -63,10 +64,14 @@ func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 	require.Equal(t, "{``: 4, `   `: 5, `'`: 6, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
 }
 
+// TestCypherEmitter_FormatsPropertyLookupKeys verifies canonical rendering of bare and escaped lookup keys.
 func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 	testCases := []struct {
-		name     string
-		symbol   string
+		// name labels the property-key form under test.
+		name string
+		// symbol is the raw property key stored in the AST.
+		symbol string
+		// expected is the canonical rendered property lookup.
 		expected string
 	}{
 		{
@@ -117,6 +122,7 @@ func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 	}
 }
 
+// TestCypherEmitter_RejectsEmptyPropertyLookupKey verifies that an empty raw lookup key cannot be rendered.
 func TestCypherEmitter_RejectsEmptyPropertyLookupKey(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	emitter := format.NewCypherEmitter(false)

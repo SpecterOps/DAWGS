@@ -8,28 +8,45 @@ import (
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
 
+// sourceReferenceCollector tracks referenced identifiers and repeated pattern declarations during syntax walking.
 type sourceReferenceCollector struct {
+	// VisitorHandler supplies cancellation and error propagation for the syntax walk.
 	walk.VisitorHandler
 
-	referencedIdentifiers        map[string]struct{}
-	matchPatternDeclarationRefs  map[string]int
-	matchPatternDeclarations     map[*cypher.PatternPart]struct{}
+	// referencedIdentifiers contains bindings consumed outside their defining pattern declarations.
+	referencedIdentifiers map[string]struct{}
+	// matchPatternDeclarationRefs counts match-pattern declarations by binding symbol.
+	matchPatternDeclarationRefs map[string]int
+	// matchPatternDeclarations identifies pattern parts whose variables are declarations rather than reads.
+	matchPatternDeclarations map[*cypher.PatternPart]struct{}
+	// matchPatternDeclarationDepth tracks nesting beneath the declaration currently being visited.
 	matchPatternDeclarationDepth int
 }
 
+// fieldRequirementCollector accumulates ordered representation requirements for each Cypher binding.
 type fieldRequirementCollector struct {
+	// VisitorHandler supplies cancellation and error propagation for the syntax walk.
 	walk.VisitorHandler
 
+	// queryPartIndex identifies the query part whose binding uses are being collected.
 	queryPartIndex int
-	ordinal        int
-	patternDepth   int
-	propertyDepth  int
-	functionStack  []*cypher.FunctionInvocation
-	bindingKinds   map[string]string
-	patternUses    map[string]int
-	decisions      map[string]*FieldRequirementDecision
+	// ordinal orders binding uses in traversal order.
+	ordinal int
+	// patternDepth tracks whether the visitor is currently inside a pattern declaration.
+	patternDepth int
+	// propertyDepth tracks nested property lookups so their base binding is classified once.
+	propertyDepth int
+	// functionStack identifies the function consuming a visited expression.
+	functionStack []*cypher.FunctionInvocation
+	// bindingKinds maps each symbol to its path, relationship, or node representation.
+	bindingKinds map[string]string
+	// patternUses counts pattern occurrences of each binding.
+	patternUses map[string]int
+	// decisions accumulates representation requirements by binding symbol.
+	decisions map[string]*FieldRequirementDecision
 }
 
+// newFieldRequirementCollector initializes requirement tracking for one query part.
 func newFieldRequirementCollector(queryPartIndex int) *fieldRequirementCollector {
 	return &fieldRequirementCollector{
 		VisitorHandler: walk.NewCancelableErrorHandler(),
@@ -40,6 +57,7 @@ func newFieldRequirementCollector(queryPartIndex int) *fieldRequirementCollector
 	}
 }
 
+// add records one ordered use and merges its required fields into the binding decision.
 func (s *fieldRequirementCollector) add(symbol string, internal bool, fields ...FieldRequirement) {
 	if symbol == "" {
 		return
@@ -75,6 +93,7 @@ func (s *fieldRequirementCollector) add(symbol string, internal bool, fields ...
 	}
 }
 
+// patternVariableSymbol returns a pattern variable's symbol or an empty string when no variable is present.
 func patternVariableSymbol(variable *cypher.Variable) string {
 	if variable == nil {
 		return ""
@@ -82,6 +101,7 @@ func patternVariableSymbol(variable *cypher.Variable) string {
 	return variable.Symbol
 }
 
+// addFullBinding records the complete representation required for a path, relationship, or node binding.
 func (s *fieldRequirementCollector) addFullBinding(symbol, kind string) {
 	switch kind {
 	case "path":
@@ -93,6 +113,7 @@ func (s *fieldRequirementCollector) addFullBinding(symbol, kind string) {
 	}
 }
 
+// addGreedyProjectionBindings marks every visible binding for full materialization in deterministic symbol order.
 func (s *fieldRequirementCollector) addGreedyProjectionBindings() {
 	symbols := make([]string, 0, len(s.bindingKinds))
 	for symbol := range s.bindingKinds {
@@ -105,6 +126,7 @@ func (s *fieldRequirementCollector) addGreedyProjectionBindings() {
 	}
 }
 
+// Enter records representation requirements before visiting a syntax node's children.
 func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 	switch typedNode := node.(type) {
 	case *cypher.PatternPart:
@@ -189,8 +211,10 @@ func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 	}
 }
 
+// Visit performs no leaf-specific work because Enter classifies every relevant node.
 func (s *fieldRequirementCollector) Visit(cypher.SyntaxNode) {}
 
+// Exit unwinds pattern, property, and function nesting after visiting a syntax node's children.
 func (s *fieldRequirementCollector) Exit(node cypher.SyntaxNode) {
 	switch node.(type) {
 	case *cypher.PatternPart:
@@ -202,6 +226,7 @@ func (s *fieldRequirementCollector) Exit(node cypher.SyntaxNode) {
 	}
 }
 
+// collectFieldRequirements walks root and returns normalized representation needs for its bindings.
 func collectFieldRequirements(queryPartIndex int, root cypher.SyntaxNode) ([]FieldRequirementDecision, error) {
 	if root == nil {
 		return nil, nil
@@ -225,6 +250,7 @@ func collectFieldRequirements(queryPartIndex int, root cypher.SyntaxNode) ([]Fie
 	return decisions, nil
 }
 
+// newSourceReferenceCollector initializes empty reference and match-declaration tracking for a syntax walk.
 func newSourceReferenceCollector() *sourceReferenceCollector {
 	return &sourceReferenceCollector{
 		VisitorHandler:              walk.NewCancelableErrorHandler(),
@@ -234,18 +260,21 @@ func newSourceReferenceCollector() *sourceReferenceCollector {
 	}
 }
 
+// addVariable records a referenced variable unless it is part of the declaration currently being traversed.
 func (s *sourceReferenceCollector) addVariable(variable *cypher.Variable) {
 	if variable != nil && variable.Symbol != "" {
 		s.referencedIdentifiers[variable.Symbol] = struct{}{}
 	}
 }
 
+// addMatchPatternDeclaration counts a non-empty variable declared inside a pattern expression so repeated declarations can be retained as references.
 func (s *sourceReferenceCollector) addMatchPatternDeclaration(variable *cypher.Variable) {
 	if variable != nil && variable.Symbol != "" {
 		s.matchPatternDeclarationRefs[variable.Symbol] += 1
 	}
 }
 
+// collectRepeatedMatchPatternDeclarations marks multiply declared match symbols as source references.
 func (s *sourceReferenceCollector) collectRepeatedMatchPatternDeclarations() {
 	for identifier, numDeclarations := range s.matchPatternDeclarationRefs {
 		if numDeclarations > 1 {
@@ -254,6 +283,7 @@ func (s *sourceReferenceCollector) collectRepeatedMatchPatternDeclarations() {
 	}
 }
 
+// isMatchPatternDeclaration reports whether node is a variable declaration belonging to a match pattern.
 func (s *sourceReferenceCollector) isMatchPatternDeclaration(patternPart *cypher.PatternPart) bool {
 	_, isDeclaration := s.matchPatternDeclarations[patternPart]
 	return isDeclaration
@@ -308,6 +338,7 @@ func (s *sourceReferenceCollector) Exit(node cypher.SyntaxNode) {
 	}
 }
 
+// collectReferencedSourceIdentifiers returns identifiers used outside a declaring match pattern or declared repeatedly within one.
 func collectReferencedSourceIdentifiers(root cypher.SyntaxNode) (map[string]struct{}, error) {
 	if root == nil {
 		return map[string]struct{}{}, nil
@@ -322,6 +353,7 @@ func collectReferencedSourceIdentifiers(root cypher.SyntaxNode) (map[string]stru
 	return collector.referencedIdentifiers, nil
 }
 
+// referencesSourceIdentifier reports whether references contains symbol or the wildcard source marker.
 func referencesSourceIdentifier(references map[string]struct{}, symbol string) bool {
 	if _, referencesAll := references[cypher.TokenLiteralAsterisk]; referencesAll {
 		return true

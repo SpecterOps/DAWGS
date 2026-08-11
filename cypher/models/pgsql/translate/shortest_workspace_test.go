@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestShortestPathWorkspaceFragmentUsesDedicatedTablesAndConstraints verifies isolation and key constraints for each workspace relation.
 func TestShortestPathWorkspaceFragmentUsesDedicatedTablesAndConstraints(t *testing.T) {
 	fragment := "insert into next_front select * from forward_front " +
 		"where not exists (select 1 from forward_visited) " +

@@ -23,6 +23,7 @@ import (
 	"github.com/specterops/dawgs/query"
 )
 
+// scanLookupKinds converts fixture kind names into the graph.Kinds accepted by query helpers.
 func scanLookupKinds(names ...string) graph.Kinds {
 	kinds := make(graph.Kinds, len(names))
 	for idx, name := range names {
@@ -31,6 +32,7 @@ func scanLookupKinds(names ...string) graph.Kinds {
 	return kinds
 }
 
+// TestQueryBuilder_RelationshipScans verifies relationship scan forms render kind, endpoint, property, and ordering constraints correctly.
 func TestQueryBuilder_RelationshipScans(t *testing.T) {
 	t.Run("SCAN-01 base endpoints and relationship ID projection", assertQueryResult(
 		query.SinglePartQuery(
@@ -142,6 +144,7 @@ func TestQueryBuilder_RelationshipScans(t *testing.T) {
 	))
 }
 
+// TestQueryBuilder_NodeLookups verifies node lookup forms render identifiers, kind filters, and property predicates correctly.
 func TestQueryBuilder_NodeLookups(t *testing.T) {
 	t.Run("LOOKUP-01 kind disjunction ID projection", assertQueryResult(
 		query.SinglePartQuery(

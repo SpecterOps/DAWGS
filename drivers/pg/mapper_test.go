@@ -84,6 +84,7 @@ func TestValueMapperMapsStringArraysByTargetType(t *testing.T) {
 	require.Equal(t, []string{"Alice", "Bob"}, stringTarget)
 }
 
+// TestValueMapperMapsCompositeArrays verifies typed node and relationship arrays preserve order and graph metadata.
 func TestValueMapperMapsCompositeArrays(t *testing.T) {
 	ctx := context.Background()
 	mapper := pgutil.NewInMemoryKindMapper()
@@ -188,6 +189,7 @@ func TestValueMapperMapsCompositeArrays(t *testing.T) {
 	})
 }
 
+// TestValueMapperMapsTypedComposites verifies owned node, edge, and path composites map to graph-native values.
 func TestValueMapperMapsTypedComposites(t *testing.T) {
 	ctx := context.Background()
 	mapper := pgutil.NewInMemoryKindMapper()

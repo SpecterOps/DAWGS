@@ -58,6 +58,7 @@ func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
 	require.Contains(t, formatted, "(null)::edgecomposite[]")
 }
 
+// TestListSizeGuardsDynamicJSONPropertiesByType verifies that size() distinguishes JSON strings and arrays at runtime.
 func TestListSizeGuardsDynamicJSONPropertiesByType(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	kindMapper.Put(graph.StringKind("TestNode"))
@@ -75,6 +76,7 @@ func TestListSizeGuardsDynamicJSONPropertiesByType(t *testing.T) {
 	require.Contains(t, formatted, "else null end")
 }
 
+// TestTailFunctionDoesNotDuplicatePathComponentExpression verifies nested tail calls hydrate path components only once.
 func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -91,6 +93,7 @@ func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
 	require.NotContains(t, formatted, "cardinality(((case when")
 }
 
+// TestTailPredicateStagesPathComponentExpression verifies predicates reuse a staged path-component projection.
 func TestTailPredicateStagesPathComponentExpression(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -108,6 +111,7 @@ func TestTailPredicateStagesPathComponentExpression(t *testing.T) {
 	require.Contains(t, formatted, ".nodes")
 }
 
+// TestProjectionStagesPathBeforeReadingComponents verifies path hydration is staged before node and edge access.
 func TestProjectionStagesPathBeforeReadingComponents(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -126,6 +130,7 @@ func TestProjectionStagesPathBeforeReadingComponents(t *testing.T) {
 	require.Contains(t, formatted, ".edges")
 }
 
+// TestProjectionStagesRepeatedPathComponents verifies repeated component access shares one staged path hydration.
 func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -145,6 +150,7 @@ func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 	require.Contains(t, formatted, ".edges")
 }
 
+// TestPathLengthUsesOrderedEdgeIDsWithoutHydration verifies that length(path) counts carried edge IDs without hydrating a path.
 func TestPathLengthUsesOrderedEdgeIDsWithoutHydration(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -162,6 +168,7 @@ func TestPathLengthUsesOrderedEdgeIDsWithoutHydration(t *testing.T) {
 	require.NotContains(t, formatted, "from unnest")
 }
 
+// TestIDOnlyTerminalProjectionCarriesScalarID verifies that an ID-only terminal consumer receives scalar state.
 func TestIDOnlyTerminalProjectionCarriesScalarID(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	kindMapper.Put(graph.StringKind("TestNode"))
@@ -180,6 +187,7 @@ func TestIDOnlyTerminalProjectionCarriesScalarID(t *testing.T) {
 	require.Contains(t, formatted, "n1.kind_ids operator")
 }
 
+// TestIDOnlyTerminalProjectionRetainsCompositeForMixedUse verifies that mixed ID and property consumers retain the terminal composite.
 func TestIDOnlyTerminalProjectionRetainsCompositeForMixedUse(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -196,6 +204,7 @@ func TestIDOnlyTerminalProjectionRetainsCompositeForMixedUse(t *testing.T) {
 	require.Contains(t, formatted, "(s0.n1).properties")
 }
 
+// TestIDOnlyTerminalProjectionRetainsCompositeForLaterPatternReuse verifies that a reused terminal remains a complete entity binding.
 func TestIDOnlyTerminalProjectionRetainsCompositeForLaterPatternReuse(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -211,6 +220,7 @@ func TestIDOnlyTerminalProjectionRetainsCompositeForLaterPatternReuse(t *testing
 	require.NotContains(t, formatted, "n1.id as n1")
 }
 
+// TestIDOnlyTerminalProjectionRetainsCompositeForObservedPath verifies that observing the path retains complete terminal state.
 func TestIDOnlyTerminalProjectionRetainsCompositeForObservedPath(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -226,6 +236,7 @@ func TestIDOnlyTerminalProjectionRetainsCompositeForObservedPath(t *testing.T) {
 	require.Contains(t, formatted, "ordered_edge_ids_to_path")
 }
 
+// TestIDOnlyExpansionContinuationCarriesScalarID verifies that an ID-only intermediate binding continues as scalar state.
 func TestIDOnlyExpansionContinuationCarriesScalarID(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -244,6 +255,7 @@ func TestIDOnlyExpansionContinuationCarriesScalarID(t *testing.T) {
 	require.NotContains(t, formatted, "(s0.n1).id = e1.start_id")
 }
 
+// TestIDOnlyExpansionContinuationRetainsCompositeForPropertyUse verifies that a property consumer prevents scalar-only continuation state.
 func TestIDOnlyExpansionContinuationRetainsCompositeForPropertyUse(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -259,6 +271,7 @@ func TestIDOnlyExpansionContinuationRetainsCompositeForPropertyUse(t *testing.T)
 	require.Contains(t, formatted, "(s0.n1).id = e1.start_id")
 }
 
+// TestIDOnlyExpansionContinuationSeedsFollowingExpansionFromScalarID verifies that a following traversal can join from a scalar intermediate ID.
 func TestIDOnlyExpansionContinuationSeedsFollowingExpansionFromScalarID(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -275,6 +288,7 @@ func TestIDOnlyExpansionContinuationSeedsFollowingExpansionFromScalarID(t *testi
 	require.NotContains(t, formatted, "select distinct (s0.n1).id as root_id from s0")
 }
 
+// TestIDOnlyExpansionContinuationRetainsCompositeForObservedPath verifies that observing the path prevents scalar-only intermediate state.
 func TestIDOnlyExpansionContinuationRetainsCompositeForObservedPath(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -291,6 +305,7 @@ func TestIDOnlyExpansionContinuationRetainsCompositeForObservedPath(t *testing.T
 	require.Contains(t, formatted, "ordered_edge_ids_to_path")
 }
 
+// TestIDOnlyExpansionContinuationRetainsCompositeForMutation verifies that mutating an intermediate node retains its complete entity value.
 func TestIDOnlyExpansionContinuationRetainsCompositeForMutation(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -307,6 +322,7 @@ func TestIDOnlyExpansionContinuationRetainsCompositeForMutation(t *testing.T) {
 	require.Contains(t, formatted, "delete from node")
 }
 
+// TestBoundPairShortestPathUsesStableSingletonArrays verifies deterministic singleton endpoint-array construction for bound shortest paths.
 func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	translateQuery := func(cypherQuery string) (Result, string) {

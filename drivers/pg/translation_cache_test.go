@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCypherTranslationCacheReturnsZeroValuesOnBuildError verifies failed builds do not leak partial SQL or parameter maps.
 func TestCypherTranslationCacheReturnsZeroValuesOnBuildError(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	expectedErr := errors.New("translation failed")
@@ -29,6 +30,7 @@ func TestCypherTranslationCacheReturnsZeroValuesOnBuildError(t *testing.T) {
 	require.Zero(t, cache.Stats().Entries)
 }
 
+// TestCypherTranslationCacheRebindsTranslatedListParameters verifies a cached list translation uses values from the current caller.
 func TestCypherTranslationCacheRebindsTranslatedListParameters(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	const cypherQuery = `MATCH (n) WHERE n.objectid IN $object_ids RETURN n`
@@ -64,6 +66,7 @@ func TestCypherTranslationCacheRebindsTranslatedListParameters(t *testing.T) {
 	require.NotEqual(t, second, third)
 }
 
+// TestCypherTranslationCacheRebindsNamedParameters verifies generated SQL parameter names map back to fresh named values.
 func TestCypherTranslationCacheRebindsNamedParameters(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	var builds int
@@ -94,6 +97,7 @@ func TestCypherTranslationCacheRebindsNamedParameters(t *testing.T) {
 	}, cache.Stats())
 }
 
+// TestCypherTranslationCacheSeparatesGraphAndParameterTypes verifies graph identity and negotiated types partition cache entries.
 func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
 	cache := newCypherTranslationCache(4)
 	var builds int
@@ -114,6 +118,7 @@ func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
 	require.Equal(t, 3, builds)
 }
 
+// TestTranslationParameterTypeKeyIsDelimiterSafe verifies length-prefixed name and type components cannot collide.
 func TestTranslationParameterTypeKeyIsDelimiterSafe(t *testing.T) {
 	first := translationParameterTypeKey(map[string]any{
 		"a": int64(1),
@@ -125,6 +130,7 @@ func TestTranslationParameterTypeKeyIsDelimiterSafe(t *testing.T) {
 	require.NotEqual(t, first, second)
 }
 
+// TestCypherTranslationCacheRejectsMissingParameterSources verifies incomplete source metadata bypasses retention.
 func TestCypherTranslationCacheRejectsMissingParameterSources(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	var builds int
@@ -146,6 +152,7 @@ func TestCypherTranslationCacheRejectsMissingParameterSources(t *testing.T) {
 	require.Equal(t, uint64(2), cache.Stats().Bypasses)
 }
 
+// TestCachedTranslationBindingFailsClosedOnMissingSource verifies a cache hit errors rather than binding an absent caller value.
 func TestCachedTranslationBindingFailsClosedOnMissingSource(t *testing.T) {
 	value := cypherTranslationCacheValue{
 		parameterSources: map[string]string{"i0": "required"},
@@ -154,6 +161,7 @@ func TestCachedTranslationBindingFailsClosedOnMissingSource(t *testing.T) {
 	require.ErrorContains(t, err, "missing parameter source")
 }
 
+// TestCypherTranslationCacheBypassesGeneratedParameters verifies translations with non-source parameters are rebuilt for each caller.
 func TestCypherTranslationCacheBypassesGeneratedParameters(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	var builds int
@@ -173,6 +181,7 @@ func TestCypherTranslationCacheBypassesGeneratedParameters(t *testing.T) {
 	require.Zero(t, cache.Stats().Entries)
 }
 
+// TestCypherTranslationCacheCoalescesConcurrentMisses verifies equivalent concurrent requests share one cacheable build.
 func TestCypherTranslationCacheCoalescesConcurrentMisses(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	const workers = 16
@@ -210,6 +219,7 @@ func TestCypherTranslationCacheCoalescesConcurrentMisses(t *testing.T) {
 	require.Equal(t, uint64(workers-1), cache.Stats().Hits+cache.Stats().CoalescedMisses)
 }
 
+// TestCypherTranslationCacheDoesNotShareUncacheableParametersWithWaiters verifies waiters rebuild results whose values cannot be rebound safely.
 func TestCypherTranslationCacheDoesNotShareUncacheableParametersWithWaiters(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	start := make(chan struct{})

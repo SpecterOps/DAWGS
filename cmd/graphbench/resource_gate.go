@@ -10,25 +10,40 @@ import (
 	"sort"
 )
 
+// resourceGateVersion identifies the serialized schema revision for resource gate.
 const resourceGateVersion = 1
 
+// ResourceGateReport reports whether production and reference plan resources remain within their allowed envelopes.
 type ResourceGateReport struct {
-	Version int                `json:"version"`
-	Passed  bool               `json:"passed"`
-	Cases   []ResourceGateCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Passed reports whether every required gate condition succeeded.
+	Passed bool `json:"passed"`
+	// Cases contains resource-envelope decisions for each evaluated production or reference executor.
+	Cases []ResourceGateCase `json:"cases"`
 }
 
+// ResourceGateCase attributes resource-gate failures to one production or reference executor architecture.
 type ResourceGateCase struct {
-	Dataset              string   `json:"dataset"`
-	Name                 string   `json:"name"`
-	Reference            string   `json:"reference,omitempty"`
-	Tier                 string   `json:"tier"`
-	Architecture         string   `json:"architecture,omitempty"`
-	FallbackArchitecture string   `json:"fallback_architecture,omitempty"`
-	Passed               bool     `json:"passed"`
-	Reasons              []string `json:"reasons,omitempty"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Reference identifies the reference arm evaluated by the resource gate.
+	Reference string `json:"reference,omitempty"`
+	// Tier identifies the resource envelope applied to the case.
+	Tier string `json:"tier"`
+	// Architecture identifies the executor architecture.
+	Architecture string `json:"architecture,omitempty"`
+	// FallbackArchitecture identifies the executor architecture used after fallback.
+	FallbackArchitecture string `json:"fallback_architecture,omitempty"`
+	// Passed reports whether every required gate condition succeeded.
+	Passed bool `json:"passed"`
+	// Reasons lists explanations for the reported disposition.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
+// createResourceGateReport evaluates production and reference plan metrics against resource ceilings and writes the report.
 func createResourceGateReport(artifact, output string) (bool, error) {
 	records, err := readJSONLFile(artifact)
 	if err != nil {
@@ -115,6 +130,7 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		}
 		return report.Cases[i].Reference < report.Cases[j].Reference
 	})
+
 	var raw []byte
 	if raw, err = json.MarshalIndent(report, "", "  "); err != nil {
 		return false, err
@@ -131,6 +147,7 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 	return report.Passed, nil
 }
 
+// appendWorkspaceResourceReasons adds failures for excessive executor or session workspace usage.
 func appendWorkspaceResourceReasons(gateCase *ResourceGateCase, metrics *PostgresPlanMetrics) {
 	if metrics.Buffers.TempRead != 0 || metrics.Buffers.TempWritten != 0 {
 		gateCase.Reasons = append(gateCase.Reasons, "compact workspace candidate spilled to executor temporary storage")
@@ -140,6 +157,7 @@ func appendWorkspaceResourceReasons(gateCase *ResourceGateCase, metrics *Postgre
 	}
 }
 
+// appendPortableResourceReasons adds failures for spill, loops, or cardinality evidence that violates portable limits.
 func appendPortableResourceReasons(gateCase *ResourceGateCase, metrics *PostgresPlanMetrics) {
 	buffers := metrics.Buffers
 	if buffers.TempRead != 0 || buffers.TempWritten != 0 {
@@ -153,6 +171,7 @@ func appendPortableResourceReasons(gateCase *ResourceGateCase, metrics *Postgres
 	}
 }
 
+// postgresPlanFunctionLoops sums actual loops for PostgreSQL plan nodes invoking the named function.
 func postgresPlanFunctionLoops(raw json.RawMessage, function string) (int64, bool, error) {
 	if len(raw) == 0 {
 		return 0, false, nil
@@ -191,6 +210,7 @@ func postgresPlanFunctionLoops(raw json.RawMessage, function string) (int64, boo
 	return loops, found, nil
 }
 
+// appliedPostgresArchitecture returns the effective PostgreSQL executor architecture, including fallback attribution.
 func appliedPostgresArchitecture(record CaseResult) string {
 	if record.Optimization == nil {
 		return ""

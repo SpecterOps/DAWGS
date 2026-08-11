@@ -9,43 +9,80 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// sourceTraversalStep groups the node and relationship patterns that make up one analyzed traversal step.
 type sourceTraversalStep struct {
-	LeftNode     *cypher.NodePattern
+	// LeftNode is the node pattern immediately preceding Relationship in source syntax.
+	LeftNode *cypher.NodePattern
+	// Relationship is the edge pattern connecting the two endpoints.
 	Relationship *cypher.RelationshipPattern
-	RightNode    *cypher.NodePattern
+	// RightNode is the node pattern immediately following Relationship in source syntax.
+	RightNode *cypher.NodePattern
 }
 
+// boundSourceSelectivity ranks how strongly known constraints bound a traversal source.
 type boundSourceSelectivity int
 
 const (
-	traversalDirectionReasonRightBound                   = "right_bound"
-	traversalDirectionReasonRightConstrained             = "right_constrained"
-	traversalDirectionReasonRightPredicate               = "right_predicate"
-	traversalDirectionReasonTerminalKindOnlyEstimateWide = "terminal kind-only estimate too broad"
-	traversalDirectionReasonBoundSourceSelective         = "bound source estimate selective"
+	// traversalDirectionReasonRightBound explains a direction flip toward an already bound right endpoint.
+	traversalDirectionReasonRightBound = "right_bound"
 
+	// traversalDirectionReasonRightConstrained explains a direction flip toward a constrained right endpoint.
+	traversalDirectionReasonRightConstrained = "right_constrained"
+
+	// traversalDirectionReasonRightPredicate explains a direction flip toward a right endpoint with a selective predicate.
+	traversalDirectionReasonRightPredicate = "right_predicate"
+
+	// traversalDirectionReasonTerminalKindOnlyEstimateWide explains rejection of a terminal kind whose estimate is too broad.
+	traversalDirectionReasonTerminalKindOnlyEstimateWide = "terminal kind-only estimate too broad"
+
+	// traversalDirectionReasonBoundSourceSelective explains retention of a sufficiently selective bound source.
+	traversalDirectionReasonBoundSourceSelective = "bound source estimate selective"
+
+	// shortestPathStrategyReasonBoundEndpointPairs selects bidirectional search for materialized endpoint pairs.
 	shortestPathStrategyReasonBoundEndpointPairs = "bound_endpoint_pairs"
+
+	// shortestPathStrategyReasonEndpointPredicates selects bidirectional search for predicates on both endpoints.
 	shortestPathStrategyReasonEndpointPredicates = "endpoint_predicates"
 
-	shortestPathFilterReasonTerminalPredicate      = "terminal_predicate"
+	// shortestPathFilterReasonTerminalPredicate materializes a filter for a selective terminal predicate.
+	shortestPathFilterReasonTerminalPredicate = "terminal_predicate"
+
+	// shortestPathFilterReasonEndpointPairPredicates materializes a filter for correlated endpoint-pair predicates.
 	shortestPathFilterReasonEndpointPairPredicates = "endpoint_pair_predicates"
 )
 
 const (
+	// boundSourceSelectivityNone indicates that no useful source constraint was found.
 	boundSourceSelectivityNone boundSourceSelectivity = iota
+
+	// boundSourceSelectivityKindOnly indicates that only a node-kind predicate constrains the source.
 	boundSourceSelectivityKindOnly
+
+	// boundSourceSelectivityPredicate indicates that a non-unique predicate constrains the source.
 	boundSourceSelectivityPredicate
+
+	// boundSourceSelectivityUnique indicates that a unique lookup constrains the source.
 	boundSourceSelectivityUnique
+
+	// boundSourceSelectivityLimited indicates that a row limit bounds the source.
 	boundSourceSelectivityLimited
+
+	// boundSourceSelectivityTopN indicates that an ordered or aggregate projection with a limit bounds the source.
 	boundSourceSelectivityTopN
 )
 
 const (
-	maxExactRangeExpansionDepth       int64 = 2
+	// maxExactRangeExpansionDepth is the largest exact range expanded into fixed traversal steps.
+	maxExactRangeExpansionDepth int64 = 2
+
+	// defaultShortestPathExpansionDepth supplies the maximum depth for an otherwise open shortest-path range.
 	defaultShortestPathExpansionDepth int64 = 15
-	defaultShortestPathStateLimit     int64 = 100_000
+
+	// defaultShortestPathStateLimit caps intermediate states admitted by guarded experimental executors.
+	defaultShortestPathStateLimit int64 = 100_000
 )
 
+// BuildLoweringPlan analyzes a query and selects safe semantic and physical lowering decisions.
 func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) (LoweringPlan, error) {
 	if query == nil || query.SingleQuery == nil {
 		return LoweringPlan{}, nil
@@ -103,6 +140,7 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	return plan, nil
 }
 
+// appendQueryPartLowerings runs every lowering analysis for one query part and appends its decisions to plan.
 func appendQueryPartLowerings(
 	plan *LoweringPlan,
 	queryPartIndex int,
@@ -144,6 +182,7 @@ func appendQueryPartLowerings(
 	return nil
 }
 
+// appendEndpointSeededExpansionDecisions qualifies terminal expansions with a fixed prefix for guarded reverse search.
 func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}, initialDeclaredSymbols map[string]struct{}) {
 	_, updatingClauses := queryPartProjection(queryPart)
 	declaredSymbols := copyStringSet(initialDeclaredSymbols)
@@ -288,6 +327,7 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 	}
 }
 
+// predicateTermsForSymbolAreLocal reports whether every predicate mentioning symbol depends on no other binding.
 func predicateTermsForSymbolAreLocal(where *cypher.Where, symbol string) bool {
 	if where == nil || symbol == "" {
 		return true
@@ -308,6 +348,7 @@ func predicateTermsForSymbolAreLocal(where *cypher.Where, symbol string) bool {
 	return true
 }
 
+// endpointSeedPredicateClass classifies a terminal property comparison as equality, suffix matching, or generic search.
 func endpointSeedPredicateClass(where *cypher.Where, symbol string) string {
 	if where == nil {
 		return ""
@@ -336,6 +377,7 @@ func endpointSeedPredicateClass(where *cypher.Where, symbol string) string {
 	return ""
 }
 
+// hasExpansionSearchDecision reports whether plan already contains a search decision for target.
 func hasExpansionSearchDecision(plan *LoweringPlan, target TraversalStepTarget) bool {
 	for _, decision := range plan.ExpansionSearchStrategy {
 		if decision.Target == target {
@@ -345,6 +387,7 @@ func hasExpansionSearchDecision(plan *LoweringPlan, target TraversalStepTarget) 
 	return false
 }
 
+// appendExpansionSearchStrategyDecisions qualifies variable expansions for fixed-suffix search strategies.
 func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}, initialDeclaredSymbols map[string]struct{}) {
 	_, updatingClauses := queryPartProjection(queryPart)
 	declaredSymbols := copyStringSet(initialDeclaredSymbols)
@@ -566,6 +609,7 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 	}
 }
 
+// syntaxContainsFunctionInvocation reports whether node contains any function invocation.
 func syntaxContainsFunctionInvocation(node cypher.SyntaxNode) bool {
 	if node == nil {
 		return false
@@ -579,6 +623,7 @@ func syntaxContainsFunctionInvocation(node cypher.SyntaxNode) bool {
 	return found
 }
 
+// syntaxContainsNonIdentityFunctionInvocation reports whether node invokes a function other than id.
 func syntaxContainsNonIdentityFunctionInvocation(node cypher.SyntaxNode) bool {
 	if node == nil {
 		return false
@@ -592,6 +637,7 @@ func syntaxContainsNonIdentityFunctionInvocation(node cypher.SyntaxNode) bool {
 	return found
 }
 
+// symbolDeclared reports whether a non-empty symbol is present in the declaration set.
 func symbolDeclared(declared map[string]struct{}, symbol string) bool {
 	if symbol == "" {
 		return false
@@ -600,6 +646,7 @@ func symbolDeclared(declared map[string]struct{}, symbol string) bool {
 	return found
 }
 
+// hasCrossRegionPredicate reports whether one predicate depends on both expansion and suffix bindings.
 func hasCrossRegionPredicate(where *cypher.Where, expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
 	if where == nil {
 		return false
@@ -630,6 +677,7 @@ func hasCrossRegionPredicate(where *cypher.Where, expansion sourceTraversalStep,
 	return false
 }
 
+// fixedSuffixLength counts consecutive fixed relationship steps before the next range expansion.
 func fixedSuffixLength(steps []sourceTraversalStep) int {
 	length := 0
 	for _, step := range steps {
@@ -641,6 +689,7 @@ func fixedSuffixLength(steps []sourceTraversalStep) int {
 	return length
 }
 
+// hasLimitPushdownForTarget reports whether target already has a planned limit pushdown.
 func hasLimitPushdownForTarget(plan *LoweringPlan, target TraversalStepTarget) bool {
 	for _, decision := range plan.LimitPushdown {
 		if decision.Target == target {
@@ -650,6 +699,7 @@ func hasLimitPushdownForTarget(plan *LoweringPlan, target TraversalStepTarget) b
 	return false
 }
 
+// qualifiedFixedSuffixTopology reports whether an outbound single-kind expansion has the required three-step typed suffix.
 func qualifiedFixedSuffixTopology(expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
 	if len(suffix) != 3 || expansion.Relationship == nil || len(expansion.Relationship.Kinds) != 1 || expansion.Relationship.Direction != graph.DirectionOutbound {
 		return false
@@ -662,6 +712,7 @@ func qualifiedFixedSuffixTopology(expansion sourceTraversalStep, suffix []source
 	return true
 }
 
+// applyExpansionSearchObservationModes classifies each expansion by the fields its external consumers require.
 func applyExpansionSearchObservationModes(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, requirements []FieldRequirementDecision) {
 	externalFieldsBySymbol := map[string]map[FieldRequirement]struct{}{}
 	for _, requirement := range requirements {
@@ -715,11 +766,13 @@ func applyExpansionSearchObservationModes(plan *LoweringPlan, queryPartIndex int
 	}
 }
 
+// hasFieldRequirement reports whether fields contains the requested binding representation.
 func hasFieldRequirement(fields map[FieldRequirement]struct{}, field FieldRequirement) bool {
 	_, found := fields[field]
 	return found
 }
 
+// setExpansionSearchEligibilityFact updates a named qualification result already present on decision.
 func setExpansionSearchEligibilityFact(decision *ExpansionSearchStrategyDecision, name string, eligible bool) {
 	for idx := range decision.EligibilityFacts {
 		if decision.EligibilityFacts[idx].Name == name {
@@ -729,6 +782,7 @@ func setExpansionSearchEligibilityFact(decision *ExpansionSearchStrategyDecision
 	}
 }
 
+// expansionSearchFactsEligible reports whether every recorded expansion-search qualification passed.
 func expansionSearchFactsEligible(facts []ExpansionSearchEligibilityFact) bool {
 	for _, fact := range facts {
 		if !fact.Eligible {
@@ -738,6 +792,7 @@ func expansionSearchFactsEligible(facts []ExpansionSearchEligibilityFact) bool {
 	return true
 }
 
+// applyShortestPathObservationModes classifies shortest-path consumers and updates their known-observation qualification.
 func applyShortestPathObservationModes(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, requirements []FieldRequirementDecision) {
 	fieldsBySymbol := map[string]map[FieldRequirement]struct{}{}
 	for _, requirement := range requirements {
@@ -779,6 +834,7 @@ func applyShortestPathObservationModes(plan *LoweringPlan, queryPartIndex int, r
 	}
 }
 
+// appendShortestPathExecutorDecisions records eligibility facts and incumbent executor decisions for shortest-path expansions.
 func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	var (
 		shortestCalls  int
@@ -972,6 +1028,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 	}
 }
 
+// shortestPathFactsEligible reports whether every recorded shortest-path qualification passed.
 func shortestPathFactsEligible(facts []ShortestPathEligibilityFact) bool {
 	for _, fact := range facts {
 		if !fact.Eligible {
@@ -981,6 +1038,7 @@ func shortestPathFactsEligible(facts []ShortestPathEligibilityFact) bool {
 	return true
 }
 
+// setShortestPathEligibilityFact replaces or appends one named executor qualification result.
 func setShortestPathEligibilityFact(decision *ShortestPathExecutorDecision, name string, eligible bool) {
 	for idx := range decision.Eligibility {
 		if decision.Eligibility[idx].Name == name {
@@ -1183,6 +1241,7 @@ func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.
 	}
 }
 
+// syntaxDependsOn reports whether node references symbol as an external dependency.
 func syntaxDependsOn(node cypher.SyntaxNode, symbol string) bool {
 	if symbol == "" {
 		return false
@@ -1195,6 +1254,7 @@ func syntaxDependsOn(node cypher.SyntaxNode, symbol string) bool {
 	return false
 }
 
+// singletonIDEqualityCounts counts constant id(symbol) equalities for each symbol in where.
 func singletonIDEqualityCounts(where *cypher.Where) map[string]int {
 	counts := map[string]int{}
 	if where == nil {
@@ -1218,6 +1278,7 @@ func singletonIDEqualityCounts(where *cypher.Where) map[string]int {
 	return counts
 }
 
+// identityFunctionSymbol returns the variable named by a single-argument id invocation.
 func identityFunctionSymbol(expression cypher.Expression) (string, bool) {
 	function, ok := expression.(*cypher.FunctionInvocation)
 	if !ok || function == nil || !strings.EqualFold(function.Name, cypher.IdentityFunction) || len(function.Arguments) != 1 {
@@ -1230,6 +1291,7 @@ func identityFunctionSymbol(expression cypher.Expression) (string, bool) {
 	return variable.Symbol, true
 }
 
+// appendExactRangeExpansionDecisions records safe short fixed-depth ranges throughout the reading clauses.
 func appendExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
@@ -1246,6 +1308,7 @@ func appendExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, 
 	}
 }
 
+// appendPatternPredicateExactRangeExpansionDecisions records exact-range steps nested inside pattern predicates.
 func appendPatternPredicateExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
 	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
 		patternPart := patternPartForPredicate(indexedPredicate.Predicate)
@@ -1259,6 +1322,7 @@ func appendPatternPredicateExactRangeExpansionDecisions(plan *LoweringPlan, quer
 	}
 }
 
+// appendPatternExactRangeExpansionDecisions records exact-range steps in one pattern part.
 func appendPatternExactRangeExpansionDecisions(plan *LoweringPlan, target PatternTarget, patternPart *cypher.PatternPart) {
 	for stepIndex, step := range traversalStepsForPattern(patternPart) {
 		if exactRangeExpansionCandidate(patternPart, step) {
@@ -1270,6 +1334,7 @@ func appendPatternExactRangeExpansionDecisions(plan *LoweringPlan, target Patter
 	}
 }
 
+// exactRangeExpansionCandidate reports whether a non-shortest directed step has a small fixed depth safe to unroll.
 func exactRangeExpansionCandidate(patternPart *cypher.PatternPart, step sourceTraversalStep) bool {
 	if patternPart == nil {
 		return false
@@ -1287,6 +1352,7 @@ func exactRangeExpansionCandidate(patternPart *cypher.PatternPart, step sourceTr
 	return depth >= 1 && depth <= maxExactRangeExpansionDepth
 }
 
+// hasExactRangeExpansionDecision reports whether plan already unrolls target's exact range.
 func hasExactRangeExpansionDecision(plan *LoweringPlan, target TraversalStepTarget) bool {
 	if plan == nil {
 		return false
@@ -1313,13 +1379,19 @@ func ExactPatternRangeDepth(patternRange *cypher.PatternRange) int64 {
 	return *patternRange.StartIndex
 }
 
+// indexedQuantifier pairs a quantifier with its stable traversal-order index.
 type indexedQuantifier struct {
-	Index      int
+	// Index is the quantifier's zero-based position in structural traversal order.
+	Index int
+	// Quantifier is the indexed Cypher predicate node.
 	Quantifier *cypher.Quantifier
 }
 
+// quantifierCollector records quantifiers in syntax traversal order.
 type quantifierCollector struct {
+	// VisitorHandler supplies cancellation and error propagation for the syntax walk.
 	walk.VisitorHandler
+	// quantifiers accumulates visited quantifiers with their stable indexes.
 	quantifiers []indexedQuantifier
 }
 
@@ -1335,6 +1407,7 @@ func (s *quantifierCollector) Enter(node cypher.SyntaxNode) {
 func (s *quantifierCollector) Visit(cypher.SyntaxNode) {}
 func (s *quantifierCollector) Exit(cypher.SyntaxNode)  {}
 
+// indexedQuantifiersInQueryPart returns all quantifiers in stable syntax traversal order.
 func indexedQuantifiersInQueryPart(queryPart cypher.SyntaxNode) []indexedQuantifier {
 	if queryPart == nil {
 		return nil
@@ -1351,6 +1424,7 @@ func indexedQuantifiersInQueryPart(queryPart cypher.SyntaxNode) []indexedQuantif
 	return collector.quantifiers
 }
 
+// quantifiersInSyntax returns the quantifier nodes contained in node in traversal order.
 func quantifiersInSyntax(node cypher.SyntaxNode) []*cypher.Quantifier {
 	if node == nil {
 		return nil
@@ -1374,6 +1448,7 @@ func quantifiersInSyntax(node cypher.SyntaxNode) []*cypher.Quantifier {
 	return quantifiers
 }
 
+// pathRelationshipQuantifierCandidate extracts the path and relationship symbols from a supported relationships(path) quantifier.
 func pathRelationshipQuantifierCandidate(quantifier *cypher.Quantifier) (string, string, bool) {
 	if quantifier == nil ||
 		(quantifier.Type != cypher.QuantifierTypeAny && quantifier.Type != cypher.QuantifierTypeNone) ||
@@ -1401,6 +1476,7 @@ func pathRelationshipQuantifierCandidate(quantifier *cypher.Quantifier) (string,
 	return pathVariable.Symbol, bindingSymbol, true
 }
 
+// appendPathRelationshipPredicateDecisions recognizes supported relationships(path) quantifiers and records their bindings.
 func appendPathRelationshipPredicateDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
 	quantifierIndexes := map[*cypher.Quantifier]int{}
 	for _, indexed := range indexedQuantifiersInQueryPart(queryPart) {
@@ -1443,6 +1519,7 @@ func appendPathRelationshipPredicateDecisions(plan *LoweringPlan, queryPartIndex
 	}
 }
 
+// appendProjectionPruningDecisions computes unused traversal bindings for each non-optional reading-clause pattern.
 func appendProjectionPruningDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
@@ -1464,6 +1541,7 @@ func appendProjectionPruningDecisions(plan *LoweringPlan, queryPartIndex int, re
 	}
 }
 
+// appendPatternProjectionPruningDecisions records node, relationship, and path fields unused after each step in a pattern.
 func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternTarget, patternPart *cypher.PatternPart, steps []sourceTraversalStep, sourceReferences map[string]struct{}) {
 	pathReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(patternPart.Variable))
 
@@ -1500,6 +1578,7 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 	}
 }
 
+// appendPatternPredicateProjectionLowerings applies projection analysis to traversal patterns nested in predicates.
 func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, sourceReferences map[string]struct{}) {
 	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
 		var (
@@ -1525,6 +1604,7 @@ func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartInde
 	}
 }
 
+// appendPatternPredicatePlacementDecisions records existence lowering for pattern predicates in one query part.
 func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
 	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
 		var (
@@ -1565,6 +1645,7 @@ func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex
 	}
 }
 
+// appendLatePathMaterializationDecisions identifies path and edge values whose hydration can be deferred.
 func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
@@ -1582,6 +1663,7 @@ func appendLatePathMaterializationDecisions(plan *LoweringPlan, queryPartIndex i
 	}
 }
 
+// appendPatternLatePathMaterializationDecisions records deferred materialization modes for one pattern's bindings.
 func appendPatternLatePathMaterializationDecisions(plan *LoweringPlan, target PatternTarget, patternPart *cypher.PatternPart, steps []sourceTraversalStep, sourceReferences map[string]struct{}) {
 	pathReferenced := referencesSourceIdentifier(sourceReferences, variableSymbol(patternPart.Variable))
 
@@ -1623,6 +1705,7 @@ func appendPatternLatePathMaterializationDecisions(plan *LoweringPlan, target Pa
 	}
 }
 
+// appendExpandIntoDecisions records traversal steps whose left and right endpoints were already declared.
 func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
 	declaredSymbols := map[string]struct{}{}
 
@@ -1680,11 +1763,15 @@ func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingCl
 	}
 }
 
+// declaredStepEndpoints snapshots visible symbols before each endpoint of a traversal step is declared.
 type declaredStepEndpoints struct {
-	BeforeLeftNode  map[string]struct{}
+	// BeforeLeftNode contains symbols visible before the step's left endpoint declaration.
+	BeforeLeftNode map[string]struct{}
+	// BeforeRightNode contains symbols visible after the edge but before the right endpoint declaration.
 	BeforeRightNode map[string]struct{}
 }
 
+// declaredSymbolsBeforeStepEndpoints computes declaration snapshots for every traversal-step endpoint.
 func declaredSymbolsBeforeStepEndpoints(initial map[string]struct{}, steps []sourceTraversalStep) []declaredStepEndpoints {
 	var (
 		declared  = copyStringSet(initial)
@@ -1702,6 +1789,7 @@ func declaredSymbolsBeforeStepEndpoints(initial map[string]struct{}, steps []sou
 	return endpoints
 }
 
+// appendTraversalDirectionDecisions evaluates each step's bound endpoints and selectivity to choose its direction.
 func appendTraversalDirectionDecisions(
 	plan *LoweringPlan,
 	queryPartIndex int,
@@ -1771,6 +1859,7 @@ func appendTraversalDirectionDecisions(
 	}
 }
 
+// bindingPredicateSymbols returns predicate dependencies that reference declared bindings.
 func bindingPredicateSymbols(predicateAttachments []PredicateAttachment, queryPartIndex int) map[string]struct{} {
 	symbols := map[string]struct{}{}
 
@@ -1787,6 +1876,7 @@ func bindingPredicateSymbols(predicateAttachments []PredicateAttachment, queryPa
 	return symbols
 }
 
+// copyBoundSourceSelectivity returns an independent copy of symbol selectivity rankings.
 func copyBoundSourceSelectivity(values map[string]boundSourceSelectivity) map[string]boundSourceSelectivity {
 	copied := make(map[string]boundSourceSelectivity, len(values))
 	for key, value := range values {
@@ -1796,6 +1886,7 @@ func copyBoundSourceSelectivity(values map[string]boundSourceSelectivity) map[st
 	return copied
 }
 
+// carryProjectionSelectivity propagates source selectivity through a WITH projection and its aliases.
 func carryProjectionSelectivity(
 	projection *cypher.Projection,
 	incomingSymbols map[string]struct{},
@@ -1836,6 +1927,7 @@ func carryProjectionSelectivity(
 	return carriedSymbols, carriedSelectivity
 }
 
+// projectionCarriesAllSymbols reports whether a projection uses the greedy asterisk form.
 func projectionCarriesAllSymbols(projection *cypher.Projection) bool {
 	if projection == nil {
 		return false
@@ -1856,6 +1948,7 @@ func projectionCarriesAllSymbols(projection *cypher.Projection) bool {
 	return false
 }
 
+// projectionCardinalitySelectivity classifies limited projections, ranking ordered or aggregate limits as top-N.
 func projectionCardinalitySelectivity(projection *cypher.Projection) boundSourceSelectivity {
 	if projection == nil || projection.Limit == nil {
 		return boundSourceSelectivityNone
@@ -1868,6 +1961,7 @@ func projectionCardinalitySelectivity(projection *cypher.Projection) boundSource
 	return boundSourceSelectivityLimited
 }
 
+// projectionHasAggregate reports whether any projection item contains an aggregate function.
 func projectionHasAggregate(projection *cypher.Projection) bool {
 	if projection == nil {
 		return false
@@ -1887,6 +1981,7 @@ func projectionHasAggregate(projection *cypher.Projection) bool {
 	return false
 }
 
+// expressionHasAggregate reports whether expression invokes a recognized aggregate function.
 func expressionHasAggregate(expression cypher.Expression) bool {
 	switch typedExpression := expression.(type) {
 	case *cypher.FunctionInvocation:
@@ -1896,6 +1991,7 @@ func expressionHasAggregate(expression cypher.Expression) bool {
 	}
 }
 
+// declareSelectiveMatchSymbols merges inferred node-property selectivity for a match into the symbol table.
 func declareSelectiveMatchSymbols(symbols map[string]boundSourceSelectivity, match *cypher.Match) {
 	if match == nil {
 		return
@@ -1929,6 +2025,7 @@ func declareSelectiveMatchSymbols(symbols map[string]boundSourceSelectivity, mat
 	}
 }
 
+// declareReadingClauseSymbols adds pattern bindings and WHERE dependencies from reading clauses.
 func declareReadingClauseSymbols(symbols map[string]struct{}, readingClauses []*cypher.ReadingClause) {
 	for _, readingClause := range readingClauses {
 		if readingClause != nil {
@@ -1937,6 +2034,7 @@ func declareReadingClauseSymbols(symbols map[string]struct{}, readingClauses []*
 	}
 }
 
+// declareReadingClauseSelectivity merges inferred selectivity from non-optional reading clauses.
 func declareReadingClauseSelectivity(symbols map[string]boundSourceSelectivity, readingClauses []*cypher.ReadingClause) {
 	for _, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil || readingClause.Match.Optional {
@@ -1947,6 +2045,7 @@ func declareReadingClauseSelectivity(symbols map[string]boundSourceSelectivity, 
 	}
 }
 
+// nodePatternsForPattern returns every node pattern in chain order.
 func nodePatternsForPattern(patternPart *cypher.PatternPart) []*cypher.NodePattern {
 	if patternPart == nil {
 		return nil
@@ -1962,12 +2061,14 @@ func nodePatternsForPattern(patternPart *cypher.PatternPart) []*cypher.NodePatte
 	return nodePatterns
 }
 
+// mergeBoundSourceSelectivity retains the stronger selectivity rank for symbol.
 func mergeBoundSourceSelectivity(symbols map[string]boundSourceSelectivity, symbol string, selectivity boundSourceSelectivity) {
 	if selectivity > symbols[symbol] {
 		symbols[symbol] = selectivity
 	}
 }
 
+// propertyPredicateSelectivity returns the strongest property constraint on symbol in where.
 func propertyPredicateSelectivity(expression cypher.Expression) (string, boundSourceSelectivity, bool) {
 	comparison, isComparison := expression.(*cypher.Comparison)
 	if !isComparison || len(comparison.Partials) != 1 {
@@ -1990,6 +2091,7 @@ func propertyPredicateSelectivity(expression cypher.Expression) (string, boundSo
 	return "", boundSourceSelectivityNone, false
 }
 
+// propertyConstraintSelectivity returns the strongest selectivity inferred from constant-valued inline properties.
 func propertyConstraintSelectivity(expression cypher.Expression) boundSourceSelectivity {
 	properties, ok := expression.(*cypher.Properties)
 	if !ok || properties == nil || properties.Parameter != nil {
@@ -2006,6 +2108,7 @@ func propertyConstraintSelectivity(expression cypher.Expression) boundSourceSele
 	return highest
 }
 
+// propertySelectivity treats a constant objectid as unique and other constant property values as selective predicates.
 func propertySelectivity(property string, value cypher.Expression) boundSourceSelectivity {
 	if strings.EqualFold(property, "objectid") && expressionIsConstant(value) {
 		return boundSourceSelectivityUnique
@@ -2018,6 +2121,7 @@ func propertySelectivity(property string, value cypher.Expression) boundSourceSe
 	return boundSourceSelectivityNone
 }
 
+// expressionIsConstant reports whether expression is a non-null literal or parameter independent of row bindings.
 func expressionIsConstant(expression cypher.Expression) bool {
 	switch typedExpression := expression.(type) {
 	case *cypher.Literal:
@@ -2029,6 +2133,7 @@ func expressionIsConstant(expression cypher.Expression) bool {
 	}
 }
 
+// propertyLookupSymbol returns the variable whose property expression reads, when direct.
 func propertyLookupSymbol(expression cypher.Expression) (string, string, bool) {
 	propertyLookup, isPropertyLookup := expression.(*cypher.PropertyLookup)
 	if !isPropertyLookup || propertyLookup == nil {
@@ -2043,10 +2148,12 @@ func propertyLookupSymbol(expression cypher.Expression) (string, string, bool) {
 	return variable.Symbol, propertyLookup.Symbol, true
 }
 
+// nodePatternHasUniquePropertyConstraint reports whether node contains an inline property treated as unique.
 func nodePatternHasUniquePropertyConstraint(nodePattern *cypher.NodePattern) bool {
 	return nodePattern != nil && propertyConstraintSelectivity(nodePattern.Properties) == boundSourceSelectivityUnique
 }
 
+// nodePatternSelectivity ranks a node pattern from kind, inline-property, and attached-predicate constraints.
 func nodePatternSelectivity(nodePattern *cypher.NodePattern, hasAttachedPredicate bool) boundSourceSelectivity {
 	if nodePattern == nil {
 		return boundSourceSelectivityNone
@@ -2065,12 +2172,14 @@ func nodePatternSelectivity(nodePattern *cypher.NodePattern, hasAttachedPredicat
 	return selectivity
 }
 
+// mergeSelectivityValue raises current when next is the stronger source-selectivity rank.
 func mergeSelectivityValue(current *boundSourceSelectivity, next boundSourceSelectivity) {
 	if next > *current {
 		*current = next
 	}
 }
 
+// shortestPathSearchPredicateSymbols returns bindings constrained by search-compatible predicates in where.
 func shortestPathSearchPredicateSymbols(readingClauses []*cypher.ReadingClause) map[string]struct{} {
 	symbols := map[string]struct{}{}
 
@@ -2087,6 +2196,7 @@ func shortestPathSearchPredicateSymbols(readingClauses []*cypher.ReadingClause) 
 	return symbols
 }
 
+// addShortestPathSearchPredicateSymbols adds search-constrained symbols from one expression to output.
 func addShortestPathSearchPredicateSymbols(symbols map[string]struct{}, expression cypher.Expression) {
 	for _, term := range cypherConjunctionTerms(expression) {
 		if symbol, ok := shortestPathSearchPredicateSymbol(term); ok {
@@ -2095,6 +2205,7 @@ func addShortestPathSearchPredicateSymbols(symbols map[string]struct{}, expressi
 	}
 }
 
+// cypherConjunctionTerms flattens nested Cypher AND expressions into independent terms.
 func cypherConjunctionTerms(expression cypher.Expression) []cypher.Expression {
 	if conjunction, isConjunction := expression.(*cypher.Conjunction); isConjunction {
 		var terms []cypher.Expression
@@ -2108,6 +2219,7 @@ func cypherConjunctionTerms(expression cypher.Expression) []cypher.Expression {
 	return []cypher.Expression{expression}
 }
 
+// shortestPathSearchPredicateSymbol extracts the endpoint symbol constrained by a supported search comparison.
 func shortestPathSearchPredicateSymbol(expression cypher.Expression) (string, bool) {
 	comparison, isComparison := expression.(*cypher.Comparison)
 	if !isComparison || len(comparison.Partials) != 1 {
@@ -2130,6 +2242,7 @@ func shortestPathSearchPredicateSymbol(expression cypher.Expression) (string, bo
 	return "", false
 }
 
+// isEndpointSearchOperator reports whether an operator can constrain endpoint seed values.
 func isEndpointSearchOperator(operator cypher.Operator) bool {
 	switch operator {
 	case cypher.OperatorEquals,
@@ -2148,6 +2261,7 @@ func isEndpointSearchOperator(operator cypher.Operator) bool {
 	}
 }
 
+// propertyLookupVariableSymbol returns the direct variable at the base of a property lookup.
 func propertyLookupVariableSymbol(expression cypher.Expression) (string, bool) {
 	propertyLookup, isPropertyLookup := expression.(*cypher.PropertyLookup)
 	if !isPropertyLookup || propertyLookup == nil {
@@ -2162,11 +2276,13 @@ func propertyLookupVariableSymbol(expression cypher.Expression) (string, bool) {
 	return variable.Symbol, true
 }
 
+// expressionReferencesAnySource reports whether expression depends on a variable or property binding.
 func expressionReferencesAnySource(expression cypher.Expression) bool {
 	references, err := collectReferencedSourceIdentifiers(expression)
 	return err != nil || len(references) > 0
 }
 
+// traversalDirectionDecisionForStep chooses whether to reverse a step based on bound endpoints and estimated selectivity.
 func traversalDirectionDecisionForStep(
 	target TraversalStepTarget,
 	stepIndex int,
@@ -2219,6 +2335,7 @@ func traversalDirectionDecisionForStep(
 	return TraversalDirectionDecision{}, false
 }
 
+// boundLeftExpansionDirectionDecisionForStep preserves a bound-left expansion unless terminal evidence justifies reversal.
 func boundLeftExpansionDirectionDecisionForStep(
 	target TraversalStepTarget,
 	patternPart *cypher.PatternPart,
@@ -2285,6 +2402,7 @@ func boundLeftExpansionDirectionDecisionForStep(
 	}, true
 }
 
+// appendShortestPathStrategyDecisions records bidirectional search when endpoint evidence supports it.
 func appendShortestPathStrategyDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
 	declaredSymbols := map[string]struct{}{}
 
@@ -2337,6 +2455,7 @@ func appendShortestPathStrategyDecisions(plan *LoweringPlan, queryPartIndex int,
 	}
 }
 
+// shortestPathStrategyDecisionForStep chooses bidirectional search when both endpoints provide usable evidence.
 func shortestPathStrategyDecisionForStep(
 	target TraversalStepTarget,
 	step sourceTraversalStep,
@@ -2369,6 +2488,7 @@ func shortestPathStrategyDecisionForStep(
 	return ShortestPathStrategyDecision{}, false
 }
 
+// endpointHasSearchConstraint reports whether endpoint has an inline property or attached predicate constraint.
 func endpointHasSearchConstraint(nodePattern *cypher.NodePattern, symbol string, predicateConstrainedSymbols map[string]struct{}) bool {
 	if nodePattern == nil {
 		return false
@@ -2377,6 +2497,7 @@ func endpointHasSearchConstraint(nodePattern *cypher.NodePattern, symbol string,
 	return nodePattern.Properties != nil || referencesSourceIdentifier(predicateConstrainedSymbols, symbol)
 }
 
+// endpointHasTerminalFilterConstraint reports whether endpoint has a kind, property, or attached predicate constraint useful as a terminal filter.
 func endpointHasTerminalFilterConstraint(nodePattern *cypher.NodePattern, symbol string, predicateConstrainedSymbols map[string]struct{}) bool {
 	if nodePattern == nil {
 		return false
@@ -2385,6 +2506,7 @@ func endpointHasTerminalFilterConstraint(nodePattern *cypher.NodePattern, symbol
 	return nodePatternHasConstraints(nodePattern) || referencesSourceIdentifier(predicateConstrainedSymbols, symbol)
 }
 
+// appendShortestPathFilterDecisions records terminal and endpoint-pair filters worth materializing for shortest paths.
 func appendShortestPathFilterDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, predicateConstrainedSymbols map[string]struct{}) {
 	declaredSymbols := map[string]struct{}{}
 
@@ -2438,6 +2560,7 @@ func appendShortestPathFilterDecisions(plan *LoweringPlan, queryPartIndex int, r
 	}
 }
 
+// shortestPathFilterDecisionForStep chooses an endpoint-pair, terminal, or no filter for one shortest-path step.
 func shortestPathFilterDecisionForStep(
 	plan *LoweringPlan,
 	target TraversalStepTarget,
@@ -2480,6 +2603,7 @@ func shortestPathFilterDecisionForStep(
 	}, true
 }
 
+// hasShortestPathBidirectionalStrategy reports whether target is planned for bidirectional shortest-path search.
 func hasShortestPathBidirectionalStrategy(plan *LoweringPlan, target TraversalStepTarget) bool {
 	if plan == nil {
 		return false
@@ -2494,6 +2618,7 @@ func hasShortestPathBidirectionalStrategy(plan *LoweringPlan, target TraversalSt
 	return false
 }
 
+// appendLimitPushdownDecisions records a final literal limit that can safely bound traversal work.
 func appendLimitPushdownDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) {
 	if !queryPartAllowsLimitPushdown(queryPart, readingClauses) {
 		return
@@ -2533,6 +2658,7 @@ func appendLimitPushdownDecisions(plan *LoweringPlan, queryPartIndex int, queryP
 	}
 }
 
+// queryPartAllowsLimitPushdown reports whether one reading clause with an unordered, non-distinct LIMIT and no SKIP or updates permits early limiting.
 func queryPartAllowsLimitPushdown(queryPart cypher.SyntaxNode, readingClauses []*cypher.ReadingClause) bool {
 	projection, updatingClauseCount := queryPartProjection(queryPart)
 	if projection == nil ||
@@ -2548,6 +2674,7 @@ func queryPartAllowsLimitPushdown(queryPart cypher.SyntaxNode, readingClauses []
 	return true
 }
 
+// queryPartProjection returns a query part's terminal projection and number of updating clauses.
 func queryPartProjection(queryPart cypher.SyntaxNode) (*cypher.Projection, int) {
 	switch typedQueryPart := queryPart.(type) {
 	case *cypher.SinglePartQuery:
@@ -2569,6 +2696,7 @@ func queryPartProjection(queryPart cypher.SyntaxNode) (*cypher.Projection, int) 
 	}
 }
 
+// suffixBindingsObserved reports whether downstream syntax consumes a binding introduced in the fixed suffix.
 func suffixBindingsObserved(patternPart *cypher.PatternPart, steps []sourceTraversalStep, references map[string]struct{}) bool {
 	if patternPart != nil && patternPart.Variable != nil && referencesSourceIdentifier(references, patternPart.Variable.Symbol) {
 		return true
@@ -2582,6 +2710,7 @@ func suffixBindingsObserved(patternPart *cypher.PatternPart, steps []sourceTrave
 	return false
 }
 
+// appendExpansionSuffixPushdownDecisions records fixed-suffix candidates evaluated for supplemental filtering.
 func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, sourceReferences map[string]struct{}) {
 	declaredSymbols := map[string]struct{}{}
 
@@ -2648,11 +2777,13 @@ func appendExpansionSuffixPushdownDecisions(plan *LoweringPlan, queryPartIndex i
 	}
 }
 
+// expansionStepMayFlipForConstraintBalance reports whether reversal can move stronger constraints to the expansion root.
 func expansionStepMayFlipForConstraintBalance(stepIndex int, step sourceTraversalStep, declaredEndpoints declaredStepEndpoints) bool {
 	_, mayFlip := traversalDirectionDecisionForStep(TraversalStepTarget{}, stepIndex, step, declaredEndpoints, false, false)
 	return mayFlip
 }
 
+// leftEndpointBoundForStep reports whether the left endpoint is available from prior scope or a preceding step.
 func leftEndpointBoundForStep(stepIndex int, step sourceTraversalStep, declaredEndpoints declaredStepEndpoints) bool {
 	leftSymbol := variableSymbol(step.LeftNode.Variable)
 	if leftSymbol == "" {
@@ -2663,6 +2794,7 @@ func leftEndpointBoundForStep(stepIndex int, step sourceTraversalStep, declaredE
 	return leftBound
 }
 
+// hasTraversalDirectionFlip reports whether target has a planned logical direction reversal.
 func hasTraversalDirectionFlip(plan *LoweringPlan, target TraversalStepTarget) bool {
 	if plan == nil {
 		return false
@@ -2677,11 +2809,15 @@ func hasTraversalDirectionFlip(plan *LoweringPlan, target TraversalStepTarget) b
 	return false
 }
 
+// bindingTargetKey uniquely identifies a binding within one query part.
 type bindingTargetKey struct {
+	// QueryPartIndex identifies the query part that owns the binding.
 	QueryPartIndex int
-	Symbol         string
+	// Symbol is the binding's Cypher variable name.
+	Symbol string
 }
 
+// appendPredicatePlacementDecisions records the earliest traversal scope where each attached predicate is evaluable.
 func appendPredicatePlacementDecisions(plan *LoweringPlan, query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) {
 	if len(predicateAttachments) == 0 {
 		return
@@ -2712,6 +2848,7 @@ func appendPredicatePlacementDecisions(plan *LoweringPlan, query *cypher.Regular
 	}
 }
 
+// attachPredicatePlacementsToSuffixPushdowns copies relevant predicate attachments into each suffix-pushdown decision.
 func attachPredicatePlacementsToSuffixPushdowns(plan *LoweringPlan) {
 	for suffixIdx := range plan.ExpansionSuffixPushdown {
 		suffix := &plan.ExpansionSuffixPushdown[suffixIdx]
@@ -2730,12 +2867,14 @@ func attachPredicatePlacementsToSuffixPushdowns(plan *LoweringPlan) {
 	}
 }
 
+// appendCountStoreFastPathDecisions records a single-part query answerable directly from node or relationship counts.
 func appendCountStoreFastPathDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
 	if decision, ok := countStoreFastPathDecision(query); ok {
 		plan.CountStoreFastPath = append(plan.CountStoreFastPath, decision)
 	}
 }
 
+// appendAggregateTraversalCountDecisions records variable traversals lowered to grouped aggregate counts.
 func appendAggregateTraversalCountDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
 	if shape, ok := AggregateTraversalCountShapeForQuery(query); ok {
 		plan.AggregateTraversalCount = append(plan.AggregateTraversalCount, AggregateTraversalCountDecision{
@@ -2815,6 +2954,7 @@ func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (Aggregate
 	}, true
 }
 
+// aggregateTraversalSourceMatch returns the match that establishes a traversal count's source binding.
 func aggregateTraversalSourceMatch(readingClause *cypher.ReadingClause) (*cypher.Match, *cypher.NodePattern, string, bool) {
 	if readingClause == nil || readingClause.Match == nil {
 		return nil, nil, "", false
@@ -2840,6 +2980,7 @@ func aggregateTraversalSourceMatch(readingClause *cypher.ReadingClause) (*cypher
 	return match, nodePattern, nodePattern.Variable.Symbol, true
 }
 
+// aggregateTraversalMatch returns the single variable-length match eligible for aggregate counting.
 func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol string) (*cypher.Match, *cypher.RelationshipPattern, *cypher.NodePattern, string, bool) {
 	if readingClause == nil || readingClause.Match == nil {
 		return nil, nil, nil, "", false
@@ -2883,6 +3024,7 @@ func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol s
 	return match, relationship, rightNode, rightNode.Variable.Symbol, true
 }
 
+// aggregateTraversalWithProjection validates the WITH projection and returns its count alias.
 func aggregateTraversalWithProjection(projection *cypher.Projection, sourceSymbol, terminalSymbol string) (string, bool) {
 	if projection == nil || projection.All || projection.Order != nil || projection.Skip != nil || projection.Limit != nil || len(projection.Items) != 2 {
 		return "", false
@@ -2900,13 +3042,19 @@ func aggregateTraversalWithProjection(projection *cypher.Projection, sourceSymbo
 	return countAlias, true
 }
 
+// aggregateTraversalFinalProjectionShape describes the source and count columns required from the final projection.
 type aggregateTraversalFinalProjectionShape struct {
+	// SourceAlias is the output name of the traversal's source binding.
 	SourceAlias string
-	CountAlias  string
+	// CountAlias is the output name of the aggregate count binding.
+	CountAlias string
+	// ReturnCount reports whether the final projection includes the count binding.
 	ReturnCount bool
-	Limit       int64
+	// Limit is the descending top-count bound applied by the final projection.
+	Limit int64
 }
 
+// aggregateTraversalFinalProjection validates the terminal projection and returns its aggregate-count output shape.
 func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, sourceSymbol, countAlias string) (aggregateTraversalFinalProjectionShape, bool) {
 	if queryPart == nil || len(queryPart.ReadingClauses) > 0 || len(queryPart.UpdatingClauses) > 0 || queryPart.Return == nil || queryPart.Return.Projection == nil {
 		return aggregateTraversalFinalProjectionShape{}, false
@@ -2970,6 +3118,7 @@ func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, source
 	return finalProjection, true
 }
 
+// aggregateTraversalDepthBounds returns finite minimum and maximum depths for a countable relationship range.
 func aggregateTraversalDepthBounds(patternRange *cypher.PatternRange) (int64, int64, bool) {
 	if patternRange == nil {
 		return 0, 0, false
@@ -2994,6 +3143,7 @@ func aggregateTraversalDepthBounds(patternRange *cypher.PatternRange) (int64, in
 	return minDepth, maxDepth, true
 }
 
+// projectionItemVariableSymbol returns the direct variable projected by item.
 func projectionItemVariableSymbol(expression cypher.Expression) (string, bool) {
 	projectionItem, ok := expression.(*cypher.ProjectionItem)
 	if !ok || projectionItem == nil || projectionItem.Alias != nil {
@@ -3003,6 +3153,7 @@ func projectionItemVariableSymbol(expression cypher.Expression) (string, bool) {
 	return expressionVariableSymbol(projectionItem.Expression)
 }
 
+// projectionItemVariableSymbolAndAlias returns a projected variable and its effective output name.
 func projectionItemVariableSymbolAndAlias(expression cypher.Expression) (string, string, bool) {
 	projectionItem, ok := expression.(*cypher.ProjectionItem)
 	if !ok || projectionItem == nil {
@@ -3026,6 +3177,7 @@ func projectionItemVariableSymbolAndAlias(expression cypher.Expression) (string,
 	return symbol, alias, true
 }
 
+// expressionVariableSymbol returns expression's direct variable symbol without following compound syntax.
 func expressionVariableSymbol(expression cypher.Expression) (string, bool) {
 	variable, ok := expression.(*cypher.Variable)
 	if !ok || variable == nil || variable.Symbol == "" {
@@ -3035,6 +3187,7 @@ func expressionVariableSymbol(expression cypher.Expression) (string, bool) {
 	return variable.Symbol, true
 }
 
+// projectionItemCountAlias returns the alias of a supported count expression.
 func projectionItemCountAlias(expression cypher.Expression, terminalSymbol string) (string, bool) {
 	projectionItem, ok := expression.(*cypher.ProjectionItem)
 	if !ok || projectionItem == nil || projectionItem.Alias == nil || projectionItem.Alias.Symbol == "" {
@@ -3054,6 +3207,7 @@ func projectionItemCountAlias(expression cypher.Expression, terminalSymbol strin
 	return projectionItem.Alias.Symbol, true
 }
 
+// aggregateTraversalCountArgumentMatches reports whether count observes the expected terminal binding or all rows.
 func aggregateTraversalCountArgumentMatches(expression cypher.Expression, terminalSymbol string) bool {
 	if symbol, ok := expressionVariableSymbol(expression); ok {
 		return symbol == terminalSymbol
@@ -3063,6 +3217,7 @@ func aggregateTraversalCountArgumentMatches(expression cypher.Expression, termin
 	return ok && rangeQuantifier != nil && rangeQuantifier.Value == cypher.TokenLiteralAsterisk
 }
 
+// literalInt64 converts a non-negative integer literal to int64 when its value is representable.
 func literalInt64(expression cypher.Expression) (int64, bool) {
 	literal, ok := expression.(*cypher.Literal)
 	if !ok || literal == nil || literal.Null {
@@ -3085,6 +3240,7 @@ func literalInt64(expression cypher.Expression) (int64, bool) {
 	}
 }
 
+// countStoreFastPathDecision recognizes a count query answerable from node or edge statistics.
 func countStoreFastPathDecision(query *cypher.RegularQuery) (CountStoreFastPathDecision, bool) {
 	if query == nil || query.SingleQuery == nil || query.SingleQuery.SinglePartQuery == nil {
 		return CountStoreFastPathDecision{}, false
@@ -3168,6 +3324,7 @@ func countStoreFastPathDecision(query *cypher.RegularQuery) (CountStoreFastPathD
 	}, true
 }
 
+// simpleCountProjectionArgument extracts the direct variable or wildcard consumed by a lone count projection.
 func simpleCountProjectionArgument(returnClause *cypher.Return) (string, bool) {
 	if returnClause == nil || returnClause.Projection == nil {
 		return "", false
@@ -3205,10 +3362,12 @@ func simpleCountProjectionArgument(returnClause *cypher.Return) (string, bool) {
 	return "", false
 }
 
+// constrainedCountFastPathEndpoint reports whether a node endpoint has constraints incompatible with count-store lookup.
 func constrainedCountFastPathEndpoint(nodePattern *cypher.NodePattern) bool {
 	return nodePattern == nil || nodePattern.Variable != nil || len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil
 }
 
+// kindSymbols returns the string names of all non-nil kinds in declaration order.
 func kindSymbols(kinds graph.Kinds) []string {
 	if len(kinds) == 0 {
 		return nil
@@ -3222,6 +3381,7 @@ func kindSymbols(kinds graph.Kinds) []string {
 	return symbols
 }
 
+// indexBindingTargets maps traversal-step node and relationship bindings to their first query-part target coordinates.
 func indexBindingTargets(query *cypher.RegularQuery) map[bindingTargetKey]TraversalStepTarget {
 	targets := map[bindingTargetKey]TraversalStepTarget{}
 
@@ -3248,6 +3408,7 @@ func indexBindingTargets(query *cypher.RegularQuery) map[bindingTargetKey]Traver
 	return targets
 }
 
+// indexReadingClauseBindingTargets adds first targets for traversal-step node and relationship bindings in readingClauses.
 func indexReadingClauseBindingTargets(targets map[bindingTargetKey]TraversalStepTarget, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
 	for clauseIndex, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil {
@@ -3271,6 +3432,7 @@ func indexReadingClauseBindingTargets(targets map[bindingTargetKey]TraversalStep
 	}
 }
 
+// setBindingTarget records target for a non-empty binding symbol without overwriting its first declaration.
 func setBindingTarget(targets map[bindingTargetKey]TraversalStepTarget, queryPartIndex int, symbol string, target TraversalStepTarget) {
 	if symbol == "" {
 		return
@@ -3285,6 +3447,7 @@ func setBindingTarget(targets map[bindingTargetKey]TraversalStepTarget, queryPar
 	}
 }
 
+// expansionSuffixPushdownLength counts fixed directed steps following a variable expansion.
 func expansionSuffixPushdownLength(suffixSteps []sourceTraversalStep) int {
 	var suffixLength int
 
@@ -3299,6 +3462,7 @@ func expansionSuffixPushdownLength(suffixSteps []sourceTraversalStep) int {
 	return suffixLength
 }
 
+// declareMatchSymbols adds pattern bindings and WHERE dependencies from match to declared.
 func declareMatchSymbols(declared map[string]struct{}, match *cypher.Match) {
 	if match == nil {
 		return
@@ -3311,6 +3475,7 @@ func declareMatchSymbols(declared map[string]struct{}, match *cypher.Match) {
 	declareWhereSymbols(declared, match)
 }
 
+// declarePatternSymbols adds path, node, and relationship bindings introduced by a pattern part.
 func declarePatternSymbols(declared map[string]struct{}, patternPart *cypher.PatternPart) {
 	if patternPart == nil {
 		return
@@ -3330,26 +3495,31 @@ func declarePatternSymbols(declared map[string]struct{}, patternPart *cypher.Pat
 	}
 }
 
+// declareWhereSymbols adds variable dependencies referenced by a match predicate.
 func declareWhereSymbols(declared map[string]struct{}, match *cypher.Match) {
 	for _, dependency := range dependenciesForMatch(match) {
 		addSymbol(declared, dependency)
 	}
 }
 
+// nodePatternHasConstraints reports whether a node pattern declares kinds or inline properties.
 func nodePatternHasConstraints(nodePattern *cypher.NodePattern) bool {
 	return nodePattern != nil && (len(nodePattern.Kinds) > 0 || nodePattern.Properties != nil)
 }
 
+// relationshipPatternHasProperties reports whether a relationship pattern declares inline properties.
 func relationshipPatternHasProperties(relationshipPattern *cypher.RelationshipPattern) bool {
 	return relationshipPattern != nil && relationshipPattern.Properties != nil
 }
 
+// addSymbol inserts a non-empty symbol into a declaration set.
 func addSymbol(symbols map[string]struct{}, symbol string) {
 	if symbol != "" {
 		symbols[symbol] = struct{}{}
 	}
 }
 
+// copyStringSet returns an independent copy of a string membership set.
 func copyStringSet(values map[string]struct{}) map[string]struct{} {
 	copied := make(map[string]struct{}, len(values))
 	for value := range values {
@@ -3359,6 +3529,7 @@ func copyStringSet(values map[string]struct{}) map[string]struct{} {
 	return copied
 }
 
+// traversalStepsForPattern converts a pattern chain into ordered left-edge-right traversal steps.
 func traversalStepsForPattern(patternPart *cypher.PatternPart) []sourceTraversalStep {
 	if patternPart == nil {
 		return nil
@@ -3399,6 +3570,7 @@ func traversalStepsForPattern(patternPart *cypher.PatternPart) []sourceTraversal
 	return steps
 }
 
+// variableSymbol returns variable's symbol or an empty string for a missing variable.
 func variableSymbol(variable *cypher.Variable) string {
 	if variable == nil {
 		return ""

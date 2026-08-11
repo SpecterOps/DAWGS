@@ -29,75 +29,133 @@ import (
 )
 
 const (
-	perfGateVersion       = 2
+	// perfGateVersion identifies the serialized schema revision for perf gate.
+	perfGateVersion = 2
+
+	// defaultBootstrapCount sets the fallback number of resamples used to estimate confidence bounds.
 	defaultBootstrapCount = 10_000
-	minimumGateRounds     = 5
-	minimumP95Samples     = 150
+
+	// minimumGateRounds requires this many independent matched rounds before a workload may pass.
+	minimumGateRounds = 5
+
+	// minimumP95Samples requires this many warm samples per arm before the P95 ratio is gated.
+	minimumP95Samples = 150
 )
 
+// PerfGateOptions defines statistical confidence, materiality, targets, and declared backend coverage for gating.
 type PerfGateOptions struct {
-	Seed                int64
-	Confidence          float64
+	// Seed controls deterministic random sampling.
+	Seed int64
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64
+	// RegressionThreshold sets the largest median ratio that is not considered a regression.
 	RegressionThreshold float64
-	BootstrapCount      int
-	DeclaredBackends    []DeclaredCaseBackend
-	TargetNames         []string
-	MaterialityRatio    float64
+	// BootstrapCount sets the number of bootstrap resamples.
+	BootstrapCount int
+	// DeclaredBackends lists case/backend declarations that the performance gate must cover.
+	DeclaredBackends []DeclaredCaseBackend
+	// TargetNames restricts materiality requirements to the named workloads.
+	TargetNames []string
+	// MaterialityRatio sets the relative change required before a difference is material.
+	MaterialityRatio float64
+	// MaterialityAbsolute sets the absolute duration change required before a difference is material.
 	MaterialityAbsolute time.Duration
-	DiagnosticMode      bool
+	// DiagnosticMode allows incomplete diagnostic selections that cannot produce a release-gate pass.
+	DiagnosticMode bool
 }
 
+// RatioInterval describes a point estimate and confidence bounds for a latency ratio.
 type RatioInterval struct {
+	// Estimate records the point estimate enclosed by the confidence bounds.
 	Estimate float64 `json:"estimate"`
-	Lower    float64 `json:"lower"`
-	Upper    float64 `json:"upper"`
+	// Lower records the lower confidence bound.
+	Lower float64 `json:"lower"`
+	// Upper records the upper confidence bound.
+	Upper float64 `json:"upper"`
 }
 
+// DurationInterval describes a duration estimate and its confidence bounds.
 type DurationInterval struct {
+	// Estimate records the point estimate enclosed by the confidence bounds.
 	Estimate time.Duration `json:"estimate"`
-	Lower    time.Duration `json:"lower"`
-	Upper    time.Duration `json:"upper"`
+	// Lower records the lower confidence bound.
+	Lower time.Duration `json:"lower"`
+	// Upper records the upper confidence bound.
+	Upper time.Duration `json:"upper"`
 }
 
+// PerfGateCase reports matched sample evidence, bootstrap intervals, and classification for one gated workload.
 type PerfGateCase struct {
-	Dataset             string            `json:"dataset"`
-	Name                string            `json:"name"`
-	Backend             ExecutionMode     `json:"backend"`
-	Rounds              int               `json:"rounds"`
-	BaselineSamples     int               `json:"baseline_samples"`
-	CandidateSamples    int               `json:"candidate_samples"`
-	BaselineStatus      string            `json:"baseline_status,omitempty"`
-	CandidateStatus     string            `json:"candidate_status,omitempty"`
-	OracleOnly          bool              `json:"oracle_only,omitempty"`
-	MedianRatio         RatioInterval     `json:"median_ratio"`
-	P95Ratio            *RatioInterval    `json:"p95_ratio,omitempty"`
-	MedianSaving        *DurationInterval `json:"median_saving,omitempty"`
-	MaterialityRatio    *float64          `json:"materiality_ratio_upper_limit,omitempty"`
-	MaterialityAbsolute *time.Duration    `json:"materiality_absolute_lower_limit,omitempty"`
-	Passed              bool              `json:"passed"`
-	Reasons             []string          `json:"reasons,omitempty"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Backend identifies the execution backend.
+	Backend ExecutionMode `json:"backend"`
+	// Rounds records the number of independent measurement rounds.
+	Rounds int `json:"rounds"`
+	// BaselineSamples records warm timing samples available from the baseline arm.
+	BaselineSamples int `json:"baseline_samples"`
+	// CandidateSamples records warm timing samples available from the candidate arm.
+	CandidateSamples int `json:"candidate_samples"`
+	// BaselineStatus records the first non-OK baseline status for the workload.
+	BaselineStatus string `json:"baseline_status,omitempty"`
+	// CandidateStatus records the first non-OK candidate status for the workload.
+	CandidateStatus string `json:"candidate_status,omitempty"`
+	// OracleOnly marks a backend as a correctness oracle excluded from latency regression decisions.
+	OracleOnly bool `json:"oracle_only,omitempty"`
+	// MedianRatio reports the candidate-to-baseline median latency ratio and confidence bounds.
+	MedianRatio RatioInterval `json:"median_ratio"`
+	// P95Ratio reports the candidate-to-baseline P95 latency ratio and confidence bounds.
+	P95Ratio *RatioInterval `json:"p95_ratio,omitempty"`
+	// MedianSaving reports absolute median latency saved by the candidate.
+	MedianSaving *DurationInterval `json:"median_saving,omitempty"`
+	// MaterialityRatio sets the relative change required before a difference is material.
+	MaterialityRatio *float64 `json:"materiality_ratio_upper_limit,omitempty"`
+	// MaterialityAbsolute sets the absolute duration change required before a difference is material.
+	MaterialityAbsolute *time.Duration `json:"materiality_absolute_lower_limit,omitempty"`
+	// Passed reports whether every required gate condition succeeded.
+	Passed bool `json:"passed"`
+	// Reasons lists explanations for the reported disposition.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
+// PerfGateReport contains baseline and candidate identities, gate policy, and every workload disposition.
 type PerfGateReport struct {
-	Version             int            `json:"version"`
-	Seed                int64          `json:"seed"`
-	Confidence          float64        `json:"confidence_level"`
-	RegressionThreshold float64        `json:"regression_threshold"`
-	BaselineSHA256      string         `json:"baseline_sha256"`
-	CandidateSHA256     string         `json:"candidate_sha256"`
-	DeclarationSHA256   string         `json:"declaration_sha256,omitempty"`
-	Passed              bool           `json:"passed"`
-	Cases               []PerfGateCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Seed controls deterministic random sampling.
+	Seed int64 `json:"seed"`
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64 `json:"confidence_level"`
+	// RegressionThreshold sets the largest median ratio that is not considered a regression.
+	RegressionThreshold float64 `json:"regression_threshold"`
+	// BaselineSHA256 identifies the exact baseline artifact evaluated by the gate.
+	BaselineSHA256 string `json:"baseline_sha256"`
+	// CandidateSHA256 identifies the exact candidate artifact evaluated by the gate.
+	CandidateSHA256 string `json:"candidate_sha256"`
+	// DeclarationSHA256 identifies the canonical set of declared workloads.
+	DeclarationSHA256 string `json:"declaration_sha256,omitempty"`
+	// Passed reports whether every required gate condition succeeded.
+	Passed bool `json:"passed"`
+	// Cases contains the gate disposition and statistical evidence for each declared workload.
+	Cases []PerfGateCase `json:"cases"`
 }
 
+// performanceKey identifies one dataset, case, and backend across performance artifacts.
 type performanceKey struct {
+	// dataset names the fixture shared by matched baseline and candidate records.
 	dataset string
-	name    string
+	// name identifies the workload case within its dataset.
+	name string
+	// backend separates independently gated execution modes for the same workload.
 	backend ExecutionMode
 }
 
+// roundSamples groups positive warm durations by independent measurement round.
 type roundSamples map[int][]time.Duration
 
+// comparePerformanceArtifacts validates two artifacts, writes their performance-gate report, and returns its pass status.
 func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string, options PerfGateOptions) (bool, error) {
 	baseline, err := readJSONLFile(baselinePath)
 	if err != nil {
@@ -134,6 +192,7 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	return report.Passed, nil
 }
 
+// validatePerformanceArtifactSelections rejects adaptive or diagnostic artifacts when complete-gate input is required.
 func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, diagnosticMode bool) error {
 	if !diagnosticMode && (hasAdaptiveDiscoveryRecord(baseline) || hasAdaptiveDiscoveryRecord(candidate)) {
 		return fmt.Errorf("adaptive-discovery artifacts are refused by the complete performance gate")
@@ -166,6 +225,7 @@ func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, dia
 	return nil
 }
 
+// hasAdaptiveDiscoveryRecord reports whether any record was produced by adaptive existing-graph discovery.
 func hasAdaptiveDiscoveryRecord(records []CaseResult) bool {
 	for _, record := range records {
 		if record.ExistingGraph != nil && record.ExistingGraph.Adaptive {
@@ -178,6 +238,7 @@ func hasAdaptiveDiscoveryRecord(records []CaseResult) bool {
 	return false
 }
 
+// buildPerfGateReport compares matched baseline and candidate samples and classifies each declared workload.
 func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptions) (PerfGateReport, error) {
 	if err := validatePerformanceWorkloadIdentity(baseline, candidate); err != nil {
 		return PerfGateReport{}, err
@@ -318,6 +379,7 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 	return report, nil
 }
 
+// validatePerformanceWorkloadIdentity ensures matched artifacts describe identical logical workloads per case and backend.
 func validatePerformanceWorkloadIdentity(baseline, candidate []CaseResult) error {
 	collect := func(label string, records []CaseResult) (map[performanceKey]string, error) {
 		identities := map[performanceKey]string{}
@@ -330,10 +392,15 @@ func validatePerformanceWorkloadIdentity(baseline, candidate []CaseResult) error
 				return nil, fmt.Errorf("%s artifact case %s/%s/%s has no workload identity", label, key.dataset, key.name, key.backend)
 			}
 			identityPayload := struct {
-				WorkloadSHA256       string `json:"workload_sha256"`
-				ManifestSHA256       string `json:"manifest_sha256,omitempty"`
-				ContentIdentity      string `json:"content_identity,omitempty"`
-				FixtureChecksum      string `json:"fixture_checksum,omitempty"`
+				// WorkloadSHA256 binds the compared samples to one logical workload declaration.
+				WorkloadSHA256 string `json:"workload_sha256"`
+				// ManifestSHA256 identifies the anchor manifest that authorized the run.
+				ManifestSHA256 string `json:"manifest_sha256,omitempty"`
+				// ContentIdentity binds resumable work to the logical contents of the live graph.
+				ContentIdentity string `json:"content_identity,omitempty"`
+				// FixtureChecksum identifies the loaded fixture contents.
+				FixtureChecksum string `json:"fixture_checksum,omitempty"`
+				// FixtureConfiguration captures generator settings used to construct the loaded fixture.
 				FixtureConfiguration string `json:"fixture_configuration,omitempty"`
 			}{WorkloadSHA256: record.WorkloadSHA256}
 			if record.ExistingGraph != nil {
@@ -371,6 +438,7 @@ func validatePerformanceWorkloadIdentity(baseline, candidate []CaseResult) error
 	return nil
 }
 
+// declaredPerformanceKeys returns the unique case/backend keys that the performance gate must evaluate.
 func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate []CaseResult) []performanceKey {
 	unique := map[performanceKey]struct{}{}
 	for _, item := range declared {
@@ -385,6 +453,7 @@ func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate
 			}] = struct{}{}
 		}
 	}
+
 	if len(declared) == 0 {
 		for _, records := range [][]CaseResult{baseline, candidate} {
 			for _, record := range records {
@@ -398,6 +467,7 @@ func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate
 			}
 		}
 	}
+
 	keys := make([]performanceKey, 0, len(unique))
 	for key := range unique {
 		keys = append(keys, key)
@@ -405,6 +475,7 @@ func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate
 	return keys
 }
 
+// artifactCaseStatus returns the first non-OK status for a declared case/backend pair, "missing" when no record exists, or OK when every matching record succeeded.
 func artifactCaseStatus(records []CaseResult, key performanceKey) string {
 	found := false
 	for _, record := range records {
@@ -422,6 +493,7 @@ func artifactCaseStatus(records []CaseResult, key performanceKey) string {
 	return StatusOK
 }
 
+// declarationSHA256 sorts declared case/backend contracts and hashes their canonical JSON so compared artifacts must describe the same workload set.
 func declarationSHA256(declared []DeclaredCaseBackend) string {
 	items := append([]DeclaredCaseBackend(nil), declared...)
 	sort.Slice(items, func(i, j int) bool {
@@ -444,6 +516,7 @@ func declarationSHA256(declared []DeclaredCaseBackend) string {
 	return hex.EncodeToString(digest.Sum(nil))
 }
 
+// collectWarmSeries groups positive warm durations by case, backend, and round.
 func collectWarmSeries(records []CaseResult) map[performanceKey]roundSamples {
 	series := map[performanceKey]roundSamples{}
 	for _, record := range records {
@@ -471,6 +544,7 @@ func collectWarmSeries(records []CaseResult) map[performanceKey]roundSamples {
 	return series
 }
 
+// matchedRounds returns round numbers present in both measurement series.
 func matchedRounds(baseline, candidate roundSamples) (roundSamples, roundSamples) {
 	matchedBaseline := roundSamples{}
 	matchedCandidate := roundSamples{}
@@ -487,6 +561,7 @@ func matchedRounds(baseline, candidate roundSamples) (roundSamples, roundSamples
 	return matchedBaseline, matchedCandidate
 }
 
+// bootstrapRoundMedianRatio bootstraps the ratio between paired round medians.
 func bootstrapRoundMedianRatio(baseline, candidate roundSamples, seed int64, options PerfGateOptions) RatioInterval {
 	rounds := sortedRounds(baseline)
 	baselineMedians := make([]float64, len(rounds))
@@ -511,6 +586,7 @@ func bootstrapRoundMedianRatio(baseline, candidate roundSamples, seed int64, opt
 	return confidenceInterval(estimate, ratios, options.Confidence)
 }
 
+// bootstrapRoundMedianSaving bootstraps the absolute duration saved between paired round medians.
 func bootstrapRoundMedianSaving(baseline, candidate roundSamples, seed int64, options PerfGateOptions) DurationInterval {
 	rounds := sortedRounds(baseline)
 	baselineMedians := make([]float64, len(rounds))
@@ -540,6 +616,7 @@ func bootstrapRoundMedianSaving(baseline, candidate roundSamples, seed int64, op
 	}
 }
 
+// bootstrapStratifiedP95Ratio bootstraps a P95 ratio while preserving round strata.
 func bootstrapStratifiedP95Ratio(baseline, candidate roundSamples, seed int64, options PerfGateOptions) RatioInterval {
 	rounds := sortedRounds(baseline)
 	estimate := durationQuantile(flattenSamples(candidate, rounds), 0.95) / durationQuantile(flattenSamples(baseline, rounds), 0.95)
@@ -556,6 +633,7 @@ func bootstrapStratifiedP95Ratio(baseline, candidate roundSamples, seed int64, o
 	return confidenceInterval(estimate, ratios, options.Confidence)
 }
 
+// confidenceInterval returns the requested central interval from sorted bootstrap estimates.
 func confidenceInterval(estimate float64, samples []float64, confidence float64) RatioInterval {
 	alpha := (1 - confidence) / 2
 	return RatioInterval{
@@ -565,6 +643,7 @@ func confidenceInterval(estimate float64, samples []float64, confidence float64)
 	}
 }
 
+// durationQuantile returns a nearest-rank duration quantile from a copy of the samples.
 func durationQuantile(values []time.Duration, probability float64) float64 {
 	numeric := make([]float64, len(values))
 	for idx, value := range values {
@@ -573,6 +652,7 @@ func durationQuantile(values []time.Duration, probability float64) float64 {
 	return quantile(numeric, probability)
 }
 
+// quantile returns a nearest-rank quantile from sorted floating-point samples.
 func quantile(values []float64, probability float64) float64 {
 	ordered := append([]float64(nil), values...)
 	sort.Float64s(ordered)
@@ -589,6 +669,7 @@ func quantile(values []float64, probability float64) float64 {
 	return ordered[index]
 }
 
+// sortedRounds returns measurement round keys in ascending order.
 func sortedRounds(samples roundSamples) []int {
 	rounds := make([]int, 0, len(samples))
 	for round := range samples {
@@ -598,6 +679,7 @@ func sortedRounds(samples roundSamples) []int {
 	return rounds
 }
 
+// flattenSamples concatenates samples from the requested rounds in the supplied round order.
 func flattenSamples(samples roundSamples, rounds []int) []time.Duration {
 	var flattened []time.Duration
 	for _, round := range rounds {
@@ -606,6 +688,7 @@ func flattenSamples(samples roundSamples, rounds []int) []time.Duration {
 	return flattened
 }
 
+// resampleDurations draws a same-size bootstrap sample of durations with replacement.
 func resampleDurations(rng *rand.Rand, values []time.Duration) []time.Duration {
 	resampled := make([]time.Duration, len(values))
 	for idx := range resampled {
@@ -614,6 +697,7 @@ func resampleDurations(rng *rand.Rand, values []time.Duration) []time.Duration {
 	return resampled
 }
 
+// sampleCount returns the total number of durations across all measurement rounds.
 func sampleCount(samples roundSamples) int {
 	count := 0
 	for _, values := range samples {
@@ -622,6 +706,7 @@ func sampleCount(samples roundSamples) int {
 	return count
 }
 
+// fileSHA256 returns the SHA-256 digest of a file's contents.
 func fileSHA256(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -631,6 +716,7 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
+// writePerfGateReport writes a performance-gate report to stdout or the requested file.
 func writePerfGateReport(path string, report PerfGateReport) (err error) {
 	var output *os.File
 	if path == "" {

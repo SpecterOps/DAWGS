@@ -12,6 +12,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// translationTestKinds returns the stable kind set and numeric IDs used by translation fixtures.
 func translationTestKinds() graph.Kinds {
 	// Keep this order stable. Translation case SQL fixtures depend on these IDs.
 	return graph.Kinds{
@@ -154,6 +155,7 @@ func translationTestKinds() graph.Kinds {
 	})...)
 }
 
+// newKindMapper returns a mapper populated with the translation fixture's deterministic kind IDs.
 func newKindMapper() pgsql.KindMapper {
 	mapper := pgutil.NewInMemoryKindMapper()
 

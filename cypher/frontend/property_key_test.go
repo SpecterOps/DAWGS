@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestParsePropertyLookupStoresRawPropertyKeyNames verifies that lookup tokens are decoded before storage in the AST.
 func TestParsePropertyLookupStoresRawPropertyKeyNames(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.match, n.`a-aaa`, n.`has``tick`, n.`   `")
 	require.NoError(t, err)
@@ -24,6 +25,7 @@ func TestParsePropertyLookupStoresRawPropertyKeyNames(t *testing.T) {
 	require.Equal(t, []string{"match", "a-aaa", "has`tick", "   "}, symbols)
 }
 
+// TestParsePropertyLookupStoresQuotePropertyKeyNames verifies that quote characters survive property-key parsing unchanged.
 func TestParsePropertyLookupStoresQuotePropertyKeyNames(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.`'`, n.`\"`")
 	require.NoError(t, err)
@@ -39,6 +41,7 @@ func TestParsePropertyLookupStoresQuotePropertyKeyNames(t *testing.T) {
 	require.Equal(t, []string{"'", "\""}, symbols)
 }
 
+// TestParsePropertyLookupStoresUnicodePropertyKeyNames verifies the Unicode classes accepted in raw property keys.
 func TestParsePropertyLookupStoresUnicodePropertyKeyNames(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN n.\u2118, n.a\u00b7, n.a\u0301, n.a\u093e, n.a$, n.`a\u20dd`")
 	require.NoError(t, err)
@@ -54,6 +57,7 @@ func TestParsePropertyLookupStoresUnicodePropertyKeyNames(t *testing.T) {
 	require.Equal(t, []string{"\u2118", "a\u00b7", "a\u0301", "a\u093e", "a$", "a\u20dd"}, symbols)
 }
 
+// TestParseMapLiteralStoresRawPropertyKeyNames verifies that map keys are decoded before storage in the AST.
 func TestParseMapLiteralStoresRawPropertyKeyNames(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN {match: 1, `a-aaa`: 2, `has``tick`: 3, ``: 4, `   `: 5}")
 	require.NoError(t, err)
@@ -69,6 +73,7 @@ func TestParseMapLiteralStoresRawPropertyKeyNames(t *testing.T) {
 	require.ElementsMatch(t, []string{"match", "a-aaa", "has`tick", "", "   "}, keys)
 }
 
+// TestParseMapLiteralStoresQuotePropertyKeyNames verifies that quote characters survive map-key parsing unchanged.
 func TestParseMapLiteralStoresQuotePropertyKeyNames(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "RETURN {`'`: 1, `\"`: 2}")
 	require.NoError(t, err)
@@ -84,9 +89,12 @@ func TestParseMapLiteralStoresQuotePropertyKeyNames(t *testing.T) {
 	require.ElementsMatch(t, []string{"'", "\""}, keys)
 }
 
+// TestParseRejectsEmptyPropertyKeyNames verifies that empty escaped keys are rejected in every property-key position.
 func TestParseRejectsEmptyPropertyKeyNames(t *testing.T) {
 	testCases := []struct {
-		name  string
+		// name labels the property-key syntax under test.
+		name string
+		// query contains an empty escaped key in the named syntax position.
 		query string
 	}{
 		{name: "property lookup", query: "RETURN n.``"},

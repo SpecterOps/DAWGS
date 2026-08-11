@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// outboundShortestPathQuery is the canonical bound-endpoint path query shared by reference-arm tests.
 const outboundShortestPathQuery = "MATCH p = shortestPath((s)-[*0..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 
+// TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput verifies the complete arm inventory, graph partition predicates, precomputed hydration inputs, and full-comparator metadata.
 func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(1), "end_id": int64(2), "max_depth": int32(15)}
 	specs := buildShortestReferenceSpecs(ScaleCase{
@@ -46,6 +48,7 @@ func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *tes
 	require.Contains(t, s3b.sql, "edge_id = any(backward.edge_ids)")
 }
 
+// TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState verifies that distance-only recursion stores just the frontier node and depth, avoiding node and edge trail arrays.
 func TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState(t *testing.T) {
 	specs := buildShortestReferenceSpecs(ScaleCase{
 		Name: "shortest_distance_bound_pair",
@@ -61,6 +64,7 @@ func TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState(t *testing.T)
 	require.NotContains(t, reference.sql, "edge_ids")
 }
 
+// TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirection verifies that the inbound-only canonical arm searches from the logical terminal using reversed physical adjacency.
 func TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirection(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(10), "end_id": int64(20), "min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1}}
 	testCase := ScaleCase{
@@ -83,6 +87,7 @@ func TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirecti
 	require.Equal(t, -1, referenceSpecIndexOrMissing(outbound, "s4_canonical_source_distance"))
 }
 
+// TestShortestS1DistancePrototypeIsDistinctBoundedAndFallsBack verifies S1 metadata, its state guard and SQL fallback, and propagation of inbound traversal direction.
 func TestShortestS1DistancePrototypeIsDistinctBoundedAndFallsBack(t *testing.T) {
 	minDepth, maxDepth := 1, 8
 	params := map[string]any{
@@ -114,6 +119,7 @@ func TestShortestS1DistancePrototypeIsDistinctBoundedAndFallsBack(t *testing.T) 
 	require.Contains(t, inbound[referenceSpecIndex(inbound, "s1_array_bfs_distance")].sql, "@edge_kind_ids, true, @state_limit")
 }
 
+// TestShortestS1DistancePrototypeRejectsUnsupportedShapes verifies that S1 is omitted for minimum depth above one, path results, and identical bound endpoints.
 func TestShortestS1DistancePrototypeRejectsUnsupportedShapes(t *testing.T) {
 	minDepth, maxDepth := 2, 8
 	params := map[string]any{"start_id": int64(10), "end_id": int64(20)}
@@ -144,6 +150,7 @@ func TestShortestS1DistancePrototypeRejectsUnsupportedShapes(t *testing.T) {
 	require.Equal(t, -1, referenceSpecIndexOrMissing(buildShortestReferenceSpecs(distance, params, nil, nil, graph.DirectionOutbound), "s1_array_bfs_distance"))
 }
 
+// TestShortestPathReferencesCompareM0AndM1WithMinimalSearchState verifies exact M0/M1 comparator arms while preserving their edge-only versus node-and-edge hydration boundaries.
 func TestShortestPathReferencesCompareM0AndM1WithMinimalSearchState(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(1), "end_id": int64(3), "max_depth": int32(4)}
 	specs := buildShortestReferenceSpecs(
@@ -176,6 +183,7 @@ func TestShortestPathReferencesCompareM0AndM1WithMinimalSearchState(t *testing.T
 	require.Contains(t, m1.sql, "node.graph_id = @graph_id")
 }
 
+// TestCanonicalWitnessReferenceUsesCompactDiscoveryAndRestoresInboundPathOrder verifies distance-only discovery, separate witness reconstruction, swapped inbound endpoints, and restoration of public path order.
 func TestCanonicalWitnessReferenceUsesCompactDiscoveryAndRestoresInboundPathOrder(t *testing.T) {
 	params := map[string]any{"graph_id": int32(42), "start_id": int64(10), "end_id": int64(20), "min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1}}
 	testCase := ScaleCase{
@@ -203,6 +211,7 @@ func TestCanonicalWitnessReferenceUsesCompactDiscoveryAndRestoresInboundPathOrde
 	require.NotContains(t, outboundWitness.sql, "reversed.ordinal")
 }
 
+// TestAllShortestDAGReferenceRetainsEveryShortestDepthPredecessor verifies that all-shortest search records every depth-minimal predecessor and reconstructs paths in both physical directions without LIMIT-based tie loss.
 func TestAllShortestDAGReferenceRetainsEveryShortestDepthPredecessor(t *testing.T) {
 	outbound := allShortestDAGSearch(graph.DirectionOutbound)
 	require.Contains(t, outbound, "distance(node_id, depth)")
@@ -217,6 +226,7 @@ func TestAllShortestDAGReferenceRetainsEveryShortestDepthPredecessor(t *testing.
 	require.Contains(t, inbound, "e.end_id = prior.node_id and e.start_id = paths.node_id")
 }
 
+// TestShortestReferenceIdentitiesAndInboundMinimalState verifies normalized arm identities and inbound M0 SQL that recurses over edge trails without carrying node arrays.
 func TestShortestReferenceIdentitiesAndInboundMinimalState(t *testing.T) {
 	specs := buildShortestReferenceSpecs(
 		ScaleCase{
@@ -239,6 +249,7 @@ func TestShortestReferenceIdentitiesAndInboundMinimalState(t *testing.T) {
 	require.NotContains(t, m0.sql, "node_ids")
 }
 
+// TestShortestPathMaterializerOnlyReferencesExcludeSearch verifies that M0/M1 hydration-only arms consume precomputed exact inputs and neither their timing nor validation SQL performs recursive search.
 func TestShortestPathMaterializerOnlyReferencesExcludeSearch(t *testing.T) {
 	specs := buildShortestReferenceSpecs(
 		ScaleCase{
@@ -265,6 +276,7 @@ func TestShortestPathMaterializerOnlyReferencesExcludeSearch(t *testing.T) {
 	require.NotContains(t, m1.validationSQL, "with recursive")
 }
 
+// TestShortestReferencesPreserveZeroLengthPathInputs verifies non-nil empty edge arrays, singleton node arrays, minimum-depth predicates, and bidirectional acceptance of zero-edge paths.
 func TestShortestReferencesPreserveZeroLengthPathInputs(t *testing.T) {
 	zeroEdges, err := referenceInt64Slice([]int64{})
 	require.NoError(t, err)
@@ -299,11 +311,19 @@ func TestShortestReferencesPreserveZeroLengthPathInputs(t *testing.T) {
 	require.Contains(t, specs[referenceSpecIndex(specs, "s3_bidirectional_trail_cte")].sql, "between @min_depth and @max_depth")
 }
 
+// TestShortestMaterializersRequireProvablyOutboundPattern verifies direction parsing and withholds ordered outbound hydration arms only for directionless patterns.
 func TestShortestMaterializersRequireProvablyOutboundPattern(t *testing.T) {
 	for _, testCase := range []struct {
-		name      string
-		query     string
-		outbound  bool
+		// name identifies the direction case in subtest diagnostics.
+		name string
+
+		// query is the pattern whose relationship direction is classified.
+		query string
+
+		// outbound is true when parsing must select physical outbound traversal.
+		outbound bool
+
+		// supported is true when directional reference materializers must be available.
 		supported bool
 	}{
 		{
@@ -349,9 +369,20 @@ func TestShortestMaterializersRequireProvablyOutboundPattern(t *testing.T) {
 	}
 }
 
+// TestShortestReferenceEndpointParametersFollowPatternRootOrder verifies that endpoint bindings follow left-to-right pattern roles rather than arrow direction or variable spelling.
 func TestShortestReferenceEndpointParametersFollowPatternRootOrder(t *testing.T) {
 	for _, testCase := range []struct {
-		name, query, root, terminal string
+		// name identifies the endpoint-order case in subtest diagnostics.
+		name string
+
+		// query contains the bound variables whose pattern positions are resolved.
+		query string
+
+		// root is the parameter attached to the left pattern endpoint.
+		root string
+
+		// terminal is the parameter attached to the right pattern endpoint.
+		terminal string
 	}{
 		{
 			name:     "outbound",
@@ -381,6 +412,7 @@ func TestShortestReferenceEndpointParametersFollowPatternRootOrder(t *testing.T)
 	}
 }
 
+// TestAlternativeOneShortestPathTieIsSemanticallyValid verifies acceptance of an equal-length valid tie and rejection of longer, wrong-kind, or unmapped alternatives.
 func TestAlternativeOneShortestPathTieIsSemanticallyValid(t *testing.T) {
 	testCase := ScaleCase{
 		Cypher: outboundShortestPathQuery,
@@ -403,6 +435,7 @@ func TestAlternativeOneShortestPathTieIsSemanticallyValid(t *testing.T) {
 	require.False(t, validAlternativeShortestPathObservation(testCase, public, unmapped))
 }
 
+// TestReferenceSpecsAlternateOrderByRound verifies odd/even forward-reverse execution ordering without mutating the declared arm sequence.
 func TestReferenceSpecsAlternateOrderByRound(t *testing.T) {
 	specs := []postgresReferenceSpec{{name: "first"}, {name: "second"}, {name: "third"}}
 	require.Equal(t, []postgresReferenceSpec{{name: "first"}, {name: "second"}, {name: "third"}}, referenceSpecsForRound(specs, 1))
@@ -410,6 +443,7 @@ func TestReferenceSpecsAlternateOrderByRound(t *testing.T) {
 	require.Equal(t, "first", specs[0].name)
 }
 
+// TestFiveArmReferenceSpecsUsePredeclaredBalancedSchedule verifies selected rows of the ten-round five-arm schedule and its periodic repetition.
 func TestFiveArmReferenceSpecsUsePredeclaredBalancedSchedule(t *testing.T) {
 	specs := []postgresReferenceSpec{{name: "T1"}, {name: "T2"}, {name: "T3"}, {name: "T4"}, {name: "T5"}}
 	require.Equal(t, []string{"T1", "T2", "T5", "T3", "T4"}, referenceSpecNames(referenceSpecsForRound(specs, 1)))
@@ -417,6 +451,7 @@ func TestFiveArmReferenceSpecsUsePredeclaredBalancedSchedule(t *testing.T) {
 	require.Equal(t, []string{"T1", "T2", "T5", "T3", "T4"}, referenceSpecNames(referenceSpecsForRound(specs, 11)))
 }
 
+// referenceSpecNames returns reference names in their declared execution order.
 func referenceSpecNames(specs []postgresReferenceSpec) []string {
 	names := make([]string, len(specs))
 	for idx, spec := range specs {
@@ -425,6 +460,7 @@ func referenceSpecNames(specs []postgresReferenceSpec) []string {
 	return names
 }
 
+// TestAllShortestPathCaseUsesOnlyPredecessorDAGReference verifies that allShortestPaths routes exclusively to the ASP-A1-DAG comparator rather than one-path arms.
 func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
 	runner := &postgresSQLRunner{}
 	specs, err := runner.referenceSpecs(context.Background(), ScaleCase{
@@ -437,6 +473,7 @@ func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
 	require.Equal(t, "ASP-A1-DAG", specs[0].architecture)
 }
 
+// TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperators verifies all seventeen arms use explicit membership predicates and retain each strategy's defining recursive SQL shape.
 func TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperators(t *testing.T) {
 	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{
 		Name: "fixed_suffix_expansion_endpoint_ids",
@@ -453,11 +490,13 @@ func TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperato
 	require.Contains(t, specs[referenceSpecIndex(specs, "factored_suffix_forward_ordered_ids")].sql, "suffix_rows")
 }
 
+// TestFixedSuffixHydrationPrecomputeIsSelectionAware verifies that default and explicit hydration-only selections request precomputed path inputs.
 func TestFixedSuffixHydrationPrecomputeIsSelectionAware(t *testing.T) {
 	require.True(t, referenceHydrationRequested(nil))
 	require.True(t, referenceHydrationRequested([]string{"hydration_only"}))
 }
 
+// TestGeneratedFixedSuffixExpansionReferencesUseDeclaredDepthAndObservation verifies propagation of maximum depth and selection of ID-row versus fully hydrated path output SQL.
 func TestGeneratedFixedSuffixExpansionReferencesUseDeclaredDepthAndObservation(t *testing.T) {
 	minDepth, maxDepth := 0, 16
 	runner := &postgresSQLRunner{}
@@ -484,6 +523,7 @@ func TestGeneratedFixedSuffixExpansionReferencesUseDeclaredDepthAndObservation(t
 	require.Contains(t, pathSpecs[referenceSpecIndex(pathSpecs, "suffix_seeded_reverse_complete")].sql, "ordered_edge_ids_to_path")
 }
 
+// TestParseConfigValidatesPostgresReferenceArmSelector verifies ordered arm selection, implicit reference enablement, and rejection of unknown or duplicate arm names.
 func TestParseConfigValidatesPostgresReferenceArmSelector(t *testing.T) {
 	cfg, err := parseConfig([]string{"-postgres-reference-arms", "suffix_seeded_reverse_ordered_ids,factored_suffix_forward_complete"}, func(string) string { return "" })
 	require.NoError(t, err)
@@ -496,11 +536,13 @@ func TestParseConfigValidatesPostgresReferenceArmSelector(t *testing.T) {
 	require.ErrorContains(t, err, "duplicate PostgreSQL reference arm")
 }
 
+// TestRequestedReferenceArmCannotDisappearFromCase verifies that an explicitly requested arm must be available for the particular workload shape.
 func TestRequestedReferenceArmCannotDisappearFromCase(t *testing.T) {
 	_, err := selectReferenceSpecs([]postgresReferenceSpec{{name: "available"}}, []string{"missing"})
 	require.ErrorContains(t, err, `requested PostgreSQL reference arm "missing" is unavailable`)
 }
 
+// TestReferenceIdentityRejectsUndeclaredDuplicateSQL verifies that normalized duplicate SQL requires an explicit A/A alias linking the second arm to the first.
 func TestReferenceIdentityRejectsUndeclaredDuplicateSQL(t *testing.T) {
 	specs := []postgresReferenceSpec{
 		normalizedReferenceSpec(postgresReferenceSpec{
@@ -524,6 +566,7 @@ func TestReferenceIdentityRejectsUndeclaredDuplicateSQL(t *testing.T) {
 	require.NoError(t, validateReferenceSpecs(specs))
 }
 
+// TestReferenceIdentityRejectsImplementationShapeDrift verifies that a shared implementation ID cannot describe different state shapes or SQL bodies.
 func TestReferenceIdentityRejectsImplementationShapeDrift(t *testing.T) {
 	specs := []postgresReferenceSpec{
 		normalizedReferenceSpec(postgresReferenceSpec{
@@ -546,6 +589,7 @@ func TestReferenceIdentityRejectsImplementationShapeDrift(t *testing.T) {
 	require.ErrorContains(t, validateReferenceSpecs(specs), "changes state, observation, or SQL identity")
 }
 
+// TestFixedSuffixExpansionRootReuseIsExplicitAAAlias verifies that root-reuse arms declare their byte-equivalent ordered-ID and complete-reference counterparts.
 func TestFixedSuffixExpansionRootReuseIsExplicitAAAlias(t *testing.T) {
 	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{
 		Name: "fixed_suffix_expansion_endpoint_ids",
@@ -558,6 +602,7 @@ func TestFixedSuffixExpansionRootReuseIsExplicitAAAlias(t *testing.T) {
 	require.Equal(t, "complete_reference", specs[referenceSpecIndex(specs, "root_reuse_complete")].aaAliasOf)
 }
 
+// TestFixedSuffixExpansionOrderedIDReferencesValidateAgainstCanonicalObservation verifies that every ordered-ID strategy uses the canonical search SQL and parameters for semantic validation.
 func TestFixedSuffixExpansionOrderedIDReferencesValidateAgainstCanonicalObservation(t *testing.T) {
 	specs := buildFixedSuffixExpansionReferenceSpecs(ScaleCase{
 		Name: "fixed_suffix_expansion_endpoint_ids",
@@ -577,6 +622,7 @@ func TestFixedSuffixExpansionOrderedIDReferencesValidateAgainstCanonicalObservat
 	}
 }
 
+// TestReferenceInt64SliceAcceptsDriverArrayRepresentations verifies normalization of int64, int32, and mixed driver arrays while rejecting nonnumeric elements with their index.
 func TestReferenceInt64SliceAcceptsDriverArrayRepresentations(t *testing.T) {
 	require.Equal(t, []int64{1, 2}, mustReferenceInt64Slice(t, []int64{1, 2}))
 	require.Equal(t, []int64{3, 4}, mustReferenceInt64Slice(t, []int32{3, 4}))
@@ -585,6 +631,7 @@ func TestReferenceInt64SliceAcceptsDriverArrayRepresentations(t *testing.T) {
 	require.ErrorContains(t, err, "array item 0")
 }
 
+// mustReferenceInt64Slice converts a reference value to integers and fails the test on invalid input.
 func mustReferenceInt64Slice(t *testing.T, value any) []int64 {
 	t.Helper()
 	result, err := referenceInt64Slice(value)

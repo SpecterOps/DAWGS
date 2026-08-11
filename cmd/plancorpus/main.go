@@ -12,18 +12,29 @@ import (
 	"github.com/specterops/dawgs/testutil"
 )
 
+// commandConfig contains plancorpus command-line inputs and output selections.
 type commandConfig struct {
-	DatasetDir      string
-	OutputDir       string
+	// DatasetDir locates fixture datasets loaded before plan capture.
+	DatasetDir string
+	// OutputDir selects the directory that receives captured plans and summaries.
+	OutputDir string
+	// SummaryMarkdown selects the Markdown plan-summary destination.
 	SummaryMarkdown string
-	SummaryJSON     string
-	Connection      string
-	PGConnection    string
+	// SummaryJSON selects the JSON summary destination.
+	SummaryJSON string
+	// Connection contains the backend connection string.
+	Connection string
+	// PGConnection contains the PostgreSQL connection string.
+	PGConnection string
+	// Neo4jConnection contains the Neo4j connection string.
 	Neo4jConnection string
-	TopPlans        int
-	DAWGSVersion    string
+	// TopPlans limits expensive PostgreSQL plans included in the summary.
+	TopPlans int
+	// DAWGSVersion records the DAWGS source version attached to artifact provenance.
+	DAWGSVersion string
 }
 
+// main runs the plancorpus command.
 func main() {
 	cfg := commandConfig{}
 	flag.StringVar(&cfg.DatasetDir, "dataset-dir", "integration/testdata", "integration testdata directory")
@@ -43,6 +54,7 @@ func main() {
 	}
 }
 
+// run captures plans for each configured backend and writes aggregate summaries.
 func run(ctx context.Context, cfg commandConfig) error {
 	specs, err := captureSpecs(cfg)
 	if err != nil {
@@ -94,6 +106,7 @@ func run(ctx context.Context, cfg commandConfig) error {
 	return nil
 }
 
+// captureSpecs validates connection inputs and returns one deterministic capture specification per driver.
 func captureSpecs(cfg commandConfig) ([]captureSpec, error) {
 	specsByDriver := map[string]captureSpec{}
 
@@ -138,14 +151,17 @@ func captureSpecs(cfg commandConfig) ([]captureSpec, error) {
 	return specs, nil
 }
 
+// pgDriverName returns the registered driver name for PostgreSQL connections.
 func pgDriverName() string {
 	return "pg"
 }
 
+// neo4jDriverName returns the registered driver name for Neo4j connections.
 func neo4jDriverName() string {
 	return "neo4j"
 }
 
+// writePlanRecords creates a JSON Lines artifact and writes every captured plan record to it.
 func writePlanRecords(path string, records []PlanRecord) error {
 	out, err := os.Create(path)
 	if err != nil {
@@ -155,6 +171,7 @@ func writePlanRecords(path string, records []PlanRecord) error {
 	return writePlanRecordsTo(out, path, records)
 }
 
+// writePlanRecordsTo encodes plan records as JSON Lines and reports both encode and close failures.
 func writePlanRecordsTo(out io.WriteCloser, path string, records []PlanRecord) error {
 	encoder := json.NewEncoder(out)
 	for _, record := range records {
@@ -171,6 +188,7 @@ func writePlanRecordsTo(out io.WriteCloser, path string, records []PlanRecord) e
 	return nil
 }
 
+// writeSummaryFiles writes the requested Markdown and JSON plan summaries and closes each output.
 func writeSummaryFiles(markdownPath, jsonPath string, summary PlanSummary) error {
 	if markdownPath != "" {
 		out, err := os.Create(markdownPath)

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMeasureCompileWaterfallMarksOverlappingIntervals verifies that compile phase timings are labeled non-additive and each requested sample records elapsed time and allocations.
 func TestMeasureCompileWaterfallMarksOverlappingIntervals(t *testing.T) {
 	waterfall, err := measureCompileWaterfall(context.Background(), "MATCH (n) RETURN id(n)", nil, pgutil.NewInMemoryKindMapper(), 1, 2, translate.ToolOptions{})
 

@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestFixtureNamesAreDeterministic verifies fixture identifiers are stable and zero-padded for a given prefix and count.
 func TestFixtureNamesAreDeterministic(t *testing.T) {
 	require.Equal(t, []string{"id-00", "id-01", "id-02"}, FixtureNames("id", 3))
 	require.Equal(t, []string{"RegressionKind01", "RegressionKind02"}, FixtureKinds(2))
@@ -29,6 +30,7 @@ func TestFixtureNamesAreDeterministic(t *testing.T) {
 	require.Empty(t, FixtureNames("id", -1))
 }
 
+// TestNewReconciliationFixtureIncludesRequiredShapes verifies the reconciliation fixture contains every typed, null, directional, and fanout shape required by regressions.
 func TestNewReconciliationFixtureIncludesRequiredShapes(t *testing.T) {
 	fixture := NewReconciliationFixture(4)
 	require.Len(t, fixture.Nodes, 8)

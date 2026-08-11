@@ -34,45 +34,94 @@ import (
 	"github.com/specterops/dawgs/testutil"
 )
 
+// cypherTemplateFile describes the ordinary and metamorphic query families loaded from one template JSON file.
 type cypherTemplateFile struct {
-	Families    []cypherTemplateFamily    `json:"families,omitempty"`
+	// Families contains independently asserted query-template families.
+	Families []cypherTemplateFamily `json:"families,omitempty"`
+
+	// Metamorphic contains families whose query variants must produce equivalent results.
 	Metamorphic []cypherMetamorphicFamily `json:"metamorphic,omitempty"`
-	path        string
+
+	// path records the source file for subtest naming and diagnostics.
+	path string
 }
 
+// cypherTemplateFamily combines a fixture and query template with the variants asserted against it.
 type cypherTemplateFamily struct {
-	Name           string                  `json:"name"`
-	Fixture        *opengraph.Graph        `json:"fixture"`
-	Template       string                  `json:"template"`
-	Params         testutil.Params         `json:"params,omitempty"`
-	NodeParams     map[string]string       `json:"node_params,omitempty"`
-	NodeListParams map[string][]string     `json:"node_list_params,omitempty"`
-	Variants       []cypherTemplateVariant `json:"variants"`
-}
+	// Name identifies the family in test output.
+	Name string `json:"name"`
 
-type cypherTemplateVariant struct {
-	Name           string              `json:"name"`
-	Vars           map[string]string   `json:"vars,omitempty"`
-	Params         testutil.Params     `json:"params,omitempty"`
-	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	// Fixture is loaded transactionally for every variant.
+	Fixture *opengraph.Graph `json:"fixture"`
+
+	// Template is the Cypher source rendered with each variant's Vars.
+	Template string `json:"template"`
+
+	// Params supplies parameters shared by every variant.
+	Params testutil.Params `json:"params,omitempty"`
+
+	// NodeParams maps shared parameter names to fixture node identifiers.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+
+	// NodeListParams maps shared parameter names to lists of fixture node identifiers.
 	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
-	Assert         json.RawMessage     `json:"assert"`
-	PostAssertions []stateAssertion    `json:"post_assertions,omitempty"`
+
+	// Variants enumerates template substitutions and expected results.
+	Variants []cypherTemplateVariant `json:"variants"`
 }
 
+// cypherTemplateVariant supplies one rendering and assertion for a query-template family.
+type cypherTemplateVariant struct {
+	// Name identifies the variant in test output.
+	Name string `json:"name"`
+
+	// Vars contains text substitutions applied to the Cypher template.
+	Vars map[string]string `json:"vars,omitempty"`
+
+	// Params augments or overrides family-level query parameters.
+	Params testutil.Params `json:"params,omitempty"`
+
+	// NodeParams augments or overrides family-level fixture-node parameters.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+
+	// NodeListParams augments or overrides family-level fixture-node-list parameters.
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+
+	// Assert encodes the expected primary query result.
+	Assert json.RawMessage `json:"assert"`
+
+	// PostAssertions contains state checks run after the primary query drains.
+	PostAssertions []stateAssertion `json:"post_assertions,omitempty"`
+}
+
+// cypherMetamorphicFamily describes queries that must agree under the selected comparison modes.
 type cypherMetamorphicFamily struct {
-	Name    string                   `json:"name"`
-	Fixture *opengraph.Graph         `json:"fixture"`
-	Compare comparisonModes          `json:"compare"`
+	// Name identifies the family in test output.
+	Name string `json:"name"`
+
+	// Fixture is loaded once for the family's equivalence comparison.
+	Fixture *opengraph.Graph `json:"fixture"`
+
+	// Compare selects the result dimensions used to establish equivalence.
+	Compare comparisonModes `json:"compare"`
+
+	// Queries contains the query variants compared with the baseline.
 	Queries []cypherMetamorphicQuery `json:"queries"`
 }
 
+// cypherMetamorphicQuery is one named Cypher statement and parameter set in an equivalence family.
 type cypherMetamorphicQuery struct {
-	Name   string          `json:"name"`
-	Cypher string          `json:"cypher"`
+	// Name identifies the query in test output.
+	Name string `json:"name"`
+
+	// Cypher is the statement executed for this variant.
+	Cypher string `json:"cypher"`
+
+	// Params contains the statement's query parameters.
 	Params testutil.Params `json:"params,omitempty"`
 }
 
+// TestCypherTemplates renders every template variant and verifies its query and post-state assertions against the shared fixture.
 func TestCypherTemplates(t *testing.T) {
 	templateFiles := loadCypherTemplateFiles(t)
 	nodeKinds, edgeKinds := cypherTemplateKinds(templateFiles)
@@ -116,6 +165,7 @@ func TestCypherTemplates(t *testing.T) {
 	}
 }
 
+// loadCypherTemplateFiles reads and decodes every JSON template file, preserving each source path for diagnostics.
 func loadCypherTemplateFiles(t *testing.T) []cypherTemplateFile {
 	t.Helper()
 
@@ -146,6 +196,8 @@ func loadCypherTemplateFiles(t *testing.T) []cypherTemplateFile {
 	return templateFiles
 }
 
+// cypherTemplateKinds collects the node and relationship kinds used by every
+// inline template and metamorphic fixture.
 func cypherTemplateKinds(templateFiles []cypherTemplateFile) (graph.Kinds, graph.Kinds) {
 	var nodeKinds, edgeKinds graph.Kinds
 
@@ -170,6 +222,8 @@ func cypherTemplateKinds(templateFiles []cypherTemplateFile) (graph.Kinds, graph
 	return nodeKinds, edgeKinds
 }
 
+// renderCypherTemplate replaces named placeholders and fails if any placeholder
+// remains unresolved.
 func renderCypherTemplate(t *testing.T, template string, vars map[string]string) string {
 	t.Helper()
 
@@ -185,6 +239,7 @@ func renderCypherTemplate(t *testing.T, template string, vars map[string]string)
 	return rendered
 }
 
+// mergeParams returns a copy of base with overrides taking precedence.
 func mergeParams(base, overrides map[string]any) map[string]any {
 	if len(base) == 0 && len(overrides) == 0 {
 		return nil
@@ -201,6 +256,8 @@ func mergeParams(base, overrides map[string]any) map[string]any {
 	return merged
 }
 
+// mergeStringMap returns a copy of base with string overrides taking
+// precedence.
 func mergeStringMap(base, overrides map[string]string) map[string]string {
 	if len(base) == 0 && len(overrides) == 0 {
 		return nil
@@ -216,6 +273,8 @@ func mergeStringMap(base, overrides map[string]string) map[string]string {
 	return merged
 }
 
+// mergeStringListMap returns a deep-enough copy of base with list overrides
+// taking precedence.
 func mergeStringListMap(base, overrides map[string][]string) map[string][]string {
 	if len(base) == 0 && len(overrides) == 0 {
 		return nil
@@ -231,6 +290,8 @@ func mergeStringListMap(base, overrides map[string][]string) map[string][]string
 	return merged
 }
 
+// runWithTemplateFixture executes a rendered case against its inline fixture,
+// checks the query result and postconditions, and rolls the transaction back.
 func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database, tc testCase, assertion caseAssertion) {
 	t.Helper()
 
@@ -239,7 +300,10 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 	}
 
 	queryErrorObserved := false
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 	err := session.WithRollbackFixture(t, tc.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 		params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, idMap)
 		result := tx.Query(tc.Cypher, params)
@@ -262,6 +326,8 @@ func runWithTemplateFixture(t *testing.T, ctx context.Context, db graph.Database
 	}
 }
 
+// runMetamorphicFamily executes every query over one fixture and requires their
+// selected comparison signatures to match the first query.
 func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, family cypherMetamorphicFamily) {
 	t.Helper()
 
@@ -273,7 +339,10 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 		t.Fatal("metamorphic cases must define at least two queries")
 	}
 
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 	err := session.WithRollbackFixture(t, family.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 		assertCtx := newAssertionContext(idMap)
 		var baselineName string
@@ -318,8 +387,10 @@ func runMetamorphicFamily(t *testing.T, ctx context.Context, db graph.Database, 
 	}
 }
 
+// comparisonModes accepts either one comparison-mode string or a list in template JSON.
 type comparisonModes []string
 
+// UnmarshalJSON accepts either a single comparison mode or a list of modes.
 func (s *comparisonModes) UnmarshalJSON(raw []byte) error {
 	var mode string
 	if err := json.Unmarshal(raw, &mode); err == nil {
@@ -336,10 +407,13 @@ func (s *comparisonModes) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
+// String joins comparison modes for use in generated subtest names.
 func (s comparisonModes) String() string {
 	return strings.Join(s, ",")
 }
 
+// comparisonSignature computes each requested comparison mode for a collected
+// result in declaration order.
 func comparisonSignature(t *testing.T, result queryResult, ctx assertionContext, modes comparisonModes) []string {
 	t.Helper()
 
@@ -355,6 +429,8 @@ func comparisonSignature(t *testing.T, result queryResult, ctx assertionContext,
 	return signature
 }
 
+// comparisonModeSignature canonicalizes a collected result according to one
+// supported metamorphic comparison mode.
 func comparisonModeSignature(t *testing.T, result queryResult, ctx assertionContext, mode string) string {
 	t.Helper()
 
@@ -405,6 +481,8 @@ func comparisonModeSignature(t *testing.T, result queryResult, ctx assertionCont
 	return mode + ":" + string(encoded)
 }
 
+// firstScalarSignatures returns the canonical signature of each row's first
+// projected value.
 func firstScalarSignatures(t *testing.T, result queryResult) []string {
 	t.Helper()
 
@@ -420,6 +498,7 @@ func firstScalarSignatures(t *testing.T, result queryResult) []string {
 	return signatures
 }
 
+// rowScalarSignatures renders every result row into a deterministic scalar signature.
 func rowScalarSignatures(result queryResult) []string {
 	signatures := make([]string, 0, len(result.rows))
 	for _, row := range result.rows {
@@ -429,6 +508,7 @@ func rowScalarSignatures(result queryResult) []string {
 	return signatures
 }
 
+// sortedSignatures returns a sorted copy without modifying its input.
 func sortedSignatures(signatures []string) []string {
 	sorted := append([]string(nil), signatures...)
 	sort.Strings(sorted)

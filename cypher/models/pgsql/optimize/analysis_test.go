@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fixedSuffixExpansionQuery exercises one variable expansion followed by a three-edge typed suffix.
 const fixedSuffixExpansionQuery = `
 MATCH (root:ExpansionRoot)
 WHERE root.root_key = 'root'
@@ -21,6 +22,7 @@ AND (predicate.version = 1 OR predicate.required_approvals = 0)
 RETURN p1, p2
 `
 
+// analyzeCypher parses query, runs optimizer analysis, and requires both stages to succeed.
 func analyzeCypher(t *testing.T, query string) Analysis {
 	t.Helper()
 
@@ -30,6 +32,7 @@ func analyzeCypher(t *testing.T, query string) Analysis {
 	return Analyze(regularQuery)
 }
 
+// requireBinding requires an analyzed binding with the expected symbol and kind.
 func requireBinding(t *testing.T, bindings []Binding, symbol string, kind BindingKind) {
 	t.Helper()
 
@@ -42,6 +45,7 @@ func requireBinding(t *testing.T, bindings []Binding, symbol string, kind Bindin
 	t.Fatalf("expected binding %s:%s in %#v", symbol, kind, bindings)
 }
 
+// requirePathVariable requires a path variable with the expected relationship count and range shape.
 func requirePathVariable(t *testing.T, pathVariables []PathVariable, symbol string, relationshipCount int, expectedVariableLength bool) {
 	t.Helper()
 
@@ -56,6 +60,7 @@ func requirePathVariable(t *testing.T, pathVariables []PathVariable, symbol stri
 	t.Fatalf("expected path variable %s in %#v", symbol, pathVariables)
 }
 
+// TestAnalyzeIdentifiesEligibleFixedSuffixExpansionRegion verifies that analysis isolates the variable expansion and its fixed suffix.
 func TestAnalyzeIdentifiesEligibleFixedSuffixExpansionRegion(t *testing.T) {
 	t.Parallel()
 
@@ -132,6 +137,7 @@ func TestAnalyzeSegmentsRegionsAtSemanticBarriers(t *testing.T) {
 	require.Equal(t, []string{"m"}, secondPart.ProjectionDependencies)
 }
 
+// TestAnalysisDiagnosticsAreStable verifies that diagnostic ordering and query coordinates remain deterministic.
 func TestAnalysisDiagnosticsAreStable(t *testing.T) {
 	t.Parallel()
 

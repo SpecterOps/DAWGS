@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// postgresIntegrationConnectionString returns CONNECTION_STRING only for a PostgreSQL target and skips the driver-scoped test otherwise.
 func postgresIntegrationConnectionString(t *testing.T) string {
 	t.Helper()
 
@@ -30,6 +31,7 @@ func postgresIntegrationConnectionString(t *testing.T) string {
 	return connectionString
 }
 
+// connectCompositeCodecIntegration opens a timeout-bounded PostgreSQL connection and registers cleanup for composite-codec integration tests.
 func connectCompositeCodecIntegration(t *testing.T) (context.Context, *pgx.Conn) {
 	t.Helper()
 
@@ -72,6 +74,7 @@ create type pg_temp.pathComposite as (
 	return ctx, conn
 }
 
+// TestPostgresOwnedCompositeCodecRegistration verifies pooled connections register optimized codecs for every owned composite type.
 func TestPostgresOwnedCompositeCodecRegistration(t *testing.T) {
 	_, conn := connectCompositeCodecIntegration(t)
 	typeMap := conn.TypeMap()
@@ -95,11 +98,15 @@ func TestPostgresOwnedCompositeCodecRegistration(t *testing.T) {
 	require.IsType(t, &ownedCompositeCodec[pathComposite]{}, pathType.Codec)
 }
 
+// TestPostgresOwnedCompositeCodecRowsValues verifies Rows.Values returns driver-owned node and edge composites.
 func TestPostgresOwnedCompositeCodecRowsValues(t *testing.T) {
 	ctx, conn := connectCompositeCodecIntegration(t)
 
 	for _, testCase := range []struct {
-		name   string
+		// name identifies the wire-format subtest.
+		name string
+
+		// format selects the pgx result format used by the query.
 		format int16
 	}{
 		{
@@ -147,11 +154,15 @@ order by series.id`, pgx.QueryResultFormats{testCase.format})
 	}
 }
 
+// TestPostgresOwnedCompositeCodecArraysAndPaths verifies composite arrays and paths decode into their typed graph representations.
 func TestPostgresOwnedCompositeCodecArraysAndPaths(t *testing.T) {
 	ctx, conn := connectCompositeCodecIntegration(t)
 
 	for _, testCase := range []struct {
-		name   string
+		// name identifies the wire-format subtest.
+		name string
+
+		// format selects the pgx result format used by the query.
 		format int16
 	}{
 		{
@@ -209,11 +220,15 @@ select
 	}
 }
 
+// TestPostgresOwnedCompositeCodecNullInternalFieldFallback verifies nullable composite fields retain pgx's lossless fallback representation.
 func TestPostgresOwnedCompositeCodecNullInternalFieldFallback(t *testing.T) {
 	ctx, conn := connectCompositeCodecIntegration(t)
 
 	for _, testCase := range []struct {
-		name   string
+		// name identifies the wire-format subtest.
+		name string
+
+		// format selects the pgx result format used by the query.
 		format int16
 	}{
 		{

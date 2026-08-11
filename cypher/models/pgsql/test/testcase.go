@@ -26,12 +26,21 @@ import (
 )
 
 const (
-	prefixCase          = "case:"
+	// prefixCase introduces a named translation case in a fixture file.
+	prefixCase = "case:"
+
+	// prefixExclusiveTest marks a fixture case that must run without the other cases.
 	prefixExclusiveTest = "exclusive:"
-	prefixCypherParams  = "cypher_params:"
-	prefixPgSQLParams   = "pgsql_params:"
+
+	// prefixCypherParams introduces the JSON parameter map supplied to Cypher translation.
+	prefixCypherParams = "cypher_params:"
+
+	// prefixPgSQLParams introduces the JSON parameter map expected in rendered PostgreSQL.
+	prefixPgSQLParams = "pgsql_params:"
 )
 
+// testCaseFiles embeds the translation fixtures consumed by the package test runner.
+//
 //go:embed translation_cases/*
 var testCaseFiles embed.FS
 
@@ -62,6 +71,7 @@ func (s *TranslationTestCase) Copy() *TranslationTestCase {
 	}
 }
 
+// writeStrings writes each string to writer in order and returns the first write failure.
 func writeStrings(output io.Writer, strs ...string) error {
 	for _, str := range strs {
 		if _, err := output.Write([]byte(str)); err != nil {
@@ -72,6 +82,7 @@ func writeStrings(output io.Writer, strs ...string) error {
 	return nil
 }
 
+// licenseHeader is the exact header required at the start of every generated fixture file.
 var licenseHeader = `-- Copyright %d Specter Ops, Inc.
 --
 -- Licensed under the Apache License, Version 2.0
@@ -148,6 +159,7 @@ func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMap
 	return nil
 }
 
+// Assert translates the case and compares normalized SQL and parameters with the golden expectations.
 func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMapper pgsql.KindMapper) {
 	if regularQuery, err := frontend.ParseCypher(frontend.NewContext(), s.Cypher); err != nil {
 		t.Fatalf("Failed to compile cypher query: %s - %v", s.Cypher, err)
@@ -332,6 +344,7 @@ func ReadTranslationTestCaseFile(path string, fin fs.File) (TranslationTestCaseF
 	}, err
 }
 
+// updatedCasesDir returns the configured fixture update directory or an isolated temporary directory.
 func updatedCasesDir() (string, error) {
 	if workingDir, err := os.Getwd(); err != nil {
 		return "", err
@@ -346,6 +359,7 @@ func updatedCasesDir() (string, error) {
 	}
 }
 
+// UpdateTranslationTestCases regenerates SQL golden files from their embedded Cypher cases.
 func UpdateTranslationTestCases(mapper pgsql.KindMapper) error {
 	if updatedCasesPath, err := updatedCasesDir(); err != nil {
 		return err

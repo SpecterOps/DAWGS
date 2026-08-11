@@ -10,16 +10,23 @@ import (
 )
 
 const (
+	// fixedSuffixBoundaryID names the column containing the node where reverse search enters the fixed suffix.
 	fixedSuffixBoundaryID pgsql.Identifier = "boundary_id"
 )
 
+// suffixSeededIdentifiers names the root-presence, suffix, boundary, and reverse-search CTEs for one rewrite.
 type suffixSeededIdentifiers struct {
+	// rootPresence names the relation that records whether the bound root produced rows.
 	rootPresence pgsql.Identifier
-	suffix       pgsql.Identifier
-	boundaries   pgsql.Identifier
-	reverse      pgsql.Identifier
+	// suffix names the materialized matches for the fixed terminal suffix.
+	suffix pgsql.Identifier
+	// boundaries names the distinct suffix-boundary nodes used to seed reverse search.
+	boundaries pgsql.Identifier
+	// reverse names the recursive relation that searches from each boundary toward the root.
+	reverse pgsql.Identifier
 }
 
+// newSuffixSeededIdentifiers derives collision-resistant CTE names from the incumbent final frame.
 func newSuffixSeededIdentifiers(finalFrame pgsql.Identifier) suffixSeededIdentifiers {
 	prefix := string(finalFrame) + "_suffix_seeded_"
 	return suffixSeededIdentifiers{
@@ -30,6 +37,7 @@ func newSuffixSeededIdentifiers(finalFrame pgsql.Identifier) suffixSeededIdentif
 	}
 }
 
+// selectedFixedSuffixDecision returns the first traversal decision that selected suffix-seeded reverse search.
 func selectedFixedSuffixDecision(part *PatternPart, decisions map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision) (optimize.ExpansionSearchStrategyDecision, bool) {
 	for _, step := range part.TraversalSteps {
 		if step == nil || !step.HasSourceTarget {
@@ -43,6 +51,7 @@ func selectedFixedSuffixDecision(part *PatternPart, decisions map[optimize.Trave
 	return optimize.ExpansionSearchStrategyDecision{}, false
 }
 
+// rewriteTraversalPatternAsSuffixSeededReverse replaces a qualified incumbent frame chain with fixed-suffix reverse search.
 func (s *Translator) rewriteTraversalPatternAsSuffixSeededReverse(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
 	if len(part.TraversalSteps) != decision.SuffixEndStep+1 || decision.SuffixLength != 3 || decision.Target.StepIndex < 0 || decision.Target.StepIndex >= len(part.TraversalSteps) {
 		return fmt.Errorf("forced suffix-seeded reverse target requires one expansion followed by exactly three terminal suffix steps")
@@ -90,6 +99,7 @@ func (s *Translator) rewriteTraversalPatternAsSuffixSeededReverse(part *PatternP
 	return nil
 }
 
+// buildSuffixSeededReverseQuery joins bound roots to reverse states seeded by materialized fixed-suffix matches.
 func (s *Translator) buildSuffixSeededReverseQuery(
 	part *PatternPart,
 	decision optimize.ExpansionSearchStrategyDecision,
@@ -212,14 +222,17 @@ func (s *Translator) buildSuffixSeededReverseQuery(
 	}, nil
 }
 
+// buildFixedSuffixCTE materializes every locally valid fixed-suffix path and its boundary node.
 func (s *Translator) buildFixedSuffixCTE(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers) (pgsql.CommonTableExpression, error) {
 	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, false)
 }
 
+// buildFixedSuffixProbeCTE builds a bounded suffix probe used to guard the specialized branch.
 func (s *Translator) buildFixedSuffixProbeCTE(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers) (pgsql.CommonTableExpression, error) {
 	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, true)
 }
 
+// buildFixedSuffixCTEWithOptions builds the fixed-suffix join chain with optional materialization and row limit.
 func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers, projectNodeIDs bool) (pgsql.CommonTableExpression, error) {
 	localScope := pgsql.NewIdentifierSet()
 	for _, step := range suffix {
@@ -348,6 +361,7 @@ func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep
 	}, nil
 }
 
+// buildSuffixSeededReverseCTE recursively walks from suffix boundaries back toward bound roots without reusing edges.
 func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize.ExpansionSearchStrategyDecision, ids suffixSeededIdentifiers) (pgsql.CommonTableExpression, error) {
 	if expansionStep.Edge == nil || expansionStep.RightNode == nil {
 		return pgsql.CommonTableExpression{}, fmt.Errorf("forced suffix-seeded reverse expansion step is incomplete")
@@ -444,6 +458,7 @@ func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize
 	}, nil
 }
 
+// suffixSeededFinalProjection reconstructs the incumbent projection from root, reverse-state, and suffix columns.
 func suffixSeededFinalProjection(
 	part *PatternPart,
 	expansionStep *TraversalStep,
@@ -491,6 +506,7 @@ func suffixSeededFinalProjection(
 	return projection, nil
 }
 
+// selectItemAlias returns an explicit alias or the identifier naturally exposed by a select item.
 func selectItemAlias(item pgsql.SelectItem) (pgsql.Identifier, bool) {
 	switch typed := item.(type) {
 	case *pgsql.AliasedExpression:
@@ -502,6 +518,7 @@ func selectItemAlias(item pgsql.SelectItem) (pgsql.Identifier, bool) {
 	}
 }
 
+// suffixSeededNodeValue returns a node's scalar ID or composite value according to its projection representation.
 func suffixSeededNodeValue(binding *BoundIdentifier) pgsql.Expression {
 	if binding.IDOnly {
 		return pgd.EntityID(binding.Identifier)
@@ -509,6 +526,7 @@ func suffixSeededNodeValue(binding *BoundIdentifier) pgsql.Expression {
 	return aggregateNodeComposite(binding.Identifier)
 }
 
+// tableFrom wraps a relation name as a single PostgreSQL FROM clause.
 func tableFrom(identifier pgsql.Identifier) pgsql.FromClause {
 	return pgsql.FromClause{
 		Source: pgsql.TableReference{

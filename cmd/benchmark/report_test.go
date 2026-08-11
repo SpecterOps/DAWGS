@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWriteJSONEmitsBaselineFriendlyReport verifies that JSON retains row diagnostics, timing values, SQL, and every optimizer decision needed for baseline comparisons.
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	var (
 		distinctRows  = int64(2)
@@ -105,6 +106,7 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	}
 }
 
+// TestWriteMarkdownIncludesDiagnosticColumns verifies that Markdown exposes distinct and duplicate row counts alongside timing and plan-capture status.
 func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 	var (
 		distinctRows  = int64(2)
@@ -144,16 +146,19 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 	}
 }
 
+// TestValidateIterationsRejectsZero verifies that benchmark execution requires at least one measured iteration.
 func TestValidateIterationsRejectsZero(t *testing.T) {
 	require.Error(t, validateIterations(0))
 	require.NoError(t, validateIterations(1))
 }
 
+// TestWriteReportRejectsUnknownFormat verifies that report dispatch fails instead of silently choosing a serializer for an unsupported format.
 func TestWriteReportRejectsUnknownFormat(t *testing.T) {
 	err := writeReport(&bytes.Buffer{}, Report{}, "xml")
 	require.ErrorContains(t, err, "unsupported output format")
 }
 
+// TestWriteJSON verifies that JSON dispatch preserves the selected driver and emits raw duration samples in nanoseconds.
 func TestWriteJSON(t *testing.T) {
 	report := testReport()
 	var out bytes.Buffer
@@ -165,6 +170,7 @@ func TestWriteJSON(t *testing.T) {
 	require.Contains(t, out.String(), `1000000`)
 }
 
+// TestWriteBenchfmt verifies that benchfmt output carries platform metadata, a stable benchmark name, and one ns/op observation per sample.
 func TestWriteBenchfmt(t *testing.T) {
 	report := testReport()
 	var out bytes.Buffer
@@ -180,6 +186,7 @@ func TestWriteBenchfmt(t *testing.T) {
 	require.Contains(t, output, "\t1\t2000000 ns/op")
 }
 
+// TestSanitizeBenchNamePart verifies that benchmark labels normalize whitespace and arrows without destroying hierarchy separators, and that empty labels receive a fallback.
 func TestSanitizeBenchNamePart(t *testing.T) {
 	require.Equal(t, "Shortest_Paths", sanitizeBenchNamePart("Shortest Paths"))
 	require.Equal(t, "n1_-_n3", sanitizeBenchNamePart("n1 -> n3"))
@@ -187,6 +194,7 @@ func TestSanitizeBenchNamePart(t *testing.T) {
 	require.Equal(t, "unknown", sanitizeBenchNamePart(""))
 }
 
+// TestWriteMarkdownOmitsSamples verifies that Markdown reports aggregate timings without leaking the raw nanosecond sample series.
 func TestWriteMarkdownOmitsSamples(t *testing.T) {
 	report := testReport()
 	var out bytes.Buffer
@@ -198,6 +206,7 @@ func TestWriteMarkdownOmitsSamples(t *testing.T) {
 	require.False(t, strings.Contains(output, "1000000"))
 }
 
+// testReport returns a representative report used by serializer tests.
 func testReport() Report {
 	return Report{
 		Driver:     "pg",

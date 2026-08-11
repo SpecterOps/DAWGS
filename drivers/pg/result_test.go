@@ -11,8 +11,11 @@ import (
 )
 
 var (
+	// benchmarkDecodedJSONValues retains decoded rows so benchmark work cannot be optimized away.
 	benchmarkDecodedJSONValues []any
-	benchmarkResultKeys        []string
+
+	// benchmarkResultKeys retains cached column names so benchmark work cannot be optimized away.
+	benchmarkResultKeys []string
 )
 
 func TestDecodeJSONValue(t *testing.T) {
@@ -53,6 +56,7 @@ func TestDecodeJSONValue(t *testing.T) {
 	})
 }
 
+// TestDecodeJSONValuesPreservesDecodedStringScalars verifies JSON-typed strings already decoded by pgx are not reinterpreted as JSON tokens.
 func TestDecodeJSONValuesPreservesDecodedStringScalars(t *testing.T) {
 	var (
 		values = []any{
@@ -75,6 +79,7 @@ func TestDecodeJSONValuesPreservesDecodedStringScalars(t *testing.T) {
 	require.Same(t, &values[0], &decoded[0])
 }
 
+// TestDecodeJSONValuesReusesInputSlice verifies JSON replacement occurs in the pgx-owned row slice without an extra copy.
 func TestDecodeJSONValuesReusesInputSlice(t *testing.T) {
 	var (
 		values = []any{
@@ -94,6 +99,7 @@ func TestDecodeJSONValuesReusesInputSlice(t *testing.T) {
 	require.Equal(t, int64(42), decoded[1])
 }
 
+// TestDecodeJSONValuesDoesNotAllocateForDecodedFields verifies already-decoded fields follow the zero-allocation path.
 func TestDecodeJSONValuesDoesNotAllocateForDecodedFields(t *testing.T) {
 	var (
 		values = []any{
@@ -111,6 +117,7 @@ func TestDecodeJSONValuesDoesNotAllocateForDecodedFields(t *testing.T) {
 	}))
 }
 
+// TestQueryResultCachesKeysAcrossRows verifies column-name storage is reused while row values remain independently owned.
 func TestQueryResultCachesKeysAcrossRows(t *testing.T) {
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
@@ -129,7 +136,9 @@ func TestQueryResultCachesKeysAcrossRows(t *testing.T) {
 	rows, err := mock.Query(context.Background(), "select values")
 	require.NoError(t, err)
 
-	result := &queryResult{rows: rows}
+	result := &queryResult{
+		rows: rows,
+	}
 	require.True(t, result.Next())
 	require.Equal(t, []string{"name", "count"}, result.Keys())
 	firstKey := &result.Keys()[0]
@@ -146,6 +155,7 @@ func TestQueryResultCachesKeysAcrossRows(t *testing.T) {
 	require.NoError(t, result.Error())
 }
 
+// TestQueryResultCacheKeysDoesNotAllocateAfterInitialization verifies repeated key access performs no allocation.
 func TestQueryResultCacheKeysDoesNotAllocateAfterInitialization(t *testing.T) {
 	var (
 		result = &queryResult{}
@@ -161,6 +171,7 @@ func TestQueryResultCacheKeysDoesNotAllocateAfterInitialization(t *testing.T) {
 	}))
 }
 
+// BenchmarkDecodeJSONValuesDecodedFields compares in-place decoding with the previous shallow-copy approach.
 func BenchmarkDecodeJSONValuesDecodedFields(b *testing.B) {
 	var (
 		values = []any{
@@ -190,6 +201,7 @@ func BenchmarkDecodeJSONValuesDecodedFields(b *testing.B) {
 	})
 }
 
+// BenchmarkQueryResultCacheKeys compares cached column names with rebuilding them for every row.
 func BenchmarkQueryResultCacheKeys(b *testing.B) {
 	fields := []pgconn.FieldDescription{
 		{Name: "name"},

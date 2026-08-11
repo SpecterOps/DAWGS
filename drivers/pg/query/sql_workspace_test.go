@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBidirectionalShortestPathWorkspaceIsReusable verifies shortest-path SQL creates reusable session-scoped workspace tables.
 func TestBidirectionalShortestPathWorkspaceIsReusable(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public._bidirectional_sp_harness")
 	require.NotEqual(t, -1, start)
@@ -28,6 +29,7 @@ func TestBidirectionalShortestPathWorkspaceIsReusable(t *testing.T) {
 	require.Contains(t, harness, "truncate table pg_temp.bsp_next_front")
 }
 
+// TestBidirectionalShortestPathWarmWorkspaceUsesTruncate verifies repeated shortest-path execution clears existing workspace instead of recreating it.
 func TestBidirectionalShortestPathWarmWorkspaceUsesTruncate(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.reset_bsp_workspace")
 	require.NotEqual(t, -1, start)
@@ -41,11 +43,13 @@ func TestBidirectionalShortestPathWarmWorkspaceUsesTruncate(t *testing.T) {
 	require.NotContains(t, sqlSchemaUp, "current_setting('transaction_read_only')")
 }
 
+// TestBidirectionalShortestPathArrayModeSkipsGenericWorkspace verifies array-backed execution does not initialize table-backed workspace.
 func TestBidirectionalShortestPathArrayModeSkipsGenericWorkspace(t *testing.T) {
 	require.Contains(t, sqlSchemaUp, "if not use_array_parameters then\nperform public.load_bsp_filter_tables")
 	require.Contains(t, sqlSchemaUp, "perform public.reset_bsp_workspace(not use_array_parameters)")
 }
 
+// TestBidirectionalShortestPathFragmentsRewriteLegacyFilterTables verifies generated fragments target the current workspace filter tables.
 func TestBidirectionalShortestPathFragmentsRewriteLegacyFilterTables(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.bsp_workspace_fragment")
 	require.NotEqual(t, -1, start)
@@ -58,6 +62,7 @@ func TestBidirectionalShortestPathFragmentsRewriteLegacyFilterTables(t *testing.
 	require.Contains(t, rewriter, "'traversal_pair_filter', 'pg_temp.bsp_pair_filter'")
 }
 
+// TestLinearPathMaterializerScopesPersistentLookups verifies persistent node and edge lookups include the selected graph ID.
 func TestLinearPathMaterializerScopesPersistentLookups(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.ordered_edge_ids_to_path")
 	require.NotEqual(t, -1, start)
@@ -71,6 +76,7 @@ func TestLinearPathMaterializerScopesPersistentLookups(t *testing.T) {
 	require.NotContains(t, materializer, "order by case when")
 }
 
+// TestLegacyPathMaterializersRequireTargetGraph verifies legacy materializer signatures cannot bypass graph scoping.
 func TestLegacyPathMaterializersRequireTargetGraph(t *testing.T) {
 	require.Contains(t, sqlSchemaUp, "drop function if exists public.nodes_to_path(int8[])")
 	require.Contains(t, sqlSchemaUp, "drop function if exists public.edges_to_path(int8[])")
@@ -88,6 +94,7 @@ func TestLegacyPathMaterializersRequireTargetGraph(t *testing.T) {
 	require.NotContains(t, sqlSchemaDown, "drop function if exists edges_to_path;")
 }
 
+// TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped verifies the benchmark prototype constrains depth and graph identity.
 func TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.graphbench_s1_distance_bfs")
 	require.NotEqual(t, -1, start)
@@ -101,6 +108,7 @@ func TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped(t *testing.T) {
 	require.Contains(t, sqlSchemaDown, "drop function if exists graphbench_s1_distance_bfs")
 }
 
+// TestCompactShortestExecutorsUseReusableTypedWorkspace verifies compact executors use typed, reusable workspace structures.
 func TestCompactShortestExecutorsUseReusableTypedWorkspace(t *testing.T) {
 	require.Contains(t, sqlSchemaUp, "create or replace function public.ensure_shortest_dag_workspace()")
 	require.Contains(t, sqlSchemaUp, "create or replace function public.reset_shortest_dag_workspace()")
@@ -113,6 +121,7 @@ func TestCompactShortestExecutorsUseReusableTypedWorkspace(t *testing.T) {
 	require.Contains(t, sqlSchemaDown, "drop function if exists shortest_path_compact")
 }
 
+// TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration verifies shallow-depth specializations precede deferred path enumeration.
 func TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.all_shortest_paths_dag")
 	require.NotEqual(t, -1, start)
@@ -130,6 +139,7 @@ func TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration(t *testing.T) {
 	require.NotContains(t, executor, "execute ")
 }
 
+// TestCompactSingletonOverflowFallsBackBeforeReturning verifies compact overflow takes the safe fallback before emitting a result.
 func TestCompactSingletonOverflowFallsBackBeforeReturning(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.shortest_path_compact")
 	require.NotEqual(t, -1, start)
@@ -144,6 +154,7 @@ func TestCompactSingletonOverflowFallsBackBeforeReturning(t *testing.T) {
 	require.NotContains(t, executor, "execute ")
 }
 
+// TestLegacyASPFallbackReusesWorkspaceWithoutCatalogSwaps verifies legacy all-shortest fallback reuses workspace without replacing catalog objects.
 func TestLegacyASPFallbackReusesWorkspaceWithoutCatalogSwaps(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.create_unidirectional_pathspace_tables")
 	require.NotEqual(t, -1, start)

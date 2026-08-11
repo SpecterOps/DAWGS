@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDestructiveRunnersRequireTargetAuthorization verifies that neither PostgreSQL nor Neo4j runners can initialize against an unapproved destructive target.
 func TestDestructiveRunnersRequireTargetAuthorization(t *testing.T) {
 	t.Setenv(databaseguard.AllowDestructiveEnv, "")
 	t.Setenv(databaseguard.DisposableTargetsEnv, "")

@@ -25,6 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// requireUniqueScaleEdgeKeys verifies a fixture does not contain duplicate
+// start, end, and kind tuples rejected by PostgreSQL storage.
 func requireUniqueScaleEdgeKeys(t *testing.T, fixture *opengraph.Graph) {
 	t.Helper()
 
@@ -36,6 +38,8 @@ func requireUniqueScaleEdgeKeys(t *testing.T, fixture *opengraph.Graph) {
 	}
 }
 
+// TestNewReconciliationScaleFixture verifies the reconciliation fixture's
+// cardinality, edge-key uniqueness, and complete kind range.
 func TestNewReconciliationScaleFixture(t *testing.T) {
 	fixture := NewReconciliationScaleFixture(8)
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -49,12 +53,16 @@ func TestNewReconciliationScaleFixture(t *testing.T) {
 	}
 }
 
+// TestFixtureNamesAreDeterministic verifies generated fixture identifiers are
+// stable, padded, and empty for negative counts.
 func TestFixtureNamesAreDeterministic(t *testing.T) {
 	require.Equal(t, []string{"item-00", "item-01", "item-02"}, FixtureNames("item", 3))
 	require.Equal(t, FixtureNames("item", 2_000), FixtureNames("item", 2_000))
 	require.Empty(t, FixtureNames("item", -1))
 }
 
+// TestNewDirectWriteScaleFixtureUsesExactBoundaryAndCascadeShape verifies exact
+// target counts and the intended delete, update, and incident edge populations.
 func TestNewDirectWriteScaleFixtureUsesExactBoundaryAndCascadeShape(t *testing.T) {
 	empty := NewDirectWriteScaleFixture(0)
 	require.Len(t, empty.Nodes, 2)
@@ -89,6 +97,8 @@ func TestNewDirectWriteScaleFixtureUsesExactBoundaryAndCascadeShape(t *testing.T
 	require.Equal(t, "write-target-01", fixture.Edges[4].StartID)
 }
 
+// TestNewTrustPruningScaleFixtureIncludesDenseAndDecoyShapes verifies the
+// fixture includes all node and relationship categories used by pruning cases.
 func TestNewTrustPruningScaleFixtureIncludesDenseAndDecoyShapes(t *testing.T) {
 	fixture := NewTrustPruningScaleFixture(8)
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -106,6 +116,8 @@ func TestNewTrustPruningScaleFixtureIncludesDenseAndDecoyShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("MetaIncludes"))
 }
 
+// TestNewHopScaleFixtureIncludesDenseAndLargeListShapes verifies dense hop
+// topology, broad kind coverage, and large-list endpoints are present.
 func TestNewHopScaleFixtureIncludesDenseAndLargeListShapes(t *testing.T) {
 	fixture := NewHopScaleFixture(32)
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -120,6 +132,8 @@ func TestNewHopScaleFixtureIncludesDenseAndLargeListShapes(t *testing.T) {
 	require.Contains(t, edgeKinds, graph.StringKind("HopSetEdge"))
 }
 
+// TestNewScanLookupScaleFixtureIncludesWideAndLargeListShapes verifies the
+// fixture contains all scan, lookup, hydration, and relationship categories.
 func TestNewScanLookupScaleFixtureIncludesWideAndLargeListShapes(t *testing.T) {
 	fixture := NewScanLookupScaleFixture(32)
 	nodeKinds, edgeKinds := fixture.Kinds()

@@ -12,38 +12,61 @@ import (
 	"time"
 )
 
+// BackendDeltaReport contains descriptive PostgreSQL-to-Neo4j correctness and latency deltas for matched records.
 type BackendDeltaReport struct {
-	Version int                `json:"version"`
-	Notice  string             `json:"notice"`
-	Cases   []BackendDeltaCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Notice states that backend deltas are descriptive and not release-gate evidence.
+	Notice string `json:"notice"`
+	// Cases contains matched PostgreSQL-to-Neo4j comparisons in deterministic report order.
+	Cases []BackendDeltaCase `json:"cases"`
 }
 
+// BackendDeltaCase compares one matched PostgreSQL and Neo4j case round without assigning release-gate status.
 type BackendDeltaCase struct {
-	Dataset                string        `json:"dataset"`
-	Name                   string        `json:"name"`
-	Round                  int           `json:"round,omitempty"`
-	PostgresStatus         string        `json:"postgres_status"`
-	Neo4jStatus            string        `json:"neo4j_status"`
-	PostgresMedian         time.Duration `json:"postgres_median,omitempty"`
-	PostgresP95            time.Duration `json:"postgres_p95,omitempty"`
-	Neo4jMedian            time.Duration `json:"neo4j_median,omitempty"`
-	Neo4jP95               time.Duration `json:"neo4j_p95,omitempty"`
-	MedianNeo4jOverPG      float64       `json:"median_neo4j_over_postgres,omitempty"`
-	P95Neo4jOverPG         float64       `json:"p95_neo4j_over_postgres,omitempty"`
-	ObservationsComparable bool          `json:"observations_comparable"`
-	ObservationsMatch      bool          `json:"observations_match"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Round identifies the measurement round.
+	Round int `json:"round,omitempty"`
+	// PostgresStatus records the PostgreSQL execution status for the matched round.
+	PostgresStatus string `json:"postgres_status"`
+	// Neo4jStatus records the Neo4j execution status for the matched round.
+	Neo4jStatus string `json:"neo4j_status"`
+	// PostgresMedian records PostgreSQL median latency for the matched round.
+	PostgresMedian time.Duration `json:"postgres_median,omitempty"`
+	// PostgresP95 records PostgreSQL P95 latency for the matched round.
+	PostgresP95 time.Duration `json:"postgres_p95,omitempty"`
+	// Neo4jMedian records Neo4j median latency for the matched round.
+	Neo4jMedian time.Duration `json:"neo4j_median,omitempty"`
+	// Neo4jP95 records Neo4j P95 latency for the matched round.
+	Neo4jP95 time.Duration `json:"neo4j_p95,omitempty"`
+	// MedianNeo4jOverPG reports the Neo4j-to-PostgreSQL median latency ratio.
+	MedianNeo4jOverPG float64 `json:"median_neo4j_over_postgres,omitempty"`
+	// P95Neo4jOverPG reports the Neo4j-to-PostgreSQL P95 latency ratio.
+	P95Neo4jOverPG float64 `json:"p95_neo4j_over_postgres,omitempty"`
+	// ObservationsComparable reports whether both backend records contain stable observations at the same boundary.
+	ObservationsComparable bool `json:"observations_comparable"`
+	// ObservationsMatch reports whether comparable backend row counts and normalized observations are equal.
+	ObservationsMatch bool `json:"observations_match"`
 }
 
+// createBackendDeltaReport matches PostgreSQL and Neo4j records and writes descriptive latency and correctness deltas.
 func createBackendDeltaReport(artifact, output string) error {
 	records, err := readJSONLFile(artifact)
 	if err != nil {
 		return err
 	}
 
+	// key identifies one dataset, case, and round during backend matching.
 	type key struct {
+		// dataset names the fixture shared by the matched backend records.
 		dataset string
-		name    string
-		round   int
+		// name identifies the workload case matched across backends.
+		name string
+		// round identifies the measurement round used to balance execution order.
+		round int
 	}
 
 	postgres, neo4j := map[key]CaseResult{}, map[key]CaseResult{}
@@ -95,6 +118,7 @@ func createBackendDeltaReport(artifact, output string) error {
 			ObservationsComparable: observationsComparable,
 			ObservationsMatch:      observationsComparable && pgRecord.RowCount == neoRecord.RowCount && slices.Equal(pgRecord.ObservedRows, neoRecord.ObservedRows),
 		}
+
 		if next.PostgresMedian > 0 {
 			next.MedianNeo4jOverPG = float64(next.Neo4jMedian) / float64(next.PostgresMedian)
 		}
@@ -103,6 +127,7 @@ func createBackendDeltaReport(artifact, output string) error {
 		}
 		report.Cases = append(report.Cases, next)
 	}
+
 	if len(report.Cases) == 0 {
 		return fmt.Errorf("backend-delta artifact has no matched PostgreSQL/Neo4j cases")
 	}

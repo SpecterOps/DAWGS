@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fieldRequirementForSymbol optimizes cypherQuery and returns the field-requirement decision for symbol.
 func fieldRequirementForSymbol(t *testing.T, cypherQuery, symbol string) FieldRequirementDecision {
 	t.Helper()
 
@@ -32,6 +33,7 @@ func fieldRequirementForSymbol(t *testing.T, cypherQuery, symbol string) FieldRe
 	return FieldRequirementDecision{}
 }
 
+// TestScalarContinuationFieldRequirementAllowsIDOnlyObservation verifies that an ID consumer permits scalar continuation state.
 func TestScalarContinuationFieldRequirementAllowsIDOnlyObservation(t *testing.T) {
 	t.Parallel()
 
@@ -44,6 +46,7 @@ func TestScalarContinuationFieldRequirementAllowsIDOnlyObservation(t *testing.T)
 	require.NotContains(t, decision.Fields, FieldRequirementFullEntity)
 }
 
+// TestScalarContinuationFieldRequirementRetainsFullEntityForMutation verifies that mutation prevents scalar-only continuation state.
 func TestScalarContinuationFieldRequirementRetainsFullEntityForMutation(t *testing.T) {
 	t.Parallel()
 

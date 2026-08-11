@@ -13,6 +13,7 @@ import (
 // to accidentally register an unrelated composite with a decoder whose field
 // order does not match its PostgreSQL definition.
 type ownedComposite interface {
+	// The closed type set limits optimized decoding to composites whose PostgreSQL field order is owned by this driver.
 	nodeComposite | edgeComposite | pathComposite
 }
 
@@ -23,6 +24,7 @@ type ownedComposite interface {
 // their slices and JSON maps, which also makes the returned value independent
 // of pgx's reusable wire buffer.
 type ownedCompositeCodec[T ownedComposite] struct {
+	// compositeCodec retains pgx's standard encoding and scan-plan implementation.
 	compositeCodec *pgtype.CompositeCodec
 }
 
@@ -31,25 +33,31 @@ type ownedCompositeCodec[T ownedComposite] struct {
 // scan failure falls back to pgx's []any representation instead of discarding
 // that information.
 type ownedCompositeArrayCodec[T ownedComposite] struct {
+	// arrayCodec retains pgx's array metadata and fallback decoding behavior.
 	arrayCodec *pgtype.ArrayCodec
 }
 
+// FormatSupported reports whether the wrapped composite codec accepts format.
 func (s *ownedCompositeCodec[T]) FormatSupported(format int16) bool {
 	return s.compositeCodec.FormatSupported(format)
 }
 
+// PreferredFormat returns the wire format preferred by the wrapped composite codec.
 func (s *ownedCompositeCodec[T]) PreferredFormat() int16 {
 	return s.compositeCodec.PreferredFormat()
 }
 
+// PlanEncode delegates composite encoding to pgx's registered composite codec.
 func (s *ownedCompositeCodec[T]) PlanEncode(m *pgtype.Map, oid uint32, format int16, value any) pgtype.EncodePlan {
 	return s.compositeCodec.PlanEncode(m, oid, format, value)
 }
 
+// PlanScan preserves pgx's explicit-target composite scanning behavior.
 func (s *ownedCompositeCodec[T]) PlanScan(m *pgtype.Map, oid uint32, format int16, target any) pgtype.ScanPlan {
 	return s.compositeCodec.PlanScan(m, oid, format, target)
 }
 
+// DecodeDatabaseSQLValue delegates database/sql decoding to pgx's composite codec.
 func (s *ownedCompositeCodec[T]) DecodeDatabaseSQLValue(
 	m *pgtype.Map,
 	oid uint32,
@@ -59,6 +67,7 @@ func (s *ownedCompositeCodec[T]) DecodeDatabaseSQLValue(
 	return s.compositeCodec.DecodeDatabaseSQLValue(m, oid, format, src)
 }
 
+// DecodeValue decodes non-null composites into their owned Go representation and falls back for nullable fields.
 func (s *ownedCompositeCodec[T]) DecodeValue(m *pgtype.Map, oid uint32, format int16, src []byte) (any, error) {
 	if src == nil {
 		return nil, nil
@@ -86,14 +95,17 @@ func (s *ownedCompositeCodec[T]) DecodeValue(m *pgtype.Map, oid uint32, format i
 	return value, nil
 }
 
+// FormatSupported reports whether the wrapped array codec accepts format.
 func (s *ownedCompositeArrayCodec[T]) FormatSupported(format int16) bool {
 	return s.arrayCodec.FormatSupported(format)
 }
 
+// PreferredFormat returns the wire format preferred by the wrapped array codec.
 func (s *ownedCompositeArrayCodec[T]) PreferredFormat() int16 {
 	return s.arrayCodec.PreferredFormat()
 }
 
+// PlanEncode delegates composite-array encoding to pgx's registered array codec.
 func (s *ownedCompositeArrayCodec[T]) PlanEncode(
 	m *pgtype.Map,
 	oid uint32,
@@ -103,6 +115,7 @@ func (s *ownedCompositeArrayCodec[T]) PlanEncode(
 	return s.arrayCodec.PlanEncode(m, oid, format, value)
 }
 
+// PlanScan preserves pgx's explicit-target composite-array scanning behavior.
 func (s *ownedCompositeArrayCodec[T]) PlanScan(
 	m *pgtype.Map,
 	oid uint32,
@@ -112,6 +125,7 @@ func (s *ownedCompositeArrayCodec[T]) PlanScan(
 	return s.arrayCodec.PlanScan(m, oid, format, target)
 }
 
+// DecodeDatabaseSQLValue delegates database/sql decoding to pgx's array codec.
 func (s *ownedCompositeArrayCodec[T]) DecodeDatabaseSQLValue(
 	m *pgtype.Map,
 	oid uint32,
@@ -121,6 +135,7 @@ func (s *ownedCompositeArrayCodec[T]) DecodeDatabaseSQLValue(
 	return s.arrayCodec.DecodeDatabaseSQLValue(m, oid, format, src)
 }
 
+// DecodeValue decodes arrays without null elements into []T and otherwise preserves pgx's nullable representation.
 func (s *ownedCompositeArrayCodec[T]) DecodeValue(m *pgtype.Map, oid uint32, format int16, src []byte) (any, error) {
 	if src == nil {
 		return nil, nil
@@ -138,6 +153,7 @@ func (s *ownedCompositeArrayCodec[T]) DecodeValue(m *pgtype.Map, oid uint32, for
 	return s.arrayCodec.DecodeValue(m, oid, format, src)
 }
 
+// installOwnedCompositeCodec replaces a supported pgx codec with the matching driver-owned scalar or array decoder.
 func installOwnedCompositeCodec(dataType pgsql.DataType, definition *pgtype.Type) error {
 	switch dataType {
 	case pgsql.NodeCompositeArray:

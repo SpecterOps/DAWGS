@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestParsePostgresPlanJSONMetricsWalksStructuredNodes verifies extraction of root timings, buffer use, recursive cardinality, labeled CTE rows, index probes, and provenance from nested plan JSON.
 func TestParsePostgresPlanJSONMetricsWalksStructuredNodes(t *testing.T) {
 	raw := json.RawMessage(`[{
   "Plan": {
@@ -41,11 +42,13 @@ func TestParsePostgresPlanJSONMetricsWalksStructuredNodes(t *testing.T) {
 	require.Equal(t, "plan_derived_index_loops", metrics.Provenance["reverse_edge_probes"])
 }
 
+// TestParsePostgresPlanJSONMetricsRejectsMissingPlan verifies that timing metadata alone is not accepted as a PostgreSQL execution plan.
 func TestParsePostgresPlanJSONMetricsRejectsMissingPlan(t *testing.T) {
 	_, err := parsePostgresPlanJSONMetrics(json.RawMessage(`[{"Planning Time":1}]`))
 	require.ErrorContains(t, err, "missing its root Plan")
 }
 
+// TestParsePostgresPlanJSONMetricsAttributesLabeledS4State verifies that repeated frontier loops and labeled witness, meeting, and hydration nodes populate their dedicated counters.
 func TestParsePostgresPlanJSONMetricsAttributesLabeledS4State(t *testing.T) {
 	raw := json.RawMessage(`[{"Plan":{"Node Type":"Result","Actual Rows":1,"Actual Loops":1,"Plans":[
 		{"Node Type":"CTE Scan","CTE Name":"forward_frontier","Actual Rows":3,"Actual Loops":2},
@@ -62,6 +65,7 @@ func TestParsePostgresPlanJSONMetricsAttributesLabeledS4State(t *testing.T) {
 	require.Equal(t, "plan_derived_labeled_state_rows", metrics.Provenance["witness_rows"])
 }
 
+// TestParsePostgresPlanJSONMetricsAttributesEndpointGuardState verifies endpoint/state guard overflow detection and fallback attribution from labeled seeded-search CTEs.
 func TestParsePostgresPlanJSONMetricsAttributesEndpointGuardState(t *testing.T) {
 	raw := json.RawMessage(`[{"Plan":{"Node Type":"Result","Actual Rows":1,"Actual Loops":1,"Plans":[
 		{"Node Type":"CTE Scan","CTE Name":"s4_endpoint_seeded_endpoints","Actual Rows":33,"Actual Loops":1},

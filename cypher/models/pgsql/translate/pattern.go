@@ -11,6 +11,7 @@ type BindingResult struct {
 	AlreadyBound bool
 }
 
+// bindPatternExpression binds a completed traversal result to its pattern variable when one was declared.
 func (s *Translator) bindPatternExpression(cypherExpression cypher.Expression, dataType pgsql.DataType) (BindingResult, error) {
 	if cypherBinding, hasCypherBinding, err := extractIdentifierFromCypherExpression(cypherExpression); err != nil {
 		return BindingResult{}, err
@@ -33,6 +34,7 @@ func (s *Translator) bindPatternExpression(cypherExpression cypher.Expression, d
 	}
 }
 
+// translatePatternPart dispatches shortest-path, variable-expansion, and fixed traversal patterns to their builders.
 func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error {
 	// We expect this to be a node select if there aren't enough pattern elements for a traversal
 	newPatternPart := s.query.CurrentPart().currentPattern.NewPart()
@@ -66,6 +68,7 @@ func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error
 	return nil
 }
 
+// buildPatternPart finalizes a translated pattern part and exports its visible bindings.
 func (s *Translator) buildPatternPart(part *PatternPart) error {
 	if part.IsTraversal {
 		return s.buildTraversalPatternPart(part)
@@ -74,6 +77,7 @@ func (s *Translator) buildPatternPart(part *PatternPart) error {
 	}
 }
 
+// buildTraversalPattern emits fixed traversal steps and applies any exact-range unrolling decisions.
 func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootStep bool) error {
 	if isRootStep {
 		if traversalStepQuery, err := s.buildTraversalPatternRoot(traversalStep.Frame, traversalStep); err != nil {
@@ -107,6 +111,7 @@ func (s *Translator) buildTraversalPattern(traversalStep *TraversalStep, isRootS
 	return nil
 }
 
+// buildExpansionPattern emits an ordinary variable expansion and any qualified specialized-search rewrite.
 func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) error {
 	traversalStep := traversalStepContext.CurrentStep
 
@@ -137,6 +142,7 @@ func (s *Translator) buildExpansionPattern(traversalStepContext TraversalStepCon
 	return nil
 }
 
+// buildShortestPathsExpansionPattern emits the selected shortest-path executor and its projection frame.
 func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder, allPaths bool) error {
 	traversalStep := traversalStepContext.CurrentStep
 
@@ -234,6 +240,7 @@ type TraversalStepContext struct {
 	IsRootStep   bool
 }
 
+// buildTraversalPatternPart translates all steps in a non-expanding pattern chain.
 func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 	firstCTE := len(s.query.CurrentPart().Model.CommonTableExpressions.Expressions)
 	fixedSuffixDecision, useFixedSuffixStrategy := selectedFixedSuffixDecision(part, s.expansionSearchStrategyDecisions)

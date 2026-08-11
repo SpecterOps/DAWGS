@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBuildReferencePairReportComparesExactMatchedArms verifies median/P95 ratios and absolute change across ten carryover-balanced full-comparator rounds.
 func TestBuildReferencePairReportComparesExactMatchedArms(t *testing.T) {
 	records := make([]CaseResult, 0, 10)
 	for round := 1; round <= 10; round++ {
@@ -90,6 +91,7 @@ func TestBuildReferencePairReportComparesExactMatchedArms(t *testing.T) {
 	require.Equal(t, time.Millisecond, report.Cases[0].MedianChange.Estimate)
 }
 
+// TestBuildReferencePairReportComparesValidatedHydrationBoundaries verifies that two prevalidated hydration implementations remain comparable despite different input-boundary descriptions.
 func TestBuildReferencePairReportComparesValidatedHydrationBoundaries(t *testing.T) {
 	records := make([]CaseResult, 0, 10)
 	for round := 1; round <= 10; round++ {
@@ -168,6 +170,7 @@ func TestBuildReferencePairReportComparesValidatedHydrationBoundaries(t *testing
 	require.InDelta(t, 2, report.Cases[0].P95Ratio.Estimate, 0.0001)
 }
 
+// TestBuildReferencePairReportRejectsMixedExactBoundaries verifies that a full public-result comparator cannot be timed against a precomputed hydration-only boundary.
 func TestBuildReferencePairReportRejectsMixedExactBoundaries(t *testing.T) {
 	record := CaseResult{
 		Dataset:       "fixture",
@@ -214,6 +217,7 @@ func TestBuildReferencePairReportRejectsMixedExactBoundaries(t *testing.T) {
 	require.ErrorContains(t, err, "does not share an exact comparable boundary")
 }
 
+// TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery verifies the reduced discovery protocol thresholds and ratio calculation for exact ordered-ID observations.
 func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T) {
 	records := make([]CaseResult, 0, 5)
 	for round := 1; round <= 5; round++ {
@@ -294,6 +298,7 @@ func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T)
 	require.InDelta(t, 0.5, report.Cases[0].MedianRatio.Estimate, 0.0001)
 }
 
+// TestBuildReferencePairReportRejectsChangedImplementationIdentity verifies that an arm's implementation fingerprint must remain constant across all measurement rounds.
 func TestBuildReferencePairReportRejectsChangedImplementationIdentity(t *testing.T) {
 	records := make([]CaseResult, 0, 10)
 	for round := 1; round <= 10; round++ {
@@ -308,6 +313,7 @@ func TestBuildReferencePairReportRejectsChangedImplementationIdentity(t *testing
 	require.ErrorContains(t, err, "identity changed")
 }
 
+// TestBuildReferencePairReportRejectsUnbalancedArmOrder verifies that repeatedly measuring the same arm first violates the carryover-balancing protocol.
 func TestBuildReferencePairReportRejectsUnbalancedArmOrder(t *testing.T) {
 	records := make([]CaseResult, 0, 10)
 	for round := 1; round <= 10; round++ {
@@ -321,6 +327,7 @@ func TestBuildReferencePairReportRejectsUnbalancedArmOrder(t *testing.T) {
 	require.ErrorContains(t, err, "does not alternate")
 }
 
+// referencePairProtocolRecord returns one exact comparator round with selectable arm order and uniform warm timing samples.
 func referencePairProtocolRecord(round int, baselineFirst bool) CaseResult {
 	baselineOrder, candidateOrder := 2, 3
 	if !baselineFirst {
@@ -347,6 +354,7 @@ func referencePairProtocolRecord(round int, baselineFirst bool) CaseResult {
 	return record
 }
 
+// stampReferencePairIdentity assigns a stable runtime, implementation, and SQL identity to both reference arms.
 func stampReferencePairIdentity(record *CaseResult) {
 	record.Environment.BinarySHA256 = "binary"
 	record.Environment.DirtyDiffSHA256 = "dirty"
@@ -360,6 +368,7 @@ func stampReferencePairIdentity(record *CaseResult) {
 	}
 }
 
+// TestBuildReferencePairReportRejectsMismatchedOrderedIDObservations verifies that discovery timing cannot compare arms whose ordered-ID result sequences differ.
 func TestBuildReferencePairReportRejectsMismatchedOrderedIDObservations(t *testing.T) {
 	record := CaseResult{
 		Dataset:       "fixture",

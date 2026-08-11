@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestResolveCaseParams verifies that scalar, explicit-list, and generated-list fixture keys become ordered int64 IDs without disturbing ordinary parameters.
 func TestResolveCaseParams(t *testing.T) {
 	params, err := resolveCaseParams(ScaleCase{
 		Params: map[string]any{
@@ -61,6 +62,7 @@ func TestResolveCaseParams(t *testing.T) {
 	}, params)
 }
 
+// TestScaleCaseDecodesTypedDatetimeParameter verifies that the corpus JSON datetime envelope becomes a UTC time value rather than an untyped map.
 func TestScaleCaseDecodesTypedDatetimeParameter(t *testing.T) {
 	var testCase ScaleCase
 	require.NoError(t, json.Unmarshal([]byte(`{
@@ -75,6 +77,7 @@ func TestScaleCaseDecodesTypedDatetimeParameter(t *testing.T) {
 	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), testCase.Params["threshold"])
 }
 
+// TestParsePostgresPlanMetrics verifies parsing of planning/execution milliseconds and every shared, local, and temporary buffer counter from text plans.
 func TestParsePostgresPlanMetrics(t *testing.T) {
 	metrics := parsePostgresPlanMetrics([]string{
 		"Nested Loop  (actual rows=1 loops=1)",
@@ -101,6 +104,7 @@ func TestParsePostgresPlanMetrics(t *testing.T) {
 	}, metrics.Buffers)
 }
 
+// TestGeneratedDatasetVariantsAreParameterizedAndRepeatable verifies deterministic generation for equal names and propagation of configured payload size into fixed-suffix nodes.
 func TestGeneratedDatasetVariantsAreParameterizedAndRepeatable(t *testing.T) {
 	first := generatedDataset("generated_shortest_paths_d4_f16")
 	second := generatedDataset("generated_shortest_paths_d4_f16")
@@ -112,6 +116,7 @@ func TestGeneratedDatasetVariantsAreParameterizedAndRepeatable(t *testing.T) {
 	require.Contains(t, fixedSuffix.Nodes[0].Properties["payload"], "xxxx")
 }
 
+// TestFixtureMetadataIncludesCardinalityAndChecksum verifies that generated fixtures expose their configuration, nonzero entity counts, and a full SHA-256 content digest.
 func TestFixtureMetadataIncludesCardinalityAndChecksum(t *testing.T) {
 	metadata, err := fixtureMetadata("unused", "generated_shortest_paths_d4_f16")
 	require.NoError(t, err)
