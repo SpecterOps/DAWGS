@@ -32,19 +32,40 @@ func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 	}
 }
 
+// SchemaManager coordinates graph and kind metadata with the query caches that depend on that schema state.
 type SchemaManager struct {
-	defaultGraph          model.Graph
-	pool                  *pgxpool.Pool
-	parseCache            *cypherParseCache
-	translationCache      *cypherTranslationCache
-	hasDefaultGraph       bool
-	graphs                map[string]model.Graph
-	kindsByID             map[graph.Kind]int16
-	kindIDsByKind         map[int16]graph.Kind
-	lock                  *sync.RWMutex
+	// defaultGraph caches the first graph selected as the schema default.
+	defaultGraph model.Graph
+
+	// pool supplies PostgreSQL connections for schema operations.
+	pool *pgxpool.Pool
+
+	// parseCache retains immutable Cypher ASTs keyed by normalized query text.
+	parseCache *cypherParseCache
+
+	// translationCache retains parameter-rebindable SQL translations by graph and parameter shape.
+	translationCache *cypherTranslationCache
+
+	// hasDefaultGraph distinguishes a cached default graph from the zero-value graph model.
+	hasDefaultGraph bool
+
+	// graphs indexes asserted database graph models by schema name.
+	graphs map[string]model.Graph
+
+	// kindsByID maps graph kind names to their PostgreSQL int2 identifiers.
+	kindsByID map[graph.Kind]int16
+
+	// kindIDsByKind maps PostgreSQL int2 identifiers back to graph kind names.
+	kindIDsByKind map[int16]graph.Kind
+
+	// lock protects cached graph and kind metadata from concurrent access.
+	lock *sync.RWMutex
+
+	// graphQueryMemoryLimit caps memory available to a graph query transaction.
 	graphQueryMemoryLimit size.Size
 }
 
+// NewSchemaManager creates an empty metadata manager with bounded parse and translation caches for pool.
 func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
 	return &SchemaManager{
 		pool:                  pool,
@@ -81,6 +102,7 @@ func (s *SchemaManager) WriteTransaction(ctx context.Context, txDelegate graph.T
 	}
 }
 
+// fetch replaces both in-memory kind indexes with the kinds visible through tx.
 func (s *SchemaManager) fetch(tx graph.Transaction) error {
 	if kinds, err := query.On(tx).SelectKinds(); err != nil {
 		return err
@@ -101,12 +123,15 @@ func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
 	return s.kindIDsByKind
 }
 
+// Fetch refreshes both in-memory kind indexes from a read transaction against the current schema.
 func (s *SchemaManager) Fetch(ctx context.Context) error {
 	return s.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		return s.fetch(tx)
 	}, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol))
 }
 
+// defineKinds inserts any missing kinds and records their database IDs in both
+// in-memory indexes.
 func (s *SchemaManager) defineKinds(tx graph.Transaction, kinds graph.Kinds) error {
 	for _, kind := range kinds {
 		if kindID, err := query.On(tx).InsertOrGetKind(kind); err != nil {
@@ -120,6 +145,7 @@ func (s *SchemaManager) defineKinds(tx graph.Transaction, kinds graph.Kinds) err
 	return nil
 }
 
+// mapKinds partitions semantic kinds into cached database IDs and unresolved kinds without refreshing the cache.
 func (s *SchemaManager) mapKinds(kinds graph.Kinds) ([]int16, graph.Kinds) {
 	var (
 		missingKinds = make(graph.Kinds, 0, len(kinds))
@@ -200,6 +226,7 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 	}
 }
 
+// mapKindIDs partitions database kind IDs into cached semantic kinds and unresolved IDs without refreshing the cache.
 func (s *SchemaManager) mapKindIDs(kindIDs []int16) (graph.Kinds, []int16) {
 	var (
 		missingIDs = make([]int16, 0, len(kindIDs))
@@ -248,6 +275,7 @@ func (s *SchemaManager) MapKindIDs(ctx context.Context, kindIDs []int16) (graph.
 	}
 }
 
+// assertKinds defines any missing kinds while holding the write lock and returns IDs from the refreshed in-memory mapping.
 func (s *SchemaManager) assertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
 	// Acquire a write-lock and release on-exit
 	s.lock.Lock()
@@ -283,6 +311,7 @@ func (s *SchemaManager) AssertKinds(ctx context.Context, kinds graph.Kinds) ([]i
 	return s.assertKinds(ctx, kinds)
 }
 
+// setDefaultGraph caches the first successfully resolved default graph and ignores later attempts to replace it.
 func (s *SchemaManager) setDefaultGraph(defaultGraph model.Graph, schema graph.Graph) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -329,6 +358,7 @@ func (s *SchemaManager) DefaultGraph() (model.Graph, bool) {
 	return s.defaultGraph, s.hasDefaultGraph
 }
 
+// assertGraph creates or validates schema's graph definition in tx and records the resulting database model.
 func (s *SchemaManager) assertGraph(tx graph.Transaction, schema graph.Graph) (model.Graph, error) {
 	var assertedGraph model.Graph
 
@@ -380,6 +410,7 @@ func (s *SchemaManager) AssertGraph(tx graph.Transaction, schema graph.Graph) (m
 	return s.assertGraph(tx, schema)
 }
 
+// assertSchema creates schema storage and defines every node and relationship kind required by its graphs.
 func (s *SchemaManager) assertSchema(tx graph.Transaction, schema graph.Schema) error {
 	if err := query.On(tx).CreateSchema(); err != nil {
 		return err

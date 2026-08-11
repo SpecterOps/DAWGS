@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// translateLegacyQuery builds legacy criteria, translates the resulting Cypher, and returns formatted SQL and metadata.
 func translateLegacyQuery(t *testing.T, criteria ...graph.Criteria) (string, translate.Result) {
 	t.Helper()
 
@@ -43,6 +44,7 @@ func translateLegacyQuery(t *testing.T, criteria ...graph.Criteria) (string, tra
 	return formatted, translation
 }
 
+// TestLegacyBuilderPostgreSQL_LogicalForms verifies boolean grouping, typed thresholds, and binding-local predicates in migrated builder queries.
 func TestLegacyBuilderPostgreSQL_LogicalForms(t *testing.T) {
 	t.Run("LOGIC-01 branch-local relationship kinds", func(t *testing.T) {
 		formatted, _ := translateLegacyQuery(t,
@@ -105,10 +107,13 @@ func TestLegacyBuilderPostgreSQL_LogicalForms(t *testing.T) {
 	})
 }
 
+// TestLegacyBuilderPostgreSQL_LOGIC05ProjectionOrder verifies that migrated projections preserve caller-specified column order.
 func TestLegacyBuilderPostgreSQL_LOGIC05ProjectionOrder(t *testing.T) {
 	testCases := map[string]struct {
+		// projection supplies the legacy graph criteria for the case.
 		projection *graphProjection
-		columns    []string
+		// columns lists the SQL fragments in their required projection order.
+		columns []string
 	}{
 		"full opposite node plus relationship": {
 			projection: projectionOf(query.Relationship(), query.End()),
@@ -148,9 +153,11 @@ func TestLegacyBuilderPostgreSQL_LOGIC05ProjectionOrder(t *testing.T) {
 // graphProjection keeps the table-driven projection cases strongly typed
 // without obscuring that they are legacy query criteria.
 type graphProjection struct {
+	// criteria is the legacy returning criterion represented by this projection.
 	criteria graph.Criteria
 }
 
+// projectionOf wraps returning criteria in the strongly typed projection used by table-driven cases.
 func projectionOf(criteria ...graph.Criteria) *graphProjection {
 	return &graphProjection{criteria: query.Returning(criteria...)}
 }

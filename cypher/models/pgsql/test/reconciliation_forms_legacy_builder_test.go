@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderPostgreSQL_ReconciliationForms verifies migrated relationship reconciliation reads and deletes across kind-set sizes.
 func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 	reconciliationKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
@@ -83,10 +84,14 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 	}
 
 	testCases := map[string]struct {
-		criteria   []graph.Criteria
-		fragments  []string
+		// criteria contains the legacy query-builder inputs for the case.
+		criteria []graph.Criteria
+		// fragments lists SQL fragments that the translation must contain.
+		fragments []string
+		// parameters is the exact parameter map expected from translation.
 		parameters map[string]any
-		read       bool
+		// read reports whether the case reads rather than deletes a relationship.
+		read bool
 	}{
 		"REC-03 inbound primary group": {
 			criteria: []graph.Criteria{
@@ -192,6 +197,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 	}
 }
 
+// sequentialKindIDs formats count consecutive kind IDs beginning at start for SQL-fragment assertions.
 func sequentialKindIDs(first, count int) string {
 	ids := make([]string, count)
 	for idx := range count {

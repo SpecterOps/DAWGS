@@ -23,18 +23,31 @@ import (
 )
 
 const (
+	// ReconciliationScaleDataset identifies the generated reconciliation
+	// fixture.
 	ReconciliationScaleDataset = "generated_reconciliation"
-	TrustPruningScaleDataset   = "generated_trust_pruning"
-	HopScaleDataset            = "generated_hops"
-	ScanLookupScaleDataset     = "generated_scan_lookups"
+
+	// TrustPruningScaleDataset identifies the generated trust-pruning fixture.
+	TrustPruningScaleDataset = "generated_trust_pruning"
+
+	// HopScaleDataset identifies the generated relationship-hop fixture.
+	HopScaleDataset = "generated_hops"
+
+	// ScanLookupScaleDataset identifies the generated scan-and-lookup fixture.
+	ScanLookupScaleDataset = "generated_scan_lookups"
 )
 
 // GeneratedNodeListParam resolves optional fixture IDs followed by a
 // deterministic prefix/count sequence. It keeps high-cardinality database-ID
 // parameters out of handwritten JSON.
 type GeneratedNodeListParam struct {
-	Prefix  string   `json:"prefix"`
-	Count   int      `json:"count"`
+	// Prefix is prepended to each generated node identifier.
+	Prefix string `json:"prefix"`
+
+	// Count is the number of sequential identifiers to generate.
+	Count int `json:"count"`
+
+	// Include lists literal identifiers to place before generated identifiers.
 	Include []string `json:"include,omitempty"`
 }
 

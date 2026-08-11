@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDormantFormsStayOutOfPlanCorpus verifies that active cases, variants, and metamorphic query names never expose FUTURE-prefixed query forms.
 func TestDormantFormsStayOutOfPlanCorpus(t *testing.T) {
 	suite, err := loadCorpus("../../integration/testdata")
 	require.NoError(t, err)
@@ -51,6 +52,7 @@ func TestDormantFormsStayOutOfPlanCorpus(t *testing.T) {
 	}
 }
 
+// requireNoDormantPlanQueryFormID rejects a corpus field containing the reserved FUTURE marker, independent of letter case.
 func requireNoDormantPlanQueryFormID(t *testing.T, field, value string) {
 	t.Helper()
 	require.False(t, strings.Contains(strings.ToUpper(value), "FUTURE-"),

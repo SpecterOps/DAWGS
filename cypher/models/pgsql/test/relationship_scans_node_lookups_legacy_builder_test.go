@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// scanLookupRegressionKinds converts numeric fixture suffixes to their RegressionKind names.
 func scanLookupRegressionKinds(numbers ...int) graph.Kinds {
 	kinds := make(graph.Kinds, len(numbers))
 	for idx, number := range numbers {
@@ -32,6 +33,7 @@ func scanLookupRegressionKinds(numbers ...int) graph.Kinds {
 	return kinds
 }
 
+// twoDigitKindSuffix formats a fixture kind number as two decimal digits.
 func twoDigitKindSuffix(value int) string {
 	if value < 10 {
 		return "0" + string(rune('0'+value))
@@ -39,6 +41,7 @@ func twoDigitKindSuffix(value int) string {
 	return string(rune('0'+value/10)) + string(rune('0'+value%10))
 }
 
+// assertScanLookupTranslation translates criteria and requires every expected SQL fragment to be present.
 func assertScanLookupTranslation(t *testing.T, criteria []graph.Criteria, fragments ...string) {
 	t.Helper()
 	formatted, _ := translateLegacyQuery(t, criteria...)
@@ -47,6 +50,7 @@ func assertScanLookupTranslation(t *testing.T, criteria []graph.Criteria, fragme
 	}
 }
 
+// TestLegacyBuilderPostgreSQL_RelationshipScans verifies migrated relationship scans preserve endpoint, kind, property, and projection semantics.
 func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 	t.Run("SCAN-01 base endpoints and relationship ID", func(t *testing.T) {
 		assertScanLookupTranslation(t, []graph.Criteria{
@@ -128,7 +132,9 @@ func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 
 	t.Run("SCAN-08 scenario A and B", func(t *testing.T) {
 		for name, testCase := range map[string]struct {
+			// endKinds optionally constrains the terminal node kinds.
 			endKinds graph.Kinds
+			// relKinds constrains the relationship kinds admitted by the scan.
 			relKinds graph.Kinds
 		}{
 			"scenario A": {relKinds: scanLookupRegressionKinds(87, 88, 89, 90, 91, 92)},
@@ -155,6 +161,7 @@ func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 	})
 }
 
+// TestLegacyBuilderPostgreSQL_NodeLookups verifies migrated node lookups preserve ID, kind, property, projection, and limit semantics.
 func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 	t.Run("LOOKUP-01 ID and full-node projections", func(t *testing.T) {
 		assertScanLookupTranslation(t, []graph.Criteria{

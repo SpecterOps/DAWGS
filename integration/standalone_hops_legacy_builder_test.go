@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderStandaloneHops verifies legacy one-hop queries preserve direction, kinds, and endpoint projections.
 func TestLegacyBuilderStandaloneHops(t *testing.T) {
 	anchorFixture := regressionTemplateFixture(t, "HOP-01 through HOP-03 anchored direction and relationship-kind cardinality")
 	idFixture := regressionTemplateFixture(t, "HOP-04 and HOP-05 endpoint kinds and ID constraints")
@@ -120,9 +121,14 @@ func TestLegacyBuilderStandaloneHops(t *testing.T) {
 
 	t.Run("HOP-05 endpoint IDs and traversal anchor contradiction", func(t *testing.T) {
 		for _, testCase := range []struct {
-			name        string
+			// name identifies whether the root constraint agrees with the path.
+			name string
+
+			// allowedRoot is the fixture ID admitted by the root constraint.
 			allowedRoot string
-			expected    []string
+
+			// expected lists the endpoint object IDs returned by the query.
+			expected []string
 		}{
 			{
 				name:        "matching",
@@ -252,6 +258,8 @@ func TestLegacyBuilderStandaloneHops(t *testing.T) {
 	})
 }
 
+// regressionTemplateFixture returns the inline fixture belonging to the named
+// Cypher template family.
 func regressionTemplateFixture(t *testing.T, familyName string) *opengraph.Graph {
 	t.Helper()
 	for _, templateFile := range loadCypherTemplateFiles(t) {
@@ -265,6 +273,7 @@ func regressionTemplateFixture(t *testing.T, familyName string) *opengraph.Graph
 	return nil
 }
 
+// standaloneHopDirectionalResults drains a directional cursor and fails the current test on cursor error.
 func standaloneHopDirectionalResults(t *testing.T, cursor graph.Cursor[graph.DirectionalResult]) []graph.DirectionalResult {
 	t.Helper()
 	var results []graph.DirectionalResult
@@ -275,6 +284,7 @@ func standaloneHopDirectionalResults(t *testing.T, cursor graph.Cursor[graph.Dir
 	return results
 }
 
+// standaloneHopRelationshipMarkers returns sorted marker properties from a relationship slice.
 func standaloneHopRelationshipMarkers(t *testing.T, relationships []*graph.Relationship) []string {
 	t.Helper()
 	markers := make([]string, 0, len(relationships))
@@ -287,6 +297,7 @@ func standaloneHopRelationshipMarkers(t *testing.T, relationships []*graph.Relat
 	return markers
 }
 
+// assertStandaloneHopRelationshipMarkers returns a legacy-query assertion that compares sorted relationship markers.
 func assertStandaloneHopRelationshipMarkers(t *testing.T, expected []string) func(graph.RelationshipQuery, opengraph.IDMap) error {
 	t.Helper()
 	return func(relationshipQuery graph.RelationshipQuery, _ opengraph.IDMap) error {

@@ -12,20 +12,35 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 )
 
+// defaultCypherTranslationCacheEntries is the maximum number of translated SQL
+// entries retained when no cache capacity is configured.
 const defaultCypherTranslationCacheEntries = 256
 
+// cypherTranslationCacheKey identifies SQL that can be reused for one query, graph, and parameter type shape.
 type cypherTranslationCacheKey struct {
-	query         string
-	graphID       int32
+	// query is normalized Cypher text cloned on a cache miss.
+	query string
+
+	// graphID scopes generated SQL to the selected graph.
+	graphID int32
+
+	// parameterType captures sorted parameter names and negotiated PostgreSQL types.
 	parameterType string
 }
 
+// cypherTranslationCacheValue stores generated SQL and the source mapping needed to bind fresh parameter values.
 type cypherTranslationCacheValue struct {
-	key              cypherTranslationCacheKey
-	sql              string
+	// key is the immutable identity used by the LRU index.
+	key cypherTranslationCacheKey
+
+	// sql is the rendered PostgreSQL statement reused by cache hits.
+	sql string
+
+	// parameterSources maps generated SQL parameters back to caller-supplied Cypher parameter names.
 	parameterSources map[string]string
 }
 
+// bind negotiates current caller values for every generated parameter recorded by the cached translation.
 func (s cypherTranslationCacheValue) bind(parameters map[string]any) (map[string]any, error) {
 	bound := make(map[string]any, len(s.parameterSources))
 	for identifier, source := range s.parameterSources {
@@ -42,33 +57,70 @@ func (s cypherTranslationCacheValue) bind(parameters map[string]any) (map[string
 	return bound, nil
 }
 
+// cypherTranslationCall publishes one in-flight build result to callers waiting on the same cache key.
 type cypherTranslationCall struct {
-	done      chan struct{}
-	value     cypherTranslationCacheValue
-	err       error
+	// done closes after value, err, and cacheable have been published.
+	done chan struct{}
+
+	// value is the translation produced by the build owner.
+	value cypherTranslationCacheValue
+
+	// err is the build failure shared with waiting callers.
+	err error
+
+	// cacheable reports whether waiters may safely rebind and reuse value.
 	cacheable bool
 }
 
+// cypherTranslationCache is a bounded LRU of reusable SQL translations with single-flight miss coalescing.
 type cypherTranslationCache struct {
-	lock     sync.Mutex
+	// lock protects completed entries, pending calls, closure state, and counters.
+	lock sync.Mutex
+
+	// capacity is the maximum number of completed translations retained.
 	capacity int
-	entries  map[cypherTranslationCacheKey]*list.Element
-	lru      *list.List
-	pending  map[cypherTranslationCacheKey]*cypherTranslationCall
-	closed   bool
-	stats    TranslationCacheStats
+
+	// entries indexes completed translations by their reusable input shape.
+	entries map[cypherTranslationCacheKey]*list.Element
+
+	// lru orders completed translations from most to least recently used.
+	lru *list.List
+
+	// pending coalesces concurrent builds for the same translation key.
+	pending map[cypherTranslationCacheKey]*cypherTranslationCall
+
+	// closed prevents completed or future builds from being retained.
+	closed bool
+
+	// stats accumulates cache activity for this instance.
+	stats TranslationCacheStats
 }
 
+// TranslationCacheStats is a query-text-free snapshot of translation cache activity and occupancy.
 type TranslationCacheStats struct {
-	Hits            uint64 `json:"hits"`
-	Misses          uint64 `json:"misses"`
-	Bypasses        uint64 `json:"bypasses"`
-	Evictions       uint64 `json:"evictions"`
+	// Hits counts translations served from completed cache entries.
+	Hits uint64 `json:"hits"`
+
+	// Misses counts builds owned by callers that established pending entries.
+	Misses uint64 `json:"misses"`
+
+	// Bypasses counts builds that could not be retained or safely shared.
+	Bypasses uint64 `json:"bypasses"`
+
+	// Evictions counts least-recently-used translations removed at capacity.
+	Evictions uint64 `json:"evictions"`
+
+	// CoalescedMisses counts callers that waited for an existing build of the same key.
 	CoalescedMisses uint64 `json:"coalesced_misses"`
-	Entries         int    `json:"entries"`
-	Pending         int    `json:"pending"`
+
+	// Entries is the number of completed translations retained when the snapshot was taken.
+	Entries int `json:"entries"`
+
+	// Pending is the number of in-flight translation builds when the snapshot was taken.
+	Pending int `json:"pending"`
 }
 
+// newCypherTranslationCache initializes an empty LRU translation cache with the requested capacity.
 func newCypherTranslationCache(capacity int) *cypherTranslationCache {
 	return &cypherTranslationCache{
 		capacity: capacity,
@@ -78,6 +130,7 @@ func newCypherTranslationCache(capacity int) *cypherTranslationCache {
 	}
 }
 
+// translationParameterTypeKey encodes sorted parameter names and negotiated data types into an unambiguous cache-key component.
 func translationParameterTypeKey(parameters map[string]any) string {
 	keys := make([]string, 0, len(parameters))
 	for key := range parameters {
@@ -108,6 +161,7 @@ func translationParameterTypeKey(parameters map[string]any) string {
 	return key.String()
 }
 
+// cacheableTranslation reports whether every translated parameter can be rebound from a current caller parameter.
 func cacheableTranslation(result translate.Result, parameters map[string]any) bool {
 	if len(result.Parameters) != len(result.ParameterSources) {
 		return false
@@ -124,6 +178,7 @@ func cacheableTranslation(result translate.Result, parameters map[string]any) bo
 	return true
 }
 
+// cloneSources copies parameter-source metadata so cached values do not alias translator-owned maps.
 func cloneSources(values map[string]string) map[string]string {
 	cloned := make(map[string]string, len(values))
 	for key, value := range values {
@@ -132,6 +187,7 @@ func cloneSources(values map[string]string) map[string]string {
 	return cloned
 }
 
+// Translate returns reusable SQL with values rebound from parameters, building or coalescing a translation on a miss.
 func (s *cypherTranslationCache) Translate(query string, graphID int32, parameters map[string]any, build func() (translate.Result, string, error)) (string, map[string]any, error) {
 	trimmed := strings.TrimSpace(query)
 	if s == nil || s.capacity <= 0 || len(query) > maxCachedCypherQueryBytes {
@@ -230,6 +286,7 @@ func (s *cypherTranslationCache) Translate(query string, graphID int32, paramete
 	return sql, result.Parameters, nil
 }
 
+// Stats returns a consistent snapshot of counters and current cache occupancy.
 func (s *cypherTranslationCache) Stats() TranslationCacheStats {
 	if s == nil {
 		return TranslationCacheStats{}
@@ -242,6 +299,7 @@ func (s *cypherTranslationCache) Stats() TranslationCacheStats {
 	return stats
 }
 
+// Close releases retained translations and prevents future builds from repopulating the cache.
 func (s *cypherTranslationCache) Close() {
 	if s == nil {
 		return

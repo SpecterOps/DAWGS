@@ -16,25 +16,40 @@ import (
 	"strings"
 )
 
+// captureBundleVersion identifies the serialized schema revision for capture bundle.
 const captureBundleVersion = 1
 
+// CaptureBundleManifest inventories the benchmark artifacts and source provenance copied into a portable bundle.
 type CaptureBundleManifest struct {
-	Version           int            `json:"version"`
-	Environment       RunEnvironment `json:"environment"`
-	RecordCount       int            `json:"record_count"`
-	CorpusDeclaration string         `json:"corpus_declaration"`
-	RawArtifact       string         `json:"raw_artifact"`
-	Executable        string         `json:"executable"`
-	SourcePatch       string         `json:"source_patch"`
-	UntrackedManifest string         `json:"untracked_manifest"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Environment captures the environment in which the measurement ran.
+	Environment RunEnvironment `json:"environment"`
+	// RecordCount records case-result records included in the capture bundle.
+	RecordCount int `json:"record_count"`
+	// CorpusDeclaration contains the exact selected corpus declaration bundled for replay.
+	CorpusDeclaration string `json:"corpus_declaration"`
+	// RawArtifact identifies the uncopied artifact used as bundle input.
+	RawArtifact string `json:"raw_artifact"`
+	// Executable captures executable path, digest, and build metadata.
+	Executable string `json:"executable"`
+	// SourcePatch contains the tracked working-tree patch preserved as source provenance.
+	SourcePatch string `json:"source_patch"`
+	// UntrackedManifest names the bundle-relative JSON inventory of copied untracked sources.
+	UntrackedManifest string `json:"untracked_manifest"`
 }
 
+// UntrackedSource describes an untracked source file copied into an artifact bundle.
 type UntrackedSource struct {
-	Path   string `json:"path"`
+	// Path records the untracked source path relative to the repository root.
+	Path string `json:"path"`
+	// SHA256 verifies the copied file's contents without depending on its path.
 	SHA256 string `json:"sha256"`
-	Copy   string `json:"copy"`
+	// Copy identifies the bundle-relative copy of an untracked source file.
+	Copy string `json:"copy"`
 }
 
+// writeCaptureBundle copies run artifacts and provenance into a checksummed portable bundle.
 func writeCaptureBundle(root string, corpus ScaleCorpus, records []CaseResult, environment RunEnvironment) error {
 	root = filepath.Clean(root)
 	if root == "." || root == string(filepath.Separator) {
@@ -115,6 +130,7 @@ func writeCaptureBundle(root string, corpus ScaleCorpus, records []CaseResult, e
 	return writeBundleChecksums(root)
 }
 
+// listUntrackedSources returns untracked repository files eligible for inclusion in the bundle.
 func listUntrackedSources(bundleRoot string) ([]string, error) {
 	output, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").Output()
 	if err != nil {
@@ -145,6 +161,7 @@ func listUntrackedSources(bundleRoot string) ([]string, error) {
 	return paths, nil
 }
 
+// copyRegularFile copies one regular file to a newly created bundle path with the requested mode.
 func copyRegularFile(source, destination string, mode os.FileMode) (err error) {
 	input, err := os.Open(source)
 	if err != nil {
@@ -167,6 +184,7 @@ func copyRegularFile(source, destination string, mode os.FileMode) (err error) {
 	return err
 }
 
+// writeIndentedJSON writes one value as indented JSON with a trailing newline.
 func writeIndentedJSON(path string, value any) (err error) {
 	output, err := os.Create(path)
 	if err != nil {
@@ -182,6 +200,7 @@ func writeIndentedJSON(path string, value any) (err error) {
 	return encoder.Encode(value)
 }
 
+// writeBundleJSONL writes case records as JSON Lines inside an artifact bundle.
 func writeBundleJSONL(path string, records []CaseResult) (err error) {
 	output, err := os.Create(path)
 	if err != nil {
@@ -195,6 +214,7 @@ func writeBundleJSONL(path string, records []CaseResult) (err error) {
 	return writeJSONL(output, records)
 }
 
+// writeBundleChecksums writes sorted SHA-256 entries for every bundled file except the checksum file.
 func writeBundleChecksums(root string) error {
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {

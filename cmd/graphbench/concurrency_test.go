@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPostgresConcurrencyTransactionsPermitSessionWorkspaceMaintenance verifies that concurrent benchmark transactions are read-write so session-scoped workspace tables can be maintained.
 func TestPostgresConcurrencyTransactionsPermitSessionWorkspaceMaintenance(t *testing.T) {
 	require.Equal(t, pgx.ReadWrite, postgresConcurrencyTxOptions().AccessMode)
 }

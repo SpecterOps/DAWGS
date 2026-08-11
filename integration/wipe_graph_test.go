@@ -11,16 +11,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// WipeGraph is a Postgres-only bulk-delete primitive, so this suite is scoped to the pg driver and skips itself unless
-// CONNECTION_STRING selects a Postgres backend.
+// TestWipeGraph verifies the PostgreSQL-only bulk-delete primitive and skips unless CONNECTION_STRING selects that backend.
 func TestWipeGraph(t *testing.T) {
 	var (
 		wipeNode = graph.StringKind("WipeNode")
 		survivor = graph.StringKind("WipeSurvivor")
 		wipeEdge = graph.StringKind("WIPE_EDGE")
 
-		defaultGraph   = graph.Graph{Name: "wipe_default", Nodes: graph.Kinds{wipeNode, survivor}, Edges: graph.Kinds{wipeEdge}}
-		secondaryGraph = graph.Graph{Name: "wipe_secondary", Nodes: graph.Kinds{wipeNode, survivor}, Edges: graph.Kinds{wipeEdge}}
+		defaultGraph = graph.Graph{
+			Name:  "wipe_default",
+			Nodes: graph.Kinds{wipeNode, survivor},
+			Edges: graph.Kinds{wipeEdge},
+		}
+		secondaryGraph = graph.Graph{
+			Name:  "wipe_secondary",
+			Nodes: graph.Kinds{wipeNode, survivor},
+			Edges: graph.Kinds{wipeEdge},
+		}
 
 		schema = graph.Schema{
 			Graphs:       []graph.Graph{defaultGraph, secondaryGraph},
@@ -128,6 +135,7 @@ func TestWipeGraph(t *testing.T) {
 	})
 }
 
+// countNodes returns the total node count across graphs.
 func countNodes(t *testing.T, ctx context.Context, db graph.Database, graphs ...graph.Graph) int64 {
 	t.Helper()
 
@@ -147,6 +155,7 @@ func countNodes(t *testing.T, ctx context.Context, db graph.Database, graphs ...
 	return count
 }
 
+// countEdges returns the relationship count in the database's current graph.
 func countEdges(t *testing.T, ctx context.Context, db graph.Database) int64 {
 	t.Helper()
 

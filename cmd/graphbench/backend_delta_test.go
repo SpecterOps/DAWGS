@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBackendDeltaReportIsDescriptiveAndRequiresMatchedObservations verifies that equal stable rows make backend timings comparable while the report remains explicitly non-gating.
 func TestBackendDeltaReportIsDescriptiveAndRequiresMatchedObservations(t *testing.T) {
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
@@ -57,6 +58,7 @@ func TestBackendDeltaReportIsDescriptiveAndRequiresMatchedObservations(t *testin
 	require.Contains(t, report.Notice, "Descriptive only")
 }
 
+// TestBackendDeltaReportComparesPersistedObservations verifies that differing canonical row payloads are reported as a semantic mismatch even when row counts agree.
 func TestBackendDeltaReportComparesPersistedObservations(t *testing.T) {
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
@@ -90,6 +92,7 @@ func TestBackendDeltaReportComparesPersistedObservations(t *testing.T) {
 	require.False(t, report.Cases[0].ObservationsMatch)
 }
 
+// TestBackendDeltaReportDoesNotTreatAbsentObservationsAsMatching verifies that matching cardinalities cannot establish comparability without persisted stable row observations.
 func TestBackendDeltaReportDoesNotTreatAbsentObservationsAsMatching(t *testing.T) {
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
@@ -107,6 +110,7 @@ func TestBackendDeltaReportDoesNotTreatAbsentObservationsAsMatching(t *testing.T
 	require.False(t, report.Cases[0].ObservationsMatch)
 }
 
+// TestBackendDeltaReportPreservesRepeatedRounds verifies that matched backend observations remain separate, ordered report cases for each measurement round.
 func TestBackendDeltaReportPreservesRepeatedRounds(t *testing.T) {
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")

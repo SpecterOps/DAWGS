@@ -10,21 +10,41 @@ import (
 )
 
 const (
-	testNodeCompositeOID      uint32 = 91_001
+	// testNodeCompositeOID is the synthetic scalar node OID registered by codec unit tests.
+	testNodeCompositeOID uint32 = 91_001
+
+	// testNodeCompositeArrayOID is the synthetic node-array OID registered by codec unit tests.
 	testNodeCompositeArrayOID uint32 = 91_002
-	testEdgeCompositeOID      uint32 = 91_003
+
+	// testEdgeCompositeOID is the synthetic scalar edge OID registered by codec unit tests.
+	testEdgeCompositeOID uint32 = 91_003
+
+	// testEdgeCompositeArrayOID is the synthetic edge-array OID registered by codec unit tests.
 	testEdgeCompositeArrayOID uint32 = 91_004
-	testPathCompositeOID      uint32 = 91_005
+
+	// testPathCompositeOID is the synthetic path OID registered by codec unit tests.
+	testPathCompositeOID uint32 = 91_005
 )
 
+// compositeCodecTestTypes provides a controllable test double for PostgreSQL composite decoding; graph values round-trip through pgx without losing identity or properties.
 type compositeCodecTestTypes struct {
-	node      *pgtype.Type
+	// node is the registered scalar node type.
+	node *pgtype.Type
+
+	// nodeArray is the registered node-array type.
 	nodeArray *pgtype.Type
-	edge      *pgtype.Type
+
+	// edge is the registered scalar edge type.
+	edge *pgtype.Type
+
+	// edgeArray is the registered edge-array type.
 	edgeArray *pgtype.Type
-	path      *pgtype.Type
+
+	// path is the registered scalar path type.
+	path *pgtype.Type
 }
 
+// requirePGType returns the type registered for oid and fails the test when the registration is absent.
 func requirePGType(t testing.TB, typeMap *pgtype.Map, oid uint32) *pgtype.Type {
 	t.Helper()
 
@@ -34,6 +54,7 @@ func requirePGType(t testing.TB, typeMap *pgtype.Map, oid uint32) *pgtype.Type {
 	return dataType
 }
 
+// newCompositeCodecTestMap registers synthetic node, edge, and path definitions, optionally installing owned codecs.
 func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeCodecTestTypes) {
 	t.Helper()
 
@@ -65,9 +86,11 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	typeMap.RegisterType(types.node)
 
 	types.nodeArray = &pgtype.Type{
-		Name:  pgsql.NodeCompositeArray.String(),
-		OID:   testNodeCompositeArrayOID,
-		Codec: &pgtype.ArrayCodec{ElementType: types.node},
+		Name: pgsql.NodeCompositeArray.String(),
+		OID:  testNodeCompositeArrayOID,
+		Codec: &pgtype.ArrayCodec{
+			ElementType: types.node,
+		},
 	}
 	if owned {
 		require.NoError(t, installOwnedCompositeCodec(pgsql.NodeCompositeArray, types.nodeArray))
@@ -108,9 +131,11 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	typeMap.RegisterType(types.edge)
 
 	types.edgeArray = &pgtype.Type{
-		Name:  pgsql.EdgeCompositeArray.String(),
-		OID:   testEdgeCompositeArrayOID,
-		Codec: &pgtype.ArrayCodec{ElementType: types.edge},
+		Name: pgsql.EdgeCompositeArray.String(),
+		OID:  testEdgeCompositeArrayOID,
+		Codec: &pgtype.ArrayCodec{
+			ElementType: types.edge,
+		},
 	}
 	if owned {
 		require.NoError(t, installOwnedCompositeCodec(pgsql.EdgeCompositeArray, types.edgeArray))
@@ -141,6 +166,7 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	return typeMap, types
 }
 
+// testNodeComposite returns a representative node value with the requested ID.
 func testNodeComposite(id int64) nodeComposite {
 	return nodeComposite{
 		ID:         id,
@@ -149,6 +175,7 @@ func testNodeComposite(id int64) nodeComposite {
 	}
 }
 
+// testEdgeComposite returns a representative edge value with the requested identity and endpoints.
 func testEdgeComposite(id, startID, endID int64) edgeComposite {
 	return edgeComposite{
 		ID:         id,
@@ -159,6 +186,7 @@ func testEdgeComposite(id, startID, endID int64) edgeComposite {
 	}
 }
 
+// TestOwnedCompositeCodecDecodeValue verifies scalar node, edge, and path values decode into owned concrete types.
 func TestOwnedCompositeCodecDecodeValue(t *testing.T) {
 	typeMap, types := newCompositeCodecTestMap(t, true)
 	expectedNode := testNodeComposite(101)
@@ -169,10 +197,17 @@ func TestOwnedCompositeCodecDecodeValue(t *testing.T) {
 	}
 
 	for _, testCase := range []struct {
-		name     string
-		format   int16
+		// name identifies the composite type and wire-format subtest.
+		name string
+
+		// format selects the pgx encoding format.
+		format int16
+
+		// dataType supplies the composite codec under test.
 		dataType *pgtype.Type
-		value    any
+
+		// value is the concrete composite expected after decoding.
+		value any
 	}{
 		{
 			name:     "node/binary",
@@ -228,6 +263,7 @@ func TestOwnedCompositeCodecDecodeValue(t *testing.T) {
 	}
 }
 
+// TestOwnedCompositeCodecPreservesExplicitScanAndNull verifies explicit scan targets and null composites keep pgx semantics.
 func TestOwnedCompositeCodecPreservesExplicitScanAndNull(t *testing.T) {
 	typeMap, types := newCompositeCodecTestMap(t, true)
 	expected := testNodeComposite(101)
@@ -246,6 +282,7 @@ func TestOwnedCompositeCodecPreservesExplicitScanAndNull(t *testing.T) {
 	}
 }
 
+// TestOwnedCompositeCodecFallsBackForNullInternalFields verifies nullable internal fields retain pgx's lossless map representation.
 func TestOwnedCompositeCodecFallsBackForNullInternalFields(t *testing.T) {
 	typeMap, types := newCompositeCodecTestMap(t, true)
 	value := pgtype.CompositeFields{nil, []int16{1, 2}, map[string]any{"name": "nullable"}}
@@ -276,6 +313,7 @@ func TestOwnedCompositeCodecFallsBackForNullInternalFields(t *testing.T) {
 	}
 }
 
+// TestOwnedCompositeCodecSupportsArrays verifies non-null composite arrays decode directly into typed slices.
 func TestOwnedCompositeCodecSupportsArrays(t *testing.T) {
 	typeMap, types := newCompositeCodecTestMap(t, true)
 	first := testNodeComposite(101)
@@ -311,6 +349,7 @@ func TestOwnedCompositeCodecSupportsArrays(t *testing.T) {
 	}
 }
 
+// TestOwnedCompositeCodecArrayPreservesNullElements verifies arrays containing null composites retain a nullable representation.
 func TestOwnedCompositeCodecArrayPreservesNullElements(t *testing.T) {
 	typeMap, types := newCompositeCodecTestMap(t, true)
 	first := testNodeComposite(101)
@@ -326,10 +365,14 @@ func TestOwnedCompositeCodecArrayPreservesNullElements(t *testing.T) {
 	}
 }
 
+// TestInstallOwnedCompositeCodec verifies supported definitions are wrapped and incompatible definitions are rejected.
 func TestInstallOwnedCompositeCodec(t *testing.T) {
 	for _, testCase := range []struct {
+		// dataType identifies the supported composite definition to install.
 		dataType pgsql.DataType
-		value    any
+
+		// value selects the concrete owned codec type expected for dataType.
+		value any
 	}{
 		{
 			dataType: pgsql.NodeComposite,
@@ -364,8 +407,10 @@ func TestInstallOwnedCompositeCodec(t *testing.T) {
 	require.ErrorContains(t, installOwnedCompositeCodec(pgsql.NodeComposite, invalidDefinition), "*pgtype.CompositeCodec")
 }
 
+// compositeCodecBenchmarkSink retains decoded values so benchmark work cannot be optimized away.
 var compositeCodecBenchmarkSink any
 
+// benchmarkCompositeDecodeValue repeatedly decodes one encoded value through the selected codec implementation.
 func benchmarkCompositeDecodeValue(
 	b *testing.B,
 	owned bool,
@@ -390,10 +435,14 @@ func benchmarkCompositeDecodeValue(
 	}
 }
 
+// BenchmarkNodeCompositeDecodeValue compares scalar node decoding through stock and owned codecs.
 func BenchmarkNodeCompositeDecodeValue(b *testing.B) {
 	value := testNodeComposite(101)
 	for _, testCase := range []struct {
-		name  string
+		// name identifies whether the benchmark uses stock or owned decoding.
+		name string
+
+		// owned enables the owned composite codec when true.
 		owned bool
 	}{
 		{
@@ -413,6 +462,7 @@ func BenchmarkNodeCompositeDecodeValue(b *testing.B) {
 	}
 }
 
+// BenchmarkNodeCompositeArrayDecodeValue compares node-array decoding through stock and owned codecs.
 func BenchmarkNodeCompositeArrayDecodeValue(b *testing.B) {
 	values := make([]nodeComposite, 128)
 	for idx := range values {
@@ -420,7 +470,10 @@ func BenchmarkNodeCompositeArrayDecodeValue(b *testing.B) {
 	}
 
 	for _, testCase := range []struct {
-		name  string
+		// name identifies whether the benchmark uses stock or owned decoding.
+		name string
+
+		// owned enables the owned composite codec when true.
 		owned bool
 	}{
 		{
@@ -440,6 +493,7 @@ func BenchmarkNodeCompositeArrayDecodeValue(b *testing.B) {
 	}
 }
 
+// BenchmarkPathCompositeDecodeValue compares path decoding through stock and owned codecs.
 func BenchmarkPathCompositeDecodeValue(b *testing.B) {
 	value := pathComposite{
 		Nodes: make([]nodeComposite, 32),
@@ -453,7 +507,10 @@ func BenchmarkPathCompositeDecodeValue(b *testing.B) {
 	}
 
 	for _, testCase := range []struct {
-		name  string
+		// name identifies whether the benchmark uses stock or owned decoding.
+		name string
+
+		// owned enables the owned composite codec when true.
 		owned bool
 	}{
 		{

@@ -24,29 +24,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// staticKindMapper returns deterministic kind mappings for relationship batch tests.
 type staticKindMapper struct {
 }
 
+// MapKindID returns the fixed kind associated with every synthetic ID.
 func (s staticKindMapper) MapKindID(context.Context, int16) (graph.Kind, error) {
 	return graph.StringKind("WriteCreateRelationship"), nil
 }
 
+// MapKindIDs returns the fixed kind set used by the batch fixture.
 func (s staticKindMapper) MapKindIDs(context.Context, []int16) (graph.Kinds, error) {
 	return graph.Kinds{graph.StringKind("WriteCreateRelationship")}, nil
 }
 
+// MapKind returns the fixed database ID associated with every synthetic kind.
 func (s staticKindMapper) MapKind(context.Context, graph.Kind) (int16, error) {
 	return 1, nil
 }
 
+// MapKinds returns the fixed database ID set used by the batch fixture.
 func (s staticKindMapper) MapKinds(context.Context, graph.Kinds) ([]int16, error) {
 	return []int16{1}, nil
 }
 
+// AssertKinds accepts every supplied kind and returns the fixture's fixed database ID.
 func (s staticKindMapper) AssertKinds(context.Context, graph.Kinds) ([]int16, error) {
 	return []int16{1}, nil
 }
 
+// TestRelationshipCreateBatchBuilderMergesPropertiesByConflictKey verifies distinct endpoint tuples cannot collide and duplicate tuples merge properties.
 func TestRelationshipCreateBatchBuilderMergesPropertiesByConflictKey(t *testing.T) {
 	var (
 		ctx     = context.Background()

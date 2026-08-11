@@ -33,31 +33,70 @@ import (
 )
 
 const (
+	// directWriteObjectID is the identity property used by node selectors and upserts.
 	directWriteObjectID = "objectid"
+
+	// directWriteLastSeen is the mutable timestamp property used to verify update semantics.
 	directWriteLastSeen = "lastseen"
 )
 
 var (
-	directWriteDeleteRelationshipKind  = graph.StringKind("WriteDeleteRelationship")
-	directWriteCreateRelationshipKind  = graph.StringKind("WriteCreateRelationship")
+	// directWriteDeleteRelationshipKind identifies relationships targeted by direct delete tests.
+	directWriteDeleteRelationshipKind = graph.StringKind("WriteDeleteRelationship")
+
+	// directWriteCreateRelationshipKind identifies relationships created and conflict-merged by batch tests.
+	directWriteCreateRelationshipKind = graph.StringKind("WriteCreateRelationship")
+
+	// directWriteCreateRelationshipOther identifies non-target relationships that must survive create tests.
 	directWriteCreateRelationshipOther = graph.StringKind("WriteCreateRelationshipOther")
-	directWriteUpsertNodeKind          = graph.StringKind("WriteUpsertNode")
-	directWriteUpsertNodeKindA         = graph.StringKind("WriteUpsertNodeA")
-	directWriteUpsertNodeKindB         = graph.StringKind("WriteUpsertNodeB")
-	directWriteUpsertNodeKindC         = graph.StringKind("WriteUpsertNodeC")
-	directWriteUpsertRelationshipKind  = graph.StringKind("WriteUpsertRelationship")
+
+	// directWriteUpsertNodeKind identifies nodes targeted by identity-based upserts.
+	directWriteUpsertNodeKind = graph.StringKind("WriteUpsertNode")
+
+	// directWriteUpsertNodeKindA is the first kind used to verify multi-kind node updates.
+	directWriteUpsertNodeKindA = graph.StringKind("WriteUpsertNodeA")
+
+	// directWriteUpsertNodeKindB is the second kind used to verify multi-kind node updates.
+	directWriteUpsertNodeKindB = graph.StringKind("WriteUpsertNodeB")
+
+	// directWriteUpsertNodeKindC is the replacement kind used to verify kind-set mutation.
+	directWriteUpsertNodeKindC = graph.StringKind("WriteUpsertNodeC")
+
+	// directWriteUpsertRelationshipKind identifies relationships targeted by identity-based upserts.
+	directWriteUpsertRelationshipKind = graph.StringKind("WriteUpsertRelationship")
+
+	// directWriteUpsertRelationshipOther identifies non-target relationships that must survive upserts.
 	directWriteUpsertRelationshipOther = graph.StringKind("WriteUpsertRelationshipOther")
-	directWriteEnsureRelationshipKind  = graph.StringKind("WriteEnsureRelationship")
-	directWriteEntityKind              = graph.StringKind("Entity")
-	directWriteGroupKind               = graph.StringKind("Group")
-	directWriteUnrelatedKind           = graph.StringKind("WriteUnrelated")
-	directWriteSuffixKind              = graph.StringKind("WriteSuffix")
-	directWriteMissingKind             = graph.StringKind("WriteMissing")
-	directWriteScanKind                = graph.StringKind("WriteKindScan")
-	directWriteEndpointKind            = graph.StringKind("WriteEndpoint")
-	directWriteBoundarySizes           = []int{0, 1, 1_000, 1_999, 2_000, 2_001, 4_001, 8_001}
+
+	// directWriteEnsureRelationshipKind identifies relationships created or updated by read-then-write tests.
+	directWriteEnsureRelationshipKind = graph.StringKind("WriteEnsureRelationship")
+
+	// directWriteEntityKind is the common base kind assigned to direct-write fixture nodes.
+	directWriteEntityKind = graph.StringKind("Entity")
+
+	// directWriteGroupKind identifies group nodes used by get-or-create tests.
+	directWriteGroupKind = graph.StringKind("Group")
+
+	// directWriteUnrelatedKind marks nodes that selectors must not mutate.
+	directWriteUnrelatedKind = graph.StringKind("WriteUnrelated")
+
+	// directWriteSuffixKind marks nodes used to exercise suffix-selector updates.
+	directWriteSuffixKind = graph.StringKind("WriteSuffix")
+
+	// directWriteMissingKind is intentionally absent from the fixture for miss-path assertions.
+	directWriteMissingKind = graph.StringKind("WriteMissing")
+
+	// directWriteScanKind identifies nodes used by kind-scan selectors.
+	directWriteScanKind = graph.StringKind("WriteKindScan")
+
+	// directWriteEndpointKind identifies relationship endpoint nodes in mutation fixtures.
+	directWriteEndpointKind = graph.StringKind("WriteEndpoint")
+
+	// directWriteBoundarySizes exercises empty, exact, adjacent, and repeated batch-flush thresholds.
+	directWriteBoundarySizes = []int{0, 1, 1_000, 1_999, 2_000, 2_001, 4_001, 8_001}
 )
 
+// TestDirectWriteDeleteRelationshipBoundariesAndSurvivors verifies batched relationship deletion at flush boundaries preserves non-target edges.
 func TestDirectWriteDeleteRelationshipBoundariesAndSurvivors(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 
@@ -114,6 +153,7 @@ func TestDirectWriteDeleteRelationshipBoundariesAndSurvivors(t *testing.T) {
 	})
 }
 
+// TestDirectWriteDeleteNodeBoundariesAndCascades verifies batched node deletion removes incident edges and preserves unrelated nodes.
 func TestDirectWriteDeleteNodeBoundariesAndCascades(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 
@@ -168,6 +208,7 @@ func TestDirectWriteDeleteNodeBoundariesAndCascades(t *testing.T) {
 	})
 }
 
+// TestDirectWriteCreateRelationshipConflictMerge verifies duplicate relationship keys merge properties without colliding with distinct endpoint tuples.
 func TestDirectWriteCreateRelationshipConflictMerge(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 	ClearGraph(t, db, ctx)
@@ -175,9 +216,16 @@ func TestDirectWriteCreateRelationshipConflictMerge(t *testing.T) {
 
 	require.NoError(t, db.BatchOperation(ctx, func(batch graph.Batch) error {
 		updates := []struct {
-			start      graph.ID
-			end        graph.ID
-			kind       graph.Kind
+			// start is the relationship start node ID.
+			start graph.ID
+
+			// end is the relationship end node ID.
+			end graph.ID
+
+			// kind is the relationship kind to create or merge.
+			kind graph.Kind
+
+			// properties supplies the values merged into the relationship.
 			properties *graph.Properties
 		}{
 			{
@@ -253,6 +301,7 @@ func TestDirectWriteCreateRelationshipConflictMerge(t *testing.T) {
 	require.Equal(t, int64(1), countByCypher(t, ctx, db, "MATCH ()-[r:WriteCreateRelationshipOther]->() RETURN count(r)"))
 }
 
+// TestDirectWriteUpdateNodeBySemanticsAndBoundaries verifies identity-based node updates, replacements, and misses across flush boundaries.
 func TestDirectWriteUpdateNodeBySemanticsAndBoundaries(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 
@@ -326,6 +375,7 @@ func TestDirectWriteUpdateNodeBySemanticsAndBoundaries(t *testing.T) {
 	})
 }
 
+// TestDirectWriteUpdateRelationshipBySemanticsAndBoundaries verifies relationship upsert semantics and survivor isolation across flush boundaries.
 func TestDirectWriteUpdateRelationshipBySemanticsAndBoundaries(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 
@@ -402,6 +452,7 @@ func TestDirectWriteUpdateRelationshipBySemanticsAndBoundaries(t *testing.T) {
 	})
 }
 
+// TestDirectWriteReadThenCreateOrUpdateRelationship verifies the read-then-write path updates an existing edge or creates the missing edge exactly once.
 func TestDirectWriteReadThenCreateOrUpdateRelationship(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 	ClearGraph(t, db, ctx)
@@ -448,6 +499,7 @@ func TestDirectWriteReadThenCreateOrUpdateRelationship(t *testing.T) {
 	require.Equal(t, "reverse", directWriteStringProperty(t, reverse.Properties, "marker"))
 }
 
+// TestDirectWriteFullNodeUpdateAfterSelectors verifies selector results can be fully replaced without mutating unmatched nodes.
 func TestDirectWriteFullNodeUpdateAfterSelectors(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 	ClearGraph(t, db, ctx)
@@ -530,6 +582,7 @@ func TestDirectWriteFullNodeUpdateAfterSelectors(t *testing.T) {
 	require.True(t, updatedScan.Kinds.ContainsOneOf(directWriteUnrelatedKind))
 }
 
+// TestDirectWriteExactKeyMissThenCreateNode verifies an exact-key miss followed by creation yields one correctly keyed node.
 func TestDirectWriteExactKeyMissThenCreateNode(t *testing.T) {
 	db, ctx := directWriteSetup(t)
 	ClearGraph(t, db, ctx)
@@ -583,6 +636,7 @@ func TestDirectWriteExactKeyMissThenCreateNode(t *testing.T) {
 	require.Equal(t, int64(1), countByCypher(t, ctx, db, "MATCH (n) WHERE n.objectid = 'well-known-existing' RETURN count(n)"))
 }
 
+// BenchmarkMutationSafeDirectWrites measures guarded direct-write workloads across representative batch sizes.
 func BenchmarkMutationSafeDirectWrites(b *testing.B) {
 	session := Open(b, Options{
 		Schema:      directWriteSchema(),
@@ -748,6 +802,7 @@ func BenchmarkMutationSafeDirectWrites(b *testing.B) {
 	}
 }
 
+// directWriteSetup opens a guarded integration session with the mutation fixture schema and returns its database context.
 func directWriteSetup(t *testing.T) (graph.Database, context.Context) {
 	t.Helper()
 	session := Open(t, Options{
@@ -757,6 +812,7 @@ func directWriteSetup(t *testing.T) (graph.Database, context.Context) {
 	return session.DB, session.Ctx
 }
 
+// directWriteSchema returns the graph schema containing every kind used by direct-write fixtures and assertions.
 func directWriteSchema() *graph.Schema {
 	nodeKinds, edgeKinds := directWriteKinds()
 	graphSchema := graph.Graph{
@@ -774,6 +830,8 @@ func directWriteSchema() *graph.Schema {
 	}
 }
 
+// directWriteKinds returns every node and relationship kind required by the
+// direct-write fixture and mutation cases.
 func directWriteKinds() (graph.Kinds, graph.Kinds) {
 	fixtureNodeKinds, fixtureEdgeKinds := testutil.NewDirectWriteScaleFixture(2).Kinds()
 	nodeKinds := fixtureNodeKinds.Add(
@@ -798,6 +856,8 @@ func directWriteKinds() (graph.Kinds, graph.Kinds) {
 	return nodeKinds, edgeKinds
 }
 
+// directWriteLoadDirectWriteFixture clears the database, loads a generated
+// direct-write graph, and returns both the fixture and its database ID map.
 func directWriteLoadDirectWriteFixture(t *testing.T, ctx context.Context, db graph.Database, size int) (*opengraph.Graph, opengraph.IDMap) {
 	t.Helper()
 	ClearGraph(t, db, ctx)
@@ -807,6 +867,7 @@ func directWriteLoadDirectWriteFixture(t *testing.T, ctx context.Context, db gra
 	return fixture, idMap
 }
 
+// directWriteCreateEndpoints creates the three endpoint nodes required by relationship mutation cases.
 func directWriteCreateEndpoints(t *testing.T, ctx context.Context, db graph.Database, objectIDs ...string) (*graph.Node, *graph.Node, *graph.Node) {
 	t.Helper()
 	require.Len(t, objectIDs, 3)
@@ -824,6 +885,7 @@ func directWriteCreateEndpoints(t *testing.T, ctx context.Context, db graph.Data
 	return created[0], created[1], created[2]
 }
 
+// directWriteCreateNode creates one node in a committed transaction and returns its database-assigned identity.
 func directWriteCreateNode(t *testing.T, ctx context.Context, db graph.Database, properties *graph.Properties, kinds ...graph.Kind) *graph.Node {
 	t.Helper()
 	var created *graph.Node
@@ -835,6 +897,7 @@ func directWriteCreateNode(t *testing.T, ctx context.Context, db graph.Database,
 	return created
 }
 
+// directWriteProperties constructs a property bag from alternating string keys and values.
 func directWriteProperties(keyValues ...any) *graph.Properties {
 	properties := graph.NewProperties()
 	for idx := 0; idx < len(keyValues); idx += 2 {
@@ -843,6 +906,7 @@ func directWriteProperties(keyValues ...any) *graph.Properties {
 	return properties
 }
 
+// directWriteIncidentCount returns the expected number of fixture relationships incident to targets nodes.
 func directWriteIncidentCount(targets int) int64 {
 	switch targets {
 	case 0:
@@ -854,6 +918,7 @@ func directWriteIncidentCount(targets int) int64 {
 	}
 }
 
+// directWriteNodeUpdate builds an identity-property node upsert while preserving objectID in the replacement properties.
 func directWriteNodeUpdate(objectID string, kind graph.Kind, properties *graph.Properties) graph.NodeUpdate {
 	properties = properties.Clone().Set(directWriteObjectID, objectID)
 	return graph.NodeUpdate{
@@ -862,6 +927,7 @@ func directWriteNodeUpdate(objectID string, kind graph.Kind, properties *graph.P
 	}
 }
 
+// directWriteRelationshipUpdate builds a relationship upsert whose endpoints are selected by objectID.
 func directWriteRelationshipUpdate(startObjectID, endObjectID string, kind graph.Kind, properties *graph.Properties) graph.RelationshipUpdate {
 	return graph.RelationshipUpdate{
 		Start: graph.PrepareNode(
@@ -878,6 +944,7 @@ func directWriteRelationshipUpdate(startObjectID, endObjectID string, kind graph
 	}
 }
 
+// directWriteFetchRelationshipIDs returns matching relationship IDs and fails the current test on query error.
 func directWriteFetchRelationshipIDs(t *testing.T, ctx context.Context, db graph.Database, criteria graph.CriteriaProvider) []graph.ID {
 	t.Helper()
 	ids, err := directWriteRelationshipIDs(ctx, db, criteria)
@@ -885,6 +952,7 @@ func directWriteFetchRelationshipIDs(t *testing.T, ctx context.Context, db graph
 	return ids
 }
 
+// directWriteRelationshipIDs queries the IDs of relationships matching criteria in a read transaction.
 func directWriteRelationshipIDs(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider) ([]graph.ID, error) {
 	var ids []graph.ID
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -898,6 +966,7 @@ func directWriteRelationshipIDs(ctx context.Context, db graph.Database, criteria
 	return ids, nil
 }
 
+// directWriteFetchRelationship returns the relationship with the exact endpoints and kind, failing the current test when absent.
 func directWriteFetchRelationship(t *testing.T, ctx context.Context, db graph.Database, startID, endID graph.ID, kind graph.Kind) *graph.Relationship {
 	t.Helper()
 	var relationship *graph.Relationship
@@ -915,6 +984,7 @@ func directWriteFetchRelationship(t *testing.T, ctx context.Context, db graph.Da
 	return relationship
 }
 
+// directWriteFetchNodeByObjectID returns the node selected by objectID and fails the current test on lookup error.
 func directWriteFetchNodeByObjectID(t *testing.T, ctx context.Context, db graph.Database, objectID string) *graph.Node {
 	t.Helper()
 	node, err := directWriteFindNodeByObjectID(ctx, db, objectID)
@@ -922,6 +992,7 @@ func directWriteFetchNodeByObjectID(t *testing.T, ctx context.Context, db graph.
 	return node
 }
 
+// directWriteFindNodeByObjectID queries the single node selected by objectID.
 func directWriteFindNodeByObjectID(ctx context.Context, db graph.Database, objectID string) (*graph.Node, error) {
 	var node *graph.Node
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -937,6 +1008,7 @@ func directWriteFindNodeByObjectID(ctx context.Context, db graph.Database, objec
 	return node, nil
 }
 
+// directWriteFetchNodeByID returns the node selected by database ID and fails the current test on lookup error.
 func directWriteFetchNodeByID(t *testing.T, ctx context.Context, db graph.Database, id graph.ID) *graph.Node {
 	t.Helper()
 	var node *graph.Node
@@ -948,6 +1020,7 @@ func directWriteFetchNodeByID(t *testing.T, ctx context.Context, db graph.Databa
 	return node
 }
 
+// directWriteStringProperty reads key as a string and fails the current test when the value is absent or incompatible.
 func directWriteStringProperty(t *testing.T, properties *graph.Properties, key string) string {
 	t.Helper()
 	value, err := properties.Get(key).String()
@@ -955,6 +1028,7 @@ func directWriteStringProperty(t *testing.T, properties *graph.Properties, key s
 	return value
 }
 
+// directWriteEnsureRelationship updates the exact relationship when present or creates it when absent, reporting which path ran.
 func directWriteEnsureRelationship(ctx context.Context, db graph.Database, startID, endID graph.ID, kind graph.Kind, properties *graph.Properties) (graph.ID, bool, error) {
 	var (
 		id      graph.ID
@@ -991,6 +1065,7 @@ func directWriteEnsureRelationship(ctx context.Context, db graph.Database, start
 	return id, created, nil
 }
 
+// directWriteGetOrCreateGroup returns the group selected by objectID or creates it atomically when missing.
 func directWriteGetOrCreateGroup(ctx context.Context, db graph.Database, properties *graph.Properties) (*graph.Node, bool, error) {
 	objectID, err := properties.Get(directWriteObjectID).String()
 	if err != nil {
@@ -1032,6 +1107,7 @@ func directWriteGetOrCreateGroup(ctx context.Context, db graph.Database, propert
 	return result, created, nil
 }
 
+// directWriteClearBenchmarkGraph removes every benchmark node and its incident relationships before the next iteration.
 func directWriteClearBenchmarkGraph(b *testing.B, session *Session) {
 	b.Helper()
 	if err := session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
@@ -1041,6 +1117,7 @@ func directWriteClearBenchmarkGraph(b *testing.B, session *Session) {
 	}
 }
 
+// directWriteCount executes a scalar Cypher count query and returns its first value.
 func directWriteCount(ctx context.Context, db graph.Database, cypher string) (int64, error) {
 	var count int64
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {

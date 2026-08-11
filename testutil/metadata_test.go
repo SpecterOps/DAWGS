@@ -22,9 +22,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestResolveBaselineMetadata verifies an explicit version is preserved in generated baseline metadata.
 func TestResolveBaselineMetadata(t *testing.T) {
 	metadata := ResolveBaselineMetadata("dawgs")
-	require.Equal(t, BaselineMetadata{DAWGSVersion: "dawgs"}, metadata)
+	require.Equal(t, BaselineMetadata{
+		DAWGSVersion: "dawgs",
+	}, metadata)
 
 	defaults := ResolveBaselineMetadata("")
 	require.NotEmpty(t, defaults.DAWGSVersion)

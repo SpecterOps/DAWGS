@@ -12,50 +12,83 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-// DefaultGraphID is the graph_id used by callers that do not have a specific
-// graph target available (tests, tooling, and visualization passes that only
-// exercise translation output).
+// DefaultGraphID selects graph zero for tests and tooling that do not target a concrete graph.
 const DefaultGraphID int32 = 0
 
+// Translator walks an optimized Cypher AST and constructs the corresponding PostgreSQL AST.
 type Translator struct {
+	// Visitor supplies traversal control and error propagation for the Cypher walk.
 	walk.Visitor[cypher.SyntaxNode]
 
-	ctx            context.Context
-	kindMapper     *contextAwareKindMapper
-	graphID        int32
-	parameters     map[string]any
-	translation    Result
+	// ctx carries cancellation and deadlines through translation.
+	ctx context.Context
+	// kindMapper resolves graph kind names within the translation context.
+	kindMapper *contextAwareKindMapper
+	// graphID identifies the concrete graph partitions targeted by generated SQL.
+	graphID int32
+	// parameters is an isolated copy of the caller's Cypher parameter values.
+	parameters map[string]any
+	// translation accumulates the statement, generated parameters, and diagnostics.
+	translation Result
+	// treeTranslator lowers the current Cypher expression tree into PostgreSQL expressions.
 	treeTranslator *ExpressionTreeTranslator
-	query          *Query
-	scope          *Scope
-	unwindTargets  map[*cypher.Variable]struct{}
+	// query holds the PostgreSQL query model under construction.
+	query *Query
+	// scope tracks translated bindings and their materialization frames.
+	scope *Scope
+	// unwindTargets contains UNWIND variables awaiting source translation.
+	unwindTargets map[*cypher.Variable]struct{}
 
+	// collectIDMembershipAliases identifies collect projections eligible to carry scalar entity IDs.
 	collectIDMembershipAliases map[pgsql.Identifier]struct{}
-	collectIDProjectionDepth   int
+	// collectIDProjectionDepth tracks nesting within an ID-only collect projection.
+	collectIDProjectionDepth int
 
-	appliedLoweringCounts              map[string]int
-	appliedShortestPathExecutors       map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor
-	appliedExpansionSearchStrategies   map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy
-	patternTargets                     map[*cypher.PatternPart]optimize.PatternTarget
-	patternPredicateTargets            map[*cypher.PatternPredicate]optimize.PatternTarget
-	projectionPruningDecisions         map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
-	latePathDecisions                  map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
-	suffixPushdownDecisions            map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
-	predicatePlacementDecisions        map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
-	expandIntoDecisions                map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
-	traversalDirectionDecisions        map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
-	shortestPathStrategyDecisions      map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
-	shortestPathFilterDecisions        map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
-	shortestPathExecutorDecisions      map[optimize.TraversalStepTarget]optimize.ShortestPathExecutorDecision
-	expansionSearchStrategyDecisions   map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision
-	limitPushdownDecisions             map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
-	patternPredicateDecisions          map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
-	exactRangeExpansionDecisions       map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
+	// appliedLoweringCounts counts emitted applications of each planned lowering.
+	appliedLoweringCounts map[string]int
+	// appliedShortestPathExecutors records the physical executor emitted for each optimized traversal.
+	appliedShortestPathExecutors map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor
+	// appliedExpansionSearchStrategies records the physical search emitted for each optimized expansion.
+	appliedExpansionSearchStrategies map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy
+	// patternTargets maps source pattern parts to their stable optimizer coordinates.
+	patternTargets map[*cypher.PatternPart]optimize.PatternTarget
+	// patternPredicateTargets maps source pattern predicates to their stable optimizer coordinates.
+	patternPredicateTargets map[*cypher.PatternPredicate]optimize.PatternTarget
+	// projectionPruningDecisions indexes planned projection omissions by traversal target.
+	projectionPruningDecisions map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
+	// latePathDecisions indexes deferred path-materialization decisions by traversal target.
+	latePathDecisions map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
+	// suffixPushdownDecisions indexes fixed-suffix pushdown decisions by traversal target.
+	suffixPushdownDecisions map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	// predicatePlacementDecisions indexes predicate attachment decisions by traversal target.
+	predicatePlacementDecisions map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
+	// expandIntoDecisions indexes bound-endpoint expansion choices by traversal target.
+	expandIntoDecisions map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
+	// traversalDirectionDecisions indexes physical traversal direction choices by traversal target.
+	traversalDirectionDecisions map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
+	// shortestPathStrategyDecisions indexes directional shortest-path search choices by traversal target.
+	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
+	// shortestPathFilterDecisions indexes shortest-path filter decisions by traversal target.
+	shortestPathFilterDecisions map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
+	// shortestPathExecutorDecisions indexes planned shortest-path executor choices by traversal target.
+	shortestPathExecutorDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathExecutorDecision
+	// expansionSearchStrategyDecisions indexes planned variable-expansion strategies by traversal target.
+	expansionSearchStrategyDecisions map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision
+	// limitPushdownDecisions indexes planned traversal limits by source target.
+	limitPushdownDecisions map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
+	// patternPredicateDecisions indexes planned existence lowering by traversal target.
+	patternPredicateDecisions map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
+	// exactRangeExpansionDecisions indexes fixed-depth unrolling choices by source target.
+	exactRangeExpansionDecisions map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
+	// pathRelationshipPredicateDecisions indexes path quantifier lowering by stable quantifier target.
 	pathRelationshipPredicateDecisions map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision
-	fieldRequirementDecisions          map[int]map[string]optimize.FieldRequirementDecision
-	quantifierTargets                  []optimize.QuantifierTarget
+	// fieldRequirementDecisions indexes binding representation requirements by query part and symbol.
+	fieldRequirementDecisions map[int]map[string]optimize.FieldRequirementDecision
+	// quantifierTargets records stable coordinates for visited quantified traversals.
+	quantifierTargets []optimize.QuantifierTarget
 }
 
+// NewTranslator initializes translation state for the supplied graph and copies the caller's parameter map.
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
 	if parameters == nil {
 		parameters = map[string]any{}
@@ -92,6 +125,7 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 	return translator
 }
 
+// SetOptimizationPlan indexes lowering decisions by their stable targets for use during AST traversal.
 func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.patternTargets = optimize.IndexPatternTargets(plan.Query)
 	s.patternPredicateTargets = optimize.IndexPatternPredicateTargets(plan.Query)
@@ -177,6 +211,7 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	}
 }
 
+// Enter translates a Cypher syntax node when the walker reaches it.
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 	case *cypher.RegularQuery, *cypher.SingleQuery, *cypher.PatternElement,
@@ -371,6 +406,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	}
 }
 
+// resolveParameterValue returns the caller-supplied value for a Cypher parameter or reports an unknown parameter.
 func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
 	if value, hasValue := s.parameters[parameter.Symbol]; hasValue {
 		return value
@@ -379,6 +415,7 @@ func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
 	return parameter.Value
 }
 
+// coalescePropertyLookupExpression builds a coalesce call from a property lookup and translated fallback operands.
 func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Expression {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
 		return pgsql.FunctionCall{
@@ -394,6 +431,7 @@ func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Express
 	return expression
 }
 
+// rewriteNegatedStringPredicateExpression preserves Cypher null behavior when negating a string predicate.
 func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.Expression {
 	switch typedExpression := expression.(type) {
 	case *pgsql.Parenthetical:
@@ -676,60 +714,108 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	}
 }
 
+// Result contains the translated PostgreSQL statement, parameters, graph target, and optimization diagnostics.
 type Result struct {
-	Statement        pgsql.Statement
-	Parameters       map[string]any
+	// Statement is the translated PostgreSQL AST.
+	Statement pgsql.Statement
+	// Parameters contains SQL parameters generated during translation.
+	Parameters map[string]any
+	// ParameterSources maps generated SQL parameter names back to Cypher parameter names.
 	ParameterSources map[string]string
-	Optimization     OptimizationSummary
-	GraphID          int32
+	// Optimization summarizes planned, applied, and skipped lowering decisions.
+	Optimization OptimizationSummary
+	// GraphID identifies the graph partitions targeted by the statement.
+	GraphID int32
 }
 
+// OptimizationSummary records which optimizer decisions were planned, applied, or skipped during translation.
 type OptimizationSummary struct {
-	Rules                []optimize.RuleResult          `json:"rules,omitempty"`
+	// Rules contains the semantic optimizer rule results in execution order.
+	Rules []optimize.RuleResult `json:"rules,omitempty"`
+	// PredicateAttachments records optimizer-selected predicate scopes.
 	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
-	PlannedLowerings     []optimize.LoweringDecision    `json:"planned_lowerings,omitempty"`
-	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
-	SkippedLowerings     []SkippedLowering              `json:"skipped_lowerings,omitempty"`
-	TargetOutcomes       []TargetLoweringOutcome        `json:"target_outcomes,omitempty"`
-	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
+	// PlannedLowerings summarizes lowering categories selected by the optimizer.
+	PlannedLowerings []optimize.LoweringDecision `json:"planned_lowerings,omitempty"`
+	// Lowerings summarizes lowering categories actually emitted by translation.
+	Lowerings []optimize.LoweringDecision `json:"lowerings,omitempty"`
+	// SkippedLowerings explains planned lowering applications that translation did not emit.
+	SkippedLowerings []SkippedLowering `json:"skipped_lowerings,omitempty"`
+	// TargetOutcomes reports selection and application results for each lowering target.
+	TargetOutcomes []TargetLoweringOutcome `json:"target_outcomes,omitempty"`
+	// LoweringPlan exposes the optimizer decisions used to translate the statement.
+	LoweringPlan *optimize.LoweringPlan `json:"lowering_plan,omitempty"`
 }
 
+// TargetLoweringOutcome reports how one planned lowering target was qualified, selected, and applied.
 type TargetLoweringOutcome struct {
-	Lowering               string                        `json:"lowering"`
-	TargetKind             string                        `json:"target_kind"`
-	TraversalTarget        *optimize.TraversalStepTarget `json:"traversal_target,omitempty"`
-	QueryPartIndex         *int                          `json:"query_part_index,omitempty"`
-	Symbol                 string                        `json:"symbol,omitempty"`
-	Family                 string                        `json:"family,omitempty"`
-	PlannedCandidates      []string                      `json:"planned_candidates,omitempty"`
-	Candidate              string                        `json:"candidate,omitempty"`
-	EligibilityFacts       []TargetEligibilityFact       `json:"eligibility_facts,omitempty"`
-	ObservationMode        string                        `json:"observation_mode,omitempty"`
-	Direction              string                        `json:"direction,omitempty"`
-	PhysicalExpansion      string                        `json:"physical_expansion,omitempty"`
-	RelationshipKindCount  int                           `json:"relationship_kind_count,omitempty"`
-	UntypedRelationship    bool                          `json:"untyped_relationship,omitempty"`
-	TopologyClassification string                        `json:"topology_classification,omitempty"`
-	Eligible               *bool                         `json:"eligible,omitempty"`
-	StaticallyEligible     *bool                         `json:"statically_eligible,omitempty"`
-	SelectionMode          string                        `json:"selection_mode,omitempty"`
-	SelectorVersion        string                        `json:"selector_version,omitempty"`
-	Fallback               string                        `json:"fallback,omitempty"`
-	MinimumDepth           *int64                        `json:"minimum_depth,omitempty"`
-	MaximumDepth           *int64                        `json:"maximum_depth,omitempty"`
-	StateLimit             int64                         `json:"state_limit,omitempty"`
-	EndpointLimit          int64                         `json:"endpoint_limit,omitempty"`
-	SeedPredicateClass     string                        `json:"seed_predicate_class,omitempty"`
-	PrefixLength           int                           `json:"prefix_length,omitempty"`
-	HasFinalLimit          bool                          `json:"has_final_limit,omitempty"`
-	Selected               string                        `json:"selected,omitempty"`
-	Applied                string                        `json:"applied,omitempty"`
-	SkipReason             string                        `json:"skip_reason,omitempty"`
+	// Lowering names the lowering pass that produced this outcome.
+	Lowering string `json:"lowering"`
+	// TargetKind identifies the kind of syntax or binding targeted by the lowering.
+	TargetKind string `json:"target_kind"`
+	// TraversalTarget locates a traversal-step target when the lowering applies to one.
+	TraversalTarget *optimize.TraversalStepTarget `json:"traversal_target,omitempty"`
+	// QueryPartIndex locates a query-part target when the lowering applies to one.
+	QueryPartIndex *int `json:"query_part_index,omitempty"`
+	// Symbol identifies a binding target when the lowering applies to one.
+	Symbol string `json:"symbol,omitempty"`
+	// Family names the candidate-selection family that produced this outcome.
+	Family string `json:"family,omitempty"`
+	// PlannedCandidates lists the candidates considered in preference order.
+	PlannedCandidates []string `json:"planned_candidates,omitempty"`
+	// Candidate is the specialized candidate proposed by analysis.
+	Candidate string `json:"candidate,omitempty"`
+	// EligibilityFacts records named qualification checks for the candidate.
+	EligibilityFacts []TargetEligibilityFact `json:"eligibility_facts,omitempty"`
+	// ObservationMode describes how downstream clauses consume the target.
+	ObservationMode string `json:"observation_mode,omitempty"`
+	// Direction records the target's logical traversal direction.
+	Direction string `json:"direction,omitempty"`
+	// PhysicalExpansion records the stored edge endpoint used to advance traversal.
+	PhysicalExpansion string `json:"physical_expansion,omitempty"`
+	// RelationshipKindCount is the number of statically resolved relationship kinds.
+	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
+	// UntypedRelationship reports whether the pattern omitted relationship kinds.
+	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// TopologyClassification summarizes logical direction, physical direction, and depth.
+	TopologyClassification string `json:"topology_classification,omitempty"`
+	// Eligible reports the structural qualification result when one is available.
+	Eligible *bool `json:"eligible,omitempty"`
+	// StaticallyEligible reports the literal- and kind-based qualification result when available.
+	StaticallyEligible *bool `json:"statically_eligible,omitempty"`
+	// SelectionMode records whether selection was automatic or forced by tooling.
+	SelectionMode string `json:"selection_mode,omitempty"`
+	// SelectorVersion identifies the policy version that ranked candidates.
+	SelectorVersion string `json:"selector_version,omitempty"`
+	// Fallback names the candidate used if the preferred lowering was not applied.
+	Fallback string `json:"fallback,omitempty"`
+	// MinimumDepth is the target's inclusive lower traversal-depth bound.
+	MinimumDepth *int64 `json:"minimum_depth,omitempty"`
+	// MaximumDepth is the target's inclusive upper traversal-depth bound when finite.
+	MaximumDepth *int64 `json:"maximum_depth,omitempty"`
+	// StateLimit is the maximum intermediate-state count admitted by the candidate.
+	StateLimit int64 `json:"state_limit,omitempty"`
+	// EndpointLimit is the maximum endpoint-seed count admitted by the candidate.
+	EndpointLimit int64 `json:"endpoint_limit,omitempty"`
+	// SeedPredicateClass describes the predicate used to bound search seeds.
+	SeedPredicateClass string `json:"seed_predicate_class,omitempty"`
+	// PrefixLength is the number of fixed steps before the variable expansion.
+	PrefixLength int `json:"prefix_length,omitempty"`
+	// HasFinalLimit reports whether a final row limit influenced candidate selection.
+	HasFinalLimit bool `json:"has_final_limit,omitempty"`
+	// Selected names the candidate selected by the optimizer.
+	Selected string `json:"selected,omitempty"`
+	// Applied names the candidate actually emitted by translation.
+	Applied string `json:"applied,omitempty"`
+	// SkipReason explains why a planned candidate was not emitted.
+	SkipReason string `json:"skip_reason,omitempty"`
 }
 
+// TargetEligibilityFact reports one named qualification result in a translated target outcome.
 type TargetEligibilityFact struct {
-	Name     string `json:"name"`
-	Eligible bool   `json:"eligible"`
+	// Name identifies the qualification check.
+	Name string `json:"name"`
+	// Eligible reports whether the target passed the named check.
+	Eligible bool `json:"eligible"`
 }
 
 type SkippedLowering struct {
@@ -738,6 +824,7 @@ type SkippedLowering struct {
 	Count  int    `json:"count,omitempty"`
 }
 
+// recordLowering increments the applied count for one lowering name.
 func (s *Translator) recordLowering(name string) {
 	if s.appliedLoweringCounts == nil {
 		s.appliedLoweringCounts = map[string]int{}
@@ -753,6 +840,7 @@ func (s *Translator) recordLowering(name string) {
 	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
 }
 
+// recordShortestPathExecutor records the executor actually emitted for a traversal target.
 func (s *Translator) recordShortestPathExecutor(target optimize.TraversalStepTarget, executor optimize.ShortestPathExecutor) {
 	if s.appliedShortestPathExecutors == nil {
 		s.appliedShortestPathExecutors = map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor{}
@@ -761,6 +849,7 @@ func (s *Translator) recordShortestPathExecutor(target optimize.TraversalStepTar
 	s.recordLowering(optimize.LoweringShortestPathExecutor)
 }
 
+// recordExpansionSearchStrategy records the expansion strategy actually emitted for a traversal target.
 func (s *Translator) recordExpansionSearchStrategy(target optimize.TraversalStepTarget, strategy optimize.ExpansionSearchStrategy) {
 	if s.appliedExpansionSearchStrategies == nil {
 		s.appliedExpansionSearchStrategies = map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy{}
@@ -769,6 +858,7 @@ func (s *Translator) recordExpansionSearchStrategy(target optimize.TraversalStep
 	s.recordLowering(optimize.LoweringExpansionSearchStrategy)
 }
 
+// appliedLoweringCountSnapshot merges optimizer-declared and translator-observed lowering counts into the snapshot used to diagnose unapplied plans.
 func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
 	applied := map[string]int{}
 
@@ -783,6 +873,7 @@ func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
 	return applied
 }
 
+// recordSkippedLowerings compares the plan with applied counts and emits aggregated skip diagnostics.
 func (s *Translator) recordSkippedLowerings() {
 	if s.translation.Optimization.LoweringPlan == nil {
 		return
@@ -809,6 +900,7 @@ func (s *Translator) recordSkippedLowerings() {
 	}
 }
 
+// recordTargetOutcomes converts per-target plan decisions and applied choices into diagnostic outcomes.
 func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 	if len(s.translation.Optimization.TargetOutcomes) != 0 {
 		return
@@ -888,6 +980,7 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 	}
 }
 
+// shortestPathCandidateNames converts executor candidates to their stable diagnostic names.
 func shortestPathCandidateNames(candidates []optimize.ShortestPathExecutor) []string {
 	names := make([]string, len(candidates))
 	for idx, candidate := range candidates {
@@ -896,6 +989,7 @@ func shortestPathCandidateNames(candidates []optimize.ShortestPathExecutor) []st
 	return names
 }
 
+// expansionSearchCandidateNames converts expansion candidates to their stable diagnostic names.
 func expansionSearchCandidateNames(candidates []optimize.ExpansionSearchStrategy) []string {
 	names := make([]string, len(candidates))
 	for idx, candidate := range candidates {
@@ -904,6 +998,7 @@ func expansionSearchCandidateNames(candidates []optimize.ExpansionSearchStrategy
 	return names
 }
 
+// shortestPathEligibilityFacts converts executor qualification facts to public diagnostic records.
 func shortestPathEligibilityFacts(facts []optimize.ShortestPathEligibilityFact) []TargetEligibilityFact {
 	outcomes := make([]TargetEligibilityFact, len(facts))
 	for idx, fact := range facts {
@@ -915,6 +1010,7 @@ func shortestPathEligibilityFacts(facts []optimize.ShortestPathEligibilityFact) 
 	return outcomes
 }
 
+// expansionSearchEligibilityFacts converts search-strategy qualification facts to public diagnostic records.
 func expansionSearchEligibilityFacts(facts []optimize.ExpansionSearchEligibilityFact) []TargetEligibilityFact {
 	outcomes := make([]TargetEligibilityFact, len(facts))
 	for idx, fact := range facts {
@@ -926,6 +1022,7 @@ func expansionSearchEligibilityFacts(facts []optimize.ExpansionSearchEligibility
 	return outcomes
 }
 
+// plannedLoweringCounts converts each lowering target collection into a named count so planned work can be reconciled with applied work.
 func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 	return []SkippedLowering{
 		{
@@ -995,6 +1092,7 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 	}
 }
 
+// skippedLoweringReason explains why planned lowering work was not observed, including metadata-only analyses and lowerings superseded by a stronger fast path.
 func skippedLoweringReason(name string, applied map[string]int, plan optimize.LoweringPlan) string {
 	if name == optimize.LoweringFieldRequirements {
 		return "analysis_metadata_only"
@@ -1032,6 +1130,7 @@ func skippedLoweringReason(name string, applied map[string]int, plan optimize.Lo
 	return "planned lowering did not change the emitted SQL"
 }
 
+// skippedTraversalDirectionReason returns the first recorded reason a planned traversal direction was retained.
 func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 	for _, decision := range plan.TraversalDirection {
 		if !decision.Flip && decision.Reason != "" {
@@ -1042,11 +1141,15 @@ func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 	return ""
 }
 
+// ToolOptions controls experimental lowering selection exposed only to repository tooling.
 type ToolOptions struct {
-	ForceShortestPathExecutor    optimize.ShortestPathExecutor
+	// ForceShortestPathExecutor requests a qualified shortest-path executor instead of automatic selection.
+	ForceShortestPathExecutor optimize.ShortestPathExecutor
+	// ForceExpansionSearchStrategy requests a qualified variable-expansion strategy instead of automatic selection.
 	ForceExpansionSearchStrategy optimize.ExpansionSearchStrategy
 }
 
+// Translate optimizes and translates a Cypher query for the selected graph using production lowering choices.
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
 	return translate(ctx, cypherQuery, kindMapper, parameters, graphID, ToolOptions{})
 }
@@ -1057,6 +1160,7 @@ func TranslateForTool(ctx context.Context, cypherQuery *cypher.RegularQuery, kin
 	return translate(ctx, cypherQuery, kindMapper, parameters, graphID, options)
 }
 
+// translate optimizes a Cypher query, applies optional tooling overrides, emits PostgreSQL, and records diagnostics.
 func translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
 	optimizedPlan, err := optimize.Optimize(cypherQuery)
 	if err != nil {
@@ -1109,6 +1213,7 @@ func translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	return translator.translation, nil
 }
 
+// applyToolOptions applies supported forced executor and expansion-strategy requests to an optimized plan.
 func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if err := applyForcedShortestPathExecutor(plan, options.ForceShortestPathExecutor); err != nil {
 		return err
@@ -1116,6 +1221,7 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
 }
 
+// applyForcedShortestPathExecutor selects the requested executor only when exactly one qualified shortest-path target supports it.
 func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.ShortestPathExecutor) error {
 	if executor == "" {
 		return nil
@@ -1180,6 +1286,7 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	return nil
 }
 
+// applyForcedExpansionSearchStrategy selects the requested strategy only when exactly one qualified expansion target supports it.
 func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.ExpansionSearchStrategy) error {
 	if strategy == "" {
 		return nil
@@ -1218,6 +1325,7 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 	return nil
 }
 
+// decodeCypherStringLiteral decodes Cypher escape sequences by interpreting the token as a quoted Go string.
 func decodeCypherStringLiteral(raw string) (string, error) {
 	if len(raw) < 2 {
 		return "", fmt.Errorf("invalid cypher string literal: %q", raw)

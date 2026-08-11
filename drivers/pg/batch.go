@@ -17,6 +17,8 @@ import (
 )
 
 const (
+	// LargeNodeUpdateThreshold is the node count above which batch updates use
+	// the large-update execution path.
 	LargeNodeUpdateThreshold = 1_000_000
 )
 
@@ -40,21 +42,46 @@ func (s *Int2ArrayEncoder) Encode(values []int16) string {
 	return s.buffer.String()
 }
 
+// batch buffers graph mutations and applies them through one PostgreSQL transaction in insertion order.
 type batch struct {
-	ctx                        context.Context
-	innerTransaction           *transaction
-	schemaManager              *SchemaManager
-	nodeDeletionBuffer         []graph.ID
+	// ctx scopes database operations performed while flushing buffered mutations.
+	ctx context.Context
+
+	// innerTransaction owns the PostgreSQL transaction through which every buffered mutation is applied.
+	innerTransaction *transaction
+
+	// schemaManager resolves graph metadata and maps graph kinds to their database identifiers.
+	schemaManager *SchemaManager
+
+	// nodeDeletionBuffer retains node identifiers awaiting a bulk delete.
+	nodeDeletionBuffer []graph.ID
+
+	// relationshipDeletionBuffer retains relationship identifiers awaiting a bulk delete.
 	relationshipDeletionBuffer []graph.ID
-	nodeCreateBuffer           []*graph.Node
-	nodeUpdateBuffer           []*graph.Node
-	nodeUpdateByBuffer         []graph.NodeUpdate
-	relationshipCreateBuffer   []*graph.Relationship
+
+	// nodeCreateBuffer retains nodes awaiting a bulk insert.
+	nodeCreateBuffer []*graph.Node
+
+	// nodeUpdateBuffer retains complete node replacements awaiting a bulk update.
+	nodeUpdateBuffer []*graph.Node
+
+	// nodeUpdateByBuffer retains identity-property node upserts awaiting validation and execution.
+	nodeUpdateByBuffer []graph.NodeUpdate
+
+	// relationshipCreateBuffer retains relationships awaiting conflict coalescing and insertion.
+	relationshipCreateBuffer []*graph.Relationship
+
+	// relationshipUpdateByBuffer retains identity-based relationship upserts awaiting validation and execution.
 	relationshipUpdateByBuffer []graph.RelationshipUpdate
-	batchWriteSize             int
-	kindIDEncoder              Int2ArrayEncoder
+
+	// batchWriteSize is the buffer length that triggers an automatic flush.
+	batchWriteSize int
+
+	// kindIDEncoder reuses one buffer when serializing PostgreSQL int2 arrays for node writes.
+	kindIDEncoder Int2ArrayEncoder
 }
 
+// newBatch opens the transaction used by a mutation batch and applies its configured flush threshold.
 func newBatch(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config) (*batch, error) {
 	if tx, err := newTransactionWrapper(ctx, conn, schemaManager, cfg, false); err != nil {
 		return nil, err
@@ -287,6 +314,7 @@ func (s *batch) UpdateNodes(nodes []*graph.Node) error {
 	return nil
 }
 
+// flushNodeDeleteBuffer deletes the buffered node IDs and clears the buffer after a successful execution.
 func (s *batch) flushNodeDeleteBuffer() error {
 	if _, err := s.innerTransaction.conn.Exec(s.ctx, deleteNodeWithIDStatement, s.nodeDeletionBuffer); err != nil {
 		return err
@@ -296,6 +324,7 @@ func (s *batch) flushNodeDeleteBuffer() error {
 	return nil
 }
 
+// flushRelationshipDeleteBuffer deletes the buffered relationship IDs and clears the buffer after a successful execution.
 func (s *batch) flushRelationshipDeleteBuffer() error {
 	if _, err := s.innerTransaction.conn.Exec(s.ctx, deleteEdgeWithIDStatement, s.relationshipDeletionBuffer); err != nil {
 		return err
@@ -305,6 +334,7 @@ func (s *batch) flushRelationshipDeleteBuffer() error {
 	return nil
 }
 
+// flushNodeCreateBuffer rejects mixed ID allocation modes and dispatches the buffered nodes to the matching insert path.
 func (s *batch) flushNodeCreateBuffer() error {
 	var (
 		withoutIDs = false
@@ -330,6 +360,7 @@ func (s *batch) flushNodeCreateBuffer() error {
 	return s.flushNodeCreateBufferWithIDs()
 }
 
+// flushNodeCreateBufferWithIDs inserts buffered nodes whose IDs were assigned by the caller.
 func (s *batch) flushNodeCreateBufferWithIDs() error {
 	var (
 		numCreates    = len(s.nodeCreateBuffer)
@@ -367,6 +398,7 @@ func (s *batch) flushNodeCreateBufferWithIDs() error {
 	return nil
 }
 
+// flushNodeCreateBufferWithoutIDs inserts buffered nodes using database-generated IDs.
 func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 	var (
 		numCreates    = len(s.nodeCreateBuffer)
@@ -401,6 +433,7 @@ func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 	return nil
 }
 
+// flushNodeUpsertBatch validates and executes one identity-based node upsert batch for the target graph.
 func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 	parameters := NewNodeUpsertParameters(len(updates.Updates))
 
@@ -437,6 +470,7 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 	return nil
 }
 
+// tryFlushNodeUpdateByBuffer validates, writes, and clears the buffered identity-based node updates.
 func (s *batch) tryFlushNodeUpdateByBuffer() error {
 	if updates, err := sql.ValidateNodeUpdateByBatch(s.nodeUpdateByBuffer); err != nil {
 		return err
@@ -448,6 +482,7 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 	return nil
 }
 
+// flushNodeUpdateBatch writes complete node replacements for the supplied nodes.
 func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
 	parameters := NewNodeUpdateParameters(len(nodes))
 
@@ -470,6 +505,7 @@ func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
 	}
 }
 
+// tryFlushNodeUpdateBuffer writes and clears the buffered complete node updates.
 func (s *batch) tryFlushNodeUpdateBuffer() error {
 	if err := s.flushNodeUpdateBatch(s.nodeUpdateBuffer); err != nil {
 		return err
@@ -647,6 +683,7 @@ func (s *RelationshipUpdateByParameters) AppendAll(ctx context.Context, updates 
 	return nil
 }
 
+// flushRelationshipUpdateByBuffer upserts prerequisite nodes and then applies identity-based relationship updates.
 func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateBatch) error {
 	if err := s.flushNodeUpsertBatch(updates.NodeUpdates); err != nil {
 		return err
@@ -671,6 +708,7 @@ func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateB
 	return nil
 }
 
+// tryFlushRelationshipUpdateByBuffer validates, writes, and clears the buffered identity-based relationship updates.
 func (s *batch) tryFlushRelationshipUpdateByBuffer() error {
 	if updateBatch, err := sql.ValidateRelationshipUpdateByBatch(s.relationshipUpdateByBuffer); err != nil {
 		return err
@@ -682,13 +720,22 @@ func (s *batch) tryFlushRelationshipUpdateByBuffer() error {
 	return nil
 }
 
+// relationshipCreateBatch stores column-oriented values for one relationship insert statement.
 type relationshipCreateBatch struct {
-	startIDs         []uint64
-	endIDs           []uint64
-	edgeKindIDs      []int16
+	// startIDs contains each relationship's start-node identifier in insert-row order.
+	startIDs []uint64
+
+	// endIDs contains each relationship's end-node identifier in insert-row order.
+	endIDs []uint64
+
+	// edgeKindIDs contains each relationship's database kind identifier in insert-row order.
+	edgeKindIDs []int16
+
+	// edgePropertyBags contains each relationship's JSONB properties in insert-row order.
 	edgePropertyBags []pgtype.JSONB
 }
 
+// newRelationshipCreateBatch allocates relationship insert columns with capacity for size rows.
 func newRelationshipCreateBatch(size int) *relationshipCreateBatch {
 	return &relationshipCreateBatch{
 		startIDs:         make([]uint64, 0, size),
@@ -716,18 +763,31 @@ func (s *relationshipCreateBatch) EncodeProperties(edgePropertiesBatch []*graph.
 	return nil
 }
 
+// relationshipCreateBatchBuilder coalesces duplicate relationship keys while retaining their merged properties.
 type relationshipCreateBatchBuilder struct {
-	keyToPropertiesIndex    map[relationshipCreateKey]int
+	// keyToPropertiesIndex locates the property bag associated with each unique relationship key.
+	keyToPropertiesIndex map[relationshipCreateKey]int
+
+	// relationshipUpdateBatch accumulates the column values emitted for unique relationship keys.
 	relationshipUpdateBatch *relationshipCreateBatch
-	edgePropertiesBatch     []*graph.Properties
+
+	// edgePropertiesBatch retains mergeable properties parallel to relationshipUpdateBatch rows.
+	edgePropertiesBatch []*graph.Properties
 }
 
+// relationshipCreateKey identifies a relationship by endpoints and kind for conflict coalescing.
 type relationshipCreateKey struct {
+	// startID identifies the relationship's starting node.
 	startID graph.ID
-	endID   graph.ID
-	kind    string
+
+	// endID identifies the relationship's ending node.
+	endID graph.ID
+
+	// kind identifies the relationship kind independently of its property bag.
+	kind string
 }
 
+// newRelationshipCreateBatchBuilder allocates a conflict index and column buffers for size relationship inputs.
 func newRelationshipCreateBatchBuilder(size int) *relationshipCreateBatchBuilder {
 	return &relationshipCreateBatchBuilder{
 		keyToPropertiesIndex:    map[relationshipCreateKey]int{},
@@ -739,6 +799,7 @@ func (s *relationshipCreateBatchBuilder) Build() (*relationshipCreateBatch, erro
 	return s.relationshipUpdateBatch, s.relationshipUpdateBatch.EncodeProperties(s.edgePropertiesBatch)
 }
 
+// Add coalesces edge into the relationship batch, merging properties when its endpoints and kind repeat.
 func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper KindMapper, edge *graph.Relationship) error {
 	key := relationshipCreateKey{
 		startID: edge.StartID,
@@ -768,6 +829,7 @@ func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper Kin
 	return nil
 }
 
+// flushRelationshipCreateBuffer coalesces duplicate keys, inserts the resulting relationships, and clears the input buffer.
 func (s *batch) flushRelationshipCreateBuffer() error {
 	batchBuilder := newRelationshipCreateBatchBuilder(len(s.relationshipCreateBuffer))
 
@@ -790,6 +852,7 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 	return nil
 }
 
+// tryFlush writes any mutation buffer whose length exceeds batchWriteSize.
 func (s *batch) tryFlush(batchWriteSize int) error {
 	if len(s.nodeUpdateByBuffer) > batchWriteSize {
 		if err := s.tryFlushNodeUpdateByBuffer(); err != nil {

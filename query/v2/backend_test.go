@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testKindMapper returns an in-memory mapper populated in argument order.
 func testKindMapper(kinds ...graph.Kind) *pgutil.InMemoryKindMapper {
 	mapper := pgutil.NewInMemoryKindMapper()
 
@@ -169,6 +170,7 @@ func TestBackendParityNeo4jPrepare(t *testing.T) {
 	}
 }
 
+// TestBackendParityPGTranslateTraversalDepth verifies traversal-depth controls reach PostgreSQL's recursive path translation.
 func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 	edgeKind := graph.StringKind("MemberOf")
 	mapper := testKindMapper(edgeKind)
@@ -228,6 +230,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 	}
 }
 
+// TestBackendParityPGTranslate verifies v2 builders produce stable PostgreSQL SQL and parameter bindings across query forms.
 func TestBackendParityPGTranslate(t *testing.T) {
 	userKind := graph.StringKind("User")
 	edgeKind := graph.StringKind("MemberOf")
@@ -306,6 +309,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 	}
 }
 
+// TestBackendParityPGTranslateShortestPaths verifies shortest-path controls select the expected PostgreSQL search harness.
 func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 	edgeKind := graph.StringKind("MemberOf")
 	mapper := testKindMapper(edgeKind)

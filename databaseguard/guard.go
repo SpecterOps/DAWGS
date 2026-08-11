@@ -21,8 +21,13 @@ import (
 )
 
 const (
-	AllowDestructiveEnv   = "DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE"
-	DisposableTargetsEnv  = "DAWGS_INTEGRATION_DISPOSABLE_TARGETS"
+	// AllowDestructiveEnv names the environment variable that must equal "1" before destructive database work is permitted.
+	AllowDestructiveEnv = "DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE"
+
+	// DisposableTargetsEnv names the environment variable containing the exact, credential-free targets approved for destructive work.
+	DisposableTargetsEnv = "DAWGS_INTEGRATION_DISPOSABLE_TARGETS"
+
+	// allowDestructiveValue is the acknowledgement value required by Validate.
 	allowDestructiveValue = "1"
 )
 
@@ -48,6 +53,7 @@ func Target(connection string) (string, error) {
 	}
 }
 
+// postgresTarget returns the canonical PostgreSQL endpoint and database that the parsed pgx configuration will use.
 func postgresTarget(connection string) (string, error) {
 	config, err := pgxpool.ParseConfig(connection)
 	if err != nil {
@@ -74,6 +80,7 @@ func postgresTarget(connection string) (string, error) {
 	return "postgresql://" + net.JoinHostPort(host, strconv.FormatUint(uint64(port), 10)) + "/" + url.PathEscape(database), nil
 }
 
+// neo4jTarget returns a credential-free Neo4j target with an explicit port and escaped database name.
 func neo4jTarget(parsed *url.URL) (string, error) {
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
 	if host == "" {
@@ -132,6 +139,7 @@ func ValidateEnvironment(connection string) error {
 	)
 }
 
+// splitTargets parses a comma-separated target allowlist, trimming whitespace and discarding empty entries.
 func splitTargets(value string) []string {
 	var targets []string
 	for _, target := range strings.Split(value, ",") {

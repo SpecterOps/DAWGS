@@ -31,80 +31,153 @@ import (
 	"github.com/specterops/dawgs/testutil"
 )
 
+// config contains graphbench command-line selections and safety settings.
 type config struct {
-	CorpusRoot                string
-	DatasetDir                string
-	Connection                string
-	PGConnection              string
-	Neo4jConnection           string
-	Modes                     []ExecutionMode
-	Iterations                int
-	WarmupIterations          int
-	Round                     int
-	Block                     int
-	Arm                       string
-	ArmOrder                  int
-	RunUUID                   string
-	Cases                     []string
-	Datasets                  []string
-	Categories                []string
-	Tags                      []string
-	OutputJSONL               string
-	AppendJSONL               bool
-	Summary                   string
-	SummaryJSON               string
-	Baseline                  string
-	DAWGSVersion              string
-	GateBaseline              string
-	GateCandidate             string
-	GateOutput                string
-	GateSeed                  int64
-	Confidence                float64
-	Regression                float64
-	GateTargets               []string
-	MaterialityRatio          float64
-	MaterialityAbsolute       time.Duration
-	DestructiveLock           string
-	AAArtifact                string
-	AAOutput                  string
-	ReferenceClosureArtifact  string
-	ReferenceClosureOutput    string
-	ReferenceClosureArm       string
-	ReferencePairArtifact     string
-	ReferencePairOutput       string
-	ReferencePairBaseline     string
-	ReferencePairCandidate    string
-	ReferencePairProtocol     string
-	PoolSize                  int
-	Concurrency               []int
+	// CorpusRoot locates scale-case and template declarations.
+	CorpusRoot string
+	// DatasetDir locates fixture datasets loaded for managed benchmark runs.
+	DatasetDir string
+	// Connection contains the backend connection string.
+	Connection string
+	// PGConnection contains the PostgreSQL connection string.
+	PGConnection string
+	// Neo4jConnection contains the Neo4j connection string.
+	Neo4jConnection string
+	// Modes lists backend execution modes requested for each benchmark round.
+	Modes []ExecutionMode
+	// Iterations records the number of measured iterations.
+	Iterations int
+	// WarmupIterations records the untimed iterations run before measurement.
+	WarmupIterations int
+	// Round identifies the measurement round.
+	Round int
+	// Block identifies the measurement block used to control carryover effects.
+	Block int
+	// Arm identifies the measurement arm that produced the sample.
+	Arm string
+	// ArmOrder records the arm's position within its balanced measurement block.
+	ArmOrder int
+	// RunUUID supplies an optional stable identity shared by every artifact in one run series.
+	RunUUID string
+	// Cases lists exact case names requested by the user.
+	Cases []string
+	// Datasets lists exact dataset selectors supplied by the user.
+	Datasets []string
+	// Categories lists workload categories used to filter the corpus.
+	Categories []string
+	// Tags lists exact tag selectors supplied by the user.
+	Tags []string
+	// OutputJSONL selects the benchmark-result JSON Lines destination.
+	OutputJSONL string
+	// AppendJSONL selects append-safe JSON Lines output instead of replacing the artifact.
+	AppendJSONL bool
+	// Summary selects the Markdown benchmark-summary destination.
+	Summary string
+	// SummaryJSON selects the JSON summary destination.
+	SummaryJSON string
+	// Baseline identifies the baseline version or result used for comparison.
+	Baseline string
+	// DAWGSVersion records the DAWGS source version attached to artifact provenance.
+	DAWGSVersion string
+	// GateBaseline selects the baseline JSON Lines artifact for performance gating.
+	GateBaseline string
+	// GateCandidate selects the candidate JSON Lines artifact for performance gating.
+	GateCandidate string
+	// GateOutput selects the performance-gate JSON report destination.
+	GateOutput string
+	// GateSeed controls deterministic performance-gate bootstrap resampling.
+	GateSeed int64
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64
+	// Regression sets the largest candidate-to-baseline median ratio accepted by the gate.
+	Regression float64
+	// GateTargets lists exact case names subject to performance gating.
+	GateTargets []string
+	// MaterialityRatio sets the relative change required before a difference is material.
+	MaterialityRatio float64
+	// MaterialityAbsolute sets the absolute duration change required before a difference is material.
+	MaterialityAbsolute time.Duration
+	// DestructiveLock selects the lock-file path that serializes destructive runs.
+	DestructiveLock string
+	// AAArtifact selects benchmark records used to estimate within-arm noise.
+	AAArtifact string
+	// AAOutput selects the A/A resolution report destination.
+	AAOutput string
+	// ReferenceClosureArtifact selects benchmark records used for production-to-reference closure analysis.
+	ReferenceClosureArtifact string
+	// ReferenceClosureOutput selects the reference-closure report destination.
+	ReferenceClosureOutput string
+	// ReferenceClosureArm selects the independent reference arm compared with production.
+	ReferenceClosureArm string
+	// ReferencePairArtifact selects benchmark records containing the two reference arms to compare.
+	ReferencePairArtifact string
+	// ReferencePairOutput selects the paired-reference report destination.
+	ReferencePairOutput string
+	// ReferencePairBaseline selects the reference arm treated as the paired baseline.
+	ReferencePairBaseline string
+	// ReferencePairCandidate selects the reference arm compared with the paired baseline.
+	ReferencePairCandidate string
+	// ReferencePairProtocol selects confirmation or discovery sample requirements for paired references.
+	ReferencePairProtocol string
+	// PoolSize sets the database connection-pool size.
+	PoolSize int
+	// Concurrency lists opt-in worker counts for PostgreSQL concurrency measurements.
+	Concurrency []int
+	// SessionMemoryCeilingBytes sets the per-session memory ceiling in bytes.
 	SessionMemoryCeilingBytes int64
-	PoolMemoryCeilingBytes    int64
-	PostgresReferences        bool
-	PostgresReferenceArms     []string
-	PostgresForceShortest     string
-	PostgresForceExpansion    string
-	ConfirmLeft               string
-	ConfirmRight              string
-	ConfirmAA                 string
-	ConfirmOutput             string
-	ConfirmCases              []string
-	DiagnosticGate            bool
-	BundleDir                 string
-	BuildCommand              string
-	ExistingGraph             bool
-	AnchorManifest            string
-	Checkpoint                string
-	Resume                    bool
-	Progress                  string
-	Discovery                 bool
-	TimeoutClasses            []time.Duration
-	DiscoverySampleFloor      int
-	ResourceArtifact          string
-	ResourceOutput            string
-	BackendDeltaArtifact      string
-	BackendDeltaOutput        string
+	// PoolMemoryCeilingBytes sets the aggregate pool memory ceiling in bytes.
+	PoolMemoryCeilingBytes int64
+	// PostgresReferences enables independent PostgreSQL reference-arm measurement and persistence.
+	PostgresReferences bool
+	// PostgresReferenceArms lists independent PostgreSQL reference arms selected for measurement.
+	PostgresReferenceArms []string
+	// PostgresForceShortest selects a forced shortest-path executor for diagnostic runs.
+	PostgresForceShortest string
+	// PostgresForceExpansion selects a forced expansion search strategy for diagnostic runs.
+	PostgresForceExpansion string
+	// ConfirmLeft selects the left artifact used for paired confirmation.
+	ConfirmLeft string
+	// ConfirmRight selects the right artifact used for paired confirmation.
+	ConfirmRight string
+	// ConfirmAA selects the A/A noise report used to classify confirmation deltas.
+	ConfirmAA string
+	// ConfirmOutput selects the paired confirmation report destination.
+	ConfirmOutput string
+	// ConfirmCases lists exact case names included in paired confirmation.
+	ConfirmCases []string
+	// DiagnosticGate marks output as diagnostic and therefore ineligible for a complete release-gate pass.
+	DiagnosticGate bool
+	// BundleDir selects the directory that receives portable artifacts and source provenance.
+	BundleDir string
+	// BuildCommand records the reproducible command used to build the benchmark executable.
+	BuildCommand string
+	// ExistingGraph selects read-only execution against a pre-existing graph.
+	ExistingGraph bool
+	// AnchorManifest selects the live-graph anchor manifest to validate and redact.
+	AnchorManifest string
+	// Checkpoint selects the persisted live-graph completion checkpoint.
+	Checkpoint string
+	// Resume allows live-graph execution to skip checkpointed workloads with matching identities.
+	Resume bool
+	// Progress selects the append-only live-graph progress JSON Lines destination.
+	Progress string
+	// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
+	Discovery bool
+	// TimeoutClasses lists increasing per-attempt deadlines for adaptive live-graph discovery.
+	TimeoutClasses []time.Duration
+	// DiscoverySampleFloor sets the minimum live-graph samples required before adaptive discovery may stop.
+	DiscoverySampleFloor int
+	// ResourceArtifact selects benchmark records evaluated against plan-resource limits.
+	ResourceArtifact string
+	// ResourceOutput selects the resource-gate JSON report destination.
+	ResourceOutput string
+	// BackendDeltaArtifact selects records used for descriptive PostgreSQL-to-Neo4j comparison.
+	BackendDeltaArtifact string
+	// BackendDeltaOutput selects the cross-backend delta report destination.
+	BackendDeltaOutput string
 }
 
+// parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
 func parseConfig(args []string, env func(string) string) (config, error) {
 	flags := flag.NewFlagSet("graphbench", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -392,6 +465,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	return cfg, nil
 }
 
+// parseUniqueCSV splits comma-separated selectors, rejecting duplicates and empty elements.
 func parseUniqueCSV(kind, raw string) ([]string, error) {
 	var values []string
 	seen := map[string]struct{}{}
@@ -409,6 +483,7 @@ func parseUniqueCSV(kind, raw string) ([]string, error) {
 	return values, nil
 }
 
+// parseExecutionModes parses a comma-separated mode list and rejects duplicates or unsupported values.
 func parseExecutionModes(raw string) ([]ExecutionMode, error) {
 	var (
 		modes []ExecutionMode
@@ -434,11 +509,13 @@ func parseExecutionModes(raw string) ([]ExecutionMode, error) {
 	return modes, nil
 }
 
+// fatal logs a formatted fatal error and terminates the command.
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
 }
 
+// main runs the graphbench command.
 func main() {
 	cfg, err := parseConfig(os.Args[1:], os.Getenv)
 	if err != nil {
@@ -588,11 +665,11 @@ func main() {
 	}
 
 	var (
-		ctx       = context.Background()
-		records   []CaseResult
-		startedAt = time.Now()
+		ctx              = context.Background()
+		records          []CaseResult
+		existingManifest ExistingGraphAnchorManifest
+		startedAt        = time.Now()
 	)
-	var existingManifest ExistingGraphAnchorManifest
 	checkpointCorpusHash := corpusIdentity(corpus)
 	metadata := testutil.ResolveBaselineMetadata(cfg.DAWGSVersion)
 	environment := resolveRunEnvironment(cfg, os.Args, selection, startedAt, startedAt)
@@ -770,6 +847,7 @@ func main() {
 	}
 }
 
+// modesForRound returns execution modes in alternating round order without mutating the configured slice.
 func modesForRound(modes []ExecutionMode, round int) []ExecutionMode {
 	ordered := append([]ExecutionMode(nil), modes...)
 	if round%2 == 0 {

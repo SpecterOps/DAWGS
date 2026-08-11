@@ -35,241 +35,447 @@ import (
 )
 
 const (
-	StatusOK             = "ok"
-	StatusRowMismatch    = "row_mismatch"
-	StatusError          = "error"
+	// StatusOK marks a benchmark case whose execution and expectations succeeded.
+	StatusOK = "ok"
+
+	// StatusRowMismatch marks a benchmark case whose observed row count differed from its expectation.
+	StatusRowMismatch = "row_mismatch"
+
+	// StatusError marks a benchmark case that failed during execution.
+	StatusError = "error"
+
+	// StatusNotImplemented marks a benchmark case unsupported by the selected backend.
 	StatusNotImplemented = "not_implemented"
 )
 
+// DurationStats summarizes warmup policy, measured latency samples, quantiles, and sample sufficiency.
 type DurationStats struct {
-	Iterations       int             `json:"iterations"`
-	WarmupIterations int             `json:"warmup_iterations"`
-	Median           time.Duration   `json:"median"`
-	P95              time.Duration   `json:"p95"`
-	P99              time.Duration   `json:"p99"`
-	P99Gated         bool            `json:"p99_gated"`
-	Max              time.Duration   `json:"max"`
-	Samples          []LatencySample `json:"samples,omitempty"`
+	// Iterations records the number of measured iterations.
+	Iterations int `json:"iterations"`
+	// WarmupIterations records the untimed iterations run before measurement.
+	WarmupIterations int `json:"warmup_iterations"`
+	// Median records the median observed duration.
+	Median time.Duration `json:"median"`
+	// P95 records the 95th-percentile observed duration.
+	P95 time.Duration `json:"p95"`
+	// P99 records the 99th-percentile duration.
+	P99 time.Duration `json:"p99"`
+	// P99Gated reports whether the sample count is sufficient to enforce the P99 noise threshold.
+	P99Gated bool `json:"p99_gated"`
+	// Max records the longest observed duration.
+	Max time.Duration `json:"max"`
+	// Samples contains the individual measurements.
+	Samples []LatencySample `json:"samples,omitempty"`
 }
 
+// LatencySample records one labeled duration and its measurement order.
 type LatencySample struct {
-	Round          int           `json:"round"`
-	Block          int           `json:"block,omitempty"`
-	Arm            string        `json:"arm,omitempty"`
-	ArmOrder       int           `json:"arm_order,omitempty"`
-	RunUUID        string        `json:"run_uuid,omitempty"`
-	Iteration      int           `json:"iteration"`
-	Case           string        `json:"case"`
-	Dataset        string        `json:"dataset"`
-	Backend        ExecutionMode `json:"backend"`
-	ConnectionID   string        `json:"connection_id,omitempty"`
-	Classification string        `json:"classification"`
-	Duration       time.Duration `json:"duration"`
+	// Round identifies the measurement round.
+	Round int `json:"round"`
+	// Block identifies the measurement block used to control carryover effects.
+	Block int `json:"block,omitempty"`
+	// Arm identifies the measurement arm that produced the sample.
+	Arm string `json:"arm,omitempty"`
+	// ArmOrder records the arm's position within its balanced measurement block.
+	ArmOrder int `json:"arm_order,omitempty"`
+	// RunUUID links the sample to its resumable benchmark run series.
+	RunUUID string `json:"run_uuid,omitempty"`
+	// Iteration identifies the measured iteration within its worker or round.
+	Iteration int `json:"iteration"`
+	// Case identifies the workload whose iteration produced the sample.
+	Case string `json:"case"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Backend identifies the execution backend.
+	Backend ExecutionMode `json:"backend"`
+	// ConnectionID records the backend session that executed the measured iteration.
+	ConnectionID string `json:"connection_id,omitempty"`
+	// Classification records the assigned measurement or result class.
+	Classification string `json:"classification"`
+	// Duration records elapsed time for this observation.
+	Duration time.Duration `json:"duration"`
 }
 
+// ConcurrencySample records one concurrent worker iteration and its connection and latency stages.
 type ConcurrencySample struct {
-	Worker         int           `json:"worker"`
-	Iteration      int           `json:"iteration"`
-	ConnectionID   string        `json:"connection_id"`
-	Classification string        `json:"classification"`
-	PoolWait       time.Duration `json:"pool_wait"`
-	Transaction    time.Duration `json:"transaction_setup"`
-	ExecuteDrain   time.Duration `json:"execute_decode_drain"`
-	Total          time.Duration `json:"total"`
+	// Worker identifies the concurrent worker that produced the sample.
+	Worker int `json:"worker"`
+	// Iteration identifies the measured iteration within its worker or round.
+	Iteration int `json:"iteration"`
+	// ConnectionID records the PostgreSQL backend session assigned to the worker iteration.
+	ConnectionID string `json:"connection_id"`
+	// Classification records the assigned measurement or result class.
+	Classification string `json:"classification"`
+	// PoolWait records latency spent acquiring a database connection from the pool.
+	PoolWait time.Duration `json:"pool_wait"`
+	// Transaction records latency spent beginning and configuring the transaction.
+	Transaction time.Duration `json:"transaction_setup"`
+	// ExecuteDrain records latency spent executing and draining all rows.
+	ExecuteDrain time.Duration `json:"execute_decode_drain"`
+	// Total records the total elapsed duration.
+	Total time.Duration `json:"total"`
 }
 
+// ConcurrencyBlock summarizes all samples and connection usage for one concurrency level.
 type ConcurrencyBlock struct {
-	Concurrency int                 `json:"concurrency"`
-	PoolSize    int                 `json:"pool_size"`
-	Operations  int                 `json:"operations"`
-	Wall        time.Duration       `json:"wall"`
-	QPS         float64             `json:"qps"`
-	Samples     []ConcurrencySample `json:"samples"`
+	// Concurrency records the worker count exercised by the block.
+	Concurrency int `json:"concurrency"`
+	// PoolSize sets the database connection-pool size.
+	PoolSize int `json:"pool_size"`
+	// Operations records successful query operations completed by a concurrency block.
+	Operations int `json:"operations"`
+	// Wall records end-to-end wall time for a concurrency block.
+	Wall time.Duration `json:"wall"`
+	// QPS reports completed query iterations per second.
+	QPS float64 `json:"qps"`
+	// Samples contains the individual measurements.
+	Samples []ConcurrencySample `json:"samples"`
 }
 
+// PostgresReferenceResult records one independent PostgreSQL reference arm's identity, plan, observations, and timings.
 type PostgresReferenceResult struct {
-	SchemaVersion      int                  `json:"schema_version"`
-	Name               string               `json:"name"`
-	LegacyName         string               `json:"legacy_name,omitempty"`
-	Architecture       string               `json:"architecture"`
-	ImplementationID   string               `json:"implementation_id"`
-	StateShape         string               `json:"state_shape"`
-	ObservationShape   string               `json:"observation_shape"`
-	SemanticValidation string               `json:"semantic_validation"`
-	Boundary           string               `json:"boundary"`
-	TimingBoundary     string               `json:"timing_boundary"`
-	FullComparator     bool                 `json:"full_comparator"`
-	MeasurementOrder   int                  `json:"measurement_order,omitempty"`
-	AAAliasOf          string               `json:"aa_alias_of,omitempty"`
-	SQL                string               `json:"sql"`
-	SQLFingerprint     string               `json:"sql_fingerprint"`
-	RowCount           int64                `json:"row_count"`
-	ObservedRows       []string             `json:"observed_rows,omitempty"`
-	Stats              DurationStats        `json:"stats"`
-	PostgresPlan       []string             `json:"postgres_plan,omitempty"`
-	PostgresPlanJSON   json.RawMessage      `json:"postgres_plan_json,omitempty"`
-	PostgresMetrics    *PostgresPlanMetrics `json:"postgres_metrics,omitempty"`
+	// SchemaVersion identifies the PostgreSQL reference-result schema revision.
+	SchemaVersion int `json:"schema_version"`
+	// Name identifies the independently measured reference arm.
+	Name string `json:"name"`
+	// LegacyName retains a compatibility alias for the reference arm.
+	LegacyName string `json:"legacy_name,omitempty"`
+	// Architecture identifies the executor architecture.
+	Architecture string `json:"architecture"`
+	// ImplementationID provides a versioned identity for the measured reference algorithm and materializer.
+	ImplementationID string `json:"implementation_id"`
+	// StateShape describes recursive state retained by the reference implementation.
+	StateShape string `json:"state_shape"`
+	// ObservationShape describes normalized values returned by the reference boundary.
+	ObservationShape string `json:"observation_shape"`
+	// SemanticValidation identifies the exact observation contract enforced for the reference.
+	SemanticValidation string `json:"semantic_validation"`
+	// Boundary identifies the measured execution boundary.
+	Boundary string `json:"boundary"`
+	// TimingBoundary describes which reference stages contribute to latency samples.
+	TimingBoundary string `json:"timing_boundary"`
+	// FullComparator indicates that the reference returns the complete public observation.
+	FullComparator bool `json:"full_comparator"`
+	// MeasurementOrder records the operation's position within its measurement round.
+	MeasurementOrder int `json:"measurement_order,omitempty"`
+	// AAAliasOf identifies the reference arm reused for an explicit A/A comparison.
+	AAAliasOf string `json:"aa_alias_of,omitempty"`
+	// SQL contains the rendered SQL statement.
+	SQL string `json:"sql"`
+	// SQLFingerprint identifies normalized SQL without retaining the statement text.
+	SQLFingerprint string `json:"sql_fingerprint"`
+	// RowCount records the number of rows produced.
+	RowCount int64 `json:"row_count"`
+	// ObservedRows contains stable serialized observations used for correctness comparison.
+	ObservedRows []string `json:"observed_rows,omitempty"`
+	// Stats contains latency statistics for the enclosing result or reference.
+	Stats DurationStats `json:"stats"`
+	// PostgresPlan contains normalized PostgreSQL text-plan lines.
+	PostgresPlan []string `json:"postgres_plan,omitempty"`
+	// PostgresPlanJSON contains structured PostgreSQL EXPLAIN evidence.
+	PostgresPlanJSON json.RawMessage `json:"postgres_plan_json,omitempty"`
+	// PostgresMetrics contains normalized PostgreSQL plan resource metrics.
+	PostgresMetrics *PostgresPlanMetrics `json:"postgres_metrics,omitempty"`
 }
 
+// CompileSample breaks one Cypher compilation into parse, translate, and render stages.
 type CompileSample struct {
-	Iteration                  int           `json:"iteration"`
-	Parse                      time.Duration `json:"parse"`
-	Optimize                   time.Duration `json:"optimize"`
+	// Iteration identifies the measured iteration within its worker or round.
+	Iteration int `json:"iteration"`
+	// Parse records Cypher parse latency.
+	Parse time.Duration `json:"parse"`
+	// Optimize records query optimization latency.
+	Optimize time.Duration `json:"optimize"`
+	// TranslateIncludingOptimize records combined translation and optimization latency.
 	TranslateIncludingOptimize time.Duration `json:"translate_including_optimize"`
-	Render                     time.Duration `json:"render"`
-	Total                      time.Duration `json:"total"`
-	Allocations                uint64        `json:"allocations"`
-	AllocatedBytes             uint64        `json:"allocated_bytes"`
+	// Render records SQL rendering latency after translation.
+	Render time.Duration `json:"render"`
+	// Total records the total elapsed duration.
+	Total time.Duration `json:"total"`
+	// Allocations records allocation count while measuring the client-side stage.
+	Allocations uint64 `json:"allocations"`
+	// AllocatedBytes records bytes allocated while measuring the client-side stage.
+	AllocatedBytes uint64 `json:"allocated_bytes"`
 }
 
+// ClientWaterfall summarizes compile and raw-request samples at the client boundary.
 type ClientWaterfall struct {
-	IntervalsOverlap bool            `json:"intervals_overlap"`
-	Notes            string          `json:"notes"`
-	Samples          []CompileSample `json:"samples"`
+	// IntervalsOverlap warns that nested compilation stages cannot be summed as exclusive costs.
+	IntervalsOverlap bool `json:"intervals_overlap"`
+	// Notes contains human-readable caveats attached to the artifact or case.
+	Notes string `json:"notes"`
+	// Samples contains the individual measurements.
+	Samples []CompileSample `json:"samples"`
 }
 
+// BoundarySample breaks one raw PostgreSQL request into client-side latency stages.
 type BoundarySample struct {
-	Iteration      int           `json:"iteration"`
-	PoolWait       time.Duration `json:"pool_wait"`
-	Transaction    time.Duration `json:"transaction_setup"`
-	BindPrepare    time.Duration `json:"bind_prepare"`
-	FirstRow       time.Duration `json:"first_row"`
-	AllRowsDecode  time.Duration `json:"all_rows_decode"`
-	DrainClose     time.Duration `json:"drain_close"`
-	Total          time.Duration `json:"total"`
-	Rows           int64         `json:"rows"`
-	Allocations    uint64        `json:"allocations"`
-	AllocatedBytes uint64        `json:"allocated_bytes"`
+	// Iteration identifies the measured iteration within its worker or round.
+	Iteration int `json:"iteration"`
+	// PoolWait records latency spent acquiring a PostgreSQL connection from the pool.
+	PoolWait time.Duration `json:"pool_wait"`
+	// Transaction records latency spent beginning and configuring the transaction.
+	Transaction time.Duration `json:"transaction_setup"`
+	// BindPrepare records PostgreSQL bind and statement-prepare latency.
+	BindPrepare time.Duration `json:"bind_prepare"`
+	// FirstRow records latency until the first result row becomes available.
+	FirstRow time.Duration `json:"first_row"`
+	// AllRowsDecode records client time to decode the complete result set.
+	AllRowsDecode time.Duration `json:"all_rows_decode"`
+	// DrainClose records latency spent draining remaining rows and closing the iterator.
+	DrainClose time.Duration `json:"drain_close"`
+	// Total records the total elapsed duration.
+	Total time.Duration `json:"total"`
+	// Rows records the number of rows decoded during this boundary measurement.
+	Rows int64 `json:"rows"`
+	// Allocations records allocation count while measuring the client-side stage.
+	Allocations uint64 `json:"allocations"`
+	// AllocatedBytes records bytes allocated while measuring the client-side stage.
+	AllocatedBytes uint64 `json:"allocated_bytes"`
 }
 
+// PostgresBoundaryWaterfall summarizes PostgreSQL planning, execution, and client overhead samples.
 type PostgresBoundaryWaterfall struct {
-	Boundary         string           `json:"boundary"`
-	SQLFingerprint   string           `json:"sql_fingerprint"`
-	WarmupIterations int              `json:"warmup_iterations"`
-	MeasurementOrder int              `json:"measurement_order,omitempty"`
-	Samples          []BoundarySample `json:"samples"`
+	// Boundary identifies the measured execution boundary.
+	Boundary string `json:"boundary"`
+	// SQLFingerprint identifies normalized SQL without retaining the statement text.
+	SQLFingerprint string `json:"sql_fingerprint"`
+	// WarmupIterations records the untimed iterations run before measurement.
+	WarmupIterations int `json:"warmup_iterations"`
+	// MeasurementOrder records the operation's position within its measurement round.
+	MeasurementOrder int `json:"measurement_order,omitempty"`
+	// Samples contains the individual measurements.
+	Samples []BoundarySample `json:"samples"`
 }
 
+// PostgresPlanMetrics aggregates structural, cardinality, timing, and buffer evidence from a PostgreSQL plan.
 type PostgresPlanMetrics struct {
-	PlanningMS                *float64                 `json:"planning_ms,omitempty"`
-	ExecutionMS               *float64                 `json:"execution_ms,omitempty"`
-	Buffers                   Buffers                  `json:"buffers,omitempty"`
-	TempFiles                 int64                    `json:"temp_files,omitempty"`
-	TempBytes                 int64                    `json:"temp_bytes,omitempty"`
-	WALRecords                int64                    `json:"wal_records,omitempty"`
-	WALBytes                  int64                    `json:"wal_bytes,omitempty"`
-	RootRows                  int64                    `json:"root_rows,omitempty"`
-	RecursiveRows             int64                    `json:"recursive_rows,omitempty"`
-	RecursiveLoops            int64                    `json:"recursive_loops,omitempty"`
-	FrontierRows              int64                    `json:"frontier_rows,omitempty"`
-	WitnessRows               int64                    `json:"witness_rows,omitempty"`
-	MeetingRows               int64                    `json:"meeting_rows,omitempty"`
-	HydrationRows             int64                    `json:"hydration_rows,omitempty"`
-	ForwardEdgeProbes         int64                    `json:"forward_edge_probes,omitempty"`
-	ReverseEdgeProbes         int64                    `json:"reverse_edge_probes,omitempty"`
-	RootLookupLoops           int64                    `json:"root_lookup_loops,omitempty"`
-	BoundaryLookupLoops       int64                    `json:"boundary_lookup_loops,omitempty"`
-	HydrationLoops            int64                    `json:"hydration_loops,omitempty"`
-	EndpointProbeRows         int64                    `json:"endpoint_probe_rows,omitempty"`
-	ReverseStateProbeRows     int64                    `json:"reverse_state_probe_rows,omitempty"`
-	EndpointGuardOverflow     bool                     `json:"endpoint_guard_overflow,omitempty"`
-	StateGuardOverflow        bool                     `json:"state_guard_overflow,omitempty"`
-	ExpansionFallbackExecuted bool                     `json:"expansion_fallback_executed,omitempty"`
-	PlanNodes                 []PostgresPlanNodeMetric `json:"plan_nodes,omitempty"`
-	Provenance                map[string]string        `json:"provenance,omitempty"`
+	// PlanningMS records PostgreSQL planning time in milliseconds.
+	PlanningMS *float64 `json:"planning_ms,omitempty"`
+	// ExecutionMS records PostgreSQL execution time in milliseconds.
+	ExecutionMS *float64 `json:"execution_ms,omitempty"`
+	// Buffers contains shared, local, and temporary buffer activity attributed to the plan.
+	Buffers Buffers `json:"buffers,omitempty"`
+	// TempFiles records temporary files created by the backend session.
+	TempFiles int64 `json:"temp_files,omitempty"`
+	// TempBytes records temporary bytes written by the backend session.
+	TempBytes int64 `json:"temp_bytes,omitempty"`
+	// WALRecords records write-ahead-log records attributed to the plan node.
+	WALRecords int64 `json:"wal_records,omitempty"`
+	// WALBytes records write-ahead-log bytes attributed to the plan node.
+	WALBytes int64 `json:"wal_bytes,omitempty"`
+	// RootRows records rows emitted by root selection in the PostgreSQL plan.
+	RootRows int64 `json:"root_rows,omitempty"`
+	// RecursiveRows records rows emitted by recursive traversal state.
+	RecursiveRows int64 `json:"recursive_rows,omitempty"`
+	// RecursiveLoops records loops performed by recursive plan nodes.
+	RecursiveLoops int64 `json:"recursive_loops,omitempty"`
+	// FrontierRows records rows retained in the active traversal frontier.
+	FrontierRows int64 `json:"frontier_rows,omitempty"`
+	// WitnessRows records rows retained for shortest-path witness reconstruction.
+	WitnessRows int64 `json:"witness_rows,omitempty"`
+	// MeetingRows records bidirectional search rows where frontiers meet.
+	MeetingRows int64 `json:"meeting_rows,omitempty"`
+	// HydrationRows records rows processed while hydrating paths from ID trails.
+	HydrationRows int64 `json:"hydration_rows,omitempty"`
+	// ForwardEdgeProbes records relationship probes performed by forward search.
+	ForwardEdgeProbes int64 `json:"forward_edge_probes,omitempty"`
+	// ReverseEdgeProbes records relationship probes performed by reverse search.
+	ReverseEdgeProbes int64 `json:"reverse_edge_probes,omitempty"`
+	// RootLookupLoops records repeated plan loops used to locate traversal roots.
+	RootLookupLoops int64 `json:"root_lookup_loops,omitempty"`
+	// BoundaryLookupLoops records loops used to resolve traversal boundaries.
+	BoundaryLookupLoops int64 `json:"boundary_lookup_loops,omitempty"`
+	// HydrationLoops records loops performed while hydrating search results.
+	HydrationLoops int64 `json:"hydration_loops,omitempty"`
+	// EndpointProbeRows records rows examined by endpoint preflight probing.
+	EndpointProbeRows int64 `json:"endpoint_probe_rows,omitempty"`
+	// ReverseStateProbeRows records reverse-search state rows examined by probing.
+	ReverseStateProbeRows int64 `json:"reverse_state_probe_rows,omitempty"`
+	// EndpointGuardOverflow reports whether endpoint-seeded search exceeded its configured guard.
+	EndpointGuardOverflow bool `json:"endpoint_guard_overflow,omitempty"`
+	// StateGuardOverflow reports whether recursive state exceeded its configured guard.
+	StateGuardOverflow bool `json:"state_guard_overflow,omitempty"`
+	// ExpansionFallbackExecuted reports whether guarded expansion switched to its exact fallback executor.
+	ExpansionFallbackExecuted bool `json:"expansion_fallback_executed,omitempty"`
+	// PlanNodes lists normalized PostgreSQL plan-node metrics in traversal order.
+	PlanNodes []PostgresPlanNodeMetric `json:"plan_nodes,omitempty"`
+	// Provenance maps derived metric names to the plan evidence used to compute them.
+	Provenance map[string]string `json:"provenance,omitempty"`
 }
 
+// PostgresPlanNodeMetric captures one PostgreSQL plan node's identity, counters, and buffers.
 type PostgresPlanNodeMetric struct {
-	NodeType           string  `json:"node_type"`
-	ParentRelationship string  `json:"parent_relationship,omitempty"`
-	CTEName            string  `json:"cte_name,omitempty"`
-	RelationName       string  `json:"relation_name,omitempty"`
-	Alias              string  `json:"alias,omitempty"`
-	IndexName          string  `json:"index_name,omitempty"`
-	PlanRows           int64   `json:"plan_rows,omitempty"`
-	PlanWidth          int64   `json:"plan_width,omitempty"`
-	ActualRows         int64   `json:"actual_rows,omitempty"`
-	ActualLoops        int64   `json:"actual_loops,omitempty"`
-	ActualTotalMS      float64 `json:"actual_total_ms,omitempty"`
-	Buffers            Buffers `json:"buffers,omitempty"`
-	Provenance         string  `json:"provenance"`
+	// NodeType identifies the PostgreSQL plan node type.
+	NodeType string `json:"node_type"`
+	// ParentRelationship identifies the relationship by which this plan node is attached to its parent.
+	ParentRelationship string `json:"parent_relationship,omitempty"`
+	// CTEName names the recursive common-table expression referenced by the plan node.
+	CTEName string `json:"cte_name,omitempty"`
+	// RelationName identifies the PostgreSQL relation scanned by the plan node.
+	RelationName string `json:"relation_name,omitempty"`
+	// Alias contains the display alias assigned to the plan node.
+	Alias string `json:"alias,omitempty"`
+	// IndexName names the PostgreSQL index scanned by the plan node.
+	IndexName string `json:"index_name,omitempty"`
+	// PlanRows records the planner's estimated rows for the plan node.
+	PlanRows int64 `json:"plan_rows,omitempty"`
+	// PlanWidth records the planner's estimated row width in bytes.
+	PlanWidth int64 `json:"plan_width,omitempty"`
+	// ActualRows records rows actually emitted by the plan node.
+	ActualRows int64 `json:"actual_rows,omitempty"`
+	// ActualLoops records how many times the PostgreSQL plan node executed.
+	ActualLoops int64 `json:"actual_loops,omitempty"`
+	// ActualTotalMS records total observed time for the PostgreSQL plan node.
+	ActualTotalMS float64 `json:"actual_total_ms,omitempty"`
+	// Buffers contains shared, local, and temporary buffer activity attributed to the plan.
+	Buffers Buffers `json:"buffers,omitempty"`
+	// Provenance identifies the plan evidence from which this node metric was measured.
+	Provenance string `json:"provenance"`
 }
 
+// Buffers contains PostgreSQL buffer activity split by storage class and operation.
 type Buffers struct {
-	SharedHit     int64 `json:"shared_hit,omitempty"`
-	SharedRead    int64 `json:"shared_read,omitempty"`
+	// SharedHit records shared PostgreSQL buffer cache hits.
+	SharedHit int64 `json:"shared_hit,omitempty"`
+	// SharedRead records shared PostgreSQL buffers read by the plan.
+	SharedRead int64 `json:"shared_read,omitempty"`
+	// SharedDirtied records shared PostgreSQL buffers dirtied by the plan.
 	SharedDirtied int64 `json:"shared_dirtied,omitempty"`
+	// SharedWritten records shared PostgreSQL buffers written by the plan.
 	SharedWritten int64 `json:"shared_written,omitempty"`
-	LocalHit      int64 `json:"local_hit,omitempty"`
-	LocalRead     int64 `json:"local_read,omitempty"`
-	LocalDirtied  int64 `json:"local_dirtied,omitempty"`
-	LocalWritten  int64 `json:"local_written,omitempty"`
-	TempRead      int64 `json:"temp_read,omitempty"`
-	TempWritten   int64 `json:"temp_written,omitempty"`
+	// LocalHit records local PostgreSQL buffer cache hits.
+	LocalHit int64 `json:"local_hit,omitempty"`
+	// LocalRead records local PostgreSQL buffers read by the plan.
+	LocalRead int64 `json:"local_read,omitempty"`
+	// LocalDirtied records local PostgreSQL buffers dirtied by the plan.
+	LocalDirtied int64 `json:"local_dirtied,omitempty"`
+	// LocalWritten records local PostgreSQL buffers written by the plan.
+	LocalWritten int64 `json:"local_written,omitempty"`
+	// TempRead records temporary PostgreSQL buffers read by the plan.
+	TempRead int64 `json:"temp_read,omitempty"`
+	// TempWritten records temporary PostgreSQL buffers written by the plan.
+	TempWritten int64 `json:"temp_written,omitempty"`
 }
 
+// CaseResult records one workload execution with provenance, observations, plan evidence, and latency samples.
 type CaseResult struct {
-	Metadata            testutil.BaselineMetadata      `json:"metadata"`
-	Environment         *RunEnvironment                `json:"environment,omitempty"`
-	PostgresEnvironment *PostgresEnvironment           `json:"postgres_environment,omitempty"`
-	Fixture             *FixtureMetadata               `json:"fixture,omitempty"`
-	Source              string                         `json:"source"`
-	Dataset             string                         `json:"dataset"`
-	Name                string                         `json:"name"`
-	WorkloadSHA256      string                         `json:"workload_sha256"`
-	Category            string                         `json:"category"`
-	Shape               WorkloadShape                  `json:"shape"`
-	ExecutionMode       ExecutionMode                  `json:"execution_mode"`
-	Status              string                         `json:"status"`
-	Cypher              string                         `json:"cypher"`
-	Params              map[string]any                 `json:"params,omitempty"`
-	NodeParams          map[string]string              `json:"node_params,omitempty"`
-	NodeListParams      map[string][]string            `json:"node_list_params,omitempty"`
-	ExpectedRowCount    *int64                         `json:"expected_row_count,omitempty"`
-	ObservedRows        []string                       `json:"observed_rows,omitempty"`
-	RowCount            int64                          `json:"row_count,omitempty"`
-	MatchedCount        *int64                         `json:"matched_count,omitempty"`
-	AffectedCount       *int64                         `json:"affected_count,omitempty"`
-	PostState           []StateQueryResult             `json:"post_state,omitempty"`
-	Stats               DurationStats                  `json:"stats,omitempty"`
-	Concurrency         []ConcurrencyBlock             `json:"concurrency,omitempty"`
-	PostgresReferences  []PostgresReferenceResult      `json:"postgres_references,omitempty"`
-	ClientWaterfall     *ClientWaterfall               `json:"client_waterfall,omitempty"`
-	RawPGXWaterfall     *PostgresBoundaryWaterfall     `json:"raw_pgx_waterfall,omitempty"`
-	RawPGXRoundTrip     *PostgresBoundaryWaterfall     `json:"raw_pgx_round_trip,omitempty"`
-	SQL                 string                         `json:"sql,omitempty"`
-	SQLFingerprint      string                         `json:"sql_fingerprint,omitempty"`
-	PostgresPlan        []string                       `json:"postgres_plan,omitempty"`
-	PostgresPlanJSON    json.RawMessage                `json:"postgres_plan_json,omitempty"`
-	PostgresMetrics     *PostgresPlanMetrics           `json:"postgres_metrics,omitempty"`
-	Neo4jPlan           *Neo4jPlanNode                 `json:"neo4j_plan,omitempty"`
-	Neo4jOperators      []string                       `json:"neo4j_operators,omitempty"`
-	Optimization        *translate.OptimizationSummary `json:"optimization,omitempty"`
-	ParseCache          *pg.ParseCacheStats            `json:"parse_cache,omitempty"`
-	Baseline            *BaselineComparison            `json:"baseline,omitempty"`
-	FallbackReason      string                         `json:"fallback_reason,omitempty"`
-	ExistingGraph       *ExistingGraphRun              `json:"existing_graph,omitempty"`
-	Error               string                         `json:"error,omitempty"`
-	StableObservation   bool                           `json:"observation_captured,omitempty"`
+	// Metadata captures build and baseline metadata.
+	Metadata testutil.BaselineMetadata `json:"metadata"`
+	// Environment captures the environment in which the measurement ran.
+	Environment *RunEnvironment `json:"environment,omitempty"`
+	// PostgresEnvironment captures PostgreSQL settings required for comparability.
+	PostgresEnvironment *PostgresEnvironment `json:"postgres_environment,omitempty"`
+	// Fixture captures the fixture identity and cardinality contract.
+	Fixture *FixtureMetadata `json:"fixture,omitempty"`
+	// Source identifies the source corpus file.
+	Source string `json:"source"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// WorkloadSHA256 binds the result to the case declaration and execution mode.
+	WorkloadSHA256 string `json:"workload_sha256"`
+	// Category groups cases by workload category.
+	Category string `json:"category"`
+	// Shape describes the workload shape used for selection and comparison.
+	Shape WorkloadShape `json:"shape"`
+	// ExecutionMode identifies the backend execution mode that produced the case result.
+	ExecutionMode ExecutionMode `json:"execution_mode"`
+	// Status records the execution outcome.
+	Status string `json:"status"`
+	// Cypher contains the Cypher statement under test.
+	Cypher string `json:"cypher"`
+	// Params supplies literal query parameters.
+	Params map[string]any `json:"params,omitempty"`
+	// NodeParams maps query parameters to fixture node keys.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+	// NodeListParams maps query parameters to ordered fixture node-key lists.
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	// ExpectedRowCount sets the required result-row count when known.
+	ExpectedRowCount *int64 `json:"expected_row_count,omitempty"`
+	// ObservedRows contains stable serialized observations used for correctness comparison.
+	ObservedRows []string `json:"observed_rows,omitempty"`
+	// RowCount records the number of rows produced.
+	RowCount int64 `json:"row_count,omitempty"`
+	// MatchedCount records entities selected by the measured mutation.
+	MatchedCount *int64 `json:"matched_count,omitempty"`
+	// AffectedCount records entities actually changed by the measured mutation.
+	AffectedCount *int64 `json:"affected_count,omitempty"`
+	// PostState contains the observed results of post-write validation queries.
+	PostState []StateQueryResult `json:"post_state,omitempty"`
+	// Stats contains latency statistics for the enclosing result or reference.
+	Stats DurationStats `json:"stats,omitempty"`
+	// Concurrency contains opt-in worker-count measurements for this case.
+	Concurrency []ConcurrencyBlock `json:"concurrency,omitempty"`
+	// PostgresReferences contains independent PostgreSQL reference results for the case.
+	PostgresReferences []PostgresReferenceResult `json:"postgres_references,omitempty"`
+	// ClientWaterfall contains Cypher compilation and client-boundary timing samples.
+	ClientWaterfall *ClientWaterfall `json:"client_waterfall,omitempty"`
+	// RawPGXWaterfall contains raw PGX boundary timings used for PostgreSQL cost attribution.
+	RawPGXWaterfall *PostgresBoundaryWaterfall `json:"raw_pgx_waterfall,omitempty"`
+	// RawPGXRoundTrip records legacy aggregate raw-PGX round-trip latency.
+	RawPGXRoundTrip *PostgresBoundaryWaterfall `json:"raw_pgx_round_trip,omitempty"`
+	// SQL contains the rendered SQL statement.
+	SQL string `json:"sql,omitempty"`
+	// SQLFingerprint identifies normalized SQL without retaining the statement text.
+	SQLFingerprint string `json:"sql_fingerprint,omitempty"`
+	// PostgresPlan contains normalized PostgreSQL text-plan lines.
+	PostgresPlan []string `json:"postgres_plan,omitempty"`
+	// PostgresPlanJSON contains structured PostgreSQL EXPLAIN evidence.
+	PostgresPlanJSON json.RawMessage `json:"postgres_plan_json,omitempty"`
+	// PostgresMetrics contains normalized PostgreSQL plan resource metrics.
+	PostgresMetrics *PostgresPlanMetrics `json:"postgres_metrics,omitempty"`
+	// Neo4jPlan contains the normalized Neo4j operator tree.
+	Neo4jPlan *Neo4jPlanNode `json:"neo4j_plan,omitempty"`
+	// Neo4jOperators lists normalized Neo4j operators found in the captured plan.
+	Neo4jOperators []string `json:"neo4j_operators,omitempty"`
+	// Optimization captures translation optimization and lowering decisions.
+	Optimization *translate.OptimizationSummary `json:"optimization,omitempty"`
+	// ParseCache reports parse-cache hit and miss statistics for the case.
+	ParseCache *pg.ParseCacheStats `json:"parse_cache,omitempty"`
+	// Baseline contains the latency comparison with a matching baseline record.
+	Baseline *BaselineComparison `json:"baseline,omitempty"`
+	// FallbackReason explains why execution used a fallback architecture.
+	FallbackReason string `json:"fallback_reason,omitempty"`
+	// ExistingGraph selects read-only execution against a pre-existing graph.
+	ExistingGraph *ExistingGraphRun `json:"existing_graph,omitempty"`
+	// Error records the failure message when the operation did not succeed.
+	Error string `json:"error,omitempty"`
+	// StableObservation reports whether ObservedRows contains a backend-independent normalized result.
+	StableObservation bool `json:"observation_captured,omitempty"`
 }
 
+// StateQueryResult records a post-write validation query's row count and optional scalar value.
 type StateQueryResult struct {
-	Name      string `json:"name"`
-	RowCount  int64  `json:"row_count"`
+	// Name labels the post-write state assertion that produced this result.
+	Name string `json:"name"`
+	// RowCount records the number of rows produced.
+	RowCount int64 `json:"row_count"`
+	// ScalarInt contains the observed scalar value when the state query expects one.
 	ScalarInt *int64 `json:"scalar_int,omitempty"`
 }
 
+// BaselineComparison compares current median latency with a previously recorded baseline.
 type BaselineComparison struct {
+	// BaselineMedian records the median latency loaded from the comparison baseline.
 	BaselineMedian time.Duration `json:"baseline_median"`
-	CurrentMedian  time.Duration `json:"current_median"`
-	Change         time.Duration `json:"change"`
-	Ratio          float64       `json:"ratio"`
+	// CurrentMedian records the median latency measured by the current run.
+	CurrentMedian time.Duration `json:"current_median"`
+	// Change records current latency relative to the selected baseline.
+	Change time.Duration `json:"change"`
+	// Ratio reports the candidate-to-baseline latency ratio.
+	Ratio float64 `json:"ratio"`
 }
 
+// validateBackendObservations checks row counts and stable observations across successful backend results.
 func validateBackendObservations(records []CaseResult) error {
+	// observationKey identifies one dataset, case, backend, and round during observation validation.
 	type observationKey struct {
+		// dataset names the fixture shared by observations compared across backends.
 		dataset string
-		name    string
+		// name identifies the workload case compared across backends.
+		name string
 	}
 
 	postgres := map[observationKey][]string{}
@@ -298,6 +504,7 @@ func validateBackendObservations(records []CaseResult) error {
 	return nil
 }
 
+// newCaseResult initializes workload identity, expectations, observation policy, and successful status for one case.
 func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any) CaseResult {
 	return CaseResult{
 		Source:           testCase.Source,
@@ -319,12 +526,17 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 	}
 }
 
+// scaleCaseWorkloadIdentity hashes the logical workload fields that must match across artifacts.
 func scaleCaseWorkloadIdentity(testCase ScaleCase, mode ExecutionMode) string {
 	payload := struct {
-		Version int           `json:"version"`
-		Source  string        `json:"source"`
+		// Version identifies the serialized schema revision.
+		Version int `json:"version"`
+		// Source identifies the source corpus file.
+		Source string `json:"source"`
+		// Backend identifies the execution backend.
 		Backend ExecutionMode `json:"backend"`
-		Case    ScaleCase     `json:"case"`
+		// Case contains the complete workload declaration included in the identity digest.
+		Case ScaleCase `json:"case"`
 	}{
 		Version: 1,
 		Source:  testCase.Source,
@@ -339,23 +551,36 @@ func scaleCaseWorkloadIdentity(testCase ScaleCase, mode ExecutionMode) string {
 	return hex.EncodeToString(digest[:])
 }
 
+// attachFixtureMetadata adds fixture metadata to the owning artifact.
 func attachFixtureMetadata(record *CaseResult, fixture FixtureMetadata) {
 	if record == nil {
 		return
 	}
 	record.Fixture = &fixture
 	payload := struct {
-		Version                 int                                         `json:"version"`
-		LogicalWorkloadSHA256   string                                      `json:"logical_workload_sha256"`
-		Dataset                 string                                      `json:"dataset"`
-		Checksum                string                                      `json:"checksum"`
-		NodeCount               int                                         `json:"node_count"`
-		EdgeCount               int                                         `json:"edge_count"`
-		PhysicalNodeCount       int64                                       `json:"physical_node_count,omitempty"`
-		PhysicalEdgeCount       int64                                       `json:"physical_edge_count,omitempty"`
-		Configuration           string                                      `json:"configuration,omitempty"`
-		Shortest                *ShortestFixtureExpectations                `json:"shortest,omitempty"`
-		FixedSuffixExpansion    *FixedSuffixExpansionFixtureExpectations    `json:"fixed_suffix_expansion,omitempty"`
+		// Version identifies the serialized schema revision.
+		Version int `json:"version"`
+		// LogicalWorkloadSHA256 identifies query semantics independently of runtime measurements.
+		LogicalWorkloadSHA256 string `json:"logical_workload_sha256"`
+		// Dataset identifies the fixture dataset.
+		Dataset string `json:"dataset"`
+		// Checksum binds fixture identity to its canonical logical contents.
+		Checksum string `json:"checksum"`
+		// NodeCount records logical fixture nodes declared or loaded.
+		NodeCount int `json:"node_count"`
+		// EdgeCount records logical fixture relationships declared or loaded.
+		EdgeCount int `json:"edge_count"`
+		// PhysicalNodeCount records physical node rows present in the backend fixture.
+		PhysicalNodeCount int64 `json:"physical_node_count,omitempty"`
+		// PhysicalEdgeCount records physical relationship rows present in the backend fixture.
+		PhysicalEdgeCount int64 `json:"physical_edge_count,omitempty"`
+		// Configuration captures the generator parameters that define the fixture shape.
+		Configuration string `json:"configuration,omitempty"`
+		// Shortest contains expectations derived from a generated shortest-path fixture.
+		Shortest *ShortestFixtureExpectations `json:"shortest,omitempty"`
+		// FixedSuffixExpansion contains expectations derived from a fixed-suffix expansion fixture.
+		FixedSuffixExpansion *FixedSuffixExpansionFixtureExpectations `json:"fixed_suffix_expansion,omitempty"`
+		// EndpointSeededExpansion contains expectations derived from an endpoint-seeded expansion fixture.
 		EndpointSeededExpansion *EndpointSeededExpansionFixtureExpectations `json:"endpoint_seeded_expansion,omitempty"`
 	}{
 		Version:                 1,
@@ -380,6 +605,7 @@ func attachFixtureMetadata(record *CaseResult, fixture FixtureMetadata) {
 	record.WorkloadSHA256 = hex.EncodeToString(digest[:])
 }
 
+// computeDurationStats validates measured durations and derives median, tail, maximum, and labeled sample data.
 func computeDurationStats(durations []time.Duration) (DurationStats, error) {
 	if len(durations) == 0 {
 		return DurationStats{}, fmt.Errorf("duration stats require at least one duration")
@@ -415,6 +641,7 @@ func computeDurationStats(durations []time.Duration) (DurationStats, error) {
 	}, nil
 }
 
+// labelLatencySamples attaches backend, dataset, and case identity to every latency sample in stats.
 func labelLatencySamples(stats *DurationStats, mode ExecutionMode, testCase ScaleCase) {
 	for idx := range stats.Samples {
 		stats.Samples[idx].Backend = mode
@@ -423,12 +650,14 @@ func labelLatencySamples(stats *DurationStats, mode ExecutionMode, testCase Scal
 	}
 }
 
+// setSampleRound assigns a measurement round to every latency sample in stats.
 func setSampleRound(stats *DurationStats, round int) {
 	for idx := range stats.Samples {
 		stats.Samples[idx].Round = round
 	}
 }
 
+// setSampleRunMetadata copies run, arm, block, and round identity onto every latency sample in stats.
 func setSampleRunMetadata(stats *DurationStats, environment RunEnvironment) {
 	for idx := range stats.Samples {
 		stats.Samples[idx].Round = environment.Round
@@ -439,6 +668,7 @@ func setSampleRunMetadata(stats *DurationStats, environment RunEnvironment) {
 	}
 }
 
+// setCaseRunMetadata assigns case run metadata across the supplied records.
 func setCaseRunMetadata(record *CaseResult, metadata testutil.BaselineMetadata, environment RunEnvironment) {
 	if record == nil {
 		return
@@ -451,6 +681,7 @@ func setCaseRunMetadata(record *CaseResult, metadata testutil.BaselineMetadata, 
 	}
 }
 
+// applyRowExpectation marks a successful result as mismatched when its row count violates the declared expectation.
 func applyRowExpectation(result *CaseResult) {
 	if result.ExpectedRowCount != nil && result.RowCount != *result.ExpectedRowCount {
 		result.Status = StatusRowMismatch
@@ -458,6 +689,7 @@ func applyRowExpectation(result *CaseResult) {
 	}
 }
 
+// writeJSONLFile writes records to standard output or replaces the requested JSON Lines artifact.
 func writeJSONLFile(path string, records []CaseResult) (err error) {
 	if path == "" {
 		return writeJSONL(os.Stdout, records)
@@ -480,6 +712,7 @@ func writeJSONLFile(path string, records []CaseResult) (err error) {
 	return writeJSONL(output, records)
 }
 
+// appendJSONLFile validates compatibility with existing records before appending new JSON Lines entries.
 func appendJSONLFile(path string, records []CaseResult) (err error) {
 	if path == "" {
 		return errors.New("append JSONL path must not be empty")
@@ -508,6 +741,7 @@ func appendJSONLFile(path string, records []CaseResult) (err error) {
 	return writeJSONL(output, records)
 }
 
+// validateJSONLAppend ensures appended records share run identity and do not duplicate case rounds.
 func validateJSONLAppend(existing, appended []CaseResult) error {
 	if len(existing) == 0 || len(appended) == 0 {
 		return nil
@@ -523,11 +757,16 @@ func validateJSONLAppend(existing, appended []CaseResult) error {
 			right.RunUUID, right.Arm, right.BinarySHA256, right.DirtyDiffSHA256)
 	}
 
+	// recordKey identifies one run, dataset, case, mode, and round during append validation.
 	type recordKey struct {
+		// dataset names the fixture component of the append-deduplication key.
 		dataset string
-		name    string
-		mode    ExecutionMode
-		round   int
+		// name identifies the workload case within its dataset.
+		name string
+		// mode separates records for different execution backends within the same round.
+		mode ExecutionMode
+		// round identifies the measurement round used to balance execution order.
+		round int
 	}
 	seen := make(map[recordKey]struct{}, len(existing))
 	for _, record := range existing {
@@ -561,6 +800,7 @@ func validateJSONLAppend(existing, appended []CaseResult) error {
 	return nil
 }
 
+// writeJSONL encodes each case result as one JSON Lines record in input order.
 func writeJSONL(w io.Writer, records []CaseResult) error {
 	encoder := json.NewEncoder(w)
 	for _, record := range records {
@@ -572,6 +812,7 @@ func writeJSONL(w io.Writer, records []CaseResult) error {
 	return nil
 }
 
+// readJSONLFile reads JSON Lines file and propagates I/O or decoding failures.
 func readJSONLFile(path string) ([]CaseResult, error) {
 	input, err := os.Open(path)
 	if err != nil {
@@ -601,6 +842,7 @@ func readJSONLFile(path string) ([]CaseResult, error) {
 	return records, nil
 }
 
+// normalizeHistoricalReferences canonicalizes historical references for stable comparison.
 func normalizeHistoricalReferences(record *CaseResult) {
 	for idx := range record.PostgresReferences {
 		reference := &record.PostgresReferences[idx]
@@ -635,6 +877,7 @@ func normalizeHistoricalReferences(record *CaseResult) {
 	}
 }
 
+// ensureOutputDir creates the parent directory needed for an output file.
 func ensureOutputDir(path string) error {
 	dir := filepath.Dir(path)
 	if dir == "." || dir == "" {
@@ -644,6 +887,7 @@ func ensureOutputDir(path string) error {
 	return os.MkdirAll(dir, 0o755)
 }
 
+// applyBaseline attaches median latency deltas and ratios from matching baseline records.
 func applyBaseline(path string, records []CaseResult) error {
 	baseline, err := readJSONLFile(path)
 	if err != nil {
@@ -673,6 +917,7 @@ func applyBaseline(path string, records []CaseResult) error {
 	return nil
 }
 
+// resultKey joins result identity fields into the append-validation key.
 func resultKey(dataset, name string, mode ExecutionMode) string {
 	return dataset + "\x00" + name + "\x00" + string(mode)
 }

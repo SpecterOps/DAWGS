@@ -17,10 +17,14 @@ import (
 )
 
 const (
+	// queryCypherOutputFormatTable selects tabular rendering for fetched rows.
 	queryCypherOutputFormatTable = "table"
-	queryCypherOutputFormatJSON  = "json"
+
+	// queryCypherOutputFormatJSON selects JSON rendering for fetched rows.
+	queryCypherOutputFormatJSON = "json"
 )
 
+// parseCmd describes the command that parses Cypher and prints its AST.
 func parseCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{"<...query>"},
@@ -38,6 +42,8 @@ func parseCmd() CommandDesc {
 	}
 }
 
+// translateToPsqlCmd describes the command that translates Cypher into
+// formatted PostgreSQL SQL.
 func translateToPsqlCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("translate-psql", flag.ContinueOnError)
 
@@ -116,6 +122,7 @@ func translateToPsqlCmd() CommandDesc {
 	}
 }
 
+// explainAsPsqlCmd defines the interactive command that translates Cypher and asks PostgreSQL to explain the resulting SQL.
 func explainAsPsqlCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{"<conn>", "<...query>"},
@@ -200,6 +207,8 @@ func explainAsPsqlCmd() CommandDesc {
 	}
 }
 
+// defaultGraphID returns a connection's configured default graph or the
+// translator fallback when no PostgreSQL default is available.
 func defaultGraphID(ctx *CommandContext, connName string) int32 {
 	if connName == "" {
 		return translate.DefaultGraphID
@@ -222,6 +231,8 @@ func defaultGraphID(ctx *CommandContext, connName string) int32 {
 	return translate.DefaultGraphID
 }
 
+// queryCypherCmd describes the command that executes Cypher and renders fetched
+// rows as a table or JSON.
 func queryCypherCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("query-cypher", flag.ContinueOnError)
 

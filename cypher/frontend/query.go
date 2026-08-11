@@ -706,6 +706,7 @@ func (s *PropertyExpressionVisitor) EnterOC_PropertyKeyName(ctx *parser.OC_Prope
 	s.ctx.Enter(&SymbolicNameOrReservedWordVisitor{})
 }
 
+// ExitOC_PropertyKeyName assigns the parsed key to the property expression under construction.
 func (s *PropertyExpressionVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
 	s.PropertyLookup.SetSymbol(extractPropertyKeyName(s.ctx, ctx))
 }

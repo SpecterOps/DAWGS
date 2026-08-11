@@ -9,13 +9,19 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
 )
 
+// endpointSeededIdentifiers names the seed, reverse-state, admitted-state, and fallback CTEs for one rewrite.
 type endpointSeededIdentifiers struct {
+	// endpoints names the materialized terminal-endpoint seed relation.
 	endpoints pgsql.Identifier
-	reverse   pgsql.Identifier
-	states    pgsql.Identifier
+	// reverse names the recursive reverse-search relation.
+	reverse pgsql.Identifier
+	// states names the deduplicated reverse states admitted for candidate matching.
+	states pgsql.Identifier
+	// incumbent names the original forward plan retained as an overflow fallback.
 	incumbent pgsql.Identifier
 }
 
+// newEndpointSeededIdentifiers derives collision-resistant CTE names from the incumbent final frame.
 func newEndpointSeededIdentifiers(finalFrame pgsql.Identifier) endpointSeededIdentifiers {
 	prefix := string(finalFrame) + "_endpoint_seeded_"
 	return endpointSeededIdentifiers{
@@ -26,6 +32,7 @@ func newEndpointSeededIdentifiers(finalFrame pgsql.Identifier) endpointSeededIde
 	}
 }
 
+// selectedEndpointSeededDecision returns the first traversal decision that selected endpoint-seeded reverse search.
 func selectedEndpointSeededDecision(part *PatternPart, decisions map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision) (optimize.ExpansionSearchStrategyDecision, bool) {
 	for _, step := range part.TraversalSteps {
 		if step == nil || !step.HasSourceTarget {
@@ -38,10 +45,12 @@ func selectedEndpointSeededDecision(part *PatternPart, decisions map[optimize.Tr
 	return optimize.ExpansionSearchStrategyDecision{}, false
 }
 
+// rewriteTraversalPatternAsEndpointSeededReverse replaces a qualified two-step incumbent chain with guarded reverse search and fallback.
 func (s *Translator) rewriteTraversalPatternAsEndpointSeededReverse(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
 	if decision.PrefixLength != 1 || decision.Target.StepIndex != 1 || len(part.TraversalSteps) != 2 {
 		return fmt.Errorf("endpoint-seeded reverse target requires exactly one fixed prefix step and one terminal expansion")
 	}
+
 	prefixStep := part.TraversalSteps[0]
 	expansionStep := part.TraversalSteps[1]
 	if prefixStep == nil || prefixStep.Edge == nil || prefixStep.Frame == nil || expansionStep == nil || expansionStep.Expansion == nil || expansionStep.Frame == nil || expansionStep.RightNode == nil || expansionStep.LeftNode == nil || expansionStep.Edge == nil {
@@ -52,6 +61,7 @@ func (s *Translator) rewriteTraversalPatternAsEndpointSeededReverse(part *Patter
 	if firstCTE < 0 || firstCTE >= len(ctes) {
 		return fmt.Errorf("endpoint-seeded reverse target did not emit an incumbent frame chain")
 	}
+
 	incumbentFinal := ctes[len(ctes)-1]
 	if incumbentFinal.Alias.Name != expansionStep.Frame.Binding.Identifier {
 		return fmt.Errorf("endpoint-seeded reverse final frame mismatch: expected %s but found %s", expansionStep.Frame.Binding.Identifier, incumbentFinal.Alias.Name)
@@ -60,6 +70,7 @@ func (s *Translator) rewriteTraversalPatternAsEndpointSeededReverse(part *Patter
 	if !ok {
 		return fmt.Errorf("endpoint-seeded reverse final frame must be a select")
 	}
+
 	prefixEdgeIDs := pgsql.ArrayLiteral{
 		Values:   []pgsql.Expression{pgsql.CompoundIdentifier{prefixStep.Frame.Binding.Identifier, prefixStep.Edge.Identifier}},
 		CastType: pgsql.Int8Array,
@@ -77,6 +88,7 @@ func (s *Translator) rewriteTraversalPatternAsEndpointSeededReverse(part *Patter
 	if err != nil {
 		return err
 	}
+
 	s.query.CurrentPart().Model.CommonTableExpressions.Expressions = append(ctes[:len(ctes)-1], pgsql.CommonTableExpression{
 		Alias: incumbentFinal.Alias,
 		Query: query,
@@ -85,6 +97,7 @@ func (s *Translator) rewriteTraversalPatternAsEndpointSeededReverse(part *Patter
 	return nil
 }
 
+// buildGuardedEndpointSeededQuery unions bounded endpoint-seeded candidates with the incumbent overflow fallback.
 func (s *Translator) buildGuardedEndpointSeededQuery(
 	decision optimize.ExpansionSearchStrategyDecision,
 	prefixStep *TraversalStep,
@@ -97,10 +110,12 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 	if err != nil {
 		return pgsql.Query{}, err
 	}
+
 	reverseCTE, err := buildEndpointReverseCTE(decision, expansionStep, ids)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
+
 	statesCTE := buildEndpointStateProbeCTE(decision, ids)
 	incumbentCTE := pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.incumbent},
@@ -112,6 +127,7 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 	if err != nil {
 		return pgsql.Query{}, err
 	}
+
 	prefixFrame := prefixStep.Frame.Binding.Identifier
 	endpointOverflow := endpointSeededOverflow(ids.endpoints, decision.EndpointLimit)
 	stateOverflow := endpointSeededOverflow(ids.states, decision.StateLimit)
@@ -153,6 +169,7 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 		}},
 		Where: candidateWhere,
 	}
+
 	fallback := pgsql.Select{
 		Projection: fallbackProjection,
 		From:       []pgsql.FromClause{tableFrom(ids.incumbent)},
@@ -168,6 +185,7 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 	}, nil
 }
 
+// buildEndpointSeedCTE materializes locally constrained terminal IDs up to the endpoint guard limit.
 func buildEndpointSeedCTE(decision optimize.ExpansionSearchStrategyDecision, expansionStep *TraversalStep, ids endpointSeededIdentifiers) (pgsql.CommonTableExpression, error) {
 	local, external := partitionConstraintByLocality(expansionStep.Expansion.TerminalNodeConstraints, pgsql.AsIdentifierSet(expansionStep.RightNode.Identifier))
 	if external != nil {
@@ -190,6 +208,7 @@ func buildEndpointSeedCTE(decision optimize.ExpansionSearchStrategyDecision, exp
 	}, nil
 }
 
+// buildEndpointReverseCTE builds recursive reverse traversal from terminal seeds while preserving edge uniqueness.
 func buildEndpointReverseCTE(decision optimize.ExpansionSearchStrategyDecision, expansionStep *TraversalStep, ids endpointSeededIdentifiers) (pgsql.CommonTableExpression, error) {
 	localEdgeConstraint, external := partitionConstraintByLocality(expansionStep.Expansion.EdgeConstraints, pgsql.AsIdentifierSet(expansionStep.Edge.Identifier))
 	if external != nil {
@@ -235,6 +254,7 @@ func buildEndpointReverseCTE(decision optimize.ExpansionSearchStrategyDecision, 
 	}, nil
 }
 
+// buildEndpointStateProbeCTE materializes at most the guarded number of reverse states for candidate matching.
 func buildEndpointStateProbeCTE(decision optimize.ExpansionSearchStrategyDecision, ids endpointSeededIdentifiers) pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.states},
@@ -254,6 +274,7 @@ func buildEndpointStateProbeCTE(decision optimize.ExpansionSearchStrategyDecisio
 	}
 }
 
+// endpointSeededOverflow returns an EXISTS expression that detects rows beyond the admitted limit.
 func endpointSeededOverflow(source pgsql.Identifier, limit int64) pgsql.ExistsExpression {
 	return pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{
 		Body:   pgsql.Select{Projection: []pgsql.SelectItem{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: []pgsql.FromClause{tableFrom(source)}},
@@ -262,6 +283,7 @@ func endpointSeededOverflow(source pgsql.Identifier, limit int64) pgsql.ExistsEx
 	}}}
 }
 
+// endpointSeededProjections aligns reverse-search results and incumbent rows to the original projection shape.
 func endpointSeededProjections(prefixStep, expansionStep *TraversalStep, ids endpointSeededIdentifiers, incumbent pgsql.Projection) (pgsql.Projection, pgsql.Projection, error) {
 	prefixFrame := prefixStep.Frame.Binding.Identifier
 	candidate := make(pgsql.Projection, 0, len(incumbent))

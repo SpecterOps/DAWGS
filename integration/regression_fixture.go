@@ -22,6 +22,8 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
+// defaultRegressionFanout is the relationship fanout used when a regression
+// fixture does not request an explicit size.
 const defaultRegressionFanout = 32
 
 // FixtureNames returns deterministic fixture identifiers without committing

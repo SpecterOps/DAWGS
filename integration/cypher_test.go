@@ -37,33 +37,59 @@ import (
 
 // caseFile represents one JSON test case file.
 type caseFile struct {
-	Dataset string     `json:"dataset"`
-	Cases   []testCase `json:"cases"`
+	// Dataset selects the fixture dataset loaded before executing Cases.
+	Dataset string `json:"dataset"`
+
+	// Cases contains the queries and assertions decoded from this file.
+	Cases []testCase `json:"cases"`
 }
 
 // testCase is a single test: a Cypher query and an assertion on its result.
 // Cases with a "fixture" field run in a write transaction that rolls back,
 // so the inline data doesn't persist.
 type testCase struct {
-	Name           string              `json:"name"`
-	Cypher         string              `json:"cypher"`
-	Params         testutil.Params     `json:"params,omitempty"`
-	NodeParams     map[string]string   `json:"node_params,omitempty"`
+	// Name identifies the case in test output.
+	Name string `json:"name"`
+
+	// Cypher is the statement executed by the case.
+	Cypher string `json:"cypher"`
+
+	// Params contains literal and generated query parameters.
+	Params testutil.Params `json:"params,omitempty"`
+
+	// NodeParams maps parameter names to fixture node identifiers.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+
+	// NodeListParams maps parameter names to lists of fixture node identifiers.
 	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
-	Assert         json.RawMessage     `json:"assert"`
-	PostAssertions []stateAssertion    `json:"post_assertions,omitempty"`
-	Fixture        *opengraph.Graph    `json:"fixture,omitempty"`
+
+	// Assert encodes the expected primary result assertion.
+	Assert json.RawMessage `json:"assert"`
+
+	// PostAssertions contains state checks executed after the primary result drains.
+	PostAssertions []stateAssertion `json:"post_assertions,omitempty"`
+
+	// Fixture optionally supplies inline graph data loaded in a rollback transaction.
+	Fixture *opengraph.Graph `json:"fixture,omitempty"`
 }
 
 // stateAssertion runs after the primary query has been fully drained. It is
 // executed in the same transaction and against the same fixture ID map.
 type stateAssertion struct {
-	Name   string          `json:"name,omitempty"`
-	Cypher string          `json:"cypher"`
+	// Name optionally identifies the assertion in diagnostics.
+	Name string `json:"name,omitempty"`
+
+	// Cypher is the state-inspection query executed after the primary query.
+	Cypher string `json:"cypher"`
+
+	// Params contains parameters for the state-inspection query.
 	Params testutil.Params `json:"params,omitempty"`
+
+	// Assert encodes the expected state-inspection result.
 	Assert json.RawMessage `json:"assert"`
 }
 
+// TestCypher executes every fixture-backed case, grouping cases by dataset so each group shares one loaded graph.
 func TestCypher(t *testing.T) {
 	files, err := filepath.Glob("testdata/cases/*.json")
 	if err != nil {
@@ -73,10 +99,13 @@ func TestCypher(t *testing.T) {
 		t.Fatal("no case files found in testdata/cases/")
 	}
 
-	// Parse all case files and group by dataset.
+	// group collects case files that share one fixture dataset.
 	type group struct {
+		// dataset names the fixture dataset shared by files.
 		dataset string
-		files   []caseFile
+
+		// files contains the parsed cases in the dataset group.
+		files []caseFile
 	}
 	var (
 		groups       = map[string]*group{}
@@ -318,7 +347,10 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 	t.Helper()
 
 	queryErrorObserved := false
-	session := &Session{DB: db, Ctx: ctx}
+	session := &Session{
+		DB:  db,
+		Ctx: ctx,
+	}
 	err := session.WithRollbackFixture(t, tc.Fixture, true, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 		params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, idMap)
 		result := tx.Query(tc.Cypher, params)
@@ -341,6 +373,8 @@ func runWithFixture(t *testing.T, ctx context.Context, db graph.Database, tc tes
 	}
 }
 
+// resolveFixtureParams copies literal parameters and replaces fixture node
+// references with their backend database IDs.
 func resolveFixtureParams(
 	t *testing.T,
 	params map[string]any,
@@ -381,6 +415,8 @@ func resolveFixtureParams(
 	return resolved
 }
 
+// runStateAssertions executes and checks each postcondition query in the
+// fixture's transaction.
 func runStateAssertions(t *testing.T, tx graph.Transaction, idMap opengraph.IDMap, assertions []stateAssertion) error {
 	t.Helper()
 
@@ -408,13 +444,19 @@ func runStateAssertions(t *testing.T, tx graph.Transaction, idMap opengraph.IDMa
 
 // --- Assertion implementations ---
 
+// caseAssertion selects either a normalized result check or an expected query-error check.
 type caseAssertion struct {
-	check            resultAssertion
+	// check validates a successfully drained result.
+	check resultAssertion
+
+	// expectQueryError selects the error path instead of invoking check.
 	expectQueryError bool
 }
 
+// resultAssertion validates a normalized query result using fixture-aware identity mapping.
 type resultAssertion func(*testing.T, queryResult, assertionContext)
 
+// checkResult dispatches to the expected error path or the configured successful-result assertion.
 func (s caseAssertion) checkResult(t *testing.T, result graph.Result, ctx assertionContext) {
 	t.Helper()
 
@@ -430,10 +472,13 @@ func (s caseAssertion) checkResult(t *testing.T, result graph.Result, ctx assert
 	s.check(t, collectResult(t, result), ctx)
 }
 
+// assertionContext translates backend database IDs back to stable fixture identifiers.
 type assertionContext struct {
+	// fixtureIDByID maps database node IDs to their source fixture IDs.
 	fixtureIDByID map[graph.ID]string
 }
 
+// newAssertionContext reverses a fixture ID map for result assertions.
 func newAssertionContext(idMap opengraph.IDMap) assertionContext {
 	ctx := assertionContext{
 		fixtureIDByID: make(map[graph.ID]string, len(idMap)),
@@ -446,6 +491,7 @@ func newAssertionContext(idMap opengraph.IDMap) assertionContext {
 	return ctx
 }
 
+// fixtureID returns the stable fixture identifier for dbID and fails the current test if it is unknown.
 func (s assertionContext) fixtureID(t *testing.T, dbID graph.ID) string {
 	t.Helper()
 
@@ -457,16 +503,26 @@ func (s assertionContext) fixtureID(t *testing.T, dbID graph.ID) string {
 	return ""
 }
 
+// resultRow is an owned snapshot of one backend result row and its column names.
 type resultRow struct {
-	keys   []string
+	// keys contains the row's projected column names.
+	keys []string
+
+	// values contains an owned copy of the row's projected values.
 	values []any
 }
 
+// queryResult contains drained rows and the backend mapper needed to decode graph values.
 type queryResult struct {
-	rows   []resultRow
+	// rows contains every drained row in result order.
+	rows []resultRow
+
+	// mapper converts backend-specific values to graph-native representations.
 	mapper graph.ValueMapper
 }
 
+// collectResult drains a backend result into owned rows and retains its value
+// mapper for graph-value assertions.
 func collectResult(t *testing.T, result graph.Result) queryResult {
 	t.Helper()
 
@@ -488,6 +544,7 @@ func collectResult(t *testing.T, result graph.Result) queryResult {
 	return collected
 }
 
+// assertQueryError drains result and requires the backend to report an execution error.
 func assertQueryError(t *testing.T, result graph.Result) {
 	t.Helper()
 
@@ -499,6 +556,7 @@ func assertQueryError(t *testing.T, result graph.Result) {
 	}
 }
 
+// decodeAssertionValue decodes assertion JSON into T and fails the current test with the assertion key on error.
 func decodeAssertionValue[T any](t *testing.T, key string, raw json.RawMessage) T {
 	t.Helper()
 
@@ -510,6 +568,7 @@ func decodeAssertionValue[T any](t *testing.T, key string, raw json.RawMessage) 
 	return value
 }
 
+// assertNonEmpty requires at least one result row.
 func assertNonEmpty(t *testing.T, result queryResult, _ assertionContext) {
 	t.Helper()
 	if len(result.rows) == 0 {
@@ -517,6 +576,7 @@ func assertNonEmpty(t *testing.T, result queryResult, _ assertionContext) {
 	}
 }
 
+// assertEmpty requires a result set with no rows.
 func assertEmpty(t *testing.T, result queryResult, _ assertionContext) {
 	t.Helper()
 	if len(result.rows) > 0 {
@@ -524,10 +584,12 @@ func assertEmpty(t *testing.T, result queryResult, _ assertionContext) {
 	}
 }
 
+// assertNoError accepts any successfully collected result without imposing a row-shape assertion.
 func assertNoError(t *testing.T, _ queryResult, _ assertionContext) {
 	t.Helper()
 }
 
+// assertKeys requires every result row to expose exactly the expected projection keys in order.
 func assertKeys(expected []string) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -545,6 +607,7 @@ func assertKeys(expected []string) resultAssertion {
 	}
 }
 
+// assertRowCount requires exactly n result rows.
 func assertRowCount(n int) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -554,6 +617,7 @@ func assertRowCount(n int) resultAssertion {
 	}
 }
 
+// assertAtLeastInt64 requires the first scalar result to be an integer no smaller than min.
 func assertAtLeastInt64(min int64) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -571,6 +635,7 @@ func assertAtLeastInt64(min int64) resultAssertion {
 	}
 }
 
+// assertExactInt64 requires one row whose first scalar is exactly expected.
 func assertExactInt64(expected int64) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -588,6 +653,7 @@ func assertExactInt64(expected int64) resultAssertion {
 	}
 }
 
+// assertScalarValues compares each row's first scalar with expected, optionally preserving row order.
 func assertScalarValues(expected []any, ordered bool) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -616,6 +682,7 @@ func assertScalarValues(expected []any, ordered bool) resultAssertion {
 	}
 }
 
+// assertRowValues compares complete scalar rows with expected, optionally preserving row order.
 func assertRowValues(expected [][]any, ordered bool) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -640,6 +707,8 @@ func assertRowValues(expected [][]any, ordered bool) resultAssertion {
 	}
 }
 
+// firstScalarValue returns the first projected value and fails for an empty
+// result or row.
 func firstScalarValue(t *testing.T, result queryResult) any {
 	t.Helper()
 
@@ -654,6 +723,7 @@ func firstScalarValue(t *testing.T, result queryResult) any {
 	return result.rows[0].values[0]
 }
 
+// asInt64 converts supported integer representations to int64 without accepting non-integral values.
 func asInt64(value any) (int64, bool) {
 	switch typedValue := value.(type) {
 	case int:
@@ -693,6 +763,7 @@ func asInt64(value any) (int64, bool) {
 	return 0, false
 }
 
+// rowScalarSignature joins deterministic scalar signatures for one projected row.
 func rowScalarSignature(values []any) string {
 	parts := make([]string, len(values))
 	for idx, value := range values {
@@ -707,6 +778,8 @@ func rowScalarSignature(values []any) string {
 	return string(encoded)
 }
 
+// scalarSignature canonicalizes nil, numeric, string, boolean, and JSON-backed
+// values for backend-independent comparisons.
 func scalarSignature(value any) string {
 	if value == nil {
 		return "null:"
@@ -734,6 +807,8 @@ func scalarSignature(value any) string {
 	}
 }
 
+// jsonNumberSignature recognizes a JSON number and returns its canonical
+// numeric signature.
 func jsonNumberSignature(encoded []byte) (string, bool) {
 	decoder := json.NewDecoder(strings.NewReader(string(encoded)))
 	decoder.UseNumber()
@@ -756,6 +831,7 @@ func jsonNumberSignature(encoded []byte) (string, bool) {
 	return fmt.Sprintf("number:%g", value), true
 }
 
+// assertContainsNodeWithProp requires any returned node to contain key with the expected string value.
 func assertContainsNodeWithProp(key, expected string) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -773,6 +849,7 @@ func assertContainsNodeWithProp(key, expected string) resultAssertion {
 	}
 }
 
+// assertContainsNodeWithProps requires any returned node to contain the expected property subset.
 func assertContainsNodeWithProps(expected map[string]any) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -799,19 +876,34 @@ func assertContainsNodeWithProps(expected map[string]any) resultAssertion {
 	}
 }
 
+// edgeExpectation describes the stable identity, kind, and optional properties required of a relationship result.
 type edgeExpectation struct {
-	Start string         `json:"start,omitempty"`
-	End   string         `json:"end,omitempty"`
-	Kind  string         `json:"kind,omitempty"`
+	// Start is the expected fixture ID of the relationship's start node.
+	Start string `json:"start,omitempty"`
+
+	// End is the expected fixture ID of the relationship's end node.
+	End string `json:"end,omitempty"`
+
+	// Kind is the expected relationship kind.
+	Kind string `json:"kind,omitempty"`
+
+	// Props contains the expected relationship property subset.
 	Props map[string]any `json:"props,omitempty"`
 }
 
+// nodeExpectation describes the stable identity, kinds, and optional properties required of a node result.
 type nodeExpectation struct {
-	ID    string         `json:"id"`
-	Kinds []string       `json:"kinds,omitempty"`
+	// ID is the expected fixture node identifier.
+	ID string `json:"id"`
+
+	// Kinds contains the expected node kinds independent of order.
+	Kinds []string `json:"kinds,omitempty"`
+
+	// Props contains the expected node property subset.
 	Props map[string]any `json:"props,omitempty"`
 }
 
+// assertContainsEdge requires any returned relationship to match expected endpoints, kind, and properties.
 func assertContainsEdge(expected edgeExpectation) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -826,6 +918,7 @@ func assertContainsEdge(expected edgeExpectation) resultAssertion {
 	}
 }
 
+// assertNodeIDs compares collected fixture node IDs as a multiset, optionally deduplicating them first.
 func assertNodeIDs(expected []string, unique bool) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -835,6 +928,7 @@ func assertNodeIDs(expected []string, unique bool) resultAssertion {
 	}
 }
 
+// assertNodeRecords compares returned nodes with expected fixture IDs, kinds, and property subsets independent of order.
 func assertNodeRecords(expected []nodeExpectation) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -858,6 +952,7 @@ func assertNodeRecords(expected []nodeExpectation) resultAssertion {
 	}
 }
 
+// assertRelationshipRecords compares returned relationships with expected records, optionally including properties.
 func assertRelationshipRecords(expected []edgeExpectation, includeProperties bool) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -877,6 +972,7 @@ func assertRelationshipRecords(expected []edgeExpectation, includeProperties boo
 	}
 }
 
+// assertPathRelationshipRecords compares the ordered relationship record sequence in each returned path.
 func assertPathRelationshipRecords(expected [][]edgeExpectation) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -899,6 +995,7 @@ func assertPathRelationshipRecords(expected [][]edgeExpectation) resultAssertion
 	}
 }
 
+// assertOrderedNodeIDs compares fixture node IDs in result-row order.
 func assertOrderedNodeIDs(expected []string) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -926,6 +1023,7 @@ func assertOrderedNodeIDs(expected []string) resultAssertion {
 	}
 }
 
+// assertNodeListIDs compares each returned node-list projection by its ordered fixture IDs.
 func assertNodeListIDs(expected [][]string) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -949,6 +1047,8 @@ func assertNodeListIDs(expected [][]string) resultAssertion {
 	}
 }
 
+// collectNodeIDs maps every returned node to a fixture ID, optionally removing
+// duplicates while preserving first occurrence order.
 func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, unique bool) []string {
 	t.Helper()
 
@@ -977,6 +1077,7 @@ func collectNodeIDs(t *testing.T, result queryResult, ctx assertionContext, uniq
 	return ids
 }
 
+// nodeListIDSignature renders a node slice as an ordered fixture-ID sequence.
 func nodeListIDSignature(t *testing.T, nodes []*graph.Node, ctx assertionContext) string {
 	t.Helper()
 
@@ -992,6 +1093,7 @@ func nodeListIDSignature(t *testing.T, nodes []*graph.Node, ctx assertionContext
 	return strings.Join(nodeIDs, "->")
 }
 
+// assertPathNodeIDs compares each returned path by its ordered fixture node IDs.
 func assertPathNodeIDs(expected [][]string) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -1015,6 +1117,7 @@ func assertPathNodeIDs(expected [][]string) resultAssertion {
 	}
 }
 
+// assertPathLengths compares the relationship count of every returned path.
 func assertPathLengths(expected []int) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -1033,6 +1136,7 @@ func assertPathLengths(expected []int) resultAssertion {
 	}
 }
 
+// assertPathEdgeKinds compares each returned path by its ordered relationship kinds.
 func assertPathEdgeKinds(expected [][]string) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -1051,6 +1155,7 @@ func assertPathEdgeKinds(expected [][]string) resultAssertion {
 	}
 }
 
+// assertRelationshipListKinds compares each relationship-list projection by ordered kind names.
 func assertRelationshipListKinds(expected [][]string) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
@@ -1080,6 +1185,7 @@ func assertRelationshipListKinds(expected [][]string) resultAssertion {
 	}
 }
 
+// pathNodeIDSignature renders a path as an ordered fixture-node-ID sequence.
 func pathNodeIDSignature(t *testing.T, path graph.Path, ctx assertionContext) string {
 	t.Helper()
 
@@ -1095,6 +1201,7 @@ func pathNodeIDSignature(t *testing.T, path graph.Path, ctx assertionContext) st
 	return strings.Join(nodeIDs, "->")
 }
 
+// pathEdgeKindSignature renders a path as an ordered relationship-kind sequence.
 func pathEdgeKindSignature(t *testing.T, path graph.Path) string {
 	t.Helper()
 
@@ -1114,6 +1221,7 @@ func pathEdgeKindSignature(t *testing.T, path graph.Path) string {
 	return strings.Join(edgeKinds, "->")
 }
 
+// relationshipListKindSignature renders a relationship-pointer slice as an ordered kind sequence.
 func relationshipListKindSignature(t *testing.T, relationships []*graph.Relationship) string {
 	t.Helper()
 
@@ -1133,6 +1241,7 @@ func relationshipListKindSignature(t *testing.T, relationships []*graph.Relation
 	return strings.Join(edgeKinds, "->")
 }
 
+// relationshipValueListKindSignature renders a relationship-value slice as an ordered kind sequence.
 func relationshipValueListKindSignature(t *testing.T, relationships []graph.Relationship) string {
 	t.Helper()
 
@@ -1148,6 +1257,7 @@ func relationshipValueListKindSignature(t *testing.T, relationships []graph.Rela
 	return strings.Join(edgeKinds, "->")
 }
 
+// collectPaths maps every path-valued result cell into a graph path.
 func collectPaths(t *testing.T, result queryResult) []graph.Path {
 	t.Helper()
 
@@ -1164,6 +1274,8 @@ func collectPaths(t *testing.T, result queryResult) []graph.Path {
 	return paths
 }
 
+// collectRelationships maps standalone relationships and relationships nested
+// in returned paths into one slice.
 func collectRelationships(t *testing.T, result queryResult) []graph.Relationship {
 	t.Helper()
 
@@ -1189,6 +1301,7 @@ func collectRelationships(t *testing.T, result queryResult) []graph.Relationship
 	return relationships
 }
 
+// nodeRecordSignature renders a returned node into a stable fixture ID, sorted kinds, and property signature.
 func nodeRecordSignature(t *testing.T, node graph.Node, ctx assertionContext) string {
 	t.Helper()
 
@@ -1202,6 +1315,7 @@ func nodeRecordSignature(t *testing.T, node graph.Node, ctx assertionContext) st
 	}, "\x00")
 }
 
+// expectedNodeRecordSignature renders a node expectation in the same canonical form as a returned node.
 func expectedNodeRecordSignature(node nodeExpectation) string {
 	kinds := append([]string(nil), node.Kinds...)
 	sort.Strings(kinds)
@@ -1213,6 +1327,7 @@ func expectedNodeRecordSignature(node nodeExpectation) string {
 	}, "\x00")
 }
 
+// relationshipRecordSignature renders a returned relationship into canonical fixture endpoints, kind, and optional properties.
 func relationshipRecordSignature(t *testing.T, relationship graph.Relationship, ctx assertionContext, includeProperties bool) string {
 	t.Helper()
 
@@ -1233,6 +1348,7 @@ func relationshipRecordSignature(t *testing.T, relationship graph.Relationship, 
 	return strings.Join(parts, "\x00")
 }
 
+// pathRelationshipRecordSignature renders a path's ordered relationships into one canonical comparison value.
 func pathRelationshipRecordSignature(t *testing.T, path graph.Path, ctx assertionContext) string {
 	t.Helper()
 
@@ -1246,6 +1362,7 @@ func pathRelationshipRecordSignature(t *testing.T, path graph.Path, ctx assertio
 	return strings.Join(parts, "\x02")
 }
 
+// expectedRelationshipRecordSignature renders a relationship expectation in the same canonical form as a returned relationship.
 func expectedRelationshipRecordSignature(relationship edgeExpectation, includeProperties bool) string {
 	parts := []string{relationship.Start, relationship.End, relationship.Kind}
 	if includeProperties {
@@ -1255,6 +1372,8 @@ func expectedRelationshipRecordSignature(relationship edgeExpectation, includePr
 	return strings.Join(parts, "\x00")
 }
 
+// propertyMapSignature renders properties in key order using canonical scalar
+// signatures.
 func propertyMapSignature(properties map[string]any) string {
 	keys := make([]string, 0, len(properties))
 	for key := range properties {
@@ -1270,6 +1389,8 @@ func propertyMapSignature(properties map[string]any) string {
 	return strings.Join(parts, "\x01")
 }
 
+// relationshipMatches reports whether a relationship satisfies the expected
+// fixture endpoints, kind, and property subset.
 func relationshipMatches(t *testing.T, relationship graph.Relationship, expected edgeExpectation, ctx assertionContext) bool {
 	t.Helper()
 
@@ -1290,6 +1411,7 @@ func relationshipMatches(t *testing.T, relationship graph.Relationship, expected
 	return propertiesMatch(relationship.Properties, expected.Props)
 }
 
+// propertiesMatch reports whether properties contains every expected key with an equivalent value.
 func propertiesMatch(properties *graph.Properties, expected map[string]any) bool {
 	if len(expected) == 0 {
 		return true
@@ -1309,6 +1431,7 @@ func propertiesMatch(properties *graph.Properties, expected map[string]any) bool
 	return true
 }
 
+// valuesEqual compares numeric values across concrete widths and delegates all other values to deep equality.
 func valuesEqual(actual, expected any) bool {
 	if actualNumber, actualIsNumber := asFloat64(actual); actualIsNumber {
 		if expectedNumber, expectedIsNumber := asFloat64(expected); expectedIsNumber {
@@ -1319,6 +1442,7 @@ func valuesEqual(actual, expected any) bool {
 	return reflect.DeepEqual(actual, expected)
 }
 
+// asFloat64 converts supported numeric representations to a common comparison value.
 func asFloat64(value any) (float64, bool) {
 	switch typedValue := value.(type) {
 	case int:
@@ -1350,6 +1474,7 @@ func asFloat64(value any) (float64, bool) {
 	}
 }
 
+// assertStringMultiset compares string collections after sorting copies and reports label on mismatch.
 func assertStringMultiset(t *testing.T, got, expected []string, label string) {
 	t.Helper()
 

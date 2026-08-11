@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderPostgreSQL_StandaloneHopForms verifies migrated one-hop queries preserve anchors, direction, kinds, and projections.
 func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 	hopKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
@@ -103,8 +104,11 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 	}
 
 	testCases := map[string]struct {
-		criteria   []graph.Criteria
-		fragments  []string
+		// criteria contains the legacy query-builder inputs for the case.
+		criteria []graph.Criteria
+		// fragments lists SQL fragments that the translation must contain.
+		fragments []string
+		// parameters is the exact parameter map expected from translation.
 		parameters map[string]any
 	}{
 		"HOP-04 endpoint kind disjunction": {

@@ -12,6 +12,7 @@ import (
 	"github.com/specterops/dawgs/databaseguard"
 )
 
+// main runs the integrationguard command.
 func main() {
 	if err := databaseguard.Validate(
 		os.Getenv("CONNECTION_STRING"),

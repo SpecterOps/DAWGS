@@ -16,13 +16,21 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// driver is the common execution surface implemented by pooled connections and explicit pgx transactions.
 type driver interface {
+	// Exec executes a statement and returns its PostgreSQL command tag.
 	Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error)
+
+	// Query executes a statement and returns its streaming row set.
 	Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error)
+
+	// QueryRow executes a statement whose first row is consumed through pgx.Row.
 	QueryRow(ctx context.Context, sql string, arguments ...any) pgx.Row
 }
 
+// inspectingDriver records SQL and arguments before delegating execution to a connection or transaction.
 type inspectingDriver struct {
+	// upstreamDriver receives each operation after its SQL and arguments have been inspected.
 	upstreamDriver driver
 }
 
@@ -41,17 +49,34 @@ func (s inspectingDriver) QueryRow(ctx context.Context, sql string, arguments ..
 	return s.upstreamDriver.QueryRow(ctx, sql, arguments...)
 }
 
+// transaction binds query execution, schema resolution, and an optional pgx transaction to one graph operation context.
 type transaction struct {
-	schemaManager      *SchemaManager
-	queryExecMode      pgx.QueryExecMode
+	// schemaManager resolves target graphs, kind identifiers, and cached Cypher translations.
+	schemaManager *SchemaManager
+
+	// queryExecMode selects the pgx execution protocol supplied with each query.
+	queryExecMode pgx.QueryExecMode
+
+	// queryResultsFormat selects the pgx wire format requested for returned columns.
 	queryResultsFormat pgx.QueryResultFormats
-	ctx                context.Context
-	conn               *pgxpool.Conn
-	tx                 pgx.Tx
-	targetSchema       graph.Graph
-	targetSchemaSet    bool
+
+	// ctx scopes all work performed by the graph transaction.
+	ctx context.Context
+
+	// conn is the acquired pooled connection underlying this transaction wrapper.
+	conn *pgxpool.Conn
+
+	// tx is the optional explicit PostgreSQL transaction used for transactional operations.
+	tx pgx.Tx
+
+	// targetSchema identifies the graph selected explicitly for subsequent operations.
+	targetSchema graph.Graph
+
+	// targetSchemaSet distinguishes an explicit target from the zero-value graph schema.
+	targetSchemaSet bool
 }
 
+// newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
 func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config, allocateTransaction bool) (*transaction, error) {
 	wrapper := &transaction{
 		schemaManager:      schemaManager,
@@ -73,6 +98,7 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 	return wrapper, nil
 }
 
+// driver returns an inspected executor backed by the active transaction or, when absent, the pooled connection.
 func (s *transaction) driver() driver {
 	if s.tx != nil {
 		return inspectingDriver{
@@ -103,6 +129,8 @@ func (s *transaction) Close() {
 	}
 }
 
+// getTargetGraph resolves the explicitly selected graph or falls back to the
+// driver's default graph.
 func (s *transaction) getTargetGraph() (model.Graph, error) {
 	if !s.targetSchemaSet {
 		// Look for a default graph target
@@ -116,6 +144,7 @@ func (s *transaction) getTargetGraph() (model.Graph, error) {
 	return s.schemaManager.AssertGraph(s, s.targetSchema)
 }
 
+// targetGraphID resolves the database ID of the transaction's explicit or default graph target.
 func (s *transaction) targetGraphID() (int32, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return 0, err
@@ -263,6 +292,8 @@ func (s *transaction) Relationships() graph.RelationshipQuery {
 	}
 }
 
+// query executes SQL with the transaction's configured execution mode and
+// result format, adding named parameters when present.
 func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, error) {
 	queryArgs := []any{s.queryExecMode, s.queryResultsFormat}
 
@@ -273,6 +304,7 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 	return s.driver().Query(s.ctx, query, queryArgs...)
 }
 
+// Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
 	if parsedQuery, _, err := s.schemaManager.parseCache.Parse(query); err != nil {
 		return graph.NewErrorResult(err)

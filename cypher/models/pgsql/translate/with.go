@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+// translateWith closes the current query part, projects WITH items, and opens the scope consumed by the next part.
 func (s *Translator) translateWith() error {
 	currentPart := s.query.CurrentPart()
 

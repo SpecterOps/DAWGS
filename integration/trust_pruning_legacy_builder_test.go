@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderTrustAndPruningSelectors verifies legacy trust and pruning selectors retain their filtering semantics.
 func TestLegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 	fixture := trustPruningFixture()
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -166,6 +167,7 @@ func TestLegacyBuilderTrustAndPruningSelectors(t *testing.T) {
 	})
 }
 
+// TestDirectBatchPruning verifies direct batch pruning removes selected nodes and relationships without affecting survivors.
 func TestDirectBatchPruning(t *testing.T) {
 	fixture := batchPruningFixture(32)
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -181,9 +183,16 @@ func TestDirectBatchPruning(t *testing.T) {
 
 	t.Run("PRUNE-05 empty single and many relationships", func(t *testing.T) {
 		for _, testCase := range []struct {
-			name      string
-			criteria  graph.CriteriaProvider
-			expected  int
+			// name identifies the relationship-pruning population.
+			name string
+
+			// criteria selects relationships for deletion.
+			criteria graph.CriteriaProvider
+
+			// expected is the number of accepted delete attempts.
+			expected int
+
+			// remaining is the expected PruneDelete relationship count.
 			remaining int64
 		}{
 			{
@@ -232,11 +241,20 @@ func TestDirectBatchPruning(t *testing.T) {
 
 	t.Run("PRUNE-06 empty single many and high-degree nodes", func(t *testing.T) {
 		for _, testCase := range []struct {
-			name               string
-			criteria           graph.CriteriaProvider
-			expected           int
+			// name identifies the node-pruning population.
+			name string
+
+			// criteria selects candidate nodes for deletion.
+			criteria graph.CriteriaProvider
+
+			// expected is the number of accepted delete attempts.
+			expected int
+
+			// expectedCandidates is the expected surviving candidate count.
 			expectedCandidates int64
-			expectedIncidents  int64
+
+			// expectedIncidents is the expected surviving incident-edge count.
+			expectedIncidents int64
 		}{
 			{
 				name:               "empty",
@@ -286,6 +304,7 @@ func TestDirectBatchPruning(t *testing.T) {
 	})
 }
 
+// BenchmarkDirectBatchPruning measures direct pruning across representative fixture sizes.
 func BenchmarkDirectBatchPruning(b *testing.B) {
 	fixture := testutil.NewTrustPruningScaleFixture(2_000)
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -344,6 +363,8 @@ func BenchmarkDirectBatchPruning(b *testing.B) {
 	})
 }
 
+// trustPruningCriteria selects domain-to-domain relationships of kind whose
+// last-seen time predates either endpoint's collection time.
 func trustPruningCriteria(kind string) graph.Criteria {
 	return query.And(
 		query.Kind(query.Start(), graph.StringKind("Domain")),
@@ -356,6 +377,8 @@ func trustPruningCriteria(kind string) graph.Criteria {
 	)
 }
 
+// directionalTrustCriteria selects the two directed trust kinds between the
+// supplied fixture endpoints.
 func directionalTrustCriteria(idMap opengraph.IDMap, forward, reverse string) graph.Criteria {
 	forwardID := idMap[forward]
 	reverseID := idMap[reverse]
@@ -377,6 +400,7 @@ func directionalTrustCriteria(idMap opengraph.IDMap, forward, reverse string) gr
 	)
 }
 
+// pruningProtectedNodeKinds returns the labels whose nodes must survive trust-pruning regression queries even when their relationships are stale.
 func pruningProtectedNodeKinds() graph.Kinds {
 	return graph.Kinds{
 		graph.StringKind("Domain"),
@@ -387,6 +411,7 @@ func pruningProtectedNodeKinds() graph.Kinds {
 	}
 }
 
+// trustPruningRelationshipMarkers returns sorted marker properties from selected relationships.
 func trustPruningRelationshipMarkers(t *testing.T, relationships []*graph.Relationship) []string {
 	t.Helper()
 	markers := make([]string, 0, len(relationships))
@@ -399,6 +424,7 @@ func trustPruningRelationshipMarkers(t *testing.T, relationships []*graph.Relati
 	return markers
 }
 
+// trustPruningFixtureIDs maps database IDs to sorted stable fixture identifiers.
 func trustPruningFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID) []string {
 	t.Helper()
 	fixtureIDs := make([]string, 0, len(ids))
@@ -409,6 +435,8 @@ func trustPruningFixtureIDs(t *testing.T, idMap opengraph.IDMap, ids []graph.ID)
 	return fixtureIDs
 }
 
+// trustPruningFixture builds stale, current, null-timestamp, and decoy trust
+// relationships for pruning regressions.
 func trustPruningFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
@@ -658,6 +686,8 @@ func trustPruningFixture() *opengraph.Graph {
 	}
 }
 
+// batchPruningFixture builds removable relationships and a high-degree node
+// population for batched pruning tests and benchmarks.
 func batchPruningFixture(fanout int) *opengraph.Graph {
 	fixture := &opengraph.Graph{
 		Nodes: []opengraph.Node{
@@ -752,6 +782,7 @@ func batchPruningFixture(fanout int) *opengraph.Graph {
 	return fixture
 }
 
+// pruneRelationshipsInBatches snapshots matching relationship IDs, invokes the selection hook, and deletes those IDs in one batch.
 func pruneRelationshipsInBatches(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
 	var ids []graph.ID
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -784,6 +815,7 @@ func pruneRelationshipsInBatches(ctx context.Context, db graph.Database, criteri
 	return deleted, nil
 }
 
+// pruneNodesInBatches snapshots matching node IDs, invokes the selection hook, and deletes those IDs in one batch.
 func pruneNodesInBatches(ctx context.Context, db graph.Database, criteria graph.CriteriaProvider, afterSelect func([]graph.ID) error) (int, error) {
 	var ids []graph.ID
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -816,6 +848,7 @@ func pruneNodesInBatches(ctx context.Context, db graph.Database, criteria graph.
 	return deleted, nil
 }
 
+// regressionDay returns midnight UTC on the requested January 2026 day for deterministic temporal fixtures.
 func regressionDay(day int) time.Time {
 	return time.Date(2026, time.January, day, 0, 0, 0, 0, time.UTC)
 }

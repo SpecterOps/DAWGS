@@ -30,31 +30,50 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
+// errScaleWriteRollback signals the intentional rollback used to isolate a measured write.
 var errScaleWriteRollback = errors.New("scale write rollback")
 
+// resolvedWriteScenario contains a write scenario after symbolic fixture parameters are resolved.
 type resolvedWriteScenario struct {
-	SelectionCypher  string
-	SelectionParams  map[string]any
-	AffectedEntity   string
-	ExpectedMatched  int64
+	// SelectionCypher contains the write-selection Cypher statement.
+	SelectionCypher string
+	// SelectionParams contains resolved parameters for the write-selection query.
+	SelectionParams map[string]any
+	// AffectedEntity identifies the entity class counted after a write.
+	AffectedEntity string
+	// ExpectedMatched sets the required number of matched entities.
+	ExpectedMatched int64
+	// ExpectedAffected sets the required number of affected entities.
 	ExpectedAffected int64
-	PostState        []resolvedStateQuery
+	// PostState defines the state query evaluated after a write.
+	PostState []resolvedStateQuery
 }
 
+// resolvedStateQuery contains a post-write state query after fixture parameters are resolved.
 type resolvedStateQuery struct {
-	Name     string
-	Cypher   string
-	Params   map[string]any
+	// Name labels the post-write state assertion in diagnostics and results.
+	Name string
+	// Cypher contains the Cypher statement under test.
+	Cypher string
+	// Params supplies literal query parameters.
+	Params map[string]any
+	// Expected defines the required observable result.
 	Expected ExpectedResult
 }
 
+// writeMeasurement captures a write's matched and affected counts, duration, and post-state observations.
 type writeMeasurement struct {
-	Matched   int64
-	Affected  int64
-	Duration  time.Duration
+	// Matched records entities matched by the write selection.
+	Matched int64
+	// Affected records entities changed by the measured write.
+	Affected int64
+	// Duration records elapsed time for this observation.
+	Duration time.Duration
+	// PostState contains the observed results of post-write validation queries.
 	PostState []StateQueryResult
 }
 
+// countCypherRows executes a Cypher query and returns the number of result rows.
 func countCypherRows(tx graph.Transaction, cypher string, params map[string]any) (int64, error) {
 	result := tx.Query(cypher, params)
 	defer result.Close()
@@ -71,6 +90,7 @@ func countCypherRows(tx graph.Transaction, cypher string, params map[string]any)
 	return rowCount, nil
 }
 
+// countRawRows executes a raw backend query and returns the number of result rows.
 func countRawRows(tx graph.Transaction, sql string, params map[string]any) (int64, error) {
 	result := tx.Raw(sql, params)
 	defer result.Close()
@@ -87,25 +107,39 @@ func countRawRows(tx graph.Transaction, sql string, params map[string]any) (int6
 	return rowCount, nil
 }
 
+// stableNodeObservation serializes a node using fixture-stable identity, kinds, and properties.
 type stableNodeObservation struct {
-	Identity   string         `json:"identity"`
-	Kinds      []string       `json:"kinds,omitempty"`
+	// Identity contains the stable fixture identity emitted in observations.
+	Identity string `json:"identity"`
+	// Kinds lists stable node kinds in deterministic observation order.
+	Kinds []string `json:"kinds,omitempty"`
+	// Properties contains normalized property values.
 	Properties map[string]any `json:"properties,omitempty"`
 }
 
+// stableRelationshipObservation serializes a relationship using stable endpoints, kind, identity, and properties.
 type stableRelationshipObservation struct {
-	Identity   string         `json:"identity,omitempty"`
-	Start      string         `json:"start"`
-	End        string         `json:"end"`
-	Kind       string         `json:"kind"`
+	// Identity contains the stable fixture identity emitted in observations.
+	Identity string `json:"identity,omitempty"`
+	// Start contains the stable identity of the relationship's start node.
+	Start string `json:"start"`
+	// End contains the stable identity of the relationship's end node.
+	End string `json:"end"`
+	// Kind names the relationship kind preserved in the stable observation.
+	Kind string `json:"kind"`
+	// Properties contains normalized property values.
 	Properties map[string]any `json:"properties,omitempty"`
 }
 
+// stablePathObservation serializes an ordered path as stable node and relationship observations.
 type stablePathObservation struct {
-	Nodes         []stableNodeObservation         `json:"nodes"`
+	// Nodes contains the stable node sequence.
+	Nodes []stableNodeObservation `json:"nodes"`
+	// Relationships contains the ordered stable relationship sequence in the path.
 	Relationships []stableRelationshipObservation `json:"relationships"`
 }
 
+// reverseIDMap inverts fixture node-key mappings for stable result serialization.
 func reverseIDMap(idMap opengraph.IDMap) map[graph.ID]string {
 	reversed := make(map[graph.ID]string, len(idMap))
 	for name, id := range idMap {
@@ -114,6 +148,7 @@ func reverseIDMap(idMap opengraph.IDMap) map[graph.ID]string {
 	return reversed
 }
 
+// stableIdentity maps a database identifier to its fixture key, falling back to its decimal representation.
 func stableIdentity(id graph.ID, reversed map[graph.ID]string) string {
 	if name, found := reversed[id]; found {
 		return name
@@ -121,6 +156,7 @@ func stableIdentity(id graph.ID, reversed map[graph.ID]string) string {
 	return fmt.Sprintf("unmapped-node:%d", id)
 }
 
+// stableProperties returns properties with database identifiers replaced by stable fixture keys.
 func stableProperties(properties *graph.Properties) map[string]any {
 	if properties == nil {
 		return nil
@@ -128,6 +164,7 @@ func stableProperties(properties *graph.Properties) map[string]any {
 	return properties.Map
 }
 
+// stableNode converts a backend node to a fixture-stable serialized observation.
 func stableNode(node *graph.Node, reversed map[graph.ID]string) stableNodeObservation {
 	kinds := node.Kinds.Strings()
 	sort.Strings(kinds)
@@ -138,6 +175,7 @@ func stableNode(node *graph.Node, reversed map[graph.ID]string) stableNodeObserv
 	}
 }
 
+// stableRelationship converts a backend relationship to stable endpoints, kind, identity, and properties.
 func stableRelationship(relationship *graph.Relationship, reversed map[graph.ID]string) stableRelationshipObservation {
 	kind := ""
 	if relationship.Kind != nil {
@@ -158,6 +196,7 @@ func stableRelationship(relationship *graph.Relationship, reversed map[graph.ID]
 	}
 }
 
+// stablePath converts a backend path to stable ordered node and relationship observations.
 func stablePath(path graph.Path, reversed map[graph.ID]string) (stablePathObservation, error) {
 	observation := stablePathObservation{
 		Nodes:         make([]stableNodeObservation, len(path.Nodes)),
@@ -177,6 +216,7 @@ func stablePath(path graph.Path, reversed map[graph.ID]string) (stablePathObserv
 	return observation, nil
 }
 
+// stableRowValues normalizes result values to stable scalar IDs or canonical path JSON.
 func stableRowValues(values []any, mapper graph.ValueMapper, reversed map[graph.ID]string, scalarNodeIDs bool, pathValues bool) ([]any, error) {
 	stable := make([]any, len(values))
 	for idx, value := range values {
@@ -241,6 +281,7 @@ func stableRowValues(values []any, mapper graph.ValueMapper, reversed map[graph.
 	return stable, nil
 }
 
+// expectedPathRows serializes expected paths to the same canonical representation as observed paths.
 func expectedPathRows(rows []ExpectedPath) ([]string, error) {
 	encoded := make([]string, len(rows))
 	for idx, row := range rows {
@@ -250,10 +291,12 @@ func expectedPathRows(rows []ExpectedPath) ([]string, error) {
 		}
 		encoded[idx] = string(value)
 	}
+
 	sort.Strings(encoded)
 	return encoded, nil
 }
 
+// observedPathRows extracts and sorts canonical path observations from normalized rows.
 func observedPathRows(rows []string) ([]string, error) {
 	encoded := make([]string, len(rows))
 	for idx, row := range rows {
@@ -298,16 +341,19 @@ func observedPathRows(rows []string) ([]string, error) {
 	return encoded, nil
 }
 
+// observeCypherRows executes Cypher and returns row count plus normalized observations.
 func observeCypherRows(tx graph.Transaction, cypher string, params map[string]any, idMap opengraph.IDMap, scalarNodeIDs bool, pathValues bool) (int64, []string, error) {
 	result := tx.Query(cypher, params)
 	return observeResultRows(result, idMap, scalarNodeIDs, pathValues)
 }
 
+// observeRawRows executes raw SQL and returns row count plus normalized observations.
 func observeRawRows(tx graph.Transaction, sql string, params map[string]any, idMap opengraph.IDMap, scalarNodeIDs bool, pathValues bool) (int64, []string, error) {
 	result := tx.Raw(sql, params)
 	return observeResultRows(result, idMap, scalarNodeIDs, pathValues)
 }
 
+// observeResultRows drains a result iterator into a count and sorted stable observations.
 func observeResultRows(result graph.Result, idMap opengraph.IDMap, scalarNodeIDs bool, pathValues bool) (int64, []string, error) {
 	defer result.Close()
 
@@ -338,6 +384,7 @@ func observeResultRows(result graph.Result, idMap opengraph.IDMap, scalarNodeIDs
 	return rowCount, rows, nil
 }
 
+// validateExpectedObservations compares normalized rows with explicit scalar, ID-row, or path expectations.
 func validateExpectedObservations(expected ExpectedResult, observed []string) error {
 	if len(expected.IDRows) > 0 {
 		expectedRows := make([]string, len(expected.IDRows))
@@ -375,6 +422,7 @@ func validateExpectedObservations(expected ExpectedResult, observed []string) er
 	return nil
 }
 
+// observeCypher runs a Cypher query in a read transaction and returns stable observations.
 func observeCypher(tx graph.Transaction, cypher string, params map[string]any) (StateQueryResult, error) {
 	result := tx.Query(cypher, params)
 	defer result.Close()
@@ -396,26 +444,32 @@ func observeCypher(tx graph.Transaction, cypher string, params map[string]any) (
 	return observation, nil
 }
 
+// resultContainsNodeIDs reports whether the expected result kind requires stable node-identifier mapping.
 func resultContainsNodeIDs(expected ExpectedResult) bool {
 	return expected.ResultKind == "id_set" || expected.ResultKind == "id_rows"
 }
 
+// resultContainsPaths reports whether expected observations require canonical path normalization.
 func resultContainsPaths(expected ExpectedResult) bool {
 	return expected.ResultKind == "path_set"
 }
 
+// measureCypher executes cypher and records its timing observations.
 func measureCypher(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, iterations int) (int64, []string, DurationStats, error) {
 	return measureCypherWithWarmups(ctx, db, cypher, params, expected, idMap, 0, iterations)
 }
 
+// measureCypherWithWarmups executes cypher with warmups and records its timing observations.
 func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int) (int64, []string, DurationStats, error) {
 	return measureReadWithWarmups(ctx, db, cypher, params, expected, idMap, warmupIterations, iterations, false)
 }
 
+// measureRawSQLWithWarmups executes raw SQL with warmups and records its timing observations.
 func measureRawSQLWithWarmups(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int) (int64, []string, DurationStats, error) {
 	return measureReadWithWarmups(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true)
 }
 
+// measureReadWithWarmups executes read with warmups and records its timing observations.
 func measureReadWithWarmups(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool) (int64, []string, DurationStats, error) {
 	if iterations < 1 {
 		return 0, nil, DurationStats{}, fmt.Errorf("iterations must be at least 1")
@@ -504,6 +558,7 @@ func measureReadWithWarmups(ctx context.Context, db graph.Database, query string
 	return warmupRows, preflightObserved, stats, nil
 }
 
+// countReadRows dispatches to raw SQL or Cypher row counting according to raw.
 func countReadRows(tx graph.Transaction, query string, params map[string]any, raw bool) (int64, error) {
 	if raw {
 		return countRawRows(tx, query, params)
@@ -511,6 +566,7 @@ func countReadRows(tx graph.Transaction, query string, params map[string]any, ra
 	return countCypherRows(tx, query, params)
 }
 
+// observeReadRows dispatches a read observation to raw SQL or Cypher execution.
 func observeReadRows(tx graph.Transaction, query string, params map[string]any, idMap opengraph.IDMap, scalarNodeIDs, pathValues, raw bool) (int64, []string, error) {
 	if raw {
 		return observeRawRows(tx, query, params, idMap, scalarNodeIDs, pathValues)
@@ -518,6 +574,7 @@ func observeReadRows(tx graph.Transaction, query string, params map[string]any, 
 	return observeCypherRows(tx, query, params, idMap, scalarNodeIDs, pathValues)
 }
 
+// measureWriteCypher executes write cypher and records its timing observations.
 func measureWriteCypher(
 	ctx context.Context,
 	db graph.Database,
@@ -529,6 +586,7 @@ func measureWriteCypher(
 	return measureWriteCypherWithWarmups(ctx, db, cypher, params, scenario, 0, iterations)
 }
 
+// measureWriteCypherWithWarmups executes write cypher with warmups and records its timing observations.
 func measureWriteCypherWithWarmups(
 	ctx context.Context,
 	db graph.Database,
@@ -596,6 +654,7 @@ func measureWriteCypherWithWarmups(
 	return warmup, stats, nil
 }
 
+// measureWriteIteration executes write iteration and records its timing observations.
 func measureWriteIteration(
 	ctx context.Context,
 	db graph.Database,
@@ -659,6 +718,7 @@ func measureWriteIteration(
 	return writeMeasurement{}, fmt.Errorf("write scenario committed instead of rolling back")
 }
 
+// countAffectedEntities returns the transaction-visible node or relationship count selected by entity.
 func countAffectedEntities(tx graph.Transaction, entity string) (int64, error) {
 	switch entity {
 	case "node":
@@ -670,6 +730,7 @@ func countAffectedEntities(tx graph.Transaction, entity string) (int64, error) {
 	}
 }
 
+// checkStateExpectation validates a post-write observation against its declared row-count and scalar expectations.
 func checkStateExpectation(observation StateQueryResult, expected ExpectedResult) error {
 	if expected.RowCount != nil && observation.RowCount != *expected.RowCount {
 		return fmt.Errorf("expected %d rows, got %d", *expected.RowCount, observation.RowCount)
@@ -686,6 +747,7 @@ func checkStateExpectation(observation StateQueryResult, expected ExpectedResult
 	return nil
 }
 
+// scaleInt64 converts supported integral numeric representations to int64 without unsigned overflow.
 func scaleInt64(value any) (int64, bool) {
 	switch typedValue := value.(type) {
 	case int:

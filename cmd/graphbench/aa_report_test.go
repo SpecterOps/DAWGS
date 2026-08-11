@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBuildAAResolutionReportSplitsMatchedSamplesAndKeepsP99Diagnostic verifies that five matched rounds produce balanced 100-sample arms while P99 remains explicitly non-gating.
 func TestBuildAAResolutionReportSplitsMatchedSamplesAndKeepsP99Diagnostic(t *testing.T) {
 	record := perfGateRecord("case", ModePostgresSQL, time.Millisecond, 5, 40)
 	report, err := buildAAResolutionReport([]CaseResult{record}, PerfGateOptions{

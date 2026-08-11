@@ -14,27 +14,45 @@ import (
 )
 
 var (
+	// SystemTags is the synthetic system-tags property used by query-builder tests.
 	SystemTags = "system_tags"
 
-	User         = graph.StringKind("User")
-	Domain       = graph.StringKind("Domain")
-	Computer     = graph.StringKind("Computer")
-	Group        = graph.StringKind("Group")
-	HasSession   = graph.StringKind("HasSession")
+	// User is the user node kind used by query-builder fixtures.
+	User = graph.StringKind("User")
+
+	// Domain is the domain node kind used by query-builder fixtures.
+	Domain = graph.StringKind("Domain")
+
+	// Computer is the computer node kind used by query-builder fixtures.
+	Computer = graph.StringKind("Computer")
+
+	// Group is the group node kind used by query-builder fixtures.
+	Group = graph.StringKind("Group")
+
+	// HasSession is the relationship kind used by session-path fixtures.
+	HasSession = graph.StringKind("HasSession")
+
+	// GenericWrite is the relationship kind used by generic-write fixtures.
 	GenericWrite = graph.StringKind("GenericWrite")
 )
 
+// QueryOutputAssertion contains one accepted query rendering and parameter map.
 type QueryOutputAssertion struct {
-	Query      string
+	// Query is the expected rendered Cypher text.
+	Query string
+
+	// Parameters contains the expected query parameters.
 	Parameters map[string]any
 }
 
+// expectAnalysisError returns an assertion that requires query preparation to report an analysis error.
 func expectAnalysisError(rawQuery *cypher.RegularQuery) func(t *testing.T) {
 	return func(t *testing.T) {
 		require.NotNil(t, neo4j.NewQueryBuilder(rawQuery).Prepare())
 	}
 }
 
+// assertQueryShortestPathResult prepares a shortest-path query and compares its rendered text and optional parameters.
 func assertQueryShortestPathResult(rawQuery *cypher.RegularQuery, expectedOutput string, expectedParameters ...map[string]any) func(t *testing.T) {
 	return func(t *testing.T) {
 		builder := neo4j.NewQueryBuilder(rawQuery)
@@ -53,6 +71,7 @@ func assertQueryShortestPathResult(rawQuery *cypher.RegularQuery, expectedOutput
 	}
 }
 
+// assertQueryResult prepares a query and compares its rendered text and optional parameters.
 func assertQueryResult(rawQuery *cypher.RegularQuery, expectedOutput string, expectedParameters ...map[string]any) func(t *testing.T) {
 	return func(t *testing.T) {
 		var (
@@ -76,6 +95,7 @@ func assertQueryResult(rawQuery *cypher.RegularQuery, expectedOutput string, exp
 	}
 }
 
+// assertOneOfQueryResult requires a prepared query to match one accepted rendering and parameter set.
 func assertOneOfQueryResult(rawQuery *cypher.RegularQuery, expectations []QueryOutputAssertion) func(t *testing.T) {
 	return func(t *testing.T) {
 		builder := neo4j.NewQueryBuilder(rawQuery)
@@ -206,6 +226,7 @@ func TestQueryBuilderProjectionModifiersAreOrderIndependent(t *testing.T) {
 	}
 }
 
+// TestQueryBuilder_LOGIC01PreservesBranchLocalRelationshipKinds verifies disjunctive branches retain their own relationship-kind predicates.
 func TestQueryBuilder_LOGIC01PreservesBranchLocalRelationshipKinds(t *testing.T) {
 	rawQuery := query.SinglePartQuery(
 		query.Where(
@@ -237,6 +258,7 @@ func TestQueryBuilder_LOGIC01PreservesBranchLocalRelationshipKinds(t *testing.T)
 	)(t)
 }
 
+// TestQueryBuilder_LogicalForms verifies Neo4j rendering preserves supported logical expression shapes and precedence.
 func TestQueryBuilder_LogicalForms(t *testing.T) {
 	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 
@@ -271,10 +293,14 @@ func TestQueryBuilder_LogicalForms(t *testing.T) {
 	))
 }
 
+// TestQueryBuilder_LOGIC05ProjectionOrder verifies projection ordering remains stable for the LOGIC-05 regression form.
 func TestQueryBuilder_LOGIC05ProjectionOrder(t *testing.T) {
 	testCases := map[string]struct {
+		// projection is the return clause under test.
 		projection *cypher.Return
-		expected   string
+
+		// expected is the rendered Cypher query.
+		expected string
 	}{
 		"full opposite node plus relationship": {
 			projection: query.Returning(query.Relationship(), query.End()),
@@ -306,6 +332,7 @@ func TestQueryBuilder_LOGIC05ProjectionOrder(t *testing.T) {
 	}
 }
 
+// TestQueryBuilder_ReconciliationForms verifies reconciliation forms render the expected predicates and projections.
 func TestQueryBuilder_ReconciliationForms(t *testing.T) {
 	reconciliationKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
@@ -442,6 +469,7 @@ func TestQueryBuilder_ReconciliationForms(t *testing.T) {
 	))
 }
 
+// TestQueryBuilder_TrustAndPruningForms verifies trust and pruning forms preserve selector and mutation semantics.
 func TestQueryBuilder_TrustAndPruningForms(t *testing.T) {
 	threshold := time.Date(2026, time.January, 3, 0, 0, 0, 0, time.UTC)
 	domain := graph.StringKind("Domain")
@@ -558,6 +586,7 @@ func TestQueryBuilder_TrustAndPruningForms(t *testing.T) {
 	))
 }
 
+// TestQueryBuilder_StandaloneHopForms verifies one-hop forms preserve direction, kinds, and endpoint projections.
 func TestQueryBuilder_StandaloneHopForms(t *testing.T) {
 	hopKinds := func(count int) graph.Kinds {
 		kinds := make(graph.Kinds, count)
@@ -799,6 +828,7 @@ func TestQueryBuilder_StandaloneHopForms(t *testing.T) {
 	))
 }
 
+// TestQueryBuilder_Render verifies legacy query criteria render the expected Neo4j Cypher and parameters.
 func TestQueryBuilder_Render(t *testing.T) {
 	temporalThreshold := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 

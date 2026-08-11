@@ -18,50 +18,86 @@ import (
 	"time"
 )
 
+// confirmationReportVersion identifies the JSON schema emitted by confirmation reports.
 const confirmationReportVersion = 1
 
+// ConfirmationOptions selects the paired artifacts, cases, confidence level, and bootstrap seed used for confirmation.
 type ConfirmationOptions struct {
-	Seed           int64
-	Confidence     float64
+	// Seed controls deterministic random sampling.
+	Seed int64
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64
+	// BootstrapCount sets the number of bootstrap resamples.
 	BootstrapCount int
-	CaseNames      []string
+	// CaseNames restricts confirmation to the named workloads when nonempty.
+	CaseNames []string
 }
 
+// ConfirmationMetric combines ratio, absolute-change, noise-floor, and classification evidence for one metric.
 type ConfirmationMetric struct {
-	Ratio          RatioInterval    `json:"ratio"`
+	// Ratio reports the candidate-to-baseline latency ratio.
+	Ratio RatioInterval `json:"ratio"`
+	// AbsoluteChange reports the estimated absolute duration change and confidence bounds.
 	AbsoluteChange DurationInterval `json:"absolute_change"`
-	NoiseRatio     float64          `json:"noise_ratio"`
-	NoiseAbsolute  time.Duration    `json:"noise_absolute"`
-	Classification string           `json:"classification"`
+	// NoiseRatio records the relative A/A noise floor used for classification.
+	NoiseRatio float64 `json:"noise_ratio"`
+	// NoiseAbsolute records the absolute A/A noise floor used for classification.
+	NoiseAbsolute time.Duration `json:"noise_absolute"`
+	// Classification records the assigned measurement or result class.
+	Classification string `json:"classification"`
 }
 
+// ConfirmationCase reports comparability, timing deltas, and the final disposition for one confirmed case.
 type ConfirmationCase struct {
-	Dataset       string             `json:"dataset"`
-	Name          string             `json:"name"`
-	Backend       ExecutionMode      `json:"backend"`
-	MatchedRounds int                `json:"matched_rounds"`
-	LeftSamples   int                `json:"left_samples"`
-	RightSamples  int                `json:"right_samples"`
-	Comparable    bool               `json:"comparable"`
-	Comparability []string           `json:"comparability_reasons,omitempty"`
-	P50           ConfirmationMetric `json:"p50"`
-	P95           ConfirmationMetric `json:"p95"`
-	Disposition   string             `json:"disposition"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Backend identifies the execution backend.
+	Backend ExecutionMode `json:"backend"`
+	// MatchedRounds records rounds containing both left- and right-arm samples.
+	MatchedRounds int `json:"matched_rounds"`
+	// LeftSamples records warm samples accepted from the left confirmation arm.
+	LeftSamples int `json:"left_samples"`
+	// RightSamples records warm samples accepted from the right confirmation arm.
+	RightSamples int `json:"right_samples"`
+	// Comparable reports whether the paired measurements satisfy comparison prerequisites.
+	Comparable bool `json:"comparable"`
+	// Comparability lists reasons paired confirmation records are or are not comparable.
+	Comparability []string `json:"comparability_reasons,omitempty"`
+	// P50 contains median ratio, absolute-change, noise, and classification evidence.
+	P50 ConfirmationMetric `json:"p50"`
+	// P95 contains 95th-percentile ratio, absolute-change, noise, and classification evidence.
+	P95 ConfirmationMetric `json:"p95"`
+	// Disposition records the confirmation classification assigned to the case.
+	Disposition string `json:"disposition"`
 }
 
+// ConfirmationReport contains paired-arm identities, A/A noise evidence, and per-case confirmation decisions.
 type ConfirmationReport struct {
-	Version     int                `json:"version"`
-	Kind        string             `json:"kind"`
-	Seed        int64              `json:"seed"`
-	Confidence  float64            `json:"confidence_level"`
-	LeftArm     string             `json:"left_arm"`
-	RightArm    string             `json:"right_arm"`
-	LeftSHA256  string             `json:"left_sha256"`
-	RightSHA256 string             `json:"right_sha256"`
-	AAReport    string             `json:"aa_report,omitempty"`
-	Cases       []ConfirmationCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Kind identifies the serialized confirmation-report format.
+	Kind string `json:"kind"`
+	// Seed controls deterministic random sampling.
+	Seed int64 `json:"seed"`
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64 `json:"confidence_level"`
+	// LeftArm identifies the artifact treated as the left confirmation arm.
+	LeftArm string `json:"left_arm"`
+	// RightArm identifies the artifact treated as the right confirmation arm.
+	RightArm string `json:"right_arm"`
+	// LeftSHA256 identifies the exact left-arm artifact evaluated by the report.
+	LeftSHA256 string `json:"left_sha256"`
+	// RightSHA256 identifies the exact right-arm artifact evaluated by the report.
+	RightSHA256 string `json:"right_sha256"`
+	// AAReport contains A/A noise evidence used to classify confirmation differences.
+	AAReport string `json:"aa_report,omitempty"`
+	// Cases contains paired-arm evidence and the resulting disposition for each confirmed workload.
+	Cases []ConfirmationCase `json:"cases"`
 }
 
+// createConfirmationReport loads both benchmark arms and optional A/A evidence, builds their comparison, and writes the resulting report.
 func createConfirmationReport(leftPath, rightPath, aaPath, outputPath string, options ConfirmationOptions) error {
 	left, err := readJSONLFile(leftPath)
 	if err != nil {
@@ -98,6 +134,7 @@ func createConfirmationReport(leftPath, rightPath, aaPath, outputPath string, op
 	return writeConfirmationReport(outputPath, report)
 }
 
+// buildConfirmationReport pairs comparable cases, derives confidence intervals and noise-adjusted classifications, and records why incomparable cases were skipped.
 func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, options ConfirmationOptions) (ConfirmationReport, error) {
 	if options.Confidence <= 0 || options.Confidence >= 1 {
 		return ConfirmationReport{}, fmt.Errorf("confidence level must be between 0 and 1")
@@ -221,6 +258,7 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 	return report, nil
 }
 
+// confirmationNoise chooses the largest relative and absolute noise floors observed for a metric across the supplied A/A reports, with conservative defaults.
 func confirmationNoise(reports []*AAResolutionReport, key performanceKey, p95 bool) (float64, time.Duration) {
 	ratio, absolute := 0.05, 100*time.Microsecond
 	for _, aa := range reports {
@@ -246,6 +284,7 @@ func confirmationNoise(reports []*AAResolutionReport, key performanceKey, p95 bo
 	return ratio, absolute
 }
 
+// classifyConfirmationMetric labels a confidence interval as regression, improvement, or inconclusive only when both relative and absolute noise floors are crossed.
 func classifyConfirmationMetric(ratio RatioInterval, change DurationInterval, noiseRatio float64, noiseAbsolute time.Duration) ConfirmationMetric {
 	classification := "inconclusive"
 	if ratio.Lower > 1+noiseRatio && change.Lower > noiseAbsolute {
@@ -263,6 +302,7 @@ func classifyConfirmationMetric(ratio RatioInterval, change DurationInterval, no
 	}
 }
 
+// bootstrapStratifiedQuantileChange estimates a quantile delta and confidence interval by resampling within matching benchmark rounds.
 func bootstrapStratifiedQuantileChange(left, right roundSamples, probability float64, seed int64, options PerfGateOptions) DurationInterval {
 	rounds := sortedRounds(left)
 	estimate := durationQuantile(flattenSamples(right, rounds), probability) - durationQuantile(flattenSamples(left, rounds), probability)
@@ -284,6 +324,7 @@ func bootstrapStratifiedQuantileChange(left, right roundSamples, probability flo
 	}
 }
 
+// negateDurationInterval reverses interval direction and swaps its bounds so left/right arm normalization preserves a valid ordered interval.
 func negateDurationInterval(value DurationInterval) DurationInterval {
 	return DurationInterval{
 		Estimate: -value.Estimate,
@@ -292,6 +333,7 @@ func negateDurationInterval(value DurationInterval) DurationInterval {
 	}
 }
 
+// confirmationComparable compares two confirmation records and returns every reason they cannot be paired.
 func confirmationComparable(left, right []CaseResult, key performanceKey) (bool, []string) {
 	leftRecords := matchingRecords(left, key)
 	rightRecords := matchingRecords(right, key)
@@ -321,6 +363,7 @@ func confirmationComparable(left, right []CaseResult, key performanceKey) (bool,
 	return len(reasons) == 0, uniqueStrings(reasons)
 }
 
+// confirmationArmConsistency reports within-arm drift in environment, executable, and normalized PostgreSQL plan shape.
 func confirmationArmConsistency(records []CaseResult) []string {
 	if len(records) == 0 {
 		return []string{"missing record"}
@@ -355,11 +398,17 @@ func confirmationArmConsistency(records []CaseResult) []string {
 }
 
 var (
+	// volatilePlanDetails matches planner cost and runtime annotations that do not define structural plan shape.
 	volatilePlanDetails = regexp.MustCompile(`\s+\((?:cost|actual)[^)]*\)`)
-	volatilePlanIDs     = regexp.MustCompile(`'[0-9]+'::bigint`)
-	volatilePlanLine    = regexp.MustCompile(`^(?:Buffers|Planning Time|Execution Time):`)
+
+	// volatilePlanIDs matches generated bigint constants so dataset-specific IDs do not perturb plan-shape hashes.
+	volatilePlanIDs = regexp.MustCompile(`'[0-9]+'::bigint`)
+
+	// volatilePlanLine matches resource and timing summary lines excluded from structural plan-shape hashes.
+	volatilePlanLine = regexp.MustCompile(`^(?:Buffers|Planning Time|Execution Time):`)
 )
 
+// postgresPlanShapeSHA256 hashes structural EXPLAIN lines after removing costs, runtime counters, transient IDs, and timing details; confirmation compares plan shape without treating volatile measurements as structural changes.
 func postgresPlanShapeSHA256(plan []string) string {
 	digest := sha256.New()
 	for _, line := range plan {
@@ -374,6 +423,7 @@ func postgresPlanShapeSHA256(plan []string) string {
 	return hex.EncodeToString(digest.Sum(nil))
 }
 
+// matchingRecords selects successful measured records for one dataset, case, backend, and executor identity.
 func matchingRecords(records []CaseResult, key performanceKey) []CaseResult {
 	var matched []CaseResult
 	for _, record := range records {
@@ -384,6 +434,7 @@ func matchingRecords(records []CaseResult, key performanceKey) []CaseResult {
 	return matched
 }
 
+// comparablePostgresEnvironment requires server version and normalized settings to match while tolerating absent environment metadata on both arms.
 func comparablePostgresEnvironment(left, right *PostgresEnvironment) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
@@ -393,6 +444,7 @@ func comparablePostgresEnvironment(left, right *PostgresEnvironment) bool {
 
 }
 
+// uniqueStrings removes duplicate diagnostic reasons while preserving their first-seen order.
 func uniqueStrings(values []string) []string {
 	seen := map[string]struct{}{}
 	result := make([]string, 0, len(values))
@@ -406,6 +458,7 @@ func uniqueStrings(values []string) []string {
 	return result
 }
 
+// artifactArm returns the first recorded benchmark arm label, or "unknown" when an artifact lacks environment metadata.
 func artifactArm(records []CaseResult) string {
 	for _, record := range records {
 		if record.Environment != nil {
@@ -415,6 +468,7 @@ func artifactArm(records []CaseResult) string {
 	return "unknown"
 }
 
+// sameExecutable requires both artifacts to contain the same non-empty executable SHA-256 before attributing timing changes to code.
 func sameExecutable(left, right []CaseResult) bool {
 	var leftHash, rightHash string
 	for _, record := range left {
@@ -432,6 +486,7 @@ func sameExecutable(left, right []CaseResult) bool {
 	return leftHash != "" && leftHash == rightHash
 }
 
+// writeConfirmationReport emits indented JSON to stdout or atomically replaces the requested output file.
 func writeConfirmationReport(path string, report ConfirmationReport) (err error) {
 	output := os.Stdout
 	if path != "" {

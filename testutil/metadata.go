@@ -18,10 +18,13 @@ package testutil
 
 import "runtime/debug"
 
+// BaselineMetadata records build identity needed to interpret a generated benchmark baseline.
 type BaselineMetadata struct {
+	// DAWGSVersion identifies the DAWGS build that produced the baseline.
 	DAWGSVersion string `json:"dawgs_version"`
 }
 
+// ResolveBaselineMetadata returns metadata for dawgsVersion, deriving the current build identity when it is empty.
 func ResolveBaselineMetadata(dawgsVersion string) BaselineMetadata {
 	if dawgsVersion == "" {
 		dawgsVersion = currentDAWGSVersion()
@@ -32,6 +35,7 @@ func ResolveBaselineMetadata(dawgsVersion string) BaselineMetadata {
 	}
 }
 
+// currentDAWGSVersion derives a module version and optional VCS revision from Go build information.
 func currentDAWGSVersion() string {
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {

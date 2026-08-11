@@ -25,10 +25,19 @@ import (
 )
 
 const (
-	typeKey    = "$type"
-	valueKey   = "value"
-	prefixKey  = "prefix"
-	countKey   = "count"
+	// typeKey identifies the discriminator field in a tagged test parameter.
+	typeKey = "$type"
+
+	// valueKey identifies the payload field in a tagged scalar parameter.
+	valueKey = "value"
+
+	// prefixKey identifies the generated value prefix in a tagged string list.
+	prefixKey = "prefix"
+
+	// countKey identifies the generated value count in a tagged string list.
+	countKey = "count"
+
+	// includeKey identifies literal values prepended to a tagged string list.
 	includeKey = "include"
 )
 
@@ -45,6 +54,8 @@ const (
 // Tagged values may also appear in nested maps and lists.
 type Params map[string]any
 
+// UnmarshalJSON decodes plain JSON parameters and expands supported tagged
+// values recursively.
 func (s *Params) UnmarshalJSON(raw []byte) error {
 	var decoded map[string]any
 	if err := json.Unmarshal(raw, &decoded); err != nil {
@@ -60,6 +71,7 @@ func (s *Params) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
+// convertMap recursively converts every value in a decoded parameter map.
 func convertMap(values map[string]any) (map[string]any, error) {
 	converted := make(map[string]any, len(values))
 	for key, value := range values {
@@ -74,6 +86,8 @@ func convertMap(values map[string]any) (map[string]any, error) {
 	return converted, nil
 }
 
+// convertValue expands tagged maps and recursively converts nested maps and
+// lists while preserving scalar values.
 func convertValue(value any) (any, error) {
 	switch typedValue := value.(type) {
 	case map[string]any:
@@ -100,6 +114,7 @@ func convertValue(value any) (any, error) {
 	}
 }
 
+// convertTaggedValue validates and expands one supported tagged parameter.
 func convertTaggedValue(rawType any, tagged map[string]any) (any, error) {
 	typeName, ok := rawType.(string)
 	if !ok {
@@ -137,6 +152,8 @@ func convertTaggedValue(rawType any, tagged map[string]any) (any, error) {
 	}
 }
 
+// convertStringList expands a tagged string-list specification into its
+// literal and generated values.
 func convertStringList(tagged map[string]any) ([]string, error) {
 	rawPrefix, found := tagged[prefixKey]
 	if !found {

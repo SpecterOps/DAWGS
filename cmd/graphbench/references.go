@@ -21,8 +21,10 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
+// postgresReferenceSchemaVersion identifies the serialized schema revision for PostgreSQL reference schema.
 const postgresReferenceSchemaVersion = 1
 
+// postgresReferenceArms lists the independently implemented PostgreSQL comparison arms.
 var postgresReferenceArms = []string{
 	"round_trip",
 	"endpoint_validation",
@@ -54,28 +56,46 @@ var postgresReferenceArms = []string{
 	"asp_a1_predecessor_dag_m0",
 }
 
+// validPostgresReferenceArm reports whether a reference-arm selector is declared.
 func validPostgresReferenceArm(name string) bool {
 	return slices.Contains(postgresReferenceArms, name)
 }
 
+// postgresReferenceSpec defines one independent PostgreSQL reference implementation and its observation contract.
 type postgresReferenceSpec struct {
-	name               string
-	legacyName         string
-	architecture       string
-	implementationID   string
-	stateShape         string
-	observationShape   string
+	// name is the canonical selector and serialized identity for the reference arm.
+	name string
+	// legacyName retains the compatibility alias accepted for a reference arm.
+	legacyName string
+	// architecture retains the executor architecture that must remain stable across rounds.
+	architecture string
+	// implementationID provides a versioned identity for the reference algorithm and materialization strategy.
+	implementationID string
+	// stateShape describes recursive state retained by the reference implementation.
+	stateShape string
+	// observationShape describes the normalized values returned by the reference boundary.
+	observationShape string
+	// semanticValidation describes the exact observation contract enforced for the reference.
 	semanticValidation string
-	boundary           string
-	fullComparator     bool
-	aaAliasOf          string
-	timingBoundary     string
-	sql                string
-	parameters         map[string]any
-	validationSQL      string
-	validationParams   map[string]any
+	// boundary identifies the timed boundary exposed by the reference arm.
+	boundary string
+	// fullComparator reports whether the reference produces the complete public observation.
+	fullComparator bool
+	// aaAliasOf identifies the reference arm reused as an explicit A/A alias.
+	aaAliasOf string
+	// timingBoundary describes which portion of reference execution contributes to latency samples.
+	timingBoundary string
+	// sql contains the executable SQL for an independent reference arm.
+	sql string
+	// parameters supplies resolved parameters to the reference SQL query.
+	parameters map[string]any
+	// validationSQL contains SQL used to validate affected entity counts after a write.
+	validationSQL string
+	// validationParams supplies parameters used to validate precomputed reference inputs.
+	validationParams map[string]any
 }
 
+// measureReferences executes references and records its timing observations.
 func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase ScaleCase, params map[string]any, idMap opengraph.IDMap, publicObservation []string, warmupIterations, iterations int) ([]PostgresReferenceResult, error) {
 	specs, err := s.referenceSpecs(ctx, testCase, params)
 	if err != nil {
@@ -179,6 +199,7 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 	return results, nil
 }
 
+// selectReferenceSpecs restricts reference arms to explicit selectors and rejects missing requested arms.
 func selectReferenceSpecs(specs []postgresReferenceSpec, names []string) ([]postgresReferenceSpec, error) {
 	selected := make([]postgresReferenceSpec, 0, len(names))
 	for _, name := range names {
@@ -191,6 +212,7 @@ func selectReferenceSpecs(specs []postgresReferenceSpec, names []string) ([]post
 	return selected, nil
 }
 
+// explainRawPostgres runs raw PostgreSQL EXPLAIN and returns normalized plan text, JSON, and metrics.
 func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any) ([]string, json.RawMessage, PostgresPlanMetrics, error) {
 	var (
 		plan     []string
@@ -229,6 +251,7 @@ func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string,
 	return plan, planJSON, metrics, nil
 }
 
+// normalizedReferenceSpec fills legacy reference metadata defaults used for stable identity comparisons.
 func normalizedReferenceSpec(spec postgresReferenceSpec) postgresReferenceSpec {
 	if spec.architecture == "" {
 		spec.architecture = "component_probe"
@@ -254,10 +277,12 @@ func normalizedReferenceSpec(spec postgresReferenceSpec) postgresReferenceSpec {
 	return spec
 }
 
+// normalizedSQLFingerprint hashes SQL after collapsing insignificant whitespace.
 func normalizedSQLFingerprint(sql string) string {
 	return sqlFingerprint(strings.Join(strings.Fields(sql), " "))
 }
 
+// validateReferenceSpecs rejects duplicate, incomplete, or semantically inconsistent reference specifications.
 func validateReferenceSpecs(specs []postgresReferenceSpec) error {
 	byName := make(map[string]postgresReferenceSpec, len(specs))
 	byImplementation := make(map[string]postgresReferenceSpec, len(specs))
@@ -312,6 +337,7 @@ func validateReferenceSpecs(specs []postgresReferenceSpec) error {
 	return nil
 }
 
+// parameterShape returns a type-only description of query parameters for reference identity checks.
 func parameterShape(parameters map[string]any) string {
 	names := make([]string, 0, len(parameters))
 	for name := range parameters {
@@ -332,6 +358,7 @@ func parameterShape(parameters map[string]any) string {
 	return shape.String()
 }
 
+// validAlternativeShortestPathObservation reports whether two observations are both valid shortest-path witnesses.
 func validAlternativeShortestPathObservation(testCase ScaleCase, publicRows, referenceRows []string) bool {
 	if testCase.Expected.ResultKind != "path_set" || strings.Contains(strings.ToLower(testCase.Cypher), "allshortestpaths") {
 		return false
@@ -355,6 +382,7 @@ func validAlternativeShortestPathObservation(testCase ScaleCase, publicRows, ref
 	return publicStart == referenceStart && publicEnd == referenceEnd
 }
 
+// singleStablePathObservation returns the sole normalized path when the result contains exactly one valid path.
 func singleStablePathObservation(rows []string) (stablePathObservation, bool) {
 	if len(rows) != 1 {
 		return stablePathObservation{}, false
@@ -372,6 +400,7 @@ func singleStablePathObservation(rows []string) (stablePathObservation, bool) {
 	return path, true
 }
 
+// validOutboundStablePath reports whether a stable path follows every relationship in outbound order.
 func validOutboundStablePath(path stablePathObservation, allowedKinds []string) bool {
 	if len(path.Nodes) == 0 || len(path.Nodes) != len(path.Relationships)+1 {
 		return false
@@ -392,6 +421,7 @@ func validOutboundStablePath(path stablePathObservation, allowedKinds []string) 
 	return true
 }
 
+// referenceSpecsForRound returns reference specifications in the predeclared balanced order for a round.
 func referenceSpecsForRound(specs []postgresReferenceSpec, round int) []postgresReferenceSpec {
 	if len(specs) == 5 && round > 0 {
 		// Ten-sequence Williams/carryover-balanced schedule predeclared by the
@@ -415,6 +445,7 @@ func referenceSpecsForRound(specs []postgresReferenceSpec, round int) []postgres
 	return ordered
 }
 
+// referenceSpecs constructs the independent PostgreSQL reference implementations for a scale case.
 func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
 	if testCase.Category == "generated_fixed_suffix_expansion" {
 		return s.fixedSuffixExpansionReferenceSpecs(ctx, testCase, params)
@@ -437,6 +468,7 @@ func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCa
 	}
 }
 
+// allShortestDAGSearch returns the predecessor-DAG SQL search for all shortest paths in one direction.
 func allShortestDAGSearch(direction graph.Direction) string {
 	distanceJoin, distanceNext := "e.start_id = distance.node_id", "e.end_id"
 	predecessorJoin := "e.start_id = prior.node_id and e.end_id = paths.node_id"
@@ -479,6 +511,7 @@ func allShortestDAGSearch(direction graph.Direction) string {
 )`
 }
 
+// allShortestReferenceSpecs builds the predecessor-DAG reference for an all-shortest-path workload.
 func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
 	probeParams := copyReferenceParams(params)
 	probeParams["graph_id"] = s.graphID
@@ -531,6 +564,7 @@ func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testC
 	}}, nil
 }
 
+// shortestReferenceSpecs builds eligible shortest-path reference implementations and measurement boundaries.
 func (s *postgresSQLRunner) shortestReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
 	probeParams := copyReferenceParams(params)
 	probeParams["graph_id"] = s.graphID
@@ -587,6 +621,7 @@ func (s *postgresSQLRunner) shortestReferenceSpecs(ctx context.Context, testCase
 	return buildShortestReferenceSpecs(testCase, searchParams, nodeIDs, edgeIDs, direction), nil
 }
 
+// shortestReferenceEndpointParameters maps public start and end parameters to physical search endpoints for the parsed direction.
 func shortestReferenceEndpointParameters(query string) (string, string, error) {
 	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 	if err != nil {
@@ -625,6 +660,7 @@ func shortestReferenceEndpointParameters(query string) (string, string, error) {
 	return "", "", fmt.Errorf("shortest pattern not found")
 }
 
+// collectIdentityParameterBindings extracts equality-bound ID parameters for the two variables in a shortest-path pattern.
 func collectIdentityParameterBindings(expression cypher.Expression, bindings map[string]string) {
 	switch typed := expression.(type) {
 	case *cypher.Conjunction:
@@ -650,6 +686,7 @@ func collectIdentityParameterBindings(expression cypher.Expression, bindings map
 	}
 }
 
+// identityReferenceSymbol returns the variable whose ID is projected directly by a reference query.
 func identityReferenceSymbol(expression cypher.Expression) (string, bool) {
 	function, ok := expression.(*cypher.FunctionInvocation)
 	if !ok || function == nil || !strings.EqualFold(function.Name, cypher.IdentityFunction) || len(function.Arguments) != 1 {
@@ -662,6 +699,7 @@ func identityReferenceSymbol(expression cypher.Expression) (string, bool) {
 	return variable.Symbol, true
 }
 
+// shortestReferenceIsProvablyOutbound reports whether a supported shortest-path query has outbound direction.
 func shortestReferenceIsProvablyOutbound(query string) (bool, error) {
 	direction, err := shortestReferenceDirection(query)
 	if err != nil {
@@ -671,6 +709,7 @@ func shortestReferenceIsProvablyOutbound(query string) (bool, error) {
 	return direction == graph.DirectionOutbound, nil
 }
 
+// shortestReferenceDirection parses a shortest-path query and returns its single relationship direction.
 func shortestReferenceDirection(query string) (graph.Direction, error) {
 	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 	if err != nil {
@@ -709,10 +748,12 @@ func shortestReferenceDirection(query string) (graph.Direction, error) {
 	return direction, nil
 }
 
+// shortestReferenceSearch returns the compact recursive shortest-path search SQL for a projection mode.
 func shortestReferenceSearch() string {
 	return shortestReferenceSearchForDirection(graph.DirectionOutbound)
 }
 
+// shortestReferenceSearchForDirection returns direction-specific shortest-path search SQL and endpoint columns.
 func shortestReferenceSearchForDirection(direction graph.Direction) string {
 	edgeJoin, nextNode := "e.start_id = search.node_id", "e.end_id"
 	if direction == graph.DirectionInbound {
@@ -734,6 +775,7 @@ func shortestReferenceSearchForDirection(direction graph.Direction) string {
 )`
 }
 
+// shortestEdgeReferenceSearch returns the edge-only shortest-path search SQL for a direction.
 func shortestEdgeReferenceSearch(direction graph.Direction) string {
 	edgeJoin, nextNode := "e.start_id = search.node_id", "e.end_id"
 	if direction == graph.DirectionInbound {
@@ -755,10 +797,12 @@ func shortestEdgeReferenceSearch(direction graph.Direction) string {
 )`
 }
 
+// shortestDistanceReferenceSearch returns the minimal-state shortest-distance search SQL for a direction.
 func shortestDistanceReferenceSearch() string {
 	return shortestDistanceReferenceSearchForDirection(graph.DirectionOutbound)
 }
 
+// shortestDistanceReferenceSearchForDirection returns direction-specific shortest-distance SQL and endpoint columns.
 func shortestDistanceReferenceSearchForDirection(direction graph.Direction) string {
 	edgeJoin, nextNode := "e.start_id = search.node_id", "e.end_id"
 	if direction == graph.DirectionInbound {
@@ -779,6 +823,7 @@ func shortestDistanceReferenceSearchForDirection(direction graph.Direction) stri
 )`
 }
 
+// shortestCanonicalWitnessSearch returns SQL that reconstructs one deterministic witness from compact predecessor state.
 func shortestCanonicalWitnessSearch(reverseForPublicPath bool) string {
 	edgeIDs := "witness.edge_ids"
 	if reverseForPublicPath {
@@ -816,6 +861,7 @@ func shortestCanonicalWitnessSearch(reverseForPublicPath bool) string {
 )`
 }
 
+// buildShortestReferenceSpecs assembles exact shortest-path comparators supported by the workload shape.
 func buildShortestReferenceSpecs(testCase ScaleCase, probeParams map[string]any, nodeIDs, edgeIDs []int64, direction graph.Direction) []postgresReferenceSpec {
 	searchNE := shortestReferenceSearchForDirection(direction)
 	searchE := shortestEdgeReferenceSearch(direction)
@@ -982,6 +1028,7 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 				parameters:         probeParams,
 			},
 		)
+
 		witnessParams := copyReferenceParams(probeParams)
 		witnessParams["search_start_id"], witnessParams["search_end_id"] = probeParams["start_id"], probeParams["end_id"]
 		reverseForPublicPath := false
@@ -1019,6 +1066,7 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 	return specs
 }
 
+// shortestS1DistanceEligible reports whether a case can use the bounded single-direction distance prototype.
 func shortestS1DistanceEligible(testCase ScaleCase, parameters map[string]any, direction graph.Direction, pathObserved bool) bool {
 	if pathObserved || direction == graph.DirectionBoth {
 		return false
@@ -1030,6 +1078,7 @@ func shortestS1DistanceEligible(testCase ScaleCase, parameters map[string]any, d
 	return minDepth <= 1 && !reflect.DeepEqual(parameters["start_id"], parameters["end_id"])
 }
 
+// shortestS1DistanceSQL wraps a shortest-path query with the bounded S1 distance prototype.
 func shortestS1DistanceSQL(fallbackSQL string, direction graph.Direction) string {
 	inbound := "false"
 	if direction == graph.DirectionInbound {
@@ -1048,6 +1097,7 @@ where (select overflow from s1)
 limit 1`
 }
 
+// shortestArchitectureForCase chooses the witness-producing or distance-only S3 reference architecture from the case's observable result contract.
 func shortestArchitectureForCase(testCase ScaleCase) string {
 	if testCase.Expected.ResultKind == "path_set" || testCase.Name == "one_shortest_path_bound_pair" {
 		return "SP-S3-U-NE"
@@ -1055,10 +1105,12 @@ func shortestArchitectureForCase(testCase ScaleCase) string {
 	return "SP-S3-U-D"
 }
 
+// shortestM0HydrationSQL returns SQL that hydrates paths from ordered relationship IDs.
 func shortestM0HydrationSQL(direction graph.Direction) string {
 	return `with shortest(edge_ids) as (select @edge_ids::int8[])` + shortestM0MaterializationSelect(direction)
 }
 
+// shortestM0FullSQL combines edge-only search with M0 path hydration.
 func shortestM0FullSQL(search string, direction graph.Direction) string {
 	return search + shortestM0MaterializationSelect(direction)
 }
@@ -1092,10 +1144,12 @@ cross join lateral (
 where hydrated.hydrated_count = cardinality(shortest.edge_ids)`
 }
 
+// shortestM1HydrationSQL returns SQL that hydrates paths from ordered node and relationship IDs.
 func shortestM1HydrationSQL() string {
 	return `with shortest(node_ids, edge_ids) as (select @node_ids::int8[], @edge_ids::int8[])` + shortestM1MaterializationSelect()
 }
 
+// shortestM1FullSQL combines node-and-edge search with M1 path hydration.
 func shortestM1FullSQL(search string) string {
 	return search + shortestM1MaterializationSelect()
 }
@@ -1130,6 +1184,7 @@ where cardinality(shortest.node_ids) = cardinality(shortest.edge_ids) + 1
   and hydrated_edges.hydrated_count = cardinality(shortest.edge_ids)`
 }
 
+// shortestS3UStateShape describes recursive state retained by the selected unidirectional search projection.
 func shortestS3UStateShape(testCase ScaleCase) string {
 	if testCase.Expected.ResultKind == "path_set" || testCase.Name == "one_shortest_path_bound_pair" {
 		return "per-row node and relationship trail arrays"
@@ -1137,6 +1192,7 @@ func shortestS3UStateShape(testCase ScaleCase) string {
 	return "distance frontier node and depth only; no path or predecessor state"
 }
 
+// shortestBidirectionalReferenceSQL returns the bidirectional shortest-path reference query for the requested result shape.
 func shortestBidirectionalReferenceSQL(testCase ScaleCase, direction graph.Direction) string {
 	forwardJoin, forwardNext := "e.start_id = forward.node_id", "e.end_id"
 	backwardJoin, backwardNext := "e.end_id = backward.node_id", "e.start_id"
@@ -1181,6 +1237,7 @@ select ordered_edge_ids_to_path(
 from shortest join node root on root.graph_id = @graph_id and root.id = @start_id`
 }
 
+// fixedSuffixExpansionReferenceSpecs builds exact reference implementations for fixed-suffix expansion cases.
 func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
 	kindNames := []string{"ExpansionRoot", "SuffixHead", "SuffixMiddle", "SuffixTerminal", "Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"}
 	probeParams := copyReferenceParams(params)
@@ -1255,10 +1312,12 @@ from node root where root.graph_id = @graph_id and root.id = @root_id`,
 	return specs, nil
 }
 
+// referenceHydrationRequested reports whether the selected arm requires precomputed hydration inputs.
 func referenceHydrationRequested(referenceArms []string) bool {
 	return len(referenceArms) == 0 || slices.Contains(referenceArms, "hydration_only")
 }
 
+// buildFixedSuffixExpansionReferenceSpecs assembles fixed-suffix search and hydration references for one case.
 func buildFixedSuffixExpansionReferenceSpecs(testCase ScaleCase, probeParams map[string]any) []postgresReferenceSpec {
 	roots := `roots(root_id) as materialized (
   select n.id from node n
@@ -1582,6 +1641,7 @@ from paths join node root on root.graph_id = @graph_id and root.id = paths.node_
 	}
 }
 
+// observationShapeForCase selects full public path observations when the case exposes paths and endpoint IDs otherwise.
 func observationShapeForCase(testCase ScaleCase) string {
 	if testCase.Observes.Paths || testCase.Expected.ResultKind == "path_set" {
 		return "public_observation"
@@ -1589,6 +1649,7 @@ func observationShapeForCase(testCase ScaleCase) string {
 	return "endpoint_ids"
 }
 
+// referenceSpecIndex returns a reference arm's index and panics when the arm is absent.
 func referenceSpecIndex(specs []postgresReferenceSpec, name string) int {
 	for idx, spec := range specs {
 		if spec.name == name {
@@ -1598,6 +1659,7 @@ func referenceSpecIndex(specs []postgresReferenceSpec, name string) int {
 	panic("missing PostgreSQL reference spec " + name)
 }
 
+// referenceSpecIndexOrMissing returns a reference arm's index or -1 when absent.
 func referenceSpecIndexOrMissing(specs []postgresReferenceSpec, name string) int {
 	for idx, spec := range specs {
 		if spec.name == name {
@@ -1607,6 +1669,7 @@ func referenceSpecIndexOrMissing(specs []postgresReferenceSpec, name string) int
 	return -1
 }
 
+// readReferenceRow reads reference row and propagates I/O or decoding failures.
 func readReferenceRow(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any) ([]any, error) {
 	var values []any
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -1628,6 +1691,7 @@ func readReferenceRow(ctx context.Context, db graph.Database, sqlQuery string, p
 	return values, nil
 }
 
+// referenceInt64Slice normalizes supported driver array representations to []int64.
 func referenceInt64Slice(value any) ([]int64, error) {
 	switch typed := value.(type) {
 	case []int64:
@@ -1658,6 +1722,7 @@ func referenceInt64Slice(value any) ([]int64, error) {
 	}
 }
 
+// copyReferenceParams duplicates reference params without aliasing mutable state.
 func copyReferenceParams(params map[string]any) map[string]any {
 	copy := make(map[string]any, len(params)+10)
 	for name, value := range params {
@@ -1666,6 +1731,7 @@ func copyReferenceParams(params map[string]any) map[string]any {
 	return copy
 }
 
+// measureRawPostgres executes raw PostgreSQL and records its timing observations.
 func measureRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any, warmupIterations, iterations int) (int64, DurationStats, error) {
 	run := func() (int64, error) {
 		var count int64

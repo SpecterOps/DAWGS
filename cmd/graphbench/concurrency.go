@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// measurePostgresConcurrency runs requested concurrency levels and records latency and connection reuse.
 func measurePostgresConcurrency(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -37,6 +38,7 @@ func measurePostgresConcurrency(
 	return blocks, nil
 }
 
+// measurePostgresConcurrencyBlock coordinates workers for one concurrency level and aggregates their samples.
 func measurePostgresConcurrencyBlock(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -99,6 +101,7 @@ func measurePostgresConcurrencyBlock(
 	}, nil
 }
 
+// measurePostgresConcurrentIteration executes one timed query in a transaction and records its backend process ID.
 func measurePostgresConcurrentIteration(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -164,6 +167,7 @@ func measurePostgresConcurrentIteration(
 	}, pid, nil
 }
 
+// postgresConcurrencyTxOptions returns transaction options that preserve session-local workspace maintenance.
 func postgresConcurrencyTxOptions() pgx.TxOptions {
 	return pgx.TxOptions{AccessMode: pgx.ReadWrite}
 }

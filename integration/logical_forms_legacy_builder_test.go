@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderLogicalForms verifies legacy logical predicates preserve grouping, precedence, and result identity.
 func TestLegacyBuilderLogicalForms(t *testing.T) {
 	logicFixture := logicalFormsFixture()
 	projectionFixture := logicalProjectionFixture()
@@ -219,6 +220,8 @@ func TestLegacyBuilderLogicalForms(t *testing.T) {
 	})
 }
 
+// logicalFormsFixture builds direction, null, time, and boolean property cases
+// for logical criteria regressions.
 func logicalFormsFixture() *opengraph.Graph {
 	day := func(day int) time.Time {
 		return time.Date(2026, time.January, day, 0, 0, 0, 0, time.UTC)
@@ -398,6 +401,8 @@ func logicalFormsFixture() *opengraph.Graph {
 	}
 }
 
+// logicalProjectionFixture builds the single relationship used to verify
+// projection and fetch behavior for logical criteria.
 func logicalProjectionFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{
@@ -423,6 +428,7 @@ func logicalProjectionFixture() *opengraph.Graph {
 	}
 }
 
+// regressionFixtureID resolves a database node ID back to its stable fixture identifier and fails when unmapped.
 func regressionFixtureID(t *testing.T, idMap opengraph.IDMap, id graph.ID) string {
 	t.Helper()
 	for fixtureID, databaseID := range idMap {

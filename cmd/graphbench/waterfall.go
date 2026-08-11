@@ -19,6 +19,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 )
 
+// measureCompileWaterfall times Cypher parse, translate, and SQL rendering separately.
 func measureCompileWaterfall(
 	ctx context.Context,
 	cypherQuery string,
@@ -85,6 +86,7 @@ func measureCompileWaterfall(
 	return waterfall, nil
 }
 
+// measureRawPGXWaterfall times PostgreSQL bind, first row, drain, and close stages separately.
 func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery string, params map[string]any, warmupIterations, iterations int) (PostgresBoundaryWaterfall, error) {
 	if warmupIterations < 0 || iterations < 1 {
 		return PostgresBoundaryWaterfall{}, fmt.Errorf("invalid raw pgx warmup/iteration counts")

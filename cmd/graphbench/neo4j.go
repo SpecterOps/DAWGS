@@ -31,13 +31,19 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// neo4jRunner owns the Neo4j driver and database used to execute benchmark cases.
 type neo4jRunner struct {
-	datasetDir   string
-	db           graph.Database
-	planDriver   neo4jcore.DriverWithContext
+	// datasetDir locates fixture and corpus files on disk.
+	datasetDir string
+	// db provides graph transactions for fixture preparation and query execution.
+	db graph.Database
+	// planDriver supplies the Neo4j driver used only for EXPLAIN capture.
+	planDriver neo4jcore.DriverWithContext
+	// databaseName selects the Neo4j database targeted by the benchmark session.
 	databaseName string
 }
 
+// newNeo4jRunner opens a Neo4j driver and selects the optional database encoded in the URI.
 func newNeo4jRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus) (*neo4jRunner, error) {
 	if err := databaseguard.ValidateEnvironment(connection); err != nil {
 		return nil, fmt.Errorf("refuse destructive Neo4j GraphBench target: %w", err)
@@ -76,6 +82,7 @@ func newNeo4jRunner(ctx context.Context, datasetDir, connection string, corpus S
 	}, nil
 }
 
+// Close releases both Neo4j drivers owned by the benchmark runner.
 func (s *neo4jRunner) Close(ctx context.Context) error {
 	var closeErr error
 	if s.planDriver != nil {
@@ -90,6 +97,7 @@ func (s *neo4jRunner) Close(ctx context.Context) error {
 	return closeErr
 }
 
+// Run reloads each fixture dataset and measures every corpus case supported by Neo4j.
 func (s *neo4jRunner) Run(ctx context.Context, warmupIterations, iterations int, corpus ScaleCorpus) ([]CaseResult, error) {
 	var (
 		records        []CaseResult
@@ -124,6 +132,7 @@ func (s *neo4jRunner) Run(ctx context.Context, warmupIterations, iterations int,
 	return records, nil
 }
 
+// runCase resolves fixture parameters, measures the selected Neo4j read or write workload, and records correctness and timing status in one CaseResult.
 func (s *neo4jRunner) runCase(ctx context.Context, warmupIterations, iterations int, testCase ScaleCase, idMap opengraph.IDMap) CaseResult {
 	params, err := resolveCaseParams(testCase, idMap)
 	record := newCaseResult(testCase, ModeNeo4j, params)
@@ -182,6 +191,7 @@ func (s *neo4jRunner) runCase(ctx context.Context, warmupIterations, iterations 
 	return record
 }
 
+// explain submits native Neo4j EXPLAIN and returns its normalized operator tree and operator names.
 func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (plan *Neo4jPlanNode, operators []string, err error) {
 	accessMode := neo4jcore.AccessModeRead
 	if write {
@@ -214,13 +224,19 @@ func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params ma
 	return &planNode, neo4jOperators(planNode), nil
 }
 
+// neo4jPlanDriverConfig contains a Neo4j server URI and optional target database parsed from a connection string.
 type neo4jPlanDriverConfig struct {
-	Target       string
-	Username     string
-	Password     string
+	// Target contains the Neo4j server URI without a database path.
+	Target string
+	// Username contains the Neo4j username decoded from the connection URI.
+	Username string
+	// Password contains the Neo4j password decoded from the connection URI.
+	Password string
+	// DatabaseName selects the Neo4j database targeted by the session.
 	DatabaseName string
 }
 
+// parseNeo4jPlanDriverConfig parses a Neo4j connection string while preserving its server URI and database path.
 func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	connectionURL, err := url.Parse(connStr)
 	if err != nil {
@@ -256,6 +272,7 @@ func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	}, nil
 }
 
+// neo4jDatabaseName returns the optional single-segment database name encoded in a Neo4j URI path.
 func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	databasePath := strings.Trim(connectionURL.EscapedPath(), "/")
 	if databasePath == "" {
@@ -276,6 +293,7 @@ func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	return databaseName, nil
 }
 
+// openNeo4jPlanDriver parses the benchmark connection settings and returns a context-aware driver together with the selected database name.
 func openNeo4jPlanDriver(connStr string) (neo4jcore.DriverWithContext, string, error) {
 	cfg, err := parseNeo4jPlanDriverConfig(connStr)
 	if err != nil {
@@ -290,13 +308,19 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.DriverWithContext, string, e
 	return driver, cfg.DatabaseName, nil
 }
 
+// Neo4jPlanNode models the recursive operator tree returned by Neo4j EXPLAIN.
 type Neo4jPlanNode struct {
-	Operator    string            `json:"operator"`
-	Arguments   map[string]string `json:"arguments,omitempty"`
-	Identifiers []string          `json:"identifiers,omitempty"`
-	Children    []Neo4jPlanNode   `json:"children,omitempty"`
+	// Operator identifies the backend plan operator at this node.
+	Operator string `json:"operator"`
+	// Arguments maps backend plan argument names to stable string representations.
+	Arguments map[string]string `json:"arguments,omitempty"`
+	// Identifiers lists variables or identifiers referenced by the Neo4j plan node.
+	Identifiers []string `json:"identifiers,omitempty"`
+	// Children contains child Neo4j plan operators in backend order.
+	Children []Neo4jPlanNode `json:"children,omitempty"`
 }
 
+// convertNeo4jPlan recursively converts a Neo4j plan into the stable serialized plan-node schema.
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	node := Neo4jPlanNode{
 		Operator:    plan.Operator(),
@@ -311,6 +335,7 @@ func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	return node
 }
 
+// stringifyArguments converts plan arguments to stable strings in a fresh map.
 func stringifyArguments(arguments map[string]any) map[string]string {
 	if len(arguments) == 0 {
 		return nil
@@ -324,6 +349,7 @@ func stringifyArguments(arguments map[string]any) map[string]string {
 	return values
 }
 
+// neo4jOperators flattens a Neo4j plan tree into sorted unique operator names.
 func neo4jOperators(root Neo4jPlanNode) []string {
 	var (
 		operators []string
@@ -341,6 +367,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	return operators
 }
 
+// cypherWithoutTerminator trims surrounding whitespace and one trailing Cypher semicolon.
 func cypherWithoutTerminator(cypherQuery string) string {
 	return strings.TrimSuffix(strings.TrimSpace(cypherQuery), ";")
 }

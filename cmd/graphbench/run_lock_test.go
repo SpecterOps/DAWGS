@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDestructiveRunLockRejectsOverlap verifies that a held lock prevents a second destructive GraphBench process from using the same lock path.
 func TestDestructiveRunLockRejectsOverlap(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "graphbench.lock")
 	first, err := acquireDestructiveRunLock(path)

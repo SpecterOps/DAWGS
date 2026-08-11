@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderDelegatedEnrollmentDiscovery verifies legacy criteria preserve delegated-enrollment discovery results across backends.
 func TestLegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
 	fixture := delegatedEnrollmentFixture()
 	nodeKinds, edgeKinds := fixture.Kinds()
@@ -57,6 +58,8 @@ func TestLegacyBuilderDelegatedEnrollmentDiscovery(t *testing.T) {
 	})
 }
 
+// delegatedEnrollmentFixture builds templates, enrollment endpoints, and
+// duplicate paths used by the delegated-enrollment regression cases.
 func delegatedEnrollmentFixture() *opengraph.Graph {
 	return &opengraph.Graph{
 		Nodes: []opengraph.Node{

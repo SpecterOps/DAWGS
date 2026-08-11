@@ -15,47 +15,82 @@ import (
 	"time"
 )
 
+// referenceClosureReportVersion identifies the serialized schema revision for reference closure report.
 const referenceClosureReportVersion = 1
 
+// ReferenceClosureOptions selects the reference arm and ratio and absolute limits used for closure analysis.
 type ReferenceClosureOptions struct {
-	Seed               int64
-	Confidence         float64
-	BootstrapCount     int
-	ReferenceName      string
-	RatioUpperLimit    float64
+	// Seed controls deterministic random sampling.
+	Seed int64
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64
+	// BootstrapCount sets the number of bootstrap resamples.
+	BootstrapCount int
+	// ReferenceName identifies the reference arm selected for closure analysis.
+	ReferenceName string
+	// RatioUpperLimit sets the largest production-to-reference median ratio accepted by closure analysis.
+	RatioUpperLimit float64
+	// AbsoluteResolution records the absolute A/A noise floor used for materiality decisions.
 	AbsoluteResolution time.Duration
 }
 
+// ReferenceClosureCase reports paired production/reference samples, A/A floors, and closure disposition for one case.
 type ReferenceClosureCase struct {
-	Dataset                string           `json:"dataset"`
-	Name                   string           `json:"name"`
-	ReferenceName          string           `json:"reference_name"`
-	ReferenceArchitecture  string           `json:"reference_architecture"`
-	Rounds                 int              `json:"rounds"`
-	ProductionSamples      int              `json:"production_samples"`
-	ReferenceSamples       int              `json:"reference_samples"`
-	MedianRatio            RatioInterval    `json:"median_ratio"`
-	MedianChange           DurationInterval `json:"median_change"`
-	AbsoluteGapUpper       time.Duration    `json:"absolute_gap_upper"`
-	RatioUpperLimit        float64          `json:"ratio_upper_limit"`
-	AbsoluteFloor          time.Duration    `json:"absolute_floor"`
-	ProductionAAResolution time.Duration    `json:"production_aa_resolution"`
-	ReferenceAAResolution  time.Duration    `json:"reference_aa_resolution"`
-	AbsoluteResolution     time.Duration    `json:"absolute_resolution"`
-	Passed                 bool             `json:"passed"`
-	Reasons                []string         `json:"reasons,omitempty"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// ReferenceName identifies the reference arm selected for closure analysis.
+	ReferenceName string `json:"reference_name"`
+	// ReferenceArchitecture records the executor architecture declared by the closure reference arm.
+	ReferenceArchitecture string `json:"reference_architecture"`
+	// Rounds records the number of independent measurement rounds.
+	Rounds int `json:"rounds"`
+	// ProductionSamples records warm timing samples available from production execution.
+	ProductionSamples int `json:"production_samples"`
+	// ReferenceSamples records warm timing samples available from the reference arm.
+	ReferenceSamples int `json:"reference_samples"`
+	// MedianRatio reports the candidate-to-baseline median latency ratio and confidence bounds.
+	MedianRatio RatioInterval `json:"median_ratio"`
+	// MedianChange reports the absolute median latency difference and confidence bounds.
+	MedianChange DurationInterval `json:"median_change"`
+	// AbsoluteGapUpper records the upper confidence bound for absolute production/reference latency gap.
+	AbsoluteGapUpper time.Duration `json:"absolute_gap_upper"`
+	// RatioUpperLimit sets the largest production-to-reference median ratio accepted by closure analysis.
+	RatioUpperLimit float64 `json:"ratio_upper_limit"`
+	// AbsoluteFloor records the A/A-derived absolute materiality floor.
+	AbsoluteFloor time.Duration `json:"absolute_floor"`
+	// ProductionAAResolution records production-arm A/A noise used for closure materiality.
+	ProductionAAResolution time.Duration `json:"production_aa_resolution"`
+	// ReferenceAAResolution records reference-arm A/A noise used for closure materiality.
+	ReferenceAAResolution time.Duration `json:"reference_aa_resolution"`
+	// AbsoluteResolution records the absolute A/A noise floor used for materiality decisions.
+	AbsoluteResolution time.Duration `json:"absolute_resolution"`
+	// Passed reports whether every required gate condition succeeded.
+	Passed bool `json:"passed"`
+	// Reasons lists explanations for the reported disposition.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
+// ReferenceClosureReport contains artifact identity, thresholds, and per-case production/reference closure results.
 type ReferenceClosureReport struct {
-	Version        int                    `json:"version"`
-	Seed           int64                  `json:"seed"`
-	Confidence     float64                `json:"confidence_level"`
-	ArtifactSHA256 string                 `json:"artifact_sha256"`
-	ReferenceName  string                 `json:"reference_name"`
-	Passed         bool                   `json:"passed"`
-	Cases          []ReferenceClosureCase `json:"cases"`
+	// Version identifies the serialized schema revision.
+	Version int `json:"version"`
+	// Seed controls deterministic random sampling.
+	Seed int64 `json:"seed"`
+	// Confidence sets the confidence level used for statistical intervals.
+	Confidence float64 `json:"confidence_level"`
+	// ArtifactSHA256 identifies the exact input artifact summarized by the report.
+	ArtifactSHA256 string `json:"artifact_sha256"`
+	// ReferenceName identifies the reference arm selected for closure analysis.
+	ReferenceName string `json:"reference_name"`
+	// Passed reports whether every required gate condition succeeded.
+	Passed bool `json:"passed"`
+	// Cases contains production-to-reference closure evidence for each evaluated workload.
+	Cases []ReferenceClosureCase `json:"cases"`
 }
 
+// buildReferenceClosureReport compares production and exact-reference samples under the closure protocol.
 func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureOptions) (ReferenceClosureReport, error) {
 	if options.Confidence <= 0 || options.Confidence >= 1 {
 		return ReferenceClosureReport{}, fmt.Errorf("confidence level must be between 0 and 1")
@@ -82,9 +117,13 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		return ReferenceClosureReport{}, fmt.Errorf("reference absolute resolution must not be negative")
 	}
 
+	// closureSeries groups production and reference samples with the architecture fixed across rounds.
 	type closureSeries struct {
-		production   roundSamples
-		reference    roundSamples
+		// production groups production duration samples by measurement round.
+		production roundSamples
+		// reference groups reference-arm duration samples by measurement round.
+		reference roundSamples
+		// architecture retains the executor architecture that must remain stable across rounds.
 		architecture string
 	}
 	series := map[performanceKey]*closureSeries{}
@@ -141,6 +180,7 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s has duplicate round %d", record.Dataset, record.Name, record.Environment.Round)
 		}
 		seenRounds[key][record.Environment.Round] = struct{}{}
+
 		if series[key] == nil {
 			series[key] = &closureSeries{
 				production:   roundSamples{},
@@ -150,17 +190,20 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		} else if series[key].architecture != reference.Architecture {
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s reference architecture changed across rounds", record.Dataset, record.Name)
 		}
+
 		for _, sample := range record.RawPGXWaterfall.Samples {
 			if sample.Total > 0 {
 				series[key].production[record.Environment.Round] = append(series[key].production[record.Environment.Round], sample.Total)
 			}
 		}
+
 		for _, sample := range reference.Stats.Samples {
 			if sample.Classification == "warm" && sample.Duration > 0 {
 				series[key].reference[record.Environment.Round] = append(series[key].reference[record.Environment.Round], sample.Duration)
 			}
 		}
 	}
+
 	if len(series) == 0 {
 		return ReferenceClosureReport{}, fmt.Errorf("artifact has no successful PostgreSQL production/reference records")
 	}
@@ -232,6 +275,7 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 	return report, nil
 }
 
+// withinSessionAAResolution returns the larger within-session A/A noise estimate for a case.
 func withinSessionAAResolution(samples roundSamples, seed int64, options PerfGateOptions) time.Duration {
 	armA, armB := splitAASeries(samples)
 	armA, armB = matchedRounds(armA, armB)
@@ -242,10 +286,12 @@ func withinSessionAAResolution(samples roundSamples, seed int64, options PerfGat
 	return max(absDuration(interval.Lower), absDuration(interval.Upper))
 }
 
+// absDuration returns the magnitude of a signed duration.
 func absDuration(value time.Duration) time.Duration {
 	return time.Duration(math.Abs(float64(value)))
 }
 
+// createReferenceClosureReport loads benchmark records, builds a closure report, and writes it as JSON.
 func createReferenceClosureReport(artifactPath, outputPath string, options ReferenceClosureOptions) (bool, error) {
 	records, err := readJSONLFile(artifactPath)
 	if err != nil {
@@ -262,6 +308,7 @@ func createReferenceClosureReport(artifactPath, outputPath string, options Refer
 	return report.Passed, writeReferenceClosureReport(outputPath, report)
 }
 
+// writeReferenceClosureReport writes a reference-closure report as indented JSON.
 func writeReferenceClosureReport(path string, report ReferenceClosureReport) (err error) {
 	var output *os.File
 	if path == "" {

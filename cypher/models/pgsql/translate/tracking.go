@@ -110,18 +110,26 @@ func (s *Frame) Reveal(identifier pgsql.Identifier) {
 // all visible projections. This is required when disambiguating references that otherwise belong to
 // a frame.
 type Scope struct {
+	// nextFrameID is the sequence value assigned to the next scope frame.
 	nextFrameID int
-	graphID     int32
-	stack       []*Frame
-	generator   IdentifierGenerator
-	aliases     map[pgsql.Identifier]pgsql.Identifier
+	// graphID identifies the graph whose concrete partitions translation targets.
+	graphID int32
+	// stack contains active scope frames from outermost to innermost.
+	stack []*Frame
+	// generator allocates collision-free PostgreSQL identifiers by data type.
+	generator IdentifierGenerator
+	// aliases maps Cypher-visible symbols to their canonical translated identifiers.
+	aliases map[pgsql.Identifier]pgsql.Identifier
+	// definitions maps canonical translated identifiers to their binding metadata.
 	definitions map[pgsql.Identifier]*BoundIdentifier
 }
 
+// SetGraphID sets the graph used for graph-scoped table references created in this scope.
 func (s *Scope) SetGraphID(graphID int32) {
 	s.graphID = graphID
 }
 
+// GraphID returns the graph used for graph-scoped table references in this scope.
 func (s *Scope) GraphID() int32 {
 	return s.graphID
 }
@@ -388,20 +396,29 @@ func (s *Scope) Define(identifier pgsql.Identifier, dataType pgsql.DataType) *Bo
 // will eagerly bind anonymous identifiers for traversal steps and rebind existing identifiers and their
 // aliases to prevent naming collisions.
 type BoundIdentifier struct {
-	Identifier     pgsql.Identifier
-	Alias          models.Optional[pgsql.Identifier]
-	Parameter      *pgsql.Parameter
+	// Identifier is the canonical PostgreSQL name allocated for the binding.
+	Identifier pgsql.Identifier
+	// Alias is the optional source-visible name projected for the binding.
+	Alias models.Optional[pgsql.Identifier]
+	// Parameter is the translated SQL parameter represented by this binding, when applicable.
+	Parameter *pgsql.Parameter
+	// LastProjection is the most recent frame that materialized the binding.
 	LastProjection *Frame
-	Dependencies   []*BoundIdentifier
-	DataType       pgsql.DataType
-	IDOnly         bool
-	DistanceOnly   bool
+	// Dependencies are the bindings required to reconstruct this value.
+	Dependencies []*BoundIdentifier
+	// DataType is the PostgreSQL representation carried by the binding.
+	DataType pgsql.DataType
+	// IDOnly reports that the binding is represented by a scalar entity ID instead of a composite.
+	IDOnly bool
+	// DistanceOnly reports that the binding carries only shortest-path distance state.
+	DistanceOnly bool
 }
 
 func (s *BoundIdentifier) MaterializedBy(frame *Frame) {
 	s.LastProjection = frame
 }
 
+// Copy returns an independent binding whose dependency slice can be modified without affecting the source.
 func (s *BoundIdentifier) Copy() *BoundIdentifier {
 	dependenciesCopy := make([]*BoundIdentifier, len(s.Dependencies))
 	copy(dependenciesCopy, s.Dependencies)
@@ -418,6 +435,7 @@ func (s *BoundIdentifier) Copy() *BoundIdentifier {
 	}
 }
 
+// Symbol returns the first deterministic symbol that aliases binding.
 func (s *Scope) Symbol(binding *BoundIdentifier) (pgsql.Identifier, bool) {
 	if symbols := s.Symbols(binding); len(symbols) > 0 {
 		return symbols[0], true
@@ -426,6 +444,7 @@ func (s *Scope) Symbol(binding *BoundIdentifier) (pgsql.Identifier, bool) {
 	return "", false
 }
 
+// Symbols returns every symbol that aliases binding in lexical order.
 func (s *Scope) Symbols(binding *BoundIdentifier) []pgsql.Identifier {
 	if binding == nil {
 		return nil

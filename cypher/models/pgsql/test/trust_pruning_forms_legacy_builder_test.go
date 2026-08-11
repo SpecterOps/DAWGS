@@ -25,12 +25,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLegacyBuilderPostgreSQL_TrustAndPruningForms verifies migrated trust filters and pruning projections retain their SQL contracts.
 func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 	threshold := time.Date(2026, time.January, 3, 0, 0, 0, 0, time.UTC)
 
 	testCases := map[string]struct {
-		criteria   []graph.Criteria
-		fragments  []string
+		// criteria contains the legacy query-builder inputs for the case.
+		criteria []graph.Criteria
+		// fragments lists SQL fragments that the translation must contain.
+		fragments []string
+		// parameters is the exact parameter map expected from translation.
 		parameters map[string]any
 	}{
 		"TRUST-01 SameForestTrust ID projection": {
@@ -149,6 +153,7 @@ func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 	}
 }
 
+// trustPruningCriteria builds the shared trust-kind and timestamp predicate used by pruning regression cases.
 func trustPruningCriteria(domainKind, relationshipKind string, projection graph.Criteria) []graph.Criteria {
 	return []graph.Criteria{
 		query.Where(query.And(

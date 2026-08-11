@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// scaleCorpusRequiredIDs lists representative corpus cases required by the regression contract.
 var scaleCorpusRequiredIDs = []string{
 	"REC-01", "REC-02", "REC-04", "REC-06", "REC-08",
 	"TRUST-01", "TRUST-02",
@@ -34,6 +35,7 @@ var scaleCorpusRequiredIDs = []string{
 	"LOOKUP-02", "LOOKUP-04", "LOOKUP-05", "LOOKUP-09", "LOOKUP-11", "LOOKUP-13", "LOOKUP-15", "LOOKUP-16",
 }
 
+// TestGeneratedScaleCasesParseAndExecuteRealBackends verifies that each generated family has parseable Cypher and an explicit support decision for PostgreSQL and Neo4j.
 func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -62,6 +64,7 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 	require.Positive(t, covered["endpoint_seeded_expansion"])
 }
 
+// TestEndpointSeededExpansionCorpusCoversGuardOutcomes verifies corpus representatives for admitted execution plus endpoint-guard and state-guard overflow fallbacks.
 func TestEndpointSeededExpansionCorpusCoversGuardOutcomes(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -81,6 +84,7 @@ func TestEndpointSeededExpansionCorpusCoversGuardOutcomes(t *testing.T) {
 	}
 }
 
+// TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope verifies distance cases spanning deep, wide, inbound, disconnected, cyclic, parallel-edge, and self-loop shapes.
 func TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -104,6 +108,7 @@ func TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope(t *testing.T
 	}
 }
 
+// TestGeneratedShortestPathCorpusCoversMaterializerEnvelope verifies hydrated-path cases spanning deep, wide, inbound, zero-depth, disconnected, cyclic, parallel-edge, and self-loop shapes.
 func TestGeneratedShortestPathCorpusCoversMaterializerEnvelope(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -127,6 +132,7 @@ func TestGeneratedShortestPathCorpusCoversMaterializerEnvelope(t *testing.T) {
 	}
 }
 
+// scaleCorpusCaseID joins a scale case's dataset and name into its contract identifier.
 func scaleCorpusCaseID(name string) string {
 	if separator := strings.IndexByte(name, '_'); separator >= 0 {
 		return name[:separator]
@@ -134,6 +140,7 @@ func scaleCorpusCaseID(name string) string {
 	return name
 }
 
+// scaleCorpusRequiredIDSet returns the required representative scale-case identifiers as a set.
 func scaleCorpusRequiredIDSet() map[string]struct{} {
 	required := make(map[string]struct{}, len(scaleCorpusRequiredIDs))
 	for _, id := range scaleCorpusRequiredIDs {
@@ -142,6 +149,7 @@ func scaleCorpusRequiredIDSet() map[string]struct{} {
 	return required
 }
 
+// TestScaleCorpusRequiredRepresentativesDeclareCardinality verifies every required query-form tag is present and declares row counts or complete mutation cardinalities.
 func TestScaleCorpusRequiredRepresentativesDeclareCardinality(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -169,6 +177,7 @@ func TestScaleCorpusRequiredRepresentativesDeclareCardinality(t *testing.T) {
 	}
 }
 
+// TestScaleCorpusDistinguishesProjectionClasses verifies that ID-only, shallow, and fully hydrated tags agree with result kind and observation requirements.
 func TestScaleCorpusDistinguishesProjectionClasses(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -208,6 +217,7 @@ func TestScaleCorpusDistinguishesProjectionClasses(t *testing.T) {
 	}
 }
 
+// TestFixedSuffixExpansionIDRowsUseStableFixtureIdentitiesAndPreserveDuplicates verifies four identical logical endpoint pairs remain explicit expected rows rather than being deduplicated or backend-ID based.
 func TestFixedSuffixExpansionIDRowsUseStableFixtureIdentitiesAndPreserveDuplicates(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)

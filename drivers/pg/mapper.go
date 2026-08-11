@@ -7,10 +7,14 @@ import (
 )
 
 const (
+	// minKindID is the smallest integer representable by PostgreSQL's int2 kind column.
 	minKindID = -1 << 15
+
+	// maxKindID is the largest integer representable by PostgreSQL's int2 kind column.
 	maxKindID = 1<<15 - 1
 )
 
+// mapKindIDs resolves database kind IDs and reports false when the mapper rejects any ID.
 func mapKindIDs(ctx context.Context, kindMapper KindMapper, kindIDs []int16) (graph.Kinds, bool) {
 	if len(kindIDs) == 0 {
 		return graph.Kinds{}, true
@@ -23,6 +27,7 @@ func mapKindIDs(ctx context.Context, kindMapper KindMapper, kindIDs []int16) (gr
 	return nil, false
 }
 
+// asKindID converts supported integer representations to int16 without truncation.
 func asKindID(value any) (int16, bool) {
 	switch typedValue := value.(type) {
 	case int:
@@ -78,6 +83,7 @@ func asKindID(value any) (int16, bool) {
 	}
 }
 
+// mapAnyKinds maps a homogeneous list of kind names or numeric IDs and rejects mixed or unsupported values.
 func mapAnyKinds(ctx context.Context, kindMapper KindMapper, values []any) (graph.Kinds, bool) {
 	if len(values) == 0 {
 		return graph.Kinds{}, true
@@ -113,6 +119,7 @@ func mapAnyKinds(ctx context.Context, kindMapper KindMapper, values []any) (grap
 	return mapKindIDs(ctx, kindMapper, kindIDs)
 }
 
+// mapKinds accepts the slice representations emitted by pgx for graph kind arrays.
 func mapKinds(ctx context.Context, kindMapper KindMapper, untypedValue any) (graph.Kinds, bool) {
 	switch typedValue := untypedValue.(type) {
 	case []any:
@@ -128,6 +135,7 @@ func mapKinds(ctx context.Context, kindMapper KindMapper, untypedValue any) (gra
 	return nil, false
 }
 
+// mapNodeCompositeArray converts a raw PostgreSQL composite array into graph nodes with resolved kinds.
 func mapNodeCompositeArray(ctx context.Context, kindMapper KindMapper, value any) ([]*graph.Node, bool) {
 	nodeComposites, err := nodeCompositesFromRaw(value)
 	if err != nil {
@@ -147,6 +155,7 @@ func mapNodeCompositeArray(ctx context.Context, kindMapper KindMapper, value any
 	return nodes, true
 }
 
+// mapEdgeCompositeArray converts a raw PostgreSQL composite array into graph relationships with resolved kinds.
 func mapEdgeCompositeArray(ctx context.Context, kindMapper KindMapper, value any) ([]*graph.Relationship, bool) {
 	edgeComposites, err := edgeCompositesFromRaw(value)
 	if err != nil {
@@ -166,6 +175,7 @@ func mapEdgeCompositeArray(ctx context.Context, kindMapper KindMapper, value any
 	return relationships, true
 }
 
+// newMapFunc returns the result mapper that recognizes graph composites, arrays, paths, and kind slices.
 func newMapFunc(ctx context.Context, kindMapper KindMapper) graph.MapFunc {
 	return func(value, target any) bool {
 		switch typedTarget := target.(type) {

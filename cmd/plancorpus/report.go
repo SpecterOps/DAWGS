@@ -13,55 +13,93 @@ import (
 	"github.com/specterops/dawgs/testutil"
 )
 
+// defaultTopPlans limits an unconfigured report to its 25 most expensive PostgreSQL plans.
 const defaultTopPlans = 25
 
+// postgresCostPattern extracts the total-cost upper bound from a PostgreSQL plan's cost range.
 var postgresCostPattern = regexp.MustCompile(`cost=[0-9.]+\.\.([0-9.]+)`)
 
+// PlanSummary aggregates captured plans by driver, lowering, and cost.
 type PlanSummary struct {
-	Metadata          testutil.BaselineMetadata `json:"metadata"`
-	Drivers           []DriverSummary           `json:"drivers"`
-	TopPostgresPlans  []CostedPlan              `json:"top_postgres_plans,omitempty"`
-	PostgresOperators []Count                   `json:"postgres_operators,omitempty"`
-	Neo4jOperators    []Count                   `json:"neo4j_operators,omitempty"`
-	PlannedLowerings  []Count                   `json:"planned_lowerings,omitempty"`
-	AppliedLowerings  []Count                   `json:"applied_lowerings,omitempty"`
-	SkippedLowerings  []Count                   `json:"skipped_lowerings,omitempty"`
-	SkippedReasons    []Count                   `json:"skipped_reasons,omitempty"`
-	FeatureCounts     []Count                   `json:"feature_counts,omitempty"`
-	Errors            []PlanError               `json:"errors,omitempty"`
+	// Metadata captures build and baseline metadata.
+	Metadata testutil.BaselineMetadata `json:"metadata"`
+	// Drivers lists driver summaries in deterministic display order.
+	Drivers []DriverSummary `json:"drivers"`
+	// TopPostgresPlans lists the highest-cost PostgreSQL plans selected for the summary.
+	TopPostgresPlans []CostedPlan `json:"top_postgres_plans,omitempty"`
+	// PostgresOperators counts normalized PostgreSQL plan operators.
+	PostgresOperators []Count `json:"postgres_operators,omitempty"`
+	// Neo4jOperators lists normalized Neo4j operators found in the captured plan.
+	Neo4jOperators []Count `json:"neo4j_operators,omitempty"`
+	// PlannedLowerings lists SQL lowering opportunities identified before optimization.
+	PlannedLowerings []Count `json:"planned_lowerings,omitempty"`
+	// AppliedLowerings lists SQL lowerings actually applied during translation.
+	AppliedLowerings []Count `json:"applied_lowerings,omitempty"`
+	// SkippedLowerings lists identified SQL lowerings not applied.
+	SkippedLowerings []Count `json:"skipped_lowerings,omitempty"`
+	// SkippedReasons counts reasons identified lowerings were not applied.
+	SkippedReasons []Count `json:"skipped_reasons,omitempty"`
+	// FeatureCounts counts captured plans containing each normalized plan feature.
+	FeatureCounts []Count `json:"feature_counts,omitempty"`
+	// Errors lists failures observed while processing the record.
+	Errors []PlanError `json:"errors,omitempty"`
 }
 
+// DriverSummary aggregates plan counts and operators for one database driver.
 type DriverSummary struct {
-	Driver  string `json:"driver"`
-	Records int    `json:"records"`
-	Errors  int    `json:"errors"`
+	// Driver identifies the database driver that produced the plan or summary.
+	Driver string `json:"driver"`
+	// Records counts captured plan records produced by the driver.
+	Records int `json:"records"`
+	// Errors counts plan-capture failures reported by the driver.
+	Errors int `json:"errors"`
 }
 
+// Count pairs a label with an aggregate count for serialized summaries.
 type Count struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
+	// Name labels the operator, lowering, feature, or reason being counted.
+	Name string `json:"name"`
+	// Count records how many plan records contributed the named item.
+	Count int `json:"count"`
 }
 
+// CostedPlan identifies a captured plan and its parsed PostgreSQL estimated cost.
 type CostedPlan struct {
-	Cost             float64  `json:"cost"`
-	Driver           string   `json:"driver"`
-	Source           string   `json:"source"`
-	Dataset          string   `json:"dataset,omitempty"`
-	Name             string   `json:"name"`
-	Cypher           string   `json:"cypher"`
-	PlanRoot         string   `json:"plan_root"`
+	// Cost records the PostgreSQL planner's estimated total cost.
+	Cost float64 `json:"cost"`
+	// Driver identifies the database driver that produced the plan or summary.
+	Driver string `json:"driver"`
+	// Source identifies the source corpus file.
+	Source string `json:"source"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset,omitempty"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Cypher contains the Cypher statement under test.
+	Cypher string `json:"cypher"`
+	// PlanRoot identifies the root operator of the captured plan.
+	PlanRoot string `json:"plan_root"`
+	// PlannedLowerings lists SQL lowering opportunities identified before optimization.
 	PlannedLowerings []string `json:"planned_lowerings,omitempty"`
+	// AppliedLowerings lists SQL lowerings actually applied during translation.
 	AppliedLowerings []string `json:"applied_lowerings,omitempty"`
+	// SkippedLowerings lists identified SQL lowerings not applied.
 	SkippedLowerings []string `json:"skipped_lowerings,omitempty"`
 }
 
+// PlanError records the driver, query, and failure for a plan that could not be summarized.
 type PlanError struct {
+	// Driver identifies the database driver that produced the plan or summary.
 	Driver string `json:"driver"`
+	// Source identifies the source corpus file.
 	Source string `json:"source"`
-	Name   string `json:"name"`
-	Error  string `json:"error"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Error records the failure message when the operation did not succeed.
+	Error string `json:"error"`
 }
 
+// buildSummary aggregates plan records by driver, operator, lowering, error, and estimated cost.
 func buildSummary(records []PlanRecord, topN int) PlanSummary {
 	if topN <= 0 {
 		topN = defaultTopPlans
@@ -170,6 +208,7 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 	}
 }
 
+// skippedLoweringLabels renders skipped lowering names and reasons as stable report labels, preserving their plan order.
 func skippedLoweringLabels(lowerings []translate.SkippedLowering) []string {
 	if len(lowerings) == 0 {
 		return nil
@@ -183,6 +222,7 @@ func skippedLoweringLabels(lowerings []translate.SkippedLowering) []string {
 	return labels
 }
 
+// postgresEstimatedCost extracts the PostgreSQL planner's estimated total cost from plan text.
 func postgresEstimatedCost(planRoot string) float64 {
 	match := postgresCostPattern.FindStringSubmatch(planRoot)
 	if len(match) != 2 {
@@ -196,6 +236,7 @@ func postgresEstimatedCost(planRoot string) float64 {
 	return cost
 }
 
+// normalizePostgresOperator removes plan decoration so equivalent PostgreSQL operator lines share one name.
 func normalizePostgresOperator(operator string) string {
 	operator = strings.TrimSpace(operator)
 	if operator == "" {
@@ -213,6 +254,7 @@ func normalizePostgresOperator(operator string) string {
 	return operator
 }
 
+// sortedDriverSummaries returns driver summaries ordered by driver name.
 func sortedDriverSummaries(drivers map[string]*DriverSummary) []DriverSummary {
 	sorted := make([]DriverSummary, 0, len(drivers))
 	for _, summary := range drivers {
@@ -224,6 +266,7 @@ func sortedDriverSummaries(drivers map[string]*DriverSummary) []DriverSummary {
 	return sorted
 }
 
+// sortedCounts converts a count map to descending-count, name-tiebroken entries.
 func sortedCounts(counts map[string]int) []Count {
 	sorted := make([]Count, 0, len(counts))
 	for name, count := range counts {
@@ -241,12 +284,14 @@ func sortedCounts(counts map[string]int) []Count {
 	return sorted
 }
 
+// writeJSONSummary encodes a plan summary as indented JSON.
 func writeJSONSummary(w io.Writer, summary PlanSummary) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(summary)
 }
 
+// writeMarkdownSummary renders aggregate counts, expensive plans, and errors as Markdown.
 func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
 	writef := func(format string, args ...any) error {
 		_, err := fmt.Fprintf(w, format, args...)
@@ -351,6 +396,7 @@ func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
 	return nil
 }
 
+// markdownCell escapes table delimiters and line breaks for a Markdown cell.
 func markdownCell(value string) string {
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.ReplaceAll(value, "|", "\\|")

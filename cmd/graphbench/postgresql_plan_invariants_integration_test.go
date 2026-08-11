@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// postgresPlanNodeLoops extracts Actual Loops for every EXPLAIN node with the requested alias, allowing integration assertions to detect repeated execution.
 func postgresPlanNodeLoops(t *testing.T, raw json.RawMessage, alias string) []int64 {
 	t.Helper()
 	var document []map[string]any
@@ -65,6 +66,7 @@ func postgresPlanNodeLoops(t *testing.T, raw json.RawMessage, alias string) []in
 	return loops
 }
 
+// TestPostgreSQLScalePlanInvariants verifies analyzed-plan capture, indexed anchors, correct mutation targets, and preserved branch-local predicates across required scale representatives.
 func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -150,6 +152,7 @@ func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	})
 }
 
+// TestPostgreSQLZeroLengthShortestMaterializersAreExact verifies that all search-and-hydration references reproduce a singleton zero-edge path and hydration-only arms avoid recursive search.
 func TestPostgreSQLZeroLengthShortestMaterializersAreExact(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -230,6 +233,7 @@ func TestPostgreSQLZeroLengthShortestMaterializersAreExact(t *testing.T) {
 	}
 }
 
+// TestPostgreSQLForcedShortestDistanceEndpointSemantics verifies zero-depth identity, missing-root emptiness, and the minimum-depth self-endpoint error under forced distance execution.
 func TestPostgreSQLForcedShortestDistanceEndpointSemantics(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -321,6 +325,7 @@ func TestPostgreSQLForcedShortestDistanceEndpointSemantics(t *testing.T) {
 	require.Contains(t, records[2].Error, "shortest path")
 }
 
+// TestPostgreSQLForcedShortestDirectPreflightSkipsAndFallsBackExactly verifies that one-hop direct hits bypass the recursive harness while longer paths invoke it and preserve exact ordered path output.
 func TestPostgreSQLForcedShortestDirectPreflightSkipsAndFallsBackExactly(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -458,6 +463,7 @@ func TestPostgreSQLForcedShortestDirectPreflightSkipsAndFallsBackExactly(t *test
 	require.Equal(t, int64(0), multiKindLoops[0], records[2].PostgresPlan)
 }
 
+// TestPostgreSQLForcedShortestDistanceCancellationReusesSession verifies prompt timeout cancellation, rollback recovery on the same backend PID, and successful replay of forced distance SQL.
 func TestPostgreSQLForcedShortestDistanceCancellationReusesSession(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -537,6 +543,7 @@ func TestPostgreSQLForcedShortestDistanceCancellationReusesSession(t *testing.T)
 	t.Logf("cancelled exact SP-S3-U-D SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
 }
 
+// TestPostgreSQLForcedShortestPathEdgeM0PlanResourcesAndConcurrency verifies direct edge-array hydration, zero local/temp/WAL usage, concurrency sample counts, and no edge work for a missing endpoint.
 func TestPostgreSQLForcedShortestPathEdgeM0PlanResourcesAndConcurrency(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -617,6 +624,7 @@ func TestPostgreSQLForcedShortestPathEdgeM0PlanResourcesAndConcurrency(t *testin
 	require.Zero(t, missingEdgeLoops, "missing endpoint must execute zero edge-search loops")
 }
 
+// TestPostgreSQLForcedShortestPathEdgeM0CancellationReusesSession verifies prompt timeout cancellation, rollback recovery on the same backend PID, and successful replay of M0 path SQL.
 func TestPostgreSQLForcedShortestPathEdgeM0CancellationReusesSession(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -696,6 +704,7 @@ func TestPostgreSQLForcedShortestPathEdgeM0CancellationReusesSession(t *testing.
 	t.Logf("cancelled exact SP-S3-U-E+MAT-M0 SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
 }
 
+// TestPostgreSQLForcedSuffixSeededReversePlanResourcesAndConcurrency verifies compact reverse-search SQL, relationship uniqueness, zero local/temp/WAL usage, and complete samples at each concurrency level.
 func TestPostgreSQLForcedSuffixSeededReversePlanResourcesAndConcurrency(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -755,6 +764,7 @@ func TestPostgreSQLForcedSuffixSeededReversePlanResourcesAndConcurrency(t *testi
 	}
 }
 
+// TestPostgreSQLForcedSuffixSeededReverseCancellationReusesSession verifies prompt timeout cancellation, rollback recovery on the same backend PID, and cardinality-preserving replay of reverse expansion SQL.
 func TestPostgreSQLForcedSuffixSeededReverseCancellationReusesSession(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -833,6 +843,7 @@ func TestPostgreSQLForcedSuffixSeededReverseCancellationReusesSession(t *testing
 	t.Logf("cancelled exact EXPANSION-SUFFIX-SEEDED-REVERSE SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
 }
 
+// requirePostgresReference returns the named comparator result or fails when the runner omitted that reference arm.
 func requirePostgresReference(t *testing.T, references []PostgresReferenceResult, name string) PostgresReferenceResult {
 	t.Helper()
 	for _, reference := range references {
@@ -844,12 +855,14 @@ func requirePostgresReference(t *testing.T, references []PostgresReferenceResult
 	return PostgresReferenceResult{}
 }
 
+// requireSingleScaleRecord returns the sole result for a corpus ID and rejects missing or duplicate representatives.
 func requireSingleScaleRecord(t *testing.T, byID map[string][]CaseResult, id string) CaseResult {
 	t.Helper()
 	require.Len(t, byID[id], 1, "%s must have one representative", id)
 	return byID[id][0]
 }
 
+// assertMutationPlanTarget verifies that delete representatives modify the physical entity table implied by their corpus ID.
 func assertMutationPlanTarget(t *testing.T, id, plan string) {
 	t.Helper()
 
@@ -861,6 +874,7 @@ func assertMutationPlanTarget(t *testing.T, id, plan string) {
 	}
 }
 
+// assertAnchorPlanIndex verifies that each indexed representative anchors through an endpoint or selective graph-partition index rather than a heap-wide scan.
 func assertAnchorPlanIndex(t *testing.T, id, plan string) {
 	t.Helper()
 

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestExistingGraphManifestCorpusSafetyAndRedaction verifies that live-graph mode rejects mutations and strips query, parameter, plan, row, reference, and error disclosures from artifacts.
 func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
 	manifest := ExistingGraphAnchorManifest{
 		Version:  1,
@@ -80,6 +81,7 @@ func TestExistingGraphManifestCorpusSafetyAndRedaction(t *testing.T) {
 	require.NotContains(t, record.ExistingGraph.Attempts[0].Error, "attempt-sensitive-property")
 }
 
+// TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity verifies manifest checksums bind graph/content identity and that each anchor chooses exactly one complete logical or physical identity form.
 func TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "anchors.json")
 	valid := `{"version":1,"graph":"integration_test","content_identity":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","anchors":{"source":{"logical_key":"safe-source"}}}`
@@ -108,6 +110,7 @@ func TestExistingGraphManifestRequiresGraphAndLogicalContentIdentity(t *testing.
 	require.ErrorContains(t, err, "content_identity")
 }
 
+// TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity verifies that artifacts replace a physical anchor ID with an opaque digest derived from its content identity.
 func TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity(t *testing.T) {
 	id := int64(42)
 	manifest := ExistingGraphAnchorManifest{
@@ -126,6 +129,7 @@ func TestPhysicalExistingGraphAnchorRedactionUsesContentIdentity(t *testing.T) {
 	require.NotContains(t, record.NodeParams["source"], "42")
 }
 
+// TestExistingGraphCheckpointIsIdentityBoundAndResumable verifies round-trip recovery only for matching manifest, corpus, and run identities and rejects duplicate completed records.
 func TestExistingGraphCheckpointIsIdentityBoundAndResumable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "checkpoint.json")
 	records := []CaseResult{{
@@ -164,12 +168,14 @@ func TestExistingGraphCheckpointIsIdentityBoundAndResumable(t *testing.T) {
 	require.ErrorContains(t, err, "duplicate record")
 }
 
+// TestExistingGraphPlanRedactionPreservesJSONNumbers verifies that plan redaction replaces IDs inside text without corrupting numeric cardinality fields in the JSON document.
 func TestExistingGraphPlanRedactionPreservesJSONNumbers(t *testing.T) {
 	raw := json.RawMessage(`[{"Plan":{"Plan Rows":42,"Index Cond":"id = 42"}}]`)
 	redacted := redactPlanJSON(raw, map[string]graph.ID{"source": 42})
 	require.JSONEq(t, `[{"Plan":{"Plan Rows":42,"Index Cond":"id = <anchor-id>"}}]`, string(redacted))
 }
 
+// TestExistingGraphProgressIsAppendOnlyJSONL verifies that successive progress events remain two independently parseable JSON Lines records.
 func TestExistingGraphProgressIsAppendOnlyJSONL(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "progress.jsonl")
 	require.NoError(t, appendExistingGraphProgress(path, ExistingGraphProgress{
@@ -186,6 +192,7 @@ func TestExistingGraphProgressIsAppendOnlyJSONL(t *testing.T) {
 	require.Equal(t, 2, len(splitNonEmptyLines(string(raw))))
 }
 
+// TestCompleteGateRejectsAdaptiveExistingGraphArtifacts verifies that discovery-selected live-graph measurements cannot enter a complete performance gate.
 func TestCompleteGateRejectsAdaptiveExistingGraphArtifacts(t *testing.T) {
 	records := []CaseResult{{
 		ExistingGraph: &ExistingGraphRun{
@@ -195,6 +202,7 @@ func TestCompleteGateRejectsAdaptiveExistingGraphArtifacts(t *testing.T) {
 	require.ErrorContains(t, validatePerformanceArtifactSelections(records, records, false), "adaptive-discovery")
 }
 
+// TestExistingGraphCorpusIdentityIsStable verifies that corpus identity is deterministic and changes when either query text or expected cardinality changes.
 func TestExistingGraphCorpusIdentityIsStable(t *testing.T) {
 	zero := int64(0)
 	corpus := ScaleCorpus{
@@ -223,6 +231,7 @@ func TestExistingGraphCorpusIdentityIsStable(t *testing.T) {
 	require.NotEqual(t, corpusIdentity(corpus), corpusIdentity(changedExpected))
 }
 
+// TestExistingGraphCompletedWorkloadsAreFixtureBound verifies that resume records are accepted only for known cases with the same fixture checksum and workload digest.
 func TestExistingGraphCompletedWorkloadsAreFixtureBound(t *testing.T) {
 	corpus := ScaleCorpus{Cases: []ScaleCase{{
 		Name:           "case",
@@ -242,6 +251,7 @@ func TestExistingGraphCompletedWorkloadsAreFixtureBound(t *testing.T) {
 	require.ErrorContains(t, validateCompletedWorkloads(map[string]string{"postgres_sql/other/case": "digest"}, corpus, fixture), "unknown workload")
 }
 
+// splitNonEmptyLines separates platform-independent line endings and discards empty records.
 func splitNonEmptyLines(value string) []string {
 	var lines []string
 	for _, line := range regexp.MustCompile(`\r?\n`).Split(value, -1) {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL verifies graph partitioning in both the outer query and shortest-path harness.
 func TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH p = shortestPath((s:Group)-[:MemberOf*1..]->(e:Domain))
@@ -44,6 +45,7 @@ func TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL(t *testing.T) {
 	}
 }
 
+// TestFixedSuffixTargetGraphUsesOnlyConcreteRelations verifies that suffix-seeded translation never falls back to unpartitioned graph tables.
 func TestFixedSuffixTargetGraphUsesOnlyConcreteRelations(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), optimizerFixedSuffixQuery)
 	require.NoError(t, err)

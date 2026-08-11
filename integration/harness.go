@@ -37,17 +37,24 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// ConnectionStringEnv names the default environment variable read by integration sessions.
 const ConnectionStringEnv = "CONNECTION_STRING"
 
 var (
-	localDatasetFlag   = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
+	// localDatasetFlag optionally restricts the integration harness to one local dataset.
+	localDatasetFlag = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
+
+	// errFixtureRollback is the sentinel returned to force successful fixture transactions to roll back.
 	errFixtureRollback = errors.New("fixture rollback")
 )
 
 type CleanupMode int
 
 const (
+	// CleanupGraph removes graph data when an integration session closes.
 	CleanupGraph CleanupMode = iota
+
+	// CloseOnly closes an integration session without deleting graph data.
 	CloseOnly
 )
 
@@ -91,6 +98,7 @@ func DriverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
+// Open validates the configured disposable target, initializes its schema, and returns an integration session registered for cleanup.
 func Open(t testing.TB, opts Options) *Session {
 	t.Helper()
 
@@ -230,6 +238,7 @@ func (s *Session) WithRollback(t *testing.T, delegate func(tx graph.Transaction)
 	return s.withRollback(t, delegate)
 }
 
+// withRollback runs delegate in a write transaction and converts the fixture rollback sentinel into success.
 func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction) error) error {
 	t.Helper()
 
@@ -247,6 +256,7 @@ func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction)
 	return err
 }
 
+// buildSchema combines kinds discovered from selected datasets with explicitly requested kinds.
 func buildSchema(t testing.TB, opts Options) *graph.Schema {
 	t.Helper()
 
@@ -299,6 +309,7 @@ func collectKinds(t testing.TB, datasets []string, datasetPath func(name string)
 	return nodeKinds, edgeKinds
 }
 
+// datasetPath returns the configured dataset resolver or the repository testdata resolver.
 func (s *Options) datasetPath() func(name string) string {
 	if s.DatasetPath != nil {
 		return s.DatasetPath
@@ -309,6 +320,8 @@ func (s *Options) datasetPath() func(name string) string {
 	}
 }
 
+// graphQueryMemoryLimit returns the backend's configured query memory limit,
+// defaulting to unlimited when the driver does not expose one.
 func (s Options) graphQueryMemoryLimit() size.Size {
 	if s.GraphQueryMemoryLimit == 0 {
 		return size.Gibibyte

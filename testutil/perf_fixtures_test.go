@@ -23,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact verifies the
+// legacy shortest-path fixture is stable and emits the expected topology.
 func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T) {
 	config := ShortestPathScaleConfig{
 		Depth:  16,
@@ -51,11 +53,18 @@ func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T
 	require.Equal(t, 1, selfLoops)
 }
 
+// TestEndpointSeededExpansionFixtureIsDeterministicAndSeparatesWorkClasses verifies productive, nonmatching, and ineligible lanes remain distinct.
 func TestEndpointSeededExpansionFixtureIsDeterministicAndSeparatesWorkClasses(t *testing.T) {
 	config := EndpointSeededExpansionScaleConfig{
-		Depth: 3, MatchingEndpoints: 2, OtherEndpoints: 1,
-		MatchingEligibleLanes: 2, OtherEligibleLanes: 1, MatchingIneligibleLanes: 1,
-		ParallelEdges: 1, AddCycle: true, PropertyPayloadSize: 8,
+		Depth:                   3,
+		MatchingEndpoints:       2,
+		OtherEndpoints:          1,
+		MatchingEligibleLanes:   2,
+		OtherEligibleLanes:      1,
+		MatchingIneligibleLanes: 1,
+		ParallelEdges:           1,
+		AddCycle:                true,
+		PropertyPayloadSize:     8,
 	}
 	first := NewEndpointSeededExpansionScaleFixture(config)
 	second := NewEndpointSeededExpansionScaleFixture(config)
@@ -72,6 +81,8 @@ func TestEndpointSeededExpansionFixtureIsDeterministicAndSeparatesWorkClasses(t 
 	require.ErrorContains(t, ValidateEndpointSeededExpansionScaleConfig(config), "uniquely keys edges")
 }
 
+// TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact verifies the
+// configurable fixture is stable and assigns unique logical edge keys.
 func TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact(t *testing.T) {
 	config := ShortestPathScaleV2Config{
 		Depth:                    3,
@@ -108,6 +119,8 @@ func TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact(t *testing.T)
 	}
 }
 
+// TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes verifies invalid
+// dimensions and inconsistent fan-in controls are rejected.
 func TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes(t *testing.T) {
 	for _, config := range []ShortestPathScaleV2Config{
 		{
@@ -137,6 +150,8 @@ func TestShortestPathScaleV2ConfigurationRejectsImpossibleShapes(t *testing.T) {
 	require.NoError(t, ValidateShortestPathScaleV2Config(ShortestPathScaleV2Config{}))
 }
 
+// TestFixedSuffixExpansionScaleFixtureIsDeterministicAndCoversDecoys verifies
+// the legacy suffix topology remains stable and includes wrong-kind edges.
 func TestFixedSuffixExpansionScaleFixtureIsDeterministicAndCoversDecoys(t *testing.T) {
 	config := FixedSuffixExpansionScaleConfig{
 		ExpansionDepth:      4,
@@ -158,6 +173,8 @@ func TestFixedSuffixExpansionScaleFixtureIsDeterministicAndCoversDecoys(t *testi
 	require.Contains(t, edgeKinds.Strings(), "WrongEnterSuffix")
 }
 
+// TestFixedSuffixExpansionScaleFixtureV2ControlsSuffixPopulationsIndependently verifies reachable, disconnected, and reverse-fan-in populations can vary
+// without changing one another.
 func TestFixedSuffixExpansionScaleFixtureV2ControlsSuffixPopulationsIndependently(t *testing.T) {
 	reachable := 0
 	zeroDepth := false

@@ -32,8 +32,10 @@ import (
 	"github.com/specterops/dawgs/testutil"
 )
 
+// defaultGraphName names the isolated graph populated with benchmark fixtures.
 const defaultGraphName = "integration_test"
 
+// scanDatasetKinds enumerates dataset kinds without changing the source data.
 func scanDatasetKinds(datasetDir string, datasetNames []string) (graph.Kinds, graph.Kinds, error) {
 	var nodeKinds, edgeKinds graph.Kinds
 
@@ -51,6 +53,7 @@ func scanDatasetKinds(datasetDir string, datasetNames []string) (graph.Kinds, gr
 	return nodeKinds, edgeKinds, nil
 }
 
+// parseDataset decodes a fixture document or dispatches to the requested generated dataset builder.
 func parseDataset(datasetDir, name string) (opengraph.Document, error) {
 	if fixture := generatedDataset(name); fixture != nil {
 		return opengraph.Document{Graph: *fixture}, nil
@@ -71,6 +74,7 @@ func parseDataset(datasetDir, name string) (opengraph.Document, error) {
 	return doc, nil
 }
 
+// loadDataset decodes and loads a named fixture dataset into an empty graph.
 func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string) (opengraph.IDMap, error) {
 	if fixture := generatedDataset(name); fixture != nil {
 		return opengraph.WriteGraph(ctx, db, fixture)
@@ -91,6 +95,7 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 	return idMap, nil
 }
 
+// generatedDataset constructs a named generated fixture and its shape-specific expectations.
 func generatedDataset(name string) *opengraph.Graph {
 	if config, ok := parseEndpointSeededExpansionDatasetName(name); ok {
 		return testutil.NewEndpointSeededExpansionScaleFixture(config)
@@ -143,59 +148,105 @@ func generatedDataset(name string) *opengraph.Graph {
 	}
 }
 
+// FixtureMetadata captures fixture cardinalities, checksums, and generated-shape expectations.
 type FixtureMetadata struct {
-	Dataset                 string                                      `json:"dataset"`
-	Checksum                string                                      `json:"checksum"`
-	NodeCount               int                                         `json:"node_count"`
-	EdgeCount               int                                         `json:"edge_count"`
-	PhysicalValidated       bool                                        `json:"physical_cardinality_validated,omitempty"`
-	PhysicalNodeCount       int64                                       `json:"physical_node_count,omitempty"`
-	PhysicalEdgeCount       int64                                       `json:"physical_edge_count,omitempty"`
-	NodeRelationBytes       int64                                       `json:"node_relation_bytes,omitempty"`
-	EdgeRelationBytes       int64                                       `json:"edge_relation_bytes,omitempty"`
-	Configuration           string                                      `json:"configuration,omitempty"`
-	Shortest                *ShortestFixtureExpectations                `json:"shortest,omitempty"`
-	FixedSuffixExpansion    *FixedSuffixExpansionFixtureExpectations    `json:"fixed_suffix_expansion,omitempty"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Checksum identifies the fixture's canonical logical node and relationship contents.
+	Checksum string `json:"checksum"`
+	// NodeCount records logical fixture nodes declared or loaded.
+	NodeCount int `json:"node_count"`
+	// EdgeCount records logical fixture relationships declared or loaded.
+	EdgeCount int `json:"edge_count"`
+	// PhysicalValidated reports whether live database counts and checksum matched fixture metadata.
+	PhysicalValidated bool `json:"physical_cardinality_validated,omitempty"`
+	// PhysicalNodeCount records physical node rows present in the backend fixture.
+	PhysicalNodeCount int64 `json:"physical_node_count,omitempty"`
+	// PhysicalEdgeCount records physical relationship rows present in the backend fixture.
+	PhysicalEdgeCount int64 `json:"physical_edge_count,omitempty"`
+	// NodeRelationBytes records the physical size of the graph's node relation.
+	NodeRelationBytes int64 `json:"node_relation_bytes,omitempty"`
+	// EdgeRelationBytes records the physical size of the graph's relationship relation.
+	EdgeRelationBytes int64 `json:"edge_relation_bytes,omitempty"`
+	// Configuration captures the generator parameters that define the fixture shape.
+	Configuration string `json:"configuration,omitempty"`
+	// Shortest contains expectations derived from a generated shortest-path fixture.
+	Shortest *ShortestFixtureExpectations `json:"shortest,omitempty"`
+	// FixedSuffixExpansion contains expectations derived from a fixed-suffix expansion fixture.
+	FixedSuffixExpansion *FixedSuffixExpansionFixtureExpectations `json:"fixed_suffix_expansion,omitempty"`
+	// EndpointSeededExpansion contains expectations derived from an endpoint-seeded expansion fixture.
 	EndpointSeededExpansion *EndpointSeededExpansionFixtureExpectations `json:"endpoint_seeded_expansion,omitempty"`
 }
 
+// ShortestFixtureExpectations records expected distances, witnesses, and intermediate state for shortest-path fixtures.
 type ShortestFixtureExpectations struct {
-	RootForwardDegree                 int64            `json:"root_forward_degree"`
-	RootReverseDegree                 int64            `json:"root_reverse_degree"`
+	// RootForwardDegree records outgoing relationships incident to the traversal root.
+	RootForwardDegree int64 `json:"root_forward_degree"`
+	// RootReverseDegree records incoming relationships incident to the traversal root.
+	RootReverseDegree int64 `json:"root_reverse_degree"`
+	// MaximumIntermediateForwardByLevel maps traversal depth to the largest expected forward frontier.
 	MaximumIntermediateForwardByLevel map[string]int64 `json:"maximum_intermediate_forward_by_level"`
+	// MaximumIntermediateReverseByLevel maps traversal depth to the largest expected reverse frontier.
 	MaximumIntermediateReverseByLevel map[string]int64 `json:"maximum_intermediate_reverse_by_level"`
-	PhysicalTraversableEdgesByKind    map[string]int64 `json:"physical_traversable_edges_by_kind"`
-	DistinctReachableNodesByLevel     map[string]int64 `json:"distinct_reachable_nodes_by_level"`
-	ExpectedMinimumDistance           int64            `json:"expected_minimum_distance"`
-	ExpectedOnePathCardinality        int64            `json:"expected_one_path_cardinality"`
-	ExpectedAllShortestCardinality    int64            `json:"expected_all_shortest_cardinality"`
-	ExpectedPredecessorEdges          int64            `json:"expected_relationship_distinct_predecessor_edges"`
-	DisconnectedStateCardinality      int64            `json:"disconnected_state_cardinality"`
-	ParallelPhysicalEdges             int64            `json:"parallel_physical_edges"`
-	ParallelDistinctTargets           int64            `json:"parallel_distinct_targets"`
+	// PhysicalTraversableEdgesByKind maps relationship kind to physical traversable edge count.
+	PhysicalTraversableEdgesByKind map[string]int64 `json:"physical_traversable_edges_by_kind"`
+	// DistinctReachableNodesByLevel maps traversal depth to distinct reachable node count.
+	DistinctReachableNodesByLevel map[string]int64 `json:"distinct_reachable_nodes_by_level"`
+	// ExpectedMinimumDistance records the shortest expected hop count between endpoints.
+	ExpectedMinimumDistance int64 `json:"expected_minimum_distance"`
+	// ExpectedOnePathCardinality records the expected number of valid single shortest-path witnesses.
+	ExpectedOnePathCardinality int64 `json:"expected_one_path_cardinality"`
+	// ExpectedAllShortestCardinality records the expected number of all-shortest-path results.
+	ExpectedAllShortestCardinality int64 `json:"expected_all_shortest_cardinality"`
+	// ExpectedPredecessorEdges records predecessor edges expected in the shortest-path DAG.
+	ExpectedPredecessorEdges int64 `json:"expected_relationship_distinct_predecessor_edges"`
+	// DisconnectedStateCardinality records recursive states belonging to disconnected shortest-path regions.
+	DisconnectedStateCardinality int64 `json:"disconnected_state_cardinality"`
+	// ParallelPhysicalEdges records physical parallel relationships in the generated fixture.
+	ParallelPhysicalEdges int64 `json:"parallel_physical_edges"`
+	// ParallelDistinctTargets records distinct targets reached by parallel fixture edges.
+	ParallelDistinctTargets int64 `json:"parallel_distinct_targets"`
 }
 
+// FixedSuffixExpansionFixtureExpectations records expected state and output sizes for fixed-suffix expansion fixtures.
 type FixedSuffixExpansionFixtureExpectations struct {
-	RootSourceRows         int64 `json:"root_source_rows"`
-	DistinctRoots          int64 `json:"distinct_roots"`
+	// RootSourceRows records rows selected as expansion roots.
+	RootSourceRows int64 `json:"root_source_rows"`
+	// DistinctRoots records unique root nodes in the generated fixture.
+	DistinctRoots int64 `json:"distinct_roots"`
+	// ForwardExpansionStates records recursive states visited by forward fixed-suffix expansion.
 	ForwardExpansionStates int64 `json:"forward_expansion_states"`
-	SuffixRows             int64 `json:"suffix_rows"`
-	DistinctBoundaries     int64 `json:"distinct_boundaries"`
-	ReachableBoundaries    int64 `json:"reachable_boundaries"`
+	// SuffixRows records rows belonging to the fixed suffix of generated paths.
+	SuffixRows int64 `json:"suffix_rows"`
+	// DistinctBoundaries records unique terminal boundaries in the generated fixture.
+	DistinctBoundaries int64 `json:"distinct_boundaries"`
+	// ReachableBoundaries records terminal boundaries reachable in the generated fixture.
+	ReachableBoundaries int64 `json:"reachable_boundaries"`
+	// DisconnectedBoundaries records terminal boundaries intentionally disconnected from traversal roots.
 	DisconnectedBoundaries int64 `json:"disconnected_boundaries"`
-	ExpectedReverseStates  int64 `json:"expected_reverse_states"`
-	CompleteOutputTrails   int64 `json:"complete_output_trails"`
+	// ExpectedReverseStates records the reverse-search states expected from the generated fixture.
+	ExpectedReverseStates int64 `json:"expected_reverse_states"`
+	// CompleteOutputTrails records output trails before fixture eligibility filters are applied.
+	CompleteOutputTrails int64 `json:"complete_output_trails"`
 }
 
+// EndpointSeededExpansionFixtureExpectations records expected state and output sizes for endpoint-seeded expansion fixtures.
 type EndpointSeededExpansionFixtureExpectations struct {
-	MatchingEndpoints       int64 `json:"matching_endpoints"`
-	OtherEndpoints          int64 `json:"other_endpoints"`
-	EligiblePrefixRows      int64 `json:"eligible_prefix_rows"`
+	// MatchingEndpoints records endpoints satisfying the generated fixture predicate.
+	MatchingEndpoints int64 `json:"matching_endpoints"`
+	// OtherEndpoints records nonmatching endpoint nodes in an endpoint-seeded fixture.
+	OtherEndpoints int64 `json:"other_endpoints"`
+	// EligiblePrefixRows records prefix rows that can connect to the required suffix.
+	EligiblePrefixRows int64 `json:"eligible_prefix_rows"`
+	// MatchingIneligibleLanes records matching lanes excluded by endpoint eligibility filters.
 	MatchingIneligibleLanes int64 `json:"matching_ineligible_lanes"`
-	ExpectedReverseStates   int64 `json:"expected_reverse_states"`
-	ExpectedOutputTrails    int64 `json:"expected_output_trails"`
+	// ExpectedReverseStates records the reverse-search states expected from the generated fixture.
+	ExpectedReverseStates int64 `json:"expected_reverse_states"`
+	// ExpectedOutputTrails records result trails expected from the generated expansion fixture.
+	ExpectedOutputTrails int64 `json:"expected_output_trails"`
 }
 
+// fixtureMetadata derives fixture counts, checksums, and generated-shape expectations from a graph.
 func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 	doc, err := parseDataset(datasetDir, name)
 	if err != nil {
@@ -229,6 +280,7 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 	return metadata, nil
 }
 
+// parseEndpointSeededExpansionDatasetName decodes and validates every scale parameter embedded in an endpoint-seeded dataset name.
 func parseEndpointSeededExpansionDatasetName(name string) (testutil.EndpointSeededExpansionScaleConfig, bool) {
 	var depth, matchingEndpoints, otherEndpoints, matchingEligible, otherEligible, matchingIneligible, parallel, cycle, payload int
 	format := testutil.EndpointSeededExpansionScaleDataset + "_d%d_e%d_q%d_w%d_o%d_x%d_m%d_c%d_p%d"
@@ -245,6 +297,7 @@ func parseEndpointSeededExpansionDatasetName(name string) (testutil.EndpointSeed
 	return config, true
 }
 
+// endpointSeededExpansionDatasetName encodes endpoint-seeded scale parameters in their canonical dataset name.
 func endpointSeededExpansionDatasetName(config testutil.EndpointSeededExpansionScaleConfig) string {
 	cycle := 0
 	if config.AddCycle {
@@ -255,6 +308,7 @@ func endpointSeededExpansionDatasetName(config testutil.EndpointSeededExpansionS
 		config.OtherEligibleLanes, config.MatchingIneligibleLanes, config.ParallelEdges, cycle, config.PropertyPayloadSize)
 }
 
+// endpointSeededExpansionFixtureExpectations derives reverse-search state and output counts from an endpoint-seeded fixture.
 func endpointSeededExpansionFixtureExpectations(fixture opengraph.Graph, config testutil.EndpointSeededExpansionScaleConfig) *EndpointSeededExpansionFixtureExpectations {
 	incoming := map[string][]int{}
 	matching := map[string]bool{}
@@ -271,8 +325,10 @@ func endpointSeededExpansionFixtureExpectations(fixture opengraph.Graph, config 
 			eligibleUsers[edge.EndID] = true
 		}
 	}
-	var states, outputs int64
-	var visit func(string, int, map[int]bool)
+	var (
+		states, outputs int64
+		visit           func(string, int, map[int]bool)
+	)
 	visit = func(nodeID string, depth int, used map[int]bool) {
 		states++
 		if depth > 0 && eligibleUsers[nodeID] {
@@ -301,6 +357,7 @@ func endpointSeededExpansionFixtureExpectations(fixture opengraph.Graph, config 
 	}
 }
 
+// parseShortestPathV2DatasetName decodes and validates every scale parameter embedded in a shortest-path dataset name.
 func parseShortestPathV2DatasetName(name string) (testutil.ShortestPathScaleV2Config, bool) {
 	var (
 		depth, rootOut, rootIn, intermediateOut, intermediateIn, level  int
@@ -333,6 +390,7 @@ func parseShortestPathV2DatasetName(name string) (testutil.ShortestPathScaleV2Co
 	return config, true
 }
 
+// shortestPathV2DatasetName encodes shortest-path scale parameters in their canonical dataset name.
 func shortestPathV2DatasetName(config testutil.ShortestPathScaleV2Config) string {
 	cycle, selfLoop := 0, 0
 	if config.AddCycle {
@@ -348,6 +406,7 @@ func shortestPathV2DatasetName(config testutil.ShortestPathScaleV2Config) string
 		config.DisconnectedWidth, config.PropertyPayloadSize, cycle, selfLoop)
 }
 
+// shortestFixtureExpectations derives shortest distance, path cardinality, and intermediate-state expectations from a fixture.
 func shortestFixtureExpectations(fixture opengraph.Graph, config testutil.ShortestPathScaleV2Config) *ShortestFixtureExpectations {
 	expectations := &ShortestFixtureExpectations{
 		MaximumIntermediateForwardByLevel: map[string]int64{},
@@ -393,6 +452,7 @@ func shortestFixtureExpectations(fixture opengraph.Graph, config testutil.Shorte
 	return expectations
 }
 
+// parseFixedSuffixExpansionV2DatasetName decodes and validates every scale parameter embedded in a fixed-suffix dataset name.
 func parseFixedSuffixExpansionV2DatasetName(name string) (testutil.FixedSuffixExpansionScaleConfig, bool) {
 	var depth, fanout, reachable, disconnected, fanIn, multiplicity, zeroDepth, payload int
 	format := testutil.FixedSuffixExpansionScaleDataset + "_v2_d%d_f%d_r%d_x%d_i%d_m%d_z%d_p%d"
@@ -414,6 +474,7 @@ func parseFixedSuffixExpansionV2DatasetName(name string) (testutil.FixedSuffixEx
 	}, true
 }
 
+// fixedSuffixExpansionFixtureExpectations derives forward and reverse state and output counts from a fixed-suffix fixture.
 func fixedSuffixExpansionFixtureExpectations(config testutil.FixedSuffixExpansionScaleConfig) *FixedSuffixExpansionFixtureExpectations {
 	reachable := 0
 	if config.ExactReachableSuffixSources != nil {
@@ -443,6 +504,7 @@ func fixedSuffixExpansionFixtureExpectations(config testutil.FixedSuffixExpansio
 	}
 }
 
+// clearGraph removes relationships before nodes, using PostgreSQL partition truncation when available.
 func clearGraph(ctx context.Context, db graph.Database) error {
 	if pgDriver, isPostgres := db.(*pg.Driver); isPostgres {
 		graphTarget, hasDefaultGraph := pgDriver.DefaultGraph()
@@ -466,6 +528,7 @@ func clearGraph(ctx context.Context, db graph.Database) error {
 	})
 }
 
+// clearPostgresGraph truncates one PostgreSQL graph's edge and node partitions in a transaction.
 func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) error {
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		// Truncate the active child partitions together. The high-level
@@ -483,6 +546,7 @@ func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) e
 	})
 }
 
+// benchmarkSchema returns the SQL schema used to isolate benchmark preparation from timed execution.
 func benchmarkSchema(nodeKinds, edgeKinds graph.Kinds) graph.Schema {
 	return graph.Schema{
 		Graphs: []graph.Graph{{
@@ -494,10 +558,12 @@ func benchmarkSchema(nodeKinds, edgeKinds graph.Kinds) graph.Schema {
 	}
 }
 
+// resolveCaseParams resolves a scale case's scalar, node-key, node-list, and generated-node parameters.
 func resolveCaseParams(testCase ScaleCase, idMap opengraph.IDMap) (map[string]any, error) {
 	return resolveParams(testCase.Name, testCase.Params, testCase.NodeParams, testCase.NodeListParams, testCase.GeneratedNodeListParams, idMap)
 }
 
+// resolveParams copies literal parameters and replaces symbolic node keys with database identifiers.
 func resolveParams(caseName string, rawParams map[string]any, nodeParams map[string]string, nodeListParams map[string][]string, generatedNodeListParams map[string]testutil.GeneratedNodeListParam, idMap opengraph.IDMap) (map[string]any, error) {
 	params := make(map[string]any, len(rawParams)+len(nodeParams)+len(nodeListParams)+len(generatedNodeListParams))
 	for key, value := range rawParams {
@@ -552,6 +618,7 @@ func resolveParams(caseName string, rawParams map[string]any, nodeParams map[str
 	return params, nil
 }
 
+// resolveWriteScenario resolves selection and post-state parameters while preserving the write expectation contract.
 func resolveWriteScenario(testCase ScaleCase, idMap opengraph.IDMap) (resolvedWriteScenario, error) {
 	if testCase.WriteScenario == nil {
 		return resolvedWriteScenario{}, nil

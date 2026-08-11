@@ -25,6 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestRegressionCoverageManifestClosesEveryActiveID verifies that every active
+// query form has complete coverage while dormant forms remain unactivated.
 func TestRegressionCoverageManifestClosesEveryActiveID(t *testing.T) {
 	raw, err := os.ReadFile("regression_coverage_manifest.md")
 	require.NoError(t, err)
@@ -69,6 +71,8 @@ func TestRegressionCoverageManifestClosesEveryActiveID(t *testing.T) {
 	}
 }
 
+// parseRegressionManifestRows indexes the coverage cells in each manifest row
+// by query-form identifier.
 func parseRegressionManifestRows(manifest string) map[string][]string {
 	rows := map[string][]string{}
 	for _, line := range strings.Split(manifest, "\n") {
@@ -88,5 +92,6 @@ func parseRegressionManifestRows(manifest string) map[string][]string {
 		}
 		rows[id] = cells
 	}
+
 	return rows
 }

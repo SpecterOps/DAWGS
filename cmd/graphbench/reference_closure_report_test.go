@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBuildReferenceClosureReportPassesRatioOrResolution verifies that a small absolute gap within measurement resolution passes even when production is five percent slower.
 func TestBuildReferenceClosureReportPassesRatioOrResolution(t *testing.T) {
 	records := referenceClosureRecords(10, 50, time.Millisecond, 1050*time.Microsecond)
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
@@ -33,6 +34,7 @@ func TestBuildReferenceClosureReportPassesRatioOrResolution(t *testing.T) {
 	require.Equal(t, 100*time.Microsecond, entry.AbsoluteResolution)
 }
 
+// TestBuildReferenceClosureReportUsesCaseAAResolution verifies that observed production-side A/A noise raises the per-case absolute resolution above the default floor.
 func TestBuildReferenceClosureReportUsesCaseAAResolution(t *testing.T) {
 	records := referenceClosureRecords(10, 50, 2*time.Millisecond, 1500*time.Microsecond)
 	for idx := range records {
@@ -54,6 +56,7 @@ func TestBuildReferenceClosureReportUsesCaseAAResolution(t *testing.T) {
 	require.Equal(t, report.Cases[0].ProductionAAResolution, report.Cases[0].AbsoluteResolution)
 }
 
+// TestBuildReferenceClosureReportFailsMaterialGap verifies that a confidence interval exceeding both ratio and absolute-resolution allowances fails closure.
 func TestBuildReferenceClosureReportFailsMaterialGap(t *testing.T) {
 	records := referenceClosureRecords(10, 50, time.Millisecond, 1500*time.Microsecond)
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
@@ -67,6 +70,7 @@ func TestBuildReferenceClosureReportFailsMaterialGap(t *testing.T) {
 	require.ErrorContains(t, reasonsError(report.Cases[0].Reasons), "ratio upper")
 }
 
+// TestBuildReferenceClosureReportEnforcesProtocolAndExactComparator verifies minimum rounds/samples, exact public observations, and carryover-balanced measurement order.
 func TestBuildReferenceClosureReportEnforcesProtocolAndExactComparator(t *testing.T) {
 	records := referenceClosureRecords(9, 49, time.Millisecond, time.Millisecond)
 	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
@@ -96,6 +100,7 @@ func TestBuildReferenceClosureReportEnforcesProtocolAndExactComparator(t *testin
 	require.ErrorContains(t, err, "lacks carryover-balanced")
 }
 
+// referenceClosureRecords returns carryover-balanced production/reference rounds with exact observations and uniform warm timings.
 func referenceClosureRecords(rounds, samples int, referenceDuration, productionDuration time.Duration) []CaseResult {
 	records := make([]CaseResult, 0, rounds)
 	for round := 1; round <= rounds; round++ {
