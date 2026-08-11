@@ -51,6 +51,27 @@ func TestShortestPathScaleFixtureIsDeterministicAndCardinalityExact(t *testing.T
 	require.Equal(t, 1, selfLoops)
 }
 
+func TestEndpointSeededExpansionFixtureIsDeterministicAndSeparatesWorkClasses(t *testing.T) {
+	config := EndpointSeededExpansionScaleConfig{
+		Depth: 3, MatchingEndpoints: 2, OtherEndpoints: 1,
+		MatchingEligibleLanes: 2, OtherEligibleLanes: 1, MatchingIneligibleLanes: 1,
+		ParallelEdges: 1, AddCycle: true, PropertyPayloadSize: 8,
+	}
+	first := NewEndpointSeededExpansionScaleFixture(config)
+	second := NewEndpointSeededExpansionScaleFixture(config)
+	firstJSON, err := json.Marshal(first)
+	require.NoError(t, err)
+	secondJSON, err := json.Marshal(second)
+	require.NoError(t, err)
+	require.Equal(t, firstJSON, secondJSON)
+	require.NotEmpty(t, first.Nodes)
+	require.NotEmpty(t, first.Edges)
+	require.NoError(t, ValidateEndpointSeededExpansionScaleConfig(config))
+	require.Error(t, ValidateEndpointSeededExpansionScaleConfig(EndpointSeededExpansionScaleConfig{}))
+	config.ParallelEdges = 2
+	require.ErrorContains(t, ValidateEndpointSeededExpansionScaleConfig(config), "uniquely keys edges")
+}
+
 func TestShortestPathScaleV2FixtureIsDeterministicAndTopologyExact(t *testing.T) {
 	config := ShortestPathScaleV2Config{
 		Depth:                    3,

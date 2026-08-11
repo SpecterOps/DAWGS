@@ -24,6 +24,7 @@ import (
 
 	neo4jcore "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/databaseguard"
 	dawgsneo4j "github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -38,6 +39,10 @@ type neo4jRunner struct {
 }
 
 func newNeo4jRunner(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus) (*neo4jRunner, error) {
+	if err := databaseguard.ValidateEnvironment(connection); err != nil {
+		return nil, fmt.Errorf("refuse destructive Neo4j GraphBench target: %w", err)
+	}
+
 	db, err := dawgs.Open(ctx, dawgsneo4j.DriverName, dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte,
 		ConnectionString:      connection,
@@ -111,7 +116,7 @@ func (s *neo4jRunner) Run(ctx context.Context, warmupIterations, iterations int,
 			}
 
 			record := s.runCase(ctx, warmupIterations, iterations, testCase, idMap)
-			record.Fixture = &fixture
+			attachFixtureMetadata(&record, fixture)
 			records = append(records, record)
 		}
 	}

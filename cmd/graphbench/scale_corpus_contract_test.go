@@ -40,7 +40,7 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 
 	covered := map[string]int{}
 	for _, testCase := range corpus.Cases {
-		if !strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") && !strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_") {
+		if !strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") && !strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_") && !strings.HasPrefix(testCase.Dataset, "generated_endpoint_seeded_expansion_") {
 			continue
 		}
 		_, err := frontend.ParseCypher(frontend.NewContext(), testCase.Cypher)
@@ -51,12 +51,34 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 		require.True(t, testCase.Supports(ModeNeo4j) || neo4jUnsupported, testCase.Name)
 		if strings.HasPrefix(testCase.Dataset, "generated_shortest_paths_") {
 			covered["shortest"]++
-		} else {
+		} else if strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_") {
 			covered["fixed_suffix_expansion"]++
+		} else {
+			covered["endpoint_seeded_expansion"]++
 		}
 	}
 	require.Positive(t, covered["shortest"])
 	require.Positive(t, covered["fixed_suffix_expansion"])
+	require.Positive(t, covered["endpoint_seeded_expansion"])
+}
+
+func TestEndpointSeededExpansionCorpusCoversGuardOutcomes(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	required := map[string]bool{"guard-admitted": false, "endpoint-guard-overflow": false, "state-guard-overflow": false}
+	for _, testCase := range corpus.Cases {
+		if testCase.Category != "generated_endpoint_seeded_expansion" {
+			continue
+		}
+		for tag := range required {
+			if slices.Contains(testCase.Tags, tag) {
+				required[tag] = true
+			}
+		}
+	}
+	for tag, found := range required {
+		require.True(t, found, "endpoint-seeded corpus is missing %s", tag)
+	}
 }
 
 func TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope(t *testing.T) {

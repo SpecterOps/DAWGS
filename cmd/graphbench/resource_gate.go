@@ -67,9 +67,11 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		if record.Status != StatusOK {
 			gateCase.Reasons = append(gateCase.Reasons, "record status is "+record.Status)
 		}
-		if workspaceCandidate && record.PostgresMetrics != nil {
+		if record.PostgresMetrics == nil {
+			gateCase.Reasons = append(gateCase.Reasons, "structured PostgreSQL plan metrics are missing")
+		} else if workspaceCandidate {
 			appendWorkspaceResourceReasons(&gateCase, record.PostgresMetrics)
-		} else if portableCandidate && record.PostgresMetrics != nil {
+		} else if portableCandidate {
 			appendPortableResourceReasons(&gateCase, record.PostgresMetrics)
 		}
 		gateCase.Passed = len(gateCase.Reasons) == 0
@@ -89,7 +91,9 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 				Architecture: reference.Architecture,
 				Passed:       true,
 			}
-			if reference.Architecture != "SP-S0" && reference.PostgresMetrics != nil {
+			if reference.PostgresMetrics == nil {
+				referenceCase.Reasons = append(referenceCase.Reasons, "structured PostgreSQL reference plan metrics are missing")
+			} else if reference.Architecture != "SP-S0" {
 				appendPortableResourceReasons(&referenceCase, reference.PostgresMetrics)
 			}
 			referenceCase.Passed = len(referenceCase.Reasons) == 0
@@ -192,7 +196,7 @@ func appliedPostgresArchitecture(record CaseResult) string {
 		return ""
 	}
 	for _, outcome := range record.Optimization.TargetOutcomes {
-		if outcome.Family == "SP" || outcome.Family == "ASP" || outcome.Family == "fixed_suffix_expansion" {
+		if outcome.Family == "SP" || outcome.Family == "ASP" || outcome.Family == "fixed_suffix_expansion" || outcome.Family == "fixed_prefix_terminal_expansion" {
 			if outcome.Applied != "" {
 				return outcome.Applied
 			}

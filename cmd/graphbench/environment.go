@@ -19,6 +19,9 @@ import (
 )
 
 type RunEnvironment struct {
+	ArtifactSchemaVersion     int                `json:"artifact_schema_version"`
+	CorpusSHA256              string             `json:"corpus_sha256,omitempty"`
+	RunIdentitySHA256         string             `json:"run_identity_sha256,omitempty"`
 	SourceCommit              string             `json:"source_commit"`
 	DirtyDiffSHA256           string             `json:"dirty_diff_sha256"`
 	BinarySHA256              string             `json:"binary_sha256"`
@@ -75,6 +78,7 @@ func resolveRunEnvironment(cfg config, args []string, selection SelectionManifes
 		runUUID = newRunUUID()
 	}
 	return RunEnvironment{
+		ArtifactSchemaVersion:     2,
 		SourceCommit:              commandOutput("git", "rev-parse", "HEAD"),
 		DirtyDiffSHA256:           workingTreeSHA256(),
 		BinarySHA256:              executableSHA256(),

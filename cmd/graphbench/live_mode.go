@@ -20,7 +20,7 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
-const existingGraphCheckpointVersion = 1
+const existingGraphCheckpointVersion = 2
 
 var mutationKeyword = regexp.MustCompile(`(?i)\b(create|merge|delete|detach|set|remove|drop|alter|truncate|grant|revoke|call|foreach|load\s+csv)\b`)
 
@@ -70,6 +70,7 @@ type existingGraphCheckpoint struct {
 	Version        int          `json:"version"`
 	ManifestSHA256 string       `json:"manifest_sha256"`
 	CorpusSHA256   string       `json:"corpus_sha256"`
+	RunSHA256      string       `json:"run_sha256"`
 	Records        []CaseResult `json:"records"`
 }
 
@@ -178,13 +179,84 @@ func existingGraphCaseKey(mode ExecutionMode, testCase ScaleCase) string {
 }
 
 func corpusIdentity(corpus ScaleCorpus) string {
-	declared := corpus.DeclaredBackends()
-	raw, _ := json.Marshal(declared)
+	cases := append([]ScaleCase(nil), corpus.Cases...)
+	sort.Slice(cases, func(i, j int) bool {
+		if cases[i].Source != cases[j].Source {
+			return cases[i].Source < cases[j].Source
+		}
+		if cases[i].Dataset != cases[j].Dataset {
+			return cases[i].Dataset < cases[j].Dataset
+		}
+		return cases[i].Name < cases[j].Name
+	})
+	raw, _ := json.Marshal(struct {
+		Version int         `json:"version"`
+		Cases   []ScaleCase `json:"cases"`
+	}{Version: 2, Cases: cases})
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
 }
 
-func readExistingGraphCheckpoint(path, manifestHash, corpusHash string) ([]CaseResult, error) {
+func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
+	payload := struct {
+		Version                   int             `json:"version"`
+		SourceCommit              string          `json:"source_commit"`
+		DirtyDiffSHA256           string          `json:"dirty_diff_sha256"`
+		BinarySHA256              string          `json:"binary_sha256"`
+		GOOS                      string          `json:"goos"`
+		GOARCH                    string          `json:"goarch"`
+		GoVersion                 string          `json:"go_version"`
+		Modes                     []ExecutionMode `json:"modes"`
+		Iterations                int             `json:"iterations"`
+		WarmupIterations          int             `json:"warmup_iterations"`
+		Round                     int             `json:"round"`
+		Block                     int             `json:"block"`
+		Arm                       string          `json:"arm"`
+		ArmOrder                  int             `json:"arm_order"`
+		PoolSize                  int             `json:"pool_size"`
+		Concurrency               []int           `json:"concurrency"`
+		SessionMemoryCeilingBytes int64           `json:"session_memory_ceiling_bytes"`
+		PoolMemoryCeilingBytes    int64           `json:"pool_memory_ceiling_bytes"`
+		PostgresReferences        bool            `json:"postgres_references"`
+		PostgresReferenceArms     []string        `json:"postgres_reference_arms"`
+		PostgresForceShortest     string          `json:"postgres_force_shortest"`
+		PostgresForceExpansion    string          `json:"postgres_force_expansion"`
+		Discovery                 bool            `json:"discovery"`
+		TimeoutClasses            []time.Duration `json:"timeout_classes"`
+		DiscoverySampleFloor      int             `json:"discovery_sample_floor"`
+	}{
+		Version:                   1,
+		SourceCommit:              environment.SourceCommit,
+		DirtyDiffSHA256:           environment.DirtyDiffSHA256,
+		BinarySHA256:              environment.BinarySHA256,
+		GOOS:                      environment.GOOS,
+		GOARCH:                    environment.GOARCH,
+		GoVersion:                 environment.GoVersion,
+		Modes:                     append([]ExecutionMode(nil), cfg.Modes...),
+		Iterations:                cfg.Iterations,
+		WarmupIterations:          cfg.WarmupIterations,
+		Round:                     cfg.Round,
+		Block:                     cfg.Block,
+		Arm:                       cfg.Arm,
+		ArmOrder:                  cfg.ArmOrder,
+		PoolSize:                  cfg.PoolSize,
+		Concurrency:               append([]int(nil), cfg.Concurrency...),
+		SessionMemoryCeilingBytes: cfg.SessionMemoryCeilingBytes,
+		PoolMemoryCeilingBytes:    cfg.PoolMemoryCeilingBytes,
+		PostgresReferences:        cfg.PostgresReferences,
+		PostgresReferenceArms:     append([]string(nil), cfg.PostgresReferenceArms...),
+		PostgresForceShortest:     cfg.PostgresForceShortest,
+		PostgresForceExpansion:    cfg.PostgresForceExpansion,
+		Discovery:                 cfg.Discovery,
+		TimeoutClasses:            append([]time.Duration(nil), cfg.TimeoutClasses...),
+		DiscoverySampleFloor:      cfg.DiscoverySampleFloor,
+	}
+	raw, _ := json.Marshal(payload)
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
+}
+
+func readExistingGraphCheckpoint(path, manifestHash, corpusHash, runHash string) ([]CaseResult, error) {
 	if path == "" {
 		return nil, nil
 	}
@@ -196,13 +268,30 @@ func readExistingGraphCheckpoint(path, manifestHash, corpusHash string) ([]CaseR
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		return nil, fmt.Errorf("decode existing-graph checkpoint: %w", err)
 	}
-	if checkpoint.Version != existingGraphCheckpointVersion || checkpoint.ManifestSHA256 != manifestHash || checkpoint.CorpusSHA256 != corpusHash {
+	if checkpoint.Version != existingGraphCheckpointVersion || checkpoint.ManifestSHA256 != manifestHash || checkpoint.CorpusSHA256 != corpusHash || checkpoint.RunSHA256 != runHash {
 		return nil, fmt.Errorf("existing-graph checkpoint identity does not match this run")
+	}
+	seen := map[string]struct{}{}
+	runUUID := ""
+	for _, record := range checkpoint.Records {
+		if record.WorkloadSHA256 == "" || record.Environment == nil || record.Environment.ArtifactSchemaVersion != 2 || record.Environment.CorpusSHA256 != corpusHash || record.Environment.RunIdentitySHA256 != runHash || record.Environment.RunUUID == "" {
+			return nil, fmt.Errorf("existing-graph checkpoint record identity does not match this run")
+		}
+		if runUUID == "" {
+			runUUID = record.Environment.RunUUID
+		} else if record.Environment.RunUUID != runUUID {
+			return nil, fmt.Errorf("existing-graph checkpoint contains multiple run UUIDs")
+		}
+		key := strings.Join([]string{string(record.ExecutionMode), record.Dataset, record.Name}, "/")
+		if _, found := seen[key]; found {
+			return nil, fmt.Errorf("existing-graph checkpoint contains duplicate record %s", key)
+		}
+		seen[key] = struct{}{}
 	}
 	return checkpoint.Records, nil
 }
 
-func writeExistingGraphCheckpoint(path, manifestHash, corpusHash string, records []CaseResult) error {
+func writeExistingGraphCheckpoint(path, manifestHash, corpusHash, runHash string, records []CaseResult) error {
 	if path == "" {
 		return nil
 	}
@@ -210,6 +299,7 @@ func writeExistingGraphCheckpoint(path, manifestHash, corpusHash string, records
 		Version:        existingGraphCheckpointVersion,
 		ManifestSHA256: manifestHash,
 		CorpusSHA256:   corpusHash,
+		RunSHA256:      runHash,
 		Records:        records,
 	}
 	raw, err := json.MarshalIndent(checkpoint, "", "  ")
@@ -276,10 +366,7 @@ func redactExistingGraphRecord(record *CaseResult, manifest ExistingGraphAnchorM
 	record.NodeParams = redacted
 	record.NodeListParams = nil
 	record.Cypher = ""
-	for idx := range record.ObservedRows {
-		digest := sha256.Sum256([]byte(record.ObservedRows[idx]))
-		record.ObservedRows[idx] = "sha256:" + hex.EncodeToString(digest[:])
-	}
+	record.ObservedRows = redactObservedRows(record.ObservedRows)
 	record.SQL = redactResolvedIDs(record.SQL, resolved)
 	for idx := range record.PostgresPlan {
 		record.PostgresPlan[idx] = redactResolvedIDs(record.PostgresPlan[idx], resolved)
@@ -287,9 +374,10 @@ func redactExistingGraphRecord(record *CaseResult, manifest ExistingGraphAnchorM
 	if len(record.PostgresPlanJSON) > 0 {
 		record.PostgresPlanJSON = redactPlanJSON(record.PostgresPlanJSON, resolved)
 	}
-	record.Error = redactResolvedIDs(record.Error, resolved)
+	record.Error = redactDiagnostic(record.Error)
 	for idx := range record.PostgresReferences {
 		reference := &record.PostgresReferences[idx]
+		reference.ObservedRows = redactObservedRows(reference.ObservedRows)
 		reference.SQL = redactResolvedIDs(reference.SQL, resolved)
 		for planIdx := range reference.PostgresPlan {
 			reference.PostgresPlan[planIdx] = redactResolvedIDs(reference.PostgresPlan[planIdx], resolved)
@@ -298,6 +386,27 @@ func redactExistingGraphRecord(record *CaseResult, manifest ExistingGraphAnchorM
 			reference.PostgresPlanJSON = redactPlanJSON(reference.PostgresPlanJSON, resolved)
 		}
 	}
+	if record.ExistingGraph != nil {
+		for idx := range record.ExistingGraph.Attempts {
+			record.ExistingGraph.Attempts[idx].Error = redactDiagnostic(record.ExistingGraph.Attempts[idx].Error)
+		}
+	}
+}
+
+func redactObservedRows(rows []string) []string {
+	for idx := range rows {
+		digest := sha256.Sum256([]byte(rows[idx]))
+		rows[idx] = "sha256:" + hex.EncodeToString(digest[:])
+	}
+	return rows
+}
+
+func redactDiagnostic(value string) string {
+	if value == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(value))
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 func redactResolvedIDs(value string, resolved map[string]graph.ID) string {
@@ -336,13 +445,30 @@ func redactPlanJSON(raw json.RawMessage, resolved map[string]graph.ID) json.RawM
 	return encoded
 }
 
-func sortedCompletedKeys(records []CaseResult) []string {
-	keys := make([]string, 0, len(records))
-	for _, record := range records {
-		keys = append(keys, strings.Join([]string{string(record.ExecutionMode), record.Dataset, record.Name}, "/"))
+func validateCompletedWorkloads(completed map[string]string, corpus ScaleCorpus, fixture FixtureMetadata) error {
+	expectedKeys := map[string]struct{}{}
+	for _, testCase := range corpus.Cases {
+		if !testCase.Supports(ModePostgresSQL) {
+			continue
+		}
+		key := existingGraphCaseKey(ModePostgresSQL, testCase)
+		expectedKeys[key] = struct{}{}
+		checkpointWorkload, found := completed[key]
+		if !found {
+			continue
+		}
+		expected := newCaseResult(testCase, ModePostgresSQL, nil)
+		attachFixtureMetadata(&expected, fixture)
+		if checkpointWorkload == "" || checkpointWorkload != expected.WorkloadSHA256 {
+			return fmt.Errorf("existing-graph checkpoint workload identity does not match %s", key)
+		}
 	}
-	sort.Strings(keys)
-	return keys
+	for key := range completed {
+		if _, found := expectedKeys[key]; !found {
+			return fmt.Errorf("existing-graph checkpoint contains unknown workload %s", key)
+		}
+	}
+	return nil
 }
 
 func idMapForManifest(anchors map[string]graph.ID) opengraph.IDMap {

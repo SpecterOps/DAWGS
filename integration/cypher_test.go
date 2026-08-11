@@ -162,6 +162,7 @@ func TestCypher(t *testing.T) {
 //	{"path_node_ids": [["a", "b"]]}       — exact multiset of returned path node ID sequences
 //	{"path_lengths": [N...]}              — exact multiset of returned path edge counts
 //	{"path_edge_kinds": [["K"...]]}       — exact multiset of returned path edge kind sequences
+//	{"path_relationship_records": [[{start,end,kind,props}...]]} — exact ordered relationships for every returned path
 //	{"relationship_list_kinds": [["K"...]]} — exact multiset of returned relationship-list kind sequences
 //
 // Object assertions may combine multiple keys; every assertion must pass.
@@ -257,6 +258,9 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 
 		case "path_edge_kinds":
 			assertions = append(assertions, assertPathEdgeKinds(decodeAssertionValue[[][]string](t, key, val)))
+
+		case "path_relationship_records":
+			assertions = append(assertions, assertPathRelationshipRecords(decodeAssertionValue[[][]edgeExpectation](t, key, val)))
 
 		case "relationship_list_kinds":
 			assertions = append(assertions, assertRelationshipListKinds(decodeAssertionValue[[][]string](t, key, val)))
@@ -873,6 +877,28 @@ func assertRelationshipRecords(expected []edgeExpectation, includeProperties boo
 	}
 }
 
+func assertPathRelationshipRecords(expected [][]edgeExpectation) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+
+		paths := collectPaths(t, result)
+		got := make([]string, len(paths))
+		for idx, path := range paths {
+			got[idx] = pathRelationshipRecordSignature(t, path, ctx)
+		}
+		want := make([]string, len(expected))
+		for pathIdx, relationships := range expected {
+			parts := make([]string, len(relationships))
+			for relationshipIdx, relationship := range relationships {
+				parts[relationshipIdx] = expectedRelationshipRecordSignature(relationship, true)
+			}
+			want[pathIdx] = strings.Join(parts, "\x02")
+		}
+
+		assertStringMultiset(t, got, want, "ordered path relationship records")
+	}
+}
+
 func assertOrderedNodeIDs(expected []string) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {
 		t.Helper()
@@ -1205,6 +1231,19 @@ func relationshipRecordSignature(t *testing.T, relationship graph.Relationship, 
 	}
 
 	return strings.Join(parts, "\x00")
+}
+
+func pathRelationshipRecordSignature(t *testing.T, path graph.Path, ctx assertionContext) string {
+	t.Helper()
+
+	parts := make([]string, 0, len(path.Edges))
+	for _, relationship := range path.Edges {
+		if relationship == nil {
+			t.Fatal("path contains a nil relationship")
+		}
+		parts = append(parts, relationshipRecordSignature(t, *relationship, ctx, true))
+	}
+	return strings.Join(parts, "\x02")
 }
 
 func expectedRelationshipRecordSignature(relationship edgeExpectation, includeProperties bool) string {

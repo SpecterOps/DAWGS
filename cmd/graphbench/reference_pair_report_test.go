@@ -57,6 +57,7 @@ func TestBuildReferencePairReportComparesExactMatchedArms(t *testing.T) {
 				},
 			},
 		}
+		stampReferencePairIdentity(&record)
 		for iteration := 1; iteration <= 50; iteration++ {
 			record.PostgresReferences[0].Stats.Samples = append(record.PostgresReferences[0].Stats.Samples, LatencySample{
 				Round:          round,
@@ -134,6 +135,7 @@ func TestBuildReferencePairReportComparesValidatedHydrationBoundaries(t *testing
 				},
 			},
 		}
+		stampReferencePairIdentity(&record)
 		for iteration := 1; iteration <= 50; iteration++ {
 			record.PostgresReferences[0].Stats.Samples = append(record.PostgresReferences[0].Stats.Samples, LatencySample{
 				Round:          round,
@@ -215,6 +217,10 @@ func TestBuildReferencePairReportRejectsMixedExactBoundaries(t *testing.T) {
 func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T) {
 	records := make([]CaseResult, 0, 5)
 	for round := 1; round <= 5; round++ {
+		baselineOrder, candidateOrder := 2, 3
+		if round%2 == 0 {
+			baselineOrder, candidateOrder = 3, 2
+		}
 		record := CaseResult{
 			Dataset:       "fixture",
 			Name:          "ordered",
@@ -234,7 +240,7 @@ func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T)
 					SemanticValidation: "exact_ordered_ids",
 					RowCount:           1,
 					ObservedRows:       []string{"[[1,2],3,[4]]"},
-					MeasurementOrder:   2,
+					MeasurementOrder:   baselineOrder,
 					Stats: DurationStats{
 						WarmupIterations: 5,
 					},
@@ -246,13 +252,14 @@ func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T)
 					SemanticValidation: "exact_ordered_ids",
 					RowCount:           1,
 					ObservedRows:       []string{"[[1,2],3,[4]]"},
-					MeasurementOrder:   3,
+					MeasurementOrder:   candidateOrder,
 					Stats: DurationStats{
 						WarmupIterations: 5,
 					},
 				},
 			},
 		}
+		stampReferencePairIdentity(&record)
 		for iteration := 1; iteration <= 10; iteration++ {
 			record.PostgresReferences[0].Stats.Samples = append(record.PostgresReferences[0].Stats.Samples, LatencySample{
 				Round:          round,
@@ -285,6 +292,72 @@ func TestBuildReferencePairReportSupportsLabeledOrderedIDDiscovery(t *testing.T)
 	require.Equal(t, 10, report.MinimumSamples)
 	require.Len(t, report.Cases, 1)
 	require.InDelta(t, 0.5, report.Cases[0].MedianRatio.Estimate, 0.0001)
+}
+
+func TestBuildReferencePairReportRejectsChangedImplementationIdentity(t *testing.T) {
+	records := make([]CaseResult, 0, 10)
+	for round := 1; round <= 10; round++ {
+		records = append(records, referencePairProtocolRecord(round, round%2 == 1))
+	}
+	records[4].PostgresReferences[0].ImplementationID = "changed"
+	_, err := buildReferencePairReport(records, ReferencePairOptions{
+		Confidence:    0.975,
+		BaselineName:  "baseline",
+		CandidateName: "candidate",
+	})
+	require.ErrorContains(t, err, "identity changed")
+}
+
+func TestBuildReferencePairReportRejectsUnbalancedArmOrder(t *testing.T) {
+	records := make([]CaseResult, 0, 10)
+	for round := 1; round <= 10; round++ {
+		records = append(records, referencePairProtocolRecord(round, true))
+	}
+	_, err := buildReferencePairReport(records, ReferencePairOptions{
+		Confidence:    0.975,
+		BaselineName:  "baseline",
+		CandidateName: "candidate",
+	})
+	require.ErrorContains(t, err, "does not alternate")
+}
+
+func referencePairProtocolRecord(round int, baselineFirst bool) CaseResult {
+	baselineOrder, candidateOrder := 2, 3
+	if !baselineFirst {
+		baselineOrder, candidateOrder = candidateOrder, baselineOrder
+	}
+	record := CaseResult{
+		Dataset:       "fixture",
+		Name:          "protocol",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		RowCount:      1,
+		ObservedRows:  []string{"[1]"},
+		Environment:   &RunEnvironment{Round: round, WarmupIterations: 20},
+		PostgresReferences: []PostgresReferenceResult{
+			{Name: "baseline", Architecture: "A", FullComparator: true, SemanticValidation: "exact_public_observation", RowCount: 1, ObservedRows: []string{"[1]"}, MeasurementOrder: baselineOrder, Stats: DurationStats{WarmupIterations: 20}},
+			{Name: "candidate", Architecture: "B", FullComparator: true, SemanticValidation: "exact_public_observation", RowCount: 1, ObservedRows: []string{"[1]"}, MeasurementOrder: candidateOrder, Stats: DurationStats{WarmupIterations: 20}},
+		},
+	}
+	stampReferencePairIdentity(&record)
+	for iteration := 1; iteration <= 50; iteration++ {
+		record.PostgresReferences[0].Stats.Samples = append(record.PostgresReferences[0].Stats.Samples, LatencySample{Round: round, Iteration: iteration, Classification: "warm", Duration: time.Millisecond})
+		record.PostgresReferences[1].Stats.Samples = append(record.PostgresReferences[1].Stats.Samples, LatencySample{Round: round, Iteration: iteration, Classification: "warm", Duration: 2 * time.Millisecond})
+	}
+	return record
+}
+
+func stampReferencePairIdentity(record *CaseResult) {
+	record.Environment.BinarySHA256 = "binary"
+	record.Environment.DirtyDiffSHA256 = "dirty"
+	record.Environment.SourceCommit = "commit"
+	record.Environment.GOOS = "linux"
+	record.Environment.GOARCH = "amd64"
+	for idx := range record.PostgresReferences {
+		reference := &record.PostgresReferences[idx]
+		reference.ImplementationID = reference.Name + "-implementation"
+		reference.SQLFingerprint = reference.Name + "-sql"
+	}
 }
 
 func TestBuildReferencePairReportRejectsMismatchedOrderedIDObservations(t *testing.T) {

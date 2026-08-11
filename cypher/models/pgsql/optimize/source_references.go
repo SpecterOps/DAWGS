@@ -82,6 +82,29 @@ func patternVariableSymbol(variable *cypher.Variable) string {
 	return variable.Symbol
 }
 
+func (s *fieldRequirementCollector) addFullBinding(symbol, kind string) {
+	switch kind {
+	case "path":
+		s.add(symbol, false, FieldRequirementFullPath)
+	case "relationship":
+		s.add(symbol, false, FieldRequirementFullEntity, FieldRequirementRelationshipIDs)
+	default:
+		s.add(symbol, false, FieldRequirementFullEntity)
+	}
+}
+
+func (s *fieldRequirementCollector) addGreedyProjectionBindings() {
+	symbols := make([]string, 0, len(s.bindingKinds))
+	for symbol := range s.bindingKinds {
+		symbols = append(symbols, symbol)
+	}
+	sort.Strings(symbols)
+
+	for _, symbol := range symbols {
+		s.addFullBinding(symbol, s.bindingKinds[symbol])
+	}
+}
+
 func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 	switch typedNode := node.(type) {
 	case *cypher.PatternPart:
@@ -135,6 +158,10 @@ func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 		if s.patternDepth > 0 {
 			return
 		}
+		if typedNode.Symbol == cypher.TokenLiteralAsterisk {
+			s.addGreedyProjectionBindings()
+			return
+		}
 
 		if s.propertyDepth > 0 {
 			s.add(typedNode.Symbol, false, FieldRequirementEntityID, FieldRequirementProperties)
@@ -158,14 +185,7 @@ func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 			}
 		}
 
-		switch s.bindingKinds[typedNode.Symbol] {
-		case "path":
-			s.add(typedNode.Symbol, false, FieldRequirementFullPath)
-		case "relationship":
-			s.add(typedNode.Symbol, false, FieldRequirementFullEntity, FieldRequirementRelationshipIDs)
-		default:
-			s.add(typedNode.Symbol, false, FieldRequirementFullEntity)
-		}
+		s.addFullBinding(typedNode.Symbol, s.bindingKinds[typedNode.Symbol])
 	}
 }
 

@@ -107,11 +107,7 @@ func Open(t testing.TB, opts Options) *Session {
 		}
 		t.Fatalf("%s env var is not set", connEnv)
 	}
-	if err := databaseguard.Validate(
-		connStr,
-		os.Getenv(databaseguard.AllowDestructiveEnv),
-		os.Getenv(databaseguard.DisposableTargetsEnv),
-	); err != nil {
+	if err := databaseguard.ValidateEnvironment(connStr); err != nil {
 		t.Fatalf("integration database safety check failed: %v", err)
 	}
 

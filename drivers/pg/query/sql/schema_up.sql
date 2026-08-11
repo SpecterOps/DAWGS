@@ -638,6 +638,13 @@ $$
   parallel safe
   strict;
 
+-- CREATE OR REPLACE does not replace a function when its argument signature
+-- changes. Remove the pre-graph-scope overloads explicitly so upgrades cannot
+-- retain helpers that hydrate entities from a different graph partition.
+drop function if exists public.nodes_to_path(int8[]);
+drop function if exists public.edges_to_path(int8[]);
+drop function if exists public.ordered_edges_to_path(nodeComposite, edgeComposite[], nodeComposite[]);
+
 create or replace function public.nodes_to_path(target_graph_id int4, nodes variadic int8[]) returns pathComposite as
 $$
 select row (array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)::nodeComposite[],

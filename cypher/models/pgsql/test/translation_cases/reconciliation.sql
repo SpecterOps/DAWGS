@@ -137,4 +137,3 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 -- cypher_params: {"forward_end":202,"forward_start":101}
 -- pgsql_params:{"pi0":101,"pi1":202}
 with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n0.id as n0, n1.id as n1 from edge e0 join node n1 on n1.kind_ids operator (pg_catalog.@>) array [72]::int2[] and n1.id = e0.end_id join node n0 on n0.kind_ids operator (pg_catalog.@>) array [72]::int2[] and n0.id = e0.start_id where ((n0.id = @pi0::float8 and n1.id = @pi1::float8 and e0.kind_id = any (array [75]::int2[])) or (n0.id = @pi1::float8 and n1.id = @pi0::float8 and e0.kind_id = any (array [76]::int2[])))) select (s0.e0).id as "id(r)" from s0;
-

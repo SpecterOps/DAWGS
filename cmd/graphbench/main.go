@@ -173,7 +173,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
 	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, ASP-A1-DAG)")
-	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE)")
+	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -360,7 +360,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S0" && cfg.PostgresForceShortest != "SP-S0-DIRECT" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" && cfg.PostgresForceShortest != "SP-S4-C-D" && cfg.PostgresForceShortest != "SP-S4-C-WE+MAT-M0" && cfg.PostgresForceShortest != "ASP-A1-DAG" {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced shortest executor %q", cfg.PostgresForceShortest)
 	}
-	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "EXPANSION-SUFFIX-SEEDED-REVERSE" {
+	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "EXPANSION-SUFFIX-SEEDED-REVERSE" && cfg.PostgresForceExpansion != "EXPANSION-ENDPOINT-SEEDED-REVERSE" {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced expansion search %q", cfg.PostgresForceExpansion)
 	}
 	if cfg.PostgresForceShortest != "" && cfg.PostgresForceExpansion != "" {
@@ -557,11 +557,7 @@ func main() {
 			if connection == "" {
 				continue
 			}
-			if err := databaseguard.Validate(
-				connection,
-				os.Getenv(databaseguard.AllowDestructiveEnv),
-				os.Getenv(databaseguard.DisposableTargetsEnv),
-			); err != nil {
+			if err := databaseguard.ValidateEnvironment(connection); err != nil {
 				fatal("refuse destructive GraphBench target: %v", err)
 			}
 		}
@@ -598,6 +594,11 @@ func main() {
 	)
 	var existingManifest ExistingGraphAnchorManifest
 	checkpointCorpusHash := corpusIdentity(corpus)
+	metadata := testutil.ResolveBaselineMetadata(cfg.DAWGSVersion)
+	environment := resolveRunEnvironment(cfg, os.Args, selection, startedAt, startedAt)
+	checkpointRunHash := runConfigurationIdentity(cfg, environment)
+	environment.CorpusSHA256 = checkpointCorpusHash
+	environment.RunIdentitySHA256 = checkpointRunHash
 	if cfg.ExistingGraph {
 		existingManifest, err = loadExistingGraphAnchorManifest(cfg.AnchorManifest)
 		if err != nil {
@@ -607,9 +608,15 @@ func main() {
 			fatal("validate existing-graph corpus: %v", err)
 		}
 		if cfg.Resume {
-			records, err = readExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash)
+			records, err = readExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, checkpointRunHash)
 			if err != nil {
 				fatal("resume existing-graph checkpoint: %v", err)
+			}
+			for _, record := range records {
+				if record.Environment != nil && record.Environment.RunUUID != "" {
+					environment.RunUUID = record.Environment.RunUUID
+					break
+				}
 			}
 		}
 	}
@@ -627,9 +634,9 @@ func main() {
 
 			var existingOptions *existingGraphRunnerOptions
 			if cfg.ExistingGraph {
-				completed := map[string]bool{}
-				for _, key := range sortedCompletedKeys(records) {
-					completed[key] = true
+				completed := map[string]string{}
+				for _, record := range records {
+					completed[existingGraphCaseKey(record.ExecutionMode, ScaleCase{Dataset: record.Dataset, Name: record.Name})] = record.WorkloadSHA256
 				}
 				existingOptions = &existingGraphRunnerOptions{
 					Manifest:       existingManifest,
@@ -639,8 +646,9 @@ func main() {
 					SampleFloor:    cfg.DiscoverySampleFloor,
 					Completed:      completed,
 					OnRecord: func(record CaseResult) error {
+						setCaseRunMetadata(&record, metadata, environment)
 						records = append(records, record)
-						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records)
+						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, checkpointRunHash, records)
 					},
 					OnComplete: func(postNodes, postEdges int64) error {
 						for idx := range records {
@@ -649,7 +657,7 @@ func main() {
 								records[idx].ExistingGraph.PostEdgeCount = postEdges
 							}
 						}
-						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records)
+						return writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, checkpointRunHash, records)
 					},
 				}
 			}
@@ -672,7 +680,7 @@ func main() {
 				// OnRecord appends each completed record atomically. A resumed run
 				// may have no new records, while a complete run refreshes the final
 				// before/after cardinality proof below.
-				if err := writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, records); err != nil {
+				if err := writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, checkpointRunHash, records); err != nil {
 					fatal("finalize existing-graph checkpoint: %v", err)
 				}
 			}
@@ -714,14 +722,17 @@ func main() {
 		fatal("validate backend observations: %v", err)
 	}
 
-	metadata := testutil.ResolveBaselineMetadata(cfg.DAWGSVersion)
-	environment := resolveRunEnvironment(cfg, os.Args, selection, startedAt, time.Now())
+	environment.EndedAt = time.Now().UTC()
 	for idx := range records {
-		records[idx].Metadata = metadata
-		records[idx].Environment = &environment
-		setSampleRunMetadata(&records[idx].Stats, environment)
-		for referenceIdx := range records[idx].PostgresReferences {
-			setSampleRunMetadata(&records[idx].PostgresReferences[referenceIdx].Stats, environment)
+		if records[idx].Environment == nil {
+			setCaseRunMetadata(&records[idx], metadata, environment)
+		} else if records[idx].Environment.RunUUID == environment.RunUUID {
+			records[idx].Environment.EndedAt = environment.EndedAt
+		}
+	}
+	if cfg.ExistingGraph {
+		if err := writeExistingGraphCheckpoint(cfg.Checkpoint, existingManifest.Checksum, checkpointCorpusHash, checkpointRunHash, records); err != nil {
+			fatal("persist finalized existing-graph checkpoint: %v", err)
 		}
 	}
 

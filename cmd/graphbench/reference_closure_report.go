@@ -219,9 +219,9 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 			entry.MedianRatio = bootstrapRoundMedianRatio(baseline, candidate, seed, gateOptions)
 			entry.MedianChange = negateDurationInterval(bootstrapRoundMedianSaving(baseline, candidate, seed+1, gateOptions))
 			entry.AbsoluteGapUpper = max(absDuration(entry.MedianChange.Lower), absDuration(entry.MedianChange.Upper))
-			if entry.MedianRatio.Upper > options.RatioUpperLimit && entry.AbsoluteGapUpper > options.AbsoluteResolution {
+			if entry.MedianRatio.Upper > options.RatioUpperLimit && entry.AbsoluteGapUpper > entry.AbsoluteResolution {
 				entry.Passed = false
-				entry.Reasons = append(entry.Reasons, fmt.Sprintf("ratio upper %.4f exceeds %.4f and absolute gap upper %s exceeds %s", entry.MedianRatio.Upper, options.RatioUpperLimit, entry.AbsoluteGapUpper, options.AbsoluteResolution))
+				entry.Reasons = append(entry.Reasons, fmt.Sprintf("ratio upper %.4f exceeds %.4f and absolute gap upper %s exceeds effective resolution %s", entry.MedianRatio.Upper, options.RatioUpperLimit, entry.AbsoluteGapUpper, entry.AbsoluteResolution))
 			}
 		}
 		if !entry.Passed {

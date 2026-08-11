@@ -143,6 +143,20 @@ func TestBuildPerfGateReportRequiresMatchedRounds(t *testing.T) {
 	require.ErrorContains(t, reasonsError(report.Cases[0].Reasons), "at least 5 matched rounds")
 }
 
+func TestBuildPerfGateReportRejectsChangedLogicalWorkload(t *testing.T) {
+	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 10*time.Millisecond, 5, 30)}
+	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 9*time.Millisecond, 5, 30)}
+	candidate[0].WorkloadSHA256 = "changed-workload"
+
+	_, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
+		Seed:                1,
+		Confidence:          0.95,
+		RegressionThreshold: 0.20,
+		BootstrapCount:      100,
+	})
+	require.ErrorContains(t, err, "logical workload differs")
+}
+
 func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing.T) {
 	declared := []DeclaredCaseBackend{
 		{
@@ -206,10 +220,11 @@ func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate
 
 func perfGateRecord(name string, mode ExecutionMode, duration time.Duration, rounds, samplesPerRound int) CaseResult {
 	record := CaseResult{
-		Dataset:       "fixture",
-		Name:          name,
-		ExecutionMode: mode,
-		Status:        StatusOK,
+		Dataset:        "fixture",
+		Name:           name,
+		WorkloadSHA256: fmt.Sprintf("workload:%s:%s", name, mode),
+		ExecutionMode:  mode,
+		Status:         StatusOK,
 	}
 	for round := 1; round <= rounds; round++ {
 		for iteration := 1; iteration <= samplesPerRound; iteration++ {

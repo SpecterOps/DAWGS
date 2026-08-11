@@ -179,6 +179,9 @@ func hasAdaptiveDiscoveryRecord(records []CaseResult) bool {
 }
 
 func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptions) (PerfGateReport, error) {
+	if err := validatePerformanceWorkloadIdentity(baseline, candidate); err != nil {
+		return PerfGateReport{}, err
+	}
 	if options.Confidence <= 0 || options.Confidence >= 1 {
 		return PerfGateReport{}, fmt.Errorf("confidence level must be between 0 and 1")
 	}
@@ -313,6 +316,59 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 	}
 
 	return report, nil
+}
+
+func validatePerformanceWorkloadIdentity(baseline, candidate []CaseResult) error {
+	collect := func(label string, records []CaseResult) (map[performanceKey]string, error) {
+		identities := map[performanceKey]string{}
+		for _, record := range records {
+			if record.ExecutionMode != ModePostgresSQL && record.ExecutionMode != ModeNeo4j {
+				continue
+			}
+			key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+			if record.WorkloadSHA256 == "" {
+				return nil, fmt.Errorf("%s artifact case %s/%s/%s has no workload identity", label, key.dataset, key.name, key.backend)
+			}
+			identityPayload := struct {
+				WorkloadSHA256       string `json:"workload_sha256"`
+				ManifestSHA256       string `json:"manifest_sha256,omitempty"`
+				ContentIdentity      string `json:"content_identity,omitempty"`
+				FixtureChecksum      string `json:"fixture_checksum,omitempty"`
+				FixtureConfiguration string `json:"fixture_configuration,omitempty"`
+			}{WorkloadSHA256: record.WorkloadSHA256}
+			if record.ExistingGraph != nil {
+				identityPayload.ManifestSHA256 = record.ExistingGraph.ManifestSHA256
+				identityPayload.ContentIdentity = record.ExistingGraph.ContentIdentity
+			}
+			if record.Fixture != nil {
+				identityPayload.FixtureChecksum = record.Fixture.Checksum
+				identityPayload.FixtureConfiguration = record.Fixture.Configuration
+			}
+			raw, _ := json.Marshal(identityPayload)
+			digest := sha256.Sum256(raw)
+			identity := hex.EncodeToString(digest[:])
+			if present, found := identities[key]; found && present != identity {
+				return nil, fmt.Errorf("%s artifact case %s/%s/%s mixes workload identities", label, key.dataset, key.name, key.backend)
+			}
+			identities[key] = identity
+		}
+		return identities, nil
+	}
+
+	baselineIdentities, err := collect("baseline", baseline)
+	if err != nil {
+		return err
+	}
+	candidateIdentities, err := collect("candidate", candidate)
+	if err != nil {
+		return err
+	}
+	for key, baselineIdentity := range baselineIdentities {
+		if candidateIdentity, found := candidateIdentities[key]; found && candidateIdentity != baselineIdentity {
+			return fmt.Errorf("logical workload differs for %s/%s/%s", key.dataset, key.name, key.backend)
+		}
+	}
+	return nil
 }
 
 func declaredPerformanceKeys(declared []DeclaredCaseBackend, baseline, candidate []CaseResult) []performanceKey {

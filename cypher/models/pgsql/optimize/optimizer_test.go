@@ -79,6 +79,57 @@ func TestFieldRequirementAnalysisDistinguishesObservationBoundaries(t *testing.T
 	require.NotContains(t, bySymbol["p"].Fields, FieldRequirementFullPath)
 }
 
+func TestFieldRequirementAnalysisExpandsGreedyProjection(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[r:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN *
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+
+	bySymbol := map[string]FieldRequirementDecision{}
+	for _, decision := range plan.LoweringPlan.FieldRequirements {
+		bySymbol[decision.Symbol] = decision
+	}
+
+	require.NotContains(t, bySymbol, cypher.TokenLiteralAsterisk)
+	require.Contains(t, bySymbol["p"].Fields, FieldRequirementFullPath)
+	require.Contains(t, bySymbol["s"].Fields, FieldRequirementFullEntity)
+	require.Contains(t, bySymbol["e"].Fields, FieldRequirementFullEntity)
+	require.Contains(t, bySymbol["r"].Fields, FieldRequirementFullEntity)
+	require.Contains(t, bySymbol["r"].Fields, FieldRequirementRelationshipIDs)
+	require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+	require.Equal(t, ShortestPathObservationOnePath, plan.LoweringPlan.ShortestPathExecutor[0].ObservationMode)
+}
+
+func TestFieldRequirementAnalysisTreatsWithGreedyProjectionAsFullObservation(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		WITH *
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+
+	for _, decision := range plan.LoweringPlan.FieldRequirements {
+		if decision.QueryPartIndex == 0 && decision.Symbol == "p" {
+			require.Contains(t, decision.Fields, FieldRequirementFullPath)
+			return
+		}
+	}
+	require.Fail(t, "missing path field-requirement decision")
+}
+
 func TestOptimizePlansFixedSuffixFanoutRewrite(t *testing.T) {
 	t.Parallel()
 
@@ -827,6 +878,85 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 	require.Equal(t, int64(16), decision.MaximumDepth)
 	require.Equal(t, 3, decision.SuffixLength)
 	require.Equal(t, "outbound", decision.LogicalDirection)
+}
+
+func TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
+		WHERE excluded.objectid ENDS WITH '-516'
+		WITH collect(s) AS exclude
+		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)
+		WHERE g.objectid ENDS WITH $suffix AND NOT c IN exclude
+		RETURN p
+		LIMIT 1000
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 2)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[1]
+	require.Equal(t, "fixed_prefix_terminal_expansion", decision.Family)
+	require.True(t, decision.StructurallyEligible)
+	require.True(t, decision.StaticallyEligible)
+	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
+	require.Equal(t, ExpansionSearchStepwiseForward, decision.FallbackStrategy)
+	require.Equal(t, "static_guarded", decision.SelectionMode)
+	require.Equal(t, "endpoint-seeded-guarded-v1", decision.SelectorVersion)
+	require.Equal(t, "property_ends_with", decision.SeedPredicateClass)
+	require.Equal(t, int64(32), decision.EndpointLimit)
+	require.Equal(t, int64(4096), decision.StateLimit)
+	require.Equal(t, 1, decision.PrefixLength)
+	require.Equal(t, int64(1), decision.MinimumDepth)
+	require.Equal(t, int64(15), decision.MaximumDepth)
+	require.True(t, decision.HasFinalLimit)
+	require.Empty(t, decision.FallbackReason)
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "single_variable_expansion_in_region", Eligible: true})
+}
+
+func TestGuardedEndpointSeededExpansionFallbackReasons(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		query  string
+		reason string
+	}{
+		{name: "terminal not selective", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) RETURN p`, reason: ExpansionSearchFallbackTerminalNotSelective},
+		{name: "zero depth", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*0..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackZeroDepth},
+		{name: "directionless prefix", query: `MATCH p = (c:Computer)-[:HasSession]-(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackDirectionlessPrefix},
+		{name: "correlated terminal", query: `MATCH (g:Group) MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackCorrelatedTerminal},
+		{name: "correlated terminal predicate", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND g.tenant = c.tenant RETURN p`, reason: ExpansionSearchFallbackCorrelatedTerminal},
+		{name: "nonterminal expansion", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)-[:AdminTo]->() WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackExpansionNotTerminal},
+		{name: "mutation", query: `MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' CREATE (:Computer) RETURN g`, reason: ExpansionSearchFallbackMutation},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.NotEmpty(t, plan.LoweringPlan.ExpansionSearchStrategy)
+			decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
+			require.Equal(t, "fixed_prefix_terminal_expansion", decision.Family)
+			require.False(t, decision.StructurallyEligible)
+			require.Equal(t, ExpansionSearchStepwiseForward, decision.SelectedStrategy)
+			require.Equal(t, testCase.reason, decision.FallbackReason)
+		})
+	}
+}
+
+func TestGuardedEndpointSeededExpansionAcceptsTerminalIDEquality(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..8]->(g)
+		WHERE id(g) = $terminal_id
+		RETURN id(c), id(g)
+	`)
+	require.NoError(t, err)
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
+	require.True(t, decision.StructurallyEligible)
+	require.Equal(t, "id_equality", decision.SeedPredicateClass)
+	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
 }
 
 func TestFixedSuffixSearchRejectsPredicateFunctionReevaluation(t *testing.T) {
@@ -1745,13 +1875,13 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			name:              "outbound one path one kind",
 			pattern:           `(s)-[:MemberOf*1..16]->(e)`,
 			observation:       `p`,
-			executor:          ShortestPathExecutorS3EdgeM0,
+			executor:          ShortestPathExecutorS4CanonicalWitness,
 			direction:         graph.DirectionOutbound,
 			physicalExpansion: ShortestPathPhysicalExpansionStartID,
 			topology:          ShortestPathTopologyPhysicalOutbound,
 			kindCount:         1,
 			staticEligible:    true,
-			selector:          "sp-static-v3",
+			selector:          "sp-static-v4",
 		},
 		{
 			name:              "outbound one path two kinds",
@@ -1793,13 +1923,13 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			name:              "inbound path depth one",
 			pattern:           `(s)<-[:MemberOf*1..1]-(e)`,
 			observation:       `p`,
-			executor:          ShortestPathExecutorS3EdgeM0,
+			executor:          ShortestPathExecutorS4CanonicalWitness,
 			direction:         graph.DirectionInbound,
 			physicalExpansion: ShortestPathPhysicalExpansionEndID,
 			topology:          ShortestPathTopologyPhysicalInboundShallow,
 			kindCount:         1,
 			staticEligible:    true,
-			selector:          "sp-static-v3",
+			selector:          "sp-static-v4",
 		},
 		{
 			name:              "inbound distance depth two",

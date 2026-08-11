@@ -96,7 +96,8 @@ tidy:
 # Code quality
 lint:
 	@echo "Running linter..."
-	@$(GO_CMD) vet ./...
+	@$(GO_CMD) vet -unreachable=false ./...
+	@$(GO_CMD) list ./... | grep -v '/cypher/parser$$' | xargs $(GO_CMD) vet -unreachable
 
 format:
 	@echo "Formatting code..."

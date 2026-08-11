@@ -19,17 +19,19 @@ type BackendDeltaReport struct {
 }
 
 type BackendDeltaCase struct {
-	Dataset           string        `json:"dataset"`
-	Name              string        `json:"name"`
-	PostgresStatus    string        `json:"postgres_status"`
-	Neo4jStatus       string        `json:"neo4j_status"`
-	PostgresMedian    time.Duration `json:"postgres_median,omitempty"`
-	PostgresP95       time.Duration `json:"postgres_p95,omitempty"`
-	Neo4jMedian       time.Duration `json:"neo4j_median,omitempty"`
-	Neo4jP95          time.Duration `json:"neo4j_p95,omitempty"`
-	MedianNeo4jOverPG float64       `json:"median_neo4j_over_postgres,omitempty"`
-	P95Neo4jOverPG    float64       `json:"p95_neo4j_over_postgres,omitempty"`
-	ObservationsMatch bool          `json:"observations_match"`
+	Dataset                string        `json:"dataset"`
+	Name                   string        `json:"name"`
+	Round                  int           `json:"round,omitempty"`
+	PostgresStatus         string        `json:"postgres_status"`
+	Neo4jStatus            string        `json:"neo4j_status"`
+	PostgresMedian         time.Duration `json:"postgres_median,omitempty"`
+	PostgresP95            time.Duration `json:"postgres_p95,omitempty"`
+	Neo4jMedian            time.Duration `json:"neo4j_median,omitempty"`
+	Neo4jP95               time.Duration `json:"neo4j_p95,omitempty"`
+	MedianNeo4jOverPG      float64       `json:"median_neo4j_over_postgres,omitempty"`
+	P95Neo4jOverPG         float64       `json:"p95_neo4j_over_postgres,omitempty"`
+	ObservationsComparable bool          `json:"observations_comparable"`
+	ObservationsMatch      bool          `json:"observations_match"`
 }
 
 func createBackendDeltaReport(artifact, output string) error {
@@ -41,19 +43,31 @@ func createBackendDeltaReport(artifact, output string) error {
 	type key struct {
 		dataset string
 		name    string
+		round   int
 	}
 
 	postgres, neo4j := map[key]CaseResult{}, map[key]CaseResult{}
 	for _, record := range records {
+		round := 0
+		if record.Environment != nil {
+			round = record.Environment.Round
+		}
 		nextKey := key{
 			dataset: record.Dataset,
 			name:    record.Name,
+			round:   round,
 		}
 
 		switch record.ExecutionMode {
 		case ModePostgresSQL:
+			if _, duplicate := postgres[nextKey]; duplicate {
+				return fmt.Errorf("backend-delta artifact has duplicate PostgreSQL record for %s/%s round %d", nextKey.dataset, nextKey.name, nextKey.round)
+			}
 			postgres[nextKey] = record
 		case ModeNeo4j:
+			if _, duplicate := neo4j[nextKey]; duplicate {
+				return fmt.Errorf("backend-delta artifact has duplicate Neo4j record for %s/%s round %d", nextKey.dataset, nextKey.name, nextKey.round)
+			}
 			neo4j[nextKey] = record
 		}
 	}
@@ -67,16 +81,19 @@ func createBackendDeltaReport(artifact, output string) error {
 		if !found {
 			continue
 		}
+		observationsComparable := pgRecord.StableObservation && neoRecord.StableObservation
 		next := BackendDeltaCase{
-			Dataset:           nextKey.dataset,
-			Name:              nextKey.name,
-			PostgresStatus:    pgRecord.Status,
-			Neo4jStatus:       neoRecord.Status,
-			PostgresMedian:    pgRecord.Stats.Median,
-			PostgresP95:       pgRecord.Stats.P95,
-			Neo4jMedian:       neoRecord.Stats.Median,
-			Neo4jP95:          neoRecord.Stats.P95,
-			ObservationsMatch: pgRecord.RowCount == neoRecord.RowCount && slices.Equal(pgRecord.ObservedRows, neoRecord.ObservedRows),
+			Dataset:                nextKey.dataset,
+			Name:                   nextKey.name,
+			Round:                  nextKey.round,
+			PostgresStatus:         pgRecord.Status,
+			Neo4jStatus:            neoRecord.Status,
+			PostgresMedian:         pgRecord.Stats.Median,
+			PostgresP95:            pgRecord.Stats.P95,
+			Neo4jMedian:            neoRecord.Stats.Median,
+			Neo4jP95:               neoRecord.Stats.P95,
+			ObservationsComparable: observationsComparable,
+			ObservationsMatch:      observationsComparable && pgRecord.RowCount == neoRecord.RowCount && slices.Equal(pgRecord.ObservedRows, neoRecord.ObservedRows),
 		}
 		if next.PostgresMedian > 0 {
 			next.MedianNeo4jOverPG = float64(next.Neo4jMedian) / float64(next.PostgresMedian)
@@ -93,7 +110,10 @@ func createBackendDeltaReport(artifact, output string) error {
 		if report.Cases[i].Dataset != report.Cases[j].Dataset {
 			return report.Cases[i].Dataset < report.Cases[j].Dataset
 		}
-		return report.Cases[i].Name < report.Cases[j].Name
+		if report.Cases[i].Name != report.Cases[j].Name {
+			return report.Cases[i].Name < report.Cases[j].Name
+		}
+		return report.Cases[i].Round < report.Cases[j].Round
 	})
 	raw, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {

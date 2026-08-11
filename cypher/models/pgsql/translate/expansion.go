@@ -1260,7 +1260,9 @@ func (s *ExpansionBuilder) prepareForwardFrontPrimerQuery(expansionModel *Expans
 		return pgsql.Query{}, nil, err
 	}
 
-	if !expansionModel.HasExplicitEndpointInequality && !expansionModel.UsesSingletonEndpointPair() {
+	if !expansionModel.HasExplicitEndpointInequality &&
+		!expansionModel.UsesSingletonEndpointPair() &&
+		!expansionAllowsZeroDepth(expansionModel) {
 		nextQuery.Where = pgsql.OptionalAnd(
 			nextQuery.Where,
 			shortestPathSeedSelfEndpointGuard(s.model.EdgeStartColumn, expansionModel.UseMaterializedEndpointPairFilter),
@@ -4052,6 +4054,14 @@ func expansionLocalTerminalSatisfactionProjection(traversalStep *TraversalStep) 
 
 func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep) ([]pgsql.SelectItem, error) {
 	expansionModel := traversalStep.Expansion
+	isCycleProjection := pgsql.SelectItem(pgsql.NewLiteral(false, pgsql.Boolean))
+	if expansionModel.Options.FindShortestPath || expansionModel.Options.FindAllShortestPaths {
+		isCycleProjection = pgsql.NewBinaryExpression(
+			expansionModel.EdgeStartColumn,
+			pgsql.OperatorEquals,
+			expansionModel.EdgeEndColumn,
+		)
+	}
 
 	if expansionModel.TerminalNodeSatisfactionProjection != nil {
 		satisfiedProjection, err := expansionLocalTerminalSatisfactionProjection(traversalStep)
@@ -4064,11 +4074,7 @@ func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep
 			expansionModel.EdgeEndColumn,
 			pgsql.NewLiteral(1, pgsql.Int),
 			satisfiedProjection,
-			pgsql.NewBinaryExpression(
-				expansionModel.EdgeStartColumn,
-				pgsql.OperatorEquals,
-				expansionModel.EdgeEndColumn,
-			),
+			isCycleProjection,
 			pgsql.ArrayLiteral{
 				Values: []pgsql.Expression{
 					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},
@@ -4081,11 +4087,7 @@ func (s *Translator) buildExpansionPrimerProjection(traversalStep *TraversalStep
 			expansionModel.EdgeEndColumn,
 			pgsql.NewLiteral(1, pgsql.Int),
 			pgsql.NewLiteral(false, pgsql.Boolean),
-			pgsql.NewBinaryExpression(
-				expansionModel.EdgeStartColumn,
-				pgsql.OperatorEquals,
-				expansionModel.EdgeEndColumn,
-			),
+			isCycleProjection,
 			pgsql.ArrayLiteral{
 				Values: []pgsql.Expression{
 					pgsql.CompoundIdentifier{traversalStep.Edge.Identifier, pgsql.ColumnID},

@@ -14,10 +14,16 @@ plan operator trees for cross-backend plan-shape comparison.
 ## Usage
 
 ```bash
-PG_CONNECTION_STRING="postgres://postgres:password@localhost/db" \
-NEO4J_CONNECTION_STRING="neo4j://neo4j:password@localhost:7687" \
-go run ./cmd/plancorpus
+DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
+DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:5432/db,neo4j://localhost:7687/<default>" \
+  PG_CONNECTION_STRING="postgres://postgres:password@localhost/db" \
+  NEO4J_CONNECTION_STRING="neo4j://neo4j:password@localhost:7687" \
+  go run ./cmd/plancorpus
 ```
+
+Plan capture reloads fixtures and refuses to open a selected backend unless the destructive acknowledgement is set and
+its exact credential-free target is allowlisted. PostgreSQL aliases and omitted default ports are canonicalized;
+multi-host PostgreSQL URLs are accepted only when every fallback resolves to the same target.
 
 Useful flags:
 

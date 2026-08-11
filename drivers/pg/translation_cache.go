@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -22,19 +23,15 @@ type cypherTranslationCacheKey struct {
 type cypherTranslationCacheValue struct {
 	key              cypherTranslationCacheKey
 	sql              string
-	defaults         map[string]any
 	parameterSources map[string]string
 }
 
 func (s cypherTranslationCacheValue) bind(parameters map[string]any) (map[string]any, error) {
-	bound := make(map[string]any, len(s.defaults))
-	for identifier, value := range s.defaults {
-		bound[identifier] = value
-	}
+	bound := make(map[string]any, len(s.parameterSources))
 	for identifier, source := range s.parameterSources {
 		value, found := parameters[source]
 		if !found {
-			continue
+			return nil, fmt.Errorf("cached translation requires missing parameter source %q", source)
 		}
 		negotiated, err := model.NegotiateValue(value)
 		if err != nil {
@@ -89,38 +86,42 @@ func translationParameterTypeKey(parameters map[string]any) string {
 	sort.Strings(keys)
 	var key strings.Builder
 	for _, name := range keys {
-		key.WriteString(name)
-		key.WriteByte('=')
 		value := parameters[name]
+		var typeName string
 		if value == nil {
-			key.WriteString("null")
+			typeName = "null"
 		} else if dataType, err := model.ValueToDataType(value); err == nil {
-			key.WriteString(dataType.String())
+			typeName = dataType.String()
 		} else {
 			// Translation will report the same unsupported value error. Retaining
 			// its Go type here prevents unrelated invalid shapes from coalescing.
-			key.WriteString(fmt.Sprintf("invalid:%T", value))
+			typeName = fmt.Sprintf("invalid:%T", value)
 		}
-		key.WriteByte(';')
+
+		key.WriteString(strconv.Itoa(len(name)))
+		key.WriteByte(':')
+		key.WriteString(name)
+		key.WriteString(strconv.Itoa(len(typeName)))
+		key.WriteByte(':')
+		key.WriteString(typeName)
 	}
 	return key.String()
 }
 
-func cacheableTranslation(result translate.Result) bool {
+func cacheableTranslation(result translate.Result, parameters map[string]any) bool {
+	if len(result.Parameters) != len(result.ParameterSources) {
+		return false
+	}
 	for identifier := range result.Parameters {
-		if _, found := result.ParameterSources[identifier]; !found {
+		source, found := result.ParameterSources[identifier]
+		if !found || source == "" {
+			return false
+		}
+		if _, found := parameters[source]; !found {
 			return false
 		}
 	}
 	return true
-}
-
-func cloneValues(values map[string]any) map[string]any {
-	cloned := make(map[string]any, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
-	return cloned
 }
 
 func cloneSources(values map[string]string) map[string]string {
@@ -200,10 +201,9 @@ func (s *cypherTranslationCache) Translate(query string, graphID int32, paramete
 	value := cypherTranslationCacheValue{
 		key:              key,
 		sql:              sql,
-		defaults:         cloneValues(result.Parameters),
 		parameterSources: cloneSources(result.ParameterSources),
 	}
-	cacheable := err == nil && cacheableTranslation(result)
+	cacheable := err == nil && cacheableTranslation(result, parameters)
 
 	s.lock.Lock()
 	call.value, call.err, call.cacheable = value, err, cacheable

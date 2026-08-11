@@ -34,6 +34,7 @@ import (
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -63,7 +64,7 @@ type existingGraphRunnerOptions struct {
 	Discovery      bool
 	TimeoutClasses []time.Duration
 	SampleFloor    int
-	Completed      map[string]bool
+	Completed      map[string]string
 	OnRecord       func(CaseResult) error
 	OnComplete     func(int64, int64) error
 }
@@ -73,6 +74,12 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 }
 
 func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string, existing *existingGraphRunnerOptions) (*postgresSQLRunner, error) {
+	if existing == nil {
+		if err := databaseguard.ValidateEnvironment(connection); err != nil {
+			return nil, fmt.Errorf("refuse destructive PostgreSQL GraphBench target: %w", err)
+		}
+	}
+
 	poolCfg, err := pgxpool.ParseConfig(connection)
 	if err != nil {
 		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
@@ -239,7 +246,7 @@ func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iteration
 			}
 
 			record := s.runCase(ctx, warmupIterations, iterations, testCase, idMap)
-			record.Fixture = &fixture
+			attachFixtureMetadata(&record, fixture)
 			records = append(records, record)
 		}
 	}
@@ -267,8 +274,13 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 	databaseDigest := sha256.Sum256([]byte(s.environment.Database))
 	s.environment.Database = "sha256:" + hex.EncodeToString(databaseDigest[:])
 	fixture := FixtureMetadata{
-		Dataset:           "existing_graph",
-		Checksum:          s.environment.SchemaFingerprint + ":" + s.environment.IndexFingerprint,
+		Dataset: "existing_graph",
+		Checksum: strings.Join([]string{
+			options.Manifest.Checksum,
+			options.Manifest.ContentIdentity,
+			s.environment.SchemaFingerprint,
+			s.environment.IndexFingerprint,
+		}, ":"),
 		PhysicalValidated: true,
 		PhysicalNodeCount: preNodes,
 		PhysicalEdgeCount: preEdges,
@@ -276,13 +288,16 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 		EdgeRelationBytes: s.environment.EdgeRelationBytes,
 		Configuration:     "existing_graph_read_only",
 	}
+	if err := validateCompletedWorkloads(options.Completed, corpus, fixture); err != nil {
+		return nil, err
+	}
 	var records []CaseResult
 	for _, testCase := range corpus.Cases {
 		if !testCase.Supports(ModePostgresSQL) {
 			continue
 		}
 		caseKey := existingGraphCaseKey(ModePostgresSQL, testCase)
-		if options.Completed[caseKey] {
+		if _, completed := options.Completed[caseKey]; completed {
 			continue
 		}
 		if err := appendExistingGraphProgress(options.ProgressPath, ExistingGraphProgress{
@@ -295,7 +310,7 @@ func (s *postgresSQLRunner) runExistingGraph(ctx context.Context, warmupIteratio
 			return nil, fmt.Errorf("reset PostgreSQL session for %s: %w", testCase.Name, err)
 		}
 		record := s.runExistingGraphCase(ctx, warmupIterations, iterations, testCase, idMap)
-		record.Fixture = &fixture
+		attachFixtureMetadata(&record, fixture)
 		record.ExistingGraph.PreNodeCount, record.ExistingGraph.PreEdgeCount = preNodes, preEdges
 		redactExistingGraphRecord(&record, options.Manifest, anchors)
 		records = append(records, record)

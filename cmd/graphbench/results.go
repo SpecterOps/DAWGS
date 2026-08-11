@@ -17,6 +17,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -149,27 +151,32 @@ type PostgresBoundaryWaterfall struct {
 }
 
 type PostgresPlanMetrics struct {
-	PlanningMS          *float64                 `json:"planning_ms,omitempty"`
-	ExecutionMS         *float64                 `json:"execution_ms,omitempty"`
-	Buffers             Buffers                  `json:"buffers,omitempty"`
-	TempFiles           int64                    `json:"temp_files,omitempty"`
-	TempBytes           int64                    `json:"temp_bytes,omitempty"`
-	WALRecords          int64                    `json:"wal_records,omitempty"`
-	WALBytes            int64                    `json:"wal_bytes,omitempty"`
-	RootRows            int64                    `json:"root_rows,omitempty"`
-	RecursiveRows       int64                    `json:"recursive_rows,omitempty"`
-	RecursiveLoops      int64                    `json:"recursive_loops,omitempty"`
-	FrontierRows        int64                    `json:"frontier_rows,omitempty"`
-	WitnessRows         int64                    `json:"witness_rows,omitempty"`
-	MeetingRows         int64                    `json:"meeting_rows,omitempty"`
-	HydrationRows       int64                    `json:"hydration_rows,omitempty"`
-	ForwardEdgeProbes   int64                    `json:"forward_edge_probes,omitempty"`
-	ReverseEdgeProbes   int64                    `json:"reverse_edge_probes,omitempty"`
-	RootLookupLoops     int64                    `json:"root_lookup_loops,omitempty"`
-	BoundaryLookupLoops int64                    `json:"boundary_lookup_loops,omitempty"`
-	HydrationLoops      int64                    `json:"hydration_loops,omitempty"`
-	PlanNodes           []PostgresPlanNodeMetric `json:"plan_nodes,omitempty"`
-	Provenance          map[string]string        `json:"provenance,omitempty"`
+	PlanningMS                *float64                 `json:"planning_ms,omitempty"`
+	ExecutionMS               *float64                 `json:"execution_ms,omitempty"`
+	Buffers                   Buffers                  `json:"buffers,omitempty"`
+	TempFiles                 int64                    `json:"temp_files,omitempty"`
+	TempBytes                 int64                    `json:"temp_bytes,omitempty"`
+	WALRecords                int64                    `json:"wal_records,omitempty"`
+	WALBytes                  int64                    `json:"wal_bytes,omitempty"`
+	RootRows                  int64                    `json:"root_rows,omitempty"`
+	RecursiveRows             int64                    `json:"recursive_rows,omitempty"`
+	RecursiveLoops            int64                    `json:"recursive_loops,omitempty"`
+	FrontierRows              int64                    `json:"frontier_rows,omitempty"`
+	WitnessRows               int64                    `json:"witness_rows,omitempty"`
+	MeetingRows               int64                    `json:"meeting_rows,omitempty"`
+	HydrationRows             int64                    `json:"hydration_rows,omitempty"`
+	ForwardEdgeProbes         int64                    `json:"forward_edge_probes,omitempty"`
+	ReverseEdgeProbes         int64                    `json:"reverse_edge_probes,omitempty"`
+	RootLookupLoops           int64                    `json:"root_lookup_loops,omitempty"`
+	BoundaryLookupLoops       int64                    `json:"boundary_lookup_loops,omitempty"`
+	HydrationLoops            int64                    `json:"hydration_loops,omitempty"`
+	EndpointProbeRows         int64                    `json:"endpoint_probe_rows,omitempty"`
+	ReverseStateProbeRows     int64                    `json:"reverse_state_probe_rows,omitempty"`
+	EndpointGuardOverflow     bool                     `json:"endpoint_guard_overflow,omitempty"`
+	StateGuardOverflow        bool                     `json:"state_guard_overflow,omitempty"`
+	ExpansionFallbackExecuted bool                     `json:"expansion_fallback_executed,omitempty"`
+	PlanNodes                 []PostgresPlanNodeMetric `json:"plan_nodes,omitempty"`
+	Provenance                map[string]string        `json:"provenance,omitempty"`
 }
 
 type PostgresPlanNodeMetric struct {
@@ -209,6 +216,7 @@ type CaseResult struct {
 	Source              string                         `json:"source"`
 	Dataset             string                         `json:"dataset"`
 	Name                string                         `json:"name"`
+	WorkloadSHA256      string                         `json:"workload_sha256"`
 	Category            string                         `json:"category"`
 	Shape               WorkloadShape                  `json:"shape"`
 	ExecutionMode       ExecutionMode                  `json:"execution_mode"`
@@ -242,7 +250,7 @@ type CaseResult struct {
 	FallbackReason      string                         `json:"fallback_reason,omitempty"`
 	ExistingGraph       *ExistingGraphRun              `json:"existing_graph,omitempty"`
 	Error               string                         `json:"error,omitempty"`
-	StableObservation   bool                           `json:"-"`
+	StableObservation   bool                           `json:"observation_captured,omitempty"`
 }
 
 type StateQueryResult struct {
@@ -295,6 +303,7 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 		Source:           testCase.Source,
 		Dataset:          testCase.Dataset,
 		Name:             testCase.Name,
+		WorkloadSHA256:   scaleCaseWorkloadIdentity(testCase, mode),
 		Category:         testCase.Category,
 		Shape:            testCase.Shape,
 		ExecutionMode:    mode,
@@ -308,6 +317,67 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 			testCase.Expected.ResultKind == "scalar" ||
 			(testCase.Expected.ResultKind == "path_set" && len(testCase.Expected.PathRows) > 0),
 	}
+}
+
+func scaleCaseWorkloadIdentity(testCase ScaleCase, mode ExecutionMode) string {
+	payload := struct {
+		Version int           `json:"version"`
+		Source  string        `json:"source"`
+		Backend ExecutionMode `json:"backend"`
+		Case    ScaleCase     `json:"case"`
+	}{
+		Version: 1,
+		Source:  testCase.Source,
+		Backend: mode,
+		Case:    testCase,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
+}
+
+func attachFixtureMetadata(record *CaseResult, fixture FixtureMetadata) {
+	if record == nil {
+		return
+	}
+	record.Fixture = &fixture
+	payload := struct {
+		Version                 int                                         `json:"version"`
+		LogicalWorkloadSHA256   string                                      `json:"logical_workload_sha256"`
+		Dataset                 string                                      `json:"dataset"`
+		Checksum                string                                      `json:"checksum"`
+		NodeCount               int                                         `json:"node_count"`
+		EdgeCount               int                                         `json:"edge_count"`
+		PhysicalNodeCount       int64                                       `json:"physical_node_count,omitempty"`
+		PhysicalEdgeCount       int64                                       `json:"physical_edge_count,omitempty"`
+		Configuration           string                                      `json:"configuration,omitempty"`
+		Shortest                *ShortestFixtureExpectations                `json:"shortest,omitempty"`
+		FixedSuffixExpansion    *FixedSuffixExpansionFixtureExpectations    `json:"fixed_suffix_expansion,omitempty"`
+		EndpointSeededExpansion *EndpointSeededExpansionFixtureExpectations `json:"endpoint_seeded_expansion,omitempty"`
+	}{
+		Version:                 1,
+		LogicalWorkloadSHA256:   record.WorkloadSHA256,
+		Dataset:                 fixture.Dataset,
+		Checksum:                fixture.Checksum,
+		NodeCount:               fixture.NodeCount,
+		EdgeCount:               fixture.EdgeCount,
+		PhysicalNodeCount:       fixture.PhysicalNodeCount,
+		PhysicalEdgeCount:       fixture.PhysicalEdgeCount,
+		Configuration:           fixture.Configuration,
+		Shortest:                fixture.Shortest,
+		FixedSuffixExpansion:    fixture.FixedSuffixExpansion,
+		EndpointSeededExpansion: fixture.EndpointSeededExpansion,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		record.WorkloadSHA256 = ""
+		return
+	}
+	digest := sha256.Sum256(raw)
+	record.WorkloadSHA256 = hex.EncodeToString(digest[:])
 }
 
 func computeDurationStats(durations []time.Duration) (DurationStats, error) {
@@ -366,6 +436,18 @@ func setSampleRunMetadata(stats *DurationStats, environment RunEnvironment) {
 		stats.Samples[idx].Arm = environment.Arm
 		stats.Samples[idx].ArmOrder = environment.ArmOrder
 		stats.Samples[idx].RunUUID = environment.RunUUID
+	}
+}
+
+func setCaseRunMetadata(record *CaseResult, metadata testutil.BaselineMetadata, environment RunEnvironment) {
+	if record == nil {
+		return
+	}
+	record.Metadata = metadata
+	record.Environment = &environment
+	setSampleRunMetadata(&record.Stats, environment)
+	for idx := range record.PostgresReferences {
+		setSampleRunMetadata(&record.PostgresReferences[idx].Stats, environment)
 	}
 }
 

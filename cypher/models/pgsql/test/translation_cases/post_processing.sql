@@ -43,4 +43,3 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- cypher_params: {"sid_prefix":"S-1-5"}
 -- pgsql_params:{"pi0":"S-1-5"}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not (n0.kind_ids operator (pg_catalog.@>) array [80]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [81]::int2[]) and (not n0.properties ? 'name' or (n0.properties -> 'name') = ('null')::jsonb) and cypher_starts_with((n0.properties ->> 'objectid'), (@pi0::text)::text)::bool)) select (s0.n0).id as "id(n)" from s0;
-

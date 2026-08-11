@@ -5,11 +5,13 @@ It is meant for runtime gap accounting: query duration, returned row counts,
 PostgreSQL plan details, Neo4j plan operators, fallback reasons, and comparison
 summaries.
 
-The current execution modes are:
+The implemented execution modes are:
 
 - `postgres_sql`: runs DAWGS' PostgreSQL SQL translation against a PostgreSQL database.
-- `local_traversal`: records explicit `not_implemented` placeholders until the local traversal executor lands.
 - `neo4j`: runs the same corpus against Neo4j through the DAWGS Neo4j backend.
+
+`local_traversal` is accepted only to record explicit `not_implemented` diagnostic placeholders. It is excluded from
+performance gates and must not be presented as an executor result.
 
 Apache AGE is not an execution mode in this harness yet. AGE behavior can be
 captured in corpus `reference_design` notes so DAWGS can use it as design input
@@ -65,11 +67,11 @@ go run ./cmd/graphbench \
   -summary-json .coverage/graphbench-postgres.json
 ```
 
-Capture PostgreSQL, local traversal placeholders, and Neo4j in one report:
+Capture PostgreSQL and Neo4j in one report:
 
 ```bash
 go run ./cmd/graphbench \
-  -modes postgres_sql,local_traversal,neo4j \
+  -modes postgres_sql,neo4j \
   -pg-connection "$PG_CONNECTION_STRING" \
   -neo4j-connection "$NEO4J_CONNECTION_STRING" \
   -jsonl-output .coverage/graphbench.jsonl \
@@ -287,6 +289,14 @@ strategy as applied. It is mutually exclusive with forced shortest execution.
 Automatic suffix-seeded reverse dispatch remains disabled because query shape
 does not bound suffix density or reverse fan-in.
 
+`-postgres-force-expansion-search EXPANSION-ENDPOINT-SEEDED-REVERSE` targets the production-qualified
+fixed-prefix/terminal-expansion family. Its SQL has materialized 33-row endpoint and 4097-row reverse-state probes,
+then mutually exclusive reverse and incumbent branches. Generated
+`generated_endpoint_seeded_expansion_v1_d<d>_e<e>_q<q>_w<w>_o<o>_x<x>_m1_c<c>_p<p>` fixtures independently vary
+matching/other endpoints, productive/unproductive lanes, cycles, and payload. Edge multiplicity is fixed at one because
+DAWGS storage uniquely keys edges by start, end, kind, and graph. Structured plan metrics
+report probe rows, guard overflow, and whether the incumbent branch executed.
+
 The bounded same-statement fallback and keyset-continuation experiments are
 retired. They are not exposed by GraphBench or production translation. Their
 negative results remain under `docs/experiments`; the active `GFSE-BOUNDARY-*`
@@ -425,15 +435,16 @@ depth, selected/fallback executor, selector version/mode, limits, and stable
 fallback code. These fields are also copied into each exact target outcome.
 Call count and read-only status are statement-wide, including shortest calls or
 mutations separated by `WITH`. Selector `sp-static-v4` chooses `SP-S3-U-D` for
-qualified distance observations and `SP-S3-U-E+MAT-M0` for qualified one-path
-observations. Qualification requires one directed three-element shortest-path
+qualified distance observations and bounded canonical `SP-S4-C-WE+MAT-M0` for
+qualified one-path observations. `SP-S3-U-E+MAT-M0` remains available only through
+the qualification forcing seam. Qualification requires one directed three-element shortest-path
 traversal, a supported bounded depth, one static ID equality per endpoint, no
 relationship variable or predicate, no path predicate, one uncorrelated
 endpoint pair, one statement-wide shortest call, and a read-only statement.
 Selector `sp-static-v4` also records graph direction, physical expansion
 column, relationship-kind count, wildcard state, and a static topology class.
-Deep `end_id` distance expansion selects canonical `SP-S4-C-D`, while
-wildcard/multi-kind one-path state selects `SP-S4-C-WE+MAT-M0`. S4 uses compact
+Deep `end_id` distance expansion selects canonical `SP-S4-C-D`. All selected
+one-path witnesses use `SP-S4-C-WE+MAT-M0`. S4 uses compact
 ID state, a bounded ceiling, and exact same-statement overflow fallback.
 `asp-static-v1` selects `ASP-A1-DAG` for the narrow singleton all-shortest
 envelope and retains all minimum-depth predecessor edges before enumeration.
@@ -471,11 +482,14 @@ go run ./cmd/graphbench \
 ```
 
 Anchor values are used only at runtime. Durable records replace them with
-one-way hashes and omit rendered parameters and Cypher. The runner captures
+one-way hashes, omit rendered parameters and Cypher, and redact observed-row
+and error payloads in both primary and nested reference outcomes. The runner captures
 before/after graph cardinalities, relation sizes, PostgreSQL settings, and
-schema/index fingerprints. Each completed record is checkpointed by stable
-backend/dataset/case identity using an atomic rename; `-resume` accepts only a
-matching manifest and corpus identity.
+schema/index fingerprints. Artifact schema v2 records a digest of the complete
+workload, fixture identity, corpus, and run configuration. Each completed record
+is checkpointed by stable backend/dataset/case/workload identity using an atomic
+rename; `-resume` accepts only a matching manifest, corpus, and run identity and
+preserves the original run UUID.
 
 Legacy graphs without `logical_key` properties may instead use a runtime-only
 physical anchor with a content proof:
@@ -608,7 +622,9 @@ uses rollback isolation for writes and runs automatically under
 Run only the scale-plan gate with:
 
 ```bash
-CONNECTION_STRING="$PG_CONNECTION_STRING" \
+DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
+DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
+  CONNECTION_STRING="$PG_CONNECTION_STRING" \
   go test -tags manual_integration ./cmd/graphbench \
   -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1

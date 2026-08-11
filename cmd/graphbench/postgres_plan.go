@@ -64,6 +64,20 @@ func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 
 	rows := metric.ActualRows * metric.ActualLoops
 	lowerIdentity := strings.ToLower(strings.Join([]string{metric.NodeType, metric.CTEName, metric.RelationName, metric.Alias, metric.IndexName, jsonString(node["Index Cond"])}, " "))
+	if strings.Contains(lowerIdentity, "endpoint_seeded_endpoints") && rows > metrics.EndpointProbeRows {
+		metrics.EndpointProbeRows = rows
+		metrics.EndpointGuardOverflow = rows >= 33
+		metrics.Provenance["endpoint_probe_rows"] = "plan_derived_endpoint_seed_cte_rows"
+	}
+	if strings.Contains(lowerIdentity, "endpoint_seeded_states") && rows > metrics.ReverseStateProbeRows {
+		metrics.ReverseStateProbeRows = rows
+		metrics.StateGuardOverflow = rows >= 4097
+		metrics.Provenance["reverse_state_probe_rows"] = "plan_derived_reverse_state_probe_cte_rows"
+	}
+	if strings.Contains(lowerIdentity, "endpoint_seeded_incumbent") && metric.ActualLoops > 0 {
+		metrics.ExpansionFallbackExecuted = true
+		metrics.Provenance["expansion_fallback_executed"] = "plan_derived_incumbent_cte_scan_loops"
+	}
 	if strings.Contains(lowerIdentity, "recursive union") {
 		metrics.RecursiveRows += rows
 		metrics.RecursiveLoops += metric.ActualLoops

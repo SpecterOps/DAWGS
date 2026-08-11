@@ -61,3 +61,18 @@ func TestParsePostgresPlanJSONMetricsAttributesLabeledS4State(t *testing.T) {
 	require.Equal(t, int64(5), metrics.HydrationRows)
 	require.Equal(t, "plan_derived_labeled_state_rows", metrics.Provenance["witness_rows"])
 }
+
+func TestParsePostgresPlanJSONMetricsAttributesEndpointGuardState(t *testing.T) {
+	raw := json.RawMessage(`[{"Plan":{"Node Type":"Result","Actual Rows":1,"Actual Loops":1,"Plans":[
+		{"Node Type":"CTE Scan","CTE Name":"s4_endpoint_seeded_endpoints","Actual Rows":33,"Actual Loops":1},
+		{"Node Type":"CTE Scan","CTE Name":"s4_endpoint_seeded_states","Actual Rows":4097,"Actual Loops":1},
+		{"Node Type":"CTE Scan","CTE Name":"s4_endpoint_seeded_incumbent","Actual Rows":10,"Actual Loops":1}
+	]}}]`)
+	metrics, err := parsePostgresPlanJSONMetrics(raw)
+	require.NoError(t, err)
+	require.Equal(t, int64(33), metrics.EndpointProbeRows)
+	require.Equal(t, int64(4097), metrics.ReverseStateProbeRows)
+	require.True(t, metrics.EndpointGuardOverflow)
+	require.True(t, metrics.StateGuardOverflow)
+	require.True(t, metrics.ExpansionFallbackExecuted)
+}

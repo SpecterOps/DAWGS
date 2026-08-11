@@ -29,10 +29,10 @@ Current PostgreSQL optimization coverage includes:
 - Recursive traversal optimizations for endpoint kind/property predicates, relationship type predicates, bound-node
   filters, traversal direction selection, and limit pushdown where ordering and distinct semantics permit it.
 - Static shortest-path executor selection for one read-only, uncorrelated, directed traversal with one ID equality per
-  endpoint and no observed relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state and
-  one-path observations use edge-trail `SP-S3-U-E+MAT-M0` where their qualified physical envelope applies. Selector
-  `sp-static-v4` sends deep physical-inbound distance searches to `SP-S4-C-D` and wildcard/multi-kind witnesses to
-  `SP-S4-C-WE+MAT-M0`. Both S4 executors canonicalize expansion, keep recursive state ID-only, enforce a bounded state
+  endpoint and no observed relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state, with deep
+  physical-inbound searches sent to `SP-S4-C-D`; every qualified one-path witness uses
+  `SP-S4-C-WE+MAT-M0`. The S3 edge-trail materializer remains qualification-only. Both S4 executors canonicalize
+  expansion, keep recursive state ID-only, enforce a bounded state
   ceiling, and fall back to an exact relationship-trail query in the same statement and snapshot before returning a
   row. Singleton ties return one valid minimal trail; physical edge-ID order is not public. See
   `docs/shortest_path_tie_policy.md`.
@@ -53,6 +53,12 @@ Current PostgreSQL optimization coverage includes:
   retains the `EXPANSION-STEPWISE-FORWARD` translator and reports
   `tournament_unqualified` for otherwise eligible three-hop forms because no
   hard suffix-density or reverse-state bound is available before translation.
+- Guarded endpoint-seeded expansion selection covers a separate
+  `fixed_prefix_terminal_expansion` family: exactly one directed fixed prefix followed by one terminal, directed,
+  single-kind variable expansion with minimum depth one and a local selective terminal predicate. Production emits
+  `EXPANSION-ENDPOINT-SEEDED-REVERSE` with at most 32 terminal seeds and 4096 reverse states. Sentinel rows select an
+  exact stepwise-forward fallback inside the same statement and snapshot before candidate rows are exposed. Both arms
+  preserve ordered relationship IDs and enforce relationship uniqueness across the fixed prefix and expansion.
 - Strict string property equality lowering through `jsonb_typeof(properties -> key) = 'string'` plus
   `properties ->> key = value`, preserving JSON scalar semantics while allowing existing text expression indexes on
   selective fields such as `objectid` and `name`.

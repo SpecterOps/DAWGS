@@ -114,6 +114,46 @@ func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
 	require.Equal(t, 3, builds)
 }
 
+func TestTranslationParameterTypeKeyIsDelimiterSafe(t *testing.T) {
+	first := translationParameterTypeKey(map[string]any{
+		"a": int64(1),
+		"b": "value",
+	})
+	second := translationParameterTypeKey(map[string]any{
+		"a=int8;b": "value",
+	})
+	require.NotEqual(t, first, second)
+}
+
+func TestCypherTranslationCacheRejectsMissingParameterSources(t *testing.T) {
+	cache := newCypherTranslationCache(2)
+	var builds int
+	build := func() (translate.Result, string, error) {
+		builds++
+		return translate.Result{
+			Parameters:       map[string]any{"i0": int64(1)},
+			ParameterSources: map[string]string{"i0": "required"},
+		}, "select @i0", nil
+	}
+
+	for range 2 {
+		_, _, err := cache.Translate("RETURN $required", 1, map[string]any{"other": int64(1)}, build)
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, 2, builds)
+	require.Zero(t, cache.Stats().Entries)
+	require.Equal(t, uint64(2), cache.Stats().Bypasses)
+}
+
+func TestCachedTranslationBindingFailsClosedOnMissingSource(t *testing.T) {
+	value := cypherTranslationCacheValue{
+		parameterSources: map[string]string{"i0": "required"},
+	}
+	_, err := value.bind(map[string]any{"other": int64(1)})
+	require.ErrorContains(t, err, "missing parameter source")
+}
+
 func TestCypherTranslationCacheBypassesGeneratedParameters(t *testing.T) {
 	cache := newCypherTranslationCache(2)
 	var builds int

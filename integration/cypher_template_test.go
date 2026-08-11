@@ -387,6 +387,12 @@ func comparisonModeSignature(t *testing.T, result queryResult, ctx assertionCont
 			signatures = append(signatures, pathEdgeKindSignature(t, path))
 		}
 		signature = sortedSignatures(signatures)
+	case "path_relationship_records":
+		signatures := make([]string, 0, len(result.rows))
+		for _, path := range collectPaths(t, result) {
+			signatures = append(signatures, pathRelationshipRecordSignature(t, path, ctx))
+		}
+		signature = sortedSignatures(signatures)
 	default:
 		t.Fatalf("unknown metamorphic comparison mode %q", mode)
 	}
