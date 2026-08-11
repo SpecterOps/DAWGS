@@ -2,6 +2,10 @@ package jsonl
 
 import "github.com/specterops/dawgs/ret/entity"
 
+type record interface {
+	NodeRecord | RelationshipRecord
+}
+
 // NodeRecord is the JSON representation of an entity.Node.
 type NodeRecord struct {
 	SourceID   string         `json:"source_id"`
@@ -27,10 +31,10 @@ func relationshipRecord(value entity.Relationship) RelationshipRecord {
 	return RelationshipRecord{StartID: value.StartID, EndID: value.EndID, Kind: value.Kind, Properties: value.Properties}
 }
 
-func (s NodeRecord) entity() entity.Node {
-	return entity.Node{SourceID: s.SourceID, Kinds: s.Kinds, Properties: s.Properties}
+func nodeEntity(value NodeRecord) entity.Node {
+	return entity.Node{SourceID: value.SourceID, Kinds: value.Kinds, Properties: value.Properties}
 }
 
-func (s RelationshipRecord) entity() entity.Relationship {
-	return entity.Relationship{StartID: s.StartID, EndID: s.EndID, Kind: s.Kind, Properties: s.Properties}
+func relationshipEntity(value RelationshipRecord) entity.Relationship {
+	return entity.Relationship{StartID: value.StartID, EndID: value.EndID, Kind: value.Kind, Properties: value.Properties}
 }

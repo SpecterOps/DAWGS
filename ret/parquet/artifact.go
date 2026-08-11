@@ -10,6 +10,7 @@ type RelationshipArtifact struct {
 	Count, StoredBytes          int64
 }
 
+
 type artifactMetadata struct {
 	schemaVersion string
 	path          string

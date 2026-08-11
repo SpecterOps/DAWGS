@@ -3,6 +3,10 @@ package entity
 
 import "errors"
 
+type Entity interface {
+	Node | Relationship
+}
+
 type Node struct {
 	SourceID   string
 	Kinds      []string

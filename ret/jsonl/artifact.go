@@ -1,15 +1,25 @@
 package jsonl
 
-// NodeArtifact describes one stored JSONL node artifact.
-type NodeArtifact struct {
-	SchemaVersion, Path, Codec, SHA256    string
-	Level                                 int
-	Count, UncompressedBytes, StoredBytes int64
+import "fmt"
+
+type Artifact struct {
+	SchemaVersion     string
+	Codec             Codec
+	SHA256            string
+	Level             int
+	Count             int64
+	UncompressedBytes int64
+	StoredBytes       int64
 }
 
-// RelationshipArtifact describes one stored JSONL relationship artifact.
-type RelationshipArtifact struct {
-	SchemaVersion, Path, Codec, SHA256    string
-	Level                                 int
-	Count, UncompressedBytes, StoredBytes int64
+func (s Artifact) validate() error {
+	if s.SchemaVersion != SchemaVersion {
+		return fmt.Errorf("unsupported JSONL artifact schema %q", SchemaVersion)
+	} else if err := validateCodecLevel(s.Codec, s.Level); err != nil {
+		return fmt.Errorf("validate JSONL artifact codec: %w", err)
+	} else if s.Count < 0 || s.UncompressedBytes < 0 || s.StoredBytes < 0 {
+		return fmt.Errorf("JSONL artifact sizes and count must be non-negative")
+	}
+
+	return nil
 }
