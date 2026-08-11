@@ -2410,6 +2410,47 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 	}
 }
 
+// isSelfLoopEndpoints reports whether a traversal step's left and right nodes are the same Cypher
+// variable. For a self-loop such as (n)-[*..]->(n) the translator reuses a single BoundIdentifier for
+// both endpoints.
+func isSelfLoopEndpoints(traversalStep *TraversalStep) bool {
+	return traversalStep.LeftNode.Identifier == traversalStep.RightNode.Identifier
+}
+
+// expansionProjectionNodeJoins builds the projection node-lookup joins for an expansion frame. When the
+// endpoints are the same variable a single join on root_id is emitted to avoid a duplicate table alias;
+// otherwise the usual root_id/next_id pair is returned.
+func expansionProjectionNodeJoins(traversalStep *TraversalStep, frameID pgsql.Identifier) []pgsql.Join {
+	rootJoin := expansionNodeLookupJoin(
+		traversalStep.LeftNode.Identifier,
+		pgsql.CompoundIdentifier{frameID, expansionRootID},
+	)
+
+	if isSelfLoopEndpoints(traversalStep) {
+		return []pgsql.Join{rootJoin}
+	}
+
+	nextJoin := expansionNodeLookupJoin(
+		traversalStep.RightNode.Identifier,
+		pgsql.CompoundIdentifier{frameID, expansionNextID},
+	)
+
+	return []pgsql.Join{rootJoin, nextJoin}
+}
+
+// selfLoopIdentityConstraint returns a root_id = next_id predicate for self-loop endpoints, restricting
+// the projection to walks that returned to their origin. It returns nil for non-self-loops.
+func selfLoopIdentityConstraint(traversalStep *TraversalStep, frameID pgsql.Identifier) pgsql.Expression {
+	if !isSelfLoopEndpoints(traversalStep) {
+		return nil
+	}
+
+	return pgd.Equals(
+		pgsql.CompoundIdentifier{frameID, expansionRootID},
+		pgsql.CompoundIdentifier{frameID, expansionNextID},
+	)
+}
+
 func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
 	var (
 		traversalStep  = traversalStepContext.CurrentStep
@@ -2565,21 +2606,16 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 			Name:    pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
 			Binding: models.EmptyOptional[pgsql.Identifier](),
 		},
-		Joins: []pgsql.Join{
-			expansionNodeLookupJoin(
-				traversalStep.LeftNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			),
-			expansionNodeLookupJoin(
-				traversalStep.RightNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-			),
-		},
+		Joins: expansionProjectionNodeJoins(traversalStep, expansionModel.Frame.Binding.Identifier),
 	})
 
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
+		projectionConstraints = pgsql.OptionalAnd(
+			projectionConstraints,
+			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
+		)
 		if previousProjectionFrameID != "" && traversalStep.LeftNodeBound {
 			projectionConstraints = pgsql.OptionalAnd(
 				projectionConstraints,
@@ -2707,21 +2743,16 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 			Name:    pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
 			Binding: models.EmptyOptional[pgsql.Identifier](),
 		},
-		Joins: []pgsql.Join{
-			expansionNodeLookupJoin(
-				traversalStep.LeftNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			),
-			expansionNodeLookupJoin(
-				traversalStep.RightNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-			),
-		},
+		Joins: expansionProjectionNodeJoins(traversalStep, expansionModel.Frame.Binding.Identifier),
 	})
 
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
+		projectionConstraints = pgsql.OptionalAnd(
+			projectionConstraints,
+			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
+		)
 		projectionConstraints = rewriteCurrentFrameProjectionReferences(
 			projectionConstraints,
 			traversalStep.Frame.Binding.Identifier,
