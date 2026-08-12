@@ -90,6 +90,7 @@ func inboundTraversalReversalCandidate(patternPart *cypher.PatternPart, declared
 	leadingStep := steps[0]
 	if leadingStep.Relationship == nil ||
 		leadingStep.Relationship.Range == nil ||
+		leadingStep.Relationship.Range.EndIndex != nil ||
 		leadingStep.Relationship.Direction == graph.DirectionBoth ||
 		leadingStep.Relationship.Variable != nil {
 		return false

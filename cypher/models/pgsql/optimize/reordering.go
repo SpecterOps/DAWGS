@@ -2,6 +2,11 @@ package optimize
 
 import "github.com/specterops/dawgs/cypher/models/cypher"
 
+// ConservativePatternReorderingRule reorders reading clauses within a dependency-safe region so
+// that more selective anchors are scheduled earlier, driving traversals from the endpoints
+// expected to prune the search soonest. It reorders whole clauses relative to one another without
+// mutating the internals of any pattern; a clause is only moved when its dependencies remain
+// satisfied by the clauses that precede it in the new order.
 type ConservativePatternReorderingRule struct{}
 
 func (s ConservativePatternReorderingRule) Name() string {

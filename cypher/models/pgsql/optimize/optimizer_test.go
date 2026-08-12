@@ -2041,6 +2041,25 @@ func TestInboundTraversalReversalSkipsWhenLeadingStepNotVariableLength(t *testin
 	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
 }
 
+func TestInboundTraversalReversalSkipsWhenLeadingExpansionBounded(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (s:User)-[:MemberOf*1..3]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	patternPart := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
+
 func TestInboundTraversalReversalSkipsShortestPathPattern(t *testing.T) {
 	t.Parallel()
 
