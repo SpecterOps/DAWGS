@@ -12,12 +12,42 @@ import (
 func newPath(internalPath neo4j_core.Path) graph.Path {
 	path := graph.Path{}
 
+	// Neo4j always returns a distinct node pool, so repeats in the walk
+	// (e.g. a cycle's closing node) are missing and the walk must be rebuilt by
+	// following the relationships, starting from Nodes[0]. A relationship's
+	// StartId/EndId are its stored direction, which the walk may traverse either
+	// way, so the next node is whichever endpoint is not the current walk position.
+	nodesByID := make(map[graph.ID]*graph.Node, len(internalPath.Nodes))
 	for _, node := range internalPath.Nodes {
-		path.Nodes = append(path.Nodes, newNode(node))
+		nodesByID[graph.ID(node.Id)] = newNode(node)
 	}
 
+	if len(internalPath.Relationships) == 0 {
+		for _, node := range internalPath.Nodes {
+			path.Nodes = append(path.Nodes, newNode(node))
+		}
+
+		return path
+	}
+
+	current := graph.ID(internalPath.Nodes[0].Id)
+	path.Nodes = append(path.Nodes, nodesByID[current])
+
+	// relationships are stored in traversal order so walk them to reconstruct path
 	for _, relationship := range internalPath.Relationships {
+		var (
+			start = graph.ID(relationship.StartId)
+			end   = graph.ID(relationship.EndId)
+			next  = end
+		)
+
+		if start != end && end == current {
+			next = start
+		}
+
 		path.Edges = append(path.Edges, newRelationship(relationship))
+		path.Nodes = append(path.Nodes, nodesByID[next])
+		current = next
 	}
 
 	return path
