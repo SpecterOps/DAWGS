@@ -638,6 +638,14 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 			s.recordLowering(optimize.LoweringExpandIntoDetection)
 		}
 
+		// The optimizer reversed this pattern's element order and relationship directions so the
+		// traversal is driven from the terminal endpoint inward. Each expansion accumulates its
+		// edges in that reversed walk order, so mark the step path-reversed to restore the
+		// original within-segment edge order for a bound path.
+		if part.PathDirectionReversed && traversalStep.Expansion != nil {
+			traversalStep.PathReversed = true
+		}
+
 		s.prepareProjectionPruning(part, idx, traversalStep)
 
 		if traversalStepFrame, err := s.scope.PushFrame(); err != nil {

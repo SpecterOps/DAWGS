@@ -505,13 +505,17 @@ type PatternPart struct {
 	IsTraversal      bool
 	ShortestPath     bool
 	AllShortestPaths bool
-	PatternBinding   *BoundIdentifier
-	Target           optimize.PatternTarget
-	HasTarget        bool
-	TraversalSteps   []*TraversalStep
-	NodeSelect       NodeSelect
-	Constraints      *ConstraintTracker
-	nextSourceStep   int
+	// PathDirectionReversed is set when the optimizer reversed the originating cypher pattern's
+	// element order and relationship directions. Path materialization uses it to restore the
+	// original left-to-right logical order for a bound path.
+	PathDirectionReversed bool
+	PatternBinding        *BoundIdentifier
+	Target                optimize.PatternTarget
+	HasTarget             bool
+	TraversalSteps        []*TraversalStep
+	NodeSelect            NodeSelect
+	Constraints           *ConstraintTracker
+	nextSourceStep        int
 }
 
 func (s *PatternPart) nextSourceTarget() (optimize.TraversalStepTarget, bool) {

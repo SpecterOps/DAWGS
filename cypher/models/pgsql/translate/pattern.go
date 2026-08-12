@@ -38,6 +38,7 @@ func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error
 	newPatternPart.IsTraversal = len(patternPart.PatternElements) > 1
 	newPatternPart.ShortestPath = patternPart.ShortestPathPattern
 	newPatternPart.AllShortestPaths = patternPart.AllShortestPathsPattern
+	newPatternPart.PathDirectionReversed = patternPart.PathDirectionReversed
 	if target, hasTarget := s.patternTargets[patternPart]; hasTarget {
 		newPatternPart.Target = target
 		newPatternPart.HasTarget = true
@@ -51,6 +52,10 @@ func (s *Translator) translatePatternPart(patternPart *cypher.PatternPart) error
 		} else {
 			// Generate an alias for this binding
 			s.scope.Alias(cypherBinding, pathBinding)
+
+			// Propagate the optimizer's pattern reversal so path materialization can restore the
+			// original left-to-right logical order for this bound path.
+			pathBinding.PathDirectionReversed = patternPart.PathDirectionReversed
 
 			// Record the new binding in the traversal pattern being built
 			newPatternPart.PatternBinding = pathBinding

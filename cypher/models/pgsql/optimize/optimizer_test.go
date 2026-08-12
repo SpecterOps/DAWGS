@@ -7,6 +7,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,6 +44,7 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	require.Equal(t, []string{"p1", "p2"}, plan.Analysis.QueryParts[0].ProjectionDependencies)
 	require.Equal(t, []RuleResult{
 		{Name: "ConservativePatternReordering", Applied: false},
+		{Name: "InboundTraversalReversal", Applied: false},
 		{Name: "PredicateAttachment", Applied: true},
 	}, plan.Rules)
 	require.Len(t, plan.PredicateAttachments, 2)
@@ -158,6 +160,7 @@ func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *te
 	require.NoError(t, err)
 	require.Equal(t, []RuleResult{
 		{Name: "ConservativePatternReordering", Applied: false},
+		{Name: "InboundTraversalReversal", Applied: false},
 		{Name: "PredicateAttachment", Applied: false},
 	}, plan.Rules)
 	require.Empty(t, plan.PredicateAttachments)
@@ -855,14 +858,17 @@ func TestLoweringPlanPlacesBindingPredicates(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringPredicatePlacement})
 	require.Len(t, plan.LoweringPlan.PredicatePlacement, 1)
+	// InboundTraversalReversal drives this pattern from the constrained ca:EnterpriseCA terminal
+	// inward, so the ca predicate anchors at the now-leading step (StepIndex 0) rather than being
+	// pushed into an expansion suffix.
 	require.Equal(t, TraversalStepTarget{
 		QueryPartIndex: 0,
 		ClauseIndex:    0,
 		PatternIndex:   0,
-		StepIndex:      1,
+		StepIndex:      0,
 	}, plan.LoweringPlan.PredicatePlacement[0].Target)
 	require.Equal(t, []string{"ca"}, plan.LoweringPlan.PredicatePlacement[0].Attachment.BindingSymbols)
-	require.Equal(t, []PredicateAttachment{plan.LoweringPlan.PredicatePlacement[0].Attachment}, plan.LoweringPlan.ExpansionSuffixPushdown[0].PredicateAttachments)
+	require.Empty(t, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
 func TestLoweringPlanDoesNotPlaceCrossClauseBindingPredicates(t *testing.T) {
@@ -1813,6 +1819,10 @@ func TestConservativePatternReorderingMovesIndependentNodeAnchorsEarlier(t *test
 			Applied: true,
 		},
 		{
+			Name:    "InboundTraversalReversal",
+			Applied: false,
+		},
+		{
 			Name:    "PredicateAttachment",
 			Applied: false,
 		},
@@ -1840,6 +1850,10 @@ func TestConservativePatternReorderingKeepsDependentAnchorsInPlace(t *testing.T)
 	require.Equal(t, []RuleResult{
 		{
 			Name:    "ConservativePatternReordering",
+			Applied: false,
+		},
+		{
+			Name:    "InboundTraversalReversal",
 			Applied: false,
 		},
 		{
@@ -1872,6 +1886,10 @@ func TestConservativePatternReorderingUsesSelectivityWithinDependencySafeRegion(
 			Applied: true,
 		},
 		{
+			Name:    "InboundTraversalReversal",
+			Applied: false,
+		},
+		{
 			Name:    "PredicateAttachment",
 			Applied: false,
 		},
@@ -1902,6 +1920,10 @@ func TestConservativePatternReorderingPinsUnresolvedExternalDependencies(t *test
 			Applied: false,
 		},
 		{
+			Name:    "InboundTraversalReversal",
+			Applied: false,
+		},
+		{
 			Name:    "PredicateAttachment",
 			Applied: true,
 		},
@@ -1910,4 +1932,130 @@ func TestConservativePatternReorderingPinsUnresolvedExternalDependencies(t *test
 	readingClauses := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses
 	require.Equal(t, "a", firstNodeSymbol(readingClauses[0]))
 	require.Equal(t, "b", firstNodeSymbol(readingClauses[1]))
+}
+
+// patternNodeSymbols returns the variable symbols of each node pattern in element order.
+func patternNodeSymbols(patternPart *cypher.PatternPart) []string {
+	var symbols []string
+
+	for _, element := range patternPart.PatternElements {
+		if nodePattern, ok := element.AsNodePattern(); ok {
+			symbols = append(symbols, variableSymbol(nodePattern.Variable))
+		}
+	}
+
+	return symbols
+}
+
+// patternRelationshipDirections returns the direction of each relationship pattern in element order.
+func patternRelationshipDirections(patternPart *cypher.PatternPart) []graph.Direction {
+	var directions []graph.Direction
+
+	for _, element := range patternPart.PatternElements {
+		if relationshipPattern, ok := element.AsRelationshipPattern(); ok {
+			directions = append(directions, relationshipPattern.Direction)
+		}
+	}
+
+	return directions
+}
+
+func TestInboundTraversalReversalReversesElementsAndDirectionsForSelectiveTerminal(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: true})
+
+	patternPart := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.True(t, patternPart.PathDirectionReversed)
+
+	// The pattern is reversed so the traversal is driven from the constrained d:Computer terminal
+	// inward toward s:User, with each relationship direction flipped from outbound to inbound.
+	require.Equal(t, []string{"d", "g", "s"}, patternNodeSymbols(patternPart))
+	require.Equal(t, []graph.Direction{graph.DirectionInbound, graph.DirectionInbound}, patternRelationshipDirections(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsWhenSourceBoundByPriorClause(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s:User)
+		MATCH p = (s)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	patternPart := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[1].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsWhenTerminalLacksSearchConstraint(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	patternPart := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsWhenLeadingStepNotVariableLength(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (s:User)-[:MemberOf]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	patternPart := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsShortestPathPattern(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer))
+		WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	patternPart := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
 }
