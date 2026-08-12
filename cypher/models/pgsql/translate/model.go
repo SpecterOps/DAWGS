@@ -66,6 +66,7 @@ type Expansion struct {
 	PrimerNodeSatisfactionProjection   pgsql.SelectItem
 	PrimerNodeJoinCondition            pgsql.Expression
 	EdgeConstraints                    pgsql.Expression
+	PreviousRelationshipUniqueness     pgsql.Expression
 	EdgeJoinCondition                  pgsql.Expression
 	RecursiveConstraints               pgsql.Expression
 	ExpansionNodeJoinCondition         pgsql.Expression

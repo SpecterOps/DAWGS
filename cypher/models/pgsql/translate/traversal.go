@@ -809,6 +809,37 @@ func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, s
 	return constraint
 }
 
+// expansionPreviousRelationshipUniquenessConstraint enforces Cypher relationship uniqueness for an
+// expansion step against any preceding fixed steps. Where previousRelationshipUniquenessConstraint
+// handles a fixed step that follows an expansion, this handles the mirrored ordering (a fixed step
+// that precedes an expansion, e.g. after the optimizer reverses a pattern) by requiring that none
+// of the preceding fixed relationships appear in the expansion's accumulated path.
+func expansionPreviousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, stepIndex int, traversalStep *TraversalStep) pgsql.Expression {
+	if scope == nil || part == nil || stepIndex <= 0 || traversalStep == nil ||
+		traversalStep.Expansion == nil || traversalStep.Expansion.Frame == nil {
+		return nil
+	}
+
+	var (
+		pathIDs = pgsql.CompoundIdentifier{traversalStep.Expansion.Frame.Binding.Identifier, expansionPath}
+
+		constraint pgsql.Expression
+	)
+
+	for _, previousStep := range part.TraversalSteps[:stepIndex] {
+		if previousStep == nil || previousStep.Edge == nil || previousStep.Expansion != nil {
+			continue
+		}
+
+		constraint = pgsql.OptionalAnd(
+			constraint,
+			relationshipIDNotInPath(relationshipIDReference(scope, previousStep.Edge), pathIDs),
+		)
+	}
+
+	return constraint
+}
+
 func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int) (optimize.ProjectionPruningDecision, bool) {
 	target, hasTarget := sourceTargetForTraversalStep(part, stepIndex)
 	if !hasTarget {
