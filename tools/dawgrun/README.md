@@ -35,19 +35,13 @@ connection.
 
 ## Building
 
-From a `DAWGS` checkout:
+From a `DAWGS` checkout, run the tool directly:
 
     go tool dawgrun
 
-With a customized `DAWGS` clone, for testing features, version differences, etc:
+To build a local binary instead:
 
-    cd tools/dawgrun
-    just build-with-dawgs path/to/DAWGS
-
-To switch the build back to mainline:
-
-    cd tools/dawgrun
-    just build-with-upstream
+    go build -o tools/dawgrun/dawgrun ./tools/dawgrun/cmd/dawgrun
 
 ## Running
 
@@ -288,3 +282,20 @@ the `DAWGRUN_STYLE` environment variable.
 Any styles in [Chroma](https://github.com/alecthomas/chroma/tree/master/styles) are available for use as a syntax highlighting style. 
 CLI mode disables all terminal styling, including syntax highlighting
 and styled warnings, when stdout is not a terminal.
+
+## Common Issues
+
+### Why does opening a new Postgres database fail with `open failed: could not set default graph: no rows in result set`?
+
+`open` selects the configured default graph, which is named `default`
+unless `-default-graph` is provided. A new Postgres database may have a
+DAWGS schema but no graph row yet, so selecting that default graph fails.
+
+For a database that should be initialized for dawgrun, open it with
+`-init-graph`:
+
+    dawgrun > open -init-graph local "postgres://postgres:password@localhost:32771/"
+
+If you use a non-default graph name, pass it with `-default-graph`:
+
+    dawgrun > open -init-graph -default-graph mygraph local "postgres://postgres:password@localhost:32771/"

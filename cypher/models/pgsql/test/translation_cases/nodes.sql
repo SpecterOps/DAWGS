@@ -47,8 +47,38 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n) where n.name = '1234' return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = '1234'))) select s0.n0 as n from s0;
 
+-- case: match (n) where n.`a-aaa` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'a-aaa')) = 'string' and (n0.properties ->> 'a-aaa') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.`b_bbb` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'b_bbb')) = 'string' and (n0.properties ->> 'b_bbb') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.`has``tick` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> 'has`tick')) = 'string' and (n0.properties ->> 'has`tick') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.`'` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '''')) = 'string' and (n0.properties ->> '''') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.```starts-tick` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '`starts-tick')) = 'string' and (n0.properties ->> '`starts-tick') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.```super-wrapped``` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '`super-wrapped`')) = 'string' and (n0.properties ->> '`super-wrapped`') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where n.```` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> '`')) = 'string' and (n0.properties ->> '`') = '123'))) select s0.n0 as n from s0;
+
+-- case: match (n) where (n).`a-aaa` = "123" return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as n from s0 where ((jsonb_typeof((((s0.n0)).properties -> 'a-aaa')) = 'string' and (((s0.n0)).properties ->> 'a-aaa') = '123'));
+
+-- case: match ()-[r]-() where startNode(r).`something` = "abc" return r
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on (n0.id = e0.end_id or n0.id = e0.start_id) join node n1 on (n1.id = e0.end_id or n1.id = e0.start_id) where (n0.id <> n1.id)) select s0.e0 as r from s0 where ((jsonb_typeof(((start_node(((s0.e0).id, (s0.e0).start_id, (s0.e0).end_id, (s0.e0).kind_id, (s0.e0).properties)::edgecomposite)::nodecomposite).properties -> 'something')) = 'string' and ((start_node(((s0.e0).id, (s0.e0).start_id, (s0.e0).end_id, (s0.e0).kind_id, (s0.e0).properties)::edgecomposite)::nodecomposite).properties ->> 'something') = 'abc'));
+
 -- case: match (n:NodeKind1 {name: "SOME NAME"}) return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and (jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = 'SOME NAME')) select s0.n0 as n from s0;
+
+-- case: match (n:NodeKind1 {`'`: 'value'}) return n
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and (jsonb_typeof((n0.properties -> '''')) = 'string' and (n0.properties ->> '''') = 'value')) select s0.n0 as n from s0;
 
 -- case: match (n) where n.objectid in $p return n
 -- cypher_params: {"p":["1","2","3"]}
@@ -212,6 +242,12 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (s) where not (s)-[]->()-[]->() return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select e0.id as e0, s0.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on n1.id = e0.end_id where (s0.n0).id = e0.start_id), s2 as (select s1.e0 as e0, s1.n0 as n0, s1.n1 as n1 from s1 join edge e1 on (s1.n1).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.id != s1.e0) select count(*) > 0 from s2));
+
+-- case: match (s) where ()-[]->()-[]->(s) return s
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where ((with s1 as (select e0.id as e0, s0.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from edge e0 join node n1 on n1.id = e0.start_id join node n2 on n2.id = e0.end_id), s2 as (select s1.e0 as e0, s1.n0 as n0, s1.n2 as n2 from s1 join edge e1 on (s1.n2).id = e1.start_id join node n0 on (s1.n0).id = e1.end_id where e1.id != s1.e0) select count(*) > 0 from s2));
+
+-- case: match (g:Group) where (:User)-[:MemberOf]->(:Group)-[:MemberOf]->(g) return count(g)
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [13]::int2[]) select count(s0.n0)::int8 from s0 where ((with s1 as (select e0.id as e0, s0.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from edge e0 join node n1 on n1.kind_ids operator (pg_catalog.@>) array [6]::int2[] and n1.id = e0.start_id join node n2 on n2.kind_ids operator (pg_catalog.@>) array [13]::int2[] and n2.id = e0.end_id where e0.kind_id = any (array [25]::int2[])), s2 as (select s1.e0 as e0, s1.n0 as n0, s1.n2 as n2 from s1 join edge e1 on (s1.n2).id = e1.start_id join node n0 on (s1.n0).id = e1.end_id where e1.kind_id = any (array [25]::int2[]) and e1.id != s1.e0) select count(*) > 0 from s2));
 
 -- case: match (s) where not (s)-[{prop: 'a'}]-({name: 'n3'}) return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not (with s1 as (select s0.n0 as n0 from edge e0 join node n1 on (jsonb_typeof((n1.properties -> 'name')) = 'string' and (n1.properties ->> 'name') = 'n3') and (n1.id = e0.end_id or n1.id = e0.start_id) where ((s0.n0).id <> n1.id) and (jsonb_typeof((e0.properties -> 'prop')) = 'string' and (e0.properties ->> 'prop') = 'a') and ((s0.n0).id = e0.end_id or (s0.n0).id = e0.start_id)) select count(*) > 0 from s1));

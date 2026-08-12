@@ -244,6 +244,95 @@ func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
 	}
 }
 
+// TestTwoHopUndirectedPatternPredicateWithUnboundDirectionlessRoot validates that a
+// two-hop undirected WHERE predicate whose root step has no outer-bound endpoints is
+// correctly translated.  Specifically it checks the behaviour of
+// previousFrameTraversalSource: because the root step carries OmitPreviousFrameSource,
+// the outer MATCH frame (s0) must NOT be comma-joined into the root CTE's FROM clause
+// (which would re-scan the outer CTE and break per-row correlation).  Instead, s0's
+// projected column is still carried through the CTE chain as a correlated reference, and
+// the terminal set (s2) is sourced from the root CTE (s1).
+func TestTwoHopUndirectedPatternPredicateWithUnboundDirectionlessRoot(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("Domain"))             // kind ID 1
+	kindMapper.Put(graph.StringKind("SpoofSIDHistory"))    // kind ID 2
+	kindMapper.Put(graph.StringKind("AbuseTGTDelegation")) // kind ID 3
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n:Domain)
+WHERE (a:Domain)-[:SpoofSIDHistory]-(b:Domain)-[:AbuseTGTDelegation]-(c:Domain)
+RETURN n`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	// Extract the individual CTE bodies so each assertion is scoped to the CTE it
+	// describes, rather than matching anywhere in the flattened query string.
+	s1Body := extractCTEBody(t, formatted, "s1")
+	s2Body := extractCTEBody(t, formatted, "s2")
+
+	// The predicate root CTE (s1) must NOT have the outer MATCH frame (s0) as a
+	// comma-joined FROM source.  OmitPreviousFrameSource suppresses it so the subquery
+	// does not re-scan s0 for every outer row.
+	require.NotContains(t, s1Body, "from s0, edge")
+
+	// Even without a comma-joined s0, the outer row's column (s0.n0) is projected
+	// through s1 as a correlated reference, keeping the predicate tied to its enclosing
+	// row without re-scanning the outer CTE.
+	require.Contains(t, s1Body, "s0.n0 as n0")
+
+	// The first hop's edge-kind filter (SpoofSIDHistory) belongs to the root CTE (s1).
+	require.Contains(t, s1Body, "array [2]::int2[]")
+
+	// The terminal CTE (s2) is built by sourcing rows from the root CTE (s1), forming
+	// the correlated terminal set of the two-hop traversal.
+	require.Contains(t, s2Body, "from s1")
+
+	// The second hop's edge-kind filter (AbuseTGTDelegation) belongs to the terminal CTE (s2).
+	require.Contains(t, s2Body, "array [3]::int2[]")
+
+	// The first hop's filter must not leak into the terminal CTE, nor the second hop's
+	// filter into the root CTE.
+	require.NotContains(t, s1Body, "array [3]::int2[]")
+	require.NotContains(t, s2Body, "array [2]::int2[]")
+
+	// The existence check reads from the terminal set.
+	require.Contains(t, formatted, "count(*) > 0 from s2")
+}
+
+// extractCTEBody returns the parenthesised body of the named common table
+// expression (e.g. "s1") from the formatted query.  It locates "<name> as ("
+// and returns the content up to its balanced closing parenthesis, allowing
+// assertions to be scoped to a single CTE.
+func extractCTEBody(t *testing.T, formatted, name string) string {
+	t.Helper()
+
+	marker := name + " as ("
+	start := strings.Index(formatted, marker)
+	require.NotEqualf(t, -1, start, "CTE %q not found in query", name)
+
+	open := start + len(marker)
+	depth := 1
+
+	for i := open; i < len(formatted); i++ {
+		switch formatted[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return formatted[open:i]
+			}
+		}
+	}
+
+	require.Failf(t, "unbalanced parentheses", "CTE %q body has no closing parenthesis", name)
+	return ""
+}
+
 func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
