@@ -253,6 +253,7 @@ func stableSnapshotIsolation(isolation pgx.TxIsoLevel) bool {
 
 func initializeStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
 	const initializeSQL = `select
+		public.ensure_shortest_dag_workspace(),
 		public.ensure_bidirectional_shortest_path_workspace(),
 		public.ensure_bidirectional_all_shortest_path_workspace()`
 	if _, err := conn.Exec(ctx, initializeSQL); err != nil {

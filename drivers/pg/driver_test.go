@@ -116,3 +116,14 @@ func TestStableSnapshotIsolation(t *testing.T) {
 	require.True(t, stableSnapshotIsolation(pgx.RepeatableRead))
 	require.True(t, stableSnapshotIsolation(pgx.Serializable))
 }
+
+func TestOptionSetStableSnapshotIsolationAllowsTemporaryWorkspaceWrites(t *testing.T) {
+	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
+		cfg, err := renderConfig(defaultBatchWriteSize, readOnlyTxOptions, []graph.TransactionOption{
+			OptionSetTransactionIsolation(isolation),
+		})
+		require.NoError(t, err)
+		require.Equal(t, isolation, cfg.Options.IsoLevel)
+		require.Equal(t, pgx.ReadWrite, cfg.Options.AccessMode)
+	}
+}
