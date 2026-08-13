@@ -856,7 +856,11 @@ ordered runtime fallback event chain. Its target outcome names the exact
 candidate/fallback pair and emitted `sp-i1-canonical-guarded-v1` policy, while
 diagnostic resource evidence remains isolated from the ASP I1 counter family.
 It remains default-off; `sp-static-v5-contained` continues to select the
-automatic S3/S4 production paths.
+automatic S3/S4 production paths. The evidence-gated `sp-static-v6` canary
+identity accepts only the qualified inbound, typed, single-kind, one-path
+`min=1`/`max=64` bucket. Outbound, untyped, multi-kind, and different-depth
+manifests fail closed at verification, provisional capture, driver admission,
+and translation.
 
 ### Frozen canonical-I1 qualification
 
@@ -1019,6 +1023,15 @@ or the median-saving lower bound is at least `100us`, and the p95-ratio upper
 bound is at most `1.05`. The study does not change the automatic production
 selector; a passing report is input to later canary, rollback, and promotion
 closure.
+
+The clean `6d56a609` confirmation completed 10 paired rounds and 500 timed
+samples per arm/case. All four training and three holdout cases passed with
+zero candidate fallbacks; median reductions were 75.9-94.2% and p95 reductions
+were 70.2-89.7%. Resource-gate v5 passed all 70 candidate case-round records,
+with maxima of 281 state rows, 280 predecessor rows, 33 output rows, and 9,075
+output bytes. This closes the frozen cohort; it does not replace the production
+statement, reference-closure, and operational evidence required by a promotion
+manifest.
 
 Use `-postgres-production-manifest` to measure the exact guarded production
 statement from a provisional version-2 manifest before the evidence map can be

@@ -166,6 +166,12 @@ const (
 	// canonical-witness candidate with an exact compact S4 fallback.
 	ShortestPathPolicyI1CanonicalGuardedV1 = "sp-i1-canonical-guarded-v1"
 
+	// ShortestPathSelectorStaticV6 identifies the evidence-gated production
+	// selector for the qualified inbound, typed, single-kind canonical witness
+	// envelope. The automatic selector remains sp-static-v5-contained until a
+	// complete production evidence manifest activates this version.
+	ShortestPathSelectorStaticV6 = "sp-static-v6"
+
 	// ShortestPathExecutorIncumbentWorkspace selects the existing workspace-table executor.
 	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "SP-S0"
 

@@ -32,6 +32,14 @@ func orientationPromotionCaps() map[string]int64 {
 	}
 }
 
+func validateStaticV6CanonicalInboundBucket(bucket PromotionBucket) error {
+	if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationOnePath) ||
+		bucket.MinimumDepth != 1 || bucket.MaximumDepth != 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
+		return fmt.Errorf("SP-I1 canonical witness bucket %s must be the qualified inbound typed single-kind one-path depth 1..64 envelope", bucket.Name)
+	}
+	return nil
+}
+
 type PromotionEvidenceReference struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
@@ -198,6 +206,9 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 				addReason("SP-I1 canonical witness cap " + name + " must be positive")
 			}
 		}
+		if manifest.SelectorVersion != optimize.ShortestPathSelectorStaticV6 {
+			addReason("SP-I1 canonical witness requires selector " + optimize.ShortestPathSelectorStaticV6)
+		}
 	}
 	if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
 		expectedCaps := orientationPromotionCaps()
@@ -246,11 +257,8 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 			}
 		}
 		if manifest.Candidate == "SP-I1-C-WE+MAT-M0" {
-			if (bucket.Direction != "outbound" && bucket.Direction != "inbound") || bucket.ObservationMode != "one_path" || bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 {
-				addReason("SP-I1 canonical witness bucket " + bucket.Name + " is outside the directed one-path depth envelope")
-			}
-			if bucket.RelationshipKindCount < 0 || bucket.UntypedRelationship != (bucket.RelationshipKindCount == 0) {
-				addReason("SP-I1 canonical witness bucket " + bucket.Name + " has inconsistent relationship-kind metadata")
+			if err := validateStaticV6CanonicalInboundBucket(bucket); err != nil {
+				addReason(err.Error())
 			}
 		}
 	}

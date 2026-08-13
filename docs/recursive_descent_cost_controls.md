@@ -42,8 +42,10 @@ where the relationship-trail executor is the better incumbent. S4 checks a
 cap+1 state ceiling before emitting any row and records its exact
 `SP-S3-U-E+MAT-M0` fallback in the same statement and snapshot.
 
-`SP-I1-C-WE+MAT-M0` is a separate default-off canonical-predecessor canary for
-the directed singleton one-path envelope. Its guarded inline statement uses
+`SP-I1-C-WE+MAT-M0` is a separate default-off canonical-predecessor canary.
+Selector `sp-static-v6` restricts it to the qualified inbound, typed,
+single-kind singleton one-path envelope with `min=1` and `max=64`; different
+directions, kind shapes, or depth bounds fail closed. Its guarded inline statement uses
 four cap+1 gates, hydrates only after admission, and falls back through S4. A
 state overflow can therefore produce the auditable event chain
 `SP-I1-C-WE+MAT-M0 -> SP-S4-C-WE+MAT-M0 -> SP-S3-U-E+MAT-M0` without exposing

@@ -183,7 +183,10 @@ a parameter-shape-aware translation cache. The implementation and its
 qualification boundaries are documented in
 [Recursive-descent cost controls](docs/recursive_descent_cost_controls.md).
 
-New inline SP and ordinary-orientation lowerings remain default-off. The
+New inline SP and ordinary-orientation lowerings remain default-off. Canonical
+SP-I1 authorization now uses selector `sp-static-v6` and accepts only the
+qualified inbound, typed, single-kind, one-path `min=1`/`max=64` bucket; the
+automatic `sp-static-v5-contained` S3/S4 choices are unchanged. The
 PostgreSQL driver's `SetTraversalPolicy` API can expose one eligible candidate
 to an explicit normalized-query SHA-256 allowlist under a nonzero generation.
 Activation requires the exact promotion manifest, including its measured

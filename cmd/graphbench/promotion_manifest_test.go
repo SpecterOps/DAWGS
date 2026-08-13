@@ -110,6 +110,60 @@ func TestVerifyPromotionManifestRequiresExactOrientationProbeContract(t *testing
 	}
 }
 
+func TestVerifyPromotionManifestRequiresStaticV6CanonicalInboundContract(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	base := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		SelectorVersion: optimize.ShortestPathSelectorStaticV6, ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		SourceCommit:     "deadbeef", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: map[string]int64{"state_limit": 100_000, "predecessor_limit": 100_000, "enumeration_limit": 100_000, "output_bytes_limit": 64 << 20},
+		Buckets: []PromotionBucket{{
+			Name: "canonical-inbound-depth64", QuerySHA256: []string{digest}, Direction: "inbound", ObservationMode: "one_path",
+			MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+
+	verification, err := verifyPromotionManifest(writePromotionManifestWithPassingEvidence(t, base))
+	require.NoError(t, err)
+	require.True(t, verification.Passed, verification.Reasons)
+
+	tests := []struct {
+		name   string
+		mutate func(*PromotionManifest)
+		reason string
+	}{
+		{
+			name: "selector", mutate: func(manifest *PromotionManifest) { manifest.SelectorVersion = "sp-static-v5-contained" },
+			reason: "SP-I1 canonical witness requires selector sp-static-v6",
+		},
+		{
+			name: "outbound", mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].Direction = "outbound" },
+			reason: "SP-I1 canonical witness bucket canonical-inbound-depth64 must be the qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+		{
+			name: "maximum", mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].MaximumDepth = 63 },
+			reason: "SP-I1 canonical witness bucket canonical-inbound-depth64 must be the qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+		{
+			name: "kinds", mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].RelationshipKindCount = 2 },
+			reason: "SP-I1 canonical witness bucket canonical-inbound-depth64 must be the qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := base
+			manifest.Caps = clonePromotionCaps(base.Caps)
+			manifest.Buckets = clonePromotionBuckets(base.Buckets)
+			test.mutate(&manifest)
+			verification, err := verifyPromotionManifest(writePromotionManifestWithPassingEvidence(t, manifest))
+			require.NoError(t, err)
+			require.False(t, verification.Passed)
+			require.Contains(t, verification.Reasons, test.reason)
+		})
+	}
+}
+
 func TestVerifyPromotionManifestRequiresCompleteImmutableEvidenceClosure(t *testing.T) {
 	directory := t.TempDir()
 	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
