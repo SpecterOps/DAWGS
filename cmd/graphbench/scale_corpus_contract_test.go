@@ -97,6 +97,11 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 		require.NotNil(t, testCase.Expected.RowCount, testCase.Name)
 		require.NotNil(t, testCase.Shape.MaxDepth, testCase.Name)
 		require.Equal(t, config.ExpansionDepth, *testCase.Shape.MaxDepth, testCase.Name)
+		if testCase.Expected.ResultKind == "path_set" {
+			require.Len(t, testCase.Expected.PathRows, int(*testCase.Expected.RowCount),
+				testCase.Name+" must predeclare every stable path observation")
+			require.True(t, newCaseResult(testCase, ModePostgresSQL, testCase.Params).StableObservation, testCase.Name)
+		}
 		declaredCohort[performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}] = testCase.Shape.QualificationSplit
 
 		metadata, err := fixtureMetadata("unused", testCase.Dataset)

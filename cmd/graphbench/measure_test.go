@@ -97,6 +97,67 @@ func TestStableRowValuesMapsNativePathValues(t *testing.T) {
 	}, values[0])
 }
 
+// TestStablePathReconstructsRepeatedCycleAndSelfLoopNodes verifies a backend
+// path that supplies distinct nodes still produces the complete ordered Cypher
+// walk, including repeated occurrences at cycles and self-loops.
+func TestStablePathReconstructsRepeatedCycleAndSelfLoopNodes(t *testing.T) {
+	root := graph.NewNode(1, nil)
+	cycle := graph.NewNode(2, nil)
+	terminal := graph.NewNode(3, nil)
+	path := graph.Path{
+		Nodes: []*graph.Node{root, cycle, terminal},
+		Edges: []*graph.Relationship{
+			graph.NewRelationship(10, 1, 2, nil, graph.StringKind("Expand")),
+			graph.NewRelationship(11, 2, 1, nil, graph.StringKind("Expand")),
+			graph.NewRelationship(12, 1, 1, nil, graph.StringKind("Expand")),
+			graph.NewRelationship(13, 1, 3, nil, graph.StringKind("Complete")),
+		},
+	}
+
+	observed, err := stablePath(path, reverseIDMap(opengraph.IDMap{
+		"root": 1, "cycle": 2, "terminal": 3,
+	}))
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"root", "cycle", "root", "root", "terminal"}, []string{
+		observed.Nodes[0].Identity,
+		observed.Nodes[1].Identity,
+		observed.Nodes[2].Identity,
+		observed.Nodes[3].Identity,
+		observed.Nodes[4].Identity,
+	})
+}
+
+// TestStablePathReconstructsInboundTraversal verifies relationship storage
+// direction does not reverse the public path walk.
+func TestStablePathReconstructsInboundTraversal(t *testing.T) {
+	root := graph.NewNode(1, nil)
+	terminal := graph.NewNode(2, nil)
+	observed, err := stablePath(graph.Path{
+		Nodes: []*graph.Node{root, terminal},
+		Edges: []*graph.Relationship{
+			graph.NewRelationship(10, 2, 1, nil, graph.StringKind("Expand")),
+		},
+	}, reverseIDMap(opengraph.IDMap{"root": 1, "terminal": 2}))
+
+	require.NoError(t, err)
+	require.Equal(t, "root", observed.Nodes[0].Identity)
+	require.Equal(t, "terminal", observed.Nodes[1].Identity)
+}
+
+// TestStablePathRejectsNoncontiguousRelationships verifies malformed backend
+// path values cannot manufacture a stable observation.
+func TestStablePathRejectsNoncontiguousRelationships(t *testing.T) {
+	_, err := stablePath(graph.Path{
+		Nodes: []*graph.Node{graph.NewNode(1, nil), graph.NewNode(2, nil), graph.NewNode(3, nil)},
+		Edges: []*graph.Relationship{
+			graph.NewRelationship(10, 2, 3, nil, graph.StringKind("Expand")),
+		},
+	}, nil)
+
+	require.ErrorContains(t, err, "is not contiguous")
+}
+
 // TestStableRowValuesRejectsRelationshipReuseWithinPath verifies that observation normalization rejects a trail containing the same physical relationship twice.
 func TestStableRowValuesRejectsRelationshipReuseWithinPath(t *testing.T) {
 	start := graph.NewNode(1, nil)
