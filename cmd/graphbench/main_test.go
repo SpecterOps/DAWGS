@@ -163,6 +163,18 @@ func TestParseConfigAcceptsOrientationSelectorReport(t *testing.T) {
 	require.Equal(t, referencePairProtocolConfirmation, cfg.OrientationProtocol)
 }
 
+func TestParseConfigAcceptsProductionManifestAndRejectsToolMixing(t *testing.T) {
+	cfg, err := parseConfig([]string{"-postgres-production-manifest", "provisional.json"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "provisional.json", cfg.PostgresProductionManifest)
+
+	_, err = parseConfig([]string{
+		"-postgres-production-manifest", "provisional.json",
+		"-postgres-force-shortest-executor", "ASP-I1-U-DAG+MAT-M0",
+	}, func(string) string { return "" })
+	require.ErrorContains(t, err, "mutually exclusive")
+}
+
 // TestParseConfigRejectsIncompleteOrientationSelectorReport verifies the
 // report cannot silently omit an exact comparator, A/A floor, or standalone
 // workflow boundary.

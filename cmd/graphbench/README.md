@@ -668,6 +668,15 @@ remain qualification seams.
 canary, with four cap+1 gates, inline M0 hydration, exact S4 fallback, and an
 ordered runtime fallback event chain.
 
+Use `-postgres-production-manifest` to measure the exact guarded production
+statement from a provisional version-2 manifest before the evidence map can be
+closed. The runner validates the candidate/fallback pair, selector, four
+positive immutable caps, unique exact query digests, and bucket match. It
+executes each statement under Repeatable Read and retains per-sample runtime
+receipts. This flag is mutually exclusive with tool-forced and shadow modes;
+evidence may be empty only because the capture is producing that evidence.
+Final rollout still requires the ordinary complete manifest verifier.
+
 ## Existing graph non-mutating mode
 
 `-existing-graph` runs a selected PostgreSQL corpus without asserting schema,

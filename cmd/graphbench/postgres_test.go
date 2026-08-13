@@ -18,14 +18,45 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
+	query := "MATCH p = allShortestPaths((s)-[:Traverse*1..8]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+	digest := strings.Repeat("0", 64)
+	manifest := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: "ASP-I1-U-DAG+MAT-M0", SelectorVersion: "asp-i1-test-v1",
+		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: "ASP-A1-DAG",
+		SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps:    map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
+		Buckets: []PromotionBucket{{Name: "outbound-depth8", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "outbound", ObservationMode: "all_paths", MinimumDepth: 1, MaximumDepth: 8, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"}}},
+	}
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+
+	runner := &postgresSQLRunner{}
+	require.NoError(t, runner.setProductionManifest(path))
+	options, err := runner.productionOptions(query)
+	require.NoError(t, err)
+	require.Equal(t, "ASP-I1-U-DAG+MAT-M0", string(options.ShortestPathExecutor))
+	require.Equal(t, int64(10), options.ShortestPathCaps.StateLimit)
+	require.Equal(t, int64(8), options.AuthorizedBucket.MaximumDepth)
+	require.Equal(t, "asp-i1-test-v1", options.SelectorVersion)
+	_, err = runner.productionOptions(query + " RETURN 1")
+	require.ErrorContains(t, err, "absent from the provisional production manifest")
+}
 
 // TestResolveCaseParams verifies that scalar, explicit-list, and generated-list fixture keys become ordered int64 IDs without disturbing ordinary parameters.
 func TestResolveCaseParams(t *testing.T) {
