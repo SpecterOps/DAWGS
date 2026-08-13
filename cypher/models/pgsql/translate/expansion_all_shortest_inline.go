@@ -12,6 +12,7 @@ import (
 
 const (
 	aspI1Distance             pgsql.Identifier = "asp_i1_distance"
+	aspI1Direct               pgsql.Identifier = "asp_i1_direct"
 	aspI1Preflight            pgsql.Identifier = "asp_i1_preflight"
 	aspI1PreflightBounded     pgsql.Identifier = "asp_i1_preflight_bounded"
 	aspI1DistanceBounded      pgsql.Identifier = "asp_i1_distance_bounded"
@@ -198,8 +199,13 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		From:  []pgsql.FromClause{tableFrom(validatedEndpoints), {Source: expansionEdgeTableReference(firstEdge)}},
 		Where: directWhere,
 	}
+	directCTE := pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: aspI1Direct, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath})},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query:        pgsql.Query{Body: direct},
+	}
 	directExists := pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
-		Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: direct.From, Where: directWhere,
+		Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: []pgsql.FromClause{tableFrom(aspI1Direct)},
 	}, Limit: pgsql.NewLiteral(int64(1), pgsql.Int8)}}}
 	secondJoin := pgsql.OptionalAnd(edgeScope(secondEdge), pgsql.OptionalAnd(
 		pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{secondEdge, startColumn}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{firstEdge, endColumn}),
@@ -228,7 +234,16 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	}
 	preflight := pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{Name: aspI1Preflight, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath})},
-		Query: pgsql.Query{Body: pgsql.SetOperation{LOperand: direct, ROperand: twoHop, Operator: pgsql.OperatorUnion, All: true}},
+		Query: pgsql.Query{Body: pgsql.SetOperation{
+			LOperand: pgsql.Select{
+				Projection: pgsql.Projection{
+					pgsql.CompoundIdentifier{aspI1Direct, expansionDepth},
+					pgsql.CompoundIdentifier{aspI1Direct, expansionPath},
+				},
+				From: []pgsql.FromClause{tableFrom(aspI1Direct)},
+			},
+			ROperand: twoHop, Operator: pgsql.OperatorUnion, All: true,
+		}},
 	}
 	preflightBounded := boundedTraversalStateProbe(
 		aspI1PreflightBounded, aspI1Preflight, []pgsql.Identifier{expansionDepth, expansionPath}, expansionModel.ShortestPathEnumerationLimit,
@@ -659,6 +674,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	query := pgsql.Query{CommonTableExpressions: &pgsql.With{Recursive: true}, Body: projection}
 	for _, cte := range []pgsql.CommonTableExpression{
 		endpointCTE,
+		directCTE,
 		preflight,
 		preflightBounded,
 		distance,
