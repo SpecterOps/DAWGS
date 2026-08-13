@@ -234,6 +234,9 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 			t.Fatalf("read-committed policy did not preserve A1: rows=%v receipt=%s", readCommittedRows, readCommittedReceipt)
 		}
 
+		// Force the stable-snapshot execution onto a fresh PostgreSQL session.
+		// Its incumbent fallback workspace must be created before BEGIN READ ONLY.
+		session.PGPool.Reset()
 		repeatableRows, repeatableReceipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
 			"inline-asp-policy-repeatable", optimize.ShortestPathExecutorASPI1DAG, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 		if fmt.Sprint(a1Rows) != fmt.Sprint(repeatableRows) || !containsAll(repeatableReceipt, "ASP-I1-U-DAG+MAT-M0", "inline_predecessor_dag") {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -107,4 +108,11 @@ func TestOptionInitializeTraversalRuntimeAttestation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, cfg.initializeTraversalRuntimeAttestation)
+}
+
+func TestStableSnapshotIsolation(t *testing.T) {
+	require.False(t, stableSnapshotIsolation(""))
+	require.False(t, stableSnapshotIsolation(pgx.ReadCommitted))
+	require.True(t, stableSnapshotIsolation(pgx.RepeatableRead))
+	require.True(t, stableSnapshotIsolation(pgx.Serializable))
 }

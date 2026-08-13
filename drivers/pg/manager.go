@@ -221,6 +221,11 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 		return err
 	} else {
 		defer conn.Release()
+		if stableSnapshotIsolation(cfg.Options.IsoLevel) {
+			if err := initializeStableSnapshotTraversalWorkspaces(ctx, conn); err != nil {
+				return err
+			}
+		}
 		if cfg.initializeTraversalRuntimeAttestation {
 			if _, err := conn.Exec(ctx, "select public.ensure_traversal_runtime_attestation_workspace_v1()"); err != nil {
 				return fmt.Errorf("initialize traversal runtime attestation workspace: %w", err)
@@ -240,6 +245,20 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 		}
 		return nil
 	}
+}
+
+func stableSnapshotIsolation(isolation pgx.TxIsoLevel) bool {
+	return isolation == pgx.RepeatableRead || isolation == pgx.Serializable
+}
+
+func initializeStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
+	const initializeSQL = `select
+		public.ensure_bidirectional_shortest_path_workspace(),
+		public.ensure_bidirectional_all_shortest_path_workspace()`
+	if _, err := conn.Exec(ctx, initializeSQL); err != nil {
+		return fmt.Errorf("initialize stable-snapshot traversal workspaces: %w", err)
+	}
+	return nil
 }
 
 // mapKindIDs partitions database kind IDs into cached semantic kinds and unresolved IDs without refreshing the cache.
