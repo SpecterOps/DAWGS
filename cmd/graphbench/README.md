@@ -384,6 +384,26 @@ function-backed SP/ASP arms are recorded as
 `hidden_counters_unavailable`, never as zero work. The resource gate requires
 `counter_status=complete` for candidate architectures even when no numeric cap
 was declared.
+
+Traversal telemetry schema v2 gives guarded inline-predecessor evidence two non-interchangeable serialized
+families. `ASP-I1-U-DAG+MAT-M0` emits `asp-i1-guarded-v1` and writes bounded
+relation, output, and branch evidence under `diagnostic.counters.inline_asp`.
+`SP-I1-C-WE+MAT-M0` emits the distinct
+`sp-i1-canonical-guarded-v1` policy and writes the same-shaped evidence under
+`diagnostic.counters.inline_shortest_path`; evidence from either namespace
+cannot satisfy the other family. PostgreSQL's named candidate and fallback
+marker CTEs must attribute exactly one arm, and the unselected output branch
+must report zero rows. Parent-linked plan nodes also bind each branch body to
+its direct inner executor; the selected executor must run and the unselected
+executor must report zero loops. Canonical I1 reports `inline_canonical_witness` or
+`inline_canonical_no_path` when its candidate marker executes, and
+`exact_s4_fallback` with `SP-S4-C-WE+MAT-M0` when the fallback marker executes.
+If any required named relation, marker, branch, or executor-loop counter is absent from the
+plan replay, the diagnostic is `hidden_counters_unavailable`; absence is never
+converted into a qualifying zero.
+This adds fail-closed evidence for the default-off exact-query canary; it does
+not change the automatic `sp-static-v5-contained` production selector.
+
 An emitted `orientation-probe-v1` policy requires orientation probes, selected
 ordinary expansion, and hydration families. Its exact executed-candidate and
 executed-incumbent marker rows must select one arm, the other must be zero, and
@@ -829,7 +849,11 @@ and requires Repeatable Read or Serializable isolation. Forced executors
 remain qualification seams.
 `SP-I1-C-WE+MAT-M0` is the corresponding guarded canonical-predecessor witness
 canary, with four cap+1 gates, inline M0 hydration, exact S4 fallback, and an
-ordered runtime fallback event chain.
+ordered runtime fallback event chain. Its target outcome names the exact
+candidate/fallback pair and emitted `sp-i1-canonical-guarded-v1` policy, while
+diagnostic resource evidence remains isolated from the ASP I1 counter family.
+It remains default-off; `sp-static-v5-contained` continues to select the
+automatic S3/S4 production paths.
 
 Use `-postgres-production-manifest` to measure the exact guarded production
 statement from a provisional version-2 manifest before the evidence map can be

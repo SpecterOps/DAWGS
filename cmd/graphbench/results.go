@@ -334,6 +334,10 @@ type PostgresPlanMetrics struct {
 
 // PostgresPlanNodeMetric captures one PostgreSQL plan node's identity, counters, and buffers.
 type PostgresPlanNodeMetric struct {
+	// PlanNodeID identifies this node within the normalized pre-order plan tree.
+	PlanNodeID int64 `json:"plan_node_id,omitempty"`
+	// ParentPlanNodeID identifies the direct parent node; the root has no parent.
+	ParentPlanNodeID int64 `json:"parent_plan_node_id,omitempty"`
 	// NodeType identifies the PostgreSQL plan node type.
 	NodeType string `json:"node_type"`
 	// ParentRelationship identifies the relationship by which this plan node is attached to its parent.

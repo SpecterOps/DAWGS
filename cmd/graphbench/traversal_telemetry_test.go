@@ -89,7 +89,7 @@ func TestTraversalExecutionTelemetryAttachmentsSerializeVersionedSchema(t *testi
 	})
 
 	require.NoError(t, err)
-	require.Contains(t, string(encoded), `"traversal_execution_telemetry":{"schema_version":1`)
+	require.Contains(t, string(encoded), `"traversal_execution_telemetry":{"schema_version":2`)
 }
 
 func validTraversalTelemetry() TraversalExecutionTelemetry {

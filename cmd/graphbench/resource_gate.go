@@ -10,10 +10,12 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 // resourceGateVersion identifies the serialized schema revision for resource gate.
-const resourceGateVersion = 3
+const resourceGateVersion = 4
 
 // ResourceGateReport reports whether production and reference plan resources remain within their allowed envelopes.
 type ResourceGateReport struct {
@@ -104,6 +106,9 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 			appendWorkspaceResourceReasons(&gateCase, record.PostgresMetrics)
 		} else if portableCandidate {
 			appendPortableResourceReasons(&gateCase, record.PostgresMetrics)
+		}
+		if contract, guarded := guardedInlineResourceContractForArchitecture(gateCase.Architecture); guarded {
+			appendGuardedInlineResourceBindingReasons(&gateCase, record, contract)
 		}
 		telemetryRequired := telemetryRequiredForRecord(record, gateCase.Architecture)
 		appendTelemetryResourceReasons(&gateCase, record.TraversalTelemetry, telemetryRequired)
@@ -208,7 +213,10 @@ func compactBidirectionalWorkspaceArchitecture(architecture string) bool {
 }
 
 // telemetryRequiredForArchitecture identifies candidates whose qualification
-// depends on executor-visible work rather than outer EXPLAIN counters.
+// depends on executor-visible work rather than outer EXPLAIN counters. This
+// architecture-only check also applies to explicit reference arms, so guarded
+// inline I1 production requirements deliberately belong to the record-aware
+// check below instead.
 func telemetryRequiredForArchitecture(architecture string) bool {
 	return strings.HasPrefix(architecture, "SP-B1-") ||
 		strings.HasPrefix(architecture, "SP-B2-") ||
@@ -218,25 +226,138 @@ func telemetryRequiredForArchitecture(architecture string) bool {
 }
 
 func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
+	if _, guarded := guardedInlineResourceContractForArchitecture(architecture); guarded {
+		return true
+	}
 	if telemetryRequiredForArchitecture(architecture) {
 		return true
 	}
 	if record.Optimization != nil {
 		for _, outcome := range record.Optimization.TargetOutcomes {
-			if isOrientationProbePolicy(outcome.EmittedPolicy) {
+			if isOrientationProbePolicy(outcome.EmittedPolicy) || guardedInlineResourcePolicy(outcome.EmittedPolicy) {
 				return true
 			}
 		}
 	}
 	return record.TraversalTelemetry != nil &&
 		(isOrientationProbePolicy(record.TraversalTelemetry.Summary.EmittedIdentity) ||
-			isOrientationProbePolicy(record.TraversalTelemetry.Summary.SelectorVersion))
+			isOrientationProbePolicy(record.TraversalTelemetry.Summary.SelectorVersion) ||
+			guardedInlineResourcePolicy(record.TraversalTelemetry.Summary.EmittedIdentity))
+}
+
+type guardedInlineResourceContract struct {
+	architecture    string
+	family          string
+	telemetryFamily TraversalTelemetryFamily
+	policy          string
+	namespace       string
+	label           string
+}
+
+func guardedInlineResourceContractForArchitecture(architecture string) (guardedInlineResourceContract, bool) {
+	switch architecture {
+	case string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness):
+		return guardedInlineResourceContract{
+			architecture:    architecture,
+			family:          "SP",
+			telemetryFamily: TraversalTelemetryFamilySP,
+			policy:          optimize.ShortestPathPolicyI1CanonicalGuardedV1,
+			namespace:       "inline_shortest_path",
+			label:           "inline canonical SP",
+		}, true
+	case string(optimize.ShortestPathExecutorASPI1DAG):
+		return guardedInlineResourceContract{
+			architecture:    architecture,
+			family:          "ASP",
+			telemetryFamily: TraversalTelemetryFamilyASP,
+			policy:          optimize.ShortestPathPolicyASPI1GuardedV1,
+			namespace:       "inline_asp",
+			label:           "inline ASP",
+		}, true
+	default:
+		return guardedInlineResourceContract{}, false
+	}
+}
+
+func guardedInlineResourcePolicy(policy string) bool {
+	return policy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 || policy == optimize.ShortestPathPolicyASPI1GuardedV1
+}
+
+// appendGuardedInlineResourceBindingReasons prevents an unguarded comparator
+// with the same executor architecture from satisfying production resource
+// evidence. Production I1 must bind the translated outcome and telemetry to
+// its exact policy and to the observation-specific typed counter namespace.
+func appendGuardedInlineResourceBindingReasons(gateCase *ResourceGateCase, record CaseResult, contract guardedInlineResourceContract) {
+	emittedPolicy := ""
+	outcomeFound := false
+	if record.Optimization != nil {
+		for _, outcome := range record.Optimization.TargetOutcomes {
+			applied := outcome.Applied
+			if applied == "" {
+				applied = outcome.Selected
+			}
+			if outcome.Family == contract.family && applied == contract.architecture {
+				emittedPolicy = outcome.EmittedPolicy
+				outcomeFound = true
+				break
+			}
+		}
+	}
+	if !outcomeFound || emittedPolicy != contract.policy {
+		gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf(
+			"%s production architecture requires emitted policy %q; found %q",
+			contract.label, contract.policy, emittedPolicy,
+		))
+	}
+
+	telemetry := record.TraversalTelemetry
+	if telemetry == nil {
+		return
+	}
+	if telemetry.Summary.EmittedIdentity != contract.policy {
+		gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf(
+			"%s production telemetry requires emitted identity %q; found %q",
+			contract.label, contract.policy, telemetry.Summary.EmittedIdentity,
+		))
+	}
+	if telemetry.Diagnostic == nil {
+		return
+	}
+	if !slices.Contains(telemetry.Diagnostic.RequiredFamilies, contract.telemetryFamily) {
+		gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf(
+			"%s production telemetry requires declared counter family %q",
+			contract.label, contract.telemetryFamily,
+		))
+	}
+	if observationRequiresHydration(telemetry.Summary.ObservationMode) &&
+		!slices.Contains(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyHydration) {
+		gateCase.Reasons = append(gateCase.Reasons, contract.label+" production telemetry requires declared hydration counters for its observation mode")
+	}
+
+	inlineASP := telemetry.Diagnostic.Counters.InlineASP
+	inlineShortestPath := telemetry.Diagnostic.Counters.InlineShortestPath
+	switch contract.namespace {
+	case "inline_shortest_path":
+		if inlineShortestPath == nil {
+			gateCase.Reasons = append(gateCase.Reasons, "inline canonical SP production telemetry requires inline_shortest_path counters")
+		}
+		if inlineASP != nil {
+			gateCase.Reasons = append(gateCase.Reasons, "inline canonical SP production telemetry must not use inline_asp counters")
+		}
+	case "inline_asp":
+		if inlineASP == nil {
+			gateCase.Reasons = append(gateCase.Reasons, "inline ASP production telemetry requires inline_asp counters")
+		}
+		if inlineShortestPath != nil {
+			gateCase.Reasons = append(gateCase.Reasons, "inline ASP production telemetry must not use inline_shortest_path counters")
+		}
+	}
 }
 
 func appendFallbackExpectationReasons(gateCase *ResourceGateCase, record CaseResult) {
 	expectation := record.Shape.FallbackExpectation
 	if expectation == "" {
-		if telemetryRequiredForRecord(record, "") {
+		if telemetryRequiredForRecord(record, appliedPostgresArchitecture(record)) {
 			gateCase.Reasons = append(gateCase.Reasons, "candidate resource qualification requires a typed fallback expectation")
 		}
 		return
@@ -357,8 +478,11 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 		}
 		appendOrientationAttributionReasons(gateCase, telemetry.Diagnostic)
 	}
-	if required && summary.EmittedIdentity == "asp-i1-guarded-v1" {
-		appendInlineASPAttributionReasons(gateCase, telemetry.Diagnostic)
+	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyASPI1GuardedV1 {
+		appendInlinePredecessorAttributionReasons(gateCase, telemetry.Diagnostic, "inline ASP")
+	}
+	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyI1CanonicalGuardedV1 {
+		appendInlinePredecessorAttributionReasons(gateCase, telemetry.Diagnostic, "inline canonical SP")
 	}
 
 	observed := traversalNumericObservations(telemetry.Diagnostic.Counters)
@@ -387,21 +511,47 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 }
 
 func appendInlineASPAttributionReasons(gateCase *ResourceGateCase, diagnostic *TraversalExecutionDiagnostic) {
+	appendInlinePredecessorAttributionReasons(gateCase, diagnostic, "inline ASP")
+}
+
+func appendInlinePredecessorAttributionReasons(gateCase *ResourceGateCase, diagnostic *TraversalExecutionDiagnostic, label string) {
 	if diagnostic == nil || diagnostic.PlanReplay == nil {
-		gateCase.Reasons = append(gateCase.Reasons, "inline ASP qualification requires exact plan branch evidence")
+		gateCase.Reasons = append(gateCase.Reasons, label+" qualification requires exact plan branch evidence")
 		return
 	}
 	counters := diagnostic.PlanReplay.Counters
 	candidate, candidatePresent := counters["asp_i1_candidate_marker_rows"]
 	fallback, fallbackPresent := counters["asp_i1_fallback_marker_rows"]
 	if !candidatePresent || !fallbackPresent || candidate+fallback != 1 {
-		gateCase.Reasons = append(gateCase.Reasons, "inline ASP execution must attribute exactly one candidate or fallback marker")
+		gateCase.Reasons = append(gateCase.Reasons, label+" execution must attribute exactly one candidate or fallback marker")
 	}
-	if candidate == 1 && counters["asp_i1_fallback_branch_rows"] != 0 {
-		gateCase.Reasons = append(gateCase.Reasons, "inline ASP fallback arm performed work while the candidate was selected")
+	candidateBranchRows, candidateBranchPresent := counters["asp_i1_candidate_branch_rows"]
+	fallbackBranchRows, fallbackBranchPresent := counters["asp_i1_fallback_branch_rows"]
+	if !candidateBranchPresent || !fallbackBranchPresent {
+		gateCase.Reasons = append(gateCase.Reasons, label+" execution is missing exact candidate or fallback output-branch row evidence")
 	}
-	if fallback == 1 && counters["asp_i1_candidate_branch_rows"] != 0 {
-		gateCase.Reasons = append(gateCase.Reasons, "inline ASP candidate output arm performed work while fallback was selected")
+	candidateExecutorLoops, candidateExecutorPresent := counters["asp_i1_candidate_executor_loops"]
+	fallbackExecutorLoops, fallbackExecutorPresent := counters["asp_i1_fallback_executor_loops"]
+	if !candidateExecutorPresent || !fallbackExecutorPresent {
+		gateCase.Reasons = append(gateCase.Reasons, label+" execution is missing exact candidate or fallback executor-loop evidence")
+	}
+	if candidate == 1 && fallbackBranchRows != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, label+" fallback output arm emitted rows while the candidate was selected")
+	}
+	if candidate == 1 && fallbackExecutorLoops != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, label+" fallback executor ran while the candidate was selected")
+	}
+	if candidate == 1 && candidateExecutorLoops != 1 {
+		gateCase.Reasons = append(gateCase.Reasons, label+" candidate marker must bind exactly one selected executor loop")
+	}
+	if fallback == 1 && candidateBranchRows != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, label+" candidate output arm emitted rows while fallback was selected")
+	}
+	if fallback == 1 && candidateExecutorLoops != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, label+" candidate executor ran while fallback was selected")
+	}
+	if fallback == 1 && fallbackExecutorLoops != 1 {
+		gateCase.Reasons = append(gateCase.Reasons, label+" fallback marker must bind exactly one selected executor loop")
 	}
 }
 
@@ -493,6 +643,13 @@ func traversalNumericObservations(counters TraversalDiagnosticCounters) map[stri
 		set("output_bytes", all.OutputBytes)
 	}
 	if inline := counters.InlineASP; inline != nil {
+		set("state_rows", inline.DistanceRows)
+		set("predecessor_rows", inline.PredecessorRows)
+		set("output_rows", inline.EnumerationRows)
+		set("output_paths", inline.OutputPaths)
+		set("output_bytes", inline.OutputBytes)
+	}
+	if inline := counters.InlineShortestPath; inline != nil {
 		set("state_rows", inline.DistanceRows)
 		set("predecessor_rows", inline.PredecessorRows)
 		set("output_rows", inline.EnumerationRows)

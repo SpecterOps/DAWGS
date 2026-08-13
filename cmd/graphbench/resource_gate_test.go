@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
@@ -498,17 +499,313 @@ func TestResourceGateValidatesExactOrientationMarkersAndProbeCounts(t *testing.T
 func TestResourceGateRequiresSingularInlineASPBranchAndInactiveArm(t *testing.T) {
 	gateCase := &ResourceGateCase{}
 	diagnostic := &TraversalExecutionDiagnostic{PlanReplay: &TraversalPlanReplayEvidence{Counters: map[string]int64{
-		"asp_i1_candidate_marker_rows": 1,
-		"asp_i1_fallback_marker_rows":  0,
-		"asp_i1_candidate_branch_rows": 1,
-		"asp_i1_fallback_branch_rows":  0,
+		"asp_i1_candidate_marker_rows":    1,
+		"asp_i1_fallback_marker_rows":     0,
+		"asp_i1_candidate_branch_rows":    1,
+		"asp_i1_fallback_branch_rows":     0,
+		"asp_i1_candidate_executor_loops": 1,
+		"asp_i1_fallback_executor_loops":  0,
 	}}}
 	appendInlineASPAttributionReasons(gateCase, diagnostic)
 	require.Empty(t, gateCase.Reasons)
+
+	for _, missing := range []string{"asp_i1_candidate_branch_rows", "asp_i1_fallback_branch_rows"} {
+		value := diagnostic.PlanReplay.Counters[missing]
+		delete(diagnostic.PlanReplay.Counters, missing)
+		missingCase := &ResourceGateCase{}
+		appendInlineASPAttributionReasons(missingCase, diagnostic)
+		require.Contains(t, missingCase.Reasons, "inline ASP execution is missing exact candidate or fallback output-branch row evidence")
+		diagnostic.PlanReplay.Counters[missing] = value
+	}
+	for _, missing := range []string{"asp_i1_candidate_executor_loops", "asp_i1_fallback_executor_loops"} {
+		value := diagnostic.PlanReplay.Counters[missing]
+		delete(diagnostic.PlanReplay.Counters, missing)
+		missingCase := &ResourceGateCase{}
+		appendInlineASPAttributionReasons(missingCase, diagnostic)
+		require.Contains(t, missingCase.Reasons, "inline ASP execution is missing exact candidate or fallback executor-loop evidence")
+		diagnostic.PlanReplay.Counters[missing] = value
+	}
+
+	diagnostic.PlanReplay.Counters["asp_i1_fallback_executor_loops"] = 1
+	executedInactiveCase := &ResourceGateCase{}
+	appendInlineASPAttributionReasons(executedInactiveCase, diagnostic)
+	require.Contains(t, executedInactiveCase.Reasons, "inline ASP fallback executor ran while the candidate was selected")
+	diagnostic.PlanReplay.Counters["asp_i1_fallback_executor_loops"] = 0
 
 	diagnostic.PlanReplay.Counters["asp_i1_fallback_marker_rows"] = 1
 	diagnostic.PlanReplay.Counters["asp_i1_fallback_branch_rows"] = 1
 	appendInlineASPAttributionReasons(gateCase, diagnostic)
 	require.Contains(t, gateCase.Reasons, "inline ASP execution must attribute exactly one candidate or fallback marker")
-	require.Contains(t, gateCase.Reasons, "inline ASP fallback arm performed work while the candidate was selected")
+	require.Contains(t, gateCase.Reasons, "inline ASP fallback output arm emitted rows while the candidate was selected")
+}
+
+func TestResourceGateScopesGuardedI1TelemetryAndInactiveArm(t *testing.T) {
+	require.False(t, telemetryRequiredForArchitecture(string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)))
+	require.False(t, telemetryRequiredForArchitecture(string(optimize.ShortestPathExecutorASPI1DAG)))
+	require.True(t, telemetryRequiredForRecord(
+		guardedI1ResourceRecord(string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)),
+		string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+	))
+
+	gateCase := &ResourceGateCase{}
+	diagnostic := &TraversalExecutionDiagnostic{PlanReplay: &TraversalPlanReplayEvidence{Counters: map[string]int64{
+		"asp_i1_candidate_marker_rows":    1,
+		"asp_i1_fallback_marker_rows":     0,
+		"asp_i1_candidate_branch_rows":    1,
+		"asp_i1_fallback_branch_rows":     0,
+		"asp_i1_candidate_executor_loops": 1,
+		"asp_i1_fallback_executor_loops":  0,
+	}}}
+	appendInlinePredecessorAttributionReasons(gateCase, diagnostic, "inline canonical SP")
+	require.Empty(t, gateCase.Reasons)
+
+	diagnostic.PlanReplay.Counters["asp_i1_fallback_marker_rows"] = 1
+	diagnostic.PlanReplay.Counters["asp_i1_fallback_branch_rows"] = 1
+	appendInlinePredecessorAttributionReasons(gateCase, diagnostic, "inline canonical SP")
+	require.Contains(t, gateCase.Reasons, "inline canonical SP execution must attribute exactly one candidate or fallback marker")
+	require.Contains(t, gateCase.Reasons, "inline canonical SP fallback output arm emitted rows while the candidate was selected")
+}
+
+func TestResourceGateDoesNotRequireGuardedTelemetryForExplicitI1References(t *testing.T) {
+	artifact := filepath.Join(t.TempDir(), "records.jsonl")
+	record := CaseResult{
+		Dataset:         "fixture",
+		Name:            "explicit-references",
+		ExecutionMode:   ModePostgresSQL,
+		Status:          StatusOK,
+		Shape:           WorkloadShape{FixtureTier: "normal"},
+		PostgresMetrics: &PostgresPlanMetrics{},
+		PostgresReferences: []PostgresReferenceResult{
+			{
+				Name: "sp-i1-reference", Architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+				FullComparator: true, PostgresMetrics: &PostgresPlanMetrics{},
+			},
+			{
+				Name: "asp-i1-reference", Architecture: string(optimize.ShortestPathExecutorASPI1DAG),
+				FullComparator: true, PostgresMetrics: &PostgresPlanMetrics{},
+			},
+		},
+	}
+	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
+	output := filepath.Join(t.TempDir(), "report.json")
+	passed, err := createResourceGateReport(artifact, output)
+	require.NoError(t, err)
+	require.True(t, passed)
+
+	var report ResourceGateReport
+	raw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &report))
+	require.Len(t, report.Cases, 3)
+	for _, gateCase := range report.Cases {
+		require.True(t, gateCase.Passed, "%+v", gateCase)
+		require.NotContains(t, gateCase.Reasons, "required traversal execution telemetry is missing")
+	}
+}
+
+func TestResourceGateBindsGuardedI1PolicyAndCounterNamespace(t *testing.T) {
+	tests := []struct {
+		name         string
+		architecture string
+		mutate       func(*CaseResult)
+		passed       bool
+		reason       string
+	}{
+		{
+			name:         "canonical SP valid",
+			architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			passed:       true,
+		},
+		{
+			name:         "ASP valid",
+			architecture: string(optimize.ShortestPathExecutorASPI1DAG),
+			passed:       true,
+		},
+		{
+			name:         "canonical SP missing outcome policy",
+			architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			mutate: func(record *CaseResult) {
+				record.Optimization.TargetOutcomes[0].EmittedPolicy = ""
+			},
+			reason: "inline canonical SP production architecture requires emitted policy",
+		},
+		{
+			name:         "canonical SP wrong telemetry policy",
+			architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			mutate: func(record *CaseResult) {
+				record.TraversalTelemetry.Summary.EmittedIdentity = optimize.ShortestPathPolicyASPI1GuardedV1
+			},
+			reason: "inline canonical SP production telemetry requires emitted identity",
+		},
+		{
+			name:         "canonical SP wrong counter namespace",
+			architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			mutate: func(record *CaseResult) {
+				diagnostic := record.TraversalTelemetry.Diagnostic
+				diagnostic.Counters.InlineASP = diagnostic.Counters.InlineShortestPath
+				diagnostic.Counters.InlineShortestPath = nil
+				diagnostic.RequiredFamilies = []TraversalTelemetryFamily{TraversalTelemetryFamilyASP, TraversalTelemetryFamilyHydration}
+				diagnostic.Provenance = guardedI1CounterProvenance("inline_asp")
+			},
+			reason: "inline canonical SP production telemetry requires inline_shortest_path counters",
+		},
+		{
+			name:         "canonical SP missing contract counter family",
+			architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			mutate: func(record *CaseResult) {
+				record.TraversalTelemetry.Diagnostic.RequiredFamilies = []TraversalTelemetryFamily{TraversalTelemetryFamilyHydration}
+			},
+			reason: `inline canonical SP production telemetry requires declared counter family "shortest_path"`,
+		},
+		{
+			name:         "ASP missing hydration family",
+			architecture: string(optimize.ShortestPathExecutorASPI1DAG),
+			mutate: func(record *CaseResult) {
+				diagnostic := record.TraversalTelemetry.Diagnostic
+				diagnostic.RequiredFamilies = []TraversalTelemetryFamily{TraversalTelemetryFamilyASP}
+				diagnostic.Counters.Hydration = nil
+			},
+			reason: "inline ASP production telemetry requires declared hydration counters for its observation mode",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			record := guardedI1ResourceRecord(test.architecture)
+			if test.mutate != nil {
+				test.mutate(&record)
+			}
+			artifact := filepath.Join(t.TempDir(), "records.jsonl")
+			require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
+			output := filepath.Join(t.TempDir(), "report.json")
+			passed, err := createResourceGateReport(artifact, output)
+			require.NoError(t, err)
+			require.Equal(t, test.passed, passed)
+
+			var report ResourceGateReport
+			raw, err := os.ReadFile(output)
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(raw, &report))
+			require.Len(t, report.Cases, 1)
+			if test.reason != "" {
+				require.Contains(t, strings.Join(report.Cases[0].Reasons, "\n"), test.reason)
+			}
+		})
+	}
+}
+
+func guardedI1ResourceRecord(architecture string) CaseResult {
+	contract, _ := guardedInlineResourceContractForArchitecture(architecture)
+	fallback := string(optimize.ShortestPathExecutorS4CanonicalWitness)
+	requiredFamily := TraversalTelemetryFamilySP
+	observationMode := "one_path"
+	if architecture == string(optimize.ShortestPathExecutorASPI1DAG) {
+		fallback = string(optimize.ShortestPathExecutorASPA1DAG)
+		requiredFamily = TraversalTelemetryFamilyASP
+		observationMode = "all_paths"
+	}
+
+	inlineCounters := &InlinePredecessorTraversalCounters{
+		DistanceRows:           telemetryInt64(3),
+		PredecessorRows:        telemetryInt64(2),
+		EnumerationRows:        telemetryInt64(1),
+		OutputPaths:            telemetryInt64(1),
+		OutputBytes:            telemetryInt64(64),
+		CandidateMarkerRows:    telemetryInt64(1),
+		FallbackMarkerRows:     telemetryInt64(0),
+		CandidateBranchRows:    telemetryInt64(1),
+		FallbackBranchRows:     telemetryInt64(0),
+		CandidateExecutorLoops: telemetryInt64(1),
+		FallbackExecutorLoops:  telemetryInt64(0),
+	}
+	diagnosticCounters := TraversalDiagnosticCounters{}
+	if requiredFamily == TraversalTelemetryFamilySP {
+		diagnosticCounters.InlineShortestPath = inlineCounters
+	} else {
+		diagnosticCounters.InlineASP = inlineCounters
+	}
+	diagnosticCounters.Hydration = &TraversalHydrationCounters{
+		PathCount: telemetryInt64(1), NodeLookups: telemetryInt64(2), EdgeLookups: telemetryInt64(1),
+		Loops: telemetryInt64(1), Rows: telemetryInt64(1), TimeNS: telemetryInt64(100), Bytes: telemetryInt64(64),
+	}
+	planCounters := map[string]int64{
+		"asp_i1_distance_rows":            3,
+		"asp_i1_predecessor_rows":         2,
+		"asp_i1_enumeration_rows":         1,
+		"asp_i1_output_rows":              1,
+		"asp_i1_candidate_marker_rows":    1,
+		"asp_i1_fallback_marker_rows":     0,
+		"asp_i1_candidate_branch_rows":    1,
+		"asp_i1_fallback_branch_rows":     0,
+		"asp_i1_candidate_executor_loops": 1,
+		"asp_i1_fallback_executor_loops":  0,
+	}
+	planProvenance := map[string]string{}
+	for name := range planCounters {
+		planProvenance["counters."+name] = "test.plan." + name
+	}
+
+	telemetry := validTraversalTelemetry()
+	telemetry.Level = TraversalTelemetryLevelDiagnostic
+	telemetry.Summary.RequestedIdentity = architecture
+	telemetry.Summary.PlannedIdentities = []string{architecture, fallback}
+	telemetry.Summary.EmittedIdentity = contract.policy
+	telemetry.Summary.RuntimeIdentity = architecture
+	telemetry.Summary.AppliedIdentity = architecture
+	telemetry.Summary.ObservationMode = observationMode
+	telemetry.Summary.RuntimeOutcomeAvailable = telemetryBool(true)
+	telemetry.Summary.Caps = map[string]int64{
+		"state_rows": 100, "predecessor_rows": 100, "output_rows": 100, "output_bytes": 1024,
+	}
+	telemetry.Summary.Provenance["observation_mode"] = "test.observation"
+	telemetry.Summary.Provenance["runtime_outcome_available"] = "test.receipt"
+	for capName := range telemetry.Summary.Caps {
+		telemetry.Summary.Provenance["caps."+capName] = "test.cap." + capName
+	}
+	telemetry.Diagnostic = &TraversalExecutionDiagnostic{
+		InvocationID:     "guarded-i1-resource",
+		ConnectionID:     "backend-1",
+		TimedSample:      telemetryBool(false),
+		RequiredFamilies: []TraversalTelemetryFamily{requiredFamily, TraversalTelemetryFamilyHydration},
+		Counters:         diagnosticCounters,
+		CounterStatus:    TraversalTelemetryCounterStatusComplete,
+		PlanReplay: &TraversalPlanReplayEvidence{
+			Source: "test-plan", Counters: planCounters, Provenance: planProvenance,
+		},
+		Provenance: guardedI1CounterProvenance(contract.namespace),
+	}
+
+	return CaseResult{
+		Dataset:            "fixture",
+		Name:               "guarded-i1",
+		ExecutionMode:      ModePostgresSQL,
+		Status:             StatusOK,
+		Shape:              WorkloadShape{FixtureTier: "normal", FallbackExpectation: "forbidden"},
+		PostgresMetrics:    &PostgresPlanMetrics{},
+		TraversalTelemetry: &telemetry,
+		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
+			Family: contract.family, Candidate: architecture, Selected: architecture, Applied: architecture,
+			EmittedPolicy: contract.policy,
+		}}},
+	}
+}
+
+func inlineI1CounterProvenance(namespace string) map[string]string {
+	provenance := map[string]string{}
+	for _, name := range []string{
+		"distance_rows", "predecessor_rows", "enumeration_rows", "output_paths", "output_bytes",
+		"candidate_marker_rows", "fallback_marker_rows", "candidate_branch_rows", "fallback_branch_rows",
+		"candidate_executor_loops", "fallback_executor_loops",
+	} {
+		provenance[namespace+"."+name] = "test." + namespace + "." + name
+	}
+	return provenance
+}
+
+func guardedI1CounterProvenance(namespace string) map[string]string {
+	provenance := inlineI1CounterProvenance(namespace)
+	for _, name := range []string{"path_count", "node_lookups", "edge_lookups", "loops", "rows", "time_ns", "bytes"} {
+		provenance["hydration."+name] = "test.hydration." + name
+	}
+	return provenance
 }
