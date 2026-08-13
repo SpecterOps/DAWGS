@@ -132,6 +132,43 @@ func TestGeneratedShortestPathCorpusCoversMaterializerEnvelope(t *testing.T) {
 	}
 }
 
+// TestGeneratedAllShortestCorpusCoversInlineQualificationEnvelope keeps the
+// training corpus broad enough to qualify early-stop behavior independently
+// from the frozen depth-8 holdouts. Cap-threshold branch execution is covered
+// by the live guarded-statement integration tests because corpus cases do not
+// override immutable production caps.
+func TestGeneratedAllShortestCorpusCoversInlineQualificationEnvelope(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	requiredTraining := map[string]bool{
+		"early-depth-1": false, "early-depth-2": false, "early-depth-3": false,
+		"max-16": false, "max-64": false, "inbound": false,
+		"cycle-dead-tail": false, "reconvergence": false, "disconnected": false,
+	}
+	hasQualifiedHoldout := false
+	for _, testCase := range corpus.Cases {
+		if testCase.Category != "generated_shortest_path_v2" || !slices.Contains(testCase.Tags, "all-shortest") {
+			continue
+		}
+		if testCase.Shape.QualificationSplit == "holdout" && testCase.Shape.RelationshipKindCount == 1 && testCase.Shape.MaxDepth != nil && *testCase.Shape.MaxDepth >= 3 {
+			hasQualifiedHoldout = true
+		}
+		if testCase.Shape.QualificationSplit != "training" {
+			continue
+		}
+		for tag := range requiredTraining {
+			if slices.Contains(testCase.Tags, tag) {
+				requiredTraining[tag] = true
+			}
+		}
+	}
+	for tag, covered := range requiredTraining {
+		require.True(t, covered, "all-shortest training corpus is missing %s", tag)
+	}
+	require.True(t, hasQualifiedHoldout, "all-shortest corpus lacks a typed single-kind holdout at maximum depth 3 or greater")
+}
+
 // scaleCorpusCaseID joins a scale case's dataset and name into its contract identifier.
 func scaleCorpusCaseID(name string) string {
 	if separator := strings.IndexByte(name, '_'); separator >= 0 {
