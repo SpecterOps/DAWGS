@@ -997,10 +997,18 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 		}
 		if decision.SelectedExecutor == optimize.ShortestPathExecutorASPI1DAG && applied == string(optimize.ShortestPathExecutorASPI1DAG) {
 			outcome.Candidate = string(optimize.ShortestPathExecutorASPI1DAG)
-			outcome.EmittedPolicy = "asp-i1-guarded-v1"
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyASPI1GuardedV1
 			outcome.EmittedCandidates = []string{
 				string(optimize.ShortestPathExecutorASPI1DAG),
 				string(optimize.ShortestPathExecutorASPA1DAG),
+			}
+		}
+		if decision.SelectedExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness && applied == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) {
+			outcome.Candidate = string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyI1CanonicalGuardedV1
+			outcome.EmittedCandidates = []string{
+				string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+				string(optimize.ShortestPathExecutorS4CanonicalWitness),
 			}
 		}
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, outcome)

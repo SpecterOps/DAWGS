@@ -1431,6 +1431,13 @@ func TestProductionInlineWitnessExecutorKeepsEdgeIDsAtMaterializationBoundary(t 
 	require.Contains(t, formatted, "shortest_path_compact")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor, optimize.TraversalStepTarget{})
 	require.Equal(t, string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), outcome.Applied)
+	require.Equal(t, string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), outcome.Candidate)
+	require.Equal(t, optimize.ShortestPathPolicyI1CanonicalGuardedV1, outcome.EmittedPolicy)
+	require.Equal(t, []string{
+		string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		string(optimize.ShortestPathExecutorS4CanonicalWitness),
+	}, outcome.EmittedCandidates)
+	require.Equal(t, string(optimize.ShortestPathExecutorS4CanonicalWitness), outcome.Fallback)
 	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
 	require.Equal(t, "production_canary", outcome.SelectionMode)
 }

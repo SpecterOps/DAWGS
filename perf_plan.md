@@ -693,6 +693,31 @@ Why next: forced S3 beat S4 by roughly 9.57x at the median, while canonical I1
 beat S4 by roughly 3.3x. Current production still sends all deep inbound
 witnesses to S4, but this change needs more resource-safety work than P2.
 
+2026-08-13 evidence checkpoint:
+
+- Canonical `SP-I1-C-WE+MAT-M0` evidence now uses the distinct emitted policy
+  identity `sp-i1-canonical-guarded-v1`; it no longer relies on the ASP
+  `asp-i1-guarded-v1` identity to expose the shared inline-predecessor SQL
+  shape. The target outcome records canonical I1 as the exact candidate and
+  `SP-S4-C-WE+MAT-M0` as its exact fallback.
+- Traversal telemetry schema v2 serializes canonical bounded-relation and branch
+  counters under `inline_shortest_path`, separately from ASP I1's `inline_asp`
+  family. Named candidate/fallback markers must attribute exactly one arm, and
+  the unselected output branch must remain at zero rows. Parent-linked plan
+  evidence also requires the selected branch's direct inner executor to run
+  and the unselected executor to remain at zero loops. Candidate execution is
+  reported as `inline_canonical_witness` or `inline_canonical_no_path`; fallback
+  execution is reported as `exact_s4_fallback` with the S4 runtime identity.
+- This closes an evidence-attribution gap only. Canonical I1 remains a
+  default-off exact-query canary, and the automatic production selector remains
+  `sp-static-v5-contained` with its current S3/S4 choices.
+- A non-holdout live PostgreSQL smoke on
+  `GSPV2-NORMAL-hidden-fanin-path` passed resource-gate v4 with complete
+  schema-v2 telemetry: candidate marker/branch/executor `1/1/1`, fallback
+  marker/branch/executor `0/0/0`, 133 bounded-relation states, 132 predecessor
+  entries, 4 enumerated rows, and 961 hydrated output bytes. The observed
+  limits were respectively 100,000, 100,000, 100,000, and 64 MiB.
+
 Implementation sequence:
 
 1. Build a dedicated inbound witness tournament across depths 2/4/8/16/32/64,

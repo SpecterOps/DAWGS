@@ -297,12 +297,13 @@ func traversalSummaryFromOutcome(outcome translate.TargetLoweringOutcome, metric
 		summary.Provenance["fallback_identity"] = "optimizer.target_outcome.fallback"
 	}
 	family := traversalFamilyForIdentity(runtimeIdentity, outcome.Family)
-	if outcome.EmittedPolicy != "" && outcome.EmittedPolicy != "asp-i1-guarded-v1" {
+	if isOrientationProbePolicy(outcome.EmittedPolicy) ||
+		outcome.EmittedPolicy == string(optimize.ExpansionSearchPolicyEndpointGuardV1) {
 		family = TraversalTelemetryFamilyOrientation
 	}
 	if runtimeIdentity == "" {
 		telemetry := TraversalExecutionTelemetry{Summary: summary}
-		markTraversalSummaryUnavailable(&telemetry, "exact executed orientation marker is unavailable")
+		markTraversalSummaryUnavailable(&telemetry, "exact executed traversal marker is unavailable")
 		summary = telemetry.Summary
 	}
 	return summary, family, nil
@@ -373,15 +374,41 @@ func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics P
 	}
 
 	plan := postgresTraversalPlanReplay(metrics)
-	if outcome.EmittedPolicy == "asp-i1-guarded-v1" {
-		candidateRows := plan.Counters["asp_i1_candidate_marker_rows"]
-		fallbackRows := plan.Counters["asp_i1_fallback_marker_rows"]
+	if outcome.EmittedPolicy == optimize.ShortestPathPolicyASPI1GuardedV1 {
+		candidateRows, candidatePresent := plan.Counters["asp_i1_candidate_marker_rows"]
+		fallbackRows, fallbackPresent := plan.Counters["asp_i1_fallback_marker_rows"]
 		overflow = aspI1PlanOverflow(outcome, plan)
+		if !candidatePresent || !fallbackPresent {
+			return "", "runtime_outcome_unavailable", false, overflow
+		}
 		if candidateRows == 1 && fallbackRows == 0 {
 			return string(optimize.ShortestPathExecutorASPI1DAG), "inline_predecessor_dag", false, false
 		}
 		if fallbackRows == 1 && candidateRows == 0 {
 			return string(optimize.ShortestPathExecutorASPA1DAG), "exact_a1_fallback", true, true
+		}
+		return "", "runtime_outcome_unavailable", false, overflow
+	}
+	if outcome.EmittedPolicy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 {
+		candidateRows, candidatePresent := plan.Counters["asp_i1_candidate_marker_rows"]
+		fallbackRows, fallbackPresent := plan.Counters["asp_i1_fallback_marker_rows"]
+		overflow = aspI1PlanOverflow(outcome, plan)
+		if !candidatePresent || !fallbackPresent {
+			return "", "runtime_outcome_unavailable", false, overflow
+		}
+		if candidateRows == 1 && fallbackRows == 0 {
+			outputRows, outputPresent := plan.Counters["asp_i1_output_rows"]
+			if !outputPresent {
+				return "", "runtime_outcome_unavailable", false, false
+			}
+			branch := "inline_canonical_witness"
+			if outputRows == 0 {
+				branch = "inline_canonical_no_path"
+			}
+			return string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), branch, false, false
+		}
+		if fallbackRows == 1 && candidateRows == 0 {
+			return string(optimize.ShortestPathExecutorS4CanonicalWitness), "exact_s4_fallback", true, true
 		}
 		return "", "runtime_outcome_unavailable", false, overflow
 	}
@@ -643,33 +670,22 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 	addFlag("state_guard_overflow", metrics.StateGuardOverflow, "reverse_state_probe_rows")
 	addFlag("fallback_executed", metrics.ExpansionFallbackExecuted, "expansion_fallback_executed")
 
+	inlineCTECounters := map[string]string{
+		"asp_i1_distance_bounded":    "asp_i1_distance_rows",
+		"asp_i1_predecessor_bounded": "asp_i1_predecessor_rows",
+		"asp_i1_paths_bounded":       "asp_i1_enumeration_rows",
+		"asp_i1_shortest":            "asp_i1_output_rows",
+		"asp_i1_candidate_marker":    "asp_i1_candidate_marker_rows",
+		"asp_i1_fallback_marker":     "asp_i1_fallback_marker_rows",
+		"asp_i1_candidate_rows":      "asp_i1_candidate_branch_rows",
+		"asp_i1_fallback_rows":       "asp_i1_fallback_branch_rows",
+	}
+	inlineCTEBodies := map[string][]PostgresPlanNodeMetric{}
 	for _, node := range metrics.PlanNodes {
-		identity := strings.ToLower(strings.Join([]string{node.CTEName, node.Alias, node.SubplanName}, " "))
 		rows := node.ActualRows * node.ActualLoops
-		for suffix, name := range map[string]string{
-			"asp_i1_distance_bounded":    "asp_i1_distance_rows",
-			"asp_i1_predecessor_bounded": "asp_i1_predecessor_rows",
-			"asp_i1_paths_bounded":       "asp_i1_enumeration_rows",
-			"asp_i1_shortest":            "asp_i1_output_rows",
-			"asp_i1_candidate_marker":    "asp_i1_candidate_marker_rows",
-			"asp_i1_fallback_marker":     "asp_i1_fallback_marker_rows",
-		} {
-			if strings.Contains(identity, suffix) {
-				if current, present := replay.Counters[name]; !present || rows > current {
-					replay.Counters[name] = rows
-				}
-				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
-			}
-		}
-		for suffix, name := range map[string]string{
-			"asp_i1_candidate_rows": "asp_i1_candidate_branch_rows",
-			"asp_i1_fallback_rows":  "asp_i1_fallback_branch_rows",
-		} {
-			if strings.Contains(identity, suffix) {
-				if current, present := replay.Counters[name]; !present || rows > current {
-					replay.Counters[name] = rows
-				}
-				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
+		for cteName := range inlineCTECounters {
+			if inlinePredecessorCTEBody(node, cteName) {
+				inlineCTEBodies[cteName] = append(inlineCTEBodies[cteName], node)
 			}
 		}
 		for suffix, name := range map[string]string{
@@ -731,6 +747,56 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			replay.Provenance["counters.function_scan_loops"] = "postgres_metrics.plan_nodes.function_scan_actual_loops"
 		}
 	}
+	for cteName, counterName := range inlineCTECounters {
+		bodies := inlineCTEBodies[cteName]
+		if len(bodies) != 1 {
+			continue
+		}
+		body := bodies[0]
+		replay.Counters[counterName] = body.ActualRows * body.ActualLoops
+		replay.Provenance["counters."+counterName] = "postgres_metrics.plan_nodes.exact_cte_materialization_body"
+
+		branch := ""
+		markerCTE := ""
+		switch cteName {
+		case "asp_i1_candidate_rows":
+			branch, markerCTE = "candidate", "asp_i1_candidate_marker"
+		case "asp_i1_fallback_rows":
+			branch, markerCTE = "fallback", "asp_i1_fallback_marker"
+		default:
+			continue
+		}
+		if body.PlanNodeID <= 0 {
+			continue
+		}
+		var directChildren, directOuterMarkers, directInnerExecutors []PostgresPlanNodeMetric
+		for _, node := range metrics.PlanNodes {
+			if node.ParentPlanNodeID != body.PlanNodeID {
+				continue
+			}
+			directChildren = append(directChildren, node)
+			switch {
+			case strings.EqualFold(strings.TrimSpace(node.ParentRelationship), "Outer") &&
+				strings.EqualFold(strings.TrimSpace(node.NodeType), "CTE Scan") &&
+				strings.EqualFold(strings.TrimSpace(node.CTEName), markerCTE):
+				directOuterMarkers = append(directOuterMarkers, node)
+			case strings.EqualFold(strings.TrimSpace(node.ParentRelationship), "Inner"):
+				directInnerExecutors = append(directInnerExecutors, node)
+			}
+		}
+		markerBodies := inlineCTEBodies[markerCTE]
+		if len(directChildren) != 2 || len(directOuterMarkers) != 1 || len(directInnerExecutors) != 1 || len(markerBodies) != 1 {
+			continue
+		}
+		markerRows := markerBodies[0].ActualRows * markerBodies[0].ActualLoops
+		outerMarkerRows := directOuterMarkers[0].ActualRows * directOuterMarkers[0].ActualLoops
+		if directOuterMarkers[0].ActualLoops != 1 || outerMarkerRows != markerRows {
+			continue
+		}
+		name := "asp_i1_" + branch + "_executor_loops"
+		replay.Counters[name] = directInnerExecutors[0].ActualLoops
+		replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.marker_gated_direct_inner_child_actual_loops"
+	}
 	return replay
 }
 
@@ -739,8 +805,20 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 // such as reverse_degree_probe contain shorter branch names, so substring
 // attribution would over-count probes and invent work in inactive arms.
 func orientationCTEBody(node PostgresPlanNodeMetric, suffix string) bool {
+	return namedCTEBody(node, suffix)
+}
+
+// namedCTEBody matches a PostgreSQL CTE's single materialization body. CTEName
+// and Alias identify consumer scans and are intentionally excluded.
+func namedCTEBody(node PostgresPlanNodeMetric, suffix string) bool {
 	name := strings.ToLower(strings.TrimSpace(node.SubplanName))
 	return strings.HasPrefix(name, "cte ") && strings.HasSuffix(name, suffix)
+}
+
+// inlinePredecessorCTEBody uses an exact fixed name because its qualification
+// contract is tied to one emitted statement shape, not stage-prefixed CTEs.
+func inlinePredecessorCTEBody(node PostgresPlanNodeMetric, name string) bool {
+	return strings.EqualFold(strings.TrimSpace(node.SubplanName), "CTE "+name)
 }
 
 // postgresBidirectionalDiagnosticDocument is the invocation-local document
@@ -906,7 +984,7 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 					record.ObservedRows,
 					orientationPolicyMaximumDepth(*record.Optimization, telemetry.Summary.EmittedIdentity),
 				)
-				enrichInlineASPTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount, record.ObservedRows)
+				enrichInlinePredecessorTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount, record.ObservedRows)
 				if err := s.enrichBidirectionalTraversalTelemetry(ctx, telemetry, record.SQL, parameters, record.RowCount, record.ObservedRows, *record.PostgresMetrics); err != nil {
 					return fmt.Errorf("capture PostgreSQL case traversal telemetry: %w", err)
 				}
@@ -940,11 +1018,46 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 // to its dedicated bounded-work contract. Public observation bytes are a
 // conservative ceiling for the staged edge-array bytes used by admission.
 func enrichInlineASPTraversalTelemetry(telemetry *TraversalExecutionTelemetry, metrics PostgresPlanMetrics, outputRows int64, observedRows []string) {
-	if telemetry == nil || telemetry.Diagnostic == nil || telemetry.Summary.EmittedIdentity != "asp-i1-guarded-v1" {
+	enrichInlinePredecessorTraversalTelemetry(telemetry, metrics, outputRows, observedRows)
+}
+
+// enrichInlinePredecessorTraversalTelemetry maps the shared guarded I1
+// statement's named CTEs to either the all-paths or canonical one-path counter
+// family. The separate serialized fields prevent evidence from one public
+// observation contract from satisfying the other.
+func enrichInlinePredecessorTraversalTelemetry(telemetry *TraversalExecutionTelemetry, metrics PostgresPlanMetrics, outputRows int64, observedRows []string) {
+	if telemetry == nil || telemetry.Diagnostic == nil ||
+		(telemetry.Summary.EmittedIdentity != optimize.ShortestPathPolicyASPI1GuardedV1 &&
+			telemetry.Summary.EmittedIdentity != optimize.ShortestPathPolicyI1CanonicalGuardedV1) {
 		return
 	}
 	plan := telemetry.Diagnostic.PlanReplay
 	if plan == nil {
+		return
+	}
+	requiredPlanCounters := []string{
+		"asp_i1_distance_rows",
+		"asp_i1_predecessor_rows",
+		"asp_i1_enumeration_rows",
+		"asp_i1_output_rows",
+		"asp_i1_candidate_marker_rows",
+		"asp_i1_fallback_marker_rows",
+		"asp_i1_candidate_branch_rows",
+		"asp_i1_fallback_branch_rows",
+		"asp_i1_candidate_executor_loops",
+		"asp_i1_fallback_executor_loops",
+	}
+	var missingPlanCounters []string
+	for _, name := range requiredPlanCounters {
+		if _, present := plan.Counters[name]; !present {
+			missingPlanCounters = append(missingPlanCounters, name)
+		}
+	}
+	if len(missingPlanCounters) > 0 {
+		markTraversalCountersUnavailable(
+			telemetry.Diagnostic,
+			"inline predecessor plan replay is missing exact named counters: "+strings.Join(missingPlanCounters, ", "),
+		)
 		return
 	}
 	get := func(name string) int64 { return plan.Counters[name] }
@@ -952,29 +1065,38 @@ func enrichInlineASPTraversalTelemetry(telemetry *TraversalExecutionTelemetry, m
 	for _, row := range observedRows {
 		outputBytes += int64(len(row))
 	}
-	inline := &InlineASPTraversalCounters{
-		DistanceRows:        traversalTelemetryPointer(get("asp_i1_distance_rows")),
-		PredecessorRows:     traversalTelemetryPointer(get("asp_i1_predecessor_rows")),
-		EnumerationRows:     traversalTelemetryPointer(get("asp_i1_enumeration_rows")),
-		OutputPaths:         traversalTelemetryPointer(outputRows),
-		OutputBytes:         traversalTelemetryPointer(outputBytes),
-		CandidateMarkerRows: traversalTelemetryPointer(get("asp_i1_candidate_marker_rows")),
-		FallbackMarkerRows:  traversalTelemetryPointer(get("asp_i1_fallback_marker_rows")),
-		CandidateBranchRows: traversalTelemetryPointer(get("asp_i1_candidate_branch_rows")),
-		FallbackBranchRows:  traversalTelemetryPointer(get("asp_i1_fallback_branch_rows")),
+	inline := &InlinePredecessorTraversalCounters{
+		DistanceRows:           traversalTelemetryPointer(get("asp_i1_distance_rows")),
+		PredecessorRows:        traversalTelemetryPointer(get("asp_i1_predecessor_rows")),
+		EnumerationRows:        traversalTelemetryPointer(get("asp_i1_enumeration_rows")),
+		OutputPaths:            traversalTelemetryPointer(outputRows),
+		OutputBytes:            traversalTelemetryPointer(outputBytes),
+		CandidateMarkerRows:    traversalTelemetryPointer(get("asp_i1_candidate_marker_rows")),
+		FallbackMarkerRows:     traversalTelemetryPointer(get("asp_i1_fallback_marker_rows")),
+		CandidateBranchRows:    traversalTelemetryPointer(get("asp_i1_candidate_branch_rows")),
+		FallbackBranchRows:     traversalTelemetryPointer(get("asp_i1_fallback_branch_rows")),
+		CandidateExecutorLoops: traversalTelemetryPointer(get("asp_i1_candidate_executor_loops")),
+		FallbackExecutorLoops:  traversalTelemetryPointer(get("asp_i1_fallback_executor_loops")),
 	}
-	telemetry.Diagnostic.Counters.InlineASP = inline
+	prefix := "inline_asp"
+	if telemetry.Summary.EmittedIdentity == optimize.ShortestPathPolicyI1CanonicalGuardedV1 {
+		prefix = "inline_shortest_path"
+		telemetry.Diagnostic.Counters.InlineShortestPath = inline
+	} else {
+		telemetry.Diagnostic.Counters.InlineASP = inline
+	}
 	if telemetry.Diagnostic.Provenance == nil {
 		telemetry.Diagnostic.Provenance = map[string]string{}
 	}
 	for _, name := range []string{
 		"distance_rows", "predecessor_rows", "enumeration_rows", "candidate_marker_rows",
 		"fallback_marker_rows", "candidate_branch_rows", "fallback_branch_rows",
+		"candidate_executor_loops", "fallback_executor_loops",
 	} {
-		telemetry.Diagnostic.Provenance["inline_asp."+name] = "untimed_timing_on_plan.asp_i1_named_ctes"
+		telemetry.Diagnostic.Provenance[prefix+"."+name] = "untimed_timing_on_plan.inline_predecessor_named_ctes"
 	}
-	telemetry.Diagnostic.Provenance["inline_asp.output_paths"] = "exact_public_observation.row_count"
-	telemetry.Diagnostic.Provenance["inline_asp.output_bytes"] = "exact_public_observation.conservative_serialized_bytes"
+	telemetry.Diagnostic.Provenance[prefix+".output_paths"] = "exact_public_observation.row_count"
+	telemetry.Diagnostic.Provenance[prefix+".output_bytes"] = "exact_public_observation.conservative_serialized_bytes"
 
 	if slices.Contains(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyHydration) {
 		telemetry.Diagnostic.Counters.Hydration = &TraversalHydrationCounters{

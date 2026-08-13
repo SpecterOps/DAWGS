@@ -158,6 +158,14 @@ type ShortestPathStrategyDecision struct {
 type ShortestPathExecutor string
 
 const (
+	// ShortestPathPolicyASPI1GuardedV1 identifies the bounded inline
+	// predecessor-DAG candidate with an exact A1 fallback.
+	ShortestPathPolicyASPI1GuardedV1 = "asp-i1-guarded-v1"
+
+	// ShortestPathPolicyI1CanonicalGuardedV1 identifies the bounded inline
+	// canonical-witness candidate with an exact compact S4 fallback.
+	ShortestPathPolicyI1CanonicalGuardedV1 = "sp-i1-canonical-guarded-v1"
+
 	// ShortestPathExecutorIncumbentWorkspace selects the existing workspace-table executor.
 	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "SP-S0"
 

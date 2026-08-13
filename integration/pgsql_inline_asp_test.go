@@ -299,6 +299,48 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 			t.Fatalf("canonical fallback receipt does not contain the complete event chain: %s", receipt)
 		}
 	})
+
+	t.Run("canonical driver policy requires stable snapshot and rolls back immediately", func(t *testing.T) {
+		const shortestCypher = `MATCH p = shortestPath((s)<-[:InlineASPEdgeOne*1..4]-(e))
+			WHERE id(s) = $start_id AND id(e) = $end_id RETURN p`
+		parameters := map[string]any{"start_id": int64(deepEndID), "end_id": int64(deepStartID)}
+		policy := inlineCanonicalSPTraversalPolicy(t, shortestCypher)
+		if err := pgDriver.SetTraversalPolicy(policy); err != nil {
+			t.Fatalf("set canonical SP policy: %v", err)
+		}
+		t.Cleanup(func() { _ = pgDriver.SetTraversalPolicy(pg.TraversalPolicy{}) })
+
+		incumbentRows, incumbentReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
+			"sp-i1-policy-read-committed", optimize.ShortestPathExecutorS4CanonicalWitness)
+		if len(incumbentRows) != 1 || !containsAll(incumbentReceipt, "SP-S4-C-WE+MAT-M0", "compact_workspace_witness") ||
+			strings.Contains(incumbentReceipt, "SP-I1-C-WE+MAT-M0") {
+			t.Fatalf("read-committed policy did not preserve the S4 incumbent: rows=%v receipt=%s", incumbentRows, incumbentReceipt)
+		}
+
+		// Exercise admission on a fresh connection so all session-local fallback
+		// workspace is initialized before the stable-snapshot transaction begins.
+		session.PGPool.Reset()
+		candidateRows, candidateReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
+			"sp-i1-policy-repeatable", optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+			pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+		if fmt.Sprint(incumbentRows) != fmt.Sprint(candidateRows) ||
+			!containsAll(candidateReceipt, "SP-I1-C-WE+MAT-M0", "inline_canonical_witness") ||
+			strings.Contains(candidateReceipt, "SP-S4-C-WE+MAT-M0") {
+			t.Fatalf("repeatable-read policy did not execute canonical I1: rows=%v receipt=%s", candidateRows, candidateReceipt)
+		}
+
+		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{Generation: policy.Generation + 1, DisableInlineSPWitness: true}); err != nil {
+			t.Fatalf("activate canonical SP rollback: %v", err)
+		}
+		rollbackRows, rollbackReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
+			"sp-i1-policy-rollback", optimize.ShortestPathExecutorS4CanonicalWitness,
+			pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+		if fmt.Sprint(incumbentRows) != fmt.Sprint(rollbackRows) ||
+			!containsAll(rollbackReceipt, "SP-S4-C-WE+MAT-M0", "compact_workspace_witness") ||
+			strings.Contains(rollbackReceipt, "SP-I1-C-WE+MAT-M0") {
+			t.Fatalf("canonical SP rollback did not immediately restore S4: rows=%v receipt=%s", rollbackRows, rollbackReceipt)
+		}
+	})
 }
 
 func inlineASPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
@@ -328,6 +370,36 @@ func inlineASPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
 	return pg.TraversalPolicy{
 		Generation: 1, PromotionManifestSHA256: hex.EncodeToString(digest[:]), PromotionManifestJSON: raw,
 		QuerySHA256Allowlist: []string{queryDigest}, ShortestPathExecutor: optimize.ShortestPathExecutorASPI1DAG,
+	}
+}
+
+func inlineCanonicalSPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
+	t.Helper()
+	queryDigest := pg.TraversalPolicyQuerySHA256(query)
+	evidence := map[string]map[string]string{}
+	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
+		evidence[role] = map[string]string{"sha256": strings.Repeat("01", sha256.Size)}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version": 2, "candidate": string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), "selector_version": "sp-i1-canonical-driver-integration-v1",
+		"source_commit": "integration", "source_sha256": strings.Repeat("0", 64),
+		"binary_sha256": strings.Repeat("0", 64), "corpus_sha256": strings.Repeat("0", 64),
+		"execution_boundary": "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		"caps": map[string]int64{"state_limit": 1000, "predecessor_limit": 1000, "enumeration_limit": 1000, "output_bytes_limit": 1 << 20},
+		"buckets": []map[string]any{{
+			"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"},
+			"direction": "inbound", "observation_mode": "one_path", "minimum_depth": 1, "maximum_depth": 4,
+			"relationship_kind_count": 1, "untyped_relationship": false,
+		}},
+		"evidence": evidence,
+	})
+	if err != nil {
+		t.Fatalf("encode canonical SP policy: %v", err)
+	}
+	digest := sha256.Sum256(raw)
+	return pg.TraversalPolicy{
+		Generation: 2, PromotionManifestSHA256: hex.EncodeToString(digest[:]), PromotionManifestJSON: raw,
+		QuerySHA256Allowlist: []string{queryDigest}, ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 	}
 }
 

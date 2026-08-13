@@ -36,7 +36,7 @@ func parsePostgresPlanJSONMetrics(raw json.RawMessage) (PostgresPlanMetrics, err
 	if !ok {
 		return PostgresPlanMetrics{}, fmt.Errorf("PostgreSQL JSON plan is missing its root Plan object")
 	}
-	walkPostgresPlanNode(plan, &metrics)
+	walkPostgresPlanNode(plan, &metrics, 0)
 	if len(metrics.PlanNodes) > 0 {
 		metrics.Buffers = metrics.PlanNodes[0].Buffers
 		metrics.Provenance["buffers"] = "measured_plan_json_root_inclusive"
@@ -45,8 +45,12 @@ func parsePostgresPlanJSONMetrics(raw json.RawMessage) (PostgresPlanMetrics, err
 }
 
 // walkPostgresPlanNode flattens one EXPLAIN node into aggregate metrics, then recursively visits child plans and CTE subplans.
-func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
+
+func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics, parentPlanNodeID int64) {
+	planNodeID := int64(len(metrics.PlanNodes) + 1)
 	metric := PostgresPlanNodeMetric{
+		PlanNodeID:          planNodeID,
+		ParentPlanNodeID:    parentPlanNodeID,
 		NodeType:            jsonString(node["Node Type"]),
 		ParentRelationship:  jsonString(node["Parent Relationship"]),
 		CTEName:             jsonString(node["CTE Name"]),
@@ -133,7 +137,7 @@ func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 	children, _ := node["Plans"].([]any)
 	for _, child := range children {
 		if childNode, ok := child.(map[string]any); ok {
-			walkPostgresPlanNode(childNode, metrics)
+			walkPostgresPlanNode(childNode, metrics, planNodeID)
 		}
 	}
 }

@@ -24,7 +24,7 @@ import (
 
 const (
 	// TraversalExecutionTelemetrySchemaVersion is the current serialized telemetry schema revision.
-	TraversalExecutionTelemetrySchemaVersion = 1
+	TraversalExecutionTelemetrySchemaVersion = 2
 
 	// TraversalTelemetryLevelSummary records only the production execution identity and outcome.
 	TraversalTelemetryLevelSummary TraversalTelemetryLevel = "summary"
@@ -136,28 +136,37 @@ type TraversalPlanReplayEvidence struct {
 
 // TraversalDiagnosticCounters groups independent runtime counter families.
 type TraversalDiagnosticCounters struct {
-	Ordinary         *OrdinaryTraversalCounters         `json:"ordinary,omitempty"`
-	Orientation      *OrientationTraversalCounters      `json:"orientation,omitempty"`
-	ShortestPath     *ShortestPathTraversalCounters     `json:"shortest_path,omitempty"`
-	AllShortestPaths *AllShortestPathsTraversalCounters `json:"all_shortest_paths,omitempty"`
-	InlineASP        *InlineASPTraversalCounters        `json:"inline_asp,omitempty"`
-	Hydration        *TraversalHydrationCounters        `json:"hydration,omitempty"`
-	Workspace        *TraversalWorkspaceCounters        `json:"workspace,omitempty"`
+	Ordinary           *OrdinaryTraversalCounters          `json:"ordinary,omitempty"`
+	Orientation        *OrientationTraversalCounters       `json:"orientation,omitempty"`
+	ShortestPath       *ShortestPathTraversalCounters      `json:"shortest_path,omitempty"`
+	AllShortestPaths   *AllShortestPathsTraversalCounters  `json:"all_shortest_paths,omitempty"`
+	InlineASP          *InlinePredecessorTraversalCounters `json:"inline_asp,omitempty"`
+	InlineShortestPath *InlinePredecessorTraversalCounters `json:"inline_shortest_path,omitempty"`
+	Hydration          *TraversalHydrationCounters         `json:"hydration,omitempty"`
+	Workspace          *TraversalWorkspaceCounters         `json:"workspace,omitempty"`
 }
 
-// InlineASPTraversalCounters records the complete set of bounded relations
-// and complementary branch markers exposed by the guarded I1 statement.
-type InlineASPTraversalCounters struct {
-	DistanceRows        *int64 `json:"distance_rows"`
-	PredecessorRows     *int64 `json:"predecessor_rows"`
-	EnumerationRows     *int64 `json:"enumeration_rows"`
-	OutputPaths         *int64 `json:"output_paths"`
-	OutputBytes         *int64 `json:"output_bytes"`
-	CandidateMarkerRows *int64 `json:"candidate_marker_rows"`
-	FallbackMarkerRows  *int64 `json:"fallback_marker_rows"`
-	CandidateBranchRows *int64 `json:"candidate_branch_rows"`
-	FallbackBranchRows  *int64 `json:"fallback_branch_rows"`
+// InlinePredecessorTraversalCounters records the complete set of bounded
+// relations and complementary branch markers exposed by an inline I1
+// predecessor statement. ASP and canonical one-witness policies serialize
+// into separate fields so their resource evidence cannot be interchanged.
+type InlinePredecessorTraversalCounters struct {
+	DistanceRows           *int64 `json:"distance_rows"`
+	PredecessorRows        *int64 `json:"predecessor_rows"`
+	EnumerationRows        *int64 `json:"enumeration_rows"`
+	OutputPaths            *int64 `json:"output_paths"`
+	OutputBytes            *int64 `json:"output_bytes"`
+	CandidateMarkerRows    *int64 `json:"candidate_marker_rows"`
+	FallbackMarkerRows     *int64 `json:"fallback_marker_rows"`
+	CandidateBranchRows    *int64 `json:"candidate_branch_rows"`
+	FallbackBranchRows     *int64 `json:"fallback_branch_rows"`
+	CandidateExecutorLoops *int64 `json:"candidate_executor_loops"`
+	FallbackExecutorLoops  *int64 `json:"fallback_executor_loops"`
 }
+
+// InlineASPTraversalCounters preserves the source-level name used by existing
+// ASP telemetry producers while sharing the exact bounded-relation schema.
+type InlineASPTraversalCounters = InlinePredecessorTraversalCounters
 
 // OrdinaryTraversalCounters records DFS or recursive-CTE discovery work.
 type OrdinaryTraversalCounters struct {
@@ -440,10 +449,14 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 		case TraversalTelemetryFamilyOrientation:
 			validateOrientationCounters(diagnostic.Counters.Orientation, diagnostic.Provenance, problems)
 		case TraversalTelemetryFamilySP:
-			validateShortestPathCounters("shortest_path", diagnostic.Counters.ShortestPath, diagnostic.Provenance, problems)
+			if diagnostic.Counters.InlineShortestPath != nil {
+				validateInlinePredecessorCounters("inline_shortest_path", diagnostic.Counters.InlineShortestPath, diagnostic.Provenance, problems)
+			} else {
+				validateShortestPathCounters("shortest_path", diagnostic.Counters.ShortestPath, diagnostic.Provenance, problems)
+			}
 		case TraversalTelemetryFamilyASP:
 			if diagnostic.Counters.InlineASP != nil {
-				validateInlineASPCounters(diagnostic.Counters.InlineASP, diagnostic.Provenance, problems)
+				validateInlinePredecessorCounters("inline_asp", diagnostic.Counters.InlineASP, diagnostic.Provenance, problems)
 			} else {
 				validateAllShortestPathsCounters(diagnostic.Counters.AllShortestPaths, diagnostic.Provenance, problems)
 			}
@@ -463,7 +476,7 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 	for family, present := range map[TraversalTelemetryFamily]bool{
 		TraversalTelemetryFamilyOrdinary:    diagnostic.Counters.Ordinary != nil,
 		TraversalTelemetryFamilyOrientation: diagnostic.Counters.Orientation != nil,
-		TraversalTelemetryFamilySP:          diagnostic.Counters.ShortestPath != nil,
+		TraversalTelemetryFamilySP:          diagnostic.Counters.ShortestPath != nil || diagnostic.Counters.InlineShortestPath != nil,
 		TraversalTelemetryFamilyASP:         diagnostic.Counters.AllShortestPaths != nil || diagnostic.Counters.InlineASP != nil,
 		TraversalTelemetryFamilyHydration:   diagnostic.Counters.Hydration != nil,
 		TraversalTelemetryFamilyWorkspace:   diagnostic.Counters.Workspace != nil,
@@ -474,17 +487,18 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 	}
 }
 
-func validateInlineASPCounters(counters *InlineASPTraversalCounters, provenance map[string]string, problems *[]string) {
+func validateInlinePredecessorCounters(prefix string, counters *InlinePredecessorTraversalCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
-		*problems = append(*problems, "diagnostic.counters.inline_asp is missing")
+		*problems = append(*problems, "diagnostic.counters."+prefix+" is missing")
 		return
 	}
-	requireCounters("inline_asp", provenance, problems, map[string]*int64{
+	requireCounters(prefix, provenance, problems, map[string]*int64{
 		"distance_rows": counters.DistanceRows, "predecessor_rows": counters.PredecessorRows,
 		"enumeration_rows": counters.EnumerationRows, "output_paths": counters.OutputPaths,
 		"output_bytes": counters.OutputBytes, "candidate_marker_rows": counters.CandidateMarkerRows,
 		"fallback_marker_rows": counters.FallbackMarkerRows, "candidate_branch_rows": counters.CandidateBranchRows,
-		"fallback_branch_rows": counters.FallbackBranchRows,
+		"fallback_branch_rows": counters.FallbackBranchRows, "candidate_executor_loops": counters.CandidateExecutorLoops,
+		"fallback_executor_loops": counters.FallbackExecutorLoops,
 	})
 }
 
