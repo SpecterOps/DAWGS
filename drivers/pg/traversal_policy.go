@@ -239,12 +239,13 @@ func (s TraversalPolicy) validate() error {
 		if manifest.FallbackExecutor != string(optimize.ShortestPathExecutorS4CanonicalWitness) {
 			return fmt.Errorf("SP-I1 canonical promotion manifest requires fallback %q", optimize.ShortestPathExecutorS4CanonicalWitness)
 		}
+		if manifest.SelectorVersion != optimize.ShortestPathSelectorStaticV6 {
+			return fmt.Errorf("SP-I1 canonical promotion manifest requires selector %q", optimize.ShortestPathSelectorStaticV6)
+		}
 		for _, bucket := range manifest.Buckets {
-			if (bucket.Direction != "outbound" && bucket.Direction != "inbound") || bucket.ObservationMode != "one_path" || bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 || bucket.RelationshipKindCount < 0 {
-				return fmt.Errorf("SP-I1 canonical promotion bucket does not match the supported directed one-path depth envelope")
-			}
-			if bucket.UntypedRelationship != (bucket.RelationshipKindCount == 0) {
-				return fmt.Errorf("SP-I1 canonical promotion bucket relationship kind metadata is inconsistent")
+			if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationOnePath) ||
+				bucket.MinimumDepth != 1 || bucket.MaximumDepth != 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
+				return fmt.Errorf("SP-I1 canonical promotion bucket must match the qualified inbound typed single-kind one-path depth 1..64 envelope")
 			}
 		}
 	}

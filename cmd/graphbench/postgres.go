@@ -129,6 +129,9 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	if expectedFallback == "" || manifest.FallbackExecutor != expectedFallback {
 		return fmt.Errorf("unsupported candidate/fallback pair %s -> %s", manifest.Candidate, manifest.FallbackExecutor)
 	}
+	if manifest.Candidate == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) && manifest.SelectorVersion != optimize.ShortestPathSelectorStaticV6 {
+		return fmt.Errorf("canonical SP-I1 provisional manifest requires selector %q", optimize.ShortestPathSelectorStaticV6)
+	}
 	if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
 		expectedCaps := orientationPromotionCaps()
 		if len(manifest.Caps) != len(expectedCaps) {
@@ -154,6 +157,11 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	for _, bucket := range manifest.Buckets {
 		if len(bucket.QuerySHA256) == 0 {
 			return fmt.Errorf("production bucket %q has no exact query cohort", bucket.Name)
+		}
+		if manifest.Candidate == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) {
+			if err := validateStaticV6CanonicalInboundBucket(bucket); err != nil {
+				return err
+			}
 		}
 		for _, digest := range bucket.QuerySHA256 {
 			if !isLowerHexSHA256(digest) {

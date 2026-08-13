@@ -1524,6 +1524,16 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 			if options.AuthorizedBucket == nil {
 				return fmt.Errorf("guarded inline shortest-path production policy requires an exact authorized bucket")
 			}
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+				bucket := options.AuthorizedBucket
+				if options.SelectorVersion != optimize.ShortestPathSelectorStaticV6 {
+					return fmt.Errorf("canonical SP-I1 production policy requires selector %q", optimize.ShortestPathSelectorStaticV6)
+				}
+				if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationOnePath) ||
+					bucket.MinimumDepth != 1 || bucket.MaximumDepth != 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
+					return fmt.Errorf("canonical SP-I1 production policy requires the qualified inbound typed single-kind one-path depth 1..64 bucket")
+				}
+			}
 			if options.ShortestPathCaps == nil {
 				return fmt.Errorf("guarded inline shortest-path production policy requires immutable caps")
 			}

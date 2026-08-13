@@ -22,6 +22,7 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 		evidence[role] = map[string]string{"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 	}
 	boundary := map[bool]string{true: "guarded_dual_arm", false: "inline_statement"}[orientation]
+	selectorVersion := "test-selector-v1"
 	caps := map[string]int64{"state_limit": 1000}
 	bucket := map[string]any{"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"}}
 	fallback := ""
@@ -48,20 +49,21 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 		bucket["untyped_relationship"] = false
 	}
 	if executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+		selectorVersion = optimize.ShortestPathSelectorStaticV6
 		boundary = "guarded_dual_arm"
 		caps = map[string]int64{
 			"state_limit": 1000, "predecessor_limit": 900, "enumeration_limit": 800, "output_bytes_limit": 70000,
 		}
 		fallback = string(optimize.ShortestPathExecutorS4CanonicalWitness)
-		bucket["direction"] = "outbound"
+		bucket["direction"] = "inbound"
 		bucket["observation_mode"] = "one_path"
 		bucket["minimum_depth"] = 1
-		bucket["maximum_depth"] = 4
+		bucket["maximum_depth"] = 64
 		bucket["relationship_kind_count"] = 1
 		bucket["untyped_relationship"] = false
 	}
 	raw, err := json.Marshal(map[string]any{
-		"version": 2, "candidate": candidate, "selector_version": "test-selector-v1",
+		"version": 2, "candidate": candidate, "selector_version": selectorVersion,
 		"source_commit": "deadbeef", "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"binary_sha256":      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"corpus_sha256":      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -126,7 +128,7 @@ func TestTraversalPolicyInlineASPKillSwitchRequiresNoEvidence(t *testing.T) {
 
 func TestTraversalPolicyIsAllowlistedSnapshotSafeAndImmediatelyReversible(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
-	query := "MATCH p = shortestPath((s)-[*1..4]->(e)) RETURN p"
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
 	policy := testTraversalPolicy(query, optimize.ShortestPathExecutorI1CanonicalPredecessorWitness, false)
 	require.NoError(t, driver.SetTraversalPolicy(policy))
 
@@ -164,6 +166,49 @@ func TestTraversalPolicyFailsClosed(t *testing.T) {
 		optimize.ShortestPathExecutorI1CanonicalDistance,
 		false,
 	)), "not production-canary eligible")
+}
+
+func TestTraversalPolicyCanonicalSPRequiresExactStaticV6Envelope(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
+	valid := testTraversalPolicy(query, optimize.ShortestPathExecutorI1CanonicalPredecessorWitness, false)
+	require.NoError(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(valid))
+
+	tests := map[string]struct {
+		mutate        func(*traversalPromotionManifest)
+		errorContains string
+	}{
+		"selector": {
+			mutate:        func(manifest *traversalPromotionManifest) { manifest.SelectorVersion = "sp-static-v5-contained" },
+			errorContains: `requires selector "sp-static-v6"`,
+		},
+		"outbound": {
+			mutate:        func(manifest *traversalPromotionManifest) { manifest.Buckets[0].Direction = "outbound" },
+			errorContains: "qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+		"shallower maximum": {
+			mutate:        func(manifest *traversalPromotionManifest) { manifest.Buckets[0].MaximumDepth = 63 },
+			errorContains: "qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+		"multiple kinds": {
+			mutate:        func(manifest *traversalPromotionManifest) { manifest.Buckets[0].RelationshipKindCount = 2 },
+			errorContains: "qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+		"untyped": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Buckets[0].RelationshipKindCount = 0
+				manifest.Buckets[0].UntypedRelationship = true
+			},
+			errorContains: "qualified inbound typed single-kind one-path depth 1..64 envelope",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			policy := rewriteTestTraversalPolicyManifest(t, valid, test.mutate)
+			driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+			require.ErrorContains(t, driver.SetTraversalPolicy(policy), test.errorContains)
+		})
+	}
 }
 
 func TestTraversalPolicyQuerySHA256PreservesSemanticWhitespace(t *testing.T) {

@@ -516,7 +516,7 @@ func TestForcedExpansionSearchRequiresExactlyOneEligibleTarget(t *testing.T) {
 // TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied verifies automatic scalar-distance selection and matching diagnostics.
 func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
-		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		MATCH p = shortestPath((s)-[:MemberOf*1..64]->(e))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN length(p)
 	`)
@@ -763,7 +763,7 @@ func TestForcedCompactBidirectionalExecutorsUseTypedKernels(t *testing.T) {
 // distinguishable from tool forcing.
 func TestProductionCanaryShortestExecutorUsesVersionedSelectionMetadata(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = shortestPath((s)-[:MemberOf*1..4]->(e))
+		MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN p
 	`)
@@ -772,18 +772,60 @@ func TestProductionCanaryShortestExecutorUsesVersionedSelectionMetadata(t *testi
 		"start_id": int64(1), "end_id": int64(2),
 	}, DefaultGraphID, ProductionOptions{
 		ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
-		SelectorVersion:      "traversal-production-g7",
+		SelectorVersion:      optimize.ShortestPathSelectorStaticV6,
 		ShortestPathCaps: &ProductionShortestPathCaps{
 			StateLimit: 1000, PredecessorLimit: 1000, EnumerationLimit: 1000, OutputBytesLimit: 1 << 20,
 		},
-		AuthorizedBucket: &ProductionTraversalBucket{Direction: "outbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 4, RelationshipKindCount: 1},
+		AuthorizedBucket: &ProductionTraversalBucket{Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1},
 	})
 	require.NoError(t, err)
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
 	require.Equal(t, "production_canary", outcome.SelectionMode)
-	require.Equal(t, "traversal-production-g7", outcome.SelectorVersion)
+	require.Equal(t, optimize.ShortestPathSelectorStaticV6, outcome.SelectorVersion)
 	require.Equal(t, string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), outcome.Applied)
+}
+
+func TestProductionCanonicalSPRequiresExactStaticV6Envelope(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+	base := ProductionOptions{
+		ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+		SelectorVersion:      optimize.ShortestPathSelectorStaticV6,
+		ShortestPathCaps: &ProductionShortestPathCaps{
+			StateLimit: 1000, PredecessorLimit: 1000, EnumerationLimit: 1000, OutputBytesLimit: 1 << 20,
+		},
+		AuthorizedBucket: &ProductionTraversalBucket{
+			Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1,
+		},
+	}
+
+	tests := map[string]func(*ProductionOptions){
+		"selector": func(options *ProductionOptions) { options.SelectorVersion = "sp-static-v5-contained" },
+		"outbound": func(options *ProductionOptions) { options.AuthorizedBucket.Direction = "outbound" },
+		"maximum":  func(options *ProductionOptions) { options.AuthorizedBucket.MaximumDepth = 63 },
+		"kinds":    func(options *ProductionOptions) { options.AuthorizedBucket.RelationshipKindCount = 2 },
+		"untyped": func(options *ProductionOptions) {
+			options.AuthorizedBucket.RelationshipKindCount = 0
+			options.AuthorizedBucket.UntypedRelationship = true
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			options := base
+			bucket := *base.AuthorizedBucket
+			options.AuthorizedBucket = &bucket
+			mutate(&options)
+			_, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+				"start_id": int64(1), "end_id": int64(2),
+			}, DefaultGraphID, options)
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestProductionRejectsToolOnlyBidirectionalShortestExecutor(t *testing.T) {
@@ -1394,7 +1436,7 @@ func TestForcedShortestDistanceExecutorSupportsZeroDepthWithoutSelfEndpointError
 
 func TestProductionRejectsUnderGuardedInlineDistanceExecutor(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = shortestPath((s)-[:MemberOf*1..8]->(e))
+		MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN length(p)
 	`)
@@ -1407,7 +1449,7 @@ func TestProductionRejectsUnderGuardedInlineDistanceExecutor(t *testing.T) {
 
 func TestProductionInlineWitnessExecutorKeepsEdgeIDsAtMaterializationBoundary(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = shortestPath((s)-[:MemberOf*1..8]->(e))
+		MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN p
 	`)
@@ -1416,11 +1458,11 @@ func TestProductionInlineWitnessExecutorKeepsEdgeIDsAtMaterializationBoundary(t 
 		"start_id": int64(1), "end_id": int64(2),
 	}, DefaultGraphID, ProductionOptions{
 		ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
-		SelectorVersion:      "sp-i1-witness-canary-v1",
+		SelectorVersion:      optimize.ShortestPathSelectorStaticV6,
 		ShortestPathCaps: &ProductionShortestPathCaps{
 			StateLimit: 1000, PredecessorLimit: 1000, EnumerationLimit: 1000, OutputBytesLimit: 1 << 20,
 		},
-		AuthorizedBucket: &ProductionTraversalBucket{Direction: "outbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 8, RelationshipKindCount: 1},
+		AuthorizedBucket: &ProductionTraversalBucket{Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1},
 	})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)

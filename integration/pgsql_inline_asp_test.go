@@ -265,13 +265,13 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	})
 
 	t.Run("canonical inline witness falls back to S4 before exposing rows", func(t *testing.T) {
-		const shortestCypher = `MATCH p = shortestPath((s)-[:InlineASPEdgeOne*1..4]->(e))
+		const shortestCypher = `MATCH p = shortestPath((s)<-[:InlineASPEdgeOne*1..64]-(e))
 			WHERE id(s) = $start_id AND id(e) = $end_id RETURN p`
 		query, err := frontend.ParseCypher(frontend.NewContext(), shortestCypher)
 		if err != nil {
 			t.Fatalf("parse canonical shortest query: %v", err)
 		}
-		deepParameters := map[string]any{"start_id": int64(deepStartID), "end_id": int64(deepEndID)}
+		deepParameters := map[string]any{"start_id": int64(deepEndID), "end_id": int64(deepStartID)}
 		incumbent, err := translate.Translate(session.Ctx, query, pgDriver.KindMapper(), deepParameters, defaultGraph.ID)
 		if err != nil {
 			t.Fatalf("translate shortest incumbent: %v", err)
@@ -283,9 +283,9 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 					StateLimit: 1, PredecessorLimit: 100, EnumerationLimit: 100, OutputBytesLimit: 1 << 20,
 				},
 				AuthorizedBucket: &translate.ProductionTraversalBucket{
-					Direction: "outbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 4, RelationshipKindCount: 1,
+					Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1,
 				},
-				SelectorVersion: "sp-i1-integration-fallback-v1",
+				SelectorVersion: optimize.ShortestPathSelectorStaticV6,
 			})
 		if err != nil {
 			t.Fatalf("translate canonical shortest candidate: %v", err)
@@ -301,7 +301,7 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	})
 
 	t.Run("canonical driver policy requires stable snapshot and rolls back immediately", func(t *testing.T) {
-		const shortestCypher = `MATCH p = shortestPath((s)<-[:InlineASPEdgeOne*1..4]-(e))
+		const shortestCypher = `MATCH p = shortestPath((s)<-[:InlineASPEdgeOne*1..64]-(e))
 			WHERE id(s) = $start_id AND id(e) = $end_id RETURN p`
 		parameters := map[string]any{"start_id": int64(deepEndID), "end_id": int64(deepStartID)}
 		policy := inlineCanonicalSPTraversalPolicy(t, shortestCypher)
@@ -381,14 +381,14 @@ func inlineCanonicalSPTraversalPolicy(t *testing.T, query string) pg.TraversalPo
 		evidence[role] = map[string]string{"sha256": strings.Repeat("01", sha256.Size)}
 	}
 	raw, err := json.Marshal(map[string]any{
-		"version": 2, "candidate": string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), "selector_version": "sp-i1-canonical-driver-integration-v1",
+		"version": 2, "candidate": string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), "selector_version": optimize.ShortestPathSelectorStaticV6,
 		"source_commit": "integration", "source_sha256": strings.Repeat("0", 64),
 		"binary_sha256": strings.Repeat("0", 64), "corpus_sha256": strings.Repeat("0", 64),
 		"execution_boundary": "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorS4CanonicalWitness),
 		"caps": map[string]int64{"state_limit": 1000, "predecessor_limit": 1000, "enumeration_limit": 1000, "output_bytes_limit": 1 << 20},
 		"buckets": []map[string]any{{
 			"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"},
-			"direction": "inbound", "observation_mode": "one_path", "minimum_depth": 1, "maximum_depth": 4,
+			"direction": "inbound", "observation_mode": "one_path", "minimum_depth": 1, "maximum_depth": 64,
 			"relationship_kind_count": 1, "untyped_relationship": false,
 		}},
 		"evidence": evidence,

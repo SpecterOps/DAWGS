@@ -60,6 +60,54 @@ func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	require.ErrorContains(t, err, "absent from the provisional production manifest")
 }
 
+func TestPostgresProductionManifestRequiresStaticV6CanonicalInboundBucket(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:Traverse*1..64]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+	digest := strings.Repeat("0", 64)
+	base := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		SelectorVersion: optimize.ShortestPathSelectorStaticV6, ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		SourceCommit:     "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
+		Buckets: []PromotionBucket{{
+			Name: "canonical-inbound-depth64", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "inbound",
+			ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1,
+			QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+	write := func(t *testing.T, manifest PromotionManifest) string {
+		t.Helper()
+		raw, err := json.Marshal(manifest)
+		require.NoError(t, err)
+		path := filepath.Join(t.TempDir(), "manifest.json")
+		require.NoError(t, os.WriteFile(path, raw, 0o600))
+		return path
+	}
+
+	runner := &postgresSQLRunner{}
+	require.NoError(t, runner.setProductionManifest(write(t, base)))
+	options, err := runner.productionOptions(query)
+	require.NoError(t, err)
+	require.Equal(t, optimize.ShortestPathSelectorStaticV6, options.SelectorVersion)
+	require.Equal(t, int64(64), options.AuthorizedBucket.MaximumDepth)
+
+	tests := map[string]func(*PromotionManifest){
+		"selector": func(manifest *PromotionManifest) { manifest.SelectorVersion = "sp-static-v5-contained" },
+		"outbound": func(manifest *PromotionManifest) { manifest.Buckets[0].Direction = "outbound" },
+		"maximum":  func(manifest *PromotionManifest) { manifest.Buckets[0].MaximumDepth = 63 },
+		"kinds":    func(manifest *PromotionManifest) { manifest.Buckets[0].RelationshipKindCount = 2 },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			manifest := base
+			manifest.Caps = clonePromotionCaps(base.Caps)
+			manifest.Buckets = clonePromotionBuckets(base.Buckets)
+			mutate(&manifest)
+			require.Error(t, (&postgresSQLRunner{}).setProductionManifest(write(t, manifest)))
+		})
+	}
+}
+
 func TestPostgresProductionManifestBuildsOrientationOptionsWithoutShortestPathFields(t *testing.T) {
 	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) WHERE id(r) = $root_id RETURN id(e)"
 	digest := strings.Repeat("0", 64)
