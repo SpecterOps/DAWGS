@@ -861,6 +861,7 @@ func TestForcedInlineASPExecutorUsesGuardedTypedStatement(t *testing.T) {
 	require.Contains(t, formatted, "asp_i1_distance")
 	require.Contains(t, formatted, "asp_i1_predecessor_bounded")
 	require.Contains(t, formatted, "asp_i1_paths_bounded")
+	require.Contains(t, formatted, "asp_i1_admission")
 	require.Contains(t, formatted, "asp_i1_candidate_marker")
 	require.Contains(t, formatted, "asp_i1_fallback_marker")
 	require.Contains(t, formatted, "all_shortest_paths_dag")
