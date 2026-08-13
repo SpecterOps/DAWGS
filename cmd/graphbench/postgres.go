@@ -74,6 +74,9 @@ type postgresSQLRunner struct {
 	// productionManifest supplies the immutable guarded candidate identity used
 	// for pre-closure production-boundary measurement.
 	productionManifest *PromotionManifest
+	// repeatableRead measures an incumbent or tool arm under an explicit stable
+	// snapshot for comparison with an admission-equivalent production candidate.
+	repeatableRead bool
 	// traversalTelemetry selects opt-in summary or untimed diagnostic traversal evidence.
 	traversalTelemetry string
 	// existingGraph supplies live-graph anchors, checkpoints, and callbacks to the runner.
@@ -710,7 +713,12 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 		)
 
 		if !hasForcedToolOptions(s.toolOptions) && s.productionManifest == nil {
-			rowCount, observedRows, stats, err = measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
+			if s.repeatableRead {
+				rowCount, observedRows, stats, err = measureCypherWithWarmupsOptions(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations,
+					pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+			} else {
+				rowCount, observedRows, stats, err = measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
+			}
 		} else {
 			translation, sqlQuery, translateErr := s.translateCypher(ctx, testCase.Cypher, params)
 			if translateErr != nil {
@@ -1006,7 +1014,7 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		if errors.Is(explainErr, errScaleWriteRollback) {
 			explainErr = nil
 		}
-	} else if s.productionManifest != nil {
+	} else if s.productionManifest != nil || s.repeatableRead {
 		explainErr = s.db.ReadTransaction(ctx, runExplain, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	} else {
 		explainErr = s.db.ReadTransaction(ctx, runExplain)
