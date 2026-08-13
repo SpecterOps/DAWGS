@@ -21,6 +21,7 @@ const (
 	aspI1Paths                pgsql.Identifier = "asp_i1_paths"
 	aspI1PathsBounded         pgsql.Identifier = "asp_i1_paths_bounded"
 	aspI1Shortest             pgsql.Identifier = "asp_i1_shortest"
+	aspI1Admission            pgsql.Identifier = "asp_i1_admission"
 	aspI1Decision             pgsql.Identifier = "asp_i1_decision"
 	aspI1CandidateMarker      pgsql.Identifier = "asp_i1_candidate_marker"
 	aspI1FallbackMarker       pgsql.Identifier = "asp_i1_fallback_marker"
@@ -33,6 +34,8 @@ const (
 	aspI1EdgeID               pgsql.Identifier = "edge_id"
 	aspI1UseCandidate         pgsql.Identifier = "use_candidate"
 	aspI1UseFallback          pgsql.Identifier = "use_fallback"
+	aspI1Overflow             pgsql.Identifier = "overflow"
+	aspI1NoPath               pgsql.Identifier = "no_path"
 	aspI1RuntimeReceipt       pgsql.Identifier = "runtime_receipt"
 	aspI1RuntimeAttestationFn pgsql.Identifier = "record_requested_traversal_runtime_attestation_v1"
 	aspI1ColumnSizeFn         pgsql.Identifier = "pg_column_size"
@@ -490,6 +493,17 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		},
 		Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
 	}}})
+	admission := pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: aspI1Admission},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
+			aspI1Aliased(overflow, aspI1Overflow),
+			aspI1Aliased(noPath, aspI1NoPath),
+		}}},
+	}
+	admissionOverflow := pgsql.CompoundIdentifier{aspI1Admission, aspI1Overflow}
+	admissionNoPath := pgsql.CompoundIdentifier{aspI1Admission, aspI1NoPath}
+	useCandidate = pgd.Not(admissionOverflow)
 	candidateBranch := "inline_predecessor_dag"
 	noPathBranch := "inline_no_path"
 	fallbackBranch := "exact_a1_fallback"
@@ -499,7 +513,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		fallbackBranch = "exact_s4_fallback"
 	}
 	branch := pgsql.Case{
-		Conditions: []pgsql.Expression{overflow, noPath},
+		Conditions: []pgsql.Expression{admissionOverflow, admissionNoPath},
 		Then: []pgsql.Expression{
 			pgsql.NewLiteral(fallbackBranch, pgsql.Text),
 			pgsql.NewLiteral(noPathBranch, pgsql.Text),
@@ -507,7 +521,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		Else: pgsql.NewLiteral(candidateBranch, pgsql.Text),
 	}
 	runtimeExecutor := pgsql.Case{
-		Conditions: []pgsql.Expression{overflow},
+		Conditions: []pgsql.Expression{admissionOverflow},
 		Then:       []pgsql.Expression{pgsql.NewLiteral(string(mode.fallback), pgsql.Text)},
 		Else:       pgsql.NewLiteral(string(mode.identity), pgsql.Text),
 	}
@@ -516,7 +530,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
 			aspI1Aliased(useCandidate, aspI1UseCandidate),
-			aspI1Aliased(overflow, aspI1UseFallback),
+			aspI1Aliased(admissionOverflow, aspI1UseFallback),
 			aspI1Aliased(pgsql.FunctionCall{
 				Function: aspI1RuntimeAttestationFn,
 				Parameters: []pgsql.Expression{
@@ -525,7 +539,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 					runtimeExecutor,
 				},
 			}, aspI1RuntimeReceipt),
-		}}},
+		}, From: []pgsql.FromClause{tableFrom(aspI1Admission)}}},
 	}
 
 	candidateProjection := pgsql.Projection{
@@ -655,6 +669,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		paths,
 		pathsBounded,
 		shortest,
+		admission,
 		decision,
 		aspI1Marker(aspI1CandidateMarker, aspI1UseCandidate),
 		aspI1Marker(aspI1FallbackMarker, aspI1UseFallback),
