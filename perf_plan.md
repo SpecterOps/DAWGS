@@ -550,6 +550,24 @@ known crossover where reverse loses. The emitter, probes, fallback, report
 generator, and default-off policy already exist, making this the most mature
 non-ASP production-path opportunity.
 
+2026-08-13 continuation checkpoint:
+
+- A five-case discovery block confirmed that forced suffix-reverse is roughly
+  31-452x faster than the forward incumbent on the two sparse cases, about 4.3x
+  faster on zero-reachable, and about 4.1x faster on the cyclic bag case; it is
+  about 2.6x slower on high reverse fan-in. These artifacts are diagnostic only:
+  the runner had not applied requested Repeatable Read to attested tool arms.
+- `orientation-probe-v1` selected reverse for the sparse pair and forward for
+  zero-reachable, high-fan-in, and cyclic. The latter two reverse wins show that
+  v1 cannot qualify this cohort without a new immutable selector identity.
+- Shadow and guarded evidence is now marker-first for zero-row output, reports
+  probe overflow, evaluates the state sentinel once, truthfully attests probe
+  and state fallback, attributes exact CTE materialization bodies instead of
+  repeated scans, and rejects any inactive-arm traversal loops.
+- Shadow overhead exceeded the `10%`/`100us` gate on zero-reachable,
+  high-fan-in, and cyclic discovery cases. Reduce probe overhead before freezing
+  a new selector and opening fresh blind holdouts.
+
 Implementation sequence:
 
 1. Re-run the existing forward/reverse/orientation-probe tournament with

@@ -470,6 +470,8 @@ func TestResourceGateValidatesExactOrientationMarkersAndProbeCounts(t *testing.T
 		"orientation_forward_degree_probe_loops": 1,
 		"orientation_reverse_degree_probe_loops": 1,
 		"orientation_decision_loops":             1,
+		"orientation_candidate_branch_loops":     1,
+		"orientation_incumbent_branch_loops":     0,
 	}
 	diagnostic := &TraversalExecutionDiagnostic{PlanReplay: &TraversalPlanReplayEvidence{Counters: probeCounters}}
 	gateCase := &ResourceGateCase{}
@@ -483,6 +485,14 @@ func TestResourceGateValidatesExactOrientationMarkersAndProbeCounts(t *testing.T
 	require.Contains(t, strings.Join(gateCase.Reasons, "\n"), "exactly one selected arm")
 	require.Contains(t, strings.Join(gateCase.Reasons, "\n"), "executed more than once")
 	require.Contains(t, strings.Join(gateCase.Reasons, "\n"), "no execution-count evidence")
+
+	probeCounters["orientation_executed_incumbent_rows"] = 0
+	probeCounters["orientation_root_probe_loops"] = 1
+	probeCounters["orientation_suffix_probe_loops"] = 1
+	probeCounters["orientation_incumbent_branch_loops"] = 1
+	gateCase.Reasons = nil
+	appendOrientationAttributionReasons(gateCase, diagnostic)
+	require.Contains(t, gateCase.Reasons, "orientation incumbent arm performed work while the candidate was selected")
 }
 
 func TestResourceGateRequiresSingularInlineASPBranchAndInactiveArm(t *testing.T) {

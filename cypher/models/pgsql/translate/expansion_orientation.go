@@ -38,6 +38,7 @@ type expansionOrientationIdentifiers struct {
 	reverseDegreeProbe pgsql.Identifier
 	metrics            pgsql.Identifier
 	decision           pgsql.Identifier
+	admission          pgsql.Identifier
 	shadowForward      pgsql.Identifier
 	shadowReverse      pgsql.Identifier
 	shadowSelection    pgsql.Identifier
@@ -64,6 +65,7 @@ func newExpansionOrientationIdentifiers(finalFrame pgsql.Identifier) expansionOr
 		reverseDegreeProbe: pgsql.Identifier(prefix + "reverse_degree_probe"),
 		metrics:            pgsql.Identifier(prefix + "metrics"),
 		decision:           pgsql.Identifier(prefix + "decision"),
+		admission:          pgsql.Identifier(prefix + "admission"),
 		shadowForward:      pgsql.Identifier(prefix + "shadow_forward"),
 		shadowReverse:      pgsql.Identifier(prefix + "shadow_reverse"),
 		shadowSelection:    pgsql.Identifier(prefix + "shadow_selection"),
@@ -337,6 +339,7 @@ func buildExpansionOrientationDecision(ids expansionOrientationIdentifiers) pgsq
 			Projection: pgsql.Projection{
 				&pgsql.AliasedExpression{Expression: forwardScore, Alias: models.OptionalValue(orientationForwardScore)},
 				&pgsql.AliasedExpression{Expression: reverseScore, Alias: models.OptionalValue(orientationReverseScore)},
+				&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.metrics, orientationProbesComplete}, Alias: models.OptionalValue(orientationProbesComplete)},
 				&pgsql.AliasedExpression{Expression: useReverse, Alias: models.OptionalValue(orientationUseReverse)},
 				&pgsql.AliasedExpression{Expression: useReverse, Alias: models.OptionalValue(orientationWouldSelectReverse)},
 			},
@@ -398,8 +401,45 @@ func buildExpansionOrientationShadowMarkers(ids expansionOrientationIdentifiers)
 			},
 		}},
 	}
+	incumbent := pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: ids.executedIncumbent},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{&pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function: pgsql.Identifier("record_traversal_runtime_attestation_v1"),
+					Parameters: []pgsql.Expression{
+						pgsql.NewLiteral(string(optimize.ExpansionSearchStepwiseForward), pgsql.Text),
+						pgsql.NewLiteral("shadow_incumbent", pgsql.Text),
+						pgsql.NewLiteral(false, pgsql.Boolean),
+					},
+					CastType: pgsql.Boolean,
+				},
+				Alias: models.OptionalValue(orientationArmExecuted),
+			}},
+			From: []pgsql.FromClause{tableFrom(ids.shadowSelection)},
+		}},
+	}
 
-	return []pgsql.CommonTableExpression{forward, reverse, selection}
+	return []pgsql.CommonTableExpression{forward, reverse, selection, incumbent}
+}
+
+// buildExpansionOrientationAdmission materializes the recursive-state
+// sentinel once. Both execution markers consume this one decision row so the
+// cap+1 state relation is not rescanned independently by each gate and receipt.
+func buildExpansionOrientationAdmission(ids expansionOrientationIdentifiers, stateLimit int64) pgsql.CommonTableExpression {
+	return pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: ids.admission},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{
+				&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.decision, orientationUseReverse}, Alias: models.OptionalValue(orientationUseReverse)},
+				&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.decision, orientationProbesComplete}, Alias: models.OptionalValue(orientationProbesComplete)},
+				&pgsql.AliasedExpression{Expression: boundedProbeOverflow(ids.states, stateLimit), Alias: models.OptionalValue[pgsql.Identifier]("state_overflow")},
+			},
+			From: []pgsql.FromClause{tableFrom(ids.decision)},
+		}},
+	}
 }
 
 // buildExpansionOrientationExecutionMarkers materializes exactly one named
@@ -407,11 +447,14 @@ func buildExpansionOrientationShadowMarkers(ids expansionOrientationIdentifiers)
 // counts, these relations remain unambiguous when a selected arm legitimately
 // produces no traversal rows. Candidate admission requires both the policy
 // choice and a complete state probe; state overflow selects the incumbent.
-func buildExpansionOrientationExecutionMarkers(ids expansionOrientationIdentifiers, stateLimit int64) []pgsql.CommonTableExpression {
-	stateAdmitted, stateOverflow := boundedAdmissionGates(boundedProbeLimit{source: ids.states, limit: stateLimit})
-	useReverse := pgsql.CompoundIdentifier{ids.decision, orientationUseReverse}
+func buildExpansionOrientationExecutionMarkers(ids expansionOrientationIdentifiers) []pgsql.CommonTableExpression {
+	stateOverflow := pgsql.CompoundIdentifier{ids.admission, pgsql.Identifier("state_overflow")}
+	stateAdmitted := pgd.Not(stateOverflow)
+	useReverse := pgsql.CompoundIdentifier{ids.admission, orientationUseReverse}
+	probeOverflow := pgd.Not(pgsql.CompoundIdentifier{ids.admission, orientationProbesComplete})
 	candidateGate := pgsql.OptionalAnd(useReverse, stateAdmitted)
 	incumbentGate := pgsql.NewBinaryExpression(pgd.Not(useReverse), pgsql.OperatorOr, stateOverflow)
+	fallbackExecuted := pgsql.NewBinaryExpression(probeOverflow, pgsql.OperatorOr, stateOverflow)
 
 	marker := func(alias pgsql.Identifier, gate pgsql.Expression, runtimeIdentity, runtimeBranch string, fallback pgsql.Expression) pgsql.CommonTableExpression {
 		return pgsql.CommonTableExpression{
@@ -430,7 +473,7 @@ func buildExpansionOrientationExecutionMarkers(ids expansionOrientationIdentifie
 					},
 					Alias: models.OptionalValue(orientationArmExecuted),
 				}},
-				From:  []pgsql.FromClause{tableFrom(ids.decision)},
+				From:  []pgsql.FromClause{tableFrom(ids.admission)},
 				Where: gate,
 			}},
 		}
@@ -438,7 +481,7 @@ func buildExpansionOrientationExecutionMarkers(ids expansionOrientationIdentifie
 
 	return []pgsql.CommonTableExpression{
 		marker(ids.executedCandidate, candidateGate, string(optimize.ExpansionSearchSuffixSeededReverse), "suffix_seeded_reverse", pgsql.NewLiteral(false, pgsql.Boolean)),
-		marker(ids.executedIncumbent, incumbentGate, string(optimize.ExpansionSearchStepwiseForward), "exact_forward_incumbent", stateOverflow),
+		marker(ids.executedIncumbent, incumbentGate, string(optimize.ExpansionSearchStepwiseForward), "exact_forward_incumbent", fallbackExecuted),
 	}
 }
 

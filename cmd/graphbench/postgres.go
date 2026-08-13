@@ -711,13 +711,13 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			observedRows []string
 			stats        DurationStats
 		)
+		readOptions := s.readTransactionOptions()
 
 		if !hasForcedToolOptions(s.toolOptions) && s.productionManifest == nil {
-			if s.repeatableRead {
-				rowCount, observedRows, stats, err = measureCypherWithWarmupsOptions(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations,
-					pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-			} else {
+			if len(readOptions) == 0 {
 				rowCount, observedRows, stats, err = measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
+			} else {
+				rowCount, observedRows, stats, err = measureCypherWithWarmupsOptions(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
 			}
 		} else {
 			translation, sqlQuery, translateErr := s.translateCypher(ctx, testCase.Cypher, params)
@@ -726,24 +726,26 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			} else {
 				requestedIdentity := timedRuntimeAttestationIdentity(translation)
 				if requestedIdentity == "" {
-					rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+					if len(readOptions) == 0 {
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+					} else {
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
+					}
 				} else if s.poolSize != 1 {
 					// Exact per-sample receipts require one physical session. Larger
 					// pools remain useful for operational smoke testing, but their
 					// samples intentionally lack promotion-grade attestation.
-					if s.productionManifest != nil {
-						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations,
-							pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-					} else {
+					if len(readOptions) == 0 {
 						rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+					} else {
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
 					}
 				} else if attestor, attestorErr := newPostgresTimedReadAttestor(s.pool, s.poolSize, requestedIdentity); attestorErr != nil {
 					err = attestorErr
-				} else if s.productionManifest != nil {
-					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestationOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor,
-						pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-				} else {
+				} else if len(readOptions) == 0 {
 					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestation(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor)
+				} else {
+					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestationOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor, readOptions...)
 				}
 			}
 		}
@@ -912,6 +914,17 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	return record
 }
 
+// readTransactionOptions returns the one stable-snapshot contract shared by
+// every PostgreSQL timing and plan-replay path. Provisional production
+// manifests always require Repeatable Read; tool tournaments opt into the same
+// isolation with -postgres-repeatable-read.
+func (s *postgresSQLRunner) readTransactionOptions() []graph.TransactionOption {
+	if s.productionManifest == nil && !s.repeatableRead {
+		return nil
+	}
+	return []graph.TransactionOption{pg.OptionSetTransactionIsolation(pgx.RepeatableRead)}
+}
+
 func timedRuntimeAttestationIdentity(translation translate.Result) string {
 	outcome, ok := singleTraversalOutcome(translation.Optimization.TargetOutcomes)
 	if !ok {
@@ -1014,8 +1027,8 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		if errors.Is(explainErr, errScaleWriteRollback) {
 			explainErr = nil
 		}
-	} else if s.productionManifest != nil || s.repeatableRead {
-		explainErr = s.db.ReadTransaction(ctx, runExplain, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+	} else if readOptions := s.readTransactionOptions(); len(readOptions) > 0 {
+		explainErr = s.db.ReadTransaction(ctx, runExplain, readOptions...)
 	} else {
 		explainErr = s.db.ReadTransaction(ctx, runExplain)
 	}

@@ -378,8 +378,10 @@ was declared.
 An emitted `orientation-probe-v1` policy requires orientation probes, selected
 ordinary expansion, and hydration families. Its exact executed-candidate and
 executed-incumbent marker rows must select one arm, the other must be zero, and
-each named probe may execute at most once; plan-derived partial evidence cannot
-qualify.
+each named probe may execute at most once. Attribution uses only PostgreSQL's
+single `Subplan Name: CTE ...` materialization body, never repeated consumer
+CTE scans; the unselected traversal branch must also report zero loops.
+Plan-derived partial evidence cannot qualify.
 Telemetry attaches to every reference whose declared architecture is itself a
 traversal or hydration boundary. Protocol, endpoint/root validation, and other
 component probes remain intentionally unannotated; their missing attachment is
@@ -389,8 +391,10 @@ not missing traversal evidence.
 `orientation-probe-v1` shadow statement. It always executes the exact forward
 incumbent and records the mutually exclusive SQL marker result separately as
 `would_select_identity`; it never relabels that hypothetical choice as the
-runtime or applied arm. The shadow flag is mutually exclusive with forced
-shortest-path and forced expansion selectors.
+runtime or applied arm. A marker-first runtime receipt is emitted even when the
+incumbent returns zero rows, and any cap+1 probe row is reflected in the shadow
+overflow summary. The shadow flag is mutually exclusive with forced shortest-
+path and forced expansion selectors.
 
 Build the matched selector-regret and probe-overhead report from separate
 true-shadow, exact incumbent, and forced suffix-reverse artifacts plus the

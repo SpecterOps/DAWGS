@@ -81,8 +81,12 @@ Current PostgreSQL optimization coverage includes:
   typed first-hop work from both sides. Every relation has a cap+1 sentinel;
   reverse must beat forward by the versioned strict 3/4 hysteresis rule.
   Guarded execution also caps reverse state and marker-gates candidate and
-  incumbent output chains independently. Shadow execution always runs the
-  incumbent and records only `would_select`. A versioned query-allowlisted
+  incumbent output chains independently. Probe and state overflow select the
+  exact forward fallback and produce a truthful runtime receipt. Shadow
+  execution always runs the incumbent, records only `would_select`, and emits
+  its marker-first receipt even for an empty result. Plan telemetry attributes
+  work from exact CTE materialization subplans so repeated consumer scans cannot
+  inflate probe or branch loops. A versioned query-allowlisted
   driver canary can emit the guarded form only when it also binds a verified
   promotion-manifest SHA-256, while the zero policy and every non-allowlisted
   query remain forward.
