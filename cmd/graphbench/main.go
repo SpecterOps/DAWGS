@@ -146,6 +146,9 @@ type config struct {
 	// PostgresProductionManifest selects a provisional version-2 manifest used
 	// to measure an exact guarded production statement before evidence closure.
 	PostgresProductionManifest string
+	// PostgresRepeatableRead measures the incumbent under the same stable
+	// snapshot contract required for guarded candidate admission.
+	PostgresRepeatableRead bool
 	// PostgresForceExpansion selects a forced expansion search strategy for diagnostic runs.
 	PostgresForceExpansion string
 	// PostgresTraversalTelemetry selects off, summary, or an untimed diagnostic replay.
@@ -309,6 +312,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
 	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, SP-I1-C-D, SP-I1-U-E+MAT-M0, SP-I1-C-WE+MAT-M0, SP-B1-C-ALT-NODE-D, SP-B1-C-ALT-NODE-WE+MAT-M0, SP-B2-C-MIN-LEVEL-D, SP-B2-C-MIN-LEVEL-WE+MAT-M0, ASP-A1-DAG, ASP-I1-U-DAG+MAT-M0, ASP-B1-DAG-ALT-NODE, ASP-B2-DAG-MIN-LEVEL)")
 	flags.StringVar(&cfg.PostgresProductionManifest, "postgres-production-manifest", "", "provisional version-2 manifest for exact guarded PostgreSQL candidate measurement")
+	flags.BoolVar(&cfg.PostgresRepeatableRead, "postgres-repeatable-read", false, "measure PostgreSQL under an explicit Repeatable Read transaction")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
 	flags.StringVar(&cfg.PostgresTraversalTelemetry, "postgres-traversal-telemetry", postgresTraversalTelemetryOff, "PostgreSQL traversal telemetry level (off, summary, or diagnostic); replays run outside timed samples")
 	flags.BoolVar(&cfg.PostgresExpansionOrientationShadow, "postgres-expansion-orientation-shadow", false, "tool-only orientation-probe shadow mode; executes only the exact incumbent traversal arm")
@@ -632,6 +636,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	if cfg.PostgresProductionManifest != "" && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" || cfg.PostgresExpansionOrientationShadow) {
 		return config{}, fmt.Errorf("PostgreSQL production manifest is mutually exclusive with forced and shadow translation modes")
+	}
+	if cfg.PostgresProductionManifest != "" && cfg.PostgresRepeatableRead {
+		return config{}, fmt.Errorf("PostgreSQL production manifest already implies Repeatable Read")
 	}
 	if cfg.GateBaseline != "" && !cfg.DiagnosticGate && cfg.GateAA == "" {
 		return config{}, fmt.Errorf("complete performance gate requires gate-aa host calibration evidence")
@@ -1067,6 +1074,7 @@ func main() {
 				fatal("open postgres_sql runner: %v", err)
 			}
 			runner.traversalTelemetry = cfg.PostgresTraversalTelemetry
+			runner.repeatableRead = cfg.PostgresRepeatableRead
 			runner.toolOptions.EnableExpansionOrientationShadow = cfg.PostgresExpansionOrientationShadow
 			if err := runner.setProductionManifest(cfg.PostgresProductionManifest); err != nil {
 				_ = runner.Close(ctx)

@@ -676,6 +676,9 @@ executes each statement under Repeatable Read and retains per-sample runtime
 receipts. This flag is mutually exclusive with tool-forced and shadow modes;
 evidence may be empty only because the capture is producing that evidence.
 Final rollout still requires the ordinary complete manifest verifier.
+Use `-postgres-repeatable-read` on the incumbent arm so a matched comparison
+measures both sides under the stable-snapshot admission contract. A production
+manifest implies this option and cannot be combined with it explicitly.
 
 ## Existing graph non-mutating mode
 

@@ -481,6 +481,10 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	return measureReadWithWarmups(ctx, db, cypher, params, expected, idMap, warmupIterations, iterations, false)
 }
 
+func measureCypherWithWarmupsOptions(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmupsAndAttestation(ctx, db, cypher, params, expected, idMap, warmupIterations, iterations, false, nil, options...)
+}
+
 // measureRawSQLWithWarmups executes raw SQL with warmups and records its timing observations.
 func measureRawSQLWithWarmups(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int) (int64, []string, DurationStats, error) {
 	return measureReadWithWarmups(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true)

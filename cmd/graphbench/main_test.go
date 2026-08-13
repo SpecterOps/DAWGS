@@ -173,6 +173,12 @@ func TestParseConfigAcceptsProductionManifestAndRejectsToolMixing(t *testing.T) 
 		"-postgres-force-shortest-executor", "ASP-I1-U-DAG+MAT-M0",
 	}, func(string) string { return "" })
 	require.ErrorContains(t, err, "mutually exclusive")
+
+	cfg, err = parseConfig([]string{"-postgres-repeatable-read"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.PostgresRepeatableRead)
+	_, err = parseConfig([]string{"-postgres-production-manifest", "provisional.json", "-postgres-repeatable-read"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "already implies Repeatable Read")
 }
 
 // TestParseConfigRejectsIncompleteOrientationSelectorReport verifies the
