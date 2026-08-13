@@ -170,6 +170,17 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	if !containsAll(fallbackReceipt, "ASP-A1-DAG", "exact_a1_fallback", "true", "1") {
 		t.Fatalf("fallback runtime receipt is incomplete: %s", fallbackReceipt)
 	}
+
+	// ASP-A1 reaches its spd_* predecessor workspace only beyond the two-hop
+	// preflight. Prove that a fresh stable-snapshot session can execute it.
+	session.PGPool.Reset()
+	freshA1Rows, freshA1Receipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher,
+		map[string]any{"start_id": int64(deepStartID), "end_id": int64(deepEndID)},
+		"inline-asp-fresh-repeatable-a1", optimize.ShortestPathExecutorASPA1DAG,
+		pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+	if len(freshA1Rows) != 1 || !containsAll(freshA1Receipt, "ASP-A1-DAG") {
+		t.Fatalf("fresh repeatable-read session did not execute recursive A1: rows=%v receipt=%s", freshA1Rows, freshA1Receipt)
+	}
 	candidatePlan := explainInlineASPTranslation(t, session, i1)
 	requireOrientationSubplanMetric(t, candidatePlan, "asp_i1_fallback_rows", "Actual Rows", 0)
 	fallbackPlan := explainInlineASPTranslation(t, session, fallback)

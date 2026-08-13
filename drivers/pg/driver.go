@@ -47,11 +47,15 @@ func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOp
 // the supplied isolation level. B traversal candidates are selected only for
 // REPEATABLE READ or SERIALIZABLE transactions. The driver prepares the
 // production shortest-path and all-shortest-path temporary workspaces on the
-// acquired session before beginning either stable-snapshot transaction.
+// acquired session before beginning either stable-snapshot transaction and
+// uses PostgreSQL READ WRITE access so those session-local tables can reset.
 func OptionSetTransactionIsolation(isolation pgx.TxIsoLevel) graph.TransactionOption {
 	return func(config *graph.TransactionConfig) {
 		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
 			pgCfg.Options.IsoLevel = isolation
+			if stableSnapshotIsolation(isolation) {
+				pgCfg.Options.AccessMode = pgx.ReadWrite
+			}
 		}
 	}
 }
