@@ -630,6 +630,21 @@ non-ASP production-path opportunity.
   repeated cycle/self-loop node positions from the ordered relationship walk,
   eliminating a Neo4j/PostgreSQL path-adapter representation difference. No
   holdout timing was opened.
+- The replacement clean discovery at source commit `b4e896b` completed all
+  five balanced rounds for shadow, exact forward, exact reverse, guarded, and
+  both A/A arms. It failed qualification on all eight training cases, so the
+  four v3 holdouts remain unopened. V2 chose the faster exact orientation in
+  seven cases; its only miss cost about `9us`. By contrast, the guarded
+  statement added `187-376us` over its selected exact arm. Exact reverse saved
+  only `10-177us` in this cohort, so even a training-perfect threshold cannot
+  amortize the same-statement selector. Shadow and guarded plans contain
+  `93-95` and `120-121` nodes versus `33-35` for exact arms, locating the main
+  cost in the common probe/dispatch scaffold rather than inactive-arm work.
+  A direct 1,000-iteration session measurement put the armed runtime-receipt
+  record call at about `9.5us` versus `1.1us` unarmed; receipt optimization
+  cannot close the observed gap. Treat this as the P2 stop condition: preserve
+  v2 and its freeze as failed training evidence, do not tune a v3 threshold on
+  these cases, and do not open the holdouts.
 - V2 gates forward-selected cases on shadow/forward overhead and every case on
   guarded/selected overhead plus guarded/fastest regret. Reverse-selected
   shadow overhead remains diagnostic rather than an automatic pass. No v2
@@ -655,15 +670,13 @@ Implementation sequence:
    Keep shadow/forward qualification-applicable only when the selector chooses
    forward; reverse-selected shadow overhead remains diagnostic, never an
    automatic pass.
-5. From a clean tree, run the first v2 four-arm discovery on exactly the eight
-   canonical training cases and write both the discovery report and freeze
-   manifest. Before opening the fresh holdouts, verify that the manifest binds
-   the formula, caps, source commit, clean dirty diff, binary, canonical cohort
-   declaration, and discovery-report digest. Confirmation must consume those
-   exact two files and exactly the canonical eight training plus four holdout
-   timing cases. Retain forward fallback on every probe or state overflow.
-6. Only after clean confirmation, resource, reference, and operational closure,
-   roll out v2 through the exact-query driver canary.
+5. The clean eight-case discovery and freeze are complete and failed every
+   training case on guarded overhead or regret. Preserve the artifacts as
+   negative evidence; do not run confirmation or inspect holdout timing.
+6. Pause P2 until a new architecture removes the common same-statement probe
+   cost or exposes a parameter-independent applicability dimension with enough
+   work to amortize it. Any restart requires a new identity and predeclared
+   corpus rather than a threshold fitted to this failed cohort.
 
 Primary files:
 
