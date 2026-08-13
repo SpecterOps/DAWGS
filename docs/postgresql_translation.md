@@ -183,6 +183,12 @@ inside a graph transaction can pass
 `pg.OptionInitializeTraversalRuntimeAttestation()`; the driver then prepares
 the acquired session immediately before `BEGIN READ ONLY`.
 
+The driver automatically prepares the production S4 and A1 session-local
+workspaces before every explicit Repeatable Read or Serializable read-only
+transaction. This keeps incumbent execution and a guarded candidate's exact
+fallback valid on a fresh pooled connection; PostgreSQL does not permit those
+temporary tables to be created after `BEGIN READ ONLY`.
+
 `SP-I1-C-WE+MAT-M0` uses the same guarded production boundary for singleton
 one-path observations, with `SP-S4-C-WE+MAT-M0` as its declared fallback. The
 manifest must authorize an exact `one_path` bucket and the same four positive
