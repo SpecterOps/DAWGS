@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -56,6 +57,26 @@ func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	require.Equal(t, "asp-i1-test-v1", options.SelectorVersion)
 	_, err = runner.productionOptions(query + " RETURN 1")
 	require.ErrorContains(t, err, "absent from the provisional production manifest")
+}
+
+func TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode(t *testing.T) {
+	require.Empty(t, (&postgresSQLRunner{}).readTransactionOptions())
+
+	for name, runner := range map[string]*postgresSQLRunner{
+		"explicit benchmark flag": {repeatableRead: true},
+		"production manifest":     {productionManifest: &PromotionManifest{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options := runner.readTransactionOptions()
+			require.Len(t, options, 1)
+
+			pgConfig := &pg.Config{}
+			transactionConfig := &graph.TransactionConfig{DriverConfig: pgConfig}
+			options[0](transactionConfig)
+			require.Equal(t, pgx.RepeatableRead, pgConfig.Options.IsoLevel)
+			require.Equal(t, pgx.ReadWrite, pgConfig.Options.AccessMode)
+		})
+	}
 }
 
 // TestResolveCaseParams verifies that scalar, explicit-list, and generated-list fixture keys become ordered int64 IDs without disturbing ordinary parameters.

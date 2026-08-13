@@ -234,7 +234,8 @@ func traversalSummaryFromOutcome(outcome translate.TargetLoweringOutcome, metric
 		runtimeIdentity = applied
 		runtimeBranch = "shadow_incumbent"
 		fallbackExecuted = false
-		overflow = metrics.EndpointGuardOverflow || metrics.StateGuardOverflow
+		overflow = metrics.EndpointGuardOverflow || metrics.StateGuardOverflow ||
+			orientationPlanOverflow(outcome, postgresTraversalPlanReplay(metrics))
 		wouldSelectIdentity = shadowWouldSelectIdentity(outcome, metrics)
 	}
 	if outcome.EmittedPolicy != "" {
@@ -679,7 +680,7 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			"orientation_reverse_degree_probe": "orientation_reverse_degree_rows",
 			"orientation_states":               "orientation_state_rows",
 		} {
-			if strings.Contains(identity, suffix) && rows > replay.Counters[name] {
+			if orientationCTEBody(node, suffix) {
 				replay.Counters[name] = rows
 				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
 			}
@@ -689,7 +690,7 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			"orientation_shadow_reverse":   "orientation_shadow_reverse_rows",
 			"orientation_shadow_selection": "orientation_shadow_selection_rows",
 		} {
-			if strings.Contains(identity, suffix) && rows > replay.Counters[name] {
+			if orientationCTEBody(node, suffix) {
 				replay.Counters[name] = rows
 				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
 			}
@@ -698,10 +699,8 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			"orientation_executed_candidate": "orientation_executed_candidate_rows",
 			"orientation_executed_incumbent": "orientation_executed_incumbent_rows",
 		} {
-			if strings.Contains(identity, suffix) {
-				if current, present := replay.Counters[name]; !present || rows > current {
-					replay.Counters[name] = rows
-				}
+			if orientationCTEBody(node, suffix) {
+				replay.Counters[name] = rows
 				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
 			}
 		}
@@ -713,10 +712,8 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			"orientation_reverse_degree_probe": "orientation_reverse_degree_probe_loops",
 			"orientation_decision":             "orientation_decision_loops",
 		} {
-			if strings.Contains(identity, suffix) {
-				if current, present := replay.Counters[name]; !present || node.ActualLoops > current {
-					replay.Counters[name] = node.ActualLoops
-				}
+			if orientationCTEBody(node, suffix) {
+				replay.Counters[name] = node.ActualLoops
 				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
 			}
 		}
@@ -724,7 +721,7 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			"orientation_reverse":   "orientation_candidate_branch_loops",
 			"orientation_incumbent": "orientation_incumbent_branch_loops",
 		} {
-			if strings.Contains(identity, suffix) && node.ActualLoops > replay.Counters[name] {
+			if orientationCTEBody(node, suffix) {
 				replay.Counters[name] = node.ActualLoops
 				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
 			}
@@ -735,6 +732,15 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 		}
 	}
 	return replay
+}
+
+// orientationCTEBody matches the single materialization node PostgreSQL
+// labels "CTE <name>". Consumer CTE scans may execute many times and aliases
+// such as reverse_degree_probe contain shorter branch names, so substring
+// attribution would over-count probes and invent work in inactive arms.
+func orientationCTEBody(node PostgresPlanNodeMetric, suffix string) bool {
+	name := strings.ToLower(strings.TrimSpace(node.SubplanName))
+	return strings.HasPrefix(name, "cte ") && strings.HasSuffix(name, suffix)
 }
 
 // postgresBidirectionalDiagnosticDocument is the invocation-local document

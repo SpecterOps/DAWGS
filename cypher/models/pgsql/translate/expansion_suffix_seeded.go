@@ -258,6 +258,18 @@ func (s *Translator) buildShadowSuffixOrientationQuery(
 	if err != nil {
 		return pgsql.Query{}, err
 	}
+	gatedIncumbent, err := gateQueryBehindMarker(
+		ids.executedIncumbent,
+		ids.incumbentBody,
+		pgsql.Query{Body: pgsql.Select{
+			Projection: incumbentOutput,
+			From:       []pgsql.FromClause{tableFrom(ids.incumbent)},
+		}},
+		incumbentOutput,
+	)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 
 	expressions := []pgsql.CommonTableExpression{
 		rootProbe,
@@ -277,13 +289,7 @@ func (s *Translator) buildShadowSuffixOrientationQuery(
 			Recursive:   true,
 			Expressions: expressions,
 		},
-		Body: pgsql.Select{
-			Projection: incumbentOutput,
-			From: []pgsql.FromClause{
-				tableFrom(ids.incumbent),
-				tableFrom(ids.shadowSelection),
-			},
-		},
+		Body: gatedIncumbent,
 	}, nil
 }
 
@@ -355,7 +361,8 @@ func (s *Translator) buildGuardedSuffixOrientationQuery(
 		return pgsql.Query{}, err
 	}
 	states := expansionOrientationStateProbe(decision, ids)
-	executionMarkers := buildExpansionOrientationExecutionMarkers(ids, decision.Admission.StateLimit)
+	admission := buildExpansionOrientationAdmission(ids, decision.Admission.StateLimit)
+	executionMarkers := buildExpansionOrientationExecutionMarkers(ids)
 	incumbent, fallbackProjection, err := buildExpansionOrientationIncumbentCTE(ids, incumbentChain, incumbentFinal, incumbentProjection)
 	if err != nil {
 		return pgsql.Query{}, err
@@ -441,7 +448,7 @@ func (s *Translator) buildGuardedSuffixOrientationQuery(
 		policyDecision,
 	}
 	expressions = append(expressions, reverseSeed...)
-	expressions = append(expressions, reverse, states)
+	expressions = append(expressions, reverse, states, admission)
 	expressions = append(expressions, executionMarkers...)
 	expressions = append(expressions, incumbent)
 

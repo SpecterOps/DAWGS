@@ -8,6 +8,7 @@ package main
 import (
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
@@ -203,8 +204,8 @@ func TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation(t *tes
 	}
 	metrics := PostgresPlanMetrics{
 		PlanNodes: []PostgresPlanNodeMetric{{
-			NodeType:    "CTE Scan",
-			Alias:       "orientation_executed_candidate",
+			NodeType:    "Result",
+			SubplanName: "CTE s5_orientation_executed_candidate",
 			ActualRows:  1,
 			ActualLoops: 1,
 		}},
@@ -286,11 +287,16 @@ func TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent(t 
 		SelectionMode:     "shadow_tool",
 		SelectorVersion:   "orientation-probe-v1",
 		StateLimit:        4096,
+		ProbeCaps: &optimize.ExpansionSearchProbeCaps{
+			ReverseSeedRowLimit: 512,
+		},
 	}
 	metrics := PostgresPlanMetrics{
 		PlanNodes: []PostgresPlanNodeMetric{
-			{NodeType: "CTE Scan", CTEName: "s5_orientation_shadow_reverse", ActualRows: 1, ActualLoops: 1},
-			{NodeType: "CTE Scan", CTEName: "s5_orientation_shadow_forward", ActualRows: 0, ActualLoops: 1},
+			{NodeType: "Result", SubplanName: "CTE s5_orientation_shadow_reverse", ActualRows: 1, ActualLoops: 1},
+			{NodeType: "Result", SubplanName: "CTE s5_orientation_shadow_forward", ActualRows: 0, ActualLoops: 1},
+			{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 1, ActualLoops: 1},
+			{NodeType: "Limit", SubplanName: "CTE s5_orientation_suffix_probe", ActualRows: 513, ActualLoops: 1},
 		},
 		Provenance: map[string]string{},
 	}
@@ -308,6 +314,7 @@ func TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent(t 
 	require.Equal(t, "EXPANSION-SUFFIX-SEEDED-REVERSE", telemetry.Summary.WouldSelectIdentity)
 	require.Equal(t, "shadow_incumbent", telemetry.Summary.RuntimeBranch)
 	require.False(t, *telemetry.Summary.FallbackExecuted)
+	require.True(t, *telemetry.Summary.Overflow)
 }
 
 func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNodes(t *testing.T) {
@@ -319,15 +326,20 @@ func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNode
 		EmittedPolicy:     "orientation-probe-v1", SelectionMode: "production_canary", SelectorVersion: "orientation-probe-v1", StateLimit: 4096,
 	}
 	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_root_probe", ActualRows: 2, ActualLoops: 1, ActualTotalMS: .01, Buffers: Buffers{SharedHit: 1}},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_suffix_probe", ActualRows: 5, ActualLoops: 1, ActualTotalMS: .02},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_boundaries", ActualRows: 3, ActualLoops: 1, ActualTotalMS: .01},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_forward_degree_probe", ActualRows: 8, ActualLoops: 1, ActualTotalMS: .01},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_reverse_degree_probe", ActualRows: 1, ActualLoops: 1, ActualTotalMS: .01},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_states", ActualRows: 4, ActualLoops: 1},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_executed_candidate", ActualRows: 1, ActualLoops: 1},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_executed_incumbent", ActualRows: 0, ActualLoops: 1},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_reverse", ActualRows: 1, ActualLoops: 1},
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_root_probe", ActualRows: 2, ActualLoops: 1, ActualTotalMS: .01, Buffers: Buffers{SharedHit: 1}},
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_suffix_probe", ActualRows: 5, ActualLoops: 1, ActualTotalMS: .02},
+		{NodeType: "Aggregate", SubplanName: "CTE s5_orientation_boundaries", ActualRows: 3, ActualLoops: 1, ActualTotalMS: .01},
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_forward_degree_probe", ActualRows: 8, ActualLoops: 1, ActualTotalMS: .01},
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_reverse_degree_probe", ActualRows: 1, ActualLoops: 1, ActualTotalMS: .01},
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_states", ActualRows: 4, ActualLoops: 1},
+		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_candidate", ActualRows: 1, ActualLoops: 1},
+		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 0, ActualLoops: 1},
+		{NodeType: "Recursive Union", SubplanName: "CTE s5_orientation_reverse", ActualRows: 4, ActualLoops: 1},
+		{NodeType: "Result", SubplanName: "CTE s5_orientation_decision", ActualRows: 1, ActualLoops: 1},
+		// Consumer scans are deliberately repeated and must not inflate the
+		// single materialization's row, loop, or branch attribution.
+		{NodeType: "CTE Scan", CTEName: "s5_orientation_root_probe", Alias: "s5_orientation_root_probe", ActualRows: 2, ActualLoops: 3},
+		{NodeType: "CTE Scan", CTEName: "s5_orientation_reverse_degree_probe", Alias: "s5_orientation_reverse_degree_probe", ActualRows: 1, ActualLoops: 7},
 	}}
 	telemetry, err := buildPostgresCaseTraversalTelemetry(translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic)
 	require.NoError(t, err)
@@ -337,6 +349,9 @@ func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNode
 	require.Equal(t, int64(5), *telemetry.Diagnostic.Counters.Orientation.ReverseSeeds)
 	require.Equal(t, int64(2), *telemetry.Diagnostic.Counters.Orientation.DuplicateSeeds)
 	require.Equal(t, "reverse", telemetry.Diagnostic.Counters.Orientation.SelectedSide)
+	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["orientation_root_probe_loops"])
+	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["orientation_candidate_branch_loops"])
+	require.Equal(t, int64(0), telemetry.Diagnostic.PlanReplay.Counters["orientation_incumbent_branch_loops"])
 }
 
 func TestPostgresTraversalTelemetrySummaryAndDisabledModesDoNotAttachDiagnosticCounters(t *testing.T) {

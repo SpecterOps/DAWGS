@@ -3,6 +3,7 @@ package translate
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -68,6 +69,7 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 	require.Contains(t, formatted, "s5_orientation_metrics as materialized")
 	require.Contains(t, formatted, "s5_orientation_decision as materialized")
 	require.Contains(t, formatted, "s5_orientation_states as materialized")
+	require.Contains(t, formatted, "s5_orientation_admission as materialized")
 	require.Contains(t, formatted, "s5_orientation_executed_candidate as materialized")
 	require.Contains(t, formatted, "s5_orientation_executed_incumbent as materialized")
 	require.Contains(t, formatted, "record_traversal_runtime_attestation_v1('EXPANSION-SUFFIX-SEEDED-REVERSE', 'suffix_seeded_reverse', false)")
@@ -84,8 +86,10 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 	require.Contains(t, formatted, "offset 16384 limit 1")
 	require.Contains(t, formatted, "offset 4096 limit 1")
 	require.Contains(t, formatted, "(s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 < (s5_orientation_metrics.root_rows + s5_orientation_metrics.forward_degree_rows) * 3")
-	require.Contains(t, formatted, "s5_orientation_decision.use_reverse and not exists")
-	require.Contains(t, formatted, "not s5_orientation_decision.use_reverse or exists")
+	require.Contains(t, formatted, "s5_orientation_admission.use_reverse and not s5_orientation_admission.state_overflow")
+	require.Contains(t, formatted, "not s5_orientation_admission.use_reverse or s5_orientation_admission.state_overflow")
+	require.Contains(t, formatted, "not s5_orientation_admission.probes_complete or s5_orientation_admission.state_overflow")
+	require.Equal(t, 1, strings.Count(formatted, "offset 4096 limit 1"))
 	require.Contains(t, formatted, "from s5_orientation_executed_candidate join lateral")
 	require.Contains(t, formatted, "s5_orientation_executed_candidate.executed offset 0")
 	require.Contains(t, formatted, "s5_orientation_incumbent as materialized (with")
@@ -169,7 +173,10 @@ func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *test
 	require.Contains(t, formatted, "s5_orientation_shadow_forward as materialized")
 	require.Contains(t, formatted, "s5_orientation_shadow_reverse as materialized")
 	require.Contains(t, formatted, "s5_orientation_shadow_selection as materialized")
-	require.Contains(t, formatted, "from s5_orientation_incumbent, s5_orientation_shadow_selection")
+	require.Contains(t, formatted, "s5_orientation_executed_incumbent as materialized")
+	require.Contains(t, formatted, "record_traversal_runtime_attestation_v1('EXPANSION-STEPWISE-FORWARD', 'shadow_incumbent', false)")
+	require.Contains(t, formatted, "from s5_orientation_executed_incumbent join lateral")
+	require.Contains(t, formatted, "s5_orientation_executed_incumbent.executed offset 0")
 	require.Contains(t, formatted, "limit 513")
 	require.Contains(t, formatted, "limit 16385")
 	require.Contains(t, formatted, "offset 512 limit 1")

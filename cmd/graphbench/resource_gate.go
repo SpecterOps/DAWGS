@@ -419,6 +419,12 @@ func appendOrientationAttributionReasons(gateCase *ResourceGateCase, diagnostic 
 	if candidate+incumbent != 1 {
 		gateCase.Reasons = append(gateCase.Reasons, "orientation execution must attribute exactly one selected arm and zero unselected-arm work")
 	}
+	if candidate == 1 && counters["orientation_incumbent_branch_loops"] != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, "orientation incumbent arm performed work while the candidate was selected")
+	}
+	if incumbent == 1 && counters["orientation_candidate_branch_loops"] != 0 {
+		gateCase.Reasons = append(gateCase.Reasons, "orientation candidate arm performed work while the incumbent was selected")
+	}
 	for _, name := range []string{
 		"orientation_root_probe_loops", "orientation_suffix_probe_loops", "orientation_boundary_probe_loops",
 		"orientation_forward_degree_probe_loops", "orientation_reverse_degree_probe_loops", "orientation_decision_loops",
