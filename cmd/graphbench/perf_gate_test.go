@@ -311,8 +311,9 @@ func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing
 // TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate verifies that subset artifacts require an explicit diagnostic override and still must share the same declaration digest.
 func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate(t *testing.T) {
 	manifest := &SelectionManifest{
-		DiagnosticOnly:    true,
-		DeclarationSHA256: "subset",
+		Version: selectionManifestVersion, DiagnosticOnly: true,
+		FullDeclarationCount: 1, SelectedDeclarationCount: 1,
+		DeclarationSHA256: strings.Repeat("a", 64),
 	}
 	left := []CaseResult{{
 		Dataset: "fixture",
@@ -332,8 +333,9 @@ func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, false), "refused")
 	require.NoError(t, validatePerformanceArtifactSelections(left, right, true))
 	right[0].Environment.Selection = &SelectionManifest{
-		DiagnosticOnly:    true,
-		DeclarationSHA256: "different",
+		Version: selectionManifestVersion, DiagnosticOnly: true,
+		FullDeclarationCount: 1, SelectedDeclarationCount: 1,
+		DeclarationSHA256: strings.Repeat("b", 64),
 	}
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, true), "declarations differ")
 }

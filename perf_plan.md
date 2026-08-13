@@ -712,11 +712,45 @@ witnesses to S4, but this change needs more resource-safety work than P2.
   default-off exact-query canary, and the automatic production selector remains
   `sp-static-v5-contained` with its current S3/S4 choices.
 - A non-holdout live PostgreSQL smoke on
-  `GSPV2-NORMAL-hidden-fanin-path` passed resource-gate v4 with complete
+  `GSPV2-NORMAL-hidden-fanin-path` passed the then-current resource-gate v4 with complete
   schema-v2 telemetry: candidate marker/branch/executor `1/1/1`, fallback
   marker/branch/executor `0/0/0`, 133 bounded-relation states, 132 predecessor
   entries, 4 enumerated rows, and 961 hydrated output bytes. The observed
   limits were respectively 100,000, 100,000, 100,000, and 64 MiB.
+- The next staged study uses a fresh `sp-i1-inbound-v1` cohort rather than the
+  already-opened diagnostic cases: four training declarations at generated
+  depths 4 and 16, and three blind holdouts at fresh depths 8 and 32. All seven
+  bind the same typed inbound one-path query (`min=1`, `max=64`) and exact path
+  observations. A discovery freeze must bind a clean source archive, one
+  binary, the training/full declarations, query hash, four caps, training
+  timing artifacts, and resource-gate v5 before GraphBench permits any holdout
+  database execution.
+- GraphBench now implements that staged boundary as qualification-report schema
+  v1 plus freeze-manifest schema v1. Discovery accepts only the exact four-case
+  training selection and 5-20 paired rounds with at least 5 warmups/10 samples;
+  confirmation requires the exact seven-case training-plus-holdout selection
+  and 10-20 paired rounds with at least 20 warmups/50 samples. Candidate timing
+  requires per-invocation guarded-I1 receipts, while resource-gate v5 must bind
+  every candidate record, arm, round, block, run UUID, timed receipt, and
+  complete `inline_shortest_path` counters. The freeze stores promotion-form
+  state, predecessor, enumeration, and output-byte limits and maps them to the
+  corresponding telemetry counters. The CLI fixes the bootstrap seed at 1 and
+  confidence at 97.5%, uses 10,000 resamples, and freezes those settings;
+  alternating order is also verified against actual invocation chronology.
+- Holdout authorization is checked before database target validation, the
+  destructive lock, fixture loading, or runner construction. It requires the
+  clean frozen commit/archive/binary, a passing checksummed discovery report,
+  the exact full cohort, and an executable capture profile with a size-one
+  pool, Repeatable Read, diagnostic telemetry, alternating S4/I1 arm order,
+  and explicit shared run UUID. Ordinary default and broad selectors exclude
+  the protocol-only holdouts; the exact holdout protocol tag or an exact case
+  name enters protected detection but cannot authorize a partial capture. The
+  only executable confirmation selection is the exact full seven-case cohort
+  on PostgreSQL; Neo4j remains a declared semantic contract, not a holdout
+  timing arm. No timing from the new holdout declarations has been run or
+  inspected at this checkpoint. Protected capture and final confirmation must
+  also supply the three frozen training inputs; GraphBench rehashes them and
+  recomputes the discovery statistics and resource decisions before use.
 
 Implementation sequence:
 

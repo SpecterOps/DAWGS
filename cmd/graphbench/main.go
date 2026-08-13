@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -262,6 +263,28 @@ type config struct {
 	OrientationV2Output string
 	// OrientationV2Protocol selects discovery or confirmation evidence requirements.
 	OrientationV2Protocol string
+	// SPI1BaselineArtifact selects exact S4 records for the staged inbound-I1 study.
+	SPI1BaselineArtifact string
+	// SPI1CandidateArtifact selects guarded canonical-I1 records for the staged study.
+	SPI1CandidateArtifact string
+	// SPI1ResourceReport supplies the candidate artifact's checksummed resource gate.
+	SPI1ResourceReport string
+	// SPI1Freeze binds confirmation reporting or holdout capture to training-only discovery.
+	SPI1Freeze string
+	// SPI1DiscoveryReport supplies the checksummed training-only report bound by the freeze.
+	SPI1DiscoveryReport string
+	// SPI1TrainingBaseline supplies the exact S4 training evidence named by the freeze.
+	SPI1TrainingBaseline string
+	// SPI1TrainingCandidate supplies the exact I1 training evidence named by the freeze.
+	SPI1TrainingCandidate string
+	// SPI1TrainingResource supplies the exact training resource report named by the freeze.
+	SPI1TrainingResource string
+	// SPI1FreezeOutput writes the training-only staged-study freeze manifest.
+	SPI1FreezeOutput string
+	// SPI1Output selects the staged S4-to-I1 qualification report destination.
+	SPI1Output string
+	// SPI1Protocol selects discovery or confirmation evidence requirements.
+	SPI1Protocol string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -406,6 +429,17 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.OrientationV2FreezeOutput, "orientation-v2-freeze-output", "", "write the training-only orientation-v2 discovery freeze manifest")
 	flags.StringVar(&cfg.OrientationV2Output, "orientation-v2-output", "", "four-arm orientation-v2 qualification JSON output path (default: stdout)")
 	flags.StringVar(&cfg.OrientationV2Protocol, "orientation-v2-protocol", referencePairProtocolConfirmation, "orientation-v2 report protocol (discovery or confirmation)")
+	flags.StringVar(&cfg.SPI1BaselineArtifact, "sp-i1-baseline-artifact", "", "matched exact S4 JSONL artifact for staged inbound-I1 qualification")
+	flags.StringVar(&cfg.SPI1CandidateArtifact, "sp-i1-candidate-artifact", "", "matched guarded canonical-I1 JSONL artifact for staged inbound-I1 qualification")
+	flags.StringVar(&cfg.SPI1ResourceReport, "sp-i1-resource-report", "", "resource-gate report bound to the staged canonical-I1 artifact")
+	flags.StringVar(&cfg.SPI1Freeze, "sp-i1-freeze", "", "training-only freeze required by SP-I1 confirmation reporting and holdout capture")
+	flags.StringVar(&cfg.SPI1DiscoveryReport, "sp-i1-discovery-report", "", "training-only discovery report bound by the SP-I1 freeze")
+	flags.StringVar(&cfg.SPI1TrainingBaseline, "sp-i1-training-baseline-artifact", "", "exact S4 training artifact required to recompute a frozen SP-I1 discovery")
+	flags.StringVar(&cfg.SPI1TrainingCandidate, "sp-i1-training-candidate-artifact", "", "exact canonical-I1 training artifact required to recompute a frozen SP-I1 discovery")
+	flags.StringVar(&cfg.SPI1TrainingResource, "sp-i1-training-resource-report", "", "exact training resource report required to recompute a frozen SP-I1 discovery")
+	flags.StringVar(&cfg.SPI1FreezeOutput, "sp-i1-freeze-output", "", "write the staged SP-I1 training-only freeze manifest")
+	flags.StringVar(&cfg.SPI1Output, "sp-i1-output", "", "staged S4-to-I1 qualification JSON output path")
+	flags.StringVar(&cfg.SPI1Protocol, "sp-i1-protocol", referencePairProtocolConfirmation, "staged SP-I1 report protocol (discovery or confirmation)")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -576,6 +610,70 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if (cfg.OrientationV2Freeze != "" || cfg.OrientationV2DiscoveryReport != "" || cfg.OrientationV2FreezeOutput != "") && !orientationV2Configured {
 		return config{}, fmt.Errorf("orientation-v2-freeze requires orientation-v2 report mode")
 	}
+	spI1ReportInputs := []string{cfg.SPI1BaselineArtifact, cfg.SPI1CandidateArtifact, cfg.SPI1ResourceReport}
+	spI1TrainingInputs := []string{cfg.SPI1TrainingBaseline, cfg.SPI1TrainingCandidate, cfg.SPI1TrainingResource}
+	spI1ReportConfigured := cfg.SPI1Output != "" || cfg.SPI1FreezeOutput != ""
+	for _, input := range spI1ReportInputs {
+		spI1ReportConfigured = spI1ReportConfigured || input != ""
+	}
+	if cfg.SPI1Protocol != referencePairProtocolDiscovery && cfg.SPI1Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("sp-i1-protocol must be discovery or confirmation")
+	}
+	if spI1ReportConfigured {
+		for _, input := range spI1ReportInputs {
+			if input == "" {
+				return config{}, fmt.Errorf("SP-I1 report requires baseline, candidate, and resource artifacts")
+			}
+		}
+		if cfg.SPI1Output == "" {
+			return config{}, fmt.Errorf("SP-I1 report requires sp-i1-output")
+		}
+		if cfg.SPI1Protocol == referencePairProtocolDiscovery && cfg.SPI1FreezeOutput == "" {
+			return config{}, fmt.Errorf("SP-I1 discovery requires sp-i1-freeze-output")
+		}
+		if cfg.SPI1Protocol == referencePairProtocolConfirmation && (cfg.SPI1Freeze == "" || cfg.SPI1DiscoveryReport == "") {
+			return config{}, fmt.Errorf("SP-I1 confirmation requires sp-i1-freeze and sp-i1-discovery-report")
+		}
+	} else if (cfg.SPI1Freeze == "") != (cfg.SPI1DiscoveryReport == "") {
+		return config{}, fmt.Errorf("SP-I1 holdout capture requires both sp-i1-freeze and sp-i1-discovery-report")
+	}
+	trainingInputCount := 0
+	for _, input := range spI1TrainingInputs {
+		if input != "" {
+			trainingInputCount++
+		}
+	}
+	if cfg.SPI1Freeze != "" && trainingInputCount != len(spI1TrainingInputs) {
+		return config{}, fmt.Errorf("SP-I1 frozen authorization requires all three exact training evidence artifacts")
+	}
+	if cfg.SPI1Freeze == "" && trainingInputCount != 0 {
+		return config{}, fmt.Errorf("SP-I1 training evidence inputs require a discovery freeze")
+	}
+	if !spI1ReportConfigured && cfg.SPI1Freeze != "" && cfg.SPI1Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("SP-I1 holdout capture requires the confirmation protocol")
+	}
+	if cfg.SPI1FreezeOutput != "" && cfg.SPI1Protocol != referencePairProtocolDiscovery {
+		return config{}, fmt.Errorf("sp-i1-freeze-output is only valid for discovery")
+	}
+	if spI1ReportConfigured && cfg.SPI1Protocol == referencePairProtocolDiscovery && (cfg.SPI1Freeze != "" || cfg.SPI1DiscoveryReport != "") {
+		return config{}, fmt.Errorf("SP-I1 discovery creates a freeze and cannot consume confirmation inputs")
+	}
+	if spI1ReportConfigured && (cfg.OutputJSONL != "" || rawCases != "" || rawDatasets != "" || rawCategories != "" || rawTags != "") {
+		return config{}, fmt.Errorf("SP-I1 report mode cannot also execute or select benchmark cases")
+	}
+	if spI1ReportConfigured {
+		if err := validateDistinctSPI1Paths(map[string]string{
+			"baseline artifact": cfg.SPI1BaselineArtifact, "candidate artifact": cfg.SPI1CandidateArtifact,
+			"resource report": cfg.SPI1ResourceReport, "freeze manifest": cfg.SPI1Freeze,
+			"discovery report": cfg.SPI1DiscoveryReport, "freeze output": cfg.SPI1FreezeOutput,
+			"training baseline artifact":  cfg.SPI1TrainingBaseline,
+			"training candidate artifact": cfg.SPI1TrainingCandidate,
+			"training resource report":    cfg.SPI1TrainingResource,
+			"report output":               cfg.SPI1Output,
+		}); err != nil {
+			return config{}, err
+		}
+	}
 	modeCount := 0
 	if cfg.GateBaseline != "" {
 		modeCount++
@@ -619,8 +717,14 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if orientationV2Configured {
 		modeCount++
 	}
+	if spI1ReportConfigured {
+		modeCount++
+	}
+	if !spI1ReportConfigured && cfg.SPI1Freeze != "" && modeCount > 0 {
+		return config{}, fmt.Errorf("SP-I1 holdout authorization cannot be combined with a standalone report mode")
+	}
 	if modeCount > 1 {
-		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, ExpandInto-report, orientation-report, and orientation-v2-report modes are mutually exclusive")
+		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, ExpandInto-report, orientation-report, orientation-v2-report, and SP-I1-report modes are mutually exclusive")
 	}
 	if modeCount > 0 && cfg.BundleDir != "" {
 		return config{}, fmt.Errorf("standalone report modes and bundle-dir are mutually exclusive")
@@ -628,8 +732,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if len(cfg.AAArtifacts) != 0 && cfg.GateBaseline != "" {
 		return config{}, fmt.Errorf("aa-artifact and performance-gate mode are mutually exclusive")
 	}
-	if cfg.Confidence <= 0 || cfg.Confidence >= 1 {
+	if cfg.Confidence <= 0 || cfg.Confidence >= 1 || math.IsNaN(cfg.Confidence) || math.IsInf(cfg.Confidence, 0) {
 		return config{}, fmt.Errorf("confidence-level must be between 0 and 1")
+	}
+	if spI1ReportConfigured && (cfg.GateSeed != 1 || cfg.Confidence != defaultConfidenceLevel) {
+		return config{}, fmt.Errorf("SP-I1 reporting requires frozen seed 1 and confidence %.4f", defaultConfidenceLevel)
 	}
 	if cfg.Regression < 0 {
 		return config{}, fmt.Errorf("regression-threshold must not be negative")
@@ -770,6 +877,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	} else if cfg.Resume || cfg.AnchorManifest != "" || cfg.Checkpoint != "" || cfg.Progress != "" || cfg.Discovery || len(cfg.TimeoutClasses) > 0 {
 		return config{}, fmt.Errorf("existing-graph workflow flags require existing-graph mode")
 	}
+	if !spI1ReportConfigured && cfg.SPI1Freeze != "" {
+		if err := validateSPI1HoldoutCaptureConfig(cfg); err != nil {
+			return config{}, err
+		}
+	}
 
 	return cfg, nil
 }
@@ -838,6 +950,15 @@ func parseUniqueCSV(kind, raw string) ([]string, error) {
 		values = append(values, value)
 	}
 	return values, nil
+}
+
+func selectedCorpusContainsTag(corpus ScaleCorpus, tag string) bool {
+	for _, testCase := range corpus.Cases {
+		if slices.Contains(testCase.Tags, tag) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseExecutionModes parses a comma-separated mode list and rejects duplicates or unsupported values.
@@ -950,6 +1071,32 @@ func main() {
 		}
 		return
 	}
+	if cfg.SPI1BaselineArtifact != "" {
+		passed, err := createSPI1QualificationReport(
+			cfg.SPI1BaselineArtifact,
+			cfg.SPI1CandidateArtifact,
+			cfg.SPI1ResourceReport,
+			cfg.SPI1Freeze,
+			cfg.SPI1DiscoveryReport,
+			cfg.SPI1FreezeOutput,
+			cfg.SPI1Output,
+			SPI1QualificationOptions{
+				Seed:                  cfg.GateSeed,
+				Confidence:            cfg.Confidence,
+				Protocol:              cfg.SPI1Protocol,
+				TrainingBaselinePath:  cfg.SPI1TrainingBaseline,
+				TrainingCandidatePath: cfg.SPI1TrainingCandidate,
+				TrainingResourcePath:  cfg.SPI1TrainingResource,
+			},
+		)
+		if err != nil {
+			fatal("calculate staged SP-I1 qualification: %v", err)
+		}
+		if cfg.SPI1Protocol == referencePairProtocolConfirmation && !passed {
+			fatal("staged SP-I1 qualification failed")
+		}
+		return
+	}
 	if cfg.ExpandIntoArtifact != "" {
 		if err := createExpandIntoStudyReport(cfg.ExpandIntoArtifact, cfg.ExpandIntoOutput, ExpandIntoStudyOptions{
 			Seed:                cfg.GateSeed,
@@ -968,7 +1115,7 @@ func main() {
 		if err != nil {
 			fatal("load gate corpus declaration: %v", err)
 		}
-		selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
+		selected, _, err := selectRunnableScaleCorpus(corpus, CorpusSelectors{
 			Cases:      cfg.Cases,
 			Datasets:   cfg.Datasets,
 			Categories: cfg.Categories,
@@ -1077,6 +1224,30 @@ func main() {
 		}
 		return
 	}
+	fullCorpus, err := loadScaleCorpus(cfg.CorpusRoot)
+	if err != nil {
+		fatal("load corpus: %v", err)
+	}
+	corpus, selection, err := selectRunnableScaleCorpus(fullCorpus, CorpusSelectors{
+		Cases:      cfg.Cases,
+		Datasets:   cfg.Datasets,
+		Categories: cfg.Categories,
+		Tags:       cfg.Tags,
+	})
+	if err != nil {
+		fatal("select corpus: %v", err)
+	}
+	if selectedCorpusContainsTag(corpus, spI1HoldoutTag) || selectedCorpusContainsSPI1Holdout(corpus) || cfg.SPI1Freeze != "" {
+		if cfg.SPI1Freeze == "" || cfg.SPI1DiscoveryReport == "" {
+			fatal("SP-I1 holdout capture requires sp-i1-freeze and sp-i1-discovery-report before database setup")
+		}
+		if err := validateSPI1HoldoutCapture(
+			corpus, cfg.SPI1Freeze, cfg.SPI1DiscoveryReport,
+			cfg.SPI1TrainingBaseline, cfg.SPI1TrainingCandidate, cfg.SPI1TrainingResource,
+		); err != nil {
+			fatal("authorize SP-I1 holdout capture: %v", err)
+		}
+	}
 
 	if !cfg.ExistingGraph {
 		for _, mode := range cfg.Modes {
@@ -1109,20 +1280,6 @@ func main() {
 				fatal("release destructive run lock: %v", err)
 			}
 		}()
-	}
-
-	fullCorpus, err := loadScaleCorpus(cfg.CorpusRoot)
-	if err != nil {
-		fatal("load corpus: %v", err)
-	}
-	corpus, selection, err := selectScaleCorpus(fullCorpus, CorpusSelectors{
-		Cases:      cfg.Cases,
-		Datasets:   cfg.Datasets,
-		Categories: cfg.Categories,
-		Tags:       cfg.Tags,
-	})
-	if err != nil {
-		fatal("select corpus: %v", err)
 	}
 
 	var (

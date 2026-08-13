@@ -231,6 +231,88 @@ func TestParseConfigRejectsIncompleteOrMixedOrientationSelectorV2Report(t *testi
 	}
 }
 
+func TestParseConfigAcceptsSPI1StagedDiscoveryAndConfirmation(t *testing.T) {
+	discovery, err := parseConfig([]string{
+		"-sp-i1-baseline-artifact", "s4-training.jsonl",
+		"-sp-i1-candidate-artifact", "i1-training.jsonl",
+		"-sp-i1-resource-report", "i1-training-resource.json",
+		"-sp-i1-output", "sp-i1-discovery.json",
+		"-sp-i1-freeze-output", "sp-i1-freeze.json",
+		"-sp-i1-protocol", referencePairProtocolDiscovery,
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "s4-training.jsonl", discovery.SPI1BaselineArtifact)
+	require.Equal(t, "i1-training.jsonl", discovery.SPI1CandidateArtifact)
+	require.Equal(t, "i1-training-resource.json", discovery.SPI1ResourceReport)
+	require.Equal(t, "sp-i1-freeze.json", discovery.SPI1FreezeOutput)
+
+	confirmation, err := parseConfig([]string{
+		"-sp-i1-baseline-artifact", "s4-confirmation.jsonl",
+		"-sp-i1-candidate-artifact", "i1-confirmation.jsonl",
+		"-sp-i1-resource-report", "i1-confirmation-resource.json",
+		"-sp-i1-output", "sp-i1-confirmation.json",
+		"-sp-i1-freeze", "sp-i1-freeze.json",
+		"-sp-i1-discovery-report", "sp-i1-discovery.json",
+		"-sp-i1-training-baseline-artifact", "s4-training.jsonl",
+		"-sp-i1-training-candidate-artifact", "i1-training.jsonl",
+		"-sp-i1-training-resource-report", "i1-training-resource.json",
+		"-sp-i1-protocol", referencePairProtocolConfirmation,
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "sp-i1-freeze.json", confirmation.SPI1Freeze)
+	require.Equal(t, "sp-i1-discovery.json", confirmation.SPI1DiscoveryReport)
+}
+
+func TestParseConfigAcceptsSPI1HoldoutCaptureAuthorization(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-sp-i1-freeze", "sp-i1-freeze.json",
+		"-sp-i1-discovery-report", "sp-i1-discovery.json",
+		"-sp-i1-training-baseline-artifact", "s4-training.jsonl",
+		"-sp-i1-training-candidate-artifact", "i1-training.jsonl",
+		"-sp-i1-training-resource-report", "i1-training-resource.json",
+		"-tags", "sp-i1-inbound-v1-training,sp-i1-inbound-v1-holdout",
+		"-iterations", "50",
+		"-warmup-iterations", "20",
+		"-round", "1",
+		"-block", "1",
+		"-arm", "sp-i1-s4",
+		"-arm-order", "1",
+		"-run-uuid", "sp-i1-confirmation-run",
+		"-postgres-force-shortest-executor", "SP-S4-C-WE+MAT-M0",
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", postgresTraversalTelemetryDiagnostic,
+		"-jsonl-output", "sp-i1-s4-confirmation.jsonl",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "sp-i1-freeze.json", cfg.SPI1Freeze)
+	require.Empty(t, cfg.SPI1BaselineArtifact)
+}
+
+func TestParseConfigRejectsIncompleteOrMixedSPI1StagedWorkflow(t *testing.T) {
+	discovery := []string{
+		"-sp-i1-baseline-artifact", "s4.jsonl",
+		"-sp-i1-candidate-artifact", "i1.jsonl",
+		"-sp-i1-resource-report", "resource.json",
+		"-sp-i1-output", "report.json",
+		"-sp-i1-freeze-output", "freeze.json",
+		"-sp-i1-protocol", referencePairProtocolDiscovery,
+	}
+	for _, args := range [][]string{
+		{"-sp-i1-baseline-artifact", "s4.jsonl"},
+		{"-sp-i1-freeze", "freeze.json"},
+		append(append([]string(nil), discovery...), "-sp-i1-freeze", "old-freeze.json", "-sp-i1-discovery-report", "old-report.json"),
+		append(append([]string(nil), discovery...), "-sp-i1-protocol", "exploratory"),
+		append(append([]string(nil), discovery...), "-resource-artifact", "other.jsonl"),
+		append(append([]string(nil), discovery...), "-sp-i1-output", "s4.jsonl"),
+		append(append([]string(nil), discovery...), "-seed", "2"),
+		append(append([]string(nil), discovery...), "-confidence-level", "0.95"),
+		{"-sp-i1-freeze", "freeze.json", "-sp-i1-discovery-report", "discovery.json", "-resource-artifact", "candidate.jsonl"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
 func TestParseConfigAcceptsProductionManifestAndRejectsToolMixing(t *testing.T) {
 	cfg, err := parseConfig([]string{"-postgres-production-manifest", "provisional.json"}, func(string) string { return "" })
 	require.NoError(t, err)

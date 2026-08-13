@@ -966,6 +966,8 @@ func timedRuntimeAttestationIdentity(translation translate.Result) string {
 	}
 	if strings.HasPrefix(requested, "SP-B1-") || strings.HasPrefix(requested, "SP-B2-") ||
 		strings.HasPrefix(requested, "ASP-B1-") || strings.HasPrefix(requested, "ASP-B2-") ||
+		requested == string(optimize.ShortestPathExecutorS4CanonicalDistance) ||
+		requested == string(optimize.ShortestPathExecutorS4CanonicalWitness) ||
 		requested == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) ||
 		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
 		isOrientationProbePolicy(outcome.EmittedPolicy) {

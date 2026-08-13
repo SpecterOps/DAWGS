@@ -14,7 +14,7 @@ import (
 )
 
 // selectionManifestVersion identifies the serialized schema revision for selection manifest.
-const selectionManifestVersion = 1
+const selectionManifestVersion = 2
 
 // CorpusSelectors contains exact dataset, category, case, and tag filters supplied by the user.
 type CorpusSelectors struct {
@@ -54,12 +54,51 @@ type SelectionManifest struct {
 	SelectedDeclarationCount int `json:"selected_declaration_count"`
 	// OmittedDeclarationCount records declarations omitted by the resolved selection.
 	OmittedDeclarationCount int `json:"omitted_declaration_count"`
+	// ProtectedDeclarationCount records protocol-only declarations omitted before ordinary selector resolution.
+	ProtectedDeclarationCount int `json:"protected_declaration_count,omitempty"`
+	// ProtectedDeclarationSHA256 identifies the exact protocol-only declarations omitted from the runnable universe.
+	ProtectedDeclarationSHA256 string `json:"protected_declaration_sha256,omitempty"`
 	// DeclarationSHA256 identifies the canonical set of declared workloads.
 	DeclarationSHA256 string `json:"declaration_sha256"`
 }
 
+// validateSelectionManifestAccounting distinguishes protocol-protected
+// omissions from ordinary filtered omissions. An unfiltered artifact remains
+// complete only when every omitted declaration is explicitly protected and
+// bound by one digest.
+func validateSelectionManifestAccounting(manifest SelectionManifest) error {
+	if manifest.Version != selectionManifestVersion || manifest.FullDeclarationCount < 1 ||
+		manifest.SelectedDeclarationCount < 1 || manifest.OmittedDeclarationCount < 0 ||
+		manifest.FullDeclarationCount != manifest.SelectedDeclarationCount+manifest.OmittedDeclarationCount ||
+		manifest.ProtectedDeclarationCount < 0 || manifest.ProtectedDeclarationCount > manifest.OmittedDeclarationCount {
+		return fmt.Errorf("selection manifest has inconsistent declaration accounting")
+	}
+	if manifest.ProtectedDeclarationCount == 0 {
+		if manifest.ProtectedDeclarationSHA256 != "" {
+			return fmt.Errorf("selection manifest has a protected digest without protected declarations")
+		}
+	} else if !lowercaseSHA256(manifest.ProtectedDeclarationSHA256) {
+		return fmt.Errorf("selection manifest lacks a valid protected declaration digest")
+	}
+	if !manifest.DiagnosticOnly && manifest.OmittedDeclarationCount != manifest.ProtectedDeclarationCount {
+		return fmt.Errorf("complete selection manifest contains non-protected omissions")
+	}
+	return nil
+}
+
 // selectScaleCorpus filters corpus cases and returns both selected cases and a hashed selection manifest.
 func selectScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorpus, SelectionManifest, error) {
+	if err := validateCorpusSelectors(corpus, selectors); err != nil {
+		return ScaleCorpus{}, SelectionManifest{}, err
+	}
+	return selectScaleCorpusValidated(corpus, selectors)
+}
+
+// selectScaleCorpusValidated resolves selectors against a universe whose
+// selector names have already been validated. Keeping validation separate lets
+// protocol-only workloads remain known selectors while ordinary execution
+// deliberately omits them from its runnable universe.
+func selectScaleCorpusValidated(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorpus, SelectionManifest, error) {
 	filtered := len(selectors.Cases)+len(selectors.Datasets)+len(selectors.Categories)+len(selectors.Tags) > 0
 	manifest := SelectionManifest{
 		Version:              selectionManifestVersion,
@@ -67,10 +106,6 @@ func selectScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorp
 		DiagnosticOnly:       filtered,
 		FullDeclarationCount: len(corpus.DeclaredBackends()),
 	}
-	if err := validateCorpusSelectors(corpus, selectors); err != nil {
-		return ScaleCorpus{}, SelectionManifest{}, err
-	}
-
 	selected := ScaleCorpus{}
 	for _, testCase := range corpus.Cases {
 		if matchesSelectors(testCase, selectors) {
@@ -186,6 +221,8 @@ func selectionIdentity(records []CaseResult) (SelectionManifest, error) {
 		if selected.Version != current.Version || selected.DeclarationSHA256 != current.DeclarationSHA256 ||
 			selected.DiagnosticOnly != current.DiagnosticOnly || selected.FullDeclarationCount != current.FullDeclarationCount ||
 			selected.SelectedDeclarationCount != current.SelectedDeclarationCount || selected.OmittedDeclarationCount != current.OmittedDeclarationCount ||
+			selected.ProtectedDeclarationCount != current.ProtectedDeclarationCount ||
+			selected.ProtectedDeclarationSHA256 != current.ProtectedDeclarationSHA256 ||
 			resolvedSelectionSHA256(selected.Resolved) != resolvedSelectionSHA256(current.Resolved) {
 			return SelectionManifest{}, fmt.Errorf("artifact contains inconsistent selection manifests")
 		}

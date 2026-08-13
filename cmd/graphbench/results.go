@@ -72,6 +72,8 @@ type DurationStats struct {
 // a measured traversal invocation. Multiple events preserve nested fallback
 // chains such as I1 -> S4 -> S3 without reducing them to the terminal arm.
 type RuntimeReceiptEvent struct {
+	// InvocationID binds this event to the session-local timed invocation that emitted it.
+	InvocationID     string `json:"invocation_id,omitempty"`
 	Ordinal          int    `json:"ordinal"`
 	RuntimeIdentity  string `json:"runtime_identity"`
 	RuntimeBranch    string `json:"runtime_branch"`
@@ -114,6 +116,8 @@ type LatencySample struct {
 	FallbackExecuted *bool `json:"fallback_executed,omitempty"`
 	// RuntimeAttestation identifies the boundary that supplied runtime identity.
 	RuntimeAttestation string `json:"runtime_attestation,omitempty"`
+	// RuntimeInvocationID uniquely identifies the session-local timed invocation.
+	RuntimeInvocationID string `json:"runtime_invocation_id,omitempty"`
 	// RuntimeReceiptEvents preserves the complete ordered runtime branch chain
 	// for this exact measured invocation.
 	RuntimeReceiptEvents []RuntimeReceiptEvent `json:"runtime_receipt_events,omitempty"`
@@ -562,7 +566,8 @@ func newCaseResult(testCase ScaleCase, mode ExecutionMode, params map[string]any
 		ExpectedRowCount: testCase.Expected.RowCount,
 		StableObservation: testCase.Expected.ResultKind == "id_rows" ||
 			testCase.Expected.ResultKind == "scalar" ||
-			(testCase.Expected.ResultKind == "path_set" && len(testCase.Expected.PathRows) > 0),
+			(testCase.Expected.ResultKind == "path_set" && (len(testCase.Expected.PathRows) > 0 ||
+				testCase.Expected.RowCount != nil && *testCase.Expected.RowCount == 0)),
 	}
 }
 

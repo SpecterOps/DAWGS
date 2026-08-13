@@ -92,8 +92,10 @@ func (s *postgresTimedReadAttestor) Complete(ctx context.Context, _ int) (timedR
 		if event.Ordinal != idx+1 || event.RuntimeIdentity == "" || event.RuntimeBranch == "" {
 			return timedReadAttestation{}, fmt.Errorf("runtime receipt event chain is not contiguous")
 		}
+		document.Events[idx].InvocationID = invocationID
 	}
 	return timedReadAttestation{
+		InvocationID:      invocationID,
 		RequestedIdentity: document.RequestedIdentity,
 		RuntimeIdentity:   document.RuntimeIdentity,
 		RuntimeBranch:     document.RuntimeBranch,

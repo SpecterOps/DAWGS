@@ -181,8 +181,10 @@ func TestValidateBackendObservationsPreservesDuplicateStableRows(t *testing.T) {
 	require.ErrorContains(t, validateBackendObservations(records), "backend observations differ")
 }
 
-// TestNewCaseResultOnlyCrossChecksExplicitPathRows verifies that path observations become stable cross-backend evidence only when an exact expected path set is declared.
-func TestNewCaseResultOnlyCrossChecksExplicitPathRows(t *testing.T) {
+// TestNewCaseResultCrossChecksExactPathSets verifies that path observations
+// become stable cross-backend evidence only when an exact nonempty path set or
+// an exact empty result is declared.
+func TestNewCaseResultCrossChecksExactPathSets(t *testing.T) {
 	record := newCaseResult(ScaleCase{
 		Expected: ExpectedResult{
 			ResultKind: "path_set",
@@ -196,6 +198,15 @@ func TestNewCaseResultOnlyCrossChecksExplicitPathRows(t *testing.T) {
 			PathRows: []ExpectedPath{{
 				Nodes: []string{"start"},
 			}},
+		},
+	}, ModePostgresSQL, nil)
+	require.True(t, record.StableObservation)
+
+	zero := int64(0)
+	record = newCaseResult(ScaleCase{
+		Expected: ExpectedResult{
+			ResultKind: "path_set",
+			RowCount:   &zero,
 		},
 	}, ModePostgresSQL, nil)
 	require.True(t, record.StableObservation)
