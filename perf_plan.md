@@ -28,7 +28,7 @@ The governing design and implementation records are:
 
 ## Source and author context
 
-The latest full capture was built from:
+The latest broad cross-backend capture was built from:
 
 | Field | Value |
 | --- | --- |
@@ -45,16 +45,24 @@ The corpus digest in this table is for the full automatic-production capture.
 Focused studies use selection-specific corpus digests because each resolves a
 smaller declaration cohort; they share the source and binary identities above.
 
-The worktree is intentionally large and dirty. Before this document was added,
-`git status --short` reported 108 modified or untracked paths. Those changes
-contain the traversal program described here and must be preserved. Do not
-reset, check out, revert, clean, or otherwise discard them. The dirty-diff hash
-above identifies the source used for the benchmark; adding this document
-necessarily changes the current worktree fingerprint.
+The traversal implementation has since been preserved in clean commits. The
+newest clean ASP timing study was captured from:
 
-The `.coverage` captures are local diagnostic artifacts. They are useful for
-engineering decisions but are not clean-source promotion evidence. Do not
-represent them as release qualification.
+| Field | Value |
+| --- | --- |
+| Source commit | `84f38758b2ffaa48e3404310c5dba9c44061b8db` |
+| Source archive SHA-256 | `4c8c846dbe54088409a1e60524a6df7bb60e3a3347f17c5c421306840fe6aa37` |
+| Benchmark binary SHA-256 | `0fce1470f6fc29966b5cebc3beeba087d81f6f7f79cc504d36ac481d3cfe28b5` |
+| Full corpus SHA-256 | `ff889d180965ee3fd9d6f9c0e9c49c145f37184a4008bfb834fede88a26d20ed` |
+| Dirty-diff SHA-256 | empty-input SHA-256 (`e3b0c442...b855`) |
+
+The table above identifies the newest ASP A/A and causal artifacts. It does
+not replace the older source identity for the broad PostgreSQL/Neo4j capture.
+
+The `.coverage` captures are local ignored artifacts. The historical broad
+captures are diagnostics; the `qualification-84f3875` timing artifacts have a
+clean source identity but remain a failed qualification, not release evidence.
+None may be represented as rollout authorization.
 
 The current tree and every raw artifact cited by this document were preserved
 in `.coverage/perf-plan-diagnostic-20260813.tar.gz` before revision work began;
@@ -355,19 +363,14 @@ the clearest non-database optimization targets.
 
 ## Evidence caveats
 
-The latest results are decision-quality diagnostics, not promotion evidence:
-
-- the source tree is dirty;
-- the global capture has one round rather than balanced independent rounds;
-- the focused arms were forced tool paths and captured in separate runs;
-- focused arm order was not counterbalanced;
-- no current host A/A resolution report was bound;
-- no confirmation, p95 containment, resource, reference-closure, or
-  operational report set was closed into a verified manifest.
-
-Before any wider production activation, create a preserved clean source state
-containing the current work, then recapture balanced A/A and candidate runs.
-Do not obtain a clean state by discarding this worktree.
+The broad cross-backend results remain decision-quality diagnostics: that
+capture used one round from the older source identity and is suitable for
+ranking work, not promotion. The newest ASP timing evidence is stronger: it
+uses a clean committed source, one immutable binary, balanced host A/A, a
+guarded production candidate boundary, exact observations, and complete timed
+receipts. It still does not authorize rollout because the broad ASP cohort
+failed p95 qualification and no resource, reference-closure, cancellation,
+concurrency, or operational report set was closed into a verified manifest.
 
 ## Recommended next work and dependencies
 
@@ -396,9 +399,11 @@ clean-source baseline and its lane-specific exact-query canary close.
 
 Goal: turn the current opportunity signals into comparable evidence.
 
-Implementation status: steps 1-6 are complete in the current worktree. Step 7
-requires explicit commit authorization under the repository policy; steps
-8-11 depend on that preserved clean source identity.
+Implementation status: steps 1-9 are complete for the ASP timing lane through
+commit `84f3875`, including a clean immutable binary and a valid 12-case host
+A/A report. Step 10 is complete only for A/A and causal confirmation; the
+remaining resource and operational reports are deliberately deferred because
+the candidate failed the step-11 p95 gate.
 
 1. Preserve the captured diagnostic tree and raw artifacts before editing.
    Record unavailable inputs explicitly rather than reconstructing them.
@@ -471,12 +476,44 @@ by post-hoc removal of failed cases.
 
 Query hashes and the current manifest buckets cannot enforce runtime endpoint
 distance, so the passing deep cases cannot define a safe post-hoc production
-bucket. The next implementation effort must reduce the guarded statement's
-one-/two-hop overhead or introduce a parameter-independent, fail-closed
-eligibility dimension before a newly predeclared cohort is captured.
+bucket. At that point, the only valid next attempts were to reduce the guarded
+statement's one-/two-hop overhead or introduce a parameter-independent,
+fail-closed eligibility dimension before a newly predeclared cohort was
+captured.
 Reconvergence remains a separate topology stress bucket. No exact query hash
 from this rejected envelope may be activated merely because its benchmark
 parameters happened to resolve at depth three or greater.
+
+Two clean shallow-overhead iterations followed. Commit `f6290e8` materialized
+and reused the direct preflight; in a matched old/new diagnostic it improved
+outbound depth-one p50/p95 by 3.75%/0.51% and inbound depth-one by
+2.41%/10.71%. Commit `84f3875` then reused the materialized admission result
+inside runtime attestation, removing four duplicate cap probes and one
+duplicate output-byte aggregation. Both backend `make test_all` runs passed.
+
+The final fixed 20-round confirmation at `84f3875` used 20 warmups and 50
+samples per arm per round against the valid 12-case A/A report. All 480 causal
+records succeeded. All 12,000 timed candidate samples had exact, contiguous
+non-fallback receipts: 10,000 `inline_predecessor_dag` and 2,000
+`inline_no_path`. Every holdout passed. Seven of nine training cases passed;
+outbound depth one and depth two remained p95-inconclusive:
+
+| Case | I1 versus A1 p50 | I1 versus A1 p95 | Result |
+| --- | ---: | ---: | --- |
+| Outbound depth 1 / max 16 | `+2.9%` | `+13.8%` | inconclusive |
+| Outbound depth 2 / max 64 | `-3.4%` | `+21.9%` | inconclusive |
+| Inbound depth 1 / max 16 | `+3.9%` | `+19.0%` | cleared by A/A floors |
+| Reconvergence / max 16 | `-4.1%` | `-4.0%` | cleared |
+| Outbound depth 3 / max 16 | `-52.1%` | `-43.2%` | cleared |
+| Inbound depth 3 / max 64 | `-51.4%` | `-43.6%` | cleared |
+| Disconnected / max 64 | `-95.2%` | `-90.7%` | cleared |
+
+This satisfies the P1 stop condition: two isolated overhead iterations did not
+clear the full predeclared shallow envelope. Keep A1 as the production default,
+keep I1 default-off as a diagnostic tool, do not activate passing hashes from
+the rejected cohort, and move primary optimization effort to P2. A future ASP
+attempt requires a new parameter-independent eligibility design and a newly
+predeclared cohort, not another post-hoc subset of these results.
 
 Implementation sequence:
 
@@ -486,10 +523,9 @@ Implementation sequence:
 2. Confirm complete relationship-ID path multisets, not only counts.
 3. Re-run A1 versus I1 under generic/custom/auto plans, low `work_mem`, pools
    1/2/8, concurrency, cancellation, and policy-generation rollback.
-4. Treat the rejected broad-envelope capture as discovery. Optimize the
-   guarded shallow preflight or add a parameter-independent eligibility rule,
-   then predeclare and independently qualify new outbound and inbound cohorts;
-   keep reconvergence separate and leave an open maximum outside every bucket.
+4. Treat the rejected broad-envelope captures as discovery. The two planned
+   shallow-overhead iterations are complete; pause this lane until there is a
+   new parameter-independent eligibility rule and a newly predeclared cohort.
 5. First activate exact query hashes through `TraversalPolicy` under Repeatable
    Read or Serializable isolation.
 6. Keep Read Committed, reconvergence unless separately qualified, and
@@ -758,9 +794,13 @@ inventory.
 - [A1 report](.coverage/asp-a1-rerun-20260813.md)
 - [ASP I1 report](.coverage/asp-i1-rerun-20260813.md)
 - [Go microbenchmark output](.coverage/go-benchmarks-rerun-20260813.txt)
+- Clean ASP A/A report:
+  `.coverage/qualification-84f3875/aa/asp-incumbent-aa-resolution.json`
+- Clean 20-round ASP confirmation:
+  `.coverage/qualification-84f3875/confirmation20/asp-i1-confirmation.json`
 
-The near-term recommendation is therefore: close the evidence/receipt gaps,
-qualify selective ASP I1, and then activate guarded fixed-suffix orientation
-for exact sparse query cohorts. After those mature canaries, decide whether
-deep inbound single-kind witnesses can safely return to S3 or should move from
-S4 to canonical I1, then harden and evaluate the hidden-fan-in distance arm.
+The near-term recommendation is therefore: pause broad ASP I1 and qualify
+guarded fixed-suffix orientation for exact sparse query cohorts. After that
+canary matures, decide whether deep inbound single-kind witnesses can safely
+return to S3 or should move from S4 to canonical I1, then harden and evaluate
+the hidden-fan-in distance arm.
