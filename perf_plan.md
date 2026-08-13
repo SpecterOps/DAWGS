@@ -442,6 +442,15 @@ implementation and diagnostic work on P1-P6.
 Why first: the executor and rollback path already exist, and it improved four
 of six focused cases by 56-92%.
 
+Implementation status: corpus step 1 now includes normal-tier training cases
+for early targets at depths 1/2/3 under maximums 16/64, inbound mirrors,
+cyclic dead tails, reconvergence, and disconnected maximum misses. These cases
+passed both backends and the forced ASP I1 exact-result/runtime-receipt check.
+Cap-threshold branch behavior remains in the live guarded-statement integration
+matrix because ordinary corpus declarations cannot override immutable
+production caps. Statistical and operational qualification in steps 2-6 is
+still due.
+
 Implementation sequence:
 
 1. Extend the ASP corpus with early targets at depths 1/2/3 under maximums
