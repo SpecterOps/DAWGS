@@ -867,6 +867,10 @@ func TestForcedInlineASPExecutorUsesGuardedTypedStatement(t *testing.T) {
 	require.Contains(t, formatted, "asp_i1_fallback_marker")
 	require.Contains(t, formatted, "all_shortest_paths_dag")
 	require.Contains(t, formatted, "record_requested_traversal_runtime_attestation_v1")
+	require.Contains(t, formatted, "record_requested_traversal_runtime_attestation_v1(case when asp_i1_admission.overflow")
+	require.Contains(t, formatted, "end, asp_i1_admission.overflow, case when asp_i1_admission.overflow")
+	require.Equal(t, 7, strings.Count(formatted, "offset 100000 limit 1"), formatted)
+	require.Equal(t, 1, strings.Count(formatted, "67108864"), formatted)
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})

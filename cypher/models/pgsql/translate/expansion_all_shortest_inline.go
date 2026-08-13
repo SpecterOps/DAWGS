@@ -550,7 +550,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 				Function: aspI1RuntimeAttestationFn,
 				Parameters: []pgsql.Expression{
 					branch,
-					overflow,
+					admissionOverflow,
 					runtimeExecutor,
 				},
 			}, aspI1RuntimeReceipt),
