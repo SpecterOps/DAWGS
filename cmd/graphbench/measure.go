@@ -215,11 +215,49 @@ func stableRelationship(relationship *graph.Relationship, reversed map[graph.ID]
 
 // stablePath converts a backend path to stable ordered node and relationship observations.
 func stablePath(path graph.Path, reversed map[graph.ID]string) (stablePathObservation, error) {
+	if len(path.Nodes) == 0 {
+		return stablePathObservation{}, fmt.Errorf("path has no nodes")
+	}
+	nodesByID := make(map[graph.ID]*graph.Node, len(path.Nodes))
+	for _, node := range path.Nodes {
+		if node == nil {
+			return stablePathObservation{}, fmt.Errorf("path has a nil node")
+		}
+		nodesByID[node.ID] = node
+	}
+
+	// Neo4j exposes the distinct node collection for cyclic paths while
+	// PostgreSQL exposes one node per traversal position. Reconstruct the public
+	// walk from the ordered relationships so cycles and self-loops normalize to
+	// the same repeated-node sequence on both backends.
+	orderedNodes := make([]*graph.Node, 1, len(path.Edges)+1)
+	orderedNodes[0] = path.Nodes[0]
+	currentID := path.Nodes[0].ID
+	for idx, relationship := range path.Edges {
+		if relationship == nil {
+			return stablePathObservation{}, fmt.Errorf("path relationship %d is nil", idx)
+		}
+		nextID := relationship.EndID
+		switch {
+		case relationship.StartID == currentID:
+		case relationship.EndID == currentID:
+			nextID = relationship.StartID
+		default:
+			return stablePathObservation{}, fmt.Errorf("path relationship %d is not contiguous with node ID %d", idx, currentID)
+		}
+		next, found := nodesByID[nextID]
+		if !found {
+			return stablePathObservation{}, fmt.Errorf("path relationship %d references missing node ID %d", idx, nextID)
+		}
+		orderedNodes = append(orderedNodes, next)
+		currentID = nextID
+	}
+
 	observation := stablePathObservation{
-		Nodes:         make([]stableNodeObservation, len(path.Nodes)),
+		Nodes:         make([]stableNodeObservation, len(orderedNodes)),
 		Relationships: make([]stableRelationshipObservation, len(path.Edges)),
 	}
-	for idx, node := range path.Nodes {
+	for idx, node := range orderedNodes {
 		observation.Nodes[idx] = stableNode(node, reversed)
 	}
 	seenRelationships := make(map[graph.ID]struct{}, len(path.Edges))

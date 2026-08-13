@@ -622,6 +622,14 @@ non-ASP production-path opportunity.
   labels remain separate append-safe run series and are combined by a
   checksum-bound native reporter. The capture protocol uses one clean prebuilt
   binary and one stable series UUID across every arm and appended round.
+- The first clean training capture failed closed before report creation because
+  the four path-observed v3 cases declared only row counts. Their exact stable
+  node, relationship-kind, and logical-key path multisets are now part of the
+  checked-in training/holdout declaration; the corpus contract rejects any v2
+  path case without that independent oracle. Stable observation reconstructs
+  repeated cycle/self-loop node positions from the ordered relationship walk,
+  eliminating a Neo4j/PostgreSQL path-adapter representation difference. No
+  holdout timing was opened.
 - V2 gates forward-selected cases on shadow/forward overhead and every case on
   guarded/selected overhead plus guarded/fastest regret. Reverse-selected
   shadow overhead remains diagnostic rather than an automatic pass. No v2

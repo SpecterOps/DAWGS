@@ -87,6 +87,26 @@ func TestValidateScaleCaseFreezesTraversalQualificationSplit(t *testing.T) {
 	require.NoError(t, validateScaleCase(testCase))
 }
 
+// TestValidateScaleCaseRequiresExactFixedSuffixV3Paths prevents a costly v2
+// capture from reaching report time without an independent stable path oracle.
+func TestValidateScaleCaseRequiresExactFixedSuffixV3Paths(t *testing.T) {
+	rowCount := int64(1)
+	testCase := ScaleCase{
+		Name: "v3-path", Dataset: "generated", Category: "generated_fixed_suffix_expansion",
+		Cypher:         "MATCH p = (s)-[*]->(e) RETURN p",
+		CandidateModes: []ExecutionMode{ModePostgresSQL},
+		Tags:           []string{"fixed-suffix-expansion-v3"},
+		Shape:          WorkloadShape{FixtureTier: "normal", QualificationSplit: "training"},
+		Expected:       ExpectedResult{RowCount: &rowCount, ResultKind: "path_set"},
+	}
+
+	require.ErrorContains(t, validateScaleCase(testCase), "require exact expected.path_rows")
+	testCase.Expected.PathRows = []ExpectedPath{{Nodes: []string{"s", "e"}, RelationshipKinds: []string{"Expand"}}}
+	require.ErrorContains(t, validateScaleCase(testCase), "identify every relationship")
+	testCase.Expected.PathRows[0].RelationshipKeys = []string{"expand-1"}
+	require.NoError(t, validateScaleCase(testCase))
+}
+
 // TestScaleCorpusDatasets verifies that corpus dataset discovery removes repeated names and returns a deterministic lexical order.
 func TestScaleCorpusDatasets(t *testing.T) {
 	corpus := ScaleCorpus{

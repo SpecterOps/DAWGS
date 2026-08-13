@@ -158,7 +158,13 @@ func validateScaleCase(testCase ScaleCase) error {
 			if len(path.Nodes) != len(path.RelationshipKinds)+1 {
 				return fmt.Errorf("expected.path_rows[%d] must have one more node than relationship kind", idx)
 			}
+			if slices.Contains(testCase.Tags, "fixed-suffix-expansion-v3") && len(path.RelationshipKeys) != len(path.RelationshipKinds) {
+				return fmt.Errorf("fixed-suffix v3 expected.path_rows[%d] must identify every relationship", idx)
+			}
 		}
+	}
+	if slices.Contains(testCase.Tags, "fixed-suffix-expansion-v3") && testCase.Expected.ResultKind == "path_set" && len(testCase.Expected.PathRows) == 0 {
+		return fmt.Errorf("fixed-suffix v3 path_set cases require exact expected.path_rows")
 	}
 
 	if testCase.WriteScenario != nil {
