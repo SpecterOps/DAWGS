@@ -948,6 +948,10 @@ resamples, and freezes all three settings. Schedule validation checks the
 recorded invocation timestamps as well as the declared alternating order.
 Resource-gate v5 binds every decision to the exact candidate arm, round,
 block, run UUID, runtime receipt, and diagnostic counters.
+The qualification validator requires `planned_candidates` to preserve the
+translator's complete shortest-path executor search space. The exact study
+arms are bound independently through selected, applied, emitted, and timed
+runtime-receipt identities; a reduced two-arm planned list is invalid evidence.
 Every warm sample also carries a unique session-local runtime invocation ID,
 repeated on its receipt events; duplicate reuse anywhere in the paired study
 is rejected. Fixture

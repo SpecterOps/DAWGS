@@ -968,6 +968,7 @@ func validateSPI1Runtime(record CaseResult, arm string) error {
 	}
 	baseline := string(optimize.ShortestPathExecutorS4CanonicalWitness)
 	candidate := string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)
+	plannedIdentities := spI1ShortestPathPlannedIdentities()
 	outcomeDepthsExact := outcome.MinimumDepth != nil && *outcome.MinimumDepth == 1 &&
 		outcome.MaximumDepth != nil && *outcome.MaximumDepth == 64
 	outcomeShapeExact := outcome.Lowering == optimize.LoweringShortestPathExecutor && outcome.TargetKind == "traversal" &&
@@ -983,12 +984,12 @@ func validateSPI1Runtime(record CaseResult, arm string) error {
 	case "baseline":
 		if summary.RequestedIdentity != baseline || summary.EmittedIdentity != baseline ||
 			summary.RuntimeIdentity != baseline || summary.AppliedIdentity != baseline ||
-			!slices.Equal(summary.PlannedIdentities, []string{baseline, "SP-S0"}) ||
+			!slices.Equal(summary.PlannedIdentities, plannedIdentities) ||
 			summary.SelectorVersion != "sp-tool-v1" ||
 			summary.ExecutionBoundary != optimize.ShortestPathExecutorS4CanonicalWitness.ExecutionBoundary() ||
 			summary.RuntimeBranch != "selected" ||
 			outcome.Candidate != "" || outcome.Selected != baseline || outcome.Applied != baseline || outcome.Fallback != "SP-S0" ||
-			!slices.Equal(outcome.PlannedCandidates, []string{baseline, "SP-S0"}) ||
+			!slices.Equal(outcome.PlannedCandidates, plannedIdentities) ||
 			outcome.ExecutionBoundary != "stored_helper" || outcome.SelectorVersion != "sp-tool-v1" ||
 			outcome.EmittedPolicy != "" || len(outcome.EmittedCandidates) != 0 ||
 			outcome.StateLimit != 100_000 || outcome.FrontierLimit != 100_000 || outcome.PredecessorLimit != 100_000 ||
@@ -1002,7 +1003,7 @@ func validateSPI1Runtime(record CaseResult, arm string) error {
 		}
 		if summary.RequestedIdentity != candidate || summary.EmittedIdentity != optimize.ShortestPathPolicyI1CanonicalGuardedV1 ||
 			summary.RuntimeIdentity != candidate || summary.AppliedIdentity != candidate ||
-			!slices.Equal(summary.PlannedIdentities, []string{candidate, baseline}) ||
+			!slices.Equal(summary.PlannedIdentities, plannedIdentities) ||
 			summary.SelectorVersion != "sp-i1-canonical-tool-v1" ||
 			summary.ExecutionBoundary != optimize.ExpansionSearchExecutionBoundaryGuardedDualArm ||
 			summary.RuntimeBranch != expectedBranch ||
@@ -1010,7 +1011,7 @@ func validateSPI1Runtime(record CaseResult, arm string) error {
 			!slices.Contains(summary.PlannedIdentities, baseline) || !slices.Contains(summary.PlannedIdentities, candidate) ||
 			outcome.Candidate != candidate || outcome.Selected != candidate || outcome.Applied != candidate ||
 			outcome.Fallback != baseline || outcome.EmittedPolicy != optimize.ShortestPathPolicyI1CanonicalGuardedV1 ||
-			!slices.Equal(outcome.PlannedCandidates, []string{candidate, baseline}) ||
+			!slices.Equal(outcome.PlannedCandidates, plannedIdentities) ||
 			!slices.Equal(outcome.EmittedCandidates, []string{candidate, baseline}) ||
 			outcome.ExecutionBoundary != optimize.ExpansionSearchExecutionBoundaryGuardedDualArm ||
 			outcome.SelectorVersion != "sp-i1-canonical-tool-v1" ||
@@ -1042,6 +1043,30 @@ func validateSPI1Runtime(record CaseResult, arm string) error {
 		return err
 	}
 	return nil
+}
+
+// spI1ShortestPathPlannedIdentities mirrors the optimizer's complete SP search
+// space. Planned candidates describe every executor considered by lowering;
+// emitted candidates and the runtime receipt separately attest the exact
+// guarded two-arm statement that executed.
+func spI1ShortestPathPlannedIdentities() []string {
+	return []string{
+		string(optimize.ShortestPathExecutorIncumbentWorkspace),
+		string(optimize.ShortestPathExecutorS0Direct),
+		string(optimize.ShortestPathExecutorS1ArrayBFS),
+		string(optimize.ShortestPathExecutorS2TraceRelation),
+		string(optimize.ShortestPathExecutorS3Unidirectional),
+		string(optimize.ShortestPathExecutorS3EdgeM0),
+		string(optimize.ShortestPathExecutorS4CanonicalDistance),
+		string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		string(optimize.ShortestPathExecutorI1CanonicalDistance),
+		string(optimize.ShortestPathExecutorI1CanonicalWitness),
+		string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		string(optimize.ShortestPathExecutorB1AlternatingNodeDistance),
+		string(optimize.ShortestPathExecutorB1AlternatingNodeWitness),
+		string(optimize.ShortestPathExecutorB2SmallerCurrentLevelDistance),
+		string(optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness),
+	}
 }
 
 func validateSPI1SampleRuntime(record CaseResult, arm string) error {

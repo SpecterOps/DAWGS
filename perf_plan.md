@@ -751,6 +751,16 @@ witnesses to S4, but this change needs more resource-safety work than P2.
   inspected at this checkpoint. Protected capture and final confirmation must
   also supply the three frozen training inputs; GraphBench rehashes them and
   recomputes the discovery statistics and resource decisions before use.
+- The first controlled five-round training capture from `6df922c` completed
+  all four training cases in both arms and passed resource-gate v5, but report
+  generation failed closed before writing a freeze. The validator incorrectly
+  required `planned_candidates` to contain only the emitted study pair, while
+  the real translator correctly preserves the complete shortest-path executor
+  search space there. Exact selected, applied, emitted, and timed receipt
+  identities already bind the executed S4/I1 arms. The validator and synthetic
+  fixtures now require the real complete planned list, including adversarial
+  rejection of reduced or supplemental lists. Evidence from the old binary is
+  preserved only as failed protocol evidence; no holdout timing was opened.
 
 Implementation sequence:
 
