@@ -456,6 +456,28 @@ longer the only measurable candidate boundary. Matched incumbent capture has
 an explicit Repeatable Read mode so both arms satisfy the same admission
 contract; Read Committed/autocommit baselines are diagnostic only.
 
+The first clean governing capture rejected the proposed broad envelope. Commit
+`494bb9b8fcf65ff90dc6e71b2c0f3cd32bba1004` used one immutable binary and a
+valid 12-case A/A calibration with 10 carryover-balanced rounds, 20 warmups,
+50 samples per arm per round, and 97.5% seeded intervals. All 240 A/A records
+and all 240 causal-arm records completed, and every timed candidate sample had
+an exact `ASP-I1-U-DAG+MAT-M0@inline_predecessor_dag` receipt. All three
+holdouts and five of nine training cases cleared p95 non-inferiority. The
+remaining four training cases were inconclusive: outbound and inbound one-hop
+targets, the two-hop target, and reconvergence. Inbound one-hop estimated a
+1.100 p50 ratio and 1.238 p95 ratio. Therefore `minimum_depth = 1` with
+`3 <= maximum_depth <= 64` is not promotion-eligible and must not be recovered
+by post-hoc removal of failed cases.
+
+Query hashes and the current manifest buckets cannot enforce runtime endpoint
+distance, so the passing deep cases cannot define a safe post-hoc production
+bucket. The next implementation effort must reduce the guarded statement's
+one-/two-hop overhead or introduce a parameter-independent, fail-closed
+eligibility dimension before a newly predeclared cohort is captured.
+Reconvergence remains a separate topology stress bucket. No exact query hash
+from this rejected envelope may be activated merely because its benchmark
+parameters happened to resolve at depth three or greater.
+
 Implementation sequence:
 
 1. Extend the ASP corpus with early targets at depths 1/2/3 under maximums
@@ -464,12 +486,15 @@ Implementation sequence:
 2. Confirm complete relationship-ID path multisets, not only counts.
 3. Re-run A1 versus I1 under generic/custom/auto plans, low `work_mem`, pools
    1/2/8, concurrency, cancellation, and policy-generation rollback.
-4. Close clean evidence for the proposed `minimum_depth = 1` and explicit
-   `3 <= maximum_depth <= 64`, typed single-kind envelope. Independently
-   qualify inbound and outbound; an open maximum remains outside this bucket.
+4. Treat the rejected broad-envelope capture as discovery. Optimize the
+   guarded shallow preflight or add a parameter-independent eligibility rule,
+   then predeclare and independently qualify new outbound and inbound cohorts;
+   keep reconvergence separate and leave an open maximum outside every bucket.
 5. First activate exact query hashes through `TraversalPolicy` under Repeatable
    Read or Serializable isolation.
-6. Keep Read Committed, max depth <=2, and multi-kind/untyped cases on A1.
+6. Keep Read Committed, reconvergence unless separately qualified, and
+   multi-kind/untyped cases on A1. Do not select from observed endpoint depth
+   unless that choice is enforced inside the exact guarded statement.
 7. Only after canary closure consider an automatic `asp-static-v2` selector.
 
 Primary files:
