@@ -181,6 +181,25 @@ func (s TraversalPolicy) validate() error {
 	if len(manifest.Caps) == 0 || len(manifest.Buckets) == 0 {
 		return fmt.Errorf("promotion manifest requires immutable caps and authorized buckets")
 	}
+	if s.EnableExpansionOrientation {
+		expectedCaps := map[string]int64{
+			"root_row_limit":               optimize.ExpansionSearchOrientationRootRowLimit,
+			"reverse_seed_row_limit":       optimize.ExpansionSearchOrientationReverseSeedRowLimit,
+			"directional_degree_row_limit": optimize.ExpansionSearchOrientationDirectionalDegreeRowLimit,
+			"state_limit":                  optimize.ExpansionSearchOrientationStateLimit,
+		}
+		if len(manifest.Caps) != len(expectedCaps) {
+			return fmt.Errorf("orientation-probe-v1 promotion manifest requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps")
+		}
+		for name, expected := range expectedCaps {
+			if actual, found := manifest.Caps[name]; !found || actual != expected {
+				return fmt.Errorf("orientation-probe-v1 promotion manifest requires %s=%d", name, expected)
+			}
+		}
+		if manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) {
+			return fmt.Errorf("orientation-probe-v1 promotion manifest requires fallback %q", optimize.ExpansionSearchStepwiseForward)
+		}
+	}
 	if s.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG {
 		expectedCaps := map[string]struct{}{
 			"state_limit": {}, "predecessor_limit": {}, "enumeration_limit": {}, "output_bytes_limit": {},

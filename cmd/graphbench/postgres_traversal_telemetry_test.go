@@ -200,6 +200,7 @@ func TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation(t *tes
 		EmittedCandidates: []string{"EXPANSION-SUFFIX-SEEDED-REVERSE", "EXPANSION-STEPWISE-FORWARD"},
 		EmittedPolicy:     "orientation-probe-v1",
 		SelectorVersion:   "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm",
 		StateLimit:        4096,
 	}
 	metrics := PostgresPlanMetrics{
@@ -224,6 +225,7 @@ func TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation(t *tes
 	require.Equal(t, TraversalTelemetryCounterStatusPlanPartial, telemetry.Diagnostic.CounterStatus)
 	require.Equal(t, "EXPANSION-SUFFIX-SEEDED-REVERSE", telemetry.Summary.RuntimeIdentity)
 	require.Equal(t, telemetry.Summary.RuntimeIdentity, telemetry.Summary.AppliedIdentity)
+	require.Equal(t, "guarded_dual_arm", telemetry.Summary.ExecutionBoundary)
 	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["orientation_executed_candidate_rows"])
 }
 

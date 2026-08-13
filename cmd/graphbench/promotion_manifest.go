@@ -13,12 +13,23 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 const promotionManifestVersion = 2
 
 var requiredPromotionEvidenceRoles = []string{
 	"aa", "confirmation", "performance", "resource", "reference_closure", "operational",
+}
+
+func orientationPromotionCaps() map[string]int64 {
+	return map[string]int64{
+		"root_row_limit":               optimize.ExpansionSearchOrientationRootRowLimit,
+		"reverse_seed_row_limit":       optimize.ExpansionSearchOrientationReverseSeedRowLimit,
+		"directional_degree_row_limit": optimize.ExpansionSearchOrientationDirectionalDegreeRowLimit,
+		"state_limit":                  optimize.ExpansionSearchOrientationStateLimit,
+	}
 }
 
 type PromotionEvidenceReference struct {
@@ -185,6 +196,23 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 		for name := range expectedCaps {
 			if manifest.Caps[name] <= 0 {
 				addReason("SP-I1 canonical witness cap " + name + " must be positive")
+			}
+		}
+	}
+	if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+		expectedCaps := orientationPromotionCaps()
+		if manifest.ExecutionBoundary != "guarded_dual_arm" {
+			addReason("orientation-probe-v1 requires the guarded_dual_arm production boundary")
+		}
+		if manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) {
+			addReason("orientation-probe-v1 requires EXPANSION-STEPWISE-FORWARD as its exact fallback")
+		}
+		if len(manifest.Caps) != len(expectedCaps) {
+			addReason("orientation-probe-v1 requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps")
+		}
+		for name, expected := range expectedCaps {
+			if manifest.Caps[name] != expected {
+				addReason(fmt.Sprintf("orientation-probe-v1 cap %s must equal %d", name, expected))
 			}
 		}
 	}

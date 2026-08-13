@@ -674,9 +674,16 @@ ordered runtime fallback event chain.
 
 Use `-postgres-production-manifest` to measure the exact guarded production
 statement from a provisional version-2 manifest before the evidence map can be
-closed. The runner validates the candidate/fallback pair, selector, four
-positive immutable caps, unique exact query digests, and bucket match. It
-executes each statement under Repeatable Read and retains per-sample runtime
+closed. The runner validates the candidate/fallback pair, selector,
+family-specific immutable caps, unique exact query digests, and bucket match.
+Guarded SP/ASP candidates require their four positive shortest-path caps.
+`orientation-probe-v1` instead requires the optimizer's exact
+`root_row_limit=512`, `reverse_seed_row_limit=512`,
+`directional_degree_row_limit=16384`, and `state_limit=4096` contract, the
+`EXPANSION-STEPWISE-FORWARD` fallback, and the `guarded_dual_arm` boundary; its
+production options enable expansion orientation without selecting a
+shortest-path executor. The runner executes each statement under Repeatable
+Read and retains per-sample runtime
 receipts. This flag is mutually exclusive with tool-forced and shadow modes;
 evidence may be empty only because the capture is producing that evidence.
 Final rollout still requires the ordinary complete manifest verifier.

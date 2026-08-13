@@ -124,17 +124,30 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	expectedFallback := map[string]string{
 		string(optimize.ShortestPathExecutorASPI1DAG):                      string(optimize.ShortestPathExecutorASPA1DAG),
 		string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness): string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		string(optimize.ExpansionSearchPolicyOrientationProbeV1):           string(optimize.ExpansionSearchStepwiseForward),
 	}[manifest.Candidate]
 	if expectedFallback == "" || manifest.FallbackExecutor != expectedFallback {
 		return fmt.Errorf("unsupported candidate/fallback pair %s -> %s", manifest.Candidate, manifest.FallbackExecutor)
 	}
-	expectedCaps := []string{"state_limit", "predecessor_limit", "enumeration_limit", "output_bytes_limit"}
-	if len(manifest.Caps) != len(expectedCaps) {
-		return fmt.Errorf("guarded shortest candidate requires exactly four immutable caps")
-	}
-	for _, name := range expectedCaps {
-		if manifest.Caps[name] <= 0 {
-			return fmt.Errorf("guarded shortest candidate cap %s must be positive", name)
+	if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+		expectedCaps := orientationPromotionCaps()
+		if len(manifest.Caps) != len(expectedCaps) {
+			return fmt.Errorf("orientation-probe-v1 requires exactly four immutable caps")
+		}
+		for name, expected := range expectedCaps {
+			if manifest.Caps[name] != expected {
+				return fmt.Errorf("orientation-probe-v1 cap %s must equal %d", name, expected)
+			}
+		}
+	} else {
+		expectedCaps := []string{"state_limit", "predecessor_limit", "enumeration_limit", "output_bytes_limit"}
+		if len(manifest.Caps) != len(expectedCaps) {
+			return fmt.Errorf("guarded shortest candidate requires exactly four immutable caps")
+		}
+		for _, name := range expectedCaps {
+			if manifest.Caps[name] <= 0 {
+				return fmt.Errorf("guarded shortest candidate cap %s must be positive", name)
+			}
 		}
 	}
 	seenQueries := map[string]struct{}{}
@@ -169,19 +182,24 @@ func (s *postgresSQLRunner) productionOptions(cypherQuery string) (translate.Pro
 		if !slices.Contains(bucket.QuerySHA256, digest) {
 			continue
 		}
-		return translate.ProductionOptions{
-			ShortestPathExecutor: optimize.ShortestPathExecutor(manifest.Candidate),
-			ShortestPathCaps: &translate.ProductionShortestPathCaps{
-				StateLimit: manifest.Caps["state_limit"], PredecessorLimit: manifest.Caps["predecessor_limit"],
-				EnumerationLimit: manifest.Caps["enumeration_limit"], OutputBytesLimit: manifest.Caps["output_bytes_limit"],
-			},
+		options := translate.ProductionOptions{
 			AuthorizedBucket: &translate.ProductionTraversalBucket{
 				Direction: bucket.Direction, ObservationMode: bucket.ObservationMode,
 				MinimumDepth: int64(bucket.MinimumDepth), MaximumDepth: int64(bucket.MaximumDepth),
 				RelationshipKindCount: bucket.RelationshipKindCount, UntypedRelationship: bucket.UntypedRelationship,
 			},
 			SelectorVersion: manifest.SelectorVersion,
-		}, nil
+		}
+		if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+			options.EnableExpansionOrientation = true
+		} else {
+			options.ShortestPathExecutor = optimize.ShortestPathExecutor(manifest.Candidate)
+			options.ShortestPathCaps = &translate.ProductionShortestPathCaps{
+				StateLimit: manifest.Caps["state_limit"], PredecessorLimit: manifest.Caps["predecessor_limit"],
+				EnumerationLimit: manifest.Caps["enumeration_limit"], OutputBytesLimit: manifest.Caps["output_bytes_limit"],
+			}
+		}
+		return options, nil
 	}
 	return translate.ProductionOptions{}, fmt.Errorf("query SHA-256 %s is absent from the provisional production manifest", digest)
 }

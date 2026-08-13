@@ -325,6 +325,7 @@ func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.PlannedPolicy)
 	require.Empty(t, outcome.EmittedPolicy)
 	require.Equal(t, []string{string(optimize.ExpansionSearchSuffixSeededReverse)}, outcome.EmittedCandidates)
+	require.Equal(t, "inline_statement", outcome.ExecutionBoundary)
 	require.Equal(t, "forced_tool", outcome.SelectionMode)
 	require.Empty(t, outcome.SkipReason)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
@@ -365,6 +366,7 @@ func TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied(t *testing.T) {
 	require.Equal(t, string(optimize.ExpansionSearchPolicyEndpointGuardV1), outcome.PlannedPolicy)
 	require.Equal(t, string(optimize.ExpansionSearchPolicyEndpointGuardV1), outcome.EmittedPolicy)
 	require.Equal(t, []string{string(optimize.ExpansionSearchStepwiseForward), string(optimize.ExpansionSearchEndpointSeededReverse)}, outcome.EmittedCandidates)
+	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
 	require.Equal(t, &optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: 32}, outcome.ProbeCaps)
 	require.Equal(t, &optimize.ExpansionSearchAdmission{
 		StateLimit:             4096,
@@ -394,7 +396,10 @@ func TestProductionEndpointSeededKillSwitchRestoresStepwiseSQL(t *testing.T) {
 	require.NotContains(t, formatted, "_endpoint_seeded_endpoints")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 1})
 	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), outcome.Selected)
+	require.Empty(t, outcome.EmittedPolicy)
+	require.Equal(t, []string{string(optimize.ExpansionSearchStepwiseForward)}, outcome.EmittedCandidates)
 	require.Equal(t, "production_kill_switch", outcome.SelectionMode)
+	require.Equal(t, "inline_statement", outcome.ExecutionBoundary)
 }
 
 // TestOrdinaryExpansionMayContinueAfterSelfLoop verifies that encountering a self-loop does not stop unrelated recursive expansion.

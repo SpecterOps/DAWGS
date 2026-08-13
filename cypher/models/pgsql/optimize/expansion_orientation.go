@@ -86,11 +86,13 @@ func (s contiguousExpansionOrientationCandidate) decision(qualification contiguo
 func setExpansionSearchExpectedEmission(decision *ExpansionSearchStrategyDecision) {
 	decision.EmittedPolicy = ""
 	decision.EmittedCandidates = []ExpansionSearchStrategy{decision.SelectedStrategy}
+	decision.ExecutionBoundary = ExpansionSearchExecutionBoundaryInlineStatement
 	if decision.SelectedStrategy == ExpansionSearchEndpointSeededReverse && decision.StructurallyEligible {
 		decision.EmittedPolicy = ExpansionSearchPolicyEndpointGuardV1
 		decision.EmittedCandidates = []ExpansionSearchStrategy{
 			ExpansionSearchStepwiseForward,
 			ExpansionSearchEndpointSeededReverse,
 		}
+		decision.ExecutionBoundary = ExpansionSearchExecutionBoundaryGuardedDualArm
 	}
 }

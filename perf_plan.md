@@ -584,20 +584,30 @@ non-ASP production-path opportunity.
   median fell from `10.428ms` to `9.740ms` with identical rows and buffer hits.
   No case showed a stable total-latency regression, so retain this structural
   reduction. It does not by itself close the shadow-overhead gate.
+- Production orientation manifests now bind the exact v1 caps, forward
+  fallback, and `guarded_dual_arm` execution boundary. GraphBench production
+  options enable expansion orientation directly, and traversal telemetry
+  distinguishes guarded production from inline shadow/forced statements.
 
 Implementation sequence:
 
-1. Re-run the existing forward/reverse/orientation-probe tournament with
-   independently varied suffix density, root multiplicity, reverse fan-in,
-   reachable fraction, path observation, duplicates, and cycles.
-2. Verify every probe has a cap+1 sentinel and runs at most once.
-3. Verify candidate and incumbent branches are independently marker-gated and
-   the inactive arm performs zero traversal/output work.
-4. Close clean evidence for sparse suffix query hashes using
-   `orientation-probe-v1` and its strict hysteresis policy.
-5. Roll out through the exact-query driver canary first.
-6. Retain forward fallback on uncertainty or overflow. Do not promote static
-   suffix-first selection across high-fan-in shapes.
+1. Preserve `orientation-probe-v1` and its three-arm shadow report as immutable
+   diagnostic identities; the observed zero-reachable and cyclic choices rule
+   out promotion without a new selector version.
+2. Predeclare a checksum-bound v2 training corpus that independently varies
+   suffix density, root multiplicity, reverse fan-in, reachable fraction, path
+   observation, duplicates, and cycles, plus fresh unseen holdouts.
+3. Add a new `orientation-probe-v2` policy identity and report schema. Require
+   four matched arms: shadow, exact forward, forced reverse, and the actual
+   guarded production statement.
+4. Gate every case on guarded/selected overhead and guarded/fastest regret.
+   Keep shadow/forward qualification-applicable only when the selector chooses
+   forward; reverse-selected shadow overhead remains diagnostic, never an
+   automatic pass.
+5. Re-run discovery, freeze formula/caps/source/binary/corpus, then open the
+   fresh holdouts. Retain forward fallback on every probe or state overflow.
+6. Only after clean confirmation, resource, reference, and operational closure,
+   roll out v2 through the exact-query driver canary.
 
 Primary files:
 
