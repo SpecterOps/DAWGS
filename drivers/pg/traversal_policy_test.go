@@ -25,6 +25,15 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 	caps := map[string]int64{"state_limit": 1000}
 	bucket := map[string]any{"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"}}
 	fallback := ""
+	if orientation {
+		caps = map[string]int64{
+			"root_row_limit":               optimize.ExpansionSearchOrientationRootRowLimit,
+			"reverse_seed_row_limit":       optimize.ExpansionSearchOrientationReverseSeedRowLimit,
+			"directional_degree_row_limit": optimize.ExpansionSearchOrientationDirectionalDegreeRowLimit,
+			"state_limit":                  optimize.ExpansionSearchOrientationStateLimit,
+		}
+		fallback = string(optimize.ExpansionSearchStepwiseForward)
+	}
 	if executor == optimize.ShortestPathExecutorASPI1DAG {
 		boundary = "guarded_dual_arm"
 		caps = map[string]int64{
@@ -70,6 +79,21 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 		Generation: 1, PromotionManifestSHA256: hex.EncodeToString(digest[:]), PromotionManifestJSON: raw,
 		QuerySHA256Allowlist: []string{queryDigest}, ShortestPathExecutor: executor, EnableExpansionOrientation: orientation,
 	}
+}
+
+func rewriteTestTraversalPolicyManifest(t *testing.T, policy TraversalPolicy, mutate func(*traversalPromotionManifest)) TraversalPolicy {
+	t.Helper()
+
+	var manifest traversalPromotionManifest
+	require.NoError(t, json.Unmarshal(policy.PromotionManifestJSON, &manifest))
+	mutate(&manifest)
+
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	digest := sha256.Sum256(raw)
+	policy.PromotionManifestJSON = raw
+	policy.PromotionManifestSHA256 = hex.EncodeToString(digest[:])
+	return policy
 }
 
 func TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps(t *testing.T) {
@@ -166,6 +190,76 @@ func TestTraversalPolicyAllowsGuardedOrientationWithoutSnapshotUpgrade(t *testin
 	effective, identity := driver.SchemaManager.effectiveTraversalPolicy(query, pgx.ReadCommitted)
 	require.True(t, effective.EnableExpansionOrientation)
 	require.Contains(t, identity, "production-policy-")
+}
+
+func TestTraversalPolicyGuardedOrientationRequiresExactManifestContract(t *testing.T) {
+	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) RETURN id(e)"
+	valid := testTraversalPolicy(query, "", true)
+	require.NoError(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(valid))
+
+	tests := map[string]struct {
+		mutate        func(*traversalPromotionManifest)
+		errorContains string
+	}{
+		"candidate": {
+			mutate:        func(manifest *traversalPromotionManifest) { manifest.Candidate = "orientation-probe-v2" },
+			errorContains: `candidate "orientation-probe-v2" does not authorize "orientation-probe-v1"`,
+		},
+		"execution boundary": {
+			mutate:        func(manifest *traversalPromotionManifest) { manifest.ExecutionBoundary = "inline_statement" },
+			errorContains: `execution boundary "inline_statement" does not authorize "guarded_dual_arm"`,
+		},
+		"missing cap": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				delete(manifest.Caps, "root_row_limit")
+			},
+			errorContains: "requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps",
+		},
+		"extra cap": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Caps["survival_row_limit"] = 1
+			},
+			errorContains: "requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps",
+		},
+		"root cap": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Caps["root_row_limit"] = optimize.ExpansionSearchOrientationRootRowLimit + 1
+			},
+			errorContains: "requires root_row_limit=512",
+		},
+		"reverse seed cap": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Caps["reverse_seed_row_limit"] = optimize.ExpansionSearchOrientationReverseSeedRowLimit + 1
+			},
+			errorContains: "requires reverse_seed_row_limit=512",
+		},
+		"directional degree cap": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Caps["directional_degree_row_limit"] = optimize.ExpansionSearchOrientationDirectionalDegreeRowLimit + 1
+			},
+			errorContains: "requires directional_degree_row_limit=16384",
+		},
+		"state cap": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Caps["state_limit"] = optimize.ExpansionSearchOrientationStateLimit + 1
+			},
+			errorContains: "requires state_limit=4096",
+		},
+		"fallback": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.FallbackExecutor = string(optimize.ExpansionSearchSuffixSeededReverse)
+			},
+			errorContains: `requires fallback "EXPANSION-STEPWISE-FORWARD"`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			policy := rewriteTestTraversalPolicyManifest(t, valid, test.mutate)
+			driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+			require.ErrorContains(t, driver.SetTraversalPolicy(policy), test.errorContains)
+		})
+	}
 }
 
 func TestTraversalPolicyEndpointSeededKillSwitchRequiresNoPromotionEvidence(t *testing.T) {

@@ -1020,6 +1020,7 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 			EmittedPolicy:      string(decision.EmittedPolicy),
 			PlannedCandidates:  expansionSearchCandidateNames(decision.PlannedCandidates),
 			EmittedCandidates:  expansionSearchCandidateNames(decision.EmittedCandidates),
+			ExecutionBoundary:  decision.ExecutionBoundary,
 			ProbeCaps:          &probeCaps,
 			Admission:          &admission,
 			Candidate:          string(decision.CandidateStrategy),
@@ -1574,6 +1575,9 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 			decision := &plan.LoweringPlan.ExpansionSearchStrategy[idx]
 			if decision.SelectedStrategy == optimize.ExpansionSearchEndpointSeededReverse {
 				decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+				decision.EmittedPolicy = ""
+				decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward}
+				decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
 				decision.SelectionMode = "production_kill_switch"
 				decision.SelectorVersion = "endpoint-seeded-disabled-v1"
 				decision.FallbackReason = "disabled_by_production_policy"
@@ -1742,6 +1746,7 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 	decision.SelectionMode = "forced_tool"
 	decision.EmittedPolicy = ""
 	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{strategy}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
 	if strategy == optimize.ExpansionSearchSuffixSeededReverse {
 		decision.SelectorVersion = "suffix-seeded-reverse-tool-v1"
 	} else {
@@ -1751,6 +1756,7 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 			optimize.ExpansionSearchStepwiseForward,
 			optimize.ExpansionSearchEndpointSeededReverse,
 		}
+		decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
 	}
 	decision.FallbackReason = ""
 
@@ -1787,6 +1793,7 @@ func applyExpansionOrientationTournament(plan *optimize.Plan) error {
 		optimize.ExpansionSearchStepwiseForward,
 		optimize.ExpansionSearchSuffixSeededReverse,
 	}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
 	decision.FallbackReason = ""
 
 	return nil
@@ -1819,6 +1826,7 @@ func applyExpansionOrientationShadow(plan *optimize.Plan) error {
 	decision.SelectorVersion = string(optimize.ExpansionSearchPolicyOrientationProbeV1)
 	decision.EmittedPolicy = optimize.ExpansionSearchPolicyOrientationProbeV1
 	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
 	decision.FallbackReason = ""
 
 	return nil

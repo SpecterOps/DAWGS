@@ -880,6 +880,7 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 		ExpansionSearchBackwardViabilityForward,
 	}, decision.PlannedCandidates)
 	require.Equal(t, []ExpansionSearchStrategy{ExpansionSearchStepwiseForward}, decision.EmittedCandidates)
+	require.Equal(t, ExpansionSearchExecutionBoundaryInlineStatement, decision.ExecutionBoundary)
 	require.Equal(t, ExpansionSearchProbeCaps{
 		RootRowLimit:              ExpansionSearchOrientationRootRowLimit,
 		ReverseSeedRowLimit:       ExpansionSearchOrientationReverseSeedRowLimit,
@@ -923,6 +924,7 @@ func TestLoweringPlanSelectsGuardedEndpointSeededExpansion(t *testing.T) {
 	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.PlannedPolicy)
 	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.EmittedPolicy)
 	require.Equal(t, []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse}, decision.EmittedCandidates)
+	require.Equal(t, ExpansionSearchExecutionBoundaryGuardedDualArm, decision.ExecutionBoundary)
 	require.Equal(t, ExpansionSearchProbeCaps{ReverseSeedRowLimit: 32}, decision.ProbeCaps)
 	require.Equal(t, ExpansionSearchAdmission{
 		StateLimit:             4096,
@@ -970,6 +972,7 @@ func TestEndpointSeededExpansionKeepsIndependentMultipartRegionQualified(t *test
 	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
 	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.EmittedPolicy)
 	require.Equal(t, []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse}, decision.EmittedCandidates)
+	require.Equal(t, ExpansionSearchExecutionBoundaryGuardedDualArm, decision.ExecutionBoundary)
 	require.Empty(t, decision.FallbackReason)
 }
 

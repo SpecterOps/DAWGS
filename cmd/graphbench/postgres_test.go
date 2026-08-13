@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -57,6 +58,84 @@ func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	require.Equal(t, "asp-i1-test-v1", options.SelectorVersion)
 	_, err = runner.productionOptions(query + " RETURN 1")
 	require.ErrorContains(t, err, "absent from the provisional production manifest")
+}
+
+func TestPostgresProductionManifestBuildsOrientationOptionsWithoutShortestPathFields(t *testing.T) {
+	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) WHERE id(r) = $root_id RETURN id(e)"
+	digest := strings.Repeat("0", 64)
+	manifest := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ExpansionSearchPolicyOrientationProbeV1), SelectorVersion: "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: orientationPromotionCaps(),
+		Buckets: []PromotionBucket{{
+			Name: "outbound-fixed-suffix", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "outbound",
+			ObservationMode: "endpoint_ids", MinimumDepth: 0, MaximumDepth: 16, RelationshipKindCount: 1,
+			QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+
+	runner := &postgresSQLRunner{}
+	require.NoError(t, runner.setProductionManifest(path))
+	options, err := runner.productionOptions(query)
+	require.NoError(t, err)
+	require.True(t, options.EnableExpansionOrientation)
+	require.Empty(t, options.ShortestPathExecutor)
+	require.Nil(t, options.ShortestPathCaps)
+	require.Equal(t, int64(16), options.AuthorizedBucket.MaximumDepth)
+	require.Equal(t, "orientation-probe-v1", options.SelectorVersion)
+}
+
+func TestPostgresProductionManifestRejectsNonExactOrientationContract(t *testing.T) {
+	digest := strings.Repeat("0", 64)
+	base := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ExpansionSearchPolicyOrientationProbeV1), SelectorVersion: "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: orientationPromotionCaps(),
+		Buckets: []PromotionBucket{{
+			Name: "fixed-suffix", QuerySHA256: []string{digest}, QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*PromotionManifest)
+		err    string
+	}{
+		{
+			name: "fallback", mutate: func(manifest *PromotionManifest) { manifest.FallbackExecutor = "EXPANSION-SUFFIX-SEEDED-REVERSE" },
+			err: "unsupported candidate/fallback pair",
+		},
+		{
+			name: "extra cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["extra_limit"] = 1 },
+			err: "orientation-probe-v1 requires exactly four immutable caps",
+		},
+		{
+			name: "missing cap", mutate: func(manifest *PromotionManifest) { delete(manifest.Caps, "root_row_limit") },
+			err: "orientation-probe-v1 requires exactly four immutable caps",
+		},
+		{
+			name: "wrong cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["state_limit"]-- },
+			err: "orientation-probe-v1 cap state_limit must equal 4096",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := base
+			manifest.Caps = clonePromotionCaps(base.Caps)
+			test.mutate(&manifest)
+			raw, err := json.Marshal(manifest)
+			require.NoError(t, err)
+			path := filepath.Join(t.TempDir(), "manifest.json")
+			require.NoError(t, os.WriteFile(path, raw, 0o600))
+			err = (&postgresSQLRunner{}).setProductionManifest(path)
+			require.ErrorContains(t, err, test.err)
+		})
+	}
 }
 
 func TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode(t *testing.T) {

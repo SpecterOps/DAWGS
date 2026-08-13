@@ -553,6 +553,14 @@ const (
 	// ExpansionSearchOrientationForwardScoreMultiplier is the incumbent side
 	// of orientation-probe-v1's strict 3/4 hysteresis comparison.
 	ExpansionSearchOrientationForwardScoreMultiplier int64 = 3
+
+	// ExpansionSearchExecutionBoundaryInlineStatement identifies one emitted
+	// expansion traversal arm in the translated statement.
+	ExpansionSearchExecutionBoundaryInlineStatement = "inline_statement"
+
+	// ExpansionSearchExecutionBoundaryGuardedDualArm identifies a
+	// same-statement expansion policy with exact candidate and fallback arms.
+	ExpansionSearchExecutionBoundaryGuardedDualArm = "guarded_dual_arm"
 )
 
 // ExpansionSearchProbeCaps records the maximum complete evidence admitted by
@@ -707,6 +715,9 @@ type ExpansionSearchStrategyDecision struct {
 	// EmittedCandidates lists the arms present in the translated statement.
 	// Runtime telemetry, not this field, records which arm executed.
 	EmittedCandidates []ExpansionSearchStrategy `json:"emitted_candidates,omitempty"`
+	// ExecutionBoundary describes the SQL boundary that contains the emitted
+	// expansion arm or guarded policy.
+	ExecutionBoundary string `json:"execution_boundary,omitempty"`
 	// ProbeCaps records bounded evidence inputs for the planned policy.
 	ProbeCaps ExpansionSearchProbeCaps `json:"probe_caps"`
 	// Admission records the exact specialized-state gate and fallback chain.

@@ -180,6 +180,15 @@ the unselected arm emits no rows. Read Committed and
 queries outside the exact allowlist retain A1. `DisableInlineASPDAG` is the
 evidence-free emergency rollback control.
 
+Fixed-suffix expansion orientation uses the same fail-closed manifest boundary.
+An `orientation-probe-v1` production manifest must name
+`EXPANSION-STEPWISE-FORWARD` as fallback, use `guarded_dual_arm`, and bind the
+immutable `root_row_limit=512`, `reverse_seed_row_limit=512`,
+`directional_degree_row_limit=16384`, and `state_limit=4096` caps. The guarded
+statement exposes that boundary in traversal telemetry; shadow and forced
+single-arm statements report `inline_statement` and cannot stand in for
+production-boundary evidence.
+
 Runtime receipt workspaces must exist on the exact PostgreSQL session before
 an explicit read-only transaction begins. GraphBench satisfies this by pinning
 and preparing one session. Driver callers that intentionally arm receipts from

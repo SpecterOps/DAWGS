@@ -12,8 +12,103 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
 )
+
+func writePromotionManifestWithPassingEvidence(t *testing.T, manifest PromotionManifest) string {
+	t.Helper()
+	directory := t.TempDir()
+	manifest.Evidence = map[string]PromotionEvidenceReference{}
+	for _, role := range requiredPromotionEvidenceRoles {
+		document := map[string]any{"passed": true, "promotion_identity": promotionEvidenceIdentity(manifest)}
+		switch role {
+		case "aa":
+			document = map[string]any{"order_balanced": true, "cases": []any{map[string]any{"name": "case"}}, "promotion_identity": promotionEvidenceIdentity(manifest)}
+		case "confirmation", "performance":
+			document = map[string]any{"promotion_eligible": true, "promotion_identity": promotionEvidenceIdentity(manifest)}
+		}
+		raw, err := json.Marshal(document)
+		require.NoError(t, err)
+		path := role + ".json"
+		require.NoError(t, os.WriteFile(filepath.Join(directory, path), raw, 0o600))
+		digest := sha256.Sum256(raw)
+		manifest.Evidence[role] = PromotionEvidenceReference{Path: path, SHA256: hex.EncodeToString(digest[:])}
+	}
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	path := filepath.Join(directory, "promotion.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+	return path
+}
+
+func TestVerifyPromotionManifestRequiresExactOrientationProbeContract(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	base := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ExpansionSearchPolicyOrientationProbeV1), SelectorVersion: "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit: "deadbeef", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: orientationPromotionCaps(),
+		Buckets: []PromotionBucket{{
+			Name: "fixed-suffix", QuerySHA256: []string{digest}, Direction: "outbound", ObservationMode: "endpoint_ids",
+			MinimumDepth: 0, MaximumDepth: 16, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+
+	verification, err := verifyPromotionManifest(writePromotionManifestWithPassingEvidence(t, base))
+	require.NoError(t, err)
+	require.True(t, verification.Passed, verification.Reasons)
+
+	tests := []struct {
+		name   string
+		mutate func(*PromotionManifest)
+		reason string
+	}{
+		{
+			name: "boundary", mutate: func(manifest *PromotionManifest) { manifest.ExecutionBoundary = "inline_statement" },
+			reason: "orientation-probe-v1 requires the guarded_dual_arm production boundary",
+		},
+		{
+			name: "fallback", mutate: func(manifest *PromotionManifest) { manifest.FallbackExecutor = "EXPANSION-SUFFIX-SEEDED-REVERSE" },
+			reason: "orientation-probe-v1 requires EXPANSION-STEPWISE-FORWARD as its exact fallback",
+		},
+		{
+			name: "extra cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["extra_limit"] = 1 },
+			reason: "orientation-probe-v1 requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps",
+		},
+		{
+			name: "missing cap", mutate: func(manifest *PromotionManifest) { delete(manifest.Caps, "root_row_limit") },
+			reason: "orientation-probe-v1 requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps",
+		},
+		{
+			name: "root cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["root_row_limit"]-- },
+			reason: "orientation-probe-v1 cap root_row_limit must equal 512",
+		},
+		{
+			name: "reverse seed cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["reverse_seed_row_limit"]-- },
+			reason: "orientation-probe-v1 cap reverse_seed_row_limit must equal 512",
+		},
+		{
+			name: "directional degree cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["directional_degree_row_limit"]-- },
+			reason: "orientation-probe-v1 cap directional_degree_row_limit must equal 16384",
+		},
+		{
+			name: "state cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["state_limit"]-- },
+			reason: "orientation-probe-v1 cap state_limit must equal 4096",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := base
+			manifest.Caps = clonePromotionCaps(base.Caps)
+			test.mutate(&manifest)
+			verification, err := verifyPromotionManifest(writePromotionManifestWithPassingEvidence(t, manifest))
+			require.NoError(t, err)
+			require.False(t, verification.Passed)
+			require.Contains(t, verification.Reasons, test.reason)
+		})
+	}
+}
 
 func TestVerifyPromotionManifestRequiresCompleteImmutableEvidenceClosure(t *testing.T) {
 	directory := t.TempDir()

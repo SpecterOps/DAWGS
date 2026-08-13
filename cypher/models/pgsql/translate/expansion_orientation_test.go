@@ -139,6 +139,7 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, decision.Target)
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.EmittedPolicy)
+	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
 	require.Empty(t, outcome.Applied)
 	require.Empty(t, outcome.SkipReason)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
@@ -159,6 +160,7 @@ func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testi
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
 	require.Equal(t, "production_canary", outcome.SelectionMode)
 	require.Equal(t, "traversal-production-g11", outcome.SelectorVersion)
+	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
 }
 
 func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *testing.T) {
@@ -218,6 +220,7 @@ func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *test
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.EmittedPolicy)
 	require.Equal(t, []string{string(optimize.ExpansionSearchStepwiseForward)}, outcome.EmittedCandidates)
 	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), outcome.Selected)
+	require.Equal(t, "inline_statement", outcome.ExecutionBoundary)
 	require.Empty(t, outcome.Applied)
 	require.Empty(t, outcome.SkipReason)
 }
@@ -305,6 +308,8 @@ func TestProductionFixedSuffixTranslationRemainsIncumbent(t *testing.T) {
 	require.Equal(t, optimize.ExpansionSearchStepwiseForward, decision.SelectedStrategy)
 	require.Empty(t, decision.EmittedPolicy)
 	require.Equal(t, []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward}, decision.EmittedCandidates)
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, decision.Target)
+	require.Equal(t, "inline_statement", outcome.ExecutionBoundary)
 }
 
 func TestGuardedSuffixOrientationUsesOnlyTargetGraphRelations(t *testing.T) {
