@@ -87,7 +87,7 @@ func measureCompileWaterfall(
 }
 
 // measureRawPGXWaterfall times PostgreSQL bind, first row, drain, and close stages separately.
-func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery string, params map[string]any, warmupIterations, iterations int) (PostgresBoundaryWaterfall, error) {
+func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery string, params map[string]any, warmupIterations, iterations int, isolation ...pgx.TxIsoLevel) (PostgresBoundaryWaterfall, error) {
 	if warmupIterations < 0 || iterations < 1 {
 		return PostgresBoundaryWaterfall{}, fmt.Errorf("invalid raw pgx warmup/iteration counts")
 	}
@@ -108,7 +108,11 @@ func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery st
 		// whose SQL performs session-local DDL/DML. Use a rollback-only
 		// read-write transaction so the raw boundary can execute the identical
 		// translated SQL without committing state.
-		tx, err := connection.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadWrite})
+		txOptions := pgx.TxOptions{AccessMode: pgx.ReadWrite}
+		if len(isolation) > 0 {
+			txOptions.IsoLevel = isolation[0]
+		}
+		tx, err := connection.BeginTx(ctx, txOptions)
 		if err != nil {
 			return BoundarySample{}, err
 		}

@@ -319,6 +319,89 @@ func TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent(t 
 	require.True(t, *telemetry.Summary.Overflow)
 }
 
+func TestPostgresTraversalTelemetryUsesExactGuardedOrientationReceiptBranches(t *testing.T) {
+	for _, testCase := range []struct {
+		name             string
+		candidateRows    int64
+		incumbentRows    int64
+		rootProbeRows    int64
+		runtimeIdentity  string
+		runtimeBranch    string
+		fallbackExecuted bool
+		overflow         bool
+	}{
+		{
+			name: "reverse candidate", candidateRows: 1, runtimeIdentity: string(optimize.ExpansionSearchSuffixSeededReverse),
+			runtimeBranch: "suffix_seeded_reverse",
+		},
+		{
+			name: "forward selection", incumbentRows: 1, runtimeIdentity: string(optimize.ExpansionSearchStepwiseForward),
+			runtimeBranch: "exact_forward_incumbent",
+		},
+		{
+			name: "overflow fallback", incumbentRows: 1, rootProbeRows: optimize.ExpansionSearchOrientationRootRowLimit + 1,
+			runtimeIdentity: string(optimize.ExpansionSearchStepwiseForward), runtimeBranch: "exact_forward_incumbent",
+			fallbackExecuted: true, overflow: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			outcome := translate.TargetLoweringOutcome{
+				Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
+				Selected: string(optimize.ExpansionSearchStepwiseForward), Applied: string(optimize.ExpansionSearchStepwiseForward),
+				Fallback:          string(optimize.ExpansionSearchStepwiseForward),
+				PlannedCandidates: []string{string(optimize.ExpansionSearchStepwiseForward), string(optimize.ExpansionSearchSuffixSeededReverse)},
+				EmittedCandidates: []string{string(optimize.ExpansionSearchStepwiseForward), string(optimize.ExpansionSearchSuffixSeededReverse)},
+				EmittedPolicy:     string(optimize.ExpansionSearchPolicyOrientationProbeV2), SelectorVersion: string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+				ExecutionBoundary: optimize.ExpansionSearchExecutionBoundaryGuardedDualArm,
+				ProbeCaps:         &optimize.ExpansionSearchProbeCaps{RootRowLimit: optimize.ExpansionSearchOrientationRootRowLimit},
+			}
+			metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
+				{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_candidate", ActualRows: testCase.candidateRows, ActualLoops: 1},
+				{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: testCase.incumbentRows, ActualLoops: 1},
+				{NodeType: "Limit", SubplanName: "CTE s5_orientation_root_probe", ActualRows: testCase.rootProbeRows, ActualLoops: 1},
+			}}
+
+			telemetry, err := buildPostgresCaseTraversalTelemetry(
+				translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelSummary,
+			)
+			require.NoError(t, err)
+			require.Equal(t, testCase.runtimeIdentity, telemetry.Summary.RuntimeIdentity)
+			require.Equal(t, testCase.runtimeBranch, telemetry.Summary.RuntimeBranch)
+			require.Equal(t, testCase.fallbackExecuted, *telemetry.Summary.FallbackExecuted)
+			require.Equal(t, testCase.overflow, *telemetry.Summary.Overflow)
+			require.NoError(t, validateRuntimeReceiptEvents([]RuntimeReceiptEvent{{
+				Ordinal: 1, RuntimeIdentity: testCase.runtimeIdentity, RuntimeBranch: testCase.runtimeBranch,
+				FallbackExecuted: testCase.fallbackExecuted,
+			}}, telemetry.Summary.RuntimeIdentity, telemetry.Summary.RuntimeBranch, telemetry.Summary.FallbackExecuted))
+		})
+	}
+}
+
+func TestPostgresTraversalTelemetryUsesV2DepthWeightedDiagnosticScore(t *testing.T) {
+	maximumDepth := int64(16)
+	outcome := translate.TargetLoweringOutcome{
+		Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
+		Selected: string(optimize.ExpansionSearchStepwiseForward), Applied: string(optimize.ExpansionSearchStepwiseForward),
+		Fallback: string(optimize.ExpansionSearchStepwiseForward), EmittedPolicy: string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+		SelectorVersion: string(optimize.ExpansionSearchPolicyOrientationProbeV2), MaximumDepth: &maximumDepth,
+	}
+	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_root_probe", ActualRows: 2, ActualLoops: 1},
+		{NodeType: "Limit", SubplanName: "CTE s5_orientation_forward_degree_probe", ActualRows: 8, ActualLoops: 1},
+		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 1, ActualLoops: 1},
+	}}
+	telemetry, err := buildPostgresCaseTraversalTelemetry(
+		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
+	)
+	require.NoError(t, err)
+	enrichOrientationTraversalTelemetry(telemetry, metrics, 1, []string{`["path"]`}, maximumDepth)
+	require.NoError(t, telemetry.Validate())
+	require.Equal(t, float64(130), *telemetry.Diagnostic.Counters.Orientation.ForwardScore)
+	require.Equal(t, maximumDepth, orientationPolicyMaximumDepth(translate.OptimizationSummary{
+		TargetOutcomes: []translate.TargetLoweringOutcome{outcome},
+	}, string(optimize.ExpansionSearchPolicyOrientationProbeV2)))
+}
+
 func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNodes(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
 		Family: "fixed_suffix_expansion", Candidate: "EXPANSION-SUFFIX-SEEDED-REVERSE",
@@ -345,7 +428,7 @@ func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNode
 	}}
 	telemetry, err := buildPostgresCaseTraversalTelemetry(translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic)
 	require.NoError(t, err)
-	enrichOrientationTraversalTelemetry(telemetry, metrics, 1, []string{`["path"]`})
+	enrichOrientationTraversalTelemetry(telemetry, metrics, 1, []string{`["path"]`}, 0)
 	require.NoError(t, telemetry.Validate())
 	require.Equal(t, TraversalTelemetryCounterStatusComplete, telemetry.Diagnostic.CounterStatus)
 	require.Equal(t, int64(5), *telemetry.Diagnostic.Counters.Orientation.ReverseSeeds)
@@ -446,6 +529,36 @@ func TestParseConfigValidatesPostgresTraversalTelemetryMode(t *testing.T) {
 
 	_, err = parseConfig([]string{"-postgres-expansion-orientation-shadow", "-postgres-force-expansion-search", "EXPANSION-SUFFIX-SEEDED-REVERSE"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "mutually exclusive")
+}
+
+func TestParseConfigAcceptsExplicitOrientationProbeV2MeasurementModes(t *testing.T) {
+	for _, mode := range [][]string{
+		{"-postgres-expansion-orientation-shadow"},
+		{"-postgres-expansion-orientation-tournament"},
+	} {
+		args := append(append([]string(nil), mode...),
+			"-postgres-expansion-orientation-policy", "orientation-probe-v2",
+			"-postgres-repeatable-read",
+			"-postgres-traversal-telemetry", "summary",
+		)
+		cfg, err := parseConfig(args, func(string) string { return "" })
+		require.NoError(t, err, mode)
+		require.Equal(t, "orientation-probe-v2", cfg.PostgresExpansionOrientationPolicy)
+		require.True(t, cfg.PostgresRepeatableRead)
+		require.Equal(t, postgresTraversalTelemetrySummary, cfg.PostgresTraversalTelemetry)
+	}
+
+	for _, args := range [][]string{
+		{"-postgres-expansion-orientation-policy", "orientation-probe-v2", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "summary"},
+		{"-postgres-expansion-orientation-shadow", "-postgres-expansion-orientation-policy", "orientation-probe-v3", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "summary"},
+		{"-postgres-expansion-orientation-shadow", "-postgres-expansion-orientation-tournament", "-postgres-repeatable-read"},
+		{"-postgres-expansion-orientation-shadow", "-postgres-expansion-orientation-policy", "orientation-probe-v2", "-postgres-traversal-telemetry", "summary"},
+		{"-postgres-expansion-orientation-shadow", "-postgres-expansion-orientation-policy", "orientation-probe-v2", "-postgres-repeatable-read"},
+		{"-postgres-expansion-orientation-tournament"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
 }
 
 func bidirectionalCaseTelemetry(t *testing.T, level TraversalTelemetryLevel) *TraversalExecutionTelemetry {

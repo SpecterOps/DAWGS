@@ -62,7 +62,7 @@ func selectedGuardedFixedSuffixDecision(part *PatternPart, decisions map[optimiz
 		if decision, found := decisions[step.SourceTarget]; found &&
 			decision.Family == "fixed_suffix_expansion" &&
 			decision.CandidateStrategy == optimize.ExpansionSearchSuffixSeededReverse &&
-			decision.EmittedPolicy == optimize.ExpansionSearchPolicyOrientationProbeV1 {
+			supportedExpansionOrientationPolicy(decision.EmittedPolicy) {
 			return decision, true
 		}
 	}
@@ -118,8 +118,8 @@ func (s *Translator) rewriteTraversalPatternAsSuffixSeededReverse(part *PatternP
 	return nil
 }
 
-// rewriteTraversalPatternAsGuardedSuffixOrientation emits the tool-only
-// orientation-probe-v1 policy. Guarded mode wraps the incumbent and reverse
+// rewriteTraversalPatternAsGuardedSuffixOrientation emits a tool-selected,
+// versioned orientation policy. Guarded mode wraps the incumbent and reverse
 // arm in disjoint runtime gates; shadow mode executes the same bounded probes
 // but leaves the incumbent as the only traversal arm.
 func (s *Translator) rewriteTraversalPatternAsGuardedSuffixOrientation(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
@@ -191,7 +191,7 @@ func (s *Translator) rewriteTraversalPatternAsGuardedSuffixOrientation(part *Pat
 		Alias: incumbentFinal.Alias,
 		Query: query,
 	})
-	s.recordExpansionSearchPolicy(decision.Target, optimize.ExpansionSearchPolicyOrientationProbeV1)
+	s.recordExpansionSearchPolicy(decision.Target, decision.EmittedPolicy)
 	return nil
 }
 
@@ -252,7 +252,10 @@ func (s *Translator) buildShadowSuffixOrientationQuery(
 		decision.ProbeCaps.DirectionalDegreeRowLimit,
 	)
 	metrics := buildExpansionOrientationMetrics(ids, decision.ProbeCaps)
-	policyDecision := buildExpansionOrientationDecision(ids)
+	policyDecision, err := buildExpansionOrientationDecision(ids, decision.EmittedPolicy, decision.MaximumDepth)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 	shadowMarkers := buildExpansionOrientationShadowMarkers(ids)
 	incumbent, incumbentOutput, err := buildExpansionOrientationIncumbentCTE(ids, incumbentChain, incumbentFinal, incumbentProjection)
 	if err != nil {
@@ -352,7 +355,10 @@ func (s *Translator) buildGuardedSuffixOrientationQuery(
 		decision.ProbeCaps.DirectionalDegreeRowLimit,
 	)
 	metrics := buildExpansionOrientationMetrics(ids, decision.ProbeCaps)
-	policyDecision := buildExpansionOrientationDecision(ids)
+	policyDecision, err := buildExpansionOrientationDecision(ids, decision.EmittedPolicy, decision.MaximumDepth)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 	reverseSeed := buildExpansionOrientationReverseSeed(ids)
 	reverseIDs := suffixIDs
 	reverseIDs.boundaries = ids.reverseSeed

@@ -133,7 +133,9 @@ order-balanced repeated A/A captures. Complete normal/envelope performance
 gates require that checksummed per-case evidence and use minimum 5%/100us
 floors; stress timing remains diagnostic. Exact case/dataset/category/tag selectors create diagnostic-only
 artifacts that the complete gate refuses; configured warmups and matched
-arm/block/run metadata support isolated confirmation. `make perf_confirm`
+arm/block/run metadata support isolated confirmation. The GraphBench CLI accepts
+repeated `-aa-artifact` inputs so two immutable append-series arms can be
+validated without an external merge. `make perf_confirm`
 reports paired absolute and relative p50/p95 changes with optional block/reload
 A/A floors. Capture bundles can retain the source patch, untracked sources,
 module state, binary, manifest, raw records, and checksums. Opt-in pool
@@ -144,11 +146,29 @@ shared search boundary; they do not enable an experimental production executor.
 Generated fixed-suffix expansion captures provide selectable exact root-reuse,
 late-hydration, factored-suffix forward, suffix-seeded reverse, and
 backward-viability forward arms plus versioned fixtures with independent
-suffix-density and reverse-fan-in controls. The optimizer reports a typed
+suffix-density and reverse-fan-in controls. V3 fixtures additionally encode
+matching-root multiplicity and independent relationship-distinct cycle and
+self-loop controls at the productive boundary. The optimizer reports a typed
 expansion-search decision. Repository-native
 `EXPANSION-SUFFIX-SEEDED-REVERSE` is an exact qualification-only implementation.
 Production selection remains on the stepwise incumbent because query shape and
 available metadata do not provide hard suffix-density or reverse-state bounds.
+The staged, tool-only `orientation-probe-v2` experiment uses
+`F2 = root_rows + maximum_depth * forward_degree_rows` and
+`R2 = suffix_rows + boundary_rows + reverse_degree_rows`, selecting reverse
+only when every bounded probe is complete and `4 * R2 < 3 * F2`. Its frozen v3
+corpus contains eight selector-training cases and four evaluation holdouts whose
+timings remain unopened. Qualification requires matched `shadow`, `incumbent`,
+`reverse`, and `guarded` artifacts captured under Repeatable Read with traversal
+telemetry. On a clean tree, discovery must emit both its report and freeze
+manifest from the exact eight training cases; confirmation must consume those
+checksum-bound files and the exact eight-training/four-holdout cohort. Per-case
+A/A evidence also binds the PostgreSQL timing environment, including transaction
+isolation, and the exact validated fixture. See
+[GraphBench](cmd/graphbench/README.md) for the exact capture and report protocol.
+No v2 qualification benchmark has passed. The existing
+`orientation-probe-v1` report, exact-query production seam, and default
+production behavior are unchanged by this staging work.
 For the distinct one-fixed-prefix plus selective-terminal-expansion shape,
 production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
 4096 reverse-state caps select either the reverse candidate or an exact

@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -41,6 +43,11 @@ type AAResolutionCase struct {
 	Backend ExecutionMode `json:"backend"`
 	// WorkloadSHA256 binds the resolution to the exact logical workload declaration.
 	WorkloadSHA256 string `json:"workload_sha256"`
+	// PostgresEnvironmentSHA256 binds PostgreSQL A/A noise to the exact timing
+	// environment, including transaction isolation and normalized analyze state.
+	PostgresEnvironmentSHA256 string `json:"postgres_environment_sha256,omitempty"`
+	// FixtureSHA256 binds PostgreSQL A/A noise to the exact validated fixture.
+	FixtureSHA256 string `json:"fixture_sha256,omitempty"`
 	// Rounds records the number of independent measurement rounds.
 	Rounds int `json:"rounds"`
 	// SamplesPerArm records matched timing samples available from each A/A arm.
@@ -153,16 +160,26 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 		if err != nil {
 			return AAResolutionReport{}, err
 		}
+		postgresEnvironmentSHA256, err := postgresTimingEnvironmentSHA256ForKey(records, key)
+		if err != nil {
+			return AAResolutionReport{}, err
+		}
+		fixtureSHA256, err := fixtureSHA256ForKey(records, key)
+		if err != nil {
+			return AAResolutionReport{}, err
+		}
 		entry := AAResolutionCase{
-			Dataset:        key.dataset,
-			Name:           key.name,
-			Backend:        key.backend,
-			WorkloadSHA256: workloadSHA256,
-			Rounds:         len(armA),
-			SamplesPerArm:  armSamples,
-			P50:            aaMetricResolution(p50, p50Change),
-			P95:            aaMetricResolution(p95, p95Change),
-			P99Gated:       armSamples >= 10_000,
+			Dataset:                   key.dataset,
+			Name:                      key.name,
+			Backend:                   key.backend,
+			WorkloadSHA256:            workloadSHA256,
+			PostgresEnvironmentSHA256: postgresEnvironmentSHA256,
+			FixtureSHA256:             fixtureSHA256,
+			Rounds:                    len(armA),
+			SamplesPerArm:             armSamples,
+			P50:                       aaMetricResolution(p50, p50Change),
+			P95:                       aaMetricResolution(p95, p95Change),
+			P99Gated:                  armSamples >= 10_000,
 		}
 		if !entry.P99Gated {
 			entry.P99Reason = fmt.Sprintf("diagnostic only: need at least 10000 samples per A/A arm, got %d", armSamples)
@@ -307,9 +324,10 @@ func writeAAResolutionReport(path string, report AAResolutionReport) (err error)
 	return encoder.Encode(report)
 }
 
-// createAAResolutionReport loads an artifact, builds its A/A resolution report, and writes the result.
-func createAAResolutionReport(artifactPath, outputPath string, options PerfGateOptions) error {
-	records, err := readJSONLFile(artifactPath)
+// createAAResolutionReport loads one or more immutable arm artifacts, builds
+// their joint A/A resolution report, and writes the result.
+func createAAResolutionReport(artifactPaths []string, outputPath string, options PerfGateOptions) error {
+	records, artifactSHA256, err := loadAAResolutionArtifacts(artifactPaths)
 	if err != nil {
 		return err
 	}
@@ -317,11 +335,58 @@ func createAAResolutionReport(artifactPath, outputPath string, options PerfGateO
 	if err != nil {
 		return err
 	}
-	report.ArtifactSHA256, err = fileSHA256(artifactPath)
-	if err != nil {
-		return err
-	}
+	report.ArtifactSHA256 = artifactSHA256
 	return writeAAResolutionReport(outputPath, report)
+}
+
+// loadAAResolutionArtifacts combines separately captured A/A arms without
+// weakening appendJSONLFile's one-arm run-series identity. A single input keeps
+// the historical raw-file checksum. Multiple inputs use a domain-separated,
+// order-independent digest of their exact file checksums.
+func loadAAResolutionArtifacts(paths []string) ([]CaseResult, string, error) {
+	if len(paths) == 0 {
+		return nil, "", fmt.Errorf("at least one A/A artifact is required")
+	}
+
+	var (
+		records []CaseResult
+		digests = make([]string, 0, len(paths))
+		seen    = make(map[string]struct{}, len(paths))
+	)
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return nil, "", fmt.Errorf("A/A artifact path must not be empty")
+		}
+		cleaned := filepath.Clean(path)
+		if _, duplicate := seen[cleaned]; duplicate {
+			return nil, "", fmt.Errorf("duplicate A/A artifact %q", path)
+		}
+		seen[cleaned] = struct{}{}
+
+		current, err := readJSONLFile(path)
+		if err != nil {
+			return nil, "", fmt.Errorf("read A/A artifact %q: %w", path, err)
+		}
+		digest, err := fileSHA256(path)
+		if err != nil {
+			return nil, "", fmt.Errorf("checksum A/A artifact %q: %w", path, err)
+		}
+		records = append(records, current...)
+		digests = append(digests, digest)
+	}
+	if len(digests) == 1 {
+		return records, digests[0], nil
+	}
+
+	sort.Strings(digests)
+	hasher := sha256.New()
+	_, _ = hasher.Write([]byte("graphbench-aa-artifact-set-v1\n"))
+	for _, digest := range digests {
+		_, _ = hasher.Write([]byte(digest))
+		_, _ = hasher.Write([]byte{'\n'})
+	}
+	return records, hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // loadAAResolutionReport decodes a host A/A report and returns the report file's checksum.

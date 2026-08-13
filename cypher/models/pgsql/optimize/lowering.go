@@ -531,6 +531,11 @@ const (
 	// orientation from bounded, same-statement topology probes.
 	ExpansionSearchPolicyOrientationProbeV1 ExpansionSearchPolicy = "orientation-probe-v1"
 
+	// ExpansionSearchPolicyOrientationProbeV2 selects an ordinary-expansion
+	// orientation using depth-weighted forward work and the same bounded,
+	// same-statement topology probes as v1.
+	ExpansionSearchPolicyOrientationProbeV2 ExpansionSearchPolicy = "orientation-probe-v2"
+
 	// ExpansionSearchOrientationRootRowLimit caps complete forward-root evidence
 	// for the initial fixed-suffix orientation tournament.
 	ExpansionSearchOrientationRootRowLimit int64 = 512
@@ -553,6 +558,14 @@ const (
 	// ExpansionSearchOrientationForwardScoreMultiplier is the incumbent side
 	// of orientation-probe-v1's strict 3/4 hysteresis comparison.
 	ExpansionSearchOrientationForwardScoreMultiplier int64 = 3
+
+	// ExpansionSearchOrientationV2ReverseScoreMultiplier is the reverse side
+	// of orientation-probe-v2's strict 3/4 hysteresis comparison.
+	ExpansionSearchOrientationV2ReverseScoreMultiplier int64 = 4
+
+	// ExpansionSearchOrientationV2ForwardScoreMultiplier is the incumbent side
+	// of orientation-probe-v2's strict 3/4 hysteresis comparison.
+	ExpansionSearchOrientationV2ForwardScoreMultiplier int64 = 3
 
 	// ExpansionSearchExecutionBoundaryInlineStatement identifies one emitted
 	// expansion traversal arm in the translated statement.

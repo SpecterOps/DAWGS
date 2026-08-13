@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/testutil"
 )
@@ -101,8 +102,10 @@ type config struct {
 	MaterialityAbsolute time.Duration
 	// DestructiveLock selects the lock-file path that serializes destructive runs.
 	DestructiveLock string
-	// AAArtifact selects benchmark records used to estimate within-arm noise.
-	AAArtifact string
+	// AAArtifacts select one or more benchmark record files used to estimate
+	// within-arm noise. Repeating the input lets independently appended A/A arms
+	// remain immutable while the reporter validates them as one logical cohort.
+	AAArtifacts []string
 	// AAOutput selects the A/A resolution report destination.
 	AAOutput string
 	// ReferenceClosureArtifact selects benchmark records used for production-to-reference closure analysis.
@@ -155,6 +158,12 @@ type config struct {
 	PostgresTraversalTelemetry string
 	// PostgresExpansionOrientationShadow executes the incumbent while recording the orientation policy's SQL-visible choice.
 	PostgresExpansionOrientationShadow bool
+	// PostgresExpansionOrientationTournament executes the guarded selector's
+	// chosen arm in the same statement.
+	PostgresExpansionOrientationTournament bool
+	// PostgresExpansionOrientationPolicy selects an immutable tool-only
+	// orientation formula. Empty preserves orientation-probe-v1.
+	PostgresExpansionOrientationPolicy string
 	// ConfirmLeft selects the left artifact used for paired confirmation.
 	ConfirmLeft string
 	// ConfirmRight selects the right artifact used for paired confirmation.
@@ -233,6 +242,26 @@ type config struct {
 	OrientationOutput string
 	// OrientationProtocol selects discovery or confirmation evidence requirements.
 	OrientationProtocol string
+	// OrientationV2ShadowArtifact selects orientation-probe-v2 shadow records.
+	OrientationV2ShadowArtifact string
+	// OrientationV2IncumbentArtifact selects matched exact forward records.
+	OrientationV2IncumbentArtifact string
+	// OrientationV2ReverseArtifact selects matched exact reverse records.
+	OrientationV2ReverseArtifact string
+	// OrientationV2GuardedArtifact selects actual guarded dual-arm records.
+	OrientationV2GuardedArtifact string
+	// OrientationV2AA selects the host A/A timing-resolution report.
+	OrientationV2AA string
+	// OrientationV2Freeze binds confirmation to the preregistered discovery identity.
+	OrientationV2Freeze string
+	// OrientationV2DiscoveryReport supplies the checksummed training-only report bound by the freeze.
+	OrientationV2DiscoveryReport string
+	// OrientationV2FreezeOutput writes the preregistered identity after training-only discovery.
+	OrientationV2FreezeOutput string
+	// OrientationV2Output selects the four-arm qualification report destination.
+	OrientationV2Output string
+	// OrientationV2Protocol selects discovery or confirmation evidence requirements.
+	OrientationV2Protocol string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -290,7 +319,14 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.Float64Var(&cfg.MaterialityRatio, "materiality-ratio", 0.95, "target median-ratio upper bound")
 	flags.DurationVar(&cfg.MaterialityAbsolute, "materiality-absolute", 100*time.Microsecond, "target median-saving lower bound")
 	flags.StringVar(&cfg.DestructiveLock, "destructive-lock", ".coverage/graphbench.lock", "local lock file guarding destructive fixture reloads")
-	flags.StringVar(&cfg.AAArtifact, "aa-artifact", "", "JSONL artifact used to calculate baseline A/A measurement resolution")
+	flags.Func("aa-artifact", "JSONL artifact used to calculate baseline A/A measurement resolution (repeat for separately captured arms)", func(value string) error {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return fmt.Errorf("aa-artifact path must not be empty")
+		}
+		cfg.AAArtifacts = append(cfg.AAArtifacts, value)
+		return nil
+	})
 	flags.StringVar(&cfg.AAOutput, "aa-output", "", "A/A measurement-resolution JSON output path (default: stdout)")
 	flags.StringVar(&cfg.ReferenceClosureArtifact, "reference-closure-artifact", "", "JSONL artifact containing matched production raw-pgx and PostgreSQL reference samples")
 	flags.StringVar(&cfg.ReferenceClosureOutput, "reference-closure-output", "", "production/reference closure JSON output path (default: stdout)")
@@ -316,6 +352,8 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
 	flags.StringVar(&cfg.PostgresTraversalTelemetry, "postgres-traversal-telemetry", postgresTraversalTelemetryOff, "PostgreSQL traversal telemetry level (off, summary, or diagnostic); replays run outside timed samples")
 	flags.BoolVar(&cfg.PostgresExpansionOrientationShadow, "postgres-expansion-orientation-shadow", false, "tool-only orientation-probe shadow mode; executes only the exact incumbent traversal arm")
+	flags.BoolVar(&cfg.PostgresExpansionOrientationTournament, "postgres-expansion-orientation-tournament", false, "tool-only guarded orientation-probe mode; executes the selected exact arm")
+	flags.StringVar(&cfg.PostgresExpansionOrientationPolicy, "postgres-expansion-orientation-policy", "", "tool-only immutable orientation policy (orientation-probe-v1 or orientation-probe-v2; default: v1)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -358,6 +396,16 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.OrientationAA, "orientation-aa", "", "host A/A report used by orientation selector-regret analysis")
 	flags.StringVar(&cfg.OrientationOutput, "orientation-output", "", "orientation selector-regret and probe-overhead JSON output path (default: stdout)")
 	flags.StringVar(&cfg.OrientationProtocol, "orientation-protocol", referencePairProtocolConfirmation, "orientation report protocol (discovery or confirmation)")
+	flags.StringVar(&cfg.OrientationV2ShadowArtifact, "orientation-v2-shadow-artifact", "", "orientation-probe-v2 shadow JSONL artifact")
+	flags.StringVar(&cfg.OrientationV2IncumbentArtifact, "orientation-v2-incumbent-artifact", "", "matched exact forward orientation-v2 JSONL artifact")
+	flags.StringVar(&cfg.OrientationV2ReverseArtifact, "orientation-v2-reverse-artifact", "", "matched exact forced-reverse orientation-v2 JSONL artifact")
+	flags.StringVar(&cfg.OrientationV2GuardedArtifact, "orientation-v2-guarded-artifact", "", "matched actual guarded orientation-v2 JSONL artifact")
+	flags.StringVar(&cfg.OrientationV2AA, "orientation-v2-aa", "", "host A/A report used by orientation-v2 qualification")
+	flags.StringVar(&cfg.OrientationV2Freeze, "orientation-v2-freeze", "", "discovery freeze manifest required by orientation-v2 confirmation")
+	flags.StringVar(&cfg.OrientationV2DiscoveryReport, "orientation-v2-discovery-report", "", "training-only discovery report bound by the orientation-v2 freeze")
+	flags.StringVar(&cfg.OrientationV2FreezeOutput, "orientation-v2-freeze-output", "", "write the training-only orientation-v2 discovery freeze manifest")
+	flags.StringVar(&cfg.OrientationV2Output, "orientation-v2-output", "", "four-arm orientation-v2 qualification JSON output path (default: stdout)")
+	flags.StringVar(&cfg.OrientationV2Protocol, "orientation-v2-protocol", referencePairProtocolConfirmation, "orientation-v2 report protocol (discovery or confirmation)")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -492,11 +540,47 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.OrientationProtocol != referencePairProtocolDiscovery && cfg.OrientationProtocol != referencePairProtocolConfirmation {
 		return config{}, fmt.Errorf("orientation-protocol must be discovery or confirmation")
 	}
+	orientationV2Inputs := []string{
+		cfg.OrientationV2ShadowArtifact, cfg.OrientationV2IncumbentArtifact, cfg.OrientationV2ReverseArtifact,
+		cfg.OrientationV2GuardedArtifact, cfg.OrientationV2AA,
+	}
+	orientationV2Configured := cfg.OrientationV2Output != ""
+	for _, input := range orientationV2Inputs {
+		orientationV2Configured = orientationV2Configured || input != ""
+	}
+	if orientationV2Configured {
+		for _, input := range orientationV2Inputs {
+			if input == "" {
+				return config{}, fmt.Errorf("orientation-v2 report requires shadow, incumbent, reverse, guarded, and A/A artifacts")
+			}
+		}
+	}
+	if cfg.OrientationV2Protocol != referencePairProtocolDiscovery && cfg.OrientationV2Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("orientation-v2-protocol must be discovery or confirmation")
+	}
+	if orientationV2Configured && cfg.OrientationV2Protocol == referencePairProtocolConfirmation && (cfg.OrientationV2Freeze == "" || cfg.OrientationV2DiscoveryReport == "") {
+		return config{}, fmt.Errorf("orientation-v2 confirmation requires orientation-v2-freeze and orientation-v2-discovery-report")
+	}
+	if orientationV2Configured && cfg.OrientationV2Protocol == referencePairProtocolDiscovery && (cfg.OrientationV2FreezeOutput == "" || cfg.OrientationV2Output == "") {
+		return config{}, fmt.Errorf("orientation-v2 discovery requires orientation-v2-output and orientation-v2-freeze-output")
+	}
+	if cfg.OrientationV2Freeze != "" && cfg.OrientationV2Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("orientation-v2-freeze is only valid for confirmation")
+	}
+	if cfg.OrientationV2DiscoveryReport != "" && cfg.OrientationV2Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("orientation-v2-discovery-report is only valid for confirmation")
+	}
+	if cfg.OrientationV2FreezeOutput != "" && cfg.OrientationV2Protocol != referencePairProtocolDiscovery {
+		return config{}, fmt.Errorf("orientation-v2-freeze-output is only valid for discovery")
+	}
+	if (cfg.OrientationV2Freeze != "" || cfg.OrientationV2DiscoveryReport != "" || cfg.OrientationV2FreezeOutput != "") && !orientationV2Configured {
+		return config{}, fmt.Errorf("orientation-v2-freeze requires orientation-v2 report mode")
+	}
 	modeCount := 0
 	if cfg.GateBaseline != "" {
 		modeCount++
 	}
-	if cfg.AAArtifact != "" {
+	if len(cfg.AAArtifacts) != 0 {
 		modeCount++
 	}
 	if cfg.ConfirmLeft != "" {
@@ -532,13 +616,16 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if orientationConfigured {
 		modeCount++
 	}
+	if orientationV2Configured {
+		modeCount++
+	}
 	if modeCount > 1 {
-		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, ExpandInto-report, and orientation-report modes are mutually exclusive")
+		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, ExpandInto-report, orientation-report, and orientation-v2-report modes are mutually exclusive")
 	}
 	if modeCount > 0 && cfg.BundleDir != "" {
 		return config{}, fmt.Errorf("standalone report modes and bundle-dir are mutually exclusive")
 	}
-	if cfg.AAArtifact != "" && cfg.GateBaseline != "" {
+	if len(cfg.AAArtifacts) != 0 && cfg.GateBaseline != "" {
 		return config{}, fmt.Errorf("aa-artifact and performance-gate mode are mutually exclusive")
 	}
 	if cfg.Confidence <= 0 || cfg.Confidence >= 1 {
@@ -631,10 +718,28 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.PostgresForceShortest != "" && cfg.PostgresForceExpansion != "" {
 		return config{}, fmt.Errorf("PostgreSQL shortest and expansion search forces are mutually exclusive")
 	}
-	if cfg.PostgresExpansionOrientationShadow && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "") {
-		return config{}, fmt.Errorf("PostgreSQL expansion orientation shadow and forced traversal selectors are mutually exclusive")
+	orientationMode := cfg.PostgresExpansionOrientationShadow || cfg.PostgresExpansionOrientationTournament
+	if cfg.PostgresExpansionOrientationShadow && cfg.PostgresExpansionOrientationTournament {
+		return config{}, fmt.Errorf("PostgreSQL expansion orientation shadow and tournament modes are mutually exclusive")
 	}
-	if cfg.PostgresProductionManifest != "" && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" || cfg.PostgresExpansionOrientationShadow) {
+	if orientationMode && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "") {
+		return config{}, fmt.Errorf("PostgreSQL expansion orientation and forced traversal selectors are mutually exclusive")
+	}
+	if cfg.PostgresExpansionOrientationPolicy != "" && !orientationMode {
+		return config{}, fmt.Errorf("PostgreSQL expansion orientation policy requires shadow or tournament mode")
+	}
+	if cfg.PostgresExpansionOrientationPolicy != "" &&
+		cfg.PostgresExpansionOrientationPolicy != string(optimize.ExpansionSearchPolicyOrientationProbeV1) &&
+		cfg.PostgresExpansionOrientationPolicy != string(optimize.ExpansionSearchPolicyOrientationProbeV2) {
+		return config{}, fmt.Errorf("unsupported PostgreSQL expansion orientation policy %q", cfg.PostgresExpansionOrientationPolicy)
+	}
+	if (cfg.PostgresExpansionOrientationTournament || cfg.PostgresExpansionOrientationPolicy == string(optimize.ExpansionSearchPolicyOrientationProbeV2)) && !cfg.PostgresRepeatableRead {
+		return config{}, fmt.Errorf("guarded and orientation-probe-v2 measurements require postgres-repeatable-read")
+	}
+	if cfg.PostgresExpansionOrientationPolicy == string(optimize.ExpansionSearchPolicyOrientationProbeV2) && cfg.PostgresTraversalTelemetry == postgresTraversalTelemetryOff {
+		return config{}, fmt.Errorf("orientation-probe-v2 measurements require PostgreSQL traversal telemetry")
+	}
+	if cfg.PostgresProductionManifest != "" && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" || orientationMode) {
 		return config{}, fmt.Errorf("PostgreSQL production manifest is mutually exclusive with forced and shadow translation modes")
 	}
 	if cfg.PostgresProductionManifest != "" && cfg.PostgresRepeatableRead {
@@ -820,6 +925,31 @@ func main() {
 		}
 		return
 	}
+	if cfg.OrientationV2ShadowArtifact != "" {
+		passed, err := createOrientationSelectorV2Report(
+			cfg.OrientationV2ShadowArtifact,
+			cfg.OrientationV2IncumbentArtifact,
+			cfg.OrientationV2ReverseArtifact,
+			cfg.OrientationV2GuardedArtifact,
+			cfg.OrientationV2AA,
+			cfg.OrientationV2Freeze,
+			cfg.OrientationV2DiscoveryReport,
+			cfg.OrientationV2FreezeOutput,
+			cfg.OrientationV2Output,
+			OrientationSelectorV2ReportOptions{
+				Seed:       cfg.GateSeed,
+				Confidence: cfg.Confidence,
+				Protocol:   cfg.OrientationV2Protocol,
+			},
+		)
+		if err != nil {
+			fatal("calculate orientation-v2 selector report: %v", err)
+		}
+		if cfg.OrientationV2Protocol == referencePairProtocolConfirmation && !passed {
+			fatal("orientation-v2 selector qualification failed")
+		}
+		return
+	}
 	if cfg.ExpandIntoArtifact != "" {
 		if err := createExpandIntoStudyReport(cfg.ExpandIntoArtifact, cfg.ExpandIntoOutput, ExpandIntoStudyOptions{
 			Seed:                cfg.GateSeed,
@@ -866,8 +996,8 @@ func main() {
 		}
 		return
 	}
-	if cfg.AAArtifact != "" {
-		if err := createAAResolutionReport(cfg.AAArtifact, cfg.AAOutput, PerfGateOptions{
+	if len(cfg.AAArtifacts) != 0 {
+		if err := createAAResolutionReport(cfg.AAArtifacts, cfg.AAOutput, PerfGateOptions{
 			Seed:       cfg.GateSeed,
 			Confidence: cfg.Confidence,
 		}); err != nil {
@@ -1076,6 +1206,8 @@ func main() {
 			runner.traversalTelemetry = cfg.PostgresTraversalTelemetry
 			runner.repeatableRead = cfg.PostgresRepeatableRead
 			runner.toolOptions.EnableExpansionOrientationShadow = cfg.PostgresExpansionOrientationShadow
+			runner.toolOptions.EnableExpansionOrientationTournament = cfg.PostgresExpansionOrientationTournament
+			runner.toolOptions.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicy(cfg.PostgresExpansionOrientationPolicy)
 			if err := runner.setProductionManifest(cfg.PostgresProductionManifest); err != nil {
 				_ = runner.Close(ctx)
 				fatal("configure PostgreSQL production candidate: %v", err)

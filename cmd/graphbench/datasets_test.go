@@ -29,6 +29,62 @@ func TestGeneratedFixedSuffixExpansionV2DatasetCarriesExactExpectations(t *testi
 	require.Equal(t, int64(4), metadata.FixedSuffixExpansion.CompleteOutputTrails)
 }
 
+// TestGeneratedFixedSuffixExpansionV3DatasetRoundTripsAllBoundaryControls
+// verifies independent root multiplicity and every canonical cycle/self-loop
+// combination, including exact relationship-distinct state and output counts.
+func TestGeneratedFixedSuffixExpansionV3DatasetRoundTripsAllBoundaryControls(t *testing.T) {
+	for _, testCase := range []struct {
+		name          string
+		cycle         bool
+		selfLoop      bool
+		forwardStates int64
+		reverseStates int64
+		outputTrails  int64
+	}{
+		{name: "neither", forwardStates: 5, reverseStates: 1, outputTrails: 1},
+		{name: "cycle", cycle: true, forwardStates: 7, reverseStates: 3, outputTrails: 2},
+		{name: "self-loop", selfLoop: true, forwardStates: 7, reverseStates: 2, outputTrails: 2},
+		{name: "both", cycle: true, selfLoop: true, forwardStates: 10, reverseStates: 5, outputTrails: 3},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			reachable := 0
+			zeroDepth := true
+			config := testutil.FixedSuffixExpansionScaleConfig{
+				ExpansionDepth:                2,
+				Fanout:                        1,
+				ExactReachableSuffixSources:   &reachable,
+				SuffixPathsPerBoundary:        1,
+				RootMatchCount:                3,
+				RootHasZeroDepthSuffix:        &zeroDepth,
+				AddProductiveBoundaryCycle:    testCase.cycle,
+				AddProductiveBoundarySelfLoop: testCase.selfLoop,
+			}
+			name := fixedSuffixExpansionV3DatasetName(config)
+			parsed, ok := parseFixedSuffixExpansionV3DatasetName(name)
+			require.True(t, ok)
+			require.Equal(t, config, parsed)
+
+			metadata, err := fixtureMetadata("unused", name)
+			require.NoError(t, err)
+			require.NotNil(t, metadata.FixedSuffixExpansion)
+			require.Equal(t, int64(3), metadata.FixedSuffixExpansion.RootSourceRows)
+			require.Equal(t, testCase.forwardStates, metadata.FixedSuffixExpansion.ForwardExpansionStates)
+			require.Equal(t, testCase.reverseStates, metadata.FixedSuffixExpansion.ExpectedReverseStates)
+			require.Equal(t, testCase.outputTrails, metadata.FixedSuffixExpansion.CompleteOutputTrails)
+			if testCase.cycle {
+				require.Equal(t, int64(2), metadata.FixedSuffixExpansion.ProductiveBoundaryCycleEdges)
+			} else {
+				require.Zero(t, metadata.FixedSuffixExpansion.ProductiveBoundaryCycleEdges)
+			}
+			if testCase.selfLoop {
+				require.Equal(t, int64(1), metadata.FixedSuffixExpansion.ProductiveBoundarySelfLoopEdges)
+			} else {
+				require.Zero(t, metadata.FixedSuffixExpansion.ProductiveBoundarySelfLoopEdges)
+			}
+		})
+	}
+}
+
 // TestGeneratedEndpointSeededExpansionDatasetRoundTripsWithExactExpectations verifies lossless name encoding and the expected endpoint, prefix, output, and reverse-search cardinalities.
 func TestGeneratedEndpointSeededExpansionDatasetRoundTripsWithExactExpectations(t *testing.T) {
 	config := testutil.EndpointSeededExpansionScaleConfig{
@@ -131,6 +187,26 @@ func TestGeneratedFixedSuffixExpansionV2DatasetRejectsInvalidOrNonCanonicalNames
 		"generated_fixed_suffix_expansion_v2_d016_f1000_r1_x1_i0_m1_z1_p0",
 	} {
 		_, ok := parseFixedSuffixExpansionV2DatasetName(name)
+		require.False(t, ok, name)
+		require.Nil(t, generatedDataset(name), name)
+	}
+}
+
+// TestGeneratedFixedSuffixExpansionV3DatasetRejectsInvalidOrNonCanonicalNames
+// verifies strict roots, booleans, productive-boundary requirements, exact
+// depth-zero reachability, canonical numbers, and complete token consumption.
+func TestGeneratedFixedSuffixExpansionV3DatasetRejectsInvalidOrNonCanonicalNames(t *testing.T) {
+	for _, name := range []string{
+		"generated_fixed_suffix_expansion_v3_d2_f1_r0_x0_i0_m1_q0_z1_c0_s0_p0",
+		"generated_fixed_suffix_expansion_v3_d2_f1_r0_x0_i0_m1_q1_z1_c2_s0_p0",
+		"generated_fixed_suffix_expansion_v3_d2_f1_r0_x0_i0_m1_q1_z1_c0_s2_p0",
+		"generated_fixed_suffix_expansion_v3_d2_f1_r0_x0_i0_m1_q1_z0_c1_s0_p0",
+		"generated_fixed_suffix_expansion_v3_d2_f1_r0_x0_i1_m1_q1_z0_c0_s0_p0",
+		"generated_fixed_suffix_expansion_v3_d0_f1_r1_x0_i0_m1_q1_z0_c0_s0_p0",
+		"generated_fixed_suffix_expansion_v3_d02_f1_r0_x0_i0_m1_q1_z1_c0_s0_p0",
+		"generated_fixed_suffix_expansion_v3_d2_f1_r0_x0_i0_m1_q1_z1_c0_s0_p0_unknown",
+	} {
+		_, ok := parseFixedSuffixExpansionV3DatasetName(name)
 		require.False(t, ok, name)
 		require.Nil(t, generatedDataset(name), name)
 	}

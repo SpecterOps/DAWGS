@@ -389,14 +389,14 @@ func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics P
 		candidateRows := plan.Counters["orientation_executed_candidate_rows"]
 		incumbentRows := plan.Counters["orientation_executed_incumbent_rows"]
 		overflow = overflow || orientationPlanOverflow(outcome, plan)
-		if overflow && outcome.Fallback != "" {
-			return outcome.Fallback, "runtime_fallback", true, true
-		}
 		if candidateRows == 1 && incumbentRows == 0 && outcome.Candidate != "" {
-			return outcome.Candidate, "candidate", false, false
+			if overflow {
+				return "", "runtime_outcome_unavailable", false, true
+			}
+			return outcome.Candidate, "suffix_seeded_reverse", false, false
 		}
 		if incumbentRows == 1 && candidateRows == 0 && outcome.Fallback != "" {
-			return outcome.Fallback, "incumbent", false, false
+			return outcome.Fallback, "exact_forward_incumbent", overflow, overflow
 		}
 		return "", "runtime_outcome_unavailable", false, overflow
 	}
@@ -514,7 +514,7 @@ func traversalFamilyForIdentity(identity, family string) TraversalTelemetryFamil
 	if strings.HasPrefix(identity, "SP-") || family == "SP" {
 		return TraversalTelemetryFamilySP
 	}
-	if identity == "orientation-probe-v1" || strings.Contains(identity, "ORIENTATION") {
+	if isOrientationProbePolicy(identity) || strings.Contains(identity, "ORIENTATION") {
 		return TraversalTelemetryFamilyOrientation
 	}
 	if strings.HasPrefix(identity, "MAT-") {
@@ -539,7 +539,7 @@ func traversalRequiredFamilies(summary TraversalExecutionSummary, base Traversal
 	if identity == "" {
 		identity = summary.RequestedIdentity
 	}
-	if summary.EmittedIdentity == "orientation-probe-v1" || summary.SelectorVersion == "orientation-probe-v1" {
+	if isOrientationProbePolicy(summary.EmittedIdentity) || isOrientationProbePolicy(summary.SelectorVersion) {
 		add(TraversalTelemetryFamilyOrientation)
 		add(TraversalTelemetryFamilyOrdinary)
 		if observationRequiresHydration(summary.ObservationMode) {
@@ -899,7 +899,13 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 		}
 		if telemetry != nil {
 			if level == TraversalTelemetryLevelDiagnostic {
-				enrichOrientationTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount, record.ObservedRows)
+				enrichOrientationTraversalTelemetry(
+					telemetry,
+					*record.PostgresMetrics,
+					record.RowCount,
+					record.ObservedRows,
+					orientationPolicyMaximumDepth(*record.Optimization, telemetry.Summary.EmittedIdentity),
+				)
 				enrichInlineASPTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount, record.ObservedRows)
 				if err := s.enrichBidirectionalTraversalTelemetry(ctx, telemetry, record.SQL, parameters, record.RowCount, record.ObservedRows, *record.PostgresMetrics); err != nil {
 					return fmt.Errorf("capture PostgreSQL case traversal telemetry: %w", err)
@@ -988,8 +994,12 @@ func enrichInlineASPTraversalTelemetry(telemetry *TraversalExecutionTelemetry, m
 // branch nodes into a complete, conservative diagnostic document. Probe times
 // come from the untimed TIMING ON JSON EXPLAIN replay; hydration bytes use the
 // captured public observation, never an estimated tuple width.
-func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry, metrics PostgresPlanMetrics, outputRows int64, observedRows []string) {
-	if telemetry == nil || telemetry.Diagnostic == nil || telemetry.Summary.EmittedIdentity != "orientation-probe-v1" {
+func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry, metrics PostgresPlanMetrics, outputRows int64, observedRows []string, maximumDepth int64) {
+	if telemetry == nil || telemetry.Diagnostic == nil || !isOrientationProbePolicy(telemetry.Summary.EmittedIdentity) {
+		return
+	}
+	if telemetry.Summary.EmittedIdentity == string(optimize.ExpansionSearchPolicyOrientationProbeV2) && maximumDepth <= 0 {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "orientation-probe-v2 maximum depth is unavailable")
 		return
 	}
 	plan := telemetry.Diagnostic.PlanReplay
@@ -1011,6 +1021,9 @@ func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry,
 		shallowSurvival = float64(boundaries) / float64(reverseSeeds)
 	}
 	forwardScore := float64(forwardSeeds + forwardDegree)
+	if telemetry.Summary.EmittedIdentity == string(optimize.ExpansionSearchPolicyOrientationProbeV2) {
+		forwardScore = float64(forwardSeeds + maximumDepth*forwardDegree)
+	}
 	reverseScore := float64(reverseSeeds + boundaries + reverseDegree)
 	selectedSide := "forward"
 	if telemetry.Summary.RuntimeIdentity != telemetry.Summary.FallbackIdentity && strings.Contains(telemetry.Summary.RuntimeIdentity, "REVERSE") {
@@ -1085,6 +1098,18 @@ func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry,
 	}
 	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusComplete
 	telemetry.Diagnostic.IncompleteReasons = nil
+}
+
+func orientationPolicyMaximumDepth(summary translate.OptimizationSummary, policy string) int64 {
+	if !isOrientationProbePolicy(policy) {
+		return 0
+	}
+	for _, outcome := range summary.TargetOutcomes {
+		if outcome.EmittedPolicy == policy && outcome.MaximumDepth != nil {
+			return *outcome.MaximumDepth
+		}
+	}
+	return 0
 }
 
 // enrichBidirectionalTraversalTelemetry replaces opaque Function Scan

@@ -182,7 +182,11 @@ func selectionIdentity(records []CaseResult) (SelectionManifest, error) {
 			selected = &copy
 			continue
 		}
-		if selected.DeclarationSHA256 != record.Environment.Selection.DeclarationSHA256 || selected.DiagnosticOnly != record.Environment.Selection.DiagnosticOnly {
+		current := record.Environment.Selection
+		if selected.Version != current.Version || selected.DeclarationSHA256 != current.DeclarationSHA256 ||
+			selected.DiagnosticOnly != current.DiagnosticOnly || selected.FullDeclarationCount != current.FullDeclarationCount ||
+			selected.SelectedDeclarationCount != current.SelectedDeclarationCount || selected.OmittedDeclarationCount != current.OmittedDeclarationCount ||
+			resolvedSelectionSHA256(selected.Resolved) != resolvedSelectionSHA256(current.Resolved) {
 			return SelectionManifest{}, fmt.Errorf("artifact contains inconsistent selection manifests")
 		}
 	}

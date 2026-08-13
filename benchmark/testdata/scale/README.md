@@ -102,6 +102,26 @@ trails, physical cardinality, and checksum. Semantic relationships carry
 deterministic `logical_key` properties so relationship-distinct paths can be
 compared across backends whose physical IDs differ.
 
+Version-three fixed-suffix fixtures extend that exact grammar as
+`generated_fixed_suffix_expansion_v3_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_q<root-rows>_z<zero-depth>_c<cycle>_s<self-loop>_p<payload>`.
+`q` independently controls how many distinct `ExpansionRoot` nodes match the
+root predicate; only the primary root owns the declared fanout and suffixes.
+`c1` adds two distinctly keyed `Expand` relationships from the deterministic
+productive boundary through a dedicated node and back, while `s1` adds one
+distinctly keyed `Expand` self-loop at that boundary. The primary root is the
+productive boundary when only `z1` supplies a reachable suffix; otherwise the
+first reachable branch boundary is used. Both controls require a productive
+boundary, may be enabled independently, and preserve Cypher's
+relationship-distinct trail semantics. V3 names reject implicit populations,
+invalid booleans, unproductive fan-in/topology controls, and noncanonical
+numbers. Metadata derives exact forward/reverse relationship-distinct states
+and complete output trails from the generated graph.
+The orientation-v2 declaration freezes eight training cases spanning every
+encoded dimension and four holdouts at previously unused depths 7, 11, 13,
+and 15. `orientation-v2-training` and `orientation-v2-holdout` are disjoint
+cohort tags; the legacy v2 declarations retain their original v1 evidence
+splits.
+
 `cases/fixed_suffix_expansion_limits.json` is an optimization-neutral cardinality
 holdout suite. It covers 511, 512, 513, and 600 physical suffix rows, productive
 endpoint and full-path observations, and exactly 512 physical rows with two
