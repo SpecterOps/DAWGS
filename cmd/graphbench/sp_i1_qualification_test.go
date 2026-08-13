@@ -184,6 +184,12 @@ func TestSPI1QualificationRejectsCanonicalEvidenceAndScheduleTampering(t *testin
 		"supplemental planned arm": func(_, candidate []CaseResult, _ *ResourceGateReport) {
 			candidate[0].TraversalTelemetry.Summary.PlannedIdentities = append(candidate[0].TraversalTelemetry.Summary.PlannedIdentities, "SP-B1-extra")
 		},
+		"reduced planned search space": func(baseline, _ []CaseResult, _ *ResourceGateReport) {
+			baseline[0].TraversalTelemetry.Summary.PlannedIdentities = []string{
+				string(optimize.ShortestPathExecutorS4CanonicalWitness),
+				string(optimize.ShortestPathExecutorIncumbentWorkspace),
+			}
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -556,7 +562,7 @@ func spI1QualificationTestRecords(
 	baselineOutcome := translate.TargetLoweringOutcome{
 		Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", Family: "SP",
 		Selected: baselineIdentity, Applied: baselineIdentity, Fallback: "SP-S0",
-		PlannedCandidates: []string{baselineIdentity, "SP-S0"}, SelectorVersion: "sp-tool-v1",
+		PlannedCandidates: spI1ShortestPathPlannedIdentities(), SelectorVersion: "sp-tool-v1",
 		ExecutionBoundary: "stored_helper", ObservationMode: "one_path", Scheduler: "single_ended_level",
 		Direction: "inbound", PhysicalExpansion: "end_id", RelationshipKindCount: 1,
 		TopologyClassification: "physical_inbound_deep", SelectionMode: "forced_tool",
@@ -588,7 +594,7 @@ func spI1QualificationTestRecords(
 	candidateOutcome := translate.TargetLoweringOutcome{
 		Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", Family: "SP",
 		Candidate: candidateIdentity, Selected: candidateIdentity, Applied: candidateIdentity,
-		Fallback: baselineIdentity, PlannedCandidates: []string{candidateIdentity, baselineIdentity},
+		Fallback: baselineIdentity, PlannedCandidates: spI1ShortestPathPlannedIdentities(),
 		EmittedCandidates: []string{candidateIdentity, baselineIdentity}, EmittedPolicy: optimize.ShortestPathPolicyI1CanonicalGuardedV1,
 		SelectorVersion: "sp-i1-canonical-tool-v1", ExecutionBoundary: optimize.ExpansionSearchExecutionBoundaryGuardedDualArm,
 		ObservationMode: "one_path", Scheduler: "single_ended_level", Direction: "inbound", PhysicalExpansion: "end_id",
