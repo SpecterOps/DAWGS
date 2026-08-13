@@ -588,6 +588,46 @@ non-ASP production-path opportunity.
   fallback, and `guarded_dual_arm` execution boundary. GraphBench production
   options enable expansion orientation directly, and traversal telemetry
   distinguishes guarded production from inline shadow/forced statements.
+- The staged `orientation-probe-v2` identity freezes
+  `F2 = root_rows + maximum_depth * forward_degree_rows` and
+  `R2 = suffix_rows + boundary_rows + reverse_degree_rows`, choosing reverse
+  only for complete probes with `4 * R2 < 3 * F2`. It retains the v1 caps and
+  exact forward fallback on every probe or reverse-state overflow; v1 SQL,
+  reporting, manifests, and current production behavior are unchanged.
+- A checksum-bound v3 corpus now declares eight training cases spanning every
+  encoded dimension and four holdouts at previously unused depths 7, 11, 13,
+  and 15. The cases independently exercise suffix density, matching-root
+  multiplicity, reverse fan-in, reachable fraction, path observation,
+  relationship-distinct productive cycles and self-loops, payload, zero depth,
+  and suffix multiplicity.
+- The v2 reporter requires four exact matched artifacts labeled `shadow`,
+  `incumbent`, `reverse`, and `guarded`. Each round must use distinct positions
+  1-4 in a position-balanced rotation with one block and run UUID. Every arm is
+  measured under Repeatable Read with traversal telemetry and a size-one pool;
+  shadow and guarded timings additionally require per-invocation receipt chains.
+  Discovery must run from a clean tree on exactly the eight canonical training
+  cases and request both `-orientation-v2-output` and
+  `-orientation-v2-freeze-output`. The freeze binds the policy, formula, caps,
+  source commit, clean dirty-diff, binary, canonical cohort declaration, and
+  discovery-report SHA-256. Confirmation requires that exact manifest through
+  `-orientation-v2-freeze`, its bound training report through
+  `-orientation-v2-discovery-report`, and exactly the canonical eight training
+  plus four holdout cases.
+- Per-case A/A evidence now binds the exact PostgreSQL timing environment,
+  including transaction isolation and normalized ANALYZE state, and the exact
+  validated fixture. V2 rejects any mismatch between that evidence and the
+  incumbent timing artifact. The four-arm report also freezes corpus, host,
+  workload, SQL, and exact public observations across arms.
+- GraphBench now accepts repeated `-aa-artifact` inputs so the two explicit A/A
+  labels remain separate append-safe run series and are combined by a
+  checksum-bound native reporter. The capture protocol uses one clean prebuilt
+  binary and one stable series UUID across every arm and appended round.
+- V2 gates forward-selected cases on shadow/forward overhead and every case on
+  guarded/selected overhead plus guarded/fastest regret. Reverse-selected
+  shadow overhead remains diagnostic rather than an automatic pass. No v2
+  four-arm discovery or confirmation qualification benchmark has passed yet;
+  the new identity, corpus, capture flags, and report schema only stage that
+  experiment.
 
 Implementation sequence:
 
@@ -596,16 +636,24 @@ Implementation sequence:
    out promotion without a new selector version.
 2. Predeclare a checksum-bound v2 training corpus that independently varies
    suffix density, root multiplicity, reverse fan-in, reachable fraction, path
-   observation, duplicates, and cycles, plus fresh unseen holdouts.
+   observation, duplicates, and cycles, plus fresh unseen holdouts. This is now
+   staged as the v3 eight-training/four-holdout declaration; do not inspect
+   holdout timing before the selector is frozen.
 3. Add a new `orientation-probe-v2` policy identity and report schema. Require
    four matched arms: shadow, exact forward, forced reverse, and the actual
-   guarded production statement.
+   guarded statement. The tooling and immutable report schema are staged, but
+   have not produced qualifying evidence.
 4. Gate every case on guarded/selected overhead and guarded/fastest regret.
    Keep shadow/forward qualification-applicable only when the selector chooses
    forward; reverse-selected shadow overhead remains diagnostic, never an
    automatic pass.
-5. Re-run discovery, freeze formula/caps/source/binary/corpus, then open the
-   fresh holdouts. Retain forward fallback on every probe or state overflow.
+5. From a clean tree, run the first v2 four-arm discovery on exactly the eight
+   canonical training cases and write both the discovery report and freeze
+   manifest. Before opening the fresh holdouts, verify that the manifest binds
+   the formula, caps, source commit, clean dirty diff, binary, canonical cohort
+   declaration, and discovery-report digest. Confirmation must consume those
+   exact two files and exactly the canonical eight training plus four holdout
+   timing cases. Retain forward fallback on every probe or state overflow.
 6. Only after clean confirmation, resource, reference, and operational closure,
    roll out v2 through the exact-query driver canary.
 
@@ -615,6 +663,7 @@ Primary files:
 - `cypher/models/pgsql/translate/expansion_orientation.go`
 - `cypher/models/pgsql/translate/expansion_suffix_seeded.go`
 - `cmd/graphbench/orientation_selector_report.go`
+- `cmd/graphbench/orientation_selector_report_v2.go`
 - `benchmark/testdata/scale/cases/generated_fixed_suffix_expansion.json`
 
 ### P3: Replace S4 where deep inbound witnesses do not need it

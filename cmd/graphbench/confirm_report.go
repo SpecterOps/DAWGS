@@ -531,7 +531,7 @@ func comparablePostgresEnvironment(left, right *PostgresEnvironment) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return left.PlanCacheMode == right.PlanCacheMode && left.WorkMem == right.WorkMem && left.TempFileLimit == right.TempFileLimit &&
+	return left.PlanCacheMode == right.PlanCacheMode && left.TransactionIsolation == right.TransactionIsolation && left.WorkMem == right.WorkMem && left.TempFileLimit == right.TempFileLimit &&
 		left.GraphPartitionCount == right.GraphPartitionCount && left.NodeRelationBytes == right.NodeRelationBytes && left.EdgeRelationBytes == right.EdgeRelationBytes
 
 }

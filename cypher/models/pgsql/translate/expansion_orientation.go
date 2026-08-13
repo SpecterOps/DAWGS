@@ -310,11 +310,35 @@ func buildExpansionOrientationMetrics(ids expansionOrientationIdentifiers, caps 
 	}
 }
 
-func buildExpansionOrientationDecision(ids expansionOrientationIdentifiers) pgsql.CommonTableExpression {
+// buildExpansionOrientationDecision renders the immutable score formula for
+// the requested policy identity. V1 counts one forward-degree sample per root;
+// v2 weights those samples by the traversal's inclusive maximum depth.
+func buildExpansionOrientationDecision(ids expansionOrientationIdentifiers, policy optimize.ExpansionSearchPolicy, maximumDepth int64) (pgsql.CommonTableExpression, error) {
+	var (
+		forwardWork       pgsql.Expression = pgsql.CompoundIdentifier{ids.metrics, orientationForwardDegreeRows}
+		reverseMultiplier                  = optimize.ExpansionSearchOrientationReverseScoreMultiplier
+		forwardMultiplier                  = optimize.ExpansionSearchOrientationForwardScoreMultiplier
+	)
+	switch policy {
+	case optimize.ExpansionSearchPolicyOrientationProbeV1:
+	case optimize.ExpansionSearchPolicyOrientationProbeV2:
+		if maximumDepth <= 0 {
+			return pgsql.CommonTableExpression{}, fmt.Errorf("%s requires a positive maximum depth", policy)
+		}
+		forwardWork = pgsql.NewBinaryExpression(
+			pgsql.NewLiteral(maximumDepth, pgsql.Int8),
+			pgsql.OperatorMultiply,
+			forwardWork,
+		)
+		reverseMultiplier = optimize.ExpansionSearchOrientationV2ReverseScoreMultiplier
+		forwardMultiplier = optimize.ExpansionSearchOrientationV2ForwardScoreMultiplier
+	default:
+		return pgsql.CommonTableExpression{}, fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
 	forwardScore := pgsql.NewBinaryExpression(
 		pgsql.CompoundIdentifier{ids.metrics, orientationRootRows},
 		pgsql.OperatorAdd,
-		pgsql.CompoundIdentifier{ids.metrics, orientationForwardDegreeRows},
+		forwardWork,
 	)
 	reverseScore := pgsql.NewBinaryExpression(
 		pgsql.NewBinaryExpression(
@@ -326,9 +350,9 @@ func buildExpansionOrientationDecision(ids expansionOrientationIdentifiers) pgsq
 		pgsql.CompoundIdentifier{ids.metrics, orientationReverseDegreeRows},
 	)
 	dominates := pgsql.NewBinaryExpression(
-		pgsql.NewBinaryExpression(pgsql.NewParenthetical(reverseScore), pgsql.OperatorMultiply, pgsql.NewLiteral(optimize.ExpansionSearchOrientationReverseScoreMultiplier, pgsql.Int8)),
+		pgsql.NewBinaryExpression(pgsql.NewParenthetical(reverseScore), pgsql.OperatorMultiply, pgsql.NewLiteral(reverseMultiplier, pgsql.Int8)),
 		pgsql.OperatorLessThan,
-		pgsql.NewBinaryExpression(pgsql.NewParenthetical(forwardScore), pgsql.OperatorMultiply, pgsql.NewLiteral(optimize.ExpansionSearchOrientationForwardScoreMultiplier, pgsql.Int8)),
+		pgsql.NewBinaryExpression(pgsql.NewParenthetical(forwardScore), pgsql.OperatorMultiply, pgsql.NewLiteral(forwardMultiplier, pgsql.Int8)),
 	)
 	useReverse := pgsql.OptionalAnd(pgsql.CompoundIdentifier{ids.metrics, orientationProbesComplete}, dominates)
 
@@ -345,7 +369,7 @@ func buildExpansionOrientationDecision(ids expansionOrientationIdentifiers) pgsq
 			},
 			From: []pgsql.FromClause{tableFrom(ids.metrics)},
 		}},
-	}
+	}, nil
 }
 
 // buildExpansionOrientationShadowMarkers turns the SQL-visible policy result

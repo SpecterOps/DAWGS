@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
@@ -15,6 +16,94 @@ import (
 
 // outboundShortestPathQuery is the canonical bound-endpoint path query shared by reference-arm tests.
 const outboundShortestPathQuery = "MATCH p = shortestPath((s)-[*0..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+
+// TestSupplementalPostgresReadHelpersPropagateTransactionOptions verifies that
+// reference timing, precomputation, and plan capture all retain the caller's
+// stable-snapshot transaction contract.
+func TestSupplementalPostgresReadHelpersPropagateTransactionOptions(t *testing.T) {
+	database := &referenceTransactionOptionTestDatabase{expectedDriverConfig: "stable-snapshot"}
+	transactionOption := func(config *graph.TransactionConfig) {
+		config.DriverConfig = "stable-snapshot"
+	}
+
+	rowCount, _, err := measureRawPostgres(context.Background(), database, "select value", nil, 0, 1, transactionOption)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rowCount)
+
+	values, err := readReferenceRow(context.Background(), database, "select value", nil, transactionOption)
+	require.NoError(t, err)
+	require.Equal(t, []any{int64(1)}, values)
+
+	plan, planJSON, _, err := explainRawPostgres(context.Background(), database, "select value", nil, transactionOption)
+	require.NoError(t, err)
+	require.NotEmpty(t, plan)
+	require.NotEmpty(t, planJSON)
+
+	require.Equal(t, []bool{true, true, true, true}, database.transactionOptionsApplied)
+}
+
+// referenceTransactionOptionTestDatabase records transaction configuration and
+// supplies the narrow raw-query surface used by supplemental reference helpers.
+type referenceTransactionOptionTestDatabase struct {
+	graph.Database
+	expectedDriverConfig      any
+	transactionOptionsApplied []bool
+}
+
+// ReadTransaction applies the supplied options before executing a synthetic raw transaction.
+func (s *referenceTransactionOptionTestDatabase) ReadTransaction(_ context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
+	config := &graph.TransactionConfig{}
+	for _, option := range options {
+		option(config)
+	}
+	s.transactionOptionsApplied = append(s.transactionOptionsApplied, config.DriverConfig == s.expectedDriverConfig)
+	return delegate(&referenceTransactionOptionTestTransaction{})
+}
+
+// referenceTransactionOptionTestTransaction returns one scalar row or one valid plan document.
+type referenceTransactionOptionTestTransaction struct {
+	graph.Transaction
+}
+
+// Raw returns the minimal row shape expected by the helper under test.
+func (s *referenceTransactionOptionTestTransaction) Raw(statement string, _ map[string]any) graph.Result {
+	if strings.Contains(statement, "FORMAT JSON") {
+		return &referenceTransactionOptionTestResult{rows: [][]any{{`[{"Plan":{"Node Type":"Result","Actual Rows":1,"Actual Loops":1}}]`}}}
+	}
+	if strings.HasPrefix(statement, "EXPLAIN ") {
+		return &referenceTransactionOptionTestResult{rows: [][]any{{"Result"}}}
+	}
+	return &referenceTransactionOptionTestResult{rows: [][]any{{int64(1)}}}
+}
+
+// referenceTransactionOptionTestResult iterates a fixed set of raw rows.
+type referenceTransactionOptionTestResult struct {
+	graph.Result
+	rows  [][]any
+	index int
+}
+
+// Next advances to the next fixed row.
+func (s *referenceTransactionOptionTestResult) Next() bool {
+	if s.index >= len(s.rows) {
+		return false
+	}
+	s.index++
+	return true
+}
+
+// Values returns the current fixed row.
+func (s *referenceTransactionOptionTestResult) Values() []any {
+	return s.rows[s.index-1]
+}
+
+// Error reports a successful fixed result.
+func (s *referenceTransactionOptionTestResult) Error() error {
+	return nil
+}
+
+// Close satisfies graph.Result.
+func (s *referenceTransactionOptionTestResult) Close() {}
 
 // TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput verifies the complete arm inventory, graph partition predicates, precomputed hydration inputs, and full-comparator metadata.
 func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *testing.T) {

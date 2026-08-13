@@ -107,6 +107,7 @@ type postgresReferenceSpec struct {
 
 // measureReferences executes references and records its timing observations.
 func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase ScaleCase, params map[string]any, idMap opengraph.IDMap, publicObservation []string, warmupIterations, iterations int) ([]PostgresReferenceResult, error) {
+	readOptions := s.readTransactionOptions()
 	specs, err := s.referenceSpecs(ctx, testCase, params)
 	if err != nil {
 		return nil, err
@@ -126,7 +127,7 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 	specs = referenceSpecsForRound(specs, s.round)
 	results := make([]PostgresReferenceResult, 0, len(specs))
 	for _, spec := range specs {
-		rowCount, stats, err := measureRawPostgres(ctx, s.db, spec.sql, spec.parameters, warmupIterations, iterations)
+		rowCount, stats, err := measureRawPostgres(ctx, s.db, spec.sql, spec.parameters, warmupIterations, iterations, readOptions...)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", spec.name, err)
 		}
@@ -137,7 +138,7 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 				var err error
 				observedCount, observedRows, err = observeRawRows(tx, spec.sql, spec.parameters, idMap, resultContainsNodeIDs(testCase.Expected), resultContainsPaths(testCase.Expected))
 				return err
-			})
+			}, readOptions...)
 			if err != nil {
 				return nil, fmt.Errorf("%s exact observation: %w", spec.name, err)
 			}
@@ -154,7 +155,7 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 					var err error
 					validationCount, validationRows, err = observeRawRows(tx, spec.validationSQL, spec.validationParams, idMap, resultContainsNodeIDs(testCase.Expected), resultContainsPaths(testCase.Expected))
 					return err
-				})
+				}, readOptions...)
 				if err != nil {
 					return nil, fmt.Errorf("%s validation reference observation: %w", spec.name, err)
 				}
@@ -180,7 +181,7 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 			stats.Samples[idx].Case = testCase.Name + "/reference/" + spec.name
 			stats.Samples[idx].ConnectionID = s.backendPID
 		}
-		plan, planJSON, metrics, err := explainRawPostgres(ctx, s.db, spec.sql, spec.parameters)
+		plan, planJSON, metrics, err := explainRawPostgres(ctx, s.db, spec.sql, spec.parameters, readOptions...)
 		if err != nil {
 			return nil, fmt.Errorf("%s explain: %w", spec.name, err)
 		}
@@ -225,7 +226,7 @@ func selectReferenceSpecs(specs []postgresReferenceSpec, names []string) ([]post
 }
 
 // explainRawPostgres runs raw PostgreSQL EXPLAIN and returns normalized plan text, JSON, and metrics.
-func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any) ([]string, json.RawMessage, PostgresPlanMetrics, error) {
+func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any, transactionOptions ...graph.TransactionOption) ([]string, json.RawMessage, PostgresPlanMetrics, error) {
 	var (
 		plan     []string
 		planJSON json.RawMessage
@@ -252,7 +253,7 @@ func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string,
 			}
 		}
 		return jsonResult.Error()
-	})
+	}, transactionOptions...)
 	if err != nil {
 		return nil, nil, PostgresPlanMetrics{}, err
 	}
@@ -732,7 +733,7 @@ func (s *postgresSQLRunner) shortestReferenceSpecs(ctx context.Context, testCase
 	searchParams["start_id"] = probeParams[rootParameter]
 	searchParams["end_id"] = probeParams[terminalParameter]
 	search := shortestReferenceSearchForDirection(direction)
-	values, err := readReferenceRow(ctx, s.db, search+` select depth, node_ids, edge_ids from shortest`, searchParams)
+	values, err := readReferenceRow(ctx, s.db, search+` select depth, node_ids, edge_ids from shortest`, searchParams, s.readTransactionOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("precompute shortest hydration IDs: %w", err)
 	}
@@ -1475,7 +1476,7 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 		return specs, nil
 	}
 	searchIdx := referenceSpecIndex(specs, "suffix_seeded_reverse_ordered_ids")
-	values, err := readReferenceRow(ctx, s.db, specs[searchIdx].sql, specs[searchIdx].parameters)
+	values, err := readReferenceRow(ctx, s.db, specs[searchIdx].sql, specs[searchIdx].parameters, s.readTransactionOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("precompute fixed-suffix expansion hydration IDs: %w", err)
 	}
@@ -1883,7 +1884,7 @@ func referenceSpecIndexOrMissing(specs []postgresReferenceSpec, name string) int
 }
 
 // readReferenceRow reads reference row and propagates I/O or decoding failures.
-func readReferenceRow(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any) ([]any, error) {
+func readReferenceRow(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any, transactionOptions ...graph.TransactionOption) ([]any, error) {
 	var values []any
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Raw(sqlQuery, params)
@@ -1896,7 +1897,7 @@ func readReferenceRow(ctx context.Context, db graph.Database, sqlQuery string, p
 		}
 		values = append(values, result.Values()...)
 		return result.Error()
-	})
+	}, transactionOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -1945,7 +1946,7 @@ func copyReferenceParams(params map[string]any) map[string]any {
 }
 
 // measureRawPostgres executes raw PostgreSQL and records its timing observations.
-func measureRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any, warmupIterations, iterations int) (int64, DurationStats, error) {
+func measureRawPostgres(ctx context.Context, db graph.Database, sqlQuery string, params map[string]any, warmupIterations, iterations int, transactionOptions ...graph.TransactionOption) (int64, DurationStats, error) {
 	run := func() (int64, error) {
 		var count int64
 		err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -1956,7 +1957,7 @@ func measureRawPostgres(ctx context.Context, db graph.Database, sqlQuery string,
 				_ = result.Values()
 			}
 			return result.Error()
-		})
+		}, transactionOptions...)
 		if err != nil {
 			return 0, err
 		}

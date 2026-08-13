@@ -163,6 +163,74 @@ func TestParseConfigAcceptsOrientationSelectorReport(t *testing.T) {
 	require.Equal(t, referencePairProtocolConfirmation, cfg.OrientationProtocol)
 }
 
+func TestParseConfigAcceptsOrientationSelectorV2Report(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-orientation-v2-shadow-artifact", "shadow-v2.jsonl",
+		"-orientation-v2-incumbent-artifact", "incumbent.jsonl",
+		"-orientation-v2-reverse-artifact", "reverse.jsonl",
+		"-orientation-v2-guarded-artifact", "guarded-v2.jsonl",
+		"-orientation-v2-aa", "aa.json",
+		"-orientation-v2-freeze", "orientation-v2-freeze.json",
+		"-orientation-v2-discovery-report", "orientation-v2-discovery.json",
+		"-orientation-v2-output", "orientation-v2.json",
+		"-orientation-v2-protocol", referencePairProtocolConfirmation,
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, "shadow-v2.jsonl", cfg.OrientationV2ShadowArtifact)
+	require.Equal(t, "incumbent.jsonl", cfg.OrientationV2IncumbentArtifact)
+	require.Equal(t, "reverse.jsonl", cfg.OrientationV2ReverseArtifact)
+	require.Equal(t, "guarded-v2.jsonl", cfg.OrientationV2GuardedArtifact)
+	require.Equal(t, "aa.json", cfg.OrientationV2AA)
+	require.Equal(t, "orientation-v2-freeze.json", cfg.OrientationV2Freeze)
+	require.Equal(t, "orientation-v2-discovery.json", cfg.OrientationV2DiscoveryReport)
+	require.Equal(t, "orientation-v2.json", cfg.OrientationV2Output)
+}
+
+func TestParseConfigAcceptsOrientationSelectorV2DiscoveryFreeze(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-orientation-v2-shadow-artifact", "shadow-v2.jsonl",
+		"-orientation-v2-incumbent-artifact", "incumbent.jsonl",
+		"-orientation-v2-reverse-artifact", "reverse.jsonl",
+		"-orientation-v2-guarded-artifact", "guarded-v2.jsonl",
+		"-orientation-v2-aa", "aa.json",
+		"-orientation-v2-output", "orientation-v2-discovery.json",
+		"-orientation-v2-freeze-output", "orientation-v2-freeze.json",
+		"-orientation-v2-protocol", referencePairProtocolDiscovery,
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, referencePairProtocolDiscovery, cfg.OrientationV2Protocol)
+	require.Equal(t, "orientation-v2-discovery.json", cfg.OrientationV2Output)
+	require.Equal(t, "orientation-v2-freeze.json", cfg.OrientationV2FreezeOutput)
+}
+
+func TestParseConfigRejectsIncompleteOrMixedOrientationSelectorV2Report(t *testing.T) {
+	complete := []string{
+		"-orientation-v2-shadow-artifact", "shadow-v2.jsonl",
+		"-orientation-v2-incumbent-artifact", "incumbent.jsonl",
+		"-orientation-v2-reverse-artifact", "reverse.jsonl",
+		"-orientation-v2-guarded-artifact", "guarded-v2.jsonl",
+		"-orientation-v2-aa", "aa.json",
+		"-orientation-v2-freeze", "orientation-v2-freeze.json",
+		"-orientation-v2-discovery-report", "orientation-v2-discovery.json",
+	}
+	for _, args := range [][]string{
+		{"-orientation-v2-shadow-artifact", "shadow-v2.jsonl"},
+		{
+			"-orientation-v2-shadow-artifact", "shadow-v2.jsonl", "-orientation-v2-incumbent-artifact", "incumbent.jsonl",
+			"-orientation-v2-reverse-artifact", "reverse.jsonl", "-orientation-v2-guarded-artifact", "guarded-v2.jsonl",
+			"-orientation-v2-aa", "aa.json", "-orientation-v2-output", "report.json",
+		},
+		append(append([]string(nil), complete...), "-orientation-v2-protocol", "exploratory"),
+		append(append([]string(nil), complete...), "-orientation-shadow-artifact", "shadow-v1.jsonl", "-orientation-incumbent-artifact", "incumbent.jsonl", "-orientation-reverse-artifact", "reverse.jsonl", "-orientation-aa", "aa.json"),
+		append(append([]string(nil), complete...), "-expand-into-artifact", "expand.jsonl"),
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
 func TestParseConfigAcceptsProductionManifestAndRejectsToolMixing(t *testing.T) {
 	cfg, err := parseConfig([]string{"-postgres-production-manifest", "provisional.json"}, func(string) string { return "" })
 	require.NoError(t, err)
@@ -376,6 +444,19 @@ func TestParseConfigRequiresOutputForJSONLAppend(t *testing.T) {
 	cfg, err := parseConfig([]string{"-append-jsonl", "-jsonl-output", "rounds.jsonl"}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.True(t, cfg.AppendJSONL)
+}
+
+// TestParseConfigAcceptsMultipleAAArtifacts verifies independently captured
+// A/A arms can be passed to the reporter without an unvalidated external merge.
+func TestParseConfigAcceptsMultipleAAArtifacts(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-aa-artifact", "aa-a.jsonl",
+		"-aa-artifact", "aa-b.jsonl",
+		"-aa-output", "aa.json",
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"aa-a.jsonl", "aa-b.jsonl"}, cfg.AAArtifacts)
 }
 
 // TestParseConfigAcceptsReferenceClosureMode verifies reference-closure artifact parsing, confidence propagation, required output pairing, and exclusion of incompatible A/A mode.

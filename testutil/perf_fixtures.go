@@ -17,6 +17,7 @@
 package testutil
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -30,6 +31,10 @@ const (
 	// FixedSuffixExpansionScaleDataset identifies the generated fixed-suffix
 	// expansion fixture.
 	FixedSuffixExpansionScaleDataset = "generated_fixed_suffix_expansion"
+
+	// FixedSuffixExpansionScaleV3Dataset identifies the fixed-suffix fixture
+	// grammar with independent root, cycle, and self-loop controls.
+	FixedSuffixExpansionScaleV3Dataset = FixedSuffixExpansionScaleDataset + "_v3"
 )
 
 // ShortestPathScaleConfig controls the depth and dead-end fanout of the
@@ -254,13 +259,76 @@ type FixedSuffixExpansionScaleConfig struct {
 	// RootHasZeroDepthSuffix controls whether the primary root has a suffix;
 	// nil preserves the enabled default.
 	RootHasZeroDepthSuffix *bool
+
+	// AddProductiveBoundaryCycle adds a two-edge Expand cycle at the
+	// deterministic productive boundary. The two physical relationships have
+	// distinct endpoints and logical keys, so the cycle can be traversed once
+	// in either relationship-distinct expansion direction.
+	AddProductiveBoundaryCycle bool
+
+	// AddProductiveBoundarySelfLoop adds one Expand self-loop at the
+	// deterministic productive boundary.
+	AddProductiveBoundarySelfLoop bool
+}
+
+// ValidateFixedSuffixExpansionScaleV3Config rejects dimensions that cannot
+// describe the exact v3 fixture grammar. V3 requires every population to be
+// explicit; legacy and v2 callers retain their existing defaulting behavior.
+func ValidateFixedSuffixExpansionScaleV3Config(config FixedSuffixExpansionScaleConfig) error {
+	values := []int{
+		config.ExpansionDepth, config.Fanout, config.DisconnectedSuffixSources,
+		config.ReverseFanIn, config.SuffixPathsPerBoundary, config.RootMatchCount,
+		config.PropertyPayloadSize,
+	}
+	for _, value := range values {
+		if value < 0 {
+			return errors.New("fixed-suffix v3 configuration values must not be negative")
+		}
+	}
+	if config.ExpansionDepth > 64 {
+		return errors.New("fixed-suffix v3 depth must not exceed 64")
+	}
+	if config.Fanout < 1 {
+		return errors.New("fixed-suffix v3 fanout must be positive")
+	}
+	if config.ExactReachableSuffixSources == nil {
+		return errors.New("fixed-suffix v3 reachable suffix sources must be explicit")
+	}
+	reachable := *config.ExactReachableSuffixSources
+	if reachable < 0 || reachable > config.Fanout {
+		return errors.New("fixed-suffix v3 reachable suffix sources must be between zero and fanout")
+	}
+	if config.ExpansionDepth == 0 && reachable != 0 {
+		return errors.New("fixed-suffix v3 depth-zero fixtures cannot have reachable branch suffixes")
+	}
+	if config.SuffixPathsPerBoundary < 1 {
+		return errors.New("fixed-suffix v3 suffix path multiplicity must be positive")
+	}
+	if config.RootMatchCount < 1 {
+		return errors.New("fixed-suffix v3 root match count must be positive")
+	}
+	if config.RootHasZeroDepthSuffix == nil {
+		return errors.New("fixed-suffix v3 zero-depth suffix control must be explicit")
+	}
+	if config.ValidSuffixEvery != 0 || len(config.ReachableSuffixDepths) != 0 {
+		return errors.New("fixed-suffix v3 cannot mix legacy suffix-density controls with exact controls")
+	}
+
+	hasProductiveBoundary := *config.RootHasZeroDepthSuffix || reachable > 0
+	if !hasProductiveBoundary && config.ReverseFanIn != 0 {
+		return errors.New("fixed-suffix v3 reverse fan-in requires a productive boundary")
+	}
+	if !hasProductiveBoundary && (config.AddProductiveBoundaryCycle || config.AddProductiveBoundarySelfLoop) {
+		return errors.New("fixed-suffix v3 cycle and self-loop controls require a productive boundary")
+	}
+	return nil
 }
 
 // NewFixedSuffixExpansionScaleFixture builds a deterministic expansion fanout
 // feeding a shared fixed suffix. It also emits independent wrong-kind,
 // wrong-direction, wrong-endpoint-kind, and disconnected suffix decoys.
 func NewFixedSuffixExpansionScaleFixture(config FixedSuffixExpansionScaleConfig) *opengraph.Graph {
-	if config.ExactReachableSuffixSources == nil && len(config.ReachableSuffixDepths) == 0 && config.DisconnectedSuffixSources == 0 && config.ReverseFanIn == 0 && config.SuffixPathsPerBoundary == 0 && config.RootMatchCount == 0 && config.RootHasZeroDepthSuffix == nil {
+	if config.ExactReachableSuffixSources == nil && len(config.ReachableSuffixDepths) == 0 && config.DisconnectedSuffixSources == 0 && config.ReverseFanIn == 0 && config.SuffixPathsPerBoundary == 0 && config.RootMatchCount == 0 && config.RootHasZeroDepthSuffix == nil && !config.AddProductiveBoundaryCycle && !config.AddProductiveBoundarySelfLoop {
 		return newLegacyFixedSuffixExpansionScaleFixture(config)
 	}
 	depth := max(config.ExpansionDepth, 0)
@@ -392,6 +460,41 @@ func NewFixedSuffixExpansionScaleFixture(config FixedSuffixExpansionScaleConfig)
 			EndID:      productiveBoundary,
 			Kind:       "Expand",
 			Properties: map[string]any{"logical_key": fmt.Sprintf("fanin-%05d", idx)},
+		})
+	}
+	if config.AddProductiveBoundaryCycle {
+		const cycleNode = "fse-productive-boundary-cycle"
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+			ID:    cycleNode,
+			Kinds: []string{"ExpansionNode"},
+		})
+		fixture.Edges = append(fixture.Edges,
+			opengraph.Edge{
+				StartID: productiveBoundary,
+				EndID:   cycleNode,
+				Kind:    "Expand",
+				Properties: map[string]any{
+					"logical_key": "productive-boundary-cycle-enter",
+				},
+			},
+			opengraph.Edge{
+				StartID: cycleNode,
+				EndID:   productiveBoundary,
+				Kind:    "Expand",
+				Properties: map[string]any{
+					"logical_key": "productive-boundary-cycle-return",
+				},
+			},
+		)
+	}
+	if config.AddProductiveBoundarySelfLoop {
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{
+			StartID: productiveBoundary,
+			EndID:   productiveBoundary,
+			Kind:    "Expand",
+			Properties: map[string]any{
+				"logical_key": "productive-boundary-self-loop",
+			},
 		})
 	}
 

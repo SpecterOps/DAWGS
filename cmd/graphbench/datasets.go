@@ -119,6 +119,9 @@ func generatedDataset(name string) *opengraph.Graph {
 			PropertyPayloadSize: expansionPayload,
 		})
 	}
+	if config, ok := parseFixedSuffixExpansionV3DatasetName(name); ok {
+		return testutil.NewFixedSuffixExpansionScaleFixture(config)
+	}
 	if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
 		return testutil.NewFixedSuffixExpansionScaleFixture(config)
 	}
@@ -228,6 +231,12 @@ type FixedSuffixExpansionFixtureExpectations struct {
 	ExpectedReverseStates int64 `json:"expected_reverse_states"`
 	// CompleteOutputTrails records output trails before fixture eligibility filters are applied.
 	CompleteOutputTrails int64 `json:"complete_output_trails"`
+	// ProductiveBoundaryCycleEdges records the two relationship-distinct Expand
+	// relationships forming the optional productive-boundary cycle.
+	ProductiveBoundaryCycleEdges int64 `json:"productive_boundary_cycle_edges,omitempty"`
+	// ProductiveBoundarySelfLoopEdges records the optional productive-boundary
+	// Expand self-loop.
+	ProductiveBoundarySelfLoopEdges int64 `json:"productive_boundary_self_loop_edges,omitempty"`
 }
 
 // EndpointSeededExpansionFixtureExpectations records expected state and output sizes for endpoint-seeded expansion fixtures.
@@ -268,8 +277,10 @@ func fixtureMetadata(datasetDir, name string) (FixtureMetadata, error) {
 		EdgeCount:     len(doc.Graph.Edges),
 		Configuration: configuration,
 	}
-	if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
-		metadata.FixedSuffixExpansion = fixedSuffixExpansionFixtureExpectations(config)
+	if config, ok := parseFixedSuffixExpansionV3DatasetName(name); ok {
+		metadata.FixedSuffixExpansion = fixedSuffixExpansionV3FixtureExpectations(doc.Graph, config)
+	} else if config, ok := parseFixedSuffixExpansionV2DatasetName(name); ok {
+		metadata.FixedSuffixExpansion = fixedSuffixExpansionV2FixtureExpectations(config)
 	}
 	if config, ok := parseShortestPathV2DatasetName(name); ok {
 		metadata.Shortest = shortestFixtureExpectations(doc.Graph, config)
@@ -452,6 +463,59 @@ func shortestFixtureExpectations(fixture opengraph.Graph, config testutil.Shorte
 	return expectations
 }
 
+// parseFixedSuffixExpansionV3DatasetName decodes the exact fixed-suffix
+// grammar with independently encoded matching roots and productive-boundary
+// cycle/self-loop controls.
+func parseFixedSuffixExpansionV3DatasetName(name string) (testutil.FixedSuffixExpansionScaleConfig, bool) {
+	var depth, fanout, reachable, disconnected, fanIn, multiplicity, roots, zeroDepth, cycle, selfLoop, payload int
+	format := testutil.FixedSuffixExpansionScaleV3Dataset + "_d%d_f%d_r%d_x%d_i%d_m%d_q%d_z%d_c%d_s%d_p%d"
+	matched, _ := fmt.Sscanf(name, format, &depth, &fanout, &reachable, &disconnected, &fanIn, &multiplicity, &roots, &zeroDepth, &cycle, &selfLoop, &payload)
+	if matched != 11 || (zeroDepth != 0 && zeroDepth != 1) || (cycle != 0 && cycle != 1) || (selfLoop != 0 && selfLoop != 1) {
+		return testutil.FixedSuffixExpansionScaleConfig{}, false
+	}
+
+	rootSuffix := zeroDepth == 1
+	config := testutil.FixedSuffixExpansionScaleConfig{
+		ExpansionDepth:                depth,
+		Fanout:                        fanout,
+		ExactReachableSuffixSources:   &reachable,
+		DisconnectedSuffixSources:     disconnected,
+		ReverseFanIn:                  fanIn,
+		SuffixPathsPerBoundary:        multiplicity,
+		RootMatchCount:                roots,
+		RootHasZeroDepthSuffix:        &rootSuffix,
+		AddProductiveBoundaryCycle:    cycle == 1,
+		AddProductiveBoundarySelfLoop: selfLoop == 1,
+		PropertyPayloadSize:           payload,
+	}
+	if testutil.ValidateFixedSuffixExpansionScaleV3Config(config) != nil || name != fixedSuffixExpansionV3DatasetName(config) {
+		return testutil.FixedSuffixExpansionScaleConfig{}, false
+	}
+	return config, true
+}
+
+// fixedSuffixExpansionV3DatasetName encodes every v3 fixture dimension in its
+// canonical, round-trippable dataset name.
+func fixedSuffixExpansionV3DatasetName(config testutil.FixedSuffixExpansionScaleConfig) string {
+	reachable, zeroDepth, cycle, selfLoop := 0, 0, 0, 0
+	if config.ExactReachableSuffixSources != nil {
+		reachable = *config.ExactReachableSuffixSources
+	}
+	if config.RootHasZeroDepthSuffix != nil && *config.RootHasZeroDepthSuffix {
+		zeroDepth = 1
+	}
+	if config.AddProductiveBoundaryCycle {
+		cycle = 1
+	}
+	if config.AddProductiveBoundarySelfLoop {
+		selfLoop = 1
+	}
+	return fmt.Sprintf(testutil.FixedSuffixExpansionScaleV3Dataset+"_d%d_f%d_r%d_x%d_i%d_m%d_q%d_z%d_c%d_s%d_p%d",
+		config.ExpansionDepth, config.Fanout, reachable, config.DisconnectedSuffixSources,
+		config.ReverseFanIn, config.SuffixPathsPerBoundary, config.RootMatchCount,
+		zeroDepth, cycle, selfLoop, config.PropertyPayloadSize)
+}
+
 // parseFixedSuffixExpansionV2DatasetName decodes and validates every scale parameter embedded in a fixed-suffix dataset name.
 func parseFixedSuffixExpansionV2DatasetName(name string) (testutil.FixedSuffixExpansionScaleConfig, bool) {
 	var depth, fanout, reachable, disconnected, fanIn, multiplicity, zeroDepth, payload int
@@ -474,8 +538,9 @@ func parseFixedSuffixExpansionV2DatasetName(name string) (testutil.FixedSuffixEx
 	}, true
 }
 
-// fixedSuffixExpansionFixtureExpectations derives forward and reverse state and output counts from a fixed-suffix fixture.
-func fixedSuffixExpansionFixtureExpectations(config testutil.FixedSuffixExpansionScaleConfig) *FixedSuffixExpansionFixtureExpectations {
+// fixedSuffixExpansionV2FixtureExpectations preserves the exact v2 metadata
+// contract for every existing fixture name.
+func fixedSuffixExpansionV2FixtureExpectations(config testutil.FixedSuffixExpansionScaleConfig) *FixedSuffixExpansionFixtureExpectations {
 	reachable := 0
 	if config.ExactReachableSuffixSources != nil {
 		reachable = *config.ExactReachableSuffixSources
@@ -501,6 +566,118 @@ func fixedSuffixExpansionFixtureExpectations(config testutil.FixedSuffixExpansio
 		DisconnectedBoundaries: int64(config.DisconnectedSuffixSources),
 		ExpectedReverseStates:  int64(zero + reachable*(config.ExpansionDepth+1) + config.DisconnectedSuffixSources + productiveFanIn),
 		CompleteOutputTrails:   int64((zero + reachable) * multiplicity),
+	}
+}
+
+// fixedSuffixExpansionV3FixtureExpectations derives exact forward and reverse
+// relationship-distinct states and output trails from a v3 fixture graph.
+func fixedSuffixExpansionV3FixtureExpectations(fixture opengraph.Graph, config testutil.FixedSuffixExpansionScaleConfig) *FixedSuffixExpansionFixtureExpectations {
+	type adjacentEdge struct {
+		index int
+		next  string
+	}
+
+	nodeKinds := map[string]map[string]bool{}
+	roots := []string{}
+	for _, node := range fixture.Nodes {
+		kinds := map[string]bool{}
+		for _, kind := range node.Kinds {
+			kinds[kind] = true
+		}
+		nodeKinds[node.ID] = kinds
+		if kinds["ExpansionRoot"] && node.Properties["root_key"] == "generated-fse-root" {
+			roots = append(roots, node.ID)
+		}
+	}
+
+	expandForward := map[string][]adjacentEdge{}
+	expandReverse := map[string][]adjacentEdge{}
+	edgesByStart := map[string][]int{}
+	for edgeIdx, edge := range fixture.Edges {
+		edgesByStart[edge.StartID] = append(edgesByStart[edge.StartID], edgeIdx)
+		if edge.Kind == "Expand" {
+			expandForward[edge.StartID] = append(expandForward[edge.StartID], adjacentEdge{index: edgeIdx, next: edge.EndID})
+			expandReverse[edge.EndID] = append(expandReverse[edge.EndID], adjacentEdge{index: edgeIdx, next: edge.StartID})
+		}
+	}
+
+	suffixPaths := map[string]int64{}
+	for _, enter := range fixture.Edges {
+		if enter.Kind != "EnterSuffix" || !nodeKinds[enter.EndID]["SuffixHead"] {
+			continue
+		}
+		for _, continueIdx := range edgesByStart[enter.EndID] {
+			continuation := fixture.Edges[continueIdx]
+			if continuation.Kind != "ContinueSuffix" || !nodeKinds[continuation.EndID]["SuffixMiddle"] {
+				continue
+			}
+			for _, completeIdx := range edgesByStart[continuation.EndID] {
+				completion := fixture.Edges[completeIdx]
+				if completion.Kind == "CompleteSuffix" && nodeKinds[completion.EndID]["SuffixTerminal"] {
+					suffixPaths[enter.StartID]++
+				}
+			}
+		}
+	}
+
+	used := make([]bool, len(fixture.Edges))
+	var enumerate func(map[string][]adjacentEdge, string, int, func(string)) int64
+	enumerate = func(adjacency map[string][]adjacentEdge, nodeID string, depth int, observe func(string)) int64 {
+		states := int64(1)
+		observe(nodeID)
+		if depth == config.ExpansionDepth {
+			return states
+		}
+		for _, edge := range adjacency[nodeID] {
+			if used[edge.index] {
+				continue
+			}
+			used[edge.index] = true
+			states += enumerate(adjacency, edge.next, depth+1, observe)
+			used[edge.index] = false
+		}
+		return states
+	}
+
+	boundaryVisits := map[string]int64{}
+	forwardStates := int64(0)
+	for _, root := range roots {
+		forwardStates += enumerate(expandForward, root, 0, func(nodeID string) {
+			if suffixPaths[nodeID] > 0 {
+				boundaryVisits[nodeID]++
+			}
+		})
+	}
+
+	reverseStates := int64(0)
+	for boundary := range suffixPaths {
+		reverseStates += enumerate(expandReverse, boundary, 0, func(string) {})
+	}
+
+	suffixRows, outputTrails := int64(0), int64(0)
+	for boundary, pathCount := range suffixPaths {
+		suffixRows += pathCount
+		outputTrails += boundaryVisits[boundary] * pathCount
+	}
+	cycleEdges, selfLoopEdges := int64(0), int64(0)
+	if config.AddProductiveBoundaryCycle {
+		cycleEdges = 2
+	}
+	if config.AddProductiveBoundarySelfLoop {
+		selfLoopEdges = 1
+	}
+	return &FixedSuffixExpansionFixtureExpectations{
+		RootSourceRows:                  int64(len(roots)),
+		DistinctRoots:                   int64(len(roots)),
+		ForwardExpansionStates:          forwardStates,
+		SuffixRows:                      suffixRows,
+		DistinctBoundaries:              int64(len(suffixPaths)),
+		ReachableBoundaries:             int64(len(boundaryVisits)),
+		DisconnectedBoundaries:          int64(len(suffixPaths) - len(boundaryVisits)),
+		ExpectedReverseStates:           reverseStates,
+		CompleteOutputTrails:            outputTrails,
+		ProductiveBoundaryCycleEdges:    cycleEdges,
+		ProductiveBoundarySelfLoopEdges: selfLoopEdges,
 	}
 }
 

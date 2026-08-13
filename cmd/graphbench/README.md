@@ -156,7 +156,16 @@ The report accepts exactly two explicitly executed A/A arms sharing one run
 UUID and SQL/workload identity. It requires complementary balanced order across
 at least five independent rounds, ten samples per arm and round, and fingerprints
 the host, reports p50/p95 ratio and absolute resolution, and keeps p99
-diagnostic until each arm has at least 10,000 samples.
+diagnostic until each arm has at least 10,000 samples. When append-safe capture
+keeps the two arm labels in separate files, repeat `-aa-artifact` instead of
+concatenating them outside GraphBench:
+
+```bash
+graphbench \
+  -aa-artifact .coverage/aa-a.jsonl \
+  -aa-artifact .coverage/aa-b.jsonl \
+  -aa-output .coverage/aa.json
+```
 
 ### Targeted matched diagnostics
 
@@ -420,6 +429,156 @@ records are evaluation-only; diagnostic and legacy records are serialized but
 excluded from qualification. Discovery uses 5-20 rounds, five warmups, and ten
 samples per arm. Confirmation uses 10-20 rounds, 20 warmups, and 50 samples per
 arm.
+
+`orientation-probe-v2` is a separate, immutable, tool-only experiment. It does
+not reinterpret the v1 report or change the v1 exact-query production seam.
+The v2 selector computes
+`F2 = root_rows + maximum_depth * forward_degree_rows` and
+`R2 = suffix_rows + boundary_rows + reverse_degree_rows`; it selects the exact
+suffix-seeded reverse arm only when every cap+1 probe is complete and
+`4 * R2 < 3 * F2`. Any probe or reverse-state overflow fails closed to the exact
+forward arm. The checksum-bound v3 cohort has exactly eight training cases and
+four holdouts. It independently varies maximum depth, fanout, reachable and
+disconnected branches, reverse fan-in, suffix multiplicity, matching-root
+multiplicity, zero depth, productive-boundary cycles and self-loops, payload,
+and endpoint-ID versus complete-path observation. Holdouts use previously
+unused depths 7, 11, 13, and 15 and must not be opened for threshold tuning.
+
+Capture the four artifacts with these exact arm labels. Every invocation also
+requires `-postgres-repeatable-read`, `-postgres-traversal-telemetry summary` or
+`diagnostic`, and `-pool-size 1`.
+
+| Artifact | Exact `-arm` label | Mode-specific flags |
+| --- | --- | --- |
+| Shadow | `shadow` | `-postgres-expansion-orientation-shadow -postgres-expansion-orientation-policy orientation-probe-v2` |
+| Exact forward | `incumbent` | no orientation or forced-expansion flag |
+| Exact reverse | `reverse` | `-postgres-force-expansion-search EXPANSION-SUFFIX-SEEDED-REVERSE` |
+| Guarded selector | `guarded` | `-postgres-expansion-orientation-tournament -postgres-expansion-orientation-policy orientation-probe-v2` |
+
+Build GraphBench once from the clean source tree and invoke that exact binary
+for every A/A, arm, and report command. Repeated `go run` builds do not prove a
+single binary identity:
+
+```bash
+CAPTURE=.coverage/orientation-v2-discovery
+mkdir -p "$CAPTURE/bin"
+go build -trimpath -o "$CAPTURE/bin/graphbench" ./cmd/graphbench
+RUN_UUID="orientation-v2-discovery-$(git rev-parse HEAD)"
+```
+
+For example, the first shadow discovery round is captured with:
+
+```bash
+"$CAPTURE/bin/graphbench" \
+  -modes postgres_sql \
+  -tags orientation-v2-training \
+  -warmup-iterations 5 -iterations 10 -pool-size 1 \
+  -round 1 -block 1 -run-uuid "$RUN_UUID" \
+  -arm shadow -arm-order 1 \
+  -postgres-repeatable-read \
+  -postgres-traversal-telemetry diagnostic \
+  -postgres-expansion-orientation-shadow \
+  -postgres-expansion-orientation-policy orientation-probe-v2 \
+  -jsonl-output "$CAPTURE/shadow.jsonl" -append-jsonl
+```
+
+Repeat the invocation for the other table rows and rotate `-arm-order` in each
+subsequent round. `-run-uuid` is one series identity: reuse the same value across
+all four arms and every appended round. Change `-round` and `-block`, but not the
+UUID; append validation rejects a per-round UUID. Discovery selects only
+`orientation-v2-training` and keeps the holdout timings closed. Its four
+artifacts must contain exactly the canonical eight training cases, with no
+holdout or diagnostic timing. After the formula is frozen, confirmation selects
+`-tags orientation-v2-training,orientation-v2-holdout`, writes separate
+confirmation artifacts containing exactly the canonical eight training plus
+four holdout cases, and uses 20 warmups and 50 measured samples per arm and
+round.
+
+Each matched round must give the four labels distinct `-arm-order` values from
+1 through 4 and share the same nonzero `-block`, `-round`, and `-run-uuid`.
+Rotate the positions across rounds so every arm occupies every position evenly;
+the canonical four-round rotation is
+`shadow/incumbent/reverse/guarded`,
+`incumbent/reverse/guarded/shadow`,
+`reverse/guarded/shadow/incumbent`, then
+`guarded/shadow/incumbent/reverse`. The reporter rejects a position imbalance
+greater than one, missing or extra cases, mismatched round sets, observation or
+SQL drift, non-Repeatable-Read records, missing timed receipts on shadow or
+guarded samples, and mixed source, dirty-diff, binary, corpus, host, or
+PostgreSQL identities.
+The shadow receipt branch is exactly `shadow_incumbent`. Guarded reverse
+execution must report `suffix_seeded_reverse`; guarded forward selection and
+overflow fallback both report `exact_forward_incumbent`, with
+`fallback_executed=true` required only for overflow fallback.
+
+Capture the two A/A arms as separate append-safe exact-forward artifacts using
+the same built binary, exact cohort tag, Repeatable Read, diagnostic traversal
+telemetry, size-one pool, warmups, samples, and fixture reload protocol as the
+incumbent arm. Use one A/A series UUID and alternate the two positions across
+rounds. No orientation or forced-expansion flag is permitted. Then let
+GraphBench validate the logical pair directly:
+
+```bash
+"$CAPTURE/bin/graphbench" \
+  -aa-artifact "$CAPTURE/aa-a.jsonl" \
+  -aa-artifact "$CAPTURE/aa-b.jsonl" \
+  -aa-output "$CAPTURE/aa.json" \
+  -confidence-level 0.975 -seed 1
+```
+
+Discovery is the only workflow that creates a freeze. Run it from a clean source
+tree after capturing the exact canonical eight-case training artifacts and their
+matching host A/A evidence. Both output flags are mandatory: the command writes
+the training-only discovery report and a freeze manifest that binds its SHA-256
+together with the policy, formula, caps, source commit, clean dirty-diff,
+binary, and canonical cohort declaration:
+
+```bash
+"$CAPTURE/bin/graphbench" \
+  -orientation-v2-shadow-artifact "$CAPTURE/shadow.jsonl" \
+  -orientation-v2-incumbent-artifact "$CAPTURE/incumbent.jsonl" \
+  -orientation-v2-reverse-artifact "$CAPTURE/reverse.jsonl" \
+  -orientation-v2-guarded-artifact "$CAPTURE/guarded.jsonl" \
+  -orientation-v2-aa "$CAPTURE/aa.json" \
+  -orientation-v2-output "$CAPTURE/report.json" \
+  -orientation-v2-freeze-output "$CAPTURE/freeze.json" \
+  -orientation-v2-protocol discovery \
+  -confidence-level 0.975 -seed 1
+```
+
+Confirmation fails closed unless it receives that exact freeze manifest and
+the discovery report whose digest the manifest binds. Its four timing artifacts
+and matching host A/A report must cover exactly the canonical eight training and
+four holdout cases:
+
+```bash
+CONFIRMATION=.coverage/orientation-v2-confirmation
+"$CAPTURE/bin/graphbench" \
+  -orientation-v2-shadow-artifact "$CONFIRMATION/shadow.jsonl" \
+  -orientation-v2-incumbent-artifact "$CONFIRMATION/incumbent.jsonl" \
+  -orientation-v2-reverse-artifact "$CONFIRMATION/reverse.jsonl" \
+  -orientation-v2-guarded-artifact "$CONFIRMATION/guarded.jsonl" \
+  -orientation-v2-aa "$CONFIRMATION/aa.json" \
+  -orientation-v2-freeze "$CAPTURE/freeze.json" \
+  -orientation-v2-discovery-report "$CAPTURE/report.json" \
+  -orientation-v2-output "$CONFIRMATION/report.json" \
+  -orientation-v2-protocol confirmation \
+  -confidence-level 0.975 -seed 1
+```
+
+Every v2 A/A case carries separate checksums for its workload, the exact
+PostgreSQL timing environment (including transaction isolation and normalized
+ANALYZE state), and the exact validated fixture. Discovery and confirmation
+reject missing or mismatched environment or fixture evidence.
+
+The forward-selected shadow/forward and guarded/selected overhead gates use a
+`1.10` median-ratio upper bound or a `100us` absolute-gap ceiling. The
+guarded/fastest regret gate uses the same ratio limit or the matching host A/A
+absolute floor. Shadow overhead remains visible but is not
+qualification-applicable when v2 selects reverse. Confirmation requires all
+eight training and all four holdout cases to pass independently. No v2
+discovery or confirmation result has qualified yet; the flags and schema only
+stage the experiment and do not authorize production rollout.
 
 The bounded same-statement fallback and keyset-continuation experiments are
 retired. They are not exposed by GraphBench or production translation. Their

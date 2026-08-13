@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
@@ -397,8 +398,14 @@ func testAAReportForRecords(t *testing.T, records []CaseResult) *AAResolutionRep
 	for _, key := range sortedPerformanceKeys(keys) {
 		workloadSHA256, err := workloadSHA256ForKey(records, key)
 		require.NoError(t, err)
+		postgresEnvironmentSHA256, err := postgresTimingEnvironmentSHA256ForKey(records, key)
+		require.NoError(t, err)
+		fixtureSHA256, err := fixtureSHA256ForKey(records, key)
+		require.NoError(t, err)
 		aa.Cases = append(aa.Cases, AAResolutionCase{
-			Dataset: key.dataset, Name: key.name, Backend: key.backend, WorkloadSHA256: workloadSHA256, Rounds: minimumGateRounds, SamplesPerArm: minimumGateRounds * 10,
+			Dataset: key.dataset, Name: key.name, Backend: key.backend, WorkloadSHA256: workloadSHA256,
+			PostgresEnvironmentSHA256: postgresEnvironmentSHA256, FixtureSHA256: fixtureSHA256,
+			Rounds: minimumGateRounds, SamplesPerArm: minimumGateRounds * 10,
 			P50: testAAMetricResolution(), P95: testAAMetricResolution(),
 		})
 	}
@@ -493,6 +500,31 @@ func TestQualificationSplitRecognizesCompatibleFixedSuffixV2Categories(t *testin
 
 	_, err := qualificationSplit(key, records)
 	require.ErrorContains(t, err, "no frozen qualification split")
+}
+
+func TestTraversalQualificationFamilyRecognizesFixedSuffixV3WithoutTelemetry(t *testing.T) {
+	key := performanceKey{dataset: "generated_fixed_suffix_expansion_v3_d8_f16", name: "GFSE-V3-D08-F016", backend: ModePostgresSQL}
+	records := []CaseResult{{
+		Dataset: key.dataset, Name: key.name, Category: "generated_fixed_suffix_expansion", ExecutionMode: key.backend,
+	}}
+
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), traversalQualificationFamily(key, records))
+}
+
+func TestTraversalQualificationUsesOrientationPolicyBeforeRequestedArm(t *testing.T) {
+	key := performanceKey{dataset: "generated_fixed_suffix_expansion_v3_d8_f16", name: "GFSE-V3-D08-F016", backend: ModePostgresSQL}
+	record := CaseResult{
+		Dataset: key.dataset, Name: key.name, Category: "generated_fixed_suffix_expansion", ExecutionMode: key.backend,
+		TraversalTelemetry: &TraversalExecutionTelemetry{Summary: TraversalExecutionSummary{
+			RequestedIdentity: string(optimize.ExpansionSearchSuffixSeededReverse),
+			EmittedIdentity:   string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+			SelectorVersion:   string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+			RuntimeBranch:     "suffix_seeded_reverse",
+		}},
+	}
+
+	require.True(t, requiresCandidateRuntimeEvidence(record))
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), traversalQualificationFamily(key, []CaseResult{record}))
 }
 
 // TestBuildPerfGateReportRequiresIndependentTraversalHoldout verifies a

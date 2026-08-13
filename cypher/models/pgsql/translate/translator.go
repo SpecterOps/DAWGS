@@ -1310,9 +1310,14 @@ type ToolOptions struct {
 	ForceShortestPathExecutor optimize.ShortestPathExecutor
 	// ForceExpansionSearchStrategy requests a qualified variable-expansion strategy instead of automatic selection.
 	ForceExpansionSearchStrategy optimize.ExpansionSearchStrategy
-	// EnableExpansionOrientationTournament emits the guarded orientation-probe-v1
-	// policy for one qualified fixed-suffix expansion. It is intentionally
-	// tool-only while the selector is being shadow-qualified.
+	// ExpansionOrientationPolicy selects the immutable orientation selector
+	// identity used by an enabled tournament or shadow mode. The zero value
+	// preserves orientation-probe-v1.
+	ExpansionOrientationPolicy optimize.ExpansionSearchPolicy
+	// EnableExpansionOrientationTournament emits a guarded orientation policy
+	// for one qualified fixed-suffix expansion. It defaults to
+	// orientation-probe-v1 and is intentionally tool-only while selectors are
+	// being shadow-qualified.
 	EnableExpansionOrientationTournament bool
 	// EnableExpansionOrientationShadow emits the same bounded orientation
 	// probes and SQL-visible would_select metadata while executing only the
@@ -1567,6 +1572,10 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) && options.ForceExpansionSearchStrategy != "" {
 		return fmt.Errorf("expansion orientation policy and forced expansion-search strategy are mutually exclusive")
 	}
+	orientationPolicy, err := requestedExpansionOrientationPolicy(options)
+	if err != nil {
+		return err
+	}
 	if err := applyForcedShortestPathExecutor(plan, options.ForceShortestPathExecutor); err != nil {
 		return err
 	}
@@ -1585,12 +1594,36 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 		}
 	}
 	if options.EnableExpansionOrientationTournament {
-		return applyExpansionOrientationTournament(plan)
+		return applyExpansionOrientationTournamentPolicy(plan, orientationPolicy)
 	}
 	if options.EnableExpansionOrientationShadow {
-		return applyExpansionOrientationShadow(plan)
+		return applyExpansionOrientationShadowPolicy(plan, orientationPolicy)
 	}
 	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
+}
+
+func requestedExpansionOrientationPolicy(options ToolOptions) (optimize.ExpansionSearchPolicy, error) {
+	policy := options.ExpansionOrientationPolicy
+	if policy == "" {
+		return optimize.ExpansionSearchPolicyOrientationProbeV1, nil
+	}
+	if !options.EnableExpansionOrientationTournament && !options.EnableExpansionOrientationShadow {
+		return "", fmt.Errorf("expansion orientation policy %q requires tournament or shadow mode", policy)
+	}
+	if !supportedExpansionOrientationPolicy(policy) {
+		return "", fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
+	return policy, nil
+}
+
+func supportedExpansionOrientationPolicy(policy optimize.ExpansionSearchPolicy) bool {
+	switch policy {
+	case optimize.ExpansionSearchPolicyOrientationProbeV1,
+		optimize.ExpansionSearchPolicyOrientationProbeV2:
+		return true
+	default:
+		return false
+	}
 }
 
 // applyForcedShortestPathExecutor selects the requested executor only when exactly one qualified shortest-path target supports it.
@@ -1768,6 +1801,13 @@ func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.E
 // compile-time incumbent identity because the runtime arm is not known during
 // translation.
 func applyExpansionOrientationTournament(plan *optimize.Plan) error {
+	return applyExpansionOrientationTournamentPolicy(plan, optimize.ExpansionSearchPolicyOrientationProbeV1)
+}
+
+func applyExpansionOrientationTournamentPolicy(plan *optimize.Plan, policy optimize.ExpansionSearchPolicy) error {
+	if !supportedExpansionOrientationPolicy(policy) {
+		return fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
 	var matching []int
 	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
 		if decision.Family != "fixed_suffix_expansion" ||
@@ -1786,9 +1826,10 @@ func applyExpansionOrientationTournament(plan *optimize.Plan) error {
 
 	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
 	decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.PlannedPolicy = policy
 	decision.SelectionMode = "guarded_tool"
-	decision.SelectorVersion = string(optimize.ExpansionSearchPolicyOrientationProbeV1)
-	decision.EmittedPolicy = optimize.ExpansionSearchPolicyOrientationProbeV1
+	decision.SelectorVersion = string(policy)
+	decision.EmittedPolicy = policy
 	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{
 		optimize.ExpansionSearchStepwiseForward,
 		optimize.ExpansionSearchSuffixSeededReverse,
@@ -1804,6 +1845,13 @@ func applyExpansionOrientationTournament(plan *optimize.Plan) error {
 // only emitted traversal arm. The generated policy CTE records which arm the
 // selector would have chosen without dispatching it.
 func applyExpansionOrientationShadow(plan *optimize.Plan) error {
+	return applyExpansionOrientationShadowPolicy(plan, optimize.ExpansionSearchPolicyOrientationProbeV1)
+}
+
+func applyExpansionOrientationShadowPolicy(plan *optimize.Plan, policy optimize.ExpansionSearchPolicy) error {
+	if !supportedExpansionOrientationPolicy(policy) {
+		return fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
 	var matching []int
 	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
 		if decision.Family != "fixed_suffix_expansion" ||
@@ -1822,9 +1870,10 @@ func applyExpansionOrientationShadow(plan *optimize.Plan) error {
 
 	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
 	decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.PlannedPolicy = policy
 	decision.SelectionMode = "shadow_tool"
-	decision.SelectorVersion = string(optimize.ExpansionSearchPolicyOrientationProbeV1)
-	decision.EmittedPolicy = optimize.ExpansionSearchPolicyOrientationProbeV1
+	decision.SelectorVersion = string(policy)
+	decision.EmittedPolicy = policy
 	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward}
 	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
 	decision.FallbackReason = ""

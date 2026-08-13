@@ -298,10 +298,11 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 		return nil, fmt.Errorf("identify PostgreSQL benchmark connection: %w", err)
 	}
 	var postgresEnvironment PostgresEnvironment
-	if err := pool.QueryRow(ctx, `select version(), current_database(), current_setting('plan_cache_mode'), current_setting('work_mem'), current_setting('temp_file_limit'), (select count(*) from graph), pg_postmaster_start_time(), (select oid::int8 from pg_database where datname = current_database()), current_setting('autovacuum')`).Scan(
+	if err := pool.QueryRow(ctx, `select version(), current_database(), current_setting('plan_cache_mode'), current_setting('transaction_isolation'), current_setting('work_mem'), current_setting('temp_file_limit'), (select count(*) from graph), pg_postmaster_start_time(), (select oid::int8 from pg_database where datname = current_database()), current_setting('autovacuum')`).Scan(
 		&postgresEnvironment.Version,
 		&postgresEnvironment.Database,
 		&postgresEnvironment.PlanCacheMode,
+		&postgresEnvironment.TransactionIsolation,
 		&postgresEnvironment.WorkMem,
 		&postgresEnvironment.TempFileLimit,
 		&postgresEnvironment.GraphPartitionCount,
@@ -837,6 +838,9 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 	record.SQL = explain.SQL
 	record.SQLFingerprint = sqlFingerprint(explain.SQL)
 	postgresEnvironment := s.environment
+	if len(s.readTransactionOptions()) > 0 {
+		postgresEnvironment.TransactionIsolation = "repeatable read"
+	}
 	record.PostgresEnvironment = &postgresEnvironment
 	record.PostgresPlan = explain.Plan
 	record.PostgresPlanJSON = explain.PlanJSON
@@ -857,6 +861,10 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 		record.FallbackReason = strings.Join(fallbackReasons, ",")
 	}
 	if s.references && testCase.WriteScenario == nil {
+		var rawIsolation []pgx.TxIsoLevel
+		if len(s.readTransactionOptions()) > 0 {
+			rawIsolation = []pgx.TxIsoLevel{pgx.RepeatableRead}
+		}
 		waterfall, err := measureCompileWaterfall(ctx, testCase.Cypher, params, s.pgDriver.KindMapper(), s.graphID, iterations, s.toolOptions)
 		if err != nil {
 			record.Status = StatusError
@@ -875,7 +883,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			}
 			setReferenceMeasurementOrder(references, referenceOrder)
 		}
-		rawWaterfall, err := measureRawPGXWaterfall(ctx, s.pool, explain.SQL, explain.Parameters, warmupIterations, iterations)
+		rawWaterfall, err := measureRawPGXWaterfall(ctx, s.pool, explain.SQL, explain.Parameters, warmupIterations, iterations, rawIsolation...)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = fmt.Sprintf("raw pgx waterfall: %v", err)
@@ -898,7 +906,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			setReferenceMeasurementOrder(references, referenceOrder)
 		}
 		record.PostgresReferences = references
-		roundTrip, err := measureRawPGXWaterfall(ctx, s.pool, "select 1", nil, warmupIterations, iterations)
+		roundTrip, err := measureRawPGXWaterfall(ctx, s.pool, "select 1", nil, warmupIterations, iterations, rawIsolation...)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = fmt.Sprintf("raw pgx round trip: %v", err)
@@ -913,7 +921,11 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 				CaseKey: existingGraphCaseKey(ModePostgresSQL, testCase),
 			})
 		}
-		blocks, err := measurePostgresConcurrency(ctx, s.pool, explain.SQL, explain.Parameters, s.poolSize, s.concurrency, iterations)
+		var concurrencyIsolation []pgx.TxIsoLevel
+		if len(s.readTransactionOptions()) > 0 {
+			concurrencyIsolation = []pgx.TxIsoLevel{pgx.RepeatableRead}
+		}
+		blocks, err := measurePostgresConcurrency(ctx, s.pool, explain.SQL, explain.Parameters, s.poolSize, s.concurrency, iterations, concurrencyIsolation...)
 		if err != nil {
 			record.Status = StatusError
 			record.Error = fmt.Sprintf("concurrency smoke: %v", err)
@@ -956,7 +968,7 @@ func timedRuntimeAttestationIdentity(translation translate.Result) string {
 		strings.HasPrefix(requested, "ASP-B1-") || strings.HasPrefix(requested, "ASP-B2-") ||
 		requested == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) ||
 		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
-		outcome.EmittedPolicy == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+		isOrientationProbePolicy(outcome.EmittedPolicy) {
 		return requested
 	}
 	return ""
@@ -1103,7 +1115,8 @@ func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery str
 // hasForcedToolOptions reports whether either executor-selection override is configured.
 func hasForcedToolOptions(options translate.ToolOptions) bool {
 	return options.ForceShortestPathExecutor != "" || options.ForceExpansionSearchStrategy != "" ||
-		options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow
+		options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow ||
+		options.ExpansionOrientationPolicy != ""
 }
 
 // encodePostgresPlanJSON normalizes byte, string, or structured EXPLAIN JSON into json.RawMessage.

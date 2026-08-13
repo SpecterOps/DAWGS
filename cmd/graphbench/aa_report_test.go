@@ -6,6 +6,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -37,6 +38,37 @@ func TestBuildAAResolutionReportRejectsSyntheticSingleStream(t *testing.T) {
 	record := perfGateRecord("case", ModePostgresSQL, time.Millisecond, 5, 40)
 	_, err := buildAAResolutionReport([]CaseResult{record}, PerfGateOptions{Seed: 1, Confidence: 0.95, BootstrapCount: 100})
 	require.ErrorContains(t, err, "without explicit round, block, arm, order, and run UUID")
+}
+
+// TestCreateAAResolutionReportAcceptsSeparateArmArtifacts verifies the native
+// multi-input path combines two immutable append-series arms and binds both
+// exact files into one report checksum.
+func TestCreateAAResolutionReportAcceptsSeparateArmArtifacts(t *testing.T) {
+	paths := []string{filepath.Join(t.TempDir(), "aa-a.jsonl"), filepath.Join(t.TempDir(), "aa-b.jsonl")}
+	records := explicitAARecords(t, 5, 10)
+	var left, right []CaseResult
+	for _, record := range records {
+		if record.Stats.Samples[0].Arm == "aa-a" {
+			left = append(left, record)
+		} else {
+			right = append(right, record)
+		}
+	}
+	require.NoError(t, writeJSONLFile(paths[0], left))
+	require.NoError(t, writeJSONLFile(paths[1], right))
+
+	output := filepath.Join(t.TempDir(), "aa.json")
+	require.NoError(t, createAAResolutionReport(paths, output, PerfGateOptions{
+		Seed: 1, Confidence: 0.95, BootstrapCount: 100,
+	}))
+
+	report, _, err := loadAAResolutionReport(output)
+	require.NoError(t, err)
+	require.Len(t, report.Cases, 1)
+	require.True(t, validSHA256(report.ArtifactSHA256))
+	leftDigest, err := fileSHA256(paths[0])
+	require.NoError(t, err)
+	require.NotEqual(t, leftDigest, report.ArtifactSHA256)
 }
 
 func explicitAARecords(t *testing.T, rounds, samples int) []CaseResult {

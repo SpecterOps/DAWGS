@@ -214,7 +214,7 @@ func telemetryRequiredForArchitecture(architecture string) bool {
 		strings.HasPrefix(architecture, "SP-B2-") ||
 		strings.HasPrefix(architecture, "ASP-B1-") ||
 		strings.HasPrefix(architecture, "ASP-B2-") ||
-		architecture == "orientation-probe-v1"
+		isOrientationProbePolicy(architecture)
 }
 
 func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
@@ -223,14 +223,14 @@ func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
 	}
 	if record.Optimization != nil {
 		for _, outcome := range record.Optimization.TargetOutcomes {
-			if outcome.EmittedPolicy == "orientation-probe-v1" {
+			if isOrientationProbePolicy(outcome.EmittedPolicy) {
 				return true
 			}
 		}
 	}
 	return record.TraversalTelemetry != nil &&
-		(record.TraversalTelemetry.Summary.EmittedIdentity == "orientation-probe-v1" ||
-			record.TraversalTelemetry.Summary.SelectorVersion == "orientation-probe-v1")
+		(isOrientationProbePolicy(record.TraversalTelemetry.Summary.EmittedIdentity) ||
+			isOrientationProbePolicy(record.TraversalTelemetry.Summary.SelectorVersion))
 }
 
 func appendFallbackExpectationReasons(gateCase *ResourceGateCase, record CaseResult) {
@@ -345,7 +345,7 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 		gateCase.Reasons = append(gateCase.Reasons, "candidate qualification requires complete executor counters; diagnostic status is "+string(counterStatus))
 		return
 	}
-	if required && (summary.EmittedIdentity == "orientation-probe-v1" || summary.SelectorVersion == "orientation-probe-v1") {
+	if required && (isOrientationProbePolicy(summary.EmittedIdentity) || isOrientationProbePolicy(summary.SelectorVersion)) {
 		requiredFamilies := []TraversalTelemetryFamily{TraversalTelemetryFamilyOrientation, TraversalTelemetryFamilyOrdinary}
 		if observationRequiresHydration(summary.ObservationMode) {
 			requiredFamilies = append(requiredFamilies, TraversalTelemetryFamilyHydration)

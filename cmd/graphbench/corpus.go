@@ -180,6 +180,7 @@ func requiresQualificationSplit(testCase ScaleCase) bool {
 		return true
 	case "generated_fixed_suffix_expansion":
 		return slices.Contains(testCase.Tags, "fixed-suffix-expansion-v2") ||
+			slices.Contains(testCase.Tags, "fixed-suffix-expansion-v3") ||
 			slices.Contains(testCase.Tags, "fixed-suffix-expansion-boundary")
 	default:
 		return slices.Contains(testCase.Tags, "traversal-qualification")

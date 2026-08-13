@@ -30,6 +30,105 @@ func TestExpansionOrientationReverseDominanceHasStrictHysteresis(t *testing.T) {
 	require.True(t, expansionOrientationReverseDominates(4, 2))
 }
 
+func TestExpansionOrientationBooleanModesRemainV1ByDefault(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		options ToolOptions
+	}{
+		{name: "guarded", options: ToolOptions{EnableExpansionOrientationTournament: true}},
+		{name: "shadow", options: ToolOptions{EnableExpansionOrientationShadow: true}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			translate := func(options ToolOptions) (Result, string) {
+				regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
+				require.NoError(t, err)
+				translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+					"root_key": "v1-default-root",
+				}, DefaultGraphID, options)
+				require.NoError(t, err)
+				formatted, err := Translated(translation)
+				require.NoError(t, err)
+				return translation, formatted
+			}
+
+			implicit, implicitSQL := translate(testCase.options)
+			explicitOptions := testCase.options
+			explicitOptions.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicyOrientationProbeV1
+			explicit, explicitSQL := translate(explicitOptions)
+
+			require.Equal(t, implicitSQL, explicitSQL)
+			require.Contains(t, implicitSQL, "(s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 < (s5_orientation_metrics.root_rows + s5_orientation_metrics.forward_degree_rows) * 3")
+			require.NotContains(t, implicitSQL, "16 * s5_orientation_metrics.forward_degree_rows")
+			require.Equal(t, implicit.Optimization.LoweringPlan.ExpansionSearchStrategy, explicit.Optimization.LoweringPlan.ExpansionSearchStrategy)
+			decision := implicit.Optimization.LoweringPlan.ExpansionSearchStrategy[0]
+			require.Equal(t, optimize.ExpansionSearchPolicyOrientationProbeV1, decision.PlannedPolicy)
+			require.Equal(t, optimize.ExpansionSearchPolicyOrientationProbeV1, decision.EmittedPolicy)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), decision.SelectorVersion)
+			outcome := requireTraversalTargetOutcome(t, implicit.Optimization, optimize.LoweringExpansionSearchStrategy, decision.Target)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.PlannedPolicy)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.EmittedPolicy)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.SelectorVersion)
+		})
+	}
+}
+
+func TestExpansionOrientationProbeV2IsExplicitAndDepthWeighted(t *testing.T) {
+	for _, testCase := range []struct {
+		name               string
+		options            ToolOptions
+		expectedMode       string
+		expectedBoundary   string
+		expectedCandidates []optimize.ExpansionSearchStrategy
+	}{
+		{
+			name:               "guarded",
+			options:            ToolOptions{EnableExpansionOrientationTournament: true},
+			expectedMode:       "guarded_tool",
+			expectedBoundary:   optimize.ExpansionSearchExecutionBoundaryGuardedDualArm,
+			expectedCandidates: []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward, optimize.ExpansionSearchSuffixSeededReverse},
+		},
+		{
+			name:               "shadow",
+			options:            ToolOptions{EnableExpansionOrientationShadow: true},
+			expectedMode:       "shadow_tool",
+			expectedBoundary:   optimize.ExpansionSearchExecutionBoundaryInlineStatement,
+			expectedCandidates: []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
+			require.NoError(t, err)
+			options := testCase.options
+			options.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicyOrientationProbeV2
+			translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+				"root_key": "v2-depth-root",
+			}, DefaultGraphID, options)
+			require.NoError(t, err)
+			formatted, err := Translated(translation)
+			require.NoError(t, err)
+
+			require.Contains(t, formatted, "(s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 < (s5_orientation_metrics.root_rows + 16 * s5_orientation_metrics.forward_degree_rows) * 3")
+			require.Contains(t, formatted, "s5_orientation_metrics.probes_complete and (s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 <")
+			require.NotContains(t, formatted, "(s5_orientation_metrics.root_rows + s5_orientation_metrics.forward_degree_rows) * 3")
+
+			decision := translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0]
+			require.Equal(t, int64(16), decision.MaximumDepth)
+			require.Equal(t, optimize.ExpansionSearchPolicyOrientationProbeV2, decision.PlannedPolicy)
+			require.Equal(t, optimize.ExpansionSearchPolicyOrientationProbeV2, decision.EmittedPolicy)
+			require.Equal(t, testCase.expectedCandidates, decision.EmittedCandidates)
+			require.Equal(t, testCase.expectedMode, decision.SelectionMode)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), decision.SelectorVersion)
+			require.Equal(t, testCase.expectedBoundary, decision.ExecutionBoundary)
+
+			outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, decision.Target)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), outcome.PlannedPolicy)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), outcome.EmittedPolicy)
+			require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), outcome.SelectorVersion)
+			require.Equal(t, testCase.expectedBoundary, outcome.ExecutionBoundary)
+		})
+	}
+}
+
 func TestBoundedAdmissionGatesAreStrictComplements(t *testing.T) {
 	admitted, fallback := boundedAdmissionGates(
 		boundedProbeLimit{source: "endpoint_probe", limit: 32},
@@ -156,8 +255,12 @@ func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testi
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted, "record_traversal_runtime_attestation_v1")
+	require.Contains(t, formatted, "(s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 < (s5_orientation_metrics.root_rows + s5_orientation_metrics.forward_degree_rows) * 3")
+	require.NotContains(t, formatted, "16 * s5_orientation_metrics.forward_degree_rows")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.PlannedPolicy)
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.EmittedPolicy)
 	require.Equal(t, "production_canary", outcome.SelectionMode)
 	require.Equal(t, "traversal-production-g11", outcome.SelectorVersion)
 	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
@@ -364,6 +467,25 @@ func TestExpansionOrientationShadowRejectsConflictingModesWithoutMutation(t *tes
 		require.ErrorContains(t, err, "mutually exclusive")
 		require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
 	}
+}
+
+func TestExpansionOrientationPolicyRequiresSupportedEnabledMode(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
+	require.NoError(t, err)
+	plan, err := optimize.Optimize(regularQuery)
+	require.NoError(t, err)
+	before := append([]optimize.ExpansionSearchStrategyDecision(nil), plan.LoweringPlan.ExpansionSearchStrategy...)
+
+	err = applyToolOptions(&plan, ToolOptions{ExpansionOrientationPolicy: optimize.ExpansionSearchPolicyOrientationProbeV2})
+	require.ErrorContains(t, err, "requires tournament or shadow mode")
+	require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
+
+	err = applyToolOptions(&plan, ToolOptions{
+		ExpansionOrientationPolicy:           optimize.ExpansionSearchPolicy("orientation-probe-v3"),
+		EnableExpansionOrientationTournament: true,
+	})
+	require.ErrorContains(t, err, "unsupported expansion orientation policy")
+	require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
 }
 
 func TestExpansionOrientationShadowRequiresExactlyOneEligibleTarget(t *testing.T) {

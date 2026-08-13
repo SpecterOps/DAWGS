@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -97,6 +98,47 @@ func TestPostgreSQLGuardedOrientationInactiveArmLoops(t *testing.T) {
 			requireOrientationSubplanMetric(t, plan, "_orientation_executed_incumbent", "Actual Rows", testCase.expectedIncumbentMarkers)
 			requireOrientationSubplanMetric(t, plan, "_orientation_reverse", "Actual Loops", testCase.expectedReverseLoops)
 			requireOrientationSubplanMetric(t, plan, "_orientation_incumbent", "Actual Loops", testCase.expectedIncumbentLoops)
+		})
+	}
+}
+
+// TestPostgreSQLOrientationProbeV2ChangesOnlyItsVersionedDecision proves the
+// depth-weighted v2 formula at the real PostgreSQL boundary while retaining
+// v1's frozen choice for the same graph and statement.
+func TestPostgreSQLOrientationProbeV2ChangesOnlyItsVersionedDecision(t *testing.T) {
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		CleanupMode:          CleanupGraph,
+		ExtraNodeKinds: graph.Kinds{
+			orientationRootKind,
+			orientationExpansionKind,
+			orientationSuffixHeadKind,
+			orientationSuffixMidKind,
+			orientationSuffixEndKind,
+		},
+		ExtraEdgeKinds: graph.Kinds{
+			orientationExpandEdge,
+			orientationSuffixEdgeOne,
+			orientationSuffixEdgeTwo,
+			orientationSuffixEdgeThree,
+		},
+	})
+
+	loadOrientationV2CrossoverFixture(t, session)
+	for _, testCase := range []struct {
+		policy                   optimize.ExpansionSearchPolicy
+		expectedCandidateMarkers int64
+		expectedIncumbentMarkers int64
+	}{
+		{policy: optimize.ExpansionSearchPolicyOrientationProbeV1, expectedIncumbentMarkers: 1},
+		{policy: optimize.ExpansionSearchPolicyOrientationProbeV2, expectedCandidateMarkers: 1},
+	} {
+		t.Run(string(testCase.policy), func(t *testing.T) {
+			plan := explainGuardedOrientationPolicy(t, session, testCase.policy)
+			requireOrientationSubplanMetric(t, plan, "_orientation_executed_candidate", "Actual Rows", testCase.expectedCandidateMarkers)
+			requireOrientationSubplanMetric(t, plan, "_orientation_executed_incumbent", "Actual Rows", testCase.expectedIncumbentMarkers)
 		})
 	}
 }
@@ -547,7 +589,34 @@ func loadOrientationExecutionFixture(t *testing.T, session *Session, reverseDomi
 	}
 }
 
+func loadOrientationV2CrossoverFixture(t *testing.T, session *Session) {
+	t.Helper()
+
+	if err := session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
+		root, err := tx.CreateNode(graph.AsProperties(map[string]any{"root_key": "orientation-plan-root"}), orientationRootKind)
+		if err != nil {
+			return err
+		}
+		for range 4 {
+			boundary, err := createOrientationSuffix(tx)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.CreateRelationshipByIDs(root.ID, boundary.ID, orientationExpandEdge, graph.NewProperties()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("load orientation v2 crossover fixture: %v", err)
+	}
+}
+
 func explainGuardedOrientation(t *testing.T, session *Session) any {
+	return explainGuardedOrientationPolicy(t, session, optimize.ExpansionSearchPolicyOrientationProbeV1)
+}
+
+func explainGuardedOrientationPolicy(t *testing.T, session *Session, policy optimize.ExpansionSearchPolicy) any {
 	t.Helper()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), orientationExecutionPlanCypher)
@@ -568,7 +637,10 @@ func explainGuardedOrientation(t *testing.T, session *Session) any {
 		pgDriver.KindMapper(),
 		map[string]any{"root_key": "orientation-plan-root"},
 		defaultGraph.ID,
-		translate.ToolOptions{EnableExpansionOrientationTournament: true},
+		translate.ToolOptions{
+			ExpansionOrientationPolicy:           policy,
+			EnableExpansionOrientationTournament: true,
+		},
 	)
 	if err != nil {
 		t.Fatalf("translate guarded orientation query: %v", err)

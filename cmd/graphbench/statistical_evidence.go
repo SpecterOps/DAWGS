@@ -25,6 +25,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
 const (
@@ -180,6 +182,93 @@ func workloadSHA256ForKey(records []CaseResult, key performanceKey) (string, err
 	return identity, nil
 }
 
+func postgresTimingEnvironmentSHA256ForKey(records []CaseResult, key performanceKey) (string, error) {
+	identity := ""
+	found, missing := false, false
+	for _, record := range records {
+		if record.Dataset != key.dataset || record.Name != key.name || record.ExecutionMode != key.backend {
+			continue
+		}
+		found = true
+		if record.PostgresEnvironment == nil {
+			missing = true
+			continue
+		}
+		value := *record.PostgresEnvironment
+		value.AnalyzeState = normalizedAnalyzeState(value.AnalyzeState)
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return "", fmt.Errorf("encode %s/%s/%s PostgreSQL timing environment: %w", key.dataset, key.name, key.backend, err)
+		}
+		digest := sha256.Sum256(raw)
+		current := hex.EncodeToString(digest[:])
+		if identity != "" && identity != current {
+			return "", fmt.Errorf("%s/%s/%s mixes PostgreSQL timing environments", key.dataset, key.name, key.backend)
+		}
+		identity = current
+	}
+	if !found {
+		return "", fmt.Errorf("%s/%s/%s has no workload record", key.dataset, key.name, key.backend)
+	}
+	if missing && identity != "" {
+		return "", fmt.Errorf("%s/%s/%s has partially missing PostgreSQL timing environment", key.dataset, key.name, key.backend)
+	}
+	return identity, nil
+}
+
+func fixtureSHA256ForKey(records []CaseResult, key performanceKey) (string, error) {
+	identity := ""
+	found, missing := false, false
+	for _, record := range records {
+		if record.Dataset != key.dataset || record.Name != key.name || record.ExecutionMode != key.backend {
+			continue
+		}
+		found = true
+		if record.Fixture == nil {
+			missing = true
+			continue
+		}
+		raw, err := json.Marshal(record.Fixture)
+		if err != nil {
+			return "", fmt.Errorf("encode %s/%s/%s fixture: %w", key.dataset, key.name, key.backend, err)
+		}
+		digest := sha256.Sum256(raw)
+		current := hex.EncodeToString(digest[:])
+		if identity != "" && identity != current {
+			return "", fmt.Errorf("%s/%s/%s mixes fixture identities", key.dataset, key.name, key.backend)
+		}
+		identity = current
+	}
+	if !found {
+		return "", fmt.Errorf("%s/%s/%s has no workload record", key.dataset, key.name, key.backend)
+	}
+	if missing && identity != "" {
+		return "", fmt.Errorf("%s/%s/%s has partially missing fixture identity", key.dataset, key.name, key.backend)
+	}
+	return identity, nil
+}
+
+func normalizedAnalyzeState(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	entries := strings.Split(value, ",")
+	for index, entry := range entries {
+		relation, state, found := strings.Cut(strings.TrimSpace(entry), ":")
+		if !found {
+			entries[index] = relation
+			continue
+		}
+		state = strings.TrimSpace(state)
+		if state != "" && state != "never" {
+			state = "analyzed"
+		}
+		entries[index] = relation + ":" + state
+	}
+	sort.Strings(entries)
+	return strings.Join(entries, ",")
+}
+
 func validateAAMetric(metric AAMetricResolution) error {
 	if metric.Ratio.Estimate <= 0 || metric.Ratio.Lower <= 0 || metric.Ratio.Upper <= 0 ||
 		metric.Ratio.Lower > metric.Ratio.Estimate || metric.Ratio.Estimate > metric.Ratio.Upper ||
@@ -306,7 +395,9 @@ func prioritizedTraversalRecord(record CaseResult) bool {
 
 	return record.Category == "generated_fixed_suffix_expansion" &&
 		(strings.HasPrefix(record.Dataset, "generated_fixed_suffix_expansion_v2_") ||
+			strings.HasPrefix(record.Dataset, "generated_fixed_suffix_expansion_v3_") ||
 			strings.HasPrefix(record.Name, "GFSE-V2-") ||
+			strings.HasPrefix(record.Name, "GFSE-V3-") ||
 			strings.HasPrefix(record.Name, "GFSE-BOUNDARY-"))
 }
 
@@ -349,8 +440,14 @@ func traversalQualificationFamily(key performanceKey, artifacts ...[]CaseResult)
 				continue
 			}
 			if record.TraversalTelemetry != nil {
-				if identity := record.TraversalTelemetry.Summary.RequestedIdentity; prioritizedTraversalIdentity(identity) {
-					branch := record.TraversalTelemetry.Summary.RuntimeBranch
+				summary := record.TraversalTelemetry.Summary
+				for _, identity := range []string{summary.EmittedIdentity, summary.SelectorVersion} {
+					if isOrientationProbePolicy(identity) {
+						return identity
+					}
+				}
+				if identity := summary.RequestedIdentity; prioritizedTraversalIdentity(identity) {
+					branch := summary.RuntimeBranch
 					if branch != "" && branch != "runtime_outcome_unavailable" && branch != "mixed" {
 						return identity + "@" + branch
 					}
@@ -389,6 +486,9 @@ func traversalQualificationFamily(key performanceKey, artifacts ...[]CaseResult)
 		for _, record := range records {
 			if record.Dataset != key.dataset || record.Name != key.name || record.ExecutionMode != key.backend {
 				continue
+			}
+			if strings.HasPrefix(record.Dataset, "generated_fixed_suffix_expansion_v3_") || strings.HasPrefix(record.Name, "GFSE-V3-") {
+				return string(optimize.ExpansionSearchPolicyOrientationProbeV2)
 			}
 			switch record.Category {
 			case "generated_shortest_path_v2", "generated_all_shortest_path_v2":
@@ -489,16 +589,22 @@ func caseRuntimeReceiptChains(records []CaseResult, key performanceKey) [][]Runt
 }
 
 func requiresCandidateRuntimeEvidence(record CaseResult) bool {
-	if record.TraversalTelemetry != nil && prioritizedTraversalIdentity(record.TraversalTelemetry.Summary.RequestedIdentity) {
-		requested := record.TraversalTelemetry.Summary.RequestedIdentity
-		return strings.HasPrefix(requested, "SP-B") || strings.HasPrefix(requested, "ASP-B") || requested == "orientation-probe-v1"
+	if record.TraversalTelemetry != nil {
+		summary := record.TraversalTelemetry.Summary
+		if isOrientationProbePolicy(summary.EmittedIdentity) || isOrientationProbePolicy(summary.SelectorVersion) {
+			return true
+		}
+		requested := summary.RequestedIdentity
+		if strings.HasPrefix(requested, "SP-B") || strings.HasPrefix(requested, "ASP-B") || isOrientationProbePolicy(requested) {
+			return true
+		}
 	}
 	if record.Optimization == nil {
 		return false
 	}
 	for _, outcome := range record.Optimization.TargetOutcomes {
 		for _, identity := range []string{outcome.Candidate, outcome.EmittedPolicy, outcome.Selected} {
-			if strings.HasPrefix(identity, "SP-B") || strings.HasPrefix(identity, "ASP-B") || identity == "orientation-probe-v1" {
+			if strings.HasPrefix(identity, "SP-B") || strings.HasPrefix(identity, "ASP-B") || isOrientationProbePolicy(identity) {
 				return true
 			}
 		}
@@ -510,7 +616,7 @@ func prioritizedTraversalIdentity(identity string) bool {
 	return strings.HasPrefix(identity, "SP-") ||
 		strings.HasPrefix(identity, "ASP-") ||
 		strings.HasPrefix(identity, "EXPANSION-") ||
-		identity == "orientation-probe-v1"
+		isOrientationProbePolicy(identity)
 }
 
 // promotionTimingSplit reports whether a frozen qualification partition may

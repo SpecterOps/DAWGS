@@ -100,6 +100,10 @@ type PostgresEnvironment struct {
 	Database string `json:"database"`
 	// PlanCacheMode records PostgreSQL plan_cache_mode for environment comparability.
 	PlanCacheMode string `json:"plan_cache_mode"`
+	// TransactionIsolation records the isolation applied to measured read
+	// transactions. Tool and provisional guarded orientation evidence uses
+	// Repeatable Read even when the server default differs.
+	TransactionIsolation string `json:"transaction_isolation"`
 	// WorkMem records PostgreSQL work_mem for environment comparability.
 	WorkMem string `json:"work_mem"`
 	// TempFileLimit records the configured PostgreSQL temporary-file ceiling.

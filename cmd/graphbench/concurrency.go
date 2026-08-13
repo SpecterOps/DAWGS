@@ -26,10 +26,11 @@ func measurePostgresConcurrency(
 	poolSize int,
 	levels []int,
 	iterations int,
+	isolation ...pgx.TxIsoLevel,
 ) ([]ConcurrencyBlock, error) {
 	blocks := make([]ConcurrencyBlock, 0, len(levels))
 	for _, concurrency := range levels {
-		block, err := measurePostgresConcurrencyBlock(ctx, pool, sqlQuery, parameters, poolSize, concurrency, iterations)
+		block, err := measurePostgresConcurrencyBlock(ctx, pool, sqlQuery, parameters, poolSize, concurrency, iterations, isolation...)
 		if err != nil {
 			return nil, fmt.Errorf("concurrency %d: %w", concurrency, err)
 		}
@@ -45,6 +46,7 @@ func measurePostgresConcurrencyBlock(
 	sqlQuery string,
 	parameters map[string]any,
 	poolSize, concurrency, iterations int,
+	isolation ...pgx.TxIsoLevel,
 ) (ConcurrencyBlock, error) {
 	var (
 		startBarrier = make(chan struct{})
@@ -61,7 +63,7 @@ func measurePostgresConcurrencyBlock(
 			defer wg.Done()
 			<-startBarrier
 			for iteration := range iterations {
-				sample, pid, err := measurePostgresConcurrentIteration(ctx, pool, sqlQuery, parameters, worker+1, iteration+1)
+				sample, pid, err := measurePostgresConcurrentIteration(ctx, pool, sqlQuery, parameters, worker+1, iteration+1, isolation...)
 				mutex.Lock()
 				if err != nil {
 					errorsSeen = append(errorsSeen, err)
@@ -108,6 +110,7 @@ func measurePostgresConcurrentIteration(
 	sqlQuery string,
 	parameters map[string]any,
 	worker, iteration int,
+	isolation ...pgx.TxIsoLevel,
 ) (ConcurrencySample, uint32, error) {
 	totalStart := time.Now()
 	acquireStart := time.Now()
@@ -124,7 +127,8 @@ func measurePostgresConcurrentIteration(
 	// DAWGS read queries may create and reset session-local workspace tables.
 	// Keep the transaction read-write, matching drivers/pg ReadTransaction,
 	// while rolling it back after the measurement.
-	tx, err := conn.BeginTx(ctx, postgresConcurrencyTxOptions())
+	txOptions := postgresConcurrencyTxOptions(isolation...)
+	tx, err := conn.BeginTx(ctx, txOptions)
 	if err != nil {
 		return ConcurrencySample{}, 0, err
 	}
@@ -168,6 +172,10 @@ func measurePostgresConcurrentIteration(
 }
 
 // postgresConcurrencyTxOptions returns transaction options that preserve session-local workspace maintenance.
-func postgresConcurrencyTxOptions() pgx.TxOptions {
-	return pgx.TxOptions{AccessMode: pgx.ReadWrite}
+func postgresConcurrencyTxOptions(isolation ...pgx.TxIsoLevel) pgx.TxOptions {
+	options := pgx.TxOptions{AccessMode: pgx.ReadWrite}
+	if len(isolation) > 0 {
+		options.IsoLevel = isolation[0]
+	}
+	return options
 }

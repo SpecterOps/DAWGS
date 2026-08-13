@@ -64,6 +64,112 @@ func TestGeneratedScaleCasesParseAndExecuteRealBackends(t *testing.T) {
 	require.Positive(t, covered["endpoint_seeded_expansion"])
 }
 
+// TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrices
+// verifies exact cohort sizes, independent training dimensions, fresh holdout
+// depths, canonical cohort tags, and graph-derived result cardinalities.
+func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrices(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	type fraction struct{ reachable, fanout int }
+	trainingDepths := map[int]bool{}
+	trainingFanouts := map[int]bool{}
+	trainingFractions := map[fraction]bool{}
+	trainingDisconnected := map[int]bool{}
+	trainingFanIn := map[int]bool{}
+	trainingMultiplicity := map[int]bool{}
+	trainingRoots := map[int]bool{}
+	trainingObservations := map[string]bool{}
+	trainingBoundaryControls := map[[2]bool]bool{}
+	trainingZeroDepth := map[bool]bool{}
+	trainingPayloads := map[int]bool{}
+	holdoutDepths := map[int]bool{}
+	declaredCohort := map[performanceKey]string{}
+	trainingCount, holdoutCount := 0, 0
+
+	for _, testCase := range corpus.Cases {
+		if !strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_v3_") {
+			continue
+		}
+
+		config, ok := parseFixedSuffixExpansionV3DatasetName(testCase.Dataset)
+		require.True(t, ok, testCase.Name)
+		require.NotNil(t, testCase.Expected.RowCount, testCase.Name)
+		require.NotNil(t, testCase.Shape.MaxDepth, testCase.Name)
+		require.Equal(t, config.ExpansionDepth, *testCase.Shape.MaxDepth, testCase.Name)
+		declaredCohort[performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}] = testCase.Shape.QualificationSplit
+
+		metadata, err := fixtureMetadata("unused", testCase.Dataset)
+		require.NoError(t, err, testCase.Name)
+		require.NotNil(t, metadata.FixedSuffixExpansion, testCase.Name)
+		require.Equal(t, metadata.FixedSuffixExpansion.CompleteOutputTrails, *testCase.Expected.RowCount, testCase.Name)
+
+		trainingTag := slices.Contains(testCase.Tags, "orientation-v2-training")
+		holdoutTag := slices.Contains(testCase.Tags, "orientation-v2-holdout")
+		require.NotEqual(t, trainingTag, holdoutTag, testCase.Name)
+		switch testCase.Shape.QualificationSplit {
+		case "training":
+			require.True(t, trainingTag, testCase.Name)
+			require.False(t, holdoutTag, testCase.Name)
+			trainingCount++
+			trainingDepths[config.ExpansionDepth] = true
+			trainingFanouts[config.Fanout] = true
+			trainingFractions[fraction{reachable: *config.ExactReachableSuffixSources, fanout: config.Fanout}] = true
+			trainingDisconnected[config.DisconnectedSuffixSources] = true
+			trainingFanIn[config.ReverseFanIn] = true
+			trainingMultiplicity[config.SuffixPathsPerBoundary] = true
+			trainingRoots[config.RootMatchCount] = true
+			observation := "endpoint"
+			if testCase.Observes.Paths {
+				observation = "path"
+			}
+			trainingObservations[observation] = true
+			trainingBoundaryControls[[2]bool{config.AddProductiveBoundaryCycle, config.AddProductiveBoundarySelfLoop}] = true
+			trainingZeroDepth[*config.RootHasZeroDepthSuffix] = true
+			trainingPayloads[config.PropertyPayloadSize] = true
+		case "holdout":
+			require.False(t, trainingTag, testCase.Name)
+			require.True(t, holdoutTag, testCase.Name)
+			holdoutCount++
+			holdoutDepths[config.ExpansionDepth] = true
+		default:
+			t.Fatalf("%s has invalid v3 orientation split %q", testCase.Name, testCase.Shape.QualificationSplit)
+		}
+	}
+
+	require.Equal(t, 8, trainingCount)
+	require.Equal(t, 4, holdoutCount)
+	require.GreaterOrEqual(t, len(trainingDepths), 4)
+	require.GreaterOrEqual(t, len(trainingFanouts), 4)
+	require.GreaterOrEqual(t, len(trainingFractions), 4)
+	require.GreaterOrEqual(t, len(trainingDisconnected), 4)
+	require.GreaterOrEqual(t, len(trainingFanIn), 3)
+	require.GreaterOrEqual(t, len(trainingMultiplicity), 3)
+	require.GreaterOrEqual(t, len(trainingRoots), 4)
+	require.Equal(t, map[string]bool{"endpoint": true, "path": true}, trainingObservations)
+	require.Equal(t, map[bool]bool{false: true, true: true}, trainingZeroDepth)
+	require.GreaterOrEqual(t, len(trainingPayloads), 3)
+	for _, combination := range [][2]bool{{false, false}, {true, false}, {false, true}, {true, true}} {
+		require.True(t, trainingBoundaryControls[combination], "missing cycle/self-loop combination %v", combination)
+	}
+	require.Equal(t, map[int]bool{7: true, 11: true, 13: true, 15: true}, holdoutDepths)
+	for depth := range holdoutDepths {
+		require.False(t, trainingDepths[depth], "holdout depth %d is already present in training", depth)
+	}
+	require.Len(t, orientationV2CanonicalCases, len(declaredCohort))
+	for _, frozen := range orientationV2CanonicalCases {
+		require.Equal(t, frozen.split, declaredCohort[performanceKey{dataset: frozen.dataset, name: frozen.name, backend: ModePostgresSQL}], frozen.name)
+	}
+	canonical, err := canonicalOrientationV2Cohort()
+	require.NoError(t, err)
+	_, trainingSelection, err := selectScaleCorpus(corpus, CorpusSelectors{Tags: []string{"orientation-v2-training"}})
+	require.NoError(t, err)
+	require.Equal(t, canonical.trainingDeclarationSHA256, trainingSelection.DeclarationSHA256)
+	_, confirmationSelection, err := selectScaleCorpus(corpus, CorpusSelectors{Tags: []string{"orientation-v2-training", "orientation-v2-holdout"}})
+	require.NoError(t, err)
+	require.Equal(t, canonical.declarationSHA256, confirmationSelection.DeclarationSHA256)
+}
+
 // TestEndpointSeededExpansionCorpusCoversGuardOutcomes verifies corpus representatives for admitted execution plus endpoint-guard and state-guard overflow fallbacks.
 func TestEndpointSeededExpansionCorpusCoversGuardOutcomes(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
