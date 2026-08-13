@@ -293,6 +293,10 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		PostgresForceShortest string `json:"postgres_force_shortest"`
 		// PostgresForceExpansion selects a forced expansion search strategy for diagnostic runs.
 		PostgresForceExpansion string `json:"postgres_force_expansion"`
+		// PostgresTraversalTelemetry selects the opt-in traversal evidence boundary.
+		PostgresTraversalTelemetry string `json:"postgres_traversal_telemetry"`
+		// PostgresExpansionOrientationShadow records the tool-only selector shadow mode.
+		PostgresExpansionOrientationShadow bool `json:"postgres_expansion_orientation_shadow"`
 		// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
 		Discovery bool `json:"discovery"`
 		// TimeoutClasses lists the increasing per-attempt deadlines included in resumable run identity.
@@ -300,31 +304,33 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		// DiscoverySampleFloor sets the minimum live-graph samples required before adaptive discovery may stop.
 		DiscoverySampleFloor int `json:"discovery_sample_floor"`
 	}{
-		Version:                   1,
-		SourceCommit:              environment.SourceCommit,
-		DirtyDiffSHA256:           environment.DirtyDiffSHA256,
-		BinarySHA256:              environment.BinarySHA256,
-		GOOS:                      environment.GOOS,
-		GOARCH:                    environment.GOARCH,
-		GoVersion:                 environment.GoVersion,
-		Modes:                     append([]ExecutionMode(nil), cfg.Modes...),
-		Iterations:                cfg.Iterations,
-		WarmupIterations:          cfg.WarmupIterations,
-		Round:                     cfg.Round,
-		Block:                     cfg.Block,
-		Arm:                       cfg.Arm,
-		ArmOrder:                  cfg.ArmOrder,
-		PoolSize:                  cfg.PoolSize,
-		Concurrency:               append([]int(nil), cfg.Concurrency...),
-		SessionMemoryCeilingBytes: cfg.SessionMemoryCeilingBytes,
-		PoolMemoryCeilingBytes:    cfg.PoolMemoryCeilingBytes,
-		PostgresReferences:        cfg.PostgresReferences,
-		PostgresReferenceArms:     append([]string(nil), cfg.PostgresReferenceArms...),
-		PostgresForceShortest:     cfg.PostgresForceShortest,
-		PostgresForceExpansion:    cfg.PostgresForceExpansion,
-		Discovery:                 cfg.Discovery,
-		TimeoutClasses:            append([]time.Duration(nil), cfg.TimeoutClasses...),
-		DiscoverySampleFloor:      cfg.DiscoverySampleFloor,
+		Version:                            1,
+		SourceCommit:                       environment.SourceCommit,
+		DirtyDiffSHA256:                    environment.DirtyDiffSHA256,
+		BinarySHA256:                       environment.BinarySHA256,
+		GOOS:                               environment.GOOS,
+		GOARCH:                             environment.GOARCH,
+		GoVersion:                          environment.GoVersion,
+		Modes:                              append([]ExecutionMode(nil), cfg.Modes...),
+		Iterations:                         cfg.Iterations,
+		WarmupIterations:                   cfg.WarmupIterations,
+		Round:                              cfg.Round,
+		Block:                              cfg.Block,
+		Arm:                                cfg.Arm,
+		ArmOrder:                           cfg.ArmOrder,
+		PoolSize:                           cfg.PoolSize,
+		Concurrency:                        append([]int(nil), cfg.Concurrency...),
+		SessionMemoryCeilingBytes:          cfg.SessionMemoryCeilingBytes,
+		PoolMemoryCeilingBytes:             cfg.PoolMemoryCeilingBytes,
+		PostgresReferences:                 cfg.PostgresReferences,
+		PostgresReferenceArms:              append([]string(nil), cfg.PostgresReferenceArms...),
+		PostgresForceShortest:              cfg.PostgresForceShortest,
+		PostgresForceExpansion:             cfg.PostgresForceExpansion,
+		PostgresTraversalTelemetry:         cfg.PostgresTraversalTelemetry,
+		PostgresExpansionOrientationShadow: cfg.PostgresExpansionOrientationShadow,
+		Discovery:                          cfg.Discovery,
+		TimeoutClasses:                     append([]time.Duration(nil), cfg.TimeoutClasses...),
+		DiscoverySampleFloor:               cfg.DiscoverySampleFloor,
 	}
 	raw, _ := json.Marshal(payload)
 	digest := sha256.Sum256(raw)

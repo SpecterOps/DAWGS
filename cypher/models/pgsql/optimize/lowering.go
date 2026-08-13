@@ -56,6 +56,12 @@ const (
 
 	// LoweringExpansionSearchStrategy identifies selection of a physical variable-expansion search strategy.
 	LoweringExpansionSearchStrategy = "ExpansionSearchStrategyDecision"
+
+	// LoweringEndpointResolution identifies planned bounded endpoint-resolution analysis.
+	LoweringEndpointResolution = "EndpointResolutionDecision"
+
+	// LoweringTraversalPredicateClassification identifies planned traversal-predicate locality analysis.
+	LoweringTraversalPredicateClassification = "TraversalPredicateClassificationDecision"
 )
 
 type LoweringDecision struct {
@@ -178,7 +184,107 @@ const (
 
 	// ShortestPathExecutorASPA1DAG selects all-shortest-path enumeration from a predecessor DAG.
 	ShortestPathExecutorASPA1DAG ShortestPathExecutor = "ASP-A1-DAG"
+
+	// ShortestPathExecutorI1CanonicalDistance selects an inline recursive SQL
+	// distance search. The distinct identity prevents evidence collected at an
+	// inline statement boundary from being attributed to a helper function.
+	ShortestPathExecutorI1CanonicalDistance ShortestPathExecutor = "SP-I1-C-D"
+
+	// ShortestPathExecutorI1CanonicalWitness selects inline recursive SQL with
+	// ordered edge-ID witness state and late M0 path materialization.
+	ShortestPathExecutorI1CanonicalWitness ShortestPathExecutor = "SP-I1-U-E+MAT-M0"
+
+	// ShortestPathExecutorI1CanonicalPredecessorWitness selects guarded inline
+	// minimum-distance/predecessor discovery, one deterministic witness, and an
+	// exact compact S4 fallback. It is intentionally distinct from the legacy
+	// unguarded relationship-trail I1 identity above.
+	ShortestPathExecutorI1CanonicalPredecessorWitness ShortestPathExecutor = "SP-I1-C-WE+MAT-M0"
+
+	// ShortestPathExecutorASPI1DAG selects inline predecessor-DAG discovery and
+	// late M0 materialization for all shortest paths.
+	ShortestPathExecutorASPI1DAG ShortestPathExecutor = "ASP-I1-U-DAG+MAT-M0"
+
+	// ShortestPathExecutorB1AlternatingNodeDistance reserves compact bidirectional
+	// distance search with strict node-at-a-time alternation.
+	ShortestPathExecutorB1AlternatingNodeDistance ShortestPathExecutor = "SP-B1-C-ALT-NODE-D"
+
+	// ShortestPathExecutorB1AlternatingNodeWitness reserves compact bidirectional
+	// witness search with strict node-at-a-time alternation and deferred materialization.
+	ShortestPathExecutorB1AlternatingNodeWitness ShortestPathExecutor = "SP-B1-C-ALT-NODE-WE+MAT-M0"
+
+	// ShortestPathExecutorB2SmallerCurrentLevelDistance reserves compact bidirectional
+	// distance search that expands the smaller current level.
+	ShortestPathExecutorB2SmallerCurrentLevelDistance ShortestPathExecutor = "SP-B2-C-MIN-LEVEL-D"
+
+	// ShortestPathExecutorB2SmallerCurrentLevelWitness reserves compact bidirectional
+	// witness search that expands the smaller current level and defers materialization.
+	ShortestPathExecutorB2SmallerCurrentLevelWitness ShortestPathExecutor = "SP-B2-C-MIN-LEVEL-WE+MAT-M0"
+
+	// ShortestPathExecutorASPB1AlternatingNodeDAG reserves all-shortest-path DAG
+	// enumeration with strict node-at-a-time alternation.
+	ShortestPathExecutorASPB1AlternatingNodeDAG ShortestPathExecutor = "ASP-B1-DAG-ALT-NODE"
+
+	// ShortestPathExecutorASPB2SmallerCurrentLevelDAG reserves all-shortest-path DAG
+	// enumeration that expands the smaller current level.
+	ShortestPathExecutorASPB2SmallerCurrentLevelDAG ShortestPathExecutor = "ASP-B2-DAG-MIN-LEVEL"
 )
+
+// ShortestPathScheduler identifies the frontier scheduling policy used by a
+// shortest-path executor independently of its result-observation contract.
+type ShortestPathScheduler string
+
+const (
+	// ShortestPathSchedulerSingleEndedLevel expands one complete level from a single frontier.
+	ShortestPathSchedulerSingleEndedLevel ShortestPathScheduler = "single_ended_level"
+
+	// ShortestPathSchedulerStrictAlternatingNode alternates one node expansion from each frontier.
+	ShortestPathSchedulerStrictAlternatingNode ShortestPathScheduler = "strict_alternating_node"
+
+	// ShortestPathSchedulerSmallerCurrentLevel expands the smaller of the two current frontier levels.
+	ShortestPathSchedulerSmallerCurrentLevel ShortestPathScheduler = "smaller_current_level"
+)
+
+// Scheduler reports the stable frontier scheduler associated with this executor.
+func (s ShortestPathExecutor) Scheduler() ShortestPathScheduler {
+	switch s {
+	case ShortestPathExecutorS3Unidirectional,
+		ShortestPathExecutorS3EdgeM0,
+		ShortestPathExecutorS4CanonicalDistance,
+		ShortestPathExecutorS4CanonicalWitness,
+		ShortestPathExecutorASPA1DAG,
+		ShortestPathExecutorI1CanonicalDistance,
+		ShortestPathExecutorI1CanonicalWitness,
+		ShortestPathExecutorI1CanonicalPredecessorWitness,
+		ShortestPathExecutorASPI1DAG:
+		return ShortestPathSchedulerSingleEndedLevel
+	case ShortestPathExecutorB1AlternatingNodeDistance,
+		ShortestPathExecutorB1AlternatingNodeWitness,
+		ShortestPathExecutorASPB1AlternatingNodeDAG:
+		return ShortestPathSchedulerStrictAlternatingNode
+	case ShortestPathExecutorB2SmallerCurrentLevelDistance,
+		ShortestPathExecutorB2SmallerCurrentLevelWitness,
+		ShortestPathExecutorASPB2SmallerCurrentLevelDAG:
+		return ShortestPathSchedulerSmallerCurrentLevel
+	default:
+		return ""
+	}
+}
+
+// ExecutionBoundary reports the SQL boundary represented by the executor
+// identity. Benchmark and promotion artifacts must match this value.
+func (s ShortestPathExecutor) ExecutionBoundary() string {
+	switch s {
+	case ShortestPathExecutorS3Unidirectional,
+		ShortestPathExecutorS3EdgeM0,
+		ShortestPathExecutorI1CanonicalDistance,
+		ShortestPathExecutorI1CanonicalWitness,
+		ShortestPathExecutorI1CanonicalPredecessorWitness,
+		ShortestPathExecutorASPI1DAG:
+		return "inline_statement"
+	default:
+		return "stored_helper"
+	}
+}
 
 type ShortestPathObservationMode string
 
@@ -291,6 +397,11 @@ type ShortestPathExecutorDecision struct {
 	PlannedCandidates []ShortestPathExecutor `json:"planned_candidates"`
 	// SelectedExecutor is the executor chosen after qualification.
 	SelectedExecutor ShortestPathExecutor `json:"selected_executor"`
+	// ExecutionBoundary distinguishes inline statement SQL from stored helper
+	// execution. Promotion evidence must match this boundary exactly.
+	ExecutionBoundary string `json:"execution_boundary"`
+	// Scheduler identifies the selected executor's frontier scheduling policy.
+	Scheduler ShortestPathScheduler `json:"scheduler,omitempty"`
 	// ObservationMode describes how downstream clauses consume the shortest path.
 	ObservationMode ShortestPathObservationMode `json:"observation_mode"`
 	// Direction is the logical direction of the traversal.
@@ -315,6 +426,14 @@ type ShortestPathExecutorDecision struct {
 	MaximumDepth int64 `json:"maximum_depth"`
 	// StateLimit caps state admitted by bounded experimental executors.
 	StateLimit int64 `json:"state_limit,omitempty"`
+	// FrontierLimit caps current and queued frontier rows independently of seen state.
+	FrontierLimit int64 `json:"frontier_limit,omitempty"`
+	// PredecessorLimit caps retained witness predecessor rows independently of discovery state.
+	PredecessorLimit int64 `json:"predecessor_limit,omitempty"`
+	// EnumerationLimit caps distinct ordered all-shortest-path arrays before exact fallback.
+	EnumerationLimit int64 `json:"enumeration_limit,omitempty"`
+	// OutputBytesLimit caps staged all-shortest-path array bytes before exact fallback.
+	OutputBytesLimit int64 `json:"output_bytes_limit,omitempty"`
 	// SelectorVersion identifies the policy version that ranked the candidates.
 	SelectorVersion string `json:"selector_version"`
 	// SelectionMode records whether selection was automatic or forced by tooling.
@@ -397,6 +516,69 @@ const (
 	// ExpansionSearchBackwardViabilityForward selects forward expansion gated by backward reachability.
 	ExpansionSearchBackwardViabilityForward ExpansionSearchStrategy = "EXPANSION-BACKWARD-VIABILITY-FORWARD"
 )
+
+// ExpansionSearchPolicy identifies a runtime policy independently of the
+// expansion arm that the policy may execute.
+type ExpansionSearchPolicy string
+
+const (
+	// ExpansionSearchPolicyEndpointGuardV1 identifies the shipped endpoint and
+	// reverse-state sentinel policy. It is distinct from topology orientation,
+	// which requires root, suffix, and directional-degree probes.
+	ExpansionSearchPolicyEndpointGuardV1 ExpansionSearchPolicy = "endpoint-state-guard-v1"
+
+	// ExpansionSearchPolicyOrientationProbeV1 selects an ordinary-expansion
+	// orientation from bounded, same-statement topology probes.
+	ExpansionSearchPolicyOrientationProbeV1 ExpansionSearchPolicy = "orientation-probe-v1"
+
+	// ExpansionSearchOrientationRootRowLimit caps complete forward-root evidence
+	// for the initial fixed-suffix orientation tournament.
+	ExpansionSearchOrientationRootRowLimit int64 = 512
+
+	// ExpansionSearchOrientationReverseSeedRowLimit caps complete fixed-suffix
+	// row evidence while preserving duplicate suffix paths.
+	ExpansionSearchOrientationReverseSeedRowLimit int64 = 512
+
+	// ExpansionSearchOrientationDirectionalDegreeRowLimit caps each typed
+	// directional adjacency probe independently.
+	ExpansionSearchOrientationDirectionalDegreeRowLimit int64 = 16_384
+
+	// ExpansionSearchOrientationStateLimit caps admitted reverse recursive state.
+	ExpansionSearchOrientationStateLimit int64 = 4_096
+
+	// ExpansionSearchOrientationReverseScoreMultiplier is the reverse side of
+	// orientation-probe-v1's strict 3/4 hysteresis comparison.
+	ExpansionSearchOrientationReverseScoreMultiplier int64 = 4
+
+	// ExpansionSearchOrientationForwardScoreMultiplier is the incumbent side
+	// of orientation-probe-v1's strict 3/4 hysteresis comparison.
+	ExpansionSearchOrientationForwardScoreMultiplier int64 = 3
+)
+
+// ExpansionSearchProbeCaps records the maximum complete evidence admitted by
+// an orientation policy. SQL probes use cap+1 sentinels to detect overflow.
+type ExpansionSearchProbeCaps struct {
+	// RootRowLimit caps forward-root evidence.
+	RootRowLimit int64 `json:"root_row_limit,omitempty"`
+	// ReverseSeedRowLimit caps terminal or fixed-suffix seed evidence.
+	ReverseSeedRowLimit int64 `json:"reverse_seed_row_limit,omitempty"`
+	// DirectionalDegreeRowLimit caps typed first-hop adjacency evidence.
+	DirectionalDegreeRowLimit int64 `json:"directional_degree_row_limit,omitempty"`
+	// SurvivalRowLimit caps optional one-level survival evidence.
+	SurvivalRowLimit int64 `json:"survival_row_limit,omitempty"`
+}
+
+// ExpansionSearchAdmission records the exact gate and fallback for a
+// specialized orientation arm.
+type ExpansionSearchAdmission struct {
+	// StateLimit caps specialized search state before incumbent fallback.
+	StateLimit int64 `json:"state_limit,omitempty"`
+	// RequiresCompleteProbes requires every candidate input probe to remain at
+	// or below its declared cap before specialized rows may be exposed.
+	RequiresCompleteProbes bool `json:"requires_complete_probes,omitempty"`
+	// FallbackStrategy names the exact incumbent used when admission fails.
+	FallbackStrategy ExpansionSearchStrategy `json:"fallback_strategy,omitempty"`
+}
 
 type ExpansionSearchObservationMode string
 
@@ -514,8 +696,21 @@ type ExpansionSearchStrategyDecision struct {
 	Target TraversalStepTarget `json:"target"`
 	// Family names the search-strategy family that produced the decision.
 	Family string `json:"family"`
+	// PlannedPolicy identifies the runtime policy intended for this candidate
+	// family, whether or not translation currently emits it.
+	PlannedPolicy ExpansionSearchPolicy `json:"planned_policy,omitempty"`
+	// EmittedPolicy identifies the runtime policy actually present in emitted
+	// SQL. It remains empty for a single forced arm or incumbent-only SQL.
+	EmittedPolicy ExpansionSearchPolicy `json:"emitted_policy,omitempty"`
 	// PlannedCandidates lists the strategies considered in preference order.
 	PlannedCandidates []ExpansionSearchStrategy `json:"planned_candidates"`
+	// EmittedCandidates lists the arms present in the translated statement.
+	// Runtime telemetry, not this field, records which arm executed.
+	EmittedCandidates []ExpansionSearchStrategy `json:"emitted_candidates,omitempty"`
+	// ProbeCaps records bounded evidence inputs for the planned policy.
+	ProbeCaps ExpansionSearchProbeCaps `json:"probe_caps"`
+	// Admission records the exact specialized-state gate and fallback chain.
+	Admission ExpansionSearchAdmission `json:"admission"`
 	// CandidateStrategy is the specialized strategy proposed by structural analysis.
 	CandidateStrategy ExpansionSearchStrategy `json:"candidate_strategy,omitempty"`
 	// SelectedStrategy is the strategy chosen after all qualification checks.
@@ -728,6 +923,10 @@ type LoweringPlan struct {
 	ShortestPathExecutor []ShortestPathExecutorDecision `json:"shortest_path_executor,omitempty"`
 	// ExpansionSearchStrategy records physical search choices for variable expansions.
 	ExpansionSearchStrategy []ExpansionSearchStrategyDecision `json:"expansion_search_strategy,omitempty"`
+	// EndpointResolution records planned-only bounded endpoint materialization for SP/ASP traversals.
+	EndpointResolution []EndpointResolutionDecision `json:"endpoint_resolution,omitempty"`
+	// TraversalPredicate records conservative locality and universality classifications.
+	TraversalPredicate []TraversalPredicateDecision `json:"traversal_predicate,omitempty"`
 }
 
 // Empty reports whether the plan contains no lowering-analysis or decision entries.
@@ -748,7 +947,9 @@ func (s LoweringPlan) Empty() bool {
 		len(s.AggregateTraversalCount) == 0 &&
 		len(s.FieldRequirements) == 0 &&
 		len(s.ShortestPathExecutor) == 0 &&
-		len(s.ExpansionSearchStrategy) == 0
+		len(s.ExpansionSearchStrategy) == 0 &&
+		len(s.EndpointResolution) == 0 &&
+		len(s.TraversalPredicate) == 0
 }
 
 // Decisions returns one summary entry for each lowering category present in the plan.
@@ -776,6 +977,8 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	add(LoweringFieldRequirements, len(s.FieldRequirements) > 0)
 	add(LoweringShortestPathExecutor, len(s.ShortestPathExecutor) > 0)
 	add(LoweringExpansionSearchStrategy, len(s.ExpansionSearchStrategy) > 0)
+	add(LoweringEndpointResolution, len(s.EndpointResolution) > 0)
+	add(LoweringTraversalPredicateClassification, len(s.TraversalPredicate) > 0)
 
 	return decisions
 }

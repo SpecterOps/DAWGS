@@ -26,6 +26,9 @@ type cypherTranslationCacheKey struct {
 
 	// parameterType captures sorted parameter names and negotiated PostgreSQL types.
 	parameterType string
+
+	// policyIdentity partitions SQL emitted by versioned production traversal policies.
+	policyIdentity string
 }
 
 // cypherTranslationCacheValue stores generated SQL and the source mapping needed to bind fresh parameter values.
@@ -189,6 +192,12 @@ func cloneSources(values map[string]string) map[string]string {
 
 // Translate returns reusable SQL with values rebound from parameters, building or coalescing a translation on a miss.
 func (s *cypherTranslationCache) Translate(query string, graphID int32, parameters map[string]any, build func() (translate.Result, string, error)) (string, map[string]any, error) {
+	return s.TranslateWithPolicy(query, graphID, parameters, "production-incumbent-v1", build)
+}
+
+// TranslateWithPolicy returns reusable SQL partitioned by the exact effective
+// production policy, making gate disablement immediately cache safe.
+func (s *cypherTranslationCache) TranslateWithPolicy(query string, graphID int32, parameters map[string]any, policyIdentity string, build func() (translate.Result, string, error)) (string, map[string]any, error) {
 	trimmed := strings.TrimSpace(query)
 	if s == nil || s.capacity <= 0 || len(query) > maxCachedCypherQueryBytes {
 		if result, sql, err := build(); err != nil {
@@ -198,9 +207,10 @@ func (s *cypherTranslationCache) Translate(query string, graphID int32, paramete
 		}
 	}
 	key := cypherTranslationCacheKey{
-		query:         trimmed,
-		graphID:       graphID,
-		parameterType: translationParameterTypeKey(parameters),
+		query:          trimmed,
+		graphID:        graphID,
+		parameterType:  translationParameterTypeKey(parameters),
+		policyIdentity: policyIdentity,
 	}
 
 	s.lock.Lock()

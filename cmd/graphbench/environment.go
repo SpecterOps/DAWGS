@@ -10,8 +10,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -238,22 +240,78 @@ func commandOutput(name string, args ...string) string {
 
 // workingTreeSHA256 hashes the tracked Git diff together with sorted untracked paths and contents.
 func workingTreeSHA256() string {
-	digest := sha256.New()
-	if output, err := exec.Command("git", "diff", "--binary", "HEAD", "--").Output(); err == nil {
-		_, _ = digest.Write(output)
+	fingerprint, err := calculateWorkingTreeSHA256("")
+	if err != nil {
+		return "unknown"
 	}
-	untrackedOutput, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").Output()
-	if err == nil {
-		paths := strings.Fields(string(untrackedOutput))
-		sort.Strings(paths)
-		for _, path := range paths {
-			_, _ = fmt.Fprintf(digest, "untracked:%s\x00", path)
-			if content, err := os.ReadFile(path); err == nil {
-				_, _ = digest.Write(content)
-			}
+	return fingerprint
+}
+
+func calculateWorkingTreeSHA256(excludedRoot string) (string, error) {
+	digest := sha256.New()
+	output, err := exec.Command("git", "diff", "--binary", "HEAD", "--").Output()
+	if err != nil {
+		return "", fmt.Errorf("capture tracked source diff: %w", err)
+	}
+	writeWorkingTreePatchFingerprint(digest, output)
+	paths, err := gitUntrackedPaths()
+	if err != nil {
+		return "", err
+	}
+	excludedAbsolute := ""
+	if excludedRoot != "" {
+		excludedAbsolute, err = filepath.Abs(excludedRoot)
+		if err != nil {
+			return "", fmt.Errorf("resolve excluded source root: %w", err)
 		}
 	}
-	return hex.EncodeToString(digest.Sum(nil))
+	for _, path := range paths {
+		if excludedAbsolute != "" {
+			absolute, err := filepath.Abs(path)
+			if err != nil {
+				return "", fmt.Errorf("resolve untracked source %q: %w", path, err)
+			}
+			if absolute == excludedAbsolute || strings.HasPrefix(absolute, excludedAbsolute+string(filepath.Separator)) {
+				continue
+			}
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read untracked source %q: %w", path, err)
+		}
+		writeWorkingTreeUntrackedFingerprint(digest, filepath.ToSlash(path), content)
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+func gitUntrackedPaths() ([]string, error) {
+	output, err := exec.Command("git", "ls-files", "-z", "--others", "--exclude-standard").Output()
+	if err != nil {
+		return nil, fmt.Errorf("list untracked source: %w", err)
+	}
+	paths := parseNULTerminatedPaths(output)
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func parseNULTerminatedPaths(output []byte) []string {
+	fields := strings.Split(string(output), "\x00")
+	paths := make([]string, 0, len(fields))
+	for _, path := range fields {
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func writeWorkingTreePatchFingerprint(digest io.Writer, patch []byte) {
+	_, _ = digest.Write(patch)
+}
+
+func writeWorkingTreeUntrackedFingerprint(digest io.Writer, path string, content []byte) {
+	_, _ = fmt.Fprintf(digest, "untracked:%s\x00", path)
+	_, _ = digest.Write(content)
 }
 
 // executableSHA256 returns the SHA-256 digest of the running benchmark executable.

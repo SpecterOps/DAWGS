@@ -100,3 +100,11 @@ func TestDeleteRelationshipsByKindsEmptyIsNoop(t *testing.T) {
 	require.NoError(t, driver.DeleteRelationshipsByKinds(ctx, nil))
 	require.NoError(t, driver.DeleteRelationshipsByKinds(ctx, graph.Kinds{}))
 }
+
+func TestOptionInitializeTraversalRuntimeAttestation(t *testing.T) {
+	cfg, err := renderConfig(defaultBatchWriteSize, readOnlyTxOptions, []graph.TransactionOption{
+		OptionInitializeTraversalRuntimeAttestation(),
+	})
+	require.NoError(t, err)
+	require.True(t, cfg.initializeTraversalRuntimeAttestation)
+}

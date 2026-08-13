@@ -31,12 +31,39 @@ type Config struct {
 	QueryExecMode      pgx.QueryExecMode
 	QueryResultFormats pgx.QueryResultFormats
 	BatchWriteSize     int
+
+	initializeTraversalRuntimeAttestation bool
 }
 
 func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOption {
 	return func(config *graph.TransactionConfig) {
 		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
 			pgCfg.QueryExecMode = queryExecMode
+		}
+	}
+}
+
+// OptionSetTransactionIsolation requests an explicit PostgreSQL transaction at
+// the supplied isolation level. B traversal candidates are selected only for
+// REPEATABLE READ or SERIALIZABLE transactions.
+func OptionSetTransactionIsolation(isolation pgx.TxIsoLevel) graph.TransactionOption {
+	return func(config *graph.TransactionConfig) {
+		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
+			pgCfg.Options.IsoLevel = isolation
+		}
+	}
+}
+
+// OptionInitializeTraversalRuntimeAttestation prepares the acquired PostgreSQL
+// session before an explicit read-only transaction begins. Callers that arm
+// traversal runtime receipts inside a graph transaction need this option
+// because PostgreSQL forbids creating the temporary workspace after BEGIN READ
+// ONLY. GraphBench normally pins and prepares its session before the timed
+// transaction instead.
+func OptionInitializeTraversalRuntimeAttestation() graph.TransactionOption {
+	return func(config *graph.TransactionConfig) {
+		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
+			pgCfg.initializeTraversalRuntimeAttestation = true
 		}
 	}
 }

@@ -19,6 +19,18 @@ const (
 	// FunctionShortestPathCompact identifies the SQL helper that materializes one compact shortest-path witness.
 	FunctionShortestPathCompact Identifier = "shortest_path_compact"
 
+	// FunctionShortestPathB1StrictAlternating identifies compact bidirectional search with strict node alternation.
+	FunctionShortestPathB1StrictAlternating Identifier = "shortest_path_b1_strict_alternating"
+
+	// FunctionShortestPathB2SmallerCurrentLevel identifies compact bidirectional search that expands the smaller current level.
+	FunctionShortestPathB2SmallerCurrentLevel Identifier = "shortest_path_b2_smaller_current_level"
+
+	// FunctionAllShortestPathsB1StrictAlternating identifies two-sided predecessor-DAG enumeration with strict node alternation.
+	FunctionAllShortestPathsB1StrictAlternating Identifier = "all_shortest_paths_b1_strict_alternating"
+
+	// FunctionAllShortestPathsB2SmallerCurrentLevel identifies two-sided predecessor-DAG enumeration that expands the smaller current level.
+	FunctionAllShortestPathsB2SmallerCurrentLevel Identifier = "all_shortest_paths_b2_smaller_current_level"
+
 	// FunctionShortestPathSelfEndpointError identifies the SQL helper that raises an invalid self-endpoint error.
 	FunctionShortestPathSelfEndpointError Identifier = "shortest_path_self_endpoint_error"
 

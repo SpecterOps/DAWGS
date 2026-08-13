@@ -21,6 +21,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -29,9 +30,130 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+// TestPostgreSQLBidirectionalOperationalPoolMatrix exercises the required
+// pool-size/concurrency cross-product with an exact B2 distance candidate.
+// It is intentionally a smoke matrix; latency qualification uses GraphBench's
+// separately balanced discovery and confirmation protocols.
+func TestPostgreSQLBidirectionalOperationalPoolMatrix(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GSP-D16-F016_distance"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	for _, poolSize := range []int{1, 2, 8} {
+		t.Run(fmt.Sprintf("pool-%d", poolSize), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, poolSize, 1, []int{1, 8, 16}, false, nil, "SP-B2-C-MIN-LEVEL-D", "")
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+
+			records, err := runner.Run(ctx, 0, 1, selected)
+			require.NoError(t, err)
+			require.Len(t, records, 1)
+			require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+			require.Contains(t, records[0].SQL, "shortest_path_b2_smaller_current_level")
+			require.Len(t, records[0].Concurrency, 3)
+			for idx, concurrency := range []int{1, 8, 16} {
+				block := records[0].Concurrency[idx]
+				require.Equal(t, poolSize, block.PoolSize)
+				require.Equal(t, concurrency, block.Concurrency)
+				require.Equal(t, concurrency, block.Operations)
+				require.Len(t, block.Samples, concurrency)
+			}
+			if poolSize == 1 {
+				translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+				require.NoError(t, err)
+				queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+				connectionHandle, err := runner.pool.Acquire(ctx)
+				require.NoError(t, err)
+				defer connectionHandle.Release()
+				for _, planMode := range []string{"auto", "force_custom_plan", "force_generic_plan"} {
+					tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+					require.NoError(t, err)
+					_, err = tx.Exec(ctx, "set local work_mem = '64kB'")
+					require.NoError(t, err)
+					_, err = tx.Exec(ctx, "set local plan_cache_mode = "+planMode)
+					require.NoError(t, err)
+					rows, err := tx.Query(ctx, sqlQuery, queryArgs...)
+					require.NoError(t, err)
+					var rowCount int64
+					for rows.Next() {
+						_, err = rows.Values()
+						require.NoError(t, err)
+						rowCount++
+					}
+					rows.Close()
+					require.NoError(t, rows.Err())
+					require.Equal(t, records[0].RowCount, rowCount, planMode)
+					require.NoError(t, tx.Rollback(ctx))
+				}
+			}
+			if poolSize == 2 {
+				translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+				require.NoError(t, err)
+				queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+				reader, err := runner.pool.Acquire(ctx)
+				require.NoError(t, err)
+				defer reader.Release()
+				writer, err := runner.pool.Acquire(ctx)
+				require.NoError(t, err)
+				defer writer.Release()
+				const snapshotTable = "public.graphbench_traversal_snapshot_probe"
+				_, err = writer.Exec(ctx, "drop table if exists "+snapshotTable)
+				require.NoError(t, err)
+				_, err = writer.Exec(ctx, "create table "+snapshotTable+" (value int primary key)")
+				require.NoError(t, err)
+				t.Cleanup(func() { _, _ = runner.pool.Exec(context.Background(), "drop table if exists "+snapshotTable) })
+				_, err = writer.Exec(ctx, "insert into "+snapshotTable+" values (1)")
+				require.NoError(t, err)
+
+				readerTx, err := reader.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+				require.NoError(t, err)
+				var before, during int
+				require.NoError(t, readerTx.QueryRow(ctx, "select count(*) from "+snapshotTable).Scan(&before))
+				_, err = writer.Exec(ctx, "insert into "+snapshotTable+" values (2)")
+				require.NoError(t, err)
+				rows, err := readerTx.Query(ctx, sqlQuery, queryArgs...)
+				require.NoError(t, err)
+				var rowCount int64
+				for rows.Next() {
+					_, err = rows.Values()
+					require.NoError(t, err)
+					rowCount++
+				}
+				rows.Close()
+				require.NoError(t, rows.Err())
+				require.Equal(t, records[0].RowCount, rowCount)
+				require.NoError(t, readerTx.QueryRow(ctx, "select count(*) from "+snapshotTable).Scan(&during))
+				require.Equal(t, 1, before)
+				require.Equal(t, before, during, "candidate internal statements must retain the reader snapshot across a concurrent commit")
+				require.NoError(t, readerTx.Commit(ctx))
+				var after int
+				require.NoError(t, reader.QueryRow(ctx, "select count(*) from "+snapshotTable).Scan(&after))
+				require.Equal(t, 2, after)
+				_, err = writer.Exec(ctx, "drop table "+snapshotTable)
+				require.NoError(t, err)
+			}
+		})
+	}
+}
 
 // postgresPlanNodeLoops extracts Actual Loops for every EXPLAIN node with the requested alias, allowing integration assertions to detect repeated execution.
 func postgresPlanNodeLoops(t *testing.T, raw json.RawMessage, alias string) []int64 {
@@ -841,6 +963,379 @@ func TestPostgreSQLForcedSuffixSeededReverseCancellationReusesSession(t *testing
 	require.NoError(t, rows.Err())
 	require.Equal(t, records[0].RowCount, int64(rowCount))
 	t.Logf("cancelled exact EXPANSION-SUFFIX-SEEDED-REVERSE SQL in %s and reused backend PID %d", cancellationLatency, backendPID)
+}
+
+// TestPostgreSQLForcedBidirectionalShortestCandidatesPreservePublicResults
+// verifies both scheduler wrappers at the distance, one-witness, and complete
+// all-shortest public boundaries. ASP production selection remains A1; these
+// identities are reachable only through explicit tool forcing.
+func TestPostgreSQLForcedBidirectionalShortestCandidatesPreservePublicResults(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	tests := []struct {
+		name         string
+		caseName     string
+		executor     string
+		functionName string
+	}{
+		{name: "SP B1 distance", caseName: "GSP-D16-F016_distance", executor: "SP-B1-C-ALT-NODE-D", functionName: "shortest_path_b1_strict_alternating"},
+		{name: "SP B2 witness", caseName: "GSP-D16-F016_path", executor: "SP-B2-C-MIN-LEVEL-WE+MAT-M0", functionName: "shortest_path_b2_smaller_current_level"},
+		{name: "ASP B1 complete multiset", caseName: "GSPV2-NORMAL-outbound-all-shortest-depth3", executor: "ASP-B1-DAG-ALT-NODE", functionName: "all_shortest_paths_b1_strict_alternating"},
+		{name: "ASP B2 complete multiset", caseName: "GSPV2-NORMAL-outbound-all-shortest-depth3", executor: "ASP-B2-DAG-MIN-LEVEL", functionName: "all_shortest_paths_b2_smaller_current_level"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{test.caseName}})
+			require.NoError(t, err)
+			require.Len(t, selected.Cases, 1)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, test.executor, "")
+			require.NoError(t, err)
+			defer func() { require.NoError(t, runner.Close(context.Background())) }()
+
+			records, err := runner.Run(ctx, 0, 1, selected)
+			require.NoError(t, err)
+			require.Len(t, records, 1)
+			record := records[0]
+			require.Equal(t, StatusOK, record.Status, record.Error)
+			require.Contains(t, record.SQL, test.functionName)
+			require.NotNil(t, record.Optimization)
+			found := false
+			for _, outcome := range record.Optimization.TargetOutcomes {
+				if outcome.Applied == test.executor {
+					found = true
+					break
+				}
+			}
+			require.True(t, found, "forced traversal outcome missing from %+v", record.Optimization.TargetOutcomes)
+		})
+	}
+}
+
+// TestPostgreSQLBidirectionalASPCancellationAndSessionIsolation verifies an
+// aborted B1 replay rolls back cleanly, the same backend PID can immediately
+// execute again, and identical invocation keys on two pooled sessions never
+// share workspace or diagnostic rows.
+func TestPostgreSQLBidirectionalASPCancellationAndSessionIsolation(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GSP-D64-F1000_path"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+	selected.Cases[0].Name = "forced-asp-b1-operational-depth64"
+	selected.Cases[0].Cypher = strings.Replace(selected.Cases[0].Cypher, "shortestPath", "allShortestPaths", 1)
+	selected.Cases[0].Category = "generated_all_shortest_paths"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, nil, false, nil, "ASP-B1-DAG-ALT-NODE", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+
+	translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+	require.NoError(t, err)
+	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+	first, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer first.Release()
+	second, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer second.Release()
+	firstPID, secondPID := first.Conn().PgConn().PID(), second.Conn().PgConn().PID()
+	require.NotEqual(t, firstPID, secondPID)
+	// Materialize session-local telemetry tables outside the rollback checks so
+	// both sessions have the same schema but independent contents.
+	_, err = first.Exec(ctx, "select public.ensure_bidirectional_all_shortest_path_workspace()")
+	require.NoError(t, err)
+	_, err = second.Exec(ctx, "select public.ensure_bidirectional_all_shortest_path_workspace()")
+	require.NoError(t, err)
+	_, err = first.Exec(ctx, "select public.ensure_bidirectional_all_shortest_path_telemetry_workspace()")
+	require.NoError(t, err)
+	_, err = second.Exec(ctx, "select public.ensure_bidirectional_all_shortest_path_telemetry_workspace()")
+	require.NoError(t, err)
+
+	drain := func(tx pgx.Tx) int64 {
+		rows, err := tx.Query(ctx, sqlQuery, queryArgs...)
+		require.NoError(t, err)
+		defer rows.Close()
+		var count int64
+		for rows.Next() {
+			_, err = rows.Values()
+			require.NoError(t, err)
+			count++
+		}
+		require.NoError(t, rows.Err())
+		return count
+	}
+	readCalls := func(tx pgx.Tx, invocationID string) (int64, bool) {
+		var raw string
+		err := tx.QueryRow(ctx, "select coalesce(public.read_bidirectional_all_shortest_path_diagnostic_v1($1)::text, '')", invocationID).Scan(&raw)
+		require.NoError(t, err)
+		if raw == "" {
+			return 0, false
+		}
+		var document struct {
+			SearchCalls int64 `json:"search_calls"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(raw), &document))
+		return document.SearchCalls, true
+	}
+
+	firstTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	secondTx, err := second.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	const sharedInvocation = "same-key-different-sessions"
+	_, err = firstTx.Exec(ctx, "select public.begin_bidirectional_all_shortest_path_diagnostic_v1($1)", sharedInvocation)
+	require.NoError(t, err)
+	_, err = secondTx.Exec(ctx, "select public.begin_bidirectional_all_shortest_path_diagnostic_v1($1)", sharedInvocation)
+	require.NoError(t, err)
+	require.Equal(t, records[0].RowCount, drain(firstTx))
+	firstCalls, found := readCalls(firstTx, sharedInvocation)
+	require.True(t, found)
+	require.Equal(t, int64(1), firstCalls)
+	secondCalls, found := readCalls(secondTx, sharedInvocation)
+	require.True(t, found)
+	require.Zero(t, secondCalls)
+	_, err = firstTx.Exec(ctx, "select public.clear_bidirectional_all_shortest_path_diagnostic_v1($1)", sharedInvocation)
+	require.NoError(t, err)
+	_, found = readCalls(firstTx, sharedInvocation)
+	require.False(t, found)
+	_, found = readCalls(secondTx, sharedInvocation)
+	require.True(t, found)
+	require.NoError(t, firstTx.Rollback(ctx))
+	require.NoError(t, secondTx.Rollback(ctx))
+
+	cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	_, err = cancelTx.Exec(ctx, "select public.begin_bidirectional_all_shortest_path_diagnostic_v1('cancelled-replay')")
+	require.NoError(t, err)
+	_, err = cancelTx.Exec(ctx, "set local statement_timeout = '1ms'")
+	require.NoError(t, err)
+	started := time.Now()
+	rows, queryErr := cancelTx.Query(ctx, sqlQuery, queryArgs...)
+	if queryErr == nil {
+		for rows.Next() {
+			_, queryErr = rows.Values()
+			if queryErr != nil {
+				break
+			}
+		}
+		rows.Close()
+		if queryErr == nil {
+			queryErr = rows.Err()
+		}
+	}
+	cancellationLatency := time.Since(started)
+	var postgresError *pgconn.PgError
+	require.ErrorAs(t, queryErr, &postgresError)
+	require.Equal(t, "57014", postgresError.Code)
+	require.Less(t, cancellationLatency, 250*time.Millisecond)
+	require.NoError(t, cancelTx.Rollback(ctx))
+	require.Equal(t, firstPID, first.Conn().PgConn().PID())
+
+	reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	_, found = readCalls(reuseTx, "cancelled-replay")
+	require.False(t, found, "rolled-back invocation state must not survive")
+	_, err = reuseTx.Exec(ctx, "select public.begin_bidirectional_all_shortest_path_diagnostic_v1('successful-reuse')")
+	require.NoError(t, err)
+	require.Equal(t, records[0].RowCount, drain(reuseTx))
+	reuseCalls, found := readCalls(reuseTx, "successful-reuse")
+	require.True(t, found)
+	require.Equal(t, int64(1), reuseCalls)
+	_, err = reuseTx.Exec(ctx, "select public.clear_bidirectional_all_shortest_path_diagnostic_v1('successful-reuse')")
+	require.NoError(t, err)
+	require.NoError(t, reuseTx.Commit(ctx))
+	t.Logf("cancelled ASP-B1 in %s and reused backend PID %d without cross-session state from PID %d", cancellationLatency, firstPID, secondPID)
+}
+
+// TestPostgreSQLBidirectionalSPCancellationAndSessionIsolation applies the
+// cancellation, rollback/reuse, and session-local telemetry contract to both
+// compact SP schedulers. Candidate and telemetry workspaces are materialized
+// before the timed query so the timeout interrupts search rather than DDL.
+func TestPostgreSQLBidirectionalSPCancellationAndSessionIsolation(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	for _, scheduler := range []struct {
+		name         string
+		executor     string
+		functionName string
+	}{
+		{name: "B1 strict alternating", executor: "SP-B1-C-ALT-NODE-WE+MAT-M0", functionName: "shortest_path_b1_strict_alternating"},
+		{name: "B2 smaller level", executor: "SP-B2-C-MIN-LEVEL-WE+MAT-M0", functionName: "shortest_path_b2_smaller_current_level"},
+	} {
+		scheduler := scheduler
+		t.Run(scheduler.name, func(t *testing.T) {
+			corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+			require.NoError(t, err)
+			selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GSP-D64-F1000_path"}})
+			require.NoError(t, err)
+			require.Len(t, selected.Cases, 1)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, nil, false, nil, scheduler.executor, "")
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+			records, err := runner.Run(ctx, 0, 1, selected)
+			require.NoError(t, err)
+			require.Len(t, records, 1)
+			require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+			require.Contains(t, records[0].SQL, scheduler.functionName)
+
+			translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+			require.NoError(t, err)
+			queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+			first, err := runner.pool.Acquire(ctx)
+			require.NoError(t, err)
+			defer first.Release()
+			second, err := runner.pool.Acquire(ctx)
+			require.NoError(t, err)
+			defer second.Release()
+			firstPID, secondPID := first.Conn().PgConn().PID(), second.Conn().PgConn().PID()
+			require.NotEqual(t, firstPID, secondPID)
+			for _, session := range []*pgxpool.Conn{first, second} {
+				_, err = session.Exec(ctx, "select public.ensure_bidirectional_shortest_path_workspace()")
+				require.NoError(t, err)
+				_, err = session.Exec(ctx, "select public.ensure_bidirectional_shortest_path_telemetry_workspace()")
+				require.NoError(t, err)
+			}
+
+			drain := func(tx pgx.Tx) int64 {
+				rows, queryErr := tx.Query(ctx, sqlQuery, queryArgs...)
+				require.NoError(t, queryErr)
+				defer rows.Close()
+				var count int64
+				for rows.Next() {
+					_, queryErr = rows.Values()
+					require.NoError(t, queryErr)
+					count++
+				}
+				require.NoError(t, rows.Err())
+				return count
+			}
+			readCalls := func(tx pgx.Tx, invocationID string) (int64, bool) {
+				var raw string
+				err := tx.QueryRow(ctx, "select coalesce(public.read_bidirectional_shortest_path_diagnostic_v1($1)::text, '')", invocationID).Scan(&raw)
+				require.NoError(t, err)
+				if raw == "" {
+					return 0, false
+				}
+				var document struct {
+					SearchCalls int64 `json:"search_calls"`
+				}
+				require.NoError(t, json.Unmarshal([]byte(raw), &document))
+				return document.SearchCalls, true
+			}
+
+			firstTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			require.NoError(t, err)
+			secondTx, err := second.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			require.NoError(t, err)
+			invocationID := "sp-same-key-" + scheduler.executor
+			_, err = firstTx.Exec(ctx, "select public.begin_bidirectional_shortest_path_diagnostic_v1($1)", invocationID)
+			require.NoError(t, err)
+			_, err = secondTx.Exec(ctx, "select public.begin_bidirectional_shortest_path_diagnostic_v1($1)", invocationID)
+			require.NoError(t, err)
+			require.Equal(t, records[0].RowCount, drain(firstTx))
+			firstCalls, found := readCalls(firstTx, invocationID)
+			require.True(t, found)
+			require.Equal(t, int64(1), firstCalls)
+			secondCalls, found := readCalls(secondTx, invocationID)
+			require.True(t, found)
+			require.Zero(t, secondCalls)
+			_, err = firstTx.Exec(ctx, "select public.clear_bidirectional_shortest_path_diagnostic_v1($1)", invocationID)
+			require.NoError(t, err)
+			_, found = readCalls(firstTx, invocationID)
+			require.False(t, found)
+			_, found = readCalls(secondTx, invocationID)
+			require.True(t, found)
+			require.NoError(t, firstTx.Rollback(ctx))
+			require.NoError(t, secondTx.Rollback(ctx))
+
+			cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			require.NoError(t, err)
+			cancelInvocation := "sp-cancelled-" + scheduler.executor
+			_, err = cancelTx.Exec(ctx, "select public.begin_bidirectional_shortest_path_diagnostic_v1($1)", cancelInvocation)
+			require.NoError(t, err)
+			_, err = cancelTx.Exec(ctx, "set local statement_timeout = '1ms'")
+			require.NoError(t, err)
+			started := time.Now()
+			rows, queryErr := cancelTx.Query(ctx, sqlQuery, queryArgs...)
+			if queryErr == nil {
+				for rows.Next() {
+					_, queryErr = rows.Values()
+					if queryErr != nil {
+						break
+					}
+				}
+				rows.Close()
+				if queryErr == nil {
+					queryErr = rows.Err()
+				}
+			}
+			cancellationLatency := time.Since(started)
+			var postgresError *pgconn.PgError
+			require.ErrorAs(t, queryErr, &postgresError)
+			require.Equal(t, "57014", postgresError.Code)
+			require.Less(t, cancellationLatency, 250*time.Millisecond)
+			require.NoError(t, cancelTx.Rollback(ctx))
+			require.Equal(t, firstPID, first.Conn().PgConn().PID())
+
+			reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			require.NoError(t, err)
+			_, found = readCalls(reuseTx, cancelInvocation)
+			require.False(t, found, "rolled-back invocation state must not survive")
+			reuseInvocation := "sp-successful-" + scheduler.executor
+			_, err = reuseTx.Exec(ctx, "select public.begin_bidirectional_shortest_path_diagnostic_v1($1)", reuseInvocation)
+			require.NoError(t, err)
+			require.Equal(t, records[0].RowCount, drain(reuseTx))
+			reuseCalls, found := readCalls(reuseTx, reuseInvocation)
+			require.True(t, found)
+			require.Equal(t, int64(1), reuseCalls)
+			_, err = reuseTx.Exec(ctx, "select public.clear_bidirectional_shortest_path_diagnostic_v1($1)", reuseInvocation)
+			require.NoError(t, err)
+			require.NoError(t, reuseTx.Commit(ctx))
+			t.Logf("cancelled %s in %s and reused backend PID %d without cross-session state from PID %d", scheduler.executor, cancellationLatency, firstPID, secondPID)
+		})
+	}
 }
 
 // requirePostgresReference returns the named comparator result or fails when the runner omitted that reference arm.

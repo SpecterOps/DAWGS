@@ -125,7 +125,7 @@
       "params": {"root_key": "suffix-overflow-adversarial-root"},
       "expected": {"row_count": 68, "result_kind": "id_rows"},
       "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
-      "shape": {"fixture_tier": "normal", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 3, "path_materialization_required": false},
+      "shape": {"qualification_split": "holdout", "fixture_tier": "normal", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 3, "path_materialization_required": false},
       "candidate_modes": ["postgres_sql", "neo4j"],
       "tags": ["normal-tier", "fixed-suffix-expansion-boundary", "suffix-overflow", "cycle", "relationship-distinct", "physical-bag-multiplicity", "noncanonical-logical-ids", "holdout"]
     },

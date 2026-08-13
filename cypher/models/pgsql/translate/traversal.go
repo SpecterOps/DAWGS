@@ -27,17 +27,6 @@ func boundEndpointIDReference(frame *Frame, binding *BoundIdentifier) pgsql.Expr
 	return projectedNodeIDReference(frame.Binding.Identifier, binding)
 }
 
-// boundEndpointInequality builds the Cypher inequality that excludes identical bound endpoints.
-func boundEndpointInequality(frame *Frame, traversalStep *TraversalStep) pgsql.Expression {
-	return pgsql.NewParenthetical(
-		pgsql.NewBinaryExpression(
-			boundEndpointIDReference(frame, traversalStep.LeftNode),
-			pgsql.OperatorCypherNotEquals,
-			boundEndpointIDReference(frame, traversalStep.RightNode),
-		),
-	)
-}
-
 // sourceTargetForTraversalStep returns optimizer coordinates for a step that originated in the source query.
 func sourceTargetForTraversalStep(part *PatternPart, stepIndex int) (optimize.TraversalStepTarget, bool) {
 	if part == nil || stepIndex < 0 || stepIndex >= len(part.TraversalSteps) {
@@ -264,8 +253,12 @@ func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traver
 	}
 
 	var (
-		previousFrame = partFrame.Previous
-		nextSelect    = pgsql.Select{
+		previousFrame  = partFrame.Previous
+		edgeConstraint = pgsql.OptionalAnd(
+			traversalStep.EdgeJoinCondition,
+			traversalStep.RightNodeJoinCondition,
+		)
+		nextSelect = pgsql.Select{
 			Projection: traversalStep.Projection,
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{
@@ -277,24 +270,37 @@ func (s *Translator) buildBoundEndpointTraversalPattern(partFrame *Frame, traver
 						Binding: models.OptionalValue(traversalStep.Edge.Identifier),
 					},
 					JoinOperator: pgsql.JoinOperator{
-						JoinType: pgsql.JoinTypeInner,
-						Constraint: pgsql.OptionalAnd(
-							traversalStep.EdgeJoinCondition,
-							traversalStep.RightNodeJoinCondition,
-						),
+						JoinType:   pgsql.JoinTypeInner,
+						Constraint: edgeConstraint,
 					},
 				}},
 			}},
 		}
 	)
+	if traversalStep.Direction == graph.DirectionBoth {
+		edgeConstraint = buildDirectionlessPairwiseEdgeConstraintForRefs(
+			boundEndpointIDReference(previousFrame, traversalStep.LeftNode),
+			boundEndpointIDReference(previousFrame, traversalStep.RightNode),
+			traversalStep.Edge.Identifier,
+		)
+		nextSelect.From[0].Joins[0].JoinOperator.Constraint = edgeConstraint
+	}
+	if referencesUnwind, err := expressionReferencesUnwindBinding(edgeConstraint, s.query.CurrentPart().unwindClauses); err != nil {
+		return pgsql.Query{}, err
+	} else if referencesUnwind {
+		// An UNWIND alias is appended as a comma source after this builder
+		// returns. PostgreSQL JOIN ... ON cannot see a later comma source, while
+		// WHERE can see the complete FROM list. Keep the exact pair predicate
+		// and edge scan together in that shared scope.
+		edgeJoin := nextSelect.From[0].Joins[0]
+		nextSelect.From[0].Joins = nil
+		nextSelect.From = append(nextSelect.From, pgsql.FromClause{Source: edgeJoin.Table})
+		nextSelect.Where = pgsql.OptionalAnd(edgeConstraint, nextSelect.Where)
+	}
 
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.EdgeConstraints.Expression, nextSelect.Where)
 	nextSelect.Where = pgsql.OptionalAnd(traversalStep.RightNodeConstraints, nextSelect.Where)
-
-	if traversalStep.Direction == graph.DirectionBoth && traversalStep.LeftNode.Identifier != traversalStep.RightNode.Identifier {
-		nextSelect.Where = pgsql.OptionalAnd(boundEndpointInequality(previousFrame, traversalStep), nextSelect.Where)
-	}
 
 	return pgsql.Query{
 		Body: nextSelect,
@@ -417,7 +423,10 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 		return s.buildDirectionlessTraversalPatternRoot(traversalStep)
 	}
 
-	if traversalStep.UseExpandInto {
+	// Dual-bound fixed hops must always use the exact pair join. The optimizer
+	// decision records and measures this shape, but correctness must not depend
+	// on that analysis recognizing every supported binding source.
+	if traversalStep.UseExpandInto || (traversalStep.LeftNodeBound && traversalStep.RightNodeBound) {
 		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
 	}
 
@@ -604,7 +613,10 @@ func (s *Translator) buildTraversalPatternRoot(partFrame *Frame, traversalStep *
 
 // buildTraversalPatternStep emits one relationship join, terminal node join, constraints, and projection frame.
 func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *TraversalStep) (pgsql.Query, error) {
-	if traversalStep.UseExpandInto {
+	// Keep the dual-bound semantic fallback independent of optimizer coverage;
+	// otherwise a missed decision can introduce an uncorrelated terminal-node
+	// join and multiply the outer bag.
+	if traversalStep.UseExpandInto || (traversalStep.LeftNodeBound && traversalStep.RightNodeBound) {
 		return s.buildBoundEndpointTraversalPattern(partFrame, traversalStep)
 	}
 

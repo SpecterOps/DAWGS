@@ -22,6 +22,8 @@ type commandConfig struct {
 	SummaryMarkdown string
 	// SummaryJSON selects the JSON summary destination.
 	SummaryJSON string
+	// PlanDeltaJSON selects the versioned paired plan-delta destination.
+	PlanDeltaJSON string
 	// Connection contains the backend connection string.
 	Connection string
 	// PGConnection contains the PostgreSQL connection string.
@@ -41,6 +43,7 @@ func main() {
 	flag.StringVar(&cfg.OutputDir, "output-dir", ".coverage", "directory for JSONL plan captures")
 	flag.StringVar(&cfg.SummaryMarkdown, "summary", "", "markdown summary path (default: output-dir/plan-corpus-summary.md)")
 	flag.StringVar(&cfg.SummaryJSON, "summary-json", "", "JSON summary path (default: output-dir/plan-corpus-summary.json)")
+	flag.StringVar(&cfg.PlanDeltaJSON, "plan-delta-json", "", "paired semantic plan-delta path (default: output-dir/plan-corpus-delta.json)")
 	flag.StringVar(&cfg.Connection, "connection", os.Getenv("CONNECTION_STRING"), "single backend connection string")
 	flag.StringVar(&cfg.PGConnection, "pg-connection", os.Getenv("PG_CONNECTION_STRING"), "PostgreSQL connection string")
 	flag.StringVar(&cfg.Neo4jConnection, "neo4j-connection", os.Getenv("NEO4J_CONNECTION_STRING"), "Neo4j connection string")
@@ -102,7 +105,18 @@ func run(ctx context.Context, cfg commandConfig) error {
 	if err := writeSummaryFiles(cfg.SummaryMarkdown, cfg.SummaryJSON, summary); err != nil {
 		return err
 	}
+	planDelta, err := buildPlanDeltaReport(allRecords)
+	if err != nil {
+		return err
+	}
+	if cfg.PlanDeltaJSON == "" {
+		cfg.PlanDeltaJSON = filepath.Join(cfg.OutputDir, "plan-corpus-delta.json")
+	}
+	if err := writePlanDeltaReport(cfg.PlanDeltaJSON, planDelta); err != nil {
+		return err
+	}
 	fmt.Fprintf(os.Stderr, "wrote summaries to %s and %s\n", cfg.SummaryMarkdown, cfg.SummaryJSON)
+	fmt.Fprintf(os.Stderr, "wrote paired plan delta to %s\n", cfg.PlanDeltaJSON)
 	return nil
 }
 

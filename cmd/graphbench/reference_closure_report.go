@@ -70,6 +70,9 @@ type ReferenceClosureCase struct {
 	Passed bool `json:"passed"`
 	// Reasons lists explanations for the reported disposition.
 	Reasons []string `json:"reasons,omitempty"`
+	// ProductionRuntimeReceiptChains preserves the complete production branch
+	// chain for every measured invocation used by closure.
+	ProductionRuntimeReceiptChains [][]RuntimeReceiptEvent `json:"production_runtime_receipt_chains,omitempty"`
 }
 
 // ReferenceClosureReport contains artifact identity, thresholds, and per-case production/reference closure results.
@@ -233,16 +236,17 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 	for idx, key := range keys {
 		candidate, baseline := matchedRounds(series[key].production, series[key].reference)
 		entry := ReferenceClosureCase{
-			Dataset:               key.dataset,
-			Name:                  key.name,
-			ReferenceName:         options.ReferenceName,
-			ReferenceArchitecture: series[key].architecture,
-			Rounds:                len(candidate),
-			ProductionSamples:     sampleCount(candidate),
-			ReferenceSamples:      sampleCount(baseline),
-			RatioUpperLimit:       options.RatioUpperLimit,
-			AbsoluteFloor:         options.AbsoluteResolution,
-			Passed:                true,
+			Dataset:                        key.dataset,
+			Name:                           key.name,
+			ReferenceName:                  options.ReferenceName,
+			ReferenceArchitecture:          series[key].architecture,
+			Rounds:                         len(candidate),
+			ProductionSamples:              sampleCount(candidate),
+			ReferenceSamples:               sampleCount(baseline),
+			RatioUpperLimit:                options.RatioUpperLimit,
+			AbsoluteFloor:                  options.AbsoluteResolution,
+			Passed:                         true,
+			ProductionRuntimeReceiptChains: caseRuntimeReceiptChains(records, key),
 		}
 		if entry.Rounds < 10 || entry.Rounds > 20 {
 			entry.Passed = false
@@ -277,13 +281,30 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 
 // withinSessionAAResolution returns the larger within-session A/A noise estimate for a case.
 func withinSessionAAResolution(samples roundSamples, seed int64, options PerfGateOptions) time.Duration {
-	armA, armB := splitAASeries(samples)
+	armA, armB := splitInterleavedDiagnosticSeries(samples)
 	armA, armB = matchedRounds(armA, armB)
 	if len(armA) == 0 {
 		return 0
 	}
 	interval := bootstrapRoundMedianSaving(armA, armB, seed, options)
 	return max(absDuration(interval.Lower), absDuration(interval.Upper))
+}
+
+// splitInterleavedDiagnosticSeries estimates within-session resolution for the
+// descriptive reference-closure report only. Promotion-grade host A/A evidence
+// is built exclusively from explicit arms by collectExplicitAASeries.
+func splitInterleavedDiagnosticSeries(samples roundSamples) (roundSamples, roundSamples) {
+	armA, armB := roundSamples{}, roundSamples{}
+	for round, values := range samples {
+		for idx, value := range values {
+			if idx%2 == 0 {
+				armA[round] = append(armA[round], value)
+			} else {
+				armB[round] = append(armB[round], value)
+			}
+		}
+	}
+	return armA, armB
 }
 
 // absDuration returns the magnitude of a signed duration.

@@ -80,6 +80,18 @@ const (
 
 	// defaultShortestPathStateLimit caps intermediate states admitted by guarded experimental executors.
 	defaultShortestPathStateLimit int64 = 100_000
+
+	// defaultShortestPathFrontierLimit independently caps queued/current frontier state.
+	defaultShortestPathFrontierLimit int64 = 100_000
+
+	// defaultShortestPathPredecessorLimit independently caps retained witness predecessors.
+	defaultShortestPathPredecessorLimit int64 = 100_000
+
+	// defaultAllShortestPathsEnumerationLimit independently caps staged distinct path arrays.
+	defaultAllShortestPathsEnumerationLimit int64 = 100_000
+
+	// defaultAllShortestPathsOutputBytesLimit independently caps staged ordered edge-array bytes.
+	defaultAllShortestPathsOutputBytesLimit int64 = 64 * 1024 * 1024
 )
 
 // BuildLoweringPlan analyzes a query and selects safe semantic and physical lowering decisions.
@@ -137,6 +149,7 @@ func BuildLoweringPlan(query *cypher.RegularQuery, predicateAttachments []Predic
 	appendAggregateTraversalCountDecisions(&plan, query)
 	finalizeShortestPathExecutorDecisions(&plan, query)
 	finalizeExpansionSearchStrategyDecisions(&plan, query)
+	finalizeTraversalEnvelopeDecisions(&plan, query)
 	return plan, nil
 }
 
@@ -162,12 +175,14 @@ func appendQueryPartLowerings(
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, queryPart, sourceReferences)
 	appendPatternPredicatePlacementDecisions(plan, queryPartIndex, queryPart)
-	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
+	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses, initialDeclaredSymbols)
 	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex), initialDeclaredSymbols, initialSelectivity)
 	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
 	appendShortestPathStrategyDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathFilterDecisions(plan, queryPartIndex, readingClauses, shortestPathSearchSymbols)
 	appendShortestPathExecutorDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences)
+	appendEndpointResolutionDecisions(plan, queryPartIndex, queryPart, readingClauses, initialDeclaredSymbols)
+	appendTraversalPredicateDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendLimitPushdownDecisions(plan, queryPartIndex, queryPart, readingClauses)
 	appendExpansionSuffixPushdownDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendEndpointSeededExpansionDecisions(plan, queryPartIndex, queryPart, readingClauses, sourceReferences, initialDeclaredSymbols)
@@ -307,19 +322,45 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 					fallbackReason = ""
 				}
 				projection, _ := queryPartProjection(queryPart)
-				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, ExpansionSearchStrategyDecision{
-					Target: target, Family: "fixed_prefix_terminal_expansion",
+				candidate := contiguousExpansionOrientationCandidate{
+					Target:            target,
+					Family:            "fixed_prefix_terminal_expansion",
+					PlannedPolicy:     ExpansionSearchPolicyEndpointGuardV1,
 					PlannedCandidates: []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse},
-					CandidateStrategy: ExpansionSearchEndpointSeededReverse, SelectedStrategy: selected,
-					StructurallyEligible: eligible, StaticallyEligible: eligible, EligibilityFacts: facts,
-					PrefixStartStep: 0, PrefixEndStep: stepIndex - 1, PrefixLength: prefixLength,
-					SeedPredicateClass: seedClass, EndpointLimit: 32, StateLimit: 4096,
-					HasFinalLimit:   projection != nil && projection.Limit != nil,
-					ObservationMode: observation, LogicalDirection: step.Relationship.Direction.String(),
-					MinimumDepth: minDepth, MaximumDepth: maxDepth, SelectionMode: selectionMode,
-					SelectorVersion: "endpoint-seeded-guarded-v1", FallbackStrategy: ExpansionSearchStepwiseForward,
-					FallbackReason: fallbackReason,
-				})
+					EmittedCandidates: []ExpansionSearchStrategy{ExpansionSearchStepwiseForward},
+					CandidateStrategy: ExpansionSearchEndpointSeededReverse,
+					ProbeCaps: ExpansionSearchProbeCaps{
+						ReverseSeedRowLimit: 32,
+					},
+					Admission: ExpansionSearchAdmission{
+						StateLimit:             4096,
+						RequiresCompleteProbes: true,
+						FallbackStrategy:       ExpansionSearchStepwiseForward,
+					},
+					PrefixStartStep:    0,
+					PrefixEndStep:      stepIndex - 1,
+					PrefixLength:       prefixLength,
+					SeedPredicateClass: seedClass,
+					EndpointLimit:      32,
+				}
+				if eligible {
+					candidate.EmittedPolicy = ExpansionSearchPolicyEndpointGuardV1
+					candidate.EmittedCandidates = []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse}
+				}
+				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, candidate.decision(contiguousExpansionOrientationQualification{
+					SelectedStrategy:     selected,
+					StructurallyEligible: eligible,
+					StaticallyEligible:   eligible,
+					EligibilityFacts:     facts,
+					HasFinalLimit:        projection != nil && projection.Limit != nil,
+					ObservationMode:      observation,
+					LogicalDirection:     step.Relationship.Direction.String(),
+					MinimumDepth:         minDepth,
+					MaximumDepth:         maxDepth,
+					SelectionMode:        selectionMode,
+					SelectorVersion:      "endpoint-seeded-guarded-v1",
+					FallbackReason:       fallbackReason,
+				}))
 			}
 			declarePatternSymbols(declaredSymbols, patternPart)
 		}
@@ -476,6 +517,10 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 						Eligible: boundRoot,
 					},
 					{
+						Name:     "initial_variable_expansion",
+						Eligible: stepIndex == 0,
+					},
+					{
 						Name:     "directed_expansion",
 						Eligible: directedExpansion,
 					},
@@ -544,6 +589,8 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 					fallbackReason = ExpansionSearchFallbackShortestPath
 				case queryPartVariableExpansions > 1:
 					fallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
+				case stepIndex != 0:
+					fallbackReason = ExpansionSearchFallbackTournamentUnqualified
 				case !directedExpansion:
 					fallbackReason = ExpansionSearchFallbackDirectionlessExpansion
 				case !boundedDepth:
@@ -575,9 +622,10 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 				case !boundRoot && qualifiedFixedSuffixTopology(step, suffixSteps):
 					fallbackReason = ExpansionSearchFallbackUnboundRoot
 				}
-				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, ExpansionSearchStrategyDecision{
-					Target: target,
-					Family: "fixed_suffix_expansion",
+				candidate := contiguousExpansionOrientationCandidate{
+					Target:        target,
+					Family:        "fixed_suffix_expansion",
+					PlannedPolicy: ExpansionSearchPolicyOrientationProbeV1,
 					PlannedCandidates: []ExpansionSearchStrategy{
 						ExpansionSearchStepwiseForward,
 						ExpansionSearchLateHydratedForward,
@@ -585,23 +633,35 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 						ExpansionSearchSuffixSeededReverse,
 						ExpansionSearchBackwardViabilityForward,
 					},
-					CandidateStrategy:    ExpansionSearchSuffixSeededReverse,
+					EmittedCandidates: []ExpansionSearchStrategy{ExpansionSearchStepwiseForward},
+					CandidateStrategy: ExpansionSearchSuffixSeededReverse,
+					ProbeCaps: ExpansionSearchProbeCaps{
+						RootRowLimit:              ExpansionSearchOrientationRootRowLimit,
+						ReverseSeedRowLimit:       ExpansionSearchOrientationReverseSeedRowLimit,
+						DirectionalDegreeRowLimit: ExpansionSearchOrientationDirectionalDegreeRowLimit,
+					},
+					Admission: ExpansionSearchAdmission{
+						StateLimit:             ExpansionSearchOrientationStateLimit,
+						RequiresCompleteProbes: true,
+						FallbackStrategy:       ExpansionSearchStepwiseForward,
+					},
+					SuffixStartStep: stepIndex + 1,
+					SuffixEndStep:   suffixEnd,
+					SuffixLength:    suffixLength,
+				}
+				plan.ExpansionSearchStrategy = append(plan.ExpansionSearchStrategy, candidate.decision(contiguousExpansionOrientationQualification{
 					SelectedStrategy:     ExpansionSearchStepwiseForward,
 					StructurallyEligible: eligible,
 					StaticallyEligible:   eligible,
 					EligibilityFacts:     facts,
-					SuffixStartStep:      stepIndex + 1,
-					SuffixEndStep:        suffixEnd,
-					SuffixLength:         suffixLength,
 					ObservationMode:      observation,
 					LogicalDirection:     step.Relationship.Direction.String(),
 					MinimumDepth:         minDepth,
 					MaximumDepth:         maxDepth,
 					SelectionMode:        "incumbent_default",
 					SelectorVersion:      "fixed-suffix-static-v1",
-					FallbackStrategy:     ExpansionSearchStepwiseForward,
 					FallbackReason:       fallbackReason,
-				})
+				}))
 			}
 			declarePatternSymbols(declaredSymbols, patternPart)
 		}
@@ -772,14 +832,17 @@ func hasFieldRequirement(fields map[FieldRequirement]struct{}, field FieldRequir
 	return found
 }
 
-// setExpansionSearchEligibilityFact updates a named qualification result already present on decision.
-func setExpansionSearchEligibilityFact(decision *ExpansionSearchStrategyDecision, name string, eligible bool) {
+// setExpansionSearchEligibilityFact updates a named qualification result
+// already present on decision and reports whether that fact belongs to this
+// candidate family.
+func setExpansionSearchEligibilityFact(decision *ExpansionSearchStrategyDecision, name string, eligible bool) bool {
 	for idx := range decision.EligibilityFacts {
 		if decision.EligibilityFacts[idx].Name == name {
 			decision.EligibilityFacts[idx].Eligible = eligible
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // expansionSearchFactsEligible reports whether every recorded expansion-search qualification passed.
@@ -992,10 +1055,32 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					reason = ShortestPathFallbackNonSingletonID
 				}
 				family := "SP"
-				plannedCandidates := []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorS0Direct, ShortestPathExecutorS1ArrayBFS, ShortestPathExecutorS2TraceRelation, ShortestPathExecutorS3Unidirectional, ShortestPathExecutorS3EdgeM0, ShortestPathExecutorS4CanonicalDistance, ShortestPathExecutorS4CanonicalWitness}
+				plannedCandidates := []ShortestPathExecutor{
+					ShortestPathExecutorIncumbentWorkspace,
+					ShortestPathExecutorS0Direct,
+					ShortestPathExecutorS1ArrayBFS,
+					ShortestPathExecutorS2TraceRelation,
+					ShortestPathExecutorS3Unidirectional,
+					ShortestPathExecutorS3EdgeM0,
+					ShortestPathExecutorS4CanonicalDistance,
+					ShortestPathExecutorS4CanonicalWitness,
+					ShortestPathExecutorI1CanonicalDistance,
+					ShortestPathExecutorI1CanonicalWitness,
+					ShortestPathExecutorI1CanonicalPredecessorWitness,
+					ShortestPathExecutorB1AlternatingNodeDistance,
+					ShortestPathExecutorB1AlternatingNodeWitness,
+					ShortestPathExecutorB2SmallerCurrentLevelDistance,
+					ShortestPathExecutorB2SmallerCurrentLevelWitness,
+				}
 				if patternPart.AllShortestPathsPattern {
 					family = "ASP"
-					plannedCandidates = []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorASPA1DAG}
+					plannedCandidates = []ShortestPathExecutor{
+						ShortestPathExecutorIncumbentWorkspace,
+						ShortestPathExecutorASPA1DAG,
+						ShortestPathExecutorASPI1DAG,
+						ShortestPathExecutorASPB1AlternatingNodeDAG,
+						ShortestPathExecutorASPB2SmallerCurrentLevelDAG,
+					}
 				}
 				plan.ShortestPathExecutor = append(plan.ShortestPathExecutor, ShortestPathExecutorDecision{
 					Target: PatternTarget{
@@ -1006,6 +1091,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					Family:                 family,
 					PlannedCandidates:      plannedCandidates,
 					SelectedExecutor:       ShortestPathExecutorIncumbentWorkspace,
+					ExecutionBoundary:      "stored_helper",
 					ObservationMode:        ShortestPathObservationUnknown,
 					Direction:              step.Relationship.Direction,
 					PhysicalExpansion:      physicalExpansion,
@@ -1018,6 +1104,10 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					MinimumDepth:           minDepth,
 					MaximumDepth:           maxDepth,
 					StateLimit:             defaultShortestPathStateLimit,
+					FrontierLimit:          defaultShortestPathFrontierLimit,
+					PredecessorLimit:       defaultShortestPathPredecessorLimit,
+					EnumerationLimit:       defaultAllShortestPathsEnumerationLimit,
+					OutputBytesLimit:       defaultAllShortestPathsOutputBytesLimit,
 					SelectorVersion:        "sp-static-v3",
 					SelectionMode:          "incumbent_default",
 					FallbackExecutor:       ShortestPathExecutorIncumbentWorkspace,
@@ -1060,6 +1150,13 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 	if plan == nil || query == nil || query.SingleQuery == nil {
 		return
 	}
+	defer func() {
+		for idx := range plan.ShortestPathExecutor {
+			decision := &plan.ShortestPathExecutor[idx]
+			decision.Scheduler = decision.SelectedExecutor.Scheduler()
+			decision.ExecutionBoundary = decision.SelectedExecutor.ExecutionBoundary()
+		}
+	}()
 
 	var (
 		shortestCalls   int
@@ -1143,7 +1240,7 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 					continue
 				}
 				decision.SelectionMode = "static"
-				decision.SelectorVersion = "sp-static-v4"
+				decision.SelectorVersion = "sp-static-v5-contained"
 				decision.StaticallyEligible = true
 				decision.FallbackReason = ""
 				decision.ExperimentalWinner = true
@@ -1153,7 +1250,7 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 				if decision.ObservationMode == ShortestPathObservationOnePath {
 					decision.SelectedExecutor = ShortestPathExecutorS4CanonicalWitness
 					decision.SelectionMode = "static"
-					decision.SelectorVersion = "sp-static-v4"
+					decision.SelectorVersion = "sp-static-v5-contained"
 					decision.StaticallyEligible = true
 					decision.FallbackReason = ""
 					decision.ExperimentalWinner = true
@@ -1167,12 +1264,12 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 				decision.SelectedExecutor = ShortestPathExecutorS3Unidirectional
 				decision.SelectorVersion = "sp-static-v3"
 			case ShortestPathObservationOnePath:
-				// EdgeM0 enumerates every relationship-simple trail before its
-				// final ORDER BY/LIMIT and has no runtime state budget. Keep it
-				// available to the tool-only tournament, but use the compact
-				// state-limited witness executor for production selection.
-				decision.SelectedExecutor = ShortestPathExecutorS4CanonicalWitness
-				decision.SelectorVersion = "sp-static-v4"
+				// Restore the former, already-qualified S3 production envelope.
+				// Deep physical-inbound and non-single-kind witnesses remain on
+				// S4 above; expanding S3 into either shape would expose its
+				// unbounded relationship-trail state to a new workload class.
+				decision.SelectedExecutor = ShortestPathExecutorS3EdgeM0
+				decision.SelectorVersion = "sp-static-v5-contained"
 			default:
 				continue
 			}
@@ -1184,9 +1281,10 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 }
 
 // finalizeExpansionSearchStrategyDecisions applies statement-wide safety
-// facts after all query parts and field requirements are known. A compound
-// region must never be selected from a per-clause view that misses another
-// variable expansion or a later mutation across WITH boundaries.
+// facts after all query parts and field requirements are known. The generic
+// orientation tournament has a statement-wide single-expansion envelope;
+// endpoint-seeded reverse retains its established per-region fact and guarded
+// fallback across independent WITH-separated traversals.
 func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
 	if plan == nil || query == nil || query.SingleQuery == nil {
 		return
@@ -1225,7 +1323,7 @@ func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.
 		decision := &plan.ExpansionSearchStrategy[idx]
 		singleExpansion := variableExpansions == 1
 		readOnly := updatingClauses == 0
-		setExpansionSearchEligibilityFact(decision, "single_variable_expansion", singleExpansion)
+		hasStatementWideExpansionFact := setExpansionSearchEligibilityFact(decision, "single_variable_expansion", singleExpansion)
 		setExpansionSearchEligibilityFact(decision, "read_only", readOnly)
 		decision.StructurallyEligible = expansionSearchFactsEligible(decision.EligibilityFacts)
 		decision.StaticallyEligible = decision.StructurallyEligible
@@ -1233,11 +1331,12 @@ func finalizeExpansionSearchStrategyDecisions(plan *LoweringPlan, query *cypher.
 			decision.SelectedStrategy = decision.FallbackStrategy
 			decision.SelectionMode = "incumbent_default"
 		}
-		if !singleExpansion && (decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified || decision.FallbackReason == ExpansionSearchFallbackMultipleVariableExpansions || decision.FallbackReason == ExpansionSearchFallbackUnboundRoot) {
+		if hasStatementWideExpansionFact && !singleExpansion && (decision.FallbackReason == "" || decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified || decision.FallbackReason == ExpansionSearchFallbackMultipleVariableExpansions || decision.FallbackReason == ExpansionSearchFallbackUnboundRoot) {
 			decision.FallbackReason = ExpansionSearchFallbackMultipleVariableExpansions
-		} else if !readOnly && decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified {
+		} else if !readOnly && (decision.FallbackReason == "" || decision.FallbackReason == ExpansionSearchFallbackTournamentUnqualified) {
 			decision.FallbackReason = ExpansionSearchFallbackMutation
 		}
+		setExpansionSearchExpectedEmission(decision)
 	}
 }
 
@@ -1706,11 +1805,18 @@ func appendPatternLatePathMaterializationDecisions(plan *LoweringPlan, target Pa
 }
 
 // appendExpandIntoDecisions records traversal steps whose left and right endpoints were already declared.
-func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause) {
-	declaredSymbols := map[string]struct{}{}
+func appendExpandIntoDecisions(plan *LoweringPlan, queryPartIndex int, readingClauses []*cypher.ReadingClause, initialDeclaredSymbols map[string]struct{}) {
+	declaredSymbols := copyStringSet(initialDeclaredSymbols)
 
 	for clauseIndex, readingClause := range readingClauses {
-		if readingClause == nil || readingClause.Match == nil {
+		if readingClause == nil {
+			continue
+		}
+		if readingClause.Unwind != nil {
+			addSymbol(declaredSymbols, variableSymbol(readingClause.Unwind.Variable))
+			continue
+		}
+		if readingClause.Match == nil {
 			continue
 		}
 

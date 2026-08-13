@@ -10,7 +10,8 @@ The query interface is built around openCypher, including a PostgreSQL SQL trans
 support Cypher natively.
 
 The PostgreSQL driver bounds repeated work with immutable 256-entry Cypher AST and SQL translation caches. Translation
-entries are keyed by normalized query text, graph ID, and a collision-safe parameter-name/type shape; they retain SQL
+entries are keyed by normalized query text, graph ID, a collision-safe parameter-name/type shape, and the effective
+versioned traversal-policy identity; they retain SQL
 and parameter-source mappings, never request values or defaults, and fail closed when a required source value is absent.
 Cached query text is released by LRU eviction or driver close, and diagnostics expose aggregate counters without query
 text.
@@ -127,8 +128,10 @@ confirmation and timeout-class workflows.
 The executable gate uses the complete corpus/backend declaration instead of the
 intersection of successful records, treats Neo4j only as an exact-result and
 informational latency oracle, and supports predeclared materiality thresholds.
-`make perf_aa` derives p50/p95 measurement resolution from repeated A/A
-captures. Exact case/dataset/category/tag selectors create diagnostic-only
+`make perf_aa` derives host-fingerprinted p50/p95 measurement resolution from
+order-balanced repeated A/A captures. Complete normal/envelope performance
+gates require that checksummed per-case evidence and use minimum 5%/100us
+floors; stress timing remains diagnostic. Exact case/dataset/category/tag selectors create diagnostic-only
 artifacts that the complete gate refuses; configured warmups and matched
 arm/block/run metadata support isolated confirmation. `make perf_confirm`
 reports paired absolute and relative p50/p95 changes with optional block/reload
@@ -151,12 +154,28 @@ production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
 4096 reverse-state caps select either the reverse candidate or an exact
 same-statement forward fallback without exposing partial candidate rows.
 
-PostgreSQL recursive shortest-path execution also includes bounded S4
-singleton executors and an all-shortest predecessor-DAG executor, with exact
-same-statement fallback, reusable session-local workspaces, late hydration, and
+PostgreSQL recursive shortest-path execution includes contained S3/S4
+singleton selection, a guarded canonical inline witness canary, and an
+all-shortest predecessor-DAG executor, with exact same-statement fallback,
+reusable session-local workspace-v2 state, late hydration, event-chain runtime
+receipts, and
 a parameter-shape-aware translation cache. The implementation and its
 qualification boundaries are documented in
 [Recursive-descent cost controls](docs/recursive_descent_cost_controls.md).
+
+New inline SP and ordinary-orientation lowerings remain default-off. The
+PostgreSQL driver's `SetTraversalPolicy` API can expose one eligible candidate
+to an explicit normalized-query SHA-256 allowlist under a nonzero generation.
+Activation requires the exact promotion manifest, including its measured
+execution boundary and evidence digests. Manifest schema v2 also requires every
+evidence report to repeat the exact candidate, selector, source, binary,
+corpus, cap, bucket, and query-cohort identity; a digest-shaped string alone is
+not authorization. B1/B2 and `SP-I1-C-D` remain tooling-only. Endpoint-seeded reverse,
+inline ASP, and inline canonical SP each have an evidence-free emergency
+disable switch. Resetting the policy to its
+zero value immediately returns all queries to incumbent cache identities. This
+is a reversible canary seam, not evidence that a candidate is qualified for
+broad production use.
 
 The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
@@ -215,6 +234,8 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [Development workflow](docs/development.md): build, test, integration, metrics, quality, and corpus-capture commands.
 - [Cypher library](cypher/README.md): parser generation and Cypher package overview.
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
+- [CySQL traversal performance priorities](docs/cysql_traversal_priorities.md): source-grounded roadmap for orientation, SP/ASP, probes, statistics, telemetry, and qualification.
+- [Traversal priority implementation status](docs/experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
 - [Integration corpus](integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.

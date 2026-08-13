@@ -8,7 +8,7 @@
       "params": {"root_key": "generated-fse-root"},
       "expected": {"row_count": 2, "result_kind": "id_rows", "id_rows": [["fse-head-root-00", "fse-terminal"], ["fse-head-branch-0000-depth-16-00", "fse-terminal"]]},
       "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
-      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 16, "path_materialization_required": false},
+      "shape": {"qualification_split": "training", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 16, "path_materialization_required": false},
       "candidate_modes": ["postgres_sql", "neo4j"],
       "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "endpoint-ids", "depth-16", "fanout-1000", "reachable-1", "disconnected-1", "discovery"]
     },
@@ -20,7 +20,7 @@
       "params": {"root_key": "generated-fse-root"},
       "expected": {"row_count": 2, "result_kind": "path_set"},
       "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
-      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 16, "path_materialization_required": true},
+      "shape": {"qualification_split": "training", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 16, "path_materialization_required": true},
       "candidate_modes": ["postgres_sql", "neo4j"],
       "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "path", "depth-16", "fanout-1000", "reachable-1", "disconnected-1", "discovery"]
     },
@@ -32,9 +32,9 @@
       "params": {"root_key": "generated-fse-root"},
       "expected": {"row_count": 0, "result_kind": "id_rows", "id_rows": []},
       "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
-      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 8, "path_materialization_required": false},
+      "shape": {"qualification_split": "holdout", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 8, "path_materialization_required": false},
       "candidate_modes": ["postgres_sql", "neo4j"],
-      "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "endpoint-ids", "zero-result", "reachable-0", "disconnected-512", "adversarial"]
+      "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "endpoint-ids", "zero-result", "reachable-0", "disconnected-512", "adversarial", "holdout"]
     },
     {
       "name": "GFSE-V2-D08-F016-R1-I1000-high_reverse_fanin",
@@ -44,9 +44,9 @@
       "params": {"root_key": "generated-fse-root"},
       "expected": {"row_count": 1, "result_kind": "id_rows", "id_rows": [["fse-head-branch-0000-depth-08-00", "fse-terminal"]]},
       "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
-      "shape": {"root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 8, "path_materialization_required": false},
+      "shape": {"qualification_split": "holdout", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 8, "path_materialization_required": false},
       "candidate_modes": ["postgres_sql", "neo4j"],
-      "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "endpoint-ids", "reverse-fanin-1000", "adversarial"]
+      "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "endpoint-ids", "reverse-fanin-1000", "adversarial", "holdout"]
     },
     {
       "name": "GFSE-D00-F001-none_endpoint_ids",

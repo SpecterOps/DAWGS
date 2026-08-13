@@ -69,6 +69,9 @@ type transaction struct {
 	// tx is the optional explicit PostgreSQL transaction used for transactional operations.
 	tx pgx.Tx
 
+	// isolation records the explicit snapshot contract, if any, used to admit B candidates.
+	isolation pgx.TxIsoLevel
+
 	// targetSchema identifies the graph selected explicitly for subsequent operations.
 	targetSchema graph.Graph
 
@@ -84,6 +87,7 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 		queryResultsFormat: cfg.QueryResultFormats,
 		ctx:                ctx,
 		conn:               conn,
+		isolation:          cfg.Options.IsoLevel,
 		targetSchemaSet:    false,
 	}
 
@@ -306,22 +310,33 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 
 // Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
-	if parsedQuery, _, err := s.schemaManager.parseCache.Parse(query); err != nil {
+	parsedQuery, _, err := s.schemaManager.parseCache.Parse(query)
+	if err != nil {
 		return graph.NewErrorResult(err)
-	} else if graphTarget, err := s.getTargetGraph(); err != nil {
-		return graph.NewErrorResult(err)
-	} else if sqlQuery, translatedParameters, err := s.schemaManager.translationCache.Translate(query, graphTarget.ID, parameters, func() (translate.Result, string, error) {
-		translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
-		if err != nil {
-			return translate.Result{}, "", err
-		}
-		formatted, err := translate.Translated(translated)
-		return translated, formatted, err
-	}); err != nil {
-		return graph.NewErrorResult(err)
-	} else {
-		return s.Raw(sqlQuery, translatedParameters)
 	}
+	graphTarget, err := s.getTargetGraph()
+	if err != nil {
+		return graph.NewErrorResult(err)
+	}
+	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicy(query, s.isolation)
+	sqlQuery, translatedParameters, err := s.schemaManager.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, func() (translate.Result, string, error) {
+		var translated translate.Result
+		var translateErr error
+		if policy.enabled() {
+			translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, policy.productionOptions(query))
+		} else {
+			translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
+		}
+		if translateErr != nil {
+			return translate.Result{}, "", translateErr
+		}
+		formatted, formatErr := translate.Translated(translated)
+		return translated, formatted, formatErr
+	})
+	if err != nil {
+		return graph.NewErrorResult(err)
+	}
+	return s.Raw(sqlQuery, translatedParameters)
 }
 
 func (s *transaction) Raw(query string, parameters map[string]any) graph.Result {

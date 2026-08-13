@@ -69,6 +69,8 @@ type postgresSQLRunner struct {
 	referenceArms []string
 	// toolOptions carries forced translation-executor selections for diagnostic runs.
 	toolOptions translate.ToolOptions
+	// traversalTelemetry selects opt-in summary or untimed diagnostic traversal evidence.
+	traversalTelemetry string
 	// existingGraph supplies live-graph anchors, checkpoints, and callbacks to the runner.
 	existingGraph *existingGraphRunnerOptions
 }
@@ -115,6 +117,12 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 	// deterministic while retaining the production pool hooks.
 	poolCfg.MinConns = int32(poolSize)
 	poolCfg.MaxConns = int32(poolSize)
+	if compactBidirectionalSnapshotRequired(references, referenceArms, forceShortest) {
+		if poolCfg.ConnConfig.RuntimeParams == nil {
+			poolCfg.ConnConfig.RuntimeParams = map[string]string{}
+		}
+		poolCfg.ConnConfig.RuntimeParams["default_transaction_isolation"] = "repeatable read"
+	}
 	// pg.NewPool applies the production driver's fixed 5/50 pool sizing. The
 	// benchmark must preserve the requested size so a size-one run can prove
 	// that all samples in a case used the same physical session.
@@ -215,6 +223,38 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 		},
 		existingGraph: existing,
 	}, nil
+}
+
+// compactBidirectionalSnapshotRequired reports whether any selected production
+// or reference arm can execute the multi-statement B1/B2 workspace kernel.
+func compactBidirectionalSnapshotRequired(references bool, referenceArms []string, forceShortest string) bool {
+	switch optimize.ShortestPathExecutor(forceShortest) {
+	case optimize.ShortestPathExecutorB1AlternatingNodeDistance,
+		optimize.ShortestPathExecutorB1AlternatingNodeWitness,
+		optimize.ShortestPathExecutorB2SmallerCurrentLevelDistance,
+		optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness,
+		optimize.ShortestPathExecutorASPB1AlternatingNodeDAG,
+		optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG:
+		return true
+	}
+	if !references {
+		return false
+	}
+	if len(referenceArms) == 0 {
+		return true
+	}
+	for _, arm := range referenceArms {
+		switch arm {
+		case "sp_b1_strict_alternating_distance",
+			"sp_b1_strict_alternating_witness_m0",
+			"sp_b2_smaller_frontier_distance",
+			"sp_b2_smaller_frontier_witness_m0",
+			"asp_b1_bidirectional_dag_strict_m0",
+			"asp_b2_bidirectional_dag_smaller_frontier_m0":
+			return true
+		}
+	}
+	return false
 }
 
 // Close releases the graph database and PostgreSQL pool owned by the runner.
@@ -588,7 +628,19 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			if translateErr != nil {
 				err = translateErr
 			} else {
-				rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+				requestedIdentity := timedRuntimeAttestationIdentity(translation)
+				if requestedIdentity == "" {
+					rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+				} else if s.poolSize != 1 {
+					// Exact per-sample receipts require one physical session. Larger
+					// pools remain useful for operational smoke testing, but their
+					// samples intentionally lack promotion-grade attestation.
+					rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+				} else if attestor, attestorErr := newPostgresTimedReadAttestor(s.pool, s.poolSize, requestedIdentity); attestorErr != nil {
+					err = attestorErr
+				} else {
+					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestation(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor)
+				}
 			}
 		}
 		if err != nil {
@@ -745,7 +797,34 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 		}
 		record.Concurrency = blocks
 	}
+	if testCase.WriteScenario == nil {
+		if err := s.attachPostgresTraversalTelemetry(ctx, &record, explain.Parameters); err != nil {
+			record.Status = StatusError
+			record.Error = err.Error()
+			return record
+		}
+		setSampleTraversalRuntimeMetadata(&record.Stats, record.TraversalTelemetry)
+	}
 	return record
+}
+
+func timedRuntimeAttestationIdentity(translation translate.Result) string {
+	outcome, ok := singleTraversalOutcome(translation.Optimization.TargetOutcomes)
+	if !ok {
+		return ""
+	}
+	requested := outcome.Candidate
+	if requested == "" {
+		requested = outcome.Selected
+	}
+	if strings.HasPrefix(requested, "SP-B1-") || strings.HasPrefix(requested, "SP-B2-") ||
+		strings.HasPrefix(requested, "ASP-B1-") || strings.HasPrefix(requested, "ASP-B2-") ||
+		requested == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) ||
+		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
+		outcome.EmittedPolicy == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+		return requested
+	}
+	return ""
 }
 
 // referenceClosureMeasurementOrder returns the balanced production/reference order for a measurement round.
@@ -807,7 +886,7 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 			return err
 		}
 		if !write {
-			jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING OFF, FORMAT JSON) "+sqlQuery, translation.Parameters)
+			jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING ON, FORMAT JSON) "+sqlQuery, translation.Parameters)
 			defer jsonResult.Close()
 			if jsonResult.Next() && len(jsonResult.Values()) > 0 {
 				planJSON, err = encodePostgresPlanJSON(jsonResult.Values()[0])
@@ -880,7 +959,8 @@ func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery str
 
 // hasForcedToolOptions reports whether either executor-selection override is configured.
 func hasForcedToolOptions(options translate.ToolOptions) bool {
-	return options.ForceShortestPathExecutor != "" || options.ForceExpansionSearchStrategy != ""
+	return options.ForceShortestPathExecutor != "" || options.ForceExpansionSearchStrategy != "" ||
+		options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow
 }
 
 // encodePostgresPlanJSON normalizes byte, string, or structured EXPLAIN JSON into json.RawMessage.

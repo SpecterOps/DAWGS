@@ -73,6 +73,23 @@ type writeMeasurement struct {
 	PostState []StateQueryResult
 }
 
+// timedReadAttestation is the runtime receipt captured outside a measured
+// query's latency boundary for that exact invocation.
+type timedReadAttestation struct {
+	RequestedIdentity string
+	RuntimeIdentity   string
+	RuntimeBranch     string
+	FallbackExecuted  *bool
+	Events            []RuntimeReceiptEvent
+}
+
+// timedReadAttestor arms and reads invocation-local runtime evidence. Begin
+// and Complete execute outside the duration measurement.
+type timedReadAttestor interface {
+	Begin(context.Context, int) error
+	Complete(context.Context, int) (timedReadAttestation, error)
+}
+
 // countCypherRows executes a Cypher query and returns the number of result rows.
 func countCypherRows(tx graph.Transaction, cypher string, params map[string]any) (int64, error) {
 	result := tx.Query(cypher, params)
@@ -469,8 +486,19 @@ func measureRawSQLWithWarmups(ctx context.Context, db graph.Database, sql string
 	return measureReadWithWarmups(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true)
 }
 
+// measureRawSQLWithWarmupsAndAttestation preserves the ordinary raw-SQL
+// measurement boundary while binding each timed sample to an exact runtime
+// receipt armed immediately before and read immediately after execution.
+func measureRawSQLWithWarmupsAndAttestation(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, attestor timedReadAttestor) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmupsAndAttestation(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true, attestor)
+}
+
 // measureReadWithWarmups executes read with warmups and records its timing observations.
 func measureReadWithWarmups(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmupsAndAttestation(ctx, db, query, params, expected, idMap, warmupIterations, iterations, raw, nil)
+}
+
+func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool, attestor timedReadAttestor) (int64, []string, DurationStats, error) {
 	if iterations < 1 {
 		return 0, nil, DurationStats{}, fmt.Errorf("iterations must be at least 1")
 	}
@@ -510,15 +538,31 @@ func measureReadWithWarmups(ctx context.Context, db graph.Database, query string
 	}
 
 	durations := make([]time.Duration, iterations)
+	attestations := make([]timedReadAttestation, iterations)
 	for idx := range iterations {
+		if attestor != nil {
+			if err := attestor.Begin(ctx, idx+1); err != nil {
+				return 0, nil, DurationStats{}, fmt.Errorf("arm timed runtime attestation %d: %w", idx+1, err)
+			}
+		}
 		start := time.Now()
 		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 			_, err := countReadRows(tx, query, params, raw)
 			return err
 		}); err != nil {
+			if attestor != nil {
+				_, _ = attestor.Complete(context.WithoutCancel(ctx), idx+1)
+			}
 			return 0, nil, DurationStats{}, err
 		}
 		durations[idx] = time.Since(start)
+		if attestor != nil {
+			attestation, err := attestor.Complete(ctx, idx+1)
+			if err != nil {
+				return 0, nil, DurationStats{}, fmt.Errorf("read timed runtime attestation %d: %w", idx+1, err)
+			}
+			attestations[idx] = attestation
+		}
 	}
 
 	var (
@@ -547,6 +591,16 @@ func measureReadWithWarmups(ctx context.Context, db graph.Database, query string
 		return 0, nil, DurationStats{}, err
 	}
 	stats.WarmupIterations = warmupIterations
+	if attestor != nil {
+		for idx := range attestations {
+			stats.Samples[idx].RequestedIdentity = attestations[idx].RequestedIdentity
+			stats.Samples[idx].RuntimeIdentity = attestations[idx].RuntimeIdentity
+			stats.Samples[idx].RuntimeBranch = attestations[idx].RuntimeBranch
+			stats.Samples[idx].FallbackExecuted = attestations[idx].FallbackExecuted
+			stats.Samples[idx].RuntimeAttestation = "timed_invocation"
+			stats.Samples[idx].RuntimeReceiptEvents = append([]RuntimeReceiptEvent(nil), attestations[idx].Events...)
+		}
+	}
 
 	stats.Samples = append([]LatencySample{{
 		Round:          1,

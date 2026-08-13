@@ -70,7 +70,13 @@ Run:
 make format
 ```
 
-The target uses `goimports`; install it locally if it is missing from your environment.
+The target uses `goimports`; install it locally if it is missing from your
+environment. Sandboxed or nonstandard installations can supply its explicit
+path without changing `PATH`:
+
+```bash
+make format GOIMPORTS_CMD=/absolute/path/to/goimports
+```
 
 `make lint` runs the standard Go vet analyzers across the repository. The unreachable-code analyzer is rerun only for
 handwritten packages because ANTLR emits intentional terminal branches in `cypher/parser`; generated parser code still

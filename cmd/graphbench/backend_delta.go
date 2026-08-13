@@ -30,6 +30,10 @@ type BackendDeltaCase struct {
 	Name string `json:"name"`
 	// Round identifies the measurement round.
 	Round int `json:"round,omitempty"`
+	// Complete reports whether both backend records were present.
+	Complete bool `json:"complete"`
+	// IncompleteReason identifies the absent backend side.
+	IncompleteReason string `json:"incomplete_reason,omitempty"`
 	// PostgresStatus records the PostgreSQL execution status for the matched round.
 	PostgresStatus string `json:"postgres_status"`
 	// Neo4jStatus records the Neo4j execution status for the matched round.
@@ -96,19 +100,25 @@ func createBackendDeltaReport(artifact, output string) error {
 	}
 
 	report := BackendDeltaReport{
-		Version: 1,
+		Version: 2,
 		Notice:  "Descriptive only: PostgreSQL release gates compare PostgreSQL predecessors and exact PostgreSQL references, not Neo4j latency.",
 	}
-	for nextKey, pgRecord := range postgres {
-		neoRecord, found := neo4j[nextKey]
-		if !found {
-			continue
-		}
+	keys := make(map[key]struct{}, len(postgres)+len(neo4j))
+	for nextKey := range postgres {
+		keys[nextKey] = struct{}{}
+	}
+	for nextKey := range neo4j {
+		keys[nextKey] = struct{}{}
+	}
+	for nextKey := range keys {
+		pgRecord, pgFound := postgres[nextKey]
+		neoRecord, neoFound := neo4j[nextKey]
 		observationsComparable := pgRecord.StableObservation && neoRecord.StableObservation
 		next := BackendDeltaCase{
 			Dataset:                nextKey.dataset,
 			Name:                   nextKey.name,
 			Round:                  nextKey.round,
+			Complete:               pgFound && neoFound,
 			PostgresStatus:         pgRecord.Status,
 			Neo4jStatus:            neoRecord.Status,
 			PostgresMedian:         pgRecord.Stats.Median,
@@ -118,18 +128,24 @@ func createBackendDeltaReport(artifact, output string) error {
 			ObservationsComparable: observationsComparable,
 			ObservationsMatch:      observationsComparable && pgRecord.RowCount == neoRecord.RowCount && slices.Equal(pgRecord.ObservedRows, neoRecord.ObservedRows),
 		}
+		switch {
+		case !pgFound:
+			next.IncompleteReason = "missing_postgres"
+		case !neoFound:
+			next.IncompleteReason = "missing_neo4j"
+		}
 
-		if next.PostgresMedian > 0 {
+		if next.Complete && next.PostgresMedian > 0 && next.Neo4jMedian > 0 {
 			next.MedianNeo4jOverPG = float64(next.Neo4jMedian) / float64(next.PostgresMedian)
 		}
-		if next.PostgresP95 > 0 {
+		if next.Complete && next.PostgresP95 > 0 && next.Neo4jP95 > 0 {
 			next.P95Neo4jOverPG = float64(next.Neo4jP95) / float64(next.PostgresP95)
 		}
 		report.Cases = append(report.Cases, next)
 	}
 
 	if len(report.Cases) == 0 {
-		return fmt.Errorf("backend-delta artifact has no matched PostgreSQL/Neo4j cases")
+		return fmt.Errorf("backend-delta artifact has no PostgreSQL or Neo4j cases")
 	}
 	sort.Slice(report.Cases, func(i, j int) bool {
 		if report.Cases[i].Dataset != report.Cases[j].Dataset {

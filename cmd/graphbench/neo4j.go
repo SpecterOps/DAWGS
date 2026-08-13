@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	neo4jcore "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -37,7 +38,7 @@ type neo4jRunner struct {
 	datasetDir string
 	// db provides graph transactions for fixture preparation and query execution.
 	db graph.Database
-	// planDriver supplies the Neo4j driver used only for EXPLAIN capture.
+	// planDriver supplies the Neo4j driver used only for untimed PROFILE or EXPLAIN capture.
 	planDriver neo4jcore.DriverWithContext
 	// databaseName selects the Neo4j database targeted by the benchmark session.
 	databaseName string
@@ -191,7 +192,7 @@ func (s *neo4jRunner) runCase(ctx context.Context, warmupIterations, iterations 
 	return record
 }
 
-// explain submits native Neo4j EXPLAIN and returns its normalized operator tree and operator names.
+// explain submits native Neo4j PROFILE for reads and EXPLAIN for writes after the timed block.
 func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params map[string]any, write bool) (plan *Neo4jPlanNode, operators []string, err error) {
 	accessMode := neo4jcore.AccessModeRead
 	if write {
@@ -207,7 +208,7 @@ func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params ma
 		}
 	}()
 
-	result, err := session.Run(ctx, "EXPLAIN "+cypherWithoutTerminator(cypherQuery), params)
+	result, err := session.Run(ctx, neo4jPlanCaptureStatement(cypherQuery, write), params)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -216,12 +217,47 @@ func (s *neo4jRunner) explain(ctx context.Context, cypherQuery string, params ma
 	if err != nil {
 		return nil, nil, err
 	}
-	if summary.Plan() == nil {
+	if write {
+		explainPlan := summary.Plan()
+		if explainPlan == nil {
+			return nil, nil, nil
+		}
+
+		metadata := neo4jProfileMetadata(explainPlan.Arguments(), neo4jServerAgent(summary), false)
+		planNode := convertNeo4jPlan(explainPlan)
+		planNode.ProfileMetadata = &metadata
+
+		return &planNode, neo4jOperators(planNode), nil
+	}
+
+	profile := summary.Profile()
+	if profile == nil {
 		return nil, nil, nil
 	}
 
-	planNode := convertNeo4jPlan(summary.Plan())
+	metadata := neo4jProfileMetadata(profile.Arguments(), neo4jServerAgent(summary), true)
+	planNode := convertNeo4jProfiledPlan(profile, metadata.internalTraversalOpaque())
+	planNode.ProfileMetadata = &metadata
+
 	return &planNode, neo4jOperators(planNode), nil
+}
+
+// neo4jPlanCaptureStatement selects PROFILE only for read-only cases and retains non-executing EXPLAIN for writes.
+func neo4jPlanCaptureStatement(cypherQuery string, write bool) string {
+	command := "PROFILE"
+	if write {
+		command = "EXPLAIN"
+	}
+
+	return command + " " + cypherWithoutTerminator(cypherQuery)
+}
+
+func neo4jServerAgent(summary neo4jcore.ResultSummary) string {
+	if server := summary.Server(); server != nil {
+		return server.Agent()
+	}
+
+	return ""
 }
 
 // neo4jPlanDriverConfig contains a Neo4j server URI and optional target database parsed from a connection string.
@@ -308,7 +344,21 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.DriverWithContext, string, e
 	return driver, cfg.DatabaseName, nil
 }
 
-// Neo4jPlanNode models the recursive operator tree returned by Neo4j EXPLAIN.
+// Neo4jProfileMetadata identifies the planner, runtime, and server used for a captured plan.
+type Neo4jProfileMetadata struct {
+	CaptureMode           string `json:"capture_mode"`
+	Profiled              bool   `json:"profiled"`
+	Planner               string `json:"planner,omitempty"`
+	PlannerImplementation string `json:"planner_implementation,omitempty"`
+	PlannerVersion        string `json:"planner_version,omitempty"`
+	Runtime               string `json:"runtime,omitempty"`
+	RuntimeImplementation string `json:"runtime_implementation,omitempty"`
+	RuntimeVersion        string `json:"runtime_version,omitempty"`
+	CypherVersion         string `json:"cypher_version,omitempty"`
+	ServerAgent           string `json:"server_agent,omitempty"`
+}
+
+// Neo4jPlanNode models the recursive operator tree returned by Neo4j PROFILE or EXPLAIN.
 type Neo4jPlanNode struct {
 	// Operator identifies the backend plan operator at this node.
 	Operator string `json:"operator"`
@@ -316,16 +366,39 @@ type Neo4jPlanNode struct {
 	Arguments map[string]string `json:"arguments,omitempty"`
 	// Identifiers lists variables or identifiers referenced by the Neo4j plan node.
 	Identifiers []string `json:"identifiers,omitempty"`
+	// EstimatedRows records planner-estimated output rows when Neo4j supplies them.
+	EstimatedRows *float64 `json:"estimated_rows,omitempty"`
+	// ActualRows records rows emitted by an executed PROFILE operator.
+	ActualRows *int64 `json:"actual_rows,omitempty"`
+	// Loops records operator loops when Neo4j exposes them as a plan argument.
+	Loops *int64 `json:"loops,omitempty"`
+	// DBHits records data-store accesses reported for an executed PROFILE operator.
+	DBHits *int64 `json:"db_hits,omitempty"`
+	// PageCacheHits records page-cache hits reported for an executed PROFILE operator.
+	PageCacheHits *int64 `json:"page_cache_hits,omitempty"`
+	// PageCacheMisses records page-cache misses reported for an executed PROFILE operator.
+	PageCacheMisses *int64 `json:"page_cache_misses,omitempty"`
+	// PageCacheHitRatio records the server-reported page-cache hit ratio.
+	PageCacheHitRatio *float64 `json:"page_cache_hit_ratio,omitempty"`
+	// TimeNS records operator time in nanoseconds when exposed by the Neo4j server.
+	TimeNS *int64 `json:"time_ns,omitempty"`
+	// InternalTraversalWork marks Neo4j 4.4 SP/ASP relationship work as opaque.
+	InternalTraversalWork string `json:"internal_traversal_work,omitempty"`
+	// ProfileMetadata records root planner/runtime and capture metadata.
+	ProfileMetadata *Neo4jProfileMetadata `json:"profile_metadata,omitempty"`
 	// Children contains child Neo4j plan operators in backend order.
 	Children []Neo4jPlanNode `json:"children,omitempty"`
 }
 
 // convertNeo4jPlan recursively converts a Neo4j plan into the stable serialized plan-node schema.
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
+	arguments := plan.Arguments()
 	node := Neo4jPlanNode{
-		Operator:    plan.Operator(),
-		Arguments:   stringifyArguments(plan.Arguments()),
-		Identifiers: append([]string(nil), plan.Identifiers()...),
+		Operator:      normalizeNeo4jOperator(plan.Operator()),
+		Arguments:     stringifyArguments(arguments),
+		Identifiers:   append([]string(nil), plan.Identifiers()...),
+		EstimatedRows: neo4jFloatArgument(arguments, "EstimatedRows", "estimatedRows"),
+		Loops:         neo4jIntArgument(arguments, "Loops", "loops"),
 	}
 
 	for _, child := range plan.Children() {
@@ -333,6 +406,109 @@ func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	}
 
 	return node
+}
+
+// convertNeo4jProfiledPlan recursively converts executed PROFILE data while preserving child order.
+func convertNeo4jProfiledPlan(plan neo4jcore.ProfiledPlan, opaqueInternalTraversal bool) Neo4jPlanNode {
+	arguments := plan.Arguments()
+	operator := normalizeNeo4jOperator(plan.Operator())
+	node := Neo4jPlanNode{
+		Operator:          operator,
+		Arguments:         stringifyArguments(arguments),
+		Identifiers:       append([]string(nil), plan.Identifiers()...),
+		EstimatedRows:     neo4jFloatArgument(arguments, "EstimatedRows", "estimatedRows"),
+		ActualRows:        neo4jInt64Pointer(plan.Records()),
+		Loops:             neo4jIntArgument(arguments, "Loops", "loops"),
+		DBHits:            neo4jInt64Pointer(plan.DbHits()),
+		PageCacheHits:     neo4jInt64Pointer(plan.PageCacheHits()),
+		PageCacheMisses:   neo4jInt64Pointer(plan.PageCacheMisses()),
+		PageCacheHitRatio: neo4jFloat64Pointer(plan.PageCacheHitRatio()),
+		TimeNS:            neo4jInt64Pointer(plan.Time()),
+	}
+	if opaqueInternalTraversal && strings.Contains(strings.ToLower(neo4jOperatorBase(operator)), "shortestpath") {
+		node.InternalTraversalWork = "opaque"
+	}
+
+	for _, child := range plan.Children() {
+		node.Children = append(node.Children, convertNeo4jProfiledPlan(child, opaqueInternalTraversal))
+	}
+
+	return node
+}
+
+func neo4jProfileMetadata(arguments map[string]any, serverAgent string, profiled bool) Neo4jProfileMetadata {
+	captureMode := "EXPLAIN"
+	if profiled {
+		captureMode = "PROFILE"
+	}
+
+	return Neo4jProfileMetadata{
+		CaptureMode:           captureMode,
+		Profiled:              profiled,
+		Planner:               neo4jStringArgument(arguments, "planner"),
+		PlannerImplementation: neo4jStringArgument(arguments, "planner-impl"),
+		PlannerVersion:        neo4jStringArgument(arguments, "planner-version"),
+		Runtime:               neo4jStringArgument(arguments, "runtime"),
+		RuntimeImplementation: neo4jStringArgument(arguments, "runtime-impl"),
+		RuntimeVersion:        neo4jStringArgument(arguments, "runtime-version"),
+		CypherVersion:         neo4jStringArgument(arguments, "version"),
+		ServerAgent:           serverAgent,
+	}
+}
+
+func (s Neo4jProfileMetadata) internalTraversalOpaque() bool {
+	return strings.HasPrefix(s.PlannerVersion, "4.4") ||
+		strings.HasPrefix(s.RuntimeVersion, "4.4") ||
+		strings.Contains(s.CypherVersion, "4.4") ||
+		strings.Contains(s.ServerAgent, "/4.4")
+}
+
+func neo4jStringArgument(arguments map[string]any, name string) string {
+	if value, ok := arguments[name]; ok {
+		return fmt.Sprint(value)
+	}
+
+	return ""
+}
+
+func neo4jFloatArgument(arguments map[string]any, names ...string) *float64 {
+	for _, name := range names {
+		value, ok := arguments[name]
+		if !ok {
+			continue
+		}
+
+		parsed, err := strconv.ParseFloat(fmt.Sprint(value), 64)
+		if err == nil {
+			return neo4jFloat64Pointer(parsed)
+		}
+	}
+
+	return nil
+}
+
+func neo4jIntArgument(arguments map[string]any, names ...string) *int64 {
+	for _, name := range names {
+		value, ok := arguments[name]
+		if !ok {
+			continue
+		}
+
+		parsed, err := strconv.ParseInt(fmt.Sprint(value), 10, 64)
+		if err == nil {
+			return neo4jInt64Pointer(parsed)
+		}
+	}
+
+	return nil
+}
+
+func neo4jInt64Pointer(value int64) *int64 {
+	return &value
+}
+
+func neo4jFloat64Pointer(value float64) *float64 {
+	return &value
 }
 
 // stringifyArguments converts plan arguments to stable strings in a fresh map.
@@ -349,7 +525,7 @@ func stringifyArguments(arguments map[string]any) map[string]string {
 	return values
 }
 
-// neo4jOperators flattens a Neo4j plan tree into sorted unique operator names.
+// neo4jOperators flattens a Neo4j plan tree in traversal order with exactly one backend suffix.
 func neo4jOperators(root Neo4jPlanNode) []string {
 	var (
 		operators []string
@@ -357,7 +533,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	)
 
 	walk = func(node Neo4jPlanNode) {
-		operators = append(operators, node.Operator+"@neo4j")
+		operators = append(operators, normalizeNeo4jOperator(node.Operator))
 		for _, child := range node.Children {
 			walk(child)
 		}
@@ -365,6 +541,24 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	walk(root)
 
 	return operators
+}
+
+func normalizeNeo4jOperator(operator string) string {
+	base := neo4jOperatorBase(operator)
+	if base == "" {
+		return ""
+	}
+
+	return base + "@neo4j"
+}
+
+func neo4jOperatorBase(operator string) string {
+	operator = strings.TrimSpace(operator)
+	for strings.HasSuffix(operator, "@neo4j") {
+		operator = strings.TrimSpace(strings.TrimSuffix(operator, "@neo4j"))
+	}
+
+	return operator
 }
 
 // cypherWithoutTerminator trims surrounding whitespace and one trailing Cypher semicolon.

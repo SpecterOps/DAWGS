@@ -129,6 +129,16 @@ type Expansion struct {
 	ShortestPathExecutor optimize.ShortestPathExecutor
 	// ShortestPathTarget locates this expansion in the optimizer's lowering plan.
 	ShortestPathTarget optimize.TraversalStepTarget
+	// ShortestPathStateLimit caps distinct seen state for compact executors.
+	ShortestPathStateLimit int64
+	// ShortestPathFrontierLimit caps current and queued frontier state.
+	ShortestPathFrontierLimit int64
+	// ShortestPathPredecessorLimit caps retained witness predecessors.
+	ShortestPathPredecessorLimit int64
+	// ShortestPathEnumerationLimit caps staged all-shortest-path arrays.
+	ShortestPathEnumerationLimit int64
+	// ShortestPathOutputBytesLimit caps staged all-shortest-path array bytes.
+	ShortestPathOutputBytesLimit int64
 	// SingletonRootID holds the statically resolved root ID when exactly one root is known.
 	SingletonRootID pgsql.Expression
 	// SingletonTerminalID holds the statically resolved terminal ID when exactly one terminal is known.

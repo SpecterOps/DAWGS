@@ -118,6 +118,31 @@ func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
 	require.Equal(t, 3, builds)
 }
 
+// TestCypherTranslationCacheSeparatesProductionPolicies verifies disabling a
+// canary cannot reuse SQL compiled under an earlier selector generation.
+func TestCypherTranslationCacheSeparatesProductionPolicies(t *testing.T) {
+	cache := newCypherTranslationCache(4)
+	builds := 0
+	build := func(sql string) func() (translate.Result, string, error) {
+		return func() (translate.Result, string, error) {
+			builds++
+			return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, sql, nil
+		}
+	}
+
+	first, _, err := cache.TranslateWithPolicy("RETURN 1", 1, nil, "candidate-g1", build("candidate"))
+	require.NoError(t, err)
+	incumbent, _, err := cache.TranslateWithPolicy("RETURN 1", 1, nil, "production-incumbent-v1", build("incumbent"))
+	require.NoError(t, err)
+	again, _, err := cache.TranslateWithPolicy("RETURN 1", 1, nil, "candidate-g1", build("wrong"))
+	require.NoError(t, err)
+
+	require.Equal(t, "candidate", first)
+	require.Equal(t, "incumbent", incumbent)
+	require.Equal(t, "candidate", again)
+	require.Equal(t, 2, builds)
+}
+
 // TestTranslationParameterTypeKeyIsDelimiterSafe verifies length-prefixed name and type components cannot collide.
 func TestTranslationParameterTypeKeyIsDelimiterSafe(t *testing.T) {
 	first := translationParameterTypeKey(map[string]any{

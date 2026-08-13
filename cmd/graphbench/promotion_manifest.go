@@ -1,0 +1,345 @@
+// Copyright 2026 Specter Ops, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"strings"
+)
+
+const promotionManifestVersion = 2
+
+var requiredPromotionEvidenceRoles = []string{
+	"aa", "confirmation", "performance", "resource", "reference_closure", "operational",
+}
+
+type PromotionEvidenceReference struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+type PromotionBucket struct {
+	Name                  string   `json:"name"`
+	QuerySHA256           []string `json:"query_sha256"`
+	Direction             string   `json:"direction,omitempty"`
+	ObservationMode       string   `json:"observation_mode,omitempty"`
+	MinimumDepth          int      `json:"minimum_depth,omitempty"`
+	MaximumDepth          int      `json:"maximum_depth,omitempty"`
+	RelationshipKindCount int      `json:"relationship_kind_count,omitempty"`
+	UntypedRelationship   bool     `json:"untyped_relationship,omitempty"`
+	QualificationSplit    []string `json:"qualification_split"`
+}
+
+// PromotionManifest is the sole authorization record consumed by a rollout.
+// It binds one immutable candidate and selector to source, binary, corpus,
+// caps, exact query cohorts, and every required passing report.
+type PromotionManifest struct {
+	Version           int                                   `json:"version"`
+	Candidate         string                                `json:"candidate"`
+	SelectorVersion   string                                `json:"selector_version"`
+	ExecutionBoundary string                                `json:"execution_boundary"`
+	FallbackExecutor  string                                `json:"fallback_executor,omitempty"`
+	SourceCommit      string                                `json:"source_commit"`
+	SourceSHA256      string                                `json:"source_sha256"`
+	BinarySHA256      string                                `json:"binary_sha256"`
+	CorpusSHA256      string                                `json:"corpus_sha256"`
+	Caps              map[string]int64                      `json:"caps"`
+	Buckets           []PromotionBucket                     `json:"buckets"`
+	Evidence          map[string]PromotionEvidenceReference `json:"evidence"`
+}
+
+// PromotionEvidenceIdentity is repeated verbatim by every evidence report.
+// It deliberately excludes evidence paths and digests, avoiding a circular
+// dependency while binding the report to every authorization-relevant field.
+type PromotionEvidenceIdentity struct {
+	Candidate         string            `json:"candidate"`
+	SelectorVersion   string            `json:"selector_version"`
+	ExecutionBoundary string            `json:"execution_boundary"`
+	FallbackExecutor  string            `json:"fallback_executor,omitempty"`
+	SourceCommit      string            `json:"source_commit"`
+	SourceSHA256      string            `json:"source_sha256"`
+	BinarySHA256      string            `json:"binary_sha256"`
+	CorpusSHA256      string            `json:"corpus_sha256"`
+	Caps              map[string]int64  `json:"caps"`
+	Buckets           []PromotionBucket `json:"buckets"`
+}
+
+func promotionEvidenceIdentity(manifest PromotionManifest) PromotionEvidenceIdentity {
+	return PromotionEvidenceIdentity{
+		Candidate: manifest.Candidate, SelectorVersion: manifest.SelectorVersion,
+		ExecutionBoundary: manifest.ExecutionBoundary, FallbackExecutor: manifest.FallbackExecutor,
+		SourceCommit: manifest.SourceCommit, SourceSHA256: manifest.SourceSHA256,
+		BinarySHA256: manifest.BinarySHA256, CorpusSHA256: manifest.CorpusSHA256,
+		Caps: clonePromotionCaps(manifest.Caps), Buckets: clonePromotionBuckets(manifest.Buckets),
+	}
+}
+
+func clonePromotionCaps(input map[string]int64) map[string]int64 {
+	result := make(map[string]int64, len(input))
+	for name, value := range input {
+		result[name] = value
+	}
+	return result
+}
+
+func clonePromotionBuckets(input []PromotionBucket) []PromotionBucket {
+	result := append([]PromotionBucket(nil), input...)
+	for idx := range result {
+		result[idx].QuerySHA256 = append([]string(nil), result[idx].QuerySHA256...)
+		result[idx].QualificationSplit = append([]string(nil), result[idx].QualificationSplit...)
+	}
+	return result
+}
+
+type PromotionManifestVerification struct {
+	Version         int      `json:"version"`
+	ManifestSHA256  string   `json:"manifest_sha256"`
+	Candidate       string   `json:"candidate,omitempty"`
+	SelectorVersion string   `json:"selector_version,omitempty"`
+	Passed          bool     `json:"passed"`
+	Reasons         []string `json:"reasons,omitempty"`
+}
+
+func verifyPromotionManifest(path string) (PromotionManifestVerification, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return PromotionManifestVerification{}, err
+	}
+	digest := sha256.Sum256(raw)
+	verification := PromotionManifestVerification{Version: promotionManifestVersion, ManifestSHA256: hex.EncodeToString(digest[:]), Passed: true}
+	var manifest PromotionManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return PromotionManifestVerification{}, fmt.Errorf("decode promotion manifest: %w", err)
+	}
+	verification.Candidate = manifest.Candidate
+	verification.SelectorVersion = manifest.SelectorVersion
+	addReason := func(reason string) {
+		verification.Passed = false
+		verification.Reasons = append(verification.Reasons, reason)
+	}
+	if manifest.Version != promotionManifestVersion {
+		addReason("manifest version must be 2")
+	}
+	if strings.TrimSpace(manifest.Candidate) == "" || strings.TrimSpace(manifest.SelectorVersion) == "" {
+		addReason("candidate and selector_version are required")
+	}
+	if manifest.ExecutionBoundary != "inline_statement" && manifest.ExecutionBoundary != "stored_helper" && manifest.ExecutionBoundary != "guarded_dual_arm" {
+		addReason("execution_boundary must identify the measured production boundary")
+	}
+	for name, value := range map[string]string{"source_sha256": manifest.SourceSHA256, "binary_sha256": manifest.BinarySHA256, "corpus_sha256": manifest.CorpusSHA256} {
+		if !isLowerHexSHA256(value) {
+			addReason(name + " must be a lowercase SHA-256 digest")
+		}
+	}
+	if strings.TrimSpace(manifest.SourceCommit) == "" {
+		addReason("source_commit is required")
+	}
+	if len(manifest.Caps) == 0 {
+		addReason("at least one immutable candidate cap is required")
+	}
+	for name, limit := range manifest.Caps {
+		if strings.TrimSpace(name) == "" || limit <= 0 {
+			addReason("candidate caps must have nonempty names and positive limits")
+		}
+	}
+	if manifest.Candidate == "ASP-I1-U-DAG+MAT-M0" {
+		expectedCaps := map[string]struct{}{
+			"state_limit": {}, "predecessor_limit": {}, "enumeration_limit": {}, "output_bytes_limit": {},
+		}
+		if manifest.ExecutionBoundary != "guarded_dual_arm" {
+			addReason("ASP-I1 requires the guarded_dual_arm production boundary")
+		}
+		if manifest.FallbackExecutor != "ASP-A1-DAG" {
+			addReason("ASP-I1 requires ASP-A1-DAG as its exact fallback")
+		}
+		if len(manifest.Caps) != len(expectedCaps) {
+			addReason("ASP-I1 requires exactly state, predecessor, enumeration, and output-byte caps")
+		}
+		for name := range expectedCaps {
+			if manifest.Caps[name] <= 0 {
+				addReason("ASP-I1 cap " + name + " must be positive")
+			}
+		}
+	}
+	if manifest.Candidate == "SP-I1-C-WE+MAT-M0" {
+		expectedCaps := map[string]struct{}{
+			"state_limit": {}, "predecessor_limit": {}, "enumeration_limit": {}, "output_bytes_limit": {},
+		}
+		if manifest.ExecutionBoundary != "guarded_dual_arm" {
+			addReason("SP-I1 canonical witness requires the guarded_dual_arm production boundary")
+		}
+		if manifest.FallbackExecutor != "SP-S4-C-WE+MAT-M0" {
+			addReason("SP-I1 canonical witness requires SP-S4-C-WE+MAT-M0 as its exact fallback")
+		}
+		if len(manifest.Caps) != len(expectedCaps) {
+			addReason("SP-I1 canonical witness requires exactly state, predecessor, enumeration, and output-byte caps")
+		}
+		for name := range expectedCaps {
+			if manifest.Caps[name] <= 0 {
+				addReason("SP-I1 canonical witness cap " + name + " must be positive")
+			}
+		}
+	}
+	if len(manifest.Buckets) == 0 {
+		addReason("at least one authorized bucket is required")
+	}
+	seenBuckets := map[string]struct{}{}
+	for _, bucket := range manifest.Buckets {
+		if bucket.Name == "" || len(bucket.QuerySHA256) == 0 {
+			addReason("every bucket requires a name and query allowlist")
+			continue
+		}
+		if _, found := seenBuckets[bucket.Name]; found {
+			addReason("bucket " + bucket.Name + " is duplicated")
+		}
+		seenBuckets[bucket.Name] = struct{}{}
+		for _, query := range bucket.QuerySHA256 {
+			if !isLowerHexSHA256(query) {
+				addReason("bucket " + bucket.Name + " contains an invalid query digest")
+			}
+		}
+		if !containsString(bucket.QualificationSplit, "training") || !containsString(bucket.QualificationSplit, "holdout") {
+			addReason("bucket " + bucket.Name + " must bind training and holdout evidence")
+		}
+		if manifest.Candidate == "ASP-I1-U-DAG+MAT-M0" {
+			if (bucket.Direction != "outbound" && bucket.Direction != "inbound") || bucket.ObservationMode != "all_paths" || bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 {
+				addReason("ASP-I1 bucket " + bucket.Name + " is outside the directed all-paths depth envelope")
+			}
+			if bucket.RelationshipKindCount < 0 || bucket.UntypedRelationship != (bucket.RelationshipKindCount == 0) {
+				addReason("ASP-I1 bucket " + bucket.Name + " has inconsistent relationship-kind metadata")
+			}
+		}
+		if manifest.Candidate == "SP-I1-C-WE+MAT-M0" {
+			if (bucket.Direction != "outbound" && bucket.Direction != "inbound") || bucket.ObservationMode != "one_path" || bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 {
+				addReason("SP-I1 canonical witness bucket " + bucket.Name + " is outside the directed one-path depth envelope")
+			}
+			if bucket.RelationshipKindCount < 0 || bucket.UntypedRelationship != (bucket.RelationshipKindCount == 0) {
+				addReason("SP-I1 canonical witness bucket " + bucket.Name + " has inconsistent relationship-kind metadata")
+			}
+		}
+	}
+	base := filepath.Dir(path)
+	for _, role := range requiredPromotionEvidenceRoles {
+		reference, found := manifest.Evidence[role]
+		if !found {
+			addReason("required evidence role " + role + " is missing")
+			continue
+		}
+		if err := verifyPromotionEvidence(base, role, reference, promotionEvidenceIdentity(manifest)); err != nil {
+			addReason(role + ": " + err.Error())
+		}
+	}
+	sort.Strings(verification.Reasons)
+	return verification, nil
+}
+
+func writePromotionManifestVerification(path, output string) (bool, error) {
+	verification, err := verifyPromotionManifest(path)
+	if err != nil {
+		return false, err
+	}
+	raw, err := json.MarshalIndent(verification, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	if output == "" {
+		_, err = os.Stdout.Write(append(raw, '\n'))
+	} else {
+		err = os.WriteFile(output, append(raw, '\n'), 0o644)
+	}
+	return verification.Passed, err
+}
+
+func verifyPromotionEvidence(base, role string, reference PromotionEvidenceReference, expectedIdentity PromotionEvidenceIdentity) error {
+	if filepath.IsAbs(reference.Path) || reference.Path == "" {
+		return fmt.Errorf("path must be a nonempty relative path")
+	}
+	clean := filepath.Clean(reference.Path)
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path escapes the manifest directory")
+	}
+	raw, err := os.ReadFile(filepath.Join(base, clean))
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(raw)
+	if hex.EncodeToString(digest[:]) != reference.SHA256 {
+		return fmt.Errorf("SHA-256 mismatch")
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return fmt.Errorf("decode report: %w", err)
+	}
+	identityRaw, found := document["promotion_identity"]
+	if !found {
+		return fmt.Errorf("report has no promotion_identity")
+	}
+	encodedIdentity, err := json.Marshal(identityRaw)
+	if err != nil {
+		return fmt.Errorf("encode promotion identity: %w", err)
+	}
+	var actualIdentity PromotionEvidenceIdentity
+	if err := json.Unmarshal(encodedIdentity, &actualIdentity); err != nil {
+		return fmt.Errorf("decode promotion identity: %w", err)
+	}
+	if !reflect.DeepEqual(actualIdentity, expectedIdentity) {
+		return fmt.Errorf("promotion identity does not match manifest")
+	}
+	switch role {
+	case "aa":
+		if balanced, _ := document["order_balanced"].(bool); !balanced {
+			return fmt.Errorf("A/A report is not order balanced")
+		}
+		if cases, _ := document["cases"].([]any); len(cases) == 0 {
+			return fmt.Errorf("A/A report has no cases")
+		}
+	case "confirmation", "performance":
+		if eligible, _ := document["promotion_eligible"].(bool); !eligible {
+			return fmt.Errorf("report is not promotion eligible")
+		}
+	default:
+		if passed, _ := document["passed"].(bool); !passed {
+			return fmt.Errorf("report did not pass")
+		}
+	}
+	return nil
+}
+
+// bindPromotionEvidenceReport attaches the manifest's authorization identity
+// to an already generated role-specific report. The final manifest may then
+// checksum the bound report without creating an identity/digest cycle.
+func bindPromotionEvidenceReport(manifestPath, role, inputPath, outputPath string) error {
+	if !containsString(requiredPromotionEvidenceRoles, role) {
+		return fmt.Errorf("unsupported promotion evidence role %q", role)
+	}
+	manifestRaw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+	var manifest PromotionManifest
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+		return fmt.Errorf("decode promotion manifest: %w", err)
+	}
+	reportRaw, err := os.ReadFile(inputPath)
+	if err != nil {
+		return err
+	}
+	var report map[string]any
+	if err := json.Unmarshal(reportRaw, &report); err != nil {
+		return fmt.Errorf("decode evidence report: %w", err)
+	}
+	report["promotion_identity"] = promotionEvidenceIdentity(manifest)
+	bound, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(outputPath, append(bound, '\n'), 0o644)
+}
