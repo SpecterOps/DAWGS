@@ -449,7 +449,10 @@ passed both backends and the forced ASP I1 exact-result/runtime-receipt check.
 Cap-threshold branch behavior remains in the live guarded-statement integration
 matrix because ordinary corpus declarations cannot override immutable
 production caps. Statistical and operational qualification in steps 2-6 is
-still due.
+still due. GraphBench now accepts a provisional version-2 manifest for exact
+guarded-production-boundary capture, executes its authorized queries under
+Repeatable Read, and records per-sample receipts; tool-forced I1 output is no
+longer the only measurable candidate boundary.
 
 Implementation sequence:
 

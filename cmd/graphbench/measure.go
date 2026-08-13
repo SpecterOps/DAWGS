@@ -486,6 +486,10 @@ func measureRawSQLWithWarmups(ctx context.Context, db graph.Database, sql string
 	return measureReadWithWarmups(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true)
 }
 
+func measureRawSQLWithWarmupsOptions(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmupsAndAttestation(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true, nil, options...)
+}
+
 // measureRawSQLWithWarmupsAndAttestation preserves the ordinary raw-SQL
 // measurement boundary while binding each timed sample to an exact runtime
 // receipt armed immediately before and read immediately after execution.
@@ -493,12 +497,19 @@ func measureRawSQLWithWarmupsAndAttestation(ctx context.Context, db graph.Databa
 	return measureReadWithWarmupsAndAttestation(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true, attestor)
 }
 
+// measureRawSQLWithWarmupsAndAttestationOptions measures a raw production
+// statement under explicit graph transaction options while keeping receipt
+// arming and reading outside the timed transaction.
+func measureRawSQLWithWarmupsAndAttestationOptions(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, attestor timedReadAttestor, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
+	return measureReadWithWarmupsAndAttestation(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true, attestor, options...)
+}
+
 // measureReadWithWarmups executes read with warmups and records its timing observations.
 func measureReadWithWarmups(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool) (int64, []string, DurationStats, error) {
 	return measureReadWithWarmupsAndAttestation(ctx, db, query, params, expected, idMap, warmupIterations, iterations, raw, nil)
 }
 
-func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool, attestor timedReadAttestor) (int64, []string, DurationStats, error) {
+func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool, attestor timedReadAttestor, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
 	if iterations < 1 {
 		return 0, nil, DurationStats{}, fmt.Errorf("iterations must be at least 1")
 	}
@@ -510,7 +521,7 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		_, err := countReadRows(tx, query, params, raw)
 		return err
-	}); err != nil {
+	}, options...); err != nil {
 		return 0, nil, DurationStats{}, err
 	}
 	coldDuration := time.Since(coldStart)
@@ -518,7 +529,7 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 			_, err := countReadRows(tx, query, params, raw)
 			return err
-		}); err != nil {
+		}, options...); err != nil {
 			return 0, nil, DurationStats{}, err
 		}
 	}
@@ -533,7 +544,7 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 		var err error
 		warmupRows, preflightObserved, err = observeReadRows(tx, query, params, idMap, stabilizeNodeIDs, stabilizePaths, raw)
 		return err
-	}); err != nil {
+	}, options...); err != nil {
 		return 0, nil, DurationStats{}, err
 	}
 
@@ -549,7 +560,7 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 			_, err := countReadRows(tx, query, params, raw)
 			return err
-		}); err != nil {
+		}, options...); err != nil {
 			if attestor != nil {
 				_, _ = attestor.Complete(context.WithoutCancel(ctx), idx+1)
 			}
@@ -573,7 +584,7 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 		var err error
 		postflightRows, postflightObserved, err = observeReadRows(tx, query, params, idMap, stabilizeNodeIDs, stabilizePaths, raw)
 		return err
-	}); err != nil {
+	}, options...); err != nil {
 		return 0, nil, DurationStats{}, err
 	}
 	if postflightRows != warmupRows {

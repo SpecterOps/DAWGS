@@ -23,12 +23,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -69,6 +71,9 @@ type postgresSQLRunner struct {
 	referenceArms []string
 	// toolOptions carries forced translation-executor selections for diagnostic runs.
 	toolOptions translate.ToolOptions
+	// productionManifest supplies the immutable guarded candidate identity used
+	// for pre-closure production-boundary measurement.
+	productionManifest *PromotionManifest
 	// traversalTelemetry selects opt-in summary or untimed diagnostic traversal evidence.
 	traversalTelemetry string
 	// existingGraph supplies live-graph anchors, checkpoints, and callbacks to the runner.
@@ -93,6 +98,89 @@ type existingGraphRunnerOptions struct {
 	OnRecord func(CaseResult) error
 	// OnComplete records final live-graph node and relationship counts after successful execution.
 	OnComplete func(int64, int64) error
+}
+
+// setProductionManifest loads a provisional promotion manifest. Evidence may
+// be empty because this mode exists to produce that evidence; all fields that
+// determine SQL selection and runtime behavior are still validated here.
+func (s *postgresSQLRunner) setProductionManifest(path string) error {
+	if path == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var manifest PromotionManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return fmt.Errorf("decode provisional promotion manifest: %w", err)
+	}
+	if manifest.Version != promotionManifestVersion || manifest.ExecutionBoundary != "guarded_dual_arm" || strings.TrimSpace(manifest.SelectorVersion) == "" {
+		return fmt.Errorf("provisional manifest must be version 2 with a selector and guarded_dual_arm boundary")
+	}
+	expectedFallback := map[string]string{
+		string(optimize.ShortestPathExecutorASPI1DAG):                      string(optimize.ShortestPathExecutorASPA1DAG),
+		string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness): string(optimize.ShortestPathExecutorS4CanonicalWitness),
+	}[manifest.Candidate]
+	if expectedFallback == "" || manifest.FallbackExecutor != expectedFallback {
+		return fmt.Errorf("unsupported candidate/fallback pair %s -> %s", manifest.Candidate, manifest.FallbackExecutor)
+	}
+	expectedCaps := []string{"state_limit", "predecessor_limit", "enumeration_limit", "output_bytes_limit"}
+	if len(manifest.Caps) != len(expectedCaps) {
+		return fmt.Errorf("guarded shortest candidate requires exactly four immutable caps")
+	}
+	for _, name := range expectedCaps {
+		if manifest.Caps[name] <= 0 {
+			return fmt.Errorf("guarded shortest candidate cap %s must be positive", name)
+		}
+	}
+	seenQueries := map[string]struct{}{}
+	for _, bucket := range manifest.Buckets {
+		if len(bucket.QuerySHA256) == 0 {
+			return fmt.Errorf("production bucket %q has no exact query cohort", bucket.Name)
+		}
+		for _, digest := range bucket.QuerySHA256 {
+			if !isLowerHexSHA256(digest) {
+				return fmt.Errorf("production bucket %q contains an invalid query digest", bucket.Name)
+			}
+			if _, found := seenQueries[digest]; found {
+				return fmt.Errorf("production query digest %s is authorized more than once", digest)
+			}
+			seenQueries[digest] = struct{}{}
+		}
+	}
+	if len(seenQueries) == 0 {
+		return fmt.Errorf("provisional manifest has no exact query cohort")
+	}
+	s.productionManifest = &manifest
+	return nil
+}
+
+func (s *postgresSQLRunner) productionOptions(cypherQuery string) (translate.ProductionOptions, error) {
+	manifest := s.productionManifest
+	if manifest == nil {
+		return translate.ProductionOptions{}, fmt.Errorf("production manifest is not configured")
+	}
+	digest := pg.TraversalPolicyQuerySHA256(cypherQuery)
+	for _, bucket := range manifest.Buckets {
+		if !slices.Contains(bucket.QuerySHA256, digest) {
+			continue
+		}
+		return translate.ProductionOptions{
+			ShortestPathExecutor: optimize.ShortestPathExecutor(manifest.Candidate),
+			ShortestPathCaps: &translate.ProductionShortestPathCaps{
+				StateLimit: manifest.Caps["state_limit"], PredecessorLimit: manifest.Caps["predecessor_limit"],
+				EnumerationLimit: manifest.Caps["enumeration_limit"], OutputBytesLimit: manifest.Caps["output_bytes_limit"],
+			},
+			AuthorizedBucket: &translate.ProductionTraversalBucket{
+				Direction: bucket.Direction, ObservationMode: bucket.ObservationMode,
+				MinimumDepth: int64(bucket.MinimumDepth), MaximumDepth: int64(bucket.MaximumDepth),
+				RelationshipKindCount: bucket.RelationshipKindCount, UntypedRelationship: bucket.UntypedRelationship,
+			},
+			SelectorVersion: manifest.SelectorVersion,
+		}, nil
+	}
+	return translate.ProductionOptions{}, fmt.Errorf("query SHA-256 %s is absent from the provisional production manifest", digest)
 }
 
 // newPostgresSQLRunner opens a PostgreSQL benchmark runner for managed-fixture execution.
@@ -621,7 +709,7 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			stats        DurationStats
 		)
 
-		if !hasForcedToolOptions(s.toolOptions) {
+		if !hasForcedToolOptions(s.toolOptions) && s.productionManifest == nil {
 			rowCount, observedRows, stats, err = measureCypherWithWarmups(ctx, s.db, testCase.Cypher, params, testCase.Expected, idMap, warmupIterations, iterations)
 		} else {
 			translation, sqlQuery, translateErr := s.translateCypher(ctx, testCase.Cypher, params)
@@ -635,9 +723,17 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 					// Exact per-sample receipts require one physical session. Larger
 					// pools remain useful for operational smoke testing, but their
 					// samples intentionally lack promotion-grade attestation.
-					rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+					if s.productionManifest != nil {
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations,
+							pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+					} else {
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+					}
 				} else if attestor, attestorErr := newPostgresTimedReadAttestor(s.pool, s.poolSize, requestedIdentity); attestorErr != nil {
 					err = attestorErr
+				} else if s.productionManifest != nil {
+					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestationOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor,
+						pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 				} else {
 					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestation(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor)
 				}
@@ -910,6 +1006,8 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		if errors.Is(explainErr, errScaleWriteRollback) {
 			explainErr = nil
 		}
+	} else if s.productionManifest != nil {
+		explainErr = s.db.ReadTransaction(ctx, runExplain, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	} else {
 		explainErr = s.db.ReadTransaction(ctx, runExplain)
 	}
@@ -941,7 +1039,13 @@ func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery str
 	}
 
 	var translation translate.Result
-	if !hasForcedToolOptions(s.toolOptions) {
+	if s.productionManifest != nil {
+		options, optionsErr := s.productionOptions(cypherQuery)
+		if optionsErr != nil {
+			return translate.Result{}, "", optionsErr
+		}
+		translation, err = translate.TranslateWithProductionOptions(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID, options)
+	} else if !hasForcedToolOptions(s.toolOptions) {
 		translation, err = translate.Translate(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID)
 	} else {
 		translation, err = translate.TranslateForTool(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID, s.toolOptions)
