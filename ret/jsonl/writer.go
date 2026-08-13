@@ -13,9 +13,15 @@ import (
 	"github.com/specterops/dawgs/ret/entity"
 )
 
-func NewNodeWriter(writer io.Writer, config Config) (Writer[entity.Node], error) {
+var (
+	ErrWriterNotOpen   = fmt.Errorf("writer is not open")
+	ErrWriterNotClosed = fmt.Errorf("writer is not closed")
+	ErrWriterFailed    = fmt.Errorf("writer failed")
+)
+
+func NewNodeWriter(writer io.Writer, config Config) (EntityWriter[entity.Node, NodeRecord], error) {
 	if err := config.validate(); err != nil {
-		return nil, err
+		return EntityWriter[entity.Node, NodeRecord]{}, err
 	}
 
 	hasher := sha256.New()
@@ -23,12 +29,12 @@ func NewNodeWriter(writer io.Writer, config Config) (Writer[entity.Node], error)
 
 	compressionWriter, err := newCompressionWriter(output, config)
 	if err != nil {
-		return nil, err
+		return EntityWriter[entity.Node, NodeRecord]{}, err
 	}
 
 	inputWriter := newCountingWriter(compressionWriter)
 
-	return &EntityWriter[entity.Node, NodeRecord]{
+	return EntityWriter[entity.Node, NodeRecord]{
 		outputWriter: output,
 		hasher:       hasher,
 
@@ -37,12 +43,14 @@ func NewNodeWriter(writer io.Writer, config Config) (Writer[entity.Node], error)
 
 		entityToRecord: nodeRecord,
 		config:         config,
+
+		state: Open,
 	}, nil
 }
 
-func NewRelationshipWriter(writer io.Writer, config Config) (Writer[entity.Relationship], error) {
+func NewRelationshipWriter(writer io.Writer, config Config) (EntityWriter[entity.Relationship, RelationshipRecord], error) {
 	if err := config.validate(); err != nil {
-		return nil, err
+		return EntityWriter[entity.Relationship, RelationshipRecord]{}, err
 	}
 
 	hasher := sha256.New()
@@ -50,12 +58,12 @@ func NewRelationshipWriter(writer io.Writer, config Config) (Writer[entity.Relat
 
 	compressionWriter, err := newCompressionWriter(output, config)
 	if err != nil {
-		return nil, err
+		return EntityWriter[entity.Relationship, RelationshipRecord]{}, err
 	}
 
 	inputWriter := newCountingWriter(compressionWriter)
 
-	return &EntityWriter[entity.Relationship, RelationshipRecord]{
+	return EntityWriter[entity.Relationship, RelationshipRecord]{
 		outputWriter: output,
 		hasher:       hasher,
 
@@ -64,13 +72,9 @@ func NewRelationshipWriter(writer io.Writer, config Config) (Writer[entity.Relat
 
 		entityToRecord: relationshipRecord,
 		config:         config,
-	}, nil
-}
 
-// Probably want ot move this to an external package and return New functions to return struct
-type Writer[E entity.Entity] interface {
-	Push([]E) error
-	Close() (Artifact, error)
+		state: Open,
+	}, nil
 }
 
 type EntityWriter[E entity.Entity, R record] struct {
@@ -84,27 +88,57 @@ type EntityWriter[E entity.Entity, R record] struct {
 
 	entityToRecord func(E) R
 	config         Config
+
+	state State
 }
 
 func (s *EntityWriter[E, R]) Push(entities []E) error {
+	switch s.state {
+	case Closed:
+		return ErrWriterNotOpen
+	case Failed:
+		return ErrWriterFailed
+	}
+
 	for _, entity := range entities {
-		s.recordCount++
+		if err := entity.Validate(); err != nil {
+			s.state = Failed
+			return err
+		}
 
 		record := s.entityToRecord(entity)
 
 		if encoded, err := json.Marshal(record); err != nil {
+			s.state = Failed
 			return err
 		} else if _, err := s.inputWriter.Write(append(encoded, '\n')); err != nil {
+			s.state = Failed
 			return err
 		}
+
+		s.recordCount++
 	}
 
 	return nil
 }
 
-func (s *EntityWriter[E, R]) Close() (Artifact, error) {
+func (s *EntityWriter[E, R]) Close() error {
 	if err := s.compressionWriter.Close(); err != nil {
-		return Artifact{}, nil
+		s.state = Failed
+		return err
+	} else if s.state != Failed {
+		s.state = Closed
+	}
+
+	return nil
+}
+
+func (s *EntityWriter[E, R]) Result() (Artifact, error) {
+	switch s.state {
+	case Open:
+		return Artifact{}, ErrWriterNotClosed
+	case Failed:
+		return Artifact{}, ErrWriterFailed
 	}
 
 	return Artifact{
@@ -148,7 +182,7 @@ func newCompressionWriter(writer io.Writer, config Config) (io.WriteCloser, erro
 	case CodecGzip:
 		return gzip.NewWriterLevel(writer, config.Level)
 	case CodecZstd:
-		return zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.EncoderLevel(config.Level)))
+		return zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(config.Level)))
 	default:
 		return nil, fmt.Errorf("unsupported JSONL codec %q", config.Codec)
 	}

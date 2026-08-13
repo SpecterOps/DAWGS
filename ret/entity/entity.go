@@ -5,6 +5,7 @@ import "errors"
 
 type Entity interface {
 	Node | Relationship
+	Validate() error
 }
 
 type Node struct {

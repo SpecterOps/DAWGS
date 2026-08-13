@@ -2,6 +2,7 @@ package jsonl
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,7 +21,9 @@ const (
 )
 
 var (
+	ErrReaderNotOpen = fmt.Errorf("reader is not open")
 	ErrReaderNotDone = fmt.Errorf("reader is not done reading")
+	ErrReaderFailed  = fmt.Errorf("reader failed")
 )
 
 func NewNodeReader(reader io.Reader, artifact Artifact) (Reader[entity.Node, NodeRecord], error) {
@@ -38,7 +41,7 @@ func NewNodeReader(reader io.Reader, artifact Artifact) (Reader[entity.Node, Nod
 
 	decomCounter := newCountingReader(decompressor)
 	scanner := bufio.NewScanner(decomCounter)
-	scanner.Buffer(make([]byte, initialLineBuffer), maxPhysicalLine)
+	scanner.Buffer(make([]byte, initialLineBuffer), maxPhysicalLine+1)
 
 	return Reader[entity.Node, NodeRecord]{
 		artifact: artifact,
@@ -68,7 +71,7 @@ func NewRelationshipReader(reader io.Reader, artifact Artifact) (Reader[entity.R
 
 	decomCounter := newCountingReader(decompressor)
 	scanner := bufio.NewScanner(decomCounter)
-	scanner.Buffer(make([]byte, initialLineBuffer), maxPhysicalLine)
+	scanner.Buffer(make([]byte, initialLineBuffer), maxPhysicalLine+1)
 
 	return Reader[entity.Relationship, RelationshipRecord]{
 		artifact: artifact,
@@ -93,66 +96,88 @@ type Reader[E entity.Entity, R record] struct {
 	scanner             *bufio.Scanner
 
 	recordToEntity func(R) E
-	count          int64
-	done           bool
+	recordCount    int64
+
+	state State
 }
 
 func (s *Reader[E, R]) Pull(limit int) ([]E, error) {
-	if s.done {
-		return nil, nil
+	switch s.state {
+	case Closed:
+		return nil, ErrReaderNotOpen
+	case Failed:
+		return nil, ErrReaderFailed
 	}
 
 	entities := make([]E, 0, limit)
 
-	for len(entities) >= limit {
+	for len(entities) < limit {
 		if !s.scanner.Scan() {
 			if err := s.scanner.Err(); err != nil {
+				s.state = Failed
 				return nil, err
 			}
 
-			s.done = true
+			s.state = Closed
 			return entities, nil
 		}
 
-		b := s.scanner.Bytes()
+		var (
+			line    = s.scanner.Bytes()
+			record  R
+			decoder = json.NewDecoder(bytes.NewReader(line))
+		)
+		decoder.DisallowUnknownFields()
 
-		var record R
-		if err := json.Unmarshal(b, &record); err != nil {
+		if err := decoder.Decode(&record); err != nil {
+			s.state = Failed
 			return nil, err
 		}
 
-		entities = append(entities, s.recordToEntity(record))
+		entity := s.recordToEntity(record)
+		if err := entity.Validate(); err != nil {
+			s.state = Failed
+			return nil, err
+		}
+
+		entities = append(entities, entity)
+		s.recordCount++
 	}
 
 	return entities, nil
 }
 
-type ReadResult struct {
-	SHA256            string
-	Count             int64
-	UncompressedBytes int64
-	StoredBytes       int64
-}
-
-func (s *Reader[E, R]) Result() (ReadResult, error) {
-	if !s.done {
-		return ReadResult{}, ErrReaderNotDone
+func (s *Reader[E, R]) Result() error {
+	if s.state == Open {
+		return ErrReaderNotDone
+	} else if s.state == Failed {
+		return ErrReaderFailed
+	} else if s.artifact.SHA256 != hex.EncodeToString(s.hasher.Sum(nil)) {
+		return fmt.Errorf("SHA256 encoding does not match")
+	} else if s.artifact.Count != s.recordCount {
+		return fmt.Errorf("Count does not match")
+	} else if s.artifact.UncompressedBytes != s.decomCountingReader.count {
+		return fmt.Errorf("UncompressedBytes does not match")
+	} else if s.artifact.StoredBytes != s.fileReader.count {
+		return fmt.Errorf("StoredBytes does not match")
 	}
 
-	return ReadResult{
-		SHA256:            hex.EncodeToString(s.hasher.Sum(nil)),
-		Count:             s.count,
-		UncompressedBytes: s.decomCountingReader.count,
-		StoredBytes:       s.fileReader.count,
-	}, nil
+	return nil
 }
 
 func (s *Reader[E, R]) Done() bool {
-	return s.done
+	return s.state != Open
 }
 
 func (s *Reader[E, R]) Close() error {
-	return s.decomReadCloser.Close()
+	if err := s.decomReadCloser.Close(); err != nil {
+		s.state = Failed
+		return err
+	} else if s.state != Failed {
+		s.state = Closed
+	}
+
+	return nil
 }
 
 func newCountingReader(reader io.Reader) *countingReader {

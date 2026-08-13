@@ -14,7 +14,7 @@ type Artifact struct {
 
 func (s Artifact) validate() error {
 	if s.SchemaVersion != SchemaVersion {
-		return fmt.Errorf("unsupported JSONL artifact schema %q", SchemaVersion)
+		return fmt.Errorf("unsupported JSONL artifact schema %q", s.SchemaVersion)
 	} else if err := validateCodecLevel(s.Codec, s.Level); err != nil {
 		return fmt.Errorf("validate JSONL artifact codec: %w", err)
 	} else if s.Count < 0 || s.UncompressedBytes < 0 || s.StoredBytes < 0 {
