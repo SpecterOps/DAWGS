@@ -265,6 +265,16 @@ func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, dia
 		}
 		return fmt.Errorf("complete performance gate requires selection manifests in both artifacts")
 	}
+	if err := validateSelectionManifestAccounting(baselineSelection); err != nil {
+		return fmt.Errorf("baseline artifact %w", err)
+	}
+	if err := validateSelectionManifestAccounting(candidateSelection); err != nil {
+		return fmt.Errorf("candidate artifact %w", err)
+	}
+	if baselineSelection.ProtectedDeclarationCount != candidateSelection.ProtectedDeclarationCount ||
+		baselineSelection.ProtectedDeclarationSHA256 != candidateSelection.ProtectedDeclarationSHA256 {
+		return fmt.Errorf("artifact protected declaration omissions differ")
+	}
 	if baselineSelection.DiagnosticOnly || candidateSelection.DiagnosticOnly {
 		if !diagnosticMode {
 			return fmt.Errorf("diagnostic-only artifacts are refused by the complete performance gate")

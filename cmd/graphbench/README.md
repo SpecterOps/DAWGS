@@ -175,6 +175,9 @@ different selector dimensions are intersected. Unknown, duplicate, ambiguous,
 or empty selections fail before a fixture is changed. Filtered captures are
 marked `diagnostic_only`, record both the requested and resolved selection and
 the omitted declaration count, and are refused by the ordinary complete gate.
+Selection-manifest schema v2 also records the count and digest of any protocol-protected
+declarations removed from its runnable universe; those omissions do not by
+themselves make an otherwise unfiltered run diagnostic-only.
 Use `-diagnostic-gate` only to compare two artifacts with the same resolved
 subset checksum.
 
@@ -855,6 +858,164 @@ diagnostic resource evidence remains isolated from the ASP I1 counter family.
 It remains default-off; `sp-static-v5-contained` continues to select the
 automatic S3/S4 production paths.
 
+### Frozen canonical-I1 qualification
+
+The `sp-i1-inbound-v1` study is a dedicated two-arm comparison between exact
+forced `SP-S4-C-WE+MAT-M0` and guarded forced
+`SP-I1-C-WE+MAT-M0`. Its fresh cohort contains four training cases at depths 4
+and 16 and three unopened holdouts at depths 8 and 32. Every case uses the
+same typed inbound one-path query with `min=1`, `max=64`, one `Traverse` kind,
+exact path observations, and forbidden fallback. GraphBench excludes these
+protocol-only holdouts from ordinary default, category, dataset, and generic-tag
+selection. Only the exact holdout protocol tag (or an exact holdout case name)
+enters the protected authorization path. Exact-name selection still fails
+closed because the only executable confirmation selection is the complete
+four-training/three-holdout cohort with a passing training freeze. The frozen
+performance study executes PostgreSQL only; Neo4j remains part of the declared
+cross-backend semantic contract, not an authorized holdout timing arm.
+
+Build GraphBench once from a clean committed tree. Keep the binary and all
+outputs under ignored `.coverage`; repeated `go run` invocations have different
+binary identities and cannot satisfy the freeze:
+
+```bash
+CAPTURE=.coverage/sp-i1-inbound-v1
+mkdir -p "$CAPTURE/bin"
+go build -trimpath -o "$CAPTURE/bin/graphbench" ./cmd/graphbench
+BIN="$CAPTURE/bin/graphbench"
+DISCOVERY_UUID="sp-i1-discovery-$(git rev-parse HEAD)"
+```
+
+Discovery opens only the four training declarations. Capture 5-20 paired
+rounds with at least 5 warmups and 10 samples per arm per round. Use the same
+UUID for both artifacts and all rounds. Odd rounds put S4 first; even rounds
+put canonical I1 first. For round 1, the two commands are:
+
+```bash
+"$BIN" \
+  -modes postgres_sql \
+  -tags sp-i1-inbound-v1-training \
+  -round 1 -block 1 -run-uuid "$DISCOVERY_UUID" \
+  -arm sp-i1-s4 -arm-order 1 \
+  -warmup-iterations 5 -iterations 10 -pool-size 1 \
+  -postgres-force-shortest-executor SP-S4-C-WE+MAT-M0 \
+  -postgres-repeatable-read \
+  -postgres-traversal-telemetry diagnostic \
+  -pg-connection "$PG_CONNECTION_STRING" \
+  -jsonl-output "$CAPTURE/discovery-s4.jsonl" -append-jsonl
+
+"$BIN" \
+  -modes postgres_sql \
+  -tags sp-i1-inbound-v1-training \
+  -round 1 -block 1 -run-uuid "$DISCOVERY_UUID" \
+  -arm sp-i1-candidate -arm-order 2 \
+  -warmup-iterations 5 -iterations 10 -pool-size 1 \
+  -postgres-force-shortest-executor SP-I1-C-WE+MAT-M0 \
+  -postgres-repeatable-read \
+  -postgres-traversal-telemetry diagnostic \
+  -pg-connection "$PG_CONNECTION_STRING" \
+  -jsonl-output "$CAPTURE/discovery-i1.jsonl" -append-jsonl
+```
+
+After all training rounds, bind resource-gate v5 to the exact candidate JSONL,
+then write the discovery report and freeze:
+
+```bash
+"$BIN" \
+  -resource-artifact "$CAPTURE/discovery-i1.jsonl" \
+  -resource-output "$CAPTURE/discovery-i1-resource.json"
+
+"$BIN" \
+  -sp-i1-baseline-artifact "$CAPTURE/discovery-s4.jsonl" \
+  -sp-i1-candidate-artifact "$CAPTURE/discovery-i1.jsonl" \
+  -sp-i1-resource-report "$CAPTURE/discovery-i1-resource.json" \
+  -sp-i1-protocol discovery \
+  -sp-i1-output "$CAPTURE/discovery-report.json" \
+  -sp-i1-freeze-output "$CAPTURE/discovery-freeze.json"
+```
+
+For structurally valid evidence, the reporter preserves the discovery result
+and freeze even when a statistical or resource disposition fails. Identity,
+path, and source-validation failures do not write an artifact. A failed freeze
+cannot authorize holdout capture. A passing freeze binds the clean source archive, commit,
+binary, query, training/full declarations and resolved selections, training
+artifacts, resource report, and the promotion-form cap names
+`state_limit`, `predecessor_limit`, `enumeration_limit`, and
+`output_bytes_limit`. Resource evidence uses the corresponding telemetry names
+`state_rows`, `predecessor_rows`, `output_rows`, and `output_bytes`. The CLI
+fixes the bootstrap seed at `1` and confidence at `0.975`, uses 10,000
+resamples, and freezes all three settings. Schedule validation checks the
+recorded invocation timestamps as well as the declared alternating order.
+Resource-gate v5 binds every decision to the exact candidate arm, round,
+block, run UUID, runtime receipt, and diagnostic counters.
+Every warm sample also carries a unique session-local runtime invocation ID,
+repeated on its receipt events; duplicate reuse anywhere in the paired study
+is rejected. Fixture
+and PostgreSQL comparison is deliberately strict, including byte-identical
+node and edge relation sizes across paired arms and rounds.
+
+Only after discovery passes may confirmation open the full four-training and
+three-holdout cohort. Every capture command must provide the freeze and its
+checksummed discovery report before database setup. Confirmation requires
+10-20 paired rounds, at least 20 warmups, 50 samples per arm per round, pool
+size 1, diagnostic telemetry, Repeatable Read, an explicit shared UUID, block
+equal to round, and the exact alternating labels/order. For confirmation round
+1, create a fresh series UUID, add these authorization and cohort flags to the
+two discovery commands, increase the sample settings, and write separate
+artifacts. Reuse that confirmation UUID across both arms and every confirmation
+round:
+
+```text
+CONFIRMATION_UUID="sp-i1-confirmation-$(git rev-parse HEAD)"
+-run-uuid "$CONFIRMATION_UUID"
+-tags sp-i1-inbound-v1-training,sp-i1-inbound-v1-holdout
+-sp-i1-freeze .coverage/sp-i1-inbound-v1/discovery-freeze.json
+-sp-i1-discovery-report .coverage/sp-i1-inbound-v1/discovery-report.json
+-sp-i1-training-baseline-artifact .coverage/sp-i1-inbound-v1/discovery-s4.jsonl
+-sp-i1-training-candidate-artifact .coverage/sp-i1-inbound-v1/discovery-i1.jsonl
+-sp-i1-training-resource-report .coverage/sp-i1-inbound-v1/discovery-i1-resource.json
+-warmup-iterations 20 -iterations 50
+```
+
+Use `sp-i1-s4` at order 1 and `sp-i1-candidate` at order 2 on odd rounds;
+reverse those orders on even rounds. Rounds after the first must use
+`-append-jsonl`. GraphBench rejects partial or extra cohorts, a changed tag or
+case declaration, source/binary drift, insufficient capture settings, path
+aliasing with freeze inputs, supplemental arms, and any attempt to enter an
+unrelated report mode with holdout authorization flags.
+Before every protected capture, GraphBench reloads those three training inputs,
+checks their frozen digests, and recomputes the discovery statistics and
+resource decisions before opening the database.
+
+Create resource-gate v5 from the complete confirmation I1 artifact, then issue
+the final report with the frozen discovery inputs:
+
+```bash
+"$BIN" \
+  -resource-artifact "$CAPTURE/confirmation-i1.jsonl" \
+  -resource-output "$CAPTURE/confirmation-i1-resource.json"
+
+"$BIN" \
+  -sp-i1-baseline-artifact "$CAPTURE/confirmation-s4.jsonl" \
+  -sp-i1-candidate-artifact "$CAPTURE/confirmation-i1.jsonl" \
+  -sp-i1-resource-report "$CAPTURE/confirmation-i1-resource.json" \
+  -sp-i1-freeze "$CAPTURE/discovery-freeze.json" \
+  -sp-i1-discovery-report "$CAPTURE/discovery-report.json" \
+  -sp-i1-training-baseline-artifact "$CAPTURE/discovery-s4.jsonl" \
+  -sp-i1-training-candidate-artifact "$CAPTURE/discovery-i1.jsonl" \
+  -sp-i1-training-resource-report "$CAPTURE/discovery-i1-resource.json" \
+  -sp-i1-protocol confirmation \
+  -sp-i1-output "$CAPTURE/confirmation-report.json"
+```
+
+Each case passes only when the candidate has complete per-sample timed runtime
+receipts with no fallback or overflow, exact observations match S4, resource
+evidence passes all four limits, the median-ratio upper bound is at most `0.95`
+or the median-saving lower bound is at least `100us`, and the p95-ratio upper
+bound is at most `1.05`. The study does not change the automatic production
+selector; a passing report is input to later canary, rollback, and promotion
+closure.
+
 Use `-postgres-production-manifest` to measure the exact guarded production
 statement from a provisional version-2 manifest before the evidence map can be
 closed. The runner validates the candidate/fallback pair, selector,
@@ -951,9 +1112,11 @@ are refused by the complete performance gate. Confirmation omits `-discovery`
 and uses fixed timeouts, arm order, warmups, and samples.
 
 The independent state/resource report is produced with
-`-resource-artifact results.jsonl -resource-output resources.json`. For
-non-stress portable PostgreSQL candidates it rejects temp spill, local
-workspace, and WAL for non-mutating reads. S4 and ASP explicitly permit their
+`-resource-artifact results.jsonl -resource-output resources.json`. Schema v5
+records the SHA-256 digest of the exact input JSONL so
+promotion evidence can verify that resource decisions remain bound to their
+capture. For non-stress portable PostgreSQL candidates it rejects temp spill,
+local workspace, and WAL for non-mutating reads. S4 and ASP explicitly permit their
 session-local compact workspace but still reject executor temp-file spill and
 WAL; exact incumbent fallback retains its documented temporary-workspace
 contract. `SP-S0-DIRECT` records are

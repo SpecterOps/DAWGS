@@ -4,6 +4,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -14,6 +16,50 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
+
+// TestResourceGateReportBindsExactInputArtifact verifies that schema v5 reports
+// retain the SHA-256 digest of the exact JSONL bytes supplied to the gate.
+func TestResourceGateReportBindsExactInputArtifact(t *testing.T) {
+	tempDir := t.TempDir()
+	artifact := filepath.Join(tempDir, "records.jsonl")
+	record := CaseResult{
+		Environment:   &RunEnvironment{Round: 3, Block: 3, RunUUID: "resource-run", Arm: "candidate", ArmOrder: 2},
+		Dataset:       "fixture",
+		Name:          "case",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape:         WorkloadShape{FixtureTier: "normal"},
+		Optimization: &translate.OptimizationSummary{
+			TargetOutcomes: []translate.TargetLoweringOutcome{{
+				Family:  "SP",
+				Applied: "SP-S4-C-D",
+			}},
+		},
+		PostgresMetrics: &PostgresPlanMetrics{},
+	}
+	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
+	artifactRaw, err := os.ReadFile(artifact)
+	require.NoError(t, err)
+	expectedDigest := sha256.Sum256(artifactRaw)
+
+	output := filepath.Join(tempDir, "report.json")
+	passed, err := createResourceGateReport(artifact, output)
+	require.NoError(t, err)
+	require.True(t, passed)
+
+	var report ResourceGateReport
+	reportRaw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(reportRaw, &report))
+	require.Equal(t, resourceGateVersion, report.Version)
+	require.Equal(t, hex.EncodeToString(expectedDigest[:]), report.ArtifactSHA256)
+	require.True(t, isLowerHexSHA256(report.ArtifactSHA256))
+	require.Equal(t, 3, report.Cases[0].Round)
+	require.Equal(t, 3, report.Cases[0].Block)
+	require.Equal(t, "resource-run", report.Cases[0].RunUUID)
+	require.Equal(t, "candidate", report.Cases[0].Arm)
+	require.Equal(t, 2, report.Cases[0].ArmOrder)
+}
 
 // TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill verifies that local workspace writes are permitted for the compact architecture while temporary-buffer spill fails the gate.
 func TestResourceGateAllowsCompactSessionWorkspaceButRejectsExecutorSpill(t *testing.T) {

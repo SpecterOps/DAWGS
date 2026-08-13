@@ -83,6 +83,22 @@ disconnected pairs, parallel relationship kinds, diamond multiplicity, and
 stress enumeration. These shapes distinguish stored-helper `ASP-A1-DAG` from
 inline `ASP-I1-U-DAG+MAT-M0` at the same full path-multiset boundary.
 
+`cases/generated_sp_i1_inbound_v1.json` is a separate canonical-witness cohort
+for comparing exact S4 with guarded `SP-I1-C-WE+MAT-M0`. Its four training
+cases use generated depths 4 and 16 and cover full-depth, early-target, and
+disconnected inbound searches. Its three blind holdouts use fresh depths 8 and
+32 and cover full-depth and disconnected searches. Every case uses the same
+typed one-kind `shortestPath` query with maximum depth 64 and an exact path-set
+observation. The disjoint `sp-i1-inbound-v1-training` and
+`sp-i1-inbound-v1-holdout` tags are protocol identities; holdout execution is
+authorized only after GraphBench validates the training freeze. Ordinary
+default, category, dataset, and generic-tag selection omit these protected
+holdouts; only the exact holdout protocol tag or an exact holdout case name
+enters the frozen authorization path. Partial selections remain forbidden: an
+authorized confirmation executes the exact four-training/three-holdout cohort
+on PostgreSQL. Neo4j remains in the declaration for cross-backend semantic
+coverage, not as a holdout timing arm in this study.
+
 `shape.fixture_tier` is one of `normal`, `envelope`, or `stress`.
 `shape.qualification_split` is independently one of `training`, `holdout`, or
 `diagnostic`; selector thresholds may use training records but must be frozen

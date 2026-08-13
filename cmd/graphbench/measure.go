@@ -76,6 +76,7 @@ type writeMeasurement struct {
 // timedReadAttestation is the runtime receipt captured outside a measured
 // query's latency boundary for that exact invocation.
 type timedReadAttestation struct {
+	InvocationID      string
 	RequestedIdentity string
 	RuntimeIdentity   string
 	RuntimeBranch     string
@@ -646,6 +647,7 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 	stats.WarmupIterations = warmupIterations
 	if attestor != nil {
 		for idx := range attestations {
+			stats.Samples[idx].RuntimeInvocationID = attestations[idx].InvocationID
 			stats.Samples[idx].RequestedIdentity = attestations[idx].RequestedIdentity
 			stats.Samples[idx].RuntimeIdentity = attestations[idx].RuntimeIdentity
 			stats.Samples[idx].RuntimeBranch = attestations[idx].RuntimeBranch

@@ -17,11 +17,14 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -385,4 +388,254 @@ func TestFixedSuffixExpansionIDRowsUseStableFixtureIdentitiesAndPreserveDuplicat
 	}
 
 	t.Fatal("fixed_suffix_expansion_endpoint_ids case not found")
+}
+
+// TestGeneratedSPI1InboundV1CorpusFreezesTrainingAndUnopenedHoldoutMatrices
+// verifies the preregistered canonical-witness cohort without executing or
+// inspecting any holdout timing. The contract binds exact generated topology,
+// stable path observations, split tags, query identity, and selection digests.
+func TestGeneratedSPI1InboundV1CorpusFreezesTrainingAndUnopenedHoldoutMatrices(t *testing.T) {
+	const (
+		query       = "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN p"
+		querySHA256 = "1024577967901503995d4ec0c76540e96b65f4d25e015ccb6eeffb500a5596f9"
+	)
+
+	type expectedCase struct {
+		dataset       string
+		config        testutil.ShortestPathScaleV2Config
+		fixtureSHA256 string
+		split         string
+		target        string
+		resultDepth   int
+		stateClass    string
+		extraTags     []string
+	}
+	expected := map[string]expectedCase{
+		"GSP-I1-V1-TRAIN-D04-FI016-full": {
+			dataset:       "generated_shortest_paths_v2_d4_o0_r4_fo0_fi16_l2_k0_t0_w0_x4_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(4, 4, 16, 2, 4),
+			fixtureSHA256: "29b0c923d7e3312ba1f19d09076006692dfc66379a524d160da8d74d9c7c3889",
+			split:         "training",
+			target:        "sp-v2-inbound-end",
+			resultDepth:   4,
+			stateClass:    "inbound_predecessor_full_depth_fanin_16",
+		},
+		"GSP-I1-V1-TRAIN-D16-FI256-early-d04": {
+			dataset:       "generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(16, 8, 256, 8, 16),
+			fixtureSHA256: "a297da4f7be1cb8621d173cd763e1fcc902b560e23d8fdfbbc9565d10c308bce",
+			split:         "training",
+			target:        "sp-v2-inbound-linear-04",
+			resultDepth:   4,
+			stateClass:    "inbound_predecessor_early_target_fanin_256",
+			extraTags:     []string{"early-target", "early-depth-4"},
+		},
+		"GSP-I1-V1-TRAIN-D16-FI256-full": {
+			dataset:       "generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(16, 8, 256, 8, 16),
+			fixtureSHA256: "a297da4f7be1cb8621d173cd763e1fcc902b560e23d8fdfbbc9565d10c308bce",
+			split:         "training",
+			target:        "sp-v2-inbound-end",
+			resultDepth:   16,
+			stateClass:    "inbound_predecessor_full_depth_fanin_256",
+		},
+		"GSP-I1-V1-TRAIN-D16-FI256-disconnected": {
+			dataset:       "generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(16, 8, 256, 8, 16),
+			fixtureSHA256: "a297da4f7be1cb8621d173cd763e1fcc902b560e23d8fdfbbc9565d10c308bce",
+			split:         "training",
+			target:        "sp-v2-disconnected-end",
+			resultDepth:   -1,
+			stateClass:    "inbound_predecessor_disconnected_fanin_256",
+			extraTags:     []string{"disconnected", "max-miss"},
+		},
+		"GSP-I1-V1-HOLDOUT-D08-FI031-full": {
+			dataset:       "generated_shortest_paths_v2_d8_o0_r3_fo0_fi31_l3_k0_t0_w0_x7_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(8, 3, 31, 3, 7),
+			fixtureSHA256: "47acf96f7862e639a8a33bc28f2c9b9e4457320e44c8e88b0b06ab2f25691e63",
+			split:         "holdout",
+			target:        "sp-v2-inbound-end",
+			resultDepth:   8,
+			stateClass:    "inbound_predecessor_full_depth_fanin_31",
+		},
+		"GSP-I1-V1-HOLDOUT-D32-FI191-full": {
+			dataset:       "generated_shortest_paths_v2_d32_o0_r11_fo0_fi191_l21_k0_t0_w0_x13_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(32, 11, 191, 21, 13),
+			fixtureSHA256: "da33b5d223d8513ff4af240613a8f976e12be6b398536bb9b4f8d5a184d9443b",
+			split:         "holdout",
+			target:        "sp-v2-inbound-end",
+			resultDepth:   32,
+			stateClass:    "inbound_predecessor_full_depth_fanin_191",
+		},
+		"GSP-I1-V1-HOLDOUT-D32-FI191-disconnected": {
+			dataset:       "generated_shortest_paths_v2_d32_o0_r11_fo0_fi191_l21_k0_t0_w0_x13_p0_c0_s0",
+			config:        spI1InboundFixtureConfig(32, 11, 191, 21, 13),
+			fixtureSHA256: "da33b5d223d8513ff4af240613a8f976e12be6b398536bb9b4f8d5a184d9443b",
+			split:         "holdout",
+			target:        "sp-v2-disconnected-end",
+			resultDepth:   -1,
+			stateClass:    "inbound_predecessor_disconnected_fanin_191",
+			extraTags:     []string{"disconnected", "max-miss"},
+		},
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	seen := map[string]bool{}
+	trainingDepths, holdoutDepths := map[int]bool{}, map[int]bool{}
+	trainingCount, holdoutCount := 0, 0
+	for _, testCase := range corpus.Cases {
+		trainingTag := slices.Contains(testCase.Tags, "sp-i1-inbound-v1-training")
+		holdoutTag := slices.Contains(testCase.Tags, "sp-i1-inbound-v1-holdout")
+		if !trainingTag && !holdoutTag {
+			continue
+		}
+		require.NotEqual(t, trainingTag, holdoutTag, testCase.Name)
+		contract, found := expected[testCase.Name]
+		require.True(t, found, "unexpected SP-I1 inbound-v1 declaration %s", testCase.Name)
+		require.False(t, seen[testCase.Name], testCase.Name)
+		seen[testCase.Name] = true
+
+		require.True(t, strings.HasSuffix(testCase.Source, "/cases/generated_sp_i1_inbound_v1.json"), testCase.Name)
+		require.Equal(t, contract.dataset, testCase.Dataset, testCase.Name)
+		require.Equal(t, "generated_shortest_path_v2", testCase.Category, testCase.Name)
+		require.Equal(t, query, testCase.Cypher, testCase.Name)
+		require.Equal(t, querySHA256, pg.TraversalPolicyQuerySHA256(testCase.Cypher), testCase.Name)
+		require.Equal(t, map[string]string{"root_id": "sp-v2-inbound-root", "end_id": contract.target}, testCase.NodeParams, testCase.Name)
+		require.Equal(t, []ExecutionMode{ModePostgresSQL, ModeNeo4j}, testCase.CandidateModes, testCase.Name)
+		require.Empty(t, testCase.UnsupportedModes, testCase.Name)
+		require.Equal(t, ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, testCase.Observes, testCase.Name)
+
+		shape := testCase.Shape
+		require.Equal(t, contract.split, shape.QualificationSplit, testCase.Name)
+		require.Equal(t, "forbidden", shape.FallbackExpectation, testCase.Name)
+		require.Equal(t, "bound_id", shape.RootPredicate, testCase.Name)
+		require.Equal(t, "bound_id", shape.TerminalPredicate, testCase.Name)
+		require.Equal(t, []string{"Traverse"}, shape.EdgeKinds, testCase.Name)
+		require.Equal(t, "inbound", shape.Direction, testCase.Name)
+		require.Equal(t, 1, shape.RelationshipKindCount, testCase.Name)
+		require.Equal(t, "normal", shape.FixtureTier, testCase.Name)
+		require.Equal(t, contract.stateClass, shape.ExpectedStateClass, testCase.Name)
+		require.NotNil(t, shape.MinDepth, testCase.Name)
+		require.NotNil(t, shape.MaxDepth, testCase.Name)
+		require.Equal(t, 1, *shape.MinDepth, testCase.Name)
+		require.Equal(t, 64, *shape.MaxDepth, testCase.Name)
+		require.True(t, shape.PathMaterializationRequired, testCase.Name)
+
+		config, ok := parseShortestPathV2DatasetName(testCase.Dataset)
+		require.True(t, ok, testCase.Name)
+		require.Equal(t, contract.config, config, testCase.Name)
+		metadata, err := fixtureMetadata("unused", testCase.Dataset)
+		require.NoError(t, err, testCase.Name)
+		require.Equal(t, contract.fixtureSHA256, metadata.Checksum, testCase.Name)
+		require.NotNil(t, metadata.Shortest, testCase.Name)
+		require.Equal(t, int64(config.Depth), metadata.Shortest.ExpectedMinimumDistance, testCase.Name)
+
+		expectedTags := []string{"generated", "v2", "normal-tier", "path", "inbound", "hidden-fan-in"}
+		expectedTags = append(expectedTags, contract.extraTags...)
+		if contract.split == "training" {
+			trainingCount++
+			trainingDepths[config.Depth] = true
+			expectedTags = append(expectedTags, "sp-i1-inbound-v1-training")
+		} else {
+			holdoutCount++
+			holdoutDepths[config.Depth] = true
+			expectedTags = append(expectedTags, "holdout", "sp-i1-inbound-v1-holdout")
+		}
+		require.Equal(t, expectedTags, testCase.Tags, testCase.Name)
+
+		require.NotNil(t, testCase.Expected.RowCount, testCase.Name)
+		require.Equal(t, "path_set", testCase.Expected.ResultKind, testCase.Name)
+		if contract.resultDepth < 0 {
+			require.Zero(t, *testCase.Expected.RowCount, testCase.Name)
+			require.Empty(t, testCase.Expected.PathRows, testCase.Name)
+			require.Equal(t, "empty", shape.ResultCardinalityClass, testCase.Name)
+		} else {
+			require.Equal(t, int64(1), *testCase.Expected.RowCount, testCase.Name)
+			require.Equal(t, []ExpectedPath{spI1InboundExpectedPath(config.Depth, contract.resultDepth)}, testCase.Expected.PathRows, testCase.Name)
+			require.Equal(t, "singleton", shape.ResultCardinalityClass, testCase.Name)
+		}
+	}
+
+	require.Len(t, seen, 7)
+	for name := range expected {
+		require.True(t, seen[name], "missing SP-I1 inbound-v1 declaration %s", name)
+	}
+	require.Len(t, spI1CanonicalCases, len(expected))
+	canonicalSeen := map[string]bool{}
+	for _, canonical := range spI1CanonicalCases {
+		contract, found := expected[canonical.name]
+		require.True(t, found, "unexpected frozen SP-I1 case %s", canonical.name)
+		require.False(t, canonicalSeen[canonical.name], canonical.name)
+		canonicalSeen[canonical.name] = true
+		require.Equal(t, contract.dataset, canonical.dataset, canonical.name)
+		require.Equal(t, contract.split, canonical.split, canonical.name)
+	}
+	require.Equal(t, seen, canonicalSeen, "corpus and qualification reporter must freeze the same SP-I1 cases")
+	require.Equal(t, 4, trainingCount)
+	require.Equal(t, 3, holdoutCount)
+	require.Equal(t, map[int]bool{4: true, 16: true}, trainingDepths)
+	require.Equal(t, map[int]bool{8: true, 32: true}, holdoutDepths)
+	for depth := range holdoutDepths {
+		require.False(t, trainingDepths[depth], "holdout depth %d is present in training", depth)
+	}
+
+	training, trainingSelection, err := selectScaleCorpus(corpus, CorpusSelectors{Tags: []string{"sp-i1-inbound-v1-training"}})
+	require.NoError(t, err)
+	require.Len(t, training.Cases, 4)
+	require.True(t, trainingSelection.DiagnosticOnly)
+	require.Equal(t, 8, trainingSelection.SelectedDeclarationCount)
+	require.Equal(t, "1162e6563678dad742d8fe89d250936862b4a73deab247cde4b5ddebdfdd93ce", trainingSelection.DeclarationSHA256)
+	require.Equal(t, "cc07b55331e15f4e268043d1ed36abf7deec7217771a1b30913db6e738d27f7a", resolvedSelectionSHA256(trainingSelection.Resolved))
+	require.Equal(t, "3da3c4b1cea3fa64fbaa1958f7bf8048639241522ccf6e46defd10d2d8c9ccd6", spI1InboundRuntimeCorpusIdentity(training))
+
+	confirmation, confirmationSelection, err := selectScaleCorpus(corpus, CorpusSelectors{Tags: []string{"sp-i1-inbound-v1-training", "sp-i1-inbound-v1-holdout"}})
+	require.NoError(t, err)
+	require.Len(t, confirmation.Cases, 7)
+	require.True(t, confirmationSelection.DiagnosticOnly)
+	require.Equal(t, 14, confirmationSelection.SelectedDeclarationCount)
+	require.Equal(t, "31f6041f342b3ed8059d4d1396a76f073c3fc877472d06632a8bad16b5a4cbfd", confirmationSelection.DeclarationSHA256)
+	require.Equal(t, "16a8756a7c32695f0314b3552c80d2a500226c7a44c57847c916a96e775aa0c5", resolvedSelectionSHA256(confirmationSelection.Resolved))
+	require.Equal(t, "219ee26cae52d8b81c6c91f9c517692c544ef4cec1aa9b9314fbc4e8f5ad3c5c", spI1InboundRuntimeCorpusIdentity(confirmation))
+}
+
+func spI1InboundFixtureConfig(depth, rootFanIn, intermediateFanIn, fanInLevel, disconnectedWidth int) testutil.ShortestPathScaleV2Config {
+	return testutil.ShortestPathScaleV2Config{
+		Depth:                    depth,
+		ReverseRootFanIn:         rootFanIn,
+		IntermediateReverseFanIn: intermediateFanIn,
+		FanInLevel:               fanInLevel,
+		DisconnectedWidth:        disconnectedWidth,
+	}
+}
+
+func spI1InboundExpectedPath(fixtureDepth, resultDepth int) ExpectedPath {
+	nodes := []string{"sp-v2-inbound-root"}
+	for level := 1; level < resultDepth; level++ {
+		nodes = append(nodes, fmt.Sprintf("sp-v2-inbound-linear-%02d", level))
+	}
+	if resultDepth == fixtureDepth {
+		nodes = append(nodes, "sp-v2-inbound-end")
+	} else {
+		nodes = append(nodes, fmt.Sprintf("sp-v2-inbound-linear-%02d", resultDepth))
+	}
+	kinds := make([]string, resultDepth)
+	keys := make([]string, resultDepth)
+	for idx := range resultDepth {
+		kinds[idx] = "Traverse"
+		keys[idx] = fmt.Sprintf("inbound-primary-%02d", fixtureDepth-idx)
+	}
+	return ExpectedPath{Nodes: nodes, RelationshipKinds: kinds, RelationshipKeys: keys}
+}
+
+// spI1InboundRuntimeCorpusIdentity normalizes the package-test corpus root to
+// the repository-root spelling used by GraphBench capture commands.
+func spI1InboundRuntimeCorpusIdentity(corpus ScaleCorpus) string {
+	canonical := ScaleCorpus{Cases: append([]ScaleCase(nil), corpus.Cases...)}
+	for idx := range canonical.Cases {
+		if offset := strings.Index(canonical.Cases[idx].Source, "benchmark/testdata/scale/"); offset >= 0 {
+			canonical.Cases[idx].Source = canonical.Cases[idx].Source[offset:]
+		}
+	}
+	return corpusIdentity(canonical)
 }

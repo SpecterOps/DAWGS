@@ -15,12 +15,14 @@ import (
 )
 
 // resourceGateVersion identifies the serialized schema revision for resource gate.
-const resourceGateVersion = 4
+const resourceGateVersion = 5
 
 // ResourceGateReport reports whether production and reference plan resources remain within their allowed envelopes.
 type ResourceGateReport struct {
 	// Version identifies the serialized schema revision.
 	Version int `json:"version"`
+	// ArtifactSHA256 binds this report to the exact input JSONL artifact.
+	ArtifactSHA256 string `json:"artifact_sha256"`
 	// Passed reports whether every required gate condition succeeded.
 	Passed bool `json:"passed"`
 	// Cases contains resource-envelope decisions for each evaluated production or reference executor.
@@ -33,6 +35,16 @@ type ResourceGateCase struct {
 	Dataset string `json:"dataset"`
 	// Name identifies the case or record within its dataset.
 	Name string `json:"name"`
+	// Round identifies the measured record that produced this decision.
+	Round int `json:"round,omitempty"`
+	// Block identifies the paired measurement block for this record.
+	Block int `json:"block,omitempty"`
+	// RunUUID binds the resource decision to one run series.
+	RunUUID string `json:"run_uuid,omitempty"`
+	// Arm identifies the measured executor arm.
+	Arm string `json:"arm,omitempty"`
+	// ArmOrder records the arm's position within its paired block.
+	ArmOrder int `json:"arm_order,omitempty"`
 	// Reference identifies the reference arm evaluated by the resource gate.
 	Reference string `json:"reference,omitempty"`
 	// Tier identifies the resource envelope applied to the case.
@@ -62,59 +74,20 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	artifactSHA256, err := fileSHA256(artifact)
+	if err != nil {
+		return false, err
+	}
 	report := ResourceGateReport{
-		Version: resourceGateVersion,
-		Passed:  true,
+		Version:        resourceGateVersion,
+		ArtifactSHA256: artifactSHA256,
+		Passed:         true,
 	}
 	for _, record := range records {
 		if record.ExecutionMode != ModePostgresSQL {
 			continue
 		}
-		gateCase := ResourceGateCase{
-			Dataset:              record.Dataset,
-			Name:                 record.Name,
-			Tier:                 record.Shape.FixtureTier,
-			QualificationSplit:   record.Shape.QualificationSplit,
-			Passed:               true,
-			RuntimeReceiptChains: runtimeReceiptChains(record.Stats.Samples),
-		}
-		if gateCase.Tier == "" {
-			gateCase.Tier = "legacy"
-		}
-		if gateCase.QualificationSplit == "" {
-			gateCase.QualificationSplit = "legacy"
-		}
-		gateCase.Architecture = appliedPostgresArchitecture(record)
-		portableCandidate := gateCase.Architecture != "" && gateCase.Architecture != "SP-S0"
-		workspaceCandidate := compactWorkspaceArchitecture(gateCase.Architecture)
-		if gateCase.Architecture == "SP-S0-DIRECT" {
-			if loops, found, err := postgresPlanFunctionLoops(record.PostgresPlanJSON, "bidirectional_sp_harness"); err != nil {
-				gateCase.Reasons = append(gateCase.Reasons, "direct preflight fallback attribution failed: "+err.Error())
-			} else if !found {
-				gateCase.Reasons = append(gateCase.Reasons, "direct preflight fallback plan node is missing")
-			} else if loops > 0 {
-				portableCandidate = false
-				gateCase.FallbackArchitecture = "SP-S0"
-			}
-		}
-		if record.Status != StatusOK {
-			gateCase.Reasons = append(gateCase.Reasons, "record status is "+record.Status)
-		}
-		if record.PostgresMetrics == nil {
-			gateCase.Reasons = append(gateCase.Reasons, "structured PostgreSQL plan metrics are missing")
-		} else if workspaceCandidate {
-			appendWorkspaceResourceReasons(&gateCase, record.PostgresMetrics)
-		} else if portableCandidate {
-			appendPortableResourceReasons(&gateCase, record.PostgresMetrics)
-		}
-		if contract, guarded := guardedInlineResourceContractForArchitecture(gateCase.Architecture); guarded {
-			appendGuardedInlineResourceBindingReasons(&gateCase, record, contract)
-		}
-		telemetryRequired := telemetryRequiredForRecord(record, gateCase.Architecture)
-		appendTelemetryResourceReasons(&gateCase, record.TraversalTelemetry, telemetryRequired)
-		appendFallbackExpectationReasons(&gateCase, record)
-		appendWorkspaceCeilingReasons(&gateCase, record.Environment, record.TraversalTelemetry, workspaceCandidate, compactBidirectionalWorkspaceArchitecture(gateCase.Architecture))
-		gateCase.Passed = len(gateCase.Reasons) == 0
+		gateCase := evaluateProductionResourceGateCase(record)
 		if !gateCase.Passed {
 			report.Passed = false
 		}
@@ -126,6 +99,11 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 			referenceCase := ResourceGateCase{
 				Dataset:            record.Dataset,
 				Name:               record.Name,
+				Round:              gateCase.Round,
+				Block:              gateCase.Block,
+				RunUUID:            gateCase.RunUUID,
+				Arm:                gateCase.Arm,
+				ArmOrder:           gateCase.ArmOrder,
 				Reference:          reference.Name,
 				Tier:               gateCase.Tier,
 				QualificationSplit: gateCase.QualificationSplit,
@@ -158,6 +136,9 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 		if report.Cases[i].Name != report.Cases[j].Name {
 			return report.Cases[i].Name < report.Cases[j].Name
 		}
+		if report.Cases[i].Round != report.Cases[j].Round {
+			return report.Cases[i].Round < report.Cases[j].Round
+		}
 		return report.Cases[i].Reference < report.Cases[j].Reference
 	})
 
@@ -175,6 +156,66 @@ func createResourceGateReport(artifact, output string) (bool, error) {
 	}
 
 	return report.Passed, nil
+}
+
+// evaluateProductionResourceGateCase derives the complete production decision
+// from one artifact record. Qualification reuses this exact evaluator so a
+// serialized report cannot suppress spill, WAL, attribution, fallback, or cap
+// failures while retaining the candidate artifact digest.
+func evaluateProductionResourceGateCase(record CaseResult) ResourceGateCase {
+	gateCase := ResourceGateCase{
+		Dataset:              record.Dataset,
+		Name:                 record.Name,
+		Tier:                 record.Shape.FixtureTier,
+		QualificationSplit:   record.Shape.QualificationSplit,
+		Passed:               true,
+		RuntimeReceiptChains: runtimeReceiptChains(record.Stats.Samples),
+	}
+	if record.Environment != nil {
+		gateCase.Round = record.Environment.Round
+		gateCase.Block = record.Environment.Block
+		gateCase.RunUUID = record.Environment.RunUUID
+		gateCase.Arm = record.Environment.Arm
+		gateCase.ArmOrder = record.Environment.ArmOrder
+	}
+	if gateCase.Tier == "" {
+		gateCase.Tier = "legacy"
+	}
+	if gateCase.QualificationSplit == "" {
+		gateCase.QualificationSplit = "legacy"
+	}
+	gateCase.Architecture = appliedPostgresArchitecture(record)
+	portableCandidate := gateCase.Architecture != "" && gateCase.Architecture != "SP-S0"
+	workspaceCandidate := compactWorkspaceArchitecture(gateCase.Architecture)
+	if gateCase.Architecture == "SP-S0-DIRECT" {
+		if loops, found, err := postgresPlanFunctionLoops(record.PostgresPlanJSON, "bidirectional_sp_harness"); err != nil {
+			gateCase.Reasons = append(gateCase.Reasons, "direct preflight fallback attribution failed: "+err.Error())
+		} else if !found {
+			gateCase.Reasons = append(gateCase.Reasons, "direct preflight fallback plan node is missing")
+		} else if loops > 0 {
+			portableCandidate = false
+			gateCase.FallbackArchitecture = "SP-S0"
+		}
+	}
+	if record.Status != StatusOK {
+		gateCase.Reasons = append(gateCase.Reasons, "record status is "+record.Status)
+	}
+	if record.PostgresMetrics == nil {
+		gateCase.Reasons = append(gateCase.Reasons, "structured PostgreSQL plan metrics are missing")
+	} else if workspaceCandidate {
+		appendWorkspaceResourceReasons(&gateCase, record.PostgresMetrics)
+	} else if portableCandidate {
+		appendPortableResourceReasons(&gateCase, record.PostgresMetrics)
+	}
+	if contract, guarded := guardedInlineResourceContractForArchitecture(gateCase.Architecture); guarded {
+		appendGuardedInlineResourceBindingReasons(&gateCase, record, contract)
+	}
+	telemetryRequired := telemetryRequiredForRecord(record, gateCase.Architecture)
+	appendTelemetryResourceReasons(&gateCase, record.TraversalTelemetry, telemetryRequired)
+	appendFallbackExpectationReasons(&gateCase, record)
+	appendWorkspaceCeilingReasons(&gateCase, record.Environment, record.TraversalTelemetry, workspaceCandidate, compactBidirectionalWorkspaceArchitecture(gateCase.Architecture))
+	gateCase.Passed = len(gateCase.Reasons) == 0
+	return gateCase
 }
 
 // compactWorkspaceArchitecture reports whether an executor deliberately uses
