@@ -250,15 +250,32 @@ func TestFixedSuffixExpansionScaleFixtureV3ControlsRootMultiplicity(t *testing.T
 // topology emitted for each enabled control.
 func TestFixedSuffixExpansionScaleFixtureV3ProductiveBoundaryControls(t *testing.T) {
 	for _, testCase := range []struct {
-		name      string
-		cycle     bool
-		selfLoop  bool
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// cycle indicates whether cycle applies.
+		cycle bool
+		// selfLoop indicates whether self loop applies.
+		selfLoop bool
+		// wantEdges retains the want edges while anonymous record is assembled or evaluated.
 		wantEdges int
 	}{
 		{name: "neither"},
-		{name: "cycle", cycle: true, wantEdges: 2},
-		{name: "self-loop", selfLoop: true, wantEdges: 1},
-		{name: "both", cycle: true, selfLoop: true, wantEdges: 3},
+		{
+			name:      "cycle",
+			cycle:     true,
+			wantEdges: 2,
+		},
+		{
+			name:      "self-loop",
+			selfLoop:  true,
+			wantEdges: 1,
+		},
+		{
+			name:      "both",
+			cycle:     true,
+			selfLoop:  true,
+			wantEdges: 3,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			reachable := 0

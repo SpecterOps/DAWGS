@@ -126,7 +126,7 @@ type ScaleCase struct {
 	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
 	// GeneratedNodeListParams maps query parameters to generated fixture node sets.
 	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
-	// Expected defines the required observable result.
+	// Expected supplies the expected input to the ScaleCase contract.
 	Expected ExpectedResult `json:"expected"`
 	// Observes identifies the normalized observation contract declared by the scale case.
 	Observes ObservedValues `json:"observes"`
@@ -140,13 +140,13 @@ type ScaleCase struct {
 	Tags []string `json:"tags,omitempty"`
 	// ReferenceDesign documents reference arms and validation boundaries applicable to the scale case.
 	ReferenceDesign *ReferenceDesign `json:"reference_design,omitempty"`
-	// WriteScenario defines the mutation and post-state checks measured for the scale case.
+	// WriteScenario supplies the write scenario input to the ScaleCase contract.
 	WriteScenario *WriteScenario `json:"write_scenario,omitempty"`
 }
 
-// ExpectedResult defines the row cardinality and normalized scalar, ID-row, or path observations a case must return.
+// ExpectedResult groups state that must remain consistent while processing expected result.
 type ExpectedResult struct {
-	// RowCount records the number of rows produced.
+	// RowCount records the number of row count.
 	RowCount *int64 `json:"row_count,omitempty"`
 	// ScalarInt sets the required scalar result when ResultKind is scalar_int.
 	ScalarInt *int64 `json:"scalar_int,omitempty"`
@@ -186,7 +186,7 @@ type WriteScenario struct {
 	ExpectedMatched *int64 `json:"expected_matched"`
 	// ExpectedAffected sets the required number of affected entities.
 	ExpectedAffected *int64 `json:"expected_affected"`
-	// PostState defines the state query evaluated after a write.
+	// PostState supplies the post state input to the WriteScenario contract.
 	PostState []ScaleStateQuery `json:"post_state"`
 }
 
@@ -204,7 +204,7 @@ type ScaleStateQuery struct {
 	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
 	// GeneratedNodeListParams maps query parameters to generated fixture node sets.
 	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
-	// Expected defines the required observable result.
+	// Expected supplies the expected input to the ScaleStateQuery contract.
 	Expected ExpectedResult `json:"expected"`
 }
 
@@ -238,7 +238,7 @@ type WorkloadShape struct {
 	EdgeKinds []string `json:"edge_kinds,omitempty"`
 	// Direction sets the traversal direction.
 	Direction string `json:"direction,omitempty"`
-	// RelationshipKindCount records the number of relationship kinds in the workload.
+	// RelationshipKindCount records the number of relationship kind count.
 	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
 	// FixtureTier identifies the fixture scale tier.
 	FixtureTier string `json:"fixture_tier,omitempty"`

@@ -219,7 +219,11 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 				if step.Relationship == nil || step.Relationship.Range == nil || stepIndex == 0 {
 					continue
 				}
-				target := PatternTarget{QueryPartIndex: queryPartIndex, ClauseIndex: clauseIndex, PatternIndex: patternIndex}.TraversalStep(stepIndex)
+				target := PatternTarget{
+					QueryPartIndex: queryPartIndex,
+					ClauseIndex:    clauseIndex,
+					PatternIndex:   patternIndex,
+				}.TraversalStep(stepIndex)
 				prefixLength := stepIndex
 				terminal := stepIndex == len(steps)-1
 				directedPrefix := true
@@ -256,25 +260,82 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 					observation = ExpansionSearchObservationFullPath
 				}
 				facts := []ExpansionSearchEligibilityFact{
-					{Name: "read_only", Eligible: updatingClauses == 0},
-					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
-					{Name: "ordinary_path", Eligible: patternPart != nil && !patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern},
-					{Name: "single_variable_expansion_in_region", Eligible: variableExpansions == 1},
-					{Name: "terminal_expansion", Eligible: terminal},
-					{Name: "exact_one_hop_prefix", Eligible: prefixLength == 1 && prefixFixed},
-					{Name: "directed_prefix", Eligible: directedPrefix},
-					{Name: "directed_expansion", Eligible: step.Relationship.Direction != graph.DirectionBoth},
-					{Name: "supported_effective_depth", Eligible: maxDepth >= minDepth && maxDepth <= 64},
-					{Name: "minimum_depth_one", Eligible: minDepth >= 1},
-					{Name: "terminal_unbound", Eligible: !terminalCorrelated},
-					{Name: "selective_terminal_predicate", Eligible: terminalSelective},
-					{Name: "terminal_predicate_local", Eligible: terminalPredicateLocal},
-					{Name: "single_relationship_kind", Eligible: len(step.Relationship.Kinds) == 1},
-					{Name: "no_relationship_variable", Eligible: step.Relationship.Variable == nil},
-					{Name: "no_relationship_predicate", Eligible: !relationshipPredicate},
-					{Name: "no_path_dependent_predicate", Eligible: !pathDependentPredicate},
-					{Name: "deterministic_predicates", Eligible: deterministicPredicates},
-					{Name: "supported_observation", Eligible: observation != ExpansionSearchObservationUnsupported},
+					{
+						Name:     "read_only",
+						Eligible: updatingClauses == 0,
+					},
+					{
+						Name:     "non_optional",
+						Eligible: !readingClause.Match.Optional,
+					},
+					{
+						Name:     "ordinary_path",
+						Eligible: patternPart != nil && !patternPart.ShortestPathPattern && !patternPart.AllShortestPathsPattern,
+					},
+					{
+						Name:     "single_variable_expansion_in_region",
+						Eligible: variableExpansions == 1,
+					},
+					{
+						Name:     "terminal_expansion",
+						Eligible: terminal,
+					},
+					{
+						Name:     "exact_one_hop_prefix",
+						Eligible: prefixLength == 1 && prefixFixed,
+					},
+					{
+						Name:     "directed_prefix",
+						Eligible: directedPrefix,
+					},
+					{
+						Name:     "directed_expansion",
+						Eligible: step.Relationship.Direction != graph.DirectionBoth,
+					},
+					{
+						Name:     "supported_effective_depth",
+						Eligible: maxDepth >= minDepth && maxDepth <= 64,
+					},
+					{
+						Name:     "minimum_depth_one",
+						Eligible: minDepth >= 1,
+					},
+					{
+						Name:     "terminal_unbound",
+						Eligible: !terminalCorrelated,
+					},
+					{
+						Name:     "selective_terminal_predicate",
+						Eligible: terminalSelective,
+					},
+					{
+						Name:     "terminal_predicate_local",
+						Eligible: terminalPredicateLocal,
+					},
+					{
+						Name:     "single_relationship_kind",
+						Eligible: len(step.Relationship.Kinds) == 1,
+					},
+					{
+						Name:     "no_relationship_variable",
+						Eligible: step.Relationship.Variable == nil,
+					},
+					{
+						Name:     "no_relationship_predicate",
+						Eligible: !relationshipPredicate,
+					},
+					{
+						Name:     "no_path_dependent_predicate",
+						Eligible: !pathDependentPredicate,
+					},
+					{
+						Name:     "deterministic_predicates",
+						Eligible: deterministicPredicates,
+					},
+					{
+						Name:     "supported_observation",
+						Eligible: observation != ExpansionSearchObservationUnsupported,
+					},
 				}
 				eligible := expansionSearchFactsEligible(facts)
 				fallbackReason := ExpansionSearchFallbackTournamentUnqualified
@@ -1466,6 +1527,7 @@ func hasExactRangeExpansionDecision(plan *LoweringPlan, target TraversalStepTarg
 	return false
 }
 
+// ExactPatternRangeDepth evaluates planner state needed for exact pattern range depth.
 func ExactPatternRangeDepth(patternRange *cypher.PatternRange) int64 {
 	if patternRange == nil || patternRange.StartIndex == nil || patternRange.EndIndex == nil {
 		return 0
@@ -1494,6 +1556,7 @@ type quantifierCollector struct {
 	quantifiers []indexedQuantifier
 }
 
+// Enter evaluates planner state needed for enter.
 func (s *quantifierCollector) Enter(node cypher.SyntaxNode) {
 	if quantifier, isQuantifier := node.(*cypher.Quantifier); isQuantifier {
 		s.quantifiers = append(s.quantifiers, indexedQuantifier{
@@ -1503,8 +1566,11 @@ func (s *quantifierCollector) Enter(node cypher.SyntaxNode) {
 	}
 }
 
+// Visit evaluates planner state needed for visit.
 func (s *quantifierCollector) Visit(cypher.SyntaxNode) {}
-func (s *quantifierCollector) Exit(cypher.SyntaxNode)  {}
+
+// Exit evaluates planner state needed for exit.
+func (s *quantifierCollector) Exit(cypher.SyntaxNode) {}
 
 // indexedQuantifiersInQueryPart returns all quantifiers in stable syntax traversal order.
 func indexedQuantifiersInQueryPart(queryPart cypher.SyntaxNode) []indexedQuantifier {
@@ -2923,7 +2989,7 @@ type bindingTargetKey struct {
 	Symbol string
 }
 
-// appendPredicatePlacementDecisions records the earliest traversal scope where each attached predicate is evaluable.
+// appendPredicatePlacementDecisions appends predicate placement decisions.
 func appendPredicatePlacementDecisions(plan *LoweringPlan, query *cypher.RegularQuery, predicateAttachments []PredicateAttachment) {
 	if len(predicateAttachments) == 0 {
 		return
@@ -2994,6 +3060,7 @@ func appendAggregateTraversalCountDecisions(plan *LoweringPlan, query *cypher.Re
 	}
 }
 
+// AggregateTraversalCountShapeForQuery constructs the SQL model used for aggregate traversal count shape for query.
 func AggregateTraversalCountShapeForQuery(query *cypher.RegularQuery) (AggregateTraversalCountShape, bool) {
 	if query == nil || query.SingleQuery == nil || query.SingleQuery.MultiPartQuery == nil {
 		return AggregateTraversalCountShape{}, false

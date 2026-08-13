@@ -32,7 +32,7 @@ type commandConfig struct {
 	Neo4jConnection string
 	// TopPlans limits expensive PostgreSQL plans included in the summary.
 	TopPlans int
-	// DAWGSVersion records the DAWGS source version attached to artifact provenance.
+	// DAWGSVersion identifies the schema version for dawgs version.
 	DAWGSVersion string
 }
 

@@ -45,7 +45,7 @@ type resolvedWriteScenario struct {
 	ExpectedMatched int64
 	// ExpectedAffected sets the required number of affected entities.
 	ExpectedAffected int64
-	// PostState defines the state query evaluated after a write.
+	// PostState supplies the post state input to the resolvedWriteScenario contract.
 	PostState []resolvedStateQuery
 }
 
@@ -57,7 +57,7 @@ type resolvedStateQuery struct {
 	Cypher string
 	// Params supplies literal query parameters.
 	Params map[string]any
-	// Expected defines the required observable result.
+	// Expected supplies the expected input to the resolvedStateQuery contract.
 	Expected ExpectedResult
 }
 
@@ -76,18 +76,26 @@ type writeMeasurement struct {
 // timedReadAttestation is the runtime receipt captured outside a measured
 // query's latency boundary for that exact invocation.
 type timedReadAttestation struct {
-	InvocationID      string
+	// InvocationID identifies the invocation id.
+	InvocationID string
+	// RequestedIdentity identifies the requested identity.
 	RequestedIdentity string
-	RuntimeIdentity   string
-	RuntimeBranch     string
-	FallbackExecuted  *bool
-	Events            []RuntimeReceiptEvent
+	// RuntimeIdentity identifies the runtime identity.
+	RuntimeIdentity string
+	// RuntimeBranch supplies the runtime branch input to the timedReadAttestation contract.
+	RuntimeBranch string
+	// FallbackExecuted supplies the fallback executed input to the timedReadAttestation contract.
+	FallbackExecuted *bool
+	// Events supplies the events input to the timedReadAttestation contract.
+	Events []RuntimeReceiptEvent
 }
 
 // timedReadAttestor arms and reads invocation-local runtime evidence. Begin
 // and Complete execute outside the duration measurement.
 type timedReadAttestor interface {
+	// Begin supplies the begin input to the timedReadAttestor contract.
 	Begin(context.Context, int) error
+	// Complete supplies the complete input to the timedReadAttestor contract.
 	Complete(context.Context, int) (timedReadAttestation, error)
 }
 
@@ -520,6 +528,7 @@ func measureCypherWithWarmups(ctx context.Context, db graph.Database, cypher str
 	return measureReadWithWarmups(ctx, db, cypher, params, expected, idMap, warmupIterations, iterations, false)
 }
 
+// measureCypherWithWarmupsOptions derives execution options for measure cypher with warmups.
 func measureCypherWithWarmupsOptions(ctx context.Context, db graph.Database, cypher string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
 	return measureReadWithWarmupsAndAttestation(ctx, db, cypher, params, expected, idMap, warmupIterations, iterations, false, nil, options...)
 }
@@ -529,6 +538,7 @@ func measureRawSQLWithWarmups(ctx context.Context, db graph.Database, sql string
 	return measureReadWithWarmups(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true)
 }
 
+// measureRawSQLWithWarmupsOptions derives execution options for measure raw sql with warmups.
 func measureRawSQLWithWarmupsOptions(ctx context.Context, db graph.Database, sql string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
 	return measureReadWithWarmupsAndAttestation(ctx, db, sql, params, expected, idMap, warmupIterations, iterations, true, nil, options...)
 }
@@ -552,6 +562,7 @@ func measureReadWithWarmups(ctx context.Context, db graph.Database, query string
 	return measureReadWithWarmupsAndAttestation(ctx, db, query, params, expected, idMap, warmupIterations, iterations, raw, nil)
 }
 
+// measureReadWithWarmupsAndAttestation supports benchmark evidence processing for measure read with warmups and attestation.
 func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database, query string, params map[string]any, expected ExpectedResult, idMap opengraph.IDMap, warmupIterations, iterations int, raw bool, attestor timedReadAttestor, options ...graph.TransactionOption) (int64, []string, DurationStats, error) {
 	if iterations < 1 {
 		return 0, nil, DurationStats{}, fmt.Errorf("iterations must be at least 1")

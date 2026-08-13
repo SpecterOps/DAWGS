@@ -64,18 +64,27 @@ const (
 	LoweringTraversalPredicateClassification = "TraversalPredicateClassificationDecision"
 )
 
+// LoweringDecision records the planner choice made for lowering.
 type LoweringDecision struct {
+	// Name identifies the name.
 	Name string `json:"name"`
 }
 
+// PatternTarget locates the query element affected by pattern.
 type PatternTarget struct {
-	QueryPartIndex int  `json:"query_part_index"`
-	ClauseIndex    int  `json:"clause_index"`
-	PatternIndex   int  `json:"pattern_index"`
-	Predicate      bool `json:"predicate,omitempty"`
-	PredicateIndex int  `json:"predicate_index,omitempty"`
+	// QueryPartIndex supplies the query part index input to the PatternTarget contract.
+	QueryPartIndex int `json:"query_part_index"`
+	// ClauseIndex supplies the clause index input to the PatternTarget contract.
+	ClauseIndex int `json:"clause_index"`
+	// PatternIndex supplies the pattern index input to the PatternTarget contract.
+	PatternIndex int `json:"pattern_index"`
+	// Predicate indicates whether predicate applies.
+	Predicate bool `json:"predicate,omitempty"`
+	// PredicateIndex supplies the predicate index input to the PatternTarget contract.
+	PredicateIndex int `json:"predicate_index,omitempty"`
 }
 
+// TraversalStep evaluates planner state needed for traversal step.
 func (s PatternTarget) TraversalStep(stepIndex int) TraversalStepTarget {
 	return TraversalStepTarget{
 		QueryPartIndex: s.QueryPartIndex,
@@ -87,28 +96,46 @@ func (s PatternTarget) TraversalStep(stepIndex int) TraversalStepTarget {
 	}
 }
 
+// TraversalStepTarget locates the query element affected by traversal step.
 type TraversalStepTarget struct {
-	QueryPartIndex int  `json:"query_part_index"`
-	ClauseIndex    int  `json:"clause_index"`
-	PatternIndex   int  `json:"pattern_index"`
-	Predicate      bool `json:"predicate,omitempty"`
-	PredicateIndex int  `json:"predicate_index,omitempty"`
-	StepIndex      int  `json:"step_index"`
+	// QueryPartIndex supplies the query part index input to the TraversalStepTarget contract.
+	QueryPartIndex int `json:"query_part_index"`
+	// ClauseIndex supplies the clause index input to the TraversalStepTarget contract.
+	ClauseIndex int `json:"clause_index"`
+	// PatternIndex supplies the pattern index input to the TraversalStepTarget contract.
+	PatternIndex int `json:"pattern_index"`
+	// Predicate indicates whether predicate applies.
+	Predicate bool `json:"predicate,omitempty"`
+	// PredicateIndex supplies the predicate index input to the TraversalStepTarget contract.
+	PredicateIndex int `json:"predicate_index,omitempty"`
+	// StepIndex supplies the step index input to the TraversalStepTarget contract.
+	StepIndex int `json:"step_index"`
 }
 
+// QuantifierTarget locates the query element affected by quantifier.
 type QuantifierTarget struct {
-	QueryPartIndex  int `json:"query_part_index"`
+	// QueryPartIndex supplies the query part index input to the QuantifierTarget contract.
+	QueryPartIndex int `json:"query_part_index"`
+	// QuantifierIndex supplies the quantifier index input to the QuantifierTarget contract.
 	QuantifierIndex int `json:"quantifier_index"`
 }
 
+// ProjectionPruningDecision records the planner choice made for projection pruning.
 type ProjectionPruningDecision struct {
-	Target                   TraversalStepTarget `json:"target"`
-	ReferencedSymbols        []string            `json:"referenced_symbols,omitempty"`
-	PatternBindingReferenced bool                `json:"pattern_binding_referenced,omitempty"`
-	OmitLeftNode             bool                `json:"omit_left_node,omitempty"`
-	OmitRelationship         bool                `json:"omit_relationship,omitempty"`
-	OmitRightNode            bool                `json:"omit_right_node,omitempty"`
-	OmitPathBinding          bool                `json:"omit_path_binding,omitempty"`
+	// Target supplies the target input to the ProjectionPruningDecision contract.
+	Target TraversalStepTarget `json:"target"`
+	// ReferencedSymbols supplies the referenced symbols input to the ProjectionPruningDecision contract.
+	ReferencedSymbols []string `json:"referenced_symbols,omitempty"`
+	// PatternBindingReferenced indicates whether pattern binding referenced applies.
+	PatternBindingReferenced bool `json:"pattern_binding_referenced,omitempty"`
+	// OmitLeftNode indicates whether omit left node applies.
+	OmitLeftNode bool `json:"omit_left_node,omitempty"`
+	// OmitRelationship indicates whether omit relationship applies.
+	OmitRelationship bool `json:"omit_relationship,omitempty"`
+	// OmitRightNode indicates whether omit right node applies.
+	OmitRightNode bool `json:"omit_right_node,omitempty"`
+	// OmitPathBinding indicates whether omit path binding applies.
+	OmitPathBinding bool `json:"omit_path_binding,omitempty"`
 }
 
 type LatePathMaterializationMode string
@@ -124,19 +151,28 @@ const (
 	LatePathMaterializationEdgeComposite LatePathMaterializationMode = "edge_composite"
 )
 
+// LatePathMaterializationDecision records the planner choice made for late path materialization.
 type LatePathMaterializationDecision struct {
-	Target TraversalStepTarget         `json:"target"`
-	Mode   LatePathMaterializationMode `json:"mode"`
+	// Target supplies the target input to the LatePathMaterializationDecision contract.
+	Target TraversalStepTarget `json:"target"`
+	// Mode identifies the mode.
+	Mode LatePathMaterializationMode `json:"mode"`
 }
 
+// ExpandIntoDecision records the planner choice made for expand into.
 type ExpandIntoDecision struct {
+	// Target supplies the target input to the ExpandIntoDecision contract.
 	Target TraversalStepTarget `json:"target"`
 }
 
+// TraversalDirectionDecision records the planner choice made for traversal direction.
 type TraversalDirectionDecision struct {
+	// Target supplies the target input to the TraversalDirectionDecision contract.
 	Target TraversalStepTarget `json:"target"`
-	Flip   bool                `json:"flip,omitempty"`
-	Reason string              `json:"reason,omitempty"`
+	// Flip indicates whether flip applies.
+	Flip bool `json:"flip,omitempty"`
+	// Reason supplies the reason input to the TraversalDirectionDecision contract.
+	Reason string `json:"reason,omitempty"`
 }
 
 type ShortestPathStrategy string
@@ -149,10 +185,14 @@ const (
 	ShortestPathStrategyUnidirectional ShortestPathStrategy = "unidirectional"
 )
 
+// ShortestPathStrategyDecision records the planner choice made for shortest path strategy.
 type ShortestPathStrategyDecision struct {
-	Target   TraversalStepTarget  `json:"target"`
+	// Target supplies the target input to the ShortestPathStrategyDecision contract.
+	Target TraversalStepTarget `json:"target"`
+	// Strategy supplies the strategy input to the ShortestPathStrategyDecision contract.
 	Strategy ShortestPathStrategy `json:"strategy"`
-	Reason   string               `json:"reason,omitempty"`
+	// Reason supplies the reason input to the ShortestPathStrategyDecision contract.
+	Reason string `json:"reason,omitempty"`
 }
 
 type ShortestPathExecutor string
@@ -470,10 +510,14 @@ const (
 	ShortestPathFilterEndpointPair ShortestPathFilterMode = "endpoint_pair"
 )
 
+// ShortestPathFilterDecision records the planner choice made for shortest path filter.
 type ShortestPathFilterDecision struct {
-	Target TraversalStepTarget    `json:"target"`
-	Mode   ShortestPathFilterMode `json:"mode"`
-	Reason string                 `json:"reason,omitempty"`
+	// Target supplies the target input to the ShortestPathFilterDecision contract.
+	Target TraversalStepTarget `json:"target"`
+	// Mode identifies the mode.
+	Mode ShortestPathFilterMode `json:"mode"`
+	// Reason supplies the reason input to the ShortestPathFilterDecision contract.
+	Reason string `json:"reason,omitempty"`
 }
 
 type LimitPushdownMode string
@@ -486,9 +530,12 @@ const (
 	LimitPushdownShortestPathHarness LimitPushdownMode = "shortest_path_harness"
 )
 
+// LimitPushdownDecision records the planner choice made for limit pushdown.
 type LimitPushdownDecision struct {
+	// Target supplies the target input to the LimitPushdownDecision contract.
 	Target TraversalStepTarget `json:"target"`
-	Mode   LimitPushdownMode   `json:"mode"`
+	// Mode identifies the mode.
+	Mode LimitPushdownMode `json:"mode"`
 }
 
 // ExpansionSuffixPushdownDecision describes a fixed traversal suffix evaluated for supplemental search.
@@ -747,7 +794,7 @@ type ExpansionSearchStrategyDecision struct {
 	ExecutionBoundary string `json:"execution_boundary,omitempty"`
 	// ProbeCaps records bounded evidence inputs for the planned policy.
 	ProbeCaps ExpansionSearchProbeCaps `json:"probe_caps"`
-	// Admission records the exact specialized-state gate and fallback chain.
+	// Admission supplies the admission input to the ExpansionSearchStrategyDecision contract.
 	Admission ExpansionSearchAdmission `json:"admission"`
 	// CandidateStrategy is the specialized strategy proposed by structural analysis.
 	CandidateStrategy ExpansionSearchStrategy `json:"candidate_strategy,omitempty"`
@@ -781,7 +828,7 @@ type ExpansionSearchStrategyDecision struct {
 	HasFinalLimit bool `json:"has_final_limit,omitempty"`
 	// ObservationMode describes the representation required by downstream consumers.
 	ObservationMode ExpansionSearchObservationMode `json:"observation_mode"`
-	// LogicalDirection records the variable expansion's Cypher direction.
+	// LogicalDirection supplies the logical direction input to the ExpansionSearchStrategyDecision contract.
 	LogicalDirection string `json:"logical_direction"`
 	// MinimumDepth is the inclusive lower expansion-depth bound.
 	MinimumDepth int64 `json:"minimum_depth"`
@@ -797,10 +844,14 @@ type ExpansionSearchStrategyDecision struct {
 	FallbackReason string `json:"fallback_reason"`
 }
 
+// PredicatePlacementDecision records the planner choice made for predicate placement.
 type PredicatePlacementDecision struct {
-	Target     TraversalStepTarget      `json:"target"`
-	Attachment PredicateAttachment      `json:"attachment"`
-	Placement  PredicateAttachmentScope `json:"placement"`
+	// Target supplies the target input to the PredicatePlacementDecision contract.
+	Target TraversalStepTarget `json:"target"`
+	// Attachment supplies the attachment input to the PredicatePlacementDecision contract.
+	Attachment PredicateAttachment `json:"attachment"`
+	// Placement supplies the placement input to the PredicatePlacementDecision contract.
+	Placement PredicateAttachmentScope `json:"placement"`
 }
 
 type PatternPredicatePlacementMode string
@@ -810,9 +861,12 @@ const (
 	PatternPredicatePlacementExistence PatternPredicatePlacementMode = "existence"
 )
 
+// PatternPredicatePlacementDecision records the planner choice made for pattern predicate placement.
 type PatternPredicatePlacementDecision struct {
-	Target TraversalStepTarget           `json:"target"`
-	Mode   PatternPredicatePlacementMode `json:"mode"`
+	// Target supplies the target input to the PatternPredicatePlacementDecision contract.
+	Target TraversalStepTarget `json:"target"`
+	// Mode identifies the mode.
+	Mode PatternPredicatePlacementMode `json:"mode"`
 }
 
 type CountStoreFastPathTarget string
@@ -825,33 +879,54 @@ const (
 	CountStoreFastPathEdge CountStoreFastPathTarget = "edge"
 )
 
+// CountStoreFastPathDecision records the planner choice made for count store fast path.
 type CountStoreFastPathDecision struct {
-	QueryPartIndex int                      `json:"query_part_index"`
-	ClauseIndex    int                      `json:"clause_index"`
-	PatternIndex   int                      `json:"pattern_index"`
-	BindingSymbol  string                   `json:"binding_symbol,omitempty"`
-	Target         CountStoreFastPathTarget `json:"target"`
-	KindSymbols    []string                 `json:"kind_symbols,omitempty"`
+	// QueryPartIndex supplies the query part index input to the CountStoreFastPathDecision contract.
+	QueryPartIndex int `json:"query_part_index"`
+	// ClauseIndex supplies the clause index input to the CountStoreFastPathDecision contract.
+	ClauseIndex int `json:"clause_index"`
+	// PatternIndex supplies the pattern index input to the CountStoreFastPathDecision contract.
+	PatternIndex int `json:"pattern_index"`
+	// BindingSymbol supplies the binding symbol input to the CountStoreFastPathDecision contract.
+	BindingSymbol string `json:"binding_symbol,omitempty"`
+	// Target supplies the target input to the CountStoreFastPathDecision contract.
+	Target CountStoreFastPathTarget `json:"target"`
+	// KindSymbols supplies the kind symbols input to the CountStoreFastPathDecision contract.
+	KindSymbols []string `json:"kind_symbols,omitempty"`
 }
 
+// ExactRangeExpansionDecision records the planner choice made for exact range expansion.
 type ExactRangeExpansionDecision struct {
+	// Target supplies the target input to the ExactRangeExpansionDecision contract.
 	Target TraversalStepTarget `json:"target"`
-	Depth  int64               `json:"depth"`
+	// Depth supplies the depth input to the ExactRangeExpansionDecision contract.
+	Depth int64 `json:"depth"`
 }
 
+// PathRelationshipPredicateDecision records the planner choice made for path relationship predicate.
 type PathRelationshipPredicateDecision struct {
-	Target        QuantifierTarget `json:"target"`
-	PathSymbol    string           `json:"path_symbol"`
-	BindingSymbol string           `json:"binding_symbol"`
+	// Target supplies the target input to the PathRelationshipPredicateDecision contract.
+	Target QuantifierTarget `json:"target"`
+	// PathSymbol supplies the path symbol input to the PathRelationshipPredicateDecision contract.
+	PathSymbol string `json:"path_symbol"`
+	// BindingSymbol supplies the binding symbol input to the PathRelationshipPredicateDecision contract.
+	BindingSymbol string `json:"binding_symbol"`
 }
 
+// AggregateTraversalCountDecision records the planner choice made for aggregate traversal count.
 type AggregateTraversalCountDecision struct {
-	QueryPartIndex int                 `json:"query_part_index"`
-	SourceSymbol   string              `json:"source_symbol"`
-	TerminalSymbol string              `json:"terminal_symbol"`
-	CountAlias     string              `json:"count_alias"`
-	Limit          int64               `json:"limit,omitempty"`
-	Target         TraversalStepTarget `json:"target"`
+	// QueryPartIndex supplies the query part index input to the AggregateTraversalCountDecision contract.
+	QueryPartIndex int `json:"query_part_index"`
+	// SourceSymbol supplies the source symbol input to the AggregateTraversalCountDecision contract.
+	SourceSymbol string `json:"source_symbol"`
+	// TerminalSymbol supplies the terminal symbol input to the AggregateTraversalCountDecision contract.
+	TerminalSymbol string `json:"terminal_symbol"`
+	// CountAlias supplies the count alias input to the AggregateTraversalCountDecision contract.
+	CountAlias string `json:"count_alias"`
+	// Limit supplies the limit input to the AggregateTraversalCountDecision contract.
+	Limit int64 `json:"limit,omitempty"`
+	// Target supplies the target input to the AggregateTraversalCountDecision contract.
+	Target TraversalStepTarget `json:"target"`
 }
 
 type FieldRequirement string
@@ -879,7 +954,7 @@ const (
 	FieldRequirementFullPath FieldRequirement = "full_path"
 )
 
-// FieldRequirementUse records the representation required at one ordered use of a binding.
+// FieldRequirementUse groups planner state that must remain consistent while analyzing field requirement use.
 type FieldRequirementUse struct {
 	// Ordinal orders this use relative to the other uses in its query part.
 	Ordinal int `json:"ordinal"`
@@ -905,24 +980,42 @@ type FieldRequirementDecision struct {
 	LastUse int `json:"last_use"`
 }
 
+// AggregateTraversalCountShape groups planner state that must remain consistent while analyzing aggregate traversal count shape.
 type AggregateTraversalCountShape struct {
-	QueryPartIndex    int
-	SourceSymbol      string
-	TerminalSymbol    string
-	CountAlias        string
+	// QueryPartIndex supplies the query part index input to the AggregateTraversalCountShape contract.
+	QueryPartIndex int
+	// SourceSymbol supplies the source symbol input to the AggregateTraversalCountShape contract.
+	SourceSymbol string
+	// TerminalSymbol supplies the terminal symbol input to the AggregateTraversalCountShape contract.
+	TerminalSymbol string
+	// CountAlias supplies the count alias input to the AggregateTraversalCountShape contract.
+	CountAlias string
+	// ReturnSourceAlias supplies the return source alias input to the AggregateTraversalCountShape contract.
 	ReturnSourceAlias string
-	ReturnCountAlias  string
-	ReturnCount       bool
-	Limit             int64
-	SourceMatch       *cypher.Match
-	TerminalMatch     *cypher.Match
-	SourceKinds       graph.Kinds
-	TerminalKinds     graph.Kinds
+	// ReturnCountAlias supplies the return count alias input to the AggregateTraversalCountShape contract.
+	ReturnCountAlias string
+	// ReturnCount records the number of return count.
+	ReturnCount bool
+	// Limit supplies the limit input to the AggregateTraversalCountShape contract.
+	Limit int64
+	// SourceMatch supplies the source match input to the AggregateTraversalCountShape contract.
+	SourceMatch *cypher.Match
+	// TerminalMatch supplies the terminal match input to the AggregateTraversalCountShape contract.
+	TerminalMatch *cypher.Match
+	// SourceKinds supplies the source kinds input to the AggregateTraversalCountShape contract.
+	SourceKinds graph.Kinds
+	// TerminalKinds supplies the terminal kinds input to the AggregateTraversalCountShape contract.
+	TerminalKinds graph.Kinds
+	// RelationshipKinds supplies the relationship kinds input to the AggregateTraversalCountShape contract.
 	RelationshipKinds graph.Kinds
-	Direction         graph.Direction
-	MinDepth          int64
-	MaxDepth          int64
-	Target            TraversalStepTarget
+	// Direction selects the traversal orientation covered by the contract.
+	Direction graph.Direction
+	// MinDepth supplies the min depth input to the AggregateTraversalCountShape contract.
+	MinDepth int64
+	// MaxDepth supplies the max depth input to the AggregateTraversalCountShape contract.
+	MaxDepth int64
+	// Target supplies the target input to the AggregateTraversalCountShape contract.
+	Target TraversalStepTarget
 }
 
 // LoweringPlan records lowering analyses and semantic or physical decisions for a query.
@@ -943,7 +1036,7 @@ type LoweringPlan struct {
 	LimitPushdown []LimitPushdownDecision `json:"limit_pushdown,omitempty"`
 	// ExpansionSuffixPushdown records fixed suffixes considered for supplemental filtering, including withheld candidates.
 	ExpansionSuffixPushdown []ExpansionSuffixPushdownDecision `json:"expansion_suffix_pushdown,omitempty"`
-	// PredicatePlacement records the earliest safe traversal scope for attached predicates.
+	// PredicatePlacement supplies the predicate placement input to the LoweringPlan contract.
 	PredicatePlacement []PredicatePlacementDecision `json:"predicate_placement,omitempty"`
 	// PatternPredicate records existence lowering selected for pattern predicates.
 	PatternPredicate []PatternPredicatePlacementDecision `json:"pattern_predicate_placement,omitempty"`
@@ -1021,6 +1114,7 @@ func (s LoweringPlan) Decisions() []LoweringDecision {
 	return decisions
 }
 
+// IndexPatternTargets evaluates planner state needed for index pattern targets.
 func IndexPatternTargets(query *cypher.RegularQuery) map[*cypher.PatternPart]PatternTarget {
 	targets := map[*cypher.PatternPart]PatternTarget{}
 
@@ -1047,6 +1141,7 @@ func IndexPatternTargets(query *cypher.RegularQuery) map[*cypher.PatternPart]Pat
 	return targets
 }
 
+// IndexPatternPredicateTargets evaluates planner state needed for index pattern predicate targets.
 func IndexPatternPredicateTargets(query *cypher.RegularQuery) map[*cypher.PatternPredicate]PatternTarget {
 	targets := map[*cypher.PatternPredicate]PatternTarget{}
 

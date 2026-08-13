@@ -70,8 +70,14 @@ func TestParseConfigAcceptsNamedBundleEvidence(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []CaptureBundleEvidenceInput{
-		{Name: "host-aa", Path: ".coverage/aa.json"},
-		{Name: "plan-delta", Path: ".coverage/plan-delta.json"},
+		{
+			Name: "host-aa",
+			Path: ".coverage/aa.json",
+		},
+		{
+			Name: "plan-delta",
+			Path: ".coverage/plan-delta.json",
+		},
 	}, cfg.BundleEvidence)
 }
 
@@ -89,6 +95,7 @@ func TestParseConfigAcceptsStandaloneBundleVerification(t *testing.T) {
 	require.True(t, cfg.BundleRequireClean)
 }
 
+// TestParseConfigAcceptsOnlyStandalonePromotionManifestVerification verifies parse config accepts only standalone promotion manifest verification behavior.
 func TestParseConfigAcceptsOnlyStandalonePromotionManifestVerification(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"-promotion-manifest", "promotion.json",
@@ -163,6 +170,7 @@ func TestParseConfigAcceptsOrientationSelectorReport(t *testing.T) {
 	require.Equal(t, referencePairProtocolConfirmation, cfg.OrientationProtocol)
 }
 
+// TestParseConfigAcceptsOrientationSelectorV2Report verifies parse config accepts orientation selector v2 report behavior.
 func TestParseConfigAcceptsOrientationSelectorV2Report(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"-orientation-v2-shadow-artifact", "shadow-v2.jsonl",
@@ -187,6 +195,7 @@ func TestParseConfigAcceptsOrientationSelectorV2Report(t *testing.T) {
 	require.Equal(t, "orientation-v2.json", cfg.OrientationV2Output)
 }
 
+// TestParseConfigAcceptsOrientationSelectorV2DiscoveryFreeze verifies parse config accepts orientation selector v2 discovery freeze behavior.
 func TestParseConfigAcceptsOrientationSelectorV2DiscoveryFreeze(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"-orientation-v2-shadow-artifact", "shadow-v2.jsonl",
@@ -205,6 +214,7 @@ func TestParseConfigAcceptsOrientationSelectorV2DiscoveryFreeze(t *testing.T) {
 	require.Equal(t, "orientation-v2-freeze.json", cfg.OrientationV2FreezeOutput)
 }
 
+// TestParseConfigRejectsIncompleteOrMixedOrientationSelectorV2Report verifies parse config rejects incomplete or mixed orientation selector v2 report behavior.
 func TestParseConfigRejectsIncompleteOrMixedOrientationSelectorV2Report(t *testing.T) {
 	complete := []string{
 		"-orientation-v2-shadow-artifact", "shadow-v2.jsonl",
@@ -231,6 +241,7 @@ func TestParseConfigRejectsIncompleteOrMixedOrientationSelectorV2Report(t *testi
 	}
 }
 
+// TestParseConfigAcceptsSPI1StagedDiscoveryAndConfirmation verifies parse config accepts spi1 staged discovery and confirmation behavior.
 func TestParseConfigAcceptsSPI1StagedDiscoveryAndConfirmation(t *testing.T) {
 	discovery, err := parseConfig([]string{
 		"-sp-i1-baseline-artifact", "s4-training.jsonl",
@@ -263,6 +274,7 @@ func TestParseConfigAcceptsSPI1StagedDiscoveryAndConfirmation(t *testing.T) {
 	require.Equal(t, "sp-i1-discovery.json", confirmation.SPI1DiscoveryReport)
 }
 
+// TestParseConfigAcceptsSPI1HoldoutCaptureAuthorization verifies parse config accepts spi1 holdout capture authorization behavior.
 func TestParseConfigAcceptsSPI1HoldoutCaptureAuthorization(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"-sp-i1-freeze", "sp-i1-freeze.json",
@@ -288,6 +300,7 @@ func TestParseConfigAcceptsSPI1HoldoutCaptureAuthorization(t *testing.T) {
 	require.Empty(t, cfg.SPI1BaselineArtifact)
 }
 
+// TestParseConfigRejectsIncompleteOrMixedSPI1StagedWorkflow verifies parse config rejects incomplete or mixed spi1 staged workflow behavior.
 func TestParseConfigRejectsIncompleteOrMixedSPI1StagedWorkflow(t *testing.T) {
 	discovery := []string{
 		"-sp-i1-baseline-artifact", "s4.jsonl",
@@ -313,6 +326,7 @@ func TestParseConfigRejectsIncompleteOrMixedSPI1StagedWorkflow(t *testing.T) {
 	}
 }
 
+// TestParseConfigAcceptsProductionManifestAndRejectsToolMixing verifies parse config accepts production manifest and rejects tool mixing behavior.
 func TestParseConfigAcceptsProductionManifestAndRejectsToolMixing(t *testing.T) {
 	cfg, err := parseConfig([]string{"-postgres-production-manifest", "provisional.json"}, func(string) string { return "" })
 	require.NoError(t, err)
@@ -395,6 +409,7 @@ func TestParseConfigAcceptsReferenceTournament(t *testing.T) {
 	require.Equal(t, referencePairProtocolConfirmation, cfg.ReferenceTournamentProtocol)
 }
 
+// TestParseConfigRejectsInvalidReferenceTournament verifies parse config rejects invalid reference tournament behavior.
 func TestParseConfigRejectsInvalidReferenceTournament(t *testing.T) {
 	for _, args := range [][]string{
 		{"-reference-tournament-output", "tournament.json"},

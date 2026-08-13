@@ -97,8 +97,20 @@ func TestBackendDeltaReportDoesNotTreatAbsentObservationsAsMatching(t *testing.T
 	root := t.TempDir()
 	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
 	records := []CaseResult{
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK, RowCount: 1},
-		{Dataset: "fixture", Name: "case", ExecutionMode: ModeNeo4j, Status: StatusOK, RowCount: 1},
+		{
+			Dataset:       "fixture",
+			Name:          "case",
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			RowCount:      1,
+		},
+		{
+			Dataset:       "fixture",
+			Name:          "case",
+			ExecutionMode: ModeNeo4j,
+			Status:        StatusOK,
+			RowCount:      1,
+		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, records))
 	require.NoError(t, createBackendDeltaReport(artifact, output))

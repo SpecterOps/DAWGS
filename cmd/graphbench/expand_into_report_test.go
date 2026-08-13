@@ -29,35 +29,68 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 			orders[spec.name] = idx + 2
 		}
 		record := CaseResult{
-			Environment:         &RunEnvironment{Round: round, WarmupIterations: 5},
+			Environment: &RunEnvironment{
+				Round:            round,
+				WarmupIterations: 5,
+			},
 			PostgresEnvironment: &PostgresEnvironment{PlanCacheMode: "force_custom_plan"},
-			Dataset:             "expand_into", Name: "pair", Category: "expand_into_one_hop",
-			Shape: WorkloadShape{FixtureTier: "normal", QualificationSplit: "training"}, ExecutionMode: ModePostgresSQL, Status: StatusOK,
-			RowCount: 1, ObservedRows: []string{`["edge"]`},
+			Dataset:             "expand_into",
+			Name:                "pair",
+			Category:            "expand_into_one_hop",
+			Shape: WorkloadShape{
+				FixtureTier:        "normal",
+				QualificationSplit: "training",
+			},
+			ExecutionMode: ModePostgresSQL,
+			Status:        StatusOK,
+			RowCount:      1,
+			ObservedRows:  []string{`["edge"]`},
 		}
 		for idx, name := range expandIntoStudyArms {
 			duration := time.Duration(100-idx*10) * time.Microsecond
 			var samples []LatencySample
 			for sample := 0; sample < 10; sample++ {
-				samples = append(samples, LatencySample{Classification: "warm", Duration: duration + time.Duration(sample)})
+				samples = append(samples, LatencySample{
+					Classification: "warm",
+					Duration:       duration + time.Duration(sample),
+				})
 			}
 			plan := []string{"Nested Loop  (cost=0.00..1.00 rows=1 width=8)", "  ->  Index Scan using edge_start_id_idx on edge  (cost=0.00..1.00 rows=1 width=8)", "        Index Cond: (start_id = input_pairs.start_id)"}
 			if name == "expand_into_pair_cache" {
 				plan = []string{"Hash Join  (cost=0.00..1.00 rows=1 width=8)", "  ->  Memoize  (cost=0.00..1.00 rows=1 width=8)"}
 			}
 			record.PostgresReferences = append(record.PostgresReferences, PostgresReferenceResult{
-				SchemaVersion: postgresReferenceSchemaVersion, Name: name, Architecture: "architecture-" + name,
-				ImplementationID: name + "-v1", StateShape: "state", ObservationShape: "relationships",
-				SemanticValidation: "exact_public_observation", Boundary: "relationships", TimingBoundary: "raw_pgx",
-				FullComparator: true, MeasurementOrder: orders[name], SQL: "select '" + name + "'", SQLFingerprint: name,
-				RowCount: 1, ObservedRows: []string{`["edge"]`}, Stats: DurationStats{WarmupIterations: 5, Samples: samples},
+				SchemaVersion:      postgresReferenceSchemaVersion,
+				Name:               name,
+				Architecture:       "architecture-" + name,
+				ImplementationID:   name + "-v1",
+				StateShape:         "state",
+				ObservationShape:   "relationships",
+				SemanticValidation: "exact_public_observation",
+				Boundary:           "relationships",
+				TimingBoundary:     "raw_pgx",
+				FullComparator:     true,
+				MeasurementOrder:   orders[name],
+				SQL:                "select '" + name + "'",
+				SQLFingerprint:     name,
+				RowCount:           1,
+				ObservedRows:       []string{`["edge"]`},
+				Stats: DurationStats{
+					WarmupIterations: 5,
+					Samples:          samples,
+				},
 				PostgresPlan: plan,
 			})
 		}
 		records = append(records, record)
 	}
 
-	report, err := buildExpandIntoStudyReport(records, ExpandIntoStudyOptions{Seed: 1, Confidence: .975, BootstrapCount: 100, Protocol: referencePairProtocolDiscovery})
+	report, err := buildExpandIntoStudyReport(records, ExpandIntoStudyOptions{
+		Seed:           1,
+		Confidence:     .975,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolDiscovery,
+	})
 	require.NoError(t, err)
 	require.True(t, report.Passed)
 	require.Equal(t, 1, report.TrainingCases)
@@ -80,7 +113,10 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "expand-into.json")
 	require.NoError(t, writeJSONLFile(artifactPath, records))
 	require.NoError(t, createExpandIntoStudyReport(artifactPath, outputPath, ExpandIntoStudyOptions{
-		Seed: 1, Confidence: .975, BootstrapCount: 100, Protocol: referencePairProtocolDiscovery,
+		Seed:           1,
+		Confidence:     .975,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolDiscovery,
 	}))
 	content, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
@@ -93,7 +129,10 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 	var confirmationRecords []CaseResult
 	for round := 1; round <= 10; round++ {
 		record := records[(round-1)%len(records)]
-		record.Environment = &RunEnvironment{Round: round, WarmupIterations: 20}
+		record.Environment = &RunEnvironment{
+			Round:            round,
+			WarmupIterations: 20,
+		}
 		planModes := []string{"auto", "force_custom_plan", "force_generic_plan"}
 		record.PostgresEnvironment = &PostgresEnvironment{PlanCacheMode: planModes[(round-1)%len(planModes)]}
 		record.PostgresReferences = append([]PostgresReferenceResult(nil), record.PostgresReferences...)
@@ -112,7 +151,10 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 			duration := reference.Stats.Samples[0].Duration
 			reference.Stats.Samples = make([]LatencySample, 50)
 			for sample := range reference.Stats.Samples {
-				reference.Stats.Samples[sample] = LatencySample{Classification: "warm", Duration: duration + time.Duration(sample)}
+				reference.Stats.Samples[sample] = LatencySample{
+					Classification: "warm",
+					Duration:       duration + time.Duration(sample),
+				}
 			}
 		}
 		confirmationRecords = append(confirmationRecords, record)
@@ -122,7 +164,10 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 		confirmationRecords = append(confirmationRecords, holdout)
 	}
 	confirmation, err := buildExpandIntoStudyReport(confirmationRecords, ExpandIntoStudyOptions{
-		Seed: 1, Confidence: .975, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           1,
+		Confidence:     .975,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.NoError(t, err)
 	require.True(t, confirmation.Passed)
@@ -139,7 +184,10 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 		}
 	}
 	trainingOnlyReport, err := buildExpandIntoStudyReport(trainingOnly, ExpandIntoStudyOptions{
-		Seed: 1, Confidence: .975, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           1,
+		Confidence:     .975,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.NoError(t, err)
 	require.False(t, trainingOnlyReport.Passed)
@@ -151,7 +199,10 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 		confirmationRecords[idx].PostgresEnvironment = &PostgresEnvironment{PlanCacheMode: "force_custom_plan"}
 	}
 	incompleteModes, err := buildExpandIntoStudyReport(confirmationRecords, ExpandIntoStudyOptions{
-		Seed: 1, Confidence: .975, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           1,
+		Confidence:     .975,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.NoError(t, err)
 	require.False(t, incompleteModes.Passed)
@@ -162,18 +213,39 @@ func TestBuildExpandIntoStudyReportValidatesThreeArmEvidence(t *testing.T) {
 // TestBuildExpandIntoStudyReportFailsClosedOnObservationOrOrderMismatch verifies plan evidence cannot qualify without exact rows and declared carryover order.
 func TestBuildExpandIntoStudyReportFailsClosedOnObservationOrOrderMismatch(t *testing.T) {
 	record := CaseResult{
-		Environment: &RunEnvironment{Round: 1, WarmupIterations: 5}, Dataset: "expand_into", Name: "pair",
-		Category: "expand_into_one_hop", Shape: WorkloadShape{FixtureTier: "normal", QualificationSplit: "training"},
-		ExecutionMode: ModePostgresSQL, Status: StatusOK, RowCount: 1, ObservedRows: []string{"public"},
+		Environment: &RunEnvironment{
+			Round:            1,
+			WarmupIterations: 5,
+		},
+		Dataset:  "expand_into",
+		Name:     "pair",
+		Category: "expand_into_one_hop",
+		Shape: WorkloadShape{
+			FixtureTier:        "normal",
+			QualificationSplit: "training",
+		},
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		RowCount:      1,
+		ObservedRows:  []string{"public"},
 	}
 	for _, name := range expandIntoStudyArms {
 		record.PostgresReferences = append(record.PostgresReferences, PostgresReferenceResult{
-			Name: name, Architecture: name, ImplementationID: name, FullComparator: true,
-			SemanticValidation: "exact_public_observation", RowCount: 1, ObservedRows: []string{"different"},
-			Stats: DurationStats{WarmupIterations: 5}, MeasurementOrder: 2,
+			Name:               name,
+			Architecture:       name,
+			ImplementationID:   name,
+			FullComparator:     true,
+			SemanticValidation: "exact_public_observation",
+			RowCount:           1,
+			ObservedRows:       []string{"different"},
+			Stats:              DurationStats{WarmupIterations: 5},
+			MeasurementOrder:   2,
 		})
 	}
-	_, err := buildExpandIntoStudyReport([]CaseResult{record}, ExpandIntoStudyOptions{Confidence: .975, Protocol: referencePairProtocolDiscovery})
+	_, err := buildExpandIntoStudyReport([]CaseResult{record}, ExpandIntoStudyOptions{
+		Confidence: .975,
+		Protocol:   referencePairProtocolDiscovery,
+	})
 	require.ErrorContains(t, err, "not an exact public comparator")
 }
 
@@ -181,9 +253,21 @@ func TestBuildExpandIntoStudyReportFailsClosedOnObservationOrOrderMismatch(t *te
 // a durable diagnostic report cannot be mistaken for a successful gate.
 func TestCreateExpandIntoStudyReportPersistsAndRejectsIncompleteEvidence(t *testing.T) {
 	record := CaseResult{
-		Environment: &RunEnvironment{Round: 1, WarmupIterations: 5}, Dataset: "expand_into", Name: "pair",
-		Category: "expand_into_one_hop", Shape: WorkloadShape{FixtureTier: "normal", QualificationSplit: "training"}, ExecutionMode: ModePostgresSQL,
-		Status: StatusOK, RowCount: 1, ObservedRows: []string{`["edge"]`},
+		Environment: &RunEnvironment{
+			Round:            1,
+			WarmupIterations: 5,
+		},
+		Dataset:  "expand_into",
+		Name:     "pair",
+		Category: "expand_into_one_hop",
+		Shape: WorkloadShape{
+			FixtureTier:        "normal",
+			QualificationSplit: "training",
+		},
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		RowCount:      1,
+		ObservedRows:  []string{`["edge"]`},
 	}
 	orderSpecs := make([]postgresReferenceSpec, len(expandIntoStudyArms))
 	for idx, name := range expandIntoStudyArms {
@@ -195,18 +279,36 @@ func TestCreateExpandIntoStudyReportPersistsAndRejectsIncompleteEvidence(t *test
 	}
 	for _, name := range expandIntoStudyArms {
 		record.PostgresReferences = append(record.PostgresReferences, PostgresReferenceResult{
-			Name: name, Architecture: name, ImplementationID: name + "-v1", StateShape: "state",
-			ObservationShape: "relationships", Boundary: "relationships", TimingBoundary: "raw_pgx",
-			FullComparator: true, SemanticValidation: "exact_public_observation", RowCount: 1,
-			ObservedRows: []string{`["edge"]`}, SQL: "select '" + name + "'", MeasurementOrder: orders[name],
-			Stats: DurationStats{WarmupIterations: 5, Samples: []LatencySample{{Classification: "warm", Duration: time.Millisecond}}},
+			Name:               name,
+			Architecture:       name,
+			ImplementationID:   name + "-v1",
+			StateShape:         "state",
+			ObservationShape:   "relationships",
+			Boundary:           "relationships",
+			TimingBoundary:     "raw_pgx",
+			FullComparator:     true,
+			SemanticValidation: "exact_public_observation",
+			RowCount:           1,
+			ObservedRows:       []string{`["edge"]`},
+			SQL:                "select '" + name + "'",
+			MeasurementOrder:   orders[name],
+			Stats: DurationStats{
+				WarmupIterations: 5,
+				Samples: []LatencySample{{
+					Classification: "warm",
+					Duration:       time.Millisecond,
+				}},
+			},
 		})
 	}
 	artifactPath := filepath.Join(t.TempDir(), "incomplete.jsonl")
 	outputPath := filepath.Join(t.TempDir(), "report.json")
 	require.NoError(t, writeJSONLFile(artifactPath, []CaseResult{record}))
 	require.ErrorContains(t, createExpandIntoStudyReport(artifactPath, outputPath, ExpandIntoStudyOptions{
-		Seed: 1, Confidence: .975, BootstrapCount: 100, Protocol: referencePairProtocolDiscovery,
+		Seed:           1,
+		Confidence:     .975,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolDiscovery,
 	}), "did not pass")
 
 	content, err := os.ReadFile(outputPath)

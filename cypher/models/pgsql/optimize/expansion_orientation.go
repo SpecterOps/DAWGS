@@ -5,40 +5,69 @@ package optimize
 // suffix-specific analyzers retain their own correctness facts and fallback
 // reasons, then use this type to produce a consistent public decision.
 type contiguousExpansionOrientationCandidate struct {
-	Target             TraversalStepTarget
-	Family             string
-	PlannedPolicy      ExpansionSearchPolicy
-	EmittedPolicy      ExpansionSearchPolicy
-	PlannedCandidates  []ExpansionSearchStrategy
-	EmittedCandidates  []ExpansionSearchStrategy
-	CandidateStrategy  ExpansionSearchStrategy
-	ProbeCaps          ExpansionSearchProbeCaps
-	Admission          ExpansionSearchAdmission
-	PrefixStartStep    int
-	PrefixEndStep      int
-	PrefixLength       int
-	SuffixStartStep    int
-	SuffixEndStep      int
-	SuffixLength       int
+	// Target supplies the target input to the contiguousExpansionOrientationCandidate contract.
+	Target TraversalStepTarget
+	// Family supplies the family input to the contiguousExpansionOrientationCandidate contract.
+	Family string
+	// PlannedPolicy identifies the planned policy.
+	PlannedPolicy ExpansionSearchPolicy
+	// EmittedPolicy identifies the emitted policy.
+	EmittedPolicy ExpansionSearchPolicy
+	// PlannedCandidates supplies the planned candidates input to the contiguousExpansionOrientationCandidate contract.
+	PlannedCandidates []ExpansionSearchStrategy
+	// EmittedCandidates supplies the emitted candidates input to the contiguousExpansionOrientationCandidate contract.
+	EmittedCandidates []ExpansionSearchStrategy
+	// CandidateStrategy supplies the candidate strategy input to the contiguousExpansionOrientationCandidate contract.
+	CandidateStrategy ExpansionSearchStrategy
+	// ProbeCaps supplies the probe caps input to the contiguousExpansionOrientationCandidate contract.
+	ProbeCaps ExpansionSearchProbeCaps
+	// Admission supplies the admission input to the contiguousExpansionOrientationCandidate contract.
+	Admission ExpansionSearchAdmission
+	// PrefixStartStep supplies the prefix start step input to the contiguousExpansionOrientationCandidate contract.
+	PrefixStartStep int
+	// PrefixEndStep supplies the prefix end step input to the contiguousExpansionOrientationCandidate contract.
+	PrefixEndStep int
+	// PrefixLength supplies the prefix length input to the contiguousExpansionOrientationCandidate contract.
+	PrefixLength int
+	// SuffixStartStep supplies the suffix start step input to the contiguousExpansionOrientationCandidate contract.
+	SuffixStartStep int
+	// SuffixEndStep supplies the suffix end step input to the contiguousExpansionOrientationCandidate contract.
+	SuffixEndStep int
+	// SuffixLength supplies the suffix length input to the contiguousExpansionOrientationCandidate contract.
+	SuffixLength int
+	// SeedPredicateClass supplies the seed predicate class input to the contiguousExpansionOrientationCandidate contract.
 	SeedPredicateClass string
-	EndpointLimit      int64
+	// EndpointLimit supplies the endpoint limit input to the contiguousExpansionOrientationCandidate contract.
+	EndpointLimit int64
 }
 
 // contiguousExpansionOrientationQualification contains analysis results that
 // remain specific to the fixed-prefix or fixed-suffix correctness envelope.
 type contiguousExpansionOrientationQualification struct {
-	SelectedStrategy     ExpansionSearchStrategy
+	// SelectedStrategy supplies the selected strategy input to the contiguousExpansionOrientationQualification contract.
+	SelectedStrategy ExpansionSearchStrategy
+	// StructurallyEligible indicates whether structurally eligible applies.
 	StructurallyEligible bool
-	StaticallyEligible   bool
-	EligibilityFacts     []ExpansionSearchEligibilityFact
-	HasFinalLimit        bool
-	ObservationMode      ExpansionSearchObservationMode
-	LogicalDirection     string
-	MinimumDepth         int64
-	MaximumDepth         int64
-	SelectionMode        string
-	SelectorVersion      string
-	FallbackReason       string
+	// StaticallyEligible indicates whether statically eligible applies.
+	StaticallyEligible bool
+	// EligibilityFacts supplies the eligibility facts input to the contiguousExpansionOrientationQualification contract.
+	EligibilityFacts []ExpansionSearchEligibilityFact
+	// HasFinalLimit indicates whether has final limit applies.
+	HasFinalLimit bool
+	// ObservationMode identifies the observation mode.
+	ObservationMode ExpansionSearchObservationMode
+	// LogicalDirection supplies the logical direction input to the contiguousExpansionOrientationQualification contract.
+	LogicalDirection string
+	// MinimumDepth sets the inclusive lower traversal-depth bound.
+	MinimumDepth int64
+	// MaximumDepth sets the inclusive upper traversal-depth bound.
+	MaximumDepth int64
+	// SelectionMode identifies the selection mode.
+	SelectionMode string
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string
+	// FallbackReason supplies the fallback reason input to the contiguousExpansionOrientationQualification contract.
+	FallbackReason string
 }
 
 // decision combines common orientation metadata with family-specific

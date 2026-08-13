@@ -34,9 +34,9 @@ type BackendDeltaCase struct {
 	Complete bool `json:"complete"`
 	// IncompleteReason identifies the absent backend side.
 	IncompleteReason string `json:"incomplete_reason,omitempty"`
-	// PostgresStatus records the PostgreSQL execution status for the matched round.
+	// PostgresStatus supplies the postgres status input to the BackendDeltaCase contract.
 	PostgresStatus string `json:"postgres_status"`
-	// Neo4jStatus records the Neo4j execution status for the matched round.
+	// Neo4jStatus supplies the neo4j status input to the BackendDeltaCase contract.
 	Neo4jStatus string `json:"neo4j_status"`
 	// PostgresMedian records PostgreSQL median latency for the matched round.
 	PostgresMedian time.Duration `json:"postgres_median,omitempty"`

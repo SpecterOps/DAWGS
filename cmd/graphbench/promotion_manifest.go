@@ -17,12 +17,15 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// promotionManifestVersion reserves the stable protocol value used to recognize promotion manifest version across artifacts and executions.
 const promotionManifestVersion = 2
 
+// requiredPromotionEvidenceRoles contains the frozen required promotion evidence roles declaration consulted by package validation.
 var requiredPromotionEvidenceRoles = []string{
 	"aa", "confirmation", "performance", "resource", "reference_closure", "operational",
 }
 
+// orientationPromotionCaps returns the resource limits enforced for orientation promotion.
 func orientationPromotionCaps() map[string]int64 {
 	return map[string]int64{
 		"root_row_limit":               optimize.ExpansionSearchOrientationRootRowLimit,
@@ -32,6 +35,7 @@ func orientationPromotionCaps() map[string]int64 {
 	}
 }
 
+// validateStaticV6CanonicalInboundBucket validates static v6 canonical inbound bucket.
 func validateStaticV6CanonicalInboundBucket(bucket PromotionBucket) error {
 	if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationOnePath) ||
 		bucket.MinimumDepth != 1 || bucket.MaximumDepth != 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
@@ -40,67 +44,109 @@ func validateStaticV6CanonicalInboundBucket(bucket PromotionBucket) error {
 	return nil
 }
 
+// PromotionEvidenceReference groups state that must remain consistent while processing promotion evidence reference.
 type PromotionEvidenceReference struct {
-	Path   string `json:"path"`
+	// Path identifies the filesystem path.
+	Path string `json:"path"`
+	// SHA256 binds the referenced  content by SHA-256 digest.
 	SHA256 string `json:"sha256"`
 }
 
+// PromotionBucket groups state that must remain consistent while processing promotion bucket.
 type PromotionBucket struct {
-	Name                  string   `json:"name"`
-	QuerySHA256           []string `json:"query_sha256"`
-	Direction             string   `json:"direction,omitempty"`
-	ObservationMode       string   `json:"observation_mode,omitempty"`
-	MinimumDepth          int      `json:"minimum_depth,omitempty"`
-	MaximumDepth          int      `json:"maximum_depth,omitempty"`
-	RelationshipKindCount int      `json:"relationship_kind_count,omitempty"`
-	UntypedRelationship   bool     `json:"untyped_relationship,omitempty"`
-	QualificationSplit    []string `json:"qualification_split"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// QuerySHA256 binds the referenced query content by SHA-256 digest.
+	QuerySHA256 []string `json:"query_sha256"`
+	// Direction selects the traversal orientation covered by the contract.
+	Direction string `json:"direction,omitempty"`
+	// ObservationMode identifies the observation mode.
+	ObservationMode string `json:"observation_mode,omitempty"`
+	// MinimumDepth sets the inclusive lower traversal-depth bound.
+	MinimumDepth int `json:"minimum_depth,omitempty"`
+	// MaximumDepth sets the inclusive upper traversal-depth bound.
+	MaximumDepth int `json:"maximum_depth,omitempty"`
+	// RelationshipKindCount records the number of relationship kind count.
+	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
+	// UntypedRelationship indicates whether untyped relationship applies.
+	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
+	QualificationSplit []string `json:"qualification_split"`
 }
 
 // PromotionManifest is the sole authorization record consumed by a rollout.
 // It binds one immutable candidate and selector to source, binary, corpus,
 // caps, exact query cohorts, and every required passing report.
 type PromotionManifest struct {
-	Version           int                                   `json:"version"`
-	Candidate         string                                `json:"candidate"`
-	SelectorVersion   string                                `json:"selector_version"`
-	ExecutionBoundary string                                `json:"execution_boundary"`
-	FallbackExecutor  string                                `json:"fallback_executor,omitempty"`
-	SourceCommit      string                                `json:"source_commit"`
-	SourceSHA256      string                                `json:"source_sha256"`
-	BinarySHA256      string                                `json:"binary_sha256"`
-	CorpusSHA256      string                                `json:"corpus_sha256"`
-	Caps              map[string]int64                      `json:"caps"`
-	Buckets           []PromotionBucket                     `json:"buckets"`
-	Evidence          map[string]PromotionEvidenceReference `json:"evidence"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// Candidate identifies the execution strategy being evaluated or authorized.
+	Candidate string `json:"candidate"`
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string `json:"selector_version"`
+	// ExecutionBoundary supplies the execution boundary input to the PromotionManifest contract.
+	ExecutionBoundary string `json:"execution_boundary"`
+	// FallbackExecutor supplies the fallback executor input to the PromotionManifest contract.
+	FallbackExecutor string `json:"fallback_executor,omitempty"`
+	// SourceCommit supplies the source commit input to the PromotionManifest contract.
+	SourceCommit string `json:"source_commit"`
+	// SourceSHA256 binds the referenced source content by SHA-256 digest.
+	SourceSHA256 string `json:"source_sha256"`
+	// BinarySHA256 binds the referenced binary content by SHA-256 digest.
+	BinarySHA256 string `json:"binary_sha256"`
+	// CorpusSHA256 binds the referenced corpus content by SHA-256 digest.
+	CorpusSHA256 string `json:"corpus_sha256"`
+	// Caps binds each guarded resource dimension to its enforced limit.
+	Caps map[string]int64 `json:"caps"`
+	// Buckets supplies the buckets input to the PromotionManifest contract.
+	Buckets []PromotionBucket `json:"buckets"`
+	// Evidence supplies the evidence input to the PromotionManifest contract.
+	Evidence map[string]PromotionEvidenceReference `json:"evidence"`
 }
 
 // PromotionEvidenceIdentity is repeated verbatim by every evidence report.
 // It deliberately excludes evidence paths and digests, avoiding a circular
 // dependency while binding the report to every authorization-relevant field.
 type PromotionEvidenceIdentity struct {
-	Candidate         string            `json:"candidate"`
-	SelectorVersion   string            `json:"selector_version"`
-	ExecutionBoundary string            `json:"execution_boundary"`
-	FallbackExecutor  string            `json:"fallback_executor,omitempty"`
-	SourceCommit      string            `json:"source_commit"`
-	SourceSHA256      string            `json:"source_sha256"`
-	BinarySHA256      string            `json:"binary_sha256"`
-	CorpusSHA256      string            `json:"corpus_sha256"`
-	Caps              map[string]int64  `json:"caps"`
-	Buckets           []PromotionBucket `json:"buckets"`
+	// Candidate identifies the execution strategy being evaluated or authorized.
+	Candidate string `json:"candidate"`
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string `json:"selector_version"`
+	// ExecutionBoundary supplies the execution boundary input to the PromotionEvidenceIdentity contract.
+	ExecutionBoundary string `json:"execution_boundary"`
+	// FallbackExecutor supplies the fallback executor input to the PromotionEvidenceIdentity contract.
+	FallbackExecutor string `json:"fallback_executor,omitempty"`
+	// SourceCommit supplies the source commit input to the PromotionEvidenceIdentity contract.
+	SourceCommit string `json:"source_commit"`
+	// SourceSHA256 binds the referenced source content by SHA-256 digest.
+	SourceSHA256 string `json:"source_sha256"`
+	// BinarySHA256 binds the referenced binary content by SHA-256 digest.
+	BinarySHA256 string `json:"binary_sha256"`
+	// CorpusSHA256 binds the referenced corpus content by SHA-256 digest.
+	CorpusSHA256 string `json:"corpus_sha256"`
+	// Caps binds each guarded resource dimension to its enforced limit.
+	Caps map[string]int64 `json:"caps"`
+	// Buckets supplies the buckets input to the PromotionEvidenceIdentity contract.
+	Buckets []PromotionBucket `json:"buckets"`
 }
 
+// promotionEvidenceIdentity derives the stable identity used to compare promotion evidence.
 func promotionEvidenceIdentity(manifest PromotionManifest) PromotionEvidenceIdentity {
 	return PromotionEvidenceIdentity{
-		Candidate: manifest.Candidate, SelectorVersion: manifest.SelectorVersion,
-		ExecutionBoundary: manifest.ExecutionBoundary, FallbackExecutor: manifest.FallbackExecutor,
-		SourceCommit: manifest.SourceCommit, SourceSHA256: manifest.SourceSHA256,
-		BinarySHA256: manifest.BinarySHA256, CorpusSHA256: manifest.CorpusSHA256,
-		Caps: clonePromotionCaps(manifest.Caps), Buckets: clonePromotionBuckets(manifest.Buckets),
+		Candidate:         manifest.Candidate,
+		SelectorVersion:   manifest.SelectorVersion,
+		ExecutionBoundary: manifest.ExecutionBoundary,
+		FallbackExecutor:  manifest.FallbackExecutor,
+		SourceCommit:      manifest.SourceCommit,
+		SourceSHA256:      manifest.SourceSHA256,
+		BinarySHA256:      manifest.BinarySHA256,
+		CorpusSHA256:      manifest.CorpusSHA256,
+		Caps:              clonePromotionCaps(manifest.Caps),
+		Buckets:           clonePromotionBuckets(manifest.Buckets),
 	}
 }
 
+// clonePromotionCaps returns an independent copy of promotion caps.
 func clonePromotionCaps(input map[string]int64) map[string]int64 {
 	result := make(map[string]int64, len(input))
 	for name, value := range input {
@@ -109,6 +155,7 @@ func clonePromotionCaps(input map[string]int64) map[string]int64 {
 	return result
 }
 
+// clonePromotionBuckets returns an independent copy of promotion buckets.
 func clonePromotionBuckets(input []PromotionBucket) []PromotionBucket {
 	result := append([]PromotionBucket(nil), input...)
 	for idx := range result {
@@ -118,22 +165,34 @@ func clonePromotionBuckets(input []PromotionBucket) []PromotionBucket {
 	return result
 }
 
+// PromotionManifestVerification groups state that must remain consistent while processing promotion manifest verification.
 type PromotionManifestVerification struct {
-	Version         int      `json:"version"`
-	ManifestSHA256  string   `json:"manifest_sha256"`
-	Candidate       string   `json:"candidate,omitempty"`
-	SelectorVersion string   `json:"selector_version,omitempty"`
-	Passed          bool     `json:"passed"`
-	Reasons         []string `json:"reasons,omitempty"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// ManifestSHA256 binds the referenced manifest content by SHA-256 digest.
+	ManifestSHA256 string `json:"manifest_sha256"`
+	// Candidate identifies the execution strategy being evaluated or authorized.
+	Candidate string `json:"candidate,omitempty"`
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string `json:"selector_version,omitempty"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// Reasons explains each failed or inapplicable validation gate.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
+// verifyPromotionManifest verifies promotion manifest.
 func verifyPromotionManifest(path string) (PromotionManifestVerification, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return PromotionManifestVerification{}, err
 	}
 	digest := sha256.Sum256(raw)
-	verification := PromotionManifestVerification{Version: promotionManifestVersion, ManifestSHA256: hex.EncodeToString(digest[:]), Passed: true}
+	verification := PromotionManifestVerification{
+		Version:        promotionManifestVersion,
+		ManifestSHA256: hex.EncodeToString(digest[:]),
+		Passed:         true,
+	}
 	var manifest PromotionManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return PromotionManifestVerification{}, fmt.Errorf("decode promotion manifest: %w", err)
@@ -277,6 +336,7 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 	return verification, nil
 }
 
+// writePromotionManifestVerification writes promotion manifest verification.
 func writePromotionManifestVerification(path, output string) (bool, error) {
 	verification, err := verifyPromotionManifest(path)
 	if err != nil {
@@ -294,6 +354,7 @@ func writePromotionManifestVerification(path, output string) (bool, error) {
 	return verification.Passed, err
 }
 
+// verifyPromotionEvidence verifies promotion evidence.
 func verifyPromotionEvidence(base, role string, reference PromotionEvidenceReference, expectedIdentity PromotionEvidenceIdentity) error {
 	if filepath.IsAbs(reference.Path) || reference.Path == "" {
 		return fmt.Errorf("path must be a nonempty relative path")

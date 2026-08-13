@@ -14,27 +14,41 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// postgresTimedRuntimeDocument defines the serialized representation of postgres timed runtime.
 type postgresTimedRuntimeDocument struct {
-	SchemaVersion     int                   `json:"schema_version"`
-	InvocationID      string                `json:"invocation_id"`
-	RequestedIdentity string                `json:"requested_identity"`
-	RuntimeIdentity   string                `json:"runtime_identity"`
-	RuntimeBranch     string                `json:"runtime_branch"`
-	FallbackExecuted  *bool                 `json:"fallback_executed"`
-	RecordCount       int                   `json:"record_count"`
-	Events            []RuntimeReceiptEvent `json:"events"`
+	// SchemaVersion identifies the schema version for schema version.
+	SchemaVersion int `json:"schema_version"`
+	// InvocationID identifies the invocation id.
+	InvocationID string `json:"invocation_id"`
+	// RequestedIdentity identifies the requested identity.
+	RequestedIdentity string `json:"requested_identity"`
+	// RuntimeIdentity identifies the runtime identity.
+	RuntimeIdentity string `json:"runtime_identity"`
+	// RuntimeBranch supplies the runtime branch input to the postgresTimedRuntimeDocument contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// FallbackExecuted supplies the fallback executed input to the postgresTimedRuntimeDocument contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
+	// RecordCount records the number of record count.
+	RecordCount int `json:"record_count"`
+	// Events supplies the events input to the postgresTimedRuntimeDocument contract.
+	Events []RuntimeReceiptEvent `json:"events"`
 }
 
 // postgresTimedReadAttestor arms a lightweight session-local receipt before
 // each timed query and reads it after the duration has been recorded. A
 // size-one pool is required so arming, execution, and reading cannot migrate.
 type postgresTimedReadAttestor struct {
-	pool              *pgxpool.Pool
+	// pool retains the pool while postgresTimedReadAttestor is assembled or evaluated.
+	pool *pgxpool.Pool
+	// requestedIdentity identifies the requested identity.
 	requestedIdentity string
-	runID             string
-	activeInvocation  string
+	// runID identifies the run id.
+	runID string
+	// activeInvocation retains the active invocation while postgresTimedReadAttestor is assembled or evaluated.
+	activeInvocation string
 }
 
+// newPostgresTimedReadAttestor constructs postgres timed read attestor.
 func newPostgresTimedReadAttestor(pool *pgxpool.Pool, poolSize int, requestedIdentity string) (*postgresTimedReadAttestor, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("timed runtime attestation requires a PostgreSQL pool")
@@ -45,9 +59,14 @@ func newPostgresTimedReadAttestor(pool *pgxpool.Pool, poolSize int, requestedIde
 	if strings.TrimSpace(requestedIdentity) == "" {
 		return nil, fmt.Errorf("timed runtime attestation requires a requested identity")
 	}
-	return &postgresTimedReadAttestor{pool: pool, requestedIdentity: requestedIdentity, runID: newRunUUID()}, nil
+	return &postgresTimedReadAttestor{
+		pool:              pool,
+		requestedIdentity: requestedIdentity,
+		runID:             newRunUUID(),
+	}, nil
 }
 
+// Begin supports benchmark evidence processing for begin.
 func (s *postgresTimedReadAttestor) Begin(ctx context.Context, iteration int) error {
 	if s.activeInvocation != "" {
 		return fmt.Errorf("runtime attestation %q is still active", s.activeInvocation)
@@ -60,6 +79,7 @@ func (s *postgresTimedReadAttestor) Begin(ctx context.Context, iteration int) er
 	return nil
 }
 
+// Complete supports benchmark evidence processing for complete.
 func (s *postgresTimedReadAttestor) Complete(ctx context.Context, _ int) (timedReadAttestation, error) {
 	invocationID := s.activeInvocation
 	if invocationID == "" {

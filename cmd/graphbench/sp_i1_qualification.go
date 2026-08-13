@@ -22,98 +22,184 @@ import (
 )
 
 const (
+	// spI1QualificationVersion reserves the stable protocol value used to recognize sp i1 qualification version across artifacts and executions.
 	spI1QualificationVersion = 1
-	spI1FreezeVersion        = 1
-	spI1TrainingTag          = "sp-i1-inbound-v1-training"
-	spI1HoldoutTag           = "sp-i1-inbound-v1-holdout"
-	spI1QuerySHA256          = "1024577967901503995d4ec0c76540e96b65f4d25e015ccb6eeffb500a5596f9"
+
+	// spI1FreezeVersion reserves the stable protocol value used to recognize sp i1 freeze version across artifacts and executions.
+	spI1FreezeVersion = 1
+
+	// spI1TrainingTag reserves the stable protocol value used to recognize sp i1 training tag across artifacts and executions.
+	spI1TrainingTag = "sp-i1-inbound-v1-training"
+
+	// spI1HoldoutTag reserves the stable protocol value used to recognize sp i1 holdout tag across artifacts and executions.
+	spI1HoldoutTag = "sp-i1-inbound-v1-holdout"
+
+	// spI1QuerySHA256 reserves the stable protocol value used to recognize sp i1 query sha256 across artifacts and executions.
+	spI1QuerySHA256 = "1024577967901503995d4ec0c76540e96b65f4d25e015ccb6eeffb500a5596f9"
+
+	// spI1TrainingCorpusSHA256 reserves the stable protocol value used to recognize sp i1 training corpus sha256 across artifacts and executions.
 	spI1TrainingCorpusSHA256 = "3da3c4b1cea3fa64fbaa1958f7bf8048639241522ccf6e46defd10d2d8c9ccd6"
-	spI1FullCorpusSHA256     = "219ee26cae52d8b81c6c91f9c517692c544ef4cec1aa9b9314fbc4e8f5ad3c5c"
-	spI1TrainingResolvedSHA  = "cc07b55331e15f4e268043d1ed36abf7deec7217771a1b30913db6e738d27f7a"
-	spI1FullResolvedSHA      = "16a8756a7c32695f0314b3552c80d2a500226c7a44c57847c916a96e775aa0c5"
+
+	// spI1FullCorpusSHA256 reserves the stable protocol value used to recognize sp i1 full corpus sha256 across artifacts and executions.
+	spI1FullCorpusSHA256 = "219ee26cae52d8b81c6c91f9c517692c544ef4cec1aa9b9314fbc4e8f5ad3c5c"
+
+	// spI1TrainingResolvedSHA reserves the stable protocol value used to recognize sp i1 training resolved sha across artifacts and executions.
+	spI1TrainingResolvedSHA = "cc07b55331e15f4e268043d1ed36abf7deec7217771a1b30913db6e738d27f7a"
+
+	// spI1FullResolvedSHA reserves the stable protocol value used to recognize sp i1 full resolved sha across artifacts and executions.
+	spI1FullResolvedSHA = "16a8756a7c32695f0314b3552c80d2a500226c7a44c57847c916a96e775aa0c5"
 )
 
+// spI1CanonicalCases freezes the training and holdout workloads admitted to SP-I1 qualification.
 var spI1CanonicalCases = []struct {
+	// dataset identifies the generated fixture containing the workload.
 	dataset string
-	name    string
-	split   string
+
+	// name identifies the workload within the fixture dataset.
+	name string
+
+	// split assigns the workload to training or unopened holdout evidence.
+	split string
 }{
-	{"generated_shortest_paths_v2_d4_o0_r4_fo0_fi16_l2_k0_t0_w0_x4_p0_c0_s0", "GSP-I1-V1-TRAIN-D04-FI016-full", "training"},
-	{"generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0", "GSP-I1-V1-TRAIN-D16-FI256-early-d04", "training"},
-	{"generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0", "GSP-I1-V1-TRAIN-D16-FI256-full", "training"},
-	{"generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0", "GSP-I1-V1-TRAIN-D16-FI256-disconnected", "training"},
-	{"generated_shortest_paths_v2_d8_o0_r3_fo0_fi31_l3_k0_t0_w0_x7_p0_c0_s0", "GSP-I1-V1-HOLDOUT-D08-FI031-full", "holdout"},
-	{"generated_shortest_paths_v2_d32_o0_r11_fo0_fi191_l21_k0_t0_w0_x13_p0_c0_s0", "GSP-I1-V1-HOLDOUT-D32-FI191-full", "holdout"},
-	{"generated_shortest_paths_v2_d32_o0_r11_fo0_fi191_l21_k0_t0_w0_x13_p0_c0_s0", "GSP-I1-V1-HOLDOUT-D32-FI191-disconnected", "holdout"},
+	{
+		dataset: "generated_shortest_paths_v2_d4_o0_r4_fo0_fi16_l2_k0_t0_w0_x4_p0_c0_s0",
+		name:    "GSP-I1-V1-TRAIN-D04-FI016-full",
+		split:   "training",
+	},
+	{
+		dataset: "generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0",
+		name:    "GSP-I1-V1-TRAIN-D16-FI256-early-d04",
+		split:   "training",
+	},
+	{
+		dataset: "generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0",
+		name:    "GSP-I1-V1-TRAIN-D16-FI256-full",
+		split:   "training",
+	},
+	{
+		dataset: "generated_shortest_paths_v2_d16_o0_r8_fo0_fi256_l8_k0_t0_w0_x16_p0_c0_s0",
+		name:    "GSP-I1-V1-TRAIN-D16-FI256-disconnected",
+		split:   "training",
+	},
+	{
+		dataset: "generated_shortest_paths_v2_d8_o0_r3_fo0_fi31_l3_k0_t0_w0_x7_p0_c0_s0",
+		name:    "GSP-I1-V1-HOLDOUT-D08-FI031-full",
+		split:   "holdout",
+	},
+	{
+		dataset: "generated_shortest_paths_v2_d32_o0_r11_fo0_fi191_l21_k0_t0_w0_x13_p0_c0_s0",
+		name:    "GSP-I1-V1-HOLDOUT-D32-FI191-full",
+		split:   "holdout",
+	},
+	{
+		dataset: "generated_shortest_paths_v2_d32_o0_r11_fo0_fi191_l21_k0_t0_w0_x13_p0_c0_s0",
+		name:    "GSP-I1-V1-HOLDOUT-D32-FI191-disconnected",
+		split:   "holdout",
+	},
 }
 
+// spI1CanonicalCohort groups state that must remain consistent while processing sp i1 canonical cohort.
 type spI1CanonicalCohort struct {
-	keys                      map[performanceKey]struct{}
-	trainingKeys              map[performanceKey]struct{}
-	holdoutKeys               map[performanceKey]struct{}
-	declarationSHA256         string
+	// keys retains the keys while spI1CanonicalCohort is assembled or evaluated.
+	keys map[performanceKey]struct{}
+	// trainingKeys retains the training keys while spI1CanonicalCohort is assembled or evaluated.
+	trainingKeys map[performanceKey]struct{}
+	// holdoutKeys retains the holdout keys while spI1CanonicalCohort is assembled or evaluated.
+	holdoutKeys map[performanceKey]struct{}
+	// declarationSHA256 binds the referenced declaration content by SHA-256 digest.
+	declarationSHA256 string
+	// trainingDeclarationSHA256 binds the referenced training declaration content by SHA-256 digest.
 	trainingDeclarationSHA256 string
-	holdoutDeclarationSHA256  string
-	trainingCorpusSHA256      string
-	fullCorpusSHA256          string
-	trainingResolvedSHA256    string
-	fullResolvedSHA256        string
+	// holdoutDeclarationSHA256 binds the referenced holdout declaration content by SHA-256 digest.
+	holdoutDeclarationSHA256 string
+	// trainingCorpusSHA256 binds the referenced training corpus content by SHA-256 digest.
+	trainingCorpusSHA256 string
+	// fullCorpusSHA256 binds the referenced full corpus content by SHA-256 digest.
+	fullCorpusSHA256 string
+	// trainingResolvedSHA256 binds the referenced training resolved content by SHA-256 digest.
+	trainingResolvedSHA256 string
+	// fullResolvedSHA256 binds the referenced full resolved content by SHA-256 digest.
+	fullResolvedSHA256 string
 }
 
+// spI1CanonicalDeclaration groups state that must remain consistent while processing sp i1 canonical declaration.
 type spI1CanonicalDeclaration struct {
+	// testCase retains the test case while spI1CanonicalDeclaration is assembled or evaluated.
 	testCase ScaleCase
-	fixture  FixtureMetadata
+	// fixture retains the fixture while spI1CanonicalDeclaration is assembled or evaluated.
+	fixture FixtureMetadata
 }
 
+// canonicalSPI1Declarations resolves the frozen SP-I1 workload declarations and fixture metadata.
 func canonicalSPI1Declarations() (map[performanceKey]spI1CanonicalDeclaration, error) {
 	repositoryRoot := strings.TrimSpace(commandOutput("git", "rev-parse", "--show-toplevel"))
 	if repositoryRoot == "" || repositoryRoot == "unknown" {
 		return nil, fmt.Errorf("locate repository root for frozen SP-I1 declarations")
 	}
-	corpus, err := loadScaleCorpus(filepath.Join(repositoryRoot, "benchmark", "testdata", "scale"))
-	if err != nil {
+
+	if corpus, err := loadScaleCorpus(filepath.Join(repositoryRoot, "benchmark", "testdata", "scale")); err != nil {
 		return nil, fmt.Errorf("load frozen SP-I1 declarations: %w", err)
-	}
-	cohort, err := canonicalSPI1Cohort()
-	if err != nil {
+	} else if cohort, err := canonicalSPI1Cohort(); err != nil {
 		return nil, err
-	}
-	declarations := make(map[performanceKey]spI1CanonicalDeclaration, len(cohort.keys))
-	for _, testCase := range corpus.Cases {
-		key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
-		if _, expected := cohort.keys[key]; !expected {
-			continue
+	} else {
+		declarations := make(map[performanceKey]spI1CanonicalDeclaration, len(cohort.keys))
+		for _, testCase := range corpus.Cases {
+			key := performanceKey{
+				dataset: testCase.Dataset,
+				name:    testCase.Name,
+				backend: ModePostgresSQL,
+			}
+			if _, expected := cohort.keys[key]; !expected {
+				continue
+			}
+			if _, duplicate := declarations[key]; duplicate {
+				return nil, fmt.Errorf("frozen SP-I1 corpus duplicates %s/%s", key.dataset, key.name)
+			}
+			if fixture, err := fixtureMetadata("unused", testCase.Dataset); err != nil {
+				return nil, fmt.Errorf("derive frozen SP-I1 fixture %s: %w", testCase.Dataset, err)
+			} else {
+				declarations[key] = spI1CanonicalDeclaration{
+					testCase: testCase,
+					fixture:  fixture,
+				}
+			}
 		}
-		if _, duplicate := declarations[key]; duplicate {
-			return nil, fmt.Errorf("frozen SP-I1 corpus duplicates %s/%s", key.dataset, key.name)
+		if len(declarations) != len(cohort.keys) {
+			return nil, fmt.Errorf("frozen SP-I1 corpus omits canonical declarations")
 		}
-		fixture, err := fixtureMetadata("unused", testCase.Dataset)
-		if err != nil {
-			return nil, fmt.Errorf("derive frozen SP-I1 fixture %s: %w", testCase.Dataset, err)
-		}
-		declarations[key] = spI1CanonicalDeclaration{testCase: testCase, fixture: fixture}
+
+		return declarations, nil
 	}
-	if len(declarations) != len(cohort.keys) {
-		return nil, fmt.Errorf("frozen SP-I1 corpus omits canonical declarations")
-	}
-	return declarations, nil
 }
 
+// canonicalSPI1Cohort builds the immutable training and holdout membership used by qualification.
 func canonicalSPI1Cohort() (spI1CanonicalCohort, error) {
 	cohort := spI1CanonicalCohort{
-		keys: map[performanceKey]struct{}{}, trainingKeys: map[performanceKey]struct{}{}, holdoutKeys: map[performanceKey]struct{}{},
-		trainingCorpusSHA256: spI1TrainingCorpusSHA256, fullCorpusSHA256: spI1FullCorpusSHA256,
-		trainingResolvedSHA256: spI1TrainingResolvedSHA, fullResolvedSHA256: spI1FullResolvedSHA,
+		keys:                   map[performanceKey]struct{}{},
+		trainingKeys:           map[performanceKey]struct{}{},
+		holdoutKeys:            map[performanceKey]struct{}{},
+		trainingCorpusSHA256:   spI1TrainingCorpusSHA256,
+		fullCorpusSHA256:       spI1FullCorpusSHA256,
+		trainingResolvedSHA256: spI1TrainingResolvedSHA,
+		fullResolvedSHA256:     spI1FullResolvedSHA,
 	}
 	var full, training, holdout []DeclaredCaseBackend
 	for _, testCase := range spI1CanonicalCases {
-		key := performanceKey{dataset: testCase.dataset, name: testCase.name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: testCase.dataset,
+			name:    testCase.name,
+			backend: ModePostgresSQL,
+		}
 		if _, duplicate := cohort.keys[key]; duplicate || !strings.HasPrefix(testCase.dataset, "generated_shortest_paths_v2_") {
 			return spI1CanonicalCohort{}, fmt.Errorf("frozen SP-I1 cohort contains an invalid declaration")
 		}
 		cohort.keys[key] = struct{}{}
 		for _, backend := range []ExecutionMode{ModePostgresSQL, ModeNeo4j} {
-			item := DeclaredCaseBackend{Dataset: key.dataset, Name: key.name, Backend: backend}
+			item := DeclaredCaseBackend{
+				Dataset: key.dataset,
+				Name:    key.name,
+				Backend: backend,
+			}
 			full = append(full, item)
 			if testCase.split == "training" {
 				training = append(training, item)
@@ -138,6 +224,7 @@ func canonicalSPI1Cohort() (spI1CanonicalCohort, error) {
 	return cohort, nil
 }
 
+// spI1QualificationCaps returns the resource limits enforced for sp i1 qualification.
 func spI1QualificationCaps() map[string]int64 {
 	return map[string]int64{
 		"state_limit":        100_000,
@@ -147,6 +234,7 @@ func spI1QualificationCaps() map[string]int64 {
 	}
 }
 
+// spI1TelemetryCaps returns the resource limits enforced for sp i1 telemetry.
 func spI1TelemetryCaps() map[string]int64 {
 	return map[string]int64{
 		"state_rows":       100_000,
@@ -156,118 +244,214 @@ func spI1TelemetryCaps() map[string]int64 {
 	}
 }
 
+// SPI1QualificationOptions configures spi1 qualification.
 type SPI1QualificationOptions struct {
-	Seed           int64
-	Confidence     float64
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64
+	// BootstrapCount records the number of bootstrap count.
 	BootstrapCount int
-	Protocol       string
+	// Protocol identifies the protocol.
+	Protocol string
 	// Training evidence paths make confirmation independently recompute the
 	// discovery decision instead of trusting only a mutable report and freeze.
-	TrainingBaselinePath  string
+	TrainingBaselinePath string
+	// TrainingCandidatePath identifies the filesystem training candidate path.
 	TrainingCandidatePath string
-	TrainingResourcePath  string
+	// TrainingResourcePath identifies the filesystem training resource path.
+	TrainingResourcePath string
 	// SourceArchiveSHA256 binds the report to git archive HEAD. Report-mode
 	// callers populate it from the current committed tree; tests may supply a
 	// synthetic digest without invoking Git.
 	SourceArchiveSHA256 string
-	Freeze              *SPI1QualificationFreezeManifest
-	Discovery           *SPI1QualificationReport
+	// Freeze supplies the freeze input to the SPI1QualificationOptions contract.
+	Freeze *SPI1QualificationFreezeManifest
+	// Discovery supplies the discovery input to the SPI1QualificationOptions contract.
+	Discovery *SPI1QualificationReport
 }
 
+// SPI1QualificationCase records the evidence and decision for one spi1 qualification workload.
 type SPI1QualificationCase struct {
-	Dataset            string           `json:"dataset"`
-	Name               string           `json:"name"`
-	QualificationSplit string           `json:"qualification_split"`
-	Rounds             int              `json:"matched_rounds"`
-	BaselineSamples    int              `json:"baseline_samples"`
-	CandidateSamples   int              `json:"candidate_samples"`
-	MedianRatio        RatioInterval    `json:"median_ratio_to_s4"`
-	MedianSaving       DurationInterval `json:"median_saving_vs_s4"`
-	P95Ratio           RatioInterval    `json:"p95_ratio_to_s4"`
-	Material           bool             `json:"material"`
-	P95Contained       bool             `json:"p95_contained"`
-	ResourcePassed     bool             `json:"resource_passed"`
-	RuntimeBranch      string           `json:"runtime_branch"`
-	Passed             bool             `json:"passed"`
-	Reasons            []string         `json:"reasons,omitempty"`
+	// Dataset identifies the fixture dataset that supplies the workload graph.
+	Dataset string `json:"dataset"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
+	QualificationSplit string `json:"qualification_split"`
+	// Rounds records the number of rounds.
+	Rounds int `json:"matched_rounds"`
+	// BaselineSamples supplies the baseline samples input to the SPI1QualificationCase contract.
+	BaselineSamples int `json:"baseline_samples"`
+	// CandidateSamples supplies the candidate samples input to the SPI1QualificationCase contract.
+	CandidateSamples int `json:"candidate_samples"`
+	// MedianRatio supplies the median ratio input to the SPI1QualificationCase contract.
+	MedianRatio RatioInterval `json:"median_ratio_to_s4"`
+	// MedianSaving supplies the median saving input to the SPI1QualificationCase contract.
+	MedianSaving DurationInterval `json:"median_saving_vs_s4"`
+	// P95Ratio supplies the p95 ratio input to the SPI1QualificationCase contract.
+	P95Ratio RatioInterval `json:"p95_ratio_to_s4"`
+	// Material indicates whether material applies.
+	Material bool `json:"material"`
+	// P95Contained indicates whether p95 contained applies.
+	P95Contained bool `json:"p95_contained"`
+	// ResourcePassed indicates whether resource passed applies.
+	ResourcePassed bool `json:"resource_passed"`
+	// RuntimeBranch supplies the runtime branch input to the SPI1QualificationCase contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// Reasons explains each failed or inapplicable validation gate.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
+// SPI1QualificationReport records the evidence and outcome produced by spi1 qualification.
 type SPI1QualificationReport struct {
-	Version                   int                     `json:"version"`
-	Protocol                  string                  `json:"protocol"`
-	Baseline                  string                  `json:"baseline"`
-	Candidate                 string                  `json:"candidate"`
-	Policy                    string                  `json:"policy"`
-	QuerySHA256               string                  `json:"query_sha256"`
-	Seed                      int64                   `json:"seed"`
-	Confidence                float64                 `json:"confidence_level"`
-	BootstrapCount            int                     `json:"bootstrap_count"`
-	MaterialityRatio          float64                 `json:"materiality_ratio_upper_limit"`
-	MaterialityAbsolute       time.Duration           `json:"materiality_absolute_lower_limit"`
-	P95RatioLimit             float64                 `json:"p95_ratio_upper_limit"`
-	Caps                      map[string]int64        `json:"caps"`
-	SourceCommit              string                  `json:"source_commit"`
-	SourceArchiveSHA256       string                  `json:"source_archive_sha256"`
-	DirtyDiffSHA256           string                  `json:"dirty_diff_sha256"`
-	BinarySHA256              string                  `json:"binary_sha256"`
-	CorpusSHA256              string                  `json:"corpus_sha256"`
-	CohortDeclarationSHA256   string                  `json:"cohort_declaration_sha256"`
-	ResolvedSelectionSHA256   string                  `json:"resolved_selection_sha256"`
-	TrainingDeclarationSHA256 string                  `json:"training_declaration_sha256"`
-	HoldoutDeclarationSHA256  string                  `json:"holdout_declaration_sha256"`
-	FullDeclarationSHA256     string                  `json:"full_declaration_sha256"`
-	TrainingCorpusSHA256      string                  `json:"training_corpus_sha256"`
-	FullCorpusSHA256          string                  `json:"full_corpus_sha256"`
-	BaselineArtifactSHA256    string                  `json:"baseline_artifact_sha256,omitempty"`
-	CandidateArtifactSHA256   string                  `json:"candidate_artifact_sha256,omitempty"`
-	ResourceReportSHA256      string                  `json:"resource_report_sha256,omitempty"`
-	FreezeManifestSHA256      string                  `json:"freeze_manifest_sha256,omitempty"`
-	EvidencePassed            bool                    `json:"evidence_passed"`
-	TrainingCases             int                     `json:"training_cases"`
-	HoldoutCases              int                     `json:"holdout_cases"`
-	TrainingPassed            bool                    `json:"training_passed"`
-	HoldoutPassed             bool                    `json:"holdout_passed"`
-	QualificationPassed       bool                    `json:"qualification_passed"`
-	Cases                     []SPI1QualificationCase `json:"cases"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// Protocol identifies the protocol.
+	Protocol string `json:"protocol"`
+	// Baseline identifies the incumbent execution strategy used for comparison.
+	Baseline string `json:"baseline"`
+	// Candidate identifies the execution strategy being evaluated or authorized.
+	Candidate string `json:"candidate"`
+	// Policy identifies the policy.
+	Policy string `json:"policy"`
+	// QuerySHA256 binds the referenced query content by SHA-256 digest.
+	QuerySHA256 string `json:"query_sha256"`
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64 `json:"seed"`
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64 `json:"confidence_level"`
+	// BootstrapCount records the number of bootstrap count.
+	BootstrapCount int `json:"bootstrap_count"`
+	// MaterialityRatio supplies the materiality ratio input to the SPI1QualificationReport contract.
+	MaterialityRatio float64 `json:"materiality_ratio_upper_limit"`
+	// MaterialityAbsolute supplies the materiality absolute input to the SPI1QualificationReport contract.
+	MaterialityAbsolute time.Duration `json:"materiality_absolute_lower_limit"`
+	// P95RatioLimit supplies the p95 ratio limit input to the SPI1QualificationReport contract.
+	P95RatioLimit float64 `json:"p95_ratio_upper_limit"`
+	// Caps binds each guarded resource dimension to its enforced limit.
+	Caps map[string]int64 `json:"caps"`
+	// SourceCommit supplies the source commit input to the SPI1QualificationReport contract.
+	SourceCommit string `json:"source_commit"`
+	// SourceArchiveSHA256 binds the referenced source archive content by SHA-256 digest.
+	SourceArchiveSHA256 string `json:"source_archive_sha256"`
+	// DirtyDiffSHA256 binds the referenced dirty diff content by SHA-256 digest.
+	DirtyDiffSHA256 string `json:"dirty_diff_sha256"`
+	// BinarySHA256 binds the referenced binary content by SHA-256 digest.
+	BinarySHA256 string `json:"binary_sha256"`
+	// CorpusSHA256 binds the referenced corpus content by SHA-256 digest.
+	CorpusSHA256 string `json:"corpus_sha256"`
+	// CohortDeclarationSHA256 binds the referenced cohort declaration content by SHA-256 digest.
+	CohortDeclarationSHA256 string `json:"cohort_declaration_sha256"`
+	// ResolvedSelectionSHA256 binds the referenced resolved selection content by SHA-256 digest.
+	ResolvedSelectionSHA256 string `json:"resolved_selection_sha256"`
+	// TrainingDeclarationSHA256 binds the referenced training declaration content by SHA-256 digest.
+	TrainingDeclarationSHA256 string `json:"training_declaration_sha256"`
+	// HoldoutDeclarationSHA256 binds the referenced holdout declaration content by SHA-256 digest.
+	HoldoutDeclarationSHA256 string `json:"holdout_declaration_sha256"`
+	// FullDeclarationSHA256 binds the referenced full declaration content by SHA-256 digest.
+	FullDeclarationSHA256 string `json:"full_declaration_sha256"`
+	// TrainingCorpusSHA256 binds the referenced training corpus content by SHA-256 digest.
+	TrainingCorpusSHA256 string `json:"training_corpus_sha256"`
+	// FullCorpusSHA256 binds the referenced full corpus content by SHA-256 digest.
+	FullCorpusSHA256 string `json:"full_corpus_sha256"`
+	// BaselineArtifactSHA256 binds the referenced baseline artifact content by SHA-256 digest.
+	BaselineArtifactSHA256 string `json:"baseline_artifact_sha256,omitempty"`
+	// CandidateArtifactSHA256 binds the referenced candidate artifact content by SHA-256 digest.
+	CandidateArtifactSHA256 string `json:"candidate_artifact_sha256,omitempty"`
+	// ResourceReportSHA256 binds the referenced resource report content by SHA-256 digest.
+	ResourceReportSHA256 string `json:"resource_report_sha256,omitempty"`
+	// FreezeManifestSHA256 binds the referenced freeze manifest content by SHA-256 digest.
+	FreezeManifestSHA256 string `json:"freeze_manifest_sha256,omitempty"`
+	// EvidencePassed indicates whether evidence passed applies.
+	EvidencePassed bool `json:"evidence_passed"`
+	// TrainingCases supplies the training cases input to the SPI1QualificationReport contract.
+	TrainingCases int `json:"training_cases"`
+	// HoldoutCases supplies the holdout cases input to the SPI1QualificationReport contract.
+	HoldoutCases int `json:"holdout_cases"`
+	// TrainingPassed indicates whether training passed applies.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed indicates whether holdout passed applies.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// QualificationPassed indicates whether qualification passed applies.
+	QualificationPassed bool `json:"qualification_passed"`
+	// Cases contains the per-workload evidence underlying the aggregate decision.
+	Cases []SPI1QualificationCase `json:"cases"`
 }
 
+// SPI1QualificationFreezeManifest binds the immutable inputs authorized for spi1 qualification freeze.
 type SPI1QualificationFreezeManifest struct {
-	Version                   int              `json:"version"`
-	Baseline                  string           `json:"baseline"`
-	Candidate                 string           `json:"candidate"`
-	Policy                    string           `json:"policy"`
-	QuerySHA256               string           `json:"query_sha256"`
-	Caps                      map[string]int64 `json:"caps"`
-	Seed                      int64            `json:"seed"`
-	Confidence                float64          `json:"confidence_level"`
-	BootstrapCount            int              `json:"bootstrap_count"`
-	SourceCommit              string           `json:"source_commit"`
-	SourceArchiveSHA256       string           `json:"source_archive_sha256"`
-	DirtyDiffSHA256           string           `json:"dirty_diff_sha256"`
-	BinarySHA256              string           `json:"binary_sha256"`
-	TrainingDeclarationSHA256 string           `json:"training_declaration_sha256"`
-	HoldoutDeclarationSHA256  string           `json:"holdout_declaration_sha256"`
-	FullDeclarationSHA256     string           `json:"full_declaration_sha256"`
-	TrainingCorpusSHA256      string           `json:"training_corpus_sha256"`
-	FullCorpusSHA256          string           `json:"full_corpus_sha256"`
-	TrainingResolvedSHA256    string           `json:"training_resolved_selection_sha256"`
-	FullResolvedSHA256        string           `json:"full_resolved_selection_sha256"`
-	BaselineArtifactSHA256    string           `json:"baseline_artifact_sha256"`
-	CandidateArtifactSHA256   string           `json:"candidate_artifact_sha256"`
-	ResourceReportSHA256      string           `json:"resource_report_sha256"`
-	DiscoveryReportSHA256     string           `json:"discovery_report_sha256"`
-	TrainingPassed            bool             `json:"training_passed"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// Baseline identifies the incumbent execution strategy used for comparison.
+	Baseline string `json:"baseline"`
+	// Candidate identifies the execution strategy being evaluated or authorized.
+	Candidate string `json:"candidate"`
+	// Policy identifies the policy.
+	Policy string `json:"policy"`
+	// QuerySHA256 binds the referenced query content by SHA-256 digest.
+	QuerySHA256 string `json:"query_sha256"`
+	// Caps binds each guarded resource dimension to its enforced limit.
+	Caps map[string]int64 `json:"caps"`
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64 `json:"seed"`
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64 `json:"confidence_level"`
+	// BootstrapCount records the number of bootstrap count.
+	BootstrapCount int `json:"bootstrap_count"`
+	// SourceCommit supplies the source commit input to the SPI1QualificationFreezeManifest contract.
+	SourceCommit string `json:"source_commit"`
+	// SourceArchiveSHA256 binds the referenced source archive content by SHA-256 digest.
+	SourceArchiveSHA256 string `json:"source_archive_sha256"`
+	// DirtyDiffSHA256 binds the referenced dirty diff content by SHA-256 digest.
+	DirtyDiffSHA256 string `json:"dirty_diff_sha256"`
+	// BinarySHA256 binds the referenced binary content by SHA-256 digest.
+	BinarySHA256 string `json:"binary_sha256"`
+	// TrainingDeclarationSHA256 binds the referenced training declaration content by SHA-256 digest.
+	TrainingDeclarationSHA256 string `json:"training_declaration_sha256"`
+	// HoldoutDeclarationSHA256 binds the referenced holdout declaration content by SHA-256 digest.
+	HoldoutDeclarationSHA256 string `json:"holdout_declaration_sha256"`
+	// FullDeclarationSHA256 binds the referenced full declaration content by SHA-256 digest.
+	FullDeclarationSHA256 string `json:"full_declaration_sha256"`
+	// TrainingCorpusSHA256 binds the referenced training corpus content by SHA-256 digest.
+	TrainingCorpusSHA256 string `json:"training_corpus_sha256"`
+	// FullCorpusSHA256 binds the referenced full corpus content by SHA-256 digest.
+	FullCorpusSHA256 string `json:"full_corpus_sha256"`
+	// TrainingResolvedSHA256 binds the referenced training resolved content by SHA-256 digest.
+	TrainingResolvedSHA256 string `json:"training_resolved_selection_sha256"`
+	// FullResolvedSHA256 binds the referenced full resolved content by SHA-256 digest.
+	FullResolvedSHA256 string `json:"full_resolved_selection_sha256"`
+	// BaselineArtifactSHA256 binds the referenced baseline artifact content by SHA-256 digest.
+	BaselineArtifactSHA256 string `json:"baseline_artifact_sha256"`
+	// CandidateArtifactSHA256 binds the referenced candidate artifact content by SHA-256 digest.
+	CandidateArtifactSHA256 string `json:"candidate_artifact_sha256"`
+	// ResourceReportSHA256 binds the referenced resource report content by SHA-256 digest.
+	ResourceReportSHA256 string `json:"resource_report_sha256"`
+	// DiscoveryReportSHA256 binds the referenced discovery report content by SHA-256 digest.
+	DiscoveryReportSHA256 string `json:"discovery_report_sha256"`
+	// TrainingPassed indicates whether training passed applies.
+	TrainingPassed bool `json:"training_passed"`
 }
 
+// spI1EvidenceIdentity groups state that must remain consistent while processing sp i1 evidence identity.
 type spI1EvidenceIdentity struct {
-	sourceCommit      string
-	dirtyDiffSHA256   string
-	binarySHA256      string
-	corpusSHA256      string
+	// sourceCommit retains the source commit while spI1EvidenceIdentity is assembled or evaluated.
+	sourceCommit string
+	// dirtyDiffSHA256 binds the referenced dirty diff content by SHA-256 digest.
+	dirtyDiffSHA256 string
+	// binarySHA256 binds the referenced binary content by SHA-256 digest.
+	binarySHA256 string
+	// corpusSHA256 binds the referenced corpus content by SHA-256 digest.
+	corpusSHA256 string
+	// declarationSHA256 binds the referenced declaration content by SHA-256 digest.
 	declarationSHA256 string
-	resolvedSHA256    string
+	// resolvedSHA256 binds the referenced resolved content by SHA-256 digest.
+	resolvedSHA256 string
 }
 
+// sourceArchiveSHA256 supports benchmark evidence processing for source archive sha256.
 func sourceArchiveSHA256() (string, error) {
 	archive, err := exec.Command("git", "archive", "--format=tar", "HEAD").Output()
 	if err != nil {
@@ -277,6 +461,7 @@ func sourceArchiveSHA256() (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
+// equalSPI1Caps returns the resource limits enforced for equal spi1.
 func equalSPI1Caps(left, right map[string]int64) bool {
 	if len(left) != len(right) {
 		return false
@@ -289,26 +474,43 @@ func equalSPI1Caps(left, right map[string]int64) bool {
 	return true
 }
 
+// spI1ProtocolRequirements groups state that must remain consistent while processing sp i1 protocol requirements.
 type spI1ProtocolRequirements struct {
+	// minimumWarmups retains the minimum warmups while spI1ProtocolRequirements is assembled or evaluated.
 	minimumWarmups int
-	minimumRounds  int
-	maximumRounds  int
+	// minimumRounds records the number of minimum rounds.
+	minimumRounds int
+	// maximumRounds records the number of maximum rounds.
+	maximumRounds int
+	// minimumSamples retains the minimum samples while spI1ProtocolRequirements is assembled or evaluated.
 	minimumSamples int
+	// protectedCount records the number of protected count.
 	protectedCount int
-	protectedSHA   string
-	expectedKeys   map[performanceKey]struct{}
+	// protectedSHA retains the protected sha while spI1ProtocolRequirements is assembled or evaluated.
+	protectedSHA string
+	// expectedKeys retains the expected keys while spI1ProtocolRequirements is assembled or evaluated.
+	expectedKeys map[performanceKey]struct{}
+	// declarationSHA retains the declaration sha while spI1ProtocolRequirements is assembled or evaluated.
 	declarationSHA string
-	corpusSHA      string
-	resolvedSHA    string
+	// corpusSHA retains the corpus sha while spI1ProtocolRequirements is assembled or evaluated.
+	corpusSHA string
+	// resolvedSHA retains the resolved sha while spI1ProtocolRequirements is assembled or evaluated.
+	resolvedSHA string
 }
 
+// spI1QualificationSeries accumulates matched observations used to evaluate sp i1 qualification.
 type spI1QualificationSeries struct {
-	baseline       roundSamples
-	candidate      roundSamples
-	runtimeBranch  string
+	// baseline retains the baseline while spI1QualificationSeries is assembled or evaluated.
+	baseline roundSamples
+	// candidate retains the candidate while spI1QualificationSeries is assembled or evaluated.
+	candidate roundSamples
+	// runtimeBranch retains the runtime branch while spI1QualificationSeries is assembled or evaluated.
+	runtimeBranch string
+	// resourcePassed indicates whether resource passed applies.
 	resourcePassed bool
 }
 
+// spI1Requirements supports benchmark evidence processing for sp i1 requirements.
 func spI1Requirements(protocol string, cohort spI1CanonicalCohort) (spI1ProtocolRequirements, error) {
 	switch protocol {
 	case referencePairProtocolDiscovery:
@@ -340,6 +542,7 @@ func spI1Requirements(protocol string, cohort spI1CanonicalCohort) (spI1Protocol
 	}
 }
 
+// buildSPI1QualificationReport builds spi1 qualification report.
 func buildSPI1QualificationReport(
 	baseline, candidate []CaseResult,
 	resource ResourceGateReport,
@@ -509,6 +712,7 @@ func buildSPI1QualificationReport(
 	return report, nil
 }
 
+// validateSPI1EvidenceIdentity validates spi1 evidence identity.
 func validateSPI1EvidenceIdentity(
 	baseline, candidate []CaseResult,
 	requirements spI1ProtocolRequirements,
@@ -530,11 +734,19 @@ func validateSPI1EvidenceIdentity(
 
 	identity := spI1EvidenceIdentity{}
 	for _, artifact := range []struct {
-		name    string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// records retains the records while anonymous record is assembled or evaluated.
 		records []CaseResult
 	}{
-		{name: "baseline", records: baseline},
-		{name: "candidate", records: candidate},
+		{
+			name:    "baseline",
+			records: baseline,
+		},
+		{
+			name:    "candidate",
+			records: candidate,
+		},
 	} {
 		selection, err := selectionIdentity(artifact.records)
 		if err != nil {
@@ -618,6 +830,7 @@ func validateSPI1EvidenceIdentity(
 	return identity, nil
 }
 
+// spI1SQLFingerprintForKey derives the lookup key used for sp i1sql fingerprint for.
 func spI1SQLFingerprintForKey(records []CaseResult, key performanceKey) (string, error) {
 	fingerprint := ""
 	for _, record := range records {
@@ -635,6 +848,7 @@ func spI1SQLFingerprintForKey(records []CaseResult, key performanceKey) (string,
 	return fingerprint, nil
 }
 
+// validateSPI1Selection validates spi1 selection.
 func validateSPI1Selection(selection SelectionManifest, requirements spI1ProtocolRequirements) error {
 	if selection.Version != selectionManifestVersion || !selection.DiagnosticOnly ||
 		selection.SelectedDeclarationCount != 2*len(requirements.expectedKeys) ||
@@ -651,7 +865,11 @@ func validateSPI1Selection(selection SelectionManifest, requirements spI1Protoco
 		if item.Category != "generated_shortest_path_v2" {
 			return fmt.Errorf("selection contains non-SP-I1 category %q", item.Category)
 		}
-		key := performanceKey{dataset: item.Dataset, name: item.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: item.Dataset,
+			name:    item.Name,
+			backend: ModePostgresSQL,
+		}
 		if _, duplicate := resolved[key]; duplicate {
 			return fmt.Errorf("selection contains duplicate %s/%s", item.Dataset, item.Name)
 		}
@@ -663,6 +881,7 @@ func validateSPI1Selection(selection SelectionManifest, requirements spI1Protoco
 	return nil
 }
 
+// collectSPI1QualificationSeries collects spi1 qualification series.
 func collectSPI1QualificationSeries(
 	baseline, candidate []CaseResult,
 	resource ResourceGateReport,
@@ -746,12 +965,31 @@ func validateSPI1GlobalInvocationIDs(artifacts ...[]CaseResult) error {
 	return nil
 }
 
+// spI1InvocationIdentity binds one timed sample to its scheduled run and arm.
 type spI1InvocationIdentity struct {
-	round, block, order int
-	arm, runUUID        string
-	startedAt, endedAt  time.Time
+	// round identifies the paired benchmark round.
+	round int
+
+	// block identifies the order-balancing block containing the round.
+	block int
+
+	// order retains the order while spI1InvocationIdentity is assembled or evaluated.
+	order int
+
+	// arm identifies the baseline or candidate treatment.
+	arm string
+
+	// runUUID binds the sample to one benchmark process invocation.
+	runUUID string
+
+	// startedAt records when timed execution began.
+	startedAt time.Time
+
+	// endedAt records when timed execution completed.
+	endedAt time.Time
 }
 
+// validateSPI1RunSchedule validates spi1 run schedule.
 func validateSPI1RunSchedule(baseline, candidate []CaseResult, requirements spI1ProtocolRequirements) error {
 	collect := func(arm string, records []CaseResult) (map[int]spI1InvocationIdentity, error) {
 		invocations := map[int]spI1InvocationIdentity{}
@@ -762,9 +1000,13 @@ func validateSPI1RunSchedule(baseline, candidate []CaseResult, requirements spI1
 			}
 			environment := record.Environment
 			identity := spI1InvocationIdentity{
-				round: environment.Round, block: environment.Block, order: environment.ArmOrder,
-				arm: environment.Arm, runUUID: environment.RunUUID,
-				startedAt: environment.StartedAt, endedAt: environment.EndedAt,
+				round:     environment.Round,
+				block:     environment.Block,
+				order:     environment.ArmOrder,
+				arm:       environment.Arm,
+				runUUID:   environment.RunUUID,
+				startedAt: environment.StartedAt,
+				endedAt:   environment.EndedAt,
 			}
 			if identity.startedAt.IsZero() || identity.endedAt.IsZero() || identity.endedAt.Before(identity.startedAt) {
 				return nil, fmt.Errorf("SP-I1 %s round %d has malformed invocation timestamps", arm, identity.round)
@@ -831,6 +1073,7 @@ func validateSPI1RunSchedule(baseline, candidate []CaseResult, requirements spI1
 	return nil
 }
 
+// collectSPI1Artifact collects spi1 artifact.
 func collectSPI1Artifact(
 	arm string,
 	records []CaseResult,
@@ -843,7 +1086,11 @@ func collectSPI1Artifact(
 	keys := map[performanceKey]struct{}{}
 	rounds := map[performanceKey]map[int]CaseResult{}
 	for _, record := range records {
-		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+		key := performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: record.ExecutionMode,
+		}
 		if _, expected := requirements.expectedKeys[key]; !expected {
 			return nil, nil, fmt.Errorf("SP-I1 %s artifact contains unexpected case %s/%s", arm, key.dataset, key.name)
 		}
@@ -870,6 +1117,7 @@ func collectSPI1Artifact(
 	return keys, rounds, nil
 }
 
+// appendSPI1WarmSamples appends spi1 warm samples.
 func appendSPI1WarmSamples(series roundSamples, round int, record CaseResult) {
 	for _, sample := range record.Stats.Samples {
 		if sample.Classification == "warm" && sample.Duration > 0 {
@@ -878,6 +1126,7 @@ func appendSPI1WarmSamples(series roundSamples, round int, record CaseResult) {
 	}
 }
 
+// validateSPI1Record validates spi1 record.
 func validateSPI1Record(record CaseResult, arm string, declaration spI1CanonicalDeclaration) error {
 	if record.ExecutionMode != ModePostgresSQL || record.Status != StatusOK ||
 		record.Environment == nil || record.PostgresEnvironment == nil || record.Fixture == nil ||
@@ -954,6 +1203,7 @@ func validateSPI1Record(record CaseResult, arm string, declaration spI1Canonical
 	return nil
 }
 
+// validateSPI1Runtime validates spi1 runtime.
 func validateSPI1Runtime(record CaseResult, arm string) error {
 	summary := record.TraversalTelemetry.Summary
 	if summary.RuntimeOutcomeAvailable == nil || !*summary.RuntimeOutcomeAvailable ||
@@ -1069,6 +1319,7 @@ func spI1ShortestPathPlannedIdentities() []string {
 	}
 }
 
+// validateSPI1SampleRuntime validates spi1 sample runtime.
 func validateSPI1SampleRuntime(record CaseResult, arm string) error {
 	summary := record.TraversalTelemetry.Summary
 	if record.Environment == nil || record.Stats.Iterations < 1 || record.Stats.WarmupIterations != record.Environment.WarmupIterations ||
@@ -1146,6 +1397,7 @@ func validateSPI1SampleRuntime(record CaseResult, arm string) error {
 	return nil
 }
 
+// validateSPI1ResourceCases validates spi1 resource cases.
 func validateSPI1ResourceCases(
 	report ResourceGateReport,
 	candidate []CaseResult,
@@ -1154,10 +1406,26 @@ func validateSPI1ResourceCases(
 	if report.Version != resourceGateVersion {
 		return nil, fmt.Errorf("SP-I1 resource report version must be %d", resourceGateVersion)
 	}
+
+	// recordKey binds resource evidence to an exact scheduled candidate invocation.
 	type recordKey struct {
+		// performanceKey identifies the workload and backend.
 		performanceKey
-		round, block, order int
-		runUUID, arm        string
+
+		// round identifies the paired benchmark round.
+		round int
+
+		// block identifies the order-balancing block containing the round.
+		block int
+
+		// order retains the order while recordKey is assembled or evaluated.
+		order int
+
+		// runUUID binds the record to one benchmark process invocation.
+		runUUID string
+
+		// arm identifies the treatment that produced the record.
+		arm string
 	}
 	expected := map[recordKey]CaseResult{}
 	for _, record := range candidate {
@@ -1165,9 +1433,16 @@ func validateSPI1ResourceCases(
 			return nil, fmt.Errorf("%s/%s candidate resource record lacks run identity", record.Dataset, record.Name)
 		}
 		key := recordKey{
-			performanceKey: performanceKey{dataset: record.Dataset, name: record.Name, backend: ModePostgresSQL},
-			round:          record.Environment.Round, block: record.Environment.Block, order: record.Environment.ArmOrder,
-			runUUID: record.Environment.RunUUID, arm: record.Environment.Arm,
+			performanceKey: performanceKey{
+				dataset: record.Dataset,
+				name:    record.Name,
+				backend: ModePostgresSQL,
+			},
+			round:   record.Environment.Round,
+			block:   record.Environment.Block,
+			order:   record.Environment.ArmOrder,
+			runUUID: record.Environment.RunUUID,
+			arm:     record.Environment.Arm,
 		}
 		if _, duplicate := expected[key]; duplicate {
 			return nil, fmt.Errorf("SP-I1 candidate artifact duplicates a resource record identity")
@@ -1185,13 +1460,21 @@ func validateSPI1ResourceCases(
 	}
 	allPassed := true
 	for _, gateCase := range report.Cases {
-		key := performanceKey{dataset: gateCase.Dataset, name: gateCase.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: gateCase.Dataset,
+			name:    gateCase.Name,
+			backend: ModePostgresSQL,
+		}
 		if _, expected := requirements.expectedKeys[key]; !expected || gateCase.Reference != "" {
 			return nil, fmt.Errorf("SP-I1 resource report contains an unexpected production or reference case %s/%s", gateCase.Dataset, gateCase.Name)
 		}
 		identity := recordKey{
-			performanceKey: key, round: gateCase.Round, block: gateCase.Block, order: gateCase.ArmOrder,
-			runUUID: gateCase.RunUUID, arm: gateCase.Arm,
+			performanceKey: key,
+			round:          gateCase.Round,
+			block:          gateCase.Block,
+			order:          gateCase.ArmOrder,
+			runUUID:        gateCase.RunUUID,
+			arm:            gateCase.Arm,
 		}
 		record, found := expected[identity]
 		if !found {
@@ -1244,6 +1527,7 @@ func validateSPI1ResourceCases(
 	return passed, nil
 }
 
+// validateSPI1Freeze validates spi1 freeze.
 func validateSPI1Freeze(
 	freeze *SPI1QualificationFreezeManifest,
 	discovery *SPI1QualificationReport,
@@ -1267,6 +1551,7 @@ func validateSPI1Freeze(
 	return nil
 }
 
+// validateSPI1FrozenDiscovery validates spi1 frozen discovery.
 func validateSPI1FrozenDiscovery(
 	freeze *SPI1QualificationFreezeManifest,
 	discovery *SPI1QualificationReport,
@@ -1320,7 +1605,11 @@ func validateSPI1FrozenDiscovery(
 	}
 	seen := map[performanceKey]struct{}{}
 	for _, entry := range discovery.Cases {
-		key := performanceKey{dataset: entry.Dataset, name: entry.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: entry.Dataset,
+			name:    entry.Name,
+			backend: ModePostgresSQL,
+		}
 		if entry.QualificationSplit != "training" {
 			return fmt.Errorf("SP-I1 discovery report contains non-training timing")
 		}
@@ -1354,6 +1643,7 @@ func validateSPI1FrozenDiscovery(
 	return nil
 }
 
+// validSPI1RatioInterval reports whether a confidence interval contains finite ordered bounds.
 func validSPI1RatioInterval(interval RatioInterval) bool {
 	return interval.Lower > 0 && interval.Lower <= interval.Estimate && interval.Estimate <= interval.Upper &&
 		!math.IsNaN(interval.Lower) && !math.IsNaN(interval.Estimate) && !math.IsNaN(interval.Upper) &&
@@ -1546,8 +1836,11 @@ func validateSPI1FrozenTrainingEvidence(
 		return fmt.Errorf("SP-I1 frozen training resource report is not bound to the candidate artifact")
 	}
 	recomputed, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: freeze.Seed, Confidence: freeze.Confidence, BootstrapCount: freeze.BootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: freeze.SourceArchiveSHA256,
+		Seed:                freeze.Seed,
+		Confidence:          freeze.Confidence,
+		BootstrapCount:      freeze.BootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: freeze.SourceArchiveSHA256,
 	})
 	if err != nil {
 		return fmt.Errorf("recompute frozen SP-I1 training discovery: %w", err)
@@ -1561,6 +1854,7 @@ func validateSPI1FrozenTrainingEvidence(
 	return nil
 }
 
+// validateSPI1Corpus validates spi1 corpus.
 func validateSPI1Corpus(corpus ScaleCorpus, cohort spI1CanonicalCohort) error {
 	if len(corpus.Cases) != len(cohort.keys) {
 		return fmt.Errorf("SP-I1 holdout capture requires exactly the frozen four-training/three-holdout cohort")
@@ -1568,7 +1862,11 @@ func validateSPI1Corpus(corpus ScaleCorpus, cohort spI1CanonicalCohort) error {
 	seen := map[performanceKey]struct{}{}
 	resolved := make([]ResolvedCaseSelector, 0, len(corpus.Cases))
 	for _, testCase := range corpus.Cases {
-		key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: testCase.Dataset,
+			name:    testCase.Name,
+			backend: ModePostgresSQL,
+		}
 		if _, expected := cohort.keys[key]; !expected {
 			return fmt.Errorf("SP-I1 holdout capture contains unexpected case %s/%s", testCase.Dataset, testCase.Name)
 		}
@@ -1593,7 +1891,11 @@ func validateSPI1Corpus(corpus ScaleCorpus, cohort spI1CanonicalCohort) error {
 		if testCase.Shape.QualificationSplit != expectedSplit {
 			return fmt.Errorf("SP-I1 holdout capture changes frozen split for %s/%s", testCase.Dataset, testCase.Name)
 		}
-		resolved = append(resolved, ResolvedCaseSelector{Dataset: testCase.Dataset, Name: testCase.Name, Category: testCase.Category})
+		resolved = append(resolved, ResolvedCaseSelector{
+			Dataset:  testCase.Dataset,
+			Name:     testCase.Name,
+			Category: testCase.Category,
+		})
 	}
 	if !orientationV2KeySetsEqual(seen, cohort.keys) ||
 		declarationSHA256(corpus.DeclaredBackends()) != cohort.declarationSHA256 ||
@@ -1604,6 +1906,7 @@ func validateSPI1Corpus(corpus ScaleCorpus, cohort spI1CanonicalCohort) error {
 	return nil
 }
 
+// validateCurrentSPI1Source validates current spi1 source.
 func validateCurrentSPI1Source(sourceCommit, sourceArchive, dirtyDiff, binary string) error {
 	currentCommit := strings.TrimSpace(commandOutput("git", "rev-parse", "HEAD"))
 	currentArchive, err := sourceArchiveSHA256()
@@ -1621,6 +1924,7 @@ func validateCurrentSPI1Source(sourceCommit, sourceArchive, dirtyDiff, binary st
 	return nil
 }
 
+// loadSPI1ResourceReport loads spi1 resource report.
 func loadSPI1ResourceReport(path string) (ResourceGateReport, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1636,6 +1940,7 @@ func loadSPI1ResourceReport(path string) (ResourceGateReport, error) {
 	return report, nil
 }
 
+// loadSPI1QualificationReport loads spi1 qualification report.
 func loadSPI1QualificationReport(path string) (*SPI1QualificationReport, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1648,6 +1953,7 @@ func loadSPI1QualificationReport(path string) (*SPI1QualificationReport, error) 
 	return report, nil
 }
 
+// loadSPI1FreezeManifest loads spi1 freeze manifest.
 func loadSPI1FreezeManifest(path string) (*SPI1QualificationFreezeManifest, string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1661,6 +1967,7 @@ func loadSPI1FreezeManifest(path string) (*SPI1QualificationFreezeManifest, stri
 	return manifest, hex.EncodeToString(digest[:]), nil
 }
 
+// writeSPI1QualificationReport writes spi1 qualification report.
 func writeSPI1QualificationReport(path string, report SPI1QualificationReport) (err error) {
 	if path == "" {
 		return fmt.Errorf("SP-I1 qualification requires an explicit report output path")
@@ -1682,6 +1989,7 @@ func writeSPI1QualificationReport(path string, report SPI1QualificationReport) (
 	return encoder.Encode(report)
 }
 
+// writeSPI1FreezeManifest writes spi1 freeze manifest.
 func writeSPI1FreezeManifest(path, discoveryReportPath string, report SPI1QualificationReport) (err error) {
 	if path == "" || discoveryReportPath == "" {
 		return fmt.Errorf("SP-I1 discovery freeze requires report and manifest output paths")
@@ -1747,6 +2055,7 @@ func writeSPI1FreezeManifest(path, discoveryReportPath string, report SPI1Qualif
 	return closeErr
 }
 
+// validateDistinctSPI1Paths validates distinct spi1 paths.
 func validateDistinctSPI1Paths(paths map[string]string) error {
 	names := make([]string, 0, len(paths))
 	for name, path := range paths {
@@ -1755,8 +2064,12 @@ func validateDistinctSPI1Paths(paths map[string]string) error {
 		}
 	}
 	sort.Strings(names)
+
+	// resolvedPath records the canonical filesystem identity of one evidence input.
 	type resolvedPath struct {
+		// name retains the name while resolvedPath is assembled or evaluated.
 		name string
+		// info retains the info while resolvedPath is assembled or evaluated.
 		info os.FileInfo
 	}
 	resolved := map[string]resolvedPath{}
@@ -1791,13 +2104,18 @@ func validateDistinctSPI1Paths(paths map[string]string) error {
 	return nil
 }
 
+// selectedCorpusContainsSPI1Holdout selects ed corpus contains spi1 holdout.
 func selectedCorpusContainsSPI1Holdout(corpus ScaleCorpus) bool {
 	cohort, err := canonicalSPI1Cohort()
 	if err != nil {
 		return true
 	}
 	for _, testCase := range corpus.Cases {
-		key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: testCase.Dataset,
+			name:    testCase.Name,
+			backend: ModePostgresSQL,
+		}
 		if _, holdout := cohort.holdoutKeys[key]; holdout {
 			return true
 		}
@@ -1839,7 +2157,11 @@ func selectRunnableScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (S
 	filtered := ScaleCorpus{Cases: make([]ScaleCase, 0, len(corpus.Cases))}
 	protected := ScaleCorpus{Cases: make([]ScaleCase, 0, len(cohort.holdoutKeys))}
 	for _, testCase := range corpus.Cases {
-		key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
+		key := performanceKey{
+			dataset: testCase.Dataset,
+			name:    testCase.Name,
+			backend: ModePostgresSQL,
+		}
 		if _, isProtected := cohort.holdoutKeys[key]; isProtected {
 			protected.Cases = append(protected.Cases, testCase)
 			continue
@@ -1857,6 +2179,7 @@ func selectRunnableScaleCorpus(corpus ScaleCorpus, selectors CorpusSelectors) (S
 	return selected, manifest, nil
 }
 
+// validateSPI1HoldoutCaptureConfig validates spi1 holdout capture config.
 func validateSPI1HoldoutCaptureConfig(cfg config) error {
 	if len(cfg.Modes) != 1 || cfg.Modes[0] != ModePostgresSQL || cfg.ExistingGraph || cfg.Discovery {
 		return fmt.Errorf("SP-I1 holdout capture requires one managed PostgreSQL fixed-confirmation mode")

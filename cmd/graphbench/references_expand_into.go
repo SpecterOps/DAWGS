@@ -12,6 +12,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// expandIntoInputPairs reserves the stable protocol value used to recognize expand into input pairs across artifacts and executions.
 const expandIntoInputPairs = `input_pairs(pair_ordinal, start_id, end_id) as materialized (
   select pair_ordinal, start_id, @end_id::int8
   from unnest(@start_ids::int8[]) with ordinality input(start_id, pair_ordinal)
@@ -105,28 +106,40 @@ join pair_matches on pair_matches.start_id = input_pairs.start_id and pair_match
 
 	return []postgresReferenceSpec{
 		{
-			name: "expand_into_pair_join", architecture: "EXPAND-INTO-PAIR-JOIN",
+			name:               "expand_into_pair_join",
+			architecture:       "EXPAND-INTO-PAIR-JOIN",
 			implementationID:   "expand_into_parameterized_pair_join_v2",
 			stateShape:         "outer pair rows joined directly to matching relationships",
 			observationShape:   "complete relationship composites",
-			semanticValidation: "exact_public_observation", boundary: "complete matching relationships",
-			fullComparator: true, sql: pairJoin, parameters: probeParams,
+			semanticValidation: "exact_public_observation",
+			boundary:           "complete matching relationships",
+			fullComparator:     true,
+			sql:                pairJoin,
+			parameters:         probeParams,
 		},
 		{
-			name: "expand_into_lower_degree_scan", architecture: "EXPAND-INTO-LOWER-DEGREE",
+			name:               "expand_into_lower_degree_scan",
+			architecture:       "EXPAND-INTO-LOWER-DEGREE",
 			implementationID:   "expand_into_typed_lower_degree_scan_v2",
 			stateShape:         "per-pair typed directional degrees plus one disjoint adjacency scan",
 			observationShape:   "complete relationship composites",
-			semanticValidation: "exact_public_observation", boundary: "complete matching relationships",
-			fullComparator: true, sql: lowerDegree, parameters: probeParams,
+			semanticValidation: "exact_public_observation",
+			boundary:           "complete matching relationships",
+			fullComparator:     true,
+			sql:                lowerDegree,
+			parameters:         probeParams,
 		},
 		{
-			name: "expand_into_pair_cache", architecture: "EXPAND-INTO-PAIR-CACHE",
+			name:               "expand_into_pair_cache",
+			architecture:       "EXPAND-INTO-PAIR-CACHE",
 			implementationID:   "expand_into_distinct_pair_match_cache_v2",
 			stateShape:         "statement-local distinct pair keys and every matching relationship row",
 			observationShape:   "complete relationship composites with duplicate outer-row multiplicity reapplied",
-			semanticValidation: "exact_public_observation", boundary: "complete matching relationships",
-			fullComparator: true, sql: pairCache, parameters: probeParams,
+			semanticValidation: "exact_public_observation",
+			boundary:           "complete matching relationships",
+			fullComparator:     true,
+			sql:                pairCache,
+			parameters:         probeParams,
 		},
 	}
 }

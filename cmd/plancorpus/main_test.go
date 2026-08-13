@@ -181,9 +181,20 @@ func TestParseNeo4jPlanDriverConfigRejectsNestedDatabasePath(t *testing.T) {
 // the PlanCorpus Neo4j command boundary cannot execute mutations during capture.
 func TestRegularQueryHasUpdatesDistinguishesReadProfilesFromWriteExplains(t *testing.T) {
 	for _, testCase := range []struct {
+		// query retains the query while anonymous record is assembled or evaluated.
 		query string
+		// write indicates whether write applies.
 		write bool
-	}{{query: "MATCH (n) RETURN n", write: false}, {query: "CREATE (n) RETURN n", write: true}, {query: "MATCH (n) WITH n SET n.x = 1 RETURN n", write: true}} {
+	}{{
+		query: "MATCH (n) RETURN n",
+		write: false,
+	}, {
+		query: "CREATE (n) RETURN n",
+		write: true,
+	}, {
+		query: "MATCH (n) WITH n SET n.x = 1 RETURN n",
+		write: true,
+	}} {
 		parsed, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
 		require.NoError(t, err)
 		require.Equal(t, testCase.write, regularQueryHasUpdates(parsed), testCase.query)

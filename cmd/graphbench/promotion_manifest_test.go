@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// writePromotionManifestWithPassingEvidence writes promotion manifest with passing evidence.
 func writePromotionManifestWithPassingEvidence(t *testing.T, manifest PromotionManifest) string {
 	t.Helper()
 	directory := t.TempDir()
@@ -33,7 +34,10 @@ func writePromotionManifestWithPassingEvidence(t *testing.T, manifest PromotionM
 		path := role + ".json"
 		require.NoError(t, os.WriteFile(filepath.Join(directory, path), raw, 0o600))
 		digest := sha256.Sum256(raw)
-		manifest.Evidence[role] = PromotionEvidenceReference{Path: path, SHA256: hex.EncodeToString(digest[:])}
+		manifest.Evidence[role] = PromotionEvidenceReference{
+			Path:   path,
+			SHA256: hex.EncodeToString(digest[:]),
+		}
 	}
 	raw, err := json.Marshal(manifest)
 	require.NoError(t, err)
@@ -42,16 +46,29 @@ func writePromotionManifestWithPassingEvidence(t *testing.T, manifest PromotionM
 	return path
 }
 
+// TestVerifyPromotionManifestRequiresExactOrientationProbeContract verifies verify promotion manifest requires exact orientation probe contract behavior.
 func TestVerifyPromotionManifestRequiresExactOrientationProbeContract(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	base := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: string(optimize.ExpansionSearchPolicyOrientationProbeV1), SelectorVersion: "orientation-probe-v1",
-		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: string(optimize.ExpansionSearchStepwiseForward),
-		SourceCommit: "deadbeef", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: orientationPromotionCaps(),
+		Version:           promotionManifestVersion,
+		Candidate:         string(optimize.ExpansionSearchPolicyOrientationProbeV1),
+		SelectorVersion:   "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit:      "deadbeef",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              orientationPromotionCaps(),
 		Buckets: []PromotionBucket{{
-			Name: "fixed-suffix", QuerySHA256: []string{digest}, Direction: "outbound", ObservationMode: "endpoint_ids",
-			MinimumDepth: 0, MaximumDepth: 16, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+			Name:                  "fixed-suffix",
+			QuerySHA256:           []string{digest},
+			Direction:             "outbound",
+			ObservationMode:       "endpoint_ids",
+			MinimumDepth:          0,
+			MaximumDepth:          16,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
 		}},
 	}
 
@@ -60,40 +77,51 @@ func TestVerifyPromotionManifestRequiresExactOrientationProbeContract(t *testing
 	require.True(t, verification.Passed, verification.Reasons)
 
 	tests := []struct {
-		name   string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// mutate retains the mutate while anonymous record is assembled or evaluated.
 		mutate func(*PromotionManifest)
+		// reason retains the reason while anonymous record is assembled or evaluated.
 		reason string
 	}{
 		{
-			name: "boundary", mutate: func(manifest *PromotionManifest) { manifest.ExecutionBoundary = "inline_statement" },
+			name:   "boundary",
+			mutate: func(manifest *PromotionManifest) { manifest.ExecutionBoundary = "inline_statement" },
 			reason: "orientation-probe-v1 requires the guarded_dual_arm production boundary",
 		},
 		{
-			name: "fallback", mutate: func(manifest *PromotionManifest) { manifest.FallbackExecutor = "EXPANSION-SUFFIX-SEEDED-REVERSE" },
+			name:   "fallback",
+			mutate: func(manifest *PromotionManifest) { manifest.FallbackExecutor = "EXPANSION-SUFFIX-SEEDED-REVERSE" },
 			reason: "orientation-probe-v1 requires EXPANSION-STEPWISE-FORWARD as its exact fallback",
 		},
 		{
-			name: "extra cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["extra_limit"] = 1 },
+			name:   "extra cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["extra_limit"] = 1 },
 			reason: "orientation-probe-v1 requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps",
 		},
 		{
-			name: "missing cap", mutate: func(manifest *PromotionManifest) { delete(manifest.Caps, "root_row_limit") },
+			name:   "missing cap",
+			mutate: func(manifest *PromotionManifest) { delete(manifest.Caps, "root_row_limit") },
 			reason: "orientation-probe-v1 requires exactly root-row, reverse-seed-row, directional-degree-row, and state caps",
 		},
 		{
-			name: "root cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["root_row_limit"]-- },
+			name:   "root cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["root_row_limit"]-- },
 			reason: "orientation-probe-v1 cap root_row_limit must equal 512",
 		},
 		{
-			name: "reverse seed cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["reverse_seed_row_limit"]-- },
+			name:   "reverse seed cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["reverse_seed_row_limit"]-- },
 			reason: "orientation-probe-v1 cap reverse_seed_row_limit must equal 512",
 		},
 		{
-			name: "directional degree cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["directional_degree_row_limit"]-- },
+			name:   "directional degree cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["directional_degree_row_limit"]-- },
 			reason: "orientation-probe-v1 cap directional_degree_row_limit must equal 16384",
 		},
 		{
-			name: "state cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["state_limit"]-- },
+			name:   "state cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["state_limit"]-- },
 			reason: "orientation-probe-v1 cap state_limit must equal 4096",
 		},
 	}
@@ -110,17 +138,29 @@ func TestVerifyPromotionManifestRequiresExactOrientationProbeContract(t *testing
 	}
 }
 
+// TestVerifyPromotionManifestRequiresStaticV6CanonicalInboundContract verifies verify promotion manifest requires static v6 canonical inbound contract behavior.
 func TestVerifyPromotionManifestRequiresStaticV6CanonicalInboundContract(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	base := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		SelectorVersion: optimize.ShortestPathSelectorStaticV6, ExecutionBoundary: "guarded_dual_arm",
-		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalWitness),
-		SourceCommit:     "deadbeef", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: map[string]int64{"state_limit": 100_000, "predecessor_limit": 100_000, "enumeration_limit": 100_000, "output_bytes_limit": 64 << 20},
+		Version:           promotionManifestVersion,
+		Candidate:         string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		SelectorVersion:   optimize.ShortestPathSelectorStaticV6,
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		SourceCommit:      "deadbeef",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"state_limit": 100_000, "predecessor_limit": 100_000, "enumeration_limit": 100_000, "output_bytes_limit": 64 << 20},
 		Buckets: []PromotionBucket{{
-			Name: "canonical-inbound-depth64", QuerySHA256: []string{digest}, Direction: "inbound", ObservationMode: "one_path",
-			MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+			Name:                  "canonical-inbound-depth64",
+			QuerySHA256:           []string{digest},
+			Direction:             "inbound",
+			ObservationMode:       "one_path",
+			MinimumDepth:          1,
+			MaximumDepth:          64,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
 		}},
 	}
 
@@ -129,24 +169,31 @@ func TestVerifyPromotionManifestRequiresStaticV6CanonicalInboundContract(t *test
 	require.True(t, verification.Passed, verification.Reasons)
 
 	tests := []struct {
-		name   string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// mutate retains the mutate while anonymous record is assembled or evaluated.
 		mutate func(*PromotionManifest)
+		// reason retains the reason while anonymous record is assembled or evaluated.
 		reason string
 	}{
 		{
-			name: "selector", mutate: func(manifest *PromotionManifest) { manifest.SelectorVersion = "sp-static-v5-contained" },
+			name:   "selector",
+			mutate: func(manifest *PromotionManifest) { manifest.SelectorVersion = "sp-static-v5-contained" },
 			reason: "SP-I1 canonical witness requires selector sp-static-v6",
 		},
 		{
-			name: "outbound", mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].Direction = "outbound" },
+			name:   "outbound",
+			mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].Direction = "outbound" },
 			reason: "SP-I1 canonical witness bucket canonical-inbound-depth64 must be the qualified inbound typed single-kind one-path depth 1..64 envelope",
 		},
 		{
-			name: "maximum", mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].MaximumDepth = 63 },
+			name:   "maximum",
+			mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].MaximumDepth = 63 },
 			reason: "SP-I1 canonical witness bucket canonical-inbound-depth64 must be the qualified inbound typed single-kind one-path depth 1..64 envelope",
 		},
 		{
-			name: "kinds", mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].RelationshipKindCount = 2 },
+			name:   "kinds",
+			mutate: func(manifest *PromotionManifest) { manifest.Buckets[0].RelationshipKindCount = 2 },
 			reason: "SP-I1 canonical witness bucket canonical-inbound-depth64 must be the qualified inbound typed single-kind one-path depth 1..64 envelope",
 		},
 	}
@@ -164,16 +211,27 @@ func TestVerifyPromotionManifestRequiresStaticV6CanonicalInboundContract(t *test
 	}
 }
 
+// TestVerifyPromotionManifestRequiresCompleteImmutableEvidenceClosure verifies verify promotion manifest requires complete immutable evidence closure behavior.
 func TestVerifyPromotionManifestRequiresCompleteImmutableEvidenceClosure(t *testing.T) {
 	directory := t.TempDir()
 	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	manifest := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: "SP-B2-C-MIN-LEVEL-D", SelectorVersion: "sp-static-v5", ExecutionBoundary: "stored_helper",
-		SourceCommit: "deadbeef", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: map[string]int64{"visited_nodes": 1000},
+		Version:           promotionManifestVersion,
+		Candidate:         "SP-B2-C-MIN-LEVEL-D",
+		SelectorVersion:   "sp-static-v5",
+		ExecutionBoundary: "stored_helper",
+		SourceCommit:      "deadbeef",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"visited_nodes": 1000},
 		Buckets: []PromotionBucket{{
-			Name: "deep-inbound-distance", QuerySHA256: []string{digest}, Direction: "inbound",
-			ObservationMode: "distance", MinimumDepth: 5, MaximumDepth: 16,
+			Name:               "deep-inbound-distance",
+			QuerySHA256:        []string{digest},
+			Direction:          "inbound",
+			ObservationMode:    "distance",
+			MinimumDepth:       5,
+			MaximumDepth:       16,
 			QualificationSplit: []string{"training", "holdout"},
 		}},
 	}
@@ -191,7 +249,10 @@ func TestVerifyPromotionManifestRequiresCompleteImmutableEvidenceClosure(t *test
 		path := role + ".json"
 		require.NoError(t, os.WriteFile(filepath.Join(directory, path), raw, 0o600))
 		digest := sha256.Sum256(raw)
-		evidence[role] = PromotionEvidenceReference{Path: path, SHA256: hex.EncodeToString(digest[:])}
+		evidence[role] = PromotionEvidenceReference{
+			Path:   path,
+			SHA256: hex.EncodeToString(digest[:]),
+		}
 	}
 	manifest.Evidence = evidence
 	raw, err := json.Marshal(manifest)
@@ -214,15 +275,30 @@ func TestVerifyPromotionManifestRequiresCompleteImmutableEvidenceClosure(t *test
 	require.Contains(t, verification.Reasons, "required evidence role operational is missing")
 }
 
+// TestVerifyPromotionEvidenceRejectsEveryCrossBindingMismatch verifies verify promotion evidence rejects every cross binding mismatch behavior.
 func TestVerifyPromotionEvidenceRejectsEveryCrossBindingMismatch(t *testing.T) {
 	directory := t.TempDir()
 	digest := strings.Repeat("0", 64)
 	manifest := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: "candidate-a", SelectorVersion: "selector", ExecutionBoundary: "guarded_dual_arm",
-		FallbackExecutor: "incumbent", SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: map[string]int64{"cap": 1}, Buckets: []PromotionBucket{{
-			Name: "bucket", QuerySHA256: []string{digest}, Direction: "outbound", ObservationMode: "one_path",
-			MinimumDepth: 1, MaximumDepth: 4, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+		Version:           promotionManifestVersion,
+		Candidate:         "candidate-a",
+		SelectorVersion:   "selector",
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  "incumbent",
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"cap": 1},
+		Buckets: []PromotionBucket{{
+			Name:                  "bucket",
+			QuerySHA256:           []string{digest},
+			Direction:             "outbound",
+			ObservationMode:       "one_path",
+			MinimumDepth:          1,
+			MaximumDepth:          4,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
 		}},
 	}
 	tests := map[string]func(*PromotionEvidenceIdentity){
@@ -253,20 +329,36 @@ func TestVerifyPromotionEvidenceRejectsEveryCrossBindingMismatch(t *testing.T) {
 			path := "resource.json"
 			require.NoError(t, os.WriteFile(filepath.Join(directory, path), raw, 0o600))
 			sum := sha256.Sum256(raw)
-			reference := PromotionEvidenceReference{Path: path, SHA256: hex.EncodeToString(sum[:])}
+			reference := PromotionEvidenceReference{
+				Path:   path,
+				SHA256: hex.EncodeToString(sum[:]),
+			}
 			err = verifyPromotionEvidence(directory, "resource", reference, promotionEvidenceIdentity(manifest))
 			require.EqualError(t, err, "promotion identity does not match manifest")
 		})
 	}
 }
 
+// TestBindPromotionEvidenceReportCopiesCompleteManifestIdentity verifies bind promotion evidence report copies complete manifest identity behavior.
 func TestBindPromotionEvidenceReportCopiesCompleteManifestIdentity(t *testing.T) {
 	directory := t.TempDir()
 	digest := strings.Repeat("a", 64)
 	manifest := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: "candidate", SelectorVersion: "selector", ExecutionBoundary: "guarded_dual_arm",
-		FallbackExecutor: "incumbent", SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: map[string]int64{"cap": 7}, Buckets: []PromotionBucket{{Name: "bucket", QuerySHA256: []string{digest}, QualificationSplit: []string{"training", "holdout"}}},
+		Version:           promotionManifestVersion,
+		Candidate:         "candidate",
+		SelectorVersion:   "selector",
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  "incumbent",
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"cap": 7},
+		Buckets: []PromotionBucket{{
+			Name:               "bucket",
+			QuerySHA256:        []string{digest},
+			QualificationSplit: []string{"training", "holdout"},
+		}},
 	}
 	manifestRaw, err := json.Marshal(manifest)
 	require.NoError(t, err)
@@ -280,7 +372,9 @@ func TestBindPromotionEvidenceReportCopiesCompleteManifestIdentity(t *testing.T)
 	boundRaw, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 	var bound struct {
-		Passed            bool                      `json:"passed"`
+		// Passed indicates whether passed applies.
+		Passed bool `json:"passed"`
+		// PromotionIdentity identifies the promotion identity.
 		PromotionIdentity PromotionEvidenceIdentity `json:"promotion_identity"`
 	}
 	require.NoError(t, json.Unmarshal(boundRaw, &bound))
@@ -288,6 +382,7 @@ func TestBindPromotionEvidenceReportCopiesCompleteManifestIdentity(t *testing.T)
 	require.Equal(t, promotionEvidenceIdentity(manifest), bound.PromotionIdentity)
 }
 
+// TestVerifyPromotionManifestRejectsVersionOne verifies verify promotion manifest rejects version one behavior.
 func TestVerifyPromotionManifestRejectsVersionOne(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "manifest.json")
@@ -298,19 +393,33 @@ func TestVerifyPromotionManifestRejectsVersionOne(t *testing.T) {
 	require.Contains(t, verification.Reasons, "manifest version must be 2")
 }
 
+// TestVerifyPromotionManifestRejectsEscapingOrMutatedEvidence verifies verify promotion manifest rejects escaping or mutated evidence behavior.
 func TestVerifyPromotionManifestRejectsEscapingOrMutatedEvidence(t *testing.T) {
 	directory := t.TempDir()
 	manifestPath := filepath.Join(directory, "promotion.json")
 	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	manifest := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: "candidate", SelectorVersion: "selector", ExecutionBoundary: "inline_statement", SourceCommit: "commit",
-		SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps:     map[string]int64{"cap": 1},
-		Buckets:  []PromotionBucket{{Name: "bucket", QuerySHA256: []string{digest}, QualificationSplit: []string{"training", "holdout"}}},
+		Version:           promotionManifestVersion,
+		Candidate:         "candidate",
+		SelectorVersion:   "selector",
+		ExecutionBoundary: "inline_statement",
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"cap": 1},
+		Buckets: []PromotionBucket{{
+			Name:               "bucket",
+			QuerySHA256:        []string{digest},
+			QualificationSplit: []string{"training", "holdout"},
+		}},
 		Evidence: map[string]PromotionEvidenceReference{},
 	}
 	for _, role := range requiredPromotionEvidenceRoles {
-		manifest.Evidence[role] = PromotionEvidenceReference{Path: "../outside.json", SHA256: digest}
+		manifest.Evidence[role] = PromotionEvidenceReference{
+			Path:   "../outside.json",
+			SHA256: digest,
+		}
 	}
 	raw, err := json.Marshal(manifest)
 	require.NoError(t, err)

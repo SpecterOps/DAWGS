@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPostgresTraversalTelemetryCompletesBidirectionalCandidateIdentityChain verifies postgres traversal telemetry completes bidirectional candidate identity chain behavior.
 func TestPostgresTraversalTelemetryCompletesBidirectionalCandidateIdentityChain(t *testing.T) {
 	telemetry := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelDiagnostic)
 	require.Equal(t, TraversalTelemetryCounterStatusHiddenUnavailable, telemetry.Diagnostic.CounterStatus)
@@ -40,6 +41,7 @@ func TestPostgresTraversalTelemetryCompletesBidirectionalCandidateIdentityChain(
 	require.Equal(t, int64(4), observed["predecessor_rows"])
 }
 
+// TestPostgresTraversalTelemetryRebindsRuntimeIdentityOnExactFallback verifies postgres traversal telemetry rebinds runtime identity on exact fallback behavior.
 func TestPostgresTraversalTelemetryRebindsRuntimeIdentityOnExactFallback(t *testing.T) {
 	telemetry := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelDiagnostic)
 	document := validBidirectionalDiagnosticDocument(telemetry.Diagnostic.InvocationID)
@@ -63,6 +65,7 @@ func TestPostgresTraversalTelemetryRebindsRuntimeIdentityOnExactFallback(t *test
 	require.Contains(t, telemetry.Diagnostic.IncompleteReasons[0], "S4 fallback")
 }
 
+// TestPostgresTraversalTelemetryRejectsInvocationConnectionAndCapMismatch verifies postgres traversal telemetry rejects invocation connection and cap mismatch behavior.
 func TestPostgresTraversalTelemetryRejectsInvocationConnectionAndCapMismatch(t *testing.T) {
 	telemetry := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelDiagnostic)
 	document := validBidirectionalDiagnosticDocument(telemetry.Diagnostic.InvocationID)
@@ -88,6 +91,7 @@ func TestPostgresTraversalTelemetryRejectsInvocationConnectionAndCapMismatch(t *
 	require.ErrorContains(t, err, "counters are missing")
 }
 
+// TestPostgresTraversalTelemetryRequiresExactlyOneSingletonSearchCall verifies postgres traversal telemetry requires exactly one singleton search call behavior.
 func TestPostgresTraversalTelemetryRequiresExactlyOneSingletonSearchCall(t *testing.T) {
 	telemetry := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelDiagnostic)
 	document := validBidirectionalDiagnosticDocument(telemetry.Diagnostic.InvocationID)
@@ -99,6 +103,7 @@ func TestPostgresTraversalTelemetryRequiresExactlyOneSingletonSearchCall(t *test
 	require.ErrorContains(t, err, "exactly one search call")
 }
 
+// TestPostgresTraversalTelemetryCapturesASPWorkAndWorkspaceButFailsClosedWithoutHydration verifies postgres traversal telemetry captures asp work and workspace but fails closed without hydration behavior.
 func TestPostgresTraversalTelemetryCapturesASPWorkAndWorkspaceButFailsClosedWithoutHydration(t *testing.T) {
 	telemetry := bidirectionalASPCaseTelemetry(t)
 	document := validBidirectionalAllShortestDiagnosticDocument(telemetry.Diagnostic.InvocationID)
@@ -118,13 +123,23 @@ func TestPostgresTraversalTelemetryCapturesASPWorkAndWorkspaceButFailsClosedWith
 	require.NotNil(t, telemetry.Diagnostic.Counters.Workspace)
 }
 
+// TestPostgresTraversalTelemetryCompletesASPHydrationFromInvocationAndPlanEvidence verifies postgres traversal telemetry completes asp hydration from invocation and plan evidence behavior.
 func TestPostgresTraversalTelemetryCompletesASPHydrationFromInvocationAndPlanEvidence(t *testing.T) {
 	telemetry := bidirectionalASPCaseTelemetry(t)
 	document := validBidirectionalAllShortestDiagnosticDocument(telemetry.Diagnostic.InvocationID)
 	require.NoError(t, applyBidirectionalAllShortestTraversalDiagnostic(telemetry, document, telemetry.Diagnostic.InvocationID, "9123"))
-	metrics := PostgresPlanMetrics{HydrationRows: 48, HydrationLoops: 12, PlanNodes: []PostgresPlanNodeMetric{{
-		NodeType: "Index Scan", RelationName: "node", Alias: "hydrated_nodes", ActualRows: 4, ActualLoops: 12, ActualTotalMS: .25,
-	}}}
+	metrics := PostgresPlanMetrics{
+		HydrationRows:  48,
+		HydrationLoops: 12,
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType:      "Index Scan",
+			RelationName:  "node",
+			Alias:         "hydrated_nodes",
+			ActualRows:    4,
+			ActualLoops:   12,
+			ActualTotalMS: .25,
+		}},
+	}
 	enrichBidirectionalHydrationTelemetry(telemetry, document.Counters.OutputPaths, document.Counters.OutputEdgeCells, []string{`["p1"]`, `["p2"]`}, metrics)
 	require.NoError(t, telemetry.Validate())
 	require.Equal(t, TraversalTelemetryCounterStatusComplete, telemetry.Diagnostic.CounterStatus)
@@ -133,6 +148,7 @@ func TestPostgresTraversalTelemetryCompletesASPHydrationFromInvocationAndPlanEvi
 	require.Equal(t, int64(48), *telemetry.Diagnostic.Counters.Hydration.NodeLookups)
 }
 
+// TestPostgresTraversalTelemetryRebindsASPExactFallbackAndRejectsMissingCounters verifies postgres traversal telemetry rebinds asp exact fallback and rejects missing counters behavior.
 func TestPostgresTraversalTelemetryRebindsASPExactFallbackAndRejectsMissingCounters(t *testing.T) {
 	telemetry := bidirectionalASPCaseTelemetry(t)
 	document := validBidirectionalAllShortestDiagnosticDocument(telemetry.Diagnostic.InvocationID)
@@ -156,6 +172,7 @@ func TestPostgresTraversalTelemetryRebindsASPExactFallbackAndRejectsMissingCount
 	require.ErrorContains(t, err, "output_bytes")
 }
 
+// TestPostgresTraversalTelemetryWitnessRequiresSeparateHydrationEvidence verifies postgres traversal telemetry witness requires separate hydration evidence behavior.
 func TestPostgresTraversalTelemetryWitnessRequiresSeparateHydrationEvidence(t *testing.T) {
 	telemetry := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelDiagnostic)
 	telemetry.Summary.RequestedIdentity = "SP-B2-C-MIN-LEVEL-WE+MAT-M0"
@@ -170,9 +187,14 @@ func TestPostgresTraversalTelemetryWitnessRequiresSeparateHydrationEvidence(t *t
 	require.Contains(t, telemetry.Diagnostic.IncompleteReasons, "complete invocation-local path hydration counters are unavailable")
 }
 
+// TestPostgresTraversalTelemetryLeavesNonBidirectionalHiddenFunctionsUnavailable verifies postgres traversal telemetry leaves non bidirectional hidden functions unavailable behavior.
 func TestPostgresTraversalTelemetryLeavesNonBidirectionalHiddenFunctionsUnavailable(t *testing.T) {
 	metrics := PostgresPlanMetrics{
-		PlanNodes:  []PostgresPlanNodeMetric{{NodeType: "Function Scan", FunctionName: "all_shortest_paths_dag", ActualLoops: 1}},
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType:     "Function Scan",
+			FunctionName: "all_shortest_paths_dag",
+			ActualLoops:  1,
+		}},
 		Provenance: map[string]string{},
 	}
 	reference := PostgresReferenceResult{
@@ -189,6 +211,7 @@ func TestPostgresTraversalTelemetryLeavesNonBidirectionalHiddenFunctionsUnavaila
 	require.Contains(t, telemetry.Diagnostic.IncompleteReasons[0], "Function Scan")
 }
 
+// TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation verifies postgres traversal telemetry uses plan replay for sql visible orientation behavior.
 func TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
 		Family:            "fixed_suffix_expansion",
@@ -229,6 +252,7 @@ func TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation(t *tes
 	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["orientation_executed_candidate_rows"])
 }
 
+// TestPostgresTraversalTelemetryKeepsEndpointGuardInOrientationFamily verifies postgres traversal telemetry keeps endpoint guard in orientation family behavior.
 func TestPostgresTraversalTelemetryKeepsEndpointGuardInOrientationFamily(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
 		Family:            "fixed_prefix_terminal_expansion",
@@ -241,10 +265,23 @@ func TestPostgresTraversalTelemetryKeepsEndpointGuardInOrientationFamily(t *test
 		EmittedPolicy:     string(optimize.ExpansionSearchPolicyEndpointGuardV1),
 		ExecutionBoundary: "guarded_dual_arm",
 	}
-	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_candidate", ActualRows: 1, ActualLoops: 1},
-		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 0, ActualLoops: 1},
-	}}
+	metrics := PostgresPlanMetrics{
+		Provenance: map[string]string{},
+		PlanNodes: []PostgresPlanNodeMetric{
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_executed_candidate",
+				ActualRows:  1,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_executed_incumbent",
+				ActualRows:  0,
+				ActualLoops: 1,
+			},
+		},
+	}
 
 	telemetry, err := buildPostgresCaseTraversalTelemetry(
 		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
@@ -255,28 +292,45 @@ func TestPostgresTraversalTelemetryKeepsEndpointGuardInOrientationFamily(t *test
 	require.Equal(t, string(optimize.ExpansionSearchEndpointSeededReverse), telemetry.Summary.RuntimeIdentity)
 }
 
+// TestPostgresTraversalTelemetryCompletesGuardedInlineASPCounters verifies postgres traversal telemetry completes guarded inline asp counters behavior.
 func TestPostgresTraversalTelemetryCompletesGuardedInlineASPCounters(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
-		Family: "ASP", Candidate: "ASP-I1-U-DAG+MAT-M0", Selected: "ASP-I1-U-DAG+MAT-M0", Applied: "ASP-I1-U-DAG+MAT-M0",
-		Fallback: "ASP-A1-DAG", PlannedCandidates: []string{"ASP-A1-DAG", "ASP-I1-U-DAG+MAT-M0"},
-		EmittedCandidates: []string{"ASP-I1-U-DAG+MAT-M0", "ASP-A1-DAG"}, EmittedPolicy: "asp-i1-guarded-v1",
-		SelectionMode: "production_canary", SelectorVersion: "asp-i1-canary-v1", ExecutionBoundary: "guarded_dual_arm",
-		ObservationMode: "all_paths", StateLimit: 10, PredecessorLimit: 20, EnumerationLimit: 30, OutputBytesLimit: 1000,
+		Family:            "ASP",
+		Candidate:         "ASP-I1-U-DAG+MAT-M0",
+		Selected:          "ASP-I1-U-DAG+MAT-M0",
+		Applied:           "ASP-I1-U-DAG+MAT-M0",
+		Fallback:          "ASP-A1-DAG",
+		PlannedCandidates: []string{"ASP-A1-DAG", "ASP-I1-U-DAG+MAT-M0"},
+		EmittedCandidates: []string{"ASP-I1-U-DAG+MAT-M0", "ASP-A1-DAG"},
+		EmittedPolicy:     "asp-i1-guarded-v1",
+		SelectionMode:     "production_canary",
+		SelectorVersion:   "asp-i1-canary-v1",
+		ExecutionBoundary: "guarded_dual_arm",
+		ObservationMode:   "all_paths",
+		StateLimit:        10,
+		PredecessorLimit:  20,
+		EnumerationLimit:  30,
+		OutputBytesLimit:  1000,
 	}
-	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, HydrationRows: 4, HydrationLoops: 2, PlanNodes: []PostgresPlanNodeMetric{
-		inlinePredecessorPlanNode("asp_i1_distance_bounded", 3, 1),
-		inlinePredecessorPlanNode("asp_i1_predecessor_bounded", 2, 1),
-		inlinePredecessorPlanNode("asp_i1_paths_bounded", 4, 1),
-		inlinePredecessorPlanNode("asp_i1_shortest", 2, 1),
-		inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
-		inlinePredecessorPlanNode("asp_i1_fallback_marker", 0, 1),
-		inlinePredecessorPlanNode("asp_i1_candidate_rows", 2, 1),
-		inlinePredecessorPlanNode("asp_i1_fallback_rows", 0, 1),
-		inlinePredecessorMarkerGateNode("candidate", 1, 1),
-		inlinePredecessorMarkerGateNode("fallback", 0, 1),
-		inlinePredecessorExecutorNode("candidate", 1),
-		inlinePredecessorExecutorNode("fallback", 0),
-	}}
+	metrics := PostgresPlanMetrics{
+		Provenance:     map[string]string{},
+		HydrationRows:  4,
+		HydrationLoops: 2,
+		PlanNodes: []PostgresPlanNodeMetric{
+			inlinePredecessorPlanNode("asp_i1_distance_bounded", 3, 1),
+			inlinePredecessorPlanNode("asp_i1_predecessor_bounded", 2, 1),
+			inlinePredecessorPlanNode("asp_i1_paths_bounded", 4, 1),
+			inlinePredecessorPlanNode("asp_i1_shortest", 2, 1),
+			inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
+			inlinePredecessorPlanNode("asp_i1_fallback_marker", 0, 1),
+			inlinePredecessorPlanNode("asp_i1_candidate_rows", 2, 1),
+			inlinePredecessorPlanNode("asp_i1_fallback_rows", 0, 1),
+			inlinePredecessorMarkerGateNode("candidate", 1, 1),
+			inlinePredecessorMarkerGateNode("fallback", 0, 1),
+			inlinePredecessorExecutorNode("candidate", 1),
+			inlinePredecessorExecutorNode("fallback", 0),
+		},
+	}
 	telemetry, err := buildPostgresCaseTraversalTelemetry(
 		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
 	)
@@ -296,12 +350,14 @@ func TestPostgresTraversalTelemetryCompletesGuardedInlineASPCounters(t *testing.
 	require.Equal(t, int64(0), *telemetry.Diagnostic.Counters.InlineASP.FallbackExecutorLoops)
 }
 
+// TestPostgresTraversalTelemetryCompletesGuardedInlineCanonicalSPCounters verifies postgres traversal telemetry completes guarded inline canonical sp counters behavior.
 func TestPostgresTraversalTelemetryCompletesGuardedInlineCanonicalSPCounters(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
-		Family: "SP", Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		Selected: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		Applied:  string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		Fallback: string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		Family:    "SP",
+		Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		Selected:  string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		Applied:   string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		Fallback:  string(optimize.ShortestPathExecutorS4CanonicalWitness),
 		PlannedCandidates: []string{
 			string(optimize.ShortestPathExecutorS4CanonicalWitness),
 			string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
@@ -310,45 +366,82 @@ func TestPostgresTraversalTelemetryCompletesGuardedInlineCanonicalSPCounters(t *
 			string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
 			string(optimize.ShortestPathExecutorS4CanonicalWitness),
 		},
-		EmittedPolicy: optimize.ShortestPathPolicyI1CanonicalGuardedV1,
-		SelectionMode: "production_canary", SelectorVersion: "sp-i1-canary-v1", ExecutionBoundary: "guarded_dual_arm",
-		ObservationMode: "one_path", StateLimit: 10, PredecessorLimit: 20, EnumerationLimit: 30, OutputBytesLimit: 1000,
+		EmittedPolicy:     optimize.ShortestPathPolicyI1CanonicalGuardedV1,
+		SelectionMode:     "production_canary",
+		SelectorVersion:   "sp-i1-canary-v1",
+		ExecutionBoundary: "guarded_dual_arm",
+		ObservationMode:   "one_path",
+		StateLimit:        10,
+		PredecessorLimit:  20,
+		EnumerationLimit:  30,
+		OutputBytesLimit:  1000,
 	}
 
 	tests := []struct {
-		name             string
-		candidateMarker  int64
-		fallbackMarker   int64
-		outputRows       int64
-		distanceRows     int64
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// candidateMarker retains the candidate marker while anonymous record is assembled or evaluated.
+		candidateMarker int64
+		// fallbackMarker retains the fallback marker while anonymous record is assembled or evaluated.
+		fallbackMarker int64
+		// outputRows records the number of output rows.
+		outputRows int64
+		// distanceRows records the number of distance rows.
+		distanceRows int64
+		// expectedIdentity identifies the expected identity.
 		expectedIdentity string
-		expectedBranch   string
+		// expectedBranch retains the expected branch while anonymous record is assembled or evaluated.
+		expectedBranch string
+		// expectedFallback indicates whether expected fallback applies.
 		expectedFallback bool
 	}{
-		{name: "candidate witness", candidateMarker: 1, outputRows: 1, distanceRows: 3,
-			expectedIdentity: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), expectedBranch: "inline_canonical_witness"},
-		{name: "candidate no path", candidateMarker: 1, distanceRows: 3,
-			expectedIdentity: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), expectedBranch: "inline_canonical_no_path"},
-		{name: "exact S4 fallback", fallbackMarker: 1, outputRows: 1, distanceRows: 11,
-			expectedIdentity: string(optimize.ShortestPathExecutorS4CanonicalWitness), expectedBranch: "exact_s4_fallback", expectedFallback: true},
+		{
+			name:             "candidate witness",
+			candidateMarker:  1,
+			outputRows:       1,
+			distanceRows:     3,
+			expectedIdentity: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			expectedBranch:   "inline_canonical_witness",
+		},
+		{
+			name:             "candidate no path",
+			candidateMarker:  1,
+			distanceRows:     3,
+			expectedIdentity: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+			expectedBranch:   "inline_canonical_no_path",
+		},
+		{
+			name:             "exact S4 fallback",
+			fallbackMarker:   1,
+			outputRows:       1,
+			distanceRows:     11,
+			expectedIdentity: string(optimize.ShortestPathExecutorS4CanonicalWitness),
+			expectedBranch:   "exact_s4_fallback",
+			expectedFallback: true,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics := PostgresPlanMetrics{Provenance: map[string]string{}, HydrationRows: test.outputRows, HydrationLoops: test.outputRows, PlanNodes: []PostgresPlanNodeMetric{
-				inlinePredecessorPlanNode("asp_i1_distance_bounded", test.distanceRows, 1),
-				inlinePredecessorPlanNode("asp_i1_predecessor_bounded", 2, 1),
-				inlinePredecessorPlanNode("asp_i1_paths_bounded", 4, 1),
-				inlinePredecessorPlanNode("asp_i1_shortest", test.outputRows, 1),
-				inlinePredecessorPlanNode("asp_i1_candidate_marker", test.candidateMarker, 1),
-				inlinePredecessorPlanNode("asp_i1_fallback_marker", test.fallbackMarker, 1),
-				inlinePredecessorPlanNode("asp_i1_candidate_rows", test.candidateMarker*test.outputRows, 1),
-				inlinePredecessorPlanNode("asp_i1_fallback_rows", test.fallbackMarker*test.outputRows, 1),
-				inlinePredecessorMarkerGateNode("candidate", test.candidateMarker, 1),
-				inlinePredecessorMarkerGateNode("fallback", test.fallbackMarker, 1),
-				inlinePredecessorExecutorNode("candidate", test.candidateMarker),
-				inlinePredecessorExecutorNode("fallback", test.fallbackMarker),
-			}}
+			metrics := PostgresPlanMetrics{
+				Provenance:     map[string]string{},
+				HydrationRows:  test.outputRows,
+				HydrationLoops: test.outputRows,
+				PlanNodes: []PostgresPlanNodeMetric{
+					inlinePredecessorPlanNode("asp_i1_distance_bounded", test.distanceRows, 1),
+					inlinePredecessorPlanNode("asp_i1_predecessor_bounded", 2, 1),
+					inlinePredecessorPlanNode("asp_i1_paths_bounded", 4, 1),
+					inlinePredecessorPlanNode("asp_i1_shortest", test.outputRows, 1),
+					inlinePredecessorPlanNode("asp_i1_candidate_marker", test.candidateMarker, 1),
+					inlinePredecessorPlanNode("asp_i1_fallback_marker", test.fallbackMarker, 1),
+					inlinePredecessorPlanNode("asp_i1_candidate_rows", test.candidateMarker*test.outputRows, 1),
+					inlinePredecessorPlanNode("asp_i1_fallback_rows", test.fallbackMarker*test.outputRows, 1),
+					inlinePredecessorMarkerGateNode("candidate", test.candidateMarker, 1),
+					inlinePredecessorMarkerGateNode("fallback", test.fallbackMarker, 1),
+					inlinePredecessorExecutorNode("candidate", test.candidateMarker),
+					inlinePredecessorExecutorNode("fallback", test.fallbackMarker),
+				},
+			}
 			telemetry, err := buildPostgresCaseTraversalTelemetry(
 				translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
 			)
@@ -369,12 +462,14 @@ func TestPostgresTraversalTelemetryCompletesGuardedInlineCanonicalSPCounters(t *
 	}
 }
 
+// TestPostgresTraversalTelemetryRejectsEveryMissingInlinePredecessorCounter verifies postgres traversal telemetry rejects every missing inline predecessor counter behavior.
 func TestPostgresTraversalTelemetryRejectsEveryMissingInlinePredecessorCounter(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
-		Family: "SP", Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		Selected: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		Applied:  string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		Fallback: string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		Family:    "SP",
+		Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		Selected:  string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		Applied:   string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		Fallback:  string(optimize.ShortestPathExecutorS4CanonicalWitness),
 		PlannedCandidates: []string{
 			string(optimize.ShortestPathExecutorS4CanonicalWitness),
 			string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
@@ -383,8 +478,12 @@ func TestPostgresTraversalTelemetryRejectsEveryMissingInlinePredecessorCounter(t
 			string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
 			string(optimize.ShortestPathExecutorS4CanonicalWitness),
 		},
-		EmittedPolicy:   optimize.ShortestPathPolicyI1CanonicalGuardedV1,
-		ObservationMode: "one_path", StateLimit: 10, PredecessorLimit: 20, EnumerationLimit: 30, OutputBytesLimit: 1000,
+		EmittedPolicy:    optimize.ShortestPathPolicyI1CanonicalGuardedV1,
+		ObservationMode:  "one_path",
+		StateLimit:       10,
+		PredecessorLimit: 20,
+		EnumerationLimit: 30,
+		OutputBytesLimit: 1000,
 	}
 	fullPlan := []PostgresPlanNodeMetric{
 		inlinePredecessorPlanNode("asp_i1_distance_bounded", 3, 1),
@@ -434,22 +533,50 @@ func TestPostgresTraversalTelemetryRejectsEveryMissingInlinePredecessorCounter(t
 	}
 }
 
+// TestPostgresTraversalPlanReplayUsesExactInlinePredecessorCTEBodies verifies postgres traversal plan replay uses exact inline predecessor cte bodies behavior.
 func TestPostgresTraversalPlanReplayUsesExactInlinePredecessorCTEBodies(t *testing.T) {
-	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-		inlinePredecessorPlanNode("asp_i1_distance_bounded", 3, 1),
-		{PlanNodeID: 500, NodeType: "Limit", SubplanName: "CTE prefix_asp_i1_distance_bounded", ActualRows: 77, ActualLoops: 1},
-		{NodeType: "CTE Scan", CTEName: "asp_i1_distance_bounded", Alias: "asp_i1_distance_bounded", ActualRows: 99, ActualLoops: 7},
-		inlinePredecessorPlanNode("asp_i1_candidate_rows", 0, 1),
-		{NodeType: "CTE Scan", CTEName: "asp_i1_candidate_rows", Alias: "asp_i1_candidate_rows", ActualRows: 10, ActualLoops: 5},
-		inlinePredecessorPlanNode("asp_i1_fallback_rows", 0, 1),
-		{NodeType: "CTE Scan", CTEName: "asp_i1_fallback_rows", Alias: "asp_i1_fallback_rows", ActualRows: 8, ActualLoops: 3},
-		inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
-		inlinePredecessorPlanNode("asp_i1_fallback_marker", 0, 1),
-		inlinePredecessorMarkerGateNode("candidate", 1, 1),
-		inlinePredecessorMarkerGateNode("fallback", 0, 1),
-		inlinePredecessorExecutorNode("candidate", 1),
-		inlinePredecessorExecutorNode("fallback", 0),
-	}}
+	metrics := PostgresPlanMetrics{
+		Provenance: map[string]string{},
+		PlanNodes: []PostgresPlanNodeMetric{
+			inlinePredecessorPlanNode("asp_i1_distance_bounded", 3, 1),
+			{
+				PlanNodeID:  500,
+				NodeType:    "Limit",
+				SubplanName: "CTE prefix_asp_i1_distance_bounded",
+				ActualRows:  77,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "CTE Scan",
+				CTEName:     "asp_i1_distance_bounded",
+				Alias:       "asp_i1_distance_bounded",
+				ActualRows:  99,
+				ActualLoops: 7,
+			},
+			inlinePredecessorPlanNode("asp_i1_candidate_rows", 0, 1),
+			{
+				NodeType:    "CTE Scan",
+				CTEName:     "asp_i1_candidate_rows",
+				Alias:       "asp_i1_candidate_rows",
+				ActualRows:  10,
+				ActualLoops: 5,
+			},
+			inlinePredecessorPlanNode("asp_i1_fallback_rows", 0, 1),
+			{
+				NodeType:    "CTE Scan",
+				CTEName:     "asp_i1_fallback_rows",
+				Alias:       "asp_i1_fallback_rows",
+				ActualRows:  8,
+				ActualLoops: 3,
+			},
+			inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
+			inlinePredecessorPlanNode("asp_i1_fallback_marker", 0, 1),
+			inlinePredecessorMarkerGateNode("candidate", 1, 1),
+			inlinePredecessorMarkerGateNode("fallback", 0, 1),
+			inlinePredecessorExecutorNode("candidate", 1),
+			inlinePredecessorExecutorNode("fallback", 0),
+		},
+	}
 
 	replay := postgresTraversalPlanReplay(metrics)
 	require.Equal(t, int64(3), replay.Counters["asp_i1_distance_rows"])
@@ -459,16 +586,20 @@ func TestPostgresTraversalPlanReplayUsesExactInlinePredecessorCTEBodies(t *testi
 	require.Equal(t, int64(0), replay.Counters["asp_i1_fallback_executor_loops"])
 }
 
+// TestPostgresTraversalPlanReplayRejectsAmbiguousInlineBranchShape verifies postgres traversal plan replay rejects ambiguous inline branch shape behavior.
 func TestPostgresTraversalPlanReplayRejectsAmbiguousInlineBranchShape(t *testing.T) {
 	t.Run("duplicate exact body", func(t *testing.T) {
 		body := inlinePredecessorPlanNode("asp_i1_candidate_rows", 1, 1)
 		duplicate := body
 		duplicate.PlanNodeID = 99
-		replay := postgresTraversalPlanReplay(PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-			body, duplicate, inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
-			inlinePredecessorMarkerGateNode("candidate", 1, 1),
-			inlinePredecessorExecutorNode("candidate", 1),
-		}})
+		replay := postgresTraversalPlanReplay(PostgresPlanMetrics{
+			Provenance: map[string]string{},
+			PlanNodes: []PostgresPlanNodeMetric{
+				body, duplicate, inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
+				inlinePredecessorMarkerGateNode("candidate", 1, 1),
+				inlinePredecessorExecutorNode("candidate", 1),
+			},
+		})
 		_, branchPresent := replay.Counters["asp_i1_candidate_branch_rows"]
 		_, executorPresent := replay.Counters["asp_i1_candidate_executor_loops"]
 		require.False(t, branchPresent)
@@ -479,39 +610,58 @@ func TestPostgresTraversalPlanReplayRejectsAmbiguousInlineBranchShape(t *testing
 		body := inlinePredecessorPlanNode("asp_i1_candidate_rows", 1, 1)
 		wrongMarker := inlinePredecessorMarkerGateNode("candidate", 1, 1)
 		wrongMarker.CTEName = "asp_i1_fallback_marker"
-		replay := postgresTraversalPlanReplay(PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-			body, inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1), wrongMarker, inlinePredecessorExecutorNode("candidate", 1),
-		}})
+		replay := postgresTraversalPlanReplay(PostgresPlanMetrics{
+			Provenance: map[string]string{},
+			PlanNodes: []PostgresPlanNodeMetric{
+				body, inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1), wrongMarker, inlinePredecessorExecutorNode("candidate", 1),
+			},
+		})
 		require.Equal(t, int64(1), replay.Counters["asp_i1_candidate_branch_rows"])
 		_, executorPresent := replay.Counters["asp_i1_candidate_executor_loops"]
 		require.False(t, executorPresent)
 	})
 }
 
+// inlinePredecessorPlanNode prepares or inspects test evidence for inline predecessor plan node.
 func inlinePredecessorPlanNode(name string, rows, loops int64) PostgresPlanNodeMetric {
 	return PostgresPlanNodeMetric{
-		PlanNodeID: inlinePredecessorPlanNodeID(name), NodeType: "Result", SubplanName: "CTE " + name,
-		ActualRows: rows, ActualLoops: loops,
+		PlanNodeID:  inlinePredecessorPlanNodeID(name),
+		NodeType:    "Result",
+		SubplanName: "CTE " + name,
+		ActualRows:  rows,
+		ActualLoops: loops,
 	}
 }
 
+// inlinePredecessorExecutorNode prepares or inspects test evidence for inline predecessor executor node.
 func inlinePredecessorExecutorNode(branch string, loops int64) PostgresPlanNodeMetric {
 	bodyID := inlinePredecessorPlanNodeID("asp_i1_" + branch + "_rows")
 	return PostgresPlanNodeMetric{
-		PlanNodeID: bodyID + 100, ParentPlanNodeID: bodyID, ParentRelationship: "Inner",
-		NodeType: "Result", Alias: "test_" + branch + "_executor", ActualLoops: loops,
+		PlanNodeID:         bodyID + 100,
+		ParentPlanNodeID:   bodyID,
+		ParentRelationship: "Inner",
+		NodeType:           "Result",
+		Alias:              "test_" + branch + "_executor",
+		ActualLoops:        loops,
 	}
 }
 
+// inlinePredecessorMarkerGateNode prepares or inspects test evidence for inline predecessor marker gate node.
 func inlinePredecessorMarkerGateNode(branch string, rows, loops int64) PostgresPlanNodeMetric {
 	bodyID := inlinePredecessorPlanNodeID("asp_i1_" + branch + "_rows")
 	return PostgresPlanNodeMetric{
-		PlanNodeID: bodyID + 200, ParentPlanNodeID: bodyID, ParentRelationship: "Outer",
-		NodeType: "CTE Scan", CTEName: "asp_i1_" + branch + "_marker", Alias: "test_" + branch + "_marker_gate",
-		ActualRows: rows, ActualLoops: loops,
+		PlanNodeID:         bodyID + 200,
+		ParentPlanNodeID:   bodyID,
+		ParentRelationship: "Outer",
+		NodeType:           "CTE Scan",
+		CTEName:            "asp_i1_" + branch + "_marker",
+		Alias:              "test_" + branch + "_marker_gate",
+		ActualRows:         rows,
+		ActualLoops:        loops,
 	}
 }
 
+// inlinePredecessorPlanNodeID prepares or inspects test evidence for inline predecessor plan node id.
 func inlinePredecessorPlanNodeID(name string) int64 {
 	ids := map[string]int64{
 		"asp_i1_distance_bounded": 1, "asp_i1_predecessor_bounded": 2,
@@ -522,18 +672,37 @@ func inlinePredecessorPlanNodeID(name string) int64 {
 	return ids[name]
 }
 
+// TestPostgresTraversalTelemetryPrefersShortestExecutorOverAnalysisOutcomes verifies postgres traversal telemetry prefers shortest executor over analysis outcomes behavior.
 func TestPostgresTraversalTelemetryPrefersShortestExecutorOverAnalysisOutcomes(t *testing.T) {
-	shortest := translate.TargetLoweringOutcome{TargetKind: "traversal", Family: "SP", Applied: "SP-B1-C-ALT-NODE-D"}
+	shortest := translate.TargetLoweringOutcome{
+		TargetKind: "traversal",
+		Family:     "SP",
+		Applied:    "SP-B1-C-ALT-NODE-D",
+	}
 	outcome, found := singleTraversalOutcome([]translate.TargetLoweringOutcome{
-		{TargetKind: "endpoint_resolution", Family: "endpoint_resolution", TraversalFamily: "SP", Applied: "ENDPOINT-RESOLUTION-INCUMBENT"},
-		{TargetKind: "traversal_predicate", Family: "traversal_predicate", Applied: "TRAVERSAL-PREDICATE-INCUMBENT"},
-		{TargetKind: "traversal", Family: "fixed_suffix_expansion", Applied: "EXPANSION-STEPWISE-FORWARD"},
+		{
+			TargetKind:      "endpoint_resolution",
+			Family:          "endpoint_resolution",
+			TraversalFamily: "SP",
+			Applied:         "ENDPOINT-RESOLUTION-INCUMBENT",
+		},
+		{
+			TargetKind: "traversal_predicate",
+			Family:     "traversal_predicate",
+			Applied:    "TRAVERSAL-PREDICATE-INCUMBENT",
+		},
+		{
+			TargetKind: "traversal",
+			Family:     "fixed_suffix_expansion",
+			Applied:    "EXPANSION-STEPWISE-FORWARD",
+		},
 		shortest,
 	})
 	require.True(t, found)
 	require.Equal(t, shortest, outcome)
 }
 
+// TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent verifies postgres traversal telemetry separates shadow choice from executed incumbent behavior.
 func TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
 		Family:            "fixed_suffix_expansion",
@@ -553,10 +722,30 @@ func TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent(t 
 	}
 	metrics := PostgresPlanMetrics{
 		PlanNodes: []PostgresPlanNodeMetric{
-			{NodeType: "Result", SubplanName: "CTE s5_orientation_shadow_reverse", ActualRows: 1, ActualLoops: 1},
-			{NodeType: "Result", SubplanName: "CTE s5_orientation_shadow_forward", ActualRows: 0, ActualLoops: 1},
-			{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 1, ActualLoops: 1},
-			{NodeType: "Limit", SubplanName: "CTE s5_orientation_suffix_probe", ActualRows: 513, ActualLoops: 1},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_shadow_reverse",
+				ActualRows:  1,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_shadow_forward",
+				ActualRows:  0,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_executed_incumbent",
+				ActualRows:  1,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Limit",
+				SubplanName: "CTE s5_orientation_suffix_probe",
+				ActualRows:  513,
+				ActualLoops: 1,
+			},
 		},
 		Provenance: map[string]string{},
 	}
@@ -577,47 +766,85 @@ func TestPostgresTraversalTelemetrySeparatesShadowChoiceFromExecutedIncumbent(t 
 	require.True(t, *telemetry.Summary.Overflow)
 }
 
+// TestPostgresTraversalTelemetryUsesExactGuardedOrientationReceiptBranches verifies postgres traversal telemetry uses exact guarded orientation receipt branches behavior.
 func TestPostgresTraversalTelemetryUsesExactGuardedOrientationReceiptBranches(t *testing.T) {
 	for _, testCase := range []struct {
-		name             string
-		candidateRows    int64
-		incumbentRows    int64
-		rootProbeRows    int64
-		runtimeIdentity  string
-		runtimeBranch    string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// candidateRows records the number of candidate rows.
+		candidateRows int64
+		// incumbentRows records the number of incumbent rows.
+		incumbentRows int64
+		// rootProbeRows records the number of root probe rows.
+		rootProbeRows int64
+		// runtimeIdentity identifies the runtime identity.
+		runtimeIdentity string
+		// runtimeBranch retains the runtime branch while anonymous record is assembled or evaluated.
+		runtimeBranch string
+		// fallbackExecuted indicates whether fallback executed applies.
 		fallbackExecuted bool
-		overflow         bool
+		// overflow indicates whether overflow applies.
+		overflow bool
 	}{
 		{
-			name: "reverse candidate", candidateRows: 1, runtimeIdentity: string(optimize.ExpansionSearchSuffixSeededReverse),
-			runtimeBranch: "suffix_seeded_reverse",
+			name:            "reverse candidate",
+			candidateRows:   1,
+			runtimeIdentity: string(optimize.ExpansionSearchSuffixSeededReverse),
+			runtimeBranch:   "suffix_seeded_reverse",
 		},
 		{
-			name: "forward selection", incumbentRows: 1, runtimeIdentity: string(optimize.ExpansionSearchStepwiseForward),
-			runtimeBranch: "exact_forward_incumbent",
+			name:            "forward selection",
+			incumbentRows:   1,
+			runtimeIdentity: string(optimize.ExpansionSearchStepwiseForward),
+			runtimeBranch:   "exact_forward_incumbent",
 		},
 		{
-			name: "overflow fallback", incumbentRows: 1, rootProbeRows: optimize.ExpansionSearchOrientationRootRowLimit + 1,
-			runtimeIdentity: string(optimize.ExpansionSearchStepwiseForward), runtimeBranch: "exact_forward_incumbent",
-			fallbackExecuted: true, overflow: true,
+			name:             "overflow fallback",
+			incumbentRows:    1,
+			rootProbeRows:    optimize.ExpansionSearchOrientationRootRowLimit + 1,
+			runtimeIdentity:  string(optimize.ExpansionSearchStepwiseForward),
+			runtimeBranch:    "exact_forward_incumbent",
+			fallbackExecuted: true,
+			overflow:         true,
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			outcome := translate.TargetLoweringOutcome{
-				Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
-				Selected: string(optimize.ExpansionSearchStepwiseForward), Applied: string(optimize.ExpansionSearchStepwiseForward),
+				Family:            "fixed_suffix_expansion",
+				Candidate:         string(optimize.ExpansionSearchSuffixSeededReverse),
+				Selected:          string(optimize.ExpansionSearchStepwiseForward),
+				Applied:           string(optimize.ExpansionSearchStepwiseForward),
 				Fallback:          string(optimize.ExpansionSearchStepwiseForward),
 				PlannedCandidates: []string{string(optimize.ExpansionSearchStepwiseForward), string(optimize.ExpansionSearchSuffixSeededReverse)},
 				EmittedCandidates: []string{string(optimize.ExpansionSearchStepwiseForward), string(optimize.ExpansionSearchSuffixSeededReverse)},
-				EmittedPolicy:     string(optimize.ExpansionSearchPolicyOrientationProbeV2), SelectorVersion: string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+				EmittedPolicy:     string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+				SelectorVersion:   string(optimize.ExpansionSearchPolicyOrientationProbeV2),
 				ExecutionBoundary: optimize.ExpansionSearchExecutionBoundaryGuardedDualArm,
 				ProbeCaps:         &optimize.ExpansionSearchProbeCaps{RootRowLimit: optimize.ExpansionSearchOrientationRootRowLimit},
 			}
-			metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-				{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_candidate", ActualRows: testCase.candidateRows, ActualLoops: 1},
-				{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: testCase.incumbentRows, ActualLoops: 1},
-				{NodeType: "Limit", SubplanName: "CTE s5_orientation_root_probe", ActualRows: testCase.rootProbeRows, ActualLoops: 1},
-			}}
+			metrics := PostgresPlanMetrics{
+				Provenance: map[string]string{},
+				PlanNodes: []PostgresPlanNodeMetric{
+					{
+						NodeType:    "Result",
+						SubplanName: "CTE s5_orientation_executed_candidate",
+						ActualRows:  testCase.candidateRows,
+						ActualLoops: 1,
+					},
+					{
+						NodeType:    "Result",
+						SubplanName: "CTE s5_orientation_executed_incumbent",
+						ActualRows:  testCase.incumbentRows,
+						ActualLoops: 1,
+					},
+					{
+						NodeType:    "Limit",
+						SubplanName: "CTE s5_orientation_root_probe",
+						ActualRows:  testCase.rootProbeRows,
+						ActualLoops: 1,
+					},
+				},
+			}
 
 			telemetry, err := buildPostgresCaseTraversalTelemetry(
 				translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelSummary,
@@ -628,26 +855,51 @@ func TestPostgresTraversalTelemetryUsesExactGuardedOrientationReceiptBranches(t 
 			require.Equal(t, testCase.fallbackExecuted, *telemetry.Summary.FallbackExecuted)
 			require.Equal(t, testCase.overflow, *telemetry.Summary.Overflow)
 			require.NoError(t, validateRuntimeReceiptEvents([]RuntimeReceiptEvent{{
-				Ordinal: 1, RuntimeIdentity: testCase.runtimeIdentity, RuntimeBranch: testCase.runtimeBranch,
+				Ordinal:          1,
+				RuntimeIdentity:  testCase.runtimeIdentity,
+				RuntimeBranch:    testCase.runtimeBranch,
 				FallbackExecuted: testCase.fallbackExecuted,
 			}}, telemetry.Summary.RuntimeIdentity, telemetry.Summary.RuntimeBranch, telemetry.Summary.FallbackExecuted))
 		})
 	}
 }
 
+// TestPostgresTraversalTelemetryUsesV2DepthWeightedDiagnosticScore verifies postgres traversal telemetry uses v2 depth weighted diagnostic score behavior.
 func TestPostgresTraversalTelemetryUsesV2DepthWeightedDiagnosticScore(t *testing.T) {
 	maximumDepth := int64(16)
 	outcome := translate.TargetLoweringOutcome{
-		Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
-		Selected: string(optimize.ExpansionSearchStepwiseForward), Applied: string(optimize.ExpansionSearchStepwiseForward),
-		Fallback: string(optimize.ExpansionSearchStepwiseForward), EmittedPolicy: string(optimize.ExpansionSearchPolicyOrientationProbeV2),
-		SelectorVersion: string(optimize.ExpansionSearchPolicyOrientationProbeV2), MaximumDepth: &maximumDepth,
+		Family:          "fixed_suffix_expansion",
+		Candidate:       string(optimize.ExpansionSearchSuffixSeededReverse),
+		Selected:        string(optimize.ExpansionSearchStepwiseForward),
+		Applied:         string(optimize.ExpansionSearchStepwiseForward),
+		Fallback:        string(optimize.ExpansionSearchStepwiseForward),
+		EmittedPolicy:   string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+		SelectorVersion: string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+		MaximumDepth:    &maximumDepth,
 	}
-	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_root_probe", ActualRows: 2, ActualLoops: 1},
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_forward_degree_probe", ActualRows: 8, ActualLoops: 1},
-		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 1, ActualLoops: 1},
-	}}
+	metrics := PostgresPlanMetrics{
+		Provenance: map[string]string{},
+		PlanNodes: []PostgresPlanNodeMetric{
+			{
+				NodeType:    "Limit",
+				SubplanName: "CTE s5_orientation_root_probe",
+				ActualRows:  2,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Limit",
+				SubplanName: "CTE s5_orientation_forward_degree_probe",
+				ActualRows:  8,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_executed_incumbent",
+				ActualRows:  1,
+				ActualLoops: 1,
+			},
+		},
+	}
 	telemetry, err := buildPostgresCaseTraversalTelemetry(
 		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
 	)
@@ -660,30 +912,108 @@ func TestPostgresTraversalTelemetryUsesV2DepthWeightedDiagnosticScore(t *testing
 	}, string(optimize.ExpansionSearchPolicyOrientationProbeV2)))
 }
 
+// TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNodes verifies postgres traversal telemetry completes orientation counters from named plan nodes behavior.
 func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNodes(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
-		Family: "fixed_suffix_expansion", Candidate: "EXPANSION-SUFFIX-SEEDED-REVERSE",
-		Selected: "EXPANSION-STEPWISE-FORWARD", Applied: "EXPANSION-STEPWISE-FORWARD", Fallback: "EXPANSION-STEPWISE-FORWARD",
+		Family:            "fixed_suffix_expansion",
+		Candidate:         "EXPANSION-SUFFIX-SEEDED-REVERSE",
+		Selected:          "EXPANSION-STEPWISE-FORWARD",
+		Applied:           "EXPANSION-STEPWISE-FORWARD",
+		Fallback:          "EXPANSION-STEPWISE-FORWARD",
 		PlannedCandidates: []string{"EXPANSION-SUFFIX-SEEDED-REVERSE", "EXPANSION-STEPWISE-FORWARD"},
 		EmittedCandidates: []string{"EXPANSION-SUFFIX-SEEDED-REVERSE", "EXPANSION-STEPWISE-FORWARD"},
-		EmittedPolicy:     "orientation-probe-v1", SelectionMode: "production_canary", SelectorVersion: "orientation-probe-v1", StateLimit: 4096,
+		EmittedPolicy:     "orientation-probe-v1",
+		SelectionMode:     "production_canary",
+		SelectorVersion:   "orientation-probe-v1",
+		StateLimit:        4096,
 	}
-	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_root_probe", ActualRows: 2, ActualLoops: 1, ActualTotalMS: .01, Buffers: Buffers{SharedHit: 1}},
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_suffix_probe", ActualRows: 5, ActualLoops: 1, ActualTotalMS: .02},
-		{NodeType: "Aggregate", SubplanName: "CTE s5_orientation_boundaries", ActualRows: 3, ActualLoops: 1, ActualTotalMS: .01},
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_forward_degree_probe", ActualRows: 8, ActualLoops: 1, ActualTotalMS: .01},
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_reverse_degree_probe", ActualRows: 1, ActualLoops: 1, ActualTotalMS: .01},
-		{NodeType: "Limit", SubplanName: "CTE s5_orientation_states", ActualRows: 4, ActualLoops: 1},
-		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_candidate", ActualRows: 1, ActualLoops: 1},
-		{NodeType: "Result", SubplanName: "CTE s5_orientation_executed_incumbent", ActualRows: 0, ActualLoops: 1},
-		{NodeType: "Recursive Union", SubplanName: "CTE s5_orientation_reverse", ActualRows: 4, ActualLoops: 1},
-		{NodeType: "Result", SubplanName: "CTE s5_orientation_decision", ActualRows: 1, ActualLoops: 1},
-		// Consumer scans are deliberately repeated and must not inflate the
-		// single materialization's row, loop, or branch attribution.
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_root_probe", Alias: "s5_orientation_root_probe", ActualRows: 2, ActualLoops: 3},
-		{NodeType: "CTE Scan", CTEName: "s5_orientation_reverse_degree_probe", Alias: "s5_orientation_reverse_degree_probe", ActualRows: 1, ActualLoops: 7},
-	}}
+	metrics := PostgresPlanMetrics{
+		Provenance: map[string]string{},
+		PlanNodes: []PostgresPlanNodeMetric{
+			{
+				NodeType:      "Limit",
+				SubplanName:   "CTE s5_orientation_root_probe",
+				ActualRows:    2,
+				ActualLoops:   1,
+				ActualTotalMS: .01,
+				Buffers:       Buffers{SharedHit: 1},
+			},
+			{
+				NodeType:      "Limit",
+				SubplanName:   "CTE s5_orientation_suffix_probe",
+				ActualRows:    5,
+				ActualLoops:   1,
+				ActualTotalMS: .02,
+			},
+			{
+				NodeType:      "Aggregate",
+				SubplanName:   "CTE s5_orientation_boundaries",
+				ActualRows:    3,
+				ActualLoops:   1,
+				ActualTotalMS: .01,
+			},
+			{
+				NodeType:      "Limit",
+				SubplanName:   "CTE s5_orientation_forward_degree_probe",
+				ActualRows:    8,
+				ActualLoops:   1,
+				ActualTotalMS: .01,
+			},
+			{
+				NodeType:      "Limit",
+				SubplanName:   "CTE s5_orientation_reverse_degree_probe",
+				ActualRows:    1,
+				ActualLoops:   1,
+				ActualTotalMS: .01,
+			},
+			{
+				NodeType:    "Limit",
+				SubplanName: "CTE s5_orientation_states",
+				ActualRows:  4,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_executed_candidate",
+				ActualRows:  1,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_executed_incumbent",
+				ActualRows:  0,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Recursive Union",
+				SubplanName: "CTE s5_orientation_reverse",
+				ActualRows:  4,
+				ActualLoops: 1,
+			},
+			{
+				NodeType:    "Result",
+				SubplanName: "CTE s5_orientation_decision",
+				ActualRows:  1,
+				ActualLoops: 1,
+			},
+			// Consumer scans are deliberately repeated and must not inflate the
+			// single materialization's row, loop, or branch attribution.
+			{
+				NodeType:    "CTE Scan",
+				CTEName:     "s5_orientation_root_probe",
+				Alias:       "s5_orientation_root_probe",
+				ActualRows:  2,
+				ActualLoops: 3,
+			},
+			{
+				NodeType:    "CTE Scan",
+				CTEName:     "s5_orientation_reverse_degree_probe",
+				Alias:       "s5_orientation_reverse_degree_probe",
+				ActualRows:  1,
+				ActualLoops: 7,
+			},
+		},
+	}
 	telemetry, err := buildPostgresCaseTraversalTelemetry(translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic)
 	require.NoError(t, err)
 	enrichOrientationTraversalTelemetry(telemetry, metrics, 1, []string{`["path"]`}, 0)
@@ -697,6 +1027,7 @@ func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNode
 	require.Equal(t, int64(0), telemetry.Diagnostic.PlanReplay.Counters["orientation_incumbent_branch_loops"])
 }
 
+// TestPostgresTraversalTelemetrySummaryAndDisabledModesDoNotAttachDiagnosticCounters verifies postgres traversal telemetry summary and disabled modes do not attach diagnostic counters behavior.
 func TestPostgresTraversalTelemetrySummaryAndDisabledModesDoNotAttachDiagnosticCounters(t *testing.T) {
 	summary := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelSummary)
 	require.NoError(t, summary.Validate())
@@ -718,8 +1049,16 @@ func TestPostgresTraversalTelemetrySummaryAndDisabledModesDoNotAttachDiagnosticC
 	require.Nil(t, record.PostgresReferences[0].traversalTelemetryParameters)
 }
 
+// TestPostgresTraversalTelemetryAttachesToEveryTraversalReference verifies postgres traversal telemetry attaches to every traversal reference behavior.
 func TestPostgresTraversalTelemetryAttachesToEveryTraversalReference(t *testing.T) {
-	metrics := PostgresPlanMetrics{PlanNodes: []PostgresPlanNodeMetric{{NodeType: "Recursive Union", ActualRows: 2, ActualLoops: 1}}, Provenance: map[string]string{}}
+	metrics := PostgresPlanMetrics{
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType:    "Recursive Union",
+			ActualRows:  2,
+			ActualLoops: 1,
+		}},
+		Provenance: map[string]string{},
+	}
 	record := CaseResult{PostgresReferences: []PostgresReferenceResult{
 		{
 			Name:                         "forward",
@@ -752,8 +1091,16 @@ func TestPostgresTraversalTelemetryAttachesToEveryTraversalReference(t *testing.
 	}
 }
 
+// TestPostgresTraversalTelemetrySkipsNonTraversalReferenceBoundaries verifies postgres traversal telemetry skips non traversal reference boundaries behavior.
 func TestPostgresTraversalTelemetrySkipsNonTraversalReferenceBoundaries(t *testing.T) {
-	metrics := PostgresPlanMetrics{PlanNodes: []PostgresPlanNodeMetric{{NodeType: "Result", ActualRows: 1, ActualLoops: 1}}, Provenance: map[string]string{}}
+	metrics := PostgresPlanMetrics{
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType:    "Result",
+			ActualRows:  1,
+			ActualLoops: 1,
+		}},
+		Provenance: map[string]string{},
+	}
 	for _, architecture := range []string{"component_probe", "protocol", "root_validation", "root_adjacency", "factored_suffix"} {
 		reference := PostgresReferenceResult{
 			Architecture:     architecture,
@@ -766,6 +1113,7 @@ func TestPostgresTraversalTelemetrySkipsNonTraversalReferenceBoundaries(t *testi
 	}
 }
 
+// TestParseConfigValidatesPostgresTraversalTelemetryMode verifies parse config validates postgres traversal telemetry mode behavior.
 func TestParseConfigValidatesPostgresTraversalTelemetryMode(t *testing.T) {
 	cfg, err := parseConfig([]string{"-postgres-traversal-telemetry", "summary"}, func(string) string { return "" })
 	require.NoError(t, err)
@@ -789,6 +1137,7 @@ func TestParseConfigValidatesPostgresTraversalTelemetryMode(t *testing.T) {
 	require.ErrorContains(t, err, "mutually exclusive")
 }
 
+// TestParseConfigAcceptsExplicitOrientationProbeV2MeasurementModes verifies parse config accepts explicit orientation probe v2 measurement modes behavior.
 func TestParseConfigAcceptsExplicitOrientationProbeV2MeasurementModes(t *testing.T) {
 	for _, mode := range [][]string{
 		{"-postgres-expansion-orientation-shadow"},
@@ -819,6 +1168,7 @@ func TestParseConfigAcceptsExplicitOrientationProbeV2MeasurementModes(t *testing
 	}
 }
 
+// bidirectionalCaseTelemetry prepares or inspects test evidence for bidirectional case telemetry.
 func bidirectionalCaseTelemetry(t *testing.T, level TraversalTelemetryLevel) *TraversalExecutionTelemetry {
 	t.Helper()
 	outcome := translate.TargetLoweringOutcome{
@@ -854,6 +1204,7 @@ func bidirectionalCaseTelemetry(t *testing.T, level TraversalTelemetryLevel) *Tr
 	return telemetry
 }
 
+// validBidirectionalDiagnosticDocument returns a self-consistent one-path bidirectional runtime receipt.
 func validBidirectionalDiagnosticDocument(invocationID string) *postgresBidirectionalDiagnosticDocument {
 	return &postgresBidirectionalDiagnosticDocument{
 		SchemaVersion:    1,
@@ -913,18 +1264,31 @@ func validBidirectionalDiagnosticDocument(invocationID string) *postgresBidirect
 	}
 }
 
+// bidirectionalASPCaseTelemetry prepares or inspects test evidence for bidirectional asp case telemetry.
 func bidirectionalASPCaseTelemetry(t *testing.T) *TraversalExecutionTelemetry {
 	t.Helper()
 	outcome := translate.TargetLoweringOutcome{
-		Family: "ASP", Candidate: "ASP-B2-DAG-MIN-LEVEL", Selected: "ASP-B2-DAG-MIN-LEVEL",
-		Applied: "ASP-B2-DAG-MIN-LEVEL", Fallback: "ASP-A1-DAG",
+		Family:            "ASP",
+		Candidate:         "ASP-B2-DAG-MIN-LEVEL",
+		Selected:          "ASP-B2-DAG-MIN-LEVEL",
+		Applied:           "ASP-B2-DAG-MIN-LEVEL",
+		Fallback:          "ASP-A1-DAG",
 		PlannedCandidates: []string{"ASP-B2-DAG-MIN-LEVEL", "ASP-A1-DAG"},
-		Scheduler:         "smaller_current_level", SelectorVersion: "asp-tool-v1",
-		StateLimit: 100, FrontierLimit: 50, PredecessorLimit: 25,
-		EnumerationLimit: 1000, OutputBytesLimit: 4096,
+		Scheduler:         "smaller_current_level",
+		SelectorVersion:   "asp-tool-v1",
+		StateLimit:        100,
+		FrontierLimit:     50,
+		PredecessorLimit:  25,
+		EnumerationLimit:  1000,
+		OutputBytesLimit:  4096,
 	}
 	metrics := PostgresPlanMetrics{
-		PlanNodes:  []PostgresPlanNodeMetric{{NodeType: "Function Scan", FunctionName: "all_shortest_paths_b2_smaller_current_level", ActualRows: 1, ActualLoops: 1}},
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType:     "Function Scan",
+			FunctionName: "all_shortest_paths_b2_smaller_current_level",
+			ActualRows:   1,
+			ActualLoops:  1,
+		}},
 		Provenance: map[string]string{},
 	}
 	telemetry, err := buildPostgresCaseTraversalTelemetry(
@@ -935,40 +1299,74 @@ func bidirectionalASPCaseTelemetry(t *testing.T) *TraversalExecutionTelemetry {
 	return telemetry
 }
 
+// validBidirectionalAllShortestDiagnosticDocument returns a self-consistent all-shortest runtime receipt.
 func validBidirectionalAllShortestDiagnosticDocument(invocationID string) *postgresBidirectionalAllShortestDiagnosticDocument {
 	base := validBidirectionalDiagnosticDocument(invocationID)
 	counts := &postgresBidirectionalAllShortestDiagnosticCounts{
-		SchedulerActions: base.Counters.SchedulerActions, CandidateEdges: base.Counters.CandidateEdges,
-		DistinctNewNodes: base.Counters.DistinctNewNodes, SeenPeak: base.Counters.SeenPeak,
-		FrontierPeak: base.Counters.FrontierPeak, QueuePeak: base.Counters.QueuePeak,
-		PredecessorPeak: base.Counters.PredecessorPeak, MeetingCandidates: base.Counters.MeetingCandidates,
-		FrozenDistance: base.Counters.FrozenDistance, WitnessRows: base.Counters.WitnessRows, Levels: base.Counters.Levels,
-		SameDepthPredecessorAdditions: traversalTelemetryPointer(int64(5)), MeetingNodes: traversalTelemetryPointer(int64(2)),
-		CutDepth: traversalTelemetryPointer(int64(3)), PathCountEstimate: traversalTelemetryPointer(int64(12)),
-		PathCountSaturated: traversalTelemetryPointer(false), EnumeratedCandidates: traversalTelemetryPointer(int64(13)),
-		DuplicateRejects: traversalTelemetryPointer(int64(1)), OutputPaths: traversalTelemetryPointer(int64(12)),
-		OutputEdgeCells: traversalTelemetryPointer(int64(36)), OutputBytes: traversalTelemetryPointer(int64(384)),
+		SchedulerActions:              base.Counters.SchedulerActions,
+		CandidateEdges:                base.Counters.CandidateEdges,
+		DistinctNewNodes:              base.Counters.DistinctNewNodes,
+		SeenPeak:                      base.Counters.SeenPeak,
+		FrontierPeak:                  base.Counters.FrontierPeak,
+		QueuePeak:                     base.Counters.QueuePeak,
+		PredecessorPeak:               base.Counters.PredecessorPeak,
+		MeetingCandidates:             base.Counters.MeetingCandidates,
+		FrozenDistance:                base.Counters.FrozenDistance,
+		WitnessRows:                   base.Counters.WitnessRows,
+		Levels:                        base.Counters.Levels,
+		SameDepthPredecessorAdditions: traversalTelemetryPointer(int64(5)),
+		MeetingNodes:                  traversalTelemetryPointer(int64(2)),
+		CutDepth:                      traversalTelemetryPointer(int64(3)),
+		PathCountEstimate:             traversalTelemetryPointer(int64(12)),
+		PathCountSaturated:            traversalTelemetryPointer(false),
+		EnumeratedCandidates:          traversalTelemetryPointer(int64(13)),
+		DuplicateRejects:              traversalTelemetryPointer(int64(1)),
+		OutputPaths:                   traversalTelemetryPointer(int64(12)),
+		OutputEdgeCells:               traversalTelemetryPointer(int64(36)),
+		OutputBytes:                   traversalTelemetryPointer(int64(384)),
 	}
 	call := postgresBidirectionalAllShortestDiagnosticCall{
-		SearchID: base.Calls[0].SearchID, SourceID: base.Calls[0].SourceID, TargetID: base.Calls[0].TargetID,
-		RuntimeBranch: base.Calls[0].RuntimeBranch, SchedulerActions: base.Calls[0].SchedulerActions,
-		CandidateEdges: base.Calls[0].CandidateEdges, DistinctNewNodes: base.Calls[0].DistinctNewNodes,
-		SeenPeak: base.Calls[0].SeenPeak, FrontierPeak: base.Calls[0].FrontierPeak, QueuePeak: base.Calls[0].QueuePeak,
-		PredecessorPeak: base.Calls[0].PredecessorPeak, MeetingCandidates: base.Calls[0].MeetingCandidates,
-		FrozenDistance: base.Calls[0].FrozenDistance, WitnessRows: base.Calls[0].WitnessRows,
-		SameDepthPredecessorAdditions: counts.SameDepthPredecessorAdditions, MeetingNodes: counts.MeetingNodes,
-		CutDepth: counts.CutDepth, PathCountEstimate: counts.PathCountEstimate, PathCountSaturated: counts.PathCountSaturated,
-		EnumeratedCandidates: counts.EnumeratedCandidates, DuplicateRejects: counts.DuplicateRejects,
-		OutputPaths: counts.OutputPaths, OutputEdgeCells: counts.OutputEdgeCells, OutputBytes: counts.OutputBytes,
-		Overflowed: base.Calls[0].Overflowed, FallbackExecuted: base.Calls[0].FallbackExecuted,
+		SearchID:                      base.Calls[0].SearchID,
+		SourceID:                      base.Calls[0].SourceID,
+		TargetID:                      base.Calls[0].TargetID,
+		RuntimeBranch:                 base.Calls[0].RuntimeBranch,
+		SchedulerActions:              base.Calls[0].SchedulerActions,
+		CandidateEdges:                base.Calls[0].CandidateEdges,
+		DistinctNewNodes:              base.Calls[0].DistinctNewNodes,
+		SeenPeak:                      base.Calls[0].SeenPeak,
+		FrontierPeak:                  base.Calls[0].FrontierPeak,
+		QueuePeak:                     base.Calls[0].QueuePeak,
+		PredecessorPeak:               base.Calls[0].PredecessorPeak,
+		MeetingCandidates:             base.Calls[0].MeetingCandidates,
+		FrozenDistance:                base.Calls[0].FrozenDistance,
+		WitnessRows:                   base.Calls[0].WitnessRows,
+		SameDepthPredecessorAdditions: counts.SameDepthPredecessorAdditions,
+		MeetingNodes:                  counts.MeetingNodes,
+		CutDepth:                      counts.CutDepth,
+		PathCountEstimate:             counts.PathCountEstimate,
+		PathCountSaturated:            counts.PathCountSaturated,
+		EnumeratedCandidates:          counts.EnumeratedCandidates,
+		DuplicateRejects:              counts.DuplicateRejects,
+		OutputPaths:                   counts.OutputPaths,
+		OutputEdgeCells:               counts.OutputEdgeCells,
+		OutputBytes:                   counts.OutputBytes,
+		Overflowed:                    base.Calls[0].Overflowed,
+		FallbackExecuted:              base.Calls[0].FallbackExecuted,
 	}
 	return &postgresBidirectionalAllShortestDiagnosticDocument{
-		SchemaVersion: 1, InvocationID: invocationID, Scheduler: "smaller_current_level",
-		StateLimit: traversalTelemetryPointer(int64(100)), FrontierLimit: traversalTelemetryPointer(int64(50)),
-		PredecessorLimit: traversalTelemetryPointer(int64(25)), EnumerationLimit: traversalTelemetryPointer(int64(1000)),
-		OutputBytesLimit: traversalTelemetryPointer(int64(4096)), SearchCalls: traversalTelemetryPointer(int64(1)),
-		RuntimeBranch: "bidirectional_search", Overflowed: traversalTelemetryPointer(false),
-		FallbackExecuted: traversalTelemetryPointer(false), Counters: counts,
-		Calls: []postgresBidirectionalAllShortestDiagnosticCall{call},
+		SchemaVersion:    1,
+		InvocationID:     invocationID,
+		Scheduler:        "smaller_current_level",
+		StateLimit:       traversalTelemetryPointer(int64(100)),
+		FrontierLimit:    traversalTelemetryPointer(int64(50)),
+		PredecessorLimit: traversalTelemetryPointer(int64(25)),
+		EnumerationLimit: traversalTelemetryPointer(int64(1000)),
+		OutputBytesLimit: traversalTelemetryPointer(int64(4096)),
+		SearchCalls:      traversalTelemetryPointer(int64(1)),
+		RuntimeBranch:    "bidirectional_search",
+		Overflowed:       traversalTelemetryPointer(false),
+		FallbackExecuted: traversalTelemetryPointer(false),
+		Counters:         counts,
+		Calls:            []postgresBidirectionalAllShortestDiagnosticCall{call},
 	}
 }

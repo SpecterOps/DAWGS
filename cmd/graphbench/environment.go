@@ -34,37 +34,37 @@ type RunEnvironment struct {
 	DirtyDiffSHA256 string `json:"dirty_diff_sha256"`
 	// BinarySHA256 identifies the benchmark executable used for the run.
 	BinarySHA256 string `json:"binary_sha256"`
-	// GOOS records the target operating system of the benchmark executable.
+	// GOOS supplies the goos input to the RunEnvironment contract.
 	GOOS string `json:"goos"`
-	// GOARCH records the target architecture of the benchmark executable.
+	// GOARCH supplies the goarch input to the RunEnvironment contract.
 	GOARCH string `json:"goarch"`
-	// GoVersion records the Go toolchain version used to build the executable.
+	// GoVersion identifies the schema version for go version.
 	GoVersion string `json:"go_version"`
 	// CPUCount records logical CPUs visible to the benchmark process.
 	CPUCount int `json:"cpu_count"`
-	// CPUModel records the host processor model for reproducibility.
+	// CPUModel supplies the cpu model input to the RunEnvironment contract.
 	CPUModel string `json:"cpu_model,omitempty"`
-	// Kernel records the host kernel release for reproducibility.
+	// Kernel supplies the kernel input to the RunEnvironment contract.
 	Kernel string `json:"kernel,omitempty"`
-	// CgroupCPU records the process cgroup CPU allocation context.
+	// CgroupCPU supplies the cgroup cpu input to the RunEnvironment contract.
 	CgroupCPU string `json:"cgroup_cpu,omitempty"`
-	// CgroupMemory records the process cgroup memory limit and usage context.
+	// CgroupMemory supplies the cgroup memory input to the RunEnvironment contract.
 	CgroupMemory string `json:"cgroup_memory,omitempty"`
-	// CPUGovernor records the active CPU frequency governor.
+	// CPUGovernor supplies the cpu governor input to the RunEnvironment contract.
 	CPUGovernor string `json:"cpu_governor,omitempty"`
-	// CPUFrequency records the observed CPU frequency policy.
+	// CPUFrequency supplies the cpu frequency input to the RunEnvironment contract.
 	CPUFrequency string `json:"cpu_frequency,omitempty"`
 	// HostLoad records host load averages observed during the run.
 	HostLoad string `json:"host_load,omitempty"`
-	// Invocation records the sanitized command invocation used for the run.
+	// Invocation supplies the invocation input to the RunEnvironment contract.
 	Invocation []string `json:"invocation"`
-	// BuildCommand records the reproducible command used to build the benchmark executable.
+	// BuildCommand supplies the build command input to the RunEnvironment contract.
 	BuildCommand string `json:"build_command"`
 	// RunUUID groups records produced by the same resumable benchmark run series.
 	RunUUID string `json:"run_uuid"`
 	// Arm identifies the measurement arm that produced the sample.
 	Arm string `json:"arm"`
-	// ArmOrder records the arm's position within its balanced measurement block.
+	// ArmOrder supplies the arm order input to the RunEnvironment contract.
 	ArmOrder int `json:"arm_order,omitempty"`
 	// Block identifies the measurement block used to control carryover effects.
 	Block int `json:"block"`
@@ -74,13 +74,13 @@ type RunEnvironment struct {
 	StartedAt time.Time `json:"started_at"`
 	// EndedAt records when the benchmark run finished.
 	EndedAt time.Time `json:"ended_at"`
-	// WarmupIterations records the untimed iterations run before measurement.
+	// WarmupIterations records the number of warmup iterations.
 	WarmupIterations int `json:"warmup_iterations"`
 	// Selection captures the exact workload selection applied to the run.
 	Selection *SelectionManifest `json:"selection,omitempty"`
 	// PoolSize sets the database connection-pool size.
 	PoolSize int `json:"pool_size"`
-	// Concurrency records the worker counts exercised during the run.
+	// Concurrency supplies the concurrency input to the RunEnvironment contract.
 	Concurrency []int `json:"concurrency,omitempty"`
 	// SessionMemoryCeilingBytes sets the per-session memory ceiling in bytes.
 	SessionMemoryCeilingBytes int64 `json:"session_memory_ceiling_bytes,omitempty"`
@@ -106,7 +106,7 @@ type PostgresEnvironment struct {
 	TransactionIsolation string `json:"transaction_isolation"`
 	// WorkMem records PostgreSQL work_mem for environment comparability.
 	WorkMem string `json:"work_mem"`
-	// TempFileLimit records the configured PostgreSQL temporary-file ceiling.
+	// TempFileLimit supplies the temp file limit input to the PostgresEnvironment contract.
 	TempFileLimit string `json:"temp_file_limit"`
 	// GraphPartitionCount records physical PostgreSQL graph partitions included in relation-size evidence.
 	GraphPartitionCount int64 `json:"graph_partition_count"`
@@ -116,9 +116,9 @@ type PostgresEnvironment struct {
 	DatabaseOID int64 `json:"database_oid,omitempty"`
 	// Autovacuum records PostgreSQL autovacuum settings relevant to comparability.
 	Autovacuum string `json:"autovacuum,omitempty"`
-	// NodeRelationBytes records the physical size of the graph's node relation.
+	// NodeRelationBytes supplies the node relation bytes input to the PostgresEnvironment contract.
 	NodeRelationBytes int64 `json:"node_relation_bytes,omitempty"`
-	// EdgeRelationBytes records the physical size of the graph's relationship relation.
+	// EdgeRelationBytes supplies the edge relation bytes input to the PostgresEnvironment contract.
 	EdgeRelationBytes int64 `json:"edge_relation_bytes,omitempty"`
 	// AnalyzeState records PostgreSQL analyze statistics state for the fixture.
 	AnalyzeState string `json:"analyze_state,omitempty"`
@@ -251,6 +251,7 @@ func workingTreeSHA256() string {
 	return fingerprint
 }
 
+// calculateWorkingTreeSHA256 computes working tree sha256.
 func calculateWorkingTreeSHA256(excludedRoot string) (string, error) {
 	digest := sha256.New()
 	output, err := exec.Command("git", "diff", "--binary", "HEAD", "--").Output()
@@ -288,6 +289,7 @@ func calculateWorkingTreeSHA256(excludedRoot string) (string, error) {
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
+// gitUntrackedPaths supports benchmark evidence processing for git untracked paths.
 func gitUntrackedPaths() ([]string, error) {
 	output, err := exec.Command("git", "ls-files", "-z", "--others", "--exclude-standard").Output()
 	if err != nil {
@@ -298,6 +300,7 @@ func gitUntrackedPaths() ([]string, error) {
 	return paths, nil
 }
 
+// parseNULTerminatedPaths parses nul terminated paths.
 func parseNULTerminatedPaths(output []byte) []string {
 	fields := strings.Split(string(output), "\x00")
 	paths := make([]string, 0, len(fields))
@@ -309,10 +312,12 @@ func parseNULTerminatedPaths(output []byte) []string {
 	return paths
 }
 
+// writeWorkingTreePatchFingerprint writes working tree patch fingerprint.
 func writeWorkingTreePatchFingerprint(digest io.Writer, patch []byte) {
 	_, _ = digest.Write(patch)
 }
 
+// writeWorkingTreeUntrackedFingerprint writes working tree untracked fingerprint.
 func writeWorkingTreeUntrackedFingerprint(digest io.Writer, path string, content []byte) {
 	_, _ = fmt.Fprintf(digest, "untracked:%s\x00", path)
 	_, _ = digest.Write(content)

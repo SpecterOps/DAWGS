@@ -34,16 +34,19 @@ type inspectingDriver struct {
 	upstreamDriver driver
 }
 
+// Exec coordinates PostgreSQL driver behavior for exec.
 func (s inspectingDriver) Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error) {
 	inspector().Inspect(sql, arguments)
 	return s.upstreamDriver.Exec(ctx, sql, arguments...)
 }
 
+// Query constructs the SQL model used for query.
 func (s inspectingDriver) Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error) {
 	inspector().Inspect(sql, arguments)
 	return s.upstreamDriver.Query(ctx, sql, arguments...)
 }
 
+// QueryRow coordinates PostgreSQL driver behavior for query row.
 func (s inspectingDriver) QueryRow(ctx context.Context, sql string, arguments ...any) pgx.Row {
 	inspector().Inspect(sql, arguments)
 	return s.upstreamDriver.QueryRow(ctx, sql, arguments...)
@@ -69,7 +72,7 @@ type transaction struct {
 	// tx is the optional explicit PostgreSQL transaction used for transactional operations.
 	tx pgx.Tx
 
-	// isolation records the explicit snapshot contract, if any, used to admit B candidates.
+	// isolation retains the isolation while transaction is assembled or evaluated.
 	isolation pgx.TxIsoLevel
 
 	// targetSchema identifies the graph selected explicitly for subsequent operations.
@@ -115,10 +118,12 @@ func (s *transaction) driver() driver {
 	}
 }
 
+// GraphQueryMemoryLimit coordinates PostgreSQL driver behavior for graph query memory limit.
 func (s *transaction) GraphQueryMemoryLimit() size.Size {
 	return s.schemaManager.graphQueryMemoryLimit
 }
 
+// WithGraph coordinates PostgreSQL driver behavior for with graph.
 func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 	s.targetSchema = schema
 	s.targetSchemaSet = true
@@ -126,6 +131,7 @@ func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 	return s
 }
 
+// Close coordinates PostgreSQL driver behavior for close.
 func (s *transaction) Close() {
 	if s.tx != nil {
 		s.tx.Rollback(s.ctx)
@@ -157,6 +163,7 @@ func (s *transaction) targetGraphID() (int32, error) {
 	}
 }
 
+// CreateNode coordinates PostgreSQL driver behavior for create node.
 func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Kind) (*graph.Node, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
@@ -184,6 +191,7 @@ func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Ki
 	}
 }
 
+// UpdateNode coordinates PostgreSQL driver behavior for update node.
 func (s *transaction) UpdateNode(node *graph.Node) error {
 	var (
 		properties       = node.Properties
@@ -212,12 +220,14 @@ func (s *transaction) UpdateNode(node *graph.Node) error {
 	}, updateStatements...)
 }
 
+// Nodes coordinates PostgreSQL driver behavior for nodes.
 func (s *transaction) Nodes() graph.NodeQuery {
 	return &nodeQuery{
 		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
 	}
 }
 
+// CreateRelationshipByIDs coordinates PostgreSQL driver behavior for create relationship by i ds.
 func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) (*graph.Relationship, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
@@ -247,6 +257,7 @@ func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, k
 	}
 }
 
+// UpdateRelationship coordinates PostgreSQL driver behavior for update relationship.
 func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error {
 	var (
 		modifiedProperties    = relationship.Properties.ModifiedProperties()
@@ -290,6 +301,7 @@ func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error
 	return err
 }
 
+// Relationships coordinates PostgreSQL driver behavior for relationships.
 func (s *transaction) Relationships() graph.RelationshipQuery {
 	return &relationshipQuery{
 		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
@@ -323,7 +335,11 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		var translated translate.Result
 		var translateErr error
 		if policy.enabled() {
-			translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, policy.productionOptions(query))
+			if options, optionsErr := policy.productionOptions(query); optionsErr != nil {
+				return translate.Result{}, "", optionsErr
+			} else {
+				translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, options)
+			}
 		} else {
 			translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
 		}
@@ -339,6 +355,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	return s.Raw(sqlQuery, translatedParameters)
 }
 
+// Raw coordinates PostgreSQL driver behavior for raw.
 func (s *transaction) Raw(query string, parameters map[string]any) graph.Result {
 	if rows, err := s.query(query, parameters); err != nil {
 		return graph.NewErrorResult(err)
@@ -351,6 +368,7 @@ func (s *transaction) Raw(query string, parameters map[string]any) graph.Result 
 	}
 }
 
+// Commit coordinates PostgreSQL driver behavior for commit.
 func (s *transaction) Commit() error {
 	if s.tx != nil {
 		return s.tx.Commit(s.ctx)

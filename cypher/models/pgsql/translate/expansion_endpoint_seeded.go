@@ -130,8 +130,14 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 
 	prefixFrame := prefixStep.Frame.Binding.Identifier
 	admitted, fallbackGate := boundedAdmissionGates(
-		boundedProbeLimit{source: ids.endpoints, limit: decision.EndpointLimit},
-		boundedProbeLimit{source: ids.states, limit: decision.StateLimit},
+		boundedProbeLimit{
+			source: ids.endpoints,
+			limit:  decision.EndpointLimit,
+		},
+		boundedProbeLimit{
+			source: ids.states,
+			limit:  decision.StateLimit,
+		},
 	)
 
 	prefixEdgeIDs := pgsql.ArrayLiteral{
@@ -153,15 +159,21 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 			Joins: []pgsql.Join{
 				{
 					Table: pgsql.TableReference{Name: ids.states.AsCompoundIdentifier()},
-					JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-						projectedNodeIDReference(prefixFrame, expansionStep.LeftNode), pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.states, expansionNextID},
-					)},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							projectedNodeIDReference(prefixFrame, expansionStep.LeftNode), pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.states, expansionNextID},
+						),
+					},
 				},
 				{
 					Table: pgsql.TableReference{Name: ids.endpoints.AsCompoundIdentifier()},
-					JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-						pgsql.CompoundIdentifier{ids.endpoints, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.states, expansionRootID},
-					)},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{ids.endpoints, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.states, expansionRootID},
+						),
+					},
 				},
 			},
 		}},
@@ -179,7 +191,12 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 			Recursive:   true,
 			Expressions: []pgsql.CommonTableExpression{endpointCTE, reverseCTE, statesCTE, incumbentCTE},
 		},
-		Body: pgsql.SetOperation{Operator: pgsql.OperatorUnion, All: true, LOperand: candidate, ROperand: fallback},
+		Body: pgsql.SetOperation{
+			Operator: pgsql.OperatorUnion,
+			All:      true,
+			LOperand: candidate,
+			ROperand: fallback,
+		},
 	}, nil
 }
 
@@ -195,8 +212,14 @@ func buildEndpointSeedCTE(decision optimize.ExpansionSearchStrategyDecision, exp
 		Query: pgsql.Query{
 			Body: pgsql.Select{
 				Projection: []pgsql.SelectItem{
-					&pgsql.AliasedExpression{Expression: pgd.EntityID(expansionStep.RightNode.Identifier), Alias: models.OptionalValue(pgsql.ColumnID)},
-					&pgsql.AliasedExpression{Expression: suffixSeededNodeValue(expansionStep.RightNode), Alias: models.OptionalValue(expansionStep.RightNode.Identifier)},
+					&pgsql.AliasedExpression{
+						Expression: pgd.EntityID(expansionStep.RightNode.Identifier),
+						Alias:      models.OptionalValue(pgsql.ColumnID),
+					},
+					&pgsql.AliasedExpression{
+						Expression: suffixSeededNodeValue(expansionStep.RightNode),
+						Alias:      models.OptionalValue(expansionStep.RightNode.Identifier),
+					},
 				},
 				From:  []pgsql.FromClause{{Source: expansionNodeTableReference(expansionStep.RightNode.Identifier)}},
 				Where: local,
@@ -233,22 +256,37 @@ func buildEndpointReverseCTE(decision optimize.ExpansionSearchStrategyDecision, 
 			pgsql.CompoundIdentifier{ids.reverse, expansionRootID},
 			pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, expansionStep.Expansion.EdgeStartIdentifier},
 			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{ids.reverse, expansionDepth}, pgsql.OperatorAdd, pgsql.NewLiteral(int64(1), pgsql.Int8)),
-			pgsql.FunctionCall{Function: pgsql.Identifier("array_prepend"), Parameters: []pgsql.Expression{pgd.EntityID(expansionStep.Edge.Identifier), path}, CastType: pgsql.Int8Array},
+			pgsql.FunctionCall{
+				Function:   pgsql.Identifier("array_prepend"),
+				Parameters: []pgsql.Expression{pgd.EntityID(expansionStep.Edge.Identifier), path},
+				CastType:   pgsql.Int8Array,
+			},
 		},
 		From: []pgsql.FromClause{{
 			Source: pgsql.TableReference{Name: ids.reverse.AsCompoundIdentifier()},
 			Joins: []pgsql.Join{{
 				Table: expansionEdgeTableReference(expansionStep.Edge.Identifier),
-				JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, expansionStep.Expansion.EdgeEndIdentifier}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
-				)},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, expansionStep.Expansion.EdgeEndIdentifier}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
+					),
+				},
 			}},
 		}},
 		Where: recursiveWhere,
 	}
 	return pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: ids.reverse, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionRootID, expansionNextID, expansionDepth, expansionPath})},
-		Query: pgsql.Query{Body: pgsql.SetOperation{Operator: pgsql.OperatorUnion, All: true, LOperand: seed, ROperand: recursive}},
+		Alias: pgsql.TableAlias{
+			Name:  ids.reverse,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionRootID, expansionNextID, expansionDepth, expansionPath}),
+		},
+		Query: pgsql.Query{Body: pgsql.SetOperation{
+			Operator: pgsql.OperatorUnion,
+			All:      true,
+			LOperand: seed,
+			ROperand: recursive,
+		}},
 	}, nil
 }
 
@@ -283,8 +321,14 @@ func endpointSeededProjections(prefixStep, expansionStep *TraversalStep, ids end
 		default:
 			expression = pgsql.CompoundIdentifier{prefixFrame, alias}
 		}
-		candidate = append(candidate, &pgsql.AliasedExpression{Expression: expression, Alias: models.OptionalValue(alias)})
-		fallback = append(fallback, &pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.incumbent, alias}, Alias: models.OptionalValue(alias)})
+		candidate = append(candidate, &pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      models.OptionalValue(alias),
+		})
+		fallback = append(fallback, &pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{ids.incumbent, alias},
+			Alias:      models.OptionalValue(alias),
+		})
 	}
 	return candidate, fallback, nil
 }

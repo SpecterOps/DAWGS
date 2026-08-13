@@ -75,25 +75,38 @@ type TraversalExecutionTelemetry struct {
 
 // TraversalExecutionSummary identifies the planned and executed traversal policy without detailed work counters.
 type TraversalExecutionSummary struct {
-	RequestedIdentity string   `json:"requested_identity"`
+	// RequestedIdentity identifies the requested identity.
+	RequestedIdentity string `json:"requested_identity"`
+	// PlannedIdentities supplies the planned identities input to the TraversalExecutionSummary contract.
 	PlannedIdentities []string `json:"planned_identities"`
-	EmittedIdentity   string   `json:"emitted_identity"`
-	RuntimeIdentity   string   `json:"runtime_identity"`
-	AppliedIdentity   string   `json:"applied_identity"`
-	SelectorVersion   string   `json:"selector_version"`
-	SchedulerVersion  string   `json:"scheduler_version"`
-	ExecutionBoundary string   `json:"execution_boundary,omitempty"`
+	// EmittedIdentity identifies the emitted identity.
+	EmittedIdentity string `json:"emitted_identity"`
+	// RuntimeIdentity identifies the runtime identity.
+	RuntimeIdentity string `json:"runtime_identity"`
+	// AppliedIdentity identifies the applied identity.
+	AppliedIdentity string `json:"applied_identity"`
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string `json:"selector_version"`
+	// SchedulerVersion identifies the schema version for scheduler version.
+	SchedulerVersion string `json:"scheduler_version"`
+	// ExecutionBoundary supplies the execution boundary input to the TraversalExecutionSummary contract.
+	ExecutionBoundary string `json:"execution_boundary,omitempty"`
 	// ObservationMode identifies whether the public boundary consumes scalar,
 	// ordered-ID, or hydrated path values.
-	ObservationMode string           `json:"observation_mode,omitempty"`
-	Caps            map[string]int64 `json:"caps"`
+	ObservationMode string `json:"observation_mode,omitempty"`
+	// Caps binds each guarded resource dimension to its enforced limit.
+	Caps map[string]int64 `json:"caps"`
 	// RuntimeOutcomeAvailable distinguishes executor evidence from a
 	// translator prediction. When false, runtime-dependent facts stay unset.
-	RuntimeOutcomeAvailable *bool  `json:"runtime_outcome_available,omitempty"`
-	RuntimeBranch           string `json:"runtime_branch"`
-	Overflow                *bool  `json:"overflow"`
-	FallbackExecuted        *bool  `json:"fallback_executed"`
-	FallbackIdentity        string `json:"fallback_identity,omitempty"`
+	RuntimeOutcomeAvailable *bool `json:"runtime_outcome_available,omitempty"`
+	// RuntimeBranch supplies the runtime branch input to the TraversalExecutionSummary contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// Overflow supplies the overflow input to the TraversalExecutionSummary contract.
+	Overflow *bool `json:"overflow"`
+	// FallbackExecuted supplies the fallback executed input to the TraversalExecutionSummary contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
+	// FallbackIdentity identifies the fallback identity.
+	FallbackIdentity string `json:"fallback_identity,omitempty"`
 	// WouldSelectIdentity records a shadow policy choice while RuntimeIdentity
 	// and AppliedIdentity remain bound to the only executed incumbent arm.
 	WouldSelectIdentity string `json:"would_select_identity,omitempty"`
@@ -110,8 +123,9 @@ type TraversalExecutionDiagnostic struct {
 	// TimedSample is required and must be false so replay resources cannot be attributed to latency samples.
 	TimedSample *bool `json:"timed_sample"`
 	// RequiredFamilies declares exactly which counter groups must be complete for this invocation.
-	RequiredFamilies []TraversalTelemetryFamily  `json:"required_families"`
-	Counters         TraversalDiagnosticCounters `json:"counters"`
+	RequiredFamilies []TraversalTelemetryFamily `json:"required_families"`
+	// Counters supplies the counters input to the TraversalExecutionDiagnostic contract.
+	Counters TraversalDiagnosticCounters `json:"counters"`
 	// CounterStatus distinguishes qualification-complete invocation metrics from partial plan evidence or opaque function work.
 	CounterStatus TraversalTelemetryCounterStatus `json:"counter_status"`
 	// IncompleteReasons explains why a diagnostic replay cannot qualify when CounterStatus is not complete.
@@ -136,14 +150,22 @@ type TraversalPlanReplayEvidence struct {
 
 // TraversalDiagnosticCounters groups independent runtime counter families.
 type TraversalDiagnosticCounters struct {
-	Ordinary           *OrdinaryTraversalCounters          `json:"ordinary,omitempty"`
-	Orientation        *OrientationTraversalCounters       `json:"orientation,omitempty"`
-	ShortestPath       *ShortestPathTraversalCounters      `json:"shortest_path,omitempty"`
-	AllShortestPaths   *AllShortestPathsTraversalCounters  `json:"all_shortest_paths,omitempty"`
-	InlineASP          *InlinePredecessorTraversalCounters `json:"inline_asp,omitempty"`
+	// Ordinary supplies the ordinary input to the TraversalDiagnosticCounters contract.
+	Ordinary *OrdinaryTraversalCounters `json:"ordinary,omitempty"`
+	// Orientation supplies the orientation input to the TraversalDiagnosticCounters contract.
+	Orientation *OrientationTraversalCounters `json:"orientation,omitempty"`
+	// ShortestPath identifies the filesystem shortest path.
+	ShortestPath *ShortestPathTraversalCounters `json:"shortest_path,omitempty"`
+	// AllShortestPaths identifies the filesystem all shortest paths.
+	AllShortestPaths *AllShortestPathsTraversalCounters `json:"all_shortest_paths,omitempty"`
+	// InlineASP supplies the inline asp input to the TraversalDiagnosticCounters contract.
+	InlineASP *InlinePredecessorTraversalCounters `json:"inline_asp,omitempty"`
+	// InlineShortestPath identifies the filesystem inline shortest path.
 	InlineShortestPath *InlinePredecessorTraversalCounters `json:"inline_shortest_path,omitempty"`
-	Hydration          *TraversalHydrationCounters         `json:"hydration,omitempty"`
-	Workspace          *TraversalWorkspaceCounters         `json:"workspace,omitempty"`
+	// Hydration supplies the hydration input to the TraversalDiagnosticCounters contract.
+	Hydration *TraversalHydrationCounters `json:"hydration,omitempty"`
+	// Workspace supplies the workspace input to the TraversalDiagnosticCounters contract.
+	Workspace *TraversalWorkspaceCounters `json:"workspace,omitempty"`
 }
 
 // InlinePredecessorTraversalCounters records the complete set of bounded
@@ -151,17 +173,28 @@ type TraversalDiagnosticCounters struct {
 // predecessor statement. ASP and canonical one-witness policies serialize
 // into separate fields so their resource evidence cannot be interchanged.
 type InlinePredecessorTraversalCounters struct {
-	DistanceRows           *int64 `json:"distance_rows"`
-	PredecessorRows        *int64 `json:"predecessor_rows"`
-	EnumerationRows        *int64 `json:"enumeration_rows"`
-	OutputPaths            *int64 `json:"output_paths"`
-	OutputBytes            *int64 `json:"output_bytes"`
-	CandidateMarkerRows    *int64 `json:"candidate_marker_rows"`
-	FallbackMarkerRows     *int64 `json:"fallback_marker_rows"`
-	CandidateBranchRows    *int64 `json:"candidate_branch_rows"`
-	FallbackBranchRows     *int64 `json:"fallback_branch_rows"`
+	// DistanceRows records the number of distance rows.
+	DistanceRows *int64 `json:"distance_rows"`
+	// PredecessorRows records the number of predecessor rows.
+	PredecessorRows *int64 `json:"predecessor_rows"`
+	// EnumerationRows records the number of enumeration rows.
+	EnumerationRows *int64 `json:"enumeration_rows"`
+	// OutputPaths identifies the filesystem output paths.
+	OutputPaths *int64 `json:"output_paths"`
+	// OutputBytes supplies the output bytes input to the InlinePredecessorTraversalCounters contract.
+	OutputBytes *int64 `json:"output_bytes"`
+	// CandidateMarkerRows records the number of candidate marker rows.
+	CandidateMarkerRows *int64 `json:"candidate_marker_rows"`
+	// FallbackMarkerRows records the number of fallback marker rows.
+	FallbackMarkerRows *int64 `json:"fallback_marker_rows"`
+	// CandidateBranchRows records the number of candidate branch rows.
+	CandidateBranchRows *int64 `json:"candidate_branch_rows"`
+	// FallbackBranchRows records the number of fallback branch rows.
+	FallbackBranchRows *int64 `json:"fallback_branch_rows"`
+	// CandidateExecutorLoops supplies the candidate executor loops input to the InlinePredecessorTraversalCounters contract.
 	CandidateExecutorLoops *int64 `json:"candidate_executor_loops"`
-	FallbackExecutorLoops  *int64 `json:"fallback_executor_loops"`
+	// FallbackExecutorLoops supplies the fallback executor loops input to the InlinePredecessorTraversalCounters contract.
+	FallbackExecutorLoops *int64 `json:"fallback_executor_loops"`
 }
 
 // InlineASPTraversalCounters preserves the source-level name used by existing
@@ -170,52 +203,91 @@ type InlineASPTraversalCounters = InlinePredecessorTraversalCounters
 
 // OrdinaryTraversalCounters records DFS or recursive-CTE discovery work.
 type OrdinaryTraversalCounters struct {
-	Roots                     *int64 `json:"roots"`
-	EdgeCandidates            *int64 `json:"edge_candidates"`
-	AdmittedStates            *int64 `json:"admitted_states"`
+	// Roots supplies the roots input to the OrdinaryTraversalCounters contract.
+	Roots *int64 `json:"roots"`
+	// EdgeCandidates supplies the edge candidates input to the OrdinaryTraversalCounters contract.
+	EdgeCandidates *int64 `json:"edge_candidates"`
+	// AdmittedStates supplies the admitted states input to the OrdinaryTraversalCounters contract.
+	AdmittedStates *int64 `json:"admitted_states"`
+	// RelationshipRepeatRejects supplies the relationship repeat rejects input to the OrdinaryTraversalCounters contract.
 	RelationshipRepeatRejects *int64 `json:"relationship_repeat_rejects"`
-	RecursiveRows             *int64 `json:"recursive_rows"`
-	PeakState                 *int64 `json:"peak_state"`
-	EmittedTrails             *int64 `json:"emitted_trails"`
-	HydrationRows             *int64 `json:"hydration_rows"`
+	// RecursiveRows records the number of recursive rows.
+	RecursiveRows *int64 `json:"recursive_rows"`
+	// PeakState supplies the peak state input to the OrdinaryTraversalCounters contract.
+	PeakState *int64 `json:"peak_state"`
+	// EmittedTrails supplies the emitted trails input to the OrdinaryTraversalCounters contract.
+	EmittedTrails *int64 `json:"emitted_trails"`
+	// HydrationRows records the number of hydration rows.
+	HydrationRows *int64 `json:"hydration_rows"`
 }
 
 // OrientationTraversalCounters records bounded policy probes and selected-branch work.
 type OrientationTraversalCounters struct {
-	ForwardSeeds                  *int64   `json:"forward_seeds"`
-	ReverseSeeds                  *int64   `json:"reverse_seeds"`
-	DuplicateSeeds                *int64   `json:"duplicate_seeds"`
-	SuffixRows                    *int64   `json:"suffix_rows"`
-	DistinctBoundaries            *int64   `json:"distinct_boundaries"`
-	TypedDirectionalDegreeSamples *int64   `json:"typed_directional_degree_samples"`
-	ForwardDegreeSamples          *int64   `json:"forward_degree_samples"`
-	ReverseDegreeSamples          *int64   `json:"reverse_degree_samples"`
-	ShallowSurvivalRows           *int64   `json:"shallow_survival_rows"`
-	ShallowSurvival               *float64 `json:"shallow_survival"`
-	ProbeRows                     *int64   `json:"probe_rows"`
-	ProbeTimeNS                   *int64   `json:"probe_time_ns"`
-	ProbeBufferHits               *int64   `json:"probe_buffer_hits"`
-	ProbeBufferReads              *int64   `json:"probe_buffer_reads"`
-	ForwardScore                  *float64 `json:"forward_score"`
-	ReverseScore                  *float64 `json:"reverse_score"`
-	SelectedSide                  string   `json:"selected_side"`
-	SentinelOverflow              *bool    `json:"sentinel_overflow"`
-	BranchLoops                   *int64   `json:"branch_loops"`
+	// ForwardSeeds supplies the forward seeds input to the OrientationTraversalCounters contract.
+	ForwardSeeds *int64 `json:"forward_seeds"`
+	// ReverseSeeds supplies the reverse seeds input to the OrientationTraversalCounters contract.
+	ReverseSeeds *int64 `json:"reverse_seeds"`
+	// DuplicateSeeds supplies the duplicate seeds input to the OrientationTraversalCounters contract.
+	DuplicateSeeds *int64 `json:"duplicate_seeds"`
+	// SuffixRows records the number of suffix rows.
+	SuffixRows *int64 `json:"suffix_rows"`
+	// DistinctBoundaries supplies the distinct boundaries input to the OrientationTraversalCounters contract.
+	DistinctBoundaries *int64 `json:"distinct_boundaries"`
+	// TypedDirectionalDegreeSamples supplies the typed directional degree samples input to the OrientationTraversalCounters contract.
+	TypedDirectionalDegreeSamples *int64 `json:"typed_directional_degree_samples"`
+	// ForwardDegreeSamples supplies the forward degree samples input to the OrientationTraversalCounters contract.
+	ForwardDegreeSamples *int64 `json:"forward_degree_samples"`
+	// ReverseDegreeSamples supplies the reverse degree samples input to the OrientationTraversalCounters contract.
+	ReverseDegreeSamples *int64 `json:"reverse_degree_samples"`
+	// ShallowSurvivalRows records the number of shallow survival rows.
+	ShallowSurvivalRows *int64 `json:"shallow_survival_rows"`
+	// ShallowSurvival supplies the shallow survival input to the OrientationTraversalCounters contract.
+	ShallowSurvival *float64 `json:"shallow_survival"`
+	// ProbeRows records the number of probe rows.
+	ProbeRows *int64 `json:"probe_rows"`
+	// ProbeTimeNS supplies the probe time ns input to the OrientationTraversalCounters contract.
+	ProbeTimeNS *int64 `json:"probe_time_ns"`
+	// ProbeBufferHits supplies the probe buffer hits input to the OrientationTraversalCounters contract.
+	ProbeBufferHits *int64 `json:"probe_buffer_hits"`
+	// ProbeBufferReads supplies the probe buffer reads input to the OrientationTraversalCounters contract.
+	ProbeBufferReads *int64 `json:"probe_buffer_reads"`
+	// ForwardScore supplies the forward score input to the OrientationTraversalCounters contract.
+	ForwardScore *float64 `json:"forward_score"`
+	// ReverseScore supplies the reverse score input to the OrientationTraversalCounters contract.
+	ReverseScore *float64 `json:"reverse_score"`
+	// SelectedSide supplies the selected side input to the OrientationTraversalCounters contract.
+	SelectedSide string `json:"selected_side"`
+	// SentinelOverflow supplies the sentinel overflow input to the OrientationTraversalCounters contract.
+	SentinelOverflow *bool `json:"sentinel_overflow"`
+	// BranchLoops supplies the branch loops input to the OrientationTraversalCounters contract.
+	BranchLoops *int64 `json:"branch_loops"`
 }
 
 // ShortestPathLevelCounters records one scheduler action and the two-sided frontier state it observed.
 type ShortestPathLevelCounters struct {
-	SearchID          int64  `json:"search_id"`
-	ActionIndex       int64  `json:"action_index"`
-	Side              string `json:"side"`
-	Action            string `json:"action"`
-	Depth             *int64 `json:"depth"`
-	FrontierRows      *int64 `json:"frontier_rows"`
-	CandidateEdges    *int64 `json:"candidate_edges"`
-	DistinctNewNodes  *int64 `json:"distinct_new_nodes"`
-	SeenRows          *int64 `json:"seen_rows"`
-	QueueRows         *int64 `json:"queue_rows"`
-	PredecessorRows   *int64 `json:"predecessor_rows"`
+	// SearchID identifies the search id.
+	SearchID int64 `json:"search_id"`
+	// ActionIndex supplies the action index input to the ShortestPathLevelCounters contract.
+	ActionIndex int64 `json:"action_index"`
+	// Side supplies the side input to the ShortestPathLevelCounters contract.
+	Side string `json:"side"`
+	// Action supplies the action input to the ShortestPathLevelCounters contract.
+	Action string `json:"action"`
+	// Depth supplies the depth input to the ShortestPathLevelCounters contract.
+	Depth *int64 `json:"depth"`
+	// FrontierRows records the number of frontier rows.
+	FrontierRows *int64 `json:"frontier_rows"`
+	// CandidateEdges supplies the candidate edges input to the ShortestPathLevelCounters contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the ShortestPathLevelCounters contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenRows records the number of seen rows.
+	SeenRows *int64 `json:"seen_rows"`
+	// QueueRows records the number of queue rows.
+	QueueRows *int64 `json:"queue_rows"`
+	// PredecessorRows records the number of predecessor rows.
+	PredecessorRows *int64 `json:"predecessor_rows"`
+	// MeetingCandidates supplies the meeting candidates input to the ShortestPathLevelCounters contract.
 	MeetingCandidates *int64 `json:"meeting_candidates"`
 	// Provenance names the invocation-local stage or executor metric that produced this level row.
 	Provenance string `json:"provenance"`
@@ -223,52 +295,85 @@ type ShortestPathLevelCounters struct {
 
 // ShortestPathTraversalCounters records bidirectional scheduler, frontier, and witness work.
 type ShortestPathTraversalCounters struct {
-	SchedulerActions  *int64                      `json:"scheduler_actions"`
-	Levels            []ShortestPathLevelCounters `json:"levels"`
-	CandidateEdges    *int64                      `json:"candidate_edges"`
-	DistinctNewNodes  *int64                      `json:"distinct_new_nodes"`
-	SeenPeak          *int64                      `json:"seen_peak"`
-	FrontierPeak      *int64                      `json:"frontier_peak"`
-	QueuePeak         *int64                      `json:"queue_peak"`
-	PredecessorPeak   *int64                      `json:"predecessor_peak"`
-	MeetingCandidates *int64                      `json:"meeting_candidates"`
-	FrozenDistance    *int64                      `json:"frozen_distance"`
-	WitnessRows       *int64                      `json:"witness_rows"`
-	FallbackExecuted  *bool                       `json:"fallback_executed"`
+	// SchedulerActions supplies the scheduler actions input to the ShortestPathTraversalCounters contract.
+	SchedulerActions *int64 `json:"scheduler_actions"`
+	// Levels supplies the levels input to the ShortestPathTraversalCounters contract.
+	Levels []ShortestPathLevelCounters `json:"levels"`
+	// CandidateEdges supplies the candidate edges input to the ShortestPathTraversalCounters contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the ShortestPathTraversalCounters contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenPeak supplies the seen peak input to the ShortestPathTraversalCounters contract.
+	SeenPeak *int64 `json:"seen_peak"`
+	// FrontierPeak supplies the frontier peak input to the ShortestPathTraversalCounters contract.
+	FrontierPeak *int64 `json:"frontier_peak"`
+	// QueuePeak supplies the queue peak input to the ShortestPathTraversalCounters contract.
+	QueuePeak *int64 `json:"queue_peak"`
+	// PredecessorPeak supplies the predecessor peak input to the ShortestPathTraversalCounters contract.
+	PredecessorPeak *int64 `json:"predecessor_peak"`
+	// MeetingCandidates supplies the meeting candidates input to the ShortestPathTraversalCounters contract.
+	MeetingCandidates *int64 `json:"meeting_candidates"`
+	// FrozenDistance supplies the frozen distance input to the ShortestPathTraversalCounters contract.
+	FrozenDistance *int64 `json:"frozen_distance"`
+	// WitnessRows records the number of witness rows.
+	WitnessRows *int64 `json:"witness_rows"`
+	// FallbackExecuted supplies the fallback executed input to the ShortestPathTraversalCounters contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
 }
 
 // AllShortestPathsTraversalCounters records SP search work plus predecessor and output enumeration work.
 type AllShortestPathsTraversalCounters struct {
-	Search                        ShortestPathTraversalCounters `json:"search"`
-	SameDepthPredecessorAdditions *int64                        `json:"same_depth_predecessor_additions"`
-	PredecessorPeak               *int64                        `json:"predecessor_peak"`
-	MeetingNodes                  *int64                        `json:"meeting_nodes"`
-	CutDepth                      *int64                        `json:"cut_depth"`
-	PathCountEstimate             *int64                        `json:"path_count_estimate"`
-	PathCountSaturated            *bool                         `json:"path_count_saturated"`
-	EnumeratedCandidates          *int64                        `json:"enumerated_candidates"`
-	DuplicateRejects              *int64                        `json:"duplicate_rejects"`
-	OutputPaths                   *int64                        `json:"output_paths"`
-	OutputEdgeCells               *int64                        `json:"output_edge_cells"`
-	OutputBytes                   *int64                        `json:"output_bytes"`
+	// Search supplies the search input to the AllShortestPathsTraversalCounters contract.
+	Search ShortestPathTraversalCounters `json:"search"`
+	// SameDepthPredecessorAdditions supplies the same depth predecessor additions input to the AllShortestPathsTraversalCounters contract.
+	SameDepthPredecessorAdditions *int64 `json:"same_depth_predecessor_additions"`
+	// PredecessorPeak supplies the predecessor peak input to the AllShortestPathsTraversalCounters contract.
+	PredecessorPeak *int64 `json:"predecessor_peak"`
+	// MeetingNodes supplies the meeting nodes input to the AllShortestPathsTraversalCounters contract.
+	MeetingNodes *int64 `json:"meeting_nodes"`
+	// CutDepth supplies the cut depth input to the AllShortestPathsTraversalCounters contract.
+	CutDepth *int64 `json:"cut_depth"`
+	// PathCountEstimate supplies the path count estimate input to the AllShortestPathsTraversalCounters contract.
+	PathCountEstimate *int64 `json:"path_count_estimate"`
+	// PathCountSaturated supplies the path count saturated input to the AllShortestPathsTraversalCounters contract.
+	PathCountSaturated *bool `json:"path_count_saturated"`
+	// EnumeratedCandidates supplies the enumerated candidates input to the AllShortestPathsTraversalCounters contract.
+	EnumeratedCandidates *int64 `json:"enumerated_candidates"`
+	// DuplicateRejects supplies the duplicate rejects input to the AllShortestPathsTraversalCounters contract.
+	DuplicateRejects *int64 `json:"duplicate_rejects"`
+	// OutputPaths identifies the filesystem output paths.
+	OutputPaths *int64 `json:"output_paths"`
+	// OutputEdgeCells supplies the output edge cells input to the AllShortestPathsTraversalCounters contract.
+	OutputEdgeCells *int64 `json:"output_edge_cells"`
+	// OutputBytes supplies the output bytes input to the AllShortestPathsTraversalCounters contract.
+	OutputBytes *int64 `json:"output_bytes"`
 }
 
 // TraversalHydrationCounters records post-discovery materialization separately from traversal work.
 type TraversalHydrationCounters struct {
-	PathCount   *int64 `json:"path_count"`
+	// PathCount records the number of path count.
+	PathCount *int64 `json:"path_count"`
+	// NodeLookups supplies the node lookups input to the TraversalHydrationCounters contract.
 	NodeLookups *int64 `json:"node_lookups"`
+	// EdgeLookups supplies the edge lookups input to the TraversalHydrationCounters contract.
 	EdgeLookups *int64 `json:"edge_lookups"`
-	Loops       *int64 `json:"loops"`
-	Rows        *int64 `json:"rows"`
-	TimeNS      *int64 `json:"time_ns"`
-	Bytes       *int64 `json:"bytes"`
+	// Loops supplies the loops input to the TraversalHydrationCounters contract.
+	Loops *int64 `json:"loops"`
+	// Rows records the number of rows.
+	Rows *int64 `json:"rows"`
+	// TimeNS supplies the time ns input to the TraversalHydrationCounters contract.
+	TimeNS *int64 `json:"time_ns"`
+	// Bytes supplies the bytes input to the TraversalHydrationCounters contract.
+	Bytes *int64 `json:"bytes"`
 }
 
 // TraversalWorkspaceCounters records measured high-water memory attributed to
 // one diagnostic invocation and to all simultaneously active pool sessions.
 type TraversalWorkspaceCounters struct {
+	// SessionPeakBytes supplies the session peak bytes input to the TraversalWorkspaceCounters contract.
 	SessionPeakBytes *int64 `json:"session_peak_bytes"`
-	PoolPeakBytes    *int64 `json:"pool_peak_bytes"`
+	// PoolPeakBytes supplies the pool peak bytes input to the TraversalWorkspaceCounters contract.
+	PoolPeakBytes *int64 `json:"pool_peak_bytes"`
 }
 
 // ValidateTraversalExecutionTelemetry rejects incomplete or contradictory telemetry.
@@ -309,6 +414,7 @@ func (s TraversalExecutionTelemetry) Validate() error {
 	return nil
 }
 
+// validateTraversalSummary validates traversal summary.
 func validateTraversalSummary(summary TraversalExecutionSummary, problems *[]string) {
 	requireText("summary.requested_identity", summary.RequestedIdentity, problems)
 	if len(summary.PlannedIdentities) == 0 {
@@ -395,6 +501,7 @@ func validateTraversalSummary(summary TraversalExecutionSummary, problems *[]str
 	}
 }
 
+// validateTraversalDiagnostic validates traversal diagnostic.
 func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, problems *[]string) {
 	if diagnostic == nil {
 		*problems = append(*problems, "diagnostic replay is missing")
@@ -487,6 +594,7 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 	}
 }
 
+// validateInlinePredecessorCounters validates inline predecessor counters.
 func validateInlinePredecessorCounters(prefix string, counters *InlinePredecessorTraversalCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters."+prefix+" is missing")
@@ -502,6 +610,7 @@ func validateInlinePredecessorCounters(prefix string, counters *InlinePredecesso
 	})
 }
 
+// validateTraversalPlanReplay validates traversal plan replay.
 func validateTraversalPlanReplay(replay *TraversalPlanReplayEvidence, problems *[]string) {
 	if replay == nil {
 		return
@@ -518,6 +627,7 @@ func validateTraversalPlanReplay(replay *TraversalPlanReplayEvidence, problems *
 	}
 }
 
+// validateOrdinaryCounters validates ordinary counters.
 func validateOrdinaryCounters(counters *OrdinaryTraversalCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters.ordinary is missing")
@@ -531,6 +641,7 @@ func validateOrdinaryCounters(counters *OrdinaryTraversalCounters, provenance ma
 	})
 }
 
+// validateOrientationCounters validates orientation counters.
 func validateOrientationCounters(counters *OrientationTraversalCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters.orientation is missing")
@@ -554,6 +665,7 @@ func validateOrientationCounters(counters *OrientationTraversalCounters, provena
 	requirePointerAndProvenance("orientation.sentinel_overflow", counters.SentinelOverflow, provenance, problems)
 }
 
+// validateShortestPathCounters validates shortest path counters.
 func validateShortestPathCounters(prefix string, counters *ShortestPathTraversalCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters."+prefix+" is missing")
@@ -586,6 +698,7 @@ func validateShortestPathCounters(prefix string, counters *ShortestPathTraversal
 	}
 }
 
+// validateAllShortestPathsCounters validates all shortest paths counters.
 func validateAllShortestPathsCounters(counters *AllShortestPathsTraversalCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters.all_shortest_paths is missing")
@@ -602,6 +715,7 @@ func validateAllShortestPathsCounters(counters *AllShortestPathsTraversalCounter
 	requirePointerAndProvenance("all_shortest_paths.path_count_saturated", counters.PathCountSaturated, provenance, problems)
 }
 
+// validateHydrationCounters validates hydration counters.
 func validateHydrationCounters(counters *TraversalHydrationCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters.hydration is missing")
@@ -614,6 +728,7 @@ func validateHydrationCounters(counters *TraversalHydrationCounters, provenance 
 	})
 }
 
+// validateWorkspaceCounters validates workspace counters.
 func validateWorkspaceCounters(counters *TraversalWorkspaceCounters, provenance map[string]string, problems *[]string) {
 	if counters == nil {
 		*problems = append(*problems, "diagnostic.counters.workspace is missing")
@@ -626,29 +741,34 @@ func validateWorkspaceCounters(counters *TraversalWorkspaceCounters, provenance 
 	})
 }
 
+// requireCounters supports benchmark evidence processing for require counters.
 func requireCounters(prefix string, provenance map[string]string, problems *[]string, counters map[string]*int64) {
 	for name, value := range counters {
 		requirePointerAndProvenance(prefix+"."+name, value, provenance, problems)
 	}
 }
 
+// requirePointerAndProvenance supports benchmark evidence processing for require pointer and provenance.
 func requirePointerAndProvenance[T any](path string, value *T, provenance map[string]string, problems *[]string) {
 	requirePointer("diagnostic.counters."+path, value, problems)
 	requireProvenance("diagnostic.counters."+path, provenance[path], problems)
 }
 
+// requirePointer returns an addressable representation of require.
 func requirePointer[T any](path string, value *T, problems *[]string) {
 	if value == nil {
 		*problems = append(*problems, path+" is missing")
 	}
 }
 
+// requireText supports benchmark evidence processing for require text.
 func requireText(path, value string, problems *[]string) {
 	if strings.TrimSpace(value) == "" {
 		*problems = append(*problems, path+" is missing")
 	}
 }
 
+// requireProvenance supports benchmark evidence processing for require provenance.
 func requireProvenance(path, value string, problems *[]string) {
 	if strings.TrimSpace(value) == "" {
 		*problems = append(*problems, path+" provenance is missing")

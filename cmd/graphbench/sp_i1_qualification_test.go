@@ -17,11 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSPI1QualificationDiscoveryPassesTrainingWithoutOpeningHoldout verifies spi1 qualification discovery passes training without opening holdout behavior.
 func TestSPI1QualificationDiscoveryPassesTrainingWithoutOpeningHoldout(t *testing.T) {
 	baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	report, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.NoError(t, err)
 	require.True(t, report.EvidencePassed)
@@ -40,19 +44,25 @@ func TestSPI1QualificationDiscoveryPassesTrainingWithoutOpeningHoldout(t *testin
 	}
 }
 
+// TestTimedRuntimeAttestationIdentityIncludesExactS4Baseline verifies timed runtime attestation identity includes exact s4 baseline behavior.
 func TestTimedRuntimeAttestationIdentityIncludesExactS4Baseline(t *testing.T) {
 	baseline := string(optimize.ShortestPathExecutorS4CanonicalWitness)
 	translation := translate.Result{Optimization: translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
-		Family: "SP", Selected: baseline,
+		Family:   "SP",
+		Selected: baseline,
 	}}}}
 	require.Equal(t, baseline, timedRuntimeAttestationIdentity(translation))
 }
 
+// TestSPI1QualificationConfirmationRequiresAndPassesFrozenDiscovery verifies spi1 qualification confirmation requires and passes frozen discovery behavior.
 func TestSPI1QualificationConfirmationRequiresAndPassesFrozenDiscovery(t *testing.T) {
 	trainingBaseline, trainingCandidate, trainingResource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	discovery, err := buildSPI1QualificationReport(trainingBaseline, trainingCandidate, trainingResource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.NoError(t, err)
 	discovery.BaselineArtifactSHA256 = strings.Repeat("1", 64)
@@ -62,9 +72,13 @@ func TestSPI1QualificationConfirmationRequiresAndPassesFrozenDiscovery(t *testin
 
 	baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolConfirmation)
 	report, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolConfirmation, SourceArchiveSHA256: strings.Repeat("a", 64),
-		Freeze: &freeze, Discovery: &discovery,
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolConfirmation,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
+		Freeze:              &freeze,
+		Discovery:           &discovery,
 	})
 	require.NoError(t, err)
 	require.True(t, report.TrainingPassed)
@@ -75,20 +89,27 @@ func TestSPI1QualificationConfirmationRequiresAndPassesFrozenDiscovery(t *testin
 	require.Len(t, report.Cases, 7)
 }
 
+// TestSPI1QualificationRejectsUnattestedCandidateAndFreezeMutation verifies spi1 qualification rejects unattested candidate and freeze mutation behavior.
 func TestSPI1QualificationRejectsUnattestedCandidateAndFreezeMutation(t *testing.T) {
 	baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	candidate[0].Stats.Samples[1].RuntimeAttestation = "same_case_invocation_local_replay"
 	candidate[0].Stats.Samples[1].RuntimeReceiptEvents = nil
 	_, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.ErrorContains(t, err, "timed-invocation attribution")
 
 	trainingBaseline, trainingCandidate, trainingResource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	discovery, err := buildSPI1QualificationReport(trainingBaseline, trainingCandidate, trainingResource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.NoError(t, err)
 	discovery.BaselineArtifactSHA256 = strings.Repeat("1", 64)
@@ -101,14 +122,18 @@ func TestSPI1QualificationRejectsUnattestedCandidateAndFreezeMutation(t *testing
 	require.Error(t, validateSPI1FrozenDiscovery(&freeze, &discovery, cohort))
 }
 
+// TestSPI1QualificationClassifiesBoundResourceFailure verifies spi1 qualification classifies bound resource failure behavior.
 func TestSPI1QualificationClassifiesBoundResourceFailure(t *testing.T) {
 	baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	candidate[0].PostgresMetrics.Buffers.TempWritten = 1
 	resource.Cases[0] = evaluateProductionResourceGateCase(candidate[0])
 	resource.Passed = false
 	report, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.NoError(t, err)
 	require.False(t, report.TrainingPassed)
@@ -120,6 +145,7 @@ func TestSPI1QualificationClassifiesBoundResourceFailure(t *testing.T) {
 	require.True(t, found)
 }
 
+// TestSPI1QualificationRejectsCanonicalEvidenceAndScheduleTampering verifies spi1 qualification rejects canonical evidence and schedule tampering behavior.
 func TestSPI1QualificationRejectsCanonicalEvidenceAndScheduleTampering(t *testing.T) {
 	tests := map[string]func([]CaseResult, []CaseResult, *ResourceGateReport){
 		"canonical observation": func(baseline, _ []CaseResult, _ *ResourceGateReport) {
@@ -196,20 +222,36 @@ func TestSPI1QualificationRejectsCanonicalEvidenceAndScheduleTampering(t *testin
 			baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 			mutate(baseline, candidate, &resource)
 			_, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-				Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-				Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+				Seed:                1,
+				Confidence:          defaultConfidenceLevel,
+				BootstrapCount:      defaultBootstrapCount,
+				Protocol:            referencePairProtocolDiscovery,
+				SourceArchiveSHA256: strings.Repeat("a", 64),
 			})
 			require.Error(t, err)
 		})
 	}
 }
 
+// TestSPI1QualificationFreezesStatisticalPolicyAndDiscoverySemantics verifies spi1 qualification freezes statistical policy and discovery semantics behavior.
 func TestSPI1QualificationFreezesStatisticalPolicyAndDiscoverySemantics(t *testing.T) {
 	baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	for _, options := range []SPI1QualificationOptions{
-		{Seed: 2, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount},
-		{Seed: 1, Confidence: 0.95, BootstrapCount: defaultBootstrapCount},
-		{Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: 1},
+		{
+			Seed:           2,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: defaultBootstrapCount,
+		},
+		{
+			Seed:           1,
+			Confidence:     0.95,
+			BootstrapCount: defaultBootstrapCount,
+		},
+		{
+			Seed:           1,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 1,
+		},
 	} {
 		options.Protocol = referencePairProtocolDiscovery
 		options.SourceArchiveSHA256 = strings.Repeat("a", 64)
@@ -218,8 +260,11 @@ func TestSPI1QualificationFreezesStatisticalPolicyAndDiscoverySemantics(t *testi
 	}
 
 	discovery, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.NoError(t, err)
 	discovery.BaselineArtifactSHA256 = strings.Repeat("1", 64)
@@ -232,6 +277,7 @@ func TestSPI1QualificationFreezesStatisticalPolicyAndDiscoverySemantics(t *testi
 	require.Error(t, validateSPI1FrozenDiscovery(&freeze, &discovery, cohort))
 }
 
+// TestSPI1FrozenTrainingEvidenceIsRecomputedFromNamedArtifacts verifies spi1 frozen training evidence is recomputed from named artifacts behavior.
 func TestSPI1FrozenTrainingEvidenceIsRecomputedFromNamedArtifacts(t *testing.T) {
 	baseline, candidate, resource := spI1QualificationTestArtifacts(t, referencePairProtocolDiscovery)
 	directory := t.TempDir()
@@ -248,8 +294,11 @@ func TestSPI1FrozenTrainingEvidenceIsRecomputedFromNamedArtifacts(t *testing.T) 
 	require.NoError(t, os.WriteFile(resourcePath, append(resourceRaw, '\n'), 0o600))
 
 	discovery, err := buildSPI1QualificationReport(baseline, candidate, resource, SPI1QualificationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
-		Protocol: referencePairProtocolDiscovery, SourceArchiveSHA256: strings.Repeat("a", 64),
+		Seed:                1,
+		Confidence:          defaultConfidenceLevel,
+		BootstrapCount:      defaultBootstrapCount,
+		Protocol:            referencePairProtocolDiscovery,
+		SourceArchiveSHA256: strings.Repeat("a", 64),
 	})
 	require.NoError(t, err)
 	discovery.BaselineArtifactSHA256, err = fileSHA256(baselinePath)
@@ -262,13 +311,18 @@ func TestSPI1FrozenTrainingEvidenceIsRecomputedFromNamedArtifacts(t *testing.T) 
 
 	forged := discovery
 	forged.Cases = append([]SPI1QualificationCase(nil), discovery.Cases...)
-	forged.Cases[0].MedianRatio = RatioInterval{Lower: 0.801, Estimate: 0.801, Upper: 0.801}
+	forged.Cases[0].MedianRatio = RatioInterval{
+		Lower:    0.801,
+		Estimate: 0.801,
+		Upper:    0.801,
+	}
 	require.ErrorContains(t,
 		validateSPI1FrozenTrainingEvidence(&freeze, &forged, baselinePath, candidatePath, resourcePath),
 		"differs from its recomputed",
 	)
 }
 
+// TestSPI1PathsRejectHardlinkAliases verifies spi1 paths reject hardlink aliases behavior.
 func TestSPI1PathsRejectHardlinkAliases(t *testing.T) {
 	directory := t.TempDir()
 	input := filepath.Join(directory, "input.json")
@@ -278,20 +332,31 @@ func TestSPI1PathsRejectHardlinkAliases(t *testing.T) {
 	require.Error(t, validateDistinctSPI1Paths(map[string]string{"input": input, "output": alias}))
 }
 
+// TestSPI1HoldoutCaptureProfileAcceptsBothBalancedArmsAndRejectsDrift verifies spi1 holdout capture profile accepts both balanced arms and rejects drift behavior.
 func TestSPI1HoldoutCaptureProfileAcceptsBothBalancedArmsAndRejectsDrift(t *testing.T) {
 	baseline := string(optimize.ShortestPathExecutorS4CanonicalWitness)
 	candidate := string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)
 	valid := func(executor, arm string, round, order int) config {
 		return config{
-			Modes: []ExecutionMode{ModePostgresSQL}, Iterations: 50, WarmupIterations: 20,
-			Round: round, Block: round, Arm: arm, ArmOrder: order, RunUUID: "sp-i1-confirmation",
-			PoolSize: 1, PostgresForceShortest: executor, PostgresRepeatableRead: true,
+			Modes:                      []ExecutionMode{ModePostgresSQL},
+			Iterations:                 50,
+			WarmupIterations:           20,
+			Round:                      round,
+			Block:                      round,
+			Arm:                        arm,
+			ArmOrder:                   order,
+			RunUUID:                    "sp-i1-confirmation",
+			PoolSize:                   1,
+			PostgresForceShortest:      executor,
+			PostgresRepeatableRead:     true,
 			PostgresTraversalTelemetry: postgresTraversalTelemetryDiagnostic,
-			OutputJSONL:                fmt.Sprintf(".coverage/sp-i1-%s-%d.jsonl", arm, round), AppendJSONL: round > 1,
-			SPI1Freeze: ".coverage/sp-i1-freeze.json", SPI1DiscoveryReport: ".coverage/sp-i1-discovery.json",
-			SPI1TrainingBaseline:  ".coverage/sp-i1-training-s4.jsonl",
-			SPI1TrainingCandidate: ".coverage/sp-i1-training-i1.jsonl",
-			SPI1TrainingResource:  ".coverage/sp-i1-training-resource.json",
+			OutputJSONL:                fmt.Sprintf(".coverage/sp-i1-%s-%d.jsonl", arm, round),
+			AppendJSONL:                round > 1,
+			SPI1Freeze:                 ".coverage/sp-i1-freeze.json",
+			SPI1DiscoveryReport:        ".coverage/sp-i1-discovery.json",
+			SPI1TrainingBaseline:       ".coverage/sp-i1-training-s4.jsonl",
+			SPI1TrainingCandidate:      ".coverage/sp-i1-training-i1.jsonl",
+			SPI1TrainingResource:       ".coverage/sp-i1-training-resource.json",
 		}
 	}
 	for _, cfg := range []config{
@@ -336,6 +401,7 @@ func TestSPI1HoldoutCaptureProfileAcceptsBothBalancedArmsAndRejectsDrift(t *test
 	})
 }
 
+// TestSPI1HoldoutDetectionAndCorpusBindingIgnoreMutableTagAlone verifies spi1 holdout detection and corpus binding ignore mutable tag alone behavior.
 func TestSPI1HoldoutDetectionAndCorpusBindingIgnoreMutableTagAlone(t *testing.T) {
 	full, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -369,6 +435,7 @@ func TestSPI1HoldoutDetectionAndCorpusBindingIgnoreMutableTagAlone(t *testing.T)
 	require.Error(t, validateSPI1Corpus(mutated, cohort))
 }
 
+// TestRunnableCorpusExcludesSPI1HoldoutUntilExactOptIn verifies runnable corpus excludes spi1 holdout until exact opt in behavior.
 func TestRunnableCorpusExcludesSPI1HoldoutUntilExactOptIn(t *testing.T) {
 	full, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
@@ -405,6 +472,7 @@ func TestRunnableCorpusExcludesSPI1HoldoutUntilExactOptIn(t *testing.T) {
 	require.True(t, selectedCorpusContainsSPI1Holdout(exactCase))
 }
 
+// spI1QualificationTestArtifacts prepares or inspects test evidence for sp i1 qualification test artifacts.
 func spI1QualificationTestArtifacts(t *testing.T, protocol string) ([]CaseResult, []CaseResult, ResourceGateReport) {
 	t.Helper()
 	full, err := loadScaleCorpus("../../benchmark/testdata/scale")
@@ -421,7 +489,11 @@ func spI1QualificationTestArtifacts(t *testing.T, protocol string) ([]CaseResult
 	require.NoError(t, err)
 
 	var baseline, candidate []CaseResult
-	resource := ResourceGateReport{Version: resourceGateVersion, ArtifactSHA256: strings.Repeat("9", 64), Passed: true}
+	resource := ResourceGateReport{
+		Version:        resourceGateVersion,
+		ArtifactSHA256: strings.Repeat("9", 64),
+		Passed:         true,
+	}
 	for _, testCase := range selected.Cases {
 		fixture, err := fixtureMetadata("unused", testCase.Dataset)
 		require.NoError(t, err)
@@ -440,9 +512,14 @@ func spI1QualificationTestArtifacts(t *testing.T, protocol string) ([]CaseResult
 				observed[name] = allObserved[name]
 			}
 			resource.Cases = append(resource.Cases, ResourceGateCase{
-				Dataset: right.Dataset, Name: right.Name, Tier: right.Shape.FixtureTier,
-				Round: right.Environment.Round, Block: right.Environment.Block, RunUUID: right.Environment.RunUUID,
-				Arm: right.Environment.Arm, ArmOrder: right.Environment.ArmOrder,
+				Dataset:              right.Dataset,
+				Name:                 right.Name,
+				Tier:                 right.Shape.FixtureTier,
+				Round:                right.Environment.Round,
+				Block:                right.Environment.Block,
+				RunUUID:              right.Environment.RunUUID,
+				Arm:                  right.Environment.Arm,
+				ArmOrder:             right.Environment.ArmOrder,
 				QualificationSplit:   right.Shape.QualificationSplit,
 				Architecture:         string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
 				Passed:               true,
@@ -455,6 +532,7 @@ func spI1QualificationTestArtifacts(t *testing.T, protocol string) ([]CaseResult
 	return baseline, candidate, resource
 }
 
+// spI1QualificationTestRecords prepares or inspects test evidence for sp i1 qualification test records.
 func spI1QualificationTestRecords(
 	t *testing.T,
 	testCase ScaleCase,
@@ -483,8 +561,10 @@ func spI1QualificationTestRecords(
 		}
 		for index, kind := range expectedPath.RelationshipKinds {
 			path.Relationships[index] = stableRelationshipObservation{
-				Identity: expectedPath.RelationshipKeys[index], Start: expectedPath.Nodes[index],
-				End: expectedPath.Nodes[index+1], Kind: kind,
+				Identity: expectedPath.RelationshipKeys[index],
+				Start:    expectedPath.Nodes[index],
+				End:      expectedPath.Nodes[index+1],
+				Kind:     kind,
 			}
 		}
 		raw, err := json.Marshal([]any{path})
@@ -498,40 +578,90 @@ func spI1QualificationTestRecords(
 	makeSamples := func(arm string, order int, duration time.Duration, requested, branch, attestation string) []LatencySample {
 		result := make([]LatencySample, samples+1)
 		result[0] = LatencySample{
-			Round: round, Block: round, Arm: arm, ArmOrder: order, RunUUID: "sp-i1-test-run",
-			Iteration: 0, Case: testCase.Name, Dataset: testCase.Dataset, Backend: ModePostgresSQL,
-			ConnectionID: "101", Classification: "cold", Duration: 2 * duration,
+			Round:          round,
+			Block:          round,
+			Arm:            arm,
+			ArmOrder:       order,
+			RunUUID:        "sp-i1-test-run",
+			Iteration:      0,
+			Case:           testCase.Name,
+			Dataset:        testCase.Dataset,
+			Backend:        ModePostgresSQL,
+			ConnectionID:   "101",
+			Classification: "cold",
+			Duration:       2 * duration,
 		}
 		for index := range samples {
 			invocationID := fmt.Sprintf("sp-i1-test-%s-%s-%d-%d", arm, testCase.Name, round, index+1)
 			result[index+1] = LatencySample{
-				Round: round, Block: round, Arm: arm, ArmOrder: order, RunUUID: "sp-i1-test-run",
-				Iteration: index + 1, Case: testCase.Name, Dataset: testCase.Dataset, Backend: ModePostgresSQL,
-				ConnectionID: "101", Classification: "warm", Duration: duration,
-				RequestedIdentity: requested, RuntimeIdentity: requested, RuntimeBranch: branch,
-				FallbackExecuted: &falseValue, RuntimeAttestation: attestation, RuntimeInvocationID: invocationID,
+				Round:               round,
+				Block:               round,
+				Arm:                 arm,
+				ArmOrder:            order,
+				RunUUID:             "sp-i1-test-run",
+				Iteration:           index + 1,
+				Case:                testCase.Name,
+				Dataset:             testCase.Dataset,
+				Backend:             ModePostgresSQL,
+				ConnectionID:        "101",
+				Classification:      "warm",
+				Duration:            duration,
+				RequestedIdentity:   requested,
+				RuntimeIdentity:     requested,
+				RuntimeBranch:       branch,
+				FallbackExecuted:    &falseValue,
+				RuntimeAttestation:  attestation,
+				RuntimeInvocationID: invocationID,
 			}
 			if attestation == "timed_invocation" {
 				result[index+1].RuntimeReceiptEvents = []RuntimeReceiptEvent{{
-					InvocationID: invocationID, Ordinal: 1, RuntimeIdentity: requested, RuntimeBranch: branch, FallbackExecuted: false,
+					InvocationID:     invocationID,
+					Ordinal:          1,
+					RuntimeIdentity:  requested,
+					RuntimeBranch:    branch,
+					FallbackExecuted: false,
 				}}
 			}
 		}
 		return result
 	}
 	baseEnvironment := RunEnvironment{
-		ArtifactSchemaVersion: 2, CorpusSHA256: corpusSHA256,
-		SourceCommit: "deadbeef", DirtyDiffSHA256: cleanWorkingTreeSHA256(), BinarySHA256: strings.Repeat("b", 64),
-		GOOS: "linux", GOARCH: "amd64", CPUCount: 8, CPUModel: "test-cpu", Kernel: "test-kernel",
-		CgroupCPU: "max 100000", CgroupMemory: "max", CPUGovernor: "performance",
-		RunUUID: "sp-i1-test-run", Block: round, Round: round, WarmupIterations: warmups,
-		Selection: &selection, PoolSize: 1, Protocol: "fixed_confirmation",
+		ArtifactSchemaVersion: 2,
+		CorpusSHA256:          corpusSHA256,
+		SourceCommit:          "deadbeef",
+		DirtyDiffSHA256:       cleanWorkingTreeSHA256(),
+		BinarySHA256:          strings.Repeat("b", 64),
+		GOOS:                  "linux",
+		GOARCH:                "amd64",
+		CPUCount:              8,
+		CPUModel:              "test-cpu",
+		Kernel:                "test-kernel",
+		CgroupCPU:             "max 100000",
+		CgroupMemory:          "max",
+		CPUGovernor:           "performance",
+		RunUUID:               "sp-i1-test-run",
+		Block:                 round,
+		Round:                 round,
+		WarmupIterations:      warmups,
+		Selection:             &selection,
+		PoolSize:              1,
+		Protocol:              "fixed_confirmation",
 	}
 	postgresEnvironment := &PostgresEnvironment{
-		Version: "PostgreSQL test", Database: "dawgs", PlanCacheMode: "auto", TransactionIsolation: "repeatable read",
-		WorkMem: "64MB", TempFileLimit: "1GB", GraphPartitionCount: 1, DatabaseOID: 42,
-		Autovacuum: "on", NodeRelationBytes: fixture.NodeRelationBytes, EdgeRelationBytes: fixture.EdgeRelationBytes,
-		AnalyzeState: "edge:analyzed,node:analyzed", SchemaFingerprint: strings.Repeat("c", 64), IndexFingerprint: strings.Repeat("d", 64),
+		Version:              "PostgreSQL test",
+		Database:             "dawgs",
+		PlanCacheMode:        "auto",
+		TransactionIsolation: "repeatable read",
+		WorkMem:              "64MB",
+		TempFileLimit:        "1GB",
+		GraphPartitionCount:  1,
+		DatabaseOID:          42,
+		Autovacuum:           "on",
+		NodeRelationBytes:    fixture.NodeRelationBytes,
+		EdgeRelationBytes:    fixture.EdgeRelationBytes,
+		AnalyzeState:         "edge:analyzed,node:analyzed",
+		SchemaFingerprint:    strings.Repeat("c", 64),
+		IndexFingerprint:     strings.Repeat("d", 64),
 	}
 	base := newCaseResult(testCase, ModePostgresSQL, nil)
 	base.RowCount = rowCount
@@ -556,20 +686,38 @@ func spI1QualificationTestRecords(
 		baselineBranch = "compact_no_path"
 	}
 	baseline.Stats = DurationStats{
-		Iterations: samples, WarmupIterations: warmups, Median: 10 * time.Millisecond, P95: 10 * time.Millisecond,
-		Samples: makeSamples("sp-i1-s4", baselineOrder, 10*time.Millisecond, baselineIdentity, baselineBranch, "timed_invocation"),
+		Iterations:       samples,
+		WarmupIterations: warmups,
+		Median:           10 * time.Millisecond,
+		P95:              10 * time.Millisecond,
+		Samples:          makeSamples("sp-i1-s4", baselineOrder, 10*time.Millisecond, baselineIdentity, baselineBranch, "timed_invocation"),
 	}
 	baselineOutcome := translate.TargetLoweringOutcome{
-		Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", Family: "SP",
-		Selected: baselineIdentity, Applied: baselineIdentity, Fallback: "SP-S0",
-		PlannedCandidates: spI1ShortestPathPlannedIdentities(), SelectorVersion: "sp-tool-v1",
-		ExecutionBoundary: "stored_helper", ObservationMode: "one_path", Scheduler: "single_ended_level",
-		Direction: "inbound", PhysicalExpansion: "end_id", RelationshipKindCount: 1,
-		TopologyClassification: "physical_inbound_deep", SelectionMode: "forced_tool",
-		Eligible: &trueValue, StaticallyEligible: &trueValue,
-		MinimumDepth: traversalTelemetryPointer(int64(1)), MaximumDepth: traversalTelemetryPointer(int64(64)),
-		StateLimit: 100_000, FrontierLimit: 100_000, PredecessorLimit: 100_000,
-		EnumerationLimit: 100_000, OutputBytesLimit: 64 * 1024 * 1024,
+		Lowering:               optimize.LoweringShortestPathExecutor,
+		TargetKind:             "traversal",
+		Family:                 "SP",
+		Selected:               baselineIdentity,
+		Applied:                baselineIdentity,
+		Fallback:               "SP-S0",
+		PlannedCandidates:      spI1ShortestPathPlannedIdentities(),
+		SelectorVersion:        "sp-tool-v1",
+		ExecutionBoundary:      "stored_helper",
+		ObservationMode:        "one_path",
+		Scheduler:              "single_ended_level",
+		Direction:              "inbound",
+		PhysicalExpansion:      "end_id",
+		RelationshipKindCount:  1,
+		TopologyClassification: "physical_inbound_deep",
+		SelectionMode:          "forced_tool",
+		Eligible:               &trueValue,
+		StaticallyEligible:     &trueValue,
+		MinimumDepth:           traversalTelemetryPointer(int64(1)),
+		MaximumDepth:           traversalTelemetryPointer(int64(64)),
+		StateLimit:             100_000,
+		FrontierLimit:          100_000,
+		PredecessorLimit:       100_000,
+		EnumerationLimit:       100_000,
+		OutputBytesLimit:       64 * 1024 * 1024,
 	}
 	baseline.Optimization = &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{baselineOutcome}}
 	baselineMetrics := PostgresPlanMetrics{Provenance: map[string]string{}}
@@ -588,37 +736,61 @@ func spI1QualificationTestRecords(
 		candidateBranch = "inline_canonical_no_path"
 	}
 	candidate.Stats = DurationStats{
-		Iterations: samples, WarmupIterations: warmups, Median: 8 * time.Millisecond, P95: 8 * time.Millisecond,
-		Samples: makeSamples("sp-i1-candidate", candidateOrder, 8*time.Millisecond, candidateIdentity, candidateBranch, "timed_invocation"),
+		Iterations:       samples,
+		WarmupIterations: warmups,
+		Median:           8 * time.Millisecond,
+		P95:              8 * time.Millisecond,
+		Samples:          makeSamples("sp-i1-candidate", candidateOrder, 8*time.Millisecond, candidateIdentity, candidateBranch, "timed_invocation"),
 	}
 	candidateOutcome := translate.TargetLoweringOutcome{
-		Lowering: optimize.LoweringShortestPathExecutor, TargetKind: "traversal", Family: "SP",
-		Candidate: candidateIdentity, Selected: candidateIdentity, Applied: candidateIdentity,
-		Fallback: baselineIdentity, PlannedCandidates: spI1ShortestPathPlannedIdentities(),
-		EmittedCandidates: []string{candidateIdentity, baselineIdentity}, EmittedPolicy: optimize.ShortestPathPolicyI1CanonicalGuardedV1,
-		SelectorVersion: "sp-i1-canonical-tool-v1", ExecutionBoundary: optimize.ExpansionSearchExecutionBoundaryGuardedDualArm,
-		ObservationMode: "one_path", Scheduler: "single_ended_level", Direction: "inbound", PhysicalExpansion: "end_id",
-		RelationshipKindCount: 1, TopologyClassification: "physical_inbound_deep", SelectionMode: "forced_tool",
-		Eligible: &trueValue, StaticallyEligible: &trueValue,
-		MinimumDepth: traversalTelemetryPointer(int64(1)), MaximumDepth: traversalTelemetryPointer(int64(64)),
-		StateLimit: 100_000, PredecessorLimit: 100_000,
-		EnumerationLimit: 100_000, OutputBytesLimit: 64 * 1024 * 1024,
+		Lowering:               optimize.LoweringShortestPathExecutor,
+		TargetKind:             "traversal",
+		Family:                 "SP",
+		Candidate:              candidateIdentity,
+		Selected:               candidateIdentity,
+		Applied:                candidateIdentity,
+		Fallback:               baselineIdentity,
+		PlannedCandidates:      spI1ShortestPathPlannedIdentities(),
+		EmittedCandidates:      []string{candidateIdentity, baselineIdentity},
+		EmittedPolicy:          optimize.ShortestPathPolicyI1CanonicalGuardedV1,
+		SelectorVersion:        "sp-i1-canonical-tool-v1",
+		ExecutionBoundary:      optimize.ExpansionSearchExecutionBoundaryGuardedDualArm,
+		ObservationMode:        "one_path",
+		Scheduler:              "single_ended_level",
+		Direction:              "inbound",
+		PhysicalExpansion:      "end_id",
+		RelationshipKindCount:  1,
+		TopologyClassification: "physical_inbound_deep",
+		SelectionMode:          "forced_tool",
+		Eligible:               &trueValue,
+		StaticallyEligible:     &trueValue,
+		MinimumDepth:           traversalTelemetryPointer(int64(1)),
+		MaximumDepth:           traversalTelemetryPointer(int64(64)),
+		StateLimit:             100_000,
+		PredecessorLimit:       100_000,
+		EnumerationLimit:       100_000,
+		OutputBytesLimit:       64 * 1024 * 1024,
 	}
 	candidate.Optimization = &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{candidateOutcome}}
-	candidateMetrics := PostgresPlanMetrics{Provenance: map[string]string{}, HydrationRows: rowCount, HydrationLoops: rowCount, PlanNodes: []PostgresPlanNodeMetric{
-		inlinePredecessorPlanNode("asp_i1_distance_bounded", 32, 1),
-		inlinePredecessorPlanNode("asp_i1_predecessor_bounded", 16, 1),
-		inlinePredecessorPlanNode("asp_i1_paths_bounded", rowCount, 1),
-		inlinePredecessorPlanNode("asp_i1_shortest", rowCount, 1),
-		inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
-		inlinePredecessorPlanNode("asp_i1_fallback_marker", 0, 1),
-		inlinePredecessorPlanNode("asp_i1_candidate_rows", rowCount, 1),
-		inlinePredecessorPlanNode("asp_i1_fallback_rows", 0, 1),
-		inlinePredecessorMarkerGateNode("candidate", 1, 1),
-		inlinePredecessorMarkerGateNode("fallback", 0, 1),
-		inlinePredecessorExecutorNode("candidate", 1),
-		inlinePredecessorExecutorNode("fallback", 0),
-	}}
+	candidateMetrics := PostgresPlanMetrics{
+		Provenance:     map[string]string{},
+		HydrationRows:  rowCount,
+		HydrationLoops: rowCount,
+		PlanNodes: []PostgresPlanNodeMetric{
+			inlinePredecessorPlanNode("asp_i1_distance_bounded", 32, 1),
+			inlinePredecessorPlanNode("asp_i1_predecessor_bounded", 16, 1),
+			inlinePredecessorPlanNode("asp_i1_paths_bounded", rowCount, 1),
+			inlinePredecessorPlanNode("asp_i1_shortest", rowCount, 1),
+			inlinePredecessorPlanNode("asp_i1_candidate_marker", 1, 1),
+			inlinePredecessorPlanNode("asp_i1_fallback_marker", 0, 1),
+			inlinePredecessorPlanNode("asp_i1_candidate_rows", rowCount, 1),
+			inlinePredecessorPlanNode("asp_i1_fallback_rows", 0, 1),
+			inlinePredecessorMarkerGateNode("candidate", 1, 1),
+			inlinePredecessorMarkerGateNode("fallback", 0, 1),
+			inlinePredecessorExecutorNode("candidate", 1),
+			inlinePredecessorExecutorNode("fallback", 0),
+		},
+	}
 	candidate.PostgresMetrics = &candidateMetrics
 	candidateTelemetry, err := buildPostgresCaseTraversalTelemetry(*candidate.Optimization, candidateMetrics, "101", TraversalTelemetryLevelDiagnostic)
 	require.NoError(t, err)
@@ -628,6 +800,7 @@ func spI1QualificationTestRecords(
 	return baseline, candidate
 }
 
+// cloneSPI1TestEnvironment returns an independent copy of spi1 test environment.
 func cloneSPI1TestEnvironment(environment RunEnvironment, arm string, order int) *RunEnvironment {
 	copy := environment
 	copy.Arm = arm
@@ -635,16 +808,25 @@ func cloneSPI1TestEnvironment(environment RunEnvironment, arm string, order int)
 	return &copy
 }
 
+// spI1QualificationTestFreeze prepares or inspects test evidence for sp i1 qualification test freeze.
 func spI1QualificationTestFreeze(t *testing.T, discovery SPI1QualificationReport) SPI1QualificationFreezeManifest {
 	t.Helper()
 	cohort, err := canonicalSPI1Cohort()
 	require.NoError(t, err)
 	return SPI1QualificationFreezeManifest{
-		Version: spI1FreezeVersion, Baseline: discovery.Baseline, Candidate: discovery.Candidate,
-		Policy: discovery.Policy, QuerySHA256: discovery.QuerySHA256, Caps: discovery.Caps,
-		Seed: discovery.Seed, Confidence: discovery.Confidence, BootstrapCount: discovery.BootstrapCount,
-		SourceCommit: discovery.SourceCommit, SourceArchiveSHA256: discovery.SourceArchiveSHA256,
-		DirtyDiffSHA256: discovery.DirtyDiffSHA256, BinarySHA256: discovery.BinarySHA256,
+		Version:                   spI1FreezeVersion,
+		Baseline:                  discovery.Baseline,
+		Candidate:                 discovery.Candidate,
+		Policy:                    discovery.Policy,
+		QuerySHA256:               discovery.QuerySHA256,
+		Caps:                      discovery.Caps,
+		Seed:                      discovery.Seed,
+		Confidence:                discovery.Confidence,
+		BootstrapCount:            discovery.BootstrapCount,
+		SourceCommit:              discovery.SourceCommit,
+		SourceArchiveSHA256:       discovery.SourceArchiveSHA256,
+		DirtyDiffSHA256:           discovery.DirtyDiffSHA256,
+		BinarySHA256:              discovery.BinarySHA256,
 		TrainingDeclarationSHA256: cohort.trainingDeclarationSHA256,
 		HoldoutDeclarationSHA256:  cohort.holdoutDeclarationSHA256,
 		FullDeclarationSHA256:     cohort.declarationSHA256,

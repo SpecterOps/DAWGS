@@ -34,17 +34,47 @@ func TestGeneratedFixedSuffixExpansionV2DatasetCarriesExactExpectations(t *testi
 // combination, including exact relationship-distinct state and output counts.
 func TestGeneratedFixedSuffixExpansionV3DatasetRoundTripsAllBoundaryControls(t *testing.T) {
 	for _, testCase := range []struct {
-		name          string
-		cycle         bool
-		selfLoop      bool
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// cycle indicates whether cycle applies.
+		cycle bool
+		// selfLoop indicates whether self loop applies.
+		selfLoop bool
+		// forwardStates retains the forward states while anonymous record is assembled or evaluated.
 		forwardStates int64
+		// reverseStates retains the reverse states while anonymous record is assembled or evaluated.
 		reverseStates int64
-		outputTrails  int64
+		// outputTrails retains the output trails while anonymous record is assembled or evaluated.
+		outputTrails int64
 	}{
-		{name: "neither", forwardStates: 5, reverseStates: 1, outputTrails: 1},
-		{name: "cycle", cycle: true, forwardStates: 7, reverseStates: 3, outputTrails: 2},
-		{name: "self-loop", selfLoop: true, forwardStates: 7, reverseStates: 2, outputTrails: 2},
-		{name: "both", cycle: true, selfLoop: true, forwardStates: 10, reverseStates: 5, outputTrails: 3},
+		{
+			name:          "neither",
+			forwardStates: 5,
+			reverseStates: 1,
+			outputTrails:  1,
+		},
+		{
+			name:          "cycle",
+			cycle:         true,
+			forwardStates: 7,
+			reverseStates: 3,
+			outputTrails:  2,
+		},
+		{
+			name:          "self-loop",
+			selfLoop:      true,
+			forwardStates: 7,
+			reverseStates: 2,
+			outputTrails:  2,
+		},
+		{
+			name:          "both",
+			cycle:         true,
+			selfLoop:      true,
+			forwardStates: 10,
+			reverseStates: 5,
+			outputTrails:  3,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			reachable := 0
@@ -88,9 +118,15 @@ func TestGeneratedFixedSuffixExpansionV3DatasetRoundTripsAllBoundaryControls(t *
 // TestGeneratedEndpointSeededExpansionDatasetRoundTripsWithExactExpectations verifies lossless name encoding and the expected endpoint, prefix, output, and reverse-search cardinalities.
 func TestGeneratedEndpointSeededExpansionDatasetRoundTripsWithExactExpectations(t *testing.T) {
 	config := testutil.EndpointSeededExpansionScaleConfig{
-		Depth: 3, MatchingEndpoints: 2, OtherEndpoints: 1,
-		MatchingEligibleLanes: 2, OtherEligibleLanes: 1, MatchingIneligibleLanes: 1,
-		ParallelEdges: 1, AddCycle: false, PropertyPayloadSize: 8,
+		Depth:                   3,
+		MatchingEndpoints:       2,
+		OtherEndpoints:          1,
+		MatchingEligibleLanes:   2,
+		OtherEligibleLanes:      1,
+		MatchingIneligibleLanes: 1,
+		ParallelEdges:           1,
+		AddCycle:                false,
+		PropertyPayloadSize:     8,
 	}
 	name := endpointSeededExpansionDatasetName(config)
 	parsed, ok := parseEndpointSeededExpansionDatasetName(name)
@@ -304,7 +340,7 @@ type clearGraphTestRelationshipQuery struct {
 	database *clearGraphTestDatabase
 }
 
-// Delete records the deletion request and returns the configured failure.
+// Delete prepares or inspects test evidence for delete.
 func (s *clearGraphTestRelationshipQuery) Delete() error {
 	s.database.deletes = append(s.database.deletes, "relationships")
 	return s.database.relationshipError
@@ -319,7 +355,7 @@ type clearGraphTestNodeQuery struct {
 	database *clearGraphTestDatabase
 }
 
-// Delete records the deletion request and returns the configured failure.
+// Delete prepares or inspects test evidence for delete.
 func (s *clearGraphTestNodeQuery) Delete() error {
 	s.database.deletes = append(s.database.deletes, "nodes")
 	return s.database.nodeError
@@ -333,7 +369,7 @@ type clearPostgresGraphTestDatabase struct {
 	// statements records every raw SQL statement issued by cleanup.
 	statements []string
 
-	// parameters records the bind arguments paired with each captured statement.
+	// parameters retains the parameters while clearPostgresGraphTestDatabase is assembled or evaluated.
 	parameters []map[string]any
 
 	// failAt selects the one-based raw call that returns a terminal result error.

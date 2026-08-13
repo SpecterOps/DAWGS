@@ -157,7 +157,8 @@ func TestBuildPerfGateReportRequiresHostAAEvidence(t *testing.T) {
 	stampPairedEvidence(baseline, candidate, minimumDiscoveryWarmups)
 
 	_, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
 	})
 
 	require.ErrorContains(t, err, "checksummed host A/A report")
@@ -169,7 +170,8 @@ func TestBuildPerfGateReportRequiresMaterialityTargetForPromotion(t *testing.T) 
 	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, time.Millisecond, 5, 30)}
 	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, time.Millisecond, 5, 30)}
 	report, err := buildPerfGateReport(baseline, candidate, qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
 	}))
 
 	require.NoError(t, err)
@@ -184,7 +186,8 @@ func TestBuildPerfGateReportRejectsMismatchedAAHost(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, time.Millisecond, 5, 30)}
 	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, time.Millisecond, 5, 30)}
 	options := qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
 	})
 	options.AAReport.HostFingerprint = strings.Repeat("c", 64)
 
@@ -199,7 +202,8 @@ func TestBuildPerfGateReportUsesP95AbsoluteFloor(t *testing.T) {
 	candidate := []CaseResult{perfGateRecord("fast", ModePostgresSQL, 1060*time.Microsecond, 5, 30)}
 
 	report, err := buildPerfGateReport(baseline, candidate, qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 100,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 100,
 	}))
 
 	require.NoError(t, err)
@@ -212,7 +216,10 @@ func TestBuildPerfGateReportUsesP95AbsoluteFloor(t *testing.T) {
 func TestBuildPerfGateReportRejectsUnbalancedPromotionEvidence(t *testing.T) {
 	baseline := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, time.Millisecond, 5, 30)}
 	candidate := []CaseResult{perfGateRecord("ordinary_case", ModePostgresSQL, 900*time.Microsecond, 5, 30)}
-	options := qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10})
+	options := qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+	})
 	for idx := range baseline[0].Stats.Samples {
 		baseline[0].Stats.Samples[idx].ArmOrder = 1
 		candidate[0].Stats.Samples[idx].ArmOrder = 2
@@ -231,7 +238,8 @@ func TestBuildPerfGateReportKeepsStressTimingDiagnostic(t *testing.T) {
 	candidate[0].Shape.FixtureTier = "stress"
 
 	report, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
 	})
 
 	require.NoError(t, err)
@@ -250,7 +258,8 @@ func TestBuildPerfGateReportKeepsDiagnosticSplitOutOfPromotion(t *testing.T) {
 	candidate[0].Shape.QualificationSplit = "diagnostic"
 
 	report, err := buildPerfGateReport(baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
 	})
 
 	require.NoError(t, err)
@@ -311,9 +320,11 @@ func TestUnsupportedDeclarationAffectsChecksumWithoutRequiringARecord(t *testing
 // TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate verifies that subset artifacts require an explicit diagnostic override and still must share the same declaration digest.
 func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate(t *testing.T) {
 	manifest := &SelectionManifest{
-		Version: selectionManifestVersion, DiagnosticOnly: true,
-		FullDeclarationCount: 1, SelectedDeclarationCount: 1,
-		DeclarationSHA256: strings.Repeat("a", 64),
+		Version:                  selectionManifestVersion,
+		DiagnosticOnly:           true,
+		FullDeclarationCount:     1,
+		SelectedDeclarationCount: 1,
+		DeclarationSHA256:        strings.Repeat("a", 64),
 	}
 	left := []CaseResult{{
 		Dataset: "fixture",
@@ -333,9 +344,11 @@ func TestValidatePerformanceArtifactSelectionsRefusesDiagnosticsFromCompleteGate
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, false), "refused")
 	require.NoError(t, validatePerformanceArtifactSelections(left, right, true))
 	right[0].Environment.Selection = &SelectionManifest{
-		Version: selectionManifestVersion, DiagnosticOnly: true,
-		FullDeclarationCount: 1, SelectedDeclarationCount: 1,
-		DeclarationSHA256: strings.Repeat("b", 64),
+		Version:                  selectionManifestVersion,
+		DiagnosticOnly:           true,
+		FullDeclarationCount:     1,
+		SelectedDeclarationCount: 1,
+		DeclarationSHA256:        strings.Repeat("b", 64),
 	}
 	require.ErrorContains(t, validatePerformanceArtifactSelections(left, right, true), "declarations differ")
 }
@@ -350,7 +363,12 @@ func perfGateRecord(name string, mode ExecutionMode, duration time.Duration, rou
 		Status:         StatusOK,
 		Shape:          WorkloadShape{FixtureTier: "normal"},
 		Environment: &RunEnvironment{
-			GOOS: "linux", GOARCH: "amd64", CPUCount: 8, CPUModel: "test-cpu", Kernel: "test-kernel", CgroupCPU: "max 100000",
+			GOOS:             "linux",
+			GOARCH:           "amd64",
+			CPUCount:         8,
+			CPUModel:         "test-cpu",
+			Kernel:           "test-kernel",
+			CgroupCPU:        "max 100000",
 			WarmupIterations: minimumDiscoveryWarmups,
 		},
 	}
@@ -377,6 +395,7 @@ func qualifiedPerfGateOptions(t *testing.T, baseline, candidate []CaseResult, op
 	return options
 }
 
+// testAAReportForRecords prepares or inspects test evidence for test aa report for records.
 func testAAReportForRecords(t *testing.T, records []CaseResult) *AAResolutionReport {
 	t.Helper()
 	hostFingerprint, err := artifactHostFingerprint(records)
@@ -385,7 +404,11 @@ func testAAReportForRecords(t *testing.T, records []CaseResult) *AAResolutionRep
 	keys := map[performanceKey]struct{}{}
 	for _, record := range records {
 		if record.ExecutionMode == ModePostgresSQL && hasWarmLatencySample(record) {
-			keys[performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}] = struct{}{}
+			keys[performanceKey{
+				dataset: record.Dataset,
+				name:    record.Name,
+				backend: record.ExecutionMode,
+			}] = struct{}{}
 		}
 	}
 	aa := &AAResolutionReport{
@@ -405,24 +428,40 @@ func testAAReportForRecords(t *testing.T, records []CaseResult) *AAResolutionRep
 		fixtureSHA256, err := fixtureSHA256ForKey(records, key)
 		require.NoError(t, err)
 		aa.Cases = append(aa.Cases, AAResolutionCase{
-			Dataset: key.dataset, Name: key.name, Backend: key.backend, WorkloadSHA256: workloadSHA256,
-			PostgresEnvironmentSHA256: postgresEnvironmentSHA256, FixtureSHA256: fixtureSHA256,
-			Rounds: minimumGateRounds, SamplesPerArm: minimumGateRounds * 10,
-			P50: testAAMetricResolution(), P95: testAAMetricResolution(),
+			Dataset:                   key.dataset,
+			Name:                      key.name,
+			Backend:                   key.backend,
+			WorkloadSHA256:            workloadSHA256,
+			PostgresEnvironmentSHA256: postgresEnvironmentSHA256,
+			FixtureSHA256:             fixtureSHA256,
+			Rounds:                    minimumGateRounds,
+			SamplesPerArm:             minimumGateRounds * 10,
+			P50:                       testAAMetricResolution(),
+			P95:                       testAAMetricResolution(),
 		})
 	}
 	return aa
 }
 
+// testAAMetricResolution prepares or inspects test evidence for test aa metric resolution.
 func testAAMetricResolution() AAMetricResolution {
 	return AAMetricResolution{
-		Ratio:              RatioInterval{Estimate: 1, Lower: 0.99, Upper: 1.01},
-		RatioResolution:    0.01,
-		AbsoluteChange:     DurationInterval{Estimate: 0, Lower: -10 * time.Microsecond, Upper: 10 * time.Microsecond},
+		Ratio: RatioInterval{
+			Estimate: 1,
+			Lower:    0.99,
+			Upper:    1.01,
+		},
+		RatioResolution: 0.01,
+		AbsoluteChange: DurationInterval{
+			Estimate: 0,
+			Lower:    -10 * time.Microsecond,
+			Upper:    10 * time.Microsecond,
+		},
 		AbsoluteResolution: 10 * time.Microsecond,
 	}
 }
 
+// stampPairedEvidence prepares or inspects test evidence for stamp paired evidence.
 func stampPairedEvidence(left, right []CaseResult, warmups int) {
 	stamp := func(records []CaseResult, arm string, leftArm bool) {
 		for recordIdx := range records {
@@ -472,9 +511,16 @@ func reasonsError(reasons []string) error {
 // verifies benchmark artifacts cannot silently reclassify selector training as
 // frozen holdout evidence.
 func TestQualificationSplitFailsClosedOnMissingOrDriftingTraversalPartitions(t *testing.T) {
-	key := performanceKey{dataset: "fixture", name: "sp", backend: ModePostgresSQL}
+	key := performanceKey{
+		dataset: "fixture",
+		name:    "sp",
+		backend: ModePostgresSQL,
+	}
 	left := []CaseResult{{
-		Dataset: "fixture", Name: "sp", Category: "generated_shortest_path_v2", ExecutionMode: ModePostgresSQL,
+		Dataset:       "fixture",
+		Name:          "sp",
+		Category:      "generated_shortest_path_v2",
+		ExecutionMode: ModePostgresSQL,
 	}}
 	_, err := qualificationSplit(key, left)
 	require.ErrorContains(t, err, "no frozen qualification split")
@@ -495,28 +541,51 @@ func TestQualificationSplitFailsClosedOnMissingOrDriftingTraversalPartitions(t *
 // the v2 dataset cannot bypass partition enforcement through its intentionally
 // backwards-compatible category name.
 func TestQualificationSplitRecognizesCompatibleFixedSuffixV2Categories(t *testing.T) {
-	key := performanceKey{dataset: "generated_fixed_suffix_expansion_v2_d8_f16", name: "GFSE-V2-D08-F016", backend: ModePostgresSQL}
+	key := performanceKey{
+		dataset: "generated_fixed_suffix_expansion_v2_d8_f16",
+		name:    "GFSE-V2-D08-F016",
+		backend: ModePostgresSQL,
+	}
 	records := []CaseResult{{
-		Dataset: key.dataset, Name: key.name, Category: "generated_fixed_suffix_expansion", ExecutionMode: key.backend,
+		Dataset:       key.dataset,
+		Name:          key.name,
+		Category:      "generated_fixed_suffix_expansion",
+		ExecutionMode: key.backend,
 	}}
 
 	_, err := qualificationSplit(key, records)
 	require.ErrorContains(t, err, "no frozen qualification split")
 }
 
+// TestTraversalQualificationFamilyRecognizesFixedSuffixV3WithoutTelemetry verifies traversal qualification family recognizes fixed suffix v3 without telemetry behavior.
 func TestTraversalQualificationFamilyRecognizesFixedSuffixV3WithoutTelemetry(t *testing.T) {
-	key := performanceKey{dataset: "generated_fixed_suffix_expansion_v3_d8_f16", name: "GFSE-V3-D08-F016", backend: ModePostgresSQL}
+	key := performanceKey{
+		dataset: "generated_fixed_suffix_expansion_v3_d8_f16",
+		name:    "GFSE-V3-D08-F016",
+		backend: ModePostgresSQL,
+	}
 	records := []CaseResult{{
-		Dataset: key.dataset, Name: key.name, Category: "generated_fixed_suffix_expansion", ExecutionMode: key.backend,
+		Dataset:       key.dataset,
+		Name:          key.name,
+		Category:      "generated_fixed_suffix_expansion",
+		ExecutionMode: key.backend,
 	}}
 
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), traversalQualificationFamily(key, records))
 }
 
+// TestTraversalQualificationUsesOrientationPolicyBeforeRequestedArm verifies traversal qualification uses orientation policy before requested arm behavior.
 func TestTraversalQualificationUsesOrientationPolicyBeforeRequestedArm(t *testing.T) {
-	key := performanceKey{dataset: "generated_fixed_suffix_expansion_v3_d8_f16", name: "GFSE-V3-D08-F016", backend: ModePostgresSQL}
+	key := performanceKey{
+		dataset: "generated_fixed_suffix_expansion_v3_d8_f16",
+		name:    "GFSE-V3-D08-F016",
+		backend: ModePostgresSQL,
+	}
 	record := CaseResult{
-		Dataset: key.dataset, Name: key.name, Category: "generated_fixed_suffix_expansion", ExecutionMode: key.backend,
+		Dataset:       key.dataset,
+		Name:          key.name,
+		Category:      "generated_fixed_suffix_expansion",
+		ExecutionMode: key.backend,
 		TraversalTelemetry: &TraversalExecutionTelemetry{Summary: TraversalExecutionSummary{
 			RequestedIdentity: string(optimize.ExpansionSearchSuffixSeededReverse),
 			EmittedIdentity:   string(optimize.ExpansionSearchPolicyOrientationProbeV2),
@@ -549,7 +618,9 @@ func TestBuildPerfGateReportRequiresIndependentTraversalHoldout(t *testing.T) {
 	}
 
 	report, err := buildPerfGateReport(baseline, candidate, qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 50, TargetNames: []string{"sp-training", "sp-holdout"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 50,
+		TargetNames:    []string{"sp-training", "sp-holdout"},
 	}))
 	require.NoError(t, err)
 	require.True(t, report.QualificationRequired)
@@ -559,14 +630,21 @@ func TestBuildPerfGateReportRequiresIndependentTraversalHoldout(t *testing.T) {
 	require.True(t, report.Passed)
 	require.True(t, report.PromotionEligible)
 	require.Equal(t, []TraversalQualificationStatus{{
-		Family: "SP", TrainingCases: 1, HoldoutCases: 1, TrainingPassed: true, HoldoutPassed: true, Passed: true,
+		Family:         "SP",
+		TrainingCases:  1,
+		HoldoutCases:   1,
+		TrainingPassed: true,
+		HoldoutPassed:  true,
+		Passed:         true,
 	}}, report.QualificationFamilies)
 
 	// A passing ASP holdout may not qualify an SP candidate's training data.
 	baseline[1].Cypher = "RETURN allShortestPaths((a)-[:E*1..3]->(b))"
 	candidate[1].Cypher = baseline[1].Cypher
 	report, err = buildPerfGateReport(baseline, candidate, qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 50, TargetNames: []string{"sp-training", "sp-holdout"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 50,
+		TargetNames:    []string{"sp-training", "sp-holdout"},
 	}))
 	require.NoError(t, err)
 	require.False(t, report.QualificationPassed)
@@ -577,36 +655,66 @@ func TestBuildPerfGateReportRequiresIndependentTraversalHoldout(t *testing.T) {
 
 	for idx := range baseline {
 		baseline[idx].Optimization = &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{
-			{TargetKind: "traversal", Family: "SP", Applied: "SP-S4-C-D", Selected: "SP-S4-C-D"},
-			{TargetKind: "endpoint_resolution", Family: "endpoint_resolution", TraversalFamily: "SP", Applied: "ENDPOINT-RESOLUTION-INCUMBENT"},
+			{
+				TargetKind: "traversal",
+				Family:     "SP",
+				Applied:    "SP-S4-C-D",
+				Selected:   "SP-S4-C-D",
+			},
+			{
+				TargetKind:      "endpoint_resolution",
+				Family:          "endpoint_resolution",
+				TraversalFamily: "SP",
+				Applied:         "ENDPOINT-RESOLUTION-INCUMBENT",
+			},
 		}}
 		candidate[idx].Optimization = &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{
-			{TargetKind: "traversal", Family: "SP", Applied: "SP-B1-C-ALT-NODE-D", Selected: "SP-B1-C-ALT-NODE-D"},
-			{TargetKind: "endpoint_resolution", Family: "endpoint_resolution", TraversalFamily: "SP", Applied: "ENDPOINT-RESOLUTION-INCUMBENT"},
+			{
+				TargetKind: "traversal",
+				Family:     "SP",
+				Applied:    "SP-B1-C-ALT-NODE-D",
+				Selected:   "SP-B1-C-ALT-NODE-D",
+			},
+			{
+				TargetKind:      "endpoint_resolution",
+				Family:          "endpoint_resolution",
+				TraversalFamily: "SP",
+				Applied:         "ENDPOINT-RESOLUTION-INCUMBENT",
+			},
 		}}
 		fallback := false
 		available := true
 		candidate[idx].TraversalTelemetry = &TraversalExecutionTelemetry{Summary: TraversalExecutionSummary{
-			RequestedIdentity: "SP-B1-C-ALT-NODE-D", RuntimeIdentity: "SP-B1-C-ALT-NODE-D",
-			RuntimeBranch: "bidirectional_search", RuntimeOutcomeAvailable: &available, FallbackExecuted: &fallback,
+			RequestedIdentity:       "SP-B1-C-ALT-NODE-D",
+			RuntimeIdentity:         "SP-B1-C-ALT-NODE-D",
+			RuntimeBranch:           "bidirectional_search",
+			RuntimeOutcomeAvailable: &available,
+			FallbackExecuted:        &fallback,
 		}}
 		setSampleTraversalRuntimeMetadata(&candidate[idx].Stats, candidate[idx].TraversalTelemetry)
 		for sampleIdx := range candidate[idx].Stats.Samples {
 			candidate[idx].Stats.Samples[sampleIdx].RuntimeAttestation = "timed_invocation"
 			candidate[idx].Stats.Samples[sampleIdx].RuntimeReceiptEvents = []RuntimeReceiptEvent{{
-				Ordinal: 1, RuntimeIdentity: "SP-B1-C-ALT-NODE-D", RuntimeBranch: "bidirectional_search", FallbackExecuted: false,
+				Ordinal:          1,
+				RuntimeIdentity:  "SP-B1-C-ALT-NODE-D",
+				RuntimeBranch:    "bidirectional_search",
+				FallbackExecuted: false,
 			}}
 		}
 	}
 	report, err = buildPerfGateReport(baseline, candidate, qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 50, TargetNames: []string{"sp-training", "sp-holdout"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 50,
+		TargetNames:    []string{"sp-training", "sp-holdout"},
 	}))
 	require.NoError(t, err)
 	require.True(t, report.QualificationPassed)
 	require.Equal(t, "SP-B1-C-ALT-NODE-D@bidirectional_search", report.QualificationFamilies[0].Family)
 	candidate[0].Stats.Samples[0].RuntimeAttestation = "same_case_invocation_local_replay"
 	require.ErrorContains(t, validateCandidateRuntimeEvidence(candidate, performanceKey{
-		dataset: candidate[0].Dataset, name: candidate[0].Name, backend: candidate[0].ExecutionMode,
+		dataset: candidate[0].Dataset,
+		name:    candidate[0].Name,
+		backend: candidate[0].ExecutionMode,
 	}), "runtime attribution")
 	candidate[0].Stats.Samples[0].RuntimeAttestation = "timed_invocation"
 	for idx := range baseline {
@@ -617,7 +725,9 @@ func TestBuildPerfGateReportRequiresIndependentTraversalHoldout(t *testing.T) {
 	baseline = baseline[:1]
 	candidate = candidate[:1]
 	report, err = buildPerfGateReport(baseline, candidate, qualifiedPerfGateOptions(t, baseline, candidate, PerfGateOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 50, TargetNames: []string{"sp-training"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 50,
+		TargetNames:    []string{"sp-training"},
 	}))
 	require.NoError(t, err)
 	require.True(t, report.TrainingPassed)
@@ -627,12 +737,28 @@ func TestBuildPerfGateReportRequiresIndependentTraversalHoldout(t *testing.T) {
 	require.False(t, report.PromotionEligible)
 }
 
+// TestValidateRuntimeReceiptEventsPreservesNestedFallbackChain verifies validate runtime receipt events preserves nested fallback chain behavior.
 func TestValidateRuntimeReceiptEventsPreservesNestedFallbackChain(t *testing.T) {
 	fallback := true
 	events := []RuntimeReceiptEvent{
-		{Ordinal: 1, RuntimeIdentity: "SP-I1-C-WE+MAT-M0", RuntimeBranch: "candidate_overflow", FallbackExecuted: true},
-		{Ordinal: 2, RuntimeIdentity: "SP-S4-C-WE+MAT-M0", RuntimeBranch: "workspace_overflow", FallbackExecuted: true},
-		{Ordinal: 3, RuntimeIdentity: "SP-S3-U-E+MAT-M0", RuntimeBranch: "exact_fallback", FallbackExecuted: true},
+		{
+			Ordinal:          1,
+			RuntimeIdentity:  "SP-I1-C-WE+MAT-M0",
+			RuntimeBranch:    "candidate_overflow",
+			FallbackExecuted: true,
+		},
+		{
+			Ordinal:          2,
+			RuntimeIdentity:  "SP-S4-C-WE+MAT-M0",
+			RuntimeBranch:    "workspace_overflow",
+			FallbackExecuted: true,
+		},
+		{
+			Ordinal:          3,
+			RuntimeIdentity:  "SP-S3-U-E+MAT-M0",
+			RuntimeBranch:    "exact_fallback",
+			FallbackExecuted: true,
+		},
 	}
 	require.NoError(t, validateRuntimeReceiptEvents(events, "SP-S3-U-E+MAT-M0", "exact_fallback", &fallback))
 

@@ -80,12 +80,20 @@ func TestBuildPlanDeltaReportPairsByWorkloadAndPreservesSemanticDifferences(t *t
 // TestBuildPlanDeltaReportKeepsSourceRevisionsSeparate verifies captures from different source trees cannot silently pair.
 func TestBuildPlanDeltaReportKeepsSourceRevisionsSeparate(t *testing.T) {
 	postgres := PlanRecord{
-		Driver: pgDriverName(), Source: "cases/a.json", Name: "a", WorkloadSHA256: "workload",
-		PGPlanFingerprint: "pg-plan", Metadata: testutil.BaselineMetadata{DAWGSVersion: "revision-a"},
+		Driver:            pgDriverName(),
+		Source:            "cases/a.json",
+		Name:              "a",
+		WorkloadSHA256:    "workload",
+		PGPlanFingerprint: "pg-plan",
+		Metadata:          testutil.BaselineMetadata{DAWGSVersion: "revision-a"},
 	}
 	neo4j := PlanRecord{
-		Driver: neo4jDriverName(), Source: "cases/a.json", Name: "a", WorkloadSHA256: "workload",
-		Neo4jPlanFingerprint: "neo-plan", Metadata: testutil.BaselineMetadata{DAWGSVersion: "revision-b"},
+		Driver:               neo4jDriverName(),
+		Source:               "cases/a.json",
+		Name:                 "a",
+		WorkloadSHA256:       "workload",
+		Neo4jPlanFingerprint: "neo-plan",
+		Metadata:             testutil.BaselineMetadata{DAWGSVersion: "revision-b"},
 	}
 	report, err := buildPlanDeltaReport([]PlanRecord{postgres, neo4j})
 	require.NoError(t, err)
@@ -115,7 +123,13 @@ func TestBuildPlanDeltaReportRetainsIncompletePairs(t *testing.T) {
 
 // TestBuildPlanDeltaReportRejectsDuplicateBackendSides verifies ambiguous pairing fails closed.
 func TestBuildPlanDeltaReportRejectsDuplicateBackendSides(t *testing.T) {
-	_, err := buildPlanDeltaReport([]PlanRecord{{Driver: pgDriverName(), WorkloadSHA256: "same"}, {Driver: pgDriverName(), WorkloadSHA256: "same"}})
+	_, err := buildPlanDeltaReport([]PlanRecord{{
+		Driver:         pgDriverName(),
+		WorkloadSHA256: "same",
+	}, {
+		Driver:         pgDriverName(),
+		WorkloadSHA256: "same",
+	}})
 	require.ErrorContains(t, err, "duplicate PostgreSQL")
 }
 
@@ -128,7 +142,12 @@ func TestWritePlanDeltaReportWritesVersionedJSON(t *testing.T) {
 
 // TestWorkloadFingerprintIgnoresPhysicalValuesButIncludesTypeShape verifies independently loaded backend IDs pair safely.
 func TestWorkloadFingerprintIgnoresPhysicalValuesButIncludesTypeShape(t *testing.T) {
-	base := CorpusQuery{Source: "cases/a.json", Name: "a", Cypher: "RETURN $id", Params: map[string]any{"id": int64(1)}}
+	base := CorpusQuery{
+		Source: "cases/a.json",
+		Name:   "a",
+		Cypher: "RETURN $id",
+		Params: map[string]any{"id": int64(1)},
+	}
 	otherID := base
 	otherID.Params = map[string]any{"id": int64(999)}
 	otherType := base
@@ -146,14 +165,20 @@ func TestNeo4jPlanFingerprintExcludesProfileMeasurements(t *testing.T) {
 		Arguments:  map[string]string{"EstimatedRows": "1", "Rows": "1", "Details": "n"},
 		ActualRows: &firstRows,
 		DBHits:     &firstRows,
-		Children:   []Neo4jPlanNode{{Operator: "NodeByLabelScan", Arguments: map[string]string{"Details": "n:Node"}}},
+		Children: []Neo4jPlanNode{{
+			Operator:  "NodeByLabelScan",
+			Arguments: map[string]string{"Details": "n:Node"},
+		}},
 	}
 	second := &Neo4jPlanNode{
 		Operator:   "ProduceResults@neo4j@neo4j",
 		Arguments:  map[string]string{"EstimatedRows": "1", "Rows": "99", "Details": "n"},
 		ActualRows: &secondRows,
 		DBHits:     &secondRows,
-		Children:   []Neo4jPlanNode{{Operator: "NodeByLabelScan@neo4j", Arguments: map[string]string{"Details": "n:Node"}}},
+		Children: []Neo4jPlanNode{{
+			Operator:  "NodeByLabelScan@neo4j",
+			Arguments: map[string]string{"Details": "n:Node"},
+		}},
 	}
 
 	require.Equal(t, neo4jPlanFingerprint(first), neo4jPlanFingerprint(second))

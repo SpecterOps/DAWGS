@@ -16,81 +16,134 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// orientationSelectorReportVersion reserves the stable protocol value used to recognize orientation selector report version across artifacts and executions.
 const orientationSelectorReportVersion = 1
 
 // OrientationSelectorReportOptions configures the matched shadow/incumbent/
 // reverse comparison and its frozen qualification protocol.
 type OrientationSelectorReportOptions struct {
-	Seed           int64
-	Confidence     float64
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64
+	// BootstrapCount records the number of bootstrap count.
 	BootstrapCount int
-	Protocol       string
+	// Protocol identifies the protocol.
+	Protocol string
 }
 
 // OrientationLatencyGate records one frozen relative-or-absolute latency
 // rule. A case passes when either the ratio upper bound or absolute upper gap
 // stays within its declared limit.
 type OrientationLatencyGate struct {
-	BaselineIdentity string           `json:"baseline_identity"`
-	ObservedIdentity string           `json:"observed_identity"`
-	BaselineSamples  int              `json:"baseline_samples"`
-	ObservedSamples  int              `json:"observed_samples"`
-	Ratio            RatioInterval    `json:"median_ratio"`
-	AbsoluteChange   DurationInterval `json:"median_absolute_change"`
-	RatioUpperLimit  float64          `json:"ratio_upper_limit"`
-	AbsoluteFloor    time.Duration    `json:"absolute_floor"`
-	AbsoluteGapUpper time.Duration    `json:"absolute_gap_upper"`
-	Passed           bool             `json:"passed"`
+	// BaselineIdentity identifies the baseline identity.
+	BaselineIdentity string `json:"baseline_identity"`
+	// ObservedIdentity identifies the observed identity.
+	ObservedIdentity string `json:"observed_identity"`
+	// BaselineSamples supplies the baseline samples input to the OrientationLatencyGate contract.
+	BaselineSamples int `json:"baseline_samples"`
+	// ObservedSamples supplies the observed samples input to the OrientationLatencyGate contract.
+	ObservedSamples int `json:"observed_samples"`
+	// Ratio supplies the ratio input to the OrientationLatencyGate contract.
+	Ratio RatioInterval `json:"median_ratio"`
+	// AbsoluteChange supplies the absolute change input to the OrientationLatencyGate contract.
+	AbsoluteChange DurationInterval `json:"median_absolute_change"`
+	// RatioUpperLimit supplies the ratio upper limit input to the OrientationLatencyGate contract.
+	RatioUpperLimit float64 `json:"ratio_upper_limit"`
+	// AbsoluteFloor supplies the absolute floor input to the OrientationLatencyGate contract.
+	AbsoluteFloor time.Duration `json:"absolute_floor"`
+	// AbsoluteGapUpper supplies the absolute gap upper input to the OrientationLatencyGate contract.
+	AbsoluteGapUpper time.Duration `json:"absolute_gap_upper"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
 }
 
 // OrientationSelectorCase reports shadow attribution, exact-arm regret, and
 // probe-only overhead for one topology bucket.
 type OrientationSelectorCase struct {
-	Dataset                  string                 `json:"dataset"`
-	Name                     string                 `json:"name"`
-	QualificationSplit       string                 `json:"qualification_split"`
-	QualificationRole        string                 `json:"qualification_role"`
-	ThresholdTuningEligible  bool                   `json:"threshold_tuning_eligible"`
-	QualificationEligible    bool                   `json:"qualification_eligible"`
-	Rounds                   int                    `json:"matched_rounds"`
-	WouldSelectIdentity      string                 `json:"would_select_identity"`
-	FastestExactIdentity     string                 `json:"fastest_exact_identity"`
-	ExactObservationsMatched bool                   `json:"exact_observations_matched"`
-	SelectorRegret           OrientationLatencyGate `json:"selector_regret"`
-	ProbeOverhead            OrientationLatencyGate `json:"probe_overhead"`
-	Passed                   bool                   `json:"passed"`
-	Reasons                  []string               `json:"reasons,omitempty"`
+	// Dataset identifies the fixture dataset that supplies the workload graph.
+	Dataset string `json:"dataset"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
+	QualificationSplit string `json:"qualification_split"`
+	// QualificationRole supplies the qualification role input to the OrientationSelectorCase contract.
+	QualificationRole string `json:"qualification_role"`
+	// ThresholdTuningEligible indicates whether threshold tuning eligible applies.
+	ThresholdTuningEligible bool `json:"threshold_tuning_eligible"`
+	// QualificationEligible indicates whether qualification eligible applies.
+	QualificationEligible bool `json:"qualification_eligible"`
+	// Rounds records the number of rounds.
+	Rounds int `json:"matched_rounds"`
+	// WouldSelectIdentity identifies the would select identity.
+	WouldSelectIdentity string `json:"would_select_identity"`
+	// FastestExactIdentity identifies the fastest exact identity.
+	FastestExactIdentity string `json:"fastest_exact_identity"`
+	// ExactObservationsMatched indicates whether exact observations matched applies.
+	ExactObservationsMatched bool `json:"exact_observations_matched"`
+	// SelectorRegret supplies the selector regret input to the OrientationSelectorCase contract.
+	SelectorRegret OrientationLatencyGate `json:"selector_regret"`
+	// ProbeOverhead supplies the probe overhead input to the OrientationSelectorCase contract.
+	ProbeOverhead OrientationLatencyGate `json:"probe_overhead"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// Reasons explains each failed or inapplicable validation gate.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 // OrientationSelectorReport validates that shadow selection is attributable,
 // low-regret, and cheap while the incumbent remains the only shadow execution
 // arm. Diagnostic and legacy records never contribute to qualification.
 type OrientationSelectorReport struct {
-	Version                    int                       `json:"version"`
-	Policy                     string                    `json:"policy"`
-	Protocol                   string                    `json:"protocol"`
-	Seed                       int64                     `json:"seed"`
-	Confidence                 float64                   `json:"confidence_level"`
-	ShadowArtifactSHA256       string                    `json:"shadow_artifact_sha256,omitempty"`
-	IncumbentArtifactSHA256    string                    `json:"incumbent_artifact_sha256,omitempty"`
-	ReverseArtifactSHA256      string                    `json:"reverse_artifact_sha256,omitempty"`
-	AAReportSHA256             string                    `json:"aa_report_sha256,omitempty"`
-	SelectorRegretRatioLimit   float64                   `json:"selector_regret_ratio_upper_limit"`
-	ProbeOverheadRatioLimit    float64                   `json:"probe_overhead_ratio_upper_limit"`
-	ProbeOverheadAbsoluteLimit time.Duration             `json:"probe_overhead_absolute_limit"`
-	EvidencePassed             bool                      `json:"evidence_passed"`
-	TrainingCases              int                       `json:"training_cases"`
-	HoldoutCases               int                       `json:"holdout_cases"`
-	TrainingPassed             bool                      `json:"training_passed"`
-	HoldoutPassed              bool                      `json:"holdout_passed"`
-	QualificationPassed        bool                      `json:"qualification_passed"`
-	Cases                      []OrientationSelectorCase `json:"cases"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// Policy identifies the policy.
+	Policy string `json:"policy"`
+	// Protocol identifies the protocol.
+	Protocol string `json:"protocol"`
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64 `json:"seed"`
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64 `json:"confidence_level"`
+	// ShadowArtifactSHA256 binds the referenced shadow artifact content by SHA-256 digest.
+	ShadowArtifactSHA256 string `json:"shadow_artifact_sha256,omitempty"`
+	// IncumbentArtifactSHA256 binds the referenced incumbent artifact content by SHA-256 digest.
+	IncumbentArtifactSHA256 string `json:"incumbent_artifact_sha256,omitempty"`
+	// ReverseArtifactSHA256 binds the referenced reverse artifact content by SHA-256 digest.
+	ReverseArtifactSHA256 string `json:"reverse_artifact_sha256,omitempty"`
+	// AAReportSHA256 binds the referenced aa report content by SHA-256 digest.
+	AAReportSHA256 string `json:"aa_report_sha256,omitempty"`
+	// SelectorRegretRatioLimit supplies the selector regret ratio limit input to the OrientationSelectorReport contract.
+	SelectorRegretRatioLimit float64 `json:"selector_regret_ratio_upper_limit"`
+	// ProbeOverheadRatioLimit supplies the probe overhead ratio limit input to the OrientationSelectorReport contract.
+	ProbeOverheadRatioLimit float64 `json:"probe_overhead_ratio_upper_limit"`
+	// ProbeOverheadAbsoluteLimit supplies the probe overhead absolute limit input to the OrientationSelectorReport contract.
+	ProbeOverheadAbsoluteLimit time.Duration `json:"probe_overhead_absolute_limit"`
+	// EvidencePassed indicates whether evidence passed applies.
+	EvidencePassed bool `json:"evidence_passed"`
+	// TrainingCases supplies the training cases input to the OrientationSelectorReport contract.
+	TrainingCases int `json:"training_cases"`
+	// HoldoutCases supplies the holdout cases input to the OrientationSelectorReport contract.
+	HoldoutCases int `json:"holdout_cases"`
+	// TrainingPassed indicates whether training passed applies.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed indicates whether holdout passed applies.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// QualificationPassed indicates whether qualification passed applies.
+	QualificationPassed bool `json:"qualification_passed"`
+	// Cases contains the per-workload evidence underlying the aggregate decision.
+	Cases []OrientationSelectorCase `json:"cases"`
 }
 
+// orientationSelectorSeries accumulates matched observations used to evaluate orientation selector.
 type orientationSelectorSeries struct {
-	shadow      roundSamples
-	incumbent   roundSamples
-	reverse     roundSamples
+	// shadow retains the shadow while orientationSelectorSeries is assembled or evaluated.
+	shadow roundSamples
+	// incumbent retains the incumbent while orientationSelectorSeries is assembled or evaluated.
+	incumbent roundSamples
+	// reverse retains the reverse while orientationSelectorSeries is assembled or evaluated.
+	reverse roundSamples
+	// wouldSelect retains the would select while orientationSelectorSeries is assembled or evaluated.
 	wouldSelect string
 }
 
@@ -155,7 +208,11 @@ func buildOrientationSelectorReport(
 		EvidencePassed:             true,
 	}
 	trainingPassed, holdoutPassed := true, true
-	gateOptions := PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount}
+	gateOptions := PerfGateOptions{
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BootstrapCount: options.BootstrapCount,
+	}
 	for index, key := range keys {
 		current := series[key]
 		shadow, incumbent := matchedRounds(current.shadow, current.incumbent)
@@ -250,6 +307,7 @@ func buildOrientationSelectorReport(
 	return report, nil
 }
 
+// collectOrientationSelectorSeries collects orientation selector series.
 func collectOrientationSelectorSeries(
 	shadowRecords, incumbentRecords, reverseRecords []CaseResult,
 ) (map[performanceKey]*orientationSelectorSeries, []performanceKey, error) {
@@ -258,9 +316,17 @@ func collectOrientationSelectorSeries(
 		if record.ExecutionMode != ModePostgresSQL || record.TraversalTelemetry == nil || record.TraversalTelemetry.Summary.WouldSelectIdentity == "" {
 			continue
 		}
-		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+		key := performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: record.ExecutionMode,
+		}
 		if series[key] == nil {
-			series[key] = &orientationSelectorSeries{shadow: roundSamples{}, incumbent: roundSamples{}, reverse: roundSamples{}}
+			series[key] = &orientationSelectorSeries{
+				shadow:    roundSamples{},
+				incumbent: roundSamples{},
+				reverse:   roundSamples{},
+			}
 		}
 		if err := validateOrientationRecord(record, "shadow"); err != nil {
 			return nil, nil, err
@@ -278,7 +344,11 @@ func collectOrientationSelectorSeries(
 
 	for arm, records := range map[string][]CaseResult{"incumbent": incumbentRecords, "reverse": reverseRecords} {
 		for _, record := range records {
-			key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+			key := performanceKey{
+				dataset: record.Dataset,
+				name:    record.Name,
+				backend: record.ExecutionMode,
+			}
 			current := series[key]
 			if current == nil {
 				continue
@@ -310,6 +380,7 @@ func collectOrientationSelectorSeries(
 	return series, keys, nil
 }
 
+// validateOrientationRecord validates orientation record.
 func validateOrientationRecord(record CaseResult, arm string) error {
 	if record.Status != StatusOK || record.Environment == nil || record.TraversalTelemetry == nil {
 		return fmt.Errorf("%s/%s %s arm lacks a successful telemetry-bearing record", record.Dataset, record.Name, arm)
@@ -340,6 +411,7 @@ func validateOrientationRecord(record CaseResult, arm string) error {
 	return nil
 }
 
+// appendOrientationWarmSamples appends orientation warm samples.
 func appendOrientationWarmSamples(series roundSamples, record CaseResult) {
 	for _, sample := range record.Stats.Samples {
 		if sample.Classification == "warm" && sample.Duration > 0 {
@@ -348,6 +420,7 @@ func appendOrientationWarmSamples(series roundSamples, record CaseResult) {
 	}
 }
 
+// validateOrientationExactObservations validates orientation exact observations.
 func validateOrientationExactObservations(key performanceKey, artifacts ...[]CaseResult) error {
 	workload := ""
 	var observed []string
@@ -388,6 +461,7 @@ func validateOrientationExactObservations(key performanceKey, artifacts ...[]Cas
 	return nil
 }
 
+// validateOrientationArmOrder validates orientation arm order.
 func validateOrientationArmOrder(
 	shadowRecords, incumbentRecords, reverseRecords []CaseResult,
 	key performanceKey,
@@ -395,12 +469,23 @@ func validateOrientationArmOrder(
 	minimumWarmups int,
 ) error {
 	armRecords := []struct {
-		name    string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// records retains the records while anonymous record is assembled or evaluated.
 		records []CaseResult
 	}{
-		{name: "shadow", records: shadowRecords},
-		{name: "incumbent", records: incumbentRecords},
-		{name: "reverse", records: reverseRecords},
+		{
+			name:    "shadow",
+			records: shadowRecords,
+		},
+		{
+			name:    "incumbent",
+			records: incumbentRecords,
+		},
+		{
+			name:    "reverse",
+			records: reverseRecords,
+		},
 	}
 	evidence := make([]map[int]pairedRoundEvidence, len(armRecords))
 	positionCounts := make([][4]int, len(armRecords))
@@ -450,6 +535,7 @@ func validateOrientationArmOrder(
 	return nil
 }
 
+// orientationQualificationRole classifies orientation qualification role for downstream policy decisions.
 func orientationQualificationRole(split, protocol string) (role string, tuningEligible, qualificationEligible bool) {
 	switch split {
 	case "training":
@@ -463,6 +549,7 @@ func orientationQualificationRole(split, protocol string) (role string, tuningEl
 	}
 }
 
+// fastestOrientationExactArm supports benchmark evidence processing for fastest orientation exact arm.
 func fastestOrientationExactArm(incumbent, reverse roundSamples) (string, roundSamples) {
 	if roundMedianEstimate(reverse) < roundMedianEstimate(incumbent) {
 		return string(optimize.ExpansionSearchSuffixSeededReverse), reverse
@@ -470,6 +557,7 @@ func fastestOrientationExactArm(incumbent, reverse roundSamples) (string, roundS
 	return string(optimize.ExpansionSearchStepwiseForward), incumbent
 }
 
+// roundMedianEstimate derives the statistical value used to evaluate round median estimate.
 func roundMedianEstimate(samples roundSamples) float64 {
 	rounds := sortedRounds(samples)
 	medians := make([]float64, 0, len(rounds))
@@ -479,6 +567,7 @@ func roundMedianEstimate(samples roundSamples) float64 {
 	return quantile(medians, 0.5)
 }
 
+// orientationLatencyGate supports benchmark evidence processing for orientation latency gate.
 func orientationLatencyGate(
 	baselineIdentity, observedIdentity string,
 	baseline, observed roundSamples,
@@ -546,6 +635,7 @@ func createOrientationSelectorReport(
 	return report.QualificationPassed, writeOrientationSelectorReport(outputPath, report)
 }
 
+// writeOrientationSelectorReport writes orientation selector report.
 func writeOrientationSelectorReport(path string, report OrientationSelectorReport) (err error) {
 	output := os.Stdout
 	if path != "" {

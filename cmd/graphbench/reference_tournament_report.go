@@ -14,71 +14,121 @@ import (
 	"time"
 )
 
+// referenceTournamentReportVersion reserves the stable protocol value used to recognize reference tournament report version across artifacts and executions.
 const referenceTournamentReportVersion = 1
 
 // ReferenceTournamentOptions defines a predeclared three- or five-arm Williams tournament.
 // The first arm is always the incumbent.
 type ReferenceTournamentOptions struct {
-	Seed                int64
-	BootstrapCount      int
-	Confidence          float64
-	MaterialityRatio    float64
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64
+	// BootstrapCount records the number of bootstrap count.
+	BootstrapCount int
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64
+	// MaterialityRatio supplies the materiality ratio input to the ReferenceTournamentOptions contract.
+	MaterialityRatio float64
+	// MaterialityAbsolute supplies the materiality absolute input to the ReferenceTournamentOptions contract.
 	MaterialityAbsolute time.Duration
-	P95RatioLimit       float64
-	Arms                []string
-	Protocol            string
+	// P95RatioLimit supplies the p95 ratio limit input to the ReferenceTournamentOptions contract.
+	P95RatioLimit float64
+	// Arms supplies the arms input to the ReferenceTournamentOptions contract.
+	Arms []string
+	// Protocol identifies the protocol.
+	Protocol string
 }
 
+// ReferenceTournamentPair groups state that must remain consistent while processing reference tournament pair.
 type ReferenceTournamentPair struct {
-	Arm             string           `json:"arm"`
-	MedianRatio     RatioInterval    `json:"median_ratio_to_incumbent"`
-	MedianSaving    DurationInterval `json:"median_saving_vs_incumbent"`
-	P95Ratio        RatioInterval    `json:"p95_ratio_to_incumbent"`
-	Material        bool             `json:"material"`
-	P95Contained    bool             `json:"p95_contained"`
-	QualifiedWinner bool             `json:"qualified_winner"`
+	// Arm supplies the arm input to the ReferenceTournamentPair contract.
+	Arm string `json:"arm"`
+	// MedianRatio supplies the median ratio input to the ReferenceTournamentPair contract.
+	MedianRatio RatioInterval `json:"median_ratio_to_incumbent"`
+	// MedianSaving supplies the median saving input to the ReferenceTournamentPair contract.
+	MedianSaving DurationInterval `json:"median_saving_vs_incumbent"`
+	// P95Ratio supplies the p95 ratio input to the ReferenceTournamentPair contract.
+	P95Ratio RatioInterval `json:"p95_ratio_to_incumbent"`
+	// Material indicates whether material applies.
+	Material bool `json:"material"`
+	// P95Contained indicates whether p95 contained applies.
+	P95Contained bool `json:"p95_contained"`
+	// QualifiedWinner indicates whether qualified winner applies.
+	QualifiedWinner bool `json:"qualified_winner"`
 }
 
+// ReferenceTournamentCase records the evidence and decision for one reference tournament workload.
 type ReferenceTournamentCase struct {
-	Dataset            string                    `json:"dataset"`
-	Name               string                    `json:"name"`
-	QualificationSplit string                    `json:"qualification_split"`
-	Winner             string                    `json:"winner,omitempty"`
-	Rounds             int                       `json:"rounds"`
-	Passed             bool                      `json:"passed"`
-	Reasons            []string                  `json:"reasons,omitempty"`
-	Pairs              []ReferenceTournamentPair `json:"pairs"`
+	// Dataset identifies the fixture dataset that supplies the workload graph.
+	Dataset string `json:"dataset"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
+	QualificationSplit string `json:"qualification_split"`
+	// Winner supplies the winner input to the ReferenceTournamentCase contract.
+	Winner string `json:"winner,omitempty"`
+	// Rounds records the number of rounds.
+	Rounds int `json:"rounds"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// Reasons explains each failed or inapplicable validation gate.
+	Reasons []string `json:"reasons,omitempty"`
+	// Pairs supplies the pairs input to the ReferenceTournamentCase contract.
+	Pairs []ReferenceTournamentPair `json:"pairs"`
 }
 
+// ReferenceTournamentReport records the evidence and outcome produced by reference tournament.
 type ReferenceTournamentReport struct {
-	Version             int                       `json:"version"`
-	ArtifactSHA256      string                    `json:"artifact_sha256,omitempty"`
-	Protocol            string                    `json:"protocol"`
-	Incumbent           string                    `json:"incumbent"`
-	Winner              string                    `json:"winner,omitempty"`
-	Arms                []string                  `json:"arms"`
-	Confidence          float64                   `json:"confidence_level"`
-	MaterialityRatio    float64                   `json:"materiality_ratio"`
-	MaterialityAbsolute time.Duration             `json:"materiality_absolute_lower_limit"`
-	P95RatioLimit       float64                   `json:"p95_ratio_upper_limit"`
-	Passed              bool                      `json:"passed"`
-	PromotionEligible   bool                      `json:"promotion_eligible"`
-	TrainingPassed      bool                      `json:"training_passed"`
-	HoldoutPassed       bool                      `json:"holdout_passed"`
-	Cases               []ReferenceTournamentCase `json:"cases"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// ArtifactSHA256 binds the referenced artifact content by SHA-256 digest.
+	ArtifactSHA256 string `json:"artifact_sha256,omitempty"`
+	// Protocol identifies the protocol.
+	Protocol string `json:"protocol"`
+	// Incumbent supplies the incumbent input to the ReferenceTournamentReport contract.
+	Incumbent string `json:"incumbent"`
+	// Winner supplies the winner input to the ReferenceTournamentReport contract.
+	Winner string `json:"winner,omitempty"`
+	// Arms supplies the arms input to the ReferenceTournamentReport contract.
+	Arms []string `json:"arms"`
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64 `json:"confidence_level"`
+	// MaterialityRatio supplies the materiality ratio input to the ReferenceTournamentReport contract.
+	MaterialityRatio float64 `json:"materiality_ratio"`
+	// MaterialityAbsolute supplies the materiality absolute input to the ReferenceTournamentReport contract.
+	MaterialityAbsolute time.Duration `json:"materiality_absolute_lower_limit"`
+	// P95RatioLimit supplies the p95 ratio limit input to the ReferenceTournamentReport contract.
+	P95RatioLimit float64 `json:"p95_ratio_upper_limit"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// PromotionEligible indicates whether promotion eligible applies.
+	PromotionEligible bool `json:"promotion_eligible"`
+	// TrainingPassed indicates whether training passed applies.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed indicates whether holdout passed applies.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// Cases contains the per-workload evidence underlying the aggregate decision.
+	Cases []ReferenceTournamentCase `json:"cases"`
 }
 
+// tournamentArmSeries accumulates matched observations used to evaluate tournament arm.
 type tournamentArmSeries struct {
+	// identity retains the identity while tournamentArmSeries is assembled or evaluated.
 	identity string
-	samples  roundSamples
+	// samples retains the samples while tournamentArmSeries is assembled or evaluated.
+	samples roundSamples
 }
 
+// tournamentCaseSeries accumulates matched observations used to evaluate tournament case.
 type tournamentCaseSeries struct {
-	split  string
-	arms   map[string]*tournamentArmSeries
+	// split retains the split while tournamentCaseSeries is assembled or evaluated.
+	split string
+	// arms retains the arms while tournamentCaseSeries is assembled or evaluated.
+	arms map[string]*tournamentArmSeries
+	// rounds retains the rounds while tournamentCaseSeries is assembled or evaluated.
 	rounds map[int]struct{}
 }
 
+// buildReferenceTournamentReport builds reference tournament report.
 func buildReferenceTournamentReport(records []CaseResult, options ReferenceTournamentOptions) (ReferenceTournamentReport, error) {
 	if err := normalizeReferenceTournamentOptions(&options); err != nil {
 		return ReferenceTournamentReport{}, err
@@ -115,7 +165,11 @@ func buildReferenceTournamentReport(records []CaseResult, options ReferenceTourn
 		HoldoutPassed:       true,
 	}
 	keys := sortedTournamentPerformanceKeys(series)
-	gate := PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount}
+	gate := PerfGateOptions{
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BootstrapCount: options.BootstrapCount,
+	}
 	winners := map[string]struct{}{}
 	for caseIndex, key := range keys {
 		entry := evaluateReferenceTournamentCase(key, series[key], options, gate, caseIndex, minimumRounds, maximumRounds, minimumSamples)
@@ -147,6 +201,7 @@ func buildReferenceTournamentReport(records []CaseResult, options ReferenceTourn
 	return report, nil
 }
 
+// normalizeReferenceTournamentOptions normalizes reference tournament options.
 func normalizeReferenceTournamentOptions(options *ReferenceTournamentOptions) error {
 	if len(options.Arms) != 3 && len(options.Arms) != 5 {
 		return fmt.Errorf("reference tournament requires exactly 3 or 5 arms")
@@ -191,6 +246,7 @@ func normalizeReferenceTournamentOptions(options *ReferenceTournamentOptions) er
 	return nil
 }
 
+// referenceTournamentRequirements supports benchmark evidence processing for reference tournament requirements.
 func referenceTournamentRequirements(protocol string) (int, int, int, int, error) {
 	switch protocol {
 	case referencePairProtocolDiscovery:
@@ -202,6 +258,7 @@ func referenceTournamentRequirements(protocol string) (int, int, int, int, error
 	}
 }
 
+// recordContainsAnyReference supports benchmark evidence processing for record contains any reference.
 func recordContainsAnyReference(record CaseResult, arms []string) bool {
 	for _, reference := range record.PostgresReferences {
 		if slices.Contains(arms, reference.Name) {
@@ -211,6 +268,7 @@ func recordContainsAnyReference(record CaseResult, arms []string) bool {
 	return false
 }
 
+// addReferenceTournamentRecord supports benchmark evidence processing for add reference tournament record.
 func addReferenceTournamentRecord(series map[performanceKey]*tournamentCaseSeries, record CaseResult, arms []string, minimumWarmups int) error {
 	if record.Status != StatusOK || record.Environment == nil || record.Environment.WarmupIterations < minimumWarmups {
 		return fmt.Errorf("%s/%s lacks a successful %d-warmup PostgreSQL record", record.Dataset, record.Name, minimumWarmups)
@@ -218,10 +276,18 @@ func addReferenceTournamentRecord(series map[performanceKey]*tournamentCaseSerie
 	if record.Shape.QualificationSplit != "training" && record.Shape.QualificationSplit != "holdout" {
 		return fmt.Errorf("%s/%s requires a training or holdout qualification split", record.Dataset, record.Name)
 	}
-	key := performanceKey{dataset: record.Dataset, name: record.Name, backend: ModePostgresSQL}
+	key := performanceKey{
+		dataset: record.Dataset,
+		name:    record.Name,
+		backend: ModePostgresSQL,
+	}
 	current := series[key]
 	if current == nil {
-		current = &tournamentCaseSeries{split: record.Shape.QualificationSplit, arms: map[string]*tournamentArmSeries{}, rounds: map[int]struct{}{}}
+		current = &tournamentCaseSeries{
+			split:  record.Shape.QualificationSplit,
+			arms:   map[string]*tournamentArmSeries{},
+			rounds: map[int]struct{}{},
+		}
 		series[key] = current
 	} else if current.split != record.Shape.QualificationSplit {
 		return fmt.Errorf("%s/%s changes qualification split across rounds", record.Dataset, record.Name)
@@ -244,6 +310,7 @@ func addReferenceTournamentRecord(series map[performanceKey]*tournamentCaseSerie
 	return nil
 }
 
+// addReferenceTournamentArm supports benchmark evidence processing for add reference tournament arm.
 func addReferenceTournamentArm(current *tournamentCaseSeries, record CaseResult, name string, minimumWarmups int) error {
 	reference := findReference(record.PostgresReferences, name)
 	if reference == nil {
@@ -258,7 +325,10 @@ func addReferenceTournamentArm(current *tournamentCaseSeries, record CaseResult,
 	identity := reference.Architecture + "\x00" + reference.ImplementationID + "\x00" + reference.SQLFingerprint + "\x00" + reference.Boundary
 	arm := current.arms[name]
 	if arm == nil {
-		arm = &tournamentArmSeries{identity: identity, samples: roundSamples{}}
+		arm = &tournamentArmSeries{
+			identity: identity,
+			samples:  roundSamples{},
+		}
 		current.arms[name] = arm
 	} else if arm.identity != identity {
 		return fmt.Errorf("%s/%s arm %s identity changed", record.Dataset, record.Name, name)
@@ -271,6 +341,7 @@ func addReferenceTournamentArm(current *tournamentCaseSeries, record CaseResult,
 	return nil
 }
 
+// sortedTournamentPerformanceKeys returns the lookup keys used for sorted tournament performance.
 func sortedTournamentPerformanceKeys(series map[performanceKey]*tournamentCaseSeries) []performanceKey {
 	keys := make([]performanceKey, 0, len(series))
 	for key := range series {
@@ -282,8 +353,15 @@ func sortedTournamentPerformanceKeys(series map[performanceKey]*tournamentCaseSe
 	return keys
 }
 
+// evaluateReferenceTournamentCase supports benchmark evidence processing for evaluate reference tournament case.
 func evaluateReferenceTournamentCase(key performanceKey, current *tournamentCaseSeries, options ReferenceTournamentOptions, gate PerfGateOptions, caseIndex, minimumRounds, maximumRounds, minimumSamples int) ReferenceTournamentCase {
-	entry := ReferenceTournamentCase{Dataset: key.dataset, Name: key.name, QualificationSplit: current.split, Rounds: len(current.rounds), Passed: true}
+	entry := ReferenceTournamentCase{
+		Dataset:            key.dataset,
+		Name:               key.name,
+		QualificationSplit: current.split,
+		Rounds:             len(current.rounds),
+		Passed:             true,
+	}
 	if entry.Rounds < minimumRounds || entry.Rounds > maximumRounds {
 		entry.Passed = false
 		entry.Reasons = append(entry.Reasons, fmt.Sprintf("requires %d-%d Williams rounds, got %d", minimumRounds, maximumRounds, entry.Rounds))
@@ -326,6 +404,7 @@ func evaluateReferenceTournamentCase(key performanceKey, current *tournamentCase
 	return entry
 }
 
+// tournamentHasSplit supports benchmark evidence processing for tournament has split.
 func tournamentHasSplit(cases []ReferenceTournamentCase, split string) bool {
 	for _, entry := range cases {
 		if entry.QualificationSplit == split {
@@ -335,6 +414,7 @@ func tournamentHasSplit(cases []ReferenceTournamentCase, split string) bool {
 	return false
 }
 
+// validateTournamentRoundOrder validates tournament round order.
 func validateTournamentRoundOrder(round int, arms []string, references []PostgresReferenceResult) error {
 	base := make([]postgresReferenceSpec, len(arms))
 	for idx, arm := range arms {
@@ -357,6 +437,7 @@ func validateTournamentRoundOrder(round int, arms []string, references []Postgre
 	return nil
 }
 
+// createReferenceTournamentReport creates reference tournament report.
 func createReferenceTournamentReport(artifactPath, outputPath string, options ReferenceTournamentOptions) (bool, error) {
 	records, err := readJSONLFile(artifactPath)
 	if err != nil {

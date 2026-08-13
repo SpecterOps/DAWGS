@@ -7,14 +7,21 @@ import (
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
 
+// endpointResolutionCandidate groups planner state that must remain consistent while analyzing endpoint resolution candidate.
 type endpointResolutionCandidate struct {
-	class            EndpointResolutionClass
-	property         string
+	// class retains the class while endpointResolutionCandidate is assembled or evaluated.
+	class EndpointResolutionClass
+	// property retains the property while endpointResolutionCandidate is assembled or evaluated.
+	property string
+	// staticValueCount records the number of static value count.
 	staticValueCount int
+	// parameterizedSet indicates whether parameterized set applies.
 	parameterizedSet bool
-	rank             int
+	// rank retains the rank while endpointResolutionCandidate is assembled or evaluated.
+	rank int
 }
 
+// endpointResolutionCaps returns the resource limits enforced for endpoint resolution.
 func endpointResolutionCaps() EndpointResolutionCaps {
 	return EndpointResolutionCaps{
 		SingletonLimit:    EndpointResolutionSingletonLimit,
@@ -24,6 +31,7 @@ func endpointResolutionCaps() EndpointResolutionCaps {
 	}
 }
 
+// endpointResolutionInput evaluates planner state needed for endpoint resolution input.
 func endpointResolutionInput(symbol string, node *cypher.NodePattern, where *cypher.Where) EndpointResolutionInput {
 	input := EndpointResolutionInput{
 		Symbol: symbol,
@@ -70,6 +78,7 @@ func endpointResolutionInput(symbol string, node *cypher.NodePattern, where *cyp
 	return input
 }
 
+// endpointResolutionCandidateForTerm evaluates planner state needed for endpoint resolution candidate for term.
 func endpointResolutionCandidateForTerm(expression cypher.Expression, symbol string) (endpointResolutionCandidate, bool) {
 	expression = unwrapCypherParenthetical(expression)
 	comparison, ok := expression.(*cypher.Comparison)
@@ -80,10 +89,18 @@ func endpointResolutionCandidateForTerm(expression cypher.Expression, symbol str
 	switch partial.Operator {
 	case cypher.OperatorEquals:
 		if identitySymbol, found := identityFunctionSymbol(comparison.Left); found && identitySymbol == symbol && expressionIsConstant(partial.Right) {
-			return endpointResolutionCandidate{class: EndpointResolutionClassIDEquality, staticValueCount: 1, rank: 5}, true
+			return endpointResolutionCandidate{
+				class:            EndpointResolutionClassIDEquality,
+				staticValueCount: 1,
+				rank:             5,
+			}, true
 		}
 		if identitySymbol, found := identityFunctionSymbol(partial.Right); found && identitySymbol == symbol && expressionIsConstant(comparison.Left) {
-			return endpointResolutionCandidate{class: EndpointResolutionClassIDEquality, staticValueCount: 1, rank: 5}, true
+			return endpointResolutionCandidate{
+				class:            EndpointResolutionClassIDEquality,
+				staticValueCount: 1,
+				rank:             5,
+			}, true
 		}
 		if propertySymbol, property, found := propertyLookupSymbol(comparison.Left); found && propertySymbol == symbol && expressionIsConstant(partial.Right) {
 			return propertyEndpointResolutionCandidate(property), true
@@ -98,16 +115,28 @@ func endpointResolutionCandidateForTerm(expression cypher.Expression, symbol str
 			return endpointResolutionCandidate{}, false
 		}
 		if identitySymbol, found := identityFunctionSymbol(comparison.Left); found && identitySymbol == symbol {
-			return endpointResolutionCandidate{class: EndpointResolutionClassExplicitSmallSet, staticValueCount: values, parameterizedSet: parameterized, rank: 4}, true
+			return endpointResolutionCandidate{
+				class:            EndpointResolutionClassExplicitSmallSet,
+				staticValueCount: values,
+				parameterizedSet: parameterized,
+				rank:             4,
+			}, true
 		}
 		if propertySymbol, property, found := propertyLookupSymbol(comparison.Left); found && propertySymbol == symbol {
-			return endpointResolutionCandidate{class: EndpointResolutionClassExplicitSmallSet, property: property, staticValueCount: values, parameterizedSet: parameterized, rank: 4}, true
+			return endpointResolutionCandidate{
+				class:            EndpointResolutionClassExplicitSmallSet,
+				property:         property,
+				staticValueCount: values,
+				parameterizedSet: parameterized,
+				rank:             4,
+			}, true
 		}
 	}
 
 	return endpointResolutionCandidate{}, false
 }
 
+// propertyEndpointResolutionCandidate evaluates planner state needed for property endpoint resolution candidate.
 func propertyEndpointResolutionCandidate(property string) endpointResolutionCandidate {
 	// A property name is not a uniqueness proof. Until graph-schema metadata is
 	// available to the optimizer, every property equality uses the bounded
@@ -120,6 +149,7 @@ func propertyEndpointResolutionCandidate(property string) endpointResolutionCand
 	}
 }
 
+// inlineEndpointResolutionCandidates evaluates planner state needed for inline endpoint resolution candidates.
 func inlineEndpointResolutionCandidates(node *cypher.NodePattern, symbol string) []endpointResolutionCandidate {
 	if node == nil || variableSymbol(node.Variable) != symbol {
 		return nil
@@ -138,6 +168,7 @@ func inlineEndpointResolutionCandidates(node *cypher.NodePattern, symbol string)
 	return candidates
 }
 
+// constantListCardinality evaluates planner state needed for constant list cardinality.
 func constantListCardinality(expression cypher.Expression) (int, bool) {
 	literal, ok := unwrapCypherParenthetical(expression).(*cypher.ListLiteral)
 	if !ok || literal == nil || len(*literal) == 0 {
@@ -163,14 +194,17 @@ func explicitSetCardinality(expression cypher.Expression) (values int, parameter
 	return values, false, recognized
 }
 
+// endpointInputWithinStaticCap evaluates planner state needed for endpoint input within static cap.
 func endpointInputWithinStaticCap(input EndpointResolutionInput) bool {
 	return input.Class != EndpointResolutionClassExplicitSmallSet || input.StaticValueCount <= int(EndpointResolutionSmallSetLimit)
 }
 
+// endpointResolutionClassSupported evaluates planner state needed for endpoint resolution class supported.
 func endpointResolutionClassSupported(class EndpointResolutionClass) bool {
 	return class != "" && class != EndpointResolutionClassUnsupported && class != EndpointResolutionClassCorrelatedPair
 }
 
+// endpointPairPredicateCorrelated evaluates planner state needed for endpoint pair predicate correlated.
 func endpointPairPredicateCorrelated(where *cypher.Where, leftSymbol, rightSymbol string) bool {
 	if where == nil || leftSymbol == "" || rightSymbol == "" {
 		return false
@@ -186,6 +220,7 @@ func endpointPairPredicateCorrelated(where *cypher.Where, leftSymbol, rightSymbo
 	return false
 }
 
+// appendEndpointResolutionDecisions appends endpoint resolution decisions.
 func appendEndpointResolutionDecisions(
 	plan *LoweringPlan,
 	queryPartIndex int,
@@ -226,13 +261,34 @@ func appendEndpointResolutionDecisions(
 				classesSupported := endpointResolutionClassSupported(root.Class) && endpointResolutionClassSupported(terminal.Class)
 				withinCaps := endpointInputWithinStaticCap(root) && endpointInputWithinStaticCap(terminal)
 				facts := []EndpointResolutionEligibilityFact{
-					{Name: "supported_shortest_path_mode", Eligible: patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern},
-					{Name: "single_traversal_step", Eligible: len(steps) == 1 && len(patternPart.PatternElements) == 3},
-					{Name: "read_only", Eligible: updatingClauses == 0},
-					{Name: "non_optional", Eligible: !readingClause.Match.Optional},
-					{Name: "bounded_endpoint_classes", Eligible: classesSupported},
-					{Name: "within_static_endpoint_caps", Eligible: withinCaps},
-					{Name: "uncorrelated_pair", Eligible: !correlated},
+					{
+						Name:     "supported_shortest_path_mode",
+						Eligible: patternPart.ShortestPathPattern || patternPart.AllShortestPathsPattern,
+					},
+					{
+						Name:     "single_traversal_step",
+						Eligible: len(steps) == 1 && len(patternPart.PatternElements) == 3,
+					},
+					{
+						Name:     "read_only",
+						Eligible: updatingClauses == 0,
+					},
+					{
+						Name:     "non_optional",
+						Eligible: !readingClause.Match.Optional,
+					},
+					{
+						Name:     "bounded_endpoint_classes",
+						Eligible: classesSupported,
+					},
+					{
+						Name:     "within_static_endpoint_caps",
+						Eligible: withinCaps,
+					},
+					{
+						Name:     "uncorrelated_pair",
+						Eligible: !correlated,
+					},
 				}
 				eligible := endpointResolutionFactsEligible(facts)
 				fallbackReason := EndpointResolutionFallbackPlannedOnly
@@ -289,6 +345,7 @@ func appendEndpointResolutionDecisions(
 	}
 }
 
+// endpointResolutionFactsEligible evaluates planner state needed for endpoint resolution facts eligible.
 func endpointResolutionFactsEligible(facts []EndpointResolutionEligibilityFact) bool {
 	for _, fact := range facts {
 		if !fact.Eligible {
@@ -298,6 +355,7 @@ func endpointResolutionFactsEligible(facts []EndpointResolutionEligibilityFact) 
 	return true
 }
 
+// setEndpointResolutionFact evaluates planner state needed for set endpoint resolution fact.
 func setEndpointResolutionFact(decision *EndpointResolutionDecision, name string, eligible bool) {
 	for idx := range decision.EligibilityFacts {
 		if decision.EligibilityFacts[idx].Name == name {
@@ -307,13 +365,19 @@ func setEndpointResolutionFact(decision *EndpointResolutionDecision, name string
 	}
 }
 
+// traversalPredicateClassification groups planner state that must remain consistent while analyzing traversal predicate classification.
 type traversalPredicateClassification struct {
-	class         TraversalPredicateClass
+	// class retains the class while traversalPredicateClassification is assembled or evaluated.
+	class TraversalPredicateClass
+	// bindingSymbol retains the binding symbol while traversalPredicateClassification is assembled or evaluated.
 	bindingSymbol string
-	relevant      bool
-	correlated    bool
+	// relevant indicates whether relevant applies.
+	relevant bool
+	// correlated indicates whether correlated applies.
+	correlated bool
 }
 
+// classifyTraversalPredicate constructs the SQL model used for classify traversal predicate.
 func classifyTraversalPredicate(
 	expression cypher.Expression,
 	pathSymbol string,
@@ -360,13 +424,20 @@ func classifyTraversalPredicate(
 	}
 }
 
+// classifyTraversalQuantifier evaluates planner state needed for classify traversal quantifier.
 func classifyTraversalQuantifier(quantifier *cypher.Quantifier, pathSymbol string) traversalPredicateClassification {
 	if quantifier == nil || quantifier.Filter == nil || quantifier.Filter.Specifier == nil || quantifier.Filter.Specifier.Variable == nil {
-		return traversalPredicateClassification{class: TraversalPredicateClassUnsupported, relevant: true}
+		return traversalPredicateClassification{
+			class:    TraversalPredicateClassUnsupported,
+			relevant: true,
+		}
 	}
 	function, ok := quantifier.Filter.Specifier.Expression.(*cypher.FunctionInvocation)
 	if !ok || function == nil || function.NumArguments() != 1 {
-		return traversalPredicateClassification{class: TraversalPredicateClassUnsupported, relevant: true}
+		return traversalPredicateClassification{
+			class:    TraversalPredicateClassUnsupported,
+			relevant: true,
+		}
 	}
 	pathVariable, ok := function.Arguments[0].(*cypher.Variable)
 	if !ok || pathVariable == nil || pathSymbol == "" || pathVariable.Symbol != pathSymbol {
@@ -383,13 +454,26 @@ func classifyTraversalQuantifier(quantifier *cypher.Quantifier, pathSymbol strin
 	collectionNodes := strings.EqualFold(function.Name, cypher.NodesFunction)
 	collectionRelationships := strings.EqualFold(function.Name, cypher.RelationshipsFunction)
 	if !collectionNodes && !collectionRelationships {
-		return traversalPredicateClassification{class: TraversalPredicateClassWholePath, bindingSymbol: bindingSymbol, relevant: true, correlated: correlated}
+		return traversalPredicateClassification{
+			class:         TraversalPredicateClassWholePath,
+			bindingSymbol: bindingSymbol,
+			relevant:      true,
+			correlated:    correlated,
+		}
 	}
 	if correlated || quantifier.Filter.Where == nil || !traversalPredicateUsesOnlySafeFunctions(quantifier.Filter.Where, collectionRelationships) {
-		return traversalPredicateClassification{class: TraversalPredicateClassWholePath, bindingSymbol: bindingSymbol, relevant: true, correlated: correlated}
+		return traversalPredicateClassification{
+			class:         TraversalPredicateClassWholePath,
+			bindingSymbol: bindingSymbol,
+			relevant:      true,
+			correlated:    correlated,
+		}
 	}
 
-	classification := traversalPredicateClassification{bindingSymbol: bindingSymbol, relevant: true}
+	classification := traversalPredicateClassification{
+		bindingSymbol: bindingSymbol,
+		relevant:      true,
+	}
 	switch {
 	case collectionNodes && quantifier.Type == cypher.QuantifierTypeAll:
 		classification.class = TraversalPredicateClassUniversalAllNodes
@@ -405,6 +489,7 @@ func classifyTraversalQuantifier(quantifier *cypher.Quantifier, pathSymbol strin
 	return classification
 }
 
+// traversalPredicateUsesOnlySafeFunctions evaluates planner state needed for traversal predicate uses only safe functions.
 func traversalPredicateUsesOnlySafeFunctions(node cypher.SyntaxNode, relationshipBinding bool) bool {
 	safe := true
 	_ = walk.Cypher(node, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
@@ -423,6 +508,7 @@ func traversalPredicateUsesOnlySafeFunctions(node cypher.SyntaxNode, relationshi
 	return safe
 }
 
+// traversalPredicateClassStepEvaluable evaluates planner state needed for traversal predicate class step evaluable.
 func traversalPredicateClassStepEvaluable(class TraversalPredicateClass) bool {
 	switch class {
 	case TraversalPredicateClassStepLocalNode,
@@ -437,6 +523,7 @@ func traversalPredicateClassStepEvaluable(class TraversalPredicateClass) bool {
 	}
 }
 
+// appendTraversalPredicateDecisions appends traversal predicate decisions.
 func appendTraversalPredicateDecisions(
 	plan *LoweringPlan,
 	queryPartIndex int,
@@ -489,7 +576,10 @@ func appendTraversalPredicateDecisions(
 					}
 				}
 				if step.Relationship.Properties != nil {
-					classification := traversalPredicateClassification{class: TraversalPredicateClassStepLocalRelationship, relevant: true}
+					classification := traversalPredicateClassification{
+						class:    TraversalPredicateClassStepLocalRelationship,
+						relevant: true,
+					}
 					if !inlinePropertiesStepLocal(step.Relationship.Properties) {
 						classification.class = TraversalPredicateClassUnsupported
 						classification.correlated = len(sortedDependencies(step.Relationship.Properties)) > 0
@@ -516,6 +606,7 @@ func appendTraversalPredicateDecisions(
 	}
 }
 
+// inlinePropertiesStepLocal evaluates planner state needed for inline properties step local.
 func inlinePropertiesStepLocal(expression cypher.Expression) bool {
 	properties, ok := expression.(*cypher.Properties)
 	if !ok || properties == nil || properties.Parameter != nil {
@@ -529,6 +620,7 @@ func inlinePropertiesStepLocal(expression cypher.Expression) bool {
 	return true
 }
 
+// appendTraversalPredicateDecision appends traversal predicate decision.
 func appendTraversalPredicateDecision(
 	plan *LoweringPlan,
 	target TraversalStepTarget,
@@ -540,10 +632,22 @@ func appendTraversalPredicateDecision(
 ) {
 	stepEvaluable := traversalPredicateClassStepEvaluable(classification.class)
 	facts := []TraversalPredicateEligibilityFact{
-		{Name: "read_only", Eligible: readOnly},
-		{Name: "non_optional", Eligible: nonOptional},
-		{Name: "step_evaluable", Eligible: stepEvaluable},
-		{Name: "uncorrelated", Eligible: !classification.correlated},
+		{
+			Name:     "read_only",
+			Eligible: readOnly,
+		},
+		{
+			Name:     "non_optional",
+			Eligible: nonOptional,
+		},
+		{
+			Name:     "step_evaluable",
+			Eligible: stepEvaluable,
+		},
+		{
+			Name:     "uncorrelated",
+			Eligible: !classification.correlated,
+		},
 	}
 	eligible := traversalPredicateFactsEligible(facts)
 	fallbackReason := TraversalPredicateFallbackPlannedOnly
@@ -586,6 +690,7 @@ func appendTraversalPredicateDecision(
 	})
 }
 
+// traversalPredicateFactsEligible evaluates planner state needed for traversal predicate facts eligible.
 func traversalPredicateFactsEligible(facts []TraversalPredicateEligibilityFact) bool {
 	for _, fact := range facts {
 		if !fact.Eligible {
@@ -595,6 +700,7 @@ func traversalPredicateFactsEligible(facts []TraversalPredicateEligibilityFact) 
 	return true
 }
 
+// setTraversalPredicateFact evaluates planner state needed for set traversal predicate fact.
 func setTraversalPredicateFact(decision *TraversalPredicateDecision, name string, eligible bool) {
 	for idx := range decision.EligibilityFacts {
 		if decision.EligibilityFacts[idx].Name == name {
@@ -604,6 +710,7 @@ func setTraversalPredicateFact(decision *TraversalPredicateDecision, name string
 	}
 }
 
+// finalizeTraversalEnvelopeDecisions evaluates planner state needed for finalize traversal envelope decisions.
 func finalizeTraversalEnvelopeDecisions(plan *LoweringPlan, query *cypher.RegularQuery) {
 	if plan == nil || query == nil || query.SingleQuery == nil {
 		return
@@ -629,6 +736,7 @@ func finalizeTraversalEnvelopeDecisions(plan *LoweringPlan, query *cypher.Regula
 	}
 }
 
+// statementUpdatingClauseCount evaluates planner state needed for statement updating clause count.
 func statementUpdatingClauseCount(query *cypher.RegularQuery) int {
 	if query == nil || query.SingleQuery == nil {
 		return 0
@@ -649,6 +757,7 @@ func statementUpdatingClauseCount(query *cypher.RegularQuery) int {
 	return count
 }
 
+// unwrapCypherParenthetical evaluates planner state needed for unwrap cypher parenthetical.
 func unwrapCypherParenthetical(expression cypher.Expression) cypher.Expression {
 	for {
 		parenthetical, ok := expression.(*cypher.Parenthetical)
@@ -659,6 +768,7 @@ func unwrapCypherParenthetical(expression cypher.Expression) cypher.Expression {
 	}
 }
 
+// stringSliceContains evaluates planner state needed for string slice contains.
 func stringSliceContains(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

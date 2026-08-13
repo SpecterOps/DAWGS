@@ -36,7 +36,11 @@ func TestBuildAAResolutionReportUsesExplicitMatchedArmsAndKeepsP99Diagnostic(t *
 // TestBuildAAResolutionReportRejectsSyntheticSingleStream verifies unlabeled samples cannot be relabeled after timing to manufacture A/A evidence.
 func TestBuildAAResolutionReportRejectsSyntheticSingleStream(t *testing.T) {
 	record := perfGateRecord("case", ModePostgresSQL, time.Millisecond, 5, 40)
-	_, err := buildAAResolutionReport([]CaseResult{record}, PerfGateOptions{Seed: 1, Confidence: 0.95, BootstrapCount: 100})
+	_, err := buildAAResolutionReport([]CaseResult{record}, PerfGateOptions{
+		Seed:           1,
+		Confidence:     0.95,
+		BootstrapCount: 100,
+	})
 	require.ErrorContains(t, err, "without explicit round, block, arm, order, and run UUID")
 }
 
@@ -59,7 +63,9 @@ func TestCreateAAResolutionReportAcceptsSeparateArmArtifacts(t *testing.T) {
 
 	output := filepath.Join(t.TempDir(), "aa.json")
 	require.NoError(t, createAAResolutionReport(paths, output, PerfGateOptions{
-		Seed: 1, Confidence: 0.95, BootstrapCount: 100,
+		Seed:           1,
+		Confidence:     0.95,
+		BootstrapCount: 100,
 	}))
 
 	report, _, err := loadAAResolutionReport(output)
@@ -71,6 +77,7 @@ func TestCreateAAResolutionReportAcceptsSeparateArmArtifacts(t *testing.T) {
 	require.NotEqual(t, leftDigest, report.ArtifactSHA256)
 }
 
+// explicitAARecords prepares or inspects test evidence for explicit aa records.
 func explicitAARecords(t *testing.T, rounds, samples int) []CaseResult {
 	t.Helper()
 	var records []CaseResult

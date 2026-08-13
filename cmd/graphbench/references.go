@@ -546,6 +546,7 @@ func allShortestDAGSearch(direction graph.Direction) string {
 )`
 }
 
+// allShortestA1ReferenceSQL supports benchmark evidence processing for all shortest a1 reference sql.
 func allShortestA1ReferenceSQL(direction graph.Direction) string {
 	inbound := "false"
 	if direction == graph.DirectionInbound {
@@ -663,10 +664,14 @@ func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testC
 	candidateParams["enumeration_limit"] = int64(100_000)
 	candidateParams["output_bytes_limit"] = int64(64 * 1024 * 1024)
 	for _, candidate := range []struct {
-		name             string
-		architecture     string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// architecture retains the architecture while anonymous record is assembled or evaluated.
+		architecture string
+		// implementationID identifies the implementation id.
 		implementationID string
-		functionName     string
+		// functionName identifies the function name.
+		functionName string
 	}{
 		{
 			name:             "asp_b1_bidirectional_dag_strict_m0",

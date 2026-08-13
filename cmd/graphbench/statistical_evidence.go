@@ -40,14 +40,22 @@ const (
 
 // benchmarkHostIdentity contains stable host properties that must match an A/A calibration.
 type benchmarkHostIdentity struct {
-	GOOS         string `json:"goos"`
-	GOARCH       string `json:"goarch"`
-	CPUCount     int    `json:"cpu_count"`
-	CPUModel     string `json:"cpu_model"`
-	Kernel       string `json:"kernel"`
-	CgroupCPU    string `json:"cgroup_cpu,omitempty"`
+	// GOOS supplies the goos input to the benchmarkHostIdentity contract.
+	GOOS string `json:"goos"`
+	// GOARCH supplies the goarch input to the benchmarkHostIdentity contract.
+	GOARCH string `json:"goarch"`
+	// CPUCount records the number of cpu count.
+	CPUCount int `json:"cpu_count"`
+	// CPUModel supplies the cpu model input to the benchmarkHostIdentity contract.
+	CPUModel string `json:"cpu_model"`
+	// Kernel supplies the kernel input to the benchmarkHostIdentity contract.
+	Kernel string `json:"kernel"`
+	// CgroupCPU supplies the cgroup cpu input to the benchmarkHostIdentity contract.
+	CgroupCPU string `json:"cgroup_cpu,omitempty"`
+	// CgroupMemory supplies the cgroup memory input to the benchmarkHostIdentity contract.
 	CgroupMemory string `json:"cgroup_memory,omitempty"`
-	CPUGovernor  string `json:"cpu_governor,omitempty"`
+	// CPUGovernor supplies the cpu governor input to the benchmarkHostIdentity contract.
+	CPUGovernor string `json:"cpu_governor,omitempty"`
 }
 
 // artifactHostFingerprint returns one stable host fingerprint for all PostgreSQL timing records.
@@ -93,6 +101,7 @@ func artifactHostFingerprint(records []CaseResult) (string, error) {
 	return fingerprint, nil
 }
 
+// hasWarmLatencySample reports whether has warm latency sample.
 func hasWarmLatencySample(record CaseResult) bool {
 	for _, sample := range record.Stats.Samples {
 		if sample.Classification == "warm" && sample.Duration > 0 {
@@ -132,7 +141,11 @@ func validateAAResolutionEvidence(report *AAResolutionReport, records []CaseResu
 
 	seen := map[performanceKey]struct{}{}
 	for _, entry := range report.Cases {
-		key := performanceKey{dataset: entry.Dataset, name: entry.Name, backend: entry.Backend}
+		key := performanceKey{
+			dataset: entry.Dataset,
+			name:    entry.Name,
+			backend: entry.Backend,
+		}
 		if entry.Dataset == "" || entry.Name == "" || entry.Backend != ModePostgresSQL {
 			return fmt.Errorf("A/A report contains malformed case identity")
 		}
@@ -162,6 +175,7 @@ func validateAAResolutionEvidence(report *AAResolutionReport, records []CaseResu
 	return nil
 }
 
+// workloadSHA256ForKey derives the lookup key used for workload sha256 for.
 func workloadSHA256ForKey(records []CaseResult, key performanceKey) (string, error) {
 	identity := ""
 	for _, record := range records {
@@ -182,6 +196,7 @@ func workloadSHA256ForKey(records []CaseResult, key performanceKey) (string, err
 	return identity, nil
 }
 
+// postgresTimingEnvironmentSHA256ForKey derives the lookup key used for postgres timing environment sha256 for.
 func postgresTimingEnvironmentSHA256ForKey(records []CaseResult, key performanceKey) (string, error) {
 	identity := ""
 	found, missing := false, false
@@ -216,6 +231,7 @@ func postgresTimingEnvironmentSHA256ForKey(records []CaseResult, key performance
 	return identity, nil
 }
 
+// fixtureSHA256ForKey derives the lookup key used for fixture sha256 for.
 func fixtureSHA256ForKey(records []CaseResult, key performanceKey) (string, error) {
 	identity := ""
 	found, missing := false, false
@@ -248,6 +264,7 @@ func fixtureSHA256ForKey(records []CaseResult, key performanceKey) (string, erro
 	return identity, nil
 }
 
+// normalizedAnalyzeState normalizes d analyze state.
 func normalizedAnalyzeState(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
@@ -269,6 +286,7 @@ func normalizedAnalyzeState(value string) string {
 	return strings.Join(entries, ",")
 }
 
+// validateAAMetric validates aa metric.
 func validateAAMetric(metric AAMetricResolution) error {
 	if metric.Ratio.Estimate <= 0 || metric.Ratio.Lower <= 0 || metric.Ratio.Upper <= 0 ||
 		metric.Ratio.Lower > metric.Ratio.Estimate || metric.Ratio.Estimate > metric.Ratio.Upper ||
@@ -303,6 +321,7 @@ func aaTimingFloor(report *AAResolutionReport, key performanceKey, p95 bool, con
 	return 0, 0, fmt.Errorf("A/A report has no resolution evidence for %s/%s/%s", key.dataset, key.name, key.backend)
 }
 
+// validSHA256 reports whether a value is a canonical lowercase SHA-256 digest.
 func validSHA256(value string) bool {
 	if len(value) != sha256.Size*2 {
 		return false
@@ -420,12 +439,18 @@ func prioritizedTraversalKey(key performanceKey, artifacts ...[]CaseResult) bool
 // TraversalQualificationStatus reports independent selector-training and
 // frozen-holdout coverage for one concrete traversal candidate family.
 type TraversalQualificationStatus struct {
-	Family         string `json:"family"`
-	TrainingCases  int    `json:"training_cases"`
-	HoldoutCases   int    `json:"holdout_cases"`
-	TrainingPassed bool   `json:"training_passed"`
-	HoldoutPassed  bool   `json:"holdout_passed"`
-	Passed         bool   `json:"passed"`
+	// Family supplies the family input to the TraversalQualificationStatus contract.
+	Family string `json:"family"`
+	// TrainingCases supplies the training cases input to the TraversalQualificationStatus contract.
+	TrainingCases int `json:"training_cases"`
+	// HoldoutCases supplies the holdout cases input to the TraversalQualificationStatus contract.
+	HoldoutCases int `json:"holdout_cases"`
+	// TrainingPassed indicates whether training passed applies.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed indicates whether holdout passed applies.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
 }
 
 // traversalQualificationFamily returns the most specific stable candidate
@@ -548,6 +573,7 @@ func validateCandidateRuntimeEvidence(records []CaseResult, key performanceKey) 
 	return nil
 }
 
+// validateRuntimeReceiptEvents validates runtime receipt events.
 func validateRuntimeReceiptEvents(events []RuntimeReceiptEvent, runtimeIdentity, runtimeBranch string, fallbackExecuted *bool) error {
 	if len(events) == 0 {
 		return fmt.Errorf("event chain is missing")
@@ -567,6 +593,7 @@ func validateRuntimeReceiptEvents(events []RuntimeReceiptEvent, runtimeIdentity,
 	return nil
 }
 
+// runtimeReceiptChains supports benchmark evidence processing for runtime receipt chains.
 func runtimeReceiptChains(samples []LatencySample) [][]RuntimeReceiptEvent {
 	chains := make([][]RuntimeReceiptEvent, 0)
 	for _, sample := range samples {
@@ -578,6 +605,7 @@ func runtimeReceiptChains(samples []LatencySample) [][]RuntimeReceiptEvent {
 	return chains
 }
 
+// caseRuntimeReceiptChains supports benchmark evidence processing for case runtime receipt chains.
 func caseRuntimeReceiptChains(records []CaseResult, key performanceKey) [][]RuntimeReceiptEvent {
 	chains := make([][]RuntimeReceiptEvent, 0)
 	for _, record := range records {
@@ -588,6 +616,7 @@ func caseRuntimeReceiptChains(records []CaseResult, key performanceKey) [][]Runt
 	return chains
 }
 
+// requiresCandidateRuntimeEvidence reports whether requires candidate runtime evidence.
 func requiresCandidateRuntimeEvidence(record CaseResult) bool {
 	if record.TraversalTelemetry != nil {
 		summary := record.TraversalTelemetry.Summary
@@ -612,6 +641,7 @@ func requiresCandidateRuntimeEvidence(record CaseResult) bool {
 	return false
 }
 
+// prioritizedTraversalIdentity derives the stable identity used to compare prioritized traversal.
 func prioritizedTraversalIdentity(identity string) bool {
 	return strings.HasPrefix(identity, "SP-") ||
 		strings.HasPrefix(identity, "ASP-") ||
@@ -627,12 +657,18 @@ func promotionTimingSplit(split string) bool {
 	return split != "diagnostic"
 }
 
+// pairedRoundEvidence records independently verifiable observations for paired round.
 type pairedRoundEvidence struct {
-	Block    int
+	// Block supplies the block input to the pairedRoundEvidence contract.
+	Block int
+	// ArmOrder supplies the arm order input to the pairedRoundEvidence contract.
 	ArmOrder int
-	RunUUID  string
-	Arm      string
-	Warmups  int
+	// RunUUID identifies the run uuid.
+	RunUUID string
+	// Arm supplies the arm input to the pairedRoundEvidence contract.
+	Arm string
+	// Warmups supplies the warmups input to the pairedRoundEvidence contract.
+	Warmups int
 }
 
 // validatePairedOrderEvidence verifies matched block identity and balanced two-arm ordering for the requested rounds.
@@ -679,6 +715,7 @@ func validatePairedOrderEvidence(left, right []CaseResult, key performanceKey, r
 	return nil
 }
 
+// collectPairedRoundEvidence collects paired round evidence.
 func collectPairedRoundEvidence(records []CaseResult, key performanceKey) (map[int]pairedRoundEvidence, error) {
 	evidence := map[int]pairedRoundEvidence{}
 	for _, record := range records {
@@ -700,7 +737,11 @@ func collectPairedRoundEvidence(records []CaseResult, key performanceKey) (map[i
 			}
 			round := sample.Round
 			current := pairedRoundEvidence{
-				Block: sample.Block, ArmOrder: sample.ArmOrder, RunUUID: sample.RunUUID, Arm: sample.Arm, Warmups: warmups,
+				Block:    sample.Block,
+				ArmOrder: sample.ArmOrder,
+				RunUUID:  sample.RunUUID,
+				Arm:      sample.Arm,
+				Warmups:  warmups,
 			}
 			if record.Environment != nil {
 				if round == 0 {

@@ -43,7 +43,7 @@ type ResourceGateCase struct {
 	RunUUID string `json:"run_uuid,omitempty"`
 	// Arm identifies the measured executor arm.
 	Arm string `json:"arm,omitempty"`
-	// ArmOrder records the arm's position within its paired block.
+	// ArmOrder supplies the arm order input to the ResourceGateCase contract.
 	ArmOrder int `json:"arm_order,omitempty"`
 	// Reference identifies the reference arm evaluated by the resource gate.
 	Reference string `json:"reference,omitempty"`
@@ -266,6 +266,7 @@ func telemetryRequiredForArchitecture(architecture string) bool {
 		isOrientationProbePolicy(architecture)
 }
 
+// telemetryRequiredForRecord supports benchmark evidence processing for telemetry required for record.
 func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
 	if _, guarded := guardedInlineResourceContractForArchitecture(architecture); guarded {
 		return true
@@ -286,15 +287,23 @@ func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
 			guardedInlineResourcePolicy(record.TraversalTelemetry.Summary.EmittedIdentity))
 }
 
+// guardedInlineResourceContract groups state that must remain consistent while processing guarded inline resource contract.
 type guardedInlineResourceContract struct {
-	architecture    string
-	family          string
+	// architecture retains the architecture while guardedInlineResourceContract is assembled or evaluated.
+	architecture string
+	// family retains the family while guardedInlineResourceContract is assembled or evaluated.
+	family string
+	// telemetryFamily retains the telemetry family while guardedInlineResourceContract is assembled or evaluated.
 	telemetryFamily TraversalTelemetryFamily
-	policy          string
-	namespace       string
-	label           string
+	// policy retains the policy while guardedInlineResourceContract is assembled or evaluated.
+	policy string
+	// namespace retains the namespace while guardedInlineResourceContract is assembled or evaluated.
+	namespace string
+	// label retains the label while guardedInlineResourceContract is assembled or evaluated.
+	label string
 }
 
+// guardedInlineResourceContractForArchitecture supports benchmark evidence processing for guarded inline resource contract for architecture.
 func guardedInlineResourceContractForArchitecture(architecture string) (guardedInlineResourceContract, bool) {
 	switch architecture {
 	case string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness):
@@ -320,6 +329,7 @@ func guardedInlineResourceContractForArchitecture(architecture string) (guardedI
 	}
 }
 
+// guardedInlineResourcePolicy supports benchmark evidence processing for guarded inline resource policy.
 func guardedInlineResourcePolicy(policy string) bool {
 	return policy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 || policy == optimize.ShortestPathPolicyASPI1GuardedV1
 }
@@ -395,6 +405,7 @@ func appendGuardedInlineResourceBindingReasons(gateCase *ResourceGateCase, recor
 	}
 }
 
+// appendFallbackExpectationReasons appends fallback expectation reasons.
 func appendFallbackExpectationReasons(gateCase *ResourceGateCase, record CaseResult) {
 	expectation := record.Shape.FallbackExpectation
 	if expectation == "" {
@@ -427,6 +438,7 @@ func appendFallbackExpectationReasons(gateCase *ResourceGateCase, record CaseRes
 	}
 }
 
+// appendWorkspaceCeilingReasons appends workspace ceiling reasons.
 func appendWorkspaceCeilingReasons(gateCase *ResourceGateCase, environment *RunEnvironment, telemetry *TraversalExecutionTelemetry, workspaceArchitecture, ceilingsRequired bool) {
 	if !workspaceArchitecture {
 		return
@@ -551,10 +563,12 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 	}
 }
 
+// appendInlineASPAttributionReasons appends inline asp attribution reasons.
 func appendInlineASPAttributionReasons(gateCase *ResourceGateCase, diagnostic *TraversalExecutionDiagnostic) {
 	appendInlinePredecessorAttributionReasons(gateCase, diagnostic, "inline ASP")
 }
 
+// appendInlinePredecessorAttributionReasons appends inline predecessor attribution reasons.
 func appendInlinePredecessorAttributionReasons(gateCase *ResourceGateCase, diagnostic *TraversalExecutionDiagnostic, label string) {
 	if diagnostic == nil || diagnostic.PlanReplay == nil {
 		gateCase.Reasons = append(gateCase.Reasons, label+" qualification requires exact plan branch evidence")
@@ -596,6 +610,7 @@ func appendInlinePredecessorAttributionReasons(gateCase *ResourceGateCase, diagn
 	}
 }
 
+// appendOrientationAttributionReasons appends orientation attribution reasons.
 func appendOrientationAttributionReasons(gateCase *ResourceGateCase, diagnostic *TraversalExecutionDiagnostic) {
 	if diagnostic == nil || diagnostic.PlanReplay == nil {
 		gateCase.Reasons = append(gateCase.Reasons, "orientation qualification requires exact plan branch and probe evidence")

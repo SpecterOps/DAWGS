@@ -33,15 +33,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPostgresProductionManifestBuildsExactGuardedOptions verifies postgres production manifest builds exact guarded options behavior.
 func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	query := "MATCH p = allShortestPaths((s)-[:Traverse*1..8]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 	digest := strings.Repeat("0", 64)
 	manifest := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: "ASP-I1-U-DAG+MAT-M0", SelectorVersion: "asp-i1-test-v1",
-		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: "ASP-A1-DAG",
-		SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps:    map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
-		Buckets: []PromotionBucket{{Name: "outbound-depth8", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "outbound", ObservationMode: "all_paths", MinimumDepth: 1, MaximumDepth: 8, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"}}},
+		Version:           promotionManifestVersion,
+		Candidate:         "ASP-I1-U-DAG+MAT-M0",
+		SelectorVersion:   "asp-i1-test-v1",
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  "ASP-A1-DAG",
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
+		Buckets: []PromotionBucket{{
+			Name:                  "outbound-depth8",
+			QuerySHA256:           []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction:             "outbound",
+			ObservationMode:       "all_paths",
+			MinimumDepth:          1,
+			MaximumDepth:          8,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
+		}},
 	}
 	raw, err := json.Marshal(manifest)
 	require.NoError(t, err)
@@ -60,19 +76,30 @@ func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	require.ErrorContains(t, err, "absent from the provisional production manifest")
 }
 
+// TestPostgresProductionManifestRequiresStaticV6CanonicalInboundBucket verifies postgres production manifest requires static v6 canonical inbound bucket behavior.
 func TestPostgresProductionManifestRequiresStaticV6CanonicalInboundBucket(t *testing.T) {
 	query := "MATCH p = shortestPath((s)<-[:Traverse*1..64]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 	digest := strings.Repeat("0", 64)
 	base := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-		SelectorVersion: optimize.ShortestPathSelectorStaticV6, ExecutionBoundary: "guarded_dual_arm",
-		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalWitness),
-		SourceCommit:     "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
+		Version:           promotionManifestVersion,
+		Candidate:         string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		SelectorVersion:   optimize.ShortestPathSelectorStaticV6,
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
 		Buckets: []PromotionBucket{{
-			Name: "canonical-inbound-depth64", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "inbound",
-			ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1,
-			QualificationSplit: []string{"training", "holdout"},
+			Name:                  "canonical-inbound-depth64",
+			QuerySHA256:           []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction:             "inbound",
+			ObservationMode:       "one_path",
+			MinimumDepth:          1,
+			MaximumDepth:          64,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
 		}},
 	}
 	write := func(t *testing.T, manifest PromotionManifest) string {
@@ -108,18 +135,30 @@ func TestPostgresProductionManifestRequiresStaticV6CanonicalInboundBucket(t *tes
 	}
 }
 
+// TestPostgresProductionManifestBuildsOrientationOptionsWithoutShortestPathFields verifies postgres production manifest builds orientation options without shortest path fields behavior.
 func TestPostgresProductionManifestBuildsOrientationOptionsWithoutShortestPathFields(t *testing.T) {
 	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) WHERE id(r) = $root_id RETURN id(e)"
 	digest := strings.Repeat("0", 64)
 	manifest := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: string(optimize.ExpansionSearchPolicyOrientationProbeV1), SelectorVersion: "orientation-probe-v1",
-		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: string(optimize.ExpansionSearchStepwiseForward),
-		SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: orientationPromotionCaps(),
+		Version:           promotionManifestVersion,
+		Candidate:         string(optimize.ExpansionSearchPolicyOrientationProbeV1),
+		SelectorVersion:   "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              orientationPromotionCaps(),
 		Buckets: []PromotionBucket{{
-			Name: "outbound-fixed-suffix", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "outbound",
-			ObservationMode: "endpoint_ids", MinimumDepth: 0, MaximumDepth: 16, RelationshipKindCount: 1,
-			QualificationSplit: []string{"training", "holdout"},
+			Name:                  "outbound-fixed-suffix",
+			QuerySHA256:           []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction:             "outbound",
+			ObservationMode:       "endpoint_ids",
+			MinimumDepth:          0,
+			MaximumDepth:          16,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
 		}},
 	}
 	raw, err := json.Marshal(manifest)
@@ -138,37 +177,53 @@ func TestPostgresProductionManifestBuildsOrientationOptionsWithoutShortestPathFi
 	require.Equal(t, "orientation-probe-v1", options.SelectorVersion)
 }
 
+// TestPostgresProductionManifestRejectsNonExactOrientationContract verifies postgres production manifest rejects non exact orientation contract behavior.
 func TestPostgresProductionManifestRejectsNonExactOrientationContract(t *testing.T) {
 	digest := strings.Repeat("0", 64)
 	base := PromotionManifest{
-		Version: promotionManifestVersion, Candidate: string(optimize.ExpansionSearchPolicyOrientationProbeV1), SelectorVersion: "orientation-probe-v1",
-		ExecutionBoundary: "guarded_dual_arm", FallbackExecutor: string(optimize.ExpansionSearchStepwiseForward),
-		SourceCommit: "commit", SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
-		Caps: orientationPromotionCaps(),
+		Version:           promotionManifestVersion,
+		Candidate:         string(optimize.ExpansionSearchPolicyOrientationProbeV1),
+		SelectorVersion:   "orientation-probe-v1",
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              orientationPromotionCaps(),
 		Buckets: []PromotionBucket{{
-			Name: "fixed-suffix", QuerySHA256: []string{digest}, QualificationSplit: []string{"training", "holdout"},
+			Name:               "fixed-suffix",
+			QuerySHA256:        []string{digest},
+			QualificationSplit: []string{"training", "holdout"},
 		}},
 	}
 	tests := []struct {
-		name   string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// mutate retains the mutate while anonymous record is assembled or evaluated.
 		mutate func(*PromotionManifest)
-		err    string
+		// err retains the err while anonymous record is assembled or evaluated.
+		err string
 	}{
 		{
-			name: "fallback", mutate: func(manifest *PromotionManifest) { manifest.FallbackExecutor = "EXPANSION-SUFFIX-SEEDED-REVERSE" },
-			err: "unsupported candidate/fallback pair",
+			name:   "fallback",
+			mutate: func(manifest *PromotionManifest) { manifest.FallbackExecutor = "EXPANSION-SUFFIX-SEEDED-REVERSE" },
+			err:    "unsupported candidate/fallback pair",
 		},
 		{
-			name: "extra cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["extra_limit"] = 1 },
-			err: "orientation-probe-v1 requires exactly four immutable caps",
+			name:   "extra cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["extra_limit"] = 1 },
+			err:    "orientation-probe-v1 requires exactly four immutable caps",
 		},
 		{
-			name: "missing cap", mutate: func(manifest *PromotionManifest) { delete(manifest.Caps, "root_row_limit") },
-			err: "orientation-probe-v1 requires exactly four immutable caps",
+			name:   "missing cap",
+			mutate: func(manifest *PromotionManifest) { delete(manifest.Caps, "root_row_limit") },
+			err:    "orientation-probe-v1 requires exactly four immutable caps",
 		},
 		{
-			name: "wrong cap", mutate: func(manifest *PromotionManifest) { manifest.Caps["state_limit"]-- },
-			err: "orientation-probe-v1 cap state_limit must equal 4096",
+			name:   "wrong cap",
+			mutate: func(manifest *PromotionManifest) { manifest.Caps["state_limit"]-- },
+			err:    "orientation-probe-v1 cap state_limit must equal 4096",
 		},
 	}
 	for _, test := range tests {
@@ -186,6 +241,7 @@ func TestPostgresProductionManifestRejectsNonExactOrientationContract(t *testing
 	}
 }
 
+// TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode verifies postgres read transaction options match every stable snapshot mode behavior.
 func TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode(t *testing.T) {
 	require.Empty(t, (&postgresSQLRunner{}).readTransactionOptions())
 

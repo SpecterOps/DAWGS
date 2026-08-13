@@ -10,50 +10,100 @@ import (
 )
 
 const (
-	orientationRootID             pgsql.Identifier = "root_id"
-	orientationDegreeSample       pgsql.Identifier = "sampled"
-	orientationRootRows           pgsql.Identifier = "root_rows"
-	orientationSuffixRows         pgsql.Identifier = "suffix_rows"
-	orientationBoundaryRows       pgsql.Identifier = "boundary_rows"
-	orientationForwardDegreeRows  pgsql.Identifier = "forward_degree_rows"
-	orientationReverseDegreeRows  pgsql.Identifier = "reverse_degree_rows"
-	orientationProbesComplete     pgsql.Identifier = "probes_complete"
-	orientationForwardScore       pgsql.Identifier = "forward_score"
-	orientationReverseScore       pgsql.Identifier = "reverse_score"
-	orientationUseReverse         pgsql.Identifier = "use_reverse"
+	// orientationRootID reserves the stable protocol value used to recognize orientation root id across artifacts and executions.
+	orientationRootID pgsql.Identifier = "root_id"
+
+	// orientationDegreeSample reserves the stable protocol value used to recognize orientation degree sample across artifacts and executions.
+	orientationDegreeSample pgsql.Identifier = "sampled"
+
+	// orientationRootRows reserves the stable protocol value used to recognize orientation root rows across artifacts and executions.
+	orientationRootRows pgsql.Identifier = "root_rows"
+
+	// orientationSuffixRows reserves the stable protocol value used to recognize orientation suffix rows across artifacts and executions.
+	orientationSuffixRows pgsql.Identifier = "suffix_rows"
+
+	// orientationBoundaryRows reserves the stable protocol value used to recognize orientation boundary rows across artifacts and executions.
+	orientationBoundaryRows pgsql.Identifier = "boundary_rows"
+
+	// orientationForwardDegreeRows reserves the stable protocol value used to recognize orientation forward degree rows across artifacts and executions.
+	orientationForwardDegreeRows pgsql.Identifier = "forward_degree_rows"
+
+	// orientationReverseDegreeRows reserves the stable protocol value used to recognize orientation reverse degree rows across artifacts and executions.
+	orientationReverseDegreeRows pgsql.Identifier = "reverse_degree_rows"
+
+	// orientationProbesComplete reserves the stable protocol value used to recognize orientation probes complete across artifacts and executions.
+	orientationProbesComplete pgsql.Identifier = "probes_complete"
+
+	// orientationForwardScore reserves the stable protocol value used to recognize orientation forward score across artifacts and executions.
+	orientationForwardScore pgsql.Identifier = "forward_score"
+
+	// orientationReverseScore reserves the stable protocol value used to recognize orientation reverse score across artifacts and executions.
+	orientationReverseScore pgsql.Identifier = "reverse_score"
+
+	// orientationUseReverse reserves the stable protocol value used to recognize orientation use reverse across artifacts and executions.
+	orientationUseReverse pgsql.Identifier = "use_reverse"
+
+	// orientationWouldSelectReverse reserves the stable protocol value used to recognize orientation would select reverse across artifacts and executions.
 	orientationWouldSelectReverse pgsql.Identifier = "would_select_reverse"
-	orientationShadowSelected     pgsql.Identifier = "selected"
-	orientationArmExecuted        pgsql.Identifier = "executed"
+
+	// orientationShadowSelected reserves the stable protocol value used to recognize orientation shadow selected across artifacts and executions.
+	orientationShadowSelected pgsql.Identifier = "selected"
+
+	// orientationArmExecuted reserves the stable protocol value used to recognize orientation arm executed across artifacts and executions.
+	orientationArmExecuted pgsql.Identifier = "executed"
 )
 
 // expansionOrientationIdentifiers gives every probe, decision, candidate,
 // and fallback relation a stable suffix suitable for plan and telemetry
 // attribution.
 type expansionOrientationIdentifiers struct {
-	rootProbe          pgsql.Identifier
-	rootPresence       pgsql.Identifier
-	suffixProbe        pgsql.Identifier
-	boundaries         pgsql.Identifier
+	// rootProbe retains the root probe while expansionOrientationIdentifiers is assembled or evaluated.
+	rootProbe pgsql.Identifier
+	// rootPresence retains the root presence while expansionOrientationIdentifiers is assembled or evaluated.
+	rootPresence pgsql.Identifier
+	// suffixProbe retains the suffix probe while expansionOrientationIdentifiers is assembled or evaluated.
+	suffixProbe pgsql.Identifier
+	// boundaries retains the boundaries while expansionOrientationIdentifiers is assembled or evaluated.
+	boundaries pgsql.Identifier
+	// forwardDegreeProbe retains the forward degree probe while expansionOrientationIdentifiers is assembled or evaluated.
 	forwardDegreeProbe pgsql.Identifier
+	// reverseDegreeProbe retains the reverse degree probe while expansionOrientationIdentifiers is assembled or evaluated.
 	reverseDegreeProbe pgsql.Identifier
-	metrics            pgsql.Identifier
-	decision           pgsql.Identifier
-	admission          pgsql.Identifier
-	shadowForward      pgsql.Identifier
-	shadowReverse      pgsql.Identifier
-	shadowSelection    pgsql.Identifier
-	reverseGate        pgsql.Identifier
-	reverseSeed        pgsql.Identifier
-	reverseSeedRows    pgsql.Identifier
-	executedCandidate  pgsql.Identifier
-	executedIncumbent  pgsql.Identifier
-	candidateBody      pgsql.Identifier
-	incumbentBody      pgsql.Identifier
-	reverse            pgsql.Identifier
-	states             pgsql.Identifier
-	incumbent          pgsql.Identifier
+	// metrics retains the metrics while expansionOrientationIdentifiers is assembled or evaluated.
+	metrics pgsql.Identifier
+	// decision retains the decision while expansionOrientationIdentifiers is assembled or evaluated.
+	decision pgsql.Identifier
+	// admission retains the admission while expansionOrientationIdentifiers is assembled or evaluated.
+	admission pgsql.Identifier
+	// shadowForward retains the shadow forward while expansionOrientationIdentifiers is assembled or evaluated.
+	shadowForward pgsql.Identifier
+	// shadowReverse retains the shadow reverse while expansionOrientationIdentifiers is assembled or evaluated.
+	shadowReverse pgsql.Identifier
+	// shadowSelection retains the shadow selection while expansionOrientationIdentifiers is assembled or evaluated.
+	shadowSelection pgsql.Identifier
+	// reverseGate retains the reverse gate while expansionOrientationIdentifiers is assembled or evaluated.
+	reverseGate pgsql.Identifier
+	// reverseSeed retains the reverse seed while expansionOrientationIdentifiers is assembled or evaluated.
+	reverseSeed pgsql.Identifier
+	// reverseSeedRows records the number of reverse seed rows.
+	reverseSeedRows pgsql.Identifier
+	// executedCandidate retains the executed candidate while expansionOrientationIdentifiers is assembled or evaluated.
+	executedCandidate pgsql.Identifier
+	// executedIncumbent retains the executed incumbent while expansionOrientationIdentifiers is assembled or evaluated.
+	executedIncumbent pgsql.Identifier
+	// candidateBody retains the candidate body while expansionOrientationIdentifiers is assembled or evaluated.
+	candidateBody pgsql.Identifier
+	// incumbentBody retains the incumbent body while expansionOrientationIdentifiers is assembled or evaluated.
+	incumbentBody pgsql.Identifier
+	// reverse retains the reverse while expansionOrientationIdentifiers is assembled or evaluated.
+	reverse pgsql.Identifier
+	// states retains the states while expansionOrientationIdentifiers is assembled or evaluated.
+	states pgsql.Identifier
+	// incumbent retains the incumbent while expansionOrientationIdentifiers is assembled or evaluated.
+	incumbent pgsql.Identifier
 }
 
+// newExpansionOrientationIdentifiers constructs expansion orientation identifiers.
 func newExpansionOrientationIdentifiers(finalFrame pgsql.Identifier) expansionOrientationIdentifiers {
 	prefix := string(finalFrame) + "_orientation_"
 	return expansionOrientationIdentifiers{
@@ -162,7 +212,10 @@ func boundedTraversalStateProbe(
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{Name: marker.AsCompoundIdentifier()},
 				Joins: []pgsql.Join{{
-					Table: pgsql.LateralSubquery{Query: query, Binding: models.OptionalValue(bodyAlias)},
+					Table: pgsql.LateralSubquery{
+						Query:   query,
+						Binding: models.OptionalValue(bodyAlias),
+					},
 					JoinOperator: pgsql.JoinOperator{
 						JoinType:   pgsql.JoinTypeInner,
 						Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
@@ -182,10 +235,13 @@ func boundedTraversalStateProbe(
 // gates for independent bounded probes. Empty input admits the candidate and
 // suppresses fallback; every ordinary orientation supplies at least one gate.
 type boundedProbeLimit struct {
+	// source retains the source while boundedProbeLimit is assembled or evaluated.
 	source pgsql.Identifier
-	limit  int64
+	// limit retains the limit while boundedProbeLimit is assembled or evaluated.
+	limit int64
 }
 
+// boundedAdmissionGates builds the SQL model fragment responsible for bounded admission gates.
 func boundedAdmissionGates(probes ...boundedProbeLimit) (candidate, fallback pgsql.Expression) {
 	for _, probe := range probes {
 		overflow := boundedProbeOverflow(probe.source, probe.limit)
@@ -205,6 +261,7 @@ func boundedAdmissionGates(probes ...boundedProbeLimit) (candidate, fallback pgs
 	return candidate, fallback
 }
 
+// orientationCount builds the SQL model fragment responsible for orientation count.
 func orientationCount(source pgsql.Identifier) pgsql.Subquery {
 	return pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
 		Projection: pgsql.Projection{pgsql.FunctionCall{
@@ -236,6 +293,7 @@ func buildExpansionOrientationRootProbe(rootFrame pgsql.Identifier, root *BoundI
 	}
 }
 
+// buildExpansionOrientationRootPresence builds expansion orientation root presence.
 func buildExpansionOrientationRootPresence(ids expansionOrientationIdentifiers) pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{Name: ids.rootPresence},
@@ -288,6 +346,7 @@ func buildExpansionOrientationDegreeProbe(
 	}
 }
 
+// buildExpansionOrientationMetrics builds expansion orientation metrics.
 func buildExpansionOrientationMetrics(ids expansionOrientationIdentifiers, caps optimize.ExpansionSearchProbeCaps) pgsql.CommonTableExpression {
 	complete := pgsql.OptionalAnd(
 		pgd.Not(boundedProbeOverflow(ids.rootProbe, caps.RootRowLimit)),
@@ -300,12 +359,30 @@ func buildExpansionOrientationMetrics(ids expansionOrientationIdentifiers, caps 
 		Alias:        pgsql.TableAlias{Name: ids.metrics},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
-			&pgsql.AliasedExpression{Expression: orientationCount(ids.rootProbe), Alias: models.OptionalValue(orientationRootRows)},
-			&pgsql.AliasedExpression{Expression: orientationCount(ids.suffixProbe), Alias: models.OptionalValue(orientationSuffixRows)},
-			&pgsql.AliasedExpression{Expression: orientationCount(ids.boundaries), Alias: models.OptionalValue(orientationBoundaryRows)},
-			&pgsql.AliasedExpression{Expression: orientationCount(ids.forwardDegreeProbe), Alias: models.OptionalValue(orientationForwardDegreeRows)},
-			&pgsql.AliasedExpression{Expression: orientationCount(ids.reverseDegreeProbe), Alias: models.OptionalValue(orientationReverseDegreeRows)},
-			&pgsql.AliasedExpression{Expression: complete, Alias: models.OptionalValue(orientationProbesComplete)},
+			&pgsql.AliasedExpression{
+				Expression: orientationCount(ids.rootProbe),
+				Alias:      models.OptionalValue(orientationRootRows),
+			},
+			&pgsql.AliasedExpression{
+				Expression: orientationCount(ids.suffixProbe),
+				Alias:      models.OptionalValue(orientationSuffixRows),
+			},
+			&pgsql.AliasedExpression{
+				Expression: orientationCount(ids.boundaries),
+				Alias:      models.OptionalValue(orientationBoundaryRows),
+			},
+			&pgsql.AliasedExpression{
+				Expression: orientationCount(ids.forwardDegreeProbe),
+				Alias:      models.OptionalValue(orientationForwardDegreeRows),
+			},
+			&pgsql.AliasedExpression{
+				Expression: orientationCount(ids.reverseDegreeProbe),
+				Alias:      models.OptionalValue(orientationReverseDegreeRows),
+			},
+			&pgsql.AliasedExpression{
+				Expression: complete,
+				Alias:      models.OptionalValue(orientationProbesComplete),
+			},
 		}}},
 	}
 }
@@ -361,11 +438,26 @@ func buildExpansionOrientationDecision(ids expansionOrientationIdentifiers, poli
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{Body: pgsql.Select{
 			Projection: pgsql.Projection{
-				&pgsql.AliasedExpression{Expression: forwardScore, Alias: models.OptionalValue(orientationForwardScore)},
-				&pgsql.AliasedExpression{Expression: reverseScore, Alias: models.OptionalValue(orientationReverseScore)},
-				&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.metrics, orientationProbesComplete}, Alias: models.OptionalValue(orientationProbesComplete)},
-				&pgsql.AliasedExpression{Expression: useReverse, Alias: models.OptionalValue(orientationUseReverse)},
-				&pgsql.AliasedExpression{Expression: useReverse, Alias: models.OptionalValue(orientationWouldSelectReverse)},
+				&pgsql.AliasedExpression{
+					Expression: forwardScore,
+					Alias:      models.OptionalValue(orientationForwardScore),
+				},
+				&pgsql.AliasedExpression{
+					Expression: reverseScore,
+					Alias:      models.OptionalValue(orientationReverseScore),
+				},
+				&pgsql.AliasedExpression{
+					Expression: pgsql.CompoundIdentifier{ids.metrics, orientationProbesComplete},
+					Alias:      models.OptionalValue(orientationProbesComplete),
+				},
+				&pgsql.AliasedExpression{
+					Expression: useReverse,
+					Alias:      models.OptionalValue(orientationUseReverse),
+				},
+				&pgsql.AliasedExpression{
+					Expression: useReverse,
+					Alias:      models.OptionalValue(orientationWouldSelectReverse),
+				},
 			},
 			From: []pgsql.FromClause{tableFrom(ids.metrics)},
 		}},
@@ -457,9 +549,18 @@ func buildExpansionOrientationAdmission(ids expansionOrientationIdentifiers, sta
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{Body: pgsql.Select{
 			Projection: pgsql.Projection{
-				&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.decision, orientationUseReverse}, Alias: models.OptionalValue(orientationUseReverse)},
-				&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{ids.decision, orientationProbesComplete}, Alias: models.OptionalValue(orientationProbesComplete)},
-				&pgsql.AliasedExpression{Expression: boundedProbeOverflow(ids.states, stateLimit), Alias: models.OptionalValue[pgsql.Identifier]("state_overflow")},
+				&pgsql.AliasedExpression{
+					Expression: pgsql.CompoundIdentifier{ids.decision, orientationUseReverse},
+					Alias:      models.OptionalValue(orientationUseReverse),
+				},
+				&pgsql.AliasedExpression{
+					Expression: pgsql.CompoundIdentifier{ids.decision, orientationProbesComplete},
+					Alias:      models.OptionalValue(orientationProbesComplete),
+				},
+				&pgsql.AliasedExpression{
+					Expression: boundedProbeOverflow(ids.states, stateLimit),
+					Alias:      models.OptionalValue[pgsql.Identifier]("state_overflow"),
+				},
 			},
 			From: []pgsql.FromClause{tableFrom(ids.decision)},
 		}},
@@ -616,6 +717,7 @@ func gateQueryBehindMarker(
 	}, nil
 }
 
+// expansionOrientationStateProbe builds the SQL model fragment responsible for expansion orientation state probe.
 func expansionOrientationStateProbe(decision optimize.ExpansionSearchStrategyDecision, ids expansionOrientationIdentifiers) pgsql.CommonTableExpression {
 	return boundedTraversalStateProbe(ids.states, ids.reverse, []pgsql.Identifier{
 		fixedSuffixBoundaryID,

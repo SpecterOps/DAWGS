@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestTraversalExecutionTelemetrySummaryValidation verifies traversal execution telemetry summary validation behavior.
 func TestTraversalExecutionTelemetrySummaryValidation(t *testing.T) {
 	telemetry := validTraversalTelemetry()
 
@@ -38,6 +39,7 @@ func TestTraversalExecutionTelemetrySummaryValidation(t *testing.T) {
 	require.ErrorContains(t, err, "summary.runtime_identity provenance is missing")
 }
 
+// TestTraversalExecutionTelemetrySummaryRejectsContradictoryIdentityChain verifies traversal execution telemetry summary rejects contradictory identity chain behavior.
 func TestTraversalExecutionTelemetrySummaryRejectsContradictoryIdentityChain(t *testing.T) {
 	telemetry := validTraversalTelemetry()
 	telemetry.Summary.RuntimeIdentity = "unplanned-v1"
@@ -52,6 +54,7 @@ func TestTraversalExecutionTelemetrySummaryRejectsContradictoryIdentityChain(t *
 	require.ErrorContains(t, telemetry.Validate(), "summary.applied_identity must equal fallback_identity")
 }
 
+// TestTraversalExecutionTelemetryDiagnosticRequiresPointerCountersAndProvenance verifies traversal execution telemetry diagnostic requires pointer counters and provenance behavior.
 func TestTraversalExecutionTelemetryDiagnosticRequiresPointerCountersAndProvenance(t *testing.T) {
 	telemetry := validTraversalTelemetry()
 	telemetry.Level = TraversalTelemetryLevelDiagnostic
@@ -69,6 +72,7 @@ func TestTraversalExecutionTelemetryDiagnosticRequiresPointerCountersAndProvenan
 	require.ErrorContains(t, err, "diagnostic.counters.ordinary.recursive_rows provenance is missing")
 }
 
+// TestTraversalExecutionTelemetryDiagnosticCannotBeTimed verifies traversal execution telemetry diagnostic cannot be timed behavior.
 func TestTraversalExecutionTelemetryDiagnosticCannotBeTimed(t *testing.T) {
 	telemetry := validTraversalTelemetry()
 	telemetry.Level = TraversalTelemetryLevelDiagnostic
@@ -78,10 +82,13 @@ func TestTraversalExecutionTelemetryDiagnosticCannotBeTimed(t *testing.T) {
 	require.ErrorContains(t, telemetry.Validate(), "diagnostic.timed_sample must be false")
 }
 
+// TestTraversalExecutionTelemetryAttachmentsSerializeVersionedSchema verifies traversal execution telemetry attachments serialize versioned schema behavior.
 func TestTraversalExecutionTelemetryAttachmentsSerializeVersionedSchema(t *testing.T) {
 	telemetry := validTraversalTelemetry()
 	encoded, err := json.Marshal(struct {
-		Case      CaseResult              `json:"case"`
+		// Case supplies the case input to the anonymous record contract.
+		Case CaseResult `json:"case"`
+		// Reference supplies the reference input to the anonymous record contract.
 		Reference PostgresReferenceResult `json:"reference"`
 	}{
 		Case:      CaseResult{TraversalTelemetry: &telemetry},
@@ -92,6 +99,7 @@ func TestTraversalExecutionTelemetryAttachmentsSerializeVersionedSchema(t *testi
 	require.Contains(t, string(encoded), `"traversal_execution_telemetry":{"schema_version":2`)
 }
 
+// validTraversalTelemetry returns a self-consistent telemetry fixture for the requested architecture.
 func validTraversalTelemetry() TraversalExecutionTelemetry {
 	return TraversalExecutionTelemetry{
 		SchemaVersion: TraversalExecutionTelemetrySchemaVersion,
@@ -125,6 +133,7 @@ func validTraversalTelemetry() TraversalExecutionTelemetry {
 	}
 }
 
+// ordinaryDiagnostic prepares or inspects test evidence for ordinary diagnostic.
 func ordinaryDiagnostic() *TraversalExecutionDiagnostic {
 	provenance := map[string]string{}
 	for _, name := range []string{
@@ -156,10 +165,12 @@ func ordinaryDiagnostic() *TraversalExecutionDiagnostic {
 	}
 }
 
+// telemetryInt64 prepares or inspects test evidence for telemetry int64.
 func telemetryInt64(value int64) *int64 {
 	return &value
 }
 
+// telemetryBool prepares or inspects test evidence for telemetry bool.
 func telemetryBool(value bool) *bool {
 	return &value
 }

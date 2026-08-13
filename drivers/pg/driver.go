@@ -26,15 +26,22 @@ var (
 	}
 )
 
+// Config groups state that must remain consistent while processing config.
 type Config struct {
-	Options            pgx.TxOptions
-	QueryExecMode      pgx.QueryExecMode
+	// Options supplies the options input to the Config contract.
+	Options pgx.TxOptions
+	// QueryExecMode identifies the query exec mode.
+	QueryExecMode pgx.QueryExecMode
+	// QueryResultFormats supplies the query result formats input to the Config contract.
 	QueryResultFormats pgx.QueryResultFormats
-	BatchWriteSize     int
+	// BatchWriteSize supplies the batch write size input to the Config contract.
+	BatchWriteSize int
 
+	// initializeTraversalRuntimeAttestation indicates whether initialize traversal runtime attestation applies.
 	initializeTraversalRuntimeAttestation bool
 }
 
+// OptionSetQueryExecMode classifies option set query exec mode for downstream policy decisions.
 func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOption {
 	return func(config *graph.TransactionConfig) {
 		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
@@ -74,11 +81,15 @@ func OptionInitializeTraversalRuntimeAttestation() graph.TransactionOption {
 	}
 }
 
+// Driver groups state that must remain consistent while processing driver.
 type Driver struct {
+	// pool retains the pool while Driver is assembled or evaluated.
 	pool *pgxpool.Pool
+	// SchemaManager supplies the schema manager input to the Driver contract.
 	*SchemaManager
 }
 
+// NewDriver coordinates PostgreSQL driver behavior for new driver.
 func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
 	return &Driver{
 		pool:          pool,
@@ -86,22 +97,27 @@ func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
 	}
 }
 
+// SetDefaultGraph coordinates PostgreSQL driver behavior for set default graph.
 func (s *Driver) SetDefaultGraph(ctx context.Context, graphSchema graph.Graph) error {
 	return s.SchemaManager.SetDefaultGraph(ctx, graphSchema)
 }
 
+// KindMapper coordinates PostgreSQL driver behavior for kind mapper.
 func (s *Driver) KindMapper() KindMapper {
 	return s.SchemaManager
 }
 
+// SetBatchWriteSize coordinates PostgreSQL driver behavior for set batch write size.
 func (s *Driver) SetBatchWriteSize(size int) {
 	batchWriteSize = size
 }
 
+// SetWriteFlushSize coordinates PostgreSQL driver behavior for set write flush size.
 func (s *Driver) SetWriteFlushSize(size int) {
 	// THis is a no-op function since PostgreSQL does not require transaction rotation like Neo4j does
 }
 
+// BatchOperation coordinates PostgreSQL driver behavior for batch operation.
 func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
 	batchConfig := &graph.BatchConfig{
 		BatchSize: batchWriteSize,
@@ -186,6 +202,7 @@ func renderConfig(batchWriteSize int, pgxOptions pgx.TxOptions, userOptions []gr
 	return nil, fmt.Errorf("driver config is nil")
 }
 
+// FetchSchema coordinates PostgreSQL driver behavior for fetch schema.
 func (s *Driver) FetchSchema(ctx context.Context) (graph.Schema, error) {
 	// TODO: This is not required for existing functionality as the SchemaManager type handles most of this negotiation
 	//		 however, in the future this function would make it easier to make schema management generic and should be
@@ -193,6 +210,7 @@ func (s *Driver) FetchSchema(ctx context.Context) (graph.Schema, error) {
 	return graph.Schema{}, fmt.Errorf("not implemented")
 }
 
+// AssertSchema coordinates PostgreSQL driver behavior for assert schema.
 func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 	// Resetting the pool must be done on every schema assertion as composite types may have changed OIDs
 	defer s.pool.Reset()
@@ -212,6 +230,7 @@ func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 	return nil
 }
 
+// Run coordinates PostgreSQL driver behavior for run.
 func (s *Driver) Run(ctx context.Context, query string, parameters map[string]any) error {
 	return s.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Raw(query, parameters)
@@ -221,6 +240,7 @@ func (s *Driver) Run(ctx context.Context, query string, parameters map[string]an
 	})
 }
 
+// FetchKinds coordinates PostgreSQL driver behavior for fetch kinds.
 func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 	var kinds graph.Kinds
 	for _, kind := range s.SchemaManager.GetKindIDsByKind() {
@@ -230,6 +250,7 @@ func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 	return kinds, nil
 }
 
+// RefreshKinds coordinates PostgreSQL driver behavior for refresh kinds.
 func (s *Driver) RefreshKinds(ctx context.Context) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -239,6 +260,7 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	return s.SchemaManager.Fetch(ctx)
 }
 
+// OptimizeStorage coordinates PostgreSQL driver behavior for optimize storage.
 func (s *Driver) OptimizeStorage(ctx context.Context) error {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {

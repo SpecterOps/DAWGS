@@ -10,15 +10,23 @@ import (
 // directionlessSingleBoundPlan is a "generic" plan to hold the details necessary for constructing
 // a single-bound traversal step
 type directionlessSingleBoundPlan struct {
-	boundNodeConstraints   pgsql.Expression
+	// boundNodeConstraints retains the bound node constraints while directionlessSingleBoundPlan is assembled or evaluated.
+	boundNodeConstraints pgsql.Expression
+	// boundNodeJoinCondition retains the bound node join condition while directionlessSingleBoundPlan is assembled or evaluated.
 	boundNodeJoinCondition pgsql.Expression
-	nodeJoinBinding        pgsql.Identifier
-	nodeJoinConstraint     pgsql.Expression
-	whereConstraint        pgsql.Expression
-	boundNode              *BoundIdentifier
-	unboundNodeIdentifier  pgsql.Identifier
+	// nodeJoinBinding retains the node join binding while directionlessSingleBoundPlan is assembled or evaluated.
+	nodeJoinBinding pgsql.Identifier
+	// nodeJoinConstraint retains the node join constraint while directionlessSingleBoundPlan is assembled or evaluated.
+	nodeJoinConstraint pgsql.Expression
+	// whereConstraint retains the where constraint while directionlessSingleBoundPlan is assembled or evaluated.
+	whereConstraint pgsql.Expression
+	// boundNode retains the bound node while directionlessSingleBoundPlan is assembled or evaluated.
+	boundNode *BoundIdentifier
+	// unboundNodeIdentifier retains the unbound node identifier while directionlessSingleBoundPlan is assembled or evaluated.
+	unboundNodeIdentifier pgsql.Identifier
 }
 
+// buildDirectionlessSingleBoundPlan builds directionless single bound plan.
 func buildDirectionlessSingleBoundPlan(traversalStep *TraversalStep) directionlessSingleBoundPlan {
 	// Partition node constraints
 	rightJoinLocal, rightJoinExternal := partitionConstraintByLocality(
@@ -78,6 +86,7 @@ func (s *Translator) buildDirectionlessTraversalPatternRoot(traversalStep *Trave
 	return s.buildUnboundDirectionlessTraversalPatternRoot(traversalStep)
 }
 
+// buildDirectionlessPairwiseEdgeConstraintForRefs builds directionless pairwise edge constraint for refs.
 func buildDirectionlessPairwiseEdgeConstraintForRefs(left pgsql.Expression, right pgsql.Expression, edge pgsql.Identifier) pgsql.Expression {
 	// ((left).id = (eN).start_id AND (right).id = (eN).end_id)
 	leftToRight := pgsql.NewParenthetical(
@@ -321,6 +330,7 @@ func (s *Translator) buildSingleBoundDirectionlessTraversalRoot(traversalStep *T
 	}, nil
 }
 
+// buildSelfReferentialDirectionlessTraversalRoot builds self referential directionless traversal root.
 func (s *Translator) buildSelfReferentialDirectionlessTraversalRoot(traversalStep *TraversalStep) (pgsql.Query, error) {
 	var (
 		// Partition node constraints
@@ -376,6 +386,7 @@ func (s *Translator) buildSelfReferentialDirectionlessTraversalRoot(traversalSte
 // UNDIRECTED TRAVERSALS **WITH** OUTER CORRELATION
 //
 
+// buildDirectionlessTraversalPatternRootWithOuterCorrelation builds directionless traversal pattern root with outer correlation.
 func (s *Translator) buildDirectionlessTraversalPatternRootWithOuterCorrelation(traversalStep *TraversalStep) (pgsql.Query, error) {
 	if traversalStep.UseExpandInto {
 		return s.buildBoundEndpointTraversalPattern(traversalStep.Frame, traversalStep)
@@ -394,6 +405,7 @@ func (s *Translator) buildDirectionlessTraversalPatternRootWithOuterCorrelation(
 	return s.buildUnboundDirectionlessTraversalPatternRoot(traversalStep)
 }
 
+// buildSingleBoundDirectionlessTraversalRootWithOuterCorrelation builds single bound directionless traversal root with outer correlation.
 func (s *Translator) buildSingleBoundDirectionlessTraversalRootWithOuterCorrelation(traversalStep *TraversalStep) (pgsql.Query, error) {
 	previousFrame, hasPreviousFrame := s.previousValidFrame(traversalStep.Frame)
 

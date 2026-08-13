@@ -2737,7 +2737,10 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 		})
 		projection.Where = pgsql.OptionalAnd(projection.Where, pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{hydrated, hydratedCount}, pgsql.OperatorEquals,
-			pgsql.FunctionCall{Function: pgsql.FunctionCardinality, Parameters: []pgsql.Expression{pathIDs}},
+			pgsql.FunctionCall{
+				Function:   pgsql.FunctionCardinality,
+				Parameters: []pgsql.Expression{pathIDs},
+			},
 		))
 	}
 

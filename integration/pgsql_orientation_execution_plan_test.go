@@ -20,6 +20,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// orientationExecutionPlanCypher reserves the stable protocol value used to recognize orientation execution plan cypher across artifacts and executions.
 const orientationExecutionPlanCypher = `
 	MATCH (root:ExpansionRoot)
 	WHERE root.root_key = $root_key
@@ -28,14 +29,31 @@ const orientationExecutionPlanCypher = `
 `
 
 var (
-	orientationRootKind        = graph.StringKind("ExpansionRoot")
-	orientationExpansionKind   = graph.StringKind("ExpansionNode")
-	orientationSuffixHeadKind  = graph.StringKind("SuffixHead")
-	orientationSuffixMidKind   = graph.StringKind("SuffixMiddle")
-	orientationSuffixEndKind   = graph.StringKind("SuffixTerminal")
-	orientationExpandEdge      = graph.StringKind("Expand")
-	orientationSuffixEdgeOne   = graph.StringKind("EnterSuffix")
-	orientationSuffixEdgeTwo   = graph.StringKind("ContinueSuffix")
+	// orientationRootKind contains the frozen orientation root kind declaration consulted by package validation.
+	orientationRootKind = graph.StringKind("ExpansionRoot")
+
+	// orientationExpansionKind contains the frozen orientation expansion kind declaration consulted by package validation.
+	orientationExpansionKind = graph.StringKind("ExpansionNode")
+
+	// orientationSuffixHeadKind contains the frozen orientation suffix head kind declaration consulted by package validation.
+	orientationSuffixHeadKind = graph.StringKind("SuffixHead")
+
+	// orientationSuffixMidKind contains the frozen orientation suffix mid kind declaration consulted by package validation.
+	orientationSuffixMidKind = graph.StringKind("SuffixMiddle")
+
+	// orientationSuffixEndKind contains the frozen orientation suffix end kind declaration consulted by package validation.
+	orientationSuffixEndKind = graph.StringKind("SuffixTerminal")
+
+	// orientationExpandEdge contains the frozen orientation expand edge declaration consulted by package validation.
+	orientationExpandEdge = graph.StringKind("Expand")
+
+	// orientationSuffixEdgeOne contains the frozen orientation suffix edge one declaration consulted by package validation.
+	orientationSuffixEdgeOne = graph.StringKind("EnterSuffix")
+
+	// orientationSuffixEdgeTwo contains the frozen orientation suffix edge two declaration consulted by package validation.
+	orientationSuffixEdgeTwo = graph.StringKind("ContinueSuffix")
+
+	// orientationSuffixEdgeThree contains the frozen orientation suffix edge three declaration consulted by package validation.
 	orientationSuffixEdgeThree = graph.StringKind("CompleteSuffix")
 )
 
@@ -65,11 +83,17 @@ func TestPostgreSQLGuardedOrientationInactiveArmLoops(t *testing.T) {
 	})
 
 	for _, testCase := range []struct {
-		name                     string
-		reverseDominates         bool
-		expectedReverseLoops     int64
-		expectedIncumbentLoops   int64
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// reverseDominates indicates whether reverse dominates applies.
+		reverseDominates bool
+		// expectedReverseLoops retains the expected reverse loops while anonymous record is assembled or evaluated.
+		expectedReverseLoops int64
+		// expectedIncumbentLoops retains the expected incumbent loops while anonymous record is assembled or evaluated.
+		expectedIncumbentLoops int64
+		// expectedCandidateMarkers retains the expected candidate markers while anonymous record is assembled or evaluated.
 		expectedCandidateMarkers int64
+		// expectedIncumbentMarkers retains the expected incumbent markers while anonymous record is assembled or evaluated.
 		expectedIncumbentMarkers int64
 	}{
 		{
@@ -128,12 +152,21 @@ func TestPostgreSQLOrientationProbeV2ChangesOnlyItsVersionedDecision(t *testing.
 
 	loadOrientationV2CrossoverFixture(t, session)
 	for _, testCase := range []struct {
-		policy                   optimize.ExpansionSearchPolicy
+		// policy retains the policy while anonymous record is assembled or evaluated.
+		policy optimize.ExpansionSearchPolicy
+		// expectedCandidateMarkers retains the expected candidate markers while anonymous record is assembled or evaluated.
 		expectedCandidateMarkers int64
+		// expectedIncumbentMarkers retains the expected incumbent markers while anonymous record is assembled or evaluated.
 		expectedIncumbentMarkers int64
 	}{
-		{policy: optimize.ExpansionSearchPolicyOrientationProbeV1, expectedIncumbentMarkers: 1},
-		{policy: optimize.ExpansionSearchPolicyOrientationProbeV2, expectedCandidateMarkers: 1},
+		{
+			policy:                   optimize.ExpansionSearchPolicyOrientationProbeV1,
+			expectedIncumbentMarkers: 1,
+		},
+		{
+			policy:                   optimize.ExpansionSearchPolicyOrientationProbeV2,
+			expectedCandidateMarkers: 1,
+		},
 	} {
 		t.Run(string(testCase.policy), func(t *testing.T) {
 			plan := explainGuardedOrientationPolicy(t, session, testCase.policy)
@@ -279,9 +312,13 @@ func TestPostgreSQLGuardedOrientationFallbackReceipts(t *testing.T) {
 	})
 
 	for _, testCase := range []struct {
-		name         string
-		rootKey      string
-		load         func(*testing.T, *Session)
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// rootKey retains the root key while anonymous record is assembled or evaluated.
+		rootKey string
+		// load retains the load while anonymous record is assembled or evaluated.
+		load func(*testing.T, *Session)
+		// expectedRows records the number of expected rows.
 		expectedRows int
 	}{
 		{
@@ -313,6 +350,7 @@ func TestPostgreSQLGuardedOrientationFallbackReceipts(t *testing.T) {
 	}
 }
 
+// executeGuardedOrientationWithReceipt prepares or inspects test evidence for execute guarded orientation with receipt.
 func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKey string) (int, string) {
 	t.Helper()
 
@@ -394,6 +432,7 @@ func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKe
 	return rowCount, receipt
 }
 
+// loadOrientationProbeOverflowFixture loads orientation probe overflow fixture.
 func loadOrientationProbeOverflowFixture(t *testing.T, session *Session) {
 	t.Helper()
 
@@ -412,6 +451,7 @@ func loadOrientationProbeOverflowFixture(t *testing.T, session *Session) {
 	}
 }
 
+// loadOrientationStateOverflowFixture loads orientation state overflow fixture.
 func loadOrientationStateOverflowFixture(t *testing.T, session *Session) {
 	t.Helper()
 
@@ -458,6 +498,7 @@ func loadOrientationStateOverflowFixture(t *testing.T, session *Session) {
 	}
 }
 
+// createOrientationSuffix creates orientation suffix.
 func createOrientationSuffix(tx graph.Transaction) (*graph.Node, error) {
 	boundary, err := tx.CreateNode(graph.NewProperties(), orientationExpansionKind)
 	if err != nil {
@@ -476,12 +517,30 @@ func createOrientationSuffix(tx graph.Transaction) (*graph.Node, error) {
 		return nil, err
 	}
 	for _, edge := range []struct {
-		start, end graph.ID
-		kind       graph.Kind
+		// start identifies the relationship's source node.
+		start graph.ID
+
+		// end identifies the relationship's target node.
+		end graph.ID
+
+		// kind identifies the relationship kind used by the suffix query.
+		kind graph.Kind
 	}{
-		{boundary.ID, head.ID, orientationSuffixEdgeOne},
-		{head.ID, middle.ID, orientationSuffixEdgeTwo},
-		{middle.ID, terminal.ID, orientationSuffixEdgeThree},
+		{
+			start: boundary.ID,
+			end:   head.ID,
+			kind:  orientationSuffixEdgeOne,
+		},
+		{
+			start: head.ID,
+			end:   middle.ID,
+			kind:  orientationSuffixEdgeTwo,
+		},
+		{
+			start: middle.ID,
+			end:   terminal.ID,
+			kind:  orientationSuffixEdgeThree,
+		},
 	} {
 		if _, err := tx.CreateRelationshipByIDs(edge.start, edge.end, edge.kind, graph.NewProperties()); err != nil {
 			return nil, err
@@ -490,6 +549,7 @@ func createOrientationSuffix(tx graph.Transaction) (*graph.Node, error) {
 	return boundary, nil
 }
 
+// createOrientationNodes creates orientation nodes.
 func createOrientationNodes(tx graph.Transaction, count int) ([]*graph.Node, error) {
 	nodes := make([]*graph.Node, 0, count)
 	for index := 0; index < count; index++ {
@@ -502,6 +562,7 @@ func createOrientationNodes(tx graph.Transaction, count int) ([]*graph.Node, err
 	return nodes, nil
 }
 
+// connectOrientationLayers prepares or inspects test evidence for connect orientation layers.
 func connectOrientationLayers(tx graph.Transaction, left, right []*graph.Node) error {
 	for _, start := range left {
 		for _, end := range right {
@@ -513,6 +574,7 @@ func connectOrientationLayers(tx graph.Transaction, left, right []*graph.Node) e
 	return nil
 }
 
+// loadOrientationExecutionFixture loads orientation execution fixture.
 func loadOrientationExecutionFixture(t *testing.T, session *Session, reverseDominates bool) {
 	t.Helper()
 
@@ -545,12 +607,30 @@ func loadOrientationExecutionFixture(t *testing.T, session *Session, reverseDomi
 				}
 			}
 			for _, edge := range []struct {
-				start, end graph.ID
-				kind       graph.Kind
+				// start identifies the relationship's source node.
+				start graph.ID
+
+				// end identifies the relationship's target node.
+				end graph.ID
+
+				// kind identifies the relationship kind used by the suffix query.
+				kind graph.Kind
 			}{
-				{boundary.ID, head.ID, orientationSuffixEdgeOne},
-				{head.ID, middle.ID, orientationSuffixEdgeTwo},
-				{middle.ID, terminal.ID, orientationSuffixEdgeThree},
+				{
+					start: boundary.ID,
+					end:   head.ID,
+					kind:  orientationSuffixEdgeOne,
+				},
+				{
+					start: head.ID,
+					end:   middle.ID,
+					kind:  orientationSuffixEdgeTwo,
+				},
+				{
+					start: middle.ID,
+					end:   terminal.ID,
+					kind:  orientationSuffixEdgeThree,
+				},
 			} {
 				if _, err := tx.CreateRelationshipByIDs(edge.start, edge.end, edge.kind, graph.NewProperties()); err != nil {
 					return err
@@ -589,6 +669,7 @@ func loadOrientationExecutionFixture(t *testing.T, session *Session, reverseDomi
 	}
 }
 
+// loadOrientationV2CrossoverFixture loads orientation v2 crossover fixture.
 func loadOrientationV2CrossoverFixture(t *testing.T, session *Session) {
 	t.Helper()
 
@@ -612,10 +693,12 @@ func loadOrientationV2CrossoverFixture(t *testing.T, session *Session) {
 	}
 }
 
+// explainGuardedOrientation prepares or inspects test evidence for explain guarded orientation.
 func explainGuardedOrientation(t *testing.T, session *Session) any {
 	return explainGuardedOrientationPolicy(t, session, optimize.ExpansionSearchPolicyOrientationProbeV1)
 }
 
+// explainGuardedOrientationPolicy prepares or inspects test evidence for explain guarded orientation policy.
 func explainGuardedOrientationPolicy(t *testing.T, session *Session, policy optimize.ExpansionSearchPolicy) any {
 	t.Helper()
 
@@ -676,6 +759,7 @@ func explainGuardedOrientationPolicy(t *testing.T, session *Session, policy opti
 	return plan
 }
 
+// requireOrientationSubplanMetric prepares or inspects test evidence for require orientation subplan metric.
 func requireOrientationSubplanMetric(t *testing.T, plan any, suffix, metric string, expected int64) {
 	t.Helper()
 
@@ -692,6 +776,7 @@ func requireOrientationSubplanMetric(t *testing.T, plan any, suffix, metric stri
 	}
 }
 
+// findOrientationSubplan prepares or inspects test evidence for find orientation subplan.
 func findOrientationSubplan(value any, suffix string) (map[string]any, bool) {
 	switch typed := value.(type) {
 	case []any:
@@ -713,6 +798,7 @@ func findOrientationSubplan(value any, suffix string) (map[string]any, bool) {
 	return nil, false
 }
 
+// postgresPlanInt64 prepares or inspects test evidence for postgres plan int64.
 func postgresPlanInt64(value any) (int64, bool) {
 	switch typed := value.(type) {
 	case float64:

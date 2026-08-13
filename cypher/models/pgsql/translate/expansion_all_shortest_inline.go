@@ -11,45 +11,111 @@ import (
 )
 
 const (
-	aspI1Distance             pgsql.Identifier = "asp_i1_distance"
-	aspI1Direct               pgsql.Identifier = "asp_i1_direct"
-	aspI1Preflight            pgsql.Identifier = "asp_i1_preflight"
-	aspI1PreflightBounded     pgsql.Identifier = "asp_i1_preflight_bounded"
-	aspI1DistanceBounded      pgsql.Identifier = "asp_i1_distance_bounded"
-	aspI1Target               pgsql.Identifier = "asp_i1_target"
-	aspI1Predecessor          pgsql.Identifier = "asp_i1_predecessor"
-	aspI1PredecessorBounded   pgsql.Identifier = "asp_i1_predecessor_bounded"
-	aspI1Paths                pgsql.Identifier = "asp_i1_paths"
-	aspI1PathsBounded         pgsql.Identifier = "asp_i1_paths_bounded"
-	aspI1Shortest             pgsql.Identifier = "asp_i1_shortest"
-	aspI1Admission            pgsql.Identifier = "asp_i1_admission"
-	aspI1Decision             pgsql.Identifier = "asp_i1_decision"
-	aspI1CandidateMarker      pgsql.Identifier = "asp_i1_candidate_marker"
-	aspI1FallbackMarker       pgsql.Identifier = "asp_i1_fallback_marker"
-	aspI1CandidateBody        pgsql.Identifier = "asp_i1_candidate_body"
-	aspI1FallbackBody         pgsql.Identifier = "asp_i1_fallback_body"
-	aspI1CandidateRows        pgsql.Identifier = "asp_i1_candidate_rows"
-	aspI1FallbackRows         pgsql.Identifier = "asp_i1_fallback_rows"
-	aspI1NodeID               pgsql.Identifier = "node_id"
-	aspI1PredecessorID        pgsql.Identifier = "predecessor_id"
-	aspI1EdgeID               pgsql.Identifier = "edge_id"
-	aspI1UseCandidate         pgsql.Identifier = "use_candidate"
-	aspI1UseFallback          pgsql.Identifier = "use_fallback"
-	aspI1Overflow             pgsql.Identifier = "overflow"
-	aspI1NoPath               pgsql.Identifier = "no_path"
-	aspI1RuntimeReceipt       pgsql.Identifier = "runtime_receipt"
+	// aspI1Distance reserves the stable protocol value used to recognize asp i1 distance across artifacts and executions.
+	aspI1Distance pgsql.Identifier = "asp_i1_distance"
+
+	// aspI1Direct reserves the stable protocol value used to recognize asp i1 direct across artifacts and executions.
+	aspI1Direct pgsql.Identifier = "asp_i1_direct"
+
+	// aspI1Preflight reserves the stable protocol value used to recognize asp i1 preflight across artifacts and executions.
+	aspI1Preflight pgsql.Identifier = "asp_i1_preflight"
+
+	// aspI1PreflightBounded reserves the stable protocol value used to recognize asp i1 preflight bounded across artifacts and executions.
+	aspI1PreflightBounded pgsql.Identifier = "asp_i1_preflight_bounded"
+
+	// aspI1DistanceBounded reserves the stable protocol value used to recognize asp i1 distance bounded across artifacts and executions.
+	aspI1DistanceBounded pgsql.Identifier = "asp_i1_distance_bounded"
+
+	// aspI1Target reserves the stable protocol value used to recognize asp i1 target across artifacts and executions.
+	aspI1Target pgsql.Identifier = "asp_i1_target"
+
+	// aspI1Predecessor reserves the stable protocol value used to recognize asp i1 predecessor across artifacts and executions.
+	aspI1Predecessor pgsql.Identifier = "asp_i1_predecessor"
+
+	// aspI1PredecessorBounded reserves the stable protocol value used to recognize asp i1 predecessor bounded across artifacts and executions.
+	aspI1PredecessorBounded pgsql.Identifier = "asp_i1_predecessor_bounded"
+
+	// aspI1Paths reserves the stable protocol value used to recognize asp i1 paths across artifacts and executions.
+	aspI1Paths pgsql.Identifier = "asp_i1_paths"
+
+	// aspI1PathsBounded reserves the stable protocol value used to recognize asp i1 paths bounded across artifacts and executions.
+	aspI1PathsBounded pgsql.Identifier = "asp_i1_paths_bounded"
+
+	// aspI1Shortest reserves the stable protocol value used to recognize asp i1 shortest across artifacts and executions.
+	aspI1Shortest pgsql.Identifier = "asp_i1_shortest"
+
+	// aspI1Admission reserves the stable protocol value used to recognize asp i1 admission across artifacts and executions.
+	aspI1Admission pgsql.Identifier = "asp_i1_admission"
+
+	// aspI1Decision reserves the stable protocol value used to recognize asp i1 decision across artifacts and executions.
+	aspI1Decision pgsql.Identifier = "asp_i1_decision"
+
+	// aspI1CandidateMarker reserves the stable protocol value used to recognize asp i1 candidate marker across artifacts and executions.
+	aspI1CandidateMarker pgsql.Identifier = "asp_i1_candidate_marker"
+
+	// aspI1FallbackMarker reserves the stable protocol value used to recognize asp i1 fallback marker across artifacts and executions.
+	aspI1FallbackMarker pgsql.Identifier = "asp_i1_fallback_marker"
+
+	// aspI1CandidateBody reserves the stable protocol value used to recognize asp i1 candidate body across artifacts and executions.
+	aspI1CandidateBody pgsql.Identifier = "asp_i1_candidate_body"
+
+	// aspI1FallbackBody reserves the stable protocol value used to recognize asp i1 fallback body across artifacts and executions.
+	aspI1FallbackBody pgsql.Identifier = "asp_i1_fallback_body"
+
+	// aspI1CandidateRows reserves the stable protocol value used to recognize asp i1 candidate rows across artifacts and executions.
+	aspI1CandidateRows pgsql.Identifier = "asp_i1_candidate_rows"
+
+	// aspI1FallbackRows reserves the stable protocol value used to recognize asp i1 fallback rows across artifacts and executions.
+	aspI1FallbackRows pgsql.Identifier = "asp_i1_fallback_rows"
+
+	// aspI1NodeID reserves the stable protocol value used to recognize asp i1 node id across artifacts and executions.
+	aspI1NodeID pgsql.Identifier = "node_id"
+
+	// aspI1PredecessorID reserves the stable protocol value used to recognize asp i1 predecessor id across artifacts and executions.
+	aspI1PredecessorID pgsql.Identifier = "predecessor_id"
+
+	// aspI1EdgeID reserves the stable protocol value used to recognize asp i1 edge id across artifacts and executions.
+	aspI1EdgeID pgsql.Identifier = "edge_id"
+
+	// aspI1UseCandidate reserves the stable protocol value used to recognize asp i1 use candidate across artifacts and executions.
+	aspI1UseCandidate pgsql.Identifier = "use_candidate"
+
+	// aspI1UseFallback reserves the stable protocol value used to recognize asp i1 use fallback across artifacts and executions.
+	aspI1UseFallback pgsql.Identifier = "use_fallback"
+
+	// aspI1Overflow reserves the stable protocol value used to recognize asp i1 overflow across artifacts and executions.
+	aspI1Overflow pgsql.Identifier = "overflow"
+
+	// aspI1NoPath reserves the stable protocol value used to recognize asp i1 no path across artifacts and executions.
+	aspI1NoPath pgsql.Identifier = "no_path"
+
+	// aspI1RuntimeReceipt reserves the stable protocol value used to recognize asp i1 runtime receipt across artifacts and executions.
+	aspI1RuntimeReceipt pgsql.Identifier = "runtime_receipt"
+
+	// aspI1RuntimeAttestationFn reserves the stable protocol value used to recognize asp i1 runtime attestation fn across artifacts and executions.
 	aspI1RuntimeAttestationFn pgsql.Identifier = "record_requested_traversal_runtime_attestation_v1"
-	aspI1ColumnSizeFn         pgsql.Identifier = "pg_column_size"
+
+	// aspI1ColumnSizeFn reserves the stable protocol value used to recognize asp i1 column size fn across artifacts and executions.
+	aspI1ColumnSizeFn pgsql.Identifier = "pg_column_size"
 )
 
+// aspI1Aliased builds the SQL model fragment responsible for asp i1 aliased.
 func aspI1Aliased(expression pgsql.Expression, alias pgsql.Identifier) pgsql.SelectItem {
-	return &pgsql.AliasedExpression{Expression: expression, Alias: models.OptionalValue(alias)}
+	return &pgsql.AliasedExpression{
+		Expression: expression,
+		Alias:      models.OptionalValue(alias),
+	}
 }
 
+// aspI1Table builds the SQL model fragment responsible for asp i1 table.
 func aspI1Table(alias, binding pgsql.Identifier) pgsql.TableReference {
-	return pgsql.TableReference{Name: alias.AsCompoundIdentifier(), Binding: models.OptionalValue(binding)}
+	return pgsql.TableReference{
+		Name:    alias.AsCompoundIdentifier(),
+		Binding: models.OptionalValue(binding),
+	}
 }
 
+// aspI1CanonicalProjection constructs the SQL model used for asp i1 canonical projection.
 func aspI1CanonicalProjection(source pgsql.Identifier) pgsql.Projection {
 	return pgsql.Projection{
 		aspI1Aliased(pgsql.CompoundIdentifier{source, expansionRootID}, expansionRootID),
@@ -61,6 +127,7 @@ func aspI1CanonicalProjection(source pgsql.Identifier) pgsql.Projection {
 	}
 }
 
+// aspI1OverflowAny builds the SQL model fragment responsible for asp i1 overflow any.
 func aspI1OverflowAny(overflows ...pgsql.Expression) pgsql.Expression {
 	var result pgsql.Expression
 	for _, overflow := range overflows {
@@ -73,6 +140,7 @@ func aspI1OverflowAny(overflows ...pgsql.Expression) pgsql.Expression {
 	return result
 }
 
+// aspI1OutputBytes builds the SQL model fragment responsible for asp i1 output bytes.
 func aspI1OutputBytes(source pgsql.Identifier) pgsql.Subquery {
 	return pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
 		Projection: pgsql.Projection{pgsql.FunctionCall{
@@ -93,6 +161,7 @@ func aspI1OutputBytes(source pgsql.Identifier) pgsql.Subquery {
 	}}}
 }
 
+// aspI1Marker builds the SQL model fragment responsible for asp i1 marker.
 func aspI1Marker(alias pgsql.Identifier, selected pgsql.Identifier) pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: alias},
@@ -105,9 +174,13 @@ func aspI1Marker(alias pgsql.Identifier, selected pgsql.Identifier) pgsql.Common
 	}
 }
 
+// inlinePredecessorDAGMode selects the execution behavior used for inline predecessor dag.
 type inlinePredecessorDAGMode struct {
-	identity   optimize.ShortestPathExecutor
-	fallback   optimize.ShortestPathExecutor
+	// identity retains the identity while inlinePredecessorDAGMode is assembled or evaluated.
+	identity optimize.ShortestPathExecutor
+	// fallback retains the fallback while inlinePredecessorDAGMode is assembled or evaluated.
+	fallback optimize.ShortestPathExecutor
+	// oneWitness indicates whether one witness applies.
 	oneWitness bool
 }
 
@@ -194,19 +267,29 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	direct := pgsql.Select{
 		Projection: pgsql.Projection{
 			aspI1Aliased(pgsql.NewLiteral(int64(1), pgsql.Int8), expansionDepth),
-			aspI1Aliased(pgsql.ArrayLiteral{Values: []pgsql.Expression{pgsql.CompoundIdentifier{firstEdge, pgsql.ColumnID}}, CastType: pgsql.Int8Array}, expansionPath),
+			aspI1Aliased(pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{pgsql.CompoundIdentifier{firstEdge, pgsql.ColumnID}},
+				CastType: pgsql.Int8Array,
+			}, expansionPath),
 		},
 		From:  []pgsql.FromClause{tableFrom(validatedEndpoints), {Source: expansionEdgeTableReference(firstEdge)}},
 		Where: directWhere,
 	}
 	directCTE := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: aspI1Direct, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath})},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1Direct,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath}),
+		},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query:        pgsql.Query{Body: direct},
 	}
-	directExists := pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
-		Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: []pgsql.FromClause{tableFrom(aspI1Direct)},
-	}, Limit: pgsql.NewLiteral(int64(1), pgsql.Int8)}}}
+	directExists := pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
+			From:       []pgsql.FromClause{tableFrom(aspI1Direct)},
+		},
+		Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
+	}}}
 	secondJoin := pgsql.OptionalAnd(edgeScope(secondEdge), pgsql.OptionalAnd(
 		pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{secondEdge, startColumn}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{firstEdge, endColumn}),
 		pgsql.NewLiteral(true, pgsql.Boolean),
@@ -214,13 +297,23 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	twoHop := pgsql.Select{
 		Projection: pgsql.Projection{
 			aspI1Aliased(pgsql.NewLiteral(int64(2), pgsql.Int8), expansionDepth),
-			aspI1Aliased(pgsql.ArrayLiteral{Values: []pgsql.Expression{
-				pgsql.CompoundIdentifier{firstEdge, pgsql.ColumnID}, pgsql.CompoundIdentifier{secondEdge, pgsql.ColumnID},
-			}, CastType: pgsql.Int8Array}, expansionPath),
+			aspI1Aliased(pgsql.ArrayLiteral{
+				Values: []pgsql.Expression{
+					pgsql.CompoundIdentifier{firstEdge, pgsql.ColumnID}, pgsql.CompoundIdentifier{secondEdge, pgsql.ColumnID},
+				},
+				CastType: pgsql.Int8Array,
+			}, expansionPath),
 		},
-		From: []pgsql.FromClause{tableFrom(validatedEndpoints), {Source: expansionEdgeTableReference(firstEdge), Joins: []pgsql.Join{{
-			Table: expansionEdgeTableReference(secondEdge), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: secondJoin},
-		}}}},
+		From: []pgsql.FromClause{tableFrom(validatedEndpoints), {
+			Source: expansionEdgeTableReference(firstEdge),
+			Joins: []pgsql.Join{{
+				Table: expansionEdgeTableReference(secondEdge),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType:   pgsql.JoinTypeInner,
+					Constraint: secondJoin,
+				},
+			}},
+		}},
 		Where: pgsql.OptionalAnd(
 			pgd.Not(directExists),
 			pgsql.OptionalAnd(edgeScope(firstEdge), pgsql.OptionalAnd(
@@ -233,7 +326,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		),
 	}
 	preflight := pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: aspI1Preflight, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath})},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1Preflight,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath}),
+		},
 		Query: pgsql.Query{Body: pgsql.SetOperation{
 			LOperand: pgsql.Select{
 				Projection: pgsql.Projection{
@@ -242,16 +338,22 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 				},
 				From: []pgsql.FromClause{tableFrom(aspI1Direct)},
 			},
-			ROperand: twoHop, Operator: pgsql.OperatorUnion, All: true,
+			ROperand: twoHop,
+			Operator: pgsql.OperatorUnion,
+			All:      true,
 		}},
 	}
 	preflightBounded := boundedTraversalStateProbe(
 		aspI1PreflightBounded, aspI1Preflight, []pgsql.Identifier{expansionDepth, expansionPath}, expansionModel.ShortestPathEnumerationLimit,
 	)
 	preflightOverflow := boundedProbeOverflow(aspI1PreflightBounded, expansionModel.ShortestPathEnumerationLimit)
-	preflightExists := pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
-		Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: []pgsql.FromClause{tableFrom(aspI1PreflightBounded)},
-	}, Limit: pgsql.NewLiteral(int64(1), pgsql.Int8)}}}
+	preflightExists := pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
+			From:       []pgsql.FromClause{tableFrom(aspI1PreflightBounded)},
+		},
+		Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
+	}}}
 
 	anchor := pgsql.Select{
 		Projection: pgsql.Projection{
@@ -295,7 +397,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	}
 
 	distance := pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: aspI1Distance, Shape: pgsql.NewRecordShape([]pgsql.Identifier{aspI1NodeID, expansionDepth})},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1Distance,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{aspI1NodeID, expansionDepth}),
+		},
 		Query: pgsql.Query{Body: pgsql.SetOperation{
 			LOperand: anchor,
 			ROperand: recursive,
@@ -311,7 +416,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	stateOverflow := boundedProbeOverflow(aspI1DistanceBounded, expansionModel.ShortestPathStateLimit)
 
 	target := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: aspI1Target, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth})},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1Target,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth}),
+		},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{
 			Body: pgsql.Select{
@@ -326,8 +434,11 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 					pgd.Not(stateOverflow),
 				),
 			},
-			OrderBy: []*pgsql.OrderBy{{Expression: pgsql.CompoundIdentifier{aspI1DistanceBounded, expansionDepth}, Ascending: true}},
-			Limit:   pgsql.NewLiteral(int64(1), pgsql.Int8),
+			OrderBy: []*pgsql.OrderBy{{
+				Expression: pgsql.CompoundIdentifier{aspI1DistanceBounded, expansionDepth},
+				Ascending:  true,
+			}},
+			Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
 		},
 	}
 	// The endpoint relation is correlated through a scalar subquery so target
@@ -373,9 +484,12 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	}
 
 	predecessor := pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: aspI1Predecessor, Shape: pgsql.NewRecordShape([]pgsql.Identifier{
-			aspI1NodeID, expansionDepth, aspI1PredecessorID, aspI1EdgeID,
-		})},
+		Alias: pgsql.TableAlias{
+			Name: aspI1Predecessor,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{
+				aspI1NodeID, expansionDepth, aspI1PredecessorID, aspI1EdgeID,
+			}),
+		},
 		Query: pgsql.Query{Body: pgsql.Select{
 			Projection: pgsql.Projection{
 				pgsql.CompoundIdentifier{child, aspI1NodeID},
@@ -386,12 +500,30 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{Name: aspI1Target.AsCompoundIdentifier()},
 				Joins: []pgsql.Join{
-					{Table: aspI1Table(aspI1DistanceBounded, child), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.OptionalAnd(
-						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{child, expansionDepth}, pgsql.OperatorGreaterThan, pgsql.NewLiteral(int64(0), pgsql.Int8)),
-						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{child, expansionDepth}, pgsql.OperatorLessThanOrEqualTo, pgsql.CompoundIdentifier{aspI1Target, expansionDepth}),
-					)}},
-					{Table: aspI1Table(aspI1DistanceBounded, prior), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewLiteral(true, pgsql.Boolean)}},
-					{Table: expansionEdgeTableReference(s.traversalStep.Edge.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: predecessorEdgeConstraint}},
+					{
+						Table: aspI1Table(aspI1DistanceBounded, child),
+						JoinOperator: pgsql.JoinOperator{
+							JoinType: pgsql.JoinTypeInner,
+							Constraint: pgsql.OptionalAnd(
+								pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{child, expansionDepth}, pgsql.OperatorGreaterThan, pgsql.NewLiteral(int64(0), pgsql.Int8)),
+								pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{child, expansionDepth}, pgsql.OperatorLessThanOrEqualTo, pgsql.CompoundIdentifier{aspI1Target, expansionDepth}),
+							),
+						},
+					},
+					{
+						Table: aspI1Table(aspI1DistanceBounded, prior),
+						JoinOperator: pgsql.JoinOperator{
+							JoinType:   pgsql.JoinTypeInner,
+							Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
+						},
+					},
+					{
+						Table: expansionEdgeTableReference(s.traversalStep.Edge.Identifier),
+						JoinOperator: pgsql.JoinOperator{
+							JoinType:   pgsql.JoinTypeInner,
+							Constraint: predecessorEdgeConstraint,
+						},
+					},
 				},
 			}},
 		}},
@@ -421,7 +553,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 			pgsql.CompoundIdentifier{aspI1PredecessorBounded, aspI1PredecessorID},
 			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{aspI1Paths, expansionDepth}, pgsql.OperatorSubtract, pgsql.NewLiteral(int64(1), pgsql.Int8)),
 			pgsql.NewBinaryExpression(
-				pgsql.ArrayLiteral{Values: []pgsql.Expression{pgsql.CompoundIdentifier{aspI1PredecessorBounded, aspI1EdgeID}}, CastType: pgsql.Int8Array},
+				pgsql.ArrayLiteral{
+					Values:   []pgsql.Expression{pgsql.CompoundIdentifier{aspI1PredecessorBounded, aspI1EdgeID}},
+					CastType: pgsql.Int8Array,
+				},
 				pgsql.OperatorConcatenate,
 				pgsql.CompoundIdentifier{aspI1Paths, expansionPath},
 			),
@@ -430,15 +565,21 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 			Source: pgsql.TableReference{Name: aspI1Paths.AsCompoundIdentifier()},
 			Joins: []pgsql.Join{{
 				Table: pgsql.TableReference{Name: aspI1PredecessorBounded.AsCompoundIdentifier()},
-				JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.OptionalAnd(
-					pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{aspI1PredecessorBounded, aspI1NodeID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{aspI1Paths, aspI1NodeID}),
-					pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{aspI1PredecessorBounded, expansionDepth}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{aspI1Paths, expansionDepth}),
-				)},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(
+						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{aspI1PredecessorBounded, aspI1NodeID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{aspI1Paths, aspI1NodeID}),
+						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{aspI1PredecessorBounded, expansionDepth}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{aspI1Paths, expansionDepth}),
+					),
+				},
 			}},
 		}},
 	}
 	paths := pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: aspI1Paths, Shape: pgsql.NewRecordShape([]pgsql.Identifier{aspI1NodeID, expansionDepth, expansionPath})},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1Paths,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{aspI1NodeID, expansionDepth, expansionPath}),
+		},
 		Query: pgsql.Query{Body: pgsql.SetOperation{
 			LOperand: pathAnchor,
 			ROperand: pathRecursive,
@@ -455,7 +596,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	enumerationOverflow := boundedProbeOverflow(aspI1PathsBounded, expansionModel.ShortestPathEnumerationLimit)
 
 	shortest := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: aspI1Shortest, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath})},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1Shortest,
+			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth, expansionPath}),
+		},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{Body: pgsql.Select{
 			Projection: pgsql.Projection{
@@ -464,7 +608,13 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 			},
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{Name: aspI1PathsBounded.AsCompoundIdentifier()},
-				Joins:  []pgsql.Join{{Table: pgsql.TableReference{Name: aspI1Target.AsCompoundIdentifier()}, JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewLiteral(true, pgsql.Boolean)}}},
+				Joins: []pgsql.Join{{
+					Table: pgsql.TableReference{Name: aspI1Target.AsCompoundIdentifier()},
+					JoinOperator: pgsql.JoinOperator{
+						JoinType:   pgsql.JoinTypeInner,
+						Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
+					},
+				}},
 			}},
 			Where: pgsql.OptionalAnd(
 				pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{aspI1PathsBounded, aspI1NodeID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID}),
@@ -476,7 +626,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		shortestSelect := shortest.Query.Body.(pgsql.Select)
 		// ORDER BY at a UNION boundary may reference only the set output name,
 		// not a source relation that belongs to one operand.
-		shortest.Query.OrderBy = []*pgsql.OrderBy{{Expression: pgsql.CompoundIdentifier{expansionPath}, Ascending: true}}
+		shortest.Query.OrderBy = []*pgsql.OrderBy{{
+			Expression: pgsql.CompoundIdentifier{expansionPath},
+			Ascending:  true,
+		}}
 		shortest.Query.Limit = pgsql.NewLiteral(int64(1), pgsql.Int8)
 		shortest.Query.Body = shortestSelect
 	}
@@ -491,7 +644,9 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 			},
 			From: []pgsql.FromClause{tableFrom(aspI1PreflightBounded)},
 		},
-		ROperand: shortest.Query.Body.(pgsql.Select), Operator: pgsql.OperatorUnion, All: true,
+		ROperand: shortest.Query.Body.(pgsql.Select),
+		Operator: pgsql.OperatorUnion,
+		All:      true,
 	}
 
 	bytesOverflow := pgsql.NewBinaryExpression(
@@ -543,18 +698,21 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 	decision := pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: aspI1Decision},
 		Materialized: &pgsql.Materialized{Materialized: true},
-		Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
-			aspI1Aliased(useCandidate, aspI1UseCandidate),
-			aspI1Aliased(admissionOverflow, aspI1UseFallback),
-			aspI1Aliased(pgsql.FunctionCall{
-				Function: aspI1RuntimeAttestationFn,
-				Parameters: []pgsql.Expression{
-					branch,
-					admissionOverflow,
-					runtimeExecutor,
-				},
-			}, aspI1RuntimeReceipt),
-		}, From: []pgsql.FromClause{tableFrom(aspI1Admission)}}},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{
+				aspI1Aliased(useCandidate, aspI1UseCandidate),
+				aspI1Aliased(admissionOverflow, aspI1UseFallback),
+				aspI1Aliased(pgsql.FunctionCall{
+					Function: aspI1RuntimeAttestationFn,
+					Parameters: []pgsql.Expression{
+						branch,
+						admissionOverflow,
+						runtimeExecutor,
+					},
+				}, aspI1RuntimeReceipt),
+			},
+			From: []pgsql.FromClause{tableFrom(aspI1Admission)},
+		}},
 	}
 
 	candidateProjection := pgsql.Projection{
@@ -577,7 +735,10 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		return pgsql.Query{}, err
 	}
 	candidateRows := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: aspI1CandidateRows, Shape: expansionColumns()},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1CandidateRows,
+			Shape: expansionColumns(),
+		},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query:        pgsql.Query{Body: candidateBody},
 	}
@@ -614,17 +775,29 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		return pgsql.Query{}, err
 	}
 	fallbackRows := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: aspI1FallbackRows, Shape: expansionColumns()},
+		Alias: pgsql.TableAlias{
+			Name:  aspI1FallbackRows,
+			Shape: expansionColumns(),
+		},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query:        pgsql.Query{Body: fallbackBody},
 	}
 
 	stateID := expansionModel.Frame.Binding.Identifier
 	search := pgsql.CommonTableExpression{
-		Alias: pgsql.TableAlias{Name: stateID, Shape: expansionColumns()},
+		Alias: pgsql.TableAlias{
+			Name:  stateID,
+			Shape: expansionColumns(),
+		},
 		Query: pgsql.Query{Body: pgsql.SetOperation{
-			LOperand: pgsql.Select{Projection: aspI1CanonicalProjection(aspI1CandidateRows), From: []pgsql.FromClause{tableFrom(aspI1CandidateRows)}},
-			ROperand: pgsql.Select{Projection: aspI1CanonicalProjection(aspI1FallbackRows), From: []pgsql.FromClause{tableFrom(aspI1FallbackRows)}},
+			LOperand: pgsql.Select{
+				Projection: aspI1CanonicalProjection(aspI1CandidateRows),
+				From:       []pgsql.FromClause{tableFrom(aspI1CandidateRows)},
+			},
+			ROperand: pgsql.Select{
+				Projection: aspI1CanonicalProjection(aspI1FallbackRows),
+				From:       []pgsql.FromClause{tableFrom(aspI1FallbackRows)},
+			},
 			Operator: pgsql.OperatorUnion,
 			All:      true,
 		}},
@@ -635,12 +808,24 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		From: []pgsql.FromClause{{
 			Source: pgsql.TableReference{Name: stateID.AsCompoundIdentifier()},
 			Joins: []pgsql.Join{
-				{Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionRootID},
-				)}},
-				{Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier), JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionNextID},
-				)}},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.LeftNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.LeftNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionRootID},
+						),
+					},
+				},
+				{
+					Table: expansionNodeTableReference(s.traversalStep.RightNode.Identifier),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{s.traversalStep.RightNode.Identifier, pgsql.ColumnID}, pgsql.OperatorEquals, pgsql.CompoundIdentifier{stateID, expansionNextID},
+						),
+					},
+				},
 			},
 		}},
 	}
@@ -653,25 +838,47 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 		)
 		pathIDs := pgsql.CompoundIdentifier{stateID, expansionPath}
 		hydration := shortestPathM0Hydration(stateID, s.traversalStep.Direction)
-		path := pgsql.CompositeValue{DataType: pgsql.PathComposite, Values: []pgsql.Expression{
-			pgsql.NewBinaryExpression(
-				pgsql.ArrayLiteral{Values: []pgsql.Expression{shortestPathNodeComposite(s.traversalStep.LeftNode.Identifier)}, CastType: pgsql.NodeCompositeArray},
-				pgsql.OperatorConcatenate,
-				pgsql.FunctionCall{Function: pgsql.FunctionCoalesce, Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{hydrated, hydratedNodes}, pgsql.ArrayLiteral{CastType: pgsql.NodeCompositeArray}}},
-			),
-			pgsql.FunctionCall{Function: pgsql.FunctionCoalesce, Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{hydrated, hydratedEdges}, pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}}},
-		}}
+		path := pgsql.CompositeValue{
+			DataType: pgsql.PathComposite,
+			Values: []pgsql.Expression{
+				pgsql.NewBinaryExpression(
+					pgsql.ArrayLiteral{
+						Values:   []pgsql.Expression{shortestPathNodeComposite(s.traversalStep.LeftNode.Identifier)},
+						CastType: pgsql.NodeCompositeArray,
+					},
+					pgsql.OperatorConcatenate,
+					pgsql.FunctionCall{
+						Function:   pgsql.FunctionCoalesce,
+						Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{hydrated, hydratedNodes}, pgsql.ArrayLiteral{CastType: pgsql.NodeCompositeArray}},
+					},
+				),
+				pgsql.FunctionCall{
+					Function:   pgsql.FunctionCoalesce,
+					Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{hydrated, hydratedEdges}, pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}},
+				},
+			},
+		}
 		projection.Projection = shortestPathM0Projection(projection.Projection, stateID, path)
-		projection.From[0].Joins = append(projection.From[0].Joins, pgsql.Join{Table: hydration, JoinOperator: pgsql.JoinOperator{
-			JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
-		}})
+		projection.From[0].Joins = append(projection.From[0].Joins, pgsql.Join{
+			Table: hydration,
+			JoinOperator: pgsql.JoinOperator{
+				JoinType:   pgsql.JoinTypeInner,
+				Constraint: pgsql.NewLiteral(true, pgsql.Boolean),
+			},
+		})
 		projection.Where = pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{hydrated, hydratedCount}, pgsql.OperatorEquals,
-			pgsql.FunctionCall{Function: pgsql.FunctionCardinality, Parameters: []pgsql.Expression{pathIDs}},
+			pgsql.FunctionCall{
+				Function:   pgsql.FunctionCardinality,
+				Parameters: []pgsql.Expression{pathIDs},
+			},
 		)
 	}
 
-	query := pgsql.Query{CommonTableExpressions: &pgsql.With{Recursive: true}, Body: projection}
+	query := pgsql.Query{
+		CommonTableExpressions: &pgsql.With{Recursive: true},
+		Body:                   projection,
+	}
 	for _, cte := range []pgsql.CommonTableExpression{
 		endpointCTE,
 		directCTE,

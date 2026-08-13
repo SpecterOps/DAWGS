@@ -45,8 +45,11 @@ func TestSupplementalPostgresReadHelpersPropagateTransactionOptions(t *testing.T
 // referenceTransactionOptionTestDatabase records transaction configuration and
 // supplies the narrow raw-query surface used by supplemental reference helpers.
 type referenceTransactionOptionTestDatabase struct {
+	// Database supplies the database input to the referenceTransactionOptionTestDatabase contract.
 	graph.Database
-	expectedDriverConfig      any
+	// expectedDriverConfig retains the expected driver config while referenceTransactionOptionTestDatabase is assembled or evaluated.
+	expectedDriverConfig any
+	// transactionOptionsApplied retains the transaction options applied while referenceTransactionOptionTestDatabase is assembled or evaluated.
 	transactionOptionsApplied []bool
 }
 
@@ -62,6 +65,7 @@ func (s *referenceTransactionOptionTestDatabase) ReadTransaction(_ context.Conte
 
 // referenceTransactionOptionTestTransaction returns one scalar row or one valid plan document.
 type referenceTransactionOptionTestTransaction struct {
+	// Transaction supplies the transaction input to the referenceTransactionOptionTestTransaction contract.
 	graph.Transaction
 }
 
@@ -78,8 +82,11 @@ func (s *referenceTransactionOptionTestTransaction) Raw(statement string, _ map[
 
 // referenceTransactionOptionTestResult iterates a fixed set of raw rows.
 type referenceTransactionOptionTestResult struct {
+	// Result supplies the result input to the referenceTransactionOptionTestResult contract.
 	graph.Result
-	rows  [][]any
+	// rows retains the rows while referenceTransactionOptionTestResult is assembled or evaluated.
+	rows [][]any
+	// index retains the index while referenceTransactionOptionTestResult is assembled or evaluated.
 	index int
 }
 
@@ -667,13 +674,31 @@ func TestAllShortestBidirectionalReferencesStayInsideNarrowEnvelope(t *testing.T
 	runner := &postgresSQLRunner{}
 	minimumZero, maximumFour, maximumSixtyFive := 0, 4, 65
 	for _, test := range []struct {
-		name   string
-		shape  WorkloadShape
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// shape retains the shape while anonymous record is assembled or evaluated.
+		shape WorkloadShape
+		// params retains the params while anonymous record is assembled or evaluated.
 		params map[string]any
 	}{
-		{name: "zero minimum", shape: WorkloadShape{MinDepth: &minimumZero, MaxDepth: &maximumFour}, params: map[string]any{"start_id": int64(1), "end_id": int64(2)}},
-		{name: "maximum sixty five", shape: WorkloadShape{MaxDepth: &maximumSixtyFive}, params: map[string]any{"start_id": int64(1), "end_id": int64(2)}},
-		{name: "equal endpoints", shape: WorkloadShape{MaxDepth: &maximumFour}, params: map[string]any{"start_id": int64(1), "end_id": int64(1)}},
+		{
+			name: "zero minimum",
+			shape: WorkloadShape{
+				MinDepth: &minimumZero,
+				MaxDepth: &maximumFour,
+			},
+			params: map[string]any{"start_id": int64(1), "end_id": int64(2)},
+		},
+		{
+			name:   "maximum sixty five",
+			shape:  WorkloadShape{MaxDepth: &maximumSixtyFive},
+			params: map[string]any{"start_id": int64(1), "end_id": int64(2)},
+		},
+		{
+			name:   "equal endpoints",
+			shape:  WorkloadShape{MaxDepth: &maximumFour},
+			params: map[string]any{"start_id": int64(1), "end_id": int64(1)},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			specs, err := runner.referenceSpecs(context.Background(), ScaleCase{

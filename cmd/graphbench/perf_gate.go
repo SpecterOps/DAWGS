@@ -75,21 +75,21 @@ type PerfGateOptions struct {
 
 // RatioInterval describes a point estimate and confidence bounds for a latency ratio.
 type RatioInterval struct {
-	// Estimate records the point estimate enclosed by the confidence bounds.
+	// Estimate supplies the estimate input to the RatioInterval contract.
 	Estimate float64 `json:"estimate"`
-	// Lower records the lower confidence bound.
+	// Lower supplies the lower input to the RatioInterval contract.
 	Lower float64 `json:"lower"`
-	// Upper records the upper confidence bound.
+	// Upper supplies the upper input to the RatioInterval contract.
 	Upper float64 `json:"upper"`
 }
 
 // DurationInterval describes a duration estimate and its confidence bounds.
 type DurationInterval struct {
-	// Estimate records the point estimate enclosed by the confidence bounds.
+	// Estimate supplies the estimate input to the DurationInterval contract.
 	Estimate time.Duration `json:"estimate"`
-	// Lower records the lower confidence bound.
+	// Lower supplies the lower input to the DurationInterval contract.
 	Lower time.Duration `json:"lower"`
-	// Upper records the upper confidence bound.
+	// Upper supplies the upper input to the DurationInterval contract.
 	Upper time.Duration `json:"upper"`
 }
 
@@ -107,15 +107,15 @@ type PerfGateCase struct {
 	QualificationSplit string `json:"qualification_split"`
 	// TimingGated reports whether latency evidence contributes to promotion.
 	TimingGated bool `json:"timing_gated"`
-	// Rounds records the number of independent measurement rounds.
+	// Rounds records the number of rounds.
 	Rounds int `json:"rounds"`
 	// BaselineSamples records warm timing samples available from the baseline arm.
 	BaselineSamples int `json:"baseline_samples"`
 	// CandidateSamples records warm timing samples available from the candidate arm.
 	CandidateSamples int `json:"candidate_samples"`
-	// BaselineStatus records the first non-OK baseline status for the workload.
+	// BaselineStatus supplies the baseline status input to the PerfGateCase contract.
 	BaselineStatus string `json:"baseline_status,omitempty"`
-	// CandidateStatus records the first non-OK candidate status for the workload.
+	// CandidateStatus supplies the candidate status input to the PerfGateCase contract.
 	CandidateStatus string `json:"candidate_status,omitempty"`
 	// OracleOnly marks a backend as a correctness oracle excluded from latency regression decisions.
 	OracleOnly bool `json:"oracle_only,omitempty"`
@@ -129,13 +129,13 @@ type PerfGateCase struct {
 	MedianChange *DurationInterval `json:"median_change,omitempty"`
 	// P95Change reports candidate-minus-baseline P95 latency.
 	P95Change *DurationInterval `json:"p95_change,omitempty"`
-	// P50NoiseRatio records the host A/A-derived relative median floor.
+	// P50NoiseRatio supplies the p50 noise ratio input to the PerfGateCase contract.
 	P50NoiseRatio float64 `json:"p50_noise_ratio,omitempty"`
-	// P50NoiseAbsolute records the host A/A-derived absolute median floor.
+	// P50NoiseAbsolute supplies the p50 noise absolute input to the PerfGateCase contract.
 	P50NoiseAbsolute time.Duration `json:"p50_noise_absolute,omitempty"`
-	// P95NoiseRatio records the host A/A-derived relative P95 floor.
+	// P95NoiseRatio supplies the p95 noise ratio input to the PerfGateCase contract.
 	P95NoiseRatio float64 `json:"p95_noise_ratio,omitempty"`
-	// P95NoiseAbsolute records the host A/A-derived absolute P95 floor.
+	// P95NoiseAbsolute supplies the p95 noise absolute input to the PerfGateCase contract.
 	P95NoiseAbsolute time.Duration `json:"p95_noise_absolute,omitempty"`
 	// MaterialityRatio sets the relative change required before a difference is material.
 	MaterialityRatio *float64 `json:"materiality_ratio_upper_limit,omitempty"`
@@ -174,7 +174,7 @@ type PerfGateReport struct {
 	PromotionEligible bool `json:"promotion_eligible"`
 	// MaterialityRequired reports that promotion requires at least one explicitly named improvement target.
 	MaterialityRequired bool `json:"materiality_required"`
-	// MaterialityTargets records the number of declared timing targets resolved by the artifact.
+	// MaterialityTargets supplies the materiality targets input to the PerfGateReport contract.
 	MaterialityTargets int `json:"materiality_targets"`
 	// MaterialityPassed reports whether every resolved target cleared the configured A/A-aware improvement floor.
 	MaterialityPassed bool `json:"materiality_passed"`
@@ -537,7 +537,11 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 			family := traversalQualificationFamily(key, baseline, candidate)
 			status := qualification[family]
 			if status == nil {
-				status = &TraversalQualificationStatus{Family: family, TrainingPassed: true, HoldoutPassed: true}
+				status = &TraversalQualificationStatus{
+					Family:         family,
+					TrainingPassed: true,
+					HoldoutPassed:  true,
+				}
 				qualification[family] = status
 			}
 			switch gateCase.QualificationSplit {
@@ -601,7 +605,11 @@ func validatePerformanceWorkloadIdentity(baseline, candidate []CaseResult) error
 			if record.ExecutionMode != ModePostgresSQL && record.ExecutionMode != ModeNeo4j {
 				continue
 			}
-			key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+			key := performanceKey{
+				dataset: record.Dataset,
+				name:    record.Name,
+				backend: record.ExecutionMode,
+			}
 			if record.WorkloadSHA256 == "" {
 				return nil, fmt.Errorf("%s artifact case %s/%s/%s has no workload identity", label, key.dataset, key.name, key.backend)
 			}

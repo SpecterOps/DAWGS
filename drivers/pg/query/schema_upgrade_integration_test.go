@@ -123,7 +123,10 @@ func TestBidirectionalAllShortestPathCapBoundaries(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -147,23 +150,40 @@ func TestBidirectionalAllShortestPathCapBoundaries(t *testing.T) {
 		order by path`)
 	require.Len(t, exact, 6)
 
+	// limits configures each guarded resource dimension exercised by the helper.
 	type limits struct {
-		state       int64
-		frontier    int64
+		// state retains the state while limits is assembled or evaluated.
+		state int64
+		// frontier retains the frontier while limits is assembled or evaluated.
+		frontier int64
+		// predecessor retains the predecessor while limits is assembled or evaluated.
 		predecessor int64
+		// enumeration retains the enumeration while limits is assembled or evaluated.
 		enumeration int64
+		// outputBytes retains the output bytes while limits is assembled or evaluated.
 		outputBytes int64
 	}
+
+	// diagnostic decodes the runtime receipt returned by the guarded helper.
 	type diagnostic struct {
-		RuntimeBranch    string `json:"runtime_branch"`
-		Overflowed       bool   `json:"overflowed"`
-		FallbackExecuted bool   `json:"fallback_executed"`
-		Counters         struct {
-			SeenPeak        int64 `json:"seen_peak"`
-			FrontierPeak    int64 `json:"frontier_peak"`
+		// RuntimeBranch supplies the runtime branch input to the diagnostic contract.
+		RuntimeBranch string `json:"runtime_branch"`
+		// Overflowed indicates whether overflowed applies.
+		Overflowed bool `json:"overflowed"`
+		// FallbackExecuted indicates whether fallback executed applies.
+		FallbackExecuted bool `json:"fallback_executed"`
+		// Counters supplies the counters input to the diagnostic contract.
+		Counters struct {
+			// SeenPeak supplies the seen peak input to the Counters contract.
+			SeenPeak int64 `json:"seen_peak"`
+			// FrontierPeak supplies the frontier peak input to the Counters contract.
+			FrontierPeak int64 `json:"frontier_peak"`
+			// PredecessorPeak supplies the predecessor peak input to the Counters contract.
 			PredecessorPeak int64 `json:"predecessor_peak"`
-			OutputPaths     int64 `json:"output_paths"`
-			OutputBytes     int64 `json:"output_bytes"`
+			// OutputPaths identifies the filesystem output paths.
+			OutputPaths int64 `json:"output_paths"`
+			// OutputBytes supplies the output bytes input to the Counters contract.
+			OutputBytes int64 `json:"output_bytes"`
 		} `json:"counters"`
 	}
 	const candidateQuery = `
@@ -185,17 +205,31 @@ func TestBidirectionalAllShortestPathCapBoundaries(t *testing.T) {
 		return paths, report
 	}
 
-	large := limits{state: 1_000_000, frontier: 1_000_000, predecessor: 1_000_000, enumeration: 1_000_000, outputBytes: 1 << 30}
+	large := limits{
+		state:       1_000_000,
+		frontier:    1_000_000,
+		predecessor: 1_000_000,
+		enumeration: 1_000_000,
+		outputBytes: 1 << 30,
+	}
 	for _, scheduler := range []struct {
-		name  string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// query retains the query while anonymous record is assembled or evaluated.
 		query string
 	}{
-		{name: "B1 strict alternating", query: candidateQuery},
-		{name: "B2 smaller level", query: `
+		{
+			name:  "B1 strict alternating",
+			query: candidateQuery,
+		},
+		{
+			name: "B2 smaller level",
+			query: `
 			select path::text
 			from public.all_shortest_paths_b2_smaller_current_level(
 				1, 1, 9, 1, 8, array[]::int2[], false, $1, $2, $3, $4, $5)
-			order by path`},
+			order by path`,
+		},
 	} {
 		t.Run(scheduler.name+" retains the exact multiset", func(t *testing.T) {
 			paths := readPaths(scheduler.query, large.state, large.frontier, large.predecessor, large.enumeration, large.outputBytes)
@@ -215,15 +249,38 @@ func TestBidirectionalAllShortestPathCapBoundaries(t *testing.T) {
 	require.Positive(t, baseline.Counters.OutputBytes)
 
 	boundaries := []struct {
+		// name retains the name while anonymous record is assembled or evaluated.
 		name string
-		get  func(limits) int64
-		set  func(*limits, int64)
+		// get retains the get while anonymous record is assembled or evaluated.
+		get func(limits) int64
+		// set retains the set while anonymous record is assembled or evaluated.
+		set func(*limits, int64)
 	}{
-		{name: "state", get: func(_ limits) int64 { return baseline.Counters.SeenPeak }, set: func(value *limits, limit int64) { value.state = limit }},
-		{name: "frontier", get: func(_ limits) int64 { return baseline.Counters.FrontierPeak }, set: func(value *limits, limit int64) { value.frontier = limit }},
-		{name: "predecessor", get: func(_ limits) int64 { return baseline.Counters.PredecessorPeak }, set: func(value *limits, limit int64) { value.predecessor = limit }},
-		{name: "enumeration", get: func(_ limits) int64 { return baseline.Counters.OutputPaths }, set: func(value *limits, limit int64) { value.enumeration = limit }},
-		{name: "output bytes", get: func(_ limits) int64 { return baseline.Counters.OutputBytes }, set: func(value *limits, limit int64) { value.outputBytes = limit }},
+		{
+			name: "state",
+			get:  func(_ limits) int64 { return baseline.Counters.SeenPeak },
+			set:  func(value *limits, limit int64) { value.state = limit },
+		},
+		{
+			name: "frontier",
+			get:  func(_ limits) int64 { return baseline.Counters.FrontierPeak },
+			set:  func(value *limits, limit int64) { value.frontier = limit },
+		},
+		{
+			name: "predecessor",
+			get:  func(_ limits) int64 { return baseline.Counters.PredecessorPeak },
+			set:  func(value *limits, limit int64) { value.predecessor = limit },
+		},
+		{
+			name: "enumeration",
+			get:  func(_ limits) int64 { return baseline.Counters.OutputPaths },
+			set:  func(value *limits, limit int64) { value.enumeration = limit },
+		},
+		{
+			name: "output bytes",
+			get:  func(_ limits) int64 { return baseline.Counters.OutputBytes },
+			set:  func(value *limits, limit int64) { value.outputBytes = limit },
+		},
 	}
 	for _, boundary := range boundaries {
 		boundary := boundary
@@ -306,13 +363,19 @@ func TestBidirectionalShortestPathLowerBoundAndWitnesses(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// result captures the depth and path returned by one helper invocation.
 	type result struct {
+		// depth retains the depth while result is assembled or evaluated.
 		depth int32
-		path  []int64
+		// path retains the path while result is assembled or evaluated.
+		path []int64
 	}
 	run := func(function string, graphID, sourceID, targetID int64, inbound bool) result {
 		query := `select depth, path from public.` + function + `(
@@ -331,11 +394,16 @@ func TestBidirectionalShortestPathLowerBoundAndWitnesses(t *testing.T) {
 	require.NoError(t, tx.QueryRow(ctx,
 		"select public.read_bidirectional_shortest_path_diagnostic_v1('sp-adversarial-b1')::text").Scan(&raw))
 	var report struct {
+		// RuntimeBranch supplies the runtime branch input to the anonymous record contract.
 		RuntimeBranch string `json:"runtime_branch"`
-		Counters      struct {
+		// Counters supplies the counters input to the anonymous record contract.
+		Counters struct {
+			// MeetingCandidates supplies the meeting candidates input to the Counters contract.
 			MeetingCandidates int64 `json:"meeting_candidates"`
-			FrozenDistance    int32 `json:"frozen_distance"`
-			WitnessRows       int64 `json:"witness_rows"`
+			// FrozenDistance supplies the frozen distance input to the Counters contract.
+			FrozenDistance int32 `json:"frozen_distance"`
+			// WitnessRows records the number of witness rows.
+			WitnessRows int64 `json:"witness_rows"`
 		} `json:"counters"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(raw), &report))

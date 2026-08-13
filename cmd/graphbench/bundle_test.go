@@ -104,7 +104,13 @@ func TestVerifyCaptureBundleFailsClosedOnTamperingDirtySourceAndUnlistedFiles(t 
 	require.NoError(t, err)
 	environment.BinarySHA256 = binarySHA
 	recordEnvironment := environment
-	record := CaseResult{Environment: &recordEnvironment, Dataset: "fixture", Name: "case", ExecutionMode: ModePostgresSQL, Status: StatusOK}
+	record := CaseResult{
+		Environment:   &recordEnvironment,
+		Dataset:       "fixture",
+		Name:          "case",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(root, "source.patch"), []byte("diff"), 0o644))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "untracked.json"), []UntrackedSource{}))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "corpus.json"), CaptureCorpusDeclaration{Version: 2}))
@@ -155,7 +161,10 @@ func TestCopyCaptureBundleEvidenceUsesStableNamesAndDigests(t *testing.T) {
 	input := filepath.Join(t.TempDir(), "aa-report.json")
 	require.NoError(t, os.WriteFile(input, []byte(`{"version":1}`), 0o644))
 
-	evidence, err := copyCaptureBundleEvidence(root, []CaptureBundleEvidenceInput{{Name: "host-aa", Path: input}})
+	evidence, err := copyCaptureBundleEvidence(root, []CaptureBundleEvidenceInput{{
+		Name: "host-aa",
+		Path: input,
+	}})
 	require.NoError(t, err)
 	require.Len(t, evidence, 1)
 	require.Equal(t, "host-aa", evidence[0].Name)
@@ -163,12 +172,18 @@ func TestCopyCaptureBundleEvidenceUsesStableNamesAndDigests(t *testing.T) {
 	require.FileExists(t, filepath.Join(root, "artifacts", "host-aa.json"))
 	require.NotContains(t, evidence[0].Copy, filepath.Dir(input))
 
-	_, err = copyCaptureBundleEvidence(root, []CaptureBundleEvidenceInput{{Name: "../escape", Path: input}})
+	_, err = copyCaptureBundleEvidence(root, []CaptureBundleEvidenceInput{{
+		Name: "../escape",
+		Path: input,
+	}})
 	require.ErrorContains(t, err, "invalid capture bundle evidence name")
 
 	symlink := filepath.Join(t.TempDir(), "outside.json")
 	require.NoError(t, os.Symlink(input, symlink))
-	_, err = copyCaptureBundleEvidence(root, []CaptureBundleEvidenceInput{{Name: "symlink", Path: symlink}})
+	_, err = copyCaptureBundleEvidence(root, []CaptureBundleEvidenceInput{{
+		Name: "symlink",
+		Path: symlink,
+	}})
 	require.ErrorContains(t, err, "is not a regular file")
 }
 
@@ -182,6 +197,7 @@ func TestWriteCaptureBundleRejectsNonemptyDestination(t *testing.T) {
 	require.FileExists(t, filepath.Join(root, "stale.json"))
 }
 
+// TestWriteCaptureBundleRejectsStaleRunEnvironmentFingerprint verifies write capture bundle rejects stale run environment fingerprint behavior.
 func TestWriteCaptureBundleRejectsStaleRunEnvironmentFingerprint(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bundle")
 	err := writeCaptureBundleWithEvidence(root, ScaleCorpus{}, nil, RunEnvironment{
@@ -191,6 +207,7 @@ func TestWriteCaptureBundleRejectsStaleRunEnvironmentFingerprint(t *testing.T) {
 	require.NoDirExists(t, root)
 }
 
+// TestParseNULTerminatedPathsPreservesWhitespace verifies parse nul terminated paths preserves whitespace behavior.
 func TestParseNULTerminatedPathsPreservesWhitespace(t *testing.T) {
 	require.Equal(t, []string{"dir/name with spaces.go", "line\nbreak.go"}, parseNULTerminatedPaths([]byte("dir/name with spaces.go\x00line\nbreak.go\x00")))
 }
@@ -206,6 +223,7 @@ func TestCopyRegularFileRejectsSymlink(t *testing.T) {
 	require.ErrorContains(t, err, "source is not a regular file")
 }
 
+// TestVerifyCaptureBundleBindsDirtyFingerprintToPatchAndUntrackedCopies verifies verify capture bundle binds dirty fingerprint to patch and untracked copies behavior.
 func TestVerifyCaptureBundleBindsDirtyFingerprintToPatchAndUntrackedCopies(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "source-untracked", "pkg"), 0o755))
@@ -214,7 +232,11 @@ func TestVerifyCaptureBundleBindsDirtyFingerprintToPatchAndUntrackedCopies(t *te
 	require.NoError(t, os.WriteFile(filepath.Join(root, "source.patch"), patch, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "source-untracked", "pkg", "new.go"), content, 0o644))
 	contentSHA := fmt.Sprintf("%x", sha256.Sum256(content))
-	untracked := []UntrackedSource{{Path: "pkg/new.go", SHA256: contentSHA, Copy: "source-untracked/pkg/new.go"}}
+	untracked := []UntrackedSource{{
+		Path:   "pkg/new.go",
+		SHA256: contentSHA,
+		Copy:   "source-untracked/pkg/new.go",
+	}}
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "untracked.json"), untracked))
 	fingerprint, err := capturedWorkingTreeSHA256(patch, untracked, root)
 	require.NoError(t, err)
@@ -222,14 +244,25 @@ func TestVerifyCaptureBundleBindsDirtyFingerprintToPatchAndUntrackedCopies(t *te
 	require.NoError(t, os.WriteFile(filepath.Join(root, "binary"), []byte("binary"), 0o755))
 	binarySHA, err := fileSHA256(filepath.Join(root, "binary"))
 	require.NoError(t, err)
-	environment := RunEnvironment{SourceCommit: "commit", DirtyDiffSHA256: fingerprint, BinarySHA256: binarySHA, CorpusSHA256: corpusIdentity(ScaleCorpus{})}
+	environment := RunEnvironment{
+		SourceCommit:    "commit",
+		DirtyDiffSHA256: fingerprint,
+		BinarySHA256:    binarySHA,
+		CorpusSHA256:    corpusIdentity(ScaleCorpus{}),
+	}
 	recordEnvironment := environment
 	require.NoError(t, writeBundleJSONL(filepath.Join(root, "records.jsonl"), []CaseResult{{Environment: &recordEnvironment}}))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "corpus.json"), CaptureCorpusDeclaration{Version: 2}))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "manifest.json"), CaptureBundleManifest{
-		Version: captureBundleVersion, Environment: environment, RecordCount: 1,
-		CorpusDeclaration: "corpus.json", RawArtifact: "records.jsonl", Executable: "binary",
-		SourcePatch: "source.patch", UntrackedManifest: "untracked.json", SourceClean: false,
+		Version:           captureBundleVersion,
+		Environment:       environment,
+		RecordCount:       1,
+		CorpusDeclaration: "corpus.json",
+		RawArtifact:       "records.jsonl",
+		Executable:        "binary",
+		SourcePatch:       "source.patch",
+		UntrackedManifest: "untracked.json",
+		SourceClean:       false,
 	}))
 	require.NoError(t, writeBundleChecksums(root))
 
@@ -251,25 +284,39 @@ func TestVerifyCaptureBundleBindsDirtyFingerprintToPatchAndUntrackedCopies(t *te
 	require.Contains(t, report.Reasons, "manifest dirty source fingerprint does not match bundled patch and untracked sources")
 }
 
+// TestVerifyCaptureBundleRejectsMalformedOrUnchecksummedUntrackedEntries verifies verify capture bundle rejects malformed or unchecksummed untracked entries behavior.
 func TestVerifyCaptureBundleRejectsMalformedOrUnchecksummedUntrackedEntries(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "source-untracked"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "source.patch"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "source-untracked", "new.go"), []byte("package p\n"), 0o644))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "untracked.json"), []UntrackedSource{{
-		Path: "../escape.go", SHA256: "bad", Copy: "source-untracked/new.go",
+		Path:   "../escape.go",
+		SHA256: "bad",
+		Copy:   "source-untracked/new.go",
 	}}))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "binary"), []byte("binary"), 0o755))
 	binarySHA, err := fileSHA256(filepath.Join(root, "binary"))
 	require.NoError(t, err)
-	environment := RunEnvironment{SourceCommit: "commit", DirtyDiffSHA256: strings.Repeat("0", 64), BinarySHA256: binarySHA, CorpusSHA256: corpusIdentity(ScaleCorpus{})}
+	environment := RunEnvironment{
+		SourceCommit:    "commit",
+		DirtyDiffSHA256: strings.Repeat("0", 64),
+		BinarySHA256:    binarySHA,
+		CorpusSHA256:    corpusIdentity(ScaleCorpus{}),
+	}
 	recordEnvironment := environment
 	require.NoError(t, writeBundleJSONL(filepath.Join(root, "records.jsonl"), []CaseResult{{Environment: &recordEnvironment}}))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "corpus.json"), CaptureCorpusDeclaration{Version: 2}))
 	require.NoError(t, writeIndentedJSON(filepath.Join(root, "manifest.json"), CaptureBundleManifest{
-		Version: captureBundleVersion, Environment: environment, RecordCount: 1,
-		CorpusDeclaration: "corpus.json", RawArtifact: "records.jsonl", Executable: "binary",
-		SourcePatch: "source.patch", UntrackedManifest: "untracked.json", SourceClean: false,
+		Version:           captureBundleVersion,
+		Environment:       environment,
+		RecordCount:       1,
+		CorpusDeclaration: "corpus.json",
+		RawArtifact:       "records.jsonl",
+		Executable:        "binary",
+		SourcePatch:       "source.patch",
+		UntrackedManifest: "untracked.json",
+		SourceClean:       false,
 	}))
 	require.NoError(t, writeBundleChecksums(root))
 	checksums, _, err := readBundleChecksums(root)

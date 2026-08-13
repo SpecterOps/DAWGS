@@ -24,11 +24,17 @@ import (
 )
 
 var (
+	// inlineASPNodeKind contains the frozen inline asp node kind declaration consulted by package validation.
 	inlineASPNodeKind = graph.StringKind("InlineASPNode")
-	inlineASPEdgeOne  = graph.StringKind("InlineASPEdgeOne")
-	inlineASPEdgeTwo  = graph.StringKind("InlineASPEdgeTwo")
+
+	// inlineASPEdgeOne contains the frozen inline asp edge one declaration consulted by package validation.
+	inlineASPEdgeOne = graph.StringKind("InlineASPEdgeOne")
+
+	// inlineASPEdgeTwo contains the frozen inline asp edge two declaration consulted by package validation.
+	inlineASPEdgeTwo = graph.StringKind("InlineASPEdgeTwo")
 )
 
+// inlineASPCypher reserves the stable protocol value used to recognize inline asp cypher across artifacts and executions.
 const inlineASPCypher = `
 	MATCH p = allShortestPaths((s)-[:InlineASPEdgeOne|InlineASPEdgeTwo*1..4]->(e))
 	WHERE id(s) = $start_id AND id(e) = $end_id
@@ -90,9 +96,12 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		}
 		deepStartID, deepEndID = deepStart.ID, deepEnd.ID
 		for _, edge := range []struct {
+			// start retains the start while anonymous record is assembled or evaluated.
 			start graph.ID
-			end   graph.ID
-			kind  graph.Kind
+			// end retains the end while anonymous record is assembled or evaluated.
+			end graph.ID
+			// kind retains the kind while anonymous record is assembled or evaluated.
+			kind graph.Kind
 		}{
 			{start.ID, left.ID, inlineASPEdgeOne},
 			{left.ID, end.ID, inlineASPEdgeOne},
@@ -140,11 +149,18 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		translate.ProductionOptions{
 			ShortestPathExecutor: optimize.ShortestPathExecutorASPI1DAG,
 			ShortestPathCaps: &translate.ProductionShortestPathCaps{
-				StateLimit: 100, PredecessorLimit: 100, EnumerationLimit: 1, OutputBytesLimit: 1 << 20,
+				StateLimit:       100,
+				PredecessorLimit: 100,
+				EnumerationLimit: 1,
+				OutputBytesLimit: 1 << 20,
 			},
 			AuthorizedBucket: &translate.ProductionTraversalBucket{
-				Direction: "outbound", ObservationMode: "all_paths", MinimumDepth: 1, MaximumDepth: 4,
-				RelationshipKindCount: 2, UntypedRelationship: false,
+				Direction:             "outbound",
+				ObservationMode:       "all_paths",
+				MinimumDepth:          1,
+				MaximumDepth:          4,
+				RelationshipKindCount: 2,
+				UntypedRelationship:   false,
 			},
 			SelectorVersion: "asp-i1-integration-fallback-v1",
 		})
@@ -187,8 +203,11 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	requireOrientationSubplanMetric(t, fallbackPlan, "asp_i1_candidate_rows", "Actual Rows", 0)
 
 	for _, testCase := range []struct {
-		name       string
-		query      string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// query retains the query while anonymous record is assembled or evaluated.
+		query string
+		// parameters retains the parameters while anonymous record is assembled or evaluated.
 		parameters map[string]any
 	}{
 		{
@@ -254,7 +273,10 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 			t.Fatalf("repeatable-read policy did not execute I1: rows=%v receipt=%s", repeatableRows, repeatableReceipt)
 		}
 
-		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{Generation: policy.Generation + 1, DisableInlineASPDAG: true}); err != nil {
+		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{
+			Generation:          policy.Generation + 1,
+			DisableInlineASPDAG: true,
+		}); err != nil {
 			t.Fatalf("activate inline ASP rollback: %v", err)
 		}
 		rollbackRows, rollbackReceipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
@@ -280,10 +302,17 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 			translate.ProductionOptions{
 				ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 				ShortestPathCaps: &translate.ProductionShortestPathCaps{
-					StateLimit: 1, PredecessorLimit: 100, EnumerationLimit: 100, OutputBytesLimit: 1 << 20,
+					StateLimit:       1,
+					PredecessorLimit: 100,
+					EnumerationLimit: 100,
+					OutputBytesLimit: 1 << 20,
 				},
 				AuthorizedBucket: &translate.ProductionTraversalBucket{
-					Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1,
+					Direction:             "inbound",
+					ObservationMode:       "one_path",
+					MinimumDepth:          1,
+					MaximumDepth:          64,
+					RelationshipKindCount: 1,
 				},
 				SelectorVersion: optimize.ShortestPathSelectorStaticV6,
 			})
@@ -329,7 +358,10 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 			t.Fatalf("repeatable-read policy did not execute canonical I1: rows=%v receipt=%s", candidateRows, candidateReceipt)
 		}
 
-		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{Generation: policy.Generation + 1, DisableInlineSPWitness: true}); err != nil {
+		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{
+			Generation:             policy.Generation + 1,
+			DisableInlineSPWitness: true,
+		}); err != nil {
 			t.Fatalf("activate canonical SP rollback: %v", err)
 		}
 		rollbackRows, rollbackReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
@@ -343,6 +375,7 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	})
 }
 
+// inlineASPTraversalPolicy prepares or inspects test evidence for inline asp traversal policy.
 func inlineASPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
 	t.Helper()
 	queryDigest := pg.TraversalPolicyQuerySHA256(query)
@@ -368,11 +401,15 @@ func inlineASPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
 	}
 	digest := sha256.Sum256(raw)
 	return pg.TraversalPolicy{
-		Generation: 1, PromotionManifestSHA256: hex.EncodeToString(digest[:]), PromotionManifestJSON: raw,
-		QuerySHA256Allowlist: []string{queryDigest}, ShortestPathExecutor: optimize.ShortestPathExecutorASPI1DAG,
+		Generation:              1,
+		PromotionManifestSHA256: hex.EncodeToString(digest[:]),
+		PromotionManifestJSON:   raw,
+		QuerySHA256Allowlist:    []string{queryDigest},
+		ShortestPathExecutor:    optimize.ShortestPathExecutorASPI1DAG,
 	}
 }
 
+// inlineCanonicalSPTraversalPolicy prepares or inspects test evidence for inline canonical sp traversal policy.
 func inlineCanonicalSPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
 	t.Helper()
 	queryDigest := pg.TraversalPolicyQuerySHA256(query)
@@ -398,11 +435,15 @@ func inlineCanonicalSPTraversalPolicy(t *testing.T, query string) pg.TraversalPo
 	}
 	digest := sha256.Sum256(raw)
 	return pg.TraversalPolicy{
-		Generation: 2, PromotionManifestSHA256: hex.EncodeToString(digest[:]), PromotionManifestJSON: raw,
-		QuerySHA256Allowlist: []string{queryDigest}, ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+		Generation:              2,
+		PromotionManifestSHA256: hex.EncodeToString(digest[:]),
+		PromotionManifestJSON:   raw,
+		QuerySHA256Allowlist:    []string{queryDigest},
+		ShortestPathExecutor:    optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 	}
 }
 
+// explainInlineASPTranslation prepares or inspects test evidence for explain inline asp translation.
 func explainInlineASPTranslation(t *testing.T, session *Session, translation translate.Result) any {
 	t.Helper()
 	sqlQuery, err := translate.Translated(translation)
@@ -435,6 +476,7 @@ func explainInlineASPTranslation(t *testing.T, session *Session, translation tra
 	return plan
 }
 
+// executeInlineASPTranslationWithReceipt prepares or inspects test evidence for execute inline asp translation with receipt.
 func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, translation translate.Result, invocation string, requested ...optimize.ShortestPathExecutor) ([]string, string) {
 	t.Helper()
 	requestedIdentity := optimize.ShortestPathExecutorASPI1DAG
@@ -497,6 +539,7 @@ func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, tran
 	return rows, receipt
 }
 
+// executeDriverCypherWithReceipt prepares or inspects test evidence for execute driver cypher with receipt.
 func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher string, parameters map[string]any, invocation string,
 	requested optimize.ShortestPathExecutor, options ...graph.TransactionOption) ([]string, string) {
 	t.Helper()
@@ -549,6 +592,7 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 	return rows, receipt
 }
 
+// containsAll reports whether every required fragment occurs in the inspected SQL text.
 func containsAll(value string, fragments ...string) bool {
 	for _, fragment := range fragments {
 		if !strings.Contains(value, fragment) {
@@ -558,6 +602,7 @@ func containsAll(value string, fragments ...string) bool {
 	return true
 }
 
+// executeInlineASPTranslation prepares or inspects test evidence for execute inline asp translation.
 func executeInlineASPTranslation(t *testing.T, session *Session, translation translate.Result) []string {
 	t.Helper()
 	sqlQuery, err := translate.Translated(translation)

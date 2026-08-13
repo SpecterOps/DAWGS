@@ -126,7 +126,10 @@ func TestCypherTranslationCacheSeparatesProductionPolicies(t *testing.T) {
 	build := func(sql string) func() (translate.Result, string, error) {
 		return func() (translate.Result, string, error) {
 			builds++
-			return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, sql, nil
+			return translate.Result{
+				Parameters:       map[string]any{},
+				ParameterSources: map[string]string{},
+			}, sql, nil
 		}
 	}
 

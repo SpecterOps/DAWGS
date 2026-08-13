@@ -23,7 +23,13 @@ func TestResourceGateReportBindsExactInputArtifact(t *testing.T) {
 	tempDir := t.TempDir()
 	artifact := filepath.Join(tempDir, "records.jsonl")
 	record := CaseResult{
-		Environment:   &RunEnvironment{Round: 3, Block: 3, RunUUID: "resource-run", Arm: "candidate", ArmOrder: 2},
+		Environment: &RunEnvironment{
+			Round:    3,
+			Block:    3,
+			RunUUID:  "resource-run",
+			Arm:      "candidate",
+			ArmOrder: 2,
+		},
 		Dataset:       "fixture",
 		Name:          "case",
 		ExecutionMode: ModePostgresSQL,
@@ -228,7 +234,10 @@ func TestResourceGateFailsClosedWithoutStructuredMetrics(t *testing.T) {
 		Status:        StatusOK,
 		Shape:         WorkloadShape{FixtureTier: "normal"},
 		Optimization: &translate.OptimizationSummary{
-			TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S4-C-D"}},
+			TargetOutcomes: []translate.TargetLoweringOutcome{{
+				Family:  "SP",
+				Applied: "SP-S4-C-D",
+			}},
 		},
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
@@ -339,21 +348,30 @@ func TestResourceGateEnforcesTelemetryIdentityAndNumericSentinels(t *testing.T) 
 	telemetry.Diagnostic = ordinaryDiagnostic()
 	telemetry.Diagnostic.Counters.Ordinary.PeakState = telemetryInt64(33)
 	record := CaseResult{
-		Dataset:            "fixture",
-		Name:               "candidate",
-		ExecutionMode:      ModePostgresSQL,
-		Status:             StatusOK,
-		Shape:              WorkloadShape{FixtureTier: "envelope", FallbackExpectation: "forbidden"},
-		Environment:        &RunEnvironment{PoolSize: 1, SessionMemoryCeilingBytes: 1 << 20, PoolMemoryCeilingBytes: 1 << 20},
+		Dataset:       "fixture",
+		Name:          "candidate",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier:         "envelope",
+			FallbackExpectation: "forbidden",
+		},
+		Environment: &RunEnvironment{
+			PoolSize:                  1,
+			SessionMemoryCeilingBytes: 1 << 20,
+			PoolMemoryCeilingBytes:    1 << 20,
+		},
 		TraversalTelemetry: &telemetry,
 		PostgresMetrics:    &PostgresPlanMetrics{},
 		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
-			Family: "SP", Applied: "SP-B1-C-ALT-NODE-D",
+			Family:  "SP",
+			Applied: "SP-B1-C-ALT-NODE-D",
 		}},
 		},
 	}
 	record.TraversalTelemetry.Diagnostic.Counters.Workspace = &TraversalWorkspaceCounters{
-		SessionPeakBytes: telemetryInt64(4096), PoolPeakBytes: telemetryInt64(4096),
+		SessionPeakBytes: telemetryInt64(4096),
+		PoolPeakBytes:    telemetryInt64(4096),
 	}
 	record.TraversalTelemetry.Diagnostic.RequiredFamilies = append(
 		record.TraversalTelemetry.Diagnostic.RequiredFamilies,
@@ -399,7 +417,8 @@ func TestResourceGateRequiresDiagnosticTelemetryForBidirectionalCandidates(t *te
 		Shape:           WorkloadShape{FixtureTier: "normal"},
 		PostgresMetrics: &PostgresPlanMetrics{},
 		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
-			Family: "SP", Applied: "SP-B2-C-MIN-LEVEL-D",
+			Family:  "SP",
+			Applied: "SP-B2-C-MIN-LEVEL-D",
 		}},
 		},
 	}
@@ -432,13 +451,25 @@ func TestResourceGateRequiresDiagnosticTelemetryForBidirectionalCandidates(t *te
 	require.Contains(t, report.Cases[0].Reasons, "candidate qualification requires complete executor counters; diagnostic status is hidden_counters_unavailable")
 }
 
+// TestResourceGateRejectsDeclaredMemoryCeilingsWithoutMeasuredWorkspace verifies resource gate rejects declared memory ceilings without measured workspace behavior.
 func TestResourceGateRejectsDeclaredMemoryCeilingsWithoutMeasuredWorkspace(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
-		Dataset: "fixture", Name: "declared-only", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape: WorkloadShape{FixtureTier: "normal"}, PostgresMetrics: &PostgresPlanMetrics{},
-		Environment:  &RunEnvironment{PoolSize: 1, SessionMemoryCeilingBytes: 1024, PoolMemoryCeilingBytes: 4096},
-		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S4-C-D"}}},
+		Dataset:         "fixture",
+		Name:            "declared-only",
+		ExecutionMode:   ModePostgresSQL,
+		Status:          StatusOK,
+		Shape:           WorkloadShape{FixtureTier: "normal"},
+		PostgresMetrics: &PostgresPlanMetrics{},
+		Environment: &RunEnvironment{
+			PoolSize:                  1,
+			SessionMemoryCeilingBytes: 1024,
+			PoolMemoryCeilingBytes:    4096,
+		},
+		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
+			Family:  "SP",
+			Applied: "SP-S4-C-D",
+		}}},
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
 	output := filepath.Join(t.TempDir(), "report.json")
@@ -453,6 +484,7 @@ func TestResourceGateRejectsDeclaredMemoryCeilingsWithoutMeasuredWorkspace(t *te
 	require.Contains(t, report.Cases[0].Reasons, "declared workspace memory ceilings lack measured session and pool high-water evidence")
 }
 
+// TestResourceGateRequiresCompleteOrientationPolicyAndExactBranchAttribution verifies resource gate requires complete orientation policy and exact branch attribution behavior.
 func TestResourceGateRequiresCompleteOrientationPolicyAndExactBranchAttribution(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	telemetry := validTraversalTelemetry()
@@ -467,14 +499,23 @@ func TestResourceGateRequiresCompleteOrientationPolicyAndExactBranchAttribution(
 	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusPlanPartial
 	telemetry.Diagnostic.IncompleteReasons = []string{"plan evidence only"}
 	telemetry.Diagnostic.PlanReplay = &TraversalPlanReplayEvidence{
-		Source: "test", Counters: map[string]int64{"orientation_executed_candidate_rows": 1}, Flags: map[string]bool{},
+		Source:     "test",
+		Counters:   map[string]int64{"orientation_executed_candidate_rows": 1},
+		Flags:      map[string]bool{},
 		Provenance: map[string]string{"counters.orientation_executed_candidate_rows": "test.marker"},
 	}
 	record := CaseResult{
-		Dataset: "fixture", Name: "orientation", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape: WorkloadShape{FixtureTier: "normal"}, PostgresMetrics: &PostgresPlanMetrics{}, TraversalTelemetry: &telemetry,
+		Dataset:            "fixture",
+		Name:               "orientation",
+		ExecutionMode:      ModePostgresSQL,
+		Status:             StatusOK,
+		Shape:              WorkloadShape{FixtureTier: "normal"},
+		PostgresMetrics:    &PostgresPlanMetrics{},
+		TraversalTelemetry: &telemetry,
 		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
-			Family: "fixed_suffix_expansion", Applied: "EXPANSION-SUFFIX-SEEDED-REVERSE", EmittedPolicy: "orientation-probe-v1",
+			Family:        "fixed_suffix_expansion",
+			Applied:       "EXPANSION-SUFFIX-SEEDED-REVERSE",
+			EmittedPolicy: "orientation-probe-v1",
 		}}},
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
@@ -483,12 +524,20 @@ func TestResourceGateRequiresCompleteOrientationPolicyAndExactBranchAttribution(
 	require.False(t, passed)
 }
 
+// TestResourceGateScopesStressFallbackToDeclaredExpectation verifies resource gate scopes stress fallback to declared expectation behavior.
 func TestResourceGateScopesStressFallbackToDeclaredExpectation(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	withoutExpectation := CaseResult{
-		Dataset: "fixture", Name: "stress-no-overflow", ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape: WorkloadShape{FixtureTier: "stress"}, PostgresMetrics: &PostgresPlanMetrics{},
-		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{Family: "SP", Applied: "SP-S0"}}},
+		Dataset:         "fixture",
+		Name:            "stress-no-overflow",
+		ExecutionMode:   ModePostgresSQL,
+		Status:          StatusOK,
+		Shape:           WorkloadShape{FixtureTier: "stress"},
+		PostgresMetrics: &PostgresPlanMetrics{},
+		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
+			Family:  "SP",
+			Applied: "SP-S0",
+		}}},
 	}
 	require.NoError(t, writeJSONLFile(artifact, []CaseResult{withoutExpectation}))
 	passed, err := createResourceGateReport(artifact, filepath.Join(t.TempDir(), "no-expectation.json"))
@@ -507,6 +556,7 @@ func TestResourceGateScopesStressFallbackToDeclaredExpectation(t *testing.T) {
 	require.False(t, passed)
 }
 
+// TestResourceGateValidatesExactOrientationMarkersAndProbeCounts verifies resource gate validates exact orientation markers and probe counts behavior.
 func TestResourceGateValidatesExactOrientationMarkersAndProbeCounts(t *testing.T) {
 	probeCounters := map[string]int64{
 		"orientation_executed_candidate_rows":    1,
@@ -542,6 +592,7 @@ func TestResourceGateValidatesExactOrientationMarkersAndProbeCounts(t *testing.T
 	require.Contains(t, gateCase.Reasons, "orientation incumbent arm performed work while the candidate was selected")
 }
 
+// TestResourceGateRequiresSingularInlineASPBranchAndInactiveArm verifies resource gate requires singular inline asp branch and inactive arm behavior.
 func TestResourceGateRequiresSingularInlineASPBranchAndInactiveArm(t *testing.T) {
 	gateCase := &ResourceGateCase{}
 	diagnostic := &TraversalExecutionDiagnostic{PlanReplay: &TraversalPlanReplayEvidence{Counters: map[string]int64{
@@ -585,6 +636,7 @@ func TestResourceGateRequiresSingularInlineASPBranchAndInactiveArm(t *testing.T)
 	require.Contains(t, gateCase.Reasons, "inline ASP fallback output arm emitted rows while the candidate was selected")
 }
 
+// TestResourceGateScopesGuardedI1TelemetryAndInactiveArm verifies resource gate scopes guarded i1 telemetry and inactive arm behavior.
 func TestResourceGateScopesGuardedI1TelemetryAndInactiveArm(t *testing.T) {
 	require.False(t, telemetryRequiredForArchitecture(string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)))
 	require.False(t, telemetryRequiredForArchitecture(string(optimize.ShortestPathExecutorASPI1DAG)))
@@ -612,6 +664,7 @@ func TestResourceGateScopesGuardedI1TelemetryAndInactiveArm(t *testing.T) {
 	require.Contains(t, gateCase.Reasons, "inline canonical SP fallback output arm emitted rows while the candidate was selected")
 }
 
+// TestResourceGateDoesNotRequireGuardedTelemetryForExplicitI1References verifies resource gate does not require guarded telemetry for explicit i1 references behavior.
 func TestResourceGateDoesNotRequireGuardedTelemetryForExplicitI1References(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")
 	record := CaseResult{
@@ -623,12 +676,16 @@ func TestResourceGateDoesNotRequireGuardedTelemetryForExplicitI1References(t *te
 		PostgresMetrics: &PostgresPlanMetrics{},
 		PostgresReferences: []PostgresReferenceResult{
 			{
-				Name: "sp-i1-reference", Architecture: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
-				FullComparator: true, PostgresMetrics: &PostgresPlanMetrics{},
+				Name:            "sp-i1-reference",
+				Architecture:    string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+				FullComparator:  true,
+				PostgresMetrics: &PostgresPlanMetrics{},
 			},
 			{
-				Name: "asp-i1-reference", Architecture: string(optimize.ShortestPathExecutorASPI1DAG),
-				FullComparator: true, PostgresMetrics: &PostgresPlanMetrics{},
+				Name:            "asp-i1-reference",
+				Architecture:    string(optimize.ShortestPathExecutorASPI1DAG),
+				FullComparator:  true,
+				PostgresMetrics: &PostgresPlanMetrics{},
 			},
 		},
 	}
@@ -649,13 +706,19 @@ func TestResourceGateDoesNotRequireGuardedTelemetryForExplicitI1References(t *te
 	}
 }
 
+// TestResourceGateBindsGuardedI1PolicyAndCounterNamespace verifies resource gate binds guarded i1 policy and counter namespace behavior.
 func TestResourceGateBindsGuardedI1PolicyAndCounterNamespace(t *testing.T) {
 	tests := []struct {
-		name         string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// architecture retains the architecture while anonymous record is assembled or evaluated.
 		architecture string
-		mutate       func(*CaseResult)
-		passed       bool
-		reason       string
+		// mutate retains the mutate while anonymous record is assembled or evaluated.
+		mutate func(*CaseResult)
+		// passed indicates whether passed applies.
+		passed bool
+		// reason retains the reason while anonymous record is assembled or evaluated.
+		reason string
 	}{
 		{
 			name:         "canonical SP valid",
@@ -740,6 +803,7 @@ func TestResourceGateBindsGuardedI1PolicyAndCounterNamespace(t *testing.T) {
 	}
 }
 
+// guardedI1ResourceRecord prepares or inspects test evidence for guarded i1 resource record.
 func guardedI1ResourceRecord(architecture string) CaseResult {
 	contract, _ := guardedInlineResourceContractForArchitecture(architecture)
 	fallback := string(optimize.ShortestPathExecutorS4CanonicalWitness)
@@ -771,8 +835,13 @@ func guardedI1ResourceRecord(architecture string) CaseResult {
 		diagnosticCounters.InlineASP = inlineCounters
 	}
 	diagnosticCounters.Hydration = &TraversalHydrationCounters{
-		PathCount: telemetryInt64(1), NodeLookups: telemetryInt64(2), EdgeLookups: telemetryInt64(1),
-		Loops: telemetryInt64(1), Rows: telemetryInt64(1), TimeNS: telemetryInt64(100), Bytes: telemetryInt64(64),
+		PathCount:   telemetryInt64(1),
+		NodeLookups: telemetryInt64(2),
+		EdgeLookups: telemetryInt64(1),
+		Loops:       telemetryInt64(1),
+		Rows:        telemetryInt64(1),
+		TimeNS:      telemetryInt64(100),
+		Bytes:       telemetryInt64(64),
 	}
 	planCounters := map[string]int64{
 		"asp_i1_distance_rows":            3,
@@ -816,26 +885,35 @@ func guardedI1ResourceRecord(architecture string) CaseResult {
 		Counters:         diagnosticCounters,
 		CounterStatus:    TraversalTelemetryCounterStatusComplete,
 		PlanReplay: &TraversalPlanReplayEvidence{
-			Source: "test-plan", Counters: planCounters, Provenance: planProvenance,
+			Source:     "test-plan",
+			Counters:   planCounters,
+			Provenance: planProvenance,
 		},
 		Provenance: guardedI1CounterProvenance(contract.namespace),
 	}
 
 	return CaseResult{
-		Dataset:            "fixture",
-		Name:               "guarded-i1",
-		ExecutionMode:      ModePostgresSQL,
-		Status:             StatusOK,
-		Shape:              WorkloadShape{FixtureTier: "normal", FallbackExpectation: "forbidden"},
+		Dataset:       "fixture",
+		Name:          "guarded-i1",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier:         "normal",
+			FallbackExpectation: "forbidden",
+		},
 		PostgresMetrics:    &PostgresPlanMetrics{},
 		TraversalTelemetry: &telemetry,
 		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
-			Family: contract.family, Candidate: architecture, Selected: architecture, Applied: architecture,
+			Family:        contract.family,
+			Candidate:     architecture,
+			Selected:      architecture,
+			Applied:       architecture,
 			EmittedPolicy: contract.policy,
 		}}},
 	}
 }
 
+// inlineI1CounterProvenance prepares or inspects test evidence for inline i1 counter provenance.
 func inlineI1CounterProvenance(namespace string) map[string]string {
 	provenance := map[string]string{}
 	for _, name := range []string{
@@ -848,6 +926,7 @@ func inlineI1CounterProvenance(namespace string) map[string]string {
 	return provenance
 }
 
+// guardedI1CounterProvenance prepares or inspects test evidence for guarded i1 counter provenance.
 func guardedI1CounterProvenance(namespace string) map[string]string {
 	provenance := inlineI1CounterProvenance(namespace)
 	for _, name := range []string{"path_count", "node_lookups", "edge_lookups", "loops", "rows", "time_ns", "bytes"} {

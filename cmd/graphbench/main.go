@@ -47,9 +47,9 @@ type config struct {
 	Neo4jConnection string
 	// Modes lists backend execution modes requested for each benchmark round.
 	Modes []ExecutionMode
-	// Iterations records the number of measured iterations.
+	// Iterations records the number of iterations.
 	Iterations int
-	// WarmupIterations records the untimed iterations run before measurement.
+	// WarmupIterations records the number of warmup iterations.
 	WarmupIterations int
 	// Round identifies the measurement round.
 	Round int
@@ -57,7 +57,7 @@ type config struct {
 	Block int
 	// Arm identifies the measurement arm that produced the sample.
 	Arm string
-	// ArmOrder records the arm's position within its balanced measurement block.
+	// ArmOrder supplies the arm order input to the config contract.
 	ArmOrder int
 	// RunUUID supplies an optional stable identity shared by every artifact in one run series.
 	RunUUID string
@@ -79,7 +79,7 @@ type config struct {
 	SummaryJSON string
 	// Baseline identifies the baseline version or result used for comparison.
 	Baseline string
-	// DAWGSVersion records the DAWGS source version attached to artifact provenance.
+	// DAWGSVersion identifies the schema version for dawgs version.
 	DAWGSVersion string
 	// GateBaseline selects the baseline JSON Lines artifact for performance gating.
 	GateBaseline string
@@ -197,9 +197,10 @@ type config struct {
 	// PromotionBindRole names the evidence role being bound.
 	PromotionBindRole string
 	// PromotionBindInput and PromotionBindOutput select the unbound and bound reports.
-	PromotionBindInput  string
+	PromotionBindInput string
+	// PromotionBindOutput supplies the promotion bind output input to the config contract.
 	PromotionBindOutput string
-	// BuildCommand records the reproducible command used to build the benchmark executable.
+	// BuildCommand supplies the build command input to the config contract.
 	BuildCommand string
 	// ExistingGraph selects read-only execution against a pre-existing graph.
 	ExistingGraph bool
@@ -929,7 +930,10 @@ func parseCaptureBundleEvidenceInputs(rawValues []string) ([]CaptureBundleEviden
 			return nil, fmt.Errorf("duplicate bundle-evidence name %q", name)
 		}
 		seen[name] = struct{}{}
-		inputs = append(inputs, CaptureBundleEvidenceInput{Name: name, Path: path})
+		inputs = append(inputs, CaptureBundleEvidenceInput{
+			Name: name,
+			Path: path,
+		})
 	}
 	return inputs, nil
 }
@@ -952,6 +956,7 @@ func parseUniqueCSV(kind, raw string) ([]string, error) {
 	return values, nil
 }
 
+// selectedCorpusContainsTag selects ed corpus contains tag.
 func selectedCorpusContainsTag(corpus ScaleCorpus, tag string) bool {
 	for _, testCase := range corpus.Cases {
 		if slices.Contains(testCase.Tags, tag) {
@@ -1331,7 +1336,10 @@ func main() {
 			if cfg.ExistingGraph {
 				completed := map[string]string{}
 				for _, record := range records {
-					completed[existingGraphCaseKey(record.ExecutionMode, ScaleCase{Dataset: record.Dataset, Name: record.Name})] = record.WorkloadSHA256
+					completed[existingGraphCaseKey(record.ExecutionMode, ScaleCase{
+						Dataset: record.Dataset,
+						Name:    record.Name,
+					})] = record.WorkloadSHA256
 				}
 				existingOptions = &existingGraphRunnerOptions{
 					Manifest:       existingManifest,

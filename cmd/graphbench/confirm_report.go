@@ -39,11 +39,11 @@ type ConfirmationMetric struct {
 	Ratio RatioInterval `json:"ratio"`
 	// AbsoluteChange reports the estimated absolute duration change and confidence bounds.
 	AbsoluteChange DurationInterval `json:"absolute_change"`
-	// NoiseRatio records the relative A/A noise floor used for classification.
+	// NoiseRatio supplies the noise ratio input to the ConfirmationMetric contract.
 	NoiseRatio float64 `json:"noise_ratio"`
-	// NoiseAbsolute records the absolute A/A noise floor used for classification.
+	// NoiseAbsolute supplies the noise absolute input to the ConfirmationMetric contract.
 	NoiseAbsolute time.Duration `json:"noise_absolute"`
-	// Classification records the assigned measurement or result class.
+	// Classification supplies the classification input to the ConfirmationMetric contract.
 	Classification string `json:"classification"`
 }
 
@@ -75,7 +75,7 @@ type ConfirmationCase struct {
 	P50 ConfirmationMetric `json:"p50"`
 	// P95 contains 95th-percentile ratio, absolute-change, noise, and classification evidence.
 	P95 ConfirmationMetric `json:"p95"`
-	// Disposition records the confirmation classification assigned to the case.
+	// Disposition supplies the disposition input to the ConfirmationCase contract.
 	Disposition string `json:"disposition"`
 	// RightRuntimeReceiptChains preserves the candidate/right arm's complete
 	// measured runtime branch chains.
@@ -334,7 +334,11 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 			family := traversalQualificationFamily(key, left, right)
 			status := qualification[family]
 			if status == nil {
-				status = &TraversalQualificationStatus{Family: family, TrainingPassed: true, HoldoutPassed: true}
+				status = &TraversalQualificationStatus{
+					Family:         family,
+					TrainingPassed: true,
+					HoldoutPassed:  true,
+				}
 				qualification[family] = status
 			}
 			switch entry.QualificationSplit {
@@ -568,6 +572,7 @@ func sameExecutable(left, right []CaseResult) bool {
 	return leftIdentity != "" && leftIdentity == effectiveTreatmentIdentity(right)
 }
 
+// effectiveTreatmentIdentity derives the stable identity used to compare effective treatment.
 func effectiveTreatmentIdentity(records []CaseResult) string {
 	if len(records) == 0 || records[0].Environment == nil || records[0].Environment.BinarySHA256 == "" {
 		return ""

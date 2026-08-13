@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestOrientationSelectorReportPassesMatchedLowRegretLowOverheadEvidence verifies orientation selector report passes matched low regret low overhead evidence behavior.
 func TestOrientationSelectorReportPassesMatchedLowRegretLowOverheadEvidence(t *testing.T) {
 	trainingShadow, trainingIncumbent, trainingReverse := orientationSelectorRecords(
 		"training",
@@ -36,7 +37,10 @@ func TestOrientationSelectorReportPassesMatchedLowRegretLowOverheadEvidence(t *t
 	reverse := append(trainingReverse, holdoutReverse...)
 
 	report, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Seed: 7, Confidence: defaultConfidenceLevel, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           7,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 
 	require.NoError(t, err)
@@ -65,6 +69,7 @@ func TestOrientationSelectorReportPassesMatchedLowRegretLowOverheadEvidence(t *t
 	require.True(t, entry.ExactObservationsMatched)
 }
 
+// TestOrientationSelectorReportFailsRegretWhenShadowChoosesSlowArm verifies orientation selector report fails regret when shadow chooses slow arm behavior.
 func TestOrientationSelectorReportFailsRegretWhenShadowChoosesSlowArm(t *testing.T) {
 	shadow, incumbent, reverse := orientationSelectorRecords(
 		"training",
@@ -75,7 +80,10 @@ func TestOrientationSelectorReportFailsRegretWhenShadowChoosesSlowArm(t *testing
 	)
 
 	report, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Seed: 11, Confidence: defaultConfidenceLevel, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           11,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 
 	require.NoError(t, err)
@@ -88,6 +96,7 @@ func TestOrientationSelectorReportFailsRegretWhenShadowChoosesSlowArm(t *testing
 	require.Contains(t, report.Cases[0].Reasons, "selector regret exceeds the 1.10/A/A floor")
 }
 
+// TestOrientationSelectorReportAllowsAbsoluteProbeFloor verifies orientation selector report allows absolute probe floor behavior.
 func TestOrientationSelectorReportAllowsAbsoluteProbeFloor(t *testing.T) {
 	shadow, incumbent, reverse := orientationSelectorRecords(
 		"training",
@@ -98,7 +107,10 @@ func TestOrientationSelectorReportAllowsAbsoluteProbeFloor(t *testing.T) {
 	)
 
 	report, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Seed: 13, Confidence: defaultConfidenceLevel, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           13,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 
 	require.NoError(t, err)
@@ -108,15 +120,30 @@ func TestOrientationSelectorReportAllowsAbsoluteProbeFloor(t *testing.T) {
 	require.True(t, probe.Passed)
 }
 
+// TestOrientationSelectorReportKeepsHoldoutEvaluationOnlyAndExcludesDiagnostic verifies orientation selector report keeps holdout evaluation only and excludes diagnostic behavior.
 func TestOrientationSelectorReportKeepsHoldoutEvaluationOnlyAndExcludesDiagnostic(t *testing.T) {
 	for _, testCase := range []struct {
-		split                 string
-		role                  string
+		// split retains the split while anonymous record is assembled or evaluated.
+		split string
+		// role retains the role while anonymous record is assembled or evaluated.
+		role string
+		// qualificationEligible indicates whether qualification eligible applies.
 		qualificationEligible bool
-		qualificationPassed   bool
+		// qualificationPassed indicates whether qualification passed applies.
+		qualificationPassed bool
 	}{
-		{split: "holdout", role: "frozen_evaluation", qualificationEligible: true, qualificationPassed: false},
-		{split: "diagnostic", role: "diagnostic_only", qualificationEligible: false, qualificationPassed: false},
+		{
+			split:                 "holdout",
+			role:                  "frozen_evaluation",
+			qualificationEligible: true,
+			qualificationPassed:   false,
+		},
+		{
+			split:                 "diagnostic",
+			role:                  "diagnostic_only",
+			qualificationEligible: false,
+			qualificationPassed:   false,
+		},
 	} {
 		t.Run(testCase.split, func(t *testing.T) {
 			shadow, incumbent, reverse := orientationSelectorRecords(
@@ -127,7 +154,10 @@ func TestOrientationSelectorReportKeepsHoldoutEvaluationOnlyAndExcludesDiagnosti
 				5*time.Millisecond,
 			)
 			report, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-				Seed: 17, Confidence: defaultConfidenceLevel, BootstrapCount: 50, Protocol: referencePairProtocolConfirmation,
+				Seed:           17,
+				Confidence:     defaultConfidenceLevel,
+				BootstrapCount: 50,
+				Protocol:       referencePairProtocolConfirmation,
 			})
 			require.NoError(t, err)
 			require.Equal(t, testCase.role, report.Cases[0].QualificationRole)
@@ -138,6 +168,7 @@ func TestOrientationSelectorReportKeepsHoldoutEvaluationOnlyAndExcludesDiagnosti
 	}
 }
 
+// TestOrientationSelectorReportRequiresPassingTrainingAndFrozenHoldout verifies orientation selector report requires passing training and frozen holdout behavior.
 func TestOrientationSelectorReportRequiresPassingTrainingAndFrozenHoldout(t *testing.T) {
 	trainingShadow, trainingIncumbent, trainingReverse := orientationSelectorRecords(
 		"training", string(optimize.ExpansionSearchSuffixSeededReverse), 10*time.Millisecond, 10*time.Millisecond, 5*time.Millisecond,
@@ -152,7 +183,10 @@ func TestOrientationSelectorReportRequiresPassingTrainingAndFrozenHoldout(t *tes
 	reverse := append(trainingReverse, holdoutReverse...)
 
 	report, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Seed: 19, Confidence: defaultConfidenceLevel, BootstrapCount: 100, Protocol: referencePairProtocolConfirmation,
+		Seed:           19,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 100,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.NoError(t, err)
 	require.True(t, report.TrainingPassed)
@@ -160,6 +194,7 @@ func TestOrientationSelectorReportRequiresPassingTrainingAndFrozenHoldout(t *tes
 	require.False(t, report.QualificationPassed)
 }
 
+// TestOrientationSelectorReportRejectsSplitDriftAndNonIncumbentShadowRuntime verifies orientation selector report rejects split drift and non incumbent shadow runtime behavior.
 func TestOrientationSelectorReportRejectsSplitDriftAndNonIncumbentShadowRuntime(t *testing.T) {
 	shadow, incumbent, reverse := orientationSelectorRecords(
 		"training",
@@ -170,18 +205,23 @@ func TestOrientationSelectorReportRejectsSplitDriftAndNonIncumbentShadowRuntime(
 	)
 	reverse[0].Shape.QualificationSplit = "holdout"
 	_, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolConfirmation,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.ErrorContains(t, err, "changes qualification split")
 
 	reverse[0].Shape.QualificationSplit = "training"
 	shadow[0].TraversalTelemetry.Summary.RuntimeIdentity = string(optimize.ExpansionSearchSuffixSeededReverse)
 	_, err = buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolConfirmation,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.ErrorContains(t, err, "incumbent-only")
 }
 
+// TestOrientationSelectorReportRejectsUnbalancedThreeArmOrder verifies orientation selector report rejects unbalanced three arm order behavior.
 func TestOrientationSelectorReportRejectsUnbalancedThreeArmOrder(t *testing.T) {
 	shadow, incumbent, reverse := orientationSelectorRecords(
 		"training",
@@ -196,11 +236,14 @@ func TestOrientationSelectorReportRejectsUnbalancedThreeArmOrder(t *testing.T) {
 		}
 	}
 	_, err := buildOrientationSelectorReport(shadow, incumbent, reverse, testAAReportForRecords(t, incumbent), OrientationSelectorReportOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolConfirmation,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.ErrorContains(t, err, "duplicate three-arm order")
 }
 
+// orientationSelectorRecords prepares or inspects test evidence for orientation selector records.
 func orientationSelectorRecords(
 	split, wouldSelect string,
 	shadowDuration, incumbentDuration, reverseDuration time.Duration,
@@ -223,6 +266,7 @@ func orientationSelectorRecords(
 	return shadow, incumbent, reverse
 }
 
+// orientationSelectorRecord prepares or inspects test evidence for orientation selector record.
 func orientationSelectorRecord(round, armOrder int, arm, split, wouldSelect string, duration time.Duration) CaseResult {
 	forward := string(optimize.ExpansionSearchStepwiseForward)
 	reverse := string(optimize.ExpansionSearchSuffixSeededReverse)
@@ -243,22 +287,34 @@ func orientationSelectorRecord(round, armOrder int, arm, split, wouldSelect stri
 	fallback := false
 	overflow := false
 	record := CaseResult{
-		Dataset:             "orientation-fixture",
-		Name:                "fixed-suffix",
-		Category:            "generated_fixed_suffix_expansion_v2",
-		WorkloadSHA256:      "orientation-workload-v1",
-		ExecutionMode:       ModePostgresSQL,
-		Status:              StatusOK,
-		Shape:               WorkloadShape{FixtureTier: "normal", QualificationSplit: split},
+		Dataset:        "orientation-fixture",
+		Name:           "fixed-suffix",
+		Category:       "generated_fixed_suffix_expansion_v2",
+		WorkloadSHA256: "orientation-workload-v1",
+		ExecutionMode:  ModePostgresSQL,
+		Status:         StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier:        "normal",
+			QualificationSplit: split,
+		},
 		RowCount:            1,
 		ObservedRows:        []string{"[42]"},
 		StableObservation:   true,
 		SQLFingerprint:      "orientation-" + arm + "-sql-v1",
 		PostgresEnvironment: &PostgresEnvironment{PlanCacheMode: "auto"},
 		Environment: &RunEnvironment{
-			Arm: arm, ArmOrder: armOrder, Block: round, Round: round,
-			RunUUID: "orientation-run-" + fmt.Sprint(round), BinarySHA256: "orientation-binary-v1",
-			GOOS: "linux", GOARCH: "amd64", CPUCount: 8, CPUModel: "test-cpu", Kernel: "test-kernel", CgroupCPU: "max 100000",
+			Arm:              arm,
+			ArmOrder:         armOrder,
+			Block:            round,
+			Round:            round,
+			RunUUID:          "orientation-run-" + fmt.Sprint(round),
+			BinarySHA256:     "orientation-binary-v1",
+			GOOS:             "linux",
+			GOARCH:           "amd64",
+			CPUCount:         8,
+			CPUModel:         "test-cpu",
+			Kernel:           "test-kernel",
+			CgroupCPU:        "max 100000",
 			WarmupIterations: 20,
 		},
 		TraversalTelemetry: &TraversalExecutionTelemetry{
@@ -284,14 +340,20 @@ func orientationSelectorRecord(round, armOrder int, arm, split, wouldSelect stri
 	record.Stats.WarmupIterations = 20
 	for iteration := 1; iteration <= 50; iteration++ {
 		record.Stats.Samples = append(record.Stats.Samples, LatencySample{
-			Round: round, Block: round, Arm: arm, ArmOrder: armOrder,
-			RunUUID: record.Environment.RunUUID, Iteration: iteration,
-			Classification: "warm", Duration: duration,
+			Round:          round,
+			Block:          round,
+			Arm:            arm,
+			ArmOrder:       armOrder,
+			RunUUID:        record.Environment.RunUUID,
+			Iteration:      iteration,
+			Classification: "warm",
+			Duration:       duration,
 		})
 	}
 	return record
 }
 
+// renameOrientationRecords prepares or inspects test evidence for rename orientation records.
 func renameOrientationRecords(name string, artifacts ...[]CaseResult) {
 	for _, records := range artifacts {
 		for index := range records {

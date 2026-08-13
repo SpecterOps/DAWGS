@@ -1023,7 +1023,7 @@ func (s *Translator) projectionPruningDecision(part *PatternPart, stepIndex int)
 	return decision, hasDecision
 }
 
-// prepareProjectionPruning applies pruning flags and records the bindings removed from a traversal projection.
+// prepareProjectionPruning builds the SQL model fragment responsible for prepare projection pruning.
 func (s *Translator) prepareProjectionPruning(part *PatternPart, stepIndex int, traversalStep *TraversalStep) {
 	decision, hasDecision := s.projectionPruningDecision(part, stepIndex)
 	if !hasDecision || traversalStep == nil {

@@ -64,7 +64,9 @@ func TestValidateScaleCaseRequiresConsistentUnsupportedModes(t *testing.T) {
 // diagnostic evidence after selector thresholds are chosen.
 func TestValidateScaleCaseFreezesTraversalQualificationSplit(t *testing.T) {
 	testCase := ScaleCase{
-		Name: "qualified", Dataset: "generated", Category: "generated_shortest_path_v2",
+		Name:           "qualified",
+		Dataset:        "generated",
+		Category:       "generated_shortest_path_v2",
 		Cypher:         "MATCH p = shortestPath((s)-[*]->(e)) RETURN p",
 		CandidateModes: []ExecutionMode{ModePostgresSQL},
 		Shape:          WorkloadShape{FixtureTier: "normal"},
@@ -81,7 +83,10 @@ func TestValidateScaleCaseFreezesTraversalQualificationSplit(t *testing.T) {
 
 	testCase.Tags = nil
 	require.ErrorContains(t, validateScaleCase(testCase), "requires the holdout tag")
-	testCase.Shape = WorkloadShape{FixtureTier: "stress", QualificationSplit: "training"}
+	testCase.Shape = WorkloadShape{
+		FixtureTier:        "stress",
+		QualificationSplit: "training",
+	}
 	require.ErrorContains(t, validateScaleCase(testCase), "stress traversal")
 	testCase.Shape.QualificationSplit = "diagnostic"
 	require.NoError(t, validateScaleCase(testCase))
@@ -92,16 +97,27 @@ func TestValidateScaleCaseFreezesTraversalQualificationSplit(t *testing.T) {
 func TestValidateScaleCaseRequiresExactFixedSuffixV3Paths(t *testing.T) {
 	rowCount := int64(1)
 	testCase := ScaleCase{
-		Name: "v3-path", Dataset: "generated", Category: "generated_fixed_suffix_expansion",
+		Name:           "v3-path",
+		Dataset:        "generated",
+		Category:       "generated_fixed_suffix_expansion",
 		Cypher:         "MATCH p = (s)-[*]->(e) RETURN p",
 		CandidateModes: []ExecutionMode{ModePostgresSQL},
 		Tags:           []string{"fixed-suffix-expansion-v3"},
-		Shape:          WorkloadShape{FixtureTier: "normal", QualificationSplit: "training"},
-		Expected:       ExpectedResult{RowCount: &rowCount, ResultKind: "path_set"},
+		Shape: WorkloadShape{
+			FixtureTier:        "normal",
+			QualificationSplit: "training",
+		},
+		Expected: ExpectedResult{
+			RowCount:   &rowCount,
+			ResultKind: "path_set",
+		},
 	}
 
 	require.ErrorContains(t, validateScaleCase(testCase), "require exact expected.path_rows")
-	testCase.Expected.PathRows = []ExpectedPath{{Nodes: []string{"s", "e"}, RelationshipKinds: []string{"Expand"}}}
+	testCase.Expected.PathRows = []ExpectedPath{{
+		Nodes:             []string{"s", "e"},
+		RelationshipKinds: []string{"Expand"},
+	}}
 	require.ErrorContains(t, validateScaleCase(testCase), "identify every relationship")
 	testCase.Expected.PathRows[0].RelationshipKeys = []string{"expand-1"}
 	require.NoError(t, validateScaleCase(testCase))
@@ -111,7 +127,13 @@ func TestValidateScaleCaseRequiresExactFixedSuffixV3Paths(t *testing.T) {
 func TestScaleCorpusDatasets(t *testing.T) {
 	corpus := ScaleCorpus{
 		Cases: []ScaleCase{
-			{Name: "a", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
+			{
+				Name:           "a",
+				Dataset:        "base",
+				Category:       "counts",
+				Cypher:         "return 1",
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
 			{
 				Name:           "b",
 				Dataset:        "fixed_suffix_expansion_fanout",
@@ -119,7 +141,13 @@ func TestScaleCorpusDatasets(t *testing.T) {
 				Cypher:         "return 1",
 				CandidateModes: []ExecutionMode{ModePostgresSQL},
 			},
-			{Name: "c", Dataset: "base", Category: "counts", Cypher: "return 1", CandidateModes: []ExecutionMode{ModePostgresSQL}},
+			{
+				Name:           "c",
+				Dataset:        "base",
+				Category:       "counts",
+				Cypher:         "return 1",
+				CandidateModes: []ExecutionMode{ModePostgresSQL},
+			},
 		},
 	}
 

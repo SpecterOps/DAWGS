@@ -60,6 +60,7 @@ func loadScaleCorpus(root string) (ScaleCorpus, error) {
 	return corpus, nil
 }
 
+// normalizeFallbackExpectation normalizes fallback expectation.
 func normalizeFallbackExpectation(testCase *ScaleCase) {
 	if testCase == nil || testCase.Shape.FallbackExpectation != "" || !requiresQualificationSplit(*testCase) {
 		return

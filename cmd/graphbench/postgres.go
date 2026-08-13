@@ -55,9 +55,9 @@ type postgresSQLRunner struct {
 	pool *pgxpool.Pool
 	// graphID selects the PostgreSQL graph partition used for translation, fixture validation, and execution.
 	graphID int32
-	// backendPID records the physical PostgreSQL session used to label samples and detect connection changes.
+	// backendPID identifies the backend pid.
 	backendPID string
-	// poolSize records the maximum PostgreSQL connections available to the runner.
+	// poolSize retains the pool size while postgresSQLRunner is assembled or evaluated.
 	poolSize int
 	// round identifies the measurement round used to balance execution order.
 	round int
@@ -180,6 +180,7 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	return nil
 }
 
+// productionOptions derives execution options for production.
 func (s *postgresSQLRunner) productionOptions(cypherQuery string) (translate.ProductionOptions, error) {
 	manifest := s.productionManifest
 	if manifest == nil {
@@ -192,9 +193,12 @@ func (s *postgresSQLRunner) productionOptions(cypherQuery string) (translate.Pro
 		}
 		options := translate.ProductionOptions{
 			AuthorizedBucket: &translate.ProductionTraversalBucket{
-				Direction: bucket.Direction, ObservationMode: bucket.ObservationMode,
-				MinimumDepth: int64(bucket.MinimumDepth), MaximumDepth: int64(bucket.MaximumDepth),
-				RelationshipKindCount: bucket.RelationshipKindCount, UntypedRelationship: bucket.UntypedRelationship,
+				Direction:             bucket.Direction,
+				ObservationMode:       bucket.ObservationMode,
+				MinimumDepth:          int64(bucket.MinimumDepth),
+				MaximumDepth:          int64(bucket.MaximumDepth),
+				RelationshipKindCount: bucket.RelationshipKindCount,
+				UntypedRelationship:   bucket.UntypedRelationship,
 			},
 			SelectorVersion: manifest.SelectorVersion,
 		}
@@ -203,8 +207,10 @@ func (s *postgresSQLRunner) productionOptions(cypherQuery string) (translate.Pro
 		} else {
 			options.ShortestPathExecutor = optimize.ShortestPathExecutor(manifest.Candidate)
 			options.ShortestPathCaps = &translate.ProductionShortestPathCaps{
-				StateLimit: manifest.Caps["state_limit"], PredecessorLimit: manifest.Caps["predecessor_limit"],
-				EnumerationLimit: manifest.Caps["enumeration_limit"], OutputBytesLimit: manifest.Caps["output_bytes_limit"],
+				StateLimit:       manifest.Caps["state_limit"],
+				PredecessorLimit: manifest.Caps["predecessor_limit"],
+				EnumerationLimit: manifest.Caps["enumeration_limit"],
+				OutputBytesLimit: manifest.Caps["output_bytes_limit"],
 			}
 		}
 		return options, nil
@@ -702,7 +708,7 @@ func (s *postgresSQLRunner) captureAndValidateFixture(ctx context.Context, fixtu
 	return nil
 }
 
-// resetCaseSession drops pooled session state between cases and, for single-connection runs, records the replacement backend PID used to verify isolation.
+// resetCaseSession supports benchmark evidence processing for reset case session.
 func (s *postgresSQLRunner) resetCaseSession(ctx context.Context) error {
 	s.pool.Reset()
 	if s.poolSize != 1 {
@@ -963,6 +969,7 @@ func (s *postgresSQLRunner) readTransactionOptions() []graph.TransactionOption {
 	return []graph.TransactionOption{pg.OptionSetTransactionIsolation(pgx.RepeatableRead)}
 }
 
+// timedRuntimeAttestationIdentity derives the stable identity used to compare timed runtime attestation.
 func timedRuntimeAttestationIdentity(translation translate.Result) string {
 	outcome, ok := singleTraversalOutcome(translation.Optimization.TargetOutcomes)
 	if !ok {

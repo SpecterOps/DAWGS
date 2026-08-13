@@ -16,8 +16,10 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 )
 
+// planDeltaSchemaVersion reserves the stable protocol value used to recognize plan delta schema version across artifacts and executions.
 const planDeltaSchemaVersion = 2
 
+// planRowsPattern contains the frozen plan rows pattern declaration consulted by package validation.
 var planRowsPattern = regexp.MustCompile(`\brows=([0-9]+)\b`)
 
 // workloadFingerprint hashes backend-independent query identity and parameter
@@ -34,10 +36,15 @@ func workloadFingerprint(query CorpusQuery) string {
 	}
 
 	return jsonFingerprint(struct {
-		Source         string            `json:"source"`
-		Dataset        string            `json:"dataset,omitempty"`
-		Name           string            `json:"name"`
-		Cypher         string            `json:"cypher"`
+		// Source supplies the source input to the anonymous record contract.
+		Source string `json:"source"`
+		// Dataset identifies the fixture dataset that supplies the workload graph.
+		Dataset string `json:"dataset,omitempty"`
+		// Name identifies the name.
+		Name string `json:"name"`
+		// Cypher supplies the cypher input to the anonymous record contract.
+		Cypher string `json:"cypher"`
+		// ParameterTypes supplies the parameter types input to the anonymous record contract.
 		ParameterTypes map[string]string `json:"parameter_types,omitempty"`
 	}{
 		Source:         query.Source,
@@ -61,11 +68,17 @@ func neo4jPlanFingerprint(plan *Neo4jPlanNode) string {
 	if plan == nil {
 		return ""
 	}
+
+	// fingerprintNode contains only the normalized plan attributes bound into the digest.
 	type fingerprintNode struct {
-		Operator    string            `json:"operator"`
-		Arguments   map[string]string `json:"arguments,omitempty"`
-		Identifiers []string          `json:"identifiers,omitempty"`
-		Children    []fingerprintNode `json:"children,omitempty"`
+		// Operator supplies the operator input to the fingerprintNode contract.
+		Operator string `json:"operator"`
+		// Arguments supplies the arguments input to the fingerprintNode contract.
+		Arguments map[string]string `json:"arguments,omitempty"`
+		// Identifiers supplies the identifiers input to the fingerprintNode contract.
+		Identifiers []string `json:"identifiers,omitempty"`
+		// Children supplies the children input to the fingerprintNode contract.
+		Children []fingerprintNode `json:"children,omitempty"`
 	}
 	var project func(Neo4jPlanNode) fingerprintNode
 	project = func(node Neo4jPlanNode) fingerprintNode {
@@ -117,13 +130,19 @@ func jsonFingerprint(value any) string {
 // buildPlanDeltaReport pairs records by workload union so a missing backend is
 // preserved as evidence instead of disappearing through intersection-only reporting.
 func buildPlanDeltaReport(records []PlanRecord) (PlanDeltaReport, error) {
+	// pair holds the PostgreSQL and Neo4j plans available for one workload revision.
 	type pair struct {
+		// postgres retains the postgres while pair is assembled or evaluated.
 		postgres *PlanRecord
-		neo4j    *PlanRecord
+		// neo4j retains the neo4j while pair is assembled or evaluated.
+		neo4j *PlanRecord
 	}
 
+	// pairKey identifies one workload at one DAWGS revision.
 	type pairKey struct {
+		// workload retains the workload while pairKey is assembled or evaluated.
 		workload string
+		// revision retains the revision while pairKey is assembled or evaluated.
 		revision string
 	}
 	pairs := map[pairKey]pair{}
@@ -138,7 +157,10 @@ func buildPlanDeltaReport(records []PlanRecord) (PlanDeltaReport, error) {
 				Params:  record.Params,
 			})
 		}
-		key := pairKey{workload: record.WorkloadSHA256, revision: record.Metadata.DAWGSVersion}
+		key := pairKey{
+			workload: record.WorkloadSHA256,
+			revision: record.Metadata.DAWGSVersion,
+		}
 		next := pairs[key]
 		switch record.Driver {
 		case pgDriverName():
@@ -218,17 +240,28 @@ func planDeltaPairFingerprint(delta PlanDeltaRecord) string {
 		neo4jFingerprint = delta.Neo4j.PlanFingerprint
 	}
 	return jsonFingerprint(struct {
-		Dataset             string `json:"dataset,omitempty"`
-		Source              string `json:"source"`
-		Name                string `json:"name"`
-		WorkloadSHA256      string `json:"workload_sha256"`
-		SourceRevision      string `json:"source_revision,omitempty"`
+		// Dataset identifies the fixture dataset that supplies the workload graph.
+		Dataset string `json:"dataset,omitempty"`
+		// Source supplies the source input to the anonymous record contract.
+		Source string `json:"source"`
+		// Name identifies the name.
+		Name string `json:"name"`
+		// WorkloadSHA256 binds the referenced workload content by SHA-256 digest.
+		WorkloadSHA256 string `json:"workload_sha256"`
+		// SourceRevision supplies the source revision input to the anonymous record contract.
+		SourceRevision string `json:"source_revision,omitempty"`
+		// PostgresFingerprint supplies the postgres fingerprint input to the anonymous record contract.
 		PostgresFingerprint string `json:"postgres_plan_fingerprint,omitempty"`
-		Neo4jFingerprint    string `json:"neo4j_plan_fingerprint,omitempty"`
+		// Neo4jFingerprint supplies the neo4j fingerprint input to the anonymous record contract.
+		Neo4jFingerprint string `json:"neo4j_plan_fingerprint,omitempty"`
 	}{
-		Dataset: delta.Dataset, Source: delta.Source, Name: delta.Name,
-		WorkloadSHA256: delta.WorkloadSHA256, SourceRevision: delta.SourceRevision,
-		PostgresFingerprint: postgresFingerprint, Neo4jFingerprint: neo4jFingerprint,
+		Dataset:             delta.Dataset,
+		Source:              delta.Source,
+		Name:                delta.Name,
+		WorkloadSHA256:      delta.WorkloadSHA256,
+		SourceRevision:      delta.SourceRevision,
+		PostgresFingerprint: postgresFingerprint,
+		Neo4jFingerprint:    neo4jFingerprint,
 	})
 }
 
@@ -332,8 +365,13 @@ func rankPlanDeltaFindings(records []PlanDeltaRecord) []PlanDeltaFinding {
 	var findings []PlanDeltaFinding
 	appendFinding := func(record PlanDeltaRecord, category string, score float64, summary string) {
 		findings = append(findings, PlanDeltaFinding{
-			Category: category, Dataset: record.Dataset, Source: record.Source, Name: record.Name,
-			PairSHA256: record.PairSHA256, Score: score, Summary: summary,
+			Category:   category,
+			Dataset:    record.Dataset,
+			Source:     record.Source,
+			Name:       record.Name,
+			PairSHA256: record.PairSHA256,
+			Score:      score,
+			Summary:    summary,
 		})
 	}
 	for _, record := range records {

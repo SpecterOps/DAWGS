@@ -21,6 +21,7 @@ import (
 // captureBundleVersion identifies the serialized schema revision for capture bundle.
 const captureBundleVersion = 3
 
+// captureBundleChecksumFile reserves the stable protocol value used to recognize capture bundle checksum file across artifacts and executions.
 const captureBundleChecksumFile = "checksums.sha256"
 
 // CaptureBundleManifest inventories the benchmark artifacts and source provenance copied into a portable bundle.
@@ -50,8 +51,10 @@ type CaptureBundleManifest struct {
 // CaptureCorpusDeclaration preserves every selected workload field needed to
 // reconstruct the exact benchmark corpus rather than only its backend index.
 type CaptureCorpusDeclaration struct {
-	Version int         `json:"version"`
-	Cases   []ScaleCase `json:"cases"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// Cases contains the per-workload evidence underlying the aggregate decision.
+	Cases []ScaleCase `json:"cases"`
 }
 
 // CaptureBundleEvidence identifies one auxiliary plan, A/A, correctness, resource, or decision artifact.
@@ -92,7 +95,7 @@ type CaptureBundleVerification struct {
 
 // UntrackedSource describes an untracked source file copied into an artifact bundle.
 type UntrackedSource struct {
-	// Path records the untracked source path relative to the repository root.
+	// Path identifies the filesystem path.
 	Path string `json:"path"`
 	// SHA256 verifies the copied file's contents without depending on its path.
 	SHA256 string `json:"sha256"`
@@ -197,7 +200,10 @@ func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []C
 		}
 		return cases[i].Name < cases[j].Name
 	})
-	if err := writeIndentedJSON(filepath.Join(root, "corpus-declaration.json"), CaptureCorpusDeclaration{Version: 2, Cases: cases}); err != nil {
+	if err := writeIndentedJSON(filepath.Join(root, "corpus-declaration.json"), CaptureCorpusDeclaration{
+		Version: 2,
+		Cases:   cases,
+	}); err != nil {
 		return err
 	}
 	if err := writeBundleJSONL(filepath.Join(root, "combined.jsonl"), records); err != nil {
@@ -281,6 +287,7 @@ func capturedWorkingTreeSHA256(patch []byte, untracked []UntrackedSource, root s
 	return fmt.Sprintf("%x", digest.Sum(nil)), nil
 }
 
+// validUntrackedSourcePath reports whether a relative path can be copied into a capture bundle safely.
 func validUntrackedSourcePath(path string) bool {
 	if path == "" || filepath.IsAbs(path) || path != filepath.ToSlash(path) {
 		return false
@@ -344,7 +351,11 @@ func copyCaptureBundleEvidence(root string, inputs []CaptureBundleEvidenceInput)
 		if err != nil {
 			return nil, err
 		}
-		evidence = append(evidence, CaptureBundleEvidence{Name: name, SourceSHA256: digest, Copy: relative})
+		evidence = append(evidence, CaptureBundleEvidence{
+			Name:         name,
+			SourceSHA256: digest,
+			Copy:         relative,
+		})
 	}
 	sort.Slice(evidence, func(i, j int) bool { return evidence[i].Name < evidence[j].Name })
 	return evidence, nil
@@ -491,7 +502,10 @@ func writeBundleChecksums(root string) error {
 // verifyCaptureBundle validates bundle structure, every payload checksum, source provenance, and record count.
 // When requireCleanSource is true, diagnostic bundles carrying a patch or untracked source are rejected.
 func verifyCaptureBundle(root string, requireCleanSource bool) (CaptureBundleVerification, error) {
-	report := CaptureBundleVerification{Version: 1, Passed: true}
+	report := CaptureBundleVerification{
+		Version: 1,
+		Passed:  true,
+	}
 	root = filepath.Clean(root)
 	rootInfo, err := os.Stat(root)
 	if err != nil {
@@ -555,6 +569,7 @@ func verifyCaptureBundle(root string, requireCleanSource bool) (CaptureBundleVer
 	return report, nil
 }
 
+// verifyBundleCorpus verifies bundle corpus.
 func verifyBundleCorpus(root string, manifest CaptureBundleManifest) []string {
 	path, err := resolveBundlePath(root, manifest.CorpusDeclaration)
 	if err != nil {
@@ -867,6 +882,7 @@ func verifyBundleManifest(root string, checksums map[string]string) (CaptureBund
 	return manifest, reasons
 }
 
+// readUntrackedSourceManifest reads untracked source manifest.
 func readUntrackedSourceManifest(path string) ([]UntrackedSource, []string) {
 	content, err := os.ReadFile(path)
 	if err != nil {

@@ -74,7 +74,14 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
 
-	type fraction struct{ reachable, fanout int }
+	// fraction identifies one reachable-endpoint and fanout combination.
+	type fraction struct {
+		// reachable retains the reachable while fraction is assembled or evaluated.
+		reachable int
+
+		// fanout retains the fanout while fraction is assembled or evaluated.
+		fanout int
+	}
 	trainingDepths := map[int]bool{}
 	trainingFanouts := map[int]bool{}
 	trainingFractions := map[fraction]bool{}
@@ -105,7 +112,11 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 				testCase.Name+" must predeclare every stable path observation")
 			require.True(t, newCaseResult(testCase, ModePostgresSQL, testCase.Params).StableObservation, testCase.Name)
 		}
-		declaredCohort[performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}] = testCase.Shape.QualificationSplit
+		declaredCohort[performanceKey{
+			dataset: testCase.Dataset,
+			name:    testCase.Name,
+			backend: ModePostgresSQL,
+		}] = testCase.Shape.QualificationSplit
 
 		metadata, err := fixtureMetadata("unused", testCase.Dataset)
 		require.NoError(t, err, testCase.Name)
@@ -122,7 +133,10 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 			trainingCount++
 			trainingDepths[config.ExpansionDepth] = true
 			trainingFanouts[config.Fanout] = true
-			trainingFractions[fraction{reachable: *config.ExactReachableSuffixSources, fanout: config.Fanout}] = true
+			trainingFractions[fraction{
+				reachable: *config.ExactReachableSuffixSources,
+				fanout:    config.Fanout,
+			}] = true
 			trainingDisconnected[config.DisconnectedSuffixSources] = true
 			trainingFanIn[config.ReverseFanIn] = true
 			trainingMultiplicity[config.SuffixPathsPerBoundary] = true
@@ -155,7 +169,10 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 	require.GreaterOrEqual(t, len(trainingMultiplicity), 3)
 	require.GreaterOrEqual(t, len(trainingRoots), 4)
 	require.Equal(t, map[string]bool{"endpoint": true, "path": true}, trainingObservations)
-	require.Equal(t, map[bool]bool{false: true, true: true}, trainingZeroDepth)
+	require.Equal(t, map[bool]bool{
+		false: true,
+		true:  true,
+	}, trainingZeroDepth)
 	require.GreaterOrEqual(t, len(trainingPayloads), 3)
 	for _, combination := range [][2]bool{{false, false}, {true, false}, {false, true}, {true, true}} {
 		require.True(t, trainingBoundaryControls[combination], "missing cycle/self-loop combination %v", combination)
@@ -166,7 +183,11 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 	}
 	require.Len(t, orientationV2CanonicalCases, len(declaredCohort))
 	for _, frozen := range orientationV2CanonicalCases {
-		require.Equal(t, frozen.split, declaredCohort[performanceKey{dataset: frozen.dataset, name: frozen.name, backend: ModePostgresSQL}], frozen.name)
+		require.Equal(t, frozen.split, declaredCohort[performanceKey{
+			dataset: frozen.dataset,
+			name:    frozen.name,
+			backend: ModePostgresSQL,
+		}], frozen.name)
 	}
 	canonical, err := canonicalOrientationV2Cohort()
 	require.NoError(t, err)
@@ -400,15 +421,24 @@ func TestGeneratedSPI1InboundV1CorpusFreezesTrainingAndUnopenedHoldoutMatrices(t
 		querySHA256 = "1024577967901503995d4ec0c76540e96b65f4d25e015ccb6eeffb500a5596f9"
 	)
 
+	// expectedCase binds one frozen workload declaration to its expected fixture and result shape.
 	type expectedCase struct {
-		dataset       string
-		config        testutil.ShortestPathScaleV2Config
+		// dataset retains the dataset while expectedCase is assembled or evaluated.
+		dataset string
+		// config retains the config while expectedCase is assembled or evaluated.
+		config testutil.ShortestPathScaleV2Config
+		// fixtureSHA256 binds the referenced fixture content by SHA-256 digest.
 		fixtureSHA256 string
-		split         string
-		target        string
-		resultDepth   int
-		stateClass    string
-		extraTags     []string
+		// split retains the split while expectedCase is assembled or evaluated.
+		split string
+		// target retains the target while expectedCase is assembled or evaluated.
+		target string
+		// resultDepth retains the result depth while expectedCase is assembled or evaluated.
+		resultDepth int
+		// stateClass retains the state class while expectedCase is assembled or evaluated.
+		stateClass string
+		// extraTags retains the extra tags while expectedCase is assembled or evaluated.
+		extraTags []string
 	}
 	expected := map[string]expectedCase{
 		"GSP-I1-V1-TRAIN-D04-FI016-full": {
@@ -504,7 +534,12 @@ func TestGeneratedSPI1InboundV1CorpusFreezesTrainingAndUnopenedHoldoutMatrices(t
 		require.Equal(t, map[string]string{"root_id": "sp-v2-inbound-root", "end_id": contract.target}, testCase.NodeParams, testCase.Name)
 		require.Equal(t, []ExecutionMode{ModePostgresSQL, ModeNeo4j}, testCase.CandidateModes, testCase.Name)
 		require.Empty(t, testCase.UnsupportedModes, testCase.Name)
-		require.Equal(t, ObservedValues{Paths: true, Nodes: true, Relationships: true, Properties: true}, testCase.Observes, testCase.Name)
+		require.Equal(t, ObservedValues{
+			Paths:         true,
+			Nodes:         true,
+			Relationships: true,
+			Properties:    true,
+		}, testCase.Observes, testCase.Name)
 
 		shape := testCase.Shape
 		require.Equal(t, contract.split, shape.QualificationSplit, testCase.Name)
@@ -599,6 +634,7 @@ func TestGeneratedSPI1InboundV1CorpusFreezesTrainingAndUnopenedHoldoutMatrices(t
 	require.Equal(t, "219ee26cae52d8b81c6c91f9c517692c544ef4cec1aa9b9314fbc4e8f5ad3c5c", spI1InboundRuntimeCorpusIdentity(confirmation))
 }
 
+// spI1InboundFixtureConfig prepares or inspects test evidence for sp i1 inbound fixture config.
 func spI1InboundFixtureConfig(depth, rootFanIn, intermediateFanIn, fanInLevel, disconnectedWidth int) testutil.ShortestPathScaleV2Config {
 	return testutil.ShortestPathScaleV2Config{
 		Depth:                    depth,
@@ -609,6 +645,7 @@ func spI1InboundFixtureConfig(depth, rootFanIn, intermediateFanIn, fanInLevel, d
 	}
 }
 
+// spI1InboundExpectedPath prepares or inspects test evidence for sp i1 inbound expected path.
 func spI1InboundExpectedPath(fixtureDepth, resultDepth int) ExpectedPath {
 	nodes := []string{"sp-v2-inbound-root"}
 	for level := 1; level < resultDepth; level++ {
@@ -625,7 +662,11 @@ func spI1InboundExpectedPath(fixtureDepth, resultDepth int) ExpectedPath {
 		kinds[idx] = "Traverse"
 		keys[idx] = fmt.Sprintf("inbound-primary-%02d", fixtureDepth-idx)
 	}
-	return ExpectedPath{Nodes: nodes, RelationshipKinds: kinds, RelationshipKeys: keys}
+	return ExpectedPath{
+		Nodes:             nodes,
+		RelationshipKinds: kinds,
+		RelationshipKeys:  keys,
+	}
 }
 
 // spI1InboundRuntimeCorpusIdentity normalizes the package-test corpus root to

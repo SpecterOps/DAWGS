@@ -15,6 +15,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// guardedSuffixOrientationQuery reserves the stable protocol value used to recognize guarded suffix orientation query across artifacts and executions.
 const guardedSuffixOrientationQuery = `
 	MATCH (root:ExpansionRoot)
 	WHERE root.root_key = $root_key
@@ -22,6 +23,7 @@ const guardedSuffixOrientationQuery = `
 	RETURN path
 `
 
+// TestExpansionOrientationReverseDominanceHasStrictHysteresis verifies expansion orientation reverse dominance has strict hysteresis behavior.
 func TestExpansionOrientationReverseDominanceHasStrictHysteresis(t *testing.T) {
 	require.False(t, expansionOrientationReverseDominates(0, 0))
 	require.False(t, expansionOrientationReverseDominates(100, 75))
@@ -30,13 +32,22 @@ func TestExpansionOrientationReverseDominanceHasStrictHysteresis(t *testing.T) {
 	require.True(t, expansionOrientationReverseDominates(4, 2))
 }
 
+// TestExpansionOrientationBooleanModesRemainV1ByDefault verifies expansion orientation boolean modes remain v1 by default behavior.
 func TestExpansionOrientationBooleanModesRemainV1ByDefault(t *testing.T) {
 	for _, testCase := range []struct {
-		name    string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// options retains the options while anonymous record is assembled or evaluated.
 		options ToolOptions
 	}{
-		{name: "guarded", options: ToolOptions{EnableExpansionOrientationTournament: true}},
-		{name: "shadow", options: ToolOptions{EnableExpansionOrientationShadow: true}},
+		{
+			name:    "guarded",
+			options: ToolOptions{EnableExpansionOrientationTournament: true},
+		},
+		{
+			name:    "shadow",
+			options: ToolOptions{EnableExpansionOrientationShadow: true},
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			translate := func(options ToolOptions) (Result, string) {
@@ -72,12 +83,18 @@ func TestExpansionOrientationBooleanModesRemainV1ByDefault(t *testing.T) {
 	}
 }
 
+// TestExpansionOrientationProbeV2IsExplicitAndDepthWeighted verifies expansion orientation probe v2 is explicit and depth weighted behavior.
 func TestExpansionOrientationProbeV2IsExplicitAndDepthWeighted(t *testing.T) {
 	for _, testCase := range []struct {
-		name               string
-		options            ToolOptions
-		expectedMode       string
-		expectedBoundary   string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// options retains the options while anonymous record is assembled or evaluated.
+		options ToolOptions
+		// expectedMode identifies the expected mode.
+		expectedMode string
+		// expectedBoundary retains the expected boundary while anonymous record is assembled or evaluated.
+		expectedBoundary string
+		// expectedCandidates retains the expected candidates while anonymous record is assembled or evaluated.
 		expectedCandidates []optimize.ExpansionSearchStrategy
 	}{
 		{
@@ -129,17 +146,30 @@ func TestExpansionOrientationProbeV2IsExplicitAndDepthWeighted(t *testing.T) {
 	}
 }
 
+// TestBoundedAdmissionGatesAreStrictComplements verifies bounded admission gates are strict complements behavior.
 func TestBoundedAdmissionGatesAreStrictComplements(t *testing.T) {
 	admitted, fallback := boundedAdmissionGates(
-		boundedProbeLimit{source: "endpoint_probe", limit: 32},
-		boundedProbeLimit{source: "state_probe", limit: 4096},
+		boundedProbeLimit{
+			source: "endpoint_probe",
+			limit:  32,
+		},
+		boundedProbeLimit{
+			source: "state_probe",
+			limit:  4096,
+		},
 	)
 	require.NotNil(t, admitted)
 	require.NotNil(t, fallback)
 
 	query := pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
-		&pgsql.AliasedExpression{Expression: admitted, Alias: models.OptionalValue[pgsql.Identifier]("admitted")},
-		&pgsql.AliasedExpression{Expression: fallback, Alias: models.OptionalValue[pgsql.Identifier]("fallback")},
+		&pgsql.AliasedExpression{
+			Expression: admitted,
+			Alias:      models.OptionalValue[pgsql.Identifier]("admitted"),
+		},
+		&pgsql.AliasedExpression{
+			Expression: fallback,
+			Alias:      models.OptionalValue[pgsql.Identifier]("fallback"),
+		},
 	}}}
 	rendered, err := format.Statement(query, format.NewOutputBuilder())
 	require.NoError(t, err)
@@ -149,6 +179,7 @@ func TestBoundedAdmissionGatesAreStrictComplements(t *testing.T) {
 	require.Contains(t, rendered, "or exists")
 }
 
+// TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches verifies guarded suffix orientation tournament emits bounded disjoint branches behavior.
 func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -245,12 +276,16 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy)
 }
 
+// TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy verifies production canary expansion orientation uses versioned guarded policy behavior.
 func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
 	translation, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"root_key": "guarded-fixed-suffix-root",
-	}, DefaultGraphID, ProductionOptions{EnableExpansionOrientation: true, SelectorVersion: "traversal-production-g11"})
+	}, DefaultGraphID, ProductionOptions{
+		EnableExpansionOrientation: true,
+		SelectorVersion:            "traversal-production-g11",
+	})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
@@ -258,7 +293,12 @@ func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testi
 	require.Contains(t, formatted, "(s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 < (s5_orientation_metrics.root_rows + s5_orientation_metrics.forward_degree_rows) * 3")
 	require.NotContains(t, formatted, "16 * s5_orientation_metrics.forward_degree_rows")
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
-		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+		optimize.TraversalStepTarget{
+			QueryPartIndex: 0,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		})
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.PlannedPolicy)
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.EmittedPolicy)
 	require.Equal(t, "production_canary", outcome.SelectionMode)
@@ -266,6 +306,7 @@ func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testi
 	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
 }
 
+// TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent verifies suffix orientation shadow emits would select metadata and only incumbent behavior.
 func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -328,6 +369,7 @@ func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *test
 	require.Empty(t, outcome.SkipReason)
 }
 
+// TestSuffixOrientationShadowIsParameterStable verifies suffix orientation shadow is parameter stable behavior.
 func TestSuffixOrientationShadowIsParameterStable(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -347,6 +389,7 @@ func TestSuffixOrientationShadowIsParameterStable(t *testing.T) {
 	require.Contains(t, first, "@pi0::text")
 }
 
+// TestGuardedSuffixOrientationSQLIsParameterStable verifies guarded suffix orientation sql is parameter stable behavior.
 func TestGuardedSuffixOrientationSQLIsParameterStable(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -366,15 +409,31 @@ func TestGuardedSuffixOrientationSQLIsParameterStable(t *testing.T) {
 	require.Contains(t, first, "@pi0::text")
 }
 
+// TestGuardedSuffixOrientationAlignsSupportedOutputShapes verifies guarded suffix orientation aligns supported output shapes behavior.
 func TestGuardedSuffixOrientationAlignsSupportedOutputShapes(t *testing.T) {
 	for _, testCase := range []struct {
-		name       string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// projection retains the projection while anonymous record is assembled or evaluated.
 		projection string
-		expected   string
+		// expected retains the expected while anonymous record is assembled or evaluated.
+		expected string
 	}{
-		{name: "endpoint IDs", projection: "id(head), id(terminal)", expected: `select s5.n2 as "id(head)", s5.n4 as "id(terminal)"`},
-		{name: "ordered path IDs", projection: "length(path)", expected: `as "length(path)"`},
-		{name: "full path", projection: "path", expected: "ordered_edge_ids_to_path"},
+		{
+			name:       "endpoint IDs",
+			projection: "id(head), id(terminal)",
+			expected:   `select s5.n2 as "id(head)", s5.n4 as "id(terminal)"`,
+		},
+		{
+			name:       "ordered path IDs",
+			projection: "length(path)",
+			expected:   `as "length(path)"`,
+		},
+		{
+			name:       "full path",
+			projection: "path",
+			expected:   "ordered_edge_ids_to_path",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
@@ -395,6 +454,7 @@ func TestGuardedSuffixOrientationAlignsSupportedOutputShapes(t *testing.T) {
 	}
 }
 
+// TestProductionFixedSuffixTranslationRemainsIncumbent verifies production fixed suffix translation remains incumbent behavior.
 func TestProductionFixedSuffixTranslationRemainsIncumbent(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -415,6 +475,7 @@ func TestProductionFixedSuffixTranslationRemainsIncumbent(t *testing.T) {
 	require.Equal(t, "inline_statement", outcome.ExecutionBoundary)
 }
 
+// TestGuardedSuffixOrientationUsesOnlyTargetGraphRelations verifies guarded suffix orientation uses only target graph relations behavior.
 func TestGuardedSuffixOrientationUsesOnlyTargetGraphRelations(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -431,6 +492,7 @@ func TestGuardedSuffixOrientationUsesOnlyTargetGraphRelations(t *testing.T) {
 	require.NotRegexp(t, regexp.MustCompile(`(?i)(from|join) (node|edge)(?:\s|;)`), formatted)
 }
 
+// TestExpansionOrientationTournamentRejectsConflictingForceWithoutMutation verifies expansion orientation tournament rejects conflicting force without mutation behavior.
 func TestExpansionOrientationTournamentRejectsConflictingForceWithoutMutation(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -446,6 +508,7 @@ func TestExpansionOrientationTournamentRejectsConflictingForceWithoutMutation(t 
 	require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
 }
 
+// TestExpansionOrientationShadowRejectsConflictingModesWithoutMutation verifies expansion orientation shadow rejects conflicting modes without mutation behavior.
 func TestExpansionOrientationShadowRejectsConflictingModesWithoutMutation(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -469,6 +532,7 @@ func TestExpansionOrientationShadowRejectsConflictingModesWithoutMutation(t *tes
 	}
 }
 
+// TestExpansionOrientationPolicyRequiresSupportedEnabledMode verifies expansion orientation policy requires supported enabled mode behavior.
 func TestExpansionOrientationPolicyRequiresSupportedEnabledMode(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
 	require.NoError(t, err)
@@ -488,6 +552,7 @@ func TestExpansionOrientationPolicyRequiresSupportedEnabledMode(t *testing.T) {
 	require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
 }
 
+// TestExpansionOrientationShadowRequiresExactlyOneEligibleTarget verifies expansion orientation shadow requires exactly one eligible target behavior.
 func TestExpansionOrientationShadowRequiresExactlyOneEligibleTarget(t *testing.T) {
 	plan := optimize.Plan{LoweringPlan: optimize.LoweringPlan{
 		ExpansionSearchStrategy: []optimize.ExpansionSearchStrategyDecision{
@@ -516,6 +581,7 @@ func TestExpansionOrientationShadowRequiresExactlyOneEligibleTarget(t *testing.T
 	require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
 }
 
+// TestExpansionOrientationTournamentRequiresExactlyOneEligibleTarget verifies expansion orientation tournament requires exactly one eligible target behavior.
 func TestExpansionOrientationTournamentRequiresExactlyOneEligibleTarget(t *testing.T) {
 	plan := optimize.Plan{LoweringPlan: optimize.LoweringPlan{
 		ExpansionSearchStrategy: []optimize.ExpansionSearchStrategyDecision{
@@ -546,6 +612,7 @@ func TestExpansionOrientationTournamentRequiresExactlyOneEligibleTarget(t *testi
 	require.Equal(t, before, plan.LoweringPlan.ExpansionSearchStrategy)
 }
 
+// TestExpansionOrientationTournamentRejectsNonInitialVariableRegion verifies expansion orientation tournament rejects non initial variable region behavior.
 func TestExpansionOrientationTournamentRejectsNonInitialVariableRegion(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (root:ExpansionRoot)

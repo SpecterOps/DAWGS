@@ -36,7 +36,7 @@ type ExistingGraphAnchorManifest struct {
 	ContentIdentity string `json:"content_identity"`
 	// Anchors maps manifest anchor names to their logical or redacted physical identities.
 	Anchors map[string]ExistingGraphAnchor `json:"anchors"`
-	// Checksum records the digest of the validated manifest file.
+	// Checksum supplies the checksum input to the ExistingGraphAnchorManifest contract.
 	Checksum string `json:"-"`
 }
 
@@ -54,15 +54,15 @@ type ExistingGraphAnchor struct {
 
 // ExistingGraphAttempt captures the applied deadline, collected samples, and outcome of one live-graph execution.
 type ExistingGraphAttempt struct {
-	// Timeout records the deadline applied to this live-graph attempt; zero means no deadline.
+	// Timeout supplies the timeout input to the ExistingGraphAttempt contract.
 	Timeout time.Duration `json:"timeout"`
 	// WarmupSamples records untimed samples collected before live-graph measurement.
 	WarmupSamples int `json:"warmup_samples"`
 	// MeasuredSamples records timed samples collected for the live-graph attempt.
 	MeasuredSamples int `json:"measured_samples"`
-	// Status records the execution outcome.
+	// Status supplies the status input to the ExistingGraphAttempt contract.
 	Status string `json:"status"`
-	// Error records the failure message when the operation did not succeed.
+	// Error supplies the error input to the ExistingGraphAttempt contract.
 	Error string `json:"error,omitempty"`
 }
 
@@ -241,7 +241,10 @@ func corpusIdentity(corpus ScaleCorpus) string {
 		Version int `json:"version"`
 		// Cases contains the canonically ordered workload declarations bound into the corpus digest.
 		Cases []ScaleCase `json:"cases"`
-	}{Version: 2, Cases: cases})
+	}{
+		Version: 2,
+		Cases:   cases,
+	})
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
 }
@@ -257,17 +260,17 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		DirtyDiffSHA256 string `json:"dirty_diff_sha256"`
 		// BinarySHA256 identifies the benchmark executable used for the run.
 		BinarySHA256 string `json:"binary_sha256"`
-		// GOOS records the target operating system of the benchmark executable.
+		// GOOS supplies the goos input to the anonymous record contract.
 		GOOS string `json:"goos"`
-		// GOARCH records the target architecture of the benchmark executable.
+		// GOARCH supplies the goarch input to the anonymous record contract.
 		GOARCH string `json:"goarch"`
-		// GoVersion records the Go toolchain version used to build the executable.
+		// GoVersion identifies the schema version for go version.
 		GoVersion string `json:"go_version"`
 		// Modes records execution-mode order as part of resumable run identity.
 		Modes []ExecutionMode `json:"modes"`
-		// Iterations records the number of measured iterations.
+		// Iterations records the number of iterations.
 		Iterations int `json:"iterations"`
-		// WarmupIterations records the untimed iterations run before measurement.
+		// WarmupIterations records the number of warmup iterations.
 		WarmupIterations int `json:"warmup_iterations"`
 		// Round identifies the measurement round.
 		Round int `json:"round"`
@@ -275,11 +278,11 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		Block int `json:"block"`
 		// Arm identifies the measurement arm that produced the sample.
 		Arm string `json:"arm"`
-		// ArmOrder records the arm's position within its balanced measurement block.
+		// ArmOrder supplies the arm order input to the anonymous record contract.
 		ArmOrder int `json:"arm_order"`
 		// PoolSize sets the database connection-pool size.
 		PoolSize int `json:"pool_size"`
-		// Concurrency records the requested worker counts as part of resumable run identity.
+		// Concurrency supplies the concurrency input to the anonymous record contract.
 		Concurrency []int `json:"concurrency"`
 		// SessionMemoryCeilingBytes sets the per-session memory ceiling in bytes.
 		SessionMemoryCeilingBytes int64 `json:"session_memory_ceiling_bytes"`
@@ -293,15 +296,15 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		PostgresForceShortest string `json:"postgres_force_shortest"`
 		// PostgresForceExpansion selects a forced expansion search strategy for diagnostic runs.
 		PostgresForceExpansion string `json:"postgres_force_expansion"`
-		// PostgresRepeatableRead records the stable-snapshot timing contract.
+		// PostgresRepeatableRead indicates whether postgres repeatable read applies.
 		PostgresRepeatableRead bool `json:"postgres_repeatable_read"`
 		// PostgresTraversalTelemetry selects the opt-in traversal evidence boundary.
 		PostgresTraversalTelemetry string `json:"postgres_traversal_telemetry"`
-		// PostgresExpansionOrientationShadow records the tool-only selector shadow mode.
+		// PostgresExpansionOrientationShadow indicates whether postgres expansion orientation shadow applies.
 		PostgresExpansionOrientationShadow bool `json:"postgres_expansion_orientation_shadow"`
-		// PostgresExpansionOrientationTournament records the guarded selector mode.
+		// PostgresExpansionOrientationTournament indicates whether postgres expansion orientation tournament applies.
 		PostgresExpansionOrientationTournament bool `json:"postgres_expansion_orientation_tournament"`
-		// PostgresExpansionOrientationPolicy records the immutable selector formula.
+		// PostgresExpansionOrientationPolicy identifies the postgres expansion orientation policy.
 		PostgresExpansionOrientationPolicy string `json:"postgres_expansion_orientation_policy"`
 		// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
 		Discovery bool `json:"discovery"`

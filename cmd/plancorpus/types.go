@@ -7,6 +7,7 @@ import (
 	"github.com/specterops/dawgs/testutil"
 )
 
+// planRecordSchemaVersion reserves the stable protocol value used to recognize plan record schema version across artifacts and executions.
 const planRecordSchemaVersion = 2
 
 // PlanRecord captures a query plan together with workload, fixture, and environment identity.
@@ -51,7 +52,7 @@ type PlanRecord struct {
 	SkippedLowerings []translate.SkippedLowering `json:"skipped_lowerings,omitempty"`
 	// Optimization captures translation optimization and lowering decisions.
 	Optimization *translate.OptimizationSummary `json:"optimization,omitempty"`
-	// Error records the failure message when the operation did not succeed.
+	// Error supplies the error input to the PlanRecord contract.
 	Error string `json:"error,omitempty"`
 }
 
@@ -124,9 +125,9 @@ type PlanDeltaRecord struct {
 	SourceRevision string `json:"source_revision,omitempty"`
 	// PairSHA256 binds workload, source revision, and both backend plan fingerprints.
 	PairSHA256 string `json:"pair_sha256"`
-	// Postgres records the PostgreSQL side when captured.
+	// Postgres supplies the postgres input to the PlanDeltaRecord contract.
 	Postgres *SemanticPlan `json:"postgres,omitempty"`
-	// Neo4j records the Neo4j side when captured.
+	// Neo4j supplies the neo4j input to the PlanDeltaRecord contract.
 	Neo4j *SemanticPlan `json:"neo4j,omitempty"`
 	// Complete reports whether both backend plans were captured successfully.
 	Complete bool `json:"complete"`
@@ -184,7 +185,7 @@ type SemanticPlan struct {
 	ActualOutput *int64 `json:"actual_output,omitempty"`
 	// ObservedSeedWork records actual rows or store hits at the selected seed leaf when exposed.
 	ObservedSeedWork *int64 `json:"observed_seed_work,omitempty"`
-	// ObservedAlternativeSeedWork records the comparable opposite leaf's work when exposed.
+	// ObservedAlternativeSeedWork supplies the observed alternative seed work input to the SemanticPlan contract.
 	ObservedAlternativeSeedWork *int64 `json:"observed_alternative_seed_work,omitempty"`
 	// ObservedTraversalWork records profiled traversal DB hits when exposed.
 	ObservedTraversalWork *int64 `json:"observed_traversal_work,omitempty"`
@@ -192,15 +193,15 @@ type SemanticPlan struct {
 	ObservedHydrationRows *int64 `json:"observed_hydration_rows,omitempty"`
 	// OutputQError records estimate error when both estimate and actual output exist.
 	OutputQError *float64 `json:"output_q_error,omitempty"`
-	// PlannedIdentity records the optimizer-selected CySQL candidate.
+	// PlannedIdentity identifies the planned identity.
 	PlannedIdentity string `json:"planned_identity,omitempty"`
-	// EmittedIdentity records the candidate actually emitted by translation.
+	// EmittedIdentity identifies the emitted identity.
 	EmittedIdentity string `json:"emitted_identity,omitempty"`
 	// PlannedCandidates lists the complete typed candidate set.
 	PlannedCandidates []string `json:"planned_candidates,omitempty"`
 	// EmittedCandidates lists the arms present in translated SQL.
 	EmittedCandidates []string `json:"emitted_candidates,omitempty"`
-	// FallbackIdentity records the exact incumbent chain declared by translation.
+	// FallbackIdentity identifies the fallback identity.
 	FallbackIdentity string `json:"fallback_identity,omitempty"`
 	// FallbackReason records static qualification failure or guarded fallback intent.
 	FallbackReason string `json:"fallback_reason,omitempty"`

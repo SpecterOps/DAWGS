@@ -401,19 +401,25 @@ func (s *Translator) buildGuardedSuffixOrientationQuery(
 				Joins: []pgsql.Join{
 					{
 						Table: pgsql.TableReference{Name: ids.states.AsCompoundIdentifier()},
-						JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-							projectedNodeIDReference(rootFrame, expansionStep.LeftNode),
-							pgsql.OperatorEquals,
-							pgsql.CompoundIdentifier{ids.states, expansionNextID},
-						)},
+						JoinOperator: pgsql.JoinOperator{
+							JoinType: pgsql.JoinTypeInner,
+							Constraint: pgsql.NewBinaryExpression(
+								projectedNodeIDReference(rootFrame, expansionStep.LeftNode),
+								pgsql.OperatorEquals,
+								pgsql.CompoundIdentifier{ids.states, expansionNextID},
+							),
+						},
 					},
 					{
 						Table: pgsql.TableReference{Name: ids.suffixProbe.AsCompoundIdentifier()},
-						JoinOperator: pgsql.JoinOperator{JoinType: pgsql.JoinTypeInner, Constraint: pgsql.NewBinaryExpression(
-							pgsql.CompoundIdentifier{ids.suffixProbe, fixedSuffixBoundaryID},
-							pgsql.OperatorEquals,
-							pgsql.CompoundIdentifier{ids.states, fixedSuffixBoundaryID},
-						)},
+						JoinOperator: pgsql.JoinOperator{
+							JoinType: pgsql.JoinTypeInner,
+							Constraint: pgsql.NewBinaryExpression(
+								pgsql.CompoundIdentifier{ids.suffixProbe, fixedSuffixBoundaryID},
+								pgsql.OperatorEquals,
+								pgsql.CompoundIdentifier{ids.states, fixedSuffixBoundaryID},
+							),
+						},
 					},
 				},
 			},
@@ -472,6 +478,7 @@ func (s *Translator) buildGuardedSuffixOrientationQuery(
 	}, nil
 }
 
+// buildFixedSuffixBoundariesCTE builds fixed suffix boundaries cte.
 func buildFixedSuffixBoundariesCTE(ids suffixSeededIdentifiers) pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.boundaries},

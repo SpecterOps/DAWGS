@@ -25,11 +25,11 @@ const aaReportVersion = 3
 type AAMetricResolution struct {
 	// Ratio reports the candidate-to-baseline latency ratio.
 	Ratio RatioInterval `json:"ratio"`
-	// RatioResolution records the relative A/A noise floor for ratio classification.
+	// RatioResolution supplies the ratio resolution input to the AAMetricResolution contract.
 	RatioResolution float64 `json:"ratio_resolution"`
 	// AbsoluteChange reports the paired candidate-minus-baseline A/A duration interval.
 	AbsoluteChange DurationInterval `json:"absolute_change"`
-	// AbsoluteResolution records the absolute A/A noise floor used for materiality decisions.
+	// AbsoluteResolution supplies the absolute resolution input to the AAMetricResolution contract.
 	AbsoluteResolution time.Duration `json:"absolute_resolution"`
 }
 
@@ -48,7 +48,7 @@ type AAResolutionCase struct {
 	PostgresEnvironmentSHA256 string `json:"postgres_environment_sha256,omitempty"`
 	// FixtureSHA256 binds PostgreSQL A/A noise to the exact validated fixture.
 	FixtureSHA256 string `json:"fixture_sha256,omitempty"`
-	// Rounds records the number of independent measurement rounds.
+	// Rounds records the number of rounds.
 	Rounds int `json:"rounds"`
 	// SamplesPerArm records matched timing samples available from each A/A arm.
 	SamplesPerArm int `json:"samples_per_arm"`
@@ -74,9 +74,9 @@ type AAResolutionReport struct {
 	ArtifactSHA256 string `json:"artifact_sha256"`
 	// HostFingerprint identifies the host whose timing noise this report measures.
 	HostFingerprint string `json:"host_fingerprint"`
-	// MinimumRounds records the independent-round floor enforced by this report.
+	// MinimumRounds records the number of minimum rounds.
 	MinimumRounds int `json:"minimum_rounds"`
-	// MinimumSamplesPerArmPerRound records the sample floor enforced after splitting A/A arms.
+	// MinimumSamplesPerArmPerRound supplies the minimum samples per arm per round input to the AAResolutionReport contract.
 	MinimumSamplesPerArmPerRound int `json:"minimum_samples_per_arm_per_round"`
 	// OrderBalanced reports that the two explicitly executed A/A arms have complementary balanced first position.
 	OrderBalanced bool `json:"order_balanced"`
@@ -196,15 +196,25 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 // synthetic labels understates reload, connection, and first-order carryover
 // noise and is therefore deliberately refused by the promotion-grade report.
 func collectExplicitAASeries(records []CaseResult) (map[performanceKey][2]roundSamples, error) {
+	// armIdentity binds one A/A arm to its exact SQL and workload content.
 	type armIdentity struct {
+		// SQLFingerprint supplies the sql fingerprint input to the armIdentity contract.
 		SQLFingerprint string
+		// WorkloadSHA256 binds the referenced workload content by SHA-256 digest.
 		WorkloadSHA256 string
 	}
+
+	// armSeries accumulates balanced samples and scheduling identity for one arm.
 	type armSeries struct {
+		// identity retains the identity while armSeries is assembled or evaluated.
 		identity armIdentity
-		samples  roundSamples
-		orders   map[int]int
-		blocks   map[int]int
+		// samples retains the samples while armSeries is assembled or evaluated.
+		samples roundSamples
+		// orders retains the orders while armSeries is assembled or evaluated.
+		orders map[int]int
+		// blocks retains the blocks while armSeries is assembled or evaluated.
+		blocks map[int]int
+		// runUUIDs retains the run uui ds while armSeries is assembled or evaluated.
 		runUUIDs map[int]string
 	}
 
@@ -213,7 +223,11 @@ func collectExplicitAASeries(records []CaseResult) (map[performanceKey][2]roundS
 		if record.Status != StatusOK || record.ExecutionMode != ModePostgresSQL {
 			continue
 		}
-		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+		key := performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: record.ExecutionMode,
+		}
 		for _, sample := range record.Stats.Samples {
 			if sample.Classification != "warm" || sample.Duration <= 0 {
 				continue
@@ -229,12 +243,21 @@ func collectExplicitAASeries(records []CaseResult) (map[performanceKey][2]roundS
 			arm := arms[sample.Arm]
 			if arm == nil {
 				arm = &armSeries{
-					identity: armIdentity{SQLFingerprint: record.SQLFingerprint, WorkloadSHA256: record.WorkloadSHA256},
-					samples:  roundSamples{}, orders: map[int]int{}, blocks: map[int]int{}, runUUIDs: map[int]string{},
+					identity: armIdentity{
+						SQLFingerprint: record.SQLFingerprint,
+						WorkloadSHA256: record.WorkloadSHA256,
+					},
+					samples:  roundSamples{},
+					orders:   map[int]int{},
+					blocks:   map[int]int{},
+					runUUIDs: map[int]string{},
 				}
 				arms[sample.Arm] = arm
 			}
-			identity := armIdentity{SQLFingerprint: record.SQLFingerprint, WorkloadSHA256: record.WorkloadSHA256}
+			identity := armIdentity{
+				SQLFingerprint: record.SQLFingerprint,
+				WorkloadSHA256: record.WorkloadSHA256,
+			}
 			if arm.identity != identity || identity.SQLFingerprint == "" || identity.WorkloadSHA256 == "" {
 				return nil, fmt.Errorf("%s/%s arm %q changes or lacks executable/workload identity", key.dataset, key.name, sample.Arm)
 			}

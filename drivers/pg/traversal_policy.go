@@ -18,31 +18,47 @@ import (
 // generation is mandatory whenever a candidate is enabled and is included in
 // the translation cache identity.
 type TraversalPolicy struct {
-	Generation              uint64 `json:"generation"`
+	// Generation supplies the generation input to the TraversalPolicy contract.
+	Generation uint64 `json:"generation"`
+	// PromotionManifestSHA256 binds the referenced promotion manifest content by SHA-256 digest.
 	PromotionManifestSHA256 string `json:"promotion_manifest_sha256"`
 	// PromotionManifestJSON is the exact verified authorization document. It
 	// is intentionally excluded from policy serialization; its digest and
 	// content-derived fields form the cache identity.
-	PromotionManifestJSON        json.RawMessage               `json:"-"`
-	QuerySHA256Allowlist         []string                      `json:"query_sha256_allowlist"`
-	ShortestPathExecutor         optimize.ShortestPathExecutor `json:"shortest_path_executor,omitempty"`
-	EnableExpansionOrientation   bool                          `json:"enable_expansion_orientation,omitempty"`
-	DisableEndpointSeededReverse bool                          `json:"disable_endpoint_seeded_reverse,omitempty"`
-	DisableInlineASPDAG          bool                          `json:"disable_inline_asp_dag,omitempty"`
-	DisableInlineSPWitness       bool                          `json:"disable_inline_sp_witness,omitempty"`
-	compiledManifest             traversalPromotionManifest
-	compiledBuckets              map[string]traversalPromotionBucket
-	compiledIdentity             string
+	PromotionManifestJSON json.RawMessage `json:"-"`
+	// QuerySHA256Allowlist binds the referenced query sha256 allowlist content by SHA-256 digest.
+	QuerySHA256Allowlist []string `json:"query_sha256_allowlist"`
+	// ShortestPathExecutor supplies the shortest path executor input to the TraversalPolicy contract.
+	ShortestPathExecutor optimize.ShortestPathExecutor `json:"shortest_path_executor,omitempty"`
+	// EnableExpansionOrientation indicates whether enable expansion orientation applies.
+	EnableExpansionOrientation bool `json:"enable_expansion_orientation,omitempty"`
+	// DisableEndpointSeededReverse indicates whether disable endpoint seeded reverse applies.
+	DisableEndpointSeededReverse bool `json:"disable_endpoint_seeded_reverse,omitempty"`
+	// DisableInlineASPDAG indicates whether disable inline aspdag applies.
+	DisableInlineASPDAG bool `json:"disable_inline_asp_dag,omitempty"`
+	// DisableInlineSPWitness indicates whether disable inline sp witness applies.
+	DisableInlineSPWitness bool `json:"disable_inline_sp_witness,omitempty"`
+	// compiledManifest retains the compiled manifest while TraversalPolicy is assembled or evaluated.
+	compiledManifest traversalPromotionManifest
+	// compiledBuckets retains the compiled buckets while TraversalPolicy is assembled or evaluated.
+	compiledBuckets map[string]traversalPromotionBucket
+	// compiledIdentity identifies the compiled identity.
+	compiledIdentity string
 }
 
+// enabled reports whether the policy changes any production translation behavior.
 func (s TraversalPolicy) enabled() bool {
 	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness
 }
 
-func (s TraversalPolicy) productionOptions(query string) translate.ProductionOptions {
+// productionOptions derives validated translation options from the active traversal policy.
+func (s TraversalPolicy) productionOptions(query string) (translate.ProductionOptions, error) {
 	manifest := s.compiledManifest
 	if manifest.SelectorVersion == "" && len(s.PromotionManifestJSON) > 0 {
-		manifest, _ = decodeTraversalPromotionManifest(s.PromotionManifestJSON)
+		var err error
+		if manifest, err = decodeTraversalPromotionManifest(s.PromotionManifestJSON); err != nil {
+			return translate.ProductionOptions{}, fmt.Errorf("decode traversal promotion manifest: %w", err)
+		}
 	}
 	selectorVersion := manifest.SelectorVersion
 	if selectorVersion == "" {
@@ -54,7 +70,8 @@ func (s TraversalPolicy) productionOptions(query string) translate.ProductionOpt
 		}
 	}
 	options := translate.ProductionOptions{
-		ShortestPathExecutor: s.ShortestPathExecutor, EnableExpansionOrientation: s.EnableExpansionOrientation,
+		ShortestPathExecutor:         s.ShortestPathExecutor,
+		EnableExpansionOrientation:   s.EnableExpansionOrientation,
 		DisableEndpointSeededReverse: s.DisableEndpointSeededReverse,
 		DisableInlineASPDAG:          s.DisableInlineASPDAG,
 		DisableInlineSPWitness:       s.DisableInlineSPWitness,
@@ -83,47 +100,75 @@ func (s TraversalPolicy) productionOptions(query string) translate.ProductionOpt
 					continue
 				}
 				options.AuthorizedBucket = &translate.ProductionTraversalBucket{
-					Direction: bucket.Direction, ObservationMode: bucket.ObservationMode,
-					MinimumDepth: bucket.MinimumDepth, MaximumDepth: bucket.MaximumDepth,
-					RelationshipKindCount: bucket.RelationshipKindCount, UntypedRelationship: bucket.UntypedRelationship,
+					Direction:             bucket.Direction,
+					ObservationMode:       bucket.ObservationMode,
+					MinimumDepth:          bucket.MinimumDepth,
+					MaximumDepth:          bucket.MaximumDepth,
+					RelationshipKindCount: bucket.RelationshipKindCount,
+					UntypedRelationship:   bucket.UntypedRelationship,
 				}
 				break
 			}
 		}
 	}
-	return options
+	return options, nil
 }
 
+// traversalPromotionBucket groups state that must remain consistent while processing traversal promotion bucket.
 type traversalPromotionBucket struct {
-	QuerySHA256           []string `json:"query_sha256"`
-	QualificationSplit    []string `json:"qualification_split"`
-	Direction             string   `json:"direction,omitempty"`
-	ObservationMode       string   `json:"observation_mode,omitempty"`
-	MinimumDepth          int64    `json:"minimum_depth,omitempty"`
-	MaximumDepth          int64    `json:"maximum_depth,omitempty"`
-	RelationshipKindCount int      `json:"relationship_kind_count,omitempty"`
-	UntypedRelationship   bool     `json:"untyped_relationship,omitempty"`
+	// QuerySHA256 binds the referenced query content by SHA-256 digest.
+	QuerySHA256 []string `json:"query_sha256"`
+	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
+	QualificationSplit []string `json:"qualification_split"`
+	// Direction selects the traversal orientation covered by the contract.
+	Direction string `json:"direction,omitempty"`
+	// ObservationMode identifies the observation mode.
+	ObservationMode string `json:"observation_mode,omitempty"`
+	// MinimumDepth sets the inclusive lower traversal-depth bound.
+	MinimumDepth int64 `json:"minimum_depth,omitempty"`
+	// MaximumDepth sets the inclusive upper traversal-depth bound.
+	MaximumDepth int64 `json:"maximum_depth,omitempty"`
+	// RelationshipKindCount records the number of relationship kind count.
+	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
+	// UntypedRelationship indicates whether untyped relationship applies.
+	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
 }
 
+// traversalPromotionEvidence records independently verifiable observations for traversal promotion.
 type traversalPromotionEvidence struct {
+	// SHA256 binds the referenced  content by SHA-256 digest.
 	SHA256 string `json:"sha256"`
 }
 
+// traversalPromotionManifest binds the immutable inputs authorized for traversal promotion.
 type traversalPromotionManifest struct {
-	Version           int                                   `json:"version"`
-	Candidate         string                                `json:"candidate"`
-	SelectorVersion   string                                `json:"selector_version"`
-	ExecutionBoundary string                                `json:"execution_boundary"`
-	FallbackExecutor  string                                `json:"fallback_executor,omitempty"`
-	SourceCommit      string                                `json:"source_commit"`
-	SourceSHA256      string                                `json:"source_sha256"`
-	BinarySHA256      string                                `json:"binary_sha256"`
-	CorpusSHA256      string                                `json:"corpus_sha256"`
-	Caps              map[string]int64                      `json:"caps"`
-	Buckets           []traversalPromotionBucket            `json:"buckets"`
-	Evidence          map[string]traversalPromotionEvidence `json:"evidence"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// Candidate identifies the execution strategy being evaluated or authorized.
+	Candidate string `json:"candidate"`
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string `json:"selector_version"`
+	// ExecutionBoundary supplies the execution boundary input to the traversalPromotionManifest contract.
+	ExecutionBoundary string `json:"execution_boundary"`
+	// FallbackExecutor supplies the fallback executor input to the traversalPromotionManifest contract.
+	FallbackExecutor string `json:"fallback_executor,omitempty"`
+	// SourceCommit supplies the source commit input to the traversalPromotionManifest contract.
+	SourceCommit string `json:"source_commit"`
+	// SourceSHA256 binds the referenced source content by SHA-256 digest.
+	SourceSHA256 string `json:"source_sha256"`
+	// BinarySHA256 binds the referenced binary content by SHA-256 digest.
+	BinarySHA256 string `json:"binary_sha256"`
+	// CorpusSHA256 binds the referenced corpus content by SHA-256 digest.
+	CorpusSHA256 string `json:"corpus_sha256"`
+	// Caps binds each guarded resource dimension to its enforced limit.
+	Caps map[string]int64 `json:"caps"`
+	// Buckets supplies the buckets input to the traversalPromotionManifest contract.
+	Buckets []traversalPromotionBucket `json:"buckets"`
+	// Evidence supplies the evidence input to the traversalPromotionManifest contract.
+	Evidence map[string]traversalPromotionEvidence `json:"evidence"`
 }
 
+// decodeTraversalPromotionManifest coordinates PostgreSQL driver behavior for decode traversal promotion manifest.
 func decodeTraversalPromotionManifest(raw []byte) (traversalPromotionManifest, error) {
 	var manifest traversalPromotionManifest
 	if len(raw) == 0 {
@@ -135,6 +180,7 @@ func decodeTraversalPromotionManifest(raw []byte) (traversalPromotionManifest, e
 	return manifest, nil
 }
 
+// validate validates .
 func (s TraversalPolicy) validate() error {
 	if !s.enabled() {
 		return nil
@@ -286,6 +332,7 @@ func (s TraversalPolicy) validate() error {
 	return nil
 }
 
+// lowerHexSHA256 coordinates PostgreSQL driver behavior for lower hex sha256.
 func lowerHexSHA256(value string) bool {
 	if value != strings.ToLower(value) {
 		return false
@@ -294,6 +341,7 @@ func lowerHexSHA256(value string) bool {
 	return err == nil && len(decoded) == sha256.Size
 }
 
+// productionCanaryExecutor coordinates PostgreSQL driver behavior for production canary executor.
 func productionCanaryExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
@@ -344,7 +392,10 @@ func (s *Driver) SetTraversalPolicy(policy TraversalPolicy) error {
 			}
 		}
 	}
-	raw, _ := json.Marshal(policy)
+	raw, err := json.Marshal(policy)
+	if err != nil {
+		return fmt.Errorf("serialize traversal policy identity: %w", err)
+	}
 	digest := sha256.Sum256(raw)
 	policy.compiledIdentity = "production-policy-" + hex.EncodeToString(digest[:])
 	s.traversalPolicyLock.Lock()
@@ -366,6 +417,7 @@ func (s *Driver) TraversalPolicy() TraversalPolicy {
 	return policy
 }
 
+// effectiveTraversalPolicy coordinates PostgreSQL driver behavior for effective traversal policy.
 func (s *SchemaManager) effectiveTraversalPolicy(query string, isolation pgx.TxIsoLevel) (TraversalPolicy, string) {
 	s.traversalPolicyLock.RLock()
 	policy := s.traversalPolicy
@@ -388,6 +440,7 @@ func (s *SchemaManager) effectiveTraversalPolicy(query string, isolation pgx.TxI
 	return policy, policy.compiledIdentity
 }
 
+// shortestPathExecutorRequiresStableSnapshot coordinates PostgreSQL driver behavior for shortest path executor requires stable snapshot.
 func shortestPathExecutorRequiresStableSnapshot(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorB1AlternatingNodeDistance,

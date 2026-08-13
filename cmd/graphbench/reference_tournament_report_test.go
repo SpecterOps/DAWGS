@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBuildReferenceTournamentReportQualifiesStableHoldoutWinner verifies build reference tournament report qualifies stable holdout winner behavior.
 func TestBuildReferenceTournamentReportQualifiesStableHoldoutWinner(t *testing.T) {
 	arms := []string{"expand_into_pair_join", "expand_into_lower_degree_scan", "expand_into_pair_cache"}
 	var records []CaseResult
@@ -26,7 +27,11 @@ func TestBuildReferenceTournamentReportQualifiesStableHoldoutWinner(t *testing.T
 	}
 
 	report, err := buildReferenceTournamentReport(records, ReferenceTournamentOptions{
-		Seed: 1, BootstrapCount: 100, Confidence: .975, Arms: arms, Protocol: referencePairProtocolConfirmation,
+		Seed:           1,
+		BootstrapCount: 100,
+		Confidence:     .975,
+		Arms:           arms,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.NoError(t, err)
 	require.True(t, report.Passed)
@@ -41,6 +46,7 @@ func TestBuildReferenceTournamentReportQualifiesStableHoldoutWinner(t *testing.T
 	}
 }
 
+// TestBuildReferenceTournamentReportRejectsOrderAndWinnerDrift verifies build reference tournament report rejects order and winner drift behavior.
 func TestBuildReferenceTournamentReportRejectsOrderAndWinnerDrift(t *testing.T) {
 	arms := []string{"expand_into_pair_join", "expand_into_lower_degree_scan", "expand_into_pair_cache"}
 	badOrder := referenceTournamentRecord(arms, 1, "training", map[string]time.Duration{
@@ -48,7 +54,9 @@ func TestBuildReferenceTournamentReportRejectsOrderAndWinnerDrift(t *testing.T) 
 	})
 	badOrder.PostgresReferences[0].MeasurementOrder = 99
 	_, err := buildReferenceTournamentReport([]CaseResult{badOrder}, ReferenceTournamentOptions{
-		Confidence: .975, Arms: arms, Protocol: referencePairProtocolDiscovery,
+		Confidence: .975,
+		Arms:       arms,
+		Protocol:   referencePairProtocolDiscovery,
 	})
 	require.ErrorContains(t, err, "Williams order")
 
@@ -64,7 +72,11 @@ func TestBuildReferenceTournamentReportRejectsOrderAndWinnerDrift(t *testing.T) 
 		)
 	}
 	report, err := buildReferenceTournamentReport(records, ReferenceTournamentOptions{
-		Seed: 1, BootstrapCount: 100, Confidence: .975, Arms: arms, Protocol: referencePairProtocolConfirmation,
+		Seed:           1,
+		BootstrapCount: 100,
+		Confidence:     .975,
+		Arms:           arms,
+		Protocol:       referencePairProtocolConfirmation,
 	})
 	require.NoError(t, err)
 	require.False(t, report.Passed)
@@ -72,13 +84,20 @@ func TestBuildReferenceTournamentReportRejectsOrderAndWinnerDrift(t *testing.T) 
 	require.Empty(t, report.Winner)
 }
 
+// referenceTournamentRecord prepares or inspects test evidence for reference tournament record.
 func referenceTournamentRecord(arms []string, round int, split string, durations map[string]time.Duration) CaseResult {
 	record := CaseResult{
-		Environment: &RunEnvironment{Round: round, WarmupIterations: 20},
-		Dataset:     "tournament", Name: "case-" + split,
+		Environment: &RunEnvironment{
+			Round:            round,
+			WarmupIterations: 20,
+		},
+		Dataset:       "tournament",
+		Name:          "case-" + split,
 		Shape:         WorkloadShape{QualificationSplit: split},
-		ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		RowCount: 1, ObservedRows: []string{"row"},
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+		RowCount:      1,
+		ObservedRows:  []string{"row"},
 	}
 	base := make([]postgresReferenceSpec, len(arms))
 	for idx, arm := range arms {
@@ -91,13 +110,26 @@ func referenceTournamentRecord(arms []string, round int, split string, durations
 	for _, arm := range arms {
 		samples := make([]LatencySample, 50)
 		for idx := range samples {
-			samples[idx] = LatencySample{Classification: "warm", Duration: durations[arm] + time.Duration(idx)}
+			samples[idx] = LatencySample{
+				Classification: "warm",
+				Duration:       durations[arm] + time.Duration(idx),
+			}
 		}
 		record.PostgresReferences = append(record.PostgresReferences, PostgresReferenceResult{
-			Name: arm, Architecture: arm, ImplementationID: arm + "-v1", SQLFingerprint: arm + "-sql-v1",
-			Boundary: "relationships", FullComparator: true, SemanticValidation: "exact_public_observation",
-			MeasurementOrder: orders[arm], RowCount: 1, ObservedRows: []string{"row"},
-			Stats: DurationStats{WarmupIterations: 20, Samples: samples},
+			Name:               arm,
+			Architecture:       arm,
+			ImplementationID:   arm + "-v1",
+			SQLFingerprint:     arm + "-sql-v1",
+			Boundary:           "relationships",
+			FullComparator:     true,
+			SemanticValidation: "exact_public_observation",
+			MeasurementOrder:   orders[arm],
+			RowCount:           1,
+			ObservedRows:       []string{"row"},
+			Stats: DurationStats{
+				WarmupIterations: 20,
+				Samples:          samples,
+			},
 		})
 	}
 	return record

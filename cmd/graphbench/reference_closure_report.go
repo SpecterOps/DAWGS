@@ -30,7 +30,7 @@ type ReferenceClosureOptions struct {
 	ReferenceName string
 	// RatioUpperLimit sets the largest production-to-reference median ratio accepted by closure analysis.
 	RatioUpperLimit float64
-	// AbsoluteResolution records the absolute A/A noise floor used for materiality decisions.
+	// AbsoluteResolution supplies the absolute resolution input to the ReferenceClosureOptions contract.
 	AbsoluteResolution time.Duration
 }
 
@@ -42,9 +42,9 @@ type ReferenceClosureCase struct {
 	Name string `json:"name"`
 	// ReferenceName identifies the reference arm selected for closure analysis.
 	ReferenceName string `json:"reference_name"`
-	// ReferenceArchitecture records the executor architecture declared by the closure reference arm.
+	// ReferenceArchitecture supplies the reference architecture input to the ReferenceClosureCase contract.
 	ReferenceArchitecture string `json:"reference_architecture"`
-	// Rounds records the number of independent measurement rounds.
+	// Rounds records the number of rounds.
 	Rounds int `json:"rounds"`
 	// ProductionSamples records warm timing samples available from production execution.
 	ProductionSamples int `json:"production_samples"`
@@ -54,17 +54,17 @@ type ReferenceClosureCase struct {
 	MedianRatio RatioInterval `json:"median_ratio"`
 	// MedianChange reports the absolute median latency difference and confidence bounds.
 	MedianChange DurationInterval `json:"median_change"`
-	// AbsoluteGapUpper records the upper confidence bound for absolute production/reference latency gap.
+	// AbsoluteGapUpper supplies the absolute gap upper input to the ReferenceClosureCase contract.
 	AbsoluteGapUpper time.Duration `json:"absolute_gap_upper"`
 	// RatioUpperLimit sets the largest production-to-reference median ratio accepted by closure analysis.
 	RatioUpperLimit float64 `json:"ratio_upper_limit"`
-	// AbsoluteFloor records the A/A-derived absolute materiality floor.
+	// AbsoluteFloor supplies the absolute floor input to the ReferenceClosureCase contract.
 	AbsoluteFloor time.Duration `json:"absolute_floor"`
 	// ProductionAAResolution records production-arm A/A noise used for closure materiality.
 	ProductionAAResolution time.Duration `json:"production_aa_resolution"`
 	// ReferenceAAResolution records reference-arm A/A noise used for closure materiality.
 	ReferenceAAResolution time.Duration `json:"reference_aa_resolution"`
-	// AbsoluteResolution records the absolute A/A noise floor used for materiality decisions.
+	// AbsoluteResolution supplies the absolute resolution input to the ReferenceClosureCase contract.
 	AbsoluteResolution time.Duration `json:"absolute_resolution"`
 	// Passed reports whether every required gate condition succeeded.
 	Passed bool `json:"passed"`

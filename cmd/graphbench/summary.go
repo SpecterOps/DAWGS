@@ -68,11 +68,11 @@ type CostModelComponent struct {
 	Name string `json:"name"`
 	// Interval states whether the component is exclusive, derived, or inclusive and overlapping.
 	Interval string `json:"interval"`
-	// Median records the median observed duration.
+	// Median supplies the median input to the CostModelComponent contract.
 	Median time.Duration `json:"median"`
-	// P95 records the component's 95th-percentile observed duration.
+	// P95 supplies the p95 input to the CostModelComponent contract.
 	P95 time.Duration `json:"p95"`
-	// Rows records the result cardinality observed alongside the component measurement.
+	// Rows records the number of rows.
 	Rows int64 `json:"rows,omitempty"`
 	// ShareOfE2E reports this component's fraction of end-to-end latency.
 	ShareOfE2E float64 `json:"share_of_e2e,omitempty"`
@@ -112,17 +112,17 @@ type CaseSummary struct {
 
 // ModeCaseCell contains the status, statistics, and baseline comparison rendered in one summary cell.
 type ModeCaseCell struct {
-	// Status records the execution outcome.
+	// Status supplies the status input to the ModeCaseCell contract.
 	Status string `json:"status"`
-	// Rows records the row count returned for this case and execution mode.
+	// Rows records the number of rows.
 	Rows int64 `json:"rows,omitempty"`
-	// Median records the median observed duration.
+	// Median supplies the median input to the ModeCaseCell contract.
 	Median time.Duration `json:"median,omitempty"`
 	// Baseline contains the latency comparison with a matching baseline record.
 	Baseline *BaselineComparison `json:"baseline,omitempty"`
 	// FallbackReason explains why execution used a fallback architecture.
 	FallbackReason string `json:"fallback_reason,omitempty"`
-	// Error records the failure message when the operation did not succeed.
+	// Error supplies the error input to the ModeCaseCell contract.
 	Error string `json:"error,omitempty"`
 	// RuntimeReceiptChains preserves every measured invocation's complete
 	// ordered traversal branch chain.
@@ -137,9 +137,9 @@ type BaselineEntry struct {
 	Name string `json:"name"`
 	// Mode identifies the backend to which the baseline comparison applies.
 	Mode ExecutionMode `json:"mode"`
-	// BaselineMedian records the median latency loaded from the comparison baseline.
+	// BaselineMedian supplies the baseline median input to the BaselineEntry contract.
 	BaselineMedian time.Duration `json:"baseline_median"`
-	// CurrentMedian records the median latency measured by the current run.
+	// CurrentMedian supplies the current median input to the BaselineEntry contract.
 	CurrentMedian time.Duration `json:"current_median"`
 	// Ratio reports the candidate-to-baseline latency ratio.
 	Ratio float64 `json:"ratio"`

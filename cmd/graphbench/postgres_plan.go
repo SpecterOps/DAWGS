@@ -46,6 +46,7 @@ func parsePostgresPlanJSONMetrics(raw json.RawMessage) (PostgresPlanMetrics, err
 
 // walkPostgresPlanNode flattens one EXPLAIN node into aggregate metrics, then recursively visits child plans and CTE subplans.
 
+// walkPostgresPlanNode supports benchmark evidence processing for walk postgres plan node.
 func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics, parentPlanNodeID int64) {
 	planNodeID := int64(len(metrics.PlanNodes) + 1)
 	metric := PostgresPlanNodeMetric{

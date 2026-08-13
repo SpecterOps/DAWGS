@@ -15,14 +15,21 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// KindMapper groups state that must remain consistent while processing kind mapper.
 type KindMapper interface {
+	// MapKindID identifies the map kind id.
 	MapKindID(ctx context.Context, kindID int16) (graph.Kind, error)
+	// MapKindIDs supplies the map kind i ds input to the KindMapper contract.
 	MapKindIDs(ctx context.Context, kindIDs []int16) (graph.Kinds, error)
+	// MapKind supplies the map kind input to the KindMapper contract.
 	MapKind(ctx context.Context, kind graph.Kind) (int16, error)
+	// MapKinds supplies the map kinds input to the KindMapper contract.
 	MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
+	// AssertKinds supplies the assert kinds input to the KindMapper contract.
 	AssertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
 }
 
+// KindMapperFromGraphDatabase coordinates PostgreSQL driver behavior for kind mapper from graph database.
 func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 	switch typedGraphDB := graphDB.(type) {
 	case *Driver:
@@ -86,6 +93,7 @@ func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *Sche
 	}
 }
 
+// WriteTransaction coordinates PostgreSQL driver behavior for write transaction.
 func (s *SchemaManager) WriteTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 	if cfg, err := renderConfig(batchWriteSize, readWriteTxOptions, options); err != nil {
 		return err
@@ -123,6 +131,7 @@ func (s *SchemaManager) fetch(tx graph.Transaction) error {
 	return nil
 }
 
+// GetKindIDsByKind coordinates PostgreSQL driver behavior for get kind i ds by kind.
 func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -169,6 +178,7 @@ func (s *SchemaManager) mapKinds(kinds graph.Kinds) ([]int16, graph.Kinds) {
 	return ids, missingKinds
 }
 
+// MapKind coordinates PostgreSQL driver behavior for map kind.
 func (s *SchemaManager) MapKind(ctx context.Context, kind graph.Kind) (int16, error) {
 	s.lock.RLock()
 
@@ -192,6 +202,7 @@ func (s *SchemaManager) MapKind(ctx context.Context, kind graph.Kind) (int16, er
 	}
 }
 
+// MapKinds coordinates PostgreSQL driver behavior for map kinds.
 func (s *SchemaManager) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
 	s.lock.RLock()
 
@@ -214,6 +225,8 @@ func (s *SchemaManager) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int1
 		return nil, fmt.Errorf("unable to map kinds: %s", strings.Join(missingKinds.Strings(), ", "))
 	}
 }
+
+// ReadTransaction coordinates PostgreSQL driver behavior for read transaction.
 func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 	if cfg, err := renderConfig(batchWriteSize, readOnlyTxOptions, options); err != nil {
 		return err
@@ -247,10 +260,12 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 	}
 }
 
+// stableSnapshotIsolation coordinates PostgreSQL driver behavior for stable snapshot isolation.
 func stableSnapshotIsolation(isolation pgx.TxIsoLevel) bool {
 	return isolation == pgx.RepeatableRead || isolation == pgx.Serializable
 }
 
+// initializeStableSnapshotTraversalWorkspaces coordinates PostgreSQL driver behavior for initialize stable snapshot traversal workspaces.
 func initializeStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
 	const initializeSQL = `select
 		public.ensure_shortest_dag_workspace(),
@@ -280,6 +295,7 @@ func (s *SchemaManager) mapKindIDs(kindIDs []int16) (graph.Kinds, []int16) {
 	return kinds, missingIDs
 }
 
+// MapKindID coordinates PostgreSQL driver behavior for map kind id.
 func (s *SchemaManager) MapKindID(ctx context.Context, kindID int16) (graph.Kind, error) {
 	if kindIDs, err := s.MapKindIDs(ctx, []int16{kindID}); err != nil {
 		return nil, err
@@ -288,6 +304,7 @@ func (s *SchemaManager) MapKindID(ctx context.Context, kindID int16) (graph.Kind
 	}
 }
 
+// MapKindIDs coordinates PostgreSQL driver behavior for map kind i ds.
 func (s *SchemaManager) MapKindIDs(ctx context.Context, kindIDs []int16) (graph.Kinds, error) {
 	s.lock.RLock()
 
@@ -332,6 +349,7 @@ func (s *SchemaManager) assertKinds(ctx context.Context, kinds graph.Kinds) ([]i
 	return kindIDs, nil
 }
 
+// AssertKinds coordinates PostgreSQL driver behavior for assert kinds.
 func (s *SchemaManager) AssertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
 	// Acquire a read-lock first to fast-pass validate if we're missing any kind definitions
 	s.lock.RLock()
@@ -363,6 +381,7 @@ func (s *SchemaManager) setDefaultGraph(defaultGraph model.Graph, schema graph.G
 	s.hasDefaultGraph = true
 }
 
+// SetDefaultGraph coordinates PostgreSQL driver behavior for set default graph.
 func (s *SchemaManager) SetDefaultGraph(ctx context.Context, schema graph.Graph) error {
 	return s.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		// Validate the schema if the graph already exists in the database
@@ -375,6 +394,7 @@ func (s *SchemaManager) SetDefaultGraph(ctx context.Context, schema graph.Graph)
 	})
 }
 
+// AssertDefaultGraph coordinates PostgreSQL driver behavior for assert default graph.
 func (s *SchemaManager) AssertDefaultGraph(ctx context.Context, schema graph.Graph) error {
 	return s.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		if graphModel, err := s.AssertGraph(tx, schema); err != nil {
@@ -387,6 +407,7 @@ func (s *SchemaManager) AssertDefaultGraph(ctx context.Context, schema graph.Gra
 	})
 }
 
+// DefaultGraph coordinates PostgreSQL driver behavior for default graph.
 func (s *SchemaManager) DefaultGraph() (model.Graph, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -394,7 +415,7 @@ func (s *SchemaManager) DefaultGraph() (model.Graph, bool) {
 	return s.defaultGraph, s.hasDefaultGraph
 }
 
-// assertGraph creates or validates schema's graph definition in tx and records the resulting database model.
+// assertGraph coordinates PostgreSQL driver behavior for assert graph.
 func (s *SchemaManager) assertGraph(tx graph.Transaction, schema graph.Graph) (model.Graph, error) {
 	var assertedGraph model.Graph
 
@@ -422,6 +443,7 @@ func (s *SchemaManager) assertGraph(tx graph.Transaction, schema graph.Graph) (m
 	return assertedGraph, nil
 }
 
+// AssertGraph coordinates PostgreSQL driver behavior for assert graph.
 func (s *SchemaManager) AssertGraph(tx graph.Transaction, schema graph.Graph) (model.Graph, error) {
 	// Acquire a read-lock first to fast-pass validate if we're missing the graph definitions
 	s.lock.RLock()
@@ -473,6 +495,7 @@ func (s *SchemaManager) assertSchema(tx graph.Transaction, schema graph.Schema) 
 	return nil
 }
 
+// AssertSchema coordinates PostgreSQL driver behavior for assert schema.
 func (s *SchemaManager) AssertSchema(ctx context.Context, schema graph.Schema) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()

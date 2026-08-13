@@ -102,6 +102,7 @@ func TestDeleteRelationshipsByKindsEmptyIsNoop(t *testing.T) {
 	require.NoError(t, driver.DeleteRelationshipsByKinds(ctx, graph.Kinds{}))
 }
 
+// TestOptionInitializeTraversalRuntimeAttestation verifies option initialize traversal runtime attestation behavior.
 func TestOptionInitializeTraversalRuntimeAttestation(t *testing.T) {
 	cfg, err := renderConfig(defaultBatchWriteSize, readOnlyTxOptions, []graph.TransactionOption{
 		OptionInitializeTraversalRuntimeAttestation(),
@@ -110,6 +111,7 @@ func TestOptionInitializeTraversalRuntimeAttestation(t *testing.T) {
 	require.True(t, cfg.initializeTraversalRuntimeAttestation)
 }
 
+// TestStableSnapshotIsolation verifies stable snapshot isolation behavior.
 func TestStableSnapshotIsolation(t *testing.T) {
 	require.False(t, stableSnapshotIsolation(""))
 	require.False(t, stableSnapshotIsolation(pgx.ReadCommitted))
@@ -117,6 +119,7 @@ func TestStableSnapshotIsolation(t *testing.T) {
 	require.True(t, stableSnapshotIsolation(pgx.Serializable))
 }
 
+// TestOptionSetStableSnapshotIsolationAllowsTemporaryWorkspaceWrites verifies option set stable snapshot isolation allows temporary workspace writes behavior.
 func TestOptionSetStableSnapshotIsolationAllowsTemporaryWorkspaceWrites(t *testing.T) {
 	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
 		cfg, err := renderConfig(defaultBatchWriteSize, readOnlyTxOptions, []graph.TransactionOption{

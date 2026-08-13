@@ -8,8 +8,11 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// BindingResult groups SQL model state that must remain consistent while translating binding result.
 type BindingResult struct {
-	Binding      *BoundIdentifier
+	// Binding supplies the binding input to the BindingResult contract.
+	Binding *BoundIdentifier
+	// AlreadyBound indicates whether already bound applies.
 	AlreadyBound bool
 }
 
@@ -257,10 +260,14 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 	return nil
 }
 
+// TraversalStepContext groups SQL model state that must remain consistent while translating traversal step context.
 type TraversalStepContext struct {
+	// PreviousStep supplies the previous step input to the TraversalStepContext contract.
 	PreviousStep *TraversalStep
-	CurrentStep  *TraversalStep
-	IsRootStep   bool
+	// CurrentStep supplies the current step input to the TraversalStepContext contract.
+	CurrentStep *TraversalStep
+	// IsRootStep indicates whether is root step applies.
+	IsRootStep bool
 }
 
 // buildTraversalPatternPart translates all steps in a non-expanding pattern chain.

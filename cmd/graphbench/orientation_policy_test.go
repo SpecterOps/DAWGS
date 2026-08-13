@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestOrientationProbePolicyRecognitionIsVersionExplicit verifies orientation probe policy recognition is version explicit behavior.
 func TestOrientationProbePolicyRecognitionIsVersionExplicit(t *testing.T) {
 	require.True(t, isOrientationProbePolicy("orientation-probe-v1"))
 	require.True(t, isOrientationProbePolicy("orientation-probe-v2"))

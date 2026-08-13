@@ -85,7 +85,10 @@ func TestPostgreSQLBidirectionalOperationalPoolMatrix(t *testing.T) {
 				require.NoError(t, err)
 				defer connectionHandle.Release()
 				for _, planMode := range []string{"auto", "force_custom_plan", "force_generic_plan"} {
-					tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+					tx, err := connectionHandle.BeginTx(ctx, pgx.TxOptions{
+						IsoLevel:   pgx.RepeatableRead,
+						AccessMode: pgx.ReadWrite,
+					})
 					require.NoError(t, err)
 					_, err = tx.Exec(ctx, "set local work_mem = '64kB'")
 					require.NoError(t, err)
@@ -124,7 +127,10 @@ func TestPostgreSQLBidirectionalOperationalPoolMatrix(t *testing.T) {
 				_, err = writer.Exec(ctx, "insert into "+snapshotTable+" values (1)")
 				require.NoError(t, err)
 
-				readerTx, err := reader.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+				readerTx, err := reader.BeginTx(ctx, pgx.TxOptions{
+					IsoLevel:   pgx.RepeatableRead,
+					AccessMode: pgx.ReadWrite,
+				})
 				require.NoError(t, err)
 				var before, during int
 				require.NoError(t, readerTx.QueryRow(ctx, "select count(*) from "+snapshotTable).Scan(&before))
@@ -983,15 +989,39 @@ func TestPostgreSQLForcedBidirectionalShortestCandidatesPreservePublicResults(t 
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
 	tests := []struct {
-		name         string
-		caseName     string
-		executor     string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// caseName identifies the case name.
+		caseName string
+		// executor retains the executor while anonymous record is assembled or evaluated.
+		executor string
+		// functionName identifies the function name.
 		functionName string
 	}{
-		{name: "SP B1 distance", caseName: "GSP-D16-F016_distance", executor: "SP-B1-C-ALT-NODE-D", functionName: "shortest_path_b1_strict_alternating"},
-		{name: "SP B2 witness", caseName: "GSP-D16-F016_path", executor: "SP-B2-C-MIN-LEVEL-WE+MAT-M0", functionName: "shortest_path_b2_smaller_current_level"},
-		{name: "ASP B1 complete multiset", caseName: "GSPV2-NORMAL-outbound-all-shortest-depth3", executor: "ASP-B1-DAG-ALT-NODE", functionName: "all_shortest_paths_b1_strict_alternating"},
-		{name: "ASP B2 complete multiset", caseName: "GSPV2-NORMAL-outbound-all-shortest-depth3", executor: "ASP-B2-DAG-MIN-LEVEL", functionName: "all_shortest_paths_b2_smaller_current_level"},
+		{
+			name:         "SP B1 distance",
+			caseName:     "GSP-D16-F016_distance",
+			executor:     "SP-B1-C-ALT-NODE-D",
+			functionName: "shortest_path_b1_strict_alternating",
+		},
+		{
+			name:         "SP B2 witness",
+			caseName:     "GSP-D16-F016_path",
+			executor:     "SP-B2-C-MIN-LEVEL-WE+MAT-M0",
+			functionName: "shortest_path_b2_smaller_current_level",
+		},
+		{
+			name:         "ASP B1 complete multiset",
+			caseName:     "GSPV2-NORMAL-outbound-all-shortest-depth3",
+			executor:     "ASP-B1-DAG-ALT-NODE",
+			functionName: "all_shortest_paths_b1_strict_alternating",
+		},
+		{
+			name:         "ASP B2 complete multiset",
+			caseName:     "GSPV2-NORMAL-outbound-all-shortest-depth3",
+			executor:     "ASP-B2-DAG-MIN-LEVEL",
+			functionName: "all_shortest_paths_b2_smaller_current_level",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1102,15 +1132,22 @@ func TestPostgreSQLBidirectionalASPCancellationAndSessionIsolation(t *testing.T)
 			return 0, false
 		}
 		var document struct {
+			// SearchCalls supplies the search calls input to the anonymous record contract.
 			SearchCalls int64 `json:"search_calls"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(raw), &document))
 		return document.SearchCalls, true
 	}
 
-	firstTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	firstTx, err := first.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	require.NoError(t, err)
-	secondTx, err := second.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	secondTx, err := second.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	require.NoError(t, err)
 	const sharedInvocation = "same-key-different-sessions"
 	_, err = firstTx.Exec(ctx, "select public.begin_bidirectional_all_shortest_path_diagnostic_v1($1)", sharedInvocation)
@@ -1133,7 +1170,10 @@ func TestPostgreSQLBidirectionalASPCancellationAndSessionIsolation(t *testing.T)
 	require.NoError(t, firstTx.Rollback(ctx))
 	require.NoError(t, secondTx.Rollback(ctx))
 
-	cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	require.NoError(t, err)
 	_, err = cancelTx.Exec(ctx, "select public.begin_bidirectional_all_shortest_path_diagnostic_v1('cancelled-replay')")
 	require.NoError(t, err)
@@ -1161,7 +1201,10 @@ func TestPostgreSQLBidirectionalASPCancellationAndSessionIsolation(t *testing.T)
 	require.NoError(t, cancelTx.Rollback(ctx))
 	require.Equal(t, firstPID, first.Conn().PgConn().PID())
 
-	reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	require.NoError(t, err)
 	_, found = readCalls(reuseTx, "cancelled-replay")
 	require.False(t, found, "rolled-back invocation state must not survive")
@@ -1193,12 +1236,23 @@ func TestPostgreSQLBidirectionalSPCancellationAndSessionIsolation(t *testing.T) 
 	}
 
 	for _, scheduler := range []struct {
-		name         string
-		executor     string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// executor retains the executor while anonymous record is assembled or evaluated.
+		executor string
+		// functionName identifies the function name.
 		functionName string
 	}{
-		{name: "B1 strict alternating", executor: "SP-B1-C-ALT-NODE-WE+MAT-M0", functionName: "shortest_path_b1_strict_alternating"},
-		{name: "B2 smaller level", executor: "SP-B2-C-MIN-LEVEL-WE+MAT-M0", functionName: "shortest_path_b2_smaller_current_level"},
+		{
+			name:         "B1 strict alternating",
+			executor:     "SP-B1-C-ALT-NODE-WE+MAT-M0",
+			functionName: "shortest_path_b1_strict_alternating",
+		},
+		{
+			name:         "B2 smaller level",
+			executor:     "SP-B2-C-MIN-LEVEL-WE+MAT-M0",
+			functionName: "shortest_path_b2_smaller_current_level",
+		},
 	} {
 		scheduler := scheduler
 		t.Run(scheduler.name, func(t *testing.T) {
@@ -1259,15 +1313,22 @@ func TestPostgreSQLBidirectionalSPCancellationAndSessionIsolation(t *testing.T) 
 					return 0, false
 				}
 				var document struct {
+					// SearchCalls supplies the search calls input to the anonymous record contract.
 					SearchCalls int64 `json:"search_calls"`
 				}
 				require.NoError(t, json.Unmarshal([]byte(raw), &document))
 				return document.SearchCalls, true
 			}
 
-			firstTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			firstTx, err := first.BeginTx(ctx, pgx.TxOptions{
+				IsoLevel:   pgx.RepeatableRead,
+				AccessMode: pgx.ReadWrite,
+			})
 			require.NoError(t, err)
-			secondTx, err := second.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			secondTx, err := second.BeginTx(ctx, pgx.TxOptions{
+				IsoLevel:   pgx.RepeatableRead,
+				AccessMode: pgx.ReadWrite,
+			})
 			require.NoError(t, err)
 			invocationID := "sp-same-key-" + scheduler.executor
 			_, err = firstTx.Exec(ctx, "select public.begin_bidirectional_shortest_path_diagnostic_v1($1)", invocationID)
@@ -1290,7 +1351,10 @@ func TestPostgreSQLBidirectionalSPCancellationAndSessionIsolation(t *testing.T) 
 			require.NoError(t, firstTx.Rollback(ctx))
 			require.NoError(t, secondTx.Rollback(ctx))
 
-			cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{
+				IsoLevel:   pgx.RepeatableRead,
+				AccessMode: pgx.ReadWrite,
+			})
 			require.NoError(t, err)
 			cancelInvocation := "sp-cancelled-" + scheduler.executor
 			_, err = cancelTx.Exec(ctx, "select public.begin_bidirectional_shortest_path_diagnostic_v1($1)", cancelInvocation)
@@ -1319,7 +1383,10 @@ func TestPostgreSQLBidirectionalSPCancellationAndSessionIsolation(t *testing.T) 
 			require.NoError(t, cancelTx.Rollback(ctx))
 			require.Equal(t, firstPID, first.Conn().PgConn().PID())
 
-			reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+			reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{
+				IsoLevel:   pgx.RepeatableRead,
+				AccessMode: pgx.ReadWrite,
+			})
 			require.NoError(t, err)
 			_, found = readCalls(reuseTx, cancelInvocation)
 			require.False(t, found, "rolled-back invocation state must not survive")

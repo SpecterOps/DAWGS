@@ -114,12 +114,15 @@ func TestBuildConfirmationReportRequiresHostAAForCausalPromotion(t *testing.T) {
 	stampPairedEvidence(left, right, 20)
 
 	_, err := buildConfirmationReport(left, right, nil, ConfirmationOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10, CaseNames: []string{"changed"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+		CaseNames:      []string{"changed"},
 	})
 
 	require.ErrorContains(t, err, "host A/A resolution report is required")
 }
 
+// TestSameExecutableRequiresSameEffectiveTreatment verifies same executable requires same effective treatment behavior.
 func TestSameExecutableRequiresSameEffectiveTreatment(t *testing.T) {
 	left := []CaseResult{confirmationRecord("changed", "a1", "shared-binary", time.Millisecond)}
 	right := []CaseResult{confirmationRecord("changed", "i1", "shared-binary", time.Millisecond)}
@@ -143,7 +146,9 @@ func TestBuildConfirmationReportKeepsStressTimingDiagnostic(t *testing.T) {
 	right[0].Shape.FixtureTier = "stress"
 
 	report, err := buildConfirmationReport(left, right, nil, ConfirmationOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10, CaseNames: []string{"stress"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+		CaseNames:      []string{"stress"},
 	})
 
 	require.NoError(t, err)
@@ -161,7 +166,9 @@ func TestBuildConfirmationReportKeepsDiagnosticSplitOutOfPromotion(t *testing.T)
 	right[0].Shape.QualificationSplit = "diagnostic"
 
 	report, err := buildConfirmationReport(left, right, nil, ConfirmationOptions{
-		Confidence: defaultConfidenceLevel, BootstrapCount: 10, CaseNames: []string{"boundary"},
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 10,
+		CaseNames:      []string{"boundary"},
 	})
 
 	require.NoError(t, err)
@@ -191,7 +198,10 @@ func TestBuildConfirmationReportRequiresIndependentTraversalHoldout(t *testing.T
 	stampPairedEvidence(left, right, 20)
 
 	report, err := buildConfirmationReport(left, right, testAAReportForRecords(t, left), ConfirmationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: 50, CaseNames: []string{"sp-training", "sp-holdout"},
+		Seed:           1,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 50,
+		CaseNames:      []string{"sp-training", "sp-holdout"},
 	})
 	require.NoError(t, err)
 	require.True(t, report.QualificationRequired)
@@ -203,7 +213,10 @@ func TestBuildConfirmationReportRequiresIndependentTraversalHoldout(t *testing.T
 	left = left[:1]
 	right = right[:1]
 	report, err = buildConfirmationReport(left, right, testAAReportForRecords(t, left), ConfirmationOptions{
-		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: 50, CaseNames: []string{"sp-training"},
+		Seed:           1,
+		Confidence:     defaultConfidenceLevel,
+		BootstrapCount: 50,
+		CaseNames:      []string{"sp-training"},
 	})
 	require.NoError(t, err)
 	require.True(t, report.TrainingPassed)

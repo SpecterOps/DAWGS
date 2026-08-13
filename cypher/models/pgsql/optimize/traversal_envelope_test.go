@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// optimizeTraversalEnvelope evaluates planner state needed for optimize traversal envelope.
 func optimizeTraversalEnvelope(t *testing.T, query string) LoweringPlan {
 	t.Helper()
 
@@ -21,16 +22,23 @@ func optimizeTraversalEnvelope(t *testing.T, query string) LoweringPlan {
 	return plan.LoweringPlan
 }
 
+// TestEndpointResolutionClassifiesBoundedInputsWithoutSelectingThem verifies endpoint resolution classifies bounded inputs without selecting them behavior.
 func TestEndpointResolutionClassifiesBoundedInputsWithoutSelectingThem(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		where         string
-		rootClass     EndpointResolutionClass
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// where retains the where while anonymous record is assembled or evaluated.
+		where string
+		// rootClass retains the root class while anonymous record is assembled or evaluated.
+		rootClass EndpointResolutionClass
+		// terminalClass retains the terminal class while anonymous record is assembled or evaluated.
 		terminalClass EndpointResolutionClass
-		valueCount    int
-		runtimeCount  bool
+		// valueCount records the number of value count.
+		valueCount int
+		// runtimeCount records the number of runtime count.
+		runtimeCount bool
 	}{
 		{
 			name:          "ID equality",
@@ -102,6 +110,7 @@ func TestEndpointResolutionClassifiesBoundedInputsWithoutSelectingThem(t *testin
 	}
 }
 
+// TestEndpointResolutionRecordsCapsAndSentinelsInJSON verifies endpoint resolution records caps and sentinels in json behavior.
 func TestEndpointResolutionRecordsCapsAndSentinelsInJSON(t *testing.T) {
 	t.Parallel()
 
@@ -142,6 +151,7 @@ func TestEndpointResolutionRecordsCapsAndSentinelsInJSON(t *testing.T) {
 	}`, string(diagnostic))
 }
 
+// TestEndpointResolutionReportsConservativeFallbackReasons verifies endpoint resolution reports conservative fallback reasons behavior.
 func TestEndpointResolutionReportsConservativeFallbackReasons(t *testing.T) {
 	t.Parallel()
 
@@ -151,10 +161,15 @@ func TestEndpointResolutionReportsConservativeFallbackReasons(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name       string
-		query      string
-		reason     string
-		pairClass  EndpointResolutionClass
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// query retains the query while anonymous record is assembled or evaluated.
+		query string
+		// reason retains the reason while anonymous record is assembled or evaluated.
+		reason string
+		// pairClass retains the pair class while anonymous record is assembled or evaluated.
+		pairClass EndpointResolutionClass
+		// structural indicates whether structural applies.
 		structural bool
 	}{
 		{
@@ -231,16 +246,23 @@ func TestEndpointResolutionReportsConservativeFallbackReasons(t *testing.T) {
 	}
 }
 
+// TestTraversalPredicateClassifiesLocalUniversalAndWholePathForms verifies traversal predicate classifies local universal and whole path forms behavior.
 func TestTraversalPredicateClassifiesLocalUniversalAndWholePathForms(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		predicate     string
-		class         TraversalPredicateClass
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// predicate retains the predicate while anonymous record is assembled or evaluated.
+		predicate string
+		// class retains the class while anonymous record is assembled or evaluated.
+		class TraversalPredicateClass
+		// bindingSymbol retains the binding symbol while anonymous record is assembled or evaluated.
 		bindingSymbol string
-		fallback      string
-		structural    bool
+		// fallback retains the fallback while anonymous record is assembled or evaluated.
+		fallback string
+		// structural indicates whether structural applies.
+		structural bool
 	}{
 		{
 			name:       "endpoint WHERE predicate is not step local",
@@ -328,6 +350,7 @@ func TestTraversalPredicateClassifiesLocalUniversalAndWholePathForms(t *testing.
 	}
 }
 
+// TestTraversalPredicateOnlyClaimsInlineRelationshipPropertiesAsStepLocal verifies traversal predicate only claims inline relationship properties as step local behavior.
 func TestTraversalPredicateOnlyClaimsInlineRelationshipPropertiesAsStepLocal(t *testing.T) {
 	t.Parallel()
 
@@ -348,13 +371,18 @@ func TestTraversalPredicateOnlyClaimsInlineRelationshipPropertiesAsStepLocal(t *
 	require.Equal(t, TraversalPredicateFallbackUnsupported, plan.TraversalPredicate[1].FallbackReason)
 }
 
+// TestTraversalPredicateReportsMutationOptionalAndCorrelationFallbacks verifies traversal predicate reports mutation optional and correlation fallbacks behavior.
 func TestTraversalPredicateReportsMutationOptionalAndCorrelationFallbacks(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name       string
-		query      string
-		reason     string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// query retains the query while anonymous record is assembled or evaluated.
+		query string
+		// reason retains the reason while anonymous record is assembled or evaluated.
+		reason string
+		// structural indicates whether structural applies.
 		structural bool
 	}{
 		{
@@ -411,6 +439,7 @@ func TestTraversalPredicateReportsMutationOptionalAndCorrelationFallbacks(t *tes
 	}
 }
 
+// TestTraversalPredicateJSONKeepsCandidatePlannedOnly verifies traversal predicate json keeps candidate planned only behavior.
 func TestTraversalPredicateJSONKeepsCandidatePlannedOnly(t *testing.T) {
 	t.Parallel()
 

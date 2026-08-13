@@ -54,6 +54,7 @@ func TestParsePostgresPlanJSONMetricsRejectsMissingPlan(t *testing.T) {
 	require.ErrorContains(t, err, "missing its root Plan")
 }
 
+// TestParsePostgresPlanJSONMetricsRetainsDirectPlanParentage verifies parse postgres plan json metrics retains direct plan parentage behavior.
 func TestParsePostgresPlanJSONMetricsRetainsDirectPlanParentage(t *testing.T) {
 	raw := json.RawMessage(`[{
   "Plan": {"Node Type":"Append","Actual Rows":1,"Actual Loops":1,"Plans":[

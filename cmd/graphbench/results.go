@@ -50,19 +50,19 @@ const (
 
 // DurationStats summarizes warmup policy, measured latency samples, quantiles, and sample sufficiency.
 type DurationStats struct {
-	// Iterations records the number of measured iterations.
+	// Iterations records the number of iterations.
 	Iterations int `json:"iterations"`
-	// WarmupIterations records the untimed iterations run before measurement.
+	// WarmupIterations records the number of warmup iterations.
 	WarmupIterations int `json:"warmup_iterations"`
-	// Median records the median observed duration.
+	// Median supplies the median input to the DurationStats contract.
 	Median time.Duration `json:"median"`
-	// P95 records the 95th-percentile observed duration.
+	// P95 supplies the p95 input to the DurationStats contract.
 	P95 time.Duration `json:"p95"`
-	// P99 records the 99th-percentile duration.
+	// P99 supplies the p99 input to the DurationStats contract.
 	P99 time.Duration `json:"p99"`
 	// P99Gated reports whether the sample count is sufficient to enforce the P99 noise threshold.
 	P99Gated bool `json:"p99_gated"`
-	// Max records the longest observed duration.
+	// Max supplies the max input to the DurationStats contract.
 	Max time.Duration `json:"max"`
 	// Samples contains the individual measurements.
 	Samples []LatencySample `json:"samples,omitempty"`
@@ -73,11 +73,15 @@ type DurationStats struct {
 // chains such as I1 -> S4 -> S3 without reducing them to the terminal arm.
 type RuntimeReceiptEvent struct {
 	// InvocationID binds this event to the session-local timed invocation that emitted it.
-	InvocationID     string `json:"invocation_id,omitempty"`
-	Ordinal          int    `json:"ordinal"`
-	RuntimeIdentity  string `json:"runtime_identity"`
-	RuntimeBranch    string `json:"runtime_branch"`
-	FallbackExecuted bool   `json:"fallback_executed"`
+	InvocationID string `json:"invocation_id,omitempty"`
+	// Ordinal supplies the ordinal input to the RuntimeReceiptEvent contract.
+	Ordinal int `json:"ordinal"`
+	// RuntimeIdentity identifies the runtime identity.
+	RuntimeIdentity string `json:"runtime_identity"`
+	// RuntimeBranch supplies the runtime branch input to the RuntimeReceiptEvent contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// FallbackExecuted indicates whether fallback executed applies.
+	FallbackExecuted bool `json:"fallback_executed"`
 }
 
 // LatencySample records one labeled duration and its measurement order.
@@ -88,7 +92,7 @@ type LatencySample struct {
 	Block int `json:"block,omitempty"`
 	// Arm identifies the measurement arm that produced the sample.
 	Arm string `json:"arm,omitempty"`
-	// ArmOrder records the arm's position within its balanced measurement block.
+	// ArmOrder supplies the arm order input to the LatencySample contract.
 	ArmOrder int `json:"arm_order,omitempty"`
 	// RunUUID links the sample to its resumable benchmark run series.
 	RunUUID string `json:"run_uuid,omitempty"`
@@ -100,17 +104,17 @@ type LatencySample struct {
 	Dataset string `json:"dataset"`
 	// Backend identifies the execution backend.
 	Backend ExecutionMode `json:"backend"`
-	// ConnectionID records the backend session that executed the measured iteration.
+	// ConnectionID identifies the connection id.
 	ConnectionID string `json:"connection_id,omitempty"`
-	// Classification records the assigned measurement or result class.
+	// Classification supplies the classification input to the LatencySample contract.
 	Classification string `json:"classification"`
 	// Duration records elapsed time for this observation.
 	Duration time.Duration `json:"duration"`
-	// RequestedIdentity records the candidate arm selected for this case.
+	// RequestedIdentity identifies the requested identity.
 	RequestedIdentity string `json:"requested_identity,omitempty"`
-	// RuntimeIdentity records the executor observed by the case's isolated runtime attestation.
+	// RuntimeIdentity identifies the runtime identity.
 	RuntimeIdentity string `json:"runtime_identity,omitempty"`
-	// RuntimeBranch records the singular preflight, recursive, incumbent, or fallback branch observed for the case.
+	// RuntimeBranch supplies the runtime branch input to the LatencySample contract.
 	RuntimeBranch string `json:"runtime_branch,omitempty"`
 	// FallbackExecuted records whether the candidate delegated to its exact incumbent.
 	FallbackExecuted *bool `json:"fallback_executed,omitempty"`
@@ -129,9 +133,9 @@ type ConcurrencySample struct {
 	Worker int `json:"worker"`
 	// Iteration identifies the measured iteration within its worker or round.
 	Iteration int `json:"iteration"`
-	// ConnectionID records the PostgreSQL backend session assigned to the worker iteration.
+	// ConnectionID identifies the connection id.
 	ConnectionID string `json:"connection_id"`
-	// Classification records the assigned measurement or result class.
+	// Classification supplies the classification input to the ConcurrencySample contract.
 	Classification string `json:"classification"`
 	// PoolWait records latency spent acquiring a database connection from the pool.
 	PoolWait time.Duration `json:"pool_wait"`
@@ -139,13 +143,13 @@ type ConcurrencySample struct {
 	Transaction time.Duration `json:"transaction_setup"`
 	// ExecuteDrain records latency spent executing and draining all rows.
 	ExecuteDrain time.Duration `json:"execute_decode_drain"`
-	// Total records the total elapsed duration.
+	// Total supplies the total input to the ConcurrencySample contract.
 	Total time.Duration `json:"total"`
 }
 
 // ConcurrencyBlock summarizes all samples and connection usage for one concurrency level.
 type ConcurrencyBlock struct {
-	// Concurrency records the worker count exercised by the block.
+	// Concurrency supplies the concurrency input to the ConcurrencyBlock contract.
 	Concurrency int `json:"concurrency"`
 	// PoolSize sets the database connection-pool size.
 	PoolSize int `json:"pool_size"`
@@ -183,7 +187,7 @@ type PostgresReferenceResult struct {
 	TimingBoundary string `json:"timing_boundary"`
 	// FullComparator indicates that the reference returns the complete public observation.
 	FullComparator bool `json:"full_comparator"`
-	// MeasurementOrder records the operation's position within its measurement round.
+	// MeasurementOrder supplies the measurement order input to the PostgresReferenceResult contract.
 	MeasurementOrder int `json:"measurement_order,omitempty"`
 	// AAAliasOf identifies the reference arm reused for an explicit A/A comparison.
 	AAAliasOf string `json:"aa_alias_of,omitempty"`
@@ -191,7 +195,7 @@ type PostgresReferenceResult struct {
 	SQL string `json:"sql"`
 	// SQLFingerprint identifies normalized SQL without retaining the statement text.
 	SQLFingerprint string `json:"sql_fingerprint"`
-	// RowCount records the number of rows produced.
+	// RowCount records the number of row count.
 	RowCount int64 `json:"row_count"`
 	// ObservedRows contains stable serialized observations used for correctness comparison.
 	ObservedRows []string `json:"observed_rows,omitempty"`
@@ -222,7 +226,7 @@ type CompileSample struct {
 	TranslateIncludingOptimize time.Duration `json:"translate_including_optimize"`
 	// Render records SQL rendering latency after translation.
 	Render time.Duration `json:"render"`
-	// Total records the total elapsed duration.
+	// Total supplies the total input to the CompileSample contract.
 	Total time.Duration `json:"total"`
 	// Allocations records allocation count while measuring the client-side stage.
 	Allocations uint64 `json:"allocations"`
@@ -256,9 +260,9 @@ type BoundarySample struct {
 	AllRowsDecode time.Duration `json:"all_rows_decode"`
 	// DrainClose records latency spent draining remaining rows and closing the iterator.
 	DrainClose time.Duration `json:"drain_close"`
-	// Total records the total elapsed duration.
+	// Total supplies the total input to the BoundarySample contract.
 	Total time.Duration `json:"total"`
-	// Rows records the number of rows decoded during this boundary measurement.
+	// Rows records the number of rows.
 	Rows int64 `json:"rows"`
 	// Allocations records allocation count while measuring the client-side stage.
 	Allocations uint64 `json:"allocations"`
@@ -272,9 +276,9 @@ type PostgresBoundaryWaterfall struct {
 	Boundary string `json:"boundary"`
 	// SQLFingerprint identifies normalized SQL without retaining the statement text.
 	SQLFingerprint string `json:"sql_fingerprint"`
-	// WarmupIterations records the untimed iterations run before measurement.
+	// WarmupIterations records the number of warmup iterations.
 	WarmupIterations int `json:"warmup_iterations"`
-	// MeasurementOrder records the operation's position within its measurement round.
+	// MeasurementOrder supplies the measurement order input to the PostgresBoundaryWaterfall contract.
 	MeasurementOrder int `json:"measurement_order,omitempty"`
 	// Samples contains the individual measurements.
 	Samples []BoundarySample `json:"samples"`
@@ -358,9 +362,9 @@ type PostgresPlanNodeMetric struct {
 	FunctionName string `json:"function_name,omitempty"`
 	// SubplanName names an initplan, subplan, or CTE body used for stable branch attribution.
 	SubplanName string `json:"subplan_name,omitempty"`
-	// PlanRows records the planner's estimated rows for the plan node.
+	// PlanRows records the number of plan rows.
 	PlanRows int64 `json:"plan_rows,omitempty"`
-	// PlanWidth records the planner's estimated row width in bytes.
+	// PlanWidth supplies the plan width input to the PostgresPlanNodeMetric contract.
 	PlanWidth int64 `json:"plan_width,omitempty"`
 	// ActualRows records rows actually emitted by the plan node.
 	ActualRows int64 `json:"actual_rows,omitempty"`
@@ -424,7 +428,7 @@ type CaseResult struct {
 	Shape WorkloadShape `json:"shape"`
 	// ExecutionMode identifies the backend execution mode that produced the case result.
 	ExecutionMode ExecutionMode `json:"execution_mode"`
-	// Status records the execution outcome.
+	// Status supplies the status input to the CaseResult contract.
 	Status string `json:"status"`
 	// Cypher contains the Cypher statement under test.
 	Cypher string `json:"cypher"`
@@ -438,7 +442,7 @@ type CaseResult struct {
 	ExpectedRowCount *int64 `json:"expected_row_count,omitempty"`
 	// ObservedRows contains stable serialized observations used for correctness comparison.
 	ObservedRows []string `json:"observed_rows,omitempty"`
-	// RowCount records the number of rows produced.
+	// RowCount records the number of row count.
 	RowCount int64 `json:"row_count,omitempty"`
 	// MatchedCount records entities selected by the measured mutation.
 	MatchedCount *int64 `json:"matched_count,omitempty"`
@@ -484,7 +488,7 @@ type CaseResult struct {
 	FallbackReason string `json:"fallback_reason,omitempty"`
 	// ExistingGraph selects read-only execution against a pre-existing graph.
 	ExistingGraph *ExistingGraphRun `json:"existing_graph,omitempty"`
-	// Error records the failure message when the operation did not succeed.
+	// Error supplies the error input to the CaseResult contract.
 	Error string `json:"error,omitempty"`
 	// StableObservation reports whether ObservedRows contains a backend-independent normalized result.
 	StableObservation bool `json:"observation_captured,omitempty"`
@@ -494,7 +498,7 @@ type CaseResult struct {
 type StateQueryResult struct {
 	// Name labels the post-write state assertion that produced this result.
 	Name string `json:"name"`
-	// RowCount records the number of rows produced.
+	// RowCount records the number of row count.
 	RowCount int64 `json:"row_count"`
 	// ScalarInt contains the observed scalar value when the state query expects one.
 	ScalarInt *int64 `json:"scalar_int,omitempty"`
@@ -502,9 +506,9 @@ type StateQueryResult struct {
 
 // BaselineComparison compares current median latency with a previously recorded baseline.
 type BaselineComparison struct {
-	// BaselineMedian records the median latency loaded from the comparison baseline.
+	// BaselineMedian supplies the baseline median input to the BaselineComparison contract.
 	BaselineMedian time.Duration `json:"baseline_median"`
-	// CurrentMedian records the median latency measured by the current run.
+	// CurrentMedian supplies the current median input to the BaselineComparison contract.
 	CurrentMedian time.Duration `json:"current_median"`
 	// Change records current latency relative to the selected baseline.
 	Change time.Duration `json:"change"`

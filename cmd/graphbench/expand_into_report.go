@@ -14,8 +14,10 @@ import (
 	"time"
 )
 
+// expandIntoStudyReportVersion reserves the stable protocol value used to recognize expand into study report version across artifacts and executions.
 const expandIntoStudyReportVersion = 2
 
+// expandIntoStudyArms contains the frozen expand into study arms declaration consulted by package validation.
 var expandIntoStudyArms = []string{
 	"expand_into_pair_join",
 	"expand_into_lower_degree_scan",
@@ -24,78 +26,132 @@ var expandIntoStudyArms = []string{
 
 // ExpandIntoStudyOptions selects the discovery or confirmation evidence protocol.
 type ExpandIntoStudyOptions struct {
-	Seed                int64
-	Confidence          float64
-	BootstrapCount      int
-	Protocol            string
-	MaterialityRatio    float64
+	// Seed makes randomized statistical procedures reproducible.
+	Seed int64
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64
+	// BootstrapCount records the number of bootstrap count.
+	BootstrapCount int
+	// Protocol identifies the protocol.
+	Protocol string
+	// MaterialityRatio supplies the materiality ratio input to the ExpandIntoStudyOptions contract.
+	MaterialityRatio float64
+	// MaterialityAbsolute supplies the materiality absolute input to the ExpandIntoStudyOptions contract.
 	MaterialityAbsolute time.Duration
-	P95RatioLimit       float64
+	// P95RatioLimit supplies the p95 ratio limit input to the ExpandIntoStudyOptions contract.
+	P95RatioLimit float64
 }
 
 // ExpandIntoStudyReport contains exact three-arm fixed-one-hop evidence.
 type ExpandIntoStudyReport struct {
-	Version             int                   `json:"version"`
-	ArtifactSHA256      string                `json:"artifact_sha256"`
-	Protocol            string                `json:"protocol"`
-	Confidence          float64               `json:"confidence_level"`
-	Passed              bool                  `json:"passed"`
-	TrainingCases       int                   `json:"training_cases"`
-	HoldoutCases        int                   `json:"holdout_cases"`
-	TrainingPassed      bool                  `json:"training_passed"`
-	HoldoutPassed       bool                  `json:"holdout_passed"`
-	QualificationPassed bool                  `json:"qualification_passed"`
-	PromotionEligible   bool                  `json:"promotion_eligible"`
-	Winner              string                `json:"winner,omitempty"`
-	Cases               []ExpandIntoStudyCase `json:"cases"`
+	// Version identifies the schema version for version.
+	Version int `json:"version"`
+	// ArtifactSHA256 binds the referenced artifact content by SHA-256 digest.
+	ArtifactSHA256 string `json:"artifact_sha256"`
+	// Protocol identifies the protocol.
+	Protocol string `json:"protocol"`
+	// Confidence sets the requested statistical confidence level.
+	Confidence float64 `json:"confidence_level"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// TrainingCases supplies the training cases input to the ExpandIntoStudyReport contract.
+	TrainingCases int `json:"training_cases"`
+	// HoldoutCases supplies the holdout cases input to the ExpandIntoStudyReport contract.
+	HoldoutCases int `json:"holdout_cases"`
+	// TrainingPassed indicates whether training passed applies.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed indicates whether holdout passed applies.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// QualificationPassed indicates whether qualification passed applies.
+	QualificationPassed bool `json:"qualification_passed"`
+	// PromotionEligible indicates whether promotion eligible applies.
+	PromotionEligible bool `json:"promotion_eligible"`
+	// Winner supplies the winner input to the ExpandIntoStudyReport contract.
+	Winner string `json:"winner,omitempty"`
+	// Cases contains the per-workload evidence underlying the aggregate decision.
+	Cases []ExpandIntoStudyCase `json:"cases"`
 }
 
 // ExpandIntoStudyCase reports exactness, order balance, plan shape, and latency for one pair workload.
 type ExpandIntoStudyCase struct {
-	Dataset            string                       `json:"dataset"`
-	Name               string                       `json:"name"`
-	Tier               string                       `json:"tier,omitempty"`
-	QualificationSplit string                       `json:"qualification_split"`
-	Rounds             int                          `json:"rounds"`
-	Winner             string                       `json:"descriptive_median_winner,omitempty"`
-	QualifiedWinner    string                       `json:"qualified_winner,omitempty"`
-	Passed             bool                         `json:"passed"`
-	Reasons            []string                     `json:"reasons,omitempty"`
-	ArmResults         []ExpandIntoStudyArmEvidence `json:"arms"`
+	// Dataset identifies the fixture dataset that supplies the workload graph.
+	Dataset string `json:"dataset"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// Tier supplies the tier input to the ExpandIntoStudyCase contract.
+	Tier string `json:"tier,omitempty"`
+	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
+	QualificationSplit string `json:"qualification_split"`
+	// Rounds records the number of rounds.
+	Rounds int `json:"rounds"`
+	// Winner supplies the winner input to the ExpandIntoStudyCase contract.
+	Winner string `json:"descriptive_median_winner,omitempty"`
+	// QualifiedWinner supplies the qualified winner input to the ExpandIntoStudyCase contract.
+	QualifiedWinner string `json:"qualified_winner,omitempty"`
+	// Passed indicates whether passed applies.
+	Passed bool `json:"passed"`
+	// Reasons explains each failed or inapplicable validation gate.
+	Reasons []string `json:"reasons,omitempty"`
+	// ArmResults supplies the arm results input to the ExpandIntoStudyCase contract.
+	ArmResults []ExpandIntoStudyArmEvidence `json:"arms"`
 }
 
 // ExpandIntoStudyArmEvidence records one exact plan-study arm and its ratio to the direct pair join.
 type ExpandIntoStudyArmEvidence struct {
-	Name                 string               `json:"name"`
-	Architecture         string               `json:"architecture"`
-	ImplementationID     string               `json:"implementation_id"`
-	SQLFingerprint       string               `json:"sql_fingerprint"`
-	Samples              int                  `json:"samples"`
-	Median               time.Duration        `json:"median"`
-	P95                  time.Duration        `json:"p95"`
-	MedianRatioToDirect  *RatioInterval       `json:"median_ratio_to_direct,omitempty"`
-	MedianSavingToDirect *DurationInterval    `json:"median_saving_to_direct,omitempty"`
-	P95RatioToDirect     *RatioInterval       `json:"p95_ratio_to_direct,omitempty"`
-	Material             bool                 `json:"material"`
-	P95Contained         bool                 `json:"p95_contained"`
-	QualifiedWinner      bool                 `json:"qualified_winner"`
-	PlanModes            []ExpandIntoPlanMode `json:"plan_modes"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// Architecture supplies the architecture input to the ExpandIntoStudyArmEvidence contract.
+	Architecture string `json:"architecture"`
+	// ImplementationID identifies the implementation id.
+	ImplementationID string `json:"implementation_id"`
+	// SQLFingerprint supplies the sql fingerprint input to the ExpandIntoStudyArmEvidence contract.
+	SQLFingerprint string `json:"sql_fingerprint"`
+	// Samples supplies the samples input to the ExpandIntoStudyArmEvidence contract.
+	Samples int `json:"samples"`
+	// Median supplies the median input to the ExpandIntoStudyArmEvidence contract.
+	Median time.Duration `json:"median"`
+	// P95 supplies the p95 input to the ExpandIntoStudyArmEvidence contract.
+	P95 time.Duration `json:"p95"`
+	// MedianRatioToDirect supplies the median ratio to direct input to the ExpandIntoStudyArmEvidence contract.
+	MedianRatioToDirect *RatioInterval `json:"median_ratio_to_direct,omitempty"`
+	// MedianSavingToDirect supplies the median saving to direct input to the ExpandIntoStudyArmEvidence contract.
+	MedianSavingToDirect *DurationInterval `json:"median_saving_to_direct,omitempty"`
+	// P95RatioToDirect supplies the p95 ratio to direct input to the ExpandIntoStudyArmEvidence contract.
+	P95RatioToDirect *RatioInterval `json:"p95_ratio_to_direct,omitempty"`
+	// Material indicates whether material applies.
+	Material bool `json:"material"`
+	// P95Contained indicates whether p95 contained applies.
+	P95Contained bool `json:"p95_contained"`
+	// QualifiedWinner indicates whether qualified winner applies.
+	QualifiedWinner bool `json:"qualified_winner"`
+	// PlanModes supplies the plan modes input to the ExpandIntoStudyArmEvidence contract.
+	PlanModes []ExpandIntoPlanMode `json:"plan_modes"`
 }
 
 // ExpandIntoPlanMode summarizes the PostgreSQL shapes observed under one plan-cache mode.
 type ExpandIntoPlanMode struct {
-	PlanCacheMode      string   `json:"plan_cache_mode"`
-	Fingerprints       []string `json:"plan_fingerprints"`
-	OperatorFamilies   []string `json:"operator_families"`
-	ParameterizedIndex bool     `json:"parameterized_index"`
-	Memoize            bool     `json:"memoize"`
-	HashJoin           bool     `json:"hash_join"`
+	// PlanCacheMode identifies the plan cache mode.
+	PlanCacheMode string `json:"plan_cache_mode"`
+	// Fingerprints supplies the fingerprints input to the ExpandIntoPlanMode contract.
+	Fingerprints []string `json:"plan_fingerprints"`
+	// OperatorFamilies supplies the operator families input to the ExpandIntoPlanMode contract.
+	OperatorFamilies []string `json:"operator_families"`
+	// ParameterizedIndex indicates whether parameterized index applies.
+	ParameterizedIndex bool `json:"parameterized_index"`
+	// Memoize indicates whether memoize applies.
+	Memoize bool `json:"memoize"`
+	// HashJoin indicates whether hash join applies.
+	HashJoin bool `json:"hash_join"`
 }
 
+// expandIntoArmSeries accumulates matched observations used to evaluate expand into arm.
 type expandIntoArmSeries struct {
+	// identity retains the identity while expandIntoArmSeries is assembled or evaluated.
 	identity postgresReferenceSpec
-	samples  roundSamples
-	plans    map[string]map[string][]string
+	// samples retains the samples while expandIntoArmSeries is assembled or evaluated.
+	samples roundSamples
+	// plans retains the plans while expandIntoArmSeries is assembled or evaluated.
+	plans map[string]map[string][]string
 }
 
 // buildExpandIntoStudyReport validates all three exact arms and constructs descriptive crossover evidence.
@@ -135,14 +191,29 @@ func buildExpandIntoStudyReport(records []CaseResult, options ExpandIntoStudyOpt
 		return ExpandIntoStudyReport{}, fmt.Errorf("p95 ratio limit must be positive")
 	}
 
-	type key struct{ dataset, name string }
+	// key identifies a dataset and workload pair in the collected evidence.
+	type key struct {
+		// dataset identifies the fixture dataset containing the workload.
+		dataset string
+
+		// name identifies the workload within the dataset.
+		name string
+	}
+
+	// caseSeries accumulates the evidence arms and rounds for one workload.
 	type caseSeries struct {
-		tier      string
-		split     string
-		arms      map[string]*expandIntoArmSeries
-		rounds    map[int]struct{}
+		// tier retains the tier while caseSeries is assembled or evaluated.
+		tier string
+		// split retains the split while caseSeries is assembled or evaluated.
+		split string
+		// arms retains the arms while caseSeries is assembled or evaluated.
+		arms map[string]*expandIntoArmSeries
+		// rounds retains the rounds while caseSeries is assembled or evaluated.
+		rounds map[int]struct{}
+		// planModes retains the plan modes while caseSeries is assembled or evaluated.
 		planModes map[string]struct{}
-		problems  map[string]struct{}
+		// problems retains the problems while caseSeries is assembled or evaluated.
+		problems map[string]struct{}
 	}
 	series := map[key]*caseSeries{}
 	for _, record := range records {
@@ -156,8 +227,12 @@ func buildExpandIntoStudyReport(records []CaseResult, options ExpandIntoStudyOpt
 		current := series[caseKey]
 		if current == nil {
 			current = &caseSeries{
-				tier: record.Shape.FixtureTier, split: record.Shape.QualificationSplit, arms: map[string]*expandIntoArmSeries{}, rounds: map[int]struct{}{},
-				planModes: map[string]struct{}{}, problems: map[string]struct{}{},
+				tier:      record.Shape.FixtureTier,
+				split:     record.Shape.QualificationSplit,
+				arms:      map[string]*expandIntoArmSeries{},
+				rounds:    map[int]struct{}{},
+				planModes: map[string]struct{}{},
+				problems:  map[string]struct{}{},
 			}
 			series[caseKey] = current
 		} else if current.tier != record.Shape.FixtureTier {
@@ -197,14 +272,23 @@ func buildExpandIntoStudyReport(records []CaseResult, options ExpandIntoStudyOpt
 			}
 			arm := current.arms[armName]
 			identity := normalizedReferenceSpec(postgresReferenceSpec{
-				name: reference.Name, architecture: reference.Architecture, implementationID: reference.ImplementationID,
-				stateShape: reference.StateShape, observationShape: reference.ObservationShape,
-				semanticValidation: reference.SemanticValidation, boundary: reference.Boundary,
-				fullComparator: reference.FullComparator, timingBoundary: reference.TimingBoundary,
-				sql: reference.SQL,
+				name:               reference.Name,
+				architecture:       reference.Architecture,
+				implementationID:   reference.ImplementationID,
+				stateShape:         reference.StateShape,
+				observationShape:   reference.ObservationShape,
+				semanticValidation: reference.SemanticValidation,
+				boundary:           reference.Boundary,
+				fullComparator:     reference.FullComparator,
+				timingBoundary:     reference.TimingBoundary,
+				sql:                reference.SQL,
 			})
 			if arm == nil {
-				arm = &expandIntoArmSeries{identity: identity, samples: roundSamples{}, plans: map[string]map[string][]string{}}
+				arm = &expandIntoArmSeries{
+					identity: identity,
+					samples:  roundSamples{},
+					plans:    map[string]map[string][]string{},
+				}
 				current.arms[armName] = arm
 			} else if arm.identity.architecture != identity.architecture || arm.identity.implementationID != identity.implementationID || normalizedSQLFingerprint(arm.identity.sql) != normalizedSQLFingerprint(identity.sql) {
 				return ExpandIntoStudyReport{}, fmt.Errorf("%s/%s arm %s identity changed across rounds", record.Dataset, record.Name, armName)
@@ -250,11 +334,22 @@ func buildExpandIntoStudyReport(records []CaseResult, options ExpandIntoStudyOpt
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].dataset < keys[j].dataset || keys[i].dataset == keys[j].dataset && keys[i].name < keys[j].name
 	})
-	gateOptions := PerfGateOptions{Seed: options.Seed, Confidence: options.Confidence, BootstrapCount: options.BootstrapCount}
+	gateOptions := PerfGateOptions{
+		Seed:           options.Seed,
+		Confidence:     options.Confidence,
+		BootstrapCount: options.BootstrapCount,
+	}
 	qualifiedWinners := map[string]struct{}{}
 	for caseIndex, caseKey := range keys {
 		current := series[caseKey]
-		entry := ExpandIntoStudyCase{Dataset: caseKey.dataset, Name: caseKey.name, Tier: current.tier, QualificationSplit: current.split, Rounds: len(current.rounds), Passed: true}
+		entry := ExpandIntoStudyCase{
+			Dataset:            caseKey.dataset,
+			Name:               caseKey.name,
+			Tier:               current.tier,
+			QualificationSplit: current.split,
+			Rounds:             len(current.rounds),
+			Passed:             true,
+		}
 		for problem := range current.problems {
 			entry.Reasons = append(entry.Reasons, problem)
 		}
@@ -287,10 +382,14 @@ func buildExpandIntoStudyReport(records []CaseResult, options ExpandIntoStudyOpt
 			}
 			flat := flattenSamples(arm.samples, sortedRounds(arm.samples))
 			evidence := ExpandIntoStudyArmEvidence{
-				Name: armName, Architecture: arm.identity.architecture, ImplementationID: arm.identity.implementationID,
-				SQLFingerprint: normalizedSQLFingerprint(arm.identity.sql), Samples: len(flat),
-				Median: time.Duration(durationQuantile(flat, .50)), P95: time.Duration(durationQuantile(flat, .95)),
-				PlanModes: expandIntoPlanModes(arm.plans),
+				Name:             armName,
+				Architecture:     arm.identity.architecture,
+				ImplementationID: arm.identity.implementationID,
+				SQLFingerprint:   normalizedSQLFingerprint(arm.identity.sql),
+				Samples:          len(flat),
+				Median:           time.Duration(durationQuantile(flat, .50)),
+				P95:              time.Duration(durationQuantile(flat, .95)),
+				PlanModes:        expandIntoPlanModes(arm.plans),
 			}
 			if evidence.Median < winnerMedian {
 				winnerMedian, entry.Winner = evidence.Median, armName
@@ -364,6 +463,7 @@ func sortedRoundSet(rounds map[int]struct{}) []int {
 	return ordered
 }
 
+// equalStrings reports whether two ordered string collections contain identical values.
 func equalStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
@@ -402,6 +502,7 @@ func validateExpandIntoRoundOrder(round int, references []PostgresReferenceResul
 	return nil
 }
 
+// containsString reports whether an exact string occurs in a collection.
 func containsString(values []string, value string) bool {
 	for _, candidate := range values {
 		if candidate == value {

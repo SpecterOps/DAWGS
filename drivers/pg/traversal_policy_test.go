@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testTraversalPolicy coordinates PostgreSQL driver behavior for test traversal policy.
 func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, orientation bool) TraversalPolicy {
 	candidate := string(executor)
 	if orientation {
@@ -21,7 +22,10 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
 		evidence[role] = map[string]string{"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 	}
-	boundary := map[bool]string{true: "guarded_dual_arm", false: "inline_statement"}[orientation]
+	boundary := map[bool]string{
+		true:  "guarded_dual_arm",
+		false: "inline_statement",
+	}[orientation]
 	selectorVersion := "test-selector-v1"
 	caps := map[string]int64{"state_limit": 1000}
 	bucket := map[string]any{"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"}}
@@ -78,11 +82,16 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 	}
 	digest := sha256.Sum256(raw)
 	return TraversalPolicy{
-		Generation: 1, PromotionManifestSHA256: hex.EncodeToString(digest[:]), PromotionManifestJSON: raw,
-		QuerySHA256Allowlist: []string{queryDigest}, ShortestPathExecutor: executor, EnableExpansionOrientation: orientation,
+		Generation:                 1,
+		PromotionManifestSHA256:    hex.EncodeToString(digest[:]),
+		PromotionManifestJSON:      raw,
+		QuerySHA256Allowlist:       []string{queryDigest},
+		ShortestPathExecutor:       executor,
+		EnableExpansionOrientation: orientation,
 	}
 }
 
+// rewriteTestTraversalPolicyManifest coordinates PostgreSQL driver behavior for rewrite test traversal policy manifest.
 func rewriteTestTraversalPolicyManifest(t *testing.T, policy TraversalPolicy, mutate func(*traversalPromotionManifest)) TraversalPolicy {
 	t.Helper()
 
@@ -98,6 +107,7 @@ func rewriteTestTraversalPolicyManifest(t *testing.T, policy TraversalPolicy, mu
 	return policy
 }
 
+// TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps verifies traversal policy authorizes guarded inline asp only with stable snapshot and exact caps behavior.
 func TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
 	query := "MATCH p = allShortestPaths((s)-[:MemberOf*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
@@ -108,7 +118,8 @@ func TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExact
 	require.False(t, effective.enabled())
 	effective, _ = driver.SchemaManager.effectiveTraversalPolicy(query, pgx.RepeatableRead)
 	require.Equal(t, optimize.ShortestPathExecutorASPI1DAG, effective.ShortestPathExecutor)
-	options := effective.productionOptions(query)
+	options, err := effective.productionOptions(query)
+	require.NoError(t, err)
 	require.Equal(t, int64(1000), options.ShortestPathCaps.StateLimit)
 	require.Equal(t, int64(900), options.ShortestPathCaps.PredecessorLimit)
 	require.Equal(t, int64(800), options.ShortestPathCaps.EnumerationLimit)
@@ -116,16 +127,23 @@ func TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExact
 	require.Equal(t, "outbound", options.AuthorizedBucket.Direction)
 }
 
+// TestTraversalPolicyInlineASPKillSwitchRequiresNoEvidence verifies traversal policy inline asp kill switch requires no evidence behavior.
 func TestTraversalPolicyInlineASPKillSwitchRequiresNoEvidence(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
-	require.NoError(t, driver.SetTraversalPolicy(TraversalPolicy{Generation: 9, DisableInlineASPDAG: true}))
+	require.NoError(t, driver.SetTraversalPolicy(TraversalPolicy{
+		Generation:          9,
+		DisableInlineASPDAG: true,
+	}))
 	effective, identity := driver.SchemaManager.effectiveTraversalPolicy("MATCH (n) RETURN n", pgx.ReadCommitted)
 	require.True(t, effective.DisableInlineASPDAG)
 	require.Empty(t, effective.ShortestPathExecutor)
 	require.Contains(t, identity, "production-policy-")
-	require.Equal(t, "inline-asp-kill-switch-g9", effective.productionOptions("MATCH (n) RETURN n").SelectorVersion)
+	options, err := effective.productionOptions("MATCH (n) RETURN n")
+	require.NoError(t, err)
+	require.Equal(t, "inline-asp-kill-switch-g9", options.SelectorVersion)
 }
 
+// TestTraversalPolicyIsAllowlistedSnapshotSafeAndImmediatelyReversible verifies traversal policy is allowlisted snapshot safe and immediately reversible behavior.
 func TestTraversalPolicyIsAllowlistedSnapshotSafeAndImmediatelyReversible(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
 	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
@@ -148,18 +166,29 @@ func TestTraversalPolicyIsAllowlistedSnapshotSafeAndImmediatelyReversible(t *tes
 	require.NotEqual(t, candidateKey, rollbackKey)
 }
 
+// TestTraversalPolicyFailsClosed verifies traversal policy fails closed behavior.
 func TestTraversalPolicyFailsClosed(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
-	require.Error(t, driver.SetTraversalPolicy(TraversalPolicy{Generation: 1, EnableExpansionOrientation: true}))
 	require.Error(t, driver.SetTraversalPolicy(TraversalPolicy{
-		Generation: 1, PromotionManifestSHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", QuerySHA256Allowlist: []string{"not-a-digest"}, EnableExpansionOrientation: true,
+		Generation:                 1,
+		EnableExpansionOrientation: true,
 	}))
 	require.Error(t, driver.SetTraversalPolicy(TraversalPolicy{
-		Generation: 1, PromotionManifestSHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", QuerySHA256Allowlist: []string{TraversalPolicyQuerySHA256("RETURN 1")},
-		ShortestPathExecutor: optimize.ShortestPathExecutorS3Unidirectional,
+		Generation:                 1,
+		PromotionManifestSHA256:    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		QuerySHA256Allowlist:       []string{"not-a-digest"},
+		EnableExpansionOrientation: true,
 	}))
 	require.Error(t, driver.SetTraversalPolicy(TraversalPolicy{
-		Generation: 1, QuerySHA256Allowlist: []string{TraversalPolicyQuerySHA256("RETURN 1")}, EnableExpansionOrientation: true,
+		Generation:              1,
+		PromotionManifestSHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		QuerySHA256Allowlist:    []string{TraversalPolicyQuerySHA256("RETURN 1")},
+		ShortestPathExecutor:    optimize.ShortestPathExecutorS3Unidirectional,
+	}))
+	require.Error(t, driver.SetTraversalPolicy(TraversalPolicy{
+		Generation:                 1,
+		QuerySHA256Allowlist:       []string{TraversalPolicyQuerySHA256("RETURN 1")},
+		EnableExpansionOrientation: true,
 	}), "an enabled production policy must be traceable to verified evidence")
 	require.ErrorContains(t, driver.SetTraversalPolicy(testTraversalPolicy(
 		"MATCH p = shortestPath((s)-[*1..4]->(e)) RETURN length(p)",
@@ -168,13 +197,16 @@ func TestTraversalPolicyFailsClosed(t *testing.T) {
 	)), "not production-canary eligible")
 }
 
+// TestTraversalPolicyCanonicalSPRequiresExactStaticV6Envelope verifies traversal policy canonical sp requires exact static v6 envelope behavior.
 func TestTraversalPolicyCanonicalSPRequiresExactStaticV6Envelope(t *testing.T) {
 	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
 	valid := testTraversalPolicy(query, optimize.ShortestPathExecutorI1CanonicalPredecessorWitness, false)
 	require.NoError(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(valid))
 
 	tests := map[string]struct {
-		mutate        func(*traversalPromotionManifest)
+		// mutate retains the mutate while anonymous record is assembled or evaluated.
+		mutate func(*traversalPromotionManifest)
+		// errorContains retains the error contains while anonymous record is assembled or evaluated.
 		errorContains string
 	}{
 		"selector": {
@@ -211,6 +243,7 @@ func TestTraversalPolicyCanonicalSPRequiresExactStaticV6Envelope(t *testing.T) {
 	}
 }
 
+// TestTraversalPolicyQuerySHA256PreservesSemanticWhitespace verifies traversal policy query sha256 preserves semantic whitespace behavior.
 func TestTraversalPolicyQuerySHA256PreservesSemanticWhitespace(t *testing.T) {
 	require.Equal(t,
 		TraversalPolicyQuerySHA256("  MATCH (n) RETURN n  "),
@@ -226,6 +259,7 @@ func TestTraversalPolicyQuerySHA256PreservesSemanticWhitespace(t *testing.T) {
 	)
 }
 
+// TestTraversalPolicyAllowsGuardedOrientationWithoutSnapshotUpgrade verifies traversal policy allows guarded orientation without snapshot upgrade behavior.
 func TestTraversalPolicyAllowsGuardedOrientationWithoutSnapshotUpgrade(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
 	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) RETURN id(e)"
@@ -237,13 +271,16 @@ func TestTraversalPolicyAllowsGuardedOrientationWithoutSnapshotUpgrade(t *testin
 	require.Contains(t, identity, "production-policy-")
 }
 
+// TestTraversalPolicyGuardedOrientationRequiresExactManifestContract verifies traversal policy guarded orientation requires exact manifest contract behavior.
 func TestTraversalPolicyGuardedOrientationRequiresExactManifestContract(t *testing.T) {
 	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) RETURN id(e)"
 	valid := testTraversalPolicy(query, "", true)
 	require.NoError(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(valid))
 
 	tests := map[string]struct {
-		mutate        func(*traversalPromotionManifest)
+		// mutate retains the mutate while anonymous record is assembled or evaluated.
+		mutate func(*traversalPromotionManifest)
+		// errorContains retains the error contains while anonymous record is assembled or evaluated.
 		errorContains string
 	}{
 		"candidate": {
@@ -307,11 +344,17 @@ func TestTraversalPolicyGuardedOrientationRequiresExactManifestContract(t *testi
 	}
 }
 
+// TestTraversalPolicyEndpointSeededKillSwitchRequiresNoPromotionEvidence verifies traversal policy endpoint seeded kill switch requires no promotion evidence behavior.
 func TestTraversalPolicyEndpointSeededKillSwitchRequiresNoPromotionEvidence(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
-	require.NoError(t, driver.SetTraversalPolicy(TraversalPolicy{Generation: 7, DisableEndpointSeededReverse: true}))
+	require.NoError(t, driver.SetTraversalPolicy(TraversalPolicy{
+		Generation:                   7,
+		DisableEndpointSeededReverse: true,
+	}))
 	effective, identity := driver.SchemaManager.effectiveTraversalPolicy("MATCH (n) RETURN n", pgx.ReadCommitted)
 	require.True(t, effective.DisableEndpointSeededReverse)
 	require.Contains(t, identity, "production-policy-")
-	require.Equal(t, "endpoint-seeded-kill-switch-g7", effective.productionOptions("MATCH (n) RETURN n").SelectorVersion)
+	options, err := effective.productionOptions("MATCH (n) RETURN n")
+	require.NoError(t, err)
+	require.Equal(t, "endpoint-seeded-kill-switch-g7", options.SelectorVersion)
 }

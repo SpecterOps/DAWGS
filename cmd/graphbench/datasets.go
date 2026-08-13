@@ -167,9 +167,9 @@ type FixtureMetadata struct {
 	PhysicalNodeCount int64 `json:"physical_node_count,omitempty"`
 	// PhysicalEdgeCount records physical relationship rows present in the backend fixture.
 	PhysicalEdgeCount int64 `json:"physical_edge_count,omitempty"`
-	// NodeRelationBytes records the physical size of the graph's node relation.
+	// NodeRelationBytes supplies the node relation bytes input to the FixtureMetadata contract.
 	NodeRelationBytes int64 `json:"node_relation_bytes,omitempty"`
-	// EdgeRelationBytes records the physical size of the graph's relationship relation.
+	// EdgeRelationBytes supplies the edge relation bytes input to the FixtureMetadata contract.
 	EdgeRelationBytes int64 `json:"edge_relation_bytes,omitempty"`
 	// Configuration captures the generator parameters that define the fixture shape.
 	Configuration string `json:"configuration,omitempty"`
@@ -195,11 +195,11 @@ type ShortestFixtureExpectations struct {
 	PhysicalTraversableEdgesByKind map[string]int64 `json:"physical_traversable_edges_by_kind"`
 	// DistinctReachableNodesByLevel maps traversal depth to distinct reachable node count.
 	DistinctReachableNodesByLevel map[string]int64 `json:"distinct_reachable_nodes_by_level"`
-	// ExpectedMinimumDistance records the shortest expected hop count between endpoints.
+	// ExpectedMinimumDistance supplies the expected minimum distance input to the ShortestFixtureExpectations contract.
 	ExpectedMinimumDistance int64 `json:"expected_minimum_distance"`
-	// ExpectedOnePathCardinality records the expected number of valid single shortest-path witnesses.
+	// ExpectedOnePathCardinality supplies the expected one path cardinality input to the ShortestFixtureExpectations contract.
 	ExpectedOnePathCardinality int64 `json:"expected_one_path_cardinality"`
-	// ExpectedAllShortestCardinality records the expected number of all-shortest-path results.
+	// ExpectedAllShortestCardinality supplies the expected all shortest cardinality input to the ShortestFixtureExpectations contract.
 	ExpectedAllShortestCardinality int64 `json:"expected_all_shortest_cardinality"`
 	// ExpectedPredecessorEdges records predecessor edges expected in the shortest-path DAG.
 	ExpectedPredecessorEdges int64 `json:"expected_relationship_distinct_predecessor_edges"`
@@ -227,7 +227,7 @@ type FixedSuffixExpansionFixtureExpectations struct {
 	ReachableBoundaries int64 `json:"reachable_boundaries"`
 	// DisconnectedBoundaries records terminal boundaries intentionally disconnected from traversal roots.
 	DisconnectedBoundaries int64 `json:"disconnected_boundaries"`
-	// ExpectedReverseStates records the reverse-search states expected from the generated fixture.
+	// ExpectedReverseStates supplies the expected reverse states input to the FixedSuffixExpansionFixtureExpectations contract.
 	ExpectedReverseStates int64 `json:"expected_reverse_states"`
 	// CompleteOutputTrails records output trails before fixture eligibility filters are applied.
 	CompleteOutputTrails int64 `json:"complete_output_trails"`
@@ -249,7 +249,7 @@ type EndpointSeededExpansionFixtureExpectations struct {
 	EligiblePrefixRows int64 `json:"eligible_prefix_rows"`
 	// MatchingIneligibleLanes records matching lanes excluded by endpoint eligibility filters.
 	MatchingIneligibleLanes int64 `json:"matching_ineligible_lanes"`
-	// ExpectedReverseStates records the reverse-search states expected from the generated fixture.
+	// ExpectedReverseStates supplies the expected reverse states input to the EndpointSeededExpansionFixtureExpectations contract.
 	ExpectedReverseStates int64 `json:"expected_reverse_states"`
 	// ExpectedOutputTrails records result trails expected from the generated expansion fixture.
 	ExpectedOutputTrails int64 `json:"expected_output_trails"`
@@ -297,10 +297,15 @@ func parseEndpointSeededExpansionDatasetName(name string) (testutil.EndpointSeed
 	format := testutil.EndpointSeededExpansionScaleDataset + "_d%d_e%d_q%d_w%d_o%d_x%d_m%d_c%d_p%d"
 	matched, _ := fmt.Sscanf(name, format, &depth, &matchingEndpoints, &otherEndpoints, &matchingEligible, &otherEligible, &matchingIneligible, &parallel, &cycle, &payload)
 	config := testutil.EndpointSeededExpansionScaleConfig{
-		Depth: depth, MatchingEndpoints: matchingEndpoints, OtherEndpoints: otherEndpoints,
-		MatchingEligibleLanes: matchingEligible, OtherEligibleLanes: otherEligible,
-		MatchingIneligibleLanes: matchingIneligible, ParallelEdges: parallel,
-		AddCycle: cycle == 1, PropertyPayloadSize: payload,
+		Depth:                   depth,
+		MatchingEndpoints:       matchingEndpoints,
+		OtherEndpoints:          otherEndpoints,
+		MatchingEligibleLanes:   matchingEligible,
+		OtherEligibleLanes:      otherEligible,
+		MatchingIneligibleLanes: matchingIneligible,
+		ParallelEdges:           parallel,
+		AddCycle:                cycle == 1,
+		PropertyPayloadSize:     payload,
 	}
 	if matched != 9 || (cycle != 0 && cycle != 1) || testutil.ValidateEndpointSeededExpansionScaleConfig(config) != nil || name != endpointSeededExpansionDatasetName(config) {
 		return testutil.EndpointSeededExpansionScaleConfig{}, false
@@ -361,10 +366,12 @@ func endpointSeededExpansionFixtureExpectations(fixture opengraph.Graph, config 
 		visit(endpoint, 0, map[int]bool{})
 	}
 	return &EndpointSeededExpansionFixtureExpectations{
-		MatchingEndpoints: int64(config.MatchingEndpoints), OtherEndpoints: int64(config.OtherEndpoints),
+		MatchingEndpoints:       int64(config.MatchingEndpoints),
+		OtherEndpoints:          int64(config.OtherEndpoints),
 		EligiblePrefixRows:      int64(config.MatchingEligibleLanes + config.OtherEligibleLanes),
 		MatchingIneligibleLanes: int64(config.MatchingIneligibleLanes),
-		ExpectedReverseStates:   states, ExpectedOutputTrails: outputs,
+		ExpectedReverseStates:   states,
+		ExpectedOutputTrails:    outputs,
 	}
 }
 
@@ -572,9 +579,12 @@ func fixedSuffixExpansionV2FixtureExpectations(config testutil.FixedSuffixExpans
 // fixedSuffixExpansionV3FixtureExpectations derives exact forward and reverse
 // relationship-distinct states and output trails from a v3 fixture graph.
 func fixedSuffixExpansionV3FixtureExpectations(fixture opengraph.Graph, config testutil.FixedSuffixExpansionScaleConfig) *FixedSuffixExpansionFixtureExpectations {
+	// adjacentEdge identifies one indexed transition in the generated fixture.
 	type adjacentEdge struct {
+		// index retains the index while adjacentEdge is assembled or evaluated.
 		index int
-		next  string
+		// next retains the next while adjacentEdge is assembled or evaluated.
+		next string
 	}
 
 	nodeKinds := map[string]map[string]bool{}
@@ -596,8 +606,14 @@ func fixedSuffixExpansionV3FixtureExpectations(fixture opengraph.Graph, config t
 	for edgeIdx, edge := range fixture.Edges {
 		edgesByStart[edge.StartID] = append(edgesByStart[edge.StartID], edgeIdx)
 		if edge.Kind == "Expand" {
-			expandForward[edge.StartID] = append(expandForward[edge.StartID], adjacentEdge{index: edgeIdx, next: edge.EndID})
-			expandReverse[edge.EndID] = append(expandReverse[edge.EndID], adjacentEdge{index: edgeIdx, next: edge.StartID})
+			expandForward[edge.StartID] = append(expandForward[edge.StartID], adjacentEdge{
+				index: edgeIdx,
+				next:  edge.EndID,
+			})
+			expandReverse[edge.EndID] = append(expandReverse[edge.EndID], adjacentEdge{
+				index: edgeIdx,
+				next:  edge.StartID,
+			})
 		}
 	}
 

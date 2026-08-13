@@ -173,6 +173,7 @@ const (
 	FunctionGenerateSubscripts Identifier = "generate_subscripts"
 )
 
+// IsAggregateFunction supports benchmark evidence processing for is aggregate function.
 func IsAggregateFunction(function Identifier) bool {
 	switch function {
 	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionCypherMin, FunctionCypherMax, FunctionSum, FunctionAvg:

@@ -252,6 +252,7 @@ func neo4jPlanCaptureStatement(cypherQuery string, write bool) string {
 	return command + " " + cypherWithoutTerminator(cypherQuery)
 }
 
+// neo4jServerAgent supports benchmark evidence processing for neo4j server agent.
 func neo4jServerAgent(summary neo4jcore.ResultSummary) string {
 	if server := summary.Server(); server != nil {
 		return server.Agent()
@@ -346,16 +347,26 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.DriverWithContext, string, e
 
 // Neo4jProfileMetadata identifies the planner, runtime, and server used for a captured plan.
 type Neo4jProfileMetadata struct {
-	CaptureMode           string `json:"capture_mode"`
-	Profiled              bool   `json:"profiled"`
-	Planner               string `json:"planner,omitempty"`
+	// CaptureMode identifies the capture mode.
+	CaptureMode string `json:"capture_mode"`
+	// Profiled indicates whether profiled applies.
+	Profiled bool `json:"profiled"`
+	// Planner supplies the planner input to the Neo4jProfileMetadata contract.
+	Planner string `json:"planner,omitempty"`
+	// PlannerImplementation supplies the planner implementation input to the Neo4jProfileMetadata contract.
 	PlannerImplementation string `json:"planner_implementation,omitempty"`
-	PlannerVersion        string `json:"planner_version,omitempty"`
-	Runtime               string `json:"runtime,omitempty"`
+	// PlannerVersion identifies the schema version for planner version.
+	PlannerVersion string `json:"planner_version,omitempty"`
+	// Runtime supplies the runtime input to the Neo4jProfileMetadata contract.
+	Runtime string `json:"runtime,omitempty"`
+	// RuntimeImplementation supplies the runtime implementation input to the Neo4jProfileMetadata contract.
 	RuntimeImplementation string `json:"runtime_implementation,omitempty"`
-	RuntimeVersion        string `json:"runtime_version,omitempty"`
-	CypherVersion         string `json:"cypher_version,omitempty"`
-	ServerAgent           string `json:"server_agent,omitempty"`
+	// RuntimeVersion identifies the schema version for runtime version.
+	RuntimeVersion string `json:"runtime_version,omitempty"`
+	// CypherVersion identifies the schema version for cypher version.
+	CypherVersion string `json:"cypher_version,omitempty"`
+	// ServerAgent supplies the server agent input to the Neo4jProfileMetadata contract.
+	ServerAgent string `json:"server_agent,omitempty"`
 }
 
 // Neo4jPlanNode models the recursive operator tree returned by Neo4j PROFILE or EXPLAIN.
@@ -378,7 +389,7 @@ type Neo4jPlanNode struct {
 	PageCacheHits *int64 `json:"page_cache_hits,omitempty"`
 	// PageCacheMisses records page-cache misses reported for an executed PROFILE operator.
 	PageCacheMisses *int64 `json:"page_cache_misses,omitempty"`
-	// PageCacheHitRatio records the server-reported page-cache hit ratio.
+	// PageCacheHitRatio supplies the page cache hit ratio input to the Neo4jPlanNode contract.
 	PageCacheHitRatio *float64 `json:"page_cache_hit_ratio,omitempty"`
 	// TimeNS records operator time in nanoseconds when exposed by the Neo4j server.
 	TimeNS *int64 `json:"time_ns,omitempty"`
@@ -436,6 +447,7 @@ func convertNeo4jProfiledPlan(plan neo4jcore.ProfiledPlan, opaqueInternalTravers
 	return node
 }
 
+// neo4jProfileMetadata derives metadata describing neo4j profile.
 func neo4jProfileMetadata(arguments map[string]any, serverAgent string, profiled bool) Neo4jProfileMetadata {
 	captureMode := "EXPLAIN"
 	if profiled {
@@ -456,6 +468,7 @@ func neo4jProfileMetadata(arguments map[string]any, serverAgent string, profiled
 	}
 }
 
+// internalTraversalOpaque supports benchmark evidence processing for internal traversal opaque.
 func (s Neo4jProfileMetadata) internalTraversalOpaque() bool {
 	return strings.HasPrefix(s.PlannerVersion, "4.4") ||
 		strings.HasPrefix(s.RuntimeVersion, "4.4") ||
@@ -463,6 +476,7 @@ func (s Neo4jProfileMetadata) internalTraversalOpaque() bool {
 		strings.Contains(s.ServerAgent, "/4.4")
 }
 
+// neo4jStringArgument supports benchmark evidence processing for neo4j string argument.
 func neo4jStringArgument(arguments map[string]any, name string) string {
 	if value, ok := arguments[name]; ok {
 		return fmt.Sprint(value)
@@ -471,6 +485,7 @@ func neo4jStringArgument(arguments map[string]any, name string) string {
 	return ""
 }
 
+// neo4jFloatArgument supports benchmark evidence processing for neo4j float argument.
 func neo4jFloatArgument(arguments map[string]any, names ...string) *float64 {
 	for _, name := range names {
 		value, ok := arguments[name]
@@ -487,6 +502,7 @@ func neo4jFloatArgument(arguments map[string]any, names ...string) *float64 {
 	return nil
 }
 
+// neo4jIntArgument supports benchmark evidence processing for neo4j int argument.
 func neo4jIntArgument(arguments map[string]any, names ...string) *int64 {
 	for _, name := range names {
 		value, ok := arguments[name]
@@ -503,10 +519,12 @@ func neo4jIntArgument(arguments map[string]any, names ...string) *int64 {
 	return nil
 }
 
+// neo4jInt64Pointer returns an addressable representation of neo4j int64.
 func neo4jInt64Pointer(value int64) *int64 {
 	return &value
 }
 
+// neo4jFloat64Pointer returns an addressable representation of neo4j float64.
 func neo4jFloat64Pointer(value float64) *float64 {
 	return &value
 }
@@ -543,6 +561,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	return operators
 }
 
+// normalizeNeo4jOperator normalizes neo4j operator.
 func normalizeNeo4jOperator(operator string) string {
 	base := neo4jOperatorBase(operator)
 	if base == "" {
@@ -552,6 +571,7 @@ func normalizeNeo4jOperator(operator string) string {
 	return base + "@neo4j"
 }
 
+// neo4jOperatorBase supports benchmark evidence processing for neo4j operator base.
 func neo4jOperatorBase(operator string) string {
 	operator = strings.TrimSpace(operator)
 	for strings.HasSuffix(operator, "@neo4j") {

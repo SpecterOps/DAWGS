@@ -20,11 +20,22 @@ import (
 )
 
 const (
-	postgresTraversalTelemetryOff                    = "off"
-	postgresTraversalTelemetrySummary                = "summary"
-	postgresTraversalTelemetryDiagnostic             = "diagnostic"
-	postgresTraversalPlanReplaySource                = "postgres_explain_analyze_json_timing_off"
-	postgresBidirectionalDiagnosticSource            = "public.read_bidirectional_shortest_path_diagnostic_v1"
+	// postgresTraversalTelemetryOff reserves the stable protocol value used to recognize postgres traversal telemetry off across artifacts and executions.
+	postgresTraversalTelemetryOff = "off"
+
+	// postgresTraversalTelemetrySummary reserves the stable protocol value used to recognize postgres traversal telemetry summary across artifacts and executions.
+	postgresTraversalTelemetrySummary = "summary"
+
+	// postgresTraversalTelemetryDiagnostic reserves the stable protocol value used to recognize postgres traversal telemetry diagnostic across artifacts and executions.
+	postgresTraversalTelemetryDiagnostic = "diagnostic"
+
+	// postgresTraversalPlanReplaySource reserves the stable protocol value used to recognize postgres traversal plan replay source across artifacts and executions.
+	postgresTraversalPlanReplaySource = "postgres_explain_analyze_json_timing_off"
+
+	// postgresBidirectionalDiagnosticSource reserves the stable protocol value used to recognize postgres bidirectional diagnostic source across artifacts and executions.
+	postgresBidirectionalDiagnosticSource = "public.read_bidirectional_shortest_path_diagnostic_v1"
+
+	// postgresBidirectionalAllShortestDiagnosticSource reserves the stable protocol value used to recognize postgres bidirectional all shortest diagnostic source across artifacts and executions.
 	postgresBidirectionalAllShortestDiagnosticSource = "public.read_bidirectional_all_shortest_path_diagnostic_v1"
 )
 
@@ -132,6 +143,7 @@ func buildPostgresReferenceTraversalTelemetry(
 	return &telemetry, nil
 }
 
+// isTraversalReferenceArchitecture reports whether is traversal reference architecture.
 func isTraversalReferenceArchitecture(identity string) bool {
 	return strings.HasPrefix(identity, "SP-") ||
 		strings.HasPrefix(identity, "ASP-") ||
@@ -173,6 +185,7 @@ func newPostgresTraversalTelemetry(
 	return telemetry
 }
 
+// singleTraversalOutcome supports benchmark evidence processing for single traversal outcome.
 func singleTraversalOutcome(outcomes []translate.TargetLoweringOutcome) (translate.TargetLoweringOutcome, bool) {
 	var shortest, expansion []translate.TargetLoweringOutcome
 	for _, outcome := range outcomes {
@@ -198,6 +211,7 @@ func singleTraversalOutcome(outcomes []translate.TargetLoweringOutcome) (transla
 	return expansion[0], true
 }
 
+// traversalSummaryFromOutcome supports benchmark evidence processing for traversal summary from outcome.
 func traversalSummaryFromOutcome(outcome translate.TargetLoweringOutcome, metrics PostgresPlanMetrics) (TraversalExecutionSummary, TraversalTelemetryFamily, error) {
 	requested := outcome.Candidate
 	if requested == "" {
@@ -309,6 +323,7 @@ func traversalSummaryFromOutcome(outcome translate.TargetLoweringOutcome, metric
 	return summary, family, nil
 }
 
+// traversalCapParameterName supports benchmark evidence processing for traversal cap parameter name.
 func traversalCapParameterName(counterName string) string {
 	switch counterName {
 	case "state_rows":
@@ -326,6 +341,7 @@ func traversalCapParameterName(counterName string) string {
 	}
 }
 
+// traversalCapOutcomeField supports benchmark evidence processing for traversal cap outcome field.
 func traversalCapOutcomeField(counterName string) string {
 	switch counterName {
 	case "state_rows":
@@ -345,6 +361,7 @@ func traversalCapOutcomeField(counterName string) string {
 	}
 }
 
+// shadowWouldSelectIdentity derives the stable identity used to compare shadow would select.
 func shadowWouldSelectIdentity(outcome translate.TargetLoweringOutcome, metrics PostgresPlanMetrics) string {
 	plan := postgresTraversalPlanReplay(metrics)
 	if plan.Counters["orientation_shadow_reverse_rows"] > 0 {
@@ -359,6 +376,7 @@ func shadowWouldSelectIdentity(outcome translate.TargetLoweringOutcome, metrics 
 	return ""
 }
 
+// runtimeTraversalIdentity derives the stable identity used to compare runtime traversal.
 func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics PostgresPlanMetrics, requested, applied string) (identity, branch string, fallback, overflow bool) {
 	identity, branch = applied, "selected"
 	if outcome.EmittedPolicy == "" && outcome.Fallback != "" && requested != applied && applied == outcome.Fallback {
@@ -430,6 +448,7 @@ func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics P
 	return identity, branch, false, overflow
 }
 
+// aspI1PlanOverflow supports benchmark evidence processing for asp i1 plan overflow.
 func aspI1PlanOverflow(outcome translate.TargetLoweringOutcome, plan *TraversalPlanReplayEvidence) bool {
 	for counter, limit := range map[string]int64{
 		"asp_i1_distance_rows":    outcome.StateLimit,
@@ -443,6 +462,7 @@ func aspI1PlanOverflow(outcome translate.TargetLoweringOutcome, plan *TraversalP
 	return false
 }
 
+// orientationPlanOverflow supports benchmark evidence processing for orientation plan overflow.
 func orientationPlanOverflow(outcome translate.TargetLoweringOutcome, plan *TraversalPlanReplayEvidence) bool {
 	if outcome.StateLimit > 0 && plan.Counters["orientation_state_rows"] > outcome.StateLimit {
 		return true
@@ -463,6 +483,7 @@ func orientationPlanOverflow(outcome translate.TargetLoweringOutcome, plan *Trav
 	return false
 }
 
+// outcomeTraversalCaps returns the resource limits enforced for outcome traversal.
 func outcomeTraversalCaps(outcome translate.TargetLoweringOutcome) map[string]int64 {
 	caps := map[string]int64{}
 	if outcome.StateLimit > 0 {
@@ -501,6 +522,7 @@ func outcomeTraversalCaps(outcome translate.TargetLoweringOutcome) map[string]in
 	return caps
 }
 
+// referenceTraversalCaps returns the resource limits enforced for reference traversal.
 func referenceTraversalCaps(parameters map[string]any) map[string]int64 {
 	caps := map[string]int64{}
 	for _, name := range []string{"state_limit", "frontier_limit", "predecessor_limit", "enumeration_limit", "output_bytes_limit", "output_limit"} {
@@ -521,6 +543,7 @@ func referenceTraversalCaps(parameters map[string]any) map[string]int64 {
 	return caps
 }
 
+// integerParameter supports benchmark evidence processing for integer parameter.
 func integerParameter(value any) (int64, bool) {
 	switch typed := value.(type) {
 	case int:
@@ -534,6 +557,7 @@ func integerParameter(value any) (int64, bool) {
 	}
 }
 
+// traversalFamilyForIdentity derives the stable identity used to compare traversal family for.
 func traversalFamilyForIdentity(identity, family string) TraversalTelemetryFamily {
 	if strings.HasPrefix(identity, "ASP-") || family == "ASP" {
 		return TraversalTelemetryFamilyASP
@@ -591,17 +615,20 @@ func traversalRequiredFamilies(summary TraversalExecutionSummary, base Traversal
 	return required
 }
 
+// observationRequiresHydration supports benchmark evidence processing for observation requires hydration.
 func observationRequiresHydration(observation string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(observation))
 	return normalized == "one_path" || normalized == "all_paths" || normalized == "full_path" ||
 		strings.Contains(normalized, "complete path") || strings.Contains(normalized, "all-shortest path")
 }
 
+// isBidirectionalTelemetryIdentity reports whether is bidirectional telemetry identity.
 func isBidirectionalTelemetryIdentity(summary TraversalExecutionSummary) bool {
 	return isBidirectionalSPIdentity(summary.RuntimeIdentity) || isBidirectionalASPIdentity(summary.RuntimeIdentity) ||
 		isBidirectionalSPIdentity(summary.RequestedIdentity) || isBidirectionalASPIdentity(summary.RequestedIdentity)
 }
 
+// bidirectionalTelemetryIdentity derives the stable identity used to compare bidirectional telemetry.
 func bidirectionalTelemetryIdentity(summary TraversalExecutionSummary) string {
 	for _, identity := range []string{summary.RuntimeIdentity, summary.RequestedIdentity} {
 		if isBidirectionalSPIdentity(identity) || isBidirectionalASPIdentity(identity) {
@@ -611,6 +638,7 @@ func bidirectionalTelemetryIdentity(summary TraversalExecutionSummary) string {
 	return ""
 }
 
+// schedulerForIdentity derives the stable identity used to compare scheduler for.
 func schedulerForIdentity(identity, scheduler string) string {
 	if scheduler != "" {
 		return scheduler
@@ -627,6 +655,7 @@ func schedulerForIdentity(identity, scheduler string) string {
 	}
 }
 
+// functionBackedTraversal supports benchmark evidence processing for function backed traversal.
 func functionBackedTraversal(metrics PostgresPlanMetrics) bool {
 	for _, node := range metrics.PlanNodes {
 		if node.NodeType == "Function Scan" && strings.TrimSpace(node.FunctionName) != "" {
@@ -636,6 +665,7 @@ func functionBackedTraversal(metrics PostgresPlanMetrics) bool {
 	return false
 }
 
+// postgresTraversalPlanReplay supports benchmark evidence processing for postgres traversal plan replay.
 func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanReplayEvidence {
 	replay := &TraversalPlanReplayEvidence{
 		Source:     postgresTraversalPlanReplaySource,
@@ -825,138 +855,258 @@ func inlinePredecessorCTEBody(node PostgresPlanNodeMetric, name string) bool {
 // returned by read_bidirectional_shortest_path_diagnostic_v1. Pointer fields
 // preserve the distinction between a measured zero and missing evidence.
 type postgresBidirectionalDiagnosticDocument struct {
-	SchemaVersion    int                                    `json:"schema_version"`
-	InvocationID     string                                 `json:"invocation_id"`
-	Scheduler        string                                 `json:"scheduler"`
-	StateLimit       *int64                                 `json:"state_limit"`
-	FrontierLimit    *int64                                 `json:"frontier_limit"`
-	PredecessorLimit *int64                                 `json:"predecessor_limit"`
-	SearchCalls      *int64                                 `json:"search_calls"`
-	RuntimeBranch    string                                 `json:"runtime_branch"`
-	Overflowed       *bool                                  `json:"overflowed"`
-	FallbackExecuted *bool                                  `json:"fallback_executed"`
-	Counters         *postgresBidirectionalDiagnosticCounts `json:"counters"`
-	Calls            []postgresBidirectionalDiagnosticCall  `json:"calls"`
-	WorkspaceBytes   int64                                  `json:"-"`
+	// SchemaVersion identifies the schema version for schema version.
+	SchemaVersion int `json:"schema_version"`
+	// InvocationID identifies the invocation id.
+	InvocationID string `json:"invocation_id"`
+	// Scheduler supplies the scheduler input to the postgresBidirectionalDiagnosticDocument contract.
+	Scheduler string `json:"scheduler"`
+	// StateLimit supplies the state limit input to the postgresBidirectionalDiagnosticDocument contract.
+	StateLimit *int64 `json:"state_limit"`
+	// FrontierLimit supplies the frontier limit input to the postgresBidirectionalDiagnosticDocument contract.
+	FrontierLimit *int64 `json:"frontier_limit"`
+	// PredecessorLimit supplies the predecessor limit input to the postgresBidirectionalDiagnosticDocument contract.
+	PredecessorLimit *int64 `json:"predecessor_limit"`
+	// SearchCalls supplies the search calls input to the postgresBidirectionalDiagnosticDocument contract.
+	SearchCalls *int64 `json:"search_calls"`
+	// RuntimeBranch supplies the runtime branch input to the postgresBidirectionalDiagnosticDocument contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// Overflowed supplies the overflowed input to the postgresBidirectionalDiagnosticDocument contract.
+	Overflowed *bool `json:"overflowed"`
+	// FallbackExecuted supplies the fallback executed input to the postgresBidirectionalDiagnosticDocument contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
+	// Counters supplies the counters input to the postgresBidirectionalDiagnosticDocument contract.
+	Counters *postgresBidirectionalDiagnosticCounts `json:"counters"`
+	// Calls supplies the calls input to the postgresBidirectionalDiagnosticDocument contract.
+	Calls []postgresBidirectionalDiagnosticCall `json:"calls"`
+	// WorkspaceBytes supplies the workspace bytes input to the postgresBidirectionalDiagnosticDocument contract.
+	WorkspaceBytes int64 `json:"-"`
 }
 
+// postgresBidirectionalDiagnosticCall groups state that must remain consistent while processing postgres bidirectional diagnostic call.
 type postgresBidirectionalDiagnosticCall struct {
-	SearchID          *int64 `json:"search_id"`
-	SourceID          *int64 `json:"source_id"`
-	TargetID          *int64 `json:"target_id"`
-	RuntimeBranch     string `json:"runtime_branch"`
-	SchedulerActions  *int64 `json:"scheduler_actions"`
-	CandidateEdges    *int64 `json:"candidate_edges"`
-	DistinctNewNodes  *int64 `json:"distinct_new_nodes"`
-	SeenPeak          *int64 `json:"seen_peak"`
-	FrontierPeak      *int64 `json:"frontier_peak"`
-	QueuePeak         *int64 `json:"queue_peak"`
-	PredecessorPeak   *int64 `json:"predecessor_peak"`
+	// SearchID identifies the search id.
+	SearchID *int64 `json:"search_id"`
+	// SourceID identifies the source id.
+	SourceID *int64 `json:"source_id"`
+	// TargetID identifies the target id.
+	TargetID *int64 `json:"target_id"`
+	// RuntimeBranch supplies the runtime branch input to the postgresBidirectionalDiagnosticCall contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// SchedulerActions supplies the scheduler actions input to the postgresBidirectionalDiagnosticCall contract.
+	SchedulerActions *int64 `json:"scheduler_actions"`
+	// CandidateEdges supplies the candidate edges input to the postgresBidirectionalDiagnosticCall contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the postgresBidirectionalDiagnosticCall contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenPeak supplies the seen peak input to the postgresBidirectionalDiagnosticCall contract.
+	SeenPeak *int64 `json:"seen_peak"`
+	// FrontierPeak supplies the frontier peak input to the postgresBidirectionalDiagnosticCall contract.
+	FrontierPeak *int64 `json:"frontier_peak"`
+	// QueuePeak supplies the queue peak input to the postgresBidirectionalDiagnosticCall contract.
+	QueuePeak *int64 `json:"queue_peak"`
+	// PredecessorPeak supplies the predecessor peak input to the postgresBidirectionalDiagnosticCall contract.
+	PredecessorPeak *int64 `json:"predecessor_peak"`
+	// MeetingCandidates supplies the meeting candidates input to the postgresBidirectionalDiagnosticCall contract.
 	MeetingCandidates *int64 `json:"meeting_candidates"`
-	FrozenDistance    *int64 `json:"frozen_distance"`
-	WitnessRows       *int64 `json:"witness_rows"`
-	Overflowed        *bool  `json:"overflowed"`
-	FallbackExecuted  *bool  `json:"fallback_executed"`
+	// FrozenDistance supplies the frozen distance input to the postgresBidirectionalDiagnosticCall contract.
+	FrozenDistance *int64 `json:"frozen_distance"`
+	// WitnessRows records the number of witness rows.
+	WitnessRows *int64 `json:"witness_rows"`
+	// Overflowed supplies the overflowed input to the postgresBidirectionalDiagnosticCall contract.
+	Overflowed *bool `json:"overflowed"`
+	// FallbackExecuted supplies the fallback executed input to the postgresBidirectionalDiagnosticCall contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
 }
 
+// postgresBidirectionalDiagnosticCounts aggregates counters observed while evaluating postgres bidirectional diagnostic.
 type postgresBidirectionalDiagnosticCounts struct {
-	SchedulerActions  *int64                                 `json:"scheduler_actions"`
-	CandidateEdges    *int64                                 `json:"candidate_edges"`
-	DistinctNewNodes  *int64                                 `json:"distinct_new_nodes"`
-	SeenPeak          *int64                                 `json:"seen_peak"`
-	FrontierPeak      *int64                                 `json:"frontier_peak"`
-	QueuePeak         *int64                                 `json:"queue_peak"`
-	PredecessorPeak   *int64                                 `json:"predecessor_peak"`
-	MeetingCandidates *int64                                 `json:"meeting_candidates"`
-	FrozenDistance    *int64                                 `json:"frozen_distance"`
-	WitnessRows       *int64                                 `json:"witness_rows"`
-	Levels            []postgresBidirectionalDiagnosticLevel `json:"levels"`
+	// SchedulerActions supplies the scheduler actions input to the postgresBidirectionalDiagnosticCounts contract.
+	SchedulerActions *int64 `json:"scheduler_actions"`
+	// CandidateEdges supplies the candidate edges input to the postgresBidirectionalDiagnosticCounts contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the postgresBidirectionalDiagnosticCounts contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenPeak supplies the seen peak input to the postgresBidirectionalDiagnosticCounts contract.
+	SeenPeak *int64 `json:"seen_peak"`
+	// FrontierPeak supplies the frontier peak input to the postgresBidirectionalDiagnosticCounts contract.
+	FrontierPeak *int64 `json:"frontier_peak"`
+	// QueuePeak supplies the queue peak input to the postgresBidirectionalDiagnosticCounts contract.
+	QueuePeak *int64 `json:"queue_peak"`
+	// PredecessorPeak supplies the predecessor peak input to the postgresBidirectionalDiagnosticCounts contract.
+	PredecessorPeak *int64 `json:"predecessor_peak"`
+	// MeetingCandidates supplies the meeting candidates input to the postgresBidirectionalDiagnosticCounts contract.
+	MeetingCandidates *int64 `json:"meeting_candidates"`
+	// FrozenDistance supplies the frozen distance input to the postgresBidirectionalDiagnosticCounts contract.
+	FrozenDistance *int64 `json:"frozen_distance"`
+	// WitnessRows records the number of witness rows.
+	WitnessRows *int64 `json:"witness_rows"`
+	// Levels supplies the levels input to the postgresBidirectionalDiagnosticCounts contract.
+	Levels []postgresBidirectionalDiagnosticLevel `json:"levels"`
 }
 
+// postgresBidirectionalDiagnosticLevel groups state that must remain consistent while processing postgres bidirectional diagnostic level.
 type postgresBidirectionalDiagnosticLevel struct {
-	SearchID          *int64 `json:"search_id"`
-	ActionIndex       *int64 `json:"action_index"`
-	Side              string `json:"side"`
-	Action            string `json:"action"`
-	Depth             *int64 `json:"depth"`
-	FrontierRows      *int64 `json:"frontier_rows"`
-	CandidateEdges    *int64 `json:"candidate_edges"`
-	DistinctNewNodes  *int64 `json:"distinct_new_nodes"`
-	SeenRows          *int64 `json:"seen_rows"`
-	QueueRows         *int64 `json:"queue_rows"`
-	PredecessorRows   *int64 `json:"predecessor_rows"`
+	// SearchID identifies the search id.
+	SearchID *int64 `json:"search_id"`
+	// ActionIndex supplies the action index input to the postgresBidirectionalDiagnosticLevel contract.
+	ActionIndex *int64 `json:"action_index"`
+	// Side supplies the side input to the postgresBidirectionalDiagnosticLevel contract.
+	Side string `json:"side"`
+	// Action supplies the action input to the postgresBidirectionalDiagnosticLevel contract.
+	Action string `json:"action"`
+	// Depth supplies the depth input to the postgresBidirectionalDiagnosticLevel contract.
+	Depth *int64 `json:"depth"`
+	// FrontierRows records the number of frontier rows.
+	FrontierRows *int64 `json:"frontier_rows"`
+	// CandidateEdges supplies the candidate edges input to the postgresBidirectionalDiagnosticLevel contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the postgresBidirectionalDiagnosticLevel contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenRows records the number of seen rows.
+	SeenRows *int64 `json:"seen_rows"`
+	// QueueRows records the number of queue rows.
+	QueueRows *int64 `json:"queue_rows"`
+	// PredecessorRows records the number of predecessor rows.
+	PredecessorRows *int64 `json:"predecessor_rows"`
+	// MeetingCandidates supplies the meeting candidates input to the postgresBidirectionalDiagnosticLevel contract.
 	MeetingCandidates *int64 `json:"meeting_candidates"`
 }
 
+// postgresBidirectionalAllShortestDiagnosticDocument defines the serialized representation of postgres bidirectional all shortest diagnostic.
 type postgresBidirectionalAllShortestDiagnosticDocument struct {
-	SchemaVersion    int                                               `json:"schema_version"`
-	InvocationID     string                                            `json:"invocation_id"`
-	Scheduler        string                                            `json:"scheduler"`
-	StateLimit       *int64                                            `json:"state_limit"`
-	FrontierLimit    *int64                                            `json:"frontier_limit"`
-	PredecessorLimit *int64                                            `json:"predecessor_limit"`
-	EnumerationLimit *int64                                            `json:"enumeration_limit"`
-	OutputBytesLimit *int64                                            `json:"output_bytes_limit"`
-	SearchCalls      *int64                                            `json:"search_calls"`
-	RuntimeBranch    string                                            `json:"runtime_branch"`
-	Overflowed       *bool                                             `json:"overflowed"`
-	FallbackExecuted *bool                                             `json:"fallback_executed"`
-	Counters         *postgresBidirectionalAllShortestDiagnosticCounts `json:"counters"`
-	Calls            []postgresBidirectionalAllShortestDiagnosticCall  `json:"calls"`
-	WorkspaceBytes   int64                                             `json:"-"`
+	// SchemaVersion identifies the schema version for schema version.
+	SchemaVersion int `json:"schema_version"`
+	// InvocationID identifies the invocation id.
+	InvocationID string `json:"invocation_id"`
+	// Scheduler supplies the scheduler input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	Scheduler string `json:"scheduler"`
+	// StateLimit supplies the state limit input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	StateLimit *int64 `json:"state_limit"`
+	// FrontierLimit supplies the frontier limit input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	FrontierLimit *int64 `json:"frontier_limit"`
+	// PredecessorLimit supplies the predecessor limit input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	PredecessorLimit *int64 `json:"predecessor_limit"`
+	// EnumerationLimit supplies the enumeration limit input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	EnumerationLimit *int64 `json:"enumeration_limit"`
+	// OutputBytesLimit supplies the output bytes limit input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	OutputBytesLimit *int64 `json:"output_bytes_limit"`
+	// SearchCalls supplies the search calls input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	SearchCalls *int64 `json:"search_calls"`
+	// RuntimeBranch supplies the runtime branch input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// Overflowed supplies the overflowed input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	Overflowed *bool `json:"overflowed"`
+	// FallbackExecuted supplies the fallback executed input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
+	// Counters supplies the counters input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	Counters *postgresBidirectionalAllShortestDiagnosticCounts `json:"counters"`
+	// Calls supplies the calls input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	Calls []postgresBidirectionalAllShortestDiagnosticCall `json:"calls"`
+	// WorkspaceBytes supplies the workspace bytes input to the postgresBidirectionalAllShortestDiagnosticDocument contract.
+	WorkspaceBytes int64 `json:"-"`
 }
 
+// postgresBidirectionalAllShortestDiagnosticCounts aggregates counters observed while evaluating postgres bidirectional all shortest diagnostic.
 type postgresBidirectionalAllShortestDiagnosticCounts struct {
-	SchedulerActions              *int64                                 `json:"scheduler_actions"`
-	CandidateEdges                *int64                                 `json:"candidate_edges"`
-	DistinctNewNodes              *int64                                 `json:"distinct_new_nodes"`
-	SeenPeak                      *int64                                 `json:"seen_peak"`
-	FrontierPeak                  *int64                                 `json:"frontier_peak"`
-	QueuePeak                     *int64                                 `json:"queue_peak"`
-	PredecessorPeak               *int64                                 `json:"predecessor_peak"`
-	MeetingCandidates             *int64                                 `json:"meeting_candidates"`
-	FrozenDistance                *int64                                 `json:"frozen_distance"`
-	WitnessRows                   *int64                                 `json:"witness_rows"`
-	SameDepthPredecessorAdditions *int64                                 `json:"same_depth_predecessor_additions"`
-	MeetingNodes                  *int64                                 `json:"meeting_nodes"`
-	CutDepth                      *int64                                 `json:"cut_depth"`
-	PathCountEstimate             *int64                                 `json:"path_count_estimate"`
-	PathCountSaturated            *bool                                  `json:"path_count_saturated"`
-	EnumeratedCandidates          *int64                                 `json:"enumerated_candidates"`
-	DuplicateRejects              *int64                                 `json:"duplicate_rejects"`
-	OutputPaths                   *int64                                 `json:"output_paths"`
-	OutputEdgeCells               *int64                                 `json:"output_edge_cells"`
-	OutputBytes                   *int64                                 `json:"output_bytes"`
-	Levels                        []postgresBidirectionalDiagnosticLevel `json:"levels"`
+	// SchedulerActions supplies the scheduler actions input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	SchedulerActions *int64 `json:"scheduler_actions"`
+	// CandidateEdges supplies the candidate edges input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenPeak supplies the seen peak input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	SeenPeak *int64 `json:"seen_peak"`
+	// FrontierPeak supplies the frontier peak input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	FrontierPeak *int64 `json:"frontier_peak"`
+	// QueuePeak supplies the queue peak input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	QueuePeak *int64 `json:"queue_peak"`
+	// PredecessorPeak supplies the predecessor peak input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	PredecessorPeak *int64 `json:"predecessor_peak"`
+	// MeetingCandidates supplies the meeting candidates input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	MeetingCandidates *int64 `json:"meeting_candidates"`
+	// FrozenDistance supplies the frozen distance input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	FrozenDistance *int64 `json:"frozen_distance"`
+	// WitnessRows records the number of witness rows.
+	WitnessRows *int64 `json:"witness_rows"`
+	// SameDepthPredecessorAdditions supplies the same depth predecessor additions input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	SameDepthPredecessorAdditions *int64 `json:"same_depth_predecessor_additions"`
+	// MeetingNodes supplies the meeting nodes input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	MeetingNodes *int64 `json:"meeting_nodes"`
+	// CutDepth supplies the cut depth input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	CutDepth *int64 `json:"cut_depth"`
+	// PathCountEstimate supplies the path count estimate input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	PathCountEstimate *int64 `json:"path_count_estimate"`
+	// PathCountSaturated supplies the path count saturated input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	PathCountSaturated *bool `json:"path_count_saturated"`
+	// EnumeratedCandidates supplies the enumerated candidates input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	EnumeratedCandidates *int64 `json:"enumerated_candidates"`
+	// DuplicateRejects supplies the duplicate rejects input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	DuplicateRejects *int64 `json:"duplicate_rejects"`
+	// OutputPaths identifies the filesystem output paths.
+	OutputPaths *int64 `json:"output_paths"`
+	// OutputEdgeCells supplies the output edge cells input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	OutputEdgeCells *int64 `json:"output_edge_cells"`
+	// OutputBytes supplies the output bytes input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	OutputBytes *int64 `json:"output_bytes"`
+	// Levels supplies the levels input to the postgresBidirectionalAllShortestDiagnosticCounts contract.
+	Levels []postgresBidirectionalDiagnosticLevel `json:"levels"`
 }
 
+// postgresBidirectionalAllShortestDiagnosticCall groups state that must remain consistent while processing postgres bidirectional all shortest diagnostic call.
 type postgresBidirectionalAllShortestDiagnosticCall struct {
-	SearchID                      *int64 `json:"search_id"`
-	SourceID                      *int64 `json:"source_id"`
-	TargetID                      *int64 `json:"target_id"`
-	RuntimeBranch                 string `json:"runtime_branch"`
-	SchedulerActions              *int64 `json:"scheduler_actions"`
-	CandidateEdges                *int64 `json:"candidate_edges"`
-	DistinctNewNodes              *int64 `json:"distinct_new_nodes"`
-	SeenPeak                      *int64 `json:"seen_peak"`
-	FrontierPeak                  *int64 `json:"frontier_peak"`
-	QueuePeak                     *int64 `json:"queue_peak"`
-	PredecessorPeak               *int64 `json:"predecessor_peak"`
-	MeetingCandidates             *int64 `json:"meeting_candidates"`
-	FrozenDistance                *int64 `json:"frozen_distance"`
-	WitnessRows                   *int64 `json:"witness_rows"`
+	// SearchID identifies the search id.
+	SearchID *int64 `json:"search_id"`
+	// SourceID identifies the source id.
+	SourceID *int64 `json:"source_id"`
+	// TargetID identifies the target id.
+	TargetID *int64 `json:"target_id"`
+	// RuntimeBranch supplies the runtime branch input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	RuntimeBranch string `json:"runtime_branch"`
+	// SchedulerActions supplies the scheduler actions input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	SchedulerActions *int64 `json:"scheduler_actions"`
+	// CandidateEdges supplies the candidate edges input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	CandidateEdges *int64 `json:"candidate_edges"`
+	// DistinctNewNodes supplies the distinct new nodes input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	// SeenPeak supplies the seen peak input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	SeenPeak *int64 `json:"seen_peak"`
+	// FrontierPeak supplies the frontier peak input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	FrontierPeak *int64 `json:"frontier_peak"`
+	// QueuePeak supplies the queue peak input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	QueuePeak *int64 `json:"queue_peak"`
+	// PredecessorPeak supplies the predecessor peak input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	PredecessorPeak *int64 `json:"predecessor_peak"`
+	// MeetingCandidates supplies the meeting candidates input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	MeetingCandidates *int64 `json:"meeting_candidates"`
+	// FrozenDistance supplies the frozen distance input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	FrozenDistance *int64 `json:"frozen_distance"`
+	// WitnessRows records the number of witness rows.
+	WitnessRows *int64 `json:"witness_rows"`
+	// SameDepthPredecessorAdditions supplies the same depth predecessor additions input to the postgresBidirectionalAllShortestDiagnosticCall contract.
 	SameDepthPredecessorAdditions *int64 `json:"same_depth_predecessor_additions"`
-	MeetingNodes                  *int64 `json:"meeting_nodes"`
-	CutDepth                      *int64 `json:"cut_depth"`
-	PathCountEstimate             *int64 `json:"path_count_estimate"`
-	PathCountSaturated            *bool  `json:"path_count_saturated"`
-	EnumeratedCandidates          *int64 `json:"enumerated_candidates"`
-	DuplicateRejects              *int64 `json:"duplicate_rejects"`
-	OutputPaths                   *int64 `json:"output_paths"`
-	OutputEdgeCells               *int64 `json:"output_edge_cells"`
-	OutputBytes                   *int64 `json:"output_bytes"`
-	Overflowed                    *bool  `json:"overflowed"`
-	FallbackExecuted              *bool  `json:"fallback_executed"`
+	// MeetingNodes supplies the meeting nodes input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	MeetingNodes *int64 `json:"meeting_nodes"`
+	// CutDepth supplies the cut depth input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	CutDepth *int64 `json:"cut_depth"`
+	// PathCountEstimate supplies the path count estimate input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	PathCountEstimate *int64 `json:"path_count_estimate"`
+	// PathCountSaturated supplies the path count saturated input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	PathCountSaturated *bool `json:"path_count_saturated"`
+	// EnumeratedCandidates supplies the enumerated candidates input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	EnumeratedCandidates *int64 `json:"enumerated_candidates"`
+	// DuplicateRejects supplies the duplicate rejects input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	DuplicateRejects *int64 `json:"duplicate_rejects"`
+	// OutputPaths identifies the filesystem output paths.
+	OutputPaths *int64 `json:"output_paths"`
+	// OutputEdgeCells supplies the output edge cells input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	OutputEdgeCells *int64 `json:"output_edge_cells"`
+	// OutputBytes supplies the output bytes input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	OutputBytes *int64 `json:"output_bytes"`
+	// Overflowed supplies the overflowed input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	Overflowed *bool `json:"overflowed"`
+	// FallbackExecuted supplies the fallback executed input to the postgresBidirectionalAllShortestDiagnosticCall contract.
+	FallbackExecuted *bool `json:"fallback_executed"`
 }
 
 // attachPostgresTraversalTelemetry runs only after every timed case,
@@ -1100,9 +1250,13 @@ func enrichInlinePredecessorTraversalTelemetry(telemetry *TraversalExecutionTele
 
 	if slices.Contains(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyHydration) {
 		telemetry.Diagnostic.Counters.Hydration = &TraversalHydrationCounters{
-			PathCount: traversalTelemetryPointer(outputRows), NodeLookups: traversalTelemetryPointer(metrics.HydrationLoops),
-			EdgeLookups: traversalTelemetryPointer(metrics.HydrationRows), Loops: traversalTelemetryPointer(metrics.HydrationLoops),
-			Rows: traversalTelemetryPointer(metrics.HydrationRows), TimeNS: traversalTelemetryPointer(int64(0)), Bytes: traversalTelemetryPointer(outputBytes),
+			PathCount:   traversalTelemetryPointer(outputRows),
+			NodeLookups: traversalTelemetryPointer(metrics.HydrationLoops),
+			EdgeLookups: traversalTelemetryPointer(metrics.HydrationRows),
+			Loops:       traversalTelemetryPointer(metrics.HydrationLoops),
+			Rows:        traversalTelemetryPointer(metrics.HydrationRows),
+			TimeNS:      traversalTelemetryPointer(int64(0)),
+			Bytes:       traversalTelemetryPointer(outputBytes),
 		}
 		for _, name := range []string{"path_count", "node_lookups", "edge_lookups", "loops", "rows", "time_ns", "bytes"} {
 			telemetry.Diagnostic.Provenance["hydration."+name] = "untimed_plan_and_exact_public_observation"
@@ -1177,21 +1331,35 @@ func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry,
 		}
 	}
 	orientation := &OrientationTraversalCounters{
-		ForwardSeeds: traversalTelemetryPointer(forwardSeeds), ReverseSeeds: traversalTelemetryPointer(reverseSeeds),
-		DuplicateSeeds: traversalTelemetryPointer(duplicateSeeds), SuffixRows: traversalTelemetryPointer(reverseSeeds),
-		DistinctBoundaries: traversalTelemetryPointer(boundaries), TypedDirectionalDegreeSamples: traversalTelemetryPointer(forwardDegree + reverseDegree),
-		ForwardDegreeSamples: traversalTelemetryPointer(forwardDegree), ReverseDegreeSamples: traversalTelemetryPointer(reverseDegree),
-		ShallowSurvivalRows: traversalTelemetryPointer(shallowSurvivalRows), ShallowSurvival: traversalTelemetryPointer(shallowSurvival),
-		ProbeRows: traversalTelemetryPointer(probeRows), ProbeTimeNS: traversalTelemetryPointer(probeTimeNS),
-		ProbeBufferHits: traversalTelemetryPointer(probeHits), ProbeBufferReads: traversalTelemetryPointer(probeReads),
-		ForwardScore: traversalTelemetryPointer(forwardScore), ReverseScore: traversalTelemetryPointer(reverseScore),
-		SelectedSide: selectedSide, SentinelOverflow: traversalTelemetryPointer(overflow), BranchLoops: traversalTelemetryPointer(branchLoops),
+		ForwardSeeds:                  traversalTelemetryPointer(forwardSeeds),
+		ReverseSeeds:                  traversalTelemetryPointer(reverseSeeds),
+		DuplicateSeeds:                traversalTelemetryPointer(duplicateSeeds),
+		SuffixRows:                    traversalTelemetryPointer(reverseSeeds),
+		DistinctBoundaries:            traversalTelemetryPointer(boundaries),
+		TypedDirectionalDegreeSamples: traversalTelemetryPointer(forwardDegree + reverseDegree),
+		ForwardDegreeSamples:          traversalTelemetryPointer(forwardDegree),
+		ReverseDegreeSamples:          traversalTelemetryPointer(reverseDegree),
+		ShallowSurvivalRows:           traversalTelemetryPointer(shallowSurvivalRows),
+		ShallowSurvival:               traversalTelemetryPointer(shallowSurvival),
+		ProbeRows:                     traversalTelemetryPointer(probeRows),
+		ProbeTimeNS:                   traversalTelemetryPointer(probeTimeNS),
+		ProbeBufferHits:               traversalTelemetryPointer(probeHits),
+		ProbeBufferReads:              traversalTelemetryPointer(probeReads),
+		ForwardScore:                  traversalTelemetryPointer(forwardScore),
+		ReverseScore:                  traversalTelemetryPointer(reverseScore),
+		SelectedSide:                  selectedSide,
+		SentinelOverflow:              traversalTelemetryPointer(overflow),
+		BranchLoops:                   traversalTelemetryPointer(branchLoops),
 	}
 	ordinary := &OrdinaryTraversalCounters{
-		Roots: traversalTelemetryPointer(forwardSeeds), EdgeCandidates: traversalTelemetryPointer(edgeCandidates),
-		AdmittedStates: traversalTelemetryPointer(stateRows), RelationshipRepeatRejects: traversalTelemetryPointer(repeatRejects),
-		RecursiveRows: traversalTelemetryPointer(metrics.RecursiveRows), PeakState: traversalTelemetryPointer(stateRows),
-		EmittedTrails: traversalTelemetryPointer(outputRows), HydrationRows: traversalTelemetryPointer(metrics.HydrationRows),
+		Roots:                     traversalTelemetryPointer(forwardSeeds),
+		EdgeCandidates:            traversalTelemetryPointer(edgeCandidates),
+		AdmittedStates:            traversalTelemetryPointer(stateRows),
+		RelationshipRepeatRejects: traversalTelemetryPointer(repeatRejects),
+		RecursiveRows:             traversalTelemetryPointer(metrics.RecursiveRows),
+		PeakState:                 traversalTelemetryPointer(stateRows),
+		EmittedTrails:             traversalTelemetryPointer(outputRows),
+		HydrationRows:             traversalTelemetryPointer(metrics.HydrationRows),
 	}
 	telemetry.Diagnostic.Counters.Orientation = orientation
 	telemetry.Diagnostic.Counters.Ordinary = ordinary
@@ -1210,9 +1378,13 @@ func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry,
 		nodeLookups := metrics.HydrationLoops
 		edgeLookups := metrics.HydrationRows
 		telemetry.Diagnostic.Counters.Hydration = &TraversalHydrationCounters{
-			PathCount: traversalTelemetryPointer(outputRows), NodeLookups: traversalTelemetryPointer(nodeLookups),
-			EdgeLookups: traversalTelemetryPointer(edgeLookups), Loops: traversalTelemetryPointer(hydrationLoops),
-			Rows: traversalTelemetryPointer(hydrationRows), TimeNS: traversalTelemetryPointer(hydrationTimeNS), Bytes: traversalTelemetryPointer(bytes),
+			PathCount:   traversalTelemetryPointer(outputRows),
+			NodeLookups: traversalTelemetryPointer(nodeLookups),
+			EdgeLookups: traversalTelemetryPointer(edgeLookups),
+			Loops:       traversalTelemetryPointer(hydrationLoops),
+			Rows:        traversalTelemetryPointer(hydrationRows),
+			TimeNS:      traversalTelemetryPointer(hydrationTimeNS),
+			Bytes:       traversalTelemetryPointer(bytes),
 		}
 		for _, name := range []string{"path_count", "node_lookups", "edge_lookups", "loops", "rows", "time_ns", "bytes"} {
 			telemetry.Diagnostic.Provenance["hydration."+name] = "untimed_timing_on_plan_and_exact_public_observation"
@@ -1222,6 +1394,7 @@ func enrichOrientationTraversalTelemetry(telemetry *TraversalExecutionTelemetry,
 	telemetry.Diagnostic.IncompleteReasons = nil
 }
 
+// orientationPolicyMaximumDepth supports benchmark evidence processing for orientation policy maximum depth.
 func orientationPolicyMaximumDepth(summary translate.OptimizationSummary, policy string) int64 {
 	if !isOrientationProbePolicy(policy) {
 		return 0
@@ -1303,6 +1476,7 @@ func (s *postgresSQLRunner) enrichBidirectionalTraversalTelemetry(
 	return telemetry.Validate()
 }
 
+// enrichBidirectionalHydrationTelemetry supports benchmark evidence processing for enrich bidirectional hydration telemetry.
 func enrichBidirectionalHydrationTelemetry(
 	telemetry *TraversalExecutionTelemetry,
 	pathCount, edgeCells *int64,
@@ -1330,9 +1504,13 @@ func enrichBidirectionalHydrationTelemetry(
 	}
 	loops := metrics.HydrationLoops
 	telemetry.Diagnostic.Counters.Hydration = &TraversalHydrationCounters{
-		PathCount: pathCount, NodeLookups: traversalTelemetryPointer(nodeLookups), EdgeLookups: edgeCells,
-		Loops: traversalTelemetryPointer(loops), Rows: traversalTelemetryPointer(rows),
-		TimeNS: traversalTelemetryPointer(hydrationTimeNS), Bytes: traversalTelemetryPointer(bytes),
+		PathCount:   pathCount,
+		NodeLookups: traversalTelemetryPointer(nodeLookups),
+		EdgeLookups: edgeCells,
+		Loops:       traversalTelemetryPointer(loops),
+		Rows:        traversalTelemetryPointer(rows),
+		TimeNS:      traversalTelemetryPointer(hydrationTimeNS),
+		Bytes:       traversalTelemetryPointer(bytes),
 	}
 	for _, name := range []string{"path_count", "node_lookups", "edge_lookups", "loops", "rows", "time_ns", "bytes"} {
 		telemetry.Diagnostic.Provenance["hydration."+name] = "invocation_local_path_counts+untimed_timing_on_plan+exact_public_observation"
@@ -1370,6 +1548,7 @@ func (s *postgresSQLRunner) replayBidirectionalTraversalDiagnostic(
 	return document, "", nil
 }
 
+// replayBidirectionalAllShortestTraversalDiagnostic supports benchmark evidence processing for replay bidirectional all shortest traversal diagnostic.
 func (s *postgresSQLRunner) replayBidirectionalAllShortestTraversalDiagnostic(
 	ctx context.Context,
 	invocationID string,
@@ -1394,6 +1573,7 @@ func (s *postgresSQLRunner) replayBidirectionalAllShortestTraversalDiagnostic(
 	return document, "", nil
 }
 
+// replayInvocationLocalTraversalDiagnostic supports benchmark evidence processing for replay invocation local traversal diagnostic.
 func (s *postgresSQLRunner) replayInvocationLocalTraversalDiagnostic(
 	ctx context.Context,
 	invocationID string,
@@ -1419,7 +1599,10 @@ func (s *postgresSQLRunner) replayInvocationLocalTraversalDiagnostic(
 		return "", 0, "", fmt.Errorf("diagnostic connection identity %s differs from timed-sample connection %s", connectionID, s.backendPID)
 	}
 
-	tx, err := connection.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	tx, err := connection.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	})
 	if err != nil {
 		return "", 0, "", fmt.Errorf("begin repeatable-read diagnostic transaction: %w", err)
 	}
@@ -1498,6 +1681,7 @@ func (s *postgresSQLRunner) replayInvocationLocalTraversalDiagnostic(
 	return rawDocument, workspaceBytes, "", nil
 }
 
+// applyBidirectionalTraversalDiagnostic applies bidirectional traversal diagnostic.
 func applyBidirectionalTraversalDiagnostic(
 	telemetry *TraversalExecutionTelemetry,
 	document *postgresBidirectionalDiagnosticDocument,
@@ -1656,6 +1840,7 @@ func applyBidirectionalTraversalDiagnostic(
 	return nil
 }
 
+// validateBidirectionalDiagnosticCounts validates bidirectional diagnostic counts.
 func validateBidirectionalDiagnosticCounts(counters *postgresBidirectionalDiagnosticCounts) error {
 	for name, value := range map[string]*int64{
 		"scheduler_actions": counters.SchedulerActions, "candidate_edges": counters.CandidateEdges,
@@ -1692,10 +1877,12 @@ func validateBidirectionalDiagnosticCounts(counters *postgresBidirectionalDiagno
 	return nil
 }
 
+// validateBidirectionalDiagnosticCalls validates bidirectional diagnostic calls.
 func validateBidirectionalDiagnosticCalls(calls []postgresBidirectionalDiagnosticCall, overflowed, fallbackExecuted *bool) error {
 	return validateBidirectionalDiagnosticCallsFor(calls, overflowed, fallbackExecuted, "exact_s4_fallback")
 }
 
+// validateBidirectionalDiagnosticCallsFor validates bidirectional diagnostic calls for.
 func validateBidirectionalDiagnosticCallsFor(calls []postgresBidirectionalDiagnosticCall, overflowed, fallbackExecuted *bool, exactFallback string) error {
 	seen := map[int64]struct{}{}
 	anyOverflow, anyFallback := false, false
@@ -1738,6 +1925,7 @@ func validateBidirectionalDiagnosticCallsFor(calls []postgresBidirectionalDiagno
 	return nil
 }
 
+// validateDiagnosticRuntimeOutcome validates diagnostic runtime outcome.
 func validateDiagnosticRuntimeOutcome(branch string, overflowed, fallbackExecuted bool, exactFallback string, nonFallback []string) error {
 	allowed := slices.Contains(nonFallback, branch) || branch == exactFallback
 	if !allowed {
@@ -1752,6 +1940,7 @@ func validateDiagnosticRuntimeOutcome(branch string, overflowed, fallbackExecute
 	return nil
 }
 
+// validateBidirectionalSingleCallAggregate validates bidirectional single call aggregate.
 func validateBidirectionalSingleCallAggregate(counters *postgresBidirectionalDiagnosticCounts, call postgresBidirectionalDiagnosticCall) error {
 	for name, values := range map[string][2]*int64{
 		"scheduler_actions":  {counters.SchedulerActions, call.SchedulerActions},
@@ -1774,6 +1963,7 @@ func validateBidirectionalSingleCallAggregate(counters *postgresBidirectionalDia
 	return nil
 }
 
+// applyBidirectionalAllShortestTraversalDiagnostic applies bidirectional all shortest traversal diagnostic.
 func applyBidirectionalAllShortestTraversalDiagnostic(
 	telemetry *TraversalExecutionTelemetry,
 	document *postgresBidirectionalAllShortestDiagnosticDocument,
@@ -1915,34 +2105,59 @@ func applyBidirectionalAllShortestTraversalDiagnostic(
 	return nil
 }
 
+// shortestPathCountersFromAllShortest supports benchmark evidence processing for shortest path counters from all shortest.
 func shortestPathCountersFromAllShortest(counters *postgresBidirectionalAllShortestDiagnosticCounts, fallbackExecuted *bool) ShortestPathTraversalCounters {
 	levels := make([]ShortestPathLevelCounters, len(counters.Levels))
 	for idx, level := range counters.Levels {
 		levels[idx] = ShortestPathLevelCounters{
-			SearchID: *level.SearchID, ActionIndex: *level.ActionIndex, Side: level.Side, Action: level.Action,
-			Depth: level.Depth, FrontierRows: level.FrontierRows, CandidateEdges: level.CandidateEdges,
-			DistinctNewNodes: level.DistinctNewNodes, SeenRows: level.SeenRows, QueueRows: level.QueueRows,
-			PredecessorRows: level.PredecessorRows, MeetingCandidates: level.MeetingCandidates,
-			Provenance: fmt.Sprintf("%s.counters.levels[%d]", postgresBidirectionalAllShortestDiagnosticSource, idx),
+			SearchID:          *level.SearchID,
+			ActionIndex:       *level.ActionIndex,
+			Side:              level.Side,
+			Action:            level.Action,
+			Depth:             level.Depth,
+			FrontierRows:      level.FrontierRows,
+			CandidateEdges:    level.CandidateEdges,
+			DistinctNewNodes:  level.DistinctNewNodes,
+			SeenRows:          level.SeenRows,
+			QueueRows:         level.QueueRows,
+			PredecessorRows:   level.PredecessorRows,
+			MeetingCandidates: level.MeetingCandidates,
+			Provenance:        fmt.Sprintf("%s.counters.levels[%d]", postgresBidirectionalAllShortestDiagnosticSource, idx),
 		}
 	}
 	return ShortestPathTraversalCounters{
-		SchedulerActions: counters.SchedulerActions, Levels: levels, CandidateEdges: counters.CandidateEdges,
-		DistinctNewNodes: counters.DistinctNewNodes, SeenPeak: counters.SeenPeak, FrontierPeak: counters.FrontierPeak,
-		QueuePeak: counters.QueuePeak, PredecessorPeak: counters.PredecessorPeak, MeetingCandidates: counters.MeetingCandidates,
-		FrozenDistance: counters.FrozenDistance, WitnessRows: counters.WitnessRows, FallbackExecuted: fallbackExecuted,
+		SchedulerActions:  counters.SchedulerActions,
+		Levels:            levels,
+		CandidateEdges:    counters.CandidateEdges,
+		DistinctNewNodes:  counters.DistinctNewNodes,
+		SeenPeak:          counters.SeenPeak,
+		FrontierPeak:      counters.FrontierPeak,
+		QueuePeak:         counters.QueuePeak,
+		PredecessorPeak:   counters.PredecessorPeak,
+		MeetingCandidates: counters.MeetingCandidates,
+		FrozenDistance:    counters.FrozenDistance,
+		WitnessRows:       counters.WitnessRows,
+		FallbackExecuted:  fallbackExecuted,
 	}
 }
 
+// validateBidirectionalAllShortestDiagnosticCounts validates bidirectional all shortest diagnostic counts.
 func validateBidirectionalAllShortestDiagnosticCounts(counters *postgresBidirectionalAllShortestDiagnosticCounts) error {
 	if counters == nil {
 		return fmt.Errorf("bidirectional all-shortest diagnostic counters are missing")
 	}
 	if err := validateBidirectionalDiagnosticCounts(&postgresBidirectionalDiagnosticCounts{
-		SchedulerActions: counters.SchedulerActions, CandidateEdges: counters.CandidateEdges,
-		DistinctNewNodes: counters.DistinctNewNodes, SeenPeak: counters.SeenPeak, FrontierPeak: counters.FrontierPeak,
-		QueuePeak: counters.QueuePeak, PredecessorPeak: counters.PredecessorPeak, MeetingCandidates: counters.MeetingCandidates,
-		FrozenDistance: counters.FrozenDistance, WitnessRows: counters.WitnessRows, Levels: counters.Levels,
+		SchedulerActions:  counters.SchedulerActions,
+		CandidateEdges:    counters.CandidateEdges,
+		DistinctNewNodes:  counters.DistinctNewNodes,
+		SeenPeak:          counters.SeenPeak,
+		FrontierPeak:      counters.FrontierPeak,
+		QueuePeak:         counters.QueuePeak,
+		PredecessorPeak:   counters.PredecessorPeak,
+		MeetingCandidates: counters.MeetingCandidates,
+		FrozenDistance:    counters.FrozenDistance,
+		WitnessRows:       counters.WitnessRows,
+		Levels:            counters.Levels,
 	}); err != nil {
 		return err
 	}
@@ -1965,16 +2180,27 @@ func validateBidirectionalAllShortestDiagnosticCounts(counters *postgresBidirect
 	return nil
 }
 
+// validateBidirectionalAllShortestDiagnosticCalls validates bidirectional all shortest diagnostic calls.
 func validateBidirectionalAllShortestDiagnosticCalls(calls []postgresBidirectionalAllShortestDiagnosticCall, overflowed, fallbackExecuted *bool) error {
 	baseCalls := make([]postgresBidirectionalDiagnosticCall, len(calls))
 	for idx, call := range calls {
 		baseCalls[idx] = postgresBidirectionalDiagnosticCall{
-			SearchID: call.SearchID, SourceID: call.SourceID, TargetID: call.TargetID, RuntimeBranch: call.RuntimeBranch,
-			SchedulerActions: call.SchedulerActions, CandidateEdges: call.CandidateEdges, DistinctNewNodes: call.DistinctNewNodes,
-			SeenPeak: call.SeenPeak, FrontierPeak: call.FrontierPeak, QueuePeak: call.QueuePeak,
-			PredecessorPeak: call.PredecessorPeak, MeetingCandidates: call.MeetingCandidates,
-			FrozenDistance: call.FrozenDistance, WitnessRows: call.WitnessRows,
-			Overflowed: call.Overflowed, FallbackExecuted: call.FallbackExecuted,
+			SearchID:          call.SearchID,
+			SourceID:          call.SourceID,
+			TargetID:          call.TargetID,
+			RuntimeBranch:     call.RuntimeBranch,
+			SchedulerActions:  call.SchedulerActions,
+			CandidateEdges:    call.CandidateEdges,
+			DistinctNewNodes:  call.DistinctNewNodes,
+			SeenPeak:          call.SeenPeak,
+			FrontierPeak:      call.FrontierPeak,
+			QueuePeak:         call.QueuePeak,
+			PredecessorPeak:   call.PredecessorPeak,
+			MeetingCandidates: call.MeetingCandidates,
+			FrozenDistance:    call.FrozenDistance,
+			WitnessRows:       call.WitnessRows,
+			Overflowed:        call.Overflowed,
+			FallbackExecuted:  call.FallbackExecuted,
 		}
 	}
 	if err := validateBidirectionalDiagnosticCallsFor(baseCalls, overflowed, fallbackExecuted, "exact_a1_fallback"); err != nil {
@@ -1998,17 +2224,32 @@ func validateBidirectionalAllShortestDiagnosticCalls(calls []postgresBidirection
 	return nil
 }
 
+// validateBidirectionalAllShortestSingleCallAggregate validates bidirectional all shortest single call aggregate.
 func validateBidirectionalAllShortestSingleCallAggregate(counters *postgresBidirectionalAllShortestDiagnosticCounts, call postgresBidirectionalAllShortestDiagnosticCall) error {
 	if err := validateBidirectionalSingleCallAggregate(&postgresBidirectionalDiagnosticCounts{
-		SchedulerActions: counters.SchedulerActions, CandidateEdges: counters.CandidateEdges,
-		DistinctNewNodes: counters.DistinctNewNodes, SeenPeak: counters.SeenPeak, FrontierPeak: counters.FrontierPeak,
-		QueuePeak: counters.QueuePeak, PredecessorPeak: counters.PredecessorPeak, MeetingCandidates: counters.MeetingCandidates,
-		FrozenDistance: counters.FrozenDistance, WitnessRows: counters.WitnessRows, Levels: counters.Levels,
+		SchedulerActions:  counters.SchedulerActions,
+		CandidateEdges:    counters.CandidateEdges,
+		DistinctNewNodes:  counters.DistinctNewNodes,
+		SeenPeak:          counters.SeenPeak,
+		FrontierPeak:      counters.FrontierPeak,
+		QueuePeak:         counters.QueuePeak,
+		PredecessorPeak:   counters.PredecessorPeak,
+		MeetingCandidates: counters.MeetingCandidates,
+		FrozenDistance:    counters.FrozenDistance,
+		WitnessRows:       counters.WitnessRows,
+		Levels:            counters.Levels,
 	}, postgresBidirectionalDiagnosticCall{
-		SearchID: call.SearchID, SchedulerActions: call.SchedulerActions, CandidateEdges: call.CandidateEdges,
-		DistinctNewNodes: call.DistinctNewNodes, SeenPeak: call.SeenPeak, FrontierPeak: call.FrontierPeak,
-		QueuePeak: call.QueuePeak, PredecessorPeak: call.PredecessorPeak, MeetingCandidates: call.MeetingCandidates,
-		FrozenDistance: call.FrozenDistance, WitnessRows: call.WitnessRows,
+		SearchID:          call.SearchID,
+		SchedulerActions:  call.SchedulerActions,
+		CandidateEdges:    call.CandidateEdges,
+		DistinctNewNodes:  call.DistinctNewNodes,
+		SeenPeak:          call.SeenPeak,
+		FrontierPeak:      call.FrontierPeak,
+		QueuePeak:         call.QueuePeak,
+		PredecessorPeak:   call.PredecessorPeak,
+		MeetingCandidates: call.MeetingCandidates,
+		FrozenDistance:    call.FrozenDistance,
+		WitnessRows:       call.WitnessRows,
 	}); err != nil {
 		return err
 	}
@@ -2031,6 +2272,7 @@ func validateBidirectionalAllShortestSingleCallAggregate(counters *postgresBidir
 	return nil
 }
 
+// markTraversalCountersUnavailable supports benchmark evidence processing for mark traversal counters unavailable.
 func markTraversalCountersUnavailable(diagnostic *TraversalExecutionDiagnostic, reason string) {
 	if diagnostic == nil {
 		return
@@ -2041,6 +2283,7 @@ func markTraversalCountersUnavailable(diagnostic *TraversalExecutionDiagnostic, 
 	diagnostic.Provenance = map[string]string{}
 }
 
+// markTraversalSummaryUnavailable supports benchmark evidence processing for mark traversal summary unavailable.
 func markTraversalSummaryUnavailable(telemetry *TraversalExecutionTelemetry, reason string) {
 	if telemetry == nil {
 		return
@@ -2060,10 +2303,12 @@ func markTraversalSummaryUnavailable(telemetry *TraversalExecutionTelemetry, rea
 	delete(telemetry.Summary.Provenance, "fallback_identity")
 }
 
+// isBidirectionalSPIdentity reports whether is bidirectional sp identity.
 func isBidirectionalSPIdentity(identity string) bool {
 	return strings.HasPrefix(identity, "SP-B1-") || strings.HasPrefix(identity, "SP-B2-")
 }
 
+// bidirectionalFallbackIdentity derives the stable identity used to compare bidirectional fallback.
 func bidirectionalFallbackIdentity(identity string) string {
 	if isBidirectionalASPIdentity(identity) {
 		return "ASP-A1-DAG"
@@ -2077,10 +2322,12 @@ func bidirectionalFallbackIdentity(identity string) string {
 	return ""
 }
 
+// isBidirectionalASPIdentity reports whether is bidirectional asp identity.
 func isBidirectionalASPIdentity(identity string) bool {
 	return strings.HasPrefix(identity, "ASP-B1-") || strings.HasPrefix(identity, "ASP-B2-")
 }
 
+// traversalTelemetryPointer returns an addressable representation of traversal telemetry.
 func traversalTelemetryPointer[T any](value T) *T {
 	return &value
 }

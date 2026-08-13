@@ -19,10 +19,12 @@ type testRule struct {
 	name string
 }
 
+// Name evaluates planner state needed for name.
 func (s testRule) Name() string {
 	return s.name
 }
 
+// Apply evaluates planner state needed for apply.
 func (s testRule) Apply(plan *Plan) (bool, error) {
 	return false, nil
 }
@@ -30,6 +32,7 @@ func (s testRule) Apply(plan *Plan) (bool, error) {
 // testBindingLookup supplies deterministic binding resolution to optimizer tests.
 type testBindingLookup map[pgsql.Identifier]pgsql.DataType
 
+// LookupDataType evaluates planner state needed for lookup data type.
 func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
 	dataType, found := s[identifier]
 	return dataType, found
@@ -49,9 +52,18 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 	require.Len(t, plan.Analysis.QueryParts[0].Regions, 1)
 	require.Equal(t, []string{"p1", "p2"}, plan.Analysis.QueryParts[0].ProjectionDependencies)
 	require.Equal(t, []RuleResult{
-		{Name: "ConservativePatternReordering", Applied: false},
-		{Name: "InboundTraversalReversal", Applied: false},
-		{Name: "PredicateAttachment", Applied: true},
+		{
+			Name:    "ConservativePatternReordering",
+			Applied: false,
+		},
+		{
+			Name:    "InboundTraversalReversal",
+			Applied: false,
+		},
+		{
+			Name:    "PredicateAttachment",
+			Applied: true,
+		},
 	}, plan.Rules)
 	require.Len(t, plan.PredicateAttachments, 2)
 }
@@ -230,6 +242,7 @@ func TestOptimizePlansFixedSuffixFanoutRewrite(t *testing.T) {
 	})
 }
 
+// TestOptimizerRunsRulesAndRefreshesAnalysis verifies optimizer runs rules and refreshes analysis behavior.
 func TestOptimizerRunsRulesAndRefreshesAnalysis(t *testing.T) {
 	t.Parallel()
 
@@ -238,11 +251,15 @@ func TestOptimizerRunsRulesAndRefreshesAnalysis(t *testing.T) {
 
 	plan, err := NewOptimizer(testRule{name: "test"}).Optimize(regularQuery)
 	require.NoError(t, err)
-	require.Equal(t, []RuleResult{{Name: "test", Applied: false}}, plan.Rules)
+	require.Equal(t, []RuleResult{{
+		Name:    "test",
+		Applied: false,
+	}}, plan.Rules)
 	require.Len(t, plan.Analysis.QueryParts, 1)
 	require.Len(t, plan.Analysis.QueryParts[0].Regions, 1)
 }
 
+// TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist verifies default predicate attachment rule reports skipped when no predicates exist behavior.
 func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *testing.T) {
 	t.Parallel()
 
@@ -252,9 +269,18 @@ func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *te
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Equal(t, []RuleResult{
-		{Name: "ConservativePatternReordering", Applied: false},
-		{Name: "InboundTraversalReversal", Applied: false},
-		{Name: "PredicateAttachment", Applied: false},
+		{
+			Name:    "ConservativePatternReordering",
+			Applied: false,
+		},
+		{
+			Name:    "InboundTraversalReversal",
+			Applied: false,
+		},
+		{
+			Name:    "PredicateAttachment",
+			Applied: false,
+		},
 	}, plan.Rules)
 	require.Empty(t, plan.PredicateAttachments)
 }
@@ -288,6 +314,7 @@ func TestLoweringPlanReportsProjectionPruning(t *testing.T) {
 	}}, plan.LoweringPlan.ProjectionPruning)
 }
 
+// TestLoweringPlanProjectionPruningKeepsUpdateTargets verifies lowering plan projection pruning keeps update targets behavior.
 func TestLoweringPlanProjectionPruningKeepsUpdateTargets(t *testing.T) {
 	t.Parallel()
 
@@ -311,6 +338,7 @@ func TestLoweringPlanProjectionPruningKeepsUpdateTargets(t *testing.T) {
 	}}, plan.LoweringPlan.ProjectionPruning)
 }
 
+// TestLoweringPlanReportsPatternPredicateProjectionPruning verifies lowering plan reports pattern predicate projection pruning behavior.
 func TestLoweringPlanReportsPatternPredicateProjectionPruning(t *testing.T) {
 	t.Parallel()
 
@@ -335,6 +363,7 @@ func TestLoweringPlanReportsPatternPredicateProjectionPruning(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanReportsPatternPredicateExistencePlacement verifies lowering plan reports pattern predicate existence placement behavior.
 func TestLoweringPlanReportsPatternPredicateExistencePlacement(t *testing.T) {
 	t.Parallel()
 
@@ -358,6 +387,7 @@ func TestLoweringPlanReportsPatternPredicateExistencePlacement(t *testing.T) {
 	}}, plan.LoweringPlan.PatternPredicate)
 }
 
+// TestLoweringPlanReportsTypedPatternPredicateExistencePlacement verifies lowering plan reports typed pattern predicate existence placement behavior.
 func TestLoweringPlanReportsTypedPatternPredicateExistencePlacement(t *testing.T) {
 	t.Parallel()
 
@@ -381,6 +411,7 @@ func TestLoweringPlanReportsTypedPatternPredicateExistencePlacement(t *testing.T
 	}}, plan.LoweringPlan.PatternPredicate)
 }
 
+// TestLoweringPlanReportsPatternPredicateClauseIndex verifies lowering plan reports pattern predicate clause index behavior.
 func TestLoweringPlanReportsPatternPredicateClauseIndex(t *testing.T) {
 	t.Parallel()
 
@@ -416,6 +447,7 @@ func TestLoweringPlanReportsPatternPredicateClauseIndex(t *testing.T) {
 	})
 }
 
+// TestSelectivityModelPlansTraversalDirection verifies selectivity model plans traversal direction behavior.
 func TestSelectivityModelPlansTraversalDirection(t *testing.T) {
 	t.Parallel()
 
@@ -441,6 +473,7 @@ func TestSelectivityModelPlansTraversalDirection(t *testing.T) {
 	require.True(t, shouldFlip)
 }
 
+// TestLoweringPlanReportsLatePathMaterialization verifies lowering plan reports late path materialization behavior.
 func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 	t.Parallel()
 
@@ -525,6 +558,7 @@ func TestLoweringPlanReportsLatePathMaterialization(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanReportsExactOneHopRangeExpansion verifies lowering plan reports exact one hop range expansion behavior.
 func TestLoweringPlanReportsExactOneHopRangeExpansion(t *testing.T) {
 	t.Parallel()
 
@@ -559,6 +593,7 @@ func TestLoweringPlanReportsExactOneHopRangeExpansion(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanReportsExactTwoHopRangeExpansion verifies lowering plan reports exact two hop range expansion behavior.
 func TestLoweringPlanReportsExactTwoHopRangeExpansion(t *testing.T) {
 	t.Parallel()
 
@@ -658,6 +693,7 @@ func TestExactRangeDependentPlanningRequiresDecision(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanSkipsExactRangeExpansionBeyondDepthCap verifies lowering plan skips exact range expansion beyond depth cap behavior.
 func TestLoweringPlanSkipsExactRangeExpansionBeyondDepthCap(t *testing.T) {
 	t.Parallel()
 
@@ -675,6 +711,7 @@ func TestLoweringPlanSkipsExactRangeExpansionBeyondDepthCap(t *testing.T) {
 	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
 }
 
+// TestLoweringPlanSkipsUndirectedExactRangeExpansion verifies lowering plan skips undirected exact range expansion behavior.
 func TestLoweringPlanSkipsUndirectedExactRangeExpansion(t *testing.T) {
 	t.Parallel()
 
@@ -692,6 +729,7 @@ func TestLoweringPlanSkipsUndirectedExactRangeExpansion(t *testing.T) {
 	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
 }
 
+// TestLoweringPlanSkipsExactOneHopRangeExpansionForNamedRelationshipBinding verifies lowering plan skips exact one hop range expansion for named relationship binding behavior.
 func TestLoweringPlanSkipsExactOneHopRangeExpansionForNamedRelationshipBinding(t *testing.T) {
 	t.Parallel()
 
@@ -718,6 +756,7 @@ func TestLoweringPlanSkipsExactOneHopRangeExpansionForNamedRelationshipBinding(t
 	})
 }
 
+// TestLoweringPlanSkipsExactOneHopRangeExpansionForShortestPath verifies lowering plan skips exact one hop range expansion for shortest path behavior.
 func TestLoweringPlanSkipsExactOneHopRangeExpansionForShortestPath(t *testing.T) {
 	t.Parallel()
 
@@ -735,6 +774,7 @@ func TestLoweringPlanSkipsExactOneHopRangeExpansionForShortestPath(t *testing.T)
 	require.Empty(t, plan.LoweringPlan.ExactRangeExpansion)
 }
 
+// TestLoweringPlanReportsPathRelationshipPredicate verifies lowering plan reports path relationship predicate behavior.
 func TestLoweringPlanReportsPathRelationshipPredicate(t *testing.T) {
 	t.Parallel()
 
@@ -760,6 +800,7 @@ func TestLoweringPlanReportsPathRelationshipPredicate(t *testing.T) {
 	}}, plan.LoweringPlan.PathRelationshipPredicate)
 }
 
+// TestLoweringPlanReportsNonePathRelationshipPredicate verifies lowering plan reports none path relationship predicate behavior.
 func TestLoweringPlanReportsNonePathRelationshipPredicate(t *testing.T) {
 	t.Parallel()
 
@@ -785,6 +826,7 @@ func TestLoweringPlanReportsNonePathRelationshipPredicate(t *testing.T) {
 	}}, plan.LoweringPlan.PathRelationshipPredicate)
 }
 
+// TestLoweringPlanSkipsPathRelationshipPredicateForAllQuantifier verifies lowering plan skips path relationship predicate for all quantifier behavior.
 func TestLoweringPlanSkipsPathRelationshipPredicateForAllQuantifier(t *testing.T) {
 	t.Parallel()
 
@@ -803,6 +845,7 @@ func TestLoweringPlanSkipsPathRelationshipPredicateForAllQuantifier(t *testing.T
 	require.Empty(t, plan.LoweringPlan.PathRelationshipPredicate)
 }
 
+// TestLoweringPlanSkipsPathRelationshipPredicateAfterWithProjection verifies lowering plan skips path relationship predicate after with projection behavior.
 func TestLoweringPlanSkipsPathRelationshipPredicateAfterWithProjection(t *testing.T) {
 	t.Parallel()
 
@@ -945,7 +988,10 @@ func TestLoweringPlanSelectsGuardedEndpointSeededExpansion(t *testing.T) {
 	require.Equal(t, int64(15), decision.MaximumDepth)
 	require.True(t, decision.HasFinalLimit)
 	require.Empty(t, decision.FallbackReason)
-	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "single_variable_expansion_in_region", Eligible: true})
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{
+		Name:     "single_variable_expansion_in_region",
+		Eligible: true,
+	})
 }
 
 // TestEndpointSeededExpansionKeepsIndependentMultipartRegionQualified verifies
@@ -967,7 +1013,10 @@ func TestEndpointSeededExpansionKeepsIndependentMultipartRegionQualified(t *test
 	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 2)
 	decision := plan.LoweringPlan.ExpansionSearchStrategy[1]
 	require.Equal(t, "fixed_prefix_terminal_expansion", decision.Family)
-	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "single_variable_expansion_in_region", Eligible: true})
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{
+		Name:     "single_variable_expansion_in_region",
+		Eligible: true,
+	})
 	require.True(t, decision.StructurallyEligible)
 	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
 	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.EmittedPolicy)
@@ -986,13 +1035,41 @@ func TestGuardedEndpointSeededExpansionFallbackReasons(t *testing.T) {
 		// reason is the expected stable fallback code.
 		reason string
 	}{
-		{name: "terminal not selective", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) RETURN p`, reason: ExpansionSearchFallbackTerminalNotSelective},
-		{name: "zero depth", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*0..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackZeroDepth},
-		{name: "directionless prefix", query: `MATCH p = (c:Computer)-[:HasSession]-(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackDirectionlessPrefix},
-		{name: "correlated terminal", query: `MATCH (g:Group) MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackCorrelatedTerminal},
-		{name: "correlated terminal predicate", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND g.tenant = c.tenant RETURN p`, reason: ExpansionSearchFallbackCorrelatedTerminal},
-		{name: "nonterminal expansion", query: `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)-[:AdminTo]->() WHERE g.objectid ENDS WITH '-512' RETURN p`, reason: ExpansionSearchFallbackExpansionNotTerminal},
-		{name: "mutation", query: `MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' CREATE (:Computer) RETURN g`, reason: ExpansionSearchFallbackMutation},
+		{
+			name:   "terminal not selective",
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) RETURN p`,
+			reason: ExpansionSearchFallbackTerminalNotSelective,
+		},
+		{
+			name:   "zero depth",
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*0..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			reason: ExpansionSearchFallbackZeroDepth,
+		},
+		{
+			name:   "directionless prefix",
+			query:  `MATCH p = (c:Computer)-[:HasSession]-(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			reason: ExpansionSearchFallbackDirectionlessPrefix,
+		},
+		{
+			name:   "correlated terminal",
+			query:  `MATCH (g:Group) MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			reason: ExpansionSearchFallbackCorrelatedTerminal,
+		},
+		{
+			name:   "correlated terminal predicate",
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND g.tenant = c.tenant RETURN p`,
+			reason: ExpansionSearchFallbackCorrelatedTerminal,
+		},
+		{
+			name:   "nonterminal expansion",
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)-[:AdminTo]->() WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			reason: ExpansionSearchFallbackExpansionNotTerminal,
+		},
+		{
+			name:   "mutation",
+			query:  `MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' CREATE (:Computer) RETURN g`,
+			reason: ExpansionSearchFallbackMutation,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
@@ -1253,12 +1330,16 @@ func TestLoweringPlanIncludesConstrainedBoundEndpointInExpansionSuffix(t *testin
 	})
 }
 
+// TestLoweringPlanReportsCountStoreFastPath verifies lowering plan reports count store fast path behavior.
 func TestLoweringPlanReportsCountStoreFastPath(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name     string
-		query    string
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// query retains the query while anonymous record is assembled or evaluated.
+		query string
+		// expected retains the expected while anonymous record is assembled or evaluated.
 		expected CountStoreFastPathDecision
 	}{
 		{
@@ -1324,6 +1405,7 @@ func TestLoweringPlanReportsCountStoreFastPath(t *testing.T) {
 	}
 }
 
+// TestLoweringPlanPlacesBindingPredicates verifies lowering plan places binding predicates behavior.
 func TestLoweringPlanPlacesBindingPredicates(t *testing.T) {
 	t.Parallel()
 
@@ -1351,6 +1433,7 @@ func TestLoweringPlanPlacesBindingPredicates(t *testing.T) {
 	require.Empty(t, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+// TestLoweringPlanDoesNotPlaceCrossClauseBindingPredicates verifies lowering plan does not place cross clause binding predicates behavior.
 func TestLoweringPlanDoesNotPlaceCrossClauseBindingPredicates(t *testing.T) {
 	t.Parallel()
 
@@ -1369,6 +1452,7 @@ func TestLoweringPlanDoesNotPlaceCrossClauseBindingPredicates(t *testing.T) {
 	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringPredicatePlacement})
 }
 
+// TestLoweringPlanReportsExpandInto verifies lowering plan reports expand into behavior.
 func TestLoweringPlanReportsExpandInto(t *testing.T) {
 	t.Parallel()
 
@@ -1393,6 +1477,7 @@ func TestLoweringPlanReportsExpandInto(t *testing.T) {
 	}}, plan.LoweringPlan.ExpandInto)
 }
 
+// TestLoweringPlanReportsExpandIntoForEndpointsCarriedAcrossWithAndUnwind verifies lowering plan reports expand into for endpoints carried across with and unwind behavior.
 func TestLoweringPlanReportsExpandIntoForEndpointsCarriedAcrossWithAndUnwind(t *testing.T) {
 	t.Parallel()
 
@@ -1417,6 +1502,7 @@ func TestLoweringPlanReportsExpandIntoForEndpointsCarriedAcrossWithAndUnwind(t *
 	})
 }
 
+// TestLoweringPlanReportsExpandIntoForNodeIntroducedByUnwind verifies lowering plan reports expand into for node introduced by unwind behavior.
 func TestLoweringPlanReportsExpandIntoForNodeIntroducedByUnwind(t *testing.T) {
 	t.Parallel()
 
@@ -1441,6 +1527,7 @@ func TestLoweringPlanReportsExpandIntoForNodeIntroducedByUnwind(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanReportsExpandIntoForAnonymousContinuationEndpoint verifies lowering plan reports expand into for anonymous continuation endpoint behavior.
 func TestLoweringPlanReportsExpandIntoForAnonymousContinuationEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -1463,6 +1550,7 @@ func TestLoweringPlanReportsExpandIntoForAnonymousContinuationEndpoint(t *testin
 	})
 }
 
+// TestLoweringPlanReportsTraversalDirectionForConstrainedRightEndpoint verifies lowering plan reports traversal direction for constrained right endpoint behavior.
 func TestLoweringPlanReportsTraversalDirectionForConstrainedRightEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -1487,6 +1575,7 @@ func TestLoweringPlanReportsTraversalDirectionForConstrainedRightEndpoint(t *tes
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanReportsTraversalDirectionForBoundRightEndpoint verifies lowering plan reports traversal direction for bound right endpoint behavior.
 func TestLoweringPlanReportsTraversalDirectionForBoundRightEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -1512,6 +1601,7 @@ func TestLoweringPlanReportsTraversalDirectionForBoundRightEndpoint(t *testing.T
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasBindingPredicate verifies lowering plan skips traversal direction when left endpoint has binding predicate behavior.
 func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasBindingPredicate(t *testing.T) {
 	t.Parallel()
 
@@ -1527,6 +1617,7 @@ func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasBindingPredicate(
 	require.Empty(t, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasRegionPredicate verifies lowering plan skips traversal direction when left endpoint has region predicate behavior.
 func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasRegionPredicate(t *testing.T) {
 	t.Parallel()
 
@@ -1543,6 +1634,7 @@ func TestLoweringPlanSkipsTraversalDirectionWhenLeftEndpointHasRegionPredicate(t
 	require.Empty(t, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanReportsTraversalDirectionForRightEndpointPredicate verifies lowering plan reports traversal direction for right endpoint predicate behavior.
 func TestLoweringPlanReportsTraversalDirectionForRightEndpointPredicate(t *testing.T) {
 	t.Parallel()
 
@@ -1568,6 +1660,7 @@ func TestLoweringPlanReportsTraversalDirectionForRightEndpointPredicate(t *testi
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrainedRightEndpoint verifies lowering plan reports traversal direction for bound left expansion to constrained right endpoint behavior.
 func TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrainedRightEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -1594,6 +1687,7 @@ func TestLoweringPlanReportsTraversalDirectionForBoundLeftExpansionToConstrained
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanSkipsBoundLeftDirectionForSelectiveSource verifies lowering plan skips bound left direction for selective source behavior.
 func TestLoweringPlanSkipsBoundLeftDirectionForSelectiveSource(t *testing.T) {
 	t.Parallel()
 
@@ -1619,6 +1713,7 @@ func TestLoweringPlanSkipsBoundLeftDirectionForSelectiveSource(t *testing.T) {
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanSkipsBoundLeftDirectionAfterPriorLimit verifies lowering plan skips bound left direction after prior limit behavior.
 func TestLoweringPlanSkipsBoundLeftDirectionAfterPriorLimit(t *testing.T) {
 	t.Parallel()
 
@@ -1646,6 +1741,7 @@ func TestLoweringPlanSkipsBoundLeftDirectionAfterPriorLimit(t *testing.T) {
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanSkipsBoundLeftDirectionAfterGreedyProjectionLimit verifies lowering plan skips bound left direction after greedy projection limit behavior.
 func TestLoweringPlanSkipsBoundLeftDirectionAfterGreedyProjectionLimit(t *testing.T) {
 	t.Parallel()
 
@@ -1673,6 +1769,7 @@ func TestLoweringPlanSkipsBoundLeftDirectionAfterGreedyProjectionLimit(t *testin
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanCarriesBindingsAcrossNilWithPart verifies lowering plan carries bindings across nil with part behavior.
 func TestLoweringPlanCarriesBindingsAcrossNilWithPart(t *testing.T) {
 	t.Parallel()
 
@@ -1701,6 +1798,7 @@ func TestLoweringPlanCarriesBindingsAcrossNilWithPart(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanAllowsUniqueRightEndpointAfterPriorLimit verifies lowering plan allows unique right endpoint after prior limit behavior.
 func TestLoweringPlanAllowsUniqueRightEndpointAfterPriorLimit(t *testing.T) {
 	t.Parallel()
 
@@ -1729,6 +1827,7 @@ func TestLoweringPlanAllowsUniqueRightEndpointAfterPriorLimit(t *testing.T) {
 	}}, plan.LoweringPlan.TraversalDirection)
 }
 
+// TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount verifies lowering plan reports aggregate traversal count for bound expansion count behavior.
 func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *testing.T) {
 	t.Parallel()
 
@@ -1771,6 +1870,7 @@ func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *tes
 	}}, plan.LoweringPlan.AggregateTraversalCount)
 }
 
+// TestLoweringPlanReportsAggregateTraversalCountForRowCount verifies lowering plan reports aggregate traversal count for row count behavior.
 func TestLoweringPlanReportsAggregateTraversalCountForRowCount(t *testing.T) {
 	t.Parallel()
 
@@ -1791,6 +1891,7 @@ func TestLoweringPlanReportsAggregateTraversalCountForRowCount(t *testing.T) {
 	require.Equal(t, "adminCount", plan.LoweringPlan.AggregateTraversalCount[0].CountAlias)
 }
 
+// TestLoweringPlanReportsAggregateTraversalCountWhenReturningCountAlias verifies lowering plan reports aggregate traversal count when returning count alias behavior.
 func TestLoweringPlanReportsAggregateTraversalCountWhenReturningCountAlias(t *testing.T) {
 	t.Parallel()
 
@@ -1816,6 +1917,7 @@ func TestLoweringPlanReportsAggregateTraversalCountWhenReturningCountAlias(t *te
 	require.Equal(t, "privileges", shape.ReturnCountAlias)
 }
 
+// TestLoweringPlanReportsAggregateTraversalCountWithTerminalFilter verifies lowering plan reports aggregate traversal count with terminal filter behavior.
 func TestLoweringPlanReportsAggregateTraversalCountWithTerminalFilter(t *testing.T) {
 	t.Parallel()
 
@@ -1836,6 +1938,7 @@ func TestLoweringPlanReportsAggregateTraversalCountWithTerminalFilter(t *testing
 	require.Contains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
 }
 
+// TestLoweringPlanSkipsAggregateTraversalCountWithCorrelatedTerminalFilter verifies lowering plan skips aggregate traversal count with correlated terminal filter behavior.
 func TestLoweringPlanSkipsAggregateTraversalCountWithCorrelatedTerminalFilter(t *testing.T) {
 	t.Parallel()
 
@@ -1856,6 +1959,7 @@ func TestLoweringPlanSkipsAggregateTraversalCountWithCorrelatedTerminalFilter(t 
 	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
 }
 
+// TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip verifies lowering plan skips suffix pushdown after right endpoint predicate direction flip behavior.
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
 	t.Parallel()
 
@@ -1872,6 +1976,7 @@ func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip
 	require.Empty(t, plan.LoweringPlan.ExpansionSuffixPushdown)
 }
 
+// TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates verifies lowering plan reports shortest path strategy for endpoint predicates behavior.
 func TestLoweringPlanReportsShortestPathStrategyForEndpointPredicates(t *testing.T) {
 	t.Parallel()
 
@@ -2397,6 +2502,7 @@ func TestLoweringPlanRecordsStableShortestExecutorFallbackCodes(t *testing.T) {
 	}
 }
 
+// TestLoweringPlanReportsShortestPathStrategyForBoundEndpointPairs verifies lowering plan reports shortest path strategy for bound endpoint pairs behavior.
 func TestLoweringPlanReportsShortestPathStrategyForBoundEndpointPairs(t *testing.T) {
 	t.Parallel()
 
@@ -2423,6 +2529,7 @@ func TestLoweringPlanReportsShortestPathStrategyForBoundEndpointPairs(t *testing
 	}}, plan.LoweringPlan.ShortestPathStrategy)
 }
 
+// TestLoweringPlanSkipsShortestPathStrategyForLabelOnlyEndpoints verifies lowering plan skips shortest path strategy for label only endpoints behavior.
 func TestLoweringPlanSkipsShortestPathStrategyForLabelOnlyEndpoints(t *testing.T) {
 	t.Parallel()
 
@@ -2437,6 +2544,7 @@ func TestLoweringPlanSkipsShortestPathStrategyForLabelOnlyEndpoints(t *testing.T
 	require.Empty(t, plan.LoweringPlan.ShortestPathStrategy)
 }
 
+// TestLoweringPlanReportsShortestPathTerminalFilter verifies lowering plan reports shortest path terminal filter behavior.
 func TestLoweringPlanReportsShortestPathTerminalFilter(t *testing.T) {
 	t.Parallel()
 
@@ -2463,6 +2571,7 @@ func TestLoweringPlanReportsShortestPathTerminalFilter(t *testing.T) {
 	}}, plan.LoweringPlan.ShortestPathFilter)
 }
 
+// TestLoweringPlanReportsShortestPathTerminalFilterForKindOnlyTerminal verifies lowering plan reports shortest path terminal filter for kind only terminal behavior.
 func TestLoweringPlanReportsShortestPathTerminalFilterForKindOnlyTerminal(t *testing.T) {
 	t.Parallel()
 
@@ -2490,6 +2599,7 @@ func TestLoweringPlanReportsShortestPathTerminalFilterForKindOnlyTerminal(t *tes
 	}}, plan.LoweringPlan.ShortestPathFilter)
 }
 
+// TestLoweringPlanReportsTraversalLimitPushdown verifies lowering plan reports traversal limit pushdown behavior.
 func TestLoweringPlanReportsTraversalLimitPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -2514,6 +2624,7 @@ func TestLoweringPlanReportsTraversalLimitPushdown(t *testing.T) {
 	}}, plan.LoweringPlan.LimitPushdown)
 }
 
+// TestLoweringPlanReportsShortestPathLimitPushdown verifies lowering plan reports shortest path limit pushdown behavior.
 func TestLoweringPlanReportsShortestPathLimitPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -2539,6 +2650,7 @@ func TestLoweringPlanReportsShortestPathLimitPushdown(t *testing.T) {
 	})
 }
 
+// TestLoweringPlanSkipsAllShortestPathLimitPushdown verifies lowering plan skips all shortest path limit pushdown behavior.
 func TestLoweringPlanSkipsAllShortestPathLimitPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -2555,6 +2667,7 @@ func TestLoweringPlanSkipsAllShortestPathLimitPushdown(t *testing.T) {
 	require.Empty(t, plan.LoweringPlan.LimitPushdown)
 }
 
+// TestLoweringPlanSkipsOptionalMatchLimitPushdown verifies lowering plan skips optional match limit pushdown behavior.
 func TestLoweringPlanSkipsOptionalMatchLimitPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -2572,6 +2685,7 @@ func TestLoweringPlanSkipsOptionalMatchLimitPushdown(t *testing.T) {
 	require.Empty(t, plan.LoweringPlan.LimitPushdown)
 }
 
+// TestDeclareReadingClauseSelectivitySkipsOptionalMatch verifies declare reading clause selectivity skips optional match behavior.
 func TestDeclareReadingClauseSelectivitySkipsOptionalMatch(t *testing.T) {
 	t.Parallel()
 
@@ -2589,6 +2703,7 @@ func TestDeclareReadingClauseSelectivitySkipsOptionalMatch(t *testing.T) {
 	require.NotContains(t, selectivity, "m")
 }
 
+// TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncrementally verifies select references only local identifiers validates join constraints incrementally behavior.
 func TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncrementally(t *testing.T) {
 	t.Parallel()
 
@@ -2624,6 +2739,7 @@ func TestSelectReferencesOnlyLocalIdentifiersValidatesJoinConstraintsIncremental
 	require.False(t, SelectReferencesOnlyLocalIdentifiers(selectBody, pgsql.NewIdentifierSet()))
 }
 
+// TestFlattenConjunctionHandlesValueBinaryExpressions verifies flatten conjunction handles value binary expressions behavior.
 func TestFlattenConjunctionHandlesValueBinaryExpressions(t *testing.T) {
 	t.Parallel()
 
@@ -2644,6 +2760,7 @@ func TestFlattenConjunctionHandlesValueBinaryExpressions(t *testing.T) {
 	require.Equal(t, right, terms[1])
 }
 
+// TestQueryReferencesOnlyLocalIdentifiersAllowsEmptyWith verifies query references only local identifiers allows empty with behavior.
 func TestQueryReferencesOnlyLocalIdentifiersAllowsEmptyWith(t *testing.T) {
 	t.Parallel()
 
@@ -2665,6 +2782,7 @@ func TestQueryReferencesOnlyLocalIdentifiersAllowsEmptyWith(t *testing.T) {
 	require.True(t, QueryReferencesOnlyLocalIdentifiers(query, pgsql.NewIdentifierSet()))
 }
 
+// TestFromExpressionReferencesOnlyLocalIdentifiersHandlesLateralSubquery verifies from expression references only local identifiers handles lateral subquery behavior.
 func TestFromExpressionReferencesOnlyLocalIdentifiersHandlesLateralSubquery(t *testing.T) {
 	t.Parallel()
 
@@ -2682,6 +2800,7 @@ func TestFromExpressionReferencesOnlyLocalIdentifiersHandlesLateralSubquery(t *t
 	require.False(t, FromExpressionReferencesOnlyLocalIdentifiers(lateralSubquery, pgsql.NewIdentifierSet()))
 }
 
+// TestMeasureSelectivityPopReturnsTopFrame verifies measure selectivity pop returns top frame behavior.
 func TestMeasureSelectivityPopReturnsTopFrame(t *testing.T) {
 	t.Parallel()
 
@@ -2694,6 +2813,7 @@ func TestMeasureSelectivityPopReturnsTopFrame(t *testing.T) {
 	require.Equal(t, 7, visitor.Selectivity())
 }
 
+// TestMeasureSelectivityScoresIDBonusOnlyForPointPredicates verifies measure selectivity scores id bonus only for point predicates behavior.
 func TestMeasureSelectivityScoresIDBonusOnlyForPointPredicates(t *testing.T) {
 	t.Parallel()
 
@@ -2719,6 +2839,7 @@ func TestMeasureSelectivityScoresIDBonusOnlyForPointPredicates(t *testing.T) {
 	require.Equal(t, selectivityWeightNotEquals, notEqualScore)
 }
 
+// TestCollectReferencedSourceIdentifiersIgnoresMatchDeclarations verifies collect referenced source identifiers ignores match declarations behavior.
 func TestCollectReferencedSourceIdentifiersIgnoresMatchDeclarations(t *testing.T) {
 	t.Parallel()
 
@@ -2735,6 +2856,7 @@ func TestCollectReferencedSourceIdentifiersIgnoresMatchDeclarations(t *testing.T
 	require.Contains(t, references, "m")
 }
 
+// TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown verifies lowering plan skips directionless expansion suffix pushdown behavior.
 func TestLoweringPlanSkipsDirectionlessExpansionSuffixPushdown(t *testing.T) {
 	t.Parallel()
 
@@ -2781,6 +2903,7 @@ func TestPredicateAttachmentRuleAssignsSingleBindingPredicates(t *testing.T) {
 	}, plan.PredicateAttachments[1])
 }
 
+// TestPredicateAttachmentRuleKeepsMultiBindingPredicatesAtRegionScope verifies predicate attachment rule keeps multi binding predicates at region scope behavior.
 func TestPredicateAttachmentRuleKeepsMultiBindingPredicatesAtRegionScope(t *testing.T) {
 	t.Parallel()
 
@@ -2820,6 +2943,7 @@ func firstNodeSymbol(readingClause *cypher.ReadingClause) string {
 	return nodePattern.Variable.Symbol
 }
 
+// TestConservativePatternReorderingMovesIndependentNodeAnchorsEarlier verifies conservative pattern reordering moves independent node anchors earlier behavior.
 func TestConservativePatternReorderingMovesIndependentNodeAnchorsEarlier(t *testing.T) {
 	t.Parallel()
 
@@ -2854,6 +2978,7 @@ func TestConservativePatternReorderingMovesIndependentNodeAnchorsEarlier(t *test
 	require.Len(t, readingClauses[2].Match.Pattern[0].PatternElements, 3)
 }
 
+// TestConservativePatternReorderingKeepsDependentAnchorsInPlace verifies conservative pattern reordering keeps dependent anchors in place behavior.
 func TestConservativePatternReorderingKeepsDependentAnchorsInPlace(t *testing.T) {
 	t.Parallel()
 
@@ -2887,6 +3012,7 @@ func TestConservativePatternReorderingKeepsDependentAnchorsInPlace(t *testing.T)
 	require.Equal(t, "b", firstNodeSymbol(readingClauses[1]))
 }
 
+// TestConservativePatternReorderingUsesSelectivityWithinDependencySafeRegion verifies conservative pattern reordering uses selectivity within dependency safe region behavior.
 func TestConservativePatternReorderingUsesSelectivityWithinDependencySafeRegion(t *testing.T) {
 	t.Parallel()
 
@@ -2921,6 +3047,7 @@ func TestConservativePatternReorderingUsesSelectivityWithinDependencySafeRegion(
 	require.Len(t, readingClauses[2].Match.Pattern[0].PatternElements, 3)
 }
 
+// TestConservativePatternReorderingPinsUnresolvedExternalDependencies verifies conservative pattern reordering pins unresolved external dependencies behavior.
 func TestConservativePatternReorderingPinsUnresolvedExternalDependencies(t *testing.T) {
 	t.Parallel()
 

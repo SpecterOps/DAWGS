@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestOrientationSelectorV2ReportPassesForwardAndReverseWithApplicableShadowGate verifies orientation selector v2 report passes forward and reverse with applicable shadow gate behavior.
 func TestOrientationSelectorV2ReportPassesForwardAndReverseWithApplicableShadowGate(t *testing.T) {
 	artifacts := orientationSelectorV2Artifacts{}
 	for index := range 8 {
@@ -41,7 +42,12 @@ func TestOrientationSelectorV2ReportPassesForwardAndReverseWithApplicableShadowG
 	report, err := buildOrientationSelectorV2Report(
 		artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 		testAAReportForRecords(t, artifacts.incumbent),
-		OrientationSelectorV2ReportOptions{Seed: 7, Confidence: defaultConfidenceLevel, BootstrapCount: 100, Protocol: referencePairProtocolDiscovery},
+		OrientationSelectorV2ReportOptions{
+			Seed:           7,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 100,
+			Protocol:       referencePairProtocolDiscovery,
+		},
 	)
 
 	require.NoError(t, err)
@@ -65,12 +71,18 @@ func TestOrientationSelectorV2ReportPassesForwardAndReverseWithApplicableShadowG
 	}
 }
 
+// TestOrientationSelectorV2ConfirmationBindsCanonicalCohortAndFrozenDiscovery verifies orientation selector v2 confirmation binds canonical cohort and frozen discovery behavior.
 func TestOrientationSelectorV2ConfirmationBindsCanonicalCohortAndFrozenDiscovery(t *testing.T) {
 	training, full := canonicalOrientationV2TestArtifacts(t)
 	discovery, err := buildOrientationSelectorV2Report(
 		training.shadow, training.incumbent, training.reverse, training.guarded,
 		testAAReportForRecords(t, training.incumbent),
-		OrientationSelectorV2ReportOptions{Seed: 5, Confidence: defaultConfidenceLevel, BootstrapCount: 50, Protocol: referencePairProtocolDiscovery},
+		OrientationSelectorV2ReportOptions{
+			Seed:           5,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 50,
+			Protocol:       referencePairProtocolDiscovery,
+		},
 	)
 	require.NoError(t, err)
 	discovery.ShadowArtifactSHA256, discovery.IncumbentArtifactSHA256 = testSHA("1"), testSHA("2")
@@ -86,8 +98,12 @@ func TestOrientationSelectorV2ConfirmationBindsCanonicalCohortAndFrozenDiscovery
 		full.shadow, full.incumbent, full.reverse, full.guarded,
 		testAAReportForRecords(t, full.incumbent),
 		OrientationSelectorV2ReportOptions{
-			Seed: 7, Confidence: defaultConfidenceLevel, BootstrapCount: 50, Protocol: referencePairProtocolConfirmation,
-			Freeze: freeze, Discovery: &discovery,
+			Seed:           7,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 50,
+			Protocol:       referencePairProtocolConfirmation,
+			Freeze:         freeze,
+			Discovery:      &discovery,
 		},
 	)
 
@@ -98,6 +114,7 @@ func TestOrientationSelectorV2ConfirmationBindsCanonicalCohortAndFrozenDiscovery
 	require.Equal(t, canonical.declarationSHA256, report.CohortDeclarationSHA256)
 }
 
+// TestCreateOrientationSelectorV2DiscoveryWritesBoundFreeze verifies create orientation selector v2 discovery writes bound freeze behavior.
 func TestCreateOrientationSelectorV2DiscoveryWritesBoundFreeze(t *testing.T) {
 	training, _ := canonicalOrientationV2TestArtifacts(t)
 	training = compactOrientationV2Artifacts(training, 5, 10)
@@ -116,7 +133,12 @@ func TestCreateOrientationSelectorV2DiscoveryWritesBoundFreeze(t *testing.T) {
 
 	passed, err := createOrientationSelectorV2Report(
 		paths["shadow"], paths["incumbent"], paths["reverse"], paths["guarded"], paths["aa"], "", "", paths["freeze"], paths["report"],
-		OrientationSelectorV2ReportOptions{Seed: 11, Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolDiscovery},
+		OrientationSelectorV2ReportOptions{
+			Seed:           11,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 10,
+			Protocol:       referencePairProtocolDiscovery,
+		},
 	)
 
 	require.NoError(t, err)
@@ -135,33 +157,60 @@ func TestCreateOrientationSelectorV2DiscoveryWritesBoundFreeze(t *testing.T) {
 	require.Equal(t, cleanWorkingTreeSHA256(), freeze.DirtyDiffSHA256)
 }
 
+// TestOrientationSelectorV2ReportEnforcesEachLatencyGate verifies orientation selector v2 report enforces each latency gate behavior.
 func TestOrientationSelectorV2ReportEnforcesEachLatencyGate(t *testing.T) {
 	for _, testCase := range []struct {
-		name          string
-		choice        string
-		shadow        time.Duration
-		forward       time.Duration
-		reverse       time.Duration
-		guarded       time.Duration
-		reason        string
-		shadowFails   bool
+		// name retains the name while anonymous record is assembled or evaluated.
+		name string
+		// choice retains the choice while anonymous record is assembled or evaluated.
+		choice string
+		// shadow retains the shadow while anonymous record is assembled or evaluated.
+		shadow time.Duration
+		// forward retains the forward while anonymous record is assembled or evaluated.
+		forward time.Duration
+		// reverse retains the reverse while anonymous record is assembled or evaluated.
+		reverse time.Duration
+		// guarded retains the guarded while anonymous record is assembled or evaluated.
+		guarded time.Duration
+		// reason retains the reason while anonymous record is assembled or evaluated.
+		reason string
+		// shadowFails indicates whether shadow fails applies.
+		shadowFails bool
+		// selectedFails indicates whether selected fails applies.
 		selectedFails bool
-		fastestFails  bool
+		// fastestFails indicates whether fastest fails applies.
+		fastestFails bool
 	}{
 		{
-			name: "forward shadow", choice: string(optimize.ExpansionSearchStepwiseForward),
-			shadow: 12 * time.Millisecond, forward: 10 * time.Millisecond, reverse: 14 * time.Millisecond, guarded: 10 * time.Millisecond,
-			reason: "forward-selected shadow overhead", shadowFails: true,
+			name:        "forward shadow",
+			choice:      string(optimize.ExpansionSearchStepwiseForward),
+			shadow:      12 * time.Millisecond,
+			forward:     10 * time.Millisecond,
+			reverse:     14 * time.Millisecond,
+			guarded:     10 * time.Millisecond,
+			reason:      "forward-selected shadow overhead",
+			shadowFails: true,
 		},
 		{
-			name: "guarded selected", choice: string(optimize.ExpansionSearchSuffixSeededReverse),
-			shadow: 20 * time.Millisecond, forward: 10 * time.Millisecond, reverse: 5 * time.Millisecond, guarded: 7 * time.Millisecond,
-			reason: "guarded selected-arm overhead", selectedFails: true, fastestFails: true,
+			name:          "guarded selected",
+			choice:        string(optimize.ExpansionSearchSuffixSeededReverse),
+			shadow:        20 * time.Millisecond,
+			forward:       10 * time.Millisecond,
+			reverse:       5 * time.Millisecond,
+			guarded:       7 * time.Millisecond,
+			reason:        "guarded selected-arm overhead",
+			selectedFails: true,
+			fastestFails:  true,
 		},
 		{
-			name: "guarded fastest", choice: string(optimize.ExpansionSearchStepwiseForward),
-			shadow: 10 * time.Millisecond, forward: 10 * time.Millisecond, reverse: 5 * time.Millisecond, guarded: 10 * time.Millisecond,
-			reason: "guarded fastest-arm regret", fastestFails: true,
+			name:         "guarded fastest",
+			choice:       string(optimize.ExpansionSearchStepwiseForward),
+			shadow:       10 * time.Millisecond,
+			forward:      10 * time.Millisecond,
+			reverse:      5 * time.Millisecond,
+			guarded:      10 * time.Millisecond,
+			reason:       "guarded fastest-arm regret",
+			fastestFails: true,
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -169,7 +218,12 @@ func TestOrientationSelectorV2ReportEnforcesEachLatencyGate(t *testing.T) {
 			report, err := buildOrientationSelectorV2Report(
 				artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 				testAAReportForRecords(t, artifacts.incumbent),
-				OrientationSelectorV2ReportOptions{Seed: 11, Confidence: defaultConfidenceLevel, BootstrapCount: 100, Protocol: referencePairProtocolDiscovery},
+				OrientationSelectorV2ReportOptions{
+					Seed:           11,
+					Confidence:     defaultConfidenceLevel,
+					BootstrapCount: 100,
+					Protocol:       referencePairProtocolDiscovery,
+				},
 			)
 			require.NoError(t, err)
 			require.False(t, report.Cases[0].Passed)
@@ -181,6 +235,7 @@ func TestOrientationSelectorV2ReportEnforcesEachLatencyGate(t *testing.T) {
 	}
 }
 
+// TestOrientationSelectorV2ReportAcceptsExactOverflowFallback verifies orientation selector v2 report accepts exact overflow fallback behavior.
 func TestOrientationSelectorV2ReportAcceptsExactOverflowFallback(t *testing.T) {
 	artifacts := orientationSelectorV2Records(
 		"training", string(optimize.ExpansionSearchStepwiseForward),
@@ -190,7 +245,12 @@ func TestOrientationSelectorV2ReportAcceptsExactOverflowFallback(t *testing.T) {
 	report, err := buildOrientationSelectorV2Report(
 		artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 		testAAReportForRecords(t, artifacts.incumbent),
-		OrientationSelectorV2ReportOptions{Seed: 13, Confidence: defaultConfidenceLevel, BootstrapCount: 50, Protocol: referencePairProtocolDiscovery},
+		OrientationSelectorV2ReportOptions{
+			Seed:           13,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 50,
+			Protocol:       referencePairProtocolDiscovery,
+		},
 	)
 	require.NoError(t, err)
 	require.True(t, report.Cases[0].Overflow)
@@ -198,6 +258,7 @@ func TestOrientationSelectorV2ReportAcceptsExactOverflowFallback(t *testing.T) {
 	require.Equal(t, "exact_forward_incumbent", report.Cases[0].GuardedRuntimeBranch)
 }
 
+// TestOrientationSelectorV2ReportAcceptsStateOverflowAfterReverseChoice verifies orientation selector v2 report accepts state overflow after reverse choice behavior.
 func TestOrientationSelectorV2ReportAcceptsStateOverflowAfterReverseChoice(t *testing.T) {
 	artifacts := orientationSelectorV2Records(
 		"training", string(optimize.ExpansionSearchSuffixSeededReverse),
@@ -210,7 +271,12 @@ func TestOrientationSelectorV2ReportAcceptsStateOverflowAfterReverseChoice(t *te
 	report, err := buildOrientationSelectorV2Report(
 		artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 		testAAReportForRecords(t, artifacts.incumbent),
-		OrientationSelectorV2ReportOptions{Seed: 17, Confidence: defaultConfidenceLevel, BootstrapCount: 50, Protocol: referencePairProtocolDiscovery},
+		OrientationSelectorV2ReportOptions{
+			Seed:           17,
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 50,
+			Protocol:       referencePairProtocolDiscovery,
+		},
 	)
 	require.NoError(t, err)
 	require.True(t, report.Cases[0].Overflow)
@@ -218,6 +284,7 @@ func TestOrientationSelectorV2ReportAcceptsStateOverflowAfterReverseChoice(t *te
 	require.Equal(t, string(optimize.ExpansionSearchStepwiseForward), report.Cases[0].GuardedRuntimeIdentity)
 }
 
+// TestOrientationSelectorV2ReportRejectsIncompleteConfirmationCohort verifies orientation selector v2 report rejects incomplete confirmation cohort behavior.
 func TestOrientationSelectorV2ReportRejectsIncompleteConfirmationCohort(t *testing.T) {
 	artifacts := orientationSelectorV2Records(
 		"training", string(optimize.ExpansionSearchStepwiseForward),
@@ -227,11 +294,17 @@ func TestOrientationSelectorV2ReportRejectsIncompleteConfirmationCohort(t *testi
 	_, err := buildOrientationSelectorV2Report(
 		artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 		testAAReportForRecords(t, artifacts.incumbent),
-		OrientationSelectorV2ReportOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolConfirmation, Freeze: testOrientationV2Freeze()},
+		OrientationSelectorV2ReportOptions{
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 10,
+			Protocol:       referencePairProtocolConfirmation,
+			Freeze:         testOrientationV2Freeze(),
+		},
 	)
 	require.ErrorContains(t, err, "exact frozen 8-training/4-holdout cohort")
 }
 
+// TestOrientationSelectorV2ReportRequiresFrozenDiscoveryForConfirmation verifies orientation selector v2 report requires frozen discovery for confirmation behavior.
 func TestOrientationSelectorV2ReportRequiresFrozenDiscoveryForConfirmation(t *testing.T) {
 	artifacts := orientationSelectorV2Records(
 		"training", string(optimize.ExpansionSearchStepwiseForward),
@@ -240,11 +313,16 @@ func TestOrientationSelectorV2ReportRequiresFrozenDiscoveryForConfirmation(t *te
 	_, err := buildOrientationSelectorV2Report(
 		artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 		testAAReportForRecords(t, artifacts.incumbent),
-		OrientationSelectorV2ReportOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolConfirmation},
+		OrientationSelectorV2ReportOptions{
+			Confidence:     defaultConfidenceLevel,
+			BootstrapCount: 10,
+			Protocol:       referencePairProtocolConfirmation,
+		},
 	)
 	require.Error(t, err)
 }
 
+// TestOrientationSelectorV2ReportRejectsRuntimeIdentityAndReceiptDrift verifies orientation selector v2 report rejects runtime identity and receipt drift behavior.
 func TestOrientationSelectorV2ReportRejectsRuntimeIdentityAndReceiptDrift(t *testing.T) {
 	for _, mutate := range []func(*orientationSelectorV2Artifacts){
 		func(artifacts *orientationSelectorV2Artifacts) {
@@ -277,12 +355,17 @@ func TestOrientationSelectorV2ReportRejectsRuntimeIdentityAndReceiptDrift(t *tes
 		_, err := buildOrientationSelectorV2Report(
 			artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 			testAAReportForRecords(t, artifacts.incumbent),
-			OrientationSelectorV2ReportOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolDiscovery},
+			OrientationSelectorV2ReportOptions{
+				Confidence:     defaultConfidenceLevel,
+				BootstrapCount: 10,
+				Protocol:       referencePairProtocolDiscovery,
+			},
 		)
 		require.Error(t, err)
 	}
 }
 
+// TestOrientationSelectorV2ReportRejectsIdentityCaseObservationAndOrderDrift verifies orientation selector v2 report rejects identity case observation and order drift behavior.
 func TestOrientationSelectorV2ReportRejectsIdentityCaseObservationAndOrderDrift(t *testing.T) {
 	mutations := []func(*orientationSelectorV2Artifacts){
 		func(artifacts *orientationSelectorV2Artifacts) {
@@ -324,12 +407,17 @@ func TestOrientationSelectorV2ReportRejectsIdentityCaseObservationAndOrderDrift(
 		_, err := buildOrientationSelectorV2Report(
 			artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 			testAAReportForRecords(t, artifacts.incumbent),
-			OrientationSelectorV2ReportOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolDiscovery},
+			OrientationSelectorV2ReportOptions{
+				Confidence:     defaultConfidenceLevel,
+				BootstrapCount: 10,
+				Protocol:       referencePairProtocolDiscovery,
+			},
 		)
 		require.Error(t, err)
 	}
 }
 
+// TestOrientationSelectorV2ReportRejectsUnboundAAEnvironment verifies orientation selector v2 report rejects unbound aa environment behavior.
 func TestOrientationSelectorV2ReportRejectsUnboundAAEnvironment(t *testing.T) {
 	artifacts := orientationSelectorV2Records(
 		"training", string(optimize.ExpansionSearchStepwiseForward),
@@ -343,12 +431,17 @@ func TestOrientationSelectorV2ReportRejectsUnboundAAEnvironment(t *testing.T) {
 		mutate(aa)
 		_, err := buildOrientationSelectorV2Report(
 			artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded, aa,
-			OrientationSelectorV2ReportOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolDiscovery},
+			OrientationSelectorV2ReportOptions{
+				Confidence:     defaultConfidenceLevel,
+				BootstrapCount: 10,
+				Protocol:       referencePairProtocolDiscovery,
+			},
 		)
 		require.ErrorContains(t, err, "incumbent A/A environment")
 	}
 }
 
+// TestOrientationSelectorV2ReportRejectsSupplementalMeasurements verifies orientation selector v2 report rejects supplemental measurements behavior.
 func TestOrientationSelectorV2ReportRejectsSupplementalMeasurements(t *testing.T) {
 	mutations := []func(*CaseResult){
 		func(record *CaseResult) { record.Concurrency = []ConcurrencyBlock{{Concurrency: 2}} },
@@ -366,19 +459,29 @@ func TestOrientationSelectorV2ReportRejectsSupplementalMeasurements(t *testing.T
 		_, err := buildOrientationSelectorV2Report(
 			artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded,
 			testAAReportForRecords(t, artifacts.incumbent),
-			OrientationSelectorV2ReportOptions{Confidence: defaultConfidenceLevel, BootstrapCount: 10, Protocol: referencePairProtocolDiscovery},
+			OrientationSelectorV2ReportOptions{
+				Confidence:     defaultConfidenceLevel,
+				BootstrapCount: 10,
+				Protocol:       referencePairProtocolDiscovery,
+			},
 		)
 		require.ErrorContains(t, err, "mixes selector timing with supplemental PostgreSQL measurements")
 	}
 }
 
+// orientationSelectorV2Artifacts groups state that must remain consistent while processing orientation selector v2 artifacts.
 type orientationSelectorV2Artifacts struct {
-	shadow    []CaseResult
+	// shadow retains the shadow while orientationSelectorV2Artifacts is assembled or evaluated.
+	shadow []CaseResult
+	// incumbent retains the incumbent while orientationSelectorV2Artifacts is assembled or evaluated.
 	incumbent []CaseResult
-	reverse   []CaseResult
-	guarded   []CaseResult
+	// reverse retains the reverse while orientationSelectorV2Artifacts is assembled or evaluated.
+	reverse []CaseResult
+	// guarded retains the guarded while orientationSelectorV2Artifacts is assembled or evaluated.
+	guarded []CaseResult
 }
 
+// canonicalOrientationV2TestArtifacts builds a complete frozen artifact set for selector-v2 tests.
 func canonicalOrientationV2TestArtifacts(t *testing.T) (orientationSelectorV2Artifacts, orientationSelectorV2Artifacts) {
 	t.Helper()
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
@@ -417,14 +520,17 @@ func canonicalOrientationV2TestArtifacts(t *testing.T) (orientationSelectorV2Art
 		full = appendOrientationV2Artifacts(full, current)
 	}
 	training := orientationSelectorV2Artifacts{
-		shadow: cloneOrientationV2Split(full.shadow, "training"), incumbent: cloneOrientationV2Split(full.incumbent, "training"),
-		reverse: cloneOrientationV2Split(full.reverse, "training"), guarded: cloneOrientationV2Split(full.guarded, "training"),
+		shadow:    cloneOrientationV2Split(full.shadow, "training"),
+		incumbent: cloneOrientationV2Split(full.incumbent, "training"),
+		reverse:   cloneOrientationV2Split(full.reverse, "training"),
+		guarded:   cloneOrientationV2Split(full.guarded, "training"),
 	}
 	stampOrientationV2Selections(&training)
 	stampOrientationV2Selections(&full)
 	return training, full
 }
 
+// cloneOrientationV2Split returns an independent copy of orientation v2 split.
 func cloneOrientationV2Split(records []CaseResult, split string) []CaseResult {
 	result := make([]CaseResult, 0, len(records))
 	for _, record := range records {
@@ -441,6 +547,7 @@ func cloneOrientationV2Split(records []CaseResult, split string) []CaseResult {
 	return result
 }
 
+// compactOrientationV2Artifacts prepares or inspects test evidence for compact orientation v2 artifacts.
 func compactOrientationV2Artifacts(artifacts orientationSelectorV2Artifacts, rounds, samples int) orientationSelectorV2Artifacts {
 	compact := func(records []CaseResult) []CaseResult {
 		result := make([]CaseResult, 0, len(records))
@@ -455,11 +562,14 @@ func compactOrientationV2Artifacts(artifacts orientationSelectorV2Artifacts, rou
 		return result
 	}
 	return orientationSelectorV2Artifacts{
-		shadow: compact(artifacts.shadow), incumbent: compact(artifacts.incumbent),
-		reverse: compact(artifacts.reverse), guarded: compact(artifacts.guarded),
+		shadow:    compact(artifacts.shadow),
+		incumbent: compact(artifacts.incumbent),
+		reverse:   compact(artifacts.reverse),
+		guarded:   compact(artifacts.guarded),
 	}
 }
 
+// writeOrientationV2TestArtifact writes orientation v2 test artifact.
 func writeOrientationV2TestArtifact(t *testing.T, path string, records []CaseResult) {
 	t.Helper()
 	output, err := os.Create(path)
@@ -468,6 +578,7 @@ func writeOrientationV2TestArtifact(t *testing.T, path string, records []CaseRes
 	require.NoError(t, output.Close())
 }
 
+// orientationSelectorV2Records prepares or inspects test evidence for orientation selector v2 records.
 func orientationSelectorV2Records(
 	split, wouldSelect string,
 	shadowDuration, incumbentDuration, reverseDuration, guardedDuration time.Duration,
@@ -491,6 +602,7 @@ func orientationSelectorV2Records(
 	return artifacts
 }
 
+// orientationSelectorV2Record prepares or inspects test evidence for orientation selector v2 record.
 func orientationSelectorV2Record(round, armOrder int, arm, split, choice string, duration time.Duration, overflow bool) CaseResult {
 	forward := string(optimize.ExpansionSearchStepwiseForward)
 	reverse := string(optimize.ExpansionSearchSuffixSeededReverse)
@@ -529,37 +641,84 @@ func orientationSelectorV2Record(round, armOrder int, arm, split, choice string,
 	}
 	available := true
 	record := CaseResult{
-		Source: "cases/orientation-v2.json", Dataset: "orientation-v2-fixture", Name: "fixed-suffix",
-		Category: "generated_fixed_suffix_expansion", WorkloadSHA256: sqlFingerprint("orientation-v2-workload"),
-		ExecutionMode: ModePostgresSQL, Status: StatusOK,
-		Shape:    WorkloadShape{FixtureTier: "normal", QualificationSplit: split},
-		RowCount: 1, ObservedRows: []string{"[42]"}, StableObservation: true,
-		SQLFingerprint: sqlFingerprint("orientation-v2-" + arm + "-sql"),
+		Source:         "cases/orientation-v2.json",
+		Dataset:        "orientation-v2-fixture",
+		Name:           "fixed-suffix",
+		Category:       "generated_fixed_suffix_expansion",
+		WorkloadSHA256: sqlFingerprint("orientation-v2-workload"),
+		ExecutionMode:  ModePostgresSQL,
+		Status:         StatusOK,
+		Shape: WorkloadShape{
+			FixtureTier:        "normal",
+			QualificationSplit: split,
+		},
+		RowCount:          1,
+		ObservedRows:      []string{"[42]"},
+		StableObservation: true,
+		SQLFingerprint:    sqlFingerprint("orientation-v2-" + arm + "-sql"),
 		Fixture: &FixtureMetadata{
-			Dataset: "orientation-v2-fixture", Checksum: sqlFingerprint("orientation-v2-fixture-checksum"),
-			NodeCount: 10, EdgeCount: 12, PhysicalValidated: true, PhysicalNodeCount: 10, PhysicalEdgeCount: 12,
-			Configuration: "orientation-v2-test",
+			Dataset:           "orientation-v2-fixture",
+			Checksum:          sqlFingerprint("orientation-v2-fixture-checksum"),
+			NodeCount:         10,
+			EdgeCount:         12,
+			PhysicalValidated: true,
+			PhysicalNodeCount: 10,
+			PhysicalEdgeCount: 12,
+			Configuration:     "orientation-v2-test",
 		},
 		PostgresEnvironment: &PostgresEnvironment{
-			Version: "PostgreSQL test", Database: "dawgs", PlanCacheMode: "auto", TransactionIsolation: "repeatable read",
-			WorkMem: "4MB", TempFileLimit: "-1", GraphPartitionCount: 1, DatabaseOID: 1,
-			Autovacuum: "on", AnalyzeState: "stable", SchemaFingerprint: "schema", IndexFingerprint: "index",
+			Version:              "PostgreSQL test",
+			Database:             "dawgs",
+			PlanCacheMode:        "auto",
+			TransactionIsolation: "repeatable read",
+			WorkMem:              "4MB",
+			TempFileLimit:        "-1",
+			GraphPartitionCount:  1,
+			DatabaseOID:          1,
+			Autovacuum:           "on",
+			AnalyzeState:         "stable",
+			SchemaFingerprint:    "schema",
+			IndexFingerprint:     "index",
 		},
 		Environment: &RunEnvironment{
-			ArtifactSchemaVersion: 2, CorpusSHA256: testSHA("c"), SourceCommit: "deadbeef",
-			DirtyDiffSHA256: testSHA("d"), BinarySHA256: testSHA("b"),
-			GOOS: "linux", GOARCH: "amd64", CPUCount: 8, CPUModel: "test-cpu", Kernel: "test-kernel", CgroupCPU: "max 100000",
-			RunUUID: fmt.Sprintf("orientation-v2-run-%d", round), Arm: arm, ArmOrder: armOrder, Block: round, Round: round,
-			WarmupIterations: 20, PoolSize: 1,
+			ArtifactSchemaVersion: 2,
+			CorpusSHA256:          testSHA("c"),
+			SourceCommit:          "deadbeef",
+			DirtyDiffSHA256:       testSHA("d"),
+			BinarySHA256:          testSHA("b"),
+			GOOS:                  "linux",
+			GOARCH:                "amd64",
+			CPUCount:              8,
+			CPUModel:              "test-cpu",
+			Kernel:                "test-kernel",
+			CgroupCPU:             "max 100000",
+			RunUUID:               fmt.Sprintf("orientation-v2-run-%d", round),
+			Arm:                   arm,
+			ArmOrder:              armOrder,
+			Block:                 round,
+			Round:                 round,
+			WarmupIterations:      20,
+			PoolSize:              1,
 		},
 		TraversalTelemetry: &TraversalExecutionTelemetry{
-			SchemaVersion: TraversalExecutionTelemetrySchemaVersion, Level: TraversalTelemetryLevelSummary,
+			SchemaVersion: TraversalExecutionTelemetrySchemaVersion,
+			Level:         TraversalTelemetryLevelSummary,
 			Summary: TraversalExecutionSummary{
-				RequestedIdentity: requested, PlannedIdentities: []string{forward, reverse}, EmittedIdentity: emittedIdentity,
-				RuntimeIdentity: runtimeIdentity, AppliedIdentity: runtimeIdentity, SelectorVersion: selectorVersion,
-				SchedulerVersion: "not_applicable", ExecutionBoundary: boundary, Caps: map[string]int64{},
-				RuntimeOutcomeAvailable: &available, RuntimeBranch: runtimeBranch, Overflow: boolPointer(overflow),
-				FallbackExecuted: boolPointer(fallback), WouldSelectIdentity: wouldSelect, Provenance: provenance,
+				RequestedIdentity:       requested,
+				PlannedIdentities:       []string{forward, reverse},
+				EmittedIdentity:         emittedIdentity,
+				RuntimeIdentity:         runtimeIdentity,
+				AppliedIdentity:         runtimeIdentity,
+				SelectorVersion:         selectorVersion,
+				SchedulerVersion:        "not_applicable",
+				ExecutionBoundary:       boundary,
+				Caps:                    map[string]int64{},
+				RuntimeOutcomeAvailable: &available,
+				RuntimeBranch:           runtimeBranch,
+				Overflow:                boolPointer(overflow),
+				FallbackExecuted:        boolPointer(fallback),
+				WouldSelectIdentity:     wouldSelect,
+				Provenance:              provenance,
 			},
 		},
 	}
@@ -569,15 +728,26 @@ func orientationSelectorV2Record(round, armOrder int, arm, split, choice string,
 	record.Stats.WarmupIterations = 20
 	for iteration := 1; iteration <= 50; iteration++ {
 		sample := LatencySample{
-			Round: round, Block: round, Arm: arm, ArmOrder: armOrder, RunUUID: record.Environment.RunUUID,
-			Iteration: iteration, Classification: "warm", Duration: duration,
-			RequestedIdentity: requested, RuntimeIdentity: runtimeIdentity, RuntimeBranch: runtimeBranch,
-			FallbackExecuted: boolPointer(fallback),
+			Round:             round,
+			Block:             round,
+			Arm:               arm,
+			ArmOrder:          armOrder,
+			RunUUID:           record.Environment.RunUUID,
+			Iteration:         iteration,
+			Classification:    "warm",
+			Duration:          duration,
+			RequestedIdentity: requested,
+			RuntimeIdentity:   runtimeIdentity,
+			RuntimeBranch:     runtimeBranch,
+			FallbackExecuted:  boolPointer(fallback),
 		}
 		if arm == "shadow" || arm == "guarded" {
 			sample.RuntimeAttestation = "timed_invocation"
 			sample.RuntimeReceiptEvents = []RuntimeReceiptEvent{{
-				Ordinal: 1, RuntimeIdentity: runtimeIdentity, RuntimeBranch: runtimeBranch, FallbackExecuted: fallback,
+				Ordinal:          1,
+				RuntimeIdentity:  runtimeIdentity,
+				RuntimeBranch:    runtimeBranch,
+				FallbackExecuted: fallback,
 			}}
 		} else {
 			sample.RuntimeAttestation = "same_case_invocation_local_replay"
@@ -587,6 +757,7 @@ func orientationSelectorV2Record(round, armOrder int, arm, split, choice string,
 	return record
 }
 
+// renameOrientationV2Records prepares or inspects test evidence for rename orientation v2 records.
 func renameOrientationV2Records(name string, artifacts orientationSelectorV2Artifacts) {
 	for _, records := range [][]CaseResult{artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded} {
 		for index := range records {
@@ -602,6 +773,7 @@ func renameOrientationV2Records(name string, artifacts orientationSelectorV2Arti
 	stampOrientationV2Selections(&artifacts)
 }
 
+// appendOrientationV2Artifacts appends orientation v2 artifacts.
 func appendOrientationV2Artifacts(values ...orientationSelectorV2Artifacts) orientationSelectorV2Artifacts {
 	result := orientationSelectorV2Artifacts{}
 	for _, value := range values {
@@ -614,25 +786,42 @@ func appendOrientationV2Artifacts(values ...orientationSelectorV2Artifacts) orie
 	return result
 }
 
+// stampOrientationV2Selections prepares or inspects test evidence for stamp orientation v2 selections.
 func stampOrientationV2Selections(artifacts *orientationSelectorV2Artifacts) {
 	if artifacts == nil {
 		return
 	}
 	keys := map[performanceKey]struct{}{}
 	for _, record := range artifacts.shadow {
-		keys[performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}] = struct{}{}
+		keys[performanceKey{
+			dataset: record.Dataset,
+			name:    record.Name,
+			backend: record.ExecutionMode,
+		}] = struct{}{}
 	}
 	declared := make([]DeclaredCaseBackend, 0, 2*len(keys))
 	resolved := make([]ResolvedCaseSelector, 0, len(keys))
 	for _, key := range sortedPerformanceKeys(keys) {
 		for _, backend := range []ExecutionMode{ModePostgresSQL, ModeNeo4j} {
-			declared = append(declared, DeclaredCaseBackend{Dataset: key.dataset, Name: key.name, Backend: backend})
+			declared = append(declared, DeclaredCaseBackend{
+				Dataset: key.dataset,
+				Name:    key.name,
+				Backend: backend,
+			})
 		}
-		resolved = append(resolved, ResolvedCaseSelector{Dataset: key.dataset, Name: key.name, Category: "generated_fixed_suffix_expansion"})
+		resolved = append(resolved, ResolvedCaseSelector{
+			Dataset:  key.dataset,
+			Name:     key.name,
+			Category: "generated_fixed_suffix_expansion",
+		})
 	}
 	selection := &SelectionManifest{
-		Version: selectionManifestVersion, Resolved: resolved, DiagnosticOnly: true,
-		FullDeclarationCount: 2 * len(keys), SelectedDeclarationCount: 2 * len(keys), DeclarationSHA256: declarationSHA256(declared),
+		Version:                  selectionManifestVersion,
+		Resolved:                 resolved,
+		DiagnosticOnly:           true,
+		FullDeclarationCount:     2 * len(keys),
+		SelectedDeclarationCount: 2 * len(keys),
+		DeclarationSHA256:        declarationSHA256(declared),
 	}
 	for _, records := range [][]CaseResult{artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded} {
 		for index := range records {
@@ -643,8 +832,10 @@ func stampOrientationV2Selections(artifacts *orientationSelectorV2Artifacts) {
 	}
 }
 
+// boolPointer returns an addressable representation of bool.
 func boolPointer(value bool) *bool { return &value }
 
+// testSHA prepares or inspects test evidence for test sha.
 func testSHA(digit string) string {
 	value := ""
 	for len(value) < 64 {
@@ -653,14 +844,19 @@ func testSHA(digit string) string {
 	return value[:64]
 }
 
+// testOrientationV2Freeze prepares or inspects test evidence for test orientation v2 freeze.
 func testOrientationV2Freeze() *OrientationSelectorV2FreezeManifest {
 	return &OrientationSelectorV2FreezeManifest{
-		Version: 1, Policy: string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+		Version: 1,
+		Policy:  string(optimize.ExpansionSearchPolicyOrientationProbeV2),
 		Formula: "F2=root_rows+maximum_depth*forward_degree_rows;R2=suffix_rows+boundary_rows+reverse_degree_rows;reverse=complete&&4*R2<3*F2",
 		Caps: map[string]int64{
 			"root_row_limit": optimize.ExpansionSearchOrientationRootRowLimit, "reverse_seed_row_limit": optimize.ExpansionSearchOrientationReverseSeedRowLimit,
 			"directional_degree_row_limit": optimize.ExpansionSearchOrientationDirectionalDegreeRowLimit, "state_limit": optimize.ExpansionSearchOrientationStateLimit,
 		},
-		SourceCommit: "deadbeef", DirtyDiffSHA256: testSHA("d"), BinarySHA256: testSHA("b"), DiscoveryReportSHA256: testSHA("e"),
+		SourceCommit:          "deadbeef",
+		DirtyDiffSHA256:       testSHA("d"),
+		BinarySHA256:          testSHA("b"),
+		DiscoveryReportSHA256: testSHA("e"),
 	}
 }

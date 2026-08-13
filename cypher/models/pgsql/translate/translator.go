@@ -46,9 +46,9 @@ type Translator struct {
 
 	// appliedLoweringCounts counts emitted applications of each planned lowering.
 	appliedLoweringCounts map[string]int
-	// appliedShortestPathExecutors records the physical executor emitted for each optimized traversal.
+	// appliedShortestPathExecutors retains the applied shortest path executors while Translator is assembled or evaluated.
 	appliedShortestPathExecutors map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor
-	// appliedExpansionSearchStrategies records the physical search emitted for each optimized expansion.
+	// appliedExpansionSearchStrategies retains the applied expansion search strategies while Translator is assembled or evaluated.
 	appliedExpansionSearchStrategies map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy
 	// emittedExpansionSearchPolicies records runtime selection policies emitted for optimized expansions.
 	emittedExpansionSearchPolicies map[optimize.TraversalStepTarget]optimize.ExpansionSearchPolicy
@@ -464,6 +464,7 @@ func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.
 	return expression
 }
 
+// Exit builds the SQL model fragment responsible for exit.
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 
@@ -778,11 +779,12 @@ type TargetLoweringOutcome struct {
 	EmittedCandidates []string `json:"emitted_candidates,omitempty"`
 	// ProbeCaps records bounded evidence inputs for an expansion policy.
 	ProbeCaps *optimize.ExpansionSearchProbeCaps `json:"probe_caps,omitempty"`
-	// Admission records the specialized-state gate and exact fallback chain.
+	// Admission supplies the admission input to the TargetLoweringOutcome contract.
 	Admission *optimize.ExpansionSearchAdmission `json:"admission,omitempty"`
 	// EndpointRoot and EndpointTerminal describe the bounded endpoint inputs
 	// considered by analysis without implying that translation emitted them.
-	EndpointRoot     *optimize.EndpointResolutionInput `json:"endpoint_root,omitempty"`
+	EndpointRoot *optimize.EndpointResolutionInput `json:"endpoint_root,omitempty"`
+	// EndpointTerminal supplies the endpoint terminal input to the TargetLoweringOutcome contract.
 	EndpointTerminal *optimize.EndpointResolutionInput `json:"endpoint_terminal,omitempty"`
 	// EndpointPairClass records a correlation class when endpoint resolution
 	// must preserve a paired input rather than independent endpoint sets.
@@ -791,9 +793,11 @@ type TargetLoweringOutcome struct {
 	EndpointResolutionCaps *optimize.EndpointResolutionCaps `json:"endpoint_resolution_caps,omitempty"`
 	// PredicateClass and its source/index expose conservative traversal
 	// predicate placement analysis as a first-class target outcome.
-	PredicateClass  optimize.TraversalPredicateClass `json:"predicate_class,omitempty"`
-	PredicateSource string                           `json:"predicate_source,omitempty"`
-	PredicateIndex  *int                             `json:"predicate_index,omitempty"`
+	PredicateClass optimize.TraversalPredicateClass `json:"predicate_class,omitempty"`
+	// PredicateSource supplies the predicate source input to the TargetLoweringOutcome contract.
+	PredicateSource string `json:"predicate_source,omitempty"`
+	// PredicateIndex supplies the predicate index input to the TargetLoweringOutcome contract.
+	PredicateIndex *int `json:"predicate_index,omitempty"`
 	// Scheduler identifies the selected shortest-path frontier scheduling policy.
 	Scheduler string `json:"scheduler,omitempty"`
 	// ExecutionBoundary identifies whether the selected executor is inline SQL,
@@ -805,9 +809,9 @@ type TargetLoweringOutcome struct {
 	EligibilityFacts []TargetEligibilityFact `json:"eligibility_facts,omitempty"`
 	// ObservationMode describes how downstream clauses consume the target.
 	ObservationMode string `json:"observation_mode,omitempty"`
-	// Direction records the target's logical traversal direction.
+	// Direction selects the traversal orientation covered by the contract.
 	Direction string `json:"direction,omitempty"`
-	// PhysicalExpansion records the stored edge endpoint used to advance traversal.
+	// PhysicalExpansion supplies the physical expansion input to the TargetLoweringOutcome contract.
 	PhysicalExpansion string `json:"physical_expansion,omitempty"`
 	// RelationshipKindCount is the number of statically resolved relationship kinds.
 	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
@@ -863,10 +867,14 @@ type TargetEligibilityFact struct {
 	Eligible bool `json:"eligible"`
 }
 
+// SkippedLowering groups SQL model state that must remain consistent while translating skipped lowering.
 type SkippedLowering struct {
-	Name   string `json:"name"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// Reason supplies the reason input to the SkippedLowering contract.
 	Reason string `json:"reason"`
-	Count  int    `json:"count,omitempty"`
+	// Count records the number of count.
+	Count int `json:"count,omitempty"`
 }
 
 // recordLowering increments the applied count for one lowering name.
@@ -885,7 +893,7 @@ func (s *Translator) recordLowering(name string) {
 	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
 }
 
-// recordShortestPathExecutor records the executor actually emitted for a traversal target.
+// recordShortestPathExecutor builds the SQL model fragment responsible for record shortest path executor.
 func (s *Translator) recordShortestPathExecutor(target optimize.TraversalStepTarget, executor optimize.ShortestPathExecutor) {
 	if s.appliedShortestPathExecutors == nil {
 		s.appliedShortestPathExecutors = map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor{}
@@ -894,7 +902,7 @@ func (s *Translator) recordShortestPathExecutor(target optimize.TraversalStepTar
 	s.recordLowering(optimize.LoweringShortestPathExecutor)
 }
 
-// recordExpansionSearchStrategy records the expansion strategy actually emitted for a traversal target.
+// recordExpansionSearchStrategy builds the SQL model fragment responsible for record expansion search strategy.
 func (s *Translator) recordExpansionSearchStrategy(target optimize.TraversalStepTarget, strategy optimize.ExpansionSearchStrategy) {
 	if s.appliedExpansionSearchStrategies == nil {
 		s.appliedExpansionSearchStrategies = map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy{}
@@ -1177,18 +1185,26 @@ func expansionSearchEligibilityFacts(facts []optimize.ExpansionSearchEligibility
 	return outcomes
 }
 
+// endpointResolutionEligibilityFacts builds the SQL model fragment responsible for endpoint resolution eligibility facts.
 func endpointResolutionEligibilityFacts(facts []optimize.EndpointResolutionEligibilityFact) []TargetEligibilityFact {
 	outcomes := make([]TargetEligibilityFact, len(facts))
 	for idx, fact := range facts {
-		outcomes[idx] = TargetEligibilityFact{Name: fact.Name, Eligible: fact.Eligible}
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
 	}
 	return outcomes
 }
 
+// traversalPredicateEligibilityFacts builds the SQL model fragment responsible for traversal predicate eligibility facts.
 func traversalPredicateEligibilityFacts(facts []optimize.TraversalPredicateEligibilityFact) []TargetEligibilityFact {
 	outcomes := make([]TargetEligibilityFact, len(facts))
 	for idx, fact := range facts {
-		outcomes[idx] = TargetEligibilityFact{Name: fact.Name, Eligible: fact.Eligible}
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
 	}
 	return outcomes
 }
@@ -1340,34 +1356,52 @@ type ToolOptions struct {
 // query-allowlisted canary policy. The zero value preserves all incumbent
 // production choices.
 type ProductionOptions struct {
-	ShortestPathExecutor         optimize.ShortestPathExecutor
-	ShortestPathCaps             *ProductionShortestPathCaps
-	AuthorizedBucket             *ProductionTraversalBucket
-	EnableExpansionOrientation   bool
+	// ShortestPathExecutor supplies the shortest path executor input to the ProductionOptions contract.
+	ShortestPathExecutor optimize.ShortestPathExecutor
+	// ShortestPathCaps supplies the shortest path caps input to the ProductionOptions contract.
+	ShortestPathCaps *ProductionShortestPathCaps
+	// AuthorizedBucket supplies the authorized bucket input to the ProductionOptions contract.
+	AuthorizedBucket *ProductionTraversalBucket
+	// EnableExpansionOrientation indicates whether enable expansion orientation applies.
+	EnableExpansionOrientation bool
+	// DisableEndpointSeededReverse indicates whether disable endpoint seeded reverse applies.
 	DisableEndpointSeededReverse bool
-	DisableInlineASPDAG          bool
-	DisableInlineSPWitness       bool
-	SelectorVersion              string
+	// DisableInlineASPDAG indicates whether disable inline aspdag applies.
+	DisableInlineASPDAG bool
+	// DisableInlineSPWitness indicates whether disable inline sp witness applies.
+	DisableInlineSPWitness bool
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string
 }
 
 // ProductionShortestPathCaps are immutable manifest-authorized limits. They
 // are copied into the lowering decision and therefore into emitted SQL.
 type ProductionShortestPathCaps struct {
-	StateLimit       int64 `json:"state_limit"`
+	// StateLimit supplies the state limit input to the ProductionShortestPathCaps contract.
+	StateLimit int64 `json:"state_limit"`
+	// PredecessorLimit supplies the predecessor limit input to the ProductionShortestPathCaps contract.
 	PredecessorLimit int64 `json:"predecessor_limit"`
+	// EnumerationLimit supplies the enumeration limit input to the ProductionShortestPathCaps contract.
 	EnumerationLimit int64 `json:"enumeration_limit"`
+	// OutputBytesLimit supplies the output bytes limit input to the ProductionShortestPathCaps contract.
 	OutputBytesLimit int64 `json:"output_bytes_limit"`
 }
 
 // ProductionTraversalBucket binds an exact-query authorization to the
 // structural target characteristics independently qualified by evidence.
 type ProductionTraversalBucket struct {
-	Direction             string `json:"direction"`
-	ObservationMode       string `json:"observation_mode"`
-	MinimumDepth          int64  `json:"minimum_depth"`
-	MaximumDepth          int64  `json:"maximum_depth"`
-	RelationshipKindCount int    `json:"relationship_kind_count"`
-	UntypedRelationship   bool   `json:"untyped_relationship"`
+	// Direction selects the traversal orientation covered by the contract.
+	Direction string `json:"direction"`
+	// ObservationMode identifies the observation mode.
+	ObservationMode string `json:"observation_mode"`
+	// MinimumDepth sets the inclusive lower traversal-depth bound.
+	MinimumDepth int64 `json:"minimum_depth"`
+	// MaximumDepth sets the inclusive upper traversal-depth bound.
+	MaximumDepth int64 `json:"maximum_depth"`
+	// RelationshipKindCount records the number of relationship kind count.
+	RelationshipKindCount int `json:"relationship_kind_count"`
+	// UntypedRelationship indicates whether untyped relationship applies.
+	UntypedRelationship bool `json:"untyped_relationship"`
 }
 
 // Translate optimizes and translates a Cypher query for the selected graph using production lowering choices.
@@ -1436,6 +1470,7 @@ func translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	return translateOptimized(ctx, optimizedPlan, kindMapper, parameters, graphID, options)
 }
 
+// translateOptimized builds the SQL model fragment responsible for translate optimized.
 func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
 
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
@@ -1487,6 +1522,7 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 	return translator.translation, nil
 }
 
+// productionShortestPathExecutor builds the SQL model fragment responsible for production shortest path executor.
 func productionShortestPathExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
@@ -1497,6 +1533,7 @@ func productionShortestPathExecutor(executor optimize.ShortestPathExecutor) bool
 	}
 }
 
+// applyProductionShortestPathAuthorization applies production shortest path authorization.
 func applyProductionShortestPathAuthorization(plan *optimize.Plan, options ProductionOptions) error {
 	if options.ShortestPathExecutor == "" {
 		return nil
@@ -1620,6 +1657,7 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
 }
 
+// requestedExpansionOrientationPolicy builds the SQL model fragment responsible for requested expansion orientation policy.
 func requestedExpansionOrientationPolicy(options ToolOptions) (optimize.ExpansionSearchPolicy, error) {
 	policy := options.ExpansionOrientationPolicy
 	if policy == "" {
@@ -1634,6 +1672,7 @@ func requestedExpansionOrientationPolicy(options ToolOptions) (optimize.Expansio
 	return policy, nil
 }
 
+// supportedExpansionOrientationPolicy reports whether production translation recognizes an orientation policy.
 func supportedExpansionOrientationPolicy(policy optimize.ExpansionSearchPolicy) bool {
 	switch policy {
 	case optimize.ExpansionSearchPolicyOrientationProbeV1,
@@ -1737,6 +1776,7 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	return nil
 }
 
+// supportedForcedShortestPathExecutor reports whether production translation recognizes a shortest-path executor.
 func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorIncumbentWorkspace,
@@ -1822,6 +1862,7 @@ func applyExpansionOrientationTournament(plan *optimize.Plan) error {
 	return applyExpansionOrientationTournamentPolicy(plan, optimize.ExpansionSearchPolicyOrientationProbeV1)
 }
 
+// applyExpansionOrientationTournamentPolicy applies expansion orientation tournament policy.
 func applyExpansionOrientationTournamentPolicy(plan *optimize.Plan, policy optimize.ExpansionSearchPolicy) error {
 	if !supportedExpansionOrientationPolicy(policy) {
 		return fmt.Errorf("unsupported expansion orientation policy %q", policy)
@@ -1866,6 +1907,7 @@ func applyExpansionOrientationShadow(plan *optimize.Plan) error {
 	return applyExpansionOrientationShadowPolicy(plan, optimize.ExpansionSearchPolicyOrientationProbeV1)
 }
 
+// applyExpansionOrientationShadowPolicy applies expansion orientation shadow policy.
 func applyExpansionOrientationShadowPolicy(plan *optimize.Plan, policy optimize.ExpansionSearchPolicy) error {
 	if !supportedExpansionOrientationPolicy(policy) {
 		return fmt.Errorf("unsupported expansion orientation policy %q", policy)
