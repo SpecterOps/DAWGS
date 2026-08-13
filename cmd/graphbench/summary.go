@@ -124,6 +124,9 @@ type ModeCaseCell struct {
 	FallbackReason string `json:"fallback_reason,omitempty"`
 	// Error records the failure message when the operation did not succeed.
 	Error string `json:"error,omitempty"`
+	// RuntimeReceiptChains preserves every measured invocation's complete
+	// ordered traversal branch chain.
+	RuntimeReceiptChains [][]RuntimeReceiptEvent `json:"runtime_receipt_chains,omitempty"`
 }
 
 // BaselineEntry stores one case/backend baseline median used for future comparison.
@@ -191,12 +194,13 @@ func buildSummary(records []CaseResult) Summary {
 		}
 
 		caseSummary.Modes[record.ExecutionMode] = ModeCaseCell{
-			Status:         record.Status,
-			Rows:           record.RowCount,
-			Median:         record.Stats.Median,
-			Baseline:       record.Baseline,
-			FallbackReason: record.FallbackReason,
-			Error:          record.Error,
+			Status:               record.Status,
+			Rows:                 record.RowCount,
+			Median:               record.Stats.Median,
+			Baseline:             record.Baseline,
+			FallbackReason:       record.FallbackReason,
+			Error:                record.Error,
+			RuntimeReceiptChains: runtimeReceiptChains(record.Stats.Samples),
 		}
 
 		if record.Baseline != nil {

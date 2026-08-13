@@ -116,6 +116,20 @@ func TestGeneratedDatasetVariantsAreParameterizedAndRepeatable(t *testing.T) {
 	require.Contains(t, fixedSuffix.Nodes[0].Properties["payload"], "xxxx")
 }
 
+// TestCompactBidirectionalRunsRequireRepeatableSnapshot verifies runner setup
+// opts into stable snapshots exactly when a forced or reference B1/B2 arm can run.
+func TestCompactBidirectionalRunsRequireRepeatableSnapshot(t *testing.T) {
+	require.True(t, compactBidirectionalSnapshotRequired(false, nil, "SP-B1-C-ALT-NODE-D"))
+	require.True(t, compactBidirectionalSnapshotRequired(false, nil, "SP-B2-C-MIN-LEVEL-WE+MAT-M0"))
+	require.True(t, compactBidirectionalSnapshotRequired(false, nil, "ASP-B1-DAG-ALT-NODE"))
+	require.True(t, compactBidirectionalSnapshotRequired(false, nil, "ASP-B2-DAG-MIN-LEVEL"))
+	require.True(t, compactBidirectionalSnapshotRequired(true, nil, ""))
+	require.True(t, compactBidirectionalSnapshotRequired(true, []string{"sp_b1_strict_alternating_distance"}, ""))
+	require.True(t, compactBidirectionalSnapshotRequired(true, []string{"asp_b2_bidirectional_dag_smaller_frontier_m0"}, ""))
+	require.False(t, compactBidirectionalSnapshotRequired(false, nil, "SP-S4-C-D"))
+	require.False(t, compactBidirectionalSnapshotRequired(true, []string{"s4_canonical_source_distance"}, ""))
+}
+
 // TestFixtureMetadataIncludesCardinalityAndChecksum verifies that generated fixtures expose their configuration, nonzero entity counts, and a full SHA-256 content digest.
 func TestFixtureMetadataIncludesCardinalityAndChecksum(t *testing.T) {
 	metadata, err := fixtureMetadata("unused", "generated_shortest_paths_d4_f16")

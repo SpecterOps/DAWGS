@@ -43,6 +43,10 @@ dirty-worktree hash (including untracked files), binary hash, sanitized invocati
 Go/OS/CPU/kernel/cgroup data, run UUID, arm/block/order timestamps, pool settings,
 and declared memory ceilings. Use
 `-dawgs-version` to override the auto-detected DAWGS version.
+Portable bundle creation reconstructs that dirty-worktree hash from the exact
+bundled binary patch plus sorted untracked path/content bytes and refuses a
+run-environment mismatch. Verification repeats the reconstruction and rejects
+malformed, duplicated, mismatched, or unchecksummed untracked entries/copies.
 
 GraphBench clears and reloads fixtures. A non-blocking local lock at
 `.coverage/graphbench.lock` prevents overlapping processes; override it with
@@ -114,18 +118,29 @@ confidence gate:
 ```bash
 make perf_gate \
   PERF_BASELINE=.coverage/graphbench-baseline.jsonl \
-  PERF_CANDIDATE=.coverage/graphbench-candidate.jsonl
+  PERF_CANDIDATE=.coverage/graphbench-candidate.jsonl \
+  PERF_GATE_AA=.coverage/perf-aa-resolution.json
 ```
 
-The versioned gate report includes artifact SHA-256 checksums, seeded 95%
+The versioned gate report includes artifact and A/A-report SHA-256 checksums,
+seeded 97.5%
 bootstrap intervals over matched round medians, stratified p95 intervals once
-each side has at least 150 samples, and the 20% comparable-corpus regression
-gate. The version-controlled corpus `candidate_modes` declarations are the
+each side has at least 150 samples, and candidate-minus-baseline p95 duration
+intervals. Normal and envelope timing uses the greater of the matching host
+A/A resolution and the 5%/100us minimum floors. Stress timing is descriptive;
+stress correctness and the independent resource gate still apply. Matched
+timing artifacts must carry complementary, round-balanced arm order, block,
+run UUID, and warmup evidence. The version-controlled corpus `candidate_modes` declarations are the
 required-key/status manifest: a missing or non-`ok` PostgreSQL record fails
 instead of disappearing through intersection-only comparison. Neo4j records
 must be present and `ok`, but Neo4j latency is informational and never fails a
-CySQL performance gate. Fewer than five matched PostgreSQL rounds or
-insufficient p95 samples is incomplete and fails.
+CySQL performance gate. Missing/malformed host A/A, tier, pairing, selection,
+round, or p95 evidence fails production promotion. Diagnostic comparisons may
+omit promotion evidence but cannot emit a passing promotion result.
+Prioritized traversal candidates additionally require nonempty, independently
+passing training and frozen-holdout cases for every concrete runtime candidate
+family; a holdout from ASP, another scheduler, or another observation boundary
+cannot qualify an SP candidate.
 
 Predeclare cases expected to improve with `PERF_TARGETS` (or
 `-gate-targets`). A target passes materiality when its median-ratio upper bound
@@ -137,9 +152,11 @@ baseline artifact with:
 make perf_aa PERF_AA_ARTIFACT=.coverage/graphbench-aa.jsonl
 ```
 
-The report splits alternating samples within every independent round, reports
-p50/p95 ratio and absolute resolution, and keeps p99 diagnostic until each arm
-has at least 10,000 samples.
+The report accepts exactly two explicitly executed A/A arms sharing one run
+UUID and SQL/workload identity. It requires complementary balanced order across
+at least five independent rounds, ten samples per arm and round, and fingerprints
+the host, reports p50/p95 ratio and absolute resolution, and keeps p99
+diagnostic until each arm has at least 10,000 samples.
 
 ### Targeted matched diagnostics
 
@@ -170,11 +187,38 @@ go build -trimpath -o .coverage/confirm/bin/graphbench ./cmd/graphbench
 ```
 
 `-bundle-dir` retains the tracked patch, checksummed copies of untracked files,
-`go.mod`/`go.sum`, the running executable, the selected corpus declaration, raw
+`go.mod`/`go.sum`, the running executable, the complete sorted corpus
+declaration and its independently recomputed identity, raw
 JSONL, a sanitized manifest, and bundle checksums. It never records connection
-strings or arbitrary environment variables.
+strings or arbitrary environment variables. Add repeatable, stable-named
+auxiliary evidence with `-bundle-evidence name=path`, for example
+`-bundle-evidence host-aa=.coverage/host-aa.json` and
+`-bundle-evidence plan-delta=.coverage/plan-delta.json`. Evidence names use only
+lowercase letters, digits, `-`, and `_`; the bundle records each source digest
+without retaining its host path. The destination must be new or empty so stale
+payloads cannot enter its checksum inventory.
 
-Compare matched arms, optionally applying the worse block/reload A/A report:
+Verify a portable bundle independently of database access. Verification rejects
+missing, additional, symlinked, malformed, or checksum-mismatched payloads and
+writes its report outside the bundle being checked:
+
+```bash
+go run ./cmd/graphbench \
+  -bundle-verify .coverage/confirm/candidate-round-1 \
+  -bundle-verify-output .coverage/candidate-round-1-verification.json \
+  -bundle-require-clean
+
+make perf_bundle_verify \
+  PERF_BUNDLE_VERIFY_DIR=.coverage/confirm/candidate-round-1 \
+  PERF_BUNDLE_REQUIRE_CLEAN=1
+```
+
+Omit `-bundle-require-clean` for a diagnostic capture that deliberately carries
+a source patch. Structural or checksum failures always produce a nonzero exit;
+the optional clean-source policy additionally rejects any dirty capture.
+
+Compare matched arms with the matching checksummed host A/A report. Only a
+same-executable block/reload A/A comparison may omit this input:
 
 ```bash
 make perf_confirm \
@@ -231,9 +275,11 @@ fixed-suffix expansion cases expose `search_ordered_ids`,
 `factored_suffix_forward_*`, `suffix_seeded_reverse_*`, and
 `backward_viability_forward_*` boundaries. Complete arms are exact-multiset
 checked against the public CySQL observation. Ordered-ID arms retain
-relationship IDs for trail uniqueness. When exactly five arms are selected,
-rounds use this fixed Williams/carryover-balanced slot schedule; other arm
-counts retain the historical alternating order:
+relationship IDs for trail uniqueness. Exactly three selected arms use a
+six-round doubled Williams design that places every arm in every position twice
+and balances every directed carryover pair twice. Exactly five arms use the
+fixed ten-round Williams/carryover-balanced slot schedule; other arm counts
+retain the historical alternating order:
 
 ```text
 0 1 4 2 3
@@ -296,6 +342,80 @@ then mutually exclusive reverse and incumbent branches. Generated
 matching/other endpoints, productive/unproductive lanes, cycles, and payload. Edge multiplicity is fixed at one because
 DAWGS storage uniquely keys edges by start, end, kind, and graph. Structured plan metrics
 report probe rows, guard overflow, and whether the incumbent branch executed.
+
+Traversal telemetry is disabled by default. Opt in with
+`-postgres-traversal-telemetry summary` or
+`-postgres-traversal-telemetry diagnostic`; both modes require
+`-pool-size 1` so the recorded backend identity cannot drift. Attachment runs
+after the timed case, reference, raw-PGX, and concurrency blocks. Summary mode
+uses only lightweight post-timing evidence and never performs the detailed
+invocation-local replay. For a function-backed B arm whose outer plan cannot
+prove its branch, it serializes `runtime_outcome_available=false` and leaves
+runtime/applied/fallback facts unset. Diagnostic mode additionally retains the existing
+`EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON)` plan replay. For SP-B1/B2 it also
+replays the exact SQL in a separate Repeatable Read transaction on that same
+physical connection, guarded by a unique invocation ID and the
+`begin/read/clear_bidirectional_shortest_path_diagnostic_v1` session-local API;
+ASP-B1/B2 uses the corresponding
+`begin/read/clear_bidirectional_all_shortest_path_diagnostic_v1` API.
+Cancellation and SQL errors roll the replay transaction back; replay duration
+is never added to latency samples.
+
+An outer PostgreSQL `Function Scan` is not treated as internal traversal work.
+SP/ASP B counters are retained only when the invocation ID, connection,
+scheduler, caps, exactly-one singleton search call, level rows, and runtime
+outcome all validate. A B candidate that
+executes exact S4 fallback retains its measured candidate/fallback evidence but
+is marked incomplete because nested S4 work is still opaque. Witness SP and all
+ASP executions separately require complete hydration counters. Workspace-backed
+B arms also require measured per-session and pool high-water bytes; declared
+memory flags alone never qualify. These counters are not yet exposed, so those
+records fail closed while retaining their validated search evidence. Other
+function-backed SP/ASP arms are recorded as
+`hidden_counters_unavailable`, never as zero work. The resource gate requires
+`counter_status=complete` for candidate architectures even when no numeric cap
+was declared.
+An emitted `orientation-probe-v1` policy requires orientation probes, selected
+ordinary expansion, and hydration families. Its exact executed-candidate and
+executed-incumbent marker rows must select one arm, the other must be zero, and
+each named probe may execute at most once; plan-derived partial evidence cannot
+qualify.
+Telemetry attaches to every reference whose declared architecture is itself a
+traversal or hydration boundary. Protocol, endpoint/root validation, and other
+component probes remain intentionally unannotated; their missing attachment is
+not missing traversal evidence.
+
+`-postgres-expansion-orientation-shadow` enables the tool-only
+`orientation-probe-v1` shadow statement. It always executes the exact forward
+incumbent and records the mutually exclusive SQL marker result separately as
+`would_select_identity`; it never relabels that hypothetical choice as the
+runtime or applied arm. The shadow flag is mutually exclusive with forced
+shortest-path and forced expansion selectors.
+
+Build the matched selector-regret and probe-overhead report from separate
+true-shadow, exact incumbent, and forced suffix-reverse artifacts plus the
+host A/A calibration:
+
+```bash
+go run ./cmd/graphbench \
+  -orientation-shadow-artifact .coverage/orientation-shadow.jsonl \
+  -orientation-incumbent-artifact .coverage/orientation-incumbent.jsonl \
+  -orientation-reverse-artifact .coverage/orientation-reverse.jsonl \
+  -orientation-aa .coverage/perf-aa-resolution.json \
+  -orientation-output .coverage/orientation-selector.json \
+  -orientation-protocol confirmation \
+  -confidence-level 0.975 -seed 1
+```
+
+The report requires exact matching observations, stable workload/SQL/binary
+identities, one SQL-derived `would_select_identity`, and position-balanced
+three-arm rounds. Selector regret must be within a `1.10` median-ratio upper
+bound or the host A/A absolute floor. Shadow probe overhead must be within
+`10%` or `100us`. Training records may inform the frozen selector; holdout
+records are evaluation-only; diagnostic and legacy records are serialized but
+excluded from qualification. Discovery uses 5-20 rounds, five warmups, and ten
+samples per arm. Confirmation uses 10-20 rounds, 20 warmups, and 50 samples per
+arm.
 
 The bounded same-statement fallback and keyset-continuation experiments are
 retired. They are not exposed by GraphBench or production translation. Their
@@ -399,6 +519,97 @@ candidate/baseline median and p95 ratios, absolute median change, and
 within-session A/A resolution without turning architecture selection into a
 post-hoc pass threshold.
 
+### Three- and five-arm reference tournaments
+
+Use the generic tournament reporter when a candidate family has three or five
+exact PostgreSQL reference arms. The first declared arm is the incumbent:
+
+```bash
+make perf_tournament \
+  PERF_TOURNAMENT_ARTIFACT=.coverage/tournament.jsonl \
+  PERF_TOURNAMENT_ARMS=expand_into_pair_join,expand_into_lower_degree_scan,expand_into_pair_cache \
+  PERF_TOURNAMENT_PROTOCOL=confirmation
+```
+
+The reporter verifies exact public observations, immutable SQL/implementation
+identity, the predeclared doubled-Williams measurement order, and per-round
+sample floors. A confirmation is promotion-eligible only when one stable
+candidate wins both training and frozen holdout, its median improvement clears
+the configured 5% or 100us materiality floor, and its p95 ratio upper bound is
+at most 1.05. Discovery reports are always non-promotional.
+
+Function-backed SP/ASP candidates and guarded orientation runs use a
+session-local receipt around every timed invocation when `-pool-size 1` is in
+effect. Arming and reading occur outside the measured interval. The receipt
+binds the requested identity to the exact executed branch, fallback outcome,
+and a singular record count. Multi-connection runs remain available for the
+operational matrix, but their timing samples are intentionally not eligible as
+per-invocation promotion evidence.
+
+### Promotion manifest
+
+Promotion is authorized only by a version-2 manifest that binds the candidate,
+selector, source/binary/corpus SHA-256 digests, immutable caps, exact query
+cohorts, training and frozen-holdout buckets, and checksummed A/A,
+confirmation, performance, resource, reference-closure, and operational
+reports. Version 1 is decoded only to reject it for new authorization.
+
+Every evidence report must repeat the manifest's complete authorization
+identity. Generate the role-specific report first, then attach the identity
+from a provisional manifest whose evidence map may still be empty:
+
+```bash
+go run ./cmd/graphbench \
+  -promotion-bind-manifest .coverage/promotion-provisional.json \
+  -promotion-bind-role performance \
+  -promotion-bind-input .coverage/performance-unbound.json \
+  -promotion-bind-output .coverage/performance.json
+```
+
+Repeat this for `aa`, `confirmation`, `performance`, `resource`,
+`reference_closure`, and `operational`, checksum the bound reports, and place
+those digests in the final manifest. Then verify the complete closure without
+opening a database connection:
+
+```bash
+go run ./cmd/graphbench \
+  -promotion-manifest .coverage/promotion.json \
+  -promotion-manifest-output .coverage/promotion-verification.json
+```
+
+Verification fails closed for missing roles, mutated reports, path traversal,
+non-passing evidence, invalid digests, absent caps, identity fields that differ
+from the manifest, or buckets that do not bind both qualification splits. This
+mode is mutually exclusive with benchmark, report, bind, and bundle operations.
+
+### Fixed-one-hop ExpandInto study
+
+Build the standalone three-arm fixed-one-hop report from records captured with
+the `expand_into_one_hop` category and its exact PostgreSQL references:
+
+```bash
+go run ./cmd/graphbench \
+  -expand-into-artifact .coverage/expand-into.jsonl \
+  -expand-into-output .coverage/expand-into-study.json \
+  -expand-into-protocol discovery \
+  -confidence-level 0.975 -seed 1
+
+make perf_expand_into \
+  PERF_EXPAND_INTO_ARTIFACT=.coverage/expand-into.jsonl \
+  PERF_EXPAND_INTO_PROTOCOL=confirmation
+```
+
+`discovery` requires 5-20 independently reloaded rounds, five warmups, and ten
+samples per arm per round. `confirmation` requires 10-20 rounds, 20 warmups,
+and 50 samples per arm per round. Both protocols require the frozen doubled
+Williams order for `expand_into_pair_join`, `expand_into_lower_degree_scan`, and
+`expand_into_pair_cache`, exact public observations, stable implementation/SQL
+identities, and persisted plan-cache/operator evidence. Confirmation reports
+also require one stable non-direct winner across training and frozen holdout,
+the configured 5% or 100us materiality floor, and p95 containment at 1.05.
+Even a passing report does not activate a production strategy; discovery
+remains evidence-only.
+
 Path-observed singleton cases additionally capture benchmark-only M0 and M1
 materializer arms. Whole-query comparison uses each architecture's minimal
 state: `SP-S3-U-E+MAT-M0` carries edge IDs only and derives node order from the
@@ -434,21 +645,28 @@ SP family and planned candidate identities, observation mode, minimum/maximum
 depth, selected/fallback executor, selector version/mode, limits, and stable
 fallback code. These fields are also copied into each exact target outcome.
 Call count and read-only status are statement-wide, including shortest calls or
-mutations separated by `WITH`. Selector `sp-static-v4` chooses `SP-S3-U-D` for
-qualified distance observations and bounded canonical `SP-S4-C-WE+MAT-M0` for
-qualified one-path observations. `SP-S3-U-E+MAT-M0` remains available only through
-the qualification forcing seam. Qualification requires one directed three-element shortest-path
+mutations separated by `WITH`. Selector `sp-static-v5-contained` chooses
+`SP-S3-U-D` for qualified distance observations, bounded
+`SP-S3-U-E+MAT-M0` for directed single-kind one-path observations, and
+canonical `SP-S4-C-WE+MAT-M0` for deep inbound, multi-kind, or untyped witness
+work. Qualification requires one directed three-element shortest-path
 traversal, a supported bounded depth, one static ID equality per endpoint, no
 relationship variable or predicate, no path predicate, one uncorrelated
 endpoint pair, one statement-wide shortest call, and a read-only statement.
-Selector `sp-static-v4` also records graph direction, physical expansion
+The selector also records graph direction, physical expansion
 column, relationship-kind count, wildcard state, and a static topology class.
-Deep `end_id` distance expansion selects canonical `SP-S4-C-D`. All selected
-one-path witnesses use `SP-S4-C-WE+MAT-M0`. S4 uses compact
+Deep `end_id` distance expansion selects canonical `SP-S4-C-D`. S4 uses compact
 ID state, a bounded ceiling, and exact same-statement overflow fallback.
 `asp-static-v1` selects `ASP-A1-DAG` for the narrow singleton all-shortest
 envelope and retains all minimum-depth predecessor edges before enumeration.
-Forced executors remain qualification seams.
+`ASP-I1-U-DAG+MAT-M0` is a distinct inline predecessor-DAG comparator and a
+default-off exact-query production canary. Its guarded statement records the
+executed candidate/no-path/A1-fallback branch, uses immutable manifest caps,
+and requires Repeatable Read or Serializable isolation. Forced executors
+remain qualification seams.
+`SP-I1-C-WE+MAT-M0` is the corresponding guarded canonical-predecessor witness
+canary, with four cap+1 gates, inline M0 hydration, exact S4 fallback, and an
+ordered runtime fallback event chain.
 
 ## Existing graph non-mutating mode
 
@@ -540,16 +758,28 @@ outer production result.
 
 Shortest tournament references are independently selectable with
 `-postgres-reference-arms s4_canonical_source_distance`,
-`s4_canonical_source_witness_m0`, and
-`asp_a1_predecessor_dag_m0`. They are exact full-query comparators at the same
-public observation boundary, not production selectors. The first canonicalizes
-inbound search to physical `start_id -> end_id`; the witness arm discovers
-compact node/depth state and reconstructs one deterministic predecessor trail;
-the ASP arm retains every relationship-distinct shortest-depth predecessor and
-enumerates the resulting DAG. The corresponding production identities are
-forceable with `-postgres-force-shortest-executor SP-S4-C-D`,
-`SP-S4-C-WE+MAT-M0`, or `ASP-A1-DAG`; activation evidence still requires the
-saved plan/resource, holdout, concurrency, cancellation, and reference-closure gates.
+`s4_canonical_source_witness_m0`, `sp_b1_strict_alternating_distance`,
+`sp_b1_strict_alternating_witness_m0`,
+`sp_b2_smaller_frontier_distance`,
+`sp_b2_smaller_frontier_witness_m0`, `asp_a1_stored_helper_m0`,
+`asp_i1_inline_predecessor_dag_m0`,
+`asp_b1_bidirectional_dag_strict_m0`, and
+`asp_b2_bidirectional_dag_smaller_frontier_m0`. They are exact full-query comparators at the same
+public observation boundary, not production selectors. S4 canonicalizes inbound
+search to physical `start_id -> end_id`; B1 alternates one accepted node per
+side, while B2 expands the smaller complete current level with a deterministic
+forward tie-break. Both candidates retain ID-only state, reconstruct one stable
+witness late, and fall back to exact S4 before output if a seen, frontier, or
+predecessor cap overflows. Their multi-statement functions reject Read Committed;
+GraphBench runs any selected B1/B2 production or reference arm at Repeatable
+Read so candidate search and fallback share one transaction snapshot. The ASP
+arms retain every relationship-distinct shortest-depth predecessor, select one
+canonical completed meeting cut, and separately cap discovery state, frontier,
+predecessors, saturating path count, enumerated rows, and output bytes before
+exact A1 fallback. SP and ASP identities are forceable with
+`-postgres-force-shortest-executor`; automatic selection remains on S3/S4 for
+SP and A1 for ASP. Activation evidence still requires the saved
+plan/resource, holdout, concurrency, cancellation, and reference-closure gates.
 
 `-backend-delta-artifact combined.jsonl -backend-delta-output deltas.json`
 produces matched PostgreSQL/Neo4j median and p95 ratios only when both records

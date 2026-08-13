@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,19 +53,23 @@ func TestWritePlanRecordsWritesJSONLines(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "records.jsonl")
 
 	err := writePlanRecords(path, []PlanRecord{{
-		Driver: "pg",
-		Source: "cases/example.json",
-		Name:   "example",
-		Cypher: "MATCH (n) RETURN n",
+		SchemaVersion:  planRecordSchemaVersion,
+		Driver:         "pg",
+		Source:         "cases/example.json",
+		Name:           "example",
+		WorkloadSHA256: "workload",
+		Cypher:         "MATCH (n) RETURN n",
 	}})
 	require.NoError(t, err)
 
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.JSONEq(t, `{
+		"schema_version": 2,
 		"driver": "pg",
 		"source": "cases/example.json",
 		"name": "example",
+		"workload_sha256": "workload",
 		"cypher": "MATCH (n) RETURN n",
 		"metadata": {
 			"dawgs_version": ""
@@ -170,4 +175,23 @@ func TestParseNeo4jPlanDriverConfigRejectsNestedDatabasePath(t *testing.T) {
 		_, err := parseNeo4jPlanDriverConfig(connStr)
 		require.ErrorContains(t, err, "single database name")
 	}
+}
+
+// TestRegularQueryHasUpdatesDistinguishesReadProfilesFromWriteExplains verifies
+// the PlanCorpus Neo4j command boundary cannot execute mutations during capture.
+func TestRegularQueryHasUpdatesDistinguishesReadProfilesFromWriteExplains(t *testing.T) {
+	for _, testCase := range []struct {
+		query string
+		write bool
+	}{{query: "MATCH (n) RETURN n", write: false}, {query: "CREATE (n) RETURN n", write: true}, {query: "MATCH (n) WITH n SET n.x = 1 RETURN n", write: true}} {
+		parsed, err := frontend.ParseCypher(frontend.NewContext(), testCase.query)
+		require.NoError(t, err)
+		require.Equal(t, testCase.write, regularQueryHasUpdates(parsed), testCase.query)
+	}
+}
+
+// TestNormalizeNeo4jOperatorAppliesOneSuffix verifies historical doubled backend suffixes are canonicalized.
+func TestNormalizeNeo4jOperatorAppliesOneSuffix(t *testing.T) {
+	require.Equal(t, "ShortestPath@neo4j", normalizeNeo4jOperator("ShortestPath@neo4j@neo4j"))
+	require.Equal(t, "ShortestPath@neo4j", normalizeNeo4jOperator("ShortestPath"))
 }

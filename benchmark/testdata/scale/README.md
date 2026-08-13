@@ -77,8 +77,16 @@ has a stable `logical_key`. Metadata records root and per-level degrees,
 physical edges by kind, distinct reachable nodes by level, minimum distance,
 path cardinalities, predecessor edges, disconnected state, parallel physical
 edges and distinct targets, checksum, and loaded physical cardinality.
+The ASP qualification subset includes separate training and frozen holdout
+cases for outbound and inbound searches, early and maximum-depth targets,
+disconnected pairs, parallel relationship kinds, diamond multiplicity, and
+stress enumeration. These shapes distinguish stored-helper `ASP-A1-DAG` from
+inline `ASP-I1-U-DAG+MAT-M0` at the same full path-multiset boundary.
 
-`shape.fixture_tier` is one of `normal`, `envelope`, or `stress`; direction,
+`shape.fixture_tier` is one of `normal`, `envelope`, or `stress`.
+`shape.qualification_split` is independently one of `training`, `holdout`, or
+`diagnostic`; selector thresholds may use training records but must be frozen
+before holdout records are opened. Direction,
 relationship-kind count, expected state class, and result-cardinality class
 are stored alongside it. Stress cases remain exact diagnostics and are not
 silently promoted to release p95 evidence.
@@ -105,6 +113,15 @@ root lanes converging on one boundary, a reusable-node cycle, two physical suffi
 paths, and noncanonical logical IDs. Its 68-row endpoint bag proves
 relationship-trail rejection and multiplicity independently of the generated
 limit fixtures.
+
+The file-backed `expand_into` fixture and `cases/expand_into.json` form the
+fixed-one-hop, bound-pair plan study. They cover typed, wildcard, and multi-kind
+matches; cross-kind relationship multiplicity; duplicate and missing outer
+pairs; self-loops; and both asymmetric degree orientations. The
+`source_lower_degree` and `target_lower_degree` cases deliberately reverse which
+endpoint has the cheaper typed adjacency so the pair join, lower-degree scan,
+and statement-local pair-cache references are compared at the same complete
+relationship observation boundary.
 
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
 summaries. Exact case/dataset/category/tag selectors are intended for targeted

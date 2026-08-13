@@ -129,11 +129,9 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 	}
 
 	prefixFrame := prefixStep.Frame.Binding.Identifier
-	endpointOverflow := endpointSeededOverflow(ids.endpoints, decision.EndpointLimit)
-	stateOverflow := endpointSeededOverflow(ids.states, decision.StateLimit)
-	admitted := pgsql.OptionalAnd(
-		pgd.Not(endpointOverflow),
-		pgd.Not(stateOverflow),
+	admitted, fallbackGate := boundedAdmissionGates(
+		boundedProbeLimit{source: ids.endpoints, limit: decision.EndpointLimit},
+		boundedProbeLimit{source: ids.states, limit: decision.StateLimit},
 	)
 
 	prefixEdgeIDs := pgsql.ArrayLiteral{
@@ -173,7 +171,7 @@ func (s *Translator) buildGuardedEndpointSeededQuery(
 	fallback := pgsql.Select{
 		Projection: fallbackProjection,
 		From:       []pgsql.FromClause{tableFrom(ids.incumbent)},
-		Where:      pgsql.NewBinaryExpression(endpointOverflow, pgsql.OperatorOr, stateOverflow),
+		Where:      fallbackGate,
 	}
 
 	return pgsql.Query{
@@ -256,31 +254,12 @@ func buildEndpointReverseCTE(decision optimize.ExpansionSearchStrategyDecision, 
 
 // buildEndpointStateProbeCTE materializes at most the guarded number of reverse states for candidate matching.
 func buildEndpointStateProbeCTE(decision optimize.ExpansionSearchStrategyDecision, ids endpointSeededIdentifiers) pgsql.CommonTableExpression {
-	return pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: ids.states},
-		Materialized: &pgsql.Materialized{Materialized: true},
-		Query: pgsql.Query{
-			Body: pgsql.Select{
-				Projection: []pgsql.SelectItem{
-					pgsql.CompoundIdentifier{ids.reverse, expansionRootID},
-					pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
-					pgsql.CompoundIdentifier{ids.reverse, expansionDepth},
-					pgsql.CompoundIdentifier{ids.reverse, expansionPath},
-				},
-				From: []pgsql.FromClause{tableFrom(ids.reverse)},
-			},
-			Limit: pgsql.NewLiteral(decision.StateLimit+1, pgsql.Int8),
-		},
-	}
-}
-
-// endpointSeededOverflow returns an EXISTS expression that detects rows beyond the admitted limit.
-func endpointSeededOverflow(source pgsql.Identifier, limit int64) pgsql.ExistsExpression {
-	return pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{
-		Body:   pgsql.Select{Projection: []pgsql.SelectItem{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: []pgsql.FromClause{tableFrom(source)}},
-		Offset: pgsql.NewLiteral(limit, pgsql.Int8),
-		Limit:  pgsql.NewLiteral(int64(1), pgsql.Int8),
-	}}}
+	return boundedTraversalStateProbe(ids.states, ids.reverse, []pgsql.Identifier{
+		expansionRootID,
+		expansionNextID,
+		expansionDepth,
+		expansionPath,
+	}, decision.StateLimit)
 }
 
 // endpointSeededProjections aligns reverse-search results and incumbent rows to the original projection shape.

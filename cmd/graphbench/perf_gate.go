@@ -30,7 +30,7 @@ import (
 
 const (
 	// perfGateVersion identifies the serialized schema revision for perf gate.
-	perfGateVersion = 2
+	perfGateVersion = 5
 
 	// defaultBootstrapCount sets the fallback number of resamples used to estimate confidence bounds.
 	defaultBootstrapCount = 10_000
@@ -40,6 +40,9 @@ const (
 
 	// minimumP95Samples requires this many warm samples per arm before the P95 ratio is gated.
 	minimumP95Samples = 150
+
+	// minimumDiscoveryWarmups requires the discovery protocol's untimed warmup floor.
+	minimumDiscoveryWarmups = 5
 )
 
 // PerfGateOptions defines statistical confidence, materiality, targets, and declared backend coverage for gating.
@@ -62,6 +65,12 @@ type PerfGateOptions struct {
 	MaterialityAbsolute time.Duration
 	// DiagnosticMode allows incomplete diagnostic selections that cannot produce a release-gate pass.
 	DiagnosticMode bool
+	// AAReportPath selects the host A/A evidence loaded by artifact comparison mode.
+	AAReportPath string
+	// AAReport contains host-specific per-case timing resolution required for promotion.
+	AAReport *AAResolutionReport
+	// AAReportSHA256 identifies the exact A/A report supplied to the gate.
+	AAReportSHA256 string
 }
 
 // RatioInterval describes a point estimate and confidence bounds for a latency ratio.
@@ -92,6 +101,12 @@ type PerfGateCase struct {
 	Name string `json:"name"`
 	// Backend identifies the execution backend.
 	Backend ExecutionMode `json:"backend"`
+	// Tier identifies whether timing is gated or stress-diagnostic.
+	Tier string `json:"tier"`
+	// QualificationSplit identifies training, frozen holdout, or diagnostic evidence.
+	QualificationSplit string `json:"qualification_split"`
+	// TimingGated reports whether latency evidence contributes to promotion.
+	TimingGated bool `json:"timing_gated"`
 	// Rounds records the number of independent measurement rounds.
 	Rounds int `json:"rounds"`
 	// BaselineSamples records warm timing samples available from the baseline arm.
@@ -110,6 +125,18 @@ type PerfGateCase struct {
 	P95Ratio *RatioInterval `json:"p95_ratio,omitempty"`
 	// MedianSaving reports absolute median latency saved by the candidate.
 	MedianSaving *DurationInterval `json:"median_saving,omitempty"`
+	// MedianChange reports candidate-minus-baseline median latency.
+	MedianChange *DurationInterval `json:"median_change,omitempty"`
+	// P95Change reports candidate-minus-baseline P95 latency.
+	P95Change *DurationInterval `json:"p95_change,omitempty"`
+	// P50NoiseRatio records the host A/A-derived relative median floor.
+	P50NoiseRatio float64 `json:"p50_noise_ratio,omitempty"`
+	// P50NoiseAbsolute records the host A/A-derived absolute median floor.
+	P50NoiseAbsolute time.Duration `json:"p50_noise_absolute,omitempty"`
+	// P95NoiseRatio records the host A/A-derived relative P95 floor.
+	P95NoiseRatio float64 `json:"p95_noise_ratio,omitempty"`
+	// P95NoiseAbsolute records the host A/A-derived absolute P95 floor.
+	P95NoiseAbsolute time.Duration `json:"p95_noise_absolute,omitempty"`
 	// MaterialityRatio sets the relative change required before a difference is material.
 	MaterialityRatio *float64 `json:"materiality_ratio_upper_limit,omitempty"`
 	// MaterialityAbsolute sets the absolute duration change required before a difference is material.
@@ -118,6 +145,9 @@ type PerfGateCase struct {
 	Passed bool `json:"passed"`
 	// Reasons lists explanations for the reported disposition.
 	Reasons []string `json:"reasons,omitempty"`
+	// CandidateRuntimeReceiptChains preserves complete measured candidate
+	// branch chains used by the performance decision.
+	CandidateRuntimeReceiptChains [][]RuntimeReceiptEvent `json:"candidate_runtime_receipt_chains,omitempty"`
 }
 
 // PerfGateReport contains baseline and candidate identities, gate policy, and every workload disposition.
@@ -134,10 +164,34 @@ type PerfGateReport struct {
 	BaselineSHA256 string `json:"baseline_sha256"`
 	// CandidateSHA256 identifies the exact candidate artifact evaluated by the gate.
 	CandidateSHA256 string `json:"candidate_sha256"`
+	// AAReportSHA256 identifies the exact host A/A resolution report evaluated by the gate.
+	AAReportSHA256 string `json:"aa_report_sha256,omitempty"`
 	// DeclarationSHA256 identifies the canonical set of declared workloads.
 	DeclarationSHA256 string `json:"declaration_sha256,omitempty"`
 	// Passed reports whether every required gate condition succeeded.
 	Passed bool `json:"passed"`
+	// PromotionEligible reports whether this complete, non-diagnostic evidence may support production promotion.
+	PromotionEligible bool `json:"promotion_eligible"`
+	// MaterialityRequired reports that promotion requires at least one explicitly named improvement target.
+	MaterialityRequired bool `json:"materiality_required"`
+	// MaterialityTargets records the number of declared timing targets resolved by the artifact.
+	MaterialityTargets int `json:"materiality_targets"`
+	// MaterialityPassed reports whether every resolved target cleared the configured A/A-aware improvement floor.
+	MaterialityPassed bool `json:"materiality_passed"`
+	// QualificationRequired reports whether the artifact contains a prioritized traversal candidate that requires independent training and frozen-holdout gates.
+	QualificationRequired bool `json:"qualification_required"`
+	// TrainingCases records prioritized traversal cases gated on the selector-training partition.
+	TrainingCases int `json:"training_cases"`
+	// HoldoutCases records prioritized traversal cases gated on the frozen topology holdout.
+	HoldoutCases int `json:"holdout_cases"`
+	// TrainingPassed reports whether every observed prioritized training case passed.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed reports whether every observed prioritized holdout case passed.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// QualificationPassed reports whether nonempty training and holdout partitions independently passed.
+	QualificationPassed bool `json:"qualification_passed"`
+	// QualificationFamilies contains the independent split disposition for each concrete traversal candidate family.
+	QualificationFamilies []TraversalQualificationStatus `json:"qualification_families,omitempty"`
 	// Cases contains the gate disposition and statistical evidence for each declared workload.
 	Cases []PerfGateCase `json:"cases"`
 }
@@ -169,6 +223,12 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	if err := validatePerformanceArtifactSelections(baseline, candidate, options.DiagnosticMode); err != nil {
 		return false, err
 	}
+	if options.AAReportPath != "" {
+		options.AAReport, options.AAReportSHA256, err = loadAAResolutionReport(options.AAReportPath)
+		if err != nil {
+			return false, fmt.Errorf("load performance-gate A/A evidence: %w", err)
+		}
+	}
 
 	baselineChecksum, err := fileSHA256(baselinePath)
 	if err != nil {
@@ -189,7 +249,7 @@ func comparePerformanceArtifacts(baselinePath, candidatePath, outputPath string,
 	if err := writePerfGateReport(outputPath, report); err != nil {
 		return false, err
 	}
-	return report.Passed, nil
+	return report.Passed && report.PromotionEligible, nil
 }
 
 // validatePerformanceArtifactSelections rejects adaptive or diagnostic artifacts when complete-gate input is required.
@@ -199,13 +259,11 @@ func validatePerformanceArtifactSelections(baseline, candidate []CaseResult, dia
 	}
 	baselineSelection, baselineErr := selectionIdentity(baseline)
 	candidateSelection, candidateErr := selectionIdentity(candidate)
-	// Version-1 historical artifacts predate selection manifests and remain
-	// valid only for the ordinary complete-corpus gate.
 	if baselineErr != nil || candidateErr != nil {
 		if diagnosticMode {
 			return fmt.Errorf("diagnostic comparison requires selection manifests in both artifacts")
 		}
-		return nil
+		return fmt.Errorf("complete performance gate requires selection manifests in both artifacts")
 	}
 	if baselineSelection.DiagnosticOnly || candidateSelection.DiagnosticOnly {
 		if !diagnosticMode {
@@ -283,6 +341,42 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 	if len(keys) == 0 {
 		return PerfGateReport{}, fmt.Errorf("artifacts and declaration contain no PostgreSQL or Neo4j cases")
 	}
+	tiers := make(map[performanceKey]string, len(keys))
+	splits := make(map[performanceKey]string, len(keys))
+	hasPromotionTiming := false
+	for _, key := range keys {
+		tier, err := timingTier(key, baseline, candidate)
+		if err != nil {
+			return PerfGateReport{}, err
+		}
+		tiers[key] = tier
+		split, err := qualificationSplit(key, baseline, candidate)
+		if err != nil {
+			return PerfGateReport{}, err
+		}
+		splits[key] = split
+		if key.backend == ModePostgresSQL && (tier == "normal" || tier == "envelope") && promotionTimingSplit(split) {
+			hasPromotionTiming = true
+		}
+	}
+	if hasPromotionTiming && !options.DiagnosticMode {
+		if !validSHA256(options.AAReportSHA256) {
+			return PerfGateReport{}, fmt.Errorf("complete performance gate requires a checksummed host A/A report")
+		}
+		if err := validateAAResolutionEvidence(options.AAReport, baseline, options.Confidence); err != nil {
+			return PerfGateReport{}, fmt.Errorf("baseline A/A evidence: %w", err)
+		}
+		if err := validateAAResolutionEvidence(options.AAReport, candidate, options.Confidence); err != nil {
+			return PerfGateReport{}, fmt.Errorf("candidate A/A evidence: %w", err)
+		}
+	} else if options.AAReport != nil {
+		if !validSHA256(options.AAReportSHA256) {
+			return PerfGateReport{}, fmt.Errorf("supplied A/A report checksum is malformed")
+		}
+		if err := validateAAResolutionEvidence(options.AAReport, baseline, options.Confidence); err != nil {
+			return PerfGateReport{}, err
+		}
+	}
 	targetNames := make(map[string]struct{}, len(options.TargetNames))
 	for _, name := range options.TargetNames {
 		targetNames[name] = struct{}{}
@@ -293,8 +387,16 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 		Seed:                options.Seed,
 		Confidence:          options.Confidence,
 		RegressionThreshold: options.RegressionThreshold,
+		AAReportSHA256:      options.AAReportSHA256,
 		Passed:              true,
+		PromotionEligible:   !options.DiagnosticMode && hasPromotionTiming && len(targetNames) > 0,
+		MaterialityRequired: hasPromotionTiming && !options.DiagnosticMode,
+		MaterialityPassed:   len(targetNames) > 0,
+		TrainingPassed:      true,
+		HoldoutPassed:       true,
 	}
+	resolvedMaterialityTargets := map[string]struct{}{}
+	qualification := map[string]*TraversalQualificationStatus{}
 	if len(options.DeclaredBackends) > 0 {
 		report.DeclarationSHA256 = declarationSHA256(options.DeclaredBackends)
 	}
@@ -303,20 +405,30 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 		candidateStatus := artifactCaseStatus(candidate, key)
 		baselineRounds, candidateRounds := matchedRounds(baselineSeries[key], candidateSeries[key])
 		gateCase := PerfGateCase{
-			Dataset:          key.dataset,
-			Name:             key.name,
-			Backend:          key.backend,
-			Rounds:           len(baselineRounds),
-			BaselineSamples:  sampleCount(baselineRounds),
-			CandidateSamples: sampleCount(candidateRounds),
-			BaselineStatus:   baselineStatus,
-			CandidateStatus:  candidateStatus,
-			OracleOnly:       key.backend == ModeNeo4j,
-			Passed:           true,
+			Dataset:                       key.dataset,
+			Name:                          key.name,
+			Backend:                       key.backend,
+			Tier:                          tiers[key],
+			QualificationSplit:            splits[key],
+			TimingGated:                   key.backend == ModePostgresSQL && (tiers[key] == "normal" || tiers[key] == "envelope") && promotionTimingSplit(splits[key]) && !options.DiagnosticMode,
+			Rounds:                        len(baselineRounds),
+			BaselineSamples:               sampleCount(baselineRounds),
+			CandidateSamples:              sampleCount(candidateRounds),
+			BaselineStatus:                baselineStatus,
+			CandidateStatus:               candidateStatus,
+			OracleOnly:                    key.backend == ModeNeo4j,
+			Passed:                        true,
+			CandidateRuntimeReceiptChains: caseRuntimeReceiptChains(candidate, key),
 		}
 		if candidateStatus != StatusOK {
 			gateCase.Passed = false
 			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("required candidate record status is %s", candidateStatus))
+		}
+		if gateCase.TimingGated {
+			if err := validateCandidateRuntimeEvidence(candidate, key); err != nil {
+				gateCase.Passed = false
+				gateCase.Reasons = append(gateCase.Reasons, err.Error())
+			}
 		}
 		// Neo4j is a correctness oracle. A successful record means its untimed
 		// exact observation checks passed; its latency never affects this gate.
@@ -331,9 +443,38 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 			gateCase.Passed = false
 			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("required baseline record status is %s", baselineStatus))
 		}
-		if len(baselineRounds) < minimumGateRounds {
+		if gateCase.TimingGated && len(baselineRounds) < minimumGateRounds {
 			gateCase.Passed = false
 			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("need at least %d matched rounds, got %d", minimumGateRounds, len(baselineRounds)))
+		}
+		if gateCase.TimingGated && len(baselineRounds) > 0 {
+			if err := validatePairedOrderEvidence(baseline, candidate, key, sortedRounds(baselineRounds), minimumDiscoveryWarmups); err != nil {
+				return PerfGateReport{}, fmt.Errorf("invalid promotion evidence: %w", err)
+			}
+		}
+		if tiers[key] == "stress" {
+			gateCase.Reasons = append(gateCase.Reasons, "stress tier timing is diagnostic")
+		}
+		if splits[key] == "diagnostic" {
+			gateCase.Reasons = append(gateCase.Reasons, "diagnostic qualification split is excluded from promotion timing")
+		}
+
+		gateCase.P50NoiseRatio, gateCase.P50NoiseAbsolute = minimumTimingNoiseRatio, minimumTimingNoiseAbsolute
+		gateCase.P95NoiseRatio, gateCase.P95NoiseAbsolute = minimumTimingNoiseRatio, minimumTimingNoiseAbsolute
+		if options.AAReport != nil {
+			if ratio, absolute, err := aaTimingFloor(options.AAReport, key, false, options.RegressionThreshold); err == nil {
+				gateCase.P50NoiseRatio, gateCase.P50NoiseAbsolute = ratio, absolute
+			} else if gateCase.TimingGated {
+				return PerfGateReport{}, err
+			}
+			if ratio, absolute, err := aaTimingFloor(options.AAReport, key, true, options.RegressionThreshold); err == nil {
+				gateCase.P95NoiseRatio, gateCase.P95NoiseAbsolute = ratio, absolute
+			} else if gateCase.TimingGated {
+				return PerfGateReport{}, err
+			}
+		} else {
+			gateCase.P50NoiseRatio = max(gateCase.P50NoiseRatio, options.RegressionThreshold)
+			gateCase.P95NoiseRatio = max(gateCase.P95NoiseRatio, options.RegressionThreshold)
 		}
 
 		seed := options.Seed + int64(idx)*7919
@@ -341,40 +482,103 @@ func buildPerfGateReport(baseline, candidate []CaseResult, options PerfGateOptio
 			gateCase.MedianRatio = bootstrapRoundMedianRatio(baselineRounds, candidateRounds, seed, options)
 			saving := bootstrapRoundMedianSaving(baselineRounds, candidateRounds, seed+3, options)
 			gateCase.MedianSaving = &saving
-			if gateCase.MedianRatio.Lower > 1+options.RegressionThreshold {
+			change := negateDurationInterval(saving)
+			gateCase.MedianChange = &change
+			if gateCase.TimingGated && gateCase.MedianRatio.Lower > 1+gateCase.P50NoiseRatio && change.Lower > gateCase.P50NoiseAbsolute {
 				gateCase.Passed = false
-				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("median regression lower bound %.4f exceeds %.4f", gateCase.MedianRatio.Lower, 1+options.RegressionThreshold))
+				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("median regression exceeds host A/A floors: ratio lower %.4f > %.4f and change lower %s > %s", gateCase.MedianRatio.Lower, 1+gateCase.P50NoiseRatio, change.Lower, gateCase.P50NoiseAbsolute))
 			}
 		}
 
 		if gateCase.BaselineSamples >= minimumP95Samples && gateCase.CandidateSamples >= minimumP95Samples {
 			interval := bootstrapStratifiedP95Ratio(baselineRounds, candidateRounds, seed+1, options)
 			gateCase.P95Ratio = &interval
-			if interval.Lower > 1+options.RegressionThreshold {
+			change := bootstrapStratifiedQuantileChange(baselineRounds, candidateRounds, 0.95, seed+2, options)
+			gateCase.P95Change = &change
+			if gateCase.TimingGated && interval.Lower > 1+gateCase.P95NoiseRatio && change.Lower > gateCase.P95NoiseAbsolute {
 				gateCase.Passed = false
-				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("p95 regression lower bound %.4f exceeds %.4f", interval.Lower, 1+options.RegressionThreshold))
+				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("p95 regression exceeds host A/A floors: ratio lower %.4f > %.4f and change lower %s > %s", interval.Lower, 1+gateCase.P95NoiseRatio, change.Lower, gateCase.P95NoiseAbsolute))
 			}
-		} else {
+		} else if gateCase.TimingGated {
 			gateCase.Passed = false
 			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("need at least %d warm samples per side for p95, got %d/%d", minimumP95Samples, gateCase.BaselineSamples, gateCase.CandidateSamples))
 		}
 
-		if _, isTarget := targetNames[key.name]; isTarget && len(baselineRounds) > 0 {
-			gateCase.MaterialityRatio = &options.MaterialityRatio
-			gateCase.MaterialityAbsolute = &options.MaterialityAbsolute
-			materialRatio := gateCase.MedianRatio.Upper <= options.MaterialityRatio
-			materialAbsolute := gateCase.MedianSaving != nil && gateCase.MedianSaving.Lower >= options.MaterialityAbsolute
+		if _, isTarget := targetNames[key.name]; isTarget && gateCase.TimingGated && len(baselineRounds) > 0 {
+			resolvedMaterialityTargets[key.name] = struct{}{}
+			effectiveRatio := min(options.MaterialityRatio, 1-gateCase.P50NoiseRatio)
+			effectiveAbsolute := max(options.MaterialityAbsolute, gateCase.P50NoiseAbsolute)
+			gateCase.MaterialityRatio = &effectiveRatio
+			gateCase.MaterialityAbsolute = &effectiveAbsolute
+			materialRatio := gateCase.MedianRatio.Upper <= effectiveRatio
+			materialAbsolute := gateCase.MedianSaving != nil && gateCase.MedianSaving.Lower >= effectiveAbsolute
 			if !materialRatio && !materialAbsolute {
 				gateCase.Passed = false
-				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("target improvement is not material: median ratio upper %.4f > %.4f and saving lower %s < %s", gateCase.MedianRatio.Upper, options.MaterialityRatio, gateCase.MedianSaving.Lower, options.MaterialityAbsolute))
+				report.MaterialityPassed = false
+				gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("target improvement is not material: median ratio upper %.4f > %.4f and saving lower %s < %s", gateCase.MedianRatio.Upper, effectiveRatio, gateCase.MedianSaving.Lower, effectiveAbsolute))
 			}
 		}
 
 		if !gateCase.Passed {
 			report.Passed = false
 		}
+		if prioritizedTraversalKey(key, baseline, candidate) && gateCase.TimingGated {
+			report.QualificationRequired = true
+			family := traversalQualificationFamily(key, baseline, candidate)
+			status := qualification[family]
+			if status == nil {
+				status = &TraversalQualificationStatus{Family: family, TrainingPassed: true, HoldoutPassed: true}
+				qualification[family] = status
+			}
+			switch gateCase.QualificationSplit {
+			case "training":
+				report.TrainingCases++
+				report.TrainingPassed = report.TrainingPassed && gateCase.Passed
+				status.TrainingCases++
+				status.TrainingPassed = status.TrainingPassed && gateCase.Passed
+			case "holdout":
+				report.HoldoutCases++
+				report.HoldoutPassed = report.HoldoutPassed && gateCase.Passed
+				status.HoldoutCases++
+				status.HoldoutPassed = status.HoldoutPassed && gateCase.Passed
+			}
+		}
 		report.Cases = append(report.Cases, gateCase)
 	}
+	report.MaterialityTargets = len(resolvedMaterialityTargets)
+	if report.MaterialityRequired {
+		if len(targetNames) == 0 {
+			report.MaterialityPassed = false
+		}
+		if report.MaterialityTargets != len(targetNames) {
+			return PerfGateReport{}, fmt.Errorf("materiality targets resolved to %d timing-gated cases, expected %d", report.MaterialityTargets, len(targetNames))
+		}
+	}
+	if report.QualificationRequired {
+		families := make([]string, 0, len(qualification))
+		for family := range qualification {
+			families = append(families, family)
+		}
+		sort.Strings(families)
+		for _, family := range families {
+			status := qualification[family]
+			status.TrainingPassed = status.TrainingPassed && status.TrainingCases > 0
+			status.HoldoutPassed = status.HoldoutPassed && status.HoldoutCases > 0
+			status.Passed = status.TrainingPassed && status.HoldoutPassed
+			report.TrainingPassed = report.TrainingPassed && status.TrainingPassed
+			report.HoldoutPassed = report.HoldoutPassed && status.HoldoutPassed
+			report.QualificationFamilies = append(report.QualificationFamilies, *status)
+		}
+		report.QualificationPassed = report.TrainingPassed && report.HoldoutPassed
+		report.Passed = report.Passed && report.QualificationPassed
+	} else {
+		report.TrainingPassed = false
+		report.HoldoutPassed = false
+	}
+	if options.DiagnosticMode {
+		report.Passed = false
+	}
+	report.PromotionEligible = report.PromotionEligible && report.Passed && report.MaterialityPassed
 
 	return report, nil
 }

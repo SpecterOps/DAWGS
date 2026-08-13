@@ -59,6 +59,34 @@ func TestValidateScaleCaseRequiresConsistentUnsupportedModes(t *testing.T) {
 	require.ErrorContains(t, validateScaleCase(testCase), "requires a reason")
 }
 
+// TestValidateScaleCaseFreezesTraversalQualificationSplit verifies prioritized
+// traversal cases cannot silently move between training, holdout, and
+// diagnostic evidence after selector thresholds are chosen.
+func TestValidateScaleCaseFreezesTraversalQualificationSplit(t *testing.T) {
+	testCase := ScaleCase{
+		Name: "qualified", Dataset: "generated", Category: "generated_shortest_path_v2",
+		Cypher:         "MATCH p = shortestPath((s)-[*]->(e)) RETURN p",
+		CandidateModes: []ExecutionMode{ModePostgresSQL},
+		Shape:          WorkloadShape{FixtureTier: "normal"},
+	}
+
+	require.ErrorContains(t, validateScaleCase(testCase), "qualification_split is required")
+	testCase.Shape.QualificationSplit = "training"
+	require.NoError(t, validateScaleCase(testCase))
+
+	testCase.Tags = []string{"holdout"}
+	require.ErrorContains(t, validateScaleCase(testCase), "holdout-tagged")
+	testCase.Shape.QualificationSplit = "holdout"
+	require.NoError(t, validateScaleCase(testCase))
+
+	testCase.Tags = nil
+	require.ErrorContains(t, validateScaleCase(testCase), "requires the holdout tag")
+	testCase.Shape = WorkloadShape{FixtureTier: "stress", QualificationSplit: "training"}
+	require.ErrorContains(t, validateScaleCase(testCase), "stress traversal")
+	testCase.Shape.QualificationSplit = "diagnostic"
+	require.NoError(t, validateScaleCase(testCase))
+}
+
 // TestScaleCorpusDatasets verifies that corpus dataset discovery removes repeated names and returns a deterministic lexical order.
 func TestScaleCorpusDatasets(t *testing.T) {
 	corpus := ScaleCorpus{

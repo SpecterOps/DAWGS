@@ -24,7 +24,7 @@ func TestShortestReferenceSpecsAreGraphScopedAndSeparateRawFromFullOutput(t *tes
 		Cypher: outboundShortestPathQuery,
 	}, params, []int64{1, 2, 3}, []int64{10, 11}, graph.DirectionOutbound)
 
-	require.Len(t, specs, 12)
+	require.Len(t, specs, 14)
 	require.Equal(t, "round_trip", specs[0].name)
 	require.Equal(t, int32(42), specs[1].parameters["graph_id"])
 	require.Equal(t, "minimum_graph_access", specs[2].name)
@@ -56,12 +56,46 @@ func TestShortestDistanceReferenceCarriesNoTrailOrPredecessorState(t *testing.T)
 			ResultKind: "scalar",
 		},
 	}, map[string]any{}, nil, nil, graph.DirectionOutbound)
-	reference := specs[len(specs)-2]
+	reference := specs[referenceSpecIndex(specs, "s3_unidirectional_trail_cte")]
 
 	require.Equal(t, "distance frontier node and depth only; no path or predecessor state", reference.stateShape)
 	require.Contains(t, reference.sql, "search(node_id, depth)")
 	require.NotContains(t, reference.sql, "node_ids")
 	require.NotContains(t, reference.sql, "edge_ids")
+}
+
+// TestCompactBidirectionalReferencesExposeMatchedDistanceAndWitnessBoundaries
+// verifies the four frozen arms share caps while preserving observation shape.
+func TestCompactBidirectionalReferencesExposeMatchedDistanceAndWitnessBoundaries(t *testing.T) {
+	params := map[string]any{
+		"graph_id": int32(42), "start_id": int64(1), "end_id": int64(3),
+		"min_depth": int32(1), "max_depth": int32(8), "edge_kind_ids": []int16{1},
+	}
+	distance := buildShortestReferenceSpecs(ScaleCase{
+		Expected: ExpectedResult{ResultKind: "scalar"},
+	}, params, nil, nil, graph.DirectionOutbound)
+	for _, name := range []string{"sp_b1_strict_alternating_distance", "sp_b2_smaller_frontier_distance"} {
+		spec := distance[referenceSpecIndex(distance, name)]
+		require.True(t, spec.fullComparator)
+		require.Equal(t, "distance scalar", spec.observationShape)
+		require.Equal(t, int64(100_000), spec.parameters["state_limit"])
+		require.Equal(t, int64(100_000), spec.parameters["frontier_limit"])
+		require.Equal(t, int64(100_000), spec.parameters["predecessor_limit"])
+		require.Contains(t, spec.sql, "select depth, path as edge_ids")
+		require.NotContains(t, spec.sql, "ordered_edge_ids_to_path")
+	}
+
+	witness := buildShortestReferenceSpecs(ScaleCase{
+		Name:     "one_shortest_path_bound_pair",
+		Expected: ExpectedResult{ResultKind: "path_set"},
+	}, params, nil, nil, graph.DirectionInbound)
+	for _, name := range []string{"sp_b1_strict_alternating_witness_m0", "sp_b2_smaller_frontier_witness_m0"} {
+		spec := witness[referenceSpecIndex(witness, name)]
+		require.True(t, spec.fullComparator)
+		require.Equal(t, "public_observation", spec.observationShape)
+		require.Contains(t, spec.sql, "@edge_kind_ids, true")
+		require.Contains(t, spec.sql, "terminal.id = edge.start_id")
+	}
 }
 
 // TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirection verifies that the inbound-only canonical arm searches from the logical terminal using reversed physical adjacency.
@@ -75,7 +109,7 @@ func TestCanonicalSourceDistanceReferenceSwapsInboundEndpointsAndPhysicalDirecti
 	}
 	inbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionInbound)
 	canonical := inbound[referenceSpecIndex(inbound, "s4_canonical_source_distance")]
-	require.Equal(t, "SP-S4-C-D", canonical.architecture)
+	require.Equal(t, "SP-I1-C-D", canonical.architecture)
 	require.Equal(t, int64(20), canonical.parameters["start_id"])
 	require.Equal(t, int64(10), canonical.parameters["end_id"])
 	require.Contains(t, canonical.sql, "e.start_id = search.node_id")
@@ -194,7 +228,7 @@ func TestCanonicalWitnessReferenceUsesCompactDiscoveryAndRestoresInboundPathOrde
 	}
 	inbound := buildShortestReferenceSpecs(testCase, params, nil, nil, graph.DirectionInbound)
 	witness := inbound[referenceSpecIndex(inbound, "s4_canonical_source_witness_m0")]
-	require.Equal(t, "SP-S4-C-WE+MAT-M0", witness.architecture)
+	require.Equal(t, "SP-I1-C-WE+MAT-M0", witness.architecture)
 	require.Equal(t, int64(20), witness.parameters["search_start_id"])
 	require.Equal(t, int64(10), witness.parameters["search_end_id"])
 	require.Contains(t, witness.sql, "distance(node_id, depth)")
@@ -435,12 +469,48 @@ func TestAlternativeOneShortestPathTieIsSemanticallyValid(t *testing.T) {
 	require.False(t, validAlternativeShortestPathObservation(testCase, public, unmapped))
 }
 
-// TestReferenceSpecsAlternateOrderByRound verifies odd/even forward-reverse execution ordering without mutating the declared arm sequence.
+// TestReferenceSpecsAlternateOrderByRound verifies fallback odd/even forward-reverse execution ordering without mutating the declared arm sequence.
 func TestReferenceSpecsAlternateOrderByRound(t *testing.T) {
-	specs := []postgresReferenceSpec{{name: "first"}, {name: "second"}, {name: "third"}}
-	require.Equal(t, []postgresReferenceSpec{{name: "first"}, {name: "second"}, {name: "third"}}, referenceSpecsForRound(specs, 1))
-	require.Equal(t, []postgresReferenceSpec{{name: "third"}, {name: "second"}, {name: "first"}}, referenceSpecsForRound(specs, 2))
+	specs := []postgresReferenceSpec{{name: "first"}, {name: "second"}}
+	require.Equal(t, []postgresReferenceSpec{{name: "first"}, {name: "second"}}, referenceSpecsForRound(specs, 1))
+	require.Equal(t, []postgresReferenceSpec{{name: "second"}, {name: "first"}}, referenceSpecsForRound(specs, 2))
 	require.Equal(t, "first", specs[0].name)
+}
+
+// TestThreeArmReferenceSpecsUseCarryoverBalancedSchedule verifies the doubled
+// Williams design balances both execution position and directed carryover.
+func TestThreeArmReferenceSpecsUseCarryoverBalancedSchedule(t *testing.T) {
+	specs := []postgresReferenceSpec{{name: "A"}, {name: "B"}, {name: "C"}}
+	expected := [][]string{
+		{"A", "B", "C"},
+		{"B", "C", "A"},
+		{"C", "A", "B"},
+		{"C", "B", "A"},
+		{"A", "C", "B"},
+		{"B", "A", "C"},
+	}
+	positions := map[string][3]int{}
+	carryover := map[[2]string]int{}
+	for round, want := range expected {
+		got := referenceSpecNames(referenceSpecsForRound(specs, round+1))
+		require.Equal(t, want, got)
+		for position, arm := range got {
+			counts := positions[arm]
+			counts[position]++
+			positions[arm] = counts
+			if position > 0 {
+				carryover[[2]string{got[position-1], arm}]++
+			}
+		}
+	}
+	require.Equal(t, expected[0], referenceSpecNames(referenceSpecsForRound(specs, 7)))
+	for _, arm := range []string{"A", "B", "C"} {
+		require.Equal(t, [3]int{2, 2, 2}, positions[arm])
+	}
+	for _, pair := range [][2]string{{"A", "B"}, {"A", "C"}, {"B", "A"}, {"B", "C"}, {"C", "A"}, {"C", "B"}} {
+		require.Equal(t, 2, carryover[pair], pair)
+	}
+	require.Equal(t, "A", specs[0].name)
 }
 
 // TestFiveArmReferenceSpecsUsePredeclaredBalancedSchedule verifies selected rows of the ten-round five-arm schedule and its periodic repetition.
@@ -460,8 +530,10 @@ func referenceSpecNames(specs []postgresReferenceSpec) []string {
 	return names
 }
 
-// TestAllShortestPathCaseUsesOnlyPredecessorDAGReference verifies that allShortestPaths routes exclusively to the ASP-A1-DAG comparator rather than one-path arms.
-func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
+// TestAllShortestPathCaseUsesDistinctFullMultisetDAGReferences verifies that
+// stored A1, inline I1, and both exact two-sided candidates retain distinct
+// treatment identities.
+func TestAllShortestPathCaseUsesDistinctFullMultisetDAGReferences(t *testing.T) {
 	runner := &postgresSQLRunner{}
 	specs, err := runner.referenceSpecs(context.Background(), ScaleCase{
 		Category: "generated_shortest_path",
@@ -469,8 +541,62 @@ func TestAllShortestPathCaseUsesOnlyPredecessorDAGReference(t *testing.T) {
 	}, map[string]any{"start_id": int64(1), "end_id": int64(2)})
 
 	require.NoError(t, err)
-	require.Len(t, specs, 1)
-	require.Equal(t, "ASP-A1-DAG", specs[0].architecture)
+	require.Len(t, specs, 4)
+	require.Equal(t, []string{
+		"asp_a1_stored_helper_m0",
+		"asp_i1_inline_predecessor_dag_m0",
+		"asp_b1_bidirectional_dag_strict_m0",
+		"asp_b2_bidirectional_dag_smaller_frontier_m0",
+	}, referenceSpecNames(specs))
+	require.Equal(t, []string{"ASP-A1-DAG", "ASP-I1-U-DAG+MAT-M0", "ASP-B1-DAG-ALT-NODE", "ASP-B2-DAG-MIN-LEVEL"}, []string{
+		specs[0].architecture, specs[1].architecture, specs[2].architecture, specs[3].architecture,
+	})
+	for _, spec := range specs {
+		require.True(t, validPostgresReferenceArm(spec.name), spec.name)
+		require.True(t, spec.fullComparator)
+		require.Equal(t, "complete all-shortest path multiset", spec.observationShape)
+		require.Equal(t, "exact_public_observation", spec.semanticValidation)
+		require.Contains(t, spec.sql, "pathComposite")
+	}
+	for _, spec := range specs[2:] {
+		require.Equal(t, int64(100_000), spec.parameters["state_limit"])
+		require.Equal(t, int64(100_000), spec.parameters["frontier_limit"])
+		require.Equal(t, int64(100_000), spec.parameters["predecessor_limit"])
+		require.Equal(t, int64(100_000), spec.parameters["enumeration_limit"])
+		require.Equal(t, int64(64*1024*1024), spec.parameters["output_bytes_limit"])
+		require.Contains(t, spec.sql, "@enumeration_limit, @output_bytes_limit")
+	}
+	require.Contains(t, specs[0].sql, "all_shortest_paths_dag")
+	require.Contains(t, specs[1].sql, "with recursive validated")
+	require.Contains(t, specs[2].sql, "all_shortest_paths_b1_strict_alternating")
+	require.Contains(t, specs[3].sql, "all_shortest_paths_b2_smaller_current_level")
+}
+
+// TestAllShortestBidirectionalReferencesStayInsideNarrowEnvelope verifies
+// min-zero, over-depth, and equal endpoints retain only the exact A1 control.
+func TestAllShortestBidirectionalReferencesStayInsideNarrowEnvelope(t *testing.T) {
+	runner := &postgresSQLRunner{}
+	minimumZero, maximumFour, maximumSixtyFive := 0, 4, 65
+	for _, test := range []struct {
+		name   string
+		shape  WorkloadShape
+		params map[string]any
+	}{
+		{name: "zero minimum", shape: WorkloadShape{MinDepth: &minimumZero, MaxDepth: &maximumFour}, params: map[string]any{"start_id": int64(1), "end_id": int64(2)}},
+		{name: "maximum sixty five", shape: WorkloadShape{MaxDepth: &maximumSixtyFive}, params: map[string]any{"start_id": int64(1), "end_id": int64(2)}},
+		{name: "equal endpoints", shape: WorkloadShape{MaxDepth: &maximumFour}, params: map[string]any{"start_id": int64(1), "end_id": int64(1)}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			specs, err := runner.referenceSpecs(context.Background(), ScaleCase{
+				Category: "generated_shortest_path",
+				Cypher:   "MATCH p = allShortestPaths((s)-[:Traverse*0..65]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+				Shape:    test.shape,
+			}, test.params)
+			require.NoError(t, err)
+			require.Len(t, specs, 1)
+			require.Equal(t, "ASP-A1-DAG", specs[0].architecture)
+		})
+	}
 }
 
 // TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperators verifies all seventeen arms use explicit membership predicates and retain each strategy's defining recursive SQL shape.

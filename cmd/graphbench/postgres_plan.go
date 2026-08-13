@@ -47,24 +47,27 @@ func parsePostgresPlanJSONMetrics(raw json.RawMessage) (PostgresPlanMetrics, err
 // walkPostgresPlanNode flattens one EXPLAIN node into aggregate metrics, then recursively visits child plans and CTE subplans.
 func walkPostgresPlanNode(node map[string]any, metrics *PostgresPlanMetrics) {
 	metric := PostgresPlanNodeMetric{
-		NodeType:           jsonString(node["Node Type"]),
-		ParentRelationship: jsonString(node["Parent Relationship"]),
-		CTEName:            jsonString(node["CTE Name"]),
-		RelationName:       jsonString(node["Relation Name"]),
-		Alias:              jsonString(node["Alias"]),
-		IndexName:          jsonString(node["Index Name"]),
-		PlanRows:           jsonInt64(node["Plan Rows"]),
-		PlanWidth:          jsonInt64(node["Plan Width"]),
-		ActualRows:         jsonInt64(node["Actual Rows"]),
-		ActualLoops:        jsonInt64(node["Actual Loops"]),
-		ActualTotalMS:      jsonFloat64(node["Actual Total Time"]),
-		Buffers:            postgresJSONBuffers(node),
-		Provenance:         "measured_plan_json",
+		NodeType:            jsonString(node["Node Type"]),
+		ParentRelationship:  jsonString(node["Parent Relationship"]),
+		CTEName:             jsonString(node["CTE Name"]),
+		RelationName:        jsonString(node["Relation Name"]),
+		Alias:               jsonString(node["Alias"]),
+		IndexName:           jsonString(node["Index Name"]),
+		FunctionName:        jsonString(node["Function Name"]),
+		SubplanName:         jsonString(node["Subplan Name"]),
+		PlanRows:            jsonInt64(node["Plan Rows"]),
+		PlanWidth:           jsonInt64(node["Plan Width"]),
+		ActualRows:          jsonInt64(node["Actual Rows"]),
+		ActualLoops:         jsonInt64(node["Actual Loops"]),
+		RowsRemovedByFilter: jsonInt64(node["Rows Removed by Filter"]),
+		ActualTotalMS:       jsonFloat64(node["Actual Total Time"]),
+		Buffers:             postgresJSONBuffers(node),
+		Provenance:          "measured_plan_json",
 	}
 	metrics.PlanNodes = append(metrics.PlanNodes, metric)
 
 	rows := metric.ActualRows * metric.ActualLoops
-	lowerIdentity := strings.ToLower(strings.Join([]string{metric.NodeType, metric.CTEName, metric.RelationName, metric.Alias, metric.IndexName, jsonString(node["Index Cond"])}, " "))
+	lowerIdentity := strings.ToLower(strings.Join([]string{metric.NodeType, metric.CTEName, metric.RelationName, metric.Alias, metric.IndexName, metric.FunctionName, metric.SubplanName, jsonString(node["Index Cond"])}, " "))
 	if strings.Contains(lowerIdentity, "endpoint_seeded_endpoints") && rows > metrics.EndpointProbeRows {
 		metrics.EndpointProbeRows = rows
 		metrics.EndpointGuardOverflow = rows >= 33

@@ -866,6 +866,8 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
 	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
 	require.Equal(t, "fixed_suffix_expansion", decision.Family)
+	require.Equal(t, ExpansionSearchPolicyOrientationProbeV1, decision.PlannedPolicy)
+	require.Empty(t, decision.EmittedPolicy)
 	require.Equal(t, "incumbent_default", decision.SelectionMode)
 	require.Equal(t, "fixed-suffix-static-v1", decision.SelectorVersion)
 	require.Equal(t, []ExpansionSearchStrategy{
@@ -875,6 +877,17 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 		ExpansionSearchSuffixSeededReverse,
 		ExpansionSearchBackwardViabilityForward,
 	}, decision.PlannedCandidates)
+	require.Equal(t, []ExpansionSearchStrategy{ExpansionSearchStepwiseForward}, decision.EmittedCandidates)
+	require.Equal(t, ExpansionSearchProbeCaps{
+		RootRowLimit:              ExpansionSearchOrientationRootRowLimit,
+		ReverseSeedRowLimit:       ExpansionSearchOrientationReverseSeedRowLimit,
+		DirectionalDegreeRowLimit: ExpansionSearchOrientationDirectionalDegreeRowLimit,
+	}, decision.ProbeCaps)
+	require.Equal(t, ExpansionSearchAdmission{
+		StateLimit:             ExpansionSearchOrientationStateLimit,
+		RequiresCompleteProbes: true,
+		FallbackStrategy:       ExpansionSearchStepwiseForward,
+	}, decision.Admission)
 	require.True(t, decision.StructurallyEligible)
 	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{
 		Name:     "qualified_fixed_suffix_topology",
@@ -890,14 +903,11 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 	require.Equal(t, "outbound", decision.LogicalDirection)
 }
 
-// TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith verifies guarded endpoint seeding after a preceding WITH query part.
-func TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith(t *testing.T) {
+// TestLoweringPlanSelectsGuardedEndpointSeededExpansion verifies guarded endpoint seeding for one statement-wide variable expansion.
+func TestLoweringPlanSelectsGuardedEndpointSeededExpansion(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
-		WHERE excluded.objectid ENDS WITH '-516'
-		WITH collect(s) AS exclude
 		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)
-		WHERE g.objectid ENDS WITH $suffix AND NOT c IN exclude
+		WHERE g.objectid ENDS WITH $suffix
 		RETURN p
 		LIMIT 1000
 	`)
@@ -905,9 +915,18 @@ func TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith(t *testing.
 
 	plan, err := Optimize(regularQuery)
 	require.NoError(t, err)
-	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 2)
-	decision := plan.LoweringPlan.ExpansionSearchStrategy[1]
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
 	require.Equal(t, "fixed_prefix_terminal_expansion", decision.Family)
+	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.PlannedPolicy)
+	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.EmittedPolicy)
+	require.Equal(t, []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse}, decision.EmittedCandidates)
+	require.Equal(t, ExpansionSearchProbeCaps{ReverseSeedRowLimit: 32}, decision.ProbeCaps)
+	require.Equal(t, ExpansionSearchAdmission{
+		StateLimit:             4096,
+		RequiresCompleteProbes: true,
+		FallbackStrategy:       ExpansionSearchStepwiseForward,
+	}, decision.Admission)
 	require.True(t, decision.StructurallyEligible)
 	require.True(t, decision.StaticallyEligible)
 	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
@@ -923,6 +942,33 @@ func TestLoweringPlanSelectsGuardedEndpointSeededExpansionAcrossWith(t *testing.
 	require.True(t, decision.HasFinalLimit)
 	require.Empty(t, decision.FallbackReason)
 	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "single_variable_expansion_in_region", Eligible: true})
+}
+
+// TestEndpointSeededExpansionKeepsIndependentMultipartRegionQualified verifies
+// that an earlier traversal separated by WITH does not invalidate the existing
+// guarded fixed-prefix region.
+func TestEndpointSeededExpansionKeepsIndependentMultipartRegionQualified(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
+		WHERE excluded.objectid ENDS WITH '-516'
+		WITH collect(s) AS exclude
+		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)
+		WHERE g.objectid ENDS WITH $suffix AND NOT c IN exclude
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 2)
+	decision := plan.LoweringPlan.ExpansionSearchStrategy[1]
+	require.Equal(t, "fixed_prefix_terminal_expansion", decision.Family)
+	require.Contains(t, decision.EligibilityFacts, ExpansionSearchEligibilityFact{Name: "single_variable_expansion_in_region", Eligible: true})
+	require.True(t, decision.StructurallyEligible)
+	require.Equal(t, ExpansionSearchEndpointSeededReverse, decision.SelectedStrategy)
+	require.Equal(t, ExpansionSearchPolicyEndpointGuardV1, decision.EmittedPolicy)
+	require.Equal(t, []ExpansionSearchStrategy{ExpansionSearchStepwiseForward, ExpansionSearchEndpointSeededReverse}, decision.EmittedCandidates)
+	require.Empty(t, decision.FallbackReason)
 }
 
 // TestGuardedEndpointSeededExpansionFallbackReasons verifies stable rejection reasons for unsafe endpoint-seeded shapes.
@@ -1337,6 +1383,54 @@ func TestLoweringPlanReportsExpandInto(t *testing.T) {
 			StepIndex:      0,
 		},
 	}}, plan.LoweringPlan.ExpandInto)
+}
+
+func TestLoweringPlanReportsExpandIntoForEndpointsCarriedAcrossWithAndUnwind(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a:Group), (b:Group)
+		WITH a, b, [1, 2] AS copies
+		UNWIND copies AS copy
+		MATCH (a)-[:MemberOf]->(b)
+		RETURN copy
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.ExpandInto, ExpandIntoDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 1,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+	})
+}
+
+func TestLoweringPlanReportsExpandIntoForNodeIntroducedByUnwind(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (a:Group), (b:Group)
+		WITH b, [a] AS nodes
+		UNWIND nodes AS source
+		MATCH (source)-[:MemberOf]->(b)
+		RETURN source
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.LoweringPlan.ExpandInto, ExpandIntoDecision{
+		Target: TraversalStepTarget{
+			QueryPartIndex: 1,
+			ClauseIndex:    1,
+			PatternIndex:   0,
+			StepIndex:      0,
+		},
+	})
 }
 
 func TestLoweringPlanReportsExpandIntoForAnonymousContinuationEndpoint(t *testing.T) {
@@ -1831,8 +1925,16 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 		ShortestPathExecutorS3EdgeM0,
 		ShortestPathExecutorS4CanonicalDistance,
 		ShortestPathExecutorS4CanonicalWitness,
+		ShortestPathExecutorI1CanonicalDistance,
+		ShortestPathExecutorI1CanonicalWitness,
+		ShortestPathExecutorI1CanonicalPredecessorWitness,
+		ShortestPathExecutorB1AlternatingNodeDistance,
+		ShortestPathExecutorB1AlternatingNodeWitness,
+		ShortestPathExecutorB2SmallerCurrentLevelDistance,
+		ShortestPathExecutorB2SmallerCurrentLevelWitness,
 	}, decision.PlannedCandidates)
 	require.Equal(t, ShortestPathExecutorS3Unidirectional, decision.SelectedExecutor)
+	require.Equal(t, ShortestPathSchedulerSingleEndedLevel, decision.Scheduler)
 	require.Equal(t, ShortestPathExecutorIncumbentWorkspace, decision.FallbackExecutor)
 	require.Empty(t, decision.FallbackReason)
 	require.Equal(t, ShortestPathObservationDistance, decision.ObservationMode)
@@ -1860,7 +1962,14 @@ func TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor(t *testing.T) {
 	require.Equal(t, "ASP", decision.Family)
 	require.Equal(t, ShortestPathObservationAllPaths, decision.ObservationMode)
 	require.Equal(t, ShortestPathExecutorASPA1DAG, decision.SelectedExecutor)
-	require.Equal(t, []ShortestPathExecutor{ShortestPathExecutorIncumbentWorkspace, ShortestPathExecutorASPA1DAG}, decision.PlannedCandidates)
+	require.Equal(t, []ShortestPathExecutor{
+		ShortestPathExecutorIncumbentWorkspace,
+		ShortestPathExecutorASPA1DAG,
+		ShortestPathExecutorASPI1DAG,
+		ShortestPathExecutorASPB1AlternatingNodeDAG,
+		ShortestPathExecutorASPB2SmallerCurrentLevelDAG,
+	}, decision.PlannedCandidates)
+	require.Equal(t, ShortestPathSchedulerSingleEndedLevel, decision.Scheduler)
 	require.Equal(t, "asp-static-v1", decision.SelectorVersion)
 	require.Equal(t, "static", decision.SelectionMode)
 	require.True(t, decision.StructurallyEligible)
@@ -1868,7 +1977,32 @@ func TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor(t *testing.T) {
 	require.Equal(t, int64(1), decision.MinimumDepth)
 	require.Equal(t, defaultShortestPathExpansionDepth, decision.MaximumDepth)
 	require.Equal(t, defaultShortestPathStateLimit, decision.StateLimit)
+	require.Equal(t, defaultShortestPathFrontierLimit, decision.FrontierLimit)
+	require.Equal(t, defaultShortestPathPredecessorLimit, decision.PredecessorLimit)
 	require.Empty(t, decision.FallbackReason)
+}
+
+// TestShortestPathExecutorSchedulersFreezesTournamentSchedulerMetadata verifies
+// production controls and reserved bidirectional arms retain distinct policies.
+func TestShortestPathExecutorSchedulersFreezesTournamentSchedulerMetadata(t *testing.T) {
+	t.Parallel()
+	tests := map[ShortestPathExecutor]ShortestPathScheduler{
+		ShortestPathExecutorS3Unidirectional:              ShortestPathSchedulerSingleEndedLevel,
+		ShortestPathExecutorS3EdgeM0:                      ShortestPathSchedulerSingleEndedLevel,
+		ShortestPathExecutorS4CanonicalDistance:           ShortestPathSchedulerSingleEndedLevel,
+		ShortestPathExecutorS4CanonicalWitness:            ShortestPathSchedulerSingleEndedLevel,
+		ShortestPathExecutorASPA1DAG:                      ShortestPathSchedulerSingleEndedLevel,
+		ShortestPathExecutorB1AlternatingNodeDistance:     ShortestPathSchedulerStrictAlternatingNode,
+		ShortestPathExecutorB1AlternatingNodeWitness:      ShortestPathSchedulerStrictAlternatingNode,
+		ShortestPathExecutorASPB1AlternatingNodeDAG:       ShortestPathSchedulerStrictAlternatingNode,
+		ShortestPathExecutorB2SmallerCurrentLevelDistance: ShortestPathSchedulerSmallerCurrentLevel,
+		ShortestPathExecutorB2SmallerCurrentLevelWitness:  ShortestPathSchedulerSmallerCurrentLevel,
+		ShortestPathExecutorASPB2SmallerCurrentLevelDAG:   ShortestPathSchedulerSmallerCurrentLevel,
+	}
+	for executor, scheduler := range tests {
+		require.Equal(t, scheduler, executor.Scheduler(), executor)
+	}
+	require.Empty(t, ShortestPathExecutorIncumbentWorkspace.Scheduler())
 }
 
 // TestLoweringPlanShortestExecutorV4SelectionMatrix verifies executor selection across direction, depth, kind, and observation combinations.
@@ -1916,13 +2050,13 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			name:              "outbound one path one kind",
 			pattern:           `(s)-[:MemberOf*1..16]->(e)`,
 			observation:       `p`,
-			executor:          ShortestPathExecutorS4CanonicalWitness,
+			executor:          ShortestPathExecutorS3EdgeM0,
 			direction:         graph.DirectionOutbound,
 			physicalExpansion: ShortestPathPhysicalExpansionStartID,
 			topology:          ShortestPathTopologyPhysicalOutbound,
 			kindCount:         1,
 			staticEligible:    true,
-			selector:          "sp-static-v4",
+			selector:          "sp-static-v5-contained",
 		},
 		{
 			name:              "outbound one path two kinds",
@@ -1934,7 +2068,7 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			topology:          ShortestPathTopologyPhysicalOutbound,
 			kindCount:         2,
 			staticEligible:    true,
-			selector:          "sp-static-v4",
+			selector:          "sp-static-v5-contained",
 		},
 		{
 			name:              "outbound one path wildcard",
@@ -1946,7 +2080,7 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			topology:          ShortestPathTopologyPhysicalOutbound,
 			untyped:           true,
 			staticEligible:    true,
-			selector:          "sp-static-v4",
+			selector:          "sp-static-v5-contained",
 		},
 		{
 			name:              "inbound distance depth one",
@@ -1964,13 +2098,13 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			name:              "inbound path depth one",
 			pattern:           `(s)<-[:MemberOf*1..1]-(e)`,
 			observation:       `p`,
-			executor:          ShortestPathExecutorS4CanonicalWitness,
+			executor:          ShortestPathExecutorS3EdgeM0,
 			direction:         graph.DirectionInbound,
 			physicalExpansion: ShortestPathPhysicalExpansionEndID,
 			topology:          ShortestPathTopologyPhysicalInboundShallow,
 			kindCount:         1,
 			staticEligible:    true,
-			selector:          "sp-static-v4",
+			selector:          "sp-static-v5-contained",
 		},
 		{
 			name:              "inbound distance depth two",
@@ -1982,7 +2116,7 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			topology:          ShortestPathTopologyPhysicalInboundDeep,
 			kindCount:         1,
 			staticEligible:    true,
-			selector:          "sp-static-v4",
+			selector:          "sp-static-v5-contained",
 		},
 		{
 			name:              "inbound path depth 64 two kinds",
@@ -1994,7 +2128,7 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			topology:          ShortestPathTopologyPhysicalInboundDeep,
 			kindCount:         2,
 			staticEligible:    true,
-			selector:          "sp-static-v4",
+			selector:          "sp-static-v5-contained",
 		},
 	}
 

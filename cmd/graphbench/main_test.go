@@ -39,6 +39,162 @@ func TestParseConfigRequiresCompleteGateInputs(t *testing.T) {
 	require.ErrorContains(t, err, "must be supplied together")
 }
 
+// TestParseConfigDefaultsQualificationConfidence verifies every statistical workflow starts at the frozen 97.5% policy.
+func TestParseConfigDefaultsQualificationConfidence(t *testing.T) {
+	cfg, err := parseConfig(nil, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, defaultConfidenceLevel, cfg.Confidence)
+	require.Equal(t, minimumTimingNoiseRatio, cfg.Regression)
+}
+
+// TestParseConfigRequiresGateAAForPromotion verifies only explicit diagnostic comparisons may omit host calibration.
+func TestParseConfigRequiresGateAAForPromotion(t *testing.T) {
+	_, err := parseConfig([]string{"-gate-baseline", "baseline.jsonl", "-gate-candidate", "candidate.jsonl"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "requires gate-aa")
+
+	cfg, err := parseConfig([]string{
+		"-gate-baseline", "baseline.jsonl", "-gate-candidate", "candidate.jsonl", "-gate-aa", "aa.json",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "aa.json", cfg.GateAA)
+}
+
+// TestParseConfigAcceptsNamedBundleEvidence verifies repeatable name=path inputs are retained for capture without conflating their host paths with evidence names.
+func TestParseConfigAcceptsNamedBundleEvidence(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-bundle-dir", "capture",
+		"-bundle-evidence", "host-aa=.coverage/aa.json",
+		"-bundle-evidence", "plan-delta=.coverage/plan-delta.json",
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, []CaptureBundleEvidenceInput{
+		{Name: "host-aa", Path: ".coverage/aa.json"},
+		{Name: "plan-delta", Path: ".coverage/plan-delta.json"},
+	}, cfg.BundleEvidence)
+}
+
+// TestParseConfigAcceptsStandaloneBundleVerification verifies portable verification can run without a benchmark connection and optionally enforce clean-source provenance.
+func TestParseConfigAcceptsStandaloneBundleVerification(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-bundle-verify", "capture",
+		"-bundle-verify-output", "verification.json",
+		"-bundle-require-clean",
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, "capture", cfg.BundleVerify)
+	require.Equal(t, "verification.json", cfg.BundleVerifyOutput)
+	require.True(t, cfg.BundleRequireClean)
+}
+
+func TestParseConfigAcceptsOnlyStandalonePromotionManifestVerification(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-promotion-manifest", "promotion.json",
+		"-promotion-manifest-output", "verification.json",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "promotion.json", cfg.PromotionManifest)
+	require.Equal(t, "verification.json", cfg.PromotionManifestOutput)
+
+	for _, args := range [][]string{
+		{"-promotion-manifest-output", "verification.json"},
+		{"-promotion-manifest", "promotion.json", "-bundle-verify", "capture"},
+		{"-promotion-manifest", "promotion.json", "-resource-artifact", "resources.jsonl"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+// TestParseConfigRejectsMalformedOrOrphanedBundleFlags verifies capture and verification inputs fail before any artifact or database is touched.
+func TestParseConfigRejectsMalformedOrOrphanedBundleFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"-bundle-evidence", "host-aa=aa.json"},
+		{"-bundle-dir", "capture", "-bundle-evidence", "missing-separator"},
+		{"-bundle-dir", "capture", "-bundle-evidence", "../escape=aa.json"},
+		{"-bundle-dir", "capture", "-bundle-evidence", "host-aa=one.json", "-bundle-evidence", "host-aa=two.json"},
+		{"-bundle-verify-output", "verification.json"},
+		{"-bundle-require-clean"},
+		{"-bundle-verify", "capture", "-bundle-dir", "new-capture"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+// TestParseConfigAcceptsExpandIntoStudyProtocols verifies standalone three-arm reports expose the frozen discovery and confirmation evidence contracts.
+func TestParseConfigAcceptsExpandIntoStudyProtocols(t *testing.T) {
+	for _, protocol := range []string{referencePairProtocolDiscovery, referencePairProtocolConfirmation} {
+		t.Run(protocol, func(t *testing.T) {
+			cfg, err := parseConfig([]string{
+				"-expand-into-artifact", "expand-into.jsonl",
+				"-expand-into-output", "expand-into.json",
+				"-expand-into-protocol", protocol,
+			}, func(string) string { return "" })
+
+			require.NoError(t, err)
+			require.Equal(t, "expand-into.jsonl", cfg.ExpandIntoArtifact)
+			require.Equal(t, "expand-into.json", cfg.ExpandIntoOutput)
+			require.Equal(t, protocol, cfg.ExpandIntoProtocol)
+		})
+	}
+}
+
+// TestParseConfigAcceptsOrientationSelectorReport verifies the matched shadow,
+// incumbent, forced-reverse, and A/A artifacts form one standalone workflow.
+func TestParseConfigAcceptsOrientationSelectorReport(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-orientation-shadow-artifact", "shadow.jsonl",
+		"-orientation-incumbent-artifact", "incumbent.jsonl",
+		"-orientation-reverse-artifact", "reverse.jsonl",
+		"-orientation-aa", "aa.json",
+		"-orientation-output", "orientation.json",
+		"-orientation-protocol", referencePairProtocolConfirmation,
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, "shadow.jsonl", cfg.OrientationShadowArtifact)
+	require.Equal(t, "incumbent.jsonl", cfg.OrientationIncumbentArtifact)
+	require.Equal(t, "reverse.jsonl", cfg.OrientationReverseArtifact)
+	require.Equal(t, "aa.json", cfg.OrientationAA)
+	require.Equal(t, "orientation.json", cfg.OrientationOutput)
+	require.Equal(t, referencePairProtocolConfirmation, cfg.OrientationProtocol)
+}
+
+// TestParseConfigRejectsIncompleteOrientationSelectorReport verifies the
+// report cannot silently omit an exact comparator, A/A floor, or standalone
+// workflow boundary.
+func TestParseConfigRejectsIncompleteOrientationSelectorReport(t *testing.T) {
+	complete := []string{
+		"-orientation-shadow-artifact", "shadow.jsonl",
+		"-orientation-incumbent-artifact", "incumbent.jsonl",
+		"-orientation-reverse-artifact", "reverse.jsonl",
+		"-orientation-aa", "aa.json",
+	}
+	for _, args := range [][]string{
+		{"-orientation-shadow-artifact", "shadow.jsonl"},
+		append(append([]string(nil), complete...), "-orientation-protocol", "exploratory"),
+		append(append([]string(nil), complete...), "-expand-into-artifact", "expand.jsonl"),
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+// TestParseConfigRejectsInvalidExpandIntoStudyMode verifies report output, protocol, and standalone-mode exclusivity fail closed.
+func TestParseConfigRejectsInvalidExpandIntoStudyMode(t *testing.T) {
+	for _, args := range [][]string{
+		{"-expand-into-output", "expand-into.json"},
+		{"-expand-into-artifact", "expand-into.jsonl", "-expand-into-protocol", "exploratory"},
+		{"-expand-into-artifact", "expand-into.jsonl", "-bundle-verify", "capture"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
 // TestParseConfigAcceptsPoolAndConcurrencySmokeLevels verifies numeric pool parsing and stable deduplication of requested concurrency levels.
 func TestParseConfigAcceptsPoolAndConcurrencySmokeLevels(t *testing.T) {
 	cfg, err := parseConfig([]string{"-pool-size", "4", "-concurrency", "1,4,8,4"}, func(string) string { return "" })
@@ -53,6 +209,34 @@ func TestParseConfigAcceptsReferencePairDiscoveryProtocol(t *testing.T) {
 	cfg, err := parseConfig([]string{"-reference-pair-protocol", "discovery"}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.Equal(t, referencePairProtocolDiscovery, cfg.ReferencePairProtocol)
+}
+
+// TestParseConfigAcceptsReferenceTournament verifies a predeclared arm order
+// is preserved because the first arm defines the incumbent.
+func TestParseConfigAcceptsReferenceTournament(t *testing.T) {
+	arms := "expand_into_pair_join,expand_into_lower_degree_scan,expand_into_pair_cache"
+	cfg, err := parseConfig([]string{
+		"-reference-tournament-artifact", "tournament.jsonl",
+		"-reference-tournament-output", "tournament.json",
+		"-reference-tournament-arms", arms,
+		"-reference-tournament-protocol", referencePairProtocolConfirmation,
+	}, func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"expand_into_pair_join", "expand_into_lower_degree_scan", "expand_into_pair_cache"}, cfg.ReferenceTournamentArms)
+	require.Equal(t, referencePairProtocolConfirmation, cfg.ReferenceTournamentProtocol)
+}
+
+func TestParseConfigRejectsInvalidReferenceTournament(t *testing.T) {
+	for _, args := range [][]string{
+		{"-reference-tournament-output", "tournament.json"},
+		{"-reference-tournament-artifact", "tournament.jsonl"},
+		{"-reference-tournament-artifact", "tournament.jsonl", "-reference-tournament-arms", "expand_into_pair_join,expand_into_pair_cache"},
+		{"-reference-tournament-artifact", "tournament.jsonl", "-reference-tournament-arms", "expand_into_pair_join,unknown,expand_into_pair_cache"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
 }
 
 // TestParseConfigRejectsPoolMemoryBelowPerSessionBudget verifies that the pool ceiling must cover the per-session budget for every configured connection.
@@ -88,26 +272,33 @@ func TestParseConfigRejectsDuplicateExactSelectors(t *testing.T) {
 
 // TestParseConfigAcceptsOnlyQualifiedForcedShortestExecutor verifies the supported shortest-executor allowlist and rejects an incomplete strategy name.
 func TestParseConfigAcceptsOnlyQualifiedForcedShortestExecutor(t *testing.T) {
-	cfg, err := parseConfig([]string{"-postgres-force-shortest-executor", "SP-S0"}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "SP-S0", cfg.PostgresForceShortest)
-	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S0-DIRECT"}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "SP-S0-DIRECT", cfg.PostgresForceShortest)
-	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-D"}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "SP-S3-U-D", cfg.PostgresForceShortest)
-	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S3-U-E+MAT-M0"}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "SP-S3-U-E+MAT-M0", cfg.PostgresForceShortest)
-	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S4-C-WE+MAT-M0"}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "SP-S4-C-WE+MAT-M0", cfg.PostgresForceShortest)
-	cfg, err = parseConfig([]string{"-postgres-force-shortest-executor", "ASP-A1-DAG"}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "ASP-A1-DAG", cfg.PostgresForceShortest)
+	for _, executor := range []string{
+		"SP-S0",
+		"SP-S0-DIRECT",
+		"SP-S3-U-D",
+		"SP-S3-U-E+MAT-M0",
+		"SP-S4-C-D",
+		"SP-S4-C-WE+MAT-M0",
+		"SP-I1-C-D",
+		"SP-I1-U-E+MAT-M0",
+		"SP-I1-C-WE+MAT-M0",
+		"SP-B1-C-ALT-NODE-D",
+		"SP-B1-C-ALT-NODE-WE+MAT-M0",
+		"SP-B2-C-MIN-LEVEL-D",
+		"SP-B2-C-MIN-LEVEL-WE+MAT-M0",
+		"ASP-A1-DAG",
+		"ASP-I1-U-DAG+MAT-M0",
+		"ASP-B1-DAG-ALT-NODE",
+		"ASP-B2-DAG-MIN-LEVEL",
+	} {
+		t.Run(executor, func(t *testing.T) {
+			cfg, err := parseConfig([]string{"-postgres-force-shortest-executor", executor}, func(string) string { return "" })
+			require.NoError(t, err)
+			require.Equal(t, executor, cfg.PostgresForceShortest)
+		})
+	}
 
-	_, err = parseConfig([]string{"-postgres-force-shortest-executor", "SP-S1"}, func(string) string { return "" })
+	_, err := parseConfig([]string{"-postgres-force-shortest-executor", "SP-S1"}, func(string) string { return "" })
 	require.ErrorContains(t, err, "unsupported PostgreSQL forced shortest executor")
 }
 

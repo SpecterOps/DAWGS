@@ -63,6 +63,12 @@ type SchemaManager struct {
 
 	// graphQueryMemoryLimit caps memory available to a graph query transaction.
 	graphQueryMemoryLimit size.Size
+
+	// traversalPolicyLock protects the versioned default-off production canary policy.
+	traversalPolicyLock sync.RWMutex
+
+	// traversalPolicy is copied on reads so callers cannot mutate live selection state.
+	traversalPolicy TraversalPolicy
 }
 
 // NewSchemaManager creates an empty metadata manager with bounded parse and translation caches for pool.
@@ -215,14 +221,24 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 		return err
 	} else {
 		defer conn.Release()
-
-		return txDelegate(&transaction{
-			schemaManager:   s,
-			queryExecMode:   cfg.QueryExecMode,
-			ctx:             ctx,
-			conn:            conn,
-			targetSchemaSet: false,
-		})
+		if cfg.initializeTraversalRuntimeAttestation {
+			if _, err := conn.Exec(ctx, "select public.ensure_traversal_runtime_attestation_workspace_v1()"); err != nil {
+				return fmt.Errorf("initialize traversal runtime attestation workspace: %w", err)
+			}
+		}
+		allocateTransaction := cfg.Options.IsoLevel != ""
+		wrapper, err := newTransactionWrapper(ctx, conn, s, cfg, allocateTransaction)
+		if err != nil {
+			return err
+		}
+		defer wrapper.Close()
+		if err := txDelegate(wrapper); err != nil {
+			return err
+		}
+		if allocateTransaction {
+			return wrapper.Commit()
+		}
+		return nil
 	}
 }
 

@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 )
 
 // loadScaleCorpus loads all scale-case JSON files and rejects duplicate or invalid declarations.
@@ -46,6 +48,7 @@ func loadScaleCorpus(root string) (ScaleCorpus, error) {
 		source := filepath.ToSlash(path)
 		for idx, testCase := range file.Cases {
 			testCase.Source = source
+			normalizeFallbackExpectation(&testCase)
 			if err := validateScaleCase(testCase); err != nil {
 				return ScaleCorpus{}, fmt.Errorf("%s case %d: %w", source, idx, err)
 			}
@@ -55,6 +58,23 @@ func loadScaleCorpus(root string) (ScaleCorpus, error) {
 	}
 
 	return corpus, nil
+}
+
+func normalizeFallbackExpectation(testCase *ScaleCase) {
+	if testCase == nil || testCase.Shape.FallbackExpectation != "" || !requiresQualificationSplit(*testCase) {
+		return
+	}
+	testCase.Shape.FallbackExpectation = "forbidden"
+	if testCase.Shape.FixtureTier == "stress" {
+		testCase.Shape.FallbackExpectation = "allowed"
+	}
+	for _, tag := range testCase.Tags {
+		normalized := strings.ToLower(tag)
+		if strings.Contains(normalized, "fallback") || strings.Contains(normalized, "overflow") {
+			testCase.Shape.FallbackExpectation = "required"
+			return
+		}
+	}
 }
 
 // validateScaleCase checks case identity, modes, parameters, expectations, and workload shape.
@@ -97,6 +117,24 @@ func validateScaleCase(testCase ScaleCase) error {
 	if tier := testCase.Shape.FixtureTier; tier != "" && tier != "normal" && tier != "envelope" && tier != "stress" {
 		return fmt.Errorf("shape.fixture_tier must be normal, envelope, or stress")
 	}
+	if split := testCase.Shape.QualificationSplit; split != "" && split != "training" && split != "holdout" && split != "diagnostic" {
+		return fmt.Errorf("shape.qualification_split must be training, holdout, or diagnostic")
+	}
+	if expectation := testCase.Shape.FallbackExpectation; expectation != "" && expectation != "forbidden" && expectation != "required" && expectation != "allowed" {
+		return fmt.Errorf("shape.fallback_expectation must be forbidden, required, or allowed")
+	}
+	if requiresQualificationSplit(testCase) && testCase.Shape.QualificationSplit == "" {
+		return fmt.Errorf("shape.qualification_split is required for traversal qualification cases")
+	}
+	if testCase.Shape.FixtureTier == "stress" && testCase.Shape.QualificationSplit != "diagnostic" && requiresQualificationSplit(testCase) {
+		return fmt.Errorf("stress traversal qualification cases must use shape.qualification_split diagnostic")
+	}
+	if slices.Contains(testCase.Tags, "holdout") && testCase.Shape.QualificationSplit != "holdout" {
+		return fmt.Errorf("holdout-tagged cases must use shape.qualification_split holdout")
+	}
+	if testCase.Shape.QualificationSplit == "holdout" && !slices.Contains(testCase.Tags, "holdout") {
+		return fmt.Errorf("shape.qualification_split holdout requires the holdout tag")
+	}
 	if direction := testCase.Shape.Direction; direction != "" && direction != "outbound" && direction != "inbound" && direction != "directionless" && direction != "mirrored" {
 		return fmt.Errorf("shape.direction must be outbound, inbound, directionless, or mirrored")
 	}
@@ -130,6 +168,22 @@ func validateScaleCase(testCase ScaleCase) error {
 	}
 
 	return nil
+}
+
+// requiresQualificationSplit identifies traversal-program declarations whose
+// training/holdout boundary is part of their immutable workload identity.
+// Older general-purpose scale cases remain loadable while each prioritized
+// traversal family is migrated deliberately.
+func requiresQualificationSplit(testCase ScaleCase) bool {
+	switch testCase.Category {
+	case "generated_shortest_path_v2", "expand_into_one_hop", "generated_endpoint_seeded_expansion":
+		return true
+	case "generated_fixed_suffix_expansion":
+		return slices.Contains(testCase.Tags, "fixed-suffix-expansion-v2") ||
+			slices.Contains(testCase.Tags, "fixed-suffix-expansion-boundary")
+	default:
+		return slices.Contains(testCase.Tags, "traversal-qualification")
+	}
 }
 
 // validateWriteScenario checks mutation expectations and post-state query completeness.

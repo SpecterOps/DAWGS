@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	neo4jcore "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/databaseguard"
@@ -279,12 +281,14 @@ func (s *backendCapture) close(ctx context.Context) {
 // capture captures one query plan with driver, workload, and fixture metadata.
 func (s *backendCapture) capture(ctx context.Context, query CorpusQuery) PlanRecord {
 	record := PlanRecord{
-		Driver:  s.spec.DriverName,
-		Source:  query.Source,
-		Dataset: query.Dataset,
-		Name:    query.Name,
-		Cypher:  query.Cypher,
-		Params:  query.Params,
+		SchemaVersion:  planRecordSchemaVersion,
+		Driver:         s.spec.DriverName,
+		Source:         query.Source,
+		Dataset:        query.Dataset,
+		Name:           query.Name,
+		WorkloadSHA256: workloadFingerprint(query),
+		Cypher:         query.Cypher,
+		Params:         query.Params,
 	}
 
 	switch s.spec.DriverName {
@@ -293,6 +297,8 @@ func (s *backendCapture) capture(ctx context.Context, query CorpusQuery) PlanRec
 	case neo4j.DriverName:
 		s.captureNeo4j(query.Cypher, query.Params, &record)
 	}
+	record.PGPlanFingerprint = postgresPlanFingerprint(record.PGPlan)
+	record.Neo4jPlanFingerprint = neo4jPlanFingerprint(record.Neo4jPlan)
 
 	return record
 }
@@ -344,15 +350,27 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 	record.Optimization = &translation.Optimization
 }
 
-// captureNeo4j runs Neo4j EXPLAIN and attaches its normalized operator tree to the record.
+// captureNeo4j runs PROFILE for reads and EXPLAIN for writes, then attaches its normalized operator tree.
 func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any, record *PlanRecord) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+	if err != nil {
+		record.Error = err.Error()
+		return
+	}
+	write := regularQueryHasUpdates(regularQuery)
+	accessMode := neo4jcore.AccessModeRead
+	command := "PROFILE "
+	if write {
+		accessMode = neo4jcore.AccessModeWrite
+		command = "EXPLAIN "
+	}
 	session := s.neo4jDriver.NewSession(neo4jcore.SessionConfig{
-		AccessMode:   neo4jcore.AccessModeWrite,
+		AccessMode:   accessMode,
 		DatabaseName: s.neo4jDBName,
 	})
 	defer session.Close()
 
-	result, err := session.Run("EXPLAIN "+cypherWithoutTerminator(cypherQuery), params)
+	result, err := session.Run(command+cypherWithoutTerminator(cypherQuery), params)
 	if err != nil {
 		record.Error = err.Error()
 		return
@@ -364,11 +382,35 @@ func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any,
 		return
 	}
 
-	if plan := summary.Plan(); plan != nil {
+	if profile := summary.Profile(); profile != nil {
+		planNode := convertNeo4jProfile(profile)
+		record.Neo4jPlan = &planNode
+		record.Neo4jOperators = neo4jOperators(planNode)
+	} else if plan := summary.Plan(); plan != nil {
 		planNode := convertNeo4jPlan(plan)
 		record.Neo4jPlan = &planNode
 		record.Neo4jOperators = neo4jOperators(planNode)
 	}
+}
+
+// regularQueryHasUpdates reports whether any query part contains a mutation.
+func regularQueryHasUpdates(query *cypher.RegularQuery) bool {
+	if query == nil || query.SingleQuery == nil {
+		return false
+	}
+	if single := query.SingleQuery.SinglePartQuery; single != nil {
+		return len(single.UpdatingClauses) > 0
+	}
+	multi := query.SingleQuery.MultiPartQuery
+	if multi == nil {
+		return false
+	}
+	for _, part := range multi.Parts {
+		if part != nil && len(part.UpdatingClauses) > 0 {
+			return true
+		}
+	}
+	return multi.SinglePartQuery != nil && len(multi.SinglePartQuery.UpdatingClauses) > 0
 }
 
 // neo4jPlanDriverConfig contains a Neo4j server URI and optional target database parsed from a connection string.
@@ -537,16 +579,70 @@ func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *openg
 // convertNeo4jPlan recursively converts a Neo4j plan into the stable serialized plan-node schema.
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	node := Neo4jPlanNode{
-		Operator:    plan.Operator(),
+		Operator:    normalizeNeo4jOperator(plan.Operator()),
 		Arguments:   stringifyArguments(plan.Arguments()),
 		Identifiers: append([]string(nil), plan.Identifiers()...),
 	}
+	node.EstimatedRows = neo4jArgumentFloat(node.Arguments, "EstimatedRows")
 
 	for _, child := range plan.Children() {
 		node.Children = append(node.Children, convertNeo4jPlan(child))
 	}
 
 	return node
+}
+
+// convertNeo4jProfile recursively converts executed read-plan evidence.
+func convertNeo4jProfile(plan neo4jcore.ProfiledPlan) Neo4jPlanNode {
+	rows, dbHits := plan.Records(), plan.DbHits()
+	node := Neo4jPlanNode{
+		Operator:        normalizeNeo4jOperator(plan.Operator()),
+		Arguments:       stringifyArguments(plan.Arguments()),
+		Identifiers:     append([]string(nil), plan.Identifiers()...),
+		ActualRows:      &rows,
+		DBHits:          optionalNonnegativeInt64(dbHits),
+		PageCacheHits:   optionalNonnegativeInt64(plan.PageCacheHits()),
+		PageCacheMisses: optionalNonnegativeInt64(plan.PageCacheMisses()),
+		TimeNS:          optionalNonnegativeInt64(plan.Time()),
+	}
+	node.EstimatedRows = neo4jArgumentFloat(node.Arguments, "EstimatedRows")
+	for _, child := range plan.Children() {
+		node.Children = append(node.Children, convertNeo4jProfile(child))
+	}
+	return node
+}
+
+// optionalNonnegativeInt64 distinguishes unavailable profiler values from zero.
+func optionalNonnegativeInt64(value int64) *int64 {
+	if value < 0 {
+		return nil
+	}
+	return &value
+}
+
+// neo4jArgumentFloat parses an optional numeric plan argument.
+func neo4jArgumentFloat(arguments map[string]string, key string) *float64 {
+	value, found := arguments[key]
+	if !found {
+		return nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+// normalizeNeo4jOperator removes repeated backend suffixes and applies exactly one.
+func normalizeNeo4jOperator(operator string) string {
+	operator = strings.TrimSpace(operator)
+	for strings.HasSuffix(operator, "@neo4j") {
+		operator = strings.TrimSuffix(operator, "@neo4j")
+	}
+	if operator == "" {
+		return ""
+	}
+	return operator + "@neo4j"
 }
 
 // stringifyArguments converts plan arguments to stable strings in a fresh map.
@@ -588,7 +684,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	)
 
 	walk = func(node Neo4jPlanNode) {
-		operators = append(operators, node.Operator)
+		operators = append(operators, normalizeNeo4jOperator(node.Operator))
 		for _, child := range node.Children {
 			walk(child)
 		}

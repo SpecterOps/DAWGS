@@ -85,6 +85,8 @@ type config struct {
 	GateCandidate string
 	// GateOutput selects the performance-gate JSON report destination.
 	GateOutput string
+	// GateAA selects the host A/A resolution report required by production performance gating.
+	GateAA string
 	// GateSeed controls deterministic performance-gate bootstrap resampling.
 	GateSeed int64
 	// Confidence sets the confidence level used for statistical intervals.
@@ -119,6 +121,14 @@ type config struct {
 	ReferencePairCandidate string
 	// ReferencePairProtocol selects confirmation or discovery sample requirements for paired references.
 	ReferencePairProtocol string
+	// ReferenceTournamentArtifact selects records containing a predeclared three- or five-arm tournament.
+	ReferenceTournamentArtifact string
+	// ReferenceTournamentOutput selects the tournament report destination.
+	ReferenceTournamentOutput string
+	// ReferenceTournamentArms lists tournament arms with the incumbent first.
+	ReferenceTournamentArms []string
+	// ReferenceTournamentProtocol selects confirmation or discovery tournament requirements.
+	ReferenceTournamentProtocol string
 	// PoolSize sets the database connection-pool size.
 	PoolSize int
 	// Concurrency lists opt-in worker counts for PostgreSQL concurrency measurements.
@@ -135,6 +145,10 @@ type config struct {
 	PostgresForceShortest string
 	// PostgresForceExpansion selects a forced expansion search strategy for diagnostic runs.
 	PostgresForceExpansion string
+	// PostgresTraversalTelemetry selects off, summary, or an untimed diagnostic replay.
+	PostgresTraversalTelemetry string
+	// PostgresExpansionOrientationShadow executes the incumbent while recording the orientation policy's SQL-visible choice.
+	PostgresExpansionOrientationShadow bool
 	// ConfirmLeft selects the left artifact used for paired confirmation.
 	ConfirmLeft string
 	// ConfirmRight selects the right artifact used for paired confirmation.
@@ -149,6 +163,26 @@ type config struct {
 	DiagnosticGate bool
 	// BundleDir selects the directory that receives portable artifacts and source provenance.
 	BundleDir string
+	// BundleEvidence lists named auxiliary artifacts copied into a newly captured bundle.
+	BundleEvidence []CaptureBundleEvidenceInput
+	// BundleVerify selects a portable bundle directory for standalone validation.
+	BundleVerify string
+	// BundleVerifyOutput selects the standalone bundle-verification JSON destination.
+	BundleVerifyOutput string
+	// BundleRequireClean rejects otherwise valid bundles captured from a dirty source tree.
+	BundleRequireClean bool
+	// PromotionManifest selects a complete evidence-closure manifest for standalone verification.
+	PromotionManifest string
+	// PromotionManifestOutput selects the verification report destination.
+	PromotionManifestOutput string
+	// PromotionBindManifest supplies the provisional manifest whose immutable
+	// identity is attached to one generated evidence report.
+	PromotionBindManifest string
+	// PromotionBindRole names the evidence role being bound.
+	PromotionBindRole string
+	// PromotionBindInput and PromotionBindOutput select the unbound and bound reports.
+	PromotionBindInput  string
+	PromotionBindOutput string
 	// BuildCommand records the reproducible command used to build the benchmark executable.
 	BuildCommand string
 	// ExistingGraph selects read-only execution against a pre-existing graph.
@@ -175,6 +209,24 @@ type config struct {
 	BackendDeltaArtifact string
 	// BackendDeltaOutput selects the cross-backend delta report destination.
 	BackendDeltaOutput string
+	// ExpandIntoArtifact selects records used to build the fixed-one-hop three-arm study report.
+	ExpandIntoArtifact string
+	// ExpandIntoOutput selects the ExpandInto study JSON destination.
+	ExpandIntoOutput string
+	// ExpandIntoProtocol selects discovery or confirmation evidence requirements.
+	ExpandIntoProtocol string
+	// OrientationShadowArtifact selects true-shadow orientation records.
+	OrientationShadowArtifact string
+	// OrientationIncumbentArtifact selects matched exact incumbent records.
+	OrientationIncumbentArtifact string
+	// OrientationReverseArtifact selects matched exact forced-reverse records.
+	OrientationReverseArtifact string
+	// OrientationAA selects host A/A timing resolution for selector regret.
+	OrientationAA string
+	// OrientationOutput selects the selector-regret and probe-overhead report destination.
+	OrientationOutput string
+	// OrientationProtocol selects discovery or confirmation evidence requirements.
+	OrientationProtocol string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -193,7 +245,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 		rawTags           string
 		rawConfirmCases   string
 		rawReferenceArms  string
+		rawTournamentArms string
 		rawTimeoutClasses string
+		rawBundleEvidence []string
 	)
 
 	flags.StringVar(&cfg.CorpusRoot, "corpus-root", "benchmark/testdata/scale", "scale corpus root")
@@ -222,9 +276,10 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.GateBaseline, "gate-baseline", "", "baseline JSONL artifact for comparison-only mode")
 	flags.StringVar(&cfg.GateCandidate, "gate-candidate", "", "candidate JSONL artifact for comparison-only mode")
 	flags.StringVar(&cfg.GateOutput, "gate-output", "", "performance-gate JSON output path (default: stdout)")
+	flags.StringVar(&cfg.GateAA, "gate-aa", "", "host A/A resolution report required for production performance gating")
 	flags.Int64Var(&cfg.GateSeed, "seed", 1, "deterministic bootstrap seed")
-	flags.Float64Var(&cfg.Confidence, "confidence-level", 0.95, "bootstrap confidence level")
-	flags.Float64Var(&cfg.Regression, "regression-threshold", 0.20, "allowed comparable-case regression ratio")
+	flags.Float64Var(&cfg.Confidence, "confidence-level", defaultConfidenceLevel, "bootstrap confidence level")
+	flags.Float64Var(&cfg.Regression, "regression-threshold", minimumTimingNoiseRatio, "minimum allowed comparable-case regression ratio before host A/A noise")
 	flags.StringVar(&rawGateTargets, "gate-targets", "", "comma-separated PostgreSQL case names expected to improve materially")
 	flags.Float64Var(&cfg.MaterialityRatio, "materiality-ratio", 0.95, "target median-ratio upper bound")
 	flags.DurationVar(&cfg.MaterialityAbsolute, "materiality-absolute", 100*time.Microsecond, "target median-saving lower bound")
@@ -239,14 +294,20 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.ReferencePairBaseline, "reference-pair-baseline", "", "baseline PostgreSQL reference arm")
 	flags.StringVar(&cfg.ReferencePairCandidate, "reference-pair-candidate", "", "candidate PostgreSQL reference arm")
 	flags.StringVar(&cfg.ReferencePairProtocol, "reference-pair-protocol", referencePairProtocolConfirmation, "reference-pair report protocol (confirmation or discovery)")
+	flags.StringVar(&cfg.ReferenceTournamentArtifact, "reference-tournament-artifact", "", "JSONL artifact containing a predeclared three- or five-arm PostgreSQL reference tournament")
+	flags.StringVar(&cfg.ReferenceTournamentOutput, "reference-tournament-output", "", "reference tournament JSON output path (default: stdout)")
+	flags.StringVar(&rawTournamentArms, "reference-tournament-arms", "", "comma-separated tournament arms with the incumbent first")
+	flags.StringVar(&cfg.ReferenceTournamentProtocol, "reference-tournament-protocol", referencePairProtocolConfirmation, "reference tournament protocol (confirmation or discovery)")
 	flags.IntVar(&cfg.PoolSize, "pool-size", 1, "PostgreSQL physical pool size")
 	flags.StringVar(&rawConcurrency, "concurrency", "", "comma-separated opt-in PostgreSQL concurrency smoke levels")
 	flags.Int64Var(&cfg.SessionMemoryCeilingBytes, "session-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes per PostgreSQL session")
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
-	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, ASP-A1-DAG)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, SP-I1-C-D, SP-I1-U-E+MAT-M0, SP-I1-C-WE+MAT-M0, SP-B1-C-ALT-NODE-D, SP-B1-C-ALT-NODE-WE+MAT-M0, SP-B2-C-MIN-LEVEL-D, SP-B2-C-MIN-LEVEL-WE+MAT-M0, ASP-A1-DAG, ASP-I1-U-DAG+MAT-M0, ASP-B1-DAG-ALT-NODE, ASP-B2-DAG-MIN-LEVEL)")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
+	flags.StringVar(&cfg.PostgresTraversalTelemetry, "postgres-traversal-telemetry", postgresTraversalTelemetryOff, "PostgreSQL traversal telemetry level (off, summary, or diagnostic); replays run outside timed samples")
+	flags.BoolVar(&cfg.PostgresExpansionOrientationShadow, "postgres-expansion-orientation-shadow", false, "tool-only orientation-probe shadow mode; executes only the exact incumbent traversal arm")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -254,6 +315,19 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&rawConfirmCases, "confirm-cases", "", "comma-separated exact primary names for paired confirmation")
 	flags.BoolVar(&cfg.DiagnosticGate, "diagnostic-gate", false, "allow comparison of matching diagnostic-only subsets")
 	flags.StringVar(&cfg.BundleDir, "bundle-dir", "", "write a reconstructible capture bundle to this directory")
+	flags.Func("bundle-evidence", "named auxiliary bundle artifact as name=path (repeatable)", func(value string) error {
+		rawBundleEvidence = append(rawBundleEvidence, value)
+		return nil
+	})
+	flags.StringVar(&cfg.BundleVerify, "bundle-verify", "", "standalone verification of a capture bundle directory")
+	flags.StringVar(&cfg.BundleVerifyOutput, "bundle-verify-output", "", "capture-bundle verification JSON output path (default: stdout)")
+	flags.BoolVar(&cfg.BundleRequireClean, "bundle-require-clean", false, "require standalone bundle verification to prove a clean source capture")
+	flags.StringVar(&cfg.PromotionManifest, "promotion-manifest", "", "verify a candidate promotion manifest and every bound evidence report")
+	flags.StringVar(&cfg.PromotionManifestOutput, "promotion-manifest-output", "", "promotion-manifest verification JSON destination (default: stdout)")
+	flags.StringVar(&cfg.PromotionBindManifest, "promotion-bind-manifest", "", "provisional promotion manifest supplying report identity")
+	flags.StringVar(&cfg.PromotionBindRole, "promotion-bind-role", "", "promotion evidence role to bind")
+	flags.StringVar(&cfg.PromotionBindInput, "promotion-bind-input", "", "unbound promotion evidence report")
+	flags.StringVar(&cfg.PromotionBindOutput, "promotion-bind-output", "", "identity-bound promotion evidence report")
 	flags.StringVar(&cfg.BuildCommand, "build-command", "go build -trimpath ./cmd/graphbench", "reproducible build command recorded in bundles")
 	flags.BoolVar(&cfg.ExistingGraph, "existing-graph", false, "run non-mutating PostgreSQL cases against an existing graph in read-write sessions without schema, load, clear, vacuum, or persistent writes")
 	flags.StringVar(&cfg.AnchorManifest, "anchor-manifest", "", "versioned logical-key anchor manifest for existing-graph mode")
@@ -267,8 +341,21 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.ResourceOutput, "resource-output", "", "state/resource gate JSON output path (default: stdout)")
 	flags.StringVar(&cfg.BackendDeltaArtifact, "backend-delta-artifact", "", "JSONL artifact used for descriptive matched PostgreSQL/Neo4j deltas")
 	flags.StringVar(&cfg.BackendDeltaOutput, "backend-delta-output", "", "descriptive backend-delta JSON output path (default: stdout)")
+	flags.StringVar(&cfg.ExpandIntoArtifact, "expand-into-artifact", "", "JSONL artifact used to build the fixed-one-hop three-arm study report")
+	flags.StringVar(&cfg.ExpandIntoOutput, "expand-into-output", "", "ExpandInto study JSON output path (default: stdout)")
+	flags.StringVar(&cfg.ExpandIntoProtocol, "expand-into-protocol", referencePairProtocolDiscovery, "ExpandInto study protocol (discovery or confirmation)")
+	flags.StringVar(&cfg.OrientationShadowArtifact, "orientation-shadow-artifact", "", "true-shadow orientation JSONL artifact")
+	flags.StringVar(&cfg.OrientationIncumbentArtifact, "orientation-incumbent-artifact", "", "matched exact incumbent orientation JSONL artifact")
+	flags.StringVar(&cfg.OrientationReverseArtifact, "orientation-reverse-artifact", "", "matched exact forced-reverse orientation JSONL artifact")
+	flags.StringVar(&cfg.OrientationAA, "orientation-aa", "", "host A/A report used by orientation selector-regret analysis")
+	flags.StringVar(&cfg.OrientationOutput, "orientation-output", "", "orientation selector-regret and probe-overhead JSON output path (default: stdout)")
+	flags.StringVar(&cfg.OrientationProtocol, "orientation-protocol", referencePairProtocolConfirmation, "orientation report protocol (discovery or confirmation)")
 
 	if err := flags.Parse(args); err != nil {
+		return config{}, err
+	}
+	var err error
+	if cfg.BundleEvidence, err = parseCaptureBundleEvidenceInputs(rawBundleEvidence); err != nil {
 		return config{}, err
 	}
 	if cfg.Iterations < 1 {
@@ -292,6 +379,14 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.PoolSize < 1 {
 		return config{}, fmt.Errorf("pool-size must be at least 1")
 	}
+	if cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryOff &&
+		cfg.PostgresTraversalTelemetry != postgresTraversalTelemetrySummary &&
+		cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic {
+		return config{}, fmt.Errorf("postgres-traversal-telemetry must be off, summary, or diagnostic")
+	}
+	if cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryOff && cfg.PoolSize != 1 {
+		return config{}, fmt.Errorf("PostgreSQL traversal telemetry requires pool-size 1 to preserve connection identity")
+	}
 	if cfg.SessionMemoryCeilingBytes < 0 || cfg.PoolMemoryCeilingBytes < 0 {
 		return config{}, fmt.Errorf("memory ceilings must not be negative")
 	}
@@ -313,6 +408,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if (cfg.GateBaseline == "") != (cfg.GateCandidate == "") {
 		return config{}, fmt.Errorf("gate-baseline and gate-candidate must be supplied together")
 	}
+	if cfg.GateAA != "" && cfg.GateBaseline == "" {
+		return config{}, fmt.Errorf("gate-aa requires gate-baseline and gate-candidate")
+	}
 	if (cfg.ConfirmLeft == "") != (cfg.ConfirmRight == "") {
 		return config{}, fmt.Errorf("confirm-left and confirm-right must be supplied together")
 	}
@@ -331,6 +429,61 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.ReferencePairBaseline != "" && cfg.ReferencePairBaseline == cfg.ReferencePairCandidate {
 		return config{}, fmt.Errorf("reference-pair baseline and candidate must differ")
 	}
+	if cfg.ReferenceTournamentOutput != "" && cfg.ReferenceTournamentArtifact == "" {
+		return config{}, fmt.Errorf("reference-tournament-output requires reference-tournament-artifact")
+	}
+	if cfg.ReferenceTournamentArtifact != "" && len(cfg.ReferenceTournamentArms) == 0 && strings.TrimSpace(rawTournamentArms) == "" {
+		return config{}, fmt.Errorf("reference-tournament-artifact requires reference-tournament-arms")
+	}
+	if cfg.ReferenceTournamentProtocol != referencePairProtocolDiscovery && cfg.ReferenceTournamentProtocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("reference-tournament-protocol must be discovery or confirmation")
+	}
+	if cfg.BundleVerifyOutput != "" && cfg.BundleVerify == "" {
+		return config{}, fmt.Errorf("bundle-verify-output requires bundle-verify")
+	}
+	if cfg.PromotionManifestOutput != "" && cfg.PromotionManifest == "" {
+		return config{}, fmt.Errorf("promotion-manifest-output requires promotion-manifest")
+	}
+	promotionBindConfigured := cfg.PromotionBindManifest != "" || cfg.PromotionBindRole != "" || cfg.PromotionBindInput != "" || cfg.PromotionBindOutput != ""
+	if promotionBindConfigured && (cfg.PromotionBindManifest == "" || cfg.PromotionBindRole == "" || cfg.PromotionBindInput == "" || cfg.PromotionBindOutput == "") {
+		return config{}, fmt.Errorf("promotion report binding requires manifest, role, input, and output")
+	}
+	if cfg.BundleRequireClean && cfg.BundleVerify == "" {
+		return config{}, fmt.Errorf("bundle-require-clean requires bundle-verify")
+	}
+	if len(cfg.BundleEvidence) > 0 && cfg.BundleDir == "" {
+		return config{}, fmt.Errorf("bundle-evidence requires bundle-dir")
+	}
+	if cfg.BundleVerify != "" && cfg.BundleDir != "" {
+		return config{}, fmt.Errorf("bundle-verify and bundle-dir are mutually exclusive")
+	}
+	if cfg.PromotionManifest != "" && (cfg.BundleVerify != "" || cfg.BundleDir != "") {
+		return config{}, fmt.Errorf("promotion-manifest verification is mutually exclusive with bundle operations")
+	}
+	if cfg.ExpandIntoOutput != "" && cfg.ExpandIntoArtifact == "" {
+		return config{}, fmt.Errorf("expand-into-output requires expand-into-artifact")
+	}
+	if cfg.ExpandIntoProtocol != referencePairProtocolDiscovery && cfg.ExpandIntoProtocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("expand-into-protocol must be discovery or confirmation")
+	}
+	orientationInputs := []string{cfg.OrientationShadowArtifact, cfg.OrientationIncumbentArtifact, cfg.OrientationReverseArtifact, cfg.OrientationAA}
+	orientationConfigured := false
+	for _, input := range orientationInputs {
+		orientationConfigured = orientationConfigured || input != ""
+	}
+	if cfg.OrientationOutput != "" {
+		orientationConfigured = true
+	}
+	if orientationConfigured {
+		for _, input := range orientationInputs {
+			if input == "" {
+				return config{}, fmt.Errorf("orientation report requires shadow, incumbent, reverse, and A/A artifacts")
+			}
+		}
+	}
+	if cfg.OrientationProtocol != referencePairProtocolDiscovery && cfg.OrientationProtocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("orientation-protocol must be discovery or confirmation")
+	}
 	modeCount := 0
 	if cfg.GateBaseline != "" {
 		modeCount++
@@ -347,14 +500,35 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.ReferencePairArtifact != "" {
 		modeCount++
 	}
+	if cfg.ReferenceTournamentArtifact != "" {
+		modeCount++
+	}
 	if cfg.ResourceArtifact != "" {
 		modeCount++
 	}
 	if cfg.BackendDeltaArtifact != "" {
 		modeCount++
 	}
+	if cfg.BundleVerify != "" {
+		modeCount++
+	}
+	if cfg.PromotionManifest != "" {
+		modeCount++
+	}
+	if promotionBindConfigured {
+		modeCount++
+	}
+	if cfg.ExpandIntoArtifact != "" {
+		modeCount++
+	}
+	if orientationConfigured {
+		modeCount++
+	}
 	if modeCount > 1 {
-		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, resource-gate, and backend-delta modes are mutually exclusive")
+		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, ExpandInto-report, and orientation-report modes are mutually exclusive")
+	}
+	if modeCount > 0 && cfg.BundleDir != "" {
+		return config{}, fmt.Errorf("standalone report modes and bundle-dir are mutually exclusive")
 	}
 	if cfg.AAArtifact != "" && cfg.GateBaseline != "" {
 		return config{}, fmt.Errorf("aa-artifact and performance-gate mode are mutually exclusive")
@@ -400,7 +574,6 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			cfg.GateTargets = append(cfg.GateTargets, target)
 		}
 	}
-	var err error
 	if cfg.Cases, err = parseUniqueCSV("case", rawCases); err != nil {
 		return config{}, err
 	}
@@ -419,6 +592,17 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.PostgresReferenceArms, err = parseUniqueCSV("PostgreSQL reference arm", rawReferenceArms); err != nil {
 		return config{}, err
 	}
+	if cfg.ReferenceTournamentArms, err = parseUniqueCSV("reference tournament arm", rawTournamentArms); err != nil {
+		return config{}, err
+	}
+	if cfg.ReferenceTournamentArtifact != "" && len(cfg.ReferenceTournamentArms) != 3 && len(cfg.ReferenceTournamentArms) != 5 {
+		return config{}, fmt.Errorf("reference tournament requires exactly 3 or 5 arms")
+	}
+	for _, arm := range cfg.ReferenceTournamentArms {
+		if !validPostgresReferenceArm(arm) {
+			return config{}, fmt.Errorf("unknown PostgreSQL reference tournament arm %q", arm)
+		}
+	}
 	for _, arm := range cfg.PostgresReferenceArms {
 		if !validPostgresReferenceArm(arm) {
 			return config{}, fmt.Errorf("unknown PostgreSQL reference arm %q", arm)
@@ -430,7 +614,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if len(cfg.PostgresReferenceArms) > 0 {
 		cfg.PostgresReferences = true
 	}
-	if cfg.PostgresForceShortest != "" && cfg.PostgresForceShortest != "SP-S0" && cfg.PostgresForceShortest != "SP-S0-DIRECT" && cfg.PostgresForceShortest != "SP-S3-U-D" && cfg.PostgresForceShortest != "SP-S3-U-E+MAT-M0" && cfg.PostgresForceShortest != "SP-S4-C-D" && cfg.PostgresForceShortest != "SP-S4-C-WE+MAT-M0" && cfg.PostgresForceShortest != "ASP-A1-DAG" {
+	if cfg.PostgresForceShortest != "" && !validForcedShortestPathExecutor(cfg.PostgresForceShortest) {
 		return config{}, fmt.Errorf("unsupported PostgreSQL forced shortest executor %q", cfg.PostgresForceShortest)
 	}
 	if cfg.PostgresForceExpansion != "" && cfg.PostgresForceExpansion != "EXPANSION-SUFFIX-SEEDED-REVERSE" && cfg.PostgresForceExpansion != "EXPANSION-ENDPOINT-SEEDED-REVERSE" {
@@ -438,6 +622,12 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	if cfg.PostgresForceShortest != "" && cfg.PostgresForceExpansion != "" {
 		return config{}, fmt.Errorf("PostgreSQL shortest and expansion search forces are mutually exclusive")
+	}
+	if cfg.PostgresExpansionOrientationShadow && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "") {
+		return config{}, fmt.Errorf("PostgreSQL expansion orientation shadow and forced traversal selectors are mutually exclusive")
+	}
+	if cfg.GateBaseline != "" && !cfg.DiagnosticGate && cfg.GateAA == "" {
+		return config{}, fmt.Errorf("complete performance gate requires gate-aa host calibration evidence")
 	}
 
 	modes, err := parseExecutionModes(rawModes)
@@ -463,6 +653,54 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validForcedShortestPathExecutor reports whether graphbench recognizes a
+// production executor or a declared tournament identity.
+func validForcedShortestPathExecutor(executor string) bool {
+	switch executor {
+	case "SP-S0",
+		"SP-S0-DIRECT",
+		"SP-S3-U-D",
+		"SP-S3-U-E+MAT-M0",
+		"SP-S4-C-D",
+		"SP-S4-C-WE+MAT-M0",
+		"SP-I1-C-D",
+		"SP-I1-U-E+MAT-M0",
+		"SP-I1-C-WE+MAT-M0",
+		"SP-B1-C-ALT-NODE-D",
+		"SP-B1-C-ALT-NODE-WE+MAT-M0",
+		"SP-B2-C-MIN-LEVEL-D",
+		"SP-B2-C-MIN-LEVEL-WE+MAT-M0",
+		"ASP-A1-DAG",
+		"ASP-I1-U-DAG+MAT-M0",
+		"ASP-B1-DAG-ALT-NODE",
+		"ASP-B2-DAG-MIN-LEVEL":
+		return true
+	default:
+		return false
+	}
+}
+
+// parseCaptureBundleEvidenceInputs parses repeatable name=path bundle evidence
+// declarations while keeping host paths out of serialized evidence identities.
+func parseCaptureBundleEvidenceInputs(rawValues []string) ([]CaptureBundleEvidenceInput, error) {
+	inputs := make([]CaptureBundleEvidenceInput, 0, len(rawValues))
+	seen := map[string]struct{}{}
+	for _, raw := range rawValues {
+		name, path, found := strings.Cut(raw, "=")
+		name = strings.TrimSpace(name)
+		path = strings.TrimSpace(path)
+		if !found || !validBundleEvidenceName(name) || path == "" {
+			return nil, fmt.Errorf("bundle-evidence must be a valid name=path declaration, got %q", raw)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return nil, fmt.Errorf("duplicate bundle-evidence name %q", name)
+		}
+		seen[name] = struct{}{}
+		inputs = append(inputs, CaptureBundleEvidenceInput{Name: name, Path: path})
+	}
+	return inputs, nil
 }
 
 // parseUniqueCSV splits comma-separated selectors, rejecting duplicates and empty elements.
@@ -521,6 +759,66 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
+	if cfg.BundleVerify != "" {
+		passed, err := createCaptureBundleVerification(cfg.BundleVerify, cfg.BundleVerifyOutput, cfg.BundleRequireClean)
+		if err != nil {
+			fatal("verify capture bundle: %v", err)
+		}
+		if !passed {
+			fatal("capture bundle verification failed")
+		}
+		return
+	}
+	if cfg.PromotionManifest != "" {
+		passed, err := writePromotionManifestVerification(cfg.PromotionManifest, cfg.PromotionManifestOutput)
+		if err != nil {
+			fatal("verify promotion manifest: %v", err)
+		}
+		if !passed {
+			fatal("promotion manifest verification failed")
+		}
+		return
+	}
+	if cfg.PromotionBindManifest != "" {
+		if err := bindPromotionEvidenceReport(cfg.PromotionBindManifest, cfg.PromotionBindRole, cfg.PromotionBindInput, cfg.PromotionBindOutput); err != nil {
+			fatal("bind promotion evidence report: %v", err)
+		}
+		return
+	}
+	if cfg.OrientationShadowArtifact != "" {
+		passed, err := createOrientationSelectorReport(
+			cfg.OrientationShadowArtifact,
+			cfg.OrientationIncumbentArtifact,
+			cfg.OrientationReverseArtifact,
+			cfg.OrientationAA,
+			cfg.OrientationOutput,
+			OrientationSelectorReportOptions{
+				Seed:       cfg.GateSeed,
+				Confidence: cfg.Confidence,
+				Protocol:   cfg.OrientationProtocol,
+			},
+		)
+		if err != nil {
+			fatal("calculate orientation selector report: %v", err)
+		}
+		if cfg.OrientationProtocol == referencePairProtocolConfirmation && !passed {
+			fatal("orientation selector qualification failed")
+		}
+		return
+	}
+	if cfg.ExpandIntoArtifact != "" {
+		if err := createExpandIntoStudyReport(cfg.ExpandIntoArtifact, cfg.ExpandIntoOutput, ExpandIntoStudyOptions{
+			Seed:                cfg.GateSeed,
+			Confidence:          cfg.Confidence,
+			Protocol:            cfg.ExpandIntoProtocol,
+			MaterialityRatio:    cfg.MaterialityRatio,
+			MaterialityAbsolute: cfg.MaterialityAbsolute,
+			P95RatioLimit:       1.05,
+		}); err != nil {
+			fatal("calculate ExpandInto study: %v", err)
+		}
+		return
+	}
 	if cfg.GateBaseline != "" {
 		corpus, err := loadScaleCorpus(cfg.CorpusRoot)
 		if err != nil {
@@ -544,6 +842,7 @@ func main() {
 			MaterialityRatio:    cfg.MaterialityRatio,
 			MaterialityAbsolute: cfg.MaterialityAbsolute,
 			DiagnosticMode:      cfg.DiagnosticGate,
+			AAReportPath:        cfg.GateAA,
 		})
 		if err != nil {
 			fatal("compare performance artifacts: %v", err)
@@ -597,6 +896,24 @@ func main() {
 			Protocol:      cfg.ReferencePairProtocol,
 		}); err != nil {
 			fatal("calculate matched reference pair: %v", err)
+		}
+		return
+	}
+	if cfg.ReferenceTournamentArtifact != "" {
+		passed, err := createReferenceTournamentReport(cfg.ReferenceTournamentArtifact, cfg.ReferenceTournamentOutput, ReferenceTournamentOptions{
+			Seed:                cfg.GateSeed,
+			Confidence:          cfg.Confidence,
+			MaterialityRatio:    cfg.MaterialityRatio,
+			MaterialityAbsolute: cfg.MaterialityAbsolute,
+			P95RatioLimit:       1.05,
+			Arms:                cfg.ReferenceTournamentArms,
+			Protocol:            cfg.ReferenceTournamentProtocol,
+		})
+		if err != nil {
+			fatal("calculate reference tournament: %v", err)
+		}
+		if cfg.ReferenceTournamentProtocol == referencePairProtocolConfirmation && !passed {
+			fatal("reference tournament qualification failed")
 		}
 		return
 	}
@@ -742,6 +1059,8 @@ func main() {
 			if err != nil {
 				fatal("open postgres_sql runner: %v", err)
 			}
+			runner.traversalTelemetry = cfg.PostgresTraversalTelemetry
+			runner.toolOptions.EnableExpansionOrientationShadow = cfg.PostgresExpansionOrientationShadow
 			nextRecords, err := runner.Run(ctx, cfg.WarmupIterations, cfg.Iterations, corpus)
 			closeErr := runner.Close(ctx)
 			if err != nil {
@@ -829,7 +1148,7 @@ func main() {
 		fatal("write JSONL: %v", writeErr)
 	}
 	if cfg.BundleDir != "" {
-		if err := writeCaptureBundle(cfg.BundleDir, corpus, records, environment); err != nil {
+		if err := writeCaptureBundleWithEvidence(cfg.BundleDir, corpus, records, environment, cfg.BundleEvidence); err != nil {
 			fatal("write capture bundle: %v", err)
 		}
 	}

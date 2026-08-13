@@ -140,3 +140,28 @@ func TestBackendDeltaReportPreservesRepeatedRounds(t *testing.T) {
 	require.Equal(t, 1, report.Cases[0].Round)
 	require.Equal(t, 2, report.Cases[1].Round)
 }
+
+// TestBackendDeltaReportPreservesIncompletePairs verifies a missing backend
+// remains visible instead of disappearing from an intersection-only report.
+func TestBackendDeltaReportPreservesIncompletePairs(t *testing.T) {
+	root := t.TempDir()
+	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
+	records := []CaseResult{{
+		Dataset:       "fixture",
+		Name:          "postgres-only",
+		ExecutionMode: ModePostgresSQL,
+		Status:        StatusOK,
+	}}
+	require.NoError(t, writeJSONLFile(artifact, records))
+	require.NoError(t, createBackendDeltaReport(artifact, output))
+	raw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	var report BackendDeltaReport
+	require.NoError(t, json.Unmarshal(raw, &report))
+	require.Equal(t, 2, report.Version)
+	require.Len(t, report.Cases, 1)
+	require.False(t, report.Cases[0].Complete)
+	require.Equal(t, "missing_neo4j", report.Cases[0].IncompleteReason)
+	require.Zero(t, report.Cases[0].MedianNeo4jOverPG)
+	require.Zero(t, report.Cases[0].P95Neo4jOverPG)
+}

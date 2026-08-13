@@ -25,6 +25,7 @@
         "properties": true
       },
       "shape": {
+        "qualification_split": "holdout",
         "fixture_tier": "normal",
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
@@ -75,6 +76,7 @@
         "properties": true
       },
       "shape": {
+        "qualification_split": "holdout",
         "fixture_tier": "normal",
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
@@ -125,6 +127,7 @@
         "properties": true
       },
       "shape": {
+        "qualification_split": "holdout",
         "fixture_tier": "normal",
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
@@ -175,6 +178,7 @@
         "properties": true
       },
       "shape": {
+        "qualification_split": "holdout",
         "fixture_tier": "normal",
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
@@ -220,6 +224,7 @@
         "properties": true
       },
       "shape": {
+        "qualification_split": "holdout",
         "fixture_tier": "normal",
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",
@@ -275,6 +280,7 @@
         "properties": true
       },
       "shape": {
+        "qualification_split": "holdout",
         "fixture_tier": "normal",
         "root_predicate": "selective_property",
         "terminal_predicate": "fixed_suffix",

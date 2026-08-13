@@ -8,8 +8,15 @@ fixture load, preserving ID-anchored production query shapes in captured plans.
 
 Use this command to baseline PostgreSQL translator and optimizer changes. PostgreSQL captures include translated SQL,
 `EXPLAIN` output, plan operator counts, estimated plan cost, recursive CTE indicators, path materialization indicators,
-planned lowerings, applied lowerings, skipped lowerings, and skipped-lowering reasons. Neo4j captures include logical
-plan operator trees for cross-backend plan-shape comparison.
+planned lowerings, applied lowerings, skipped lowerings, and skipped-lowering reasons. Neo4j read captures use `PROFILE`
+after execution and retain ordered operators, estimated and actual rows, DB and page-cache hits, loops, and operator
+time when the server exposes them. Writes remain `EXPLAIN`-only.
+
+Every run also writes a semantic PostgreSQL/Neo4j delta over the union of captured workloads. The delta is keyed by
+workload hash and source revision, fingerprints each backend plan, compares access side, physical direction, predicate
+placement, endpoint binding, traversal family, estimates, and PostgreSQL planned/emitted/fallback identities, and ranks
+the largest disagreements. A missing or failed backend remains an explicit incomplete pair; it is never discarded by an
+intersection-only comparison. Runtime-arm attribution remains GraphBench's responsibility.
 
 ## Usage
 
@@ -36,6 +43,7 @@ Useful flags:
 | `-neo4j-connection` | `NEO4J_CONNECTION_STRING` | Neo4j backend |
 | `-summary` | `.coverage/plan-corpus-summary.md` | Markdown summary |
 | `-summary-json` | `.coverage/plan-corpus-summary.json` | JSON summary |
+| `-plan-delta-json` | `.coverage/plan-corpus-delta.json` | Versioned paired semantic delta, including incomplete backend pairs |
 | `-top` | `25` | Number of expensive PostgreSQL plans to include in summaries |
 | `-dawgs-version` | auto-detected | DAWGS source version recorded in output |
 
@@ -44,7 +52,7 @@ Useful flags:
 The markdown summary is intended for human review. It ranks the highest-cost PostgreSQL plans, reports feature counts
 such as `Recursive Union`, `SubPlan`, and `Function Scan on unnest`, and summarizes planned/applied/skipped lowerings.
 
-The JSON summary is intended for automation and baseline comparison. For optimizer work, check that intentional SQL
+The JSON summary and paired delta are intended for automation and baseline comparison. For optimizer work, check that intentional SQL
 shape changes are explained and that skipped-lowering accounting remains actionable. A planned lowering without a
 matching applied lowering should either have a specific skipped reason or indicate a translator consumption bug.
 Both per-query JSONL records and summaries include the DAWGS source version

@@ -222,6 +222,14 @@ type ObservedValues struct {
 
 // WorkloadShape describes traversal depth, direction, projection, and expected complexity.
 type WorkloadShape struct {
+	// QualificationSplit identifies whether a topology bucket is training,
+	// holdout, or a diagnostic boundary. Selector tuning must not consume
+	// holdout records.
+	QualificationSplit string `json:"qualification_split,omitempty"`
+	// FallbackExpectation is the typed runtime contract for candidate execution:
+	// forbidden, required, or allowed. Prioritized corpus declarations receive a
+	// deterministic value during loading when older files omit it.
+	FallbackExpectation string `json:"fallback_expectation,omitempty"`
 	// RootPredicate describes how the traversal root is constrained.
 	RootPredicate string `json:"root_predicate,omitempty"`
 	// TerminalPredicate describes how the traversal terminal is constrained.

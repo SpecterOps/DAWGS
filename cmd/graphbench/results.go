@@ -68,6 +68,16 @@ type DurationStats struct {
 	Samples []LatencySample `json:"samples,omitempty"`
 }
 
+// RuntimeReceiptEvent records one ordered executor transition observed during
+// a measured traversal invocation. Multiple events preserve nested fallback
+// chains such as I1 -> S4 -> S3 without reducing them to the terminal arm.
+type RuntimeReceiptEvent struct {
+	Ordinal          int    `json:"ordinal"`
+	RuntimeIdentity  string `json:"runtime_identity"`
+	RuntimeBranch    string `json:"runtime_branch"`
+	FallbackExecuted bool   `json:"fallback_executed"`
+}
+
 // LatencySample records one labeled duration and its measurement order.
 type LatencySample struct {
 	// Round identifies the measurement round.
@@ -94,6 +104,19 @@ type LatencySample struct {
 	Classification string `json:"classification"`
 	// Duration records elapsed time for this observation.
 	Duration time.Duration `json:"duration"`
+	// RequestedIdentity records the candidate arm selected for this case.
+	RequestedIdentity string `json:"requested_identity,omitempty"`
+	// RuntimeIdentity records the executor observed by the case's isolated runtime attestation.
+	RuntimeIdentity string `json:"runtime_identity,omitempty"`
+	// RuntimeBranch records the singular preflight, recursive, incumbent, or fallback branch observed for the case.
+	RuntimeBranch string `json:"runtime_branch,omitempty"`
+	// FallbackExecuted records whether the candidate delegated to its exact incumbent.
+	FallbackExecuted *bool `json:"fallback_executed,omitempty"`
+	// RuntimeAttestation identifies the boundary that supplied runtime identity.
+	RuntimeAttestation string `json:"runtime_attestation,omitempty"`
+	// RuntimeReceiptEvents preserves the complete ordered runtime branch chain
+	// for this exact measured invocation.
+	RuntimeReceiptEvents []RuntimeReceiptEvent `json:"runtime_receipt_events,omitempty"`
 }
 
 // ConcurrencySample records one concurrent worker iteration and its connection and latency stages.
@@ -176,6 +199,11 @@ type PostgresReferenceResult struct {
 	PostgresPlanJSON json.RawMessage `json:"postgres_plan_json,omitempty"`
 	// PostgresMetrics contains normalized PostgreSQL plan resource metrics.
 	PostgresMetrics *PostgresPlanMetrics `json:"postgres_metrics,omitempty"`
+	// TraversalTelemetry contains lightweight execution identity and optional untimed diagnostic counters.
+	TraversalTelemetry *TraversalExecutionTelemetry `json:"traversal_execution_telemetry,omitempty"`
+	// traversalTelemetryParameters retains invocation parameters only until all
+	// timed samples finish and the optional replay is attached.
+	traversalTelemetryParameters map[string]any
 }
 
 // CompileSample breaks one Cypher compilation into parse, translate, and render stages.
@@ -318,6 +346,10 @@ type PostgresPlanNodeMetric struct {
 	Alias string `json:"alias,omitempty"`
 	// IndexName names the PostgreSQL index scanned by the plan node.
 	IndexName string `json:"index_name,omitempty"`
+	// FunctionName identifies a SQL function invoked by a Function Scan without exposing its internal work.
+	FunctionName string `json:"function_name,omitempty"`
+	// SubplanName names an initplan, subplan, or CTE body used for stable branch attribution.
+	SubplanName string `json:"subplan_name,omitempty"`
 	// PlanRows records the planner's estimated rows for the plan node.
 	PlanRows int64 `json:"plan_rows,omitempty"`
 	// PlanWidth records the planner's estimated row width in bytes.
@@ -326,6 +358,8 @@ type PostgresPlanNodeMetric struct {
 	ActualRows int64 `json:"actual_rows,omitempty"`
 	// ActualLoops records how many times the PostgreSQL plan node executed.
 	ActualLoops int64 `json:"actual_loops,omitempty"`
+	// RowsRemovedByFilter records rows PostgreSQL reports as rejected by this node's filter.
+	RowsRemovedByFilter int64 `json:"rows_removed_by_filter,omitempty"`
 	// ActualTotalMS records total observed time for the PostgreSQL plan node.
 	ActualTotalMS float64 `json:"actual_total_ms,omitempty"`
 	// Buffers contains shared, local, and temporary buffer activity attributed to the plan.
@@ -426,6 +460,8 @@ type CaseResult struct {
 	PostgresPlanJSON json.RawMessage `json:"postgres_plan_json,omitempty"`
 	// PostgresMetrics contains normalized PostgreSQL plan resource metrics.
 	PostgresMetrics *PostgresPlanMetrics `json:"postgres_metrics,omitempty"`
+	// TraversalTelemetry contains lightweight execution identity and optional untimed diagnostic counters.
+	TraversalTelemetry *TraversalExecutionTelemetry `json:"traversal_execution_telemetry,omitempty"`
 	// Neo4jPlan contains the normalized Neo4j operator tree.
 	Neo4jPlan *Neo4jPlanNode `json:"neo4j_plan,omitempty"`
 	// Neo4jOperators lists normalized Neo4j operators found in the captured plan.
@@ -665,6 +701,27 @@ func setSampleRunMetadata(stats *DurationStats, environment RunEnvironment) {
 		stats.Samples[idx].Arm = environment.Arm
 		stats.Samples[idx].ArmOrder = environment.ArmOrder
 		stats.Samples[idx].RunUUID = environment.RunUUID
+	}
+}
+
+// setSampleTraversalRuntimeMetadata binds every timed sample to the singular
+// invocation-local replay outcome obtained for the same case, parameters, SQL,
+// and physical session. This supports diagnostics but deliberately does not
+// claim per-timed-invocation attribution; promotion gates require the stronger
+// "timed_invocation" attestation.
+func setSampleTraversalRuntimeMetadata(stats *DurationStats, telemetry *TraversalExecutionTelemetry) {
+	if stats == nil || telemetry == nil {
+		return
+	}
+	for idx := range stats.Samples {
+		if stats.Samples[idx].RuntimeAttestation == "timed_invocation" {
+			continue
+		}
+		stats.Samples[idx].RequestedIdentity = telemetry.Summary.RequestedIdentity
+		stats.Samples[idx].RuntimeIdentity = telemetry.Summary.RuntimeIdentity
+		stats.Samples[idx].RuntimeBranch = telemetry.Summary.RuntimeBranch
+		stats.Samples[idx].FallbackExecuted = telemetry.Summary.FallbackExecuted
+		stats.Samples[idx].RuntimeAttestation = "same_case_invocation_local_replay"
 	}
 }
 

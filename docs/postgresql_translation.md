@@ -30,16 +30,39 @@ Current PostgreSQL optimization coverage includes:
   filters, traversal direction selection, and limit pushdown where ordering and distinct semantics permit it.
 - Static shortest-path executor selection for one read-only, uncorrelated, directed traversal with one ID equality per
   endpoint and no observed relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state, with deep
-  physical-inbound searches sent to `SP-S4-C-D`; every qualified one-path witness uses
-  `SP-S4-C-WE+MAT-M0`. The S3 edge-trail materializer remains qualification-only. Both S4 executors canonicalize
+  physical-inbound searches sent to `SP-S4-C-D`. Bounded directed single-kind one-path witnesses use
+  `SP-S3-U-E+MAT-M0`; deep inbound and multi-kind or untyped witnesses use
+  `SP-S4-C-WE+MAT-M0`. Both S4 executors canonicalize
   expansion, keep recursive state ID-only, enforce a bounded state
   ceiling, and fall back to an exact relationship-trail query in the same statement and snapshot before returning a
   row. Singleton ties return one valid minimal trail; physical edge-ID order is not public. See
   `docs/shortest_path_tie_policy.md`.
+- Default-off compact bidirectional SP candidates preserve that singleton
+  endpoint and observation envelope. `SP-B1-C-ALT-NODE-D` and
+  `SP-B1-C-ALT-NODE-WE+MAT-M0` alternate one accepted node per side;
+  `SP-B2-C-MIN-LEVEL-D` and `SP-B2-C-MIN-LEVEL-WE+MAT-M0` expand the smaller
+  complete current level. Both use ID-only invocation-local state, a
+  lower-bound stop condition, late witness hydration, independent
+  seen/frontier/predecessor caps, and exact S4 fallback before output. They are
+  reference and explicit-tool arms; the production driver rejects them.
+  `SP-I1-C-D` is likewise tool-only until it has the same cap, exact-fallback,
+  receipt, and kill-switch contract as guarded witness and ASP I1. Eligible
+  canaries require SHA-256-allowlisted queries under repeatable-read or
+  serializable isolation and a schema-v2 promotion manifest whose reports
+  repeat its complete authorization identity. The ordinary production path
+  remains unchanged.
 - Static `allShortestPaths` selection through `asp-static-v1` for a single directed, read-only endpoint pair with
   minimum depth one. `ASP-A1-DAG` has exact one- and two-hop arms, discovers minimum node-depth layers, retains every
   relationship-distinct predecessor at those layers, and enumerates the predecessor DAG. Open maximum ranges use the
   documented depth cap of 15. Unsupported or ambiguous forms retain exact `SP-S0` with a machine-readable reason.
+- Default-off `ASP-B1-DAG-ALT-NODE` and `ASP-B2-DAG-MIN-LEVEL` reuse compact
+  two-sided search while retaining every same-minimum-depth predecessor. They
+  enumerate at one canonical completed meeting cut and apply separate
+  discovery, predecessor, saturating path-count, staged-output, and byte gates.
+  Overflow clears candidate state and invokes exact `ASP-A1-DAG` before output.
+  Production remains on A1 until independent training, frozen-holdout,
+  resource, and reference-closure reports pass; the allowlisted canary seam
+  uses the same explicit stable-snapshot requirement as SP.
 - Expansion suffix pushdown and `ExpandInto` detection for fixed suffixes and shared-endpoint fanout patterns.
 - Typed compound expansion-search planning for directed bounded expansions followed by fixed suffixes. The decision
   records its fixed-suffix expansion family, planned candidates, exact eligibility facts, observation mode, suffix
@@ -53,6 +76,16 @@ Current PostgreSQL optimization coverage includes:
   retains the `EXPANSION-STEPWISE-FORWARD` translator and reports
   `tournament_unqualified` for otherwise eligible three-hop forms because no
   hard suffix-density or reverse-state bound is available before translation.
+- The default-off `orientation-probe-v1` guarded and shadow statements measure
+  bounded duplicate-preserving roots, suffix rows/distinct boundaries, and
+  typed first-hop work from both sides. Every relation has a cap+1 sentinel;
+  reverse must beat forward by the versioned strict 3/4 hysteresis rule.
+  Guarded execution also caps reverse state and marker-gates candidate and
+  incumbent output chains independently. Shadow execution always runs the
+  incumbent and records only `would_select`. A versioned query-allowlisted
+  driver canary can emit the guarded form only when it also binds a verified
+  promotion-manifest SHA-256, while the zero policy and every non-allowlisted
+  query remain forward.
 - Guarded endpoint-seeded expansion selection covers a separate
   `fixed_prefix_terminal_expansion` family: exactly one directed fixed prefix followed by one terminal, directed,
   single-kind variable expansion with minimum depth one and a local selective terminal predicate. Production emits
@@ -67,6 +100,22 @@ Current PostgreSQL optimization coverage includes:
   correlations are sufficient.
 - Membership-only `collect(entity)` ID-array lowering with `id = any(...)` membership predicates.
 - Shortest-path strategy and terminal-filter planning for selective endpoint predicates and kind-only terminal filters.
+- Analysis-only endpoint resolution metadata classifies ID equality, bounded
+  nonunique property equality, literal or parameterized small sets, and
+  correlated pairs with explicit 1/2/32/33 contracts. Property syntax is not a
+  uniqueness proof. Analysis-only traversal predicate metadata distinguishes
+  step-local and universal node/relationship forms from whole-path and
+  unsupported forms. Neither diagnostic broadens execution until the compact
+  candidates and that semantic class independently qualify.
+- The fixed one-hop, bound-pair `ExpandInto` study exposes exact direct-pair,
+  lower-degree adjacency, and statement-local pair-reuse reference arms. It
+  covers outbound, inbound, directionless, wildcard/multi-kind, duplicate,
+  missing, and self-loop behavior but does not select a production policy.
+  Fixed-hop correctness does not depend on the study marker: dual-bound steps
+  always retain an exact pair-join fallback, including endpoints carried across
+  `WITH` or introduced by node-valued `UNWIND`. Directionless fixed hops use
+  paired endpoint orientations so self-loops are emitted once for unbound,
+  single-bound, and dual-bound forms.
 - Exact anonymous directed fixed-range expansion lowering for non-shortest-path `*1..1` and `*2..2` patterns. These
   shapes use fixed traversal steps instead of recursive CTEs, preserve path projection semantics, and enforce
   relationship uniqueness across emitted fixed steps. The explicit SQL-size cap is depth 2; broader exact ranges
@@ -94,15 +143,57 @@ prevents in-flight misses from repopulating the cache. Queries whose source text
 diagnostics expose aggregate hit, miss, bypass, eviction, coalesced-miss, entry, and pending counts only—never query
 text, literals, parameters, or credentials.
 
-The translation cache is keyed by trimmed query text, graph ID, parameter names, and the PostgreSQL data type negotiated
-for each parameter. Values are rebound on every hit. This deliberately separates empty untyped lists from typed lists
+The translation cache is keyed by trimmed query text, graph ID, parameter names, the PostgreSQL data type negotiated
+for each parameter, and the exact effective traversal-policy identity. Values are rebound on every hit. This deliberately separates empty untyped lists from typed lists
 and separates different graph partitions. A translation containing generated/static fragment parameters is not cached,
 because those values cannot be reconstructed safely from caller parameters. Concurrent cacheable misses are coalesced;
 waiters rebuild uncacheable translations rather than inheriting the first caller's values. Driver close clears both
 caches. `ParseCacheStats` and `TranslationCacheStats` expose aggregate, query-text-free counters.
 
-The shortest-path functions use session-local `ON COMMIT PRESERVE ROWS` tables with invocation versions. Calls truncate
-or version row state instead of creating, dropping, or renaming tables at every breadth-first level. The functions set a
+`pg.TraversalPolicy` is default-off and admits one candidate family per
+nonzero generation. It requires a nonempty allowlist built with
+`pg.TraversalPolicyQuerySHA256` and the exact verified promotion-manifest bytes.
+The driver checks the manifest digest and binds its candidate, selector,
+execution boundary, immutable caps, training/holdout buckets, exact query
+cohort, and required evidence digests before accepting the policy. Generation
+and policy contents partition the translation cache. Setting the zero policy
+makes older candidate entries immediately unreachable. B1/B2 candidates are
+not production-canary eligible. `DisableEndpointSeededReverse` is an emergency
+rollback control and intentionally requires no promotion artifact. Policy
+forcing never broadens a lowering's structural correctness envelope.
+
+The same policy boundary now admits `ASP-I1-U-DAG+MAT-M0` as a default-off,
+exact-query canary under Repeatable Read or Serializable isolation. Its
+manifest must authorize the query SHA and exact direction/observation/depth/
+relationship-kind bucket, declare positive immutable state, predecessor,
+enumeration, and output-byte caps, name `ASP-A1-DAG` as fallback, and use the
+`guarded_dual_arm` boundary. Exact one- and two-hop targets bypass recursive
+discovery. The inline statement materializes cap+1 preflight, distance,
+predecessor, and enumeration relations before opening either output arm. A
+version-2 runtime receipt retains the complete ordered event chain and
+identifies `inline_predecessor_dag`, `inline_no_path`, or `exact_a1_fallback`;
+the unselected arm emits no rows. Read Committed and
+queries outside the exact allowlist retain A1. `DisableInlineASPDAG` is the
+evidence-free emergency rollback control.
+
+Runtime receipt workspaces must exist on the exact PostgreSQL session before
+an explicit read-only transaction begins. GraphBench satisfies this by pinning
+and preparing one session. Driver callers that intentionally arm receipts from
+inside a graph transaction can pass
+`pg.OptionInitializeTraversalRuntimeAttestation()`; the driver then prepares
+the acquired session immediately before `BEGIN READ ONLY`.
+
+`SP-I1-C-WE+MAT-M0` uses the same guarded production boundary for singleton
+one-path observations, with `SP-S4-C-WE+MAT-M0` as its declared fallback. The
+manifest must authorize an exact `one_path` bucket and the same four positive
+caps. It is admitted only at Repeatable Read or Serializable isolation;
+`DisableInlineSPWitness` immediately restores the statically selected S3/S4
+incumbent and changes the cache identity without requiring evidence.
+
+The shortest-path functions use session-local `ON COMMIT PRESERVE ROWS`
+workspace-v2 tables with invocation versions. Calls reset seen, candidate, and
+predecessor state once, then derive each frontier from depth-tagged seen rows;
+they do not create, drop, swap, or truncate frontier tables at every level. The functions set a
 local `recursive_worktable_factor`, declare explicit `COST`/`ROWS` estimates, and carry graph/node/edge IDs until one
 outer hydration boundary. Temporary-workspace buffers are expected for S4/ASP; executor temp-file spill and WAL remain
 resource-gate failures.

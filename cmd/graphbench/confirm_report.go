@@ -19,7 +19,7 @@ import (
 )
 
 // confirmationReportVersion identifies the JSON schema emitted by confirmation reports.
-const confirmationReportVersion = 1
+const confirmationReportVersion = 4
 
 // ConfirmationOptions selects the paired artifacts, cases, confidence level, and bootstrap seed used for confirmation.
 type ConfirmationOptions struct {
@@ -55,6 +55,12 @@ type ConfirmationCase struct {
 	Name string `json:"name"`
 	// Backend identifies the execution backend.
 	Backend ExecutionMode `json:"backend"`
+	// Tier identifies whether latency is promotion-gated or stress-diagnostic.
+	Tier string `json:"tier"`
+	// QualificationSplit identifies training, frozen holdout, or diagnostic evidence.
+	QualificationSplit string `json:"qualification_split"`
+	// TimingGated reports whether timing evidence contributes to promotion.
+	TimingGated bool `json:"timing_gated"`
 	// MatchedRounds records rounds containing both left- and right-arm samples.
 	MatchedRounds int `json:"matched_rounds"`
 	// LeftSamples records warm samples accepted from the left confirmation arm.
@@ -71,6 +77,9 @@ type ConfirmationCase struct {
 	P95 ConfirmationMetric `json:"p95"`
 	// Disposition records the confirmation classification assigned to the case.
 	Disposition string `json:"disposition"`
+	// RightRuntimeReceiptChains preserves the candidate/right arm's complete
+	// measured runtime branch chains.
+	RightRuntimeReceiptChains [][]RuntimeReceiptEvent `json:"right_runtime_receipt_chains,omitempty"`
 }
 
 // ConfirmationReport contains paired-arm identities, A/A noise evidence, and per-case confirmation decisions.
@@ -93,6 +102,24 @@ type ConfirmationReport struct {
 	RightSHA256 string `json:"right_sha256"`
 	// AAReport contains A/A noise evidence used to classify confirmation differences.
 	AAReport string `json:"aa_report,omitempty"`
+	// AAReportSHA256 identifies the exact A/A report used for classification.
+	AAReportSHA256 string `json:"aa_report_sha256,omitempty"`
+	// PromotionEligible reports whether every timing-gated causal case is comparable and P95-non-inferior.
+	PromotionEligible bool `json:"promotion_eligible"`
+	// QualificationRequired reports whether the artifact contains a prioritized traversal candidate that requires independent training and frozen-holdout confirmation.
+	QualificationRequired bool `json:"qualification_required"`
+	// TrainingCases records prioritized traversal cases confirmed on the selector-training partition.
+	TrainingCases int `json:"training_cases"`
+	// HoldoutCases records prioritized traversal cases confirmed on the frozen topology holdout.
+	HoldoutCases int `json:"holdout_cases"`
+	// TrainingPassed reports whether every observed prioritized training case cleared confirmation.
+	TrainingPassed bool `json:"training_passed"`
+	// HoldoutPassed reports whether every observed prioritized holdout case cleared confirmation.
+	HoldoutPassed bool `json:"holdout_passed"`
+	// QualificationPassed reports whether nonempty training and holdout partitions independently cleared confirmation.
+	QualificationPassed bool `json:"qualification_passed"`
+	// QualificationFamilies contains the independent split disposition for each concrete traversal candidate family.
+	QualificationFamilies []TraversalQualificationStatus `json:"qualification_families,omitempty"`
 	// Cases contains paired-arm evidence and the resulting disposition for each confirmed workload.
 	Cases []ConfirmationCase `json:"cases"`
 }
@@ -108,14 +135,11 @@ func createConfirmationReport(leftPath, rightPath, aaPath, outputPath string, op
 		return fmt.Errorf("read right artifact: %w", err)
 	}
 	var aa *AAResolutionReport
+	aaSHA256 := ""
 	if aaPath != "" {
-		raw, err := os.ReadFile(aaPath)
+		aa, aaSHA256, err = loadAAResolutionReport(aaPath)
 		if err != nil {
 			return fmt.Errorf("read A/A report: %w", err)
-		}
-		aa = &AAResolutionReport{}
-		if err := json.Unmarshal(raw, aa); err != nil {
-			return fmt.Errorf("decode A/A report: %w", err)
 		}
 	}
 	report, err := buildConfirmationReport(left, right, aa, options)
@@ -131,6 +155,7 @@ func createConfirmationReport(leftPath, rightPath, aaPath, outputPath string, op
 		return err
 	}
 	report.AAReport = aaPath
+	report.AAReportSHA256 = aaSHA256
 	return writeConfirmationReport(outputPath, report)
 }
 
@@ -187,20 +212,35 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 	if len(keys) == 0 {
 		return ConfirmationReport{}, fmt.Errorf("artifacts have no matched PostgreSQL warm series")
 	}
-	aaReports := []*AAResolutionReport{}
-	for _, artifact := range [][]CaseResult{left, right} {
-		within, err := buildAAResolutionReport(artifact, PerfGateOptions{
-			Seed:           options.Seed,
-			Confidence:     options.Confidence,
-			BootstrapCount: options.BootstrapCount,
-		})
+	tiers := make(map[performanceKey]string, len(keys))
+	splits := make(map[performanceKey]string, len(keys))
+	requiresAA := false
+	for _, key := range keys {
+		tier, err := timingTier(key, left, right)
 		if err != nil {
-			return ConfirmationReport{}, fmt.Errorf("calculate within-run A/A: %w", err)
+			return ConfirmationReport{}, err
 		}
-		aaReports = append(aaReports, &within)
+		tiers[key] = tier
+		split, err := qualificationSplit(key, left, right)
+		if err != nil {
+			return ConfirmationReport{}, err
+		}
+		splits[key] = split
+		if !blockAA && tier != "stress" && promotionTimingSplit(split) {
+			requiresAA = true
+		}
 	}
-	if aa != nil {
-		aaReports = append(aaReports, aa)
+	if requiresAA {
+		if err := validateAAResolutionEvidence(aa, left, options.Confidence); err != nil {
+			return ConfirmationReport{}, fmt.Errorf("left-arm A/A evidence: %w", err)
+		}
+		if err := validateAAResolutionEvidence(aa, right, options.Confidence); err != nil {
+			return ConfirmationReport{}, fmt.Errorf("right-arm A/A evidence: %w", err)
+		}
+	} else if aa != nil {
+		if err := validateAAResolutionEvidence(aa, left, options.Confidence); err != nil {
+			return ConfirmationReport{}, err
+		}
 	}
 
 	report := ConfirmationReport{
@@ -214,6 +254,10 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 	if blockAA {
 		report.Kind = "block_reload_aa"
 	}
+	report.PromotionEligible = !blockAA && requiresAA
+	report.TrainingPassed = true
+	report.HoldoutPassed = true
+	qualification := map[string]*TraversalQualificationStatus{}
 	gateOptions := PerfGateOptions{
 		Seed:           options.Seed,
 		Confidence:     options.Confidence,
@@ -221,12 +265,18 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 	}
 	for idx, key := range keys {
 		leftRounds, rightRounds := matchedRounds(leftSeries[key], rightSeries[key])
-		if len(leftRounds) < 10 || len(leftRounds) > 20 {
+		timingGated := tiers[key] != "stress" && promotionTimingSplit(splits[key]) && !blockAA
+		if timingGated && (len(leftRounds) < 10 || len(leftRounds) > 20) {
 			return ConfirmationReport{}, fmt.Errorf("%s/%s requires 10-20 matched rounds, got %d", key.dataset, key.name, len(leftRounds))
 		}
 		for _, round := range sortedRounds(leftRounds) {
-			if len(leftRounds[round]) < 50 || len(rightRounds[round]) < 50 {
+			if timingGated && (len(leftRounds[round]) < 50 || len(rightRounds[round]) < 50) {
 				return ConfirmationReport{}, fmt.Errorf("%s/%s round %d requires at least 50 warm samples per arm", key.dataset, key.name, round)
+			}
+		}
+		if timingGated {
+			if err := validatePairedOrderEvidence(left, right, key, sortedRounds(leftRounds), 20); err != nil {
+				return ConfirmationReport{}, fmt.Errorf("invalid confirmation evidence: %w", err)
 			}
 		}
 		seed := options.Seed + int64(idx)*7919
@@ -234,54 +284,96 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 		p50Change := negateDurationInterval(bootstrapRoundMedianSaving(leftRounds, rightRounds, seed+1, gateOptions))
 		p95Ratio := bootstrapStratifiedP95Ratio(leftRounds, rightRounds, seed+2, gateOptions)
 		p95Change := bootstrapStratifiedQuantileChange(leftRounds, rightRounds, 0.95, seed+3, gateOptions)
-		p50NoiseRatio, p50NoiseAbsolute := confirmationNoise(aaReports, key, false)
-		p95NoiseRatio, p95NoiseAbsolute := confirmationNoise(aaReports, key, true)
+		p50NoiseRatio, p50NoiseAbsolute := minimumTimingNoiseRatio, minimumTimingNoiseAbsolute
+		p95NoiseRatio, p95NoiseAbsolute := minimumTimingNoiseRatio, minimumTimingNoiseAbsolute
+		if aa != nil {
+			if ratio, absolute, floorErr := aaTimingFloor(aa, key, false, 0); floorErr == nil {
+				p50NoiseRatio, p50NoiseAbsolute = ratio, absolute
+			} else if timingGated {
+				return ConfirmationReport{}, floorErr
+			}
+			if ratio, absolute, floorErr := aaTimingFloor(aa, key, true, 0); floorErr == nil {
+				p95NoiseRatio, p95NoiseAbsolute = ratio, absolute
+			} else if timingGated {
+				return ConfirmationReport{}, floorErr
+			}
+		}
 		comparable, reasons := confirmationComparable(left, right, key)
 		entry := ConfirmationCase{
-			Dataset:       key.dataset,
-			Name:          key.name,
-			Backend:       key.backend,
-			MatchedRounds: len(leftRounds),
-			LeftSamples:   sampleCount(leftRounds),
-			RightSamples:  sampleCount(rightRounds),
-			Comparable:    comparable,
-			Comparability: reasons,
-			P50:           classifyConfirmationMetric(p50Ratio, p50Change, p50NoiseRatio, p50NoiseAbsolute),
-			P95:           classifyConfirmationMetric(p95Ratio, p95Change, p95NoiseRatio, p95NoiseAbsolute),
+			Dataset:                   key.dataset,
+			Name:                      key.name,
+			Backend:                   key.backend,
+			Tier:                      tiers[key],
+			QualificationSplit:        splits[key],
+			TimingGated:               timingGated,
+			MatchedRounds:             len(leftRounds),
+			LeftSamples:               sampleCount(leftRounds),
+			RightSamples:              sampleCount(rightRounds),
+			Comparable:                comparable,
+			Comparability:             reasons,
+			RightRuntimeReceiptChains: caseRuntimeReceiptChains(right, key),
+			P50:                       classifyConfirmationMetric(p50Ratio, p50Change, p50NoiseRatio, p50NoiseAbsolute),
+			P95:                       classifyConfirmationMetric(p95Ratio, p95Change, p95NoiseRatio, p95NoiseAbsolute),
 		}
 		entry.Disposition = entry.P95.Classification
+		if tiers[key] == "stress" {
+			entry.Disposition = "stress_diagnostic"
+		}
+		if splits[key] == "diagnostic" {
+			entry.Disposition = "qualification_diagnostic"
+		}
 		if !comparable {
 			entry.Disposition = "fingerprint_mismatch"
 		}
+		if entry.TimingGated && (!entry.Comparable || entry.P95.Classification != "cleared_non_inferior") {
+			report.PromotionEligible = false
+		}
+		if prioritizedTraversalKey(key, left, right) && entry.TimingGated {
+			report.QualificationRequired = true
+			passed := entry.Comparable && entry.P95.Classification == "cleared_non_inferior"
+			family := traversalQualificationFamily(key, left, right)
+			status := qualification[family]
+			if status == nil {
+				status = &TraversalQualificationStatus{Family: family, TrainingPassed: true, HoldoutPassed: true}
+				qualification[family] = status
+			}
+			switch entry.QualificationSplit {
+			case "training":
+				report.TrainingCases++
+				report.TrainingPassed = report.TrainingPassed && passed
+				status.TrainingCases++
+				status.TrainingPassed = status.TrainingPassed && passed
+			case "holdout":
+				report.HoldoutCases++
+				report.HoldoutPassed = report.HoldoutPassed && passed
+				status.HoldoutCases++
+				status.HoldoutPassed = status.HoldoutPassed && passed
+			}
+		}
 		report.Cases = append(report.Cases, entry)
 	}
-	return report, nil
-}
-
-// confirmationNoise chooses the largest relative and absolute noise floors observed for a metric across the supplied A/A reports, with conservative defaults.
-func confirmationNoise(reports []*AAResolutionReport, key performanceKey, p95 bool) (float64, time.Duration) {
-	ratio, absolute := 0.05, 100*time.Microsecond
-	for _, aa := range reports {
-		if aa == nil {
-			continue
+	if report.QualificationRequired {
+		families := make([]string, 0, len(qualification))
+		for family := range qualification {
+			families = append(families, family)
 		}
-		for _, entry := range aa.Cases {
-			if entry.Dataset != key.dataset || entry.Name != key.name || entry.Backend != key.backend {
-				continue
-			}
-			metric := entry.P50
-			if p95 {
-				metric = entry.P95
-			}
-			if metric.RatioResolution > ratio {
-				ratio = metric.RatioResolution
-			}
-			if metric.AbsoluteResolution > absolute {
-				absolute = metric.AbsoluteResolution
-			}
+		sort.Strings(families)
+		for _, family := range families {
+			status := qualification[family]
+			status.TrainingPassed = status.TrainingPassed && status.TrainingCases > 0
+			status.HoldoutPassed = status.HoldoutPassed && status.HoldoutCases > 0
+			status.Passed = status.TrainingPassed && status.HoldoutPassed
+			report.TrainingPassed = report.TrainingPassed && status.TrainingPassed
+			report.HoldoutPassed = report.HoldoutPassed && status.HoldoutPassed
+			report.QualificationFamilies = append(report.QualificationFamilies, *status)
 		}
+		report.QualificationPassed = report.TrainingPassed && report.HoldoutPassed
+		report.PromotionEligible = report.PromotionEligible && report.QualificationPassed
+	} else {
+		report.TrainingPassed = false
+		report.HoldoutPassed = false
 	}
-	return ratio, absolute
+	return report, nil
 }
 
 // classifyConfirmationMetric labels a confidence interval as regression, improvement, or inconclusive only when both relative and absolute noise floors are crossed.
@@ -468,22 +560,35 @@ func artifactArm(records []CaseResult) string {
 	return "unknown"
 }
 
-// sameExecutable requires both artifacts to contain the same non-empty executable SHA-256 before attributing timing changes to code.
+// sameExecutable identifies a true block/reload A/A treatment. A shared
+// executable alone is insufficient because one GraphBench binary can emit
+// different forced executors and SQL statements.
 func sameExecutable(left, right []CaseResult) bool {
-	var leftHash, rightHash string
-	for _, record := range left {
-		if record.Environment != nil {
-			leftHash = record.Environment.BinarySHA256
-			break
+	leftIdentity := effectiveTreatmentIdentity(left)
+	return leftIdentity != "" && leftIdentity == effectiveTreatmentIdentity(right)
+}
+
+func effectiveTreatmentIdentity(records []CaseResult) string {
+	if len(records) == 0 || records[0].Environment == nil || records[0].Environment.BinarySHA256 == "" {
+		return ""
+	}
+	identity := []string{"binary=" + records[0].Environment.BinarySHA256}
+	for _, argument := range records[0].Environment.Invocation {
+		if strings.Contains(argument, "postgres-force-shortest-executor") ||
+			strings.Contains(argument, "postgres-force-expansion-strategy") ||
+			strings.Contains(argument, "postgres-expansion-orientation") ||
+			strings.Contains(argument, "reference-arm") {
+			identity = append(identity, "option="+argument)
 		}
 	}
-	for _, record := range right {
-		if record.Environment != nil {
-			rightHash = record.Environment.BinarySHA256
-			break
-		}
+	fingerprints := make([]string, 0, len(records))
+	for _, record := range records {
+		fingerprints = append(fingerprints, record.Dataset+"/"+record.Name+"="+record.SQLFingerprint)
 	}
-	return leftHash != "" && leftHash == rightHash
+	sort.Strings(fingerprints)
+	identity = append(identity, fingerprints...)
+	digest := sha256.Sum256([]byte(strings.Join(identity, "\n")))
+	return hex.EncodeToString(digest[:])
 }
 
 // writeConfirmationReport emits indented JSON to stdout or atomically replaces the requested output file.

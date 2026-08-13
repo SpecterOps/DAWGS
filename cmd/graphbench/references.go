@@ -53,7 +53,17 @@ var postgresReferenceArms = []string{
 	"s1_array_bfs_distance",
 	"s4_canonical_source_distance",
 	"s4_canonical_source_witness_m0",
-	"asp_a1_predecessor_dag_m0",
+	"sp_b1_strict_alternating_distance",
+	"sp_b1_strict_alternating_witness_m0",
+	"sp_b2_smaller_frontier_distance",
+	"sp_b2_smaller_frontier_witness_m0",
+	"asp_a1_stored_helper_m0",
+	"asp_i1_inline_predecessor_dag_m0",
+	"asp_b1_bidirectional_dag_strict_m0",
+	"asp_b2_bidirectional_dag_smaller_frontier_m0",
+	"expand_into_pair_join",
+	"expand_into_lower_degree_scan",
+	"expand_into_pair_cache",
 }
 
 // validPostgresReferenceArm reports whether a reference-arm selector is declared.
@@ -168,32 +178,34 @@ func (s *postgresSQLRunner) measureReferences(ctx context.Context, testCase Scal
 			stats.Samples[idx].Backend = ModePostgresSQL
 			stats.Samples[idx].Dataset = testCase.Dataset
 			stats.Samples[idx].Case = testCase.Name + "/reference/" + spec.name
+			stats.Samples[idx].ConnectionID = s.backendPID
 		}
 		plan, planJSON, metrics, err := explainRawPostgres(ctx, s.db, spec.sql, spec.parameters)
 		if err != nil {
 			return nil, fmt.Errorf("%s explain: %w", spec.name, err)
 		}
 		results = append(results, PostgresReferenceResult{
-			SchemaVersion:      postgresReferenceSchemaVersion,
-			Name:               spec.name,
-			LegacyName:         spec.legacyName,
-			Architecture:       spec.architecture,
-			ImplementationID:   spec.implementationID,
-			StateShape:         spec.stateShape,
-			ObservationShape:   spec.observationShape,
-			SemanticValidation: spec.semanticValidation,
-			Boundary:           spec.boundary,
-			TimingBoundary:     spec.timingBoundary,
-			FullComparator:     spec.fullComparator,
-			AAAliasOf:          spec.aaAliasOf,
-			SQL:                spec.sql,
-			SQLFingerprint:     normalizedSQLFingerprint(spec.sql),
-			RowCount:           rowCount,
-			ObservedRows:       observedRows,
-			Stats:              stats,
-			PostgresPlan:       plan,
-			PostgresPlanJSON:   planJSON,
-			PostgresMetrics:    &metrics,
+			SchemaVersion:                postgresReferenceSchemaVersion,
+			Name:                         spec.name,
+			LegacyName:                   spec.legacyName,
+			Architecture:                 spec.architecture,
+			ImplementationID:             spec.implementationID,
+			StateShape:                   spec.stateShape,
+			ObservationShape:             spec.observationShape,
+			SemanticValidation:           spec.semanticValidation,
+			Boundary:                     spec.boundary,
+			TimingBoundary:               spec.timingBoundary,
+			FullComparator:               spec.fullComparator,
+			AAAliasOf:                    spec.aaAliasOf,
+			SQL:                          spec.sql,
+			SQLFingerprint:               normalizedSQLFingerprint(spec.sql),
+			RowCount:                     rowCount,
+			ObservedRows:                 observedRows,
+			Stats:                        stats,
+			PostgresPlan:                 plan,
+			PostgresPlanJSON:             planJSON,
+			PostgresMetrics:              &metrics,
+			traversalTelemetryParameters: copyReferenceParams(spec.parameters),
 		})
 	}
 	return results, nil
@@ -230,7 +242,7 @@ func explainRawPostgres(ctx context.Context, db graph.Database, sqlQuery string,
 		if err := result.Error(); err != nil {
 			return err
 		}
-		jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING OFF, FORMAT JSON) "+sqlQuery, params)
+		jsonResult := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING ON, FORMAT JSON) "+sqlQuery, params)
 		defer jsonResult.Close()
 		if jsonResult.Next() && len(jsonResult.Values()) > 0 {
 			var err error
@@ -423,6 +435,25 @@ func validOutboundStablePath(path stablePathObservation, allowedKinds []string) 
 
 // referenceSpecsForRound returns reference specifications in the predeclared balanced order for a round.
 func referenceSpecsForRound(specs []postgresReferenceSpec, round int) []postgresReferenceSpec {
+	if len(specs) == 3 && round > 0 {
+		// Odd-sized treatment sets need a doubled Williams design. Across these
+		// six rows every arm occupies every position twice, and every directed
+		// first-order carryover pair occurs twice.
+		schedule := [6][3]int{
+			{0, 1, 2},
+			{1, 2, 0},
+			{2, 0, 1},
+			{2, 1, 0},
+			{0, 2, 1},
+			{1, 0, 2},
+		}
+		row := schedule[(round-1)%len(schedule)]
+		ordered := make([]postgresReferenceSpec, len(specs))
+		for idx, slot := range row {
+			ordered[idx] = specs[slot]
+		}
+		return ordered
+	}
 	if len(specs) == 5 && round > 0 {
 		// Ten-sequence Williams/carryover-balanced schedule predeclared by the
 		// fixed-suffix expansion tournament. Slots are the caller-selected arms, so B1/B2/B3 can
@@ -447,6 +478,9 @@ func referenceSpecsForRound(specs []postgresReferenceSpec, round int) []postgres
 
 // referenceSpecs constructs the independent PostgreSQL reference implementations for a scale case.
 func (s *postgresSQLRunner) referenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
+	if testCase.Category == "expand_into_one_hop" {
+		return s.expandIntoReferenceSpecs(ctx, testCase, params)
+	}
 	if testCase.Category == "generated_fixed_suffix_expansion" {
 		return s.fixedSuffixExpansionReferenceSpecs(ctx, testCase, params)
 	}
@@ -511,6 +545,39 @@ func allShortestDAGSearch(direction graph.Direction) string {
 )`
 }
 
+func allShortestA1ReferenceSQL(direction graph.Direction) string {
+	inbound := "false"
+	if direction == graph.DirectionInbound {
+		inbound = "true"
+	}
+	search := `with shortest as materialized (
+  select depth, path as edge_ids
+  from all_shortest_paths_dag(
+    @graph_id, @start_id, @end_id, @min_depth, @max_depth,
+    @edge_kind_ids, ` + inbound + `
+  )
+)`
+	return shortestM0FullSQL(search, direction)
+}
+
+// allShortestBidirectionalReferenceSQL exposes a forced two-sided
+// predecessor-DAG kernel at the same complete M0 path boundary as ASP-A1.
+func allShortestBidirectionalReferenceSQL(functionName string, direction graph.Direction) string {
+	inbound := "false"
+	if direction == graph.DirectionInbound {
+		inbound = "true"
+	}
+	search := `with shortest as materialized (
+  select depth, path as edge_ids
+  from ` + functionName + `(
+    @graph_id, @start_id, @end_id, @min_depth, @max_depth,
+    @edge_kind_ids, ` + inbound + `, @state_limit, @frontier_limit,
+    @predecessor_limit, @enumeration_limit, @output_bytes_limit
+  )
+)`
+	return shortestM0FullSQL(search, direction)
+}
+
 // allShortestReferenceSpecs builds the predecessor-DAG reference for an all-shortest-path workload.
 func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testCase ScaleCase, params map[string]any) ([]postgresReferenceSpec, error) {
 	probeParams := copyReferenceParams(params)
@@ -549,11 +616,33 @@ func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testC
 	}
 	probeParams["start_id"] = probeParams[rootParameter]
 	probeParams["end_id"] = probeParams[terminalParameter]
-	search := allShortestDAGSearch(direction)
-	return []postgresReferenceSpec{{
-		name:               "asp_a1_predecessor_dag_m0",
+	specs := []postgresReferenceSpec{{
+		name:               "asp_a1_stored_helper_m0",
 		architecture:       "ASP-A1-DAG",
-		implementationID:   "shortest_depth_predecessor_dag_m0_v1",
+		implementationID:   "all_shortest_paths_dag_stored_helper_m0_v1",
+		stateShape:         "minimum-depth helper workspace with relationship-distinct predecessors",
+		observationShape:   "complete all-shortest path multiset",
+		semanticValidation: "exact_public_observation",
+		boundary:           "complete path composites",
+		fullComparator:     true,
+		sql:                allShortestA1ReferenceSQL(direction),
+		parameters:         probeParams,
+	}}
+
+	// I1 is valid only inside the same distinct-endpoint, min-one bounded
+	// contract enforced by the production emitter. A1 remains available as the
+	// exact control outside that envelope.
+	startID, startOK := probeParams["start_id"].(int64)
+	endID, endOK := probeParams["end_id"].(int64)
+	maximumDepth, maximumOK := probeParams["max_depth"].(int32)
+	if probeParams["min_depth"] != int32(1) || !maximumOK || maximumDepth < 1 || maximumDepth > 64 || !startOK || !endOK || startID == endID {
+		return specs, nil
+	}
+	search := allShortestDAGSearch(direction)
+	specs = append(specs, postgresReferenceSpec{
+		name:               "asp_i1_inline_predecessor_dag_m0",
+		architecture:       "ASP-I1-U-DAG+MAT-M0",
+		implementationID:   "inline_shortest_depth_predecessor_dag_m0_v1",
 		stateShape:         "node/depth discovery plus every relationship-distinct shortest-depth predecessor edge",
 		observationShape:   "complete all-shortest path multiset",
 		semanticValidation: "exact_public_observation",
@@ -561,7 +650,50 @@ func (s *postgresSQLRunner) allShortestReferenceSpecs(ctx context.Context, testC
 		fullComparator:     true,
 		sql:                shortestM0FullSQL(search, direction),
 		parameters:         probeParams,
-	}}, nil
+	})
+
+	// B1/B2 are intentionally tool/reference-only. Keep automatic production
+	// selection on ASP-A1 until independent confirmation passes, and do not
+	// expose candidate arms outside their distinct-endpoint minimum-one envelope.
+	candidateParams := copyReferenceParams(probeParams)
+	candidateParams["state_limit"] = int64(100_000)
+	candidateParams["frontier_limit"] = int64(100_000)
+	candidateParams["predecessor_limit"] = int64(100_000)
+	candidateParams["enumeration_limit"] = int64(100_000)
+	candidateParams["output_bytes_limit"] = int64(64 * 1024 * 1024)
+	for _, candidate := range []struct {
+		name             string
+		architecture     string
+		implementationID string
+		functionName     string
+	}{
+		{
+			name:             "asp_b1_bidirectional_dag_strict_m0",
+			architecture:     "ASP-B1-DAG-ALT-NODE",
+			implementationID: "typed_two_sided_predecessor_dag_strict_alternating_v1",
+			functionName:     "all_shortest_paths_b1_strict_alternating",
+		},
+		{
+			name:             "asp_b2_bidirectional_dag_smaller_frontier_m0",
+			architecture:     "ASP-B2-DAG-MIN-LEVEL",
+			implementationID: "typed_two_sided_predecessor_dag_smaller_current_level_v1",
+			functionName:     "all_shortest_paths_b2_smaller_current_level",
+		},
+	} {
+		specs = append(specs, postgresReferenceSpec{
+			name:               candidate.name,
+			architecture:       candidate.architecture,
+			implementationID:   candidate.implementationID,
+			stateShape:         "two-sided minimum-node-depth discovery plus every relationship-distinct equal-depth predecessor/successor at one canonical cut",
+			observationShape:   "complete all-shortest path multiset",
+			semanticValidation: "exact_public_observation",
+			boundary:           "complete path composites",
+			fullComparator:     true,
+			sql:                allShortestBidirectionalReferenceSQL(candidate.functionName, direction),
+			parameters:         copyReferenceParams(candidateParams),
+		})
+	}
+	return specs, nil
 }
 
 // shortestReferenceSpecs builds eligible shortest-path reference implementations and measurement boundaries.
@@ -861,6 +993,26 @@ func shortestCanonicalWitnessSearch(reverseForPublicPath bool) string {
 )`
 }
 
+// shortestBidirectionalCompactReferenceSQL exposes one forced compact kernel at
+// the same distance or M0 hydration boundary as its production control.
+func shortestBidirectionalCompactReferenceSQL(functionName string, direction graph.Direction, pathObserved bool) string {
+	inbound := "false"
+	if direction == graph.DirectionInbound {
+		inbound = "true"
+	}
+	search := `with shortest as materialized (
+  select depth, path as edge_ids
+  from ` + functionName + `(
+    @graph_id, @start_id, @end_id, @min_depth, @max_depth,
+    @edge_kind_ids, ` + inbound + `, @state_limit, @frontier_limit, @predecessor_limit
+  )
+)`
+	if !pathObserved {
+		return search + ` select depth from shortest`
+	}
+	return search + shortestM0MaterializationSelect(direction)
+}
+
 // buildShortestReferenceSpecs assembles exact shortest-path comparators supported by the workload shape.
 func buildShortestReferenceSpecs(testCase ScaleCase, probeParams map[string]any, nodeIDs, edgeIDs []int64, direction graph.Direction) []postgresReferenceSpec {
 	searchNE := shortestReferenceSearchForDirection(direction)
@@ -868,6 +1020,10 @@ func buildShortestReferenceSpecs(testCase ScaleCase, probeParams map[string]any,
 	fullSQL := shortestDistanceReferenceSearchForDirection(direction) + ` select depth from shortest`
 	boundary := "distance scalar"
 	pathObserved := testCase.Name == "one_shortest_path_bound_pair" || testCase.Expected.ResultKind == "path_set"
+	compactBidirectionalParams := copyReferenceParams(probeParams)
+	compactBidirectionalParams["state_limit"] = int64(100_000)
+	compactBidirectionalParams["frontier_limit"] = int64(100_000)
+	compactBidirectionalParams["predecessor_limit"] = int64(100_000)
 	if pathObserved {
 		fullSQL = searchNE + `
 select ordered_edge_ids_to_path(
@@ -974,7 +1130,7 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 		canonicalParams["start_id"], canonicalParams["end_id"] = probeParams["end_id"], probeParams["start_id"]
 		specs = append(specs, postgresReferenceSpec{
 			name:               "s4_canonical_source_distance",
-			architecture:       "SP-S4-C-D",
+			architecture:       "SP-I1-C-D",
 			implementationID:   "canonical_relationship_source_distance_v1",
 			stateShape:         "relationship-source-oriented node and depth set state",
 			observationShape:   "distance scalar",
@@ -1039,7 +1195,7 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 		witnessSearch := shortestCanonicalWitnessSearch(reverseForPublicPath)
 		specs = append(specs, postgresReferenceSpec{
 			name:               "s4_canonical_source_witness_m0",
-			architecture:       "SP-S4-C-WE+MAT-M0",
+			architecture:       "SP-I1-C-WE+MAT-M0",
 			implementationID:   "canonical_source_compact_witness_m0_v1",
 			stateShape:         "node/depth discovery plus one deterministic predecessor per witness depth; no recursive full trails",
 			observationShape:   "public_observation",
@@ -1049,6 +1205,63 @@ from node root where root.graph_id = @graph_id and root.id = @start_id`
 			sql:                shortestM0FullSQL(witnessSearch, direction),
 			parameters:         witnessParams,
 		})
+	}
+	if direction != graph.DirectionBoth {
+		if pathObserved {
+			specs = append(specs,
+				postgresReferenceSpec{
+					name:               "sp_b1_strict_alternating_witness_m0",
+					architecture:       "SP-B1-C-ALT-NODE-WE+MAT-M0",
+					implementationID:   "typed_bidirectional_strict_alternating_node_witness_m0_v1",
+					stateShape:         "ID-only per-side FIFO, minimum-depth seen state, and one deterministic predecessor per accepted node",
+					observationShape:   "public_observation",
+					semanticValidation: "exact_public_observation",
+					boundary:           boundary,
+					fullComparator:     true,
+					sql:                shortestBidirectionalCompactReferenceSQL("shortest_path_b1_strict_alternating", direction, true),
+					parameters:         compactBidirectionalParams,
+				},
+				postgresReferenceSpec{
+					name:               "sp_b2_smaller_frontier_witness_m0",
+					architecture:       "SP-B2-C-MIN-LEVEL-WE+MAT-M0",
+					implementationID:   "typed_bidirectional_smaller_current_level_witness_m0_v1",
+					stateShape:         "ID-only per-side complete levels, minimum-depth seen state, and one deterministic predecessor per accepted node",
+					observationShape:   "public_observation",
+					semanticValidation: "exact_public_observation",
+					boundary:           boundary,
+					fullComparator:     true,
+					sql:                shortestBidirectionalCompactReferenceSQL("shortest_path_b2_smaller_current_level", direction, true),
+					parameters:         compactBidirectionalParams,
+				},
+			)
+		} else {
+			specs = append(specs,
+				postgresReferenceSpec{
+					name:               "sp_b1_strict_alternating_distance",
+					architecture:       "SP-B1-C-ALT-NODE-D",
+					implementationID:   "typed_bidirectional_strict_alternating_node_distance_v1",
+					stateShape:         "ID-only per-side FIFO and minimum-depth seen state; witness predecessor retained outside the observation boundary",
+					observationShape:   "distance scalar",
+					semanticValidation: "exact_public_observation",
+					boundary:           boundary,
+					fullComparator:     true,
+					sql:                shortestBidirectionalCompactReferenceSQL("shortest_path_b1_strict_alternating", direction, false),
+					parameters:         compactBidirectionalParams,
+				},
+				postgresReferenceSpec{
+					name:               "sp_b2_smaller_frontier_distance",
+					architecture:       "SP-B2-C-MIN-LEVEL-D",
+					implementationID:   "typed_bidirectional_smaller_current_level_distance_v1",
+					stateShape:         "ID-only per-side complete levels and minimum-depth seen state; witness predecessor retained outside the observation boundary",
+					observationShape:   "distance scalar",
+					semanticValidation: "exact_public_observation",
+					boundary:           boundary,
+					fullComparator:     true,
+					sql:                shortestBidirectionalCompactReferenceSQL("shortest_path_b2_smaller_current_level", direction, false),
+					parameters:         compactBidirectionalParams,
+				},
+			)
+		}
 	}
 	specs = append(specs, postgresReferenceSpec{
 		name:               "s3_bidirectional_trail_cte",
