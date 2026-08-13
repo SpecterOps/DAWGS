@@ -567,6 +567,23 @@ non-ASP production-path opportunity.
 - Shadow overhead exceeded the `10%`/`100us` gate on zero-reachable,
   high-fan-in, and cyclic discovery cases. Reduce probe overhead before freezing
   a new selector and opening fresh blind holdouts.
+- A follow-up attempt derived completeness from the existing cap+1 probe counts
+  to remove four `EXISTS/OFFSET` scans. It removed eight PostgreSQL plan nodes,
+  but a 12-block, order-balanced, Repeatable Read comparison with 360 timed
+  samples per arm/case did not solve the overhead gate. Pooled median deltas
+  ranged from `-3.15%` to `+0.57%`; the sparse endpoint case was slower in 10 of
+  12 block medians. The rewrite was rejected. Optimize the evidence probes
+  themselves rather than their in-memory completeness checks.
+- Shadow-only suffix evidence now projects only the boundary ID, and degree
+  probes project one boolean evidence row per typed adjacency. This preserves
+  every join, constraint, row multiplicity, cap, and guarded-candidate input
+  while reducing suffix tuple width from `64`/`160` bytes to `8` and degree
+  tuples from `16` bytes to `1`. A separate 12-block, order-balanced,
+  Repeatable Read confirmation (360 timed samples per arm/case) found paired
+  block-median deltas from `-7.09%` to `+0.68%`; the zero-reachable probe-plan
+  median fell from `10.428ms` to `9.740ms` with identical rows and buffer hits.
+  No case showed a stable total-latency regression, so retain this structural
+  reduction. It does not by itself close the shadow-overhead gate.
 
 Implementation sequence:
 

@@ -11,7 +11,7 @@ import (
 
 const (
 	orientationRootID             pgsql.Identifier = "root_id"
-	orientationEdgeID             pgsql.Identifier = "edge_id"
+	orientationDegreeSample       pgsql.Identifier = "sampled"
 	orientationRootRows           pgsql.Identifier = "root_rows"
 	orientationSuffixRows         pgsql.Identifier = "suffix_rows"
 	orientationBoundaryRows       pgsql.Identifier = "boundary_rows"
@@ -249,8 +249,8 @@ func buildExpansionOrientationRootPresence(ids expansionOrientationIdentifiers) 
 	}
 }
 
-// buildExpansionOrientationDegreeProbe materializes typed adjacency rows for
-// one side. Each seed row is retained, so duplicate forward roots contribute
+// buildExpansionOrientationDegreeProbe materializes one evidence row per typed
+// adjacency. Each seed row is retained, so duplicate forward roots contribute
 // their real work multiplier while reverse boundaries remain distinct.
 func buildExpansionOrientationDegreeProbe(
 	alias, seedSource, seedColumn pgsql.Identifier,
@@ -263,10 +263,10 @@ func buildExpansionOrientationDegreeProbe(
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{
 			Body: pgsql.Select{
-				Projection: pgsql.Projection{
-					&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{seedSource, seedColumn}, Alias: models.OptionalValue(seedColumn)},
-					&pgsql.AliasedExpression{Expression: pgsql.CompoundIdentifier{edgeAlias, pgsql.ColumnID}, Alias: models.OptionalValue(orientationEdgeID)},
-				},
+				Projection: pgsql.Projection{&pgsql.AliasedExpression{
+					Expression: pgsql.NewLiteral(true, pgsql.Boolean),
+					Alias:      models.OptionalValue(orientationDegreeSample),
+				}},
 				From: []pgsql.FromClause{{
 					Source: pgsql.TableReference{Name: seedSource.AsCompoundIdentifier()},
 					Joins: []pgsql.Join{{

@@ -228,7 +228,7 @@ func (s *Translator) buildShadowSuffixOrientationQuery(
 	}
 	rootProbe := buildExpansionOrientationRootProbe(rootFrame, expansionStep.LeftNode, ids, decision.ProbeCaps.RootRowLimit)
 	rootPresence := buildExpansionOrientationRootPresence(ids)
-	suffixProbe, err := s.buildFixedSuffixProbeCTE(expansionStep, suffix, suffixIDs, decision.ProbeCaps.ReverseSeedRowLimit)
+	suffixProbe, err := s.buildFixedSuffixEvidenceProbeCTE(expansionStep, suffix, suffixIDs, decision.ProbeCaps.ReverseSeedRowLimit)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
@@ -646,16 +646,25 @@ func (s *Translator) buildSuffixSeededReverseQuery(
 
 // buildFixedSuffixCTE materializes every locally valid fixed-suffix path and its boundary node.
 func (s *Translator) buildFixedSuffixCTE(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers) (pgsql.CommonTableExpression, error) {
-	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, false, 0)
+	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, false, false, 0)
 }
 
 // buildFixedSuffixProbeCTE builds a bounded suffix probe used to guard the specialized branch.
 func (s *Translator) buildFixedSuffixProbeCTE(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers, rowLimit int64) (pgsql.CommonTableExpression, error) {
-	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, false, rowLimit)
+	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, false, false, rowLimit)
 }
 
-// buildFixedSuffixCTEWithOptions builds the fixed-suffix join chain with optional materialization and row limit.
-func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers, projectNodeIDs bool, rowLimit int64) (pgsql.CommonTableExpression, error) {
+// buildFixedSuffixEvidenceProbeCTE preserves the suffix join and row
+// multiplicity used by orientation scoring while projecting only the boundary
+// ID needed by the shadow policy. Candidate execution is impossible in shadow
+// mode, so materializing edge IDs and node composites would be pure overhead.
+func (s *Translator) buildFixedSuffixEvidenceProbeCTE(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers, rowLimit int64) (pgsql.CommonTableExpression, error) {
+	return s.buildFixedSuffixCTEWithOptions(expansionStep, suffix, ids, false, true, rowLimit)
+}
+
+// buildFixedSuffixCTEWithOptions builds the fixed-suffix join chain with an
+// optional evidence-only projection and row limit.
+func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers, projectNodeIDs, evidenceOnly bool, rowLimit int64) (pgsql.CommonTableExpression, error) {
 	localScope := pgsql.NewIdentifierSet()
 	for _, step := range suffix {
 		localScope.Add(step.Edge.Identifier)
@@ -667,31 +676,33 @@ func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep
 		Expression: pgd.EntityID(suffix[0].LeftNode.Identifier),
 		Alias:      models.OptionalValue(fixedSuffixBoundaryID),
 	}}
-	for _, step := range suffix {
-		projection = append(projection, &pgsql.AliasedExpression{
-			Expression: pgd.EntityID(step.Edge.Identifier),
-			Alias:      models.OptionalValue(step.Edge.Identifier),
-		})
-	}
-	for idx, step := range suffix {
-		binding := step.RightNode
-		expression := suffixSeededNodeValue(binding)
-		if projectNodeIDs {
-			expression = pgd.EntityID(binding.Identifier)
+	if !evidenceOnly {
+		for _, step := range suffix {
+			projection = append(projection, &pgsql.AliasedExpression{
+				Expression: pgd.EntityID(step.Edge.Identifier),
+				Alias:      models.OptionalValue(step.Edge.Identifier),
+			})
 		}
-		projection = append(projection, &pgsql.AliasedExpression{
-			Expression: expression,
-			Alias:      models.OptionalValue(binding.Identifier),
-		})
-		if idx == 0 {
-			leftExpression := suffixSeededNodeValue(step.LeftNode)
+		for idx, step := range suffix {
+			binding := step.RightNode
+			expression := suffixSeededNodeValue(binding)
 			if projectNodeIDs {
-				leftExpression = pgd.EntityID(step.LeftNode.Identifier)
+				expression = pgd.EntityID(binding.Identifier)
 			}
 			projection = append(projection, &pgsql.AliasedExpression{
-				Expression: leftExpression,
-				Alias:      models.OptionalValue(step.LeftNode.Identifier),
+				Expression: expression,
+				Alias:      models.OptionalValue(binding.Identifier),
 			})
+			if idx == 0 {
+				leftExpression := suffixSeededNodeValue(step.LeftNode)
+				if projectNodeIDs {
+					leftExpression = pgd.EntityID(step.LeftNode.Identifier)
+				}
+				projection = append(projection, &pgsql.AliasedExpression{
+					Expression: leftExpression,
+					Alias:      models.OptionalValue(step.LeftNode.Identifier),
+				})
+			}
 		}
 	}
 
