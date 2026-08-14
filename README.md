@@ -300,7 +300,11 @@ trace, could not support the fixed A/A and qualification design at the required
 power. V2 therefore remains production-off and must not proceed to A/A,
 holdout, confirmation, or promotion; see
 [`cmd/graphbench/README.md`](cmd/graphbench/README.md) for the reproducible
-verification command.
+verification command. In plain terms, comparing the same implementation with
+itself still produced uncertainty of roughly `-5.4%` to `+6.3%` and
+`-116us` to `+133us`, wider than the allowed plus-or-minus 5% and 100us. The
+fixed study recognized the target and control outcomes only about 48% and 51%
+of the time, respectively, instead of the required 90% reliability.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports

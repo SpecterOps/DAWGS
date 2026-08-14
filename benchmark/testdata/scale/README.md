@@ -112,6 +112,15 @@ holdout resolution is rejected before database setup without V2 authorization.
 The protocol declaration binds the training, holdout, and full corpus,
 declaration, and resolved-selection digests.
 
+This V2 cohort is retired and remains checked in only for audit and semantic
+regression coverage. The frozen prospective study found that ordinary timing
+variation was wider than its A/A limits and that target/control decisions were
+reliable only about half the time instead of the required 90%. No formal A/A
+or candidate timing began, and no holdout was opened. GraphBench rejects the
+formal V2 executor and any explicit formal-cohort execution before database
+setup. A future attempt must use a newly named successor protocol rather than
+changing V2's sample count or limits.
+
 `shape.fixture_tier` is one of `normal`, `envelope`, or `stress`.
 `shape.qualification_split` is independently one of `training`, `holdout`, or
 `diagnostic`; selector thresholds may use training records but must be frozen

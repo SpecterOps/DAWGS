@@ -17,6 +17,11 @@ import (
 const (
 	spI2GenerationV1 = "sp-i2-distance-v1"
 	spI2GenerationV2 = "sp-i2-distance-v2"
+	// spI2V2TerminalStatus retires V2 after its frozen prospective study
+	// showed that normal measurement variation was too wide to distinguish
+	// the required improvements reliably. A successor must use a new protocol;
+	// V2 may be audited, but it may not enter formal timing or production.
+	spI2V2TerminalStatus = "terminated_inadequate_power"
 )
 
 type spI2ProtocolV2 struct {
@@ -296,7 +301,7 @@ func validateSPI2ProtocolV2(protocol spI2ProtocolV2) error {
 		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P),
 		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP),
 	}
-	if protocol.Schema != "sp-i2-tail-protocol-v2" || protocol.Generation != spI2GenerationV2 || protocol.Status != "terminated_inadequate_power" || protocol.ProductionDefault != "off" {
+	if protocol.Schema != "sp-i2-tail-protocol-v2" || protocol.Generation != spI2GenerationV2 || protocol.Status != spI2V2TerminalStatus || protocol.ProductionDefault != "off" {
 		return fmt.Errorf("SP-I2 V2 protocol identity is invalid")
 	}
 	identities := protocol.Identities

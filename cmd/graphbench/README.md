@@ -1258,6 +1258,17 @@ tombstone binds the implementation commit, protocol, generated report, failed
 Wilson bounds, and the fact that no formal A/A, capture plan, sealed
 preregistration, holdout, or production activation occurred.
 
+In less technical terms, the benchmark was too noisy for this fixed study to
+make a dependable yes/no decision. Comparing the same implementation with
+itself produced a plausible p95 range of about `0.946x` to `1.063x` and an
+absolute range of `-116us` to `+133us`; admission required those entire ranges
+to stay within about `0.952x` to `1.05x` and `-100us` to `+100us`. Across
+20,000 trials, the target decision succeeded 47.94% of the time and the control
+decision 51.23%, versus the required 90% lower confidence bound. Interval
+coverage and false-positive checks passed, so the analysis was behaving as
+designed—the study was simply not precise enough. Changing the sample count or
+limits after seeing that result would invalidate the frozen plan.
+
 ### Frozen canonical-I1 qualification
 
 The `sp-i1-inbound-v1` study is a dedicated two-arm comparison between exact
