@@ -4,7 +4,10 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
@@ -153,4 +156,152 @@ func TestValidateSPI2V2ReadinessCaptureConfig(t *testing.T) {
 		mutate(&copy)
 		require.Error(t, validateSPI2V2ReadinessCaptureConfig(copy))
 	}
+}
+
+func TestValidateSPI2V2DevelopmentEvidenceAcceptsCompleteStudies(t *testing.T) {
+	require.NoError(t, validateSPI2V2DevelopmentEvidence(spI2V2DevelopmentTestRecords(t, spI2V2StudyReadiness), spI2V2StudyReadiness))
+	require.NoError(t, validateSPI2V2DevelopmentEvidence(spI2V2DevelopmentTestRecords(t, spI2V2StudyTournament), spI2V2StudyTournament))
+}
+
+func TestValidateSPI2V2DevelopmentArtifact(t *testing.T) {
+	artifact := filepath.Join(t.TempDir(), "readiness.jsonl")
+	require.NoError(t, writeJSONLFile(artifact, spI2V2DevelopmentTestRecords(t, spI2V2StudyReadiness)))
+	require.NoError(t, validateSPI2V2DevelopmentArtifact(artifact, spI2V2StudyReadiness))
+}
+
+func TestValidateSPI2V2DevelopmentEvidenceRejectsTampering(t *testing.T) {
+	tests := map[string]func([]CaseResult) []CaseResult{
+		"missing record": func(records []CaseResult) []CaseResult {
+			return records[:len(records)-1]
+		},
+		"wrong sample count": func(records []CaseResult) []CaseResult {
+			records[0].Stats.Samples = records[0].Stats.Samples[:99]
+			return records
+		},
+		"wrong arm order": func(records []CaseResult) []CaseResult {
+			records[0].Environment.ArmOrder = 2
+			return records
+		},
+		"mixed run UUID": func(records []CaseResult) []CaseResult {
+			records[0].Environment.RunUUID = "other"
+			return records
+		},
+		"relabeled requested identity": func(records []CaseResult) []CaseResult {
+			records[0].Stats.Samples[0].RequestedIdentity = "other"
+			return records
+		},
+		"missing stabilization": func(records []CaseResult) []CaseResult {
+			records[0].Stats.ReceiptStabilization = nil
+			return records
+		},
+		"replayed timed invocation": func(records []CaseResult) []CaseResult {
+			first := records[0].Stats.Samples[0].RuntimeInvocationID
+			records[0].Stats.Samples[1].RuntimeInvocationID = first
+			records[0].Stats.Samples[1].RuntimeReceiptEvents[0].InvocationID = first
+			return records
+		},
+		"unexpected case": func(records []CaseResult) []CaseResult {
+			records[0].Name = "holdout"
+			return records
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			records := mutate(spI2V2DevelopmentTestRecords(t, spI2V2StudyReadiness))
+			require.Error(t, validateSPI2V2DevelopmentEvidence(records, spI2V2StudyReadiness))
+		})
+	}
+}
+
+func spI2V2DevelopmentTestRecords(t *testing.T, study spI2V2DevelopmentStudy) []CaseResult {
+	t.Helper()
+	cohort, err := canonicalSPI2Cohort()
+	require.NoError(t, err)
+	arms := spI2V2DevelopmentArms
+	if study == spI2V2StudyReadiness {
+		arms = spI2V2ReadinessArms
+	}
+	records := make([]CaseResult, 0, len(cohort.trainingKeys)*10*len(arms))
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	fallback := false
+	for round := 1; round <= 10; round++ {
+		order, err := spI2V2StudyOrder(study, round)
+		require.NoError(t, err)
+		for position, arm := range order {
+			startedAt := base.Add(time.Duration(round)*time.Hour + time.Duration(position)*2*time.Minute)
+			endedAt := startedAt.Add(time.Minute)
+			for key := range cohort.trainingKeys {
+				prefix := fmt.Sprintf("%s-%d-%s-%s", study, round, arm, key.name)
+				receiptID := prefix + "-stabilization"
+				record := CaseResult{
+					Dataset:       key.dataset,
+					Name:          key.name,
+					ExecutionMode: ModePostgresSQL,
+					Status:        StatusOK,
+					Environment: &RunEnvironment{
+						ArtifactSchemaVersion: 2,
+						RunUUID:               "development-series",
+						Arm:                   string(arm),
+						ArmOrder:              position + 1,
+						Block:                 round,
+						Round:                 round,
+						StartedAt:             startedAt,
+						EndedAt:               endedAt,
+						WarmupIterations:      25,
+						PoolSize:              1,
+					},
+					Stats: DurationStats{
+						Iterations:       100,
+						WarmupIterations: 25,
+						ReceiptStabilization: &RuntimeStabilizationReceipt{
+							InvocationID:      receiptID,
+							RequestedIdentity: string(arm),
+							RuntimeIdentity:   string(arm),
+							RuntimeBranch:     "selected",
+							FallbackExecuted:  &fallback,
+							Events: []RuntimeReceiptEvent{{
+								InvocationID:     receiptID,
+								Ordinal:          1,
+								RuntimeIdentity:  string(arm),
+								RuntimeBranch:    "selected",
+								FallbackExecuted: false,
+							}},
+						},
+					},
+				}
+				for iteration := 1; iteration <= 100; iteration++ {
+					invocationID := fmt.Sprintf("%s-%d", prefix, iteration)
+					record.Stats.Samples = append(record.Stats.Samples, LatencySample{
+						Round:               round,
+						Block:               round,
+						Arm:                 string(arm),
+						ArmOrder:            position + 1,
+						RunUUID:             "development-series",
+						Iteration:           iteration,
+						Case:                key.name,
+						Dataset:             key.dataset,
+						Backend:             ModePostgresSQL,
+						ConnectionID:        "connection-1",
+						Classification:      "warm",
+						Duration:            time.Millisecond,
+						RequestedIdentity:   string(arm),
+						RuntimeIdentity:     string(arm),
+						RuntimeBranch:       "selected",
+						FallbackExecuted:    &fallback,
+						RuntimeAttestation:  "receipt",
+						RuntimeInvocationID: invocationID,
+						RuntimeReceiptEvents: []RuntimeReceiptEvent{{
+							InvocationID:     invocationID,
+							Ordinal:          1,
+							RuntimeIdentity:  string(arm),
+							RuntimeBranch:    "selected",
+							FallbackExecuted: false,
+						}},
+					})
+				}
+				records = append(records, record)
+			}
+		}
+	}
+	return records
 }

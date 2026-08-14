@@ -1157,6 +1157,21 @@ in a round shares `-round`, `-block`, and `-run-uuid`. These modes are mutually
 exclusive, and their artifacts are diagnostic: they cannot authorize a freeze,
 holdout, manifest, or production activation.
 
+Validate a completed raw capture before analysis. Validation requires exactly
+ten complete rounds over all six open cases, the fixed arm order, 25 declared
+warmups, 100 timed samples, one excluded stabilization receipt per record,
+globally unique invocation receipts, and exact runtime identities:
+
+```bash
+go run ./cmd/graphbench \
+  -sp-i2-generation sp-i2-distance-v2 \
+  -sp-i2-v2-development-artifact development.jsonl \
+  -sp-i2-v2-development-study tournament
+```
+
+Use `readiness` for the two-arm E0/S4 artifact. The command exits without
+database setup only after the entire artifact passes validation.
+
 The authoritative logical declaration is
 `benchmark/testdata/scale/protocols/sp_i2_distance_v2.json`. It fixes 40
 rounds, 25 ordinary warmups, one excluded receipt-bearing stabilization, 100

@@ -376,6 +376,26 @@ func TestParseConfigRejectsV1CorpusForOrdinaryV2Capture(t *testing.T) {
 	require.ErrorContains(t, err, "cannot select V1 evidence")
 }
 
+func TestParseConfigAcceptsSPI2V2DevelopmentArtifactValidation(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-development-artifact", "development.jsonl",
+		"-sp-i2-v2-development-study", string(spI2V2StudyTournament),
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "development.jsonl", cfg.SPI2V2DevelopmentArtifact)
+
+	for _, args := range [][]string{
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-development-artifact", "development.jsonl"},
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-development-study", string(spI2V2StudyReadiness)},
+		{"-sp-i2-generation", spI2GenerationV1, "-sp-i2-v2-development-artifact", "development.jsonl", "-sp-i2-v2-development-study", string(spI2V2StudyReadiness)},
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-development-artifact", "development.jsonl", "-sp-i2-v2-development-study", "other"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
 func TestParseConfigRejectsIncompleteOrMixedSPI2StagedWorkflow(t *testing.T) {
 	discovery := []string{
 		"-sp-i2-baseline-artifact", "s4.jsonl",
