@@ -319,6 +319,63 @@ func TestV2GraphBenchExecutorIncludesEveryDevelopmentArm(t *testing.T) {
 	require.False(t, isV2GraphBenchExecutor(string(optimize.ShortestPathExecutorI2GuardedDistance)))
 }
 
+func TestParseConfigAcceptsSPI2V2DevelopmentTournamentPosition(t *testing.T) {
+	executor := string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0)
+	cfg, err := parseConfig([]string{
+		"-modes", string(ModePostgresSQL),
+		"-iterations", "100",
+		"-warmup-iterations", "25",
+		"-round", "1",
+		"-block", "1",
+		"-arm", executor,
+		"-arm-order", "1",
+		"-run-uuid", "development-series",
+		"-tags", spI2TrainingTag,
+		"-jsonl-output", "development.jsonl",
+		"-postgres-force-shortest-executor", executor,
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", postgresTraversalTelemetryDiagnostic,
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-development-tournament",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.SPI2V2DevelopmentTournament)
+}
+
+func TestParseConfigAcceptsSPI2V2ReadinessPosition(t *testing.T) {
+	executor := string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0)
+	cfg, err := parseConfig([]string{
+		"-modes", string(ModePostgresSQL),
+		"-iterations", "100",
+		"-warmup-iterations", "25",
+		"-round", "2",
+		"-block", "2",
+		"-arm", executor,
+		"-arm-order", "1",
+		"-run-uuid", "readiness-series",
+		"-tags", spI2TrainingTag,
+		"-jsonl-output", "readiness.jsonl",
+		"-append-jsonl",
+		"-postgres-force-shortest-executor", executor,
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", postgresTraversalTelemetryDiagnostic,
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-readiness-comparison",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.SPI2V2ReadinessComparison)
+}
+
+func TestParseConfigRejectsV1CorpusForOrdinaryV2Capture(t *testing.T) {
+	_, err := parseConfig([]string{
+		"-modes", string(ModePostgresSQL),
+		"-tags", spI2TrainingTag,
+		"-postgres-force-shortest-executor", string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0),
+		"-sp-i2-generation", spI2GenerationV2,
+	}, func(string) string { return "" })
+	require.ErrorContains(t, err, "cannot select V1 evidence")
+}
+
 func TestParseConfigRejectsIncompleteOrMixedSPI2StagedWorkflow(t *testing.T) {
 	discovery := []string{
 		"-sp-i2-baseline-artifact", "s4.jsonl",

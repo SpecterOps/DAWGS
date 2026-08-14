@@ -331,6 +331,12 @@ type config struct {
 	SPI2Protocol string
 	// SPI2Generation explicitly selects the isolated V1 or V2 evidence family.
 	SPI2Generation string
+	// SPI2V2DevelopmentTournament enables the fixed open-corpus five-arm
+	// component schedule. Its artifacts are permanently non-promotional.
+	SPI2V2DevelopmentTournament bool
+	// SPI2V2ReadinessComparison enables the fixed open-corpus E0/S4
+	// supplemental schedule. Its artifacts are permanently non-promotional.
+	SPI2V2ReadinessComparison bool
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -508,6 +514,8 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.SPI2Output, "sp-i2-output", "", "staged S4-distance-to-I2 qualification JSON output path")
 	flags.StringVar(&cfg.SPI2Protocol, "sp-i2-protocol", referencePairProtocolConfirmation, "staged SP-I2 report protocol (discovery or confirmation)")
 	flags.StringVar(&cfg.SPI2Generation, "sp-i2-generation", "", "explicit SP-I2 evidence generation (sp-i2-distance-v1 or sp-i2-distance-v2)")
+	flags.BoolVar(&cfg.SPI2V2DevelopmentTournament, "sp-i2-v2-development-tournament", false, "run one arm/round of the fixed non-promotional SP-I2 V2 open-corpus component tournament")
+	flags.BoolVar(&cfg.SPI2V2ReadinessComparison, "sp-i2-v2-readiness-comparison", false, "run one arm/round of the fixed non-promotional SP-I2 V2 E0/S4 readiness comparison")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -784,7 +792,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	spI2ExecutorRequested := cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 		isV2GraphBenchExecutor(cfg.PostgresForceShortest)
-	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" ||
+	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison ||
 		spI2TrainingInputCount(spI2TrainingInputs) > 0 || spI2ExecutorRequested ||
 		strings.Contains(rawTags, "sp-i2-distance-v1") || strings.Contains(rawTags, "sp-i2-distance-v2")
 	if spI2Requested && cfg.SPI2Generation == "" {
@@ -808,7 +816,8 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 		if spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || spI2TrainingInputCount(spI2TrainingInputs) > 0 {
 			return config{}, fmt.Errorf("SP-I2 V2 evidence cannot use V1 report or freeze flags")
 		}
-		if cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) || strings.Contains(rawTags, "sp-i2-distance-v1") {
+		if cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
+			(strings.Contains(rawTags, "sp-i2-distance-v1") && !cfg.SPI2V2DevelopmentTournament && !cfg.SPI2V2ReadinessComparison) {
 			return config{}, fmt.Errorf("SP-I2 V2 generation cannot select V1 evidence")
 		}
 	}
@@ -1113,6 +1122,16 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			return config{}, err
 		}
 	}
+	if cfg.SPI2V2DevelopmentTournament {
+		if err := validateSPI2V2DevelopmentCaptureConfig(cfg); err != nil {
+			return config{}, err
+		}
+	}
+	if cfg.SPI2V2ReadinessComparison {
+		if err := validateSPI2V2ReadinessCaptureConfig(cfg); err != nil {
+			return config{}, err
+		}
+	}
 
 	return cfg, nil
 }
@@ -1132,6 +1151,9 @@ func validForcedShortestPathExecutor(executor string) bool {
 		"SP-I2-C-D-V2",
 		"SP-I2-C-D-V2-E0",
 		"SP-I2-C-D-V2-E1",
+		"SP-I2-C-D-V2-E1D",
+		"SP-I2-C-D-V2-E1P",
+		"SP-I2-C-D-V2-E1DP",
 		"SP-I1-U-E+MAT-M0",
 		"SP-I1-C-WE+MAT-M0",
 		"SP-B1-C-ALT-NODE-D",

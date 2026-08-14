@@ -1145,6 +1145,18 @@ depth-one hit. Scalar projection forcing fails closed when entity, property,
 or path hydration is consumed. GraphBench requires
 `-sp-i2-generation sp-i2-distance-v2` whenever any V2 identity is forced.
 
+The supplemental open-corpus readiness capture requires
+`-sp-i2-v2-readiness-comparison`; it alternates exact S4 distance and E0 order
+across ten rounds. The component capture instead requires
+`-sp-i2-v2-development-tournament` and uses the fixed ten-round Williams order
+for E0, E1, E1D, E1P, and E1DP. Both modes accept only the six already-open V1
+training cases, exactly 25 warmups and 100 timed samples, Repeatable Read, and
+diagnostic telemetry. Supply the forced executor identity itself as `-arm`;
+`-arm-order` must match the selected mode's fixed round order. Every invocation
+in a round shares `-round`, `-block`, and `-run-uuid`. These modes are mutually
+exclusive, and their artifacts are diagnostic: they cannot authorize a freeze,
+holdout, manifest, or production activation.
+
 The authoritative logical declaration is
 `benchmark/testdata/scale/protocols/sp_i2_distance_v2.json`. It fixes 40
 rounds, 25 ordinary warmups, one excluded receipt-bearing stabilization, 100
