@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 
@@ -33,9 +34,47 @@ type spI2ProtocolV2 struct {
 	Bootstrap                         spI2ProtocolBootstrapV2  `json:"bootstrap"`
 	HostAdmission                     spI2HostAdmissionV2      `json:"host_admission"`
 	Corpus                            spI2ProtocolCorpusV2     `json:"corpus"`
+	Simulation                        spI2ProtocolSimulationV2 `json:"simulation"`
 	MultiplicityRule                  string                   `json:"multiplicity_rule"`
 	V1EvidenceReuse                   bool                     `json:"v1_evidence_reuse"`
 	HoldoutAuthorizationBeforeDBSetup bool                     `json:"holdout_authorization_required_before_database_setup"`
+}
+
+type spI2ProtocolSimulationV2 struct {
+	Implementation            string                     `json:"implementation"`
+	RunsPerScenario           int                        `json:"runs_per_scenario"`
+	WilsonConfidence          float64                    `json:"wilson_confidence"`
+	RequiredPowerLower        float64                    `json:"required_power_lower"`
+	RequiredCoverage          float64                    `json:"required_coverage"`
+	P95BoundaryFalsePassUpper float64                    `json:"p95_boundary_false_pass_upper"`
+	DecisionFalsePassUpper    float64                    `json:"decision_false_pass_upper"`
+	TraceRescalingTransform   string                     `json:"trace_rescaling_transform"`
+	SourceCommit              string                     `json:"source_commit"`
+	BaselineTraceSHA256       string                     `json:"baseline_trace_sha256"`
+	CandidateTraceSHA256      string                     `json:"candidate_trace_sha256"`
+	P50RoundDrift             []float64                  `json:"p50_round_drift"`
+	P95RoundDrift             []float64                  `json:"p95_round_drift"`
+	LogStandardErrors         spI2SimulationErrorsV2     `json:"log_standard_errors"`
+	AbsoluteStandardErrorsUS  spI2SimulationErrorsV2     `json:"absolute_standard_errors_us"`
+	Scenarios                 []spI2SimulationScenarioV2 `json:"scenarios"`
+}
+
+type spI2SimulationErrorsV2 struct {
+	Pooled        float64 `json:"pooled"`
+	OrderStratum  float64 `json:"order_stratum"`
+	FirstPosition float64 `json:"first_position"`
+}
+
+type spI2SimulationScenarioV2 struct {
+	Name                    string  `json:"name"`
+	Kind                    string  `json:"kind"`
+	BaselineP50US           float64 `json:"baseline_p50_us"`
+	BaselineP95US           float64 `json:"baseline_p95_us"`
+	CandidateP50US          float64 `json:"candidate_p50_us"`
+	CandidateP95US          float64 `json:"candidate_p95_us"`
+	OddCandidateMultiplier  float64 `json:"odd_candidate_multiplier"`
+	EvenCandidateMultiplier float64 `json:"even_candidate_multiplier"`
+	Seed                    string  `json:"seed"`
 }
 
 type spI2ProtocolCorpusV2 struct {
@@ -202,7 +241,7 @@ func validateSPI2ProtocolV2(protocol spI2ProtocolV2) error {
 		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P),
 		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP),
 	}
-	if protocol.Schema != "sp-i2-tail-protocol-v2" || protocol.Generation != spI2GenerationV2 || protocol.ProductionDefault != "off" {
+	if protocol.Schema != "sp-i2-tail-protocol-v2" || protocol.Generation != spI2GenerationV2 || protocol.Status != "terminated_inadequate_power" || protocol.ProductionDefault != "off" {
 		return fmt.Errorf("SP-I2 V2 protocol identity is invalid")
 	}
 	identities := protocol.Identities
@@ -246,6 +285,9 @@ func validateSPI2ProtocolV2(protocol spI2ProtocolV2) error {
 		protocol.Bootstrap.WithinRoundResampling != "independent_by_arm" {
 		return fmt.Errorf("SP-I2 V2 bootstrap declaration is invalid")
 	}
+	if err := validateSPI2SimulationProtocolV2(protocol.Simulation); err != nil {
+		return err
+	}
 	thresholds := protocol.HostAdmission.MachineThresholds
 	if !slices.Equal(protocol.HostAdmission.Sequence, []string{"S4/S4", "V2/V2", "S4/V2"}) || protocol.HostAdmission.MaximumS4Remediations != 1 ||
 		!protocol.HostAdmission.CandidateEpochLockedOnFirstInvocation || thresholds.RunnerProcessOverlapCount != 0 || thresholds.ThermalThrottleEvents != 0 ||
@@ -254,6 +296,45 @@ func validateSPI2ProtocolV2(protocol spI2ProtocolV2) error {
 	}
 	if protocol.V1EvidenceReuse || !protocol.HoldoutAuthorizationBeforeDBSetup || protocol.MultiplicityRule != "intersection_union_all_cases_must_pass" {
 		return fmt.Errorf("SP-I2 V2 evidence isolation contract is invalid")
+	}
+	return nil
+}
+
+func validateSPI2SimulationProtocolV2(simulation spI2ProtocolSimulationV2) error {
+	if simulation.Implementation != spI2PowerSimulationV2 || simulation.RunsPerScenario != 20_000 ||
+		simulation.WilsonConfidence != 0.95 || simulation.RequiredPowerLower != 0.90 || simulation.RequiredCoverage != 0.975 ||
+		simulation.P95BoundaryFalsePassUpper != 0.015 || simulation.DecisionFalsePassUpper != 0.0275 ||
+		simulation.TraceRescalingTransform != "piecewise_log_quantile_anchor_then_paired_empirical_round_drift" ||
+		simulation.SourceCommit != "3865cbc57758b7b20b7ffe431f27235873422eed" ||
+		simulation.BaselineTraceSHA256 != "ac3ceb27ee92e3f4e21e3994ff9ee82d483b8081e9d44ddcef8e695ffdb1b6d0" ||
+		simulation.CandidateTraceSHA256 != "f6d79e81bdaafedaa95568d57140c14e0808fbb6fc261387abc916081137785a" ||
+		len(simulation.P50RoundDrift) != 20 || len(simulation.P95RoundDrift) != 20 || len(simulation.Scenarios) != 11 {
+		return fmt.Errorf("SP-I2 V2 simulation declaration is invalid")
+	}
+	if simulation.LogStandardErrors != (spI2SimulationErrorsV2{Pooled: 0.025959, OrderStratum: 0.036712, FirstPosition: 0.036712}) ||
+		simulation.AbsoluteStandardErrorsUS != (spI2SimulationErrorsV2{Pooled: 59.338, OrderStratum: 83.917, FirstPosition: 83.917}) {
+		return fmt.Errorf("SP-I2 V2 simulation error calibration is invalid")
+	}
+	expectedKinds := map[string]int{"aa_power": 1, "aa_boundary": 2, "target_power": 1, "target_boundary": 1, "control_power": 1, "control_boundary": 1, "aa_order_power": 2, "aa_order_boundary": 2}
+	observedKinds := map[string]int{}
+	seen := map[string]struct{}{}
+	for _, scenario := range simulation.Scenarios {
+		if scenario.Name == "" || scenario.Seed == "" || scenario.BaselineP50US <= 0 || scenario.BaselineP95US <= scenario.BaselineP50US ||
+			scenario.CandidateP50US <= 0 || scenario.CandidateP95US <= scenario.CandidateP50US {
+			return fmt.Errorf("SP-I2 V2 simulation scenario is invalid")
+		}
+		if _, duplicate := seen[scenario.Name]; duplicate {
+			return fmt.Errorf("SP-I2 V2 simulation scenario %q is duplicated", scenario.Name)
+		}
+		seen[scenario.Name] = struct{}{}
+		observedKinds[scenario.Kind]++
+		seed := sha256.Sum256([]byte("sp-i2-power-simulation-v2\x00" + scenario.Name))
+		if scenario.Seed != hex.EncodeToString(seed[:]) {
+			return fmt.Errorf("SP-I2 V2 simulation scenario %q seed is invalid", scenario.Name)
+		}
+	}
+	if !maps.Equal(observedKinds, expectedKinds) {
+		return fmt.Errorf("SP-I2 V2 simulation matrix is incomplete")
 	}
 	return nil
 }

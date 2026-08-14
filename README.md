@@ -294,6 +294,14 @@ use the stable `GFSE-*`, `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`, `SCAN-*`, and
 `LOOKUP-*` IDs to compare captures with their semantic fixtures and manifest
 entries.
 
+The SP-I2 distance V2 study is terminally stopped before formal timing. Its
+frozen 20,000-run prospective calibration, reconstructed from the clean V1
+trace, could not support the fixed A/A and qualification design at the required
+power. V2 therefore remains production-off and must not proceed to A/A,
+holdout, confirmation, or promotion; see
+[`cmd/graphbench/README.md`](cmd/graphbench/README.md) for the reproducible
+verification command.
+
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports
 PostgreSQL and Neo4j, uncompressed, gzip, and zstd fragments, bounded keyset

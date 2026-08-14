@@ -417,6 +417,35 @@ func TestParseConfigAcceptsSPI2V2DevelopmentReportProduction(t *testing.T) {
 	}
 }
 
+func TestParseConfigAcceptsIsolatedSPI2V2PowerSimulation(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-simulation-baseline-trace", "s4.jsonl",
+		"-sp-i2-v2-simulation-candidate-trace", "i2.jsonl",
+		"-sp-i2-v2-simulation-output", "simulation.json",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "simulation.json", cfg.SPI2V2SimulationOutput)
+
+	for _, args := range [][]string{
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-simulation-output", "simulation.json"},
+		{"-sp-i2-generation", spI2GenerationV1, "-sp-i2-v2-simulation-baseline-trace", "s4.jsonl", "-sp-i2-v2-simulation-candidate-trace", "i2.jsonl", "-sp-i2-v2-simulation-output", "simulation.json"},
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-simulation-baseline-trace", "s4.jsonl", "-sp-i2-v2-simulation-candidate-trace", "i2.jsonl", "-sp-i2-v2-simulation-output", "s4.jsonl"},
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-simulation-baseline-trace", "s4.jsonl", "-sp-i2-v2-simulation-candidate-trace", "i2.jsonl", "-sp-i2-v2-simulation-output", "simulation.json", "-jsonl-output", "capture.jsonl"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+func TestParseConfigRejectsTerminalSPI2V2FormalExecutor(t *testing.T) {
+	_, err := parseConfig([]string{
+		"-sp-i2-generation", spI2GenerationV2,
+		"-postgres-force-shortest-executor", string(optimize.ShortestPathExecutorI2GuardedDistanceV2),
+	}, func(string) string { return "" })
+	require.ErrorContains(t, err, "terminally rejected")
+}
+
 func TestParseConfigAcceptsSPI2V2ComponentCheck(t *testing.T) {
 	executor := string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P)
 	cfg, err := parseConfig([]string{

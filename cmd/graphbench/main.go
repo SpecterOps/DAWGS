@@ -358,6 +358,12 @@ type config struct {
 	SPI2V2ComponentE1PArtifact string
 	// SPI2V2ComponentAuthorizationOutput writes the combined-arm authorization.
 	SPI2V2ComponentAuthorizationOutput string
+	// SPI2V2SimulationBaselineTrace supplies the frozen clean V1 S4 trace.
+	SPI2V2SimulationBaselineTrace string
+	// SPI2V2SimulationCandidateTrace supplies the frozen clean V1 I2 trace.
+	SPI2V2SimulationCandidateTrace string
+	// SPI2V2SimulationOutput writes the prospective calibration report.
+	SPI2V2SimulationOutput string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -546,6 +552,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.SPI2V2ComponentE1DArtifact, "sp-i2-v2-component-e1d-artifact", "", "exact E1D component-check JSONL artifact")
 	flags.StringVar(&cfg.SPI2V2ComponentE1PArtifact, "sp-i2-v2-component-e1p-artifact", "", "exact E1P component-check JSONL artifact")
 	flags.StringVar(&cfg.SPI2V2ComponentAuthorizationOutput, "sp-i2-v2-component-authorization-output", "", "write the checksummed E1DP component authorization")
+	flags.StringVar(&cfg.SPI2V2SimulationBaselineTrace, "sp-i2-v2-simulation-baseline-trace", "", "frozen clean V1 S4 JSONL trace used for prospective calibration")
+	flags.StringVar(&cfg.SPI2V2SimulationCandidateTrace, "sp-i2-v2-simulation-candidate-trace", "", "frozen clean V1 I2 JSONL trace used for prospective calibration")
+	flags.StringVar(&cfg.SPI2V2SimulationOutput, "sp-i2-v2-simulation-output", "", "write the frozen prospective power and coverage report")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -822,7 +831,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	spI2ExecutorRequested := cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 		isV2GraphBenchExecutor(cfg.PostgresForceShortest)
-	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentStudy != "" || cfg.SPI2V2DevelopmentReportArtifact != "" || cfg.SPI2V2DevelopmentReportOutput != "" || cfg.SPI2V2ComponentCheck || cfg.SPI2V2ComponentAuthorization != "" || cfg.SPI2V2ComponentE1DArtifact != "" || cfg.SPI2V2ComponentE1PArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" ||
+	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentStudy != "" || cfg.SPI2V2DevelopmentReportArtifact != "" || cfg.SPI2V2DevelopmentReportOutput != "" || cfg.SPI2V2ComponentCheck || cfg.SPI2V2ComponentAuthorization != "" || cfg.SPI2V2ComponentE1DArtifact != "" || cfg.SPI2V2ComponentE1PArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" || cfg.SPI2V2SimulationBaselineTrace != "" || cfg.SPI2V2SimulationCandidateTrace != "" || cfg.SPI2V2SimulationOutput != "" ||
 		spI2TrainingInputCount(spI2TrainingInputs) > 0 || spI2ExecutorRequested ||
 		strings.Contains(rawTags, "sp-i2-distance-v1") || strings.Contains(rawTags, "sp-i2-distance-v2")
 	if spI2Requested && cfg.SPI2Generation == "" {
@@ -849,6 +858,28 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 		if cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 			(strings.Contains(rawTags, "sp-i2-distance-v1") && !cfg.SPI2V2DevelopmentTournament && !cfg.SPI2V2ReadinessComparison && !cfg.SPI2V2ComponentCheck) {
 			return config{}, fmt.Errorf("SP-I2 V2 generation cannot select V1 evidence")
+		}
+		if cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistanceV2) {
+			return config{}, fmt.Errorf("SP-I2 V2 is terminally rejected for inadequate prospective power; the formal executor cannot be captured")
+		}
+	}
+	simulationInputs := 0
+	for _, path := range []string{cfg.SPI2V2SimulationBaselineTrace, cfg.SPI2V2SimulationCandidateTrace} {
+		if path != "" {
+			simulationInputs++
+		}
+	}
+	if simulationInputs != 0 || cfg.SPI2V2SimulationOutput != "" {
+		if cfg.SPI2Generation != spI2GenerationV2 || simulationInputs != 2 || cfg.SPI2V2SimulationOutput == "" {
+			return config{}, fmt.Errorf("SP-I2 V2 simulation requires generation v2, both frozen traces, and an output")
+		}
+		if sameCleanPath(cfg.SPI2V2SimulationOutput, cfg.SPI2V2SimulationBaselineTrace) || sameCleanPath(cfg.SPI2V2SimulationOutput, cfg.SPI2V2SimulationCandidateTrace) {
+			return config{}, fmt.Errorf("SP-I2 V2 simulation output must not overwrite a trace input")
+		}
+		if cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2ComponentCheck ||
+			cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentReportArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" ||
+			cfg.OutputJSONL != "" || spI2ReportConfigured || cfg.SPI2Freeze != "" {
+			return config{}, fmt.Errorf("SP-I2 V2 simulation cannot be combined with capture, reporting, or promotion workflows")
 		}
 	}
 	if (cfg.SPI2V2DevelopmentArtifact == "") != (cfg.SPI2V2DevelopmentStudy == "") {
@@ -1361,6 +1392,16 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
+	if cfg.SPI2V2SimulationOutput != "" {
+		report, err := createSPI2PowerSimulationReportV2(cfg.CorpusRoot, cfg.SPI2V2SimulationBaselineTrace, cfg.SPI2V2SimulationCandidateTrace, cfg.SPI2V2SimulationOutput)
+		if err != nil {
+			fatal("create SP-I2 V2 power simulation: %v", err)
+		}
+		if !report.Passed {
+			fatal("SP-I2 V2 prospective power or coverage requirement failed; this protocol is terminal")
+		}
+		return
+	}
 	if cfg.SPI2V2ComponentAuthorizationOutput != "" {
 		passed, err := createSPI2V2ComponentAuthorization(
 			cfg.CorpusRoot,
@@ -1682,6 +1723,9 @@ func main() {
 	})
 	if err != nil {
 		fatal("select corpus: %v", err)
+	}
+	if cfg.SPI2Generation == spI2GenerationV2 && selectedCorpusContainsSPI2V2FormalCase(corpus) {
+		fatal("SP-I2 V2 is terminally rejected for inadequate prospective power; formal corpus execution is forbidden")
 	}
 	if selectedCorpusContainsTag(corpus, spI1HoldoutTag) || selectedCorpusContainsSPI1Holdout(corpus) || cfg.SPI1Freeze != "" {
 		if cfg.SPI1Freeze == "" || cfg.SPI1DiscoveryReport == "" {

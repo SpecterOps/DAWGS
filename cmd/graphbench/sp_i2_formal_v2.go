@@ -120,3 +120,20 @@ func selectedCorpusContainsSPI2V2FormalHoldout(corpus ScaleCorpus) bool {
 	}
 	return false
 }
+
+func selectedCorpusContainsSPI2V2FormalCase(corpus ScaleCorpus) bool {
+	cohort, err := canonicalSPI2V2FormalCohort()
+	if err != nil {
+		return true
+	}
+	for _, testCase := range corpus.Cases {
+		key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
+		if _, found := cohort.trainingKeys[key]; found {
+			return true
+		}
+		if _, found := cohort.holdoutKeys[key]; found {
+			return true
+		}
+	}
+	return false
+}

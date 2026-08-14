@@ -1231,6 +1231,29 @@ timed samples, 100,000 deterministic hierarchical bootstrap draws, and the
 unchanged 97.5% confidence and p95 gates. The stabilization receipt is stored
 separately from latency samples and timed iteration one is retained.
 
+V2 terminated at its mandatory prospective calibration gate before formal
+A/A or discovery. Reproduce the gate from the exact clean V1 traces with:
+
+```bash
+graphbench \
+  -sp-i2-generation sp-i2-distance-v2 \
+  -sp-i2-v2-simulation-baseline-trace .coverage/sp-i2-distance-v1-3865cbc/discovery-s4.jsonl \
+  -sp-i2-v2-simulation-candidate-trace .coverage/sp-i2-distance-v1-3865cbc/discovery-i2.jsonl \
+  -sp-i2-v2-simulation-output .coverage/sp-i2-distance-v2-power-simulation.json
+```
+
+The producer verifies both trace hashes and their source identity, reconstructs
+the frozen p50/p95 round-drift vectors, expands the 20-round cycle-control
+trace to the fixed 40-by-100 design with the declared log-quantile transform,
+and replays the exact 100,000-draw hierarchical bootstrap used to calibrate the
+20,000-run scenarios. It writes the report and exits nonzero because identity
+A/A admission power, target power, control power, and both order-stratified
+power cases miss the frozen 90% Wilson-lower requirement. This is a terminal
+protocol result: do not run V2 A/A, discovery, holdout, capture-plan, sealed
+manifest, confirmation, operational, or promotion phases. Any renewed work
+requires a separately identified successor protocol with a new corpus and
+prospectively fixed design.
+
 ### Frozen canonical-I1 qualification
 
 The `sp-i1-inbound-v1` study is a dedicated two-arm comparison between exact
