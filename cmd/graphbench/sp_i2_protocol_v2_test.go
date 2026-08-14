@@ -29,6 +29,16 @@ func TestCheckedInSPI2V1TerminalRejection(t *testing.T) {
 	require.False(t, rejection.HoldoutOpened)
 }
 
+func TestCheckedInSPI2V2TerminalRejection(t *testing.T) {
+	path := filepath.Join("..", "..", "benchmark", "testdata", "scale", "protocols", "sp_i2_distance_v2_rejection.json")
+	rejection, err := loadSPI2V2Rejection(path)
+	require.NoError(t, err)
+	require.True(t, rejection.Terminal)
+	require.True(t, rejection.SuccessorProtocolRequired)
+	require.False(t, rejection.FormalAAStarted)
+	require.False(t, rejection.HoldoutOpened)
+}
+
 func TestSPI2V1CannotCreateFreezeOrAuthorizeHoldout(t *testing.T) {
 	_, err := createSPI2QualificationReport("baseline", "candidate", "resource", "", "", "freeze.json", "report.json", SPI2QualificationOptions{})
 	require.ErrorContains(t, err, "terminally rejected")

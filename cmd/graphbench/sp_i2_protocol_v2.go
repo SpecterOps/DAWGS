@@ -112,6 +112,32 @@ type spI2V1RejectedGate struct {
 	Limit    float64 `json:"limit"`
 }
 
+type spI2V2Rejection struct {
+	Schema                       string               `json:"schema"`
+	Generation                   string               `json:"generation"`
+	SourceCommit                 string               `json:"source_commit"`
+	ProtocolSHA256               string               `json:"protocol_sha256"`
+	SimulationReportSHA256       string               `json:"simulation_report_sha256"`
+	SimulationImplementation     string               `json:"simulation_implementation"`
+	RunsPerScenario              int                  `json:"runs_per_scenario"`
+	FailedGates                  []spI2V2RejectedGate `json:"failed_gates"`
+	CoverageCalibrated           bool                 `json:"coverage_calibrated"`
+	FormalAAStarted              bool                 `json:"formal_aa_started"`
+	CapturePlanCreated           bool                 `json:"capture_plan_created"`
+	SealedPreregistrationCreated bool                 `json:"sealed_preregistration_created"`
+	HoldoutOpened                bool                 `json:"holdout_opened"`
+	ProductionActivated          bool                 `json:"production_activated"`
+	SuccessorProtocolRequired    bool                 `json:"successor_protocol_required"`
+	Terminal                     bool                 `json:"terminal"`
+}
+
+type spI2V2RejectedGate struct {
+	Scenario string  `json:"scenario"`
+	Metric   string  `json:"metric"`
+	Observed float64 `json:"observed"`
+	Required float64 `json:"required"`
+}
+
 type spI2ProtocolIdentitiesV2 struct {
 	Executor                  string `json:"executor"`
 	Policy                    string `json:"policy"`
@@ -229,6 +255,35 @@ func loadSPI2V1Rejection(path string) (spI2V1Rejection, error) {
 		rejection.FailedGate.Metric != "p95_ratio_upper" || rejection.FailedGate.Observed != 1.2528773826285173 || rejection.FailedGate.Limit != 1.05 ||
 		rejection.FreezeCreated || rejection.HoldoutOpened || !rejection.Terminal {
 		return spI2V1Rejection{}, fmt.Errorf("SP-I2 V1 terminal rejection declaration is invalid")
+	}
+	return rejection, nil
+}
+
+func loadSPI2V2Rejection(path string) (spI2V2Rejection, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return spI2V2Rejection{}, fmt.Errorf("read SP-I2 V2 rejection: %w", err)
+	}
+	var rejection spI2V2Rejection
+	if err := decodePromotionEvidence(raw, &rejection); err != nil {
+		return spI2V2Rejection{}, fmt.Errorf("decode SP-I2 V2 rejection: %w", err)
+	}
+	expected := []spI2V2RejectedGate{
+		{Scenario: "aa_identity", Metric: "admission_power_wilson_lower", Observed: 0, Required: 0.9},
+		{Scenario: "target_power", Metric: "full_decision_power_wilson_lower", Observed: 0.4724809842358317, Required: 0.9},
+		{Scenario: "control_power", Metric: "full_decision_power_wilson_lower", Observed: 0.5053708806725798, Required: 0.9},
+		{Scenario: "aa_order_odd_high", Metric: "admission_power_wilson_lower", Observed: 0, Required: 0.9},
+		{Scenario: "aa_order_even_high", Metric: "admission_power_wilson_lower", Observed: 0, Required: 0.9},
+	}
+	if rejection.Schema != "sp-i2-terminal-rejection-v2" || rejection.Generation != spI2GenerationV2 ||
+		rejection.SourceCommit != "5df040c2992dd92cf0480beed887c4068c3052b2" ||
+		rejection.ProtocolSHA256 != "17cddc5100bc4f523122b0664ec63d3b4954ae2c01000f04864f10fdd00e1e89" ||
+		rejection.SimulationReportSHA256 != "cbf4fc593a0adfa72ead23f4f391d530790a474a292a9cc47788a18048b17875" ||
+		rejection.SimulationImplementation != spI2PowerSimulationV2 || rejection.RunsPerScenario != 20_000 ||
+		!slices.Equal(rejection.FailedGates, expected) || !rejection.CoverageCalibrated || rejection.FormalAAStarted ||
+		rejection.CapturePlanCreated || rejection.SealedPreregistrationCreated || rejection.HoldoutOpened || rejection.ProductionActivated ||
+		!rejection.SuccessorProtocolRequired || !rejection.Terminal {
+		return spI2V2Rejection{}, fmt.Errorf("SP-I2 V2 terminal rejection declaration is invalid")
 	}
 	return rejection, nil
 }

@@ -1252,7 +1252,11 @@ power cases miss the frozen 90% Wilson-lower requirement. This is a terminal
 protocol result: do not run V2 A/A, discovery, holdout, capture-plan, sealed
 manifest, confirmation, operational, or promotion phases. Any renewed work
 requires a separately identified successor protocol with a new corpus and
-prospectively fixed design.
+prospectively fixed design. The checked-in
+`benchmark/testdata/scale/protocols/sp_i2_distance_v2_rejection.json`
+tombstone binds the implementation commit, protocol, generated report, failed
+Wilson bounds, and the fact that no formal A/A, capture plan, sealed
+preregistration, holdout, or production activation occurred.
 
 ### Frozen canonical-I1 qualification
 
