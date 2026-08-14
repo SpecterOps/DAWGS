@@ -112,23 +112,13 @@ func TestNodeFragmentWriter(t *testing.T) {
 	})
 
 	t.Run("Parquet write failure removes staging and final outputs", func(t *testing.T) {
-		original := newNodeParquetSinkForFragmentWriter
-		newNodeParquetSinkForFragmentWriter = func(path string) (*parquetFragmentSink[FragmentNode], error) {
-			sink, err := newNodeParquetSink(path)
-			if err != nil {
-				return nil, err
-			}
-			sink.write = func(FragmentNode) error { return errors.New("injected parquet write failure") }
-			return sink, nil
-		}
-		t.Cleanup(func() { newNodeParquetSinkForFragmentWriter = original })
-
 		jsonlPath := filepath.Join(t.TempDir(), "nodes.jsonl")
 		parquetPath := filepath.Join(t.TempDir(), "nodes.parquet")
 		writer, err := newNodeFragmentWriter(jsonlPath, parquetPath, fragmentWriterTestOptions(t, true))
 		if err != nil {
 			t.Fatalf("create node writer: %v", err)
 		}
+		writer.parquet.write = func(FragmentNode) error { return errors.New("injected parquet write failure") }
 		if err := writer.Write(FragmentNode{ID: "node-1"}); err == nil {
 			t.Fatal("expected Parquet write failure")
 		}
@@ -173,29 +163,19 @@ func TestNodeFragmentWriter(t *testing.T) {
 	})
 
 	t.Run("abort panic does not escape or block output cleanup", func(t *testing.T) {
-		original := newNodeParquetSinkForFragmentWriter
 		writeErr := errors.New("injected parquet write failure")
-		newNodeParquetSinkForFragmentWriter = func(path string) (*parquetFragmentSink[FragmentNode], error) {
-			sink, err := newNodeParquetSink(path)
-			if err != nil {
-				return nil, err
-			}
-			originalAbort := sink.abort
-			sink.write = func(FragmentNode) error { return writeErr }
-			sink.abort = func() {
-				originalAbort()
-				panic("injected Parquet abort panic")
-			}
-			return sink, nil
-		}
-		t.Cleanup(func() { newNodeParquetSinkForFragmentWriter = original })
-
 		outputDir := t.TempDir()
 		jsonlPath := filepath.Join(outputDir, "nodes.jsonl")
 		parquetPath := filepath.Join(outputDir, "nodes.parquet")
 		writer, err := newNodeFragmentWriter(jsonlPath, parquetPath, fragmentWriterTestOptions(t, true))
 		if err != nil {
 			t.Fatalf("create node writer: %v", err)
+		}
+		originalAbort := writer.parquet.abort
+		writer.parquet.write = func(FragmentNode) error { return writeErr }
+		writer.parquet.abort = func() {
+			originalAbort()
+			panic("injected Parquet abort panic")
 		}
 		if err := writer.Write(FragmentNode{ID: "node-1"}); !errors.Is(err, writeErr) {
 			t.Fatalf("write error = %v, want %v", err, writeErr)

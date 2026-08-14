@@ -5,8 +5,6 @@ import (
 	"os"
 )
 
-var newNodeParquetSinkForFragmentWriter = newNodeParquetSink
-
 type fragmentWriter[T any] struct {
 	jsonl *compressedJSONLinesWriter
 
@@ -22,7 +20,7 @@ type fragmentWriter[T any] struct {
 }
 
 func newNodeFragmentWriter(jsonlPath, parquetPath string, options DumpOptions) (*fragmentWriter[FragmentNode], error) {
-	return newFragmentWriter(jsonlPath, parquetPath, options, newNodeParquetSinkForFragmentWriter)
+	return newFragmentWriter(jsonlPath, parquetPath, options, newNodeParquetSink)
 }
 
 func newEdgeFragmentWriter(jsonlPath, parquetPath string, options DumpOptions) (*fragmentWriter[FragmentEdge], error) {
