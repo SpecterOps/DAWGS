@@ -304,14 +304,17 @@ func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, formatted, "with recursive")
 	require.Contains(t, formatted, "_suffix_seeded_suffix as materialized")
-	require.Contains(t, formatted, "_suffix_seeded_reverse(boundary_id, next_id, depth, path)")
+	require.Contains(t, formatted, "_suffix_seeded_reverse(boundary_id, next_id, depth, path, node_path)")
 	require.Contains(t, formatted, "array_prepend(e0.id")
+	require.Contains(t, formatted, "array_prepend(e0.start_id")
 	require.Contains(t, formatted, "e0.id != all (s5_suffix_seeded_reverse.path)")
 	require.Contains(t, formatted, "e0.end_id = s5_suffix_seeded_reverse.next_id")
 	require.Contains(t, formatted, "s5_suffix_seeded_reverse.path && array [s5_suffix_seeded_suffix.e1, s5_suffix_seeded_suffix.e2, s5_suffix_seeded_suffix.e3]::int8[]")
 	require.Contains(t, formatted, "e2.id != e1.id")
 	require.Contains(t, formatted, "e3.id != e1.id")
 	require.Contains(t, formatted, "e3.id != e2.id")
+	require.Contains(t, formatted, "generate_subscripts(s5_suffix_seeded_reverse.node_path")
+	require.NotContains(t, formatted, "ordered_edge_ids_to_path")
 	require.NotContains(t, formatted, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
@@ -442,6 +445,8 @@ func TestForcedSuffixSeededReverseEndpointSQLIsParameterStable(t *testing.T) {
 	require.Equal(t, first, second)
 	require.Contains(t, first, "s5_suffix_seeded_reverse.path")
 	require.Contains(t, first, "select s5.n2 as \"id(head)\", s5.n4 as \"id(terminal)\"")
+	require.NotContains(t, first, "node_path")
+	require.NotContains(t, first, "generate_subscripts")
 	require.NotContains(t, first, "ordered_edge_ids_to_path")
 	require.NotContains(t, first, "s2(root_id, next_id, depth, satisfied, is_cycle, path)")
 }
@@ -540,7 +545,7 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 			StepIndex:      0,
 		})
 	require.Equal(t, "SP", outcome.Family)
-	require.Equal(t, []string{"SP-S0", "SP-S0-DIRECT", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0", "SP-S4-C-D", "SP-S4-C-WE+MAT-M0", "SP-I1-C-D", "SP-I1-U-E+MAT-M0", "SP-I1-C-WE+MAT-M0", "SP-B1-C-ALT-NODE-D", "SP-B1-C-ALT-NODE-WE+MAT-M0", "SP-B2-C-MIN-LEVEL-D", "SP-B2-C-MIN-LEVEL-WE+MAT-M0"}, outcome.PlannedCandidates)
+	require.Equal(t, []string{"SP-S0", "SP-S0-DIRECT", "SP-S1", "SP-S2", "SP-S3-U-D", "SP-S3-U-E+MAT-M0", "SP-S4-C-D", "SP-S4-C-WE+MAT-M0", "SP-I1-C-D", "SP-I2-C-D", "SP-I1-U-E+MAT-M0", "SP-I1-C-WE+MAT-M0", "SP-B1-C-ALT-NODE-D", "SP-B1-C-ALT-NODE-WE+MAT-M0", "SP-B2-C-MIN-LEVEL-D", "SP-B2-C-MIN-LEVEL-WE+MAT-M0"}, outcome.PlannedCandidates)
 	require.Equal(t, string(optimize.ShortestPathSchedulerSingleEndedLevel), outcome.Scheduler)
 	require.Contains(t, outcome.EligibilityFacts, TargetEligibilityFact{
 		Name:     "one_static_id_equality_per_endpoint",
@@ -555,6 +560,24 @@ func TestShortestDistanceExecutorIsAutomaticallySelectedAndReportedApplied(t *te
 	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
 	require.Equal(t, string(optimize.ShortestPathExecutorIncumbentWorkspace), outcome.Fallback)
 	require.Empty(t, outcome.SkipReason)
+}
+
+// TestImplicitMaximumShortestPathReportsPolicyDepthProvenance verifies a
+// syntax-open shortest path is specialized without pretending its bound was
+// written explicitly.
+func TestImplicitMaximumShortestPathReportsPolicyDepthProvenance(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `
+		MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
+	require.Equal(t, optimize.ShortestPathSelectorStaticV7Contained, outcome.SelectorVersion)
+	require.NotNil(t, outcome.MaximumDepth)
+	require.Equal(t, int64(15), *outcome.MaximumDepth)
+	require.Equal(t, string(optimize.ShortestPathMaximumDepthPolicyDefault), outcome.MaximumDepthSource)
 }
 
 // TestGreedyProjectionMaterializesShortestPathAndEntities verifies that RETURN * hydrates the path and every visible endpoint.
@@ -814,6 +837,91 @@ func TestProductionCanaryShortestExecutorUsesVersionedSelectionMetadata(t *testi
 	require.Equal(t, "production_canary", outcome.SelectionMode)
 	require.Equal(t, optimize.ShortestPathSelectorStaticV6, outcome.SelectorVersion)
 	require.Equal(t, string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), outcome.Applied)
+}
+
+func TestProductionGuardedDistanceEmitsReversePhysicalCandidateAndExactFallback(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+	translation, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ProductionOptions{
+		ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistance,
+		SelectorVersion:      optimize.ShortestPathSelectorStaticV8HiddenFanIn,
+		ShortestPathCaps: &ProductionShortestPathCaps{
+			StateLimit:    optimize.ShortestPathI2QualifiedStateLimit,
+			FrontierLimit: optimize.ShortestPathI2QualifiedFrontierLimit,
+		},
+		AuthorizedBucket: &ProductionTraversalBucket{
+			Direction: "inbound", ObservationMode: "distance", MinimumDepth: 1, MaximumDepth: 32, RelationshipKindCount: 1,
+		},
+	})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "sp_i2_distance")
+	require.Contains(t, formatted, "e0.start_id = sp_i2_distance.node_id")
+	require.Contains(t, formatted, "sp_i2_distance.node_id != (select singleton_endpoints.root_id from singleton_endpoints)")
+	require.Contains(t, formatted, "shortest_path_compact(")
+	require.Contains(t, formatted, "sp_i2_candidate_marker")
+	require.Contains(t, formatted, "sp_i2_fallback_marker")
+	require.Contains(t, formatted, "group by sp_i2_distance_bounded.depth having count(*)::int8 > 100000")
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor, optimize.TraversalStepTarget{})
+	require.Equal(t, string(optimize.ShortestPathExecutorI2GuardedDistance), outcome.Applied)
+	require.Equal(t, optimize.ShortestPathPolicyI2DistanceGuardedV1, outcome.EmittedPolicy)
+	require.Equal(t, []string{string(optimize.ShortestPathExecutorI2GuardedDistance), string(optimize.ShortestPathExecutorS4CanonicalDistance)}, outcome.EmittedCandidates)
+	require.Equal(t, optimize.ShortestPathI2QualifiedStateLimit, outcome.StateLimit)
+	require.Equal(t, optimize.ShortestPathI2QualifiedFrontierLimit, outcome.FrontierLimit)
+	require.Zero(t, outcome.PredecessorLimit)
+	require.Zero(t, outcome.EnumerationLimit)
+	require.Zero(t, outcome.OutputBytesLimit)
+	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
+}
+
+func TestProductionGuardedDistanceRejectsUnqualifiedCaps(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p)
+	`)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		caps ProductionShortestPathCaps
+	}{
+		{
+			name: "formerly accepted positive override",
+			caps: ProductionShortestPathCaps{StateLimit: 1000, FrontierLimit: 100},
+		},
+		{
+			name: "unauthorized cap dimension",
+			caps: ProductionShortestPathCaps{
+				StateLimit:       optimize.ShortestPathI2QualifiedStateLimit,
+				FrontierLimit:    optimize.ShortestPathI2QualifiedFrontierLimit,
+				PredecessorLimit: 1,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+				"start_id": int64(1), "end_id": int64(2),
+			}, DefaultGraphID, ProductionOptions{
+				ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistance,
+				SelectorVersion:      optimize.ShortestPathSelectorStaticV8HiddenFanIn,
+				ShortestPathCaps:     &test.caps,
+				AuthorizedBucket: &ProductionTraversalBucket{
+					Direction: "inbound", ObservationMode: "distance", MinimumDepth: 1, MaximumDepth: 32, RelationshipKindCount: 1,
+				},
+			})
+			require.ErrorContains(t, err, "requires exactly state_limit=100000 and frontier_limit=100000")
+		})
+	}
 }
 
 // TestProductionCanonicalSPRequiresExactStaticV6Envelope verifies production canonical sp requires exact static v6 envelope behavior.

@@ -274,6 +274,59 @@ func TestParseConfigAcceptsSPI1StagedDiscoveryAndConfirmation(t *testing.T) {
 	require.Equal(t, "sp-i1-discovery.json", confirmation.SPI1DiscoveryReport)
 }
 
+func TestParseConfigAcceptsSPI2StagedDiscoveryAndConfirmation(t *testing.T) {
+	discovery, err := parseConfig([]string{
+		"-sp-i2-baseline-artifact", "s4-distance-training.jsonl",
+		"-sp-i2-candidate-artifact", "i2-training.jsonl",
+		"-sp-i2-resource-report", "i2-training-resource.json",
+		"-sp-i2-output", "sp-i2-discovery.json",
+		"-sp-i2-freeze-output", "sp-i2-freeze.json",
+		"-sp-i2-protocol", referencePairProtocolDiscovery,
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "s4-distance-training.jsonl", discovery.SPI2BaselineArtifact)
+	require.Equal(t, "i2-training.jsonl", discovery.SPI2CandidateArtifact)
+	require.Equal(t, "i2-training-resource.json", discovery.SPI2ResourceReport)
+	require.Equal(t, "sp-i2-freeze.json", discovery.SPI2FreezeOutput)
+
+	confirmation, err := parseConfig([]string{
+		"-sp-i2-baseline-artifact", "s4-distance-confirmation.jsonl",
+		"-sp-i2-candidate-artifact", "i2-confirmation.jsonl",
+		"-sp-i2-resource-report", "i2-confirmation-resource.json",
+		"-sp-i2-output", "sp-i2-confirmation.json",
+		"-sp-i2-freeze", "sp-i2-freeze.json",
+		"-sp-i2-discovery-report", "sp-i2-discovery.json",
+		"-sp-i2-training-baseline-artifact", "s4-distance-training.jsonl",
+		"-sp-i2-training-candidate-artifact", "i2-training.jsonl",
+		"-sp-i2-training-resource-report", "i2-training-resource.json",
+		"-sp-i2-protocol", referencePairProtocolConfirmation,
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "sp-i2-freeze.json", confirmation.SPI2Freeze)
+	require.Equal(t, "sp-i2-discovery.json", confirmation.SPI2DiscoveryReport)
+}
+
+func TestParseConfigRejectsIncompleteOrMixedSPI2StagedWorkflow(t *testing.T) {
+	discovery := []string{
+		"-sp-i2-baseline-artifact", "s4.jsonl",
+		"-sp-i2-candidate-artifact", "i2.jsonl",
+		"-sp-i2-resource-report", "resource.json",
+		"-sp-i2-output", "report.json",
+		"-sp-i2-freeze-output", "freeze.json",
+		"-sp-i2-protocol", referencePairProtocolDiscovery,
+	}
+	for _, args := range [][]string{
+		{"-sp-i2-baseline-artifact", "s4.jsonl"},
+		{"-sp-i2-freeze", "freeze.json"},
+		append(append([]string(nil), discovery...), "-sp-i2-freeze", "old-freeze.json", "-sp-i2-discovery-report", "old-report.json"),
+		append(append([]string(nil), discovery...), "-sp-i2-protocol", "exploratory"),
+		append(append([]string(nil), discovery...), "-sp-i2-output", "s4.jsonl"),
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
 // TestParseConfigAcceptsSPI1HoldoutCaptureAuthorization verifies parse config accepts spi1 holdout capture authorization behavior.
 func TestParseConfigAcceptsSPI1HoldoutCaptureAuthorization(t *testing.T) {
 	cfg, err := parseConfig([]string{

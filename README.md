@@ -151,24 +151,59 @@ matching-root multiplicity and independent relationship-distinct cycle and
 self-loop controls at the productive boundary. The optimizer reports a typed
 expansion-search decision. Repository-native
 `EXPANSION-SUFFIX-SEEDED-REVERSE` is an exact qualification-only implementation.
+When a complete path is observed, that arm carries ordered node IDs alongside
+ordered edge IDs and hydrates both arrays directly in the translated statement;
+endpoint-only forms keep the smaller edge-only reverse state. The guarded
+candidate uses the same materializer while its exact forward fallback retains
+the generic path helper.
 Production selection remains on the stepwise incumbent because query shape and
 available metadata do not provide hard suffix-density or reverse-state bounds.
-The staged, tool-only `orientation-probe-v2` experiment uses
+The now-terminal, tool-only `orientation-probe-v2` experiment uses
 `F2 = root_rows + maximum_depth * forward_degree_rows` and
 `R2 = suffix_rows + boundary_rows + reverse_degree_rows`, selecting reverse
 only when every bounded probe is complete and `4 * R2 < 3 * F2`. Its frozen v3
 corpus contains eight selector-training cases and four evaluation holdouts whose
-timings remain unopened. Qualification requires matched `shadow`, `incumbent`,
-`reverse`, and `guarded` artifacts captured under Repeatable Read with traversal
-telemetry. On a clean tree, discovery must emit both its report and freeze
-manifest from the exact eight training cases; confirmation must consume those
-checksum-bound files and the exact eight-training/four-holdout cohort. Per-case
-A/A evidence also binds the PostgreSQL timing environment, including transaction
+timings remain unopened. Its frozen historical protocol required matched
+`shadow`, `incumbent`, `reverse`, and `guarded` artifacts captured under
+Repeatable Read with traversal telemetry. Degree evidence is represented as a
+scalar count over the same cap+1-limited adjacency stream, avoiding tuple
+materialization without changing the immutable score or fail-closed overflow
+rule. A promotable discovery would have needed a clean-tree report and freeze
+from the exact eight training cases before confirmation could open the complete
+eight-training/four-holdout cohort. That path is now archival only: v2 must not
+be recaptured or advanced, and its holdout timings remain unopened. Per-case A/A
+evidence also binds the PostgreSQL timing environment, including transaction
 isolation, and the exact validated fixture. See
-[GraphBench](cmd/graphbench/README.md) for the exact capture and report protocol.
-No v2 qualification benchmark has passed. The existing
-`orientation-probe-v1` report, exact-query production seam, and default
-production behavior are unchanged by this staging work.
+[GraphBench](cmd/graphbench/README.md) for the frozen protocol.
+No v2 qualification benchmark has passed. The driver/runtime seam recognizes
+exact-query manifests that name either the v1 or v2 selector identity so their
+diagnostic and guarded statements remain reproducible. The schema-v2 final
+verifier rejects legacy v1 evidence because it cannot bind the required source,
+corpus, and frozen cohort; it also terminally rejects v2 because that immutable
+policy generation failed its training overhead gate. A future attempt requires
+a new policy generation. Neither selector is enabled, and default production
+behavior remains unchanged.
+The latest five-round, eight-case v2 training prequalification produced exact,
+receipt-complete evidence but failed selected-arm overhead on every case: the
+guarded statement remained roughly 156-396 microseconds above its selected
+exact arm against the immutable 100-microsecond gate. A reduced-gating
+prototype also failed a fresh matched capture and was reverted. V2 is therefore
+a rejected selector generation rather than a pending clean-tree promotion; any
+next attempt must use a new policy identity and qualification freeze.
+The subsequent bounded experiment was the independent, tool-only
+`suffix-reverse-guard-v1` policy. It enrolls only complete-path fixed-suffix
+queries, performs no topology or degree probes, caps suffix payload and reverse
+state at 512 rows each, and dispatches either exact suffix-seeded reverse or the
+unchanged exact forward traversal in one Repeatable Read statement. Its
+six-round training feasibility gate is deliberately not a qualification or
+production seam; endpoint-only queries, mutations, protected holdouts, and the
+zero-value production translator remain outside the experiment. The gate also
+requires process timestamps to prove the declared physical doubled-Williams
+order and an artifact-bound schema-v4 A/A chronology proof. The first capture
+predates that enforcement and is invalid. A chronology-compliant recapture then
+failed the immutable guard-overhead bound on both training cases, so this
+generation is terminally stopped before holdout, manifest, driver-policy, or
+automatic-selector work.
 For the distinct one-fixed-prefix plus selective-terminal-expansion shape,
 production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
 4096 reverse-state caps select either the reverse candidate or an exact
@@ -187,18 +222,56 @@ New inline SP and ordinary-orientation lowerings remain default-off. Canonical
 SP-I1 authorization now uses selector `sp-static-v6` and accepts only the
 qualified inbound, typed, single-kind, one-path `min=1`/`max=64` bucket; the
 automatic `sp-static-v5-contained` S3/S4 choices are unchanged. The
-PostgreSQL driver's `SetTraversalPolicy` API can expose one eligible candidate
-to an explicit normalized-query SHA-256 allowlist under a nonzero generation.
+guarded distance identity `SP-I2-C-D` uses selector `sp-static-v8-hidden-fanin`
+for exact inbound typed single-kind distance buckets, reverse-physical ID-only
+search, the preregistered production-form `state_limit=100000` and
+`frontier_limit=100000` guards, and exact S4 fallback. Those caps are immutable
+protocol inputs, not qualified values: the dirty-tree rehearsal stopped before
+creating a discovery report or freeze, its cycle-control point estimates missed
+the frozen bounds, and no protected holdout was opened. Syntax-open
+singleton shortest paths now use the documented effective maximum depth 15 and
+report `policy_default` depth provenance under `sp-static-v7-contained`.
+The PostgreSQL driver's `SetTraversalPolicy` API can expose one eligible
+candidate to an explicit normalized-query SHA-256 allowlist under a nonzero
+generation.
 Activation requires the exact promotion manifest, including its measured
-execution boundary and evidence digests. Manifest schema v2 also requires every
-evidence report to repeat the exact candidate, selector, source, binary,
+execution boundary, independently frozen operational candidate SQL SHA-256,
+and evidence digests. The SQL anchor is derived in a non-promotional preflight,
+then added to the provisional manifest before formal evidence is recaptured.
+Manifest schema v2 also requires every evidence report to repeat the exact
+candidate, selector, source, binary,
 corpus, cap, bucket, and query-cohort identity; a digest-shaped string alone is
-not authorization. B1/B2 and `SP-I1-C-D` remain tooling-only. Endpoint-seeded reverse,
-inline ASP, and inline canonical SP each have an evidence-free emergency
-disable switch. Resetting the policy to its
-zero value immediately returns all queries to incumbent cache identities. This
-is a reversible canary seam, not evidence that a candidate is qualified for
-broad production use.
+not authorization. The verifier strictly decodes candidate-specific evidence,
+recomputes the bound native A/A digest and performance decisions, requires the
+reference workload digest to match the exact PostgreSQL A/A workload per cohort
+case, and closes every performance receipt against the complete set of resource
+case-round receipts. Confirmation and performance expose typed evidence rather
+than raw benchmark samples, so final verification can recompute their declared
+decisions but cannot independently replay every bootstrap draw; closing that
+reproducibility gap requires a producer-schema revision. The operational gate
+likewise validates an assembled 32-record native input but does not yet provide
+a standalone capture producer. Evidence roles,
+bucket names, query identities, and the canonical training/holdout split are
+closed sets; duplicate JSON keys, duplicate allowlist entries, extra roles, and
+filesystem-symlink escapes fail closed. The legacy
+`orientation-probe-v1` report lacks the source/corpus/cohort identity needed by
+this closure and therefore cannot authorize promotion. The structurally richer
+v2 report remains readable, but final authorization rejects that terminal
+generation because its immutable training overhead gate failed. B1/B2 and legacy
+unguarded `SP-I1-C-D` remain tooling-only. Endpoint-seeded reverse,
+inline ASP, inline canonical witness, and guarded inline distance each have an
+evidence-free emergency disable switch. If a manifest-backed candidate carries
+a rollback switch, it may carry exactly one and it must match: orientation with
+`DisableExpansionOrientation`, ASP-I1 with `DisableInlineASPDAG`, SP-I1 witness
+with `DisableInlineSPWitness`, or SP-I2 with `DisableInlineSPDistance`. An
+unrelated or second switch is rejected. `DisableEndpointSeededReverse` is
+standalone-only; every standalone rollback must omit a candidate and leave
+`promotion_manifest_sha256`, `promotion_manifest_json`, and
+`query_sha256_allowlist` empty. A matching rollback preserves the installed
+manifest and candidate anchor but derives an incumbent-only effective policy
+under a new cache generation. Resetting the policy to its zero value immediately
+returns all queries to incumbent cache identities. This is a reversible canary
+seam, not evidence that a candidate is qualified for broad production use.
 
 The PostgreSQL scale-plan gate runs as part of `make test_all` when
 `CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
@@ -259,6 +332,8 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
 - [CySQL traversal performance priorities](docs/cysql_traversal_priorities.md): source-grounded roadmap for orientation, SP/ASP, probes, statistics, telemetry, and qualification.
 - [Traversal priority implementation status](docs/experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
+- [Remaining traversal outlier delivery](docs/experiments/remaining_outlier_delivery_v1.md): SP-I2, fixed-suffix, qualification, promotion-closure, and rollback handoff.
+- [PostgreSQL versus Neo4j performance summary](report_summary.md): current outlier measurements and evidence boundaries.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
 - [Integration corpus](integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.

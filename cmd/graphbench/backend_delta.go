@@ -12,6 +12,14 @@ import (
 	"time"
 )
 
+// backendDeltaKey identifies one dataset, case, and round during backend
+// matching and repeated-round aggregation.
+type backendDeltaKey struct {
+	dataset string
+	name    string
+	round   int
+}
+
 // BackendDeltaReport contains descriptive PostgreSQL-to-Neo4j correctness and latency deltas for matched records.
 type BackendDeltaReport struct {
 	// Version identifies the serialized schema revision.
@@ -20,6 +28,50 @@ type BackendDeltaReport struct {
 	Notice string `json:"notice"`
 	// Cases contains matched PostgreSQL-to-Neo4j comparisons in deterministic report order.
 	Cases []BackendDeltaCase `json:"cases"`
+	// Outliers aggregates complete repeated-round PostgreSQL losses in descending
+	// PostgreSQL-to-Neo4j latency-ratio order. It is a diagnostic work ledger,
+	// not a release gate.
+	Outliers []BackendDeltaOutlier `json:"outliers,omitempty"`
+}
+
+// BackendDeltaOutlier aggregates one matched workload across repeated rounds
+// and preserves the runtime facts needed to route optimization work.
+type BackendDeltaOutlier struct {
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the workload case.
+	Name string `json:"name"`
+	// Category identifies the workload family declared by the corpus.
+	Category string `json:"category,omitempty"`
+	// Rounds counts complete, successful, observation-matching backend pairs.
+	Rounds int `json:"rounds"`
+	// MedianPostgresOverNeo4j is the median of matched per-round latency ratios.
+	MedianPostgresOverNeo4j float64 `json:"median_postgres_over_neo4j"`
+	// P95PostgresOverNeo4j is the median of matched per-round P95 ratios.
+	P95PostgresOverNeo4j float64 `json:"p95_postgres_over_neo4j,omitempty"`
+	// PostgresMedian is the median repeated-round PostgreSQL p50.
+	PostgresMedian time.Duration `json:"postgres_median"`
+	// Neo4jMedian is the median repeated-round Neo4j p50.
+	Neo4jMedian time.Duration `json:"neo4j_median"`
+	// RuntimeIdentities lists every observed PostgreSQL runtime identity.
+	RuntimeIdentities []string `json:"runtime_identities,omitempty"`
+	// AppliedIdentities lists every observed PostgreSQL applied identity.
+	AppliedIdentities []string `json:"applied_identities,omitempty"`
+	// RuntimeBranches lists every observed PostgreSQL runtime branch.
+	RuntimeBranches []string `json:"runtime_branches,omitempty"`
+	// FallbackReasons lists every translation fallback reason.
+	FallbackReasons []string `json:"fallback_reasons,omitempty"`
+	// SQLFingerprints lists the SQL identities observed across repeated rounds.
+	SQLFingerprints []string `json:"sql_fingerprints,omitempty"`
+	// Direction records the declared traversal direction when available.
+	Direction string `json:"direction,omitempty"`
+	// ExpectedStateClass records the diagnostic topology classification. It is
+	// never suitable as a production selector input by itself.
+	ExpectedStateClass string `json:"expected_state_class,omitempty"`
+	// ObservationMode records the PostgreSQL executor observation boundary.
+	ObservationMode string `json:"observation_mode,omitempty"`
+	// SelectorVersion records the PostgreSQL runtime selector version.
+	SelectorVersions []string `json:"selector_versions,omitempty"`
 }
 
 // BackendDeltaCase compares one matched PostgreSQL and Neo4j case round without assigning release-gate status.
@@ -63,23 +115,13 @@ func createBackendDeltaReport(artifact, output string) error {
 		return err
 	}
 
-	// key identifies one dataset, case, and round during backend matching.
-	type key struct {
-		// dataset names the fixture shared by the matched backend records.
-		dataset string
-		// name identifies the workload case matched across backends.
-		name string
-		// round identifies the measurement round used to balance execution order.
-		round int
-	}
-
-	postgres, neo4j := map[key]CaseResult{}, map[key]CaseResult{}
+	postgres, neo4j := map[backendDeltaKey]CaseResult{}, map[backendDeltaKey]CaseResult{}
 	for _, record := range records {
 		round := 0
 		if record.Environment != nil {
 			round = record.Environment.Round
 		}
-		nextKey := key{
+		nextKey := backendDeltaKey{
 			dataset: record.Dataset,
 			name:    record.Name,
 			round:   round,
@@ -103,7 +145,7 @@ func createBackendDeltaReport(artifact, output string) error {
 		Version: 2,
 		Notice:  "Descriptive only: PostgreSQL release gates compare PostgreSQL predecessors and exact PostgreSQL references, not Neo4j latency.",
 	}
-	keys := make(map[key]struct{}, len(postgres)+len(neo4j))
+	keys := make(map[backendDeltaKey]struct{}, len(postgres)+len(neo4j))
 	for nextKey := range postgres {
 		keys[nextKey] = struct{}{}
 	}
@@ -143,6 +185,7 @@ func createBackendDeltaReport(artifact, output string) error {
 		}
 		report.Cases = append(report.Cases, next)
 	}
+	report.Outliers = backendDeltaOutliers(postgres, neo4j)
 
 	if len(report.Cases) == 0 {
 		return fmt.Errorf("backend-delta artifact has no PostgreSQL or Neo4j cases")
@@ -165,4 +208,120 @@ func createBackendDeltaReport(artifact, output string) error {
 		return err
 	}
 	return os.WriteFile(output, append(raw, '\n'), 0o644)
+}
+
+// backendDeltaOutliers aggregates only complete, successful, semantically
+// matching backend pairs. Missing and mismatching pairs remain visible in
+// BackendDeltaReport.Cases but cannot be ranked as performance work.
+func backendDeltaOutliers(postgres, neo4j map[backendDeltaKey]CaseResult) []BackendDeltaOutlier {
+	type aggregate struct {
+		outlier       BackendDeltaOutlier
+		medianRatios  []float64
+		p95Ratios     []float64
+		postgresTimes []float64
+		neo4jTimes    []float64
+		runtime       map[string]struct{}
+		applied       map[string]struct{}
+		branches      map[string]struct{}
+		fallbacks     map[string]struct{}
+		fingerprints  map[string]struct{}
+		selectors     map[string]struct{}
+	}
+
+	aggregates := map[string]*aggregate{}
+	for nextKey, pgRecord := range postgres {
+		neoRecord, found := neo4j[nextKey]
+		if !found || pgRecord.Status != StatusOK || neoRecord.Status != StatusOK ||
+			!pgRecord.StableObservation || !neoRecord.StableObservation ||
+			pgRecord.RowCount != neoRecord.RowCount || !slices.Equal(pgRecord.ObservedRows, neoRecord.ObservedRows) ||
+			pgRecord.Stats.Median <= 0 || neoRecord.Stats.Median <= 0 {
+			continue
+		}
+
+		caseKey := nextKey.dataset + "\x00" + nextKey.name
+		next := aggregates[caseKey]
+		if next == nil {
+			next = &aggregate{
+				outlier: BackendDeltaOutlier{
+					Dataset:            nextKey.dataset,
+					Name:               nextKey.name,
+					Category:           pgRecord.Category,
+					Direction:          pgRecord.Shape.Direction,
+					ExpectedStateClass: pgRecord.Shape.ExpectedStateClass,
+				},
+				runtime:      map[string]struct{}{},
+				applied:      map[string]struct{}{},
+				branches:     map[string]struct{}{},
+				fallbacks:    map[string]struct{}{},
+				fingerprints: map[string]struct{}{},
+				selectors:    map[string]struct{}{},
+			}
+			aggregates[caseKey] = next
+		}
+		next.outlier.Rounds++
+		next.medianRatios = append(next.medianRatios, float64(pgRecord.Stats.Median)/float64(neoRecord.Stats.Median))
+		next.postgresTimes = append(next.postgresTimes, float64(pgRecord.Stats.Median))
+		next.neo4jTimes = append(next.neo4jTimes, float64(neoRecord.Stats.Median))
+		if pgRecord.Stats.P95 > 0 && neoRecord.Stats.P95 > 0 {
+			next.p95Ratios = append(next.p95Ratios, float64(pgRecord.Stats.P95)/float64(neoRecord.Stats.P95))
+		}
+		addBackendDeltaValue(next.fallbacks, pgRecord.FallbackReason)
+		addBackendDeltaValue(next.fingerprints, pgRecord.SQLFingerprint)
+		if pgRecord.TraversalTelemetry != nil {
+			summary := pgRecord.TraversalTelemetry.Summary
+			addBackendDeltaValue(next.runtime, summary.RuntimeIdentity)
+			addBackendDeltaValue(next.applied, summary.AppliedIdentity)
+			addBackendDeltaValue(next.branches, summary.RuntimeBranch)
+			addBackendDeltaValue(next.selectors, summary.SelectorVersion)
+			if next.outlier.ObservationMode == "" {
+				next.outlier.ObservationMode = summary.ObservationMode
+			}
+		}
+	}
+
+	outliers := make([]BackendDeltaOutlier, 0, len(aggregates))
+	for _, next := range aggregates {
+		if next.outlier.Rounds < 2 {
+			continue
+		}
+		next.outlier.MedianPostgresOverNeo4j = quantile(next.medianRatios, 0.5)
+		if next.outlier.MedianPostgresOverNeo4j <= 1 {
+			continue
+		}
+		next.outlier.P95PostgresOverNeo4j = quantile(next.p95Ratios, 0.5)
+		next.outlier.PostgresMedian = time.Duration(quantile(next.postgresTimes, 0.5))
+		next.outlier.Neo4jMedian = time.Duration(quantile(next.neo4jTimes, 0.5))
+		next.outlier.RuntimeIdentities = sortedBackendDeltaValues(next.runtime)
+		next.outlier.AppliedIdentities = sortedBackendDeltaValues(next.applied)
+		next.outlier.RuntimeBranches = sortedBackendDeltaValues(next.branches)
+		next.outlier.FallbackReasons = sortedBackendDeltaValues(next.fallbacks)
+		next.outlier.SQLFingerprints = sortedBackendDeltaValues(next.fingerprints)
+		next.outlier.SelectorVersions = sortedBackendDeltaValues(next.selectors)
+		outliers = append(outliers, next.outlier)
+	}
+	sort.Slice(outliers, func(i, j int) bool {
+		if outliers[i].MedianPostgresOverNeo4j != outliers[j].MedianPostgresOverNeo4j {
+			return outliers[i].MedianPostgresOverNeo4j > outliers[j].MedianPostgresOverNeo4j
+		}
+		if outliers[i].Dataset != outliers[j].Dataset {
+			return outliers[i].Dataset < outliers[j].Dataset
+		}
+		return outliers[i].Name < outliers[j].Name
+	})
+	return outliers
+}
+
+func addBackendDeltaValue(values map[string]struct{}, value string) {
+	if value != "" {
+		values[value] = struct{}{}
+	}
+}
+
+func sortedBackendDeltaValues(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }

@@ -12,11 +12,14 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strings"
 	"time"
+
+	pgdriver "github.com/specterops/dawgs/drivers/pg"
 )
 
 // referenceClosureReportVersion identifies the serialized schema revision for reference closure report.
-const referenceClosureReportVersion = 1
+const referenceClosureReportVersion = 2
 
 // ReferenceClosureOptions selects the reference arm and ratio and absolute limits used for closure analysis.
 type ReferenceClosureOptions struct {
@@ -40,6 +43,12 @@ type ReferenceClosureCase struct {
 	Dataset string `json:"dataset"`
 	// Name identifies the case or record within its dataset.
 	Name string `json:"name"`
+	// QualificationSplit binds the case to the frozen training or holdout cohort.
+	QualificationSplit string `json:"qualification_split"`
+	// WorkloadSHA256 binds the case to the exact benchmark workload declaration.
+	WorkloadSHA256 string `json:"workload_sha256"`
+	// QuerySHA256 binds the case to the normalized Cypher query authorized by the promotion manifest.
+	QuerySHA256 string `json:"query_sha256"`
 	// ReferenceName identifies the reference arm selected for closure analysis.
 	ReferenceName string `json:"reference_name"`
 	// ReferenceArchitecture supplies the reference architecture input to the ReferenceClosureCase contract.
@@ -83,8 +92,20 @@ type ReferenceClosureReport struct {
 	Seed int64 `json:"seed"`
 	// Confidence sets the confidence level used for statistical intervals.
 	Confidence float64 `json:"confidence_level"`
+	// BootstrapCount records the frozen number of bootstrap resamples.
+	BootstrapCount int `json:"bootstrap_count"`
 	// ArtifactSHA256 identifies the exact input artifact summarized by the report.
 	ArtifactSHA256 string `json:"artifact_sha256"`
+	// Candidate identifies the production executor measured by the raw-pgx boundary.
+	Candidate string `json:"candidate"`
+	// SourceCommit identifies the exact source commit used by every input record.
+	SourceCommit string `json:"source_commit"`
+	// DirtyDiffSHA256 binds every input record to the same working-tree state.
+	DirtyDiffSHA256 string `json:"dirty_diff_sha256"`
+	// BinarySHA256 binds every input record to the exact benchmark executable.
+	BinarySHA256 string `json:"binary_sha256"`
+	// CorpusSHA256 binds every input record to the exact workload corpus.
+	CorpusSHA256 string `json:"corpus_sha256"`
 	// ReferenceName identifies the reference arm selected for closure analysis.
 	ReferenceName string `json:"reference_name"`
 	// Passed reports whether every required gate condition succeeded.
@@ -128,9 +149,17 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		reference roundSamples
 		// architecture retains the executor architecture that must remain stable across rounds.
 		architecture string
+		// qualificationSplit binds all rounds to one frozen cohort partition.
+		qualificationSplit string
+		// workloadSHA256 binds all rounds to one exact case declaration.
+		workloadSHA256 string
+		// querySHA256 binds all rounds to one exact normalized Cypher query.
+		querySHA256 string
 	}
 	series := map[performanceKey]*closureSeries{}
 	seenRounds := map[performanceKey]map[int]struct{}{}
+	var sourceIdentity *RunEnvironment
+	productionCandidate := ""
 	for _, record := range records {
 		if record.ExecutionMode != ModePostgresSQL {
 			continue
@@ -140,6 +169,38 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		}
 		if record.Environment == nil {
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s has no run environment", record.Dataset, record.Name)
+		}
+		if record.Environment.ArtifactSchemaVersion != 2 || strings.TrimSpace(record.Environment.SourceCommit) == "" ||
+			!lowercaseSHA256(record.Environment.DirtyDiffSHA256) || !lowercaseSHA256(record.Environment.BinarySHA256) ||
+			!lowercaseSHA256(record.Environment.CorpusSHA256) {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s lacks complete source, binary, and corpus identity", record.Dataset, record.Name)
+		}
+		if sourceIdentity == nil {
+			copy := *record.Environment
+			sourceIdentity = &copy
+		} else if record.Environment.SourceCommit != sourceIdentity.SourceCommit ||
+			record.Environment.DirtyDiffSHA256 != sourceIdentity.DirtyDiffSHA256 ||
+			record.Environment.BinarySHA256 != sourceIdentity.BinarySHA256 ||
+			record.Environment.CorpusSHA256 != sourceIdentity.CorpusSHA256 {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s source, binary, or corpus identity changed across the closure artifact", record.Dataset, record.Name)
+		}
+		candidate := promotionCandidateForReferenceClosure(record)
+		if strings.TrimSpace(candidate) == "" {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s has no applied production executor identity", record.Dataset, record.Name)
+		}
+		if productionCandidate == "" {
+			productionCandidate = candidate
+		} else if candidate != productionCandidate {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s production executor identity changed across the closure artifact", record.Dataset, record.Name)
+		}
+		if !lowercaseSHA256(record.WorkloadSHA256) || strings.TrimSpace(record.Cypher) == "" ||
+			!lowercaseSHA256(record.SQLFingerprint) || record.SQLFingerprint != sqlFingerprint(record.SQL) ||
+			record.RawPGXWaterfall == nil || record.RawPGXWaterfall.SQLFingerprint != record.SQLFingerprint {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s lacks exact workload and translated-SQL identity", record.Dataset, record.Name)
+		}
+		querySHA256 := pgdriver.TraversalPolicyQuerySHA256(record.Cypher)
+		if !lowercaseSHA256(querySHA256) || strings.TrimSpace(record.Shape.QualificationSplit) == "" {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s lacks a normalized query digest or qualification split", record.Dataset, record.Name)
 		}
 		if record.Environment.WarmupIterations < 20 {
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s round %d requires at least 20 warmups, got %d", record.Dataset, record.Name, record.Environment.Round, record.Environment.WarmupIterations)
@@ -186,12 +247,17 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 
 		if series[key] == nil {
 			series[key] = &closureSeries{
-				production:   roundSamples{},
-				reference:    roundSamples{},
-				architecture: reference.Architecture,
+				production:         roundSamples{},
+				reference:          roundSamples{},
+				architecture:       reference.Architecture,
+				qualificationSplit: record.Shape.QualificationSplit,
+				workloadSHA256:     record.WorkloadSHA256,
+				querySHA256:        querySHA256,
 			}
-		} else if series[key].architecture != reference.Architecture {
-			return ReferenceClosureReport{}, fmt.Errorf("%s/%s reference architecture changed across rounds", record.Dataset, record.Name)
+		} else if series[key].architecture != reference.Architecture ||
+			series[key].qualificationSplit != record.Shape.QualificationSplit ||
+			series[key].workloadSHA256 != record.WorkloadSHA256 || series[key].querySHA256 != querySHA256 {
+			return ReferenceClosureReport{}, fmt.Errorf("%s/%s reference, workload, query, or split identity changed across rounds", record.Dataset, record.Name)
 		}
 
 		for _, sample := range record.RawPGXWaterfall.Samples {
@@ -222,11 +288,17 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		return keys[i].name < keys[j].name
 	})
 	report := ReferenceClosureReport{
-		Version:       referenceClosureReportVersion,
-		Seed:          options.Seed,
-		Confidence:    options.Confidence,
-		ReferenceName: options.ReferenceName,
-		Passed:        true,
+		Version:         referenceClosureReportVersion,
+		Seed:            options.Seed,
+		Confidence:      options.Confidence,
+		BootstrapCount:  options.BootstrapCount,
+		Candidate:       productionCandidate,
+		SourceCommit:    sourceIdentity.SourceCommit,
+		DirtyDiffSHA256: sourceIdentity.DirtyDiffSHA256,
+		BinarySHA256:    sourceIdentity.BinarySHA256,
+		CorpusSHA256:    sourceIdentity.CorpusSHA256,
+		ReferenceName:   options.ReferenceName,
+		Passed:          true,
 	}
 	gateOptions := PerfGateOptions{
 		Seed:           options.Seed,
@@ -238,6 +310,9 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		entry := ReferenceClosureCase{
 			Dataset:                        key.dataset,
 			Name:                           key.name,
+			QualificationSplit:             series[key].qualificationSplit,
+			WorkloadSHA256:                 series[key].workloadSHA256,
+			QuerySHA256:                    series[key].querySHA256,
 			ReferenceName:                  options.ReferenceName,
 			ReferenceArchitecture:          series[key].architecture,
 			Rounds:                         len(candidate),
@@ -277,6 +352,21 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 		report.Cases = append(report.Cases, entry)
 	}
 	return report, nil
+}
+
+// promotionCandidateForReferenceClosure returns the authorization identity
+// represented by a production record. Runtime orientation policies retain the
+// policy identity even though the lowering's static Selected field names its
+// incumbent arm; other candidates use the concrete applied executor.
+func promotionCandidateForReferenceClosure(record CaseResult) string {
+	if record.Optimization != nil {
+		for _, outcome := range record.Optimization.TargetOutcomes {
+			if isOrientationProbePolicy(outcome.EmittedPolicy) {
+				return outcome.EmittedPolicy
+			}
+		}
+	}
+	return appliedPostgresArchitecture(record)
 }
 
 // withinSessionAAResolution returns the larger within-session A/A noise estimate for a case.

@@ -53,6 +53,25 @@ rows from an abandoned arm. Stable isolation, an exact manifest bucket, and
 positive immutable caps are mandatory; `DisableInlineSPWitness` is the
 evidence-free rollback switch.
 
+`SP-I2-C-D` is the default-off guarded distance canary for hidden-fan-in
+shapes. It starts from the public terminal, follows the opposite physical
+adjacency direction using `(node_id, depth)` state, and admits results only
+when both total-state and per-depth frontier sentinels are complete. Overflow
+executes exact `SP-S4-C-D` in the same statement. Selector
+`sp-static-v8-hidden-fanin` requires an exact inbound, typed, single-kind,
+distance-only bucket with `min=1`, `max<=64`, the qualified immutable
+`state_limit=100000` and `frontier_limit=100000` contract, stable isolation,
+and query-SHA allowlisting. Final verification, provisional evidence capture,
+and driver admission all reject any other production values.
+`DisableInlineSPDistance`
+removes the candidate without requiring new evidence.
+
+When the query omits a maximum depth, the optimizer now carries the existing
+effective depth-15 policy into contained S3/S4 selection. Diagnostics identify
+the source as `policy_default` under `sp-static-v7-contained`, keeping it
+distinct from an explicit `..15` query even though emitted execution is
+equivalent.
+
 `ASP-I1-U-DAG+MAT-M0` is also available through the production policy as a
 default-off exact-query canary. It is limited to a singleton directed endpoint
 pair, `allShortestPaths`, minimum depth one, and an explicit maximum no greater

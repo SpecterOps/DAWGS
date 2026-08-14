@@ -863,8 +863,10 @@ func TestPostgreSQLForcedSuffixSeededReversePlanResourcesAndConcurrency(t *testi
 	record := records[0]
 	require.Equal(t, StatusOK, record.Status, record.Error)
 	require.Contains(t, record.SQL, "_suffix_seeded_suffix as materialized")
-	require.Contains(t, record.SQL, "_suffix_seeded_reverse(boundary_id, next_id, depth, path)")
+	require.Contains(t, record.SQL, "_suffix_seeded_reverse(boundary_id, next_id, depth, path, node_path)")
 	require.Contains(t, record.SQL, "array_prepend")
+	require.Contains(t, record.SQL, "generate_subscripts(")
+	require.NotContains(t, record.SQL, "ordered_edge_ids_to_path")
 	require.Contains(t, record.SQL, "!= all (")
 	require.NotContains(t, record.SQL, "satisfied, is_cycle")
 

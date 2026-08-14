@@ -833,6 +833,9 @@ type TargetLoweringOutcome struct {
 	MinimumDepth *int64 `json:"minimum_depth,omitempty"`
 	// MaximumDepth is the target's inclusive upper traversal-depth bound when finite.
 	MaximumDepth *int64 `json:"maximum_depth,omitempty"`
+	// MaximumDepthSource distinguishes an explicit upper bound from the
+	// repository's existing effective cap for syntax-open shortest paths.
+	MaximumDepthSource string `json:"maximum_depth_source,omitempty"`
 	// StateLimit is the maximum intermediate-state count admitted by the candidate.
 	StateLimit int64 `json:"state_limit,omitempty"`
 	// FrontierLimit is the maximum current or queued frontier size admitted by a shortest-path candidate.
@@ -997,6 +1000,7 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 			SkipReason:             decision.FallbackReason,
 			MinimumDepth:           &minimumDepth,
 			MaximumDepth:           &maximumDepth,
+			MaximumDepthSource:     string(decision.MaximumDepthSource),
 			StateLimit:             decision.StateLimit,
 			FrontierLimit:          decision.FrontierLimit,
 			PredecessorLimit:       decision.PredecessorLimit,
@@ -1017,6 +1021,14 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 			outcome.EmittedCandidates = []string{
 				string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
 				string(optimize.ShortestPathExecutorS4CanonicalWitness),
+			}
+		}
+		if decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance && applied == string(optimize.ShortestPathExecutorI2GuardedDistance) {
+			outcome.Candidate = string(optimize.ShortestPathExecutorI2GuardedDistance)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyI2DistanceGuardedV1
+			outcome.EmittedCandidates = []string{
+				string(optimize.ShortestPathExecutorI2GuardedDistance),
+				string(optimize.ShortestPathExecutorS4CanonicalDistance),
 			}
 		}
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, outcome)
@@ -1332,6 +1344,12 @@ func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 type ToolOptions struct {
 	// ForceShortestPathExecutor requests a qualified shortest-path executor instead of automatic selection.
 	ForceShortestPathExecutor optimize.ShortestPathExecutor
+	// GuardedDistanceStateLimit overrides SP-I2's cap+1 state admission only for
+	// diagnostic tool forcing. It must be paired with a positive frontier limit.
+	GuardedDistanceStateLimit int64
+	// GuardedDistanceFrontierLimit overrides SP-I2's per-level frontier admission
+	// only for diagnostic tool forcing. Production caps remain immutable.
+	GuardedDistanceFrontierLimit int64
 	// ForceExpansionSearchStrategy requests a qualified variable-expansion strategy instead of automatic selection.
 	ForceExpansionSearchStrategy optimize.ExpansionSearchStrategy
 	// ExpansionOrientationPolicy selects the immutable orientation selector
@@ -1347,6 +1365,16 @@ type ToolOptions struct {
 	// probes and SQL-visible would_select metadata while executing only the
 	// exact incumbent traversal arm.
 	EnableExpansionOrientationShadow bool
+	// EnableExpansionSuffixReverseGuard emits bounded fixed-suffix reverse
+	// execution with exact stepwise-forward fallback for one statically eligible
+	// full-path observation. It is deliberately tool-only during qualification.
+	EnableExpansionSuffixReverseGuard bool
+	// SuffixReverseGuardSuffixRowLimit overrides the tool-only fixed-suffix
+	// payload cap. Zero selects ExpansionSearchSuffixReverseGuardSuffixRowLimit.
+	SuffixReverseGuardSuffixRowLimit int64
+	// SuffixReverseGuardStateLimit overrides the tool-only reverse-state cap.
+	// Zero selects ExpansionSearchSuffixReverseGuardStateLimit.
+	SuffixReverseGuardStateLimit int64
 	// DisableEndpointSeededReverse is an emergency production rollback switch.
 	DisableEndpointSeededReverse bool
 }
@@ -1364,12 +1392,18 @@ type ProductionOptions struct {
 	AuthorizedBucket *ProductionTraversalBucket
 	// EnableExpansionOrientation indicates whether enable expansion orientation applies.
 	EnableExpansionOrientation bool
+	// ExpansionOrientationPolicy identifies the manifest-authorized immutable
+	// runtime formula. Production callers must set it explicitly when enabling
+	// orientation so v2 evidence cannot silently execute the v1 selector.
+	ExpansionOrientationPolicy optimize.ExpansionSearchPolicy
 	// DisableEndpointSeededReverse indicates whether disable endpoint seeded reverse applies.
 	DisableEndpointSeededReverse bool
 	// DisableInlineASPDAG indicates whether disable inline aspdag applies.
 	DisableInlineASPDAG bool
 	// DisableInlineSPWitness indicates whether disable inline sp witness applies.
 	DisableInlineSPWitness bool
+	// DisableInlineSPDistance is the emergency rollback switch for SP-I2-C-D.
+	DisableInlineSPDistance bool
 	// SelectorVersion identifies the schema version for selector version.
 	SelectorVersion string
 }
@@ -1379,6 +1413,8 @@ type ProductionOptions struct {
 type ProductionShortestPathCaps struct {
 	// StateLimit supplies the state limit input to the ProductionShortestPathCaps contract.
 	StateLimit int64 `json:"state_limit"`
+	// FrontierLimit caps rows admitted at any one breadth-first level.
+	FrontierLimit int64 `json:"frontier_limit"`
 	// PredecessorLimit supplies the predecessor limit input to the ProductionShortestPathCaps contract.
 	PredecessorLimit int64 `json:"predecessor_limit"`
 	// EnumerationLimit supplies the enumeration limit input to the ProductionShortestPathCaps contract.
@@ -1416,12 +1452,21 @@ func TranslateWithProductionOptions(ctx context.Context, cypherQuery *cypher.Reg
 	if options.SelectorVersion == "" {
 		return Result{}, fmt.Errorf("production traversal policy requires a selector version")
 	}
+	if options.EnableExpansionOrientation {
+		if !supportedExpansionOrientationPolicy(options.ExpansionOrientationPolicy) {
+			return Result{}, fmt.Errorf("production expansion orientation requires a supported explicit policy")
+		}
+		if options.SelectorVersion != string(options.ExpansionOrientationPolicy) {
+			return Result{}, fmt.Errorf("production expansion orientation selector %q does not match policy %q", options.SelectorVersion, options.ExpansionOrientationPolicy)
+		}
+	}
 	if options.ShortestPathExecutor != "" && !productionShortestPathExecutor(options.ShortestPathExecutor) {
 		return Result{}, fmt.Errorf("shortest-path executor %q is not production-canary eligible", options.ShortestPathExecutor)
 	}
 	toolOptions := ToolOptions{
 		ForceShortestPathExecutor:            options.ShortestPathExecutor,
 		EnableExpansionOrientationTournament: options.EnableExpansionOrientation,
+		ExpansionOrientationPolicy:           options.ExpansionOrientationPolicy,
 		DisableEndpointSeededReverse:         options.DisableEndpointSeededReverse,
 	}
 	optimizedPlan, err := optimize.Optimize(cypherQuery)
@@ -1514,6 +1559,9 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 	if options.EnableExpansionOrientationShadow && len(translator.emittedExpansionSearchPolicies) == 0 {
 		return Result{}, fmt.Errorf("expansion orientation shadow was selected but not emitted")
 	}
+	if options.EnableExpansionSuffixReverseGuard && len(translator.emittedExpansionSearchPolicies) == 0 {
+		return Result{}, fmt.Errorf("expansion suffix reverse guard was selected but not emitted")
+	}
 	if options.ForceShortestPathExecutor != "" && len(translator.appliedShortestPathExecutors) == 0 {
 		return Result{}, fmt.Errorf("forced shortest-path executor %q was selected but not emitted", options.ForceShortestPathExecutor)
 	}
@@ -1526,7 +1574,8 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 func productionShortestPathExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
-		optimize.ShortestPathExecutorASPI1DAG:
+		optimize.ShortestPathExecutorASPI1DAG,
+		optimize.ShortestPathExecutorI2GuardedDistance:
 		return true
 	default:
 		return false
@@ -1540,6 +1589,9 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 	}
 	if options.DisableInlineASPDAG && options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG {
 		return fmt.Errorf("inline ASP DAG is disabled by production policy")
+	}
+	if options.DisableInlineSPDistance && options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
+		return fmt.Errorf("inline SP distance is disabled by production policy")
 	}
 	for idx := range plan.LoweringPlan.ShortestPathExecutor {
 		decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
@@ -1557,7 +1609,7 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 				return fmt.Errorf("production traversal target does not match its authorized promotion bucket")
 			}
 		}
-		if options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+		if options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
 			if options.AuthorizedBucket == nil {
 				return fmt.Errorf("guarded inline shortest-path production policy requires an exact authorized bucket")
 			}
@@ -1571,14 +1623,36 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 					return fmt.Errorf("canonical SP-I1 production policy requires the qualified inbound typed single-kind one-path depth 1..64 bucket")
 				}
 			}
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
+				bucket := options.AuthorizedBucket
+				if options.SelectorVersion != optimize.ShortestPathSelectorStaticV8HiddenFanIn {
+					return fmt.Errorf("guarded SP-I2 distance policy requires selector %q", optimize.ShortestPathSelectorStaticV8HiddenFanIn)
+				}
+				if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationDistance) ||
+					bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
+					return fmt.Errorf("guarded SP-I2 distance policy requires an exactly authorized inbound typed single-kind distance bucket")
+				}
+			}
 			if options.ShortestPathCaps == nil {
 				return fmt.Errorf("guarded inline shortest-path production policy requires immutable caps")
 			}
 			caps := options.ShortestPathCaps
-			if caps.StateLimit <= 0 || caps.PredecessorLimit <= 0 || caps.EnumerationLimit <= 0 || caps.OutputBytesLimit <= 0 {
+			if caps.StateLimit <= 0 || (options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance && caps.FrontierLimit <= 0) ||
+				(options.ShortestPathExecutor != optimize.ShortestPathExecutorI2GuardedDistance && (caps.PredecessorLimit <= 0 || caps.EnumerationLimit <= 0 || caps.OutputBytesLimit <= 0)) {
 				return fmt.Errorf("guarded inline shortest-path production policy requires positive immutable caps")
 			}
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance &&
+				(caps.StateLimit != optimize.ShortestPathI2QualifiedStateLimit ||
+					caps.FrontierLimit != optimize.ShortestPathI2QualifiedFrontierLimit ||
+					caps.PredecessorLimit != 0 || caps.EnumerationLimit != 0 || caps.OutputBytesLimit != 0) {
+				return fmt.Errorf(
+					"guarded SP-I2 distance production policy requires exactly state_limit=%d and frontier_limit=%d",
+					optimize.ShortestPathI2QualifiedStateLimit,
+					optimize.ShortestPathI2QualifiedFrontierLimit,
+				)
+			}
 			decision.StateLimit = caps.StateLimit
+			decision.FrontierLimit = caps.FrontierLimit
 			decision.PredecessorLimit = caps.PredecessorLimit
 			decision.EnumerationLimit = caps.EnumerationLimit
 			decision.OutputBytesLimit = caps.OutputBytesLimit
@@ -1604,6 +1678,9 @@ func applyProductionShortestPathRollback(plan *optimize.Plan, options Production
 		case options.DisableInlineSPWitness && decision.SelectedExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness:
 			decision.SelectedExecutor = optimize.ShortestPathExecutorS4CanonicalWitness
 			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
+		case options.DisableInlineSPDistance && decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance:
+			decision.SelectedExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
+			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
 		default:
 			continue
 		}
@@ -1624,8 +1701,25 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.EnableExpansionOrientationTournament && options.EnableExpansionOrientationShadow {
 		return fmt.Errorf("expansion orientation tournament and shadow modes are mutually exclusive")
 	}
+	if options.EnableExpansionSuffixReverseGuard && (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) {
+		return fmt.Errorf("expansion suffix reverse guard and orientation modes are mutually exclusive")
+	}
 	if (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) && options.ForceExpansionSearchStrategy != "" {
 		return fmt.Errorf("expansion orientation policy and forced expansion-search strategy are mutually exclusive")
+	}
+	if options.EnableExpansionSuffixReverseGuard && options.ForceExpansionSearchStrategy != "" {
+		return fmt.Errorf("expansion suffix reverse guard and forced expansion-search strategy are mutually exclusive")
+	}
+	if !options.EnableExpansionSuffixReverseGuard && (options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0) {
+		return fmt.Errorf("expansion suffix reverse guard caps require the guard to be enabled")
+	}
+	if options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 {
+		if options.ForceShortestPathExecutor != optimize.ShortestPathExecutorI2GuardedDistance {
+			return fmt.Errorf("guarded distance cap overrides require forcing %q", optimize.ShortestPathExecutorI2GuardedDistance)
+		}
+		if options.GuardedDistanceStateLimit <= 0 || options.GuardedDistanceFrontierLimit <= 0 {
+			return fmt.Errorf("guarded distance cap overrides require positive state and frontier limits")
+		}
 	}
 	orientationPolicy, err := requestedExpansionOrientationPolicy(options)
 	if err != nil {
@@ -1633,6 +1727,15 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	}
 	if err := applyForcedShortestPathExecutor(plan, options.ForceShortestPathExecutor); err != nil {
 		return err
+	}
+	if options.GuardedDistanceStateLimit > 0 {
+		for idx := range plan.LoweringPlan.ShortestPathExecutor {
+			decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+			if decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance && decision.SelectionMode == "forced_tool" {
+				decision.StateLimit = options.GuardedDistanceStateLimit
+				decision.FrontierLimit = options.GuardedDistanceFrontierLimit
+			}
+		}
 	}
 	if options.DisableEndpointSeededReverse {
 		for idx := range plan.LoweringPlan.ExpansionSearchStrategy {
@@ -1654,7 +1757,68 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.EnableExpansionOrientationShadow {
 		return applyExpansionOrientationShadowPolicy(plan, orientationPolicy)
 	}
+	if options.EnableExpansionSuffixReverseGuard {
+		return applyExpansionSuffixReverseGuardPolicy(plan, options.SuffixReverseGuardSuffixRowLimit, options.SuffixReverseGuardStateLimit)
+	}
 	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
+}
+
+// applyExpansionSuffixReverseGuardPolicy selects one full-path fixed-suffix
+// target for bounded reverse execution. No endpoint-only observation or
+// topology-scored orientation decision is admitted by this tool-only policy.
+func applyExpansionSuffixReverseGuardPolicy(plan *optimize.Plan, suffixRowLimit, stateLimit int64) error {
+	if suffixRowLimit == 0 {
+		suffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
+	}
+	if stateLimit == 0 {
+		stateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
+	}
+	if suffixRowLimit <= 0 || stateLimit <= 0 {
+		return fmt.Errorf("expansion suffix reverse guard requires positive suffix-row and state limits")
+	}
+
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family != "fixed_suffix_expansion" ||
+			decision.CandidateStrategy != optimize.ExpansionSearchSuffixSeededReverse ||
+			!decision.StructurallyEligible || !decision.StaticallyEligible ||
+			decision.ObservationMode != optimize.ExpansionSearchObservationFullPath {
+			continue
+		}
+		matching = append(matching, idx)
+	}
+	if len(matching) == 0 {
+		return fmt.Errorf("expansion suffix reverse guard has no statically eligible full-path fixed-suffix target")
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("expansion suffix reverse guard matched %d statically eligible full-path fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.PlannedPolicy = optimize.ExpansionSearchPolicySuffixReverseGuardV1
+	decision.EmittedPolicy = optimize.ExpansionSearchPolicySuffixReverseGuardV1
+	decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{
+		optimize.ExpansionSearchSuffixSeededReverse,
+		optimize.ExpansionSearchStepwiseForward,
+	}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+	decision.Admission = optimize.ExpansionSearchAdmission{
+		StateLimit:             stateLimit,
+		RequiresCompleteProbes: true,
+		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+	}
+	decision.StateLimit = stateLimit
+	decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.SelectionMode = "guarded_tool"
+	decision.SelectorVersion = optimize.ExpansionSearchSelectorFixedSuffixPathV1
+	decision.FallbackReason = ""
+	decision.EligibilityFacts = append(decision.EligibilityFacts, optimize.ExpansionSearchEligibilityFact{
+		Name:     "full_path_observation",
+		Eligible: true,
+	})
+	return nil
 }
 
 // requestedExpansionOrientationPolicy builds the SQL model fragment responsible for requested expansion orientation policy.
@@ -1750,9 +1914,11 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 
 		decision.SelectedExecutor = executor
 		decision.ExecutionBoundary = executor.ExecutionBoundary()
-		if executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+		if executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || executor == optimize.ShortestPathExecutorI2GuardedDistance {
 			decision.ExecutionBoundary = "guarded_dual_arm"
-			decision.FrontierLimit = 0
+			if executor != optimize.ShortestPathExecutorI2GuardedDistance {
+				decision.FrontierLimit = 0
+			}
 		}
 		decision.Scheduler = executor.Scheduler()
 		decision.SelectionMode = "forced_tool"
@@ -1767,6 +1933,13 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 		if executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
 			decision.SelectorVersion = "sp-i1-canonical-tool-v1"
 			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalWitness
+		}
+		if executor == optimize.ShortestPathExecutorI2GuardedDistance {
+			decision.SelectorVersion = optimize.ShortestPathSelectorStaticV8HiddenFanIn
+			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
+			decision.PredecessorLimit = 0
+			decision.EnumerationLimit = 0
+			decision.OutputBytesLimit = 0
 		}
 		forced++
 	}
@@ -1788,6 +1961,7 @@ func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor)
 		optimize.ShortestPathExecutorASPA1DAG,
 		optimize.ShortestPathExecutorASPI1DAG,
 		optimize.ShortestPathExecutorI1CanonicalDistance,
+		optimize.ShortestPathExecutorI2GuardedDistance,
 		optimize.ShortestPathExecutorI1CanonicalWitness,
 		optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 		optimize.ShortestPathExecutorB1AlternatingNodeDistance,

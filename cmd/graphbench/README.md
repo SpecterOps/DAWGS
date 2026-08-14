@@ -152,13 +152,17 @@ baseline artifact with:
 make perf_aa PERF_AA_ARTIFACT=.coverage/graphbench-aa.jsonl
 ```
 
-The report accepts exactly two explicitly executed A/A arms sharing one run
-UUID and SQL/workload identity. It requires complementary balanced order across
-at least five independent rounds, ten samples per arm and round, and fingerprints
-the host, reports p50/p95 ratio and absolute resolution, and keeps p99
-diagnostic until each arm has at least 10,000 samples. When append-safe capture
-keeps the two arm labels in separate files, repeat `-aa-artifact` instead of
-concatenating them outside GraphBench:
+The schema-v4 report accepts exactly two explicitly executed A/A arms sharing
+one run UUID and SQL/workload identity. It requires `block == round`,
+complementary balanced order across at least five independent rounds, ten
+samples per arm and round, and process timestamps proving that each complete
+cohort arm ran serially in its declared position and that rounds do not
+overlap. Its artifact-bound `physical_chronology` provenance prevents a later
+gate from accepting label-only balance. It fingerprints the host, reports
+p50/p95 ratio and absolute resolution, and keeps p99 diagnostic until each arm
+has at least 10,000 samples. When append-safe capture keeps the two arm labels
+in separate files, repeat `-aa-artifact` instead of concatenating them outside
+GraphBench:
 
 ```bash
 graphbench \
@@ -285,7 +289,10 @@ Use `-postgres-reference-arms` to run only named tournament arms; it implies
 fixed-suffix expansion cases expose `search_ordered_ids`,
 `stepwise_forward_aa_ordered_ids`, `root_reuse_*`, `late_hydration_*`,
 `factored_suffix_forward_*`, `suffix_seeded_reverse_*`, and
-`backward_viability_forward_*` boundaries. Complete arms are exact-multiset
+`backward_viability_forward_*` boundaries. The `hydration_only` and
+`ordered_path_ids_hydration_only` arms compare generic edge-stream path
+reconstruction with direct hydration from precomputed ordered node and edge
+IDs. Complete arms are exact-multiset
 checked against the public CySQL observation. Ordered-ID arms retain
 relationship IDs for trail uniqueness. Exactly three selected arms use a
 six-round doubled Williams design that places every arm in every position twice
@@ -347,6 +354,73 @@ strategy as applied. It is mutually exclusive with forced shortest execution.
 Automatic suffix-seeded reverse dispatch remains disabled because query shape
 does not bound suffix density or reverse fan-in.
 
+`-postgres-expansion-suffix-reverse-guard` enables the distinct tool-only
+`suffix-reverse-guard-v1` experiment for complete-path fixed-suffix cases. It
+requires `-postgres-repeatable-read`, diagnostic traversal telemetry, and pool
+size one. The statement has 513-row suffix/state sentinel bounds by default
+(a 512-row admissible cap plus one overflow row), no topology/degree probes,
+and complementary marker-gated exact reverse and exact forward arms. Optional
+`-postgres-suffix-guard-suffix-limit` and
+`-postgres-suffix-guard-state-limit` overrides are diagnostic-only and cannot
+be supplied without the guard. Endpoint-only observations and mutations fail
+closed.
+
+This policy generation is now terminally stopped. Its chronology-valid capture
+failed the immutable `1.10`/`100us` guard-overhead gate on both cases, so it
+must not be rerun as an authorization attempt, retuned, advanced to holdout, or
+given a manifest, driver policy, or rollback switch. The recipe below is
+retained only for diagnostic reproduction and to make the existing failed
+report and its physical-order checks auditable.
+
+The early stop gate was sealed to the two already-open V3 training path cases
+`GFSE-V3-TRAIN-Q4-C1-S1-productive_cycle_self_loop_path` and
+`GFSE-V3-TRAIN-D05-F008-R4-X3-I0-M1-Q3-path`. The archived capture used exact
+forward (`incumbent`), exact suffix reverse (`reverse`), and the guarded
+statement (`guarded`) for exactly six doubled-Williams rounds, with exactly five
+warmups and ten timed samples per arm. Use one binary/run UUID and all six
+positions
+`123,231,312,321,132,213` exactly once. All three arms must retain the same
+schema-v2 resolved selection/declaration identity. The position tuple is
+`(incumbent,reverse,guarded)`, so the physical process order by round is
+`incumbent/reverse/guarded`, `guarded/incumbent/reverse`,
+`reverse/guarded/incumbent`, `guarded/reverse/incumbent`,
+`incumbent/guarded/reverse`, and `reverse/incumbent/guarded`.
+
+Set `-round N -block N` on every arm invocation. Run the three GraphBench
+processes serially in the declared order, wait for each process to exit before
+starting the next, and finish all three before starting round `N+1`. Each
+process must select the complete two-case cohort so its records share one
+process-level `started_at`/`ended_at` interval. The feasibility gate rejects
+missing or mixed intervals, an arm interval that overlaps its declared
+predecessor, a later round that overlaps or predates the prior round, and run
+UUID drift. Merely swapping `-arm-order` labels does not establish valid
+evidence.
+
+Capture the incumbent A/A arms with the same physical rules: execute `aa-a`
+then `aa-b` on odd rounds and `aa-b` then `aa-a` on even rounds, waiting for
+each process and using `-block N -round N`, one A/A run UUID, and the complete
+two-case selection. Build a schema-v4 report from both immutable arm files.
+The suffix gate requires its artifact-bound physical-chronology provenance, so
+an older label-balanced report cannot be reused. Then run:
+
+```bash
+graphbench \
+  -suffix-guard-incumbent-artifact .coverage/suffix-guard/incumbent.jsonl \
+  -suffix-guard-reverse-artifact .coverage/suffix-guard/reverse.jsonl \
+  -suffix-guard-guarded-artifact .coverage/suffix-guard/guarded.jsonl \
+  -suffix-guard-aa .coverage/suffix-guard/aa.json \
+  -suffix-guard-output .coverage/suffix-guard/feasibility.json
+```
+
+Every guarded timed sample must carry an invocation-bound runtime receipt and
+the diagnostic plan must prove one selected executor and zero loops/rows in the
+inactive arm. The gate requires guarded overhead versus exact reverse within
+`1.10` or `100us`, regret versus the fastest exact arm within `1.10` or the A/A
+floor, material median improvement versus forward (`<=0.95` or `>=100us`), and
+p95 ratio `<=1.05`. Under the frozen gate contract, a pass would have authorized
+creation of a fresh sealed qualification cohort only. The actual result failed,
+so that conditional path is closed.
+
 `-postgres-force-expansion-search EXPANSION-ENDPOINT-SEEDED-REVERSE` targets the production-qualified
 fixed-prefix/terminal-expansion family. Its SQL has materialized 33-row endpoint and 4097-row reverse-state probes,
 then mutually exclusive reverse and incumbent branches. Generated
@@ -388,13 +462,21 @@ function-backed SP/ASP arms are recorded as
 `counter_status=complete` for candidate architectures even when no numeric cap
 was declared.
 
-Traversal telemetry schema v2 gives guarded inline-predecessor evidence two non-interchangeable serialized
-families. `ASP-I1-U-DAG+MAT-M0` emits `asp-i1-guarded-v1` and writes bounded
+Traversal telemetry schema v2 gives guarded inline evidence three
+non-interchangeable serialized families. `ASP-I1-U-DAG+MAT-M0` emits
+`asp-i1-guarded-v1` and writes bounded
 relation, output, and branch evidence under `diagnostic.counters.inline_asp`.
 `SP-I1-C-WE+MAT-M0` emits the distinct
 `sp-i1-canonical-guarded-v1` policy and writes the same-shaped evidence under
 `diagnostic.counters.inline_shortest_path`; evidence from either namespace
-cannot satisfy the other family. PostgreSQL's named candidate and fallback
+cannot satisfy the other family. `SP-I2-C-D` emits
+`sp-i2-distance-guarded-v1` under
+`diagnostic.counters.inline_shortest_distance`. Its named distance, target, and
+output relations must agree with the typed counters and public row count; its
+complementary markers and branch rows must select exactly one arm; and the
+selected direct executor must run once while the inactive executor reports zero
+loops. Evidence from the predecessor namespaces cannot satisfy this distance
+contract. PostgreSQL's named candidate and fallback
 marker CTEs must attribute exactly one arm, and the unselected output branch
 must report zero rows. Parent-linked plan nodes also bind each branch body to
 its direct inner executor; the selected executor must run and the unselected
@@ -404,8 +486,8 @@ executor must report zero loops. Canonical I1 reports `inline_canonical_witness`
 If any required named relation, marker, branch, or executor-loop counter is absent from the
 plan replay, the diagnostic is `hidden_counters_unavailable`; absence is never
 converted into a qualifying zero.
-This adds fail-closed evidence for the default-off exact-query canary; it does
-not change the automatic `sp-static-v5-contained` production selector.
+These diagnostics add fail-closed evidence for the default-off exact-query
+canaries; they do not change any automatic production selector.
 
 An emitted `orientation-probe-v1` policy requires orientation probes, selected
 ordinary expansion, and hydration families. Its exact executed-candidate and
@@ -460,16 +542,23 @@ The v2 selector computes
 `R2 = suffix_rows + boundary_rows + reverse_degree_rows`; it selects the exact
 suffix-seeded reverse arm only when every cap+1 probe is complete and
 `4 * R2 < 3 * F2`. Any probe or reverse-state overflow fails closed to the exact
-forward arm. The checksum-bound v3 cohort has exactly eight training cases and
+forward arm. Degree probes expose a scalar count over their cap+1-limited inner
+stream; diagnostic telemetry attributes sample rows to that inner `Limit`, not
+the one-row aggregate. This changes neither the evidence nor the overflow
+boundary. The checksum-bound v3 cohort has exactly eight training cases and
 four holdouts. It independently varies maximum depth, fanout, reachable and
 disconnected branches, reverse fan-in, suffix multiplicity, matching-root
 multiplicity, zero depth, productive-boundary cycles and self-loops, payload,
 and endpoint-ID versus complete-path observation. Holdouts use previously
 unused depths 7, 11, 13, and 15 and must not be opened for threshold tuning.
 
-Capture the four artifacts with these exact arm labels. Every invocation also
-requires `-postgres-repeatable-read`, `-postgres-traversal-telemetry summary` or
-`diagnostic`, and `-pool-size 1`.
+The remainder of this subsection records the frozen v2 protocol for audit and
+diagnostic reproducibility only. V2 failed its immutable training overhead gate,
+the final manifest verifier terminally rejects it, and it must not be recaptured
+or advanced to confirmation. Its protected holdouts remain unopened. Under that
+historical protocol, the four artifacts used these exact arm labels and every
+invocation required `-postgres-repeatable-read`,
+`-postgres-traversal-telemetry summary` or `diagnostic`, and `-pool-size 1`.
 
 | Artifact | Exact `-arm` label | Mode-specific flags |
 | --- | --- | --- |
@@ -478,9 +567,9 @@ requires `-postgres-repeatable-read`, `-postgres-traversal-telemetry summary` or
 | Exact reverse | `reverse` | `-postgres-force-expansion-search EXPANSION-SUFFIX-SEEDED-REVERSE` |
 | Guarded selector | `guarded` | `-postgres-expansion-orientation-tournament -postgres-expansion-orientation-policy orientation-probe-v2` |
 
-Build GraphBench once from the clean source tree and invoke that exact binary
-for every A/A, arm, and report command. Repeated `go run` builds do not prove a
-single binary identity:
+The archived recipe built GraphBench once from the clean source tree and invoked
+that exact binary for every A/A, arm, and report command. Repeated `go run`
+builds did not prove a single binary identity:
 
 ```bash
 CAPTURE=.coverage/orientation-v2-discovery
@@ -489,7 +578,7 @@ go build -trimpath -o "$CAPTURE/bin/graphbench" ./cmd/graphbench
 RUN_UUID="orientation-v2-discovery-$(git rev-parse HEAD)"
 ```
 
-For example, the first shadow discovery round is captured with:
+For example, the first shadow discovery round was captured with:
 
 ```bash
 "$CAPTURE/bin/graphbench" \
@@ -505,17 +594,19 @@ For example, the first shadow discovery round is captured with:
   -jsonl-output "$CAPTURE/shadow.jsonl" -append-jsonl
 ```
 
-Repeat the invocation for the other table rows and rotate `-arm-order` in each
-subsequent round. `-run-uuid` is one series identity: reuse the same value across
-all four arms and every appended round. Change `-round` and `-block`, but not the
-UUID; append validation rejects a per-round UUID. Discovery selects only
+The recipe repeated the invocation for the other table rows and rotated
+`-arm-order` in each subsequent round. `-run-uuid` was one series identity: the
+same value was reused across all four arms and every appended round. It changed
+`-round` and `-block`, but not the UUID; append validation rejects a per-round
+UUID. Discovery selects only
 `orientation-v2-training` and keeps the holdout timings closed. Its four
 artifacts must contain exactly the canonical eight training cases, with no
-holdout or diagnostic timing. After the formula is frozen, confirmation selects
-`-tags orientation-v2-training,orientation-v2-holdout`, writes separate
-confirmation artifacts containing exactly the canonical eight training plus
-four holdout cases, and uses 20 warmups and 50 measured samples per arm and
-round.
+holdout or diagnostic timing. Had discovery produced a passing clean-source
+freeze before the terminal decision, confirmation would have selected
+`-tags orientation-v2-training,orientation-v2-holdout`, written separate
+artifacts containing exactly the canonical eight training plus four holdout
+cases, and used 20 warmups and 50 measured samples per arm and round. No such
+freeze exists, so this path must not be executed.
 
 Each matched round must give the four labels distinct `-arm-order` values from
 1 through 4 and share the same nonzero `-block`, `-round`, and `-run-uuid`.
@@ -534,12 +625,13 @@ execution must report `suffix_seeded_reverse`; guarded forward selection and
 overflow fallback both report `exact_forward_incumbent`, with
 `fallback_executed=true` required only for overflow fallback.
 
-Capture the two A/A arms as separate append-safe exact-forward artifacts using
-the same built binary, exact cohort tag, Repeatable Read, diagnostic traversal
-telemetry, size-one pool, warmups, samples, and fixture reload protocol as the
-incumbent arm. Use one A/A series UUID and alternate the two positions across
-rounds. No orientation or forced-expansion flag is permitted. Then let
-GraphBench validate the logical pair directly:
+The archived recipe captured the two A/A arms as separate append-safe
+exact-forward artifacts using the same built binary, exact cohort tag,
+Repeatable Read, diagnostic traversal telemetry, size-one pool, warmups,
+samples, and fixture reload protocol as the incumbent arm. It used one A/A
+series UUID and alternated the two positions across rounds. No orientation or
+forced-expansion flag was permitted. GraphBench then validated the logical pair
+directly:
 
 ```bash
 "$CAPTURE/bin/graphbench" \
@@ -549,12 +641,13 @@ GraphBench validate the logical pair directly:
   -confidence-level 0.975 -seed 1
 ```
 
-Discovery is the only workflow that creates a freeze. Run it from a clean source
-tree after capturing the exact canonical eight-case training artifacts and their
-matching host A/A evidence. Both output flags are mandatory: the command writes
-the training-only discovery report and a freeze manifest that binds its SHA-256
-together with the policy, formula, caps, source commit, clean dirty-diff,
-binary, and canonical cohort declaration:
+In the archived design, discovery was the only workflow that could create a
+freeze. A qualifying run would have used a clean source tree, the exact
+canonical eight-case training artifacts, and matching host A/A evidence. Both
+output flags were mandatory: the command wrote the training-only discovery
+report and, only after passing evidence and clean-source checks, a freeze
+manifest binding its SHA-256 together with the policy, formula, caps, source
+commit, clean dirty-diff, binary, and canonical cohort declaration:
 
 ```bash
 "$CAPTURE/bin/graphbench" \
@@ -569,10 +662,10 @@ binary, and canonical cohort declaration:
   -confidence-level 0.975 -seed 1
 ```
 
-Confirmation fails closed unless it receives that exact freeze manifest and
-the discovery report whose digest the manifest binds. Its four timing artifacts
-and matching host A/A report must cover exactly the canonical eight training and
-four holdout cases:
+The unexecuted confirmation path fails closed unless it receives that exact
+passing freeze manifest and the discovery report whose digest the manifest
+binds. Its four timing artifacts and matching host A/A report would have had to
+cover exactly the canonical eight training and four holdout cases:
 
 ```bash
 CONFIRMATION=.coverage/orientation-v2-confirmation
@@ -598,10 +691,16 @@ The forward-selected shadow/forward and guarded/selected overhead gates use a
 `1.10` median-ratio upper bound or a `100us` absolute-gap ceiling. The
 guarded/fastest regret gate uses the same ratio limit or the matching host A/A
 absolute floor. Shadow overhead remains visible but is not
-qualification-applicable when v2 selects reverse. Confirmation requires all
-eight training and all four holdout cases to pass independently. No v2
-discovery or confirmation result has qualified yet; the flags and schema only
-stage the experiment and do not authorize production rollout.
+qualification-applicable when v2 selects reverse. The frozen confirmation
+contract would have required all eight training and all four holdout cases to
+pass independently. No v2 discovery or confirmation result has qualified. The
+latest exact five-round
+training prequalification failed selected-arm overhead on all eight cases,
+with approximately 156-396 microseconds of guarded overhead against the frozen
+100-microsecond limit. V2 is retained as immutable negative evidence; its
+thresholds, formula, and protected holdouts must not be retuned. The flags and
+schema remain for diagnostics and historical decoding; they do not provide a
+qualification or production path.
 
 The bounded same-statement fallback and keyset-continuation experiments are
 retired. They are not exposed by GraphBench or production translation. Their
@@ -627,6 +726,13 @@ boundaries by splitting alternating samples within each round. Single selected
 reference captures run production first in odd rounds and the reference first
 in even rounds; the order is recorded on both boundaries and enforced by the
 reporter:
+
+Schema v2 also freezes the bootstrap count and carries the applied promotion
+candidate, source commit, clean-tree digest, binary and corpus digests, and each
+case's workload, normalized-query, qualification-split, and production runtime
+receipt chains. The reporter rejects identity drift across rounds before it
+writes a decision. Version 1 reference-closure reports cannot satisfy a final
+promotion manifest.
 
 ```bash
 go run ./cmd/graphbench \
@@ -732,17 +838,158 @@ and a singular record count. Multi-connection runs remain available for the
 operational matrix, but their timing samples are intentionally not eligible as
 per-invocation promotion evidence.
 
+### Operational evidence gate
+
+The standalone operational gate consumes one schema-v2 JSON document through
+`-operational-gate-input` and writes its machine-verifiable report to the
+required `-operational-gate-output`. The input has four top-level fields:
+`version`, the complete `promotion_identity`, frozen `requirements`, and
+candidate-bound `records`. Unknown fields, trailing JSON, unsupported versions,
+dirty-source evidence, or any source/archive/binary/corpus/promotion identity
+drift fail closed.
+
+Exactly 32 records must use one declared query, resolved parameter set
+(`params`, `node_params`, and `node_list_params`), and physically validated
+fixture configuration/checksum. Declared and physical node and relationship
+counts must agree. The normalized Cypher digest must occur in exactly one
+authorized promotion bucket; whole-case shape is checked for SP/ASP, while an
+orientation policy is checked against its exact fixed-suffix optimization
+target. Every record must carry the production candidate/selector/boundary,
+emitted arms, and cap contract in its optimization outcome. The manifest
+identity independently authorizes the production candidate SQL through
+`operational_candidate_sql_sha256`; the frozen requirements must repeat that
+exact anchor rather than introduce one of their own. Every non-overflow record
+must both hash to and equal the manifest anchor. Only the forced-overflow
+scenario may use a distinct SQL fingerprint, and
+then only by lowering positive guarded cap values on the otherwise identical
+translation target. It may not substitute another query, parameter set,
+fixture, policy, or lowering target. The candidate runtime arm is fixed by the
+registered promotion policy; it is not selected by the input document.
+
+The frozen candidate matrix is the complete 27-cell product of:
+
+- pool sizes `1`, `2`, and `8`;
+- concurrency levels `1`, `8`, and `16`; and
+- PostgreSQL `plan_cache_mode` values `auto`, `force_custom_plan`, and
+  `force_generic_plan`.
+
+Every cell must contain the complete native GraphBench worker/iteration block,
+positive drain and wall timings, real backend PIDs within the pool bound, and
+one cold-session classification per used connection. Pool-size-1 cells retain
+an exact timed-invocation receipt. Pool-size-2 and pool-size-8 cells must retain
+GraphBench's honest `same_case_invocation_local_replay` serial metadata with no
+fabricated invocation receipt or connection ID; their measured execution is
+proved by the independently validated concurrency block plus the same exact
+SQL, optimization target, and plan-replay summary. The same input must also
+prove receipt-bearing candidate execution with `work_mem <= 64 KiB`; SQLSTATE
+`57014` cancellation in strictly less than `250 ms`, rollback, and successful
+same-PID replay; Repeatable Read stability across a distinct committed writer
+whose change becomes visible after the reader transaction; two-session
+invocation/state isolation; and a forced-overflow receipt chain containing the
+exact configured fallback. Nested exact fallback chains are retained rather
+than reduced to their terminal executor.
+
+```bash
+go run ./cmd/graphbench \
+  -operational-gate-input .coverage/operational-input.json \
+  -operational-gate-output .coverage/operational-report.json
+```
+
+This command validates an already assembled native evidence document; it does
+not synthesize the 32 records. The repository currently has no standalone
+operational-input producer. Release engineering must assemble the document
+from the complete native GraphBench worker/iteration results and the associated
+cancellation, snapshot, isolation, overflow, optimization, plan-replay, and
+fixture evidence without reducing them to hand-authored summaries. The strict
+`OperationalGateInput` schema and fail-closed validator are the authoritative
+handoff until a capture producer is added.
+
+The report is written for both outcomes. Schema v2 embeds the complete
+canonical input and its SHA-256; final manifest verification recomputes the
+matrix, receipts, cancellation, snapshot, session isolation, overflow, and
+SQL-anchor decisions from those raw records, then requires exact coverage,
+record-decision, reason, and disposition equivalence. Editing either raw
+evidence or only its passing summary therefore fails closed. A failing gate
+exits nonzero, so CI retains the per-record reasons without mistaking the
+artifact for passing promotion evidence. Operational mode is mutually
+exclusive with every other standalone reporter, bundle creation, and protected
+holdout authorization.
+
 ### Promotion manifest
 
 Promotion is authorized only by a version-2 manifest that binds the candidate,
 selector, source/binary/corpus SHA-256 digests, immutable caps, exact query
-cohorts, training and frozen-holdout buckets, and checksummed A/A,
+cohorts, training and frozen-holdout buckets, the exact
+`operational_candidate_sql_sha256`, and checksummed A/A,
 confirmation, performance, resource, reference-closure, and operational
 reports. Version 1 is decoded only to reject it for new authorization.
 
 Every evidence report must repeat the manifest's complete authorization
 identity. Generate the role-specific report first, then attach the identity
-from a provisional manifest whose evidence map may still be empty:
+from a provisional manifest whose evidence map may still be empty.
+
+Final verification decodes every role against its concrete versioned schema;
+unknown fields, trailing JSON, structurally shallow pass claims, and
+unsupported candidate/schema combinations fail closed. Binding A/A, resource,
+and reference-closure reports embeds each report's exact native producer bytes,
+and verification recomputes their SHA-256 values before comparing the typed
+projections. Confirmation and performance remain strictly decoded typed reports
+rather than native-byte wrappers. Confirmation uses the
+candidate-specific SP-I1, SP-I2, orientation-v2, or causal-ASP schema.
+Both orientation schemas remain readable for diagnostics. `orientation-probe-v1`
+is not promotable because its v1 report cannot bind the source, corpus, and
+frozen cohort required by manifest v2. The final manifest verifier also
+terminally rejects `orientation-probe-v2`: its immutable training overhead gate
+failed, so authorization requires a new policy generation rather than a new v2
+report.
+
+Resource verification requires the candidate's exact
+numeric cap map, every observed high-water mark to remain at or below its cap,
+no fallback/reference case substitution, and at least 50 unique candidate
+runtime receipts per case-round. SP-I1/SP-I2 confirmation must name the exact
+native resource-report digest; confirmation, performance, and resource reports
+must name the same candidate artifact. Every promotion case must contain the
+exact performance round count in resource evidence, and the flattened resource
+receipt-chain set must equal the performance receipt-chain set. Reference
+closure is intentionally a
+separate capture because it contains raw-pgx and comparator measurements that
+the frozen SP confirmation artifacts forbid; it instead closes candidate,
+source/binary/corpus, normalized query, exact dataset/name/split cohort, the
+per-case workload digest against exactly one PostgreSQL A/A workload, frozen
+thresholds, and independently valid production receipt chains. Reference
+invocations come from their own raw-pgx/comparator capture, so their invocation
+IDs are not equated with the performance/resource capture. Exact cross-role
+receipt equality instead applies between performance and the complete per-round
+resource set.
+Confirmation and performance artifacts do not embed their raw benchmark
+samples, so the verifier recomputes decisions from their typed evidence and
+frozen settings but cannot independently replay every bootstrap draw. Closing
+that final reproducibility gap requires a future producer-schema revision; it
+does not weaken the current fail-closed identity, cohort, receipt, and decision
+checks.
+
+Performance verification freezes seed 1, confidence 0.975, and the 5% base
+regression threshold; recomputes p50/p95 noise-adjusted regressions and
+effective materiality floors; validates every measured receipt terminal; and
+requires its exact dataset/name/split cohort to equal confirmation. SP-I1 and
+SP-I2 resolve repository-frozen canonical cohorts, while orientation-v2
+resolves the canonical eight-training/four-holdout V3 cohort and its
+declaration digest. Orientation receipts may terminate only in the emitted
+forward or reverse executor arm; SP/ASP receipts must terminate in the
+candidate itself.
+Orientation-v2 cohort and receipt validation preserves diagnostic readability;
+it does not override the final verifier's terminal rejection of that policy
+generation.
+
+SQL anchoring uses an explicit two-pass capture. First run a preflight with
+`operational_candidate_sql_sha256` omitted to derive the exact SQL fingerprint.
+Freeze that digest in the provisional manifest, discard the preflight as
+non-promotional, and recapture every formal evidence artifact. A populated
+anchor is verified by the runner against generated SQL before execution; the
+final verifier and PostgreSQL driver require the same canonical anchor. Because
+schema v2 carries one scalar SQL anchor, an anchored manifest must contain
+exactly one unique authorized query digest (the cohort may vary parameters and
+fixtures for that query).
 
 ```bash
 go run ./cmd/graphbench \
@@ -765,8 +1012,13 @@ go run ./cmd/graphbench \
 
 Verification fails closed for missing roles, mutated reports, path traversal,
 non-passing evidence, invalid digests, absent caps, identity fields that differ
-from the manifest, or buckets that do not bind both qualification splits. This
-mode is mutually exclusive with benchmark, report, bind, and bundle operations.
+from the manifest, or buckets that do not bind the exact canonical
+`["training","holdout"]` split. The evidence map must contain exactly the six
+documented roles; invented roles, duplicate JSON object keys, duplicate query
+digests or bucket names, duplicate allowlist entries, and symlink-based escapes
+from the manifest directory are rejected. The single SQL anchor closes exactly
+one globally unique query identity across the complete bucket set. This mode is
+mutually exclusive with benchmark, report, bind, and bundle operations.
 
 ### Fixed-one-hop ExpandInto study
 
@@ -861,6 +1113,21 @@ identity accepts only the qualified inbound, typed, single-kind, one-path
 `min=1`/`max=64` bucket. Outbound, untyped, multi-kind, and different-depth
 manifests fail closed at verification, provisional capture, driver admission,
 and translation.
+
+`SP-I2-C-D` is the guarded distance-only canary for inbound hidden fan-in. Its
+reverse-physical recursive relation carries only node ID and depth, enforces
+independent state and frontier caps, and selects exact `SP-S4-C-D` before output
+on overflow. Provisional and final manifests require selector
+`sp-static-v8-hidden-fanin`, a typed single-kind inbound distance bucket, a
+stable snapshot, and exactly `state_limit` plus `frontier_limit`. Diagnostic
+replay exposes candidate/fallback markers and inactive-arm loop counts under
+the `inline_shortest_distance` namespace. Production evidence and activation
+must use the preregistered production-form `state_limit=100000` and
+`frontier_limit=100000` values; these immutable protocol inputs are not yet
+qualified. The dirty-tree rehearsal stopped before a discovery report or freeze,
+its cycle-control point estimates missed the frozen bounds, and no protected
+holdout was opened. Smaller forced caps remain available only for diagnostic
+overflow and fallback exercises.
 
 ### Frozen canonical-I1 qualification
 
@@ -1024,6 +1291,126 @@ bound is at most `1.05`. The study does not change the automatic production
 selector; a passing report is input to later canary, rollback, and promotion
 closure.
 
+### Frozen SP-I2 distance qualification
+
+The `sp-i2-distance-v1` study compares exact forced `SP-S4-C-D` with guarded
+forced `SP-I2-C-D`. Its sealed cohort contains six training cases at fixture
+depths 3, 6, 8, and 16 and four unopened holdouts at depths 5, 13, and 21.
+The matrix covers full-depth and early targets, disconnected exhaustion,
+hidden root/intermediate fan-in, and a cycle control. Every declaration uses
+the same typed inbound distance query with `min=1`, `max=64`, one `Traverse`
+kind, exact scalar observations, and forbidden fallback. Ordinary selection
+excludes the four holdouts; only the exact holdout tag or exact case name can
+enter the protected path, and timing still requires a valid discovery freeze.
+
+Build one binary from a clean committed source and capture 5-20 alternating
+discovery rounds with at least 5 warmups and 10 samples per arm. Use a fresh
+capture directory. Every invocation must set `block` equal to `round`, and the
+commands must actually run in their declared arm order: S4 first on odd rounds
+and I2 first on even rounds. Merely swapping the `-arm-order` labels while
+running S4 first in every round produces invalid chronology. This example
+captures the minimum five rounds:
+
+```bash
+CAPTURE=.coverage/sp-i2-distance-v1
+mkdir -p "$CAPTURE/bin"
+go build -trimpath -o "$CAPTURE/bin/graphbench" ./cmd/graphbench
+BIN="$CAPTURE/bin/graphbench"
+DISCOVERY_UUID="sp-i2-discovery-$(git rev-parse HEAD)"
+
+capture_sp_i2_arm() {
+  local round="$1" arm="$2" arm_order="$3" executor="$4" output="$5"
+  "$BIN" -modes postgres_sql -tags sp-i2-distance-v1-training \
+    -round "$round" -block "$round" -run-uuid "$DISCOVERY_UUID" \
+    -arm "$arm" -arm-order "$arm_order" \
+    -warmup-iterations 5 -iterations 10 -pool-size 1 \
+    -postgres-force-shortest-executor "$executor" -postgres-repeatable-read \
+    -postgres-traversal-telemetry diagnostic -pg-connection "$PG_CONNECTION_STRING" \
+    -jsonl-output "$output" -append-jsonl
+}
+
+for round in 1 2 3 4 5; do
+  if (( round % 2 == 1 )); then
+    capture_sp_i2_arm "$round" sp-i2-s4 1 SP-S4-C-D \
+      "$CAPTURE/discovery-s4.jsonl"
+    capture_sp_i2_arm "$round" sp-i2-candidate 2 SP-I2-C-D \
+      "$CAPTURE/discovery-i2.jsonl"
+  else
+    capture_sp_i2_arm "$round" sp-i2-candidate 1 SP-I2-C-D \
+      "$CAPTURE/discovery-i2.jsonl"
+    capture_sp_i2_arm "$round" sp-i2-s4 2 SP-S4-C-D \
+      "$CAPTURE/discovery-s4.jsonl"
+  fi
+done
+```
+
+After discovery capture, bind the resource report and create the freeze:
+
+```bash
+"$BIN" -resource-artifact "$CAPTURE/discovery-i2.jsonl" \
+  -resource-output "$CAPTURE/discovery-i2-resource.json"
+
+"$BIN" -sp-i2-baseline-artifact "$CAPTURE/discovery-s4.jsonl" \
+  -sp-i2-candidate-artifact "$CAPTURE/discovery-i2.jsonl" \
+  -sp-i2-resource-report "$CAPTURE/discovery-i2-resource.json" \
+  -sp-i2-protocol discovery -sp-i2-output "$CAPTURE/discovery-report.json" \
+  -sp-i2-freeze-output "$CAPTURE/discovery-freeze.json"
+```
+
+Only a passing clean-source freeze authorizes the protected cohort. Capture
+10-20 confirmation rounds with at least 20 warmups and 50 samples per arm,
+using a fresh shared UUID and the same alternating schedule. For every round,
+set `-round "$round" -block "$round"`; physically execute S4 before I2 on odd
+rounds and I2 before S4 on even rounds, with arm orders `1` then `2`. Rounds
+after the first must use `-append-jsonl`. Add these frozen authorization inputs
+to both arm commands:
+
+```text
+-tags sp-i2-distance-v1-training,sp-i2-distance-v1-holdout
+-sp-i2-freeze .coverage/sp-i2-distance-v1/discovery-freeze.json
+-sp-i2-discovery-report .coverage/sp-i2-distance-v1/discovery-report.json
+-sp-i2-training-baseline-artifact .coverage/sp-i2-distance-v1/discovery-s4.jsonl
+-sp-i2-training-candidate-artifact .coverage/sp-i2-distance-v1/discovery-i2.jsonl
+-sp-i2-training-resource-report .coverage/sp-i2-distance-v1/discovery-i2-resource.json
+-warmup-iterations 20 -iterations 50
+```
+
+Then bind the complete candidate artifact and issue confirmation:
+
+```bash
+"$BIN" -resource-artifact "$CAPTURE/confirmation-i2.jsonl" \
+  -resource-output "$CAPTURE/confirmation-i2-resource.json"
+
+"$BIN" -sp-i2-baseline-artifact "$CAPTURE/confirmation-s4.jsonl" \
+  -sp-i2-candidate-artifact "$CAPTURE/confirmation-i2.jsonl" \
+  -sp-i2-resource-report "$CAPTURE/confirmation-i2-resource.json" \
+  -sp-i2-freeze "$CAPTURE/discovery-freeze.json" \
+  -sp-i2-discovery-report "$CAPTURE/discovery-report.json" \
+  -sp-i2-training-baseline-artifact "$CAPTURE/discovery-s4.jsonl" \
+  -sp-i2-training-candidate-artifact "$CAPTURE/discovery-i2.jsonl" \
+  -sp-i2-training-resource-report "$CAPTURE/discovery-i2-resource.json" \
+  -sp-i2-protocol confirmation -sp-i2-output "$CAPTURE/confirmation-report.json"
+```
+
+Each normal case requires exact observations, unique timed receipt chains,
+`SP-I2-C-D` with zero fallback/overflow and zero inactive fallback loops,
+state/frontier evidence within the frozen 100,000-row ceilings (the portable
+`queue_rows` observation conservatively aliases the frontier), median
+ratio upper bound at most `0.95` or median saving lower bound at least `100us`,
+and p95 ratio upper bound at most `1.05`. The preregistered cycle case is an
+adverse control: its median ratio upper bound may be at most `1.10`, or its
+absolute overhead upper bound at most `100us`, while the same p95 ceiling
+continues to apply. Any failed training case prevents a
+freeze; any holdout failure rejects this policy generation without retuning.
+
+The completed local rehearsal is therefore diagnostic, not a failed formal
+discovery decision. Five target cases were strong and receipt-complete, while
+the cycle control missed its bounds on point estimates. Clean-source validation
+stopped the workflow before either report or freeze creation, so only a fresh
+clean recapture can make the authoritative discovery decision.
+
+### Existing canonical SP-I1 qualification result
+
 The clean `6d56a609` confirmation completed 10 paired rounds and 500 timed
 samples per arm/case. All four training and three holdout cases passed with
 zero candidate fallbacks; median reductions were 75.9-94.2% and p95 reductions
@@ -1033,20 +1420,34 @@ output bytes. This closes the frozen cohort; it does not replace the production
 statement, reference-closure, and operational evidence required by a promotion
 manifest.
 
+### Production-manifest statement capture
+
 Use `-postgres-production-manifest` to measure the exact guarded production
 statement from a provisional version-2 manifest before the evidence map can be
 closed. The runner validates the candidate/fallback pair, selector,
 family-specific immutable caps, unique exact query digests, and bucket match.
-Guarded SP/ASP candidates require their four positive shortest-path caps.
-`orientation-probe-v1` instead requires the optimizer's exact
+Guarded SP-I1/ASP-I1 candidates require their four positive shortest-path
+caps; SP-I2 instead requires the preregistered, production-form
+`state_limit=100000` and `frontier_limit=100000` contract and no unrelated cap
+dimensions; those values do not imply that SP-I2 has qualified.
+`orientation-probe-v1` and `orientation-probe-v2` staging instead requires the
+optimizer's exact
 `root_row_limit=512`, `reverse_seed_row_limit=512`,
 `directional_degree_row_limit=16384`, and `state_limit=4096` contract, the
-`EXPANSION-STEPWISE-FORWARD` fallback, and the `guarded_dual_arm` boundary; its
+`EXPANSION-STEPWISE-FORWARD` fallback, and the `guarded_dual_arm` boundary; their
 production options enable expansion orientation without selecting a
-shortest-path executor. The runner executes each statement under Repeatable
-Read and retains per-sample runtime
-receipts. This flag is mutually exclusive with tool-forced and shadow modes;
+shortest-path executor. This preserves exact diagnostic statement capture; it
+does not make either generation final-authorizable. Final verification rejects
+v1 because its evidence schema cannot bind the required source/corpus/cohort,
+and terminally rejects v2 because its immutable training overhead gate failed.
+The runner executes each statement under Repeatable Read and retains per-sample
+runtime receipts. This flag is mutually exclusive with tool-forced and shadow
+modes;
 evidence may be empty only because the capture is producing that evidence.
+The initial preflight manifest may also omit
+`operational_candidate_sql_sha256` solely to derive it. Formal capture must set
+that digest; the runner then fails before execution if generated SQL differs.
+Preflight artifacts cannot be bound into final promotion evidence.
 Final rollout still requires the ordinary complete manifest verifier.
 Use `-postgres-repeatable-read` on the incumbent arm so a matched comparison
 measures both sides under the stable-snapshot admission contract. A production
@@ -1169,8 +1570,12 @@ plan/resource, holdout, concurrency, cancellation, and reference-closure gates.
 
 `-backend-delta-artifact combined.jsonl -backend-delta-output deltas.json`
 produces matched PostgreSQL/Neo4j median and p95 ratios only when both records
-exist, and reports logical-observation agreement. The report is explicitly
-descriptive and never participates in PostgreSQL pass/fail selection.
+exist, reports logical-observation agreement, and emits a descending `outliers`
+list for repeated successful stable-observation regressions. Each outlier
+retains round count, runtime/applied identities, branch and fallback metadata,
+SQL fingerprints, direction, state class, observation mode, and selector
+versions. The report is explicitly descriptive and never participates in
+PostgreSQL pass/fail selection.
 Every other shape retains `SP-S0` and its specific fallback code.
 
 Ordinary variable expansions with fixed continuations similarly emit a typed

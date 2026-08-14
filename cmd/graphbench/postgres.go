@@ -115,7 +115,7 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 		return err
 	}
 	var manifest PromotionManifest
-	if err := json.Unmarshal(raw, &manifest); err != nil {
+	if err := decodePromotionEvidence(raw, &manifest); err != nil {
 		return fmt.Errorf("decode provisional promotion manifest: %w", err)
 	}
 	if manifest.Version != promotionManifestVersion || manifest.ExecutionBoundary != "guarded_dual_arm" || strings.TrimSpace(manifest.SelectorVersion) == "" {
@@ -124,7 +124,9 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	expectedFallback := map[string]string{
 		string(optimize.ShortestPathExecutorASPI1DAG):                      string(optimize.ShortestPathExecutorASPA1DAG),
 		string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness): string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		string(optimize.ShortestPathExecutorI2GuardedDistance):             string(optimize.ShortestPathExecutorS4CanonicalDistance),
 		string(optimize.ExpansionSearchPolicyOrientationProbeV1):           string(optimize.ExpansionSearchStepwiseForward),
+		string(optimize.ExpansionSearchPolicyOrientationProbeV2):           string(optimize.ExpansionSearchStepwiseForward),
 	}[manifest.Candidate]
 	if expectedFallback == "" || manifest.FallbackExecutor != expectedFallback {
 		return fmt.Errorf("unsupported candidate/fallback pair %s -> %s", manifest.Candidate, manifest.FallbackExecutor)
@@ -132,14 +134,30 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	if manifest.Candidate == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) && manifest.SelectorVersion != optimize.ShortestPathSelectorStaticV6 {
 		return fmt.Errorf("canonical SP-I1 provisional manifest requires selector %q", optimize.ShortestPathSelectorStaticV6)
 	}
-	if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+	if manifest.Candidate == string(optimize.ShortestPathExecutorI2GuardedDistance) && manifest.SelectorVersion != optimize.ShortestPathSelectorStaticV8HiddenFanIn {
+		return fmt.Errorf("SP-I2 distance provisional manifest requires selector %q", optimize.ShortestPathSelectorStaticV8HiddenFanIn)
+	}
+	if isOrientationProbePolicy(manifest.Candidate) {
+		if manifest.SelectorVersion != manifest.Candidate {
+			return fmt.Errorf("orientation candidate %q requires the same selector version", manifest.Candidate)
+		}
 		expectedCaps := orientationPromotionCaps()
 		if len(manifest.Caps) != len(expectedCaps) {
-			return fmt.Errorf("orientation-probe-v1 requires exactly four immutable caps")
+			return fmt.Errorf("%s requires exactly four immutable caps", manifest.Candidate)
 		}
 		for name, expected := range expectedCaps {
 			if manifest.Caps[name] != expected {
-				return fmt.Errorf("orientation-probe-v1 cap %s must equal %d", name, expected)
+				return fmt.Errorf("%s cap %s must equal %d", manifest.Candidate, name, expected)
+			}
+		}
+	} else if manifest.Candidate == string(optimize.ShortestPathExecutorI2GuardedDistance) {
+		expectedCaps := spI2PromotionCaps()
+		if len(manifest.Caps) != len(expectedCaps) {
+			return fmt.Errorf("SP-I2 distance candidate requires exactly state and frontier caps")
+		}
+		for name, expected := range expectedCaps {
+			if actual, found := manifest.Caps[name]; !found || actual != expected {
+				return fmt.Errorf("SP-I2 distance candidate cap %s must equal %d", name, expected)
 			}
 		}
 	} else {
@@ -154,14 +172,26 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 		}
 	}
 	seenQueries := map[string]struct{}{}
+	seenBuckets := map[string]struct{}{}
 	for _, bucket := range manifest.Buckets {
-		if len(bucket.QuerySHA256) == 0 {
-			return fmt.Errorf("production bucket %q has no exact query cohort", bucket.Name)
+		if strings.TrimSpace(bucket.Name) == "" || len(bucket.QuerySHA256) == 0 {
+			return fmt.Errorf("every provisional production bucket requires a nonempty unique name and exact query cohort")
+		}
+		if _, duplicate := seenBuckets[bucket.Name]; duplicate {
+			return fmt.Errorf("provisional production bucket %q is duplicated", bucket.Name)
+		}
+		seenBuckets[bucket.Name] = struct{}{}
+		if !slices.Equal(bucket.QualificationSplit, []string{"training", "holdout"}) {
+			return fmt.Errorf("production bucket %q must bind exactly one training and one holdout qualification split in canonical order", bucket.Name)
 		}
 		if manifest.Candidate == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) {
 			if err := validateStaticV6CanonicalInboundBucket(bucket); err != nil {
 				return err
 			}
+		}
+		if manifest.Candidate == string(optimize.ShortestPathExecutorI2GuardedDistance) &&
+			(bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationDistance) || bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship) {
+			return fmt.Errorf("SP-I2 distance bucket %q must be inbound, typed single-kind, distance-only, and depth-bounded", bucket.Name)
 		}
 		for _, digest := range bucket.QuerySHA256 {
 			if !isLowerHexSHA256(digest) {
@@ -173,8 +203,11 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 			seenQueries[digest] = struct{}{}
 		}
 	}
-	if len(seenQueries) == 0 {
-		return fmt.Errorf("provisional manifest has no exact query cohort")
+	if len(seenQueries) != 1 {
+		return fmt.Errorf("provisional manifest requires exactly one authorized query digest")
+	}
+	if manifest.OperationalCandidateSQLSHA256 != "" && !isLowerHexSHA256(manifest.OperationalCandidateSQLSHA256) {
+		return fmt.Errorf("provisional manifest operational_candidate_sql_sha256 must be a lowercase SHA-256 digest when present")
 	}
 	s.productionManifest = &manifest
 	return nil
@@ -202,12 +235,14 @@ func (s *postgresSQLRunner) productionOptions(cypherQuery string) (translate.Pro
 			},
 			SelectorVersion: manifest.SelectorVersion,
 		}
-		if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV1) {
+		if isOrientationProbePolicy(manifest.Candidate) {
 			options.EnableExpansionOrientation = true
+			options.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicy(manifest.Candidate)
 		} else {
 			options.ShortestPathExecutor = optimize.ShortestPathExecutor(manifest.Candidate)
 			options.ShortestPathCaps = &translate.ProductionShortestPathCaps{
 				StateLimit:       manifest.Caps["state_limit"],
+				FrontierLimit:    manifest.Caps["frontier_limit"],
 				PredecessorLimit: manifest.Caps["predecessor_limit"],
 				EnumerationLimit: manifest.Caps["enumeration_limit"],
 				OutputBytesLimit: manifest.Caps["output_bytes_limit"],
@@ -984,8 +1019,10 @@ func timedRuntimeAttestationIdentity(translation translate.Result) string {
 		requested == string(optimize.ShortestPathExecutorS4CanonicalDistance) ||
 		requested == string(optimize.ShortestPathExecutorS4CanonicalWitness) ||
 		requested == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) ||
+		requested == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
-		isOrientationProbePolicy(outcome.EmittedPolicy) {
+		isOrientationProbePolicy(outcome.EmittedPolicy) ||
+		isSuffixReverseGuardPolicy(outcome.EmittedPolicy) {
 		return requested
 	}
 	return ""
@@ -1126,14 +1163,37 @@ func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery str
 	if err != nil {
 		return translate.Result{}, "", err
 	}
+	if err := verifyProductionManifestSQLAnchor(s.productionManifest, sqlQuery); err != nil {
+		return translate.Result{}, "", err
+	}
 	return translation, sqlQuery, nil
+}
+
+// verifyProductionManifestSQLAnchor permits an unanchored preflight and makes
+// every subsequent provisional-manifest capture fail before SQL execution when
+// production translation drifts from the frozen operational statement.
+func verifyProductionManifestSQLAnchor(manifest *PromotionManifest, sqlQuery string) error {
+	if manifest == nil || manifest.OperationalCandidateSQLSHA256 == "" {
+		return nil
+	}
+	actual := sqlFingerprint(sqlQuery)
+	if actual != manifest.OperationalCandidateSQLSHA256 {
+		return fmt.Errorf(
+			"production traversal SQL SHA-256 %s does not match provisional manifest anchor %s",
+			actual,
+			manifest.OperationalCandidateSQLSHA256,
+		)
+	}
+	return nil
 }
 
 // hasForcedToolOptions reports whether either executor-selection override is configured.
 func hasForcedToolOptions(options translate.ToolOptions) bool {
 	return options.ForceShortestPathExecutor != "" || options.ForceExpansionSearchStrategy != "" ||
+		options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 ||
 		options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow ||
-		options.ExpansionOrientationPolicy != ""
+		options.ExpansionOrientationPolicy != "" || options.EnableExpansionSuffixReverseGuard ||
+		options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0
 }
 
 // encodePostgresPlanJSON normalizes byte, string, or structured EXPLAIN JSON into json.RawMessage.

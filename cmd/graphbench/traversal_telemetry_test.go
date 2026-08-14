@@ -82,6 +82,35 @@ func TestTraversalExecutionTelemetryDiagnosticCannotBeTimed(t *testing.T) {
 	require.ErrorContains(t, telemetry.Validate(), "diagnostic.timed_sample must be false")
 }
 
+// TestTraversalExecutionTelemetryValidatesSuffixGuardIndependently verifies
+// suffix-guard evidence does not require fabricated orientation scores while
+// still failing closed on a missing sentinel outcome.
+func TestTraversalExecutionTelemetryValidatesSuffixGuardIndependently(t *testing.T) {
+	telemetry := validTraversalTelemetry()
+	telemetry.Level = TraversalTelemetryLevelDiagnostic
+	provenance := map[string]string{}
+	for _, name := range []string{
+		"root_presence_rows", "suffix_rows", "distinct_boundary_rows", "state_rows", "output_rows", "candidate_marker_rows",
+		"fallback_marker_rows", "candidate_branch_rows", "fallback_branch_rows", "candidate_executor_loops", "fallback_executor_loops",
+		"suffix_overflow", "state_overflow",
+	} {
+		provenance["suffix_guard."+name] = "plan." + name
+	}
+	telemetry.Diagnostic = &TraversalExecutionDiagnostic{
+		InvocationID: "invocation-1", ConnectionID: "backend-123", TimedSample: telemetryBool(false),
+		RequiredFamilies: []TraversalTelemetryFamily{TraversalTelemetryFamilySuffixGuard}, CounterStatus: TraversalTelemetryCounterStatusComplete,
+		Counters: TraversalDiagnosticCounters{SuffixGuard: &SuffixGuardTraversalCounters{
+			RootPresenceRows: telemetryInt64(1), SuffixRows: telemetryInt64(2), DistinctBoundaryRows: telemetryInt64(1), StateRows: telemetryInt64(9),
+			OutputRows: telemetryInt64(1), CandidateMarkerRows: telemetryInt64(1), FallbackMarkerRows: telemetryInt64(0),
+			CandidateBranchRows: telemetryInt64(1), FallbackBranchRows: telemetryInt64(0), CandidateExecutorLoops: telemetryInt64(1),
+			FallbackExecutorLoops: telemetryInt64(0), SuffixOverflow: telemetryBool(false), StateOverflow: telemetryBool(false),
+		}}, Provenance: provenance,
+	}
+	require.NoError(t, telemetry.Validate())
+	telemetry.Diagnostic.Counters.SuffixGuard.StateOverflow = nil
+	require.ErrorContains(t, telemetry.Validate(), "suffix_guard.state_overflow is missing")
+}
+
 // TestTraversalExecutionTelemetryAttachmentsSerializeVersionedSchema verifies traversal execution telemetry attachments serialize versioned schema behavior.
 func TestTraversalExecutionTelemetryAttachmentsSerializeVersionedSchema(t *testing.T) {
 	telemetry := validTraversalTelemetry()

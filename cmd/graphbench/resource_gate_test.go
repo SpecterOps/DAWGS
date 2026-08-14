@@ -396,6 +396,19 @@ func TestResourceGateEnforcesTelemetryIdentityAndNumericSentinels(t *testing.T) 
 	require.NoError(t, err)
 	require.False(t, passed)
 
+	telemetry.Diagnostic.Counters.Ordinary.PeakState = telemetryInt64(-1)
+	record.TraversalTelemetry = &telemetry
+	require.NoError(t, writeJSONLFile(artifact, []CaseResult{record}))
+	negativeReportPath := filepath.Join(t.TempDir(), "negative.json")
+	passed, err = createResourceGateReport(artifact, negativeReportPath)
+	require.NoError(t, err)
+	require.False(t, passed)
+	negativeReportRaw, err := os.ReadFile(negativeReportPath)
+	require.NoError(t, err)
+	var negativeReport ResourceGateReport
+	require.NoError(t, json.Unmarshal(negativeReportRaw, &negativeReport))
+	require.Contains(t, negativeReport.Cases[0].Reasons, "traversal counter state_rows=-1 is negative")
+
 	telemetry.Diagnostic.Counters.Ordinary.PeakState = telemetryInt64(32)
 	telemetry.Summary.AppliedIdentity = "SP-S4-C-D"
 	record.TraversalTelemetry = &telemetry
@@ -590,6 +603,32 @@ func TestResourceGateValidatesExactOrientationMarkersAndProbeCounts(t *testing.T
 	gateCase.Reasons = nil
 	appendOrientationAttributionReasons(gateCase, diagnostic)
 	require.Contains(t, gateCase.Reasons, "orientation incumbent arm performed work while the candidate was selected")
+}
+
+// TestResourceGateValidatesSuffixGuardInactiveArmAndRejectsTopologyWork
+// verifies the reverse-first guard's resource contract is independent from
+// orientation-v2 and proves the unselected executor stayed inactive.
+func TestResourceGateValidatesSuffixGuardInactiveArmAndRejectsTopologyWork(t *testing.T) {
+	counters := map[string]int64{
+		"suffix_guard_candidate_marker_rows": 1, "suffix_guard_fallback_marker_rows": 0,
+		"suffix_guard_candidate_branch_rows": 1, "suffix_guard_fallback_branch_rows": 0,
+		"suffix_guard_output_rows":              1,
+		"suffix_guard_candidate_executor_loops": 1, "suffix_guard_fallback_executor_loops": 0,
+	}
+	diagnostic := &TraversalExecutionDiagnostic{PlanReplay: &TraversalPlanReplayEvidence{Counters: counters}}
+	gateCase := &ResourceGateCase{}
+	appendSuffixGuardAttributionReasons(gateCase, diagnostic)
+	require.Empty(t, gateCase.Reasons)
+
+	counters["suffix_guard_fallback_executor_loops"] = 1
+	appendSuffixGuardAttributionReasons(gateCase, diagnostic)
+	require.Contains(t, strings.Join(gateCase.Reasons, "\n"), "did not suppress the fallback executor")
+
+	counters["suffix_guard_fallback_executor_loops"] = 0
+	counters["orientation_forward_degree_rows"] = 10
+	gateCase.Reasons = nil
+	appendSuffixGuardAttributionReasons(gateCase, diagnostic)
+	require.Contains(t, strings.Join(gateCase.Reasons, "\n"), "unexpectedly contains orientation topology work")
 }
 
 // TestResourceGateRequiresSingularInlineASPBranchAndInactiveArm verifies resource gate requires singular inline asp branch and inactive arm behavior.

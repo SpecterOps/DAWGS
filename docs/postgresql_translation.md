@@ -45,12 +45,26 @@ Current PostgreSQL optimization coverage includes:
   lower-bound stop condition, late witness hydration, independent
   seen/frontier/predecessor caps, and exact S4 fallback before output. They are
   reference and explicit-tool arms; the production driver rejects them.
-  `SP-I1-C-D` is likewise tool-only until it has the same cap, exact-fallback,
-  receipt, and kill-switch contract as guarded witness and ASP I1. Eligible
+  Legacy `SP-I1-C-D` remains tool-only. Its guarded successor `SP-I2-C-D`
+  performs reverse-physical ID-only distance discovery behind independent
+  state/frontier gates, exposes same-statement runtime receipts, and invokes
+  exact `SP-S4-C-D` on overflow. Production authorization is restricted to
+  exact inbound typed single-kind distance buckets under selector
+  `sp-static-v8-hidden-fanin` and the preregistered production-form
+  `state_limit=100000`/`frontier_limit=100000` cap contract. These are
+  immutable protocol inputs, not qualified values: the dirty-tree rehearsal
+  stopped before a discovery report or freeze, the cycle-control point
+  estimates missed the frozen bounds, and no protected holdout was opened.
+  Tool-forced diagnostic translations may still use smaller caps to exercise
+  overflow and fallback behavior. Eligible
   canaries require SHA-256-allowlisted queries under repeatable-read or
   serializable isolation and a schema-v2 promotion manifest whose reports
   repeat its complete authorization identity. The ordinary production path
   remains unchanged.
+- Omitted shortest-path upper bounds retain Cypher's repository-defined
+  effective maximum of 15. The lowering decision records
+  `maximum_depth_source=policy_default` and uses selector
+  `sp-static-v7-contained`; explicit bounds retain `explicit` provenance.
 - Static `allShortestPaths` selection through `asp-static-v1` for a single directed, read-only endpoint pair with
   minimum depth one. `ASP-A1-DAG` has exact one- and two-hop arms, discovers minimum node-depth layers, retains every
   relationship-distinct predecessor at those layers, and enumerates the predecessor DAG. Open maximum ranges use the
@@ -76,6 +90,11 @@ Current PostgreSQL optimization coverage includes:
   retains the `EXPANSION-STEPWISE-FORWARD` translator and reports
   `tournament_unqualified` for otherwise eligible three-hop forms because no
   hard suffix-density or reverse-state bound is available before translation.
+  Full-path reverse rows additionally carry ordered node IDs and hydrate node
+  and edge composites with graph-partition-scoped aggregate lookups in the
+  translated statement. Endpoint-only rows omit that state. Guarded candidate
+  and incumbent branches still expose one identical path-composite column; the
+  incumbent retains `ordered_edge_ids_to_path` as its exact fallback boundary.
 - The default-off `orientation-probe-v1` guarded and shadow statements measure
   bounded duplicate-preserving roots, suffix rows/distinct boundaries, and
   typed first-hop work from both sides. Every relation has a cap+1 sentinel;
@@ -90,6 +109,15 @@ Current PostgreSQL optimization coverage includes:
   driver canary can emit the guarded form only when it also binds a verified
   promotion-manifest SHA-256, while the zero policy and every non-allowlisted
   query remain forward.
+- The independent `suffix-reverse-guard-v1` statement remains tool-only. It
+  enrolls complete-path fixed-suffix queries, applies separate 512-row suffix
+  and reverse-state caps, and marker-gates exact suffix-seeded reverse against
+  exact stepwise forward in one Repeatable Read statement. Its
+  chronology-valid training capture failed the immutable guard-overhead gate,
+  so the generation is terminally stopped: it has no protected-holdout,
+  manifest, driver-policy, automatic-selector, or rollback path. The exact
+  reverse executor and ordered-ID hydration remain reusable by a newly
+  preregistered architecture.
 - Guarded endpoint-seeded expansion selection covers a separate
   `fixed_prefix_terminal_expansion` family: exactly one directed fixed prefix followed by one terminal, directed,
   single-kind variable expansion with minimum depth one and a local selective terminal predicate. Production emits
@@ -156,15 +184,53 @@ caches. `ParseCacheStats` and `TranslationCacheStats` expose aggregate, query-te
 
 `pg.TraversalPolicy` is default-off and admits one candidate family per
 nonzero generation. It requires a nonempty allowlist built with
-`pg.TraversalPolicyQuerySHA256` and the exact verified promotion-manifest bytes.
-The driver checks the manifest digest and binds its candidate, selector,
-execution boundary, immutable caps, training/holdout buckets, exact query
-cohort, and required evidence digests before accepting the policy. Generation
-and policy contents partition the translation cache. Setting the zero policy
-makes older candidate entries immediately unreachable. B1/B2 candidates are
-not production-canary eligible. `DisableEndpointSeededReverse` is an emergency
-rollback control and intentionally requires no promotion artifact. Policy
-forcing never broadens a lowering's structural correctness envelope.
+`pg.TraversalPolicyQuerySHA256`. Operations must first verify the complete
+evidence closure with GraphBench and then install those exact manifest bytes
+and their digest. The driver revalidates the manifest JSON structure, digest,
+candidate, selector, execution boundary, immutable caps, training/holdout
+buckets, exact query cohort, exact evidence-role set, and evidence-reference
+digests before accepting
+the policy. It does not open evidence paths or reproduce the role-specific
+reports; acceptance by the driver is therefore not a substitute for the
+GraphBench final verifier. Generation and policy contents partition the
+translation cache. Setting the zero policy makes older candidate entries
+immediately unreachable. B1/B2 candidates are not production-canary eligible.
+`DisableEndpointSeededReverse` is an emergency rollback control and
+intentionally requires no promotion artifact. Policy forcing never broadens a
+lowering's structural correctness envelope.
+
+If a manifest-backed candidate carries an emergency switch, it may carry
+exactly one and it must be the switch dedicated to that candidate: orientation
+with `DisableExpansionOrientation`, ASP-I1 with `DisableInlineASPDAG`, canonical
+SP-I1 witness with `DisableInlineSPWitness`, or SP-I2 distance with
+`DisableInlineSPDistance`. Any unrelated or second switch is rejected.
+`DisableEndpointSeededReverse` is standalone-only. Every standalone rollback
+policy must disable all manifest candidates and leave the manifest digest,
+manifest JSON, and query allowlist empty (`promotion_manifest_sha256`,
+`promotion_manifest_json`, and `query_sha256_allowlist`). A matching rollback
+retains the installed manifest bytes and candidate anchor unchanged, but derives
+an incumbent-only effective policy, clears the effective SQL-anchor comparison,
+and uses its new generation as a distinct cache identity.
+
+Final activation treats the manifest collections as exact sets: it requires
+only the six defined evidence roles, one globally unique query digest, unique
+bucket names and query entries, and exactly one canonical training/holdout
+split declaration per bucket. Duplicate JSON keys, duplicate policy-allowlist
+digests, absolute or escaping evidence paths, and extra roles fail closed. The
+single operational SQL digest is checked against rendered candidate SQL before
+execution; an unanchored GraphBench manifest is permitted only for the
+non-promotional preflight that discovers that digest.
+
+GraphBench final verification also requires each promotion reference case to
+match exactly one native PostgreSQL A/A workload by dataset, name, and workload
+digest. For every promotion case, the resource report must cover the exact
+performance round count and its flattened candidate receipt-chain set must equal
+performance's complete set. Reference receipts remain an independently captured
+raw-pgx/comparator stream rather than sharing invocation IDs with that set.
+Confirmation and performance do not embed raw samples, so their typed decisions
+can be recomputed but their bootstrap draws cannot yet be independently replayed.
+The operational validator consumes and recomputes an assembled 32-record native
+input; the repository does not yet provide a standalone producer for that input.
 
 The same policy boundary now admits `ASP-I1-U-DAG+MAT-M0` as a default-off,
 exact-query canary under Repeatable Read or Serializable isolation. Its
@@ -180,14 +246,19 @@ the unselected arm emits no rows. Read Committed and
 queries outside the exact allowlist retain A1. `DisableInlineASPDAG` is the
 evidence-free emergency rollback control.
 
-Fixed-suffix expansion orientation uses the same fail-closed manifest boundary.
-An `orientation-probe-v1` production manifest must name
-`EXPANSION-STEPWISE-FORWARD` as fallback, use `guarded_dual_arm`, and bind the
-immutable `root_row_limit=512`, `reverse_seed_row_limit=512`,
-`directional_degree_row_limit=16384`, and `state_limit=4096` caps. The guarded
-statement exposes that boundary in traversal telemetry; shadow and forced
-single-arm statements report `inline_statement` and cannot stand in for
-production-boundary evidence.
+The default-off fixed-suffix orientation runtime seam recognizes v1 and v2
+selector identities. Either shape must name `EXPANSION-STEPWISE-FORWARD` as
+fallback, use `guarded_dual_arm`, and bind the immutable
+`root_row_limit=512`, `reverse_seed_row_limit=512`,
+`directional_degree_row_limit=16384`, and `state_limit=4096` caps. This is only
+structural runtime admission: the final schema-v2 verifier rejects the legacy
+`orientation-probe-v1` evidence schema because it cannot bind source, corpus,
+and cohort identity. It separately terminally rejects the frozen
+`orientation-probe-v2` generation because its immutable training overhead gate
+failed. Neither generation is release-authorized; v2 must not be recaptured or
+advanced to its unopened holdouts. The guarded statement exposes the production
+boundary in traversal telemetry; shadow and forced single-arm statements report
+`inline_statement` and cannot stand in for production-boundary evidence.
 
 Runtime receipt workspaces must exist on the exact PostgreSQL session before
 an explicit read-only transaction begins. GraphBench satisfies this by pinning

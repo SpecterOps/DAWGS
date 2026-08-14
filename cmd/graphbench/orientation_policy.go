@@ -18,3 +18,15 @@ func isOrientationProbePolicy(identity string) bool {
 		return false
 	}
 }
+
+// isSuffixReverseGuardPolicy recognizes the reverse-first fixed-suffix guard
+// without folding it into the topology-scored orientation policy lineage.
+func isSuffixReverseGuardPolicy(identity string) bool {
+	return optimize.ExpansionSearchPolicy(identity) == optimize.ExpansionSearchPolicySuffixReverseGuardV1
+}
+
+// isGuardedExpansionPolicy recognizes same-statement ordinary-expansion
+// policies that must expose exactly one candidate or fallback runtime branch.
+func isGuardedExpansionPolicy(identity string) bool {
+	return isOrientationProbePolicy(identity) || isSuffixReverseGuardPolicy(identity)
+}

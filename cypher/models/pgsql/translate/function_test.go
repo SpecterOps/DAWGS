@@ -150,7 +150,8 @@ func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 	require.Contains(t, formatted, ".edges")
 }
 
-// TestPathLengthUsesOrderedEdgeIDsWithoutHydration verifies that length(path) counts carried edge IDs without hydrating a path.
+// TestPathLengthUsesScalarDistanceWithoutHydration verifies that length(path)
+// consumes the selected scalar-distance result without carrying edge IDs.
 func TestPathLengthUsesOrderedEdgeIDsWithoutHydration(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -162,7 +163,8 @@ func TestPathLengthUsesOrderedEdgeIDsWithoutHydration(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, "cardinality(s0.ep0)")
+	require.Contains(t, formatted, "(s0.ep0)::int")
+	require.NotContains(t, formatted, "cardinality(")
 	require.NotContains(t, formatted, "ordered_edge_ids_to_path")
 	require.NotContains(t, formatted, "ordered_edges_to_path")
 	require.NotContains(t, formatted, "from unnest")
@@ -322,7 +324,8 @@ func TestIDOnlyExpansionContinuationRetainsCompositeForMutation(t *testing.T) {
 	require.Contains(t, formatted, "delete from node")
 }
 
-// TestBoundPairShortestPathUsesStableSingletonArrays verifies deterministic singleton endpoint-array construction for bound shortest paths.
+// TestBoundPairShortestPathUsesStableSingletonEndpoints verifies deterministic
+// scalar endpoint construction for the contained compact executor.
 func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	translateQuery := func(cypherQuery string) (Result, string) {
@@ -339,13 +342,13 @@ func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
 	second, secondSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = 41 AND id(e) = 42 RETURN p LIMIT 1`)
 
 	require.Equal(t, firstSQL, secondSQL)
-	require.Contains(t, firstSQL, "::int8[]")
+	require.Contains(t, firstSQL, "shortest_path_compact(")
 	require.NotContains(t, firstSQL, "insert into pg_temp.bsp_pair_filter")
 	require.NotContains(t, firstSQL, "traversal_pair_filter")
 	require.Contains(t, firstSQL, "limit 1")
 	require.Contains(t, firstSQL, "with singleton_endpoints as")
-	require.Contains(t, firstSQL, "array [singleton_endpoints.root_id]::int8[]")
-	require.Contains(t, firstSQL, "array [singleton_endpoints.terminal_id]::int8[]")
+	require.Contains(t, firstSQL, "singleton_endpoints.root_id")
+	require.Contains(t, firstSQL, "singleton_endpoints.terminal_id")
 	require.NotContains(t, firstSQL, "n0.id = 1")
 	require.NotContains(t, secondSQL, "n0.id = 41")
 	var firstEndpointValues, secondEndpointValues []any
@@ -362,17 +365,6 @@ func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
 	require.ElementsMatch(t, []any{int64(1), int64(2)}, firstEndpointValues)
 	require.ElementsMatch(t, []any{int64(41), int64(42)}, secondEndpointValues)
 
-	var hasRootArraySeed, hasTerminalArraySeed bool
-	for _, value := range first.Parameters {
-		fragment, isString := value.(string)
-		if !isString {
-			continue
-		}
-		hasRootArraySeed = hasRootArraySeed || strings.Contains(fragment, "unnest($1::int8[])")
-		hasTerminalArraySeed = hasTerminalArraySeed || strings.Contains(fragment, "unnest($2::int8[])")
-	}
-	require.True(t, hasRootArraySeed)
-	require.True(t, hasTerminalArraySeed)
 }
 
 func TestRelationshipEndpointFunctionsUseEdgeCompositeArguments(t *testing.T) {

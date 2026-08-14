@@ -1,13 +1,18 @@
 package pg
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
+	"github.com/specterops/dawgs/drivers/pg/model"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +25,7 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 	queryDigest := TraversalPolicyQuerySHA256(query)
 	evidence := map[string]map[string]string{}
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
-		evidence[role] = map[string]string{"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+		evidence[role] = map[string]string{"path": role + ".json", "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 	}
 	boundary := map[bool]string{
 		true:  "guarded_dual_arm",
@@ -28,9 +33,10 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 	}[orientation]
 	selectorVersion := "test-selector-v1"
 	caps := map[string]int64{"state_limit": 1000}
-	bucket := map[string]any{"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"}}
+	bucket := map[string]any{"name": "qualified-query", "query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"}}
 	fallback := ""
 	if orientation {
+		selectorVersion = string(optimize.ExpansionSearchPolicyOrientationProbeV1)
 		caps = map[string]int64{
 			"root_row_limit":               optimize.ExpansionSearchOrientationRootRowLimit,
 			"reverse_seed_row_limit":       optimize.ExpansionSearchOrientationReverseSeedRowLimit,
@@ -66,16 +72,32 @@ func testTraversalPolicy(query string, executor optimize.ShortestPathExecutor, o
 		bucket["relationship_kind_count"] = 1
 		bucket["untyped_relationship"] = false
 	}
+	if executor == optimize.ShortestPathExecutorI2GuardedDistance {
+		selectorVersion = optimize.ShortestPathSelectorStaticV8HiddenFanIn
+		boundary = "guarded_dual_arm"
+		caps = map[string]int64{
+			"state_limit":    optimize.ShortestPathI2QualifiedStateLimit,
+			"frontier_limit": optimize.ShortestPathI2QualifiedFrontierLimit,
+		}
+		fallback = string(optimize.ShortestPathExecutorS4CanonicalDistance)
+		bucket["direction"] = "inbound"
+		bucket["observation_mode"] = "distance"
+		bucket["minimum_depth"] = 1
+		bucket["maximum_depth"] = 32
+		bucket["relationship_kind_count"] = 1
+		bucket["untyped_relationship"] = false
+	}
 	raw, err := json.Marshal(map[string]any{
 		"version": 2, "candidate": candidate, "selector_version": selectorVersion,
 		"source_commit": "deadbeef", "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		"binary_sha256":      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		"corpus_sha256":      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		"execution_boundary": boundary,
-		"fallback_executor":  fallback,
-		"caps":               caps,
-		"buckets":            []map[string]any{bucket},
-		"evidence":           evidence,
+		"binary_sha256":                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"corpus_sha256":                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"operational_candidate_sql_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+		"execution_boundary":               boundary,
+		"fallback_executor":                fallback,
+		"caps":                             caps,
+		"buckets":                          []map[string]any{bucket},
+		"evidence":                         evidence,
 	})
 	if err != nil {
 		panic(err)
@@ -166,6 +188,52 @@ func TestTraversalPolicyIsAllowlistedSnapshotSafeAndImmediatelyReversible(t *tes
 	require.NotEqual(t, candidateKey, rollbackKey)
 }
 
+func TestTraversalPolicyAuthorizesAndRollsBackGuardedDistance(t *testing.T) {
+	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e)) RETURN length(p)"
+	policy := testTraversalPolicy(query, optimize.ShortestPathExecutorI2GuardedDistance, false)
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+
+	effective, _ := driver.SchemaManager.effectiveTraversalPolicy(query, pgx.RepeatableRead)
+	require.Equal(t, optimize.ShortestPathExecutorI2GuardedDistance, effective.ShortestPathExecutor)
+	options, err := effective.productionOptions(query)
+	require.NoError(t, err)
+	require.Equal(t, optimize.ShortestPathSelectorStaticV8HiddenFanIn, options.SelectorVersion)
+	require.Equal(t, optimize.ShortestPathI2QualifiedStateLimit, options.ShortestPathCaps.StateLimit)
+	require.Equal(t, optimize.ShortestPathI2QualifiedFrontierLimit, options.ShortestPathCaps.FrontierLimit)
+
+	for name, test := range map[string]struct {
+		capName  string
+		value    int64
+		expected int64
+	}{
+		"non-qualified state cap": {
+			capName: "state_limit", value: 1000, expected: optimize.ShortestPathI2QualifiedStateLimit,
+		},
+		"non-qualified frontier cap": {
+			capName: "frontier_limit", value: 100, expected: optimize.ShortestPathI2QualifiedFrontierLimit,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := rewriteTestTraversalPolicyManifest(t, policy, func(manifest *traversalPromotionManifest) {
+				manifest.Caps[test.capName] = test.value
+			})
+			err := (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(invalid)
+			require.ErrorContains(t, err, fmt.Sprintf(
+				"SP-I2 distance promotion manifest requires %s=%d",
+				test.capName,
+				test.expected,
+			))
+		})
+	}
+
+	policy.DisableInlineSPDistance = true
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+	effective, _ = driver.SchemaManager.effectiveTraversalPolicy(query, pgx.RepeatableRead)
+	require.Empty(t, effective.ShortestPathExecutor)
+	require.True(t, effective.DisableInlineSPDistance)
+}
+
 // TestTraversalPolicyFailsClosed verifies traversal policy fails closed behavior.
 func TestTraversalPolicyFailsClosed(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
@@ -195,6 +263,428 @@ func TestTraversalPolicyFailsClosed(t *testing.T) {
 		optimize.ShortestPathExecutorI1CanonicalDistance,
 		false,
 	)), "not production-canary eligible")
+}
+
+// TestTraversalPolicyRequiresOperationalSQLAnchor verifies production admission
+// cannot rely only on the operational report's self-declared fingerprint.
+func TestTraversalPolicyRequiresOperationalSQLAnchor(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
+	valid := testTraversalPolicy(query, optimize.ShortestPathExecutorI1CanonicalPredecessorWitness, false)
+
+	for name, mutate := range map[string]func(*traversalPromotionManifest){
+		"missing": func(manifest *traversalPromotionManifest) { manifest.OperationalCandidateSQLSHA256 = "" },
+		"invalid": func(manifest *traversalPromotionManifest) { manifest.OperationalCandidateSQLSHA256 = "NOT-A-DIGEST" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			policy := rewriteTestTraversalPolicyManifest(t, valid, mutate)
+			err := (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(policy)
+			require.ErrorContains(t, err, "operational candidate SQL SHA-256 digest")
+		})
+	}
+}
+
+// TestDecodeTraversalPromotionManifestIsStrict verifies unknown or trailing
+// content cannot change a final authorization document without rejection.
+func TestDecodeTraversalPromotionManifestIsStrict(t *testing.T) {
+	valid := testTraversalPolicy("MATCH (n) RETURN n", optimize.ShortestPathExecutorASPI1DAG, false)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(valid.PromotionManifestJSON, &document))
+	document["operational_candidate_sql_sha_256"] = document["operational_candidate_sql_sha256"]
+	raw, err := json.Marshal(document)
+	require.NoError(t, err)
+	_, err = decodeTraversalPromotionManifest(raw)
+	require.ErrorContains(t, err, "unknown field")
+
+	_, err = decodeTraversalPromotionManifest(append(valid.PromotionManifestJSON, []byte("\n{}")...))
+	require.ErrorContains(t, err, "trailing JSON data")
+
+	duplicateTopLevel := strings.Replace(string(valid.PromotionManifestJSON), `"version":2`, `"version":2,"version":2`, 1)
+	_, err = decodeTraversalPromotionManifest([]byte(duplicateTopLevel))
+	require.ErrorContains(t, err, `duplicate JSON object key "version"`)
+
+	duplicateNested := strings.Replace(string(valid.PromotionManifestJSON), `"qualification_split":`, `"qualification_split":["training","holdout"],"qualification_split":`, 1)
+	_, err = decodeTraversalPromotionManifest([]byte(duplicateNested))
+	require.ErrorContains(t, err, `duplicate JSON object key "qualification_split"`)
+}
+
+func TestTraversalPolicyRequiresExactManifestSets(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
+	valid := testTraversalPolicy(query, optimize.ShortestPathExecutorI1CanonicalPredecessorWitness, false)
+
+	tests := map[string]struct {
+		mutate func(*traversalPromotionManifest)
+		reason string
+	}{
+		"extra evidence role": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Evidence["invented"] = traversalPromotionEvidence{SHA256: strings.Repeat("a", 64)}
+			},
+			reason: "exactly the six supported evidence roles",
+		},
+		"escaping evidence path": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				reference := manifest.Evidence["aa"]
+				reference.Path = "../aa.json"
+				manifest.Evidence["aa"] = reference
+			},
+			reason: "requires a contained relative path",
+		},
+		"duplicate split": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Buckets[0].QualificationSplit = []string{"training", "training", "holdout"}
+			},
+			reason: "exactly one training and one holdout qualification split",
+		},
+		"extra split": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Buckets[0].QualificationSplit = []string{"training", "holdout", "diagnostic"}
+			},
+			reason: "exactly one training and one holdout qualification split",
+		},
+		"duplicate query within bucket": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Buckets[0].QuerySHA256 = append(manifest.Buckets[0].QuerySHA256, manifest.Buckets[0].QuerySHA256[0])
+			},
+			reason: "duplicates query digest",
+		},
+		"duplicate bucket name": {
+			mutate: func(manifest *traversalPromotionManifest) {
+				manifest.Buckets = append(manifest.Buckets, manifest.Buckets[0])
+			},
+			reason: "promotion bucket",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			policy := rewriteTestTraversalPolicyManifest(t, valid, test.mutate)
+			err := (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(policy)
+			require.ErrorContains(t, err, test.reason)
+		})
+	}
+
+	duplicateAllowlist := valid
+	duplicateAllowlist.QuerySHA256Allowlist = append(duplicateAllowlist.QuerySHA256Allowlist, duplicateAllowlist.QuerySHA256Allowlist[0])
+	require.ErrorContains(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(duplicateAllowlist), "must not contain duplicate digests")
+}
+
+// TestValidateTraversalPromotionSQLAnchor verifies the production execution
+// path compares exact rendered SQL with the independent manifest digest.
+func TestValidateTraversalPromotionSQLAnchor(t *testing.T) {
+	sqlQuery := "select 1::int8 as distance"
+	digest := sha256.Sum256([]byte(sqlQuery))
+	manifest := traversalPromotionManifest{OperationalCandidateSQLSHA256: hex.EncodeToString(digest[:])}
+	require.NoError(t, validateTraversalPromotionSQLAnchor(manifest, sqlQuery))
+	require.ErrorContains(t, validateTraversalPromotionSQLAnchor(manifest, sqlQuery+" "), "does not match promotion manifest anchor")
+	require.NoError(t, validateTraversalPromotionSQLAnchor(traversalPromotionManifest{}, sqlQuery),
+		"evidence-free emergency rollback policies have no operational SQL anchor")
+}
+
+// TestTraversalPolicyRollbackCompositionIsCandidateSpecific exhaustively
+// verifies that each manifest-backed candidate composes only with its dedicated
+// emergency control. A matching rollback derives an incumbent-only policy with
+// a distinct cache identity and no candidate SQL anchor; unrelated switches
+// fail installation and cannot authorize the candidate for another query.
+func TestTraversalPolicyRollbackCompositionIsCandidateSpecific(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e)) RETURN length(p)"
+	unauthorizedQuery := "RETURN 1"
+	candidates := []struct {
+		name        string
+		executor    optimize.ShortestPathExecutor
+		orientation bool
+		isolation   pgx.TxIsoLevel
+		matching    string
+	}{
+		{
+			name:        "expansion orientation",
+			orientation: true,
+			isolation:   pgx.ReadCommitted,
+			matching:    "expansion orientation",
+		},
+		{
+			name:      "inline all shortest paths",
+			executor:  optimize.ShortestPathExecutorASPI1DAG,
+			isolation: pgx.RepeatableRead,
+			matching:  "inline all shortest paths",
+		},
+		{
+			name:      "inline shortest path witness",
+			executor:  optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+			isolation: pgx.RepeatableRead,
+			matching:  "inline shortest path witness",
+		},
+		{
+			name:      "inline shortest path distance",
+			executor:  optimize.ShortestPathExecutorI2GuardedDistance,
+			isolation: pgx.RepeatableRead,
+			matching:  "inline shortest path distance",
+		},
+	}
+	switches := []struct {
+		name    string
+		disable func(*TraversalPolicy)
+		active  func(TraversalPolicy) bool
+	}{
+		{
+			name: "expansion orientation",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableExpansionOrientation = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableExpansionOrientation },
+		},
+		{
+			name: "endpoint seeded reverse",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableEndpointSeededReverse = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableEndpointSeededReverse },
+		},
+		{
+			name: "inline all shortest paths",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineASPDAG = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableInlineASPDAG },
+		},
+		{
+			name: "inline shortest path witness",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineSPWitness = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableInlineSPWitness },
+		},
+		{
+			name: "inline shortest path distance",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineSPDistance = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableInlineSPDistance },
+		},
+	}
+
+	for _, candidate := range candidates {
+		for _, rollback := range switches {
+			t.Run(candidate.name+"/"+rollback.name, func(t *testing.T) {
+				driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+				policy := testTraversalPolicy(query, candidate.executor, candidate.orientation)
+				require.NoError(t, driver.SetTraversalPolicy(policy))
+				activeCandidate, candidateIdentity := driver.SchemaManager.effectiveTraversalPolicy(query, candidate.isolation)
+				require.True(t, activeCandidate.manifestCandidateEnabled())
+
+				rollback.disable(&policy)
+				err := driver.SetTraversalPolicy(policy)
+				if rollback.name != candidate.matching {
+					require.ErrorContains(t, err, "single matching emergency rollback switch")
+					installed := driver.TraversalPolicy()
+					require.True(t, installed.manifestCandidateEnabled(), "rejected policy must not replace the installed candidate")
+					effective, identity := driver.SchemaManager.effectiveTraversalPolicy(unauthorizedQuery, candidate.isolation)
+					require.False(t, effective.manifestCandidateEnabled(), "an unrelated switch must not bypass query authorization")
+					require.Equal(t, "production-incumbent-v1", identity)
+					return
+				}
+
+				require.NoError(t, err)
+				effective, rollbackIdentity := driver.SchemaManager.effectiveTraversalPolicy(query, candidate.isolation)
+				require.True(t, rollback.active(effective))
+				require.False(t, effective.manifestCandidateEnabled())
+				require.NotEqual(t, candidateIdentity, rollbackIdentity)
+				require.Empty(t, effective.compiledManifest.OperationalCandidateSQLSHA256)
+				require.NoError(t, validateTraversalPromotionSQLAnchor(effective.compiledManifest, "incumbent SQL"))
+
+				unauthorized, unauthorizedIdentity := driver.SchemaManager.effectiveTraversalPolicy(unauthorizedQuery, candidate.isolation)
+				require.True(t, rollback.active(unauthorized), "matching emergency rollback remains global")
+				require.False(t, unauthorized.manifestCandidateEnabled())
+				require.Empty(t, unauthorized.compiledManifest.OperationalCandidateSQLSHA256)
+				require.Equal(t, rollbackIdentity, unauthorizedIdentity)
+
+				installed := driver.TraversalPolicy()
+				require.True(t, installed.manifestCandidateEnabled())
+				require.NotEmpty(t, installed.compiledManifest.OperationalCandidateSQLSHA256,
+					"deriving the rollback policy must not mutate the installed manifest")
+			})
+		}
+	}
+}
+
+// TestTraversalPolicyRejectsMatchingRollbackWithAdditionalSwitch proves the
+// matching exception cannot be broadened by adding any second emergency flag.
+func TestTraversalPolicyRejectsMatchingRollbackWithAdditionalSwitch(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e)) RETURN length(p)"
+	tests := []struct {
+		name        string
+		executor    optimize.ShortestPathExecutor
+		orientation bool
+		disable     func(*TraversalPolicy)
+	}{
+		{
+			name: "expansion orientation", orientation: true,
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableExpansionOrientation = true
+				policy.DisableEndpointSeededReverse = true
+			},
+		},
+		{
+			name: "inline all shortest paths", executor: optimize.ShortestPathExecutorASPI1DAG,
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineASPDAG = true
+				policy.DisableEndpointSeededReverse = true
+			},
+		},
+		{
+			name: "inline shortest path witness", executor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineSPWitness = true
+				policy.DisableEndpointSeededReverse = true
+			},
+		},
+		{
+			name: "inline shortest path distance", executor: optimize.ShortestPathExecutorI2GuardedDistance,
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineSPDistance = true
+				policy.DisableEndpointSeededReverse = true
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			policy := testTraversalPolicy(query, test.executor, test.orientation)
+			test.disable(&policy)
+			err := (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(policy)
+			require.ErrorContains(t, err, "single matching emergency rollback switch")
+		})
+	}
+}
+
+// TestTraversalPolicyStandaloneRollbacksRemainGlobalAndUnanchored verifies all
+// evidence-free switch-only policies apply independently of query allowlists
+// without carrying a manifest candidate or candidate SQL anchor.
+func TestTraversalPolicyStandaloneRollbacksRemainGlobalAndUnanchored(t *testing.T) {
+	tests := []struct {
+		name    string
+		disable func(*TraversalPolicy)
+		active  func(TraversalPolicy) bool
+	}{
+		{
+			name: "expansion orientation",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableExpansionOrientation = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableExpansionOrientation },
+		},
+		{
+			name: "endpoint seeded reverse",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableEndpointSeededReverse = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableEndpointSeededReverse },
+		},
+		{
+			name: "inline all shortest paths",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineASPDAG = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableInlineASPDAG },
+		},
+		{
+			name: "inline shortest path witness",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineSPWitness = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableInlineSPWitness },
+		},
+		{
+			name: "inline shortest path distance",
+			disable: func(policy *TraversalPolicy) {
+				policy.DisableInlineSPDistance = true
+			},
+			active: func(policy TraversalPolicy) bool { return policy.DisableInlineSPDistance },
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+			policy := TraversalPolicy{Generation: 42}
+			test.disable(&policy)
+			require.NoError(t, driver.SetTraversalPolicy(policy))
+
+			effective, identity := driver.SchemaManager.effectiveTraversalPolicy("RETURN 1", pgx.ReadCommitted)
+			require.True(t, test.active(effective))
+			require.False(t, effective.manifestCandidateEnabled())
+			require.Empty(t, effective.compiledManifest.OperationalCandidateSQLSHA256)
+			require.Contains(t, identity, "production-policy-")
+		})
+	}
+}
+
+// TestTraversalPolicyStandaloneRollbackRejectsPromotionFields verifies an
+// evidence-free switch cannot consume an unverified manifest selector or
+// retain irrelevant authorization data in its cache identity.
+func TestTraversalPolicyStandaloneRollbackRejectsPromotionFields(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e)) RETURN length(p)"
+	candidate := testTraversalPolicy(query, optimize.ShortestPathExecutorI2GuardedDistance, false)
+	tests := map[string]func(*TraversalPolicy){
+		"manifest digest": func(policy *TraversalPolicy) {
+			policy.PromotionManifestSHA256 = strings.Repeat("a", 64)
+		},
+		"manifest JSON": func(policy *TraversalPolicy) {
+			policy.PromotionManifestJSON = json.RawMessage(`{"selector_version":"unverified-selector"}`)
+		},
+		"query allowlist": func(policy *TraversalPolicy) {
+			policy.QuerySHA256Allowlist = []string{TraversalPolicyQuerySHA256(query)}
+		},
+		"fields copied from candidate": func(policy *TraversalPolicy) {
+			policy.PromotionManifestSHA256 = candidate.PromotionManifestSHA256
+			policy.PromotionManifestJSON = append(json.RawMessage(nil), candidate.PromotionManifestJSON...)
+			policy.QuerySHA256Allowlist = append([]string(nil), candidate.QuerySHA256Allowlist...)
+		},
+	}
+
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			policy := TraversalPolicy{Generation: 43, DisableEndpointSeededReverse: true}
+			mutate(&policy)
+			driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+			require.ErrorContains(t, driver.SetTraversalPolicy(policy), "must not carry promotion manifest or query authorization fields")
+			require.False(t, driver.TraversalPolicy().enabled(), "rejected standalone evidence must not replace the installed policy")
+		})
+	}
+}
+
+// TestTransactionQueryRejectsPromotionSQLAnchorDrift exercises the production
+// parse/translate/format callback and proves drift is returned before Raw can
+// reach the database driver.
+func TestTransactionQueryRejectsPromotionSQLAnchorDrift(t *testing.T) {
+	query := `
+		MATCH (root:ExpansionRoot)
+		WHERE root.root_key = $root_key
+		MATCH path = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		RETURN path
+	`
+	manager := NewSchemaManager(nil, 0)
+	manager.setDefaultGraph(model.Graph{ID: 1, Name: "test"}, graph.Graph{Name: "test"})
+	for index, name := range []string{"ExpansionRoot", "Expand", "EnterSuffix", "SuffixHead", "ContinueSuffix", "SuffixMiddle", "CompleteSuffix", "SuffixTerminal"} {
+		manager.kindsByID[graph.StringKind(name)] = int16(index + 1)
+	}
+	policy := testTraversalPolicy(query, "", true)
+	require.NoError(t, (&Driver{SchemaManager: manager}).SetTraversalPolicy(policy))
+
+	tx := &transaction{schemaManager: manager, ctx: context.Background(), isolation: pgx.ReadCommitted}
+	result := tx.Query(query, map[string]any{"root_key": "root"})
+	require.ErrorContains(t, result.Error(), "does not match promotion manifest anchor")
+}
+
+// TestTraversalPolicySQLAnchorRequiresOneAuthorizedQuery verifies one scalar
+// SQL anchor cannot ambiguously authorize several distinct query statements.
+func TestTraversalPolicySQLAnchorRequiresOneAuthorizedQuery(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:MemberOf*1..64]-(e)) RETURN p"
+	valid := testTraversalPolicy(query, optimize.ShortestPathExecutorI1CanonicalPredecessorWitness, false)
+	policy := rewriteTestTraversalPolicyManifest(t, valid, func(manifest *traversalPromotionManifest) {
+		manifest.Buckets[0].QuerySHA256 = append(manifest.Buckets[0].QuerySHA256, strings.Repeat("f", 64))
+	})
+	policy.QuerySHA256Allowlist = append(policy.QuerySHA256Allowlist, strings.Repeat("f", 64))
+	err := (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(policy)
+	require.ErrorContains(t, err, "operational SQL anchor requires exactly one authorized query digest")
 }
 
 // TestTraversalPolicyCanonicalSPRequiresExactStaticV6Envelope verifies traversal policy canonical sp requires exact static v6 envelope behavior.
@@ -269,6 +759,42 @@ func TestTraversalPolicyAllowsGuardedOrientationWithoutSnapshotUpgrade(t *testin
 	effective, identity := driver.SchemaManager.effectiveTraversalPolicy(query, pgx.ReadCommitted)
 	require.True(t, effective.EnableExpansionOrientation)
 	require.Contains(t, identity, "production-policy-")
+}
+
+// TestTraversalPolicyAuthorizesOrientationProbeV2WithoutExecutingV1 verifies
+// the manifest selector is carried into production translation options.
+func TestTraversalPolicyAuthorizesOrientationProbeV2WithoutExecutingV1(t *testing.T) {
+	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) RETURN id(e)"
+	policy := testTraversalPolicy(query, "", true)
+	policy = rewriteTestTraversalPolicyManifest(t, policy, func(manifest *traversalPromotionManifest) {
+		manifest.Candidate = string(optimize.ExpansionSearchPolicyOrientationProbeV2)
+		manifest.SelectorVersion = string(optimize.ExpansionSearchPolicyOrientationProbeV2)
+	})
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+	effective, _ := driver.SchemaManager.effectiveTraversalPolicy(query, pgx.ReadCommitted)
+	options, err := effective.productionOptions(query)
+	require.NoError(t, err)
+	require.True(t, options.EnableExpansionOrientation)
+	require.Equal(t, optimize.ExpansionSearchPolicyOrientationProbeV2, options.ExpansionOrientationPolicy)
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), options.SelectorVersion)
+}
+
+// TestTraversalPolicyExpansionOrientationKillSwitchRequiresNoEvidence verifies
+// rollback changes the cache identity without requiring promotion evidence.
+func TestTraversalPolicyExpansionOrientationKillSwitchRequiresNoEvidence(t *testing.T) {
+	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	require.NoError(t, driver.SetTraversalPolicy(TraversalPolicy{
+		Generation:                  10,
+		DisableExpansionOrientation: true,
+	}))
+	effective, identity := driver.SchemaManager.effectiveTraversalPolicy("MATCH (n) RETURN n", pgx.ReadCommitted)
+	require.True(t, effective.DisableExpansionOrientation)
+	require.Contains(t, identity, "production-policy-")
+	options, err := effective.productionOptions("MATCH (n) RETURN n")
+	require.NoError(t, err)
+	require.False(t, options.EnableExpansionOrientation)
+	require.Equal(t, "expansion-orientation-kill-switch-g10", options.SelectorVersion)
 }
 
 // TestTraversalPolicyGuardedOrientationRequiresExactManifestContract verifies traversal policy guarded orientation requires exact manifest contract behavior.

@@ -347,6 +347,11 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 			return translate.Result{}, "", translateErr
 		}
 		formatted, formatErr := translate.Translated(translated)
+		if formatErr == nil && policy.enabled() {
+			if anchorErr := validateTraversalPromotionSQLAnchor(policy.compiledManifest, formatted); anchorErr != nil {
+				return translate.Result{}, "", anchorErr
+			}
+		}
 		return translated, formatted, formatErr
 	})
 	if err != nil {

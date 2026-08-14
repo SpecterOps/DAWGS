@@ -306,6 +306,12 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		PostgresExpansionOrientationTournament bool `json:"postgres_expansion_orientation_tournament"`
 		// PostgresExpansionOrientationPolicy identifies the postgres expansion orientation policy.
 		PostgresExpansionOrientationPolicy string `json:"postgres_expansion_orientation_policy"`
+		// PostgresExpansionSuffixReverseGuard selects the static guarded suffix-reverse statement.
+		PostgresExpansionSuffixReverseGuard bool `json:"postgres_expansion_suffix_reverse_guard"`
+		// PostgresSuffixGuardSuffixLimit binds the tool-only suffix cap override.
+		PostgresSuffixGuardSuffixLimit int64 `json:"postgres_suffix_guard_suffix_limit"`
+		// PostgresSuffixGuardStateLimit binds the tool-only reverse-state cap override.
+		PostgresSuffixGuardStateLimit int64 `json:"postgres_suffix_guard_state_limit"`
 		// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
 		Discovery bool `json:"discovery"`
 		// TimeoutClasses lists the increasing per-attempt deadlines included in resumable run identity.
@@ -340,6 +346,9 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		PostgresExpansionOrientationShadow:     cfg.PostgresExpansionOrientationShadow,
 		PostgresExpansionOrientationTournament: cfg.PostgresExpansionOrientationTournament,
 		PostgresExpansionOrientationPolicy:     cfg.PostgresExpansionOrientationPolicy,
+		PostgresExpansionSuffixReverseGuard:    cfg.PostgresExpansionSuffixReverseGuard,
+		PostgresSuffixGuardSuffixLimit:         cfg.PostgresSuffixGuardSuffixLimit,
+		PostgresSuffixGuardStateLimit:          cfg.PostgresSuffixGuardStateLimit,
 		Discovery:                              cfg.Discovery,
 		TimeoutClasses:                         append([]time.Duration(nil), cfg.TimeoutClasses...),
 		DiscoverySampleFloor:                   cfg.DiscoverySampleFloor,

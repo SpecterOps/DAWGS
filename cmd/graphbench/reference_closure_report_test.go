@@ -6,9 +6,12 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,26 +103,99 @@ func TestBuildReferenceClosureReportEnforcesProtocolAndExactComparator(t *testin
 	require.ErrorContains(t, err, "lacks carryover-balanced")
 }
 
+func TestBuildReferenceClosureReportBindsCandidateSourceWorkloadAndQuery(t *testing.T) {
+	records := referenceClosureRecords(10, 50, time.Millisecond, time.Millisecond)
+	report, err := buildReferenceClosureReport(records, ReferenceClosureOptions{
+		Seed: 1, Confidence: defaultConfidenceLevel, BootstrapCount: defaultBootstrapCount,
+	})
+	require.NoError(t, err)
+	require.Equal(t, referenceClosureReportVersion, report.Version)
+	require.Equal(t, "candidate", report.Candidate)
+	require.Equal(t, "deadbeef", report.SourceCommit)
+	require.Equal(t, cleanWorkingTreeSHA256(), report.DirtyDiffSHA256)
+	require.Equal(t, strings.Repeat("a", 64), report.BinarySHA256)
+	require.Equal(t, strings.Repeat("a", 64), report.CorpusSHA256)
+	require.Equal(t, defaultBootstrapCount, report.BootstrapCount)
+	require.Len(t, report.Cases, 1)
+	require.Equal(t, "training", report.Cases[0].QualificationSplit)
+	require.Equal(t, strings.Repeat("a", 64), report.Cases[0].WorkloadSHA256)
+	require.True(t, lowercaseSHA256(report.Cases[0].QuerySHA256))
+	require.Len(t, report.Cases[0].ProductionRuntimeReceiptChains, 500)
+}
+
+func TestBuildReferenceClosureReportRejectsIdentityDrift(t *testing.T) {
+	tests := map[string]struct {
+		mutate func([]CaseResult)
+		reason string
+	}{
+		"source": {
+			mutate: func(records []CaseResult) { records[1].Environment.SourceCommit = "other" },
+			reason: "source, binary, or corpus identity changed",
+		},
+		"candidate": {
+			mutate: func(records []CaseResult) { records[1].Optimization.TargetOutcomes[0].Applied = "other" },
+			reason: "production executor identity changed",
+		},
+		"workload": {
+			mutate: func(records []CaseResult) { records[1].WorkloadSHA256 = strings.Repeat("b", 64) },
+			reason: "workload, query, or split identity changed",
+		},
+		"query": {
+			mutate: func(records []CaseResult) { records[1].Cypher += " limit 1" },
+			reason: "workload, query, or split identity changed",
+		},
+		"sql fingerprint": {
+			mutate: func(records []CaseResult) { records[1].SQLFingerprint = strings.Repeat("b", 64) },
+			reason: "lacks exact workload and translated-SQL identity",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			records := referenceClosureRecords(10, 50, time.Millisecond, time.Millisecond)
+			test.mutate(records)
+			_, err := buildReferenceClosureReport(records, ReferenceClosureOptions{Seed: 1, Confidence: defaultConfidenceLevel})
+			require.ErrorContains(t, err, test.reason)
+		})
+	}
+}
+
 // referenceClosureRecords returns carryover-balanced production/reference rounds with exact observations and uniform warm timings.
 func referenceClosureRecords(rounds, samples int, referenceDuration, productionDuration time.Duration) []CaseResult {
 	records := make([]CaseResult, 0, rounds)
+	digest := strings.Repeat("a", 64)
+	cypherQuery := "match p = shortestPath((a)-[:Edge*1..4]->(b)) return length(p)"
+	sqlQuery := "select 1"
 	for round := 1; round <= rounds; round++ {
 		productionOrder, referenceOrder := referenceClosureMeasurementOrder(true, round)
 		record := CaseResult{
-			Dataset:       "fixture",
-			Name:          "distance",
-			ExecutionMode: ModePostgresSQL,
-			Status:        StatusOK,
-			RowCount:      1,
-			ObservedRows:  []string{"[1]"},
+			Dataset:        "fixture",
+			Name:           "distance",
+			ExecutionMode:  ModePostgresSQL,
+			Status:         StatusOK,
+			RowCount:       1,
+			ObservedRows:   []string{"[1]"},
+			WorkloadSHA256: digest,
+			Cypher:         cypherQuery,
+			SQL:            sqlQuery,
+			SQLFingerprint: sqlFingerprint(sqlQuery),
+			Shape:          WorkloadShape{QualificationSplit: "training"},
 			Environment: &RunEnvironment{
-				Round:            round,
-				WarmupIterations: 20,
+				ArtifactSchemaVersion: 2,
+				CorpusSHA256:          digest,
+				SourceCommit:          "deadbeef",
+				DirtyDiffSHA256:       cleanWorkingTreeSHA256(),
+				BinarySHA256:          digest,
+				Round:                 round,
+				WarmupIterations:      20,
 			},
 			RawPGXWaterfall: &PostgresBoundaryWaterfall{
 				WarmupIterations: 20,
 				MeasurementOrder: productionOrder,
+				SQLFingerprint:   sqlFingerprint(sqlQuery),
 			},
+			Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
+				Family: "SP", Applied: "candidate",
+			}}},
 			PostgresReferences: []PostgresReferenceResult{{
 				Name:               "s3_unidirectional_trail_cte",
 				Architecture:       "SP-S3-U-D",
@@ -144,6 +220,13 @@ func referenceClosureRecords(rounds, samples int, referenceDuration, productionD
 				Iteration:      iteration,
 				Classification: "warm",
 				Duration:       referenceDuration,
+			})
+			invocation := fmt.Sprintf("closure-%d-%d", round, iteration)
+			fallback := false
+			record.Stats.Samples = append(record.Stats.Samples, LatencySample{
+				Round: round, Iteration: iteration, Classification: "warm", Duration: productionDuration,
+				RuntimeInvocationID: invocation, RuntimeIdentity: "candidate", RuntimeBranch: "selected", FallbackExecuted: &fallback,
+				RuntimeReceiptEvents: []RuntimeReceiptEvent{{InvocationID: invocation, Ordinal: 1, RuntimeIdentity: "candidate", RuntimeBranch: "selected"}},
 			})
 		}
 		records = append(records, record)

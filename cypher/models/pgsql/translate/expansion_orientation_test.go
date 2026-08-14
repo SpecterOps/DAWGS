@@ -196,8 +196,8 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 	require.Contains(t, formatted, "s5_orientation_boundaries as materialized")
 	require.Contains(t, formatted, "s5_orientation_forward_degree_probe as materialized")
 	require.Contains(t, formatted, "s5_orientation_reverse_degree_probe as materialized")
-	require.Contains(t, formatted, "select true as sampled from s5_orientation_root_probe")
-	require.Contains(t, formatted, "select true as sampled from s5_orientation_boundaries")
+	require.Contains(t, formatted, "select count(*)::int8 as sampled from lateral (select true from s5_orientation_root_probe")
+	require.Contains(t, formatted, "select count(*)::int8 as sampled from lateral (select true from s5_orientation_boundaries")
 	require.Contains(t, formatted, "s5_orientation_metrics as materialized")
 	require.Contains(t, formatted, "s5_orientation_decision as materialized")
 	require.Contains(t, formatted, "s5_orientation_states as materialized")
@@ -215,7 +215,9 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 	require.Contains(t, formatted, "select distinct s5_orientation_suffix_probe.boundary_id as boundary_id")
 	require.Contains(t, formatted, "e3.id != e2.id limit 513")
 	require.Contains(t, formatted, "offset 512 limit 1")
-	require.Contains(t, formatted, "offset 16384 limit 1")
+	require.Contains(t, formatted, "s5_orientation_forward_degree_probe.sampled <= 16384")
+	require.Contains(t, formatted, "s5_orientation_reverse_degree_probe.sampled <= 16384")
+	require.Contains(t, formatted, "from s5_orientation_forward_degree_probe, s5_orientation_reverse_degree_probe")
 	require.Contains(t, formatted, "offset 4096 limit 1")
 	require.Contains(t, formatted, "(s5_orientation_metrics.suffix_rows + s5_orientation_metrics.boundary_rows + s5_orientation_metrics.reverse_degree_rows) * 4 < (s5_orientation_metrics.root_rows + s5_orientation_metrics.forward_degree_rows) * 3")
 	require.Contains(t, formatted, "s5_orientation_admission.use_reverse and not s5_orientation_admission.state_overflow")
@@ -232,6 +234,11 @@ func TestGuardedSuffixOrientationTournamentEmitsBoundedDisjointBranches(t *testi
 	require.Contains(t, formatted, "s5_orientation_reverse_gate.executed offset 0")
 	require.Contains(t, formatted, "s5_orientation_states as materialized (select")
 	require.Contains(t, formatted, "from s5_orientation_reverse_gate join lateral (select s5_orientation_reverse.boundary_id")
+	require.Contains(t, formatted, "s5_orientation_reverse(boundary_id, next_id, depth, path, node_path)")
+	require.Contains(t, formatted, "generate_subscripts(s5_orientation_states.node_path")
+	require.Contains(t, formatted, "generate_subscripts(s5_orientation_states.path")
+	require.Equal(t, 1, strings.Count(formatted, "ordered_edge_ids_to_path("), "only the exact incumbent fallback should retain generic path hydration")
+	require.Contains(t, formatted, "select s5.pc0 as path from s5")
 	guardedSuffixProjection := regexp.MustCompile(`(?s)s5_orientation_suffix_probe as materialized \(select (.*?) from s5_orientation_root_presence`).FindStringSubmatch(formatted)
 	require.Len(t, guardedSuffixProjection, 2)
 	require.Contains(t, guardedSuffixProjection[1], "n1.id as boundary_id")
@@ -284,7 +291,8 @@ func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testi
 		"root_key": "guarded-fixed-suffix-root",
 	}, DefaultGraphID, ProductionOptions{
 		EnableExpansionOrientation: true,
-		SelectorVersion:            "traversal-production-g11",
+		ExpansionOrientationPolicy: optimize.ExpansionSearchPolicyOrientationProbeV1,
+		SelectorVersion:            string(optimize.ExpansionSearchPolicyOrientationProbeV1),
 	})
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
@@ -302,8 +310,31 @@ func TestProductionCanaryExpansionOrientationUsesVersionedGuardedPolicy(t *testi
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.PlannedPolicy)
 	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.EmittedPolicy)
 	require.Equal(t, "production_canary", outcome.SelectionMode)
-	require.Equal(t, "traversal-production-g11", outcome.SelectorVersion)
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV1), outcome.SelectorVersion)
 	require.Equal(t, "guarded_dual_arm", outcome.ExecutionBoundary)
+}
+
+// TestProductionCanaryExpansionOrientationV2PreservesDepthWeightedFormula verifies
+// manifest-authorized v2 reaches SQL generation without being rewritten to v1.
+func TestProductionCanaryExpansionOrientationV2PreservesDepthWeightedFormula(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
+	require.NoError(t, err)
+	translation, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"root_key": "guarded-fixed-suffix-root",
+	}, DefaultGraphID, ProductionOptions{
+		EnableExpansionOrientation: true,
+		ExpansionOrientationPolicy: optimize.ExpansionSearchPolicyOrientationProbeV2,
+		SelectorVersion:            string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+	})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "16 * s5_orientation_metrics.forward_degree_rows")
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 1, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), outcome.EmittedPolicy)
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), outcome.SelectorVersion)
+	require.Equal(t, "production_canary", outcome.SelectionMode)
 }
 
 // TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent verifies suffix orientation shadow emits would select metadata and only incumbent behavior.
@@ -322,8 +353,8 @@ func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *test
 	require.Contains(t, formatted, "s5_orientation_suffix_probe as materialized")
 	require.Contains(t, formatted, "s5_orientation_forward_degree_probe as materialized")
 	require.Contains(t, formatted, "s5_orientation_reverse_degree_probe as materialized")
-	require.Contains(t, formatted, "select true as sampled from s5_orientation_root_probe")
-	require.Contains(t, formatted, "select true as sampled from s5_orientation_boundaries")
+	require.Contains(t, formatted, "select count(*)::int8 as sampled from lateral (select true from s5_orientation_root_probe")
+	require.Contains(t, formatted, "select count(*)::int8 as sampled from lateral (select true from s5_orientation_boundaries")
 	require.Contains(t, formatted, "s5_orientation_metrics as materialized")
 	require.Contains(t, formatted, "s5_orientation_decision as materialized")
 	require.Contains(t, formatted, "as would_select_reverse")
@@ -337,16 +368,17 @@ func TestSuffixOrientationShadowEmitsWouldSelectMetadataAndOnlyIncumbent(t *test
 	require.Contains(t, formatted, "limit 513")
 	require.Contains(t, formatted, "limit 16385")
 	require.Contains(t, formatted, "offset 512 limit 1")
-	require.Contains(t, formatted, "offset 16384 limit 1")
+	require.Contains(t, formatted, "s5_orientation_forward_degree_probe.sampled <= 16384")
+	require.Contains(t, formatted, "s5_orientation_reverse_degree_probe.sampled <= 16384")
 	require.NotContains(t, formatted, "s5_orientation_states")
 	require.NotContains(t, formatted, "s5_orientation_reverse(boundary_id")
 	require.NotContains(t, formatted, "limit 4097")
-	forwardDegreeProjection := regexp.MustCompile(`(?s)s5_orientation_forward_degree_probe as materialized \(select (.*?) from s5_orientation_root_probe`).FindStringSubmatch(formatted)
+	forwardDegreeProjection := regexp.MustCompile(`(?s)s5_orientation_forward_degree_probe as materialized \(select (.*?) from lateral \(select true from s5_orientation_root_probe`).FindStringSubmatch(formatted)
 	require.Len(t, forwardDegreeProjection, 2)
-	require.Equal(t, "true as sampled", forwardDegreeProjection[1])
-	reverseDegreeProjection := regexp.MustCompile(`(?s)s5_orientation_reverse_degree_probe as materialized \(select (.*?) from s5_orientation_boundaries`).FindStringSubmatch(formatted)
+	require.Equal(t, "count(*)::int8 as sampled", forwardDegreeProjection[1])
+	reverseDegreeProjection := regexp.MustCompile(`(?s)s5_orientation_reverse_degree_probe as materialized \(select (.*?) from lateral \(select true from s5_orientation_boundaries`).FindStringSubmatch(formatted)
 	require.Len(t, reverseDegreeProjection, 2)
-	require.Equal(t, "true as sampled", reverseDegreeProjection[1])
+	require.Equal(t, "count(*)::int8 as sampled", reverseDegreeProjection[1])
 	suffixProjection := regexp.MustCompile(`(?s)s5_orientation_suffix_probe as materialized \(select (.*?) from s5_orientation_root_presence`).FindStringSubmatch(formatted)
 	require.Len(t, suffixProjection, 2)
 	require.Equal(t, "n1.id as boundary_id", suffixProjection[1])

@@ -243,6 +243,42 @@ func TestGeneratedShortestDistanceCorpusCoversQualificationEnvelope(t *testing.T
 	}
 }
 
+func TestSPInlineDistanceCorpusCoversProductionNoPath(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	found := false
+	for _, testCase := range corpus.Cases {
+		if !slices.Contains(testCase.Tags, "sp-i2") || !slices.Contains(testCase.Tags, "disconnected") {
+			continue
+		}
+		require.Equal(t, "inbound", testCase.Shape.Direction)
+		require.Contains(t, testCase.Tags, "distance")
+		require.Equal(t, 1, testCase.Shape.RelationshipKindCount)
+		require.False(t, testCase.Shape.PathMaterializationRequired)
+		require.Equal(t, "empty", testCase.Shape.ResultCardinalityClass)
+		found = true
+	}
+	require.True(t, found, "SP-I2 corpus is missing an inbound typed no-path case")
+}
+
+func TestFixedSuffixV2SparsePathHasStableOracle(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	var testCase ScaleCase
+	for _, candidate := range corpus.Cases {
+		if candidate.Name == "GFSE-V2-D16-F1000-R1-X1-M1-sparse_path" {
+			testCase = candidate
+			break
+		}
+	}
+	require.NotEmpty(t, testCase.Name)
+	require.Equal(t, "path_set", testCase.Expected.ResultKind)
+	require.Len(t, testCase.Expected.PathRows, 2)
+	require.True(t, newCaseResult(testCase, ModePostgresSQL, testCase.Params).StableObservation)
+}
+
 // TestGeneratedShortestPathCorpusCoversMaterializerEnvelope verifies hydrated-path cases spanning deep, wide, inbound, zero-depth, disconnected, cyclic, parallel-edge, and self-loop shapes.
 func TestGeneratedShortestPathCorpusCoversMaterializerEnvelope(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
@@ -632,6 +668,80 @@ func TestGeneratedSPI1InboundV1CorpusFreezesTrainingAndUnopenedHoldoutMatrices(t
 	require.Equal(t, "31f6041f342b3ed8059d4d1396a76f073c3fc877472d06632a8bad16b5a4cbfd", confirmationSelection.DeclarationSHA256)
 	require.Equal(t, "16a8756a7c32695f0314b3552c80d2a500226c7a44c57847c916a96e775aa0c5", resolvedSelectionSHA256(confirmationSelection.Resolved))
 	require.Equal(t, "219ee26cae52d8b81c6c91f9c517692c544ef4cec1aa9b9314fbc4e8f5ad3c5c", spI1InboundRuntimeCorpusIdentity(confirmation))
+}
+
+func TestGeneratedSPI2DistanceV1CorpusFreezesProtectedCohort(t *testing.T) {
+	const query = "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p)"
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	seen := map[string]bool{}
+	trainingDepths, holdoutDepths := map[int]bool{}, map[int]bool{}
+	trainingCount, holdoutCount := 0, 0
+	for _, testCase := range corpus.Cases {
+		training := slices.Contains(testCase.Tags, spI2TrainingTag)
+		holdout := slices.Contains(testCase.Tags, spI2HoldoutTag)
+		if !training && !holdout {
+			continue
+		}
+		require.NotEqual(t, training, holdout, testCase.Name)
+		require.False(t, seen[testCase.Name], testCase.Name)
+		seen[testCase.Name] = true
+		require.True(t, strings.HasSuffix(testCase.Source, "/cases/generated_sp_i2_distance_v1.json"), testCase.Name)
+		require.Equal(t, query, testCase.Cypher, testCase.Name)
+		require.Equal(t, spI2QuerySHA256, pg.TraversalPolicyQuerySHA256(testCase.Cypher), testCase.Name)
+		require.Equal(t, ObservedValues{}, testCase.Observes, testCase.Name)
+		require.Equal(t, []ExecutionMode{ModePostgresSQL, ModeNeo4j}, testCase.CandidateModes, testCase.Name)
+		require.Equal(t, "forbidden", testCase.Shape.FallbackExpectation, testCase.Name)
+		require.Equal(t, "inbound", testCase.Shape.Direction, testCase.Name)
+		require.Equal(t, []string{"Traverse"}, testCase.Shape.EdgeKinds, testCase.Name)
+		require.Equal(t, 1, testCase.Shape.RelationshipKindCount, testCase.Name)
+		require.NotNil(t, testCase.Shape.MinDepth, testCase.Name)
+		require.NotNil(t, testCase.Shape.MaxDepth, testCase.Name)
+		require.Equal(t, 1, *testCase.Shape.MinDepth, testCase.Name)
+		require.Equal(t, 64, *testCase.Shape.MaxDepth, testCase.Name)
+		require.False(t, testCase.Shape.PathMaterializationRequired, testCase.Name)
+		require.NotNil(t, testCase.Expected.RowCount, testCase.Name)
+		require.Equal(t, "scalar", testCase.Expected.ResultKind, testCase.Name)
+
+		config, ok := parseShortestPathV2DatasetName(testCase.Dataset)
+		require.True(t, ok, testCase.Name)
+		metadata, err := fixtureMetadata("unused", testCase.Dataset)
+		require.NoError(t, err, testCase.Name)
+		require.True(t, lowercaseSHA256(metadata.Checksum), testCase.Name)
+		if training {
+			trainingCount++
+			trainingDepths[config.Depth] = true
+			require.Equal(t, "training", testCase.Shape.QualificationSplit, testCase.Name)
+		} else {
+			holdoutCount++
+			holdoutDepths[config.Depth] = true
+			require.Equal(t, "holdout", testCase.Shape.QualificationSplit, testCase.Name)
+		}
+	}
+	require.Len(t, seen, 10)
+	require.Equal(t, 6, trainingCount)
+	require.Equal(t, 4, holdoutCount)
+	require.Equal(t, map[int]bool{3: true, 6: true, 8: true, 16: true}, trainingDepths)
+	require.Equal(t, map[int]bool{5: true, 13: true, 21: true}, holdoutDepths)
+	for depth := range holdoutDepths {
+		require.False(t, trainingDepths[depth], "holdout depth %d is present in training", depth)
+	}
+	require.Len(t, spI2CanonicalCases, len(seen))
+
+	training, trainingSelection, err := selectScaleCorpus(corpus, CorpusSelectors{Tags: []string{spI2TrainingTag}})
+	require.NoError(t, err)
+	require.Len(t, training.Cases, 6)
+	require.Equal(t, "32053ee421c155d9d2f2c55bb2dbb56aa1df2fb7b227b2639ecdf36d789146f3", trainingSelection.DeclarationSHA256)
+	require.Equal(t, spI2TrainingResolvedSHA, resolvedSelectionSHA256(trainingSelection.Resolved))
+	require.Equal(t, spI2TrainingCorpusSHA256, corpusIdentity(training))
+
+	confirmation, fullSelection, err := selectScaleCorpus(corpus, CorpusSelectors{Tags: []string{spI2TrainingTag, spI2HoldoutTag}})
+	require.NoError(t, err)
+	require.Len(t, confirmation.Cases, 10)
+	require.Equal(t, "3b63388e19beaebc1f621e944e53a4377430aa928bada3a8afe18d636138e3e9", fullSelection.DeclarationSHA256)
+	require.Equal(t, spI2FullResolvedSHA, resolvedSelectionSHA256(fullSelection.Resolved))
+	require.Equal(t, spI2FullCorpusSHA256, corpusIdentity(confirmation))
 }
 
 // spI1InboundFixtureConfig prepares or inspects test evidence for sp i1 inbound fixture config.

@@ -79,10 +79,10 @@ const (
 	defaultShortestPathExpansionDepth int64 = 15
 
 	// defaultShortestPathStateLimit caps intermediate states admitted by guarded experimental executors.
-	defaultShortestPathStateLimit int64 = 100_000
+	defaultShortestPathStateLimit int64 = ShortestPathI2QualifiedStateLimit
 
 	// defaultShortestPathFrontierLimit independently caps queued/current frontier state.
-	defaultShortestPathFrontierLimit int64 = 100_000
+	defaultShortestPathFrontierLimit int64 = ShortestPathI2QualifiedFrontierLimit
 
 	// defaultShortestPathPredecessorLimit independently caps retained witness predecessors.
 	defaultShortestPathPredecessorLimit int64 = 100_000
@@ -1004,10 +1004,15 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				}
 				maxDepth := defaultShortestPathExpansionDepth
 				boundedDepth := step.Relationship.Range.EndIndex != nil
+				maximumDepthSource := ShortestPathMaximumDepthPolicyDefault
 				if boundedDepth {
 					maxDepth = *step.Relationship.Range.EndIndex
+					maximumDepthSource = ShortestPathMaximumDepthExplicit
 				}
-				supportedDepth := (boundedDepth || patternPart.AllShortestPathsPattern) && (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
+				// PostgreSQL already caps syntax-open recursive traversal at
+				// defaultShortestPathExpansionDepth. Preserve that public behavior
+				// while allowing the same effective finite bound to use S3/S4.
+				supportedDepth := (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
 				directionSupported := step.Relationship.Direction != graph.DirectionBoth
 				relationshipVariableObserved := step.Relationship.Variable != nil && referencesSourceIdentifier(sourceReferences, step.Relationship.Variable.Symbol)
 				noRelationshipVariable := step.Relationship.Variable == nil || (patternPart.AllShortestPathsPattern && !relationshipVariableObserved)
@@ -1126,6 +1131,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					ShortestPathExecutorS4CanonicalDistance,
 					ShortestPathExecutorS4CanonicalWitness,
 					ShortestPathExecutorI1CanonicalDistance,
+					ShortestPathExecutorI2GuardedDistance,
 					ShortestPathExecutorI1CanonicalWitness,
 					ShortestPathExecutorI1CanonicalPredecessorWitness,
 					ShortestPathExecutorB1AlternatingNodeDistance,
@@ -1164,6 +1170,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					StaticallyEligible:     false,
 					MinimumDepth:           minDepth,
 					MaximumDepth:           maxDepth,
+					MaximumDepthSource:     maximumDepthSource,
 					StateLimit:             defaultShortestPathStateLimit,
 					FrontierLimit:          defaultShortestPathFrontierLimit,
 					PredecessorLimit:       defaultShortestPathPredecessorLimit,
@@ -1253,6 +1260,7 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 
 	for idx := range plan.ShortestPathExecutor {
 		decision := &plan.ShortestPathExecutor[idx]
+		implicitMaximum := decision.MaximumDepthSource == ShortestPathMaximumDepthPolicyDefault
 		singlePathCall := shortestCalls == 1
 		readOnly := updatingClauses == 0
 		setShortestPathEligibilityFact(decision, "single_path_call", singlePathCall)
@@ -1302,6 +1310,9 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 				}
 				decision.SelectionMode = "static"
 				decision.SelectorVersion = "sp-static-v5-contained"
+				if implicitMaximum {
+					decision.SelectorVersion = ShortestPathSelectorStaticV7Contained
+				}
 				decision.StaticallyEligible = true
 				decision.FallbackReason = ""
 				decision.ExperimentalWinner = true
@@ -1312,6 +1323,9 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 					decision.SelectedExecutor = ShortestPathExecutorS4CanonicalWitness
 					decision.SelectionMode = "static"
 					decision.SelectorVersion = "sp-static-v5-contained"
+					if implicitMaximum {
+						decision.SelectorVersion = ShortestPathSelectorStaticV7Contained
+					}
 					decision.StaticallyEligible = true
 					decision.FallbackReason = ""
 					decision.ExperimentalWinner = true
@@ -1333,6 +1347,9 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 				decision.SelectorVersion = "sp-static-v5-contained"
 			default:
 				continue
+			}
+			if implicitMaximum {
+				decision.SelectorVersion = ShortestPathSelectorStaticV7Contained
 			}
 			decision.SelectionMode = "static"
 			decision.FallbackReason = ""

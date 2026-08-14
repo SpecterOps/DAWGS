@@ -252,7 +252,7 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	}
 
 	t.Run("driver policy requires stable snapshot and rolls back immediately", func(t *testing.T) {
-		policy := inlineASPTraversalPolicy(t, inlineASPCypher)
+		policy := inlineASPTraversalPolicy(t, pgDriver, defaultGraph.ID, inlineASPCypher, parameters)
 		if err := pgDriver.SetTraversalPolicy(policy); err != nil {
 			t.Fatalf("set inline ASP policy: %v", err)
 		}
@@ -333,7 +333,7 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		const shortestCypher = `MATCH p = shortestPath((s)<-[:InlineASPEdgeOne*1..64]-(e))
 			WHERE id(s) = $start_id AND id(e) = $end_id RETURN p`
 		parameters := map[string]any{"start_id": int64(deepEndID), "end_id": int64(deepStartID)}
-		policy := inlineCanonicalSPTraversalPolicy(t, shortestCypher)
+		policy := inlineCanonicalSPTraversalPolicy(t, pgDriver, defaultGraph.ID, shortestCypher, parameters)
 		if err := pgDriver.SetTraversalPolicy(policy); err != nil {
 			t.Fatalf("set canonical SP policy: %v", err)
 		}
@@ -376,20 +376,40 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 }
 
 // inlineASPTraversalPolicy prepares or inspects test evidence for inline asp traversal policy.
-func inlineASPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
+func inlineASPTraversalPolicy(t *testing.T, pgDriver *pg.Driver, graphID int32, query string, parameters map[string]any) pg.TraversalPolicy {
 	t.Helper()
 	queryDigest := pg.TraversalPolicyQuerySHA256(query)
+	productionOptions := translate.ProductionOptions{
+		ShortestPathExecutor: optimize.ShortestPathExecutorASPI1DAG,
+		ShortestPathCaps: &translate.ProductionShortestPathCaps{
+			StateLimit:       1000,
+			PredecessorLimit: 1000,
+			EnumerationLimit: 1000,
+			OutputBytesLimit: 1 << 20,
+		},
+		AuthorizedBucket: &translate.ProductionTraversalBucket{
+			Direction:             "outbound",
+			ObservationMode:       "all_paths",
+			MinimumDepth:          1,
+			MaximumDepth:          4,
+			RelationshipKindCount: 2,
+			UntypedRelationship:   false,
+		},
+		SelectorVersion: "asp-i1-driver-integration-v1",
+	}
 	evidence := map[string]map[string]string{}
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
-		evidence[role] = map[string]string{"sha256": strings.Repeat("01", sha256.Size)}
+		evidence[role] = map[string]string{"path": role + ".json", "sha256": strings.Repeat("01", sha256.Size)}
 	}
 	raw, err := json.Marshal(map[string]any{
 		"version": 2, "candidate": string(optimize.ShortestPathExecutorASPI1DAG), "selector_version": "asp-i1-driver-integration-v1",
 		"source_commit": "integration", "source_sha256": strings.Repeat("0", 64),
 		"binary_sha256": strings.Repeat("0", 64), "corpus_sha256": strings.Repeat("0", 64),
-		"execution_boundary": "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorASPA1DAG),
+		"operational_candidate_sql_sha256": inlineProductionSQLSHA256(t, pgDriver, graphID, query, parameters, productionOptions),
+		"execution_boundary":               "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorASPA1DAG),
 		"caps": map[string]int64{"state_limit": 1000, "predecessor_limit": 1000, "enumeration_limit": 1000, "output_bytes_limit": 1 << 20},
 		"buckets": []map[string]any{{
+			"name":         "inline-asp-integration",
 			"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"},
 			"direction": "outbound", "observation_mode": "all_paths", "minimum_depth": 1, "maximum_depth": 4,
 			"relationship_kind_count": 2, "untyped_relationship": false,
@@ -410,20 +430,40 @@ func inlineASPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
 }
 
 // inlineCanonicalSPTraversalPolicy prepares or inspects test evidence for inline canonical sp traversal policy.
-func inlineCanonicalSPTraversalPolicy(t *testing.T, query string) pg.TraversalPolicy {
+func inlineCanonicalSPTraversalPolicy(t *testing.T, pgDriver *pg.Driver, graphID int32, query string, parameters map[string]any) pg.TraversalPolicy {
 	t.Helper()
 	queryDigest := pg.TraversalPolicyQuerySHA256(query)
+	productionOptions := translate.ProductionOptions{
+		ShortestPathExecutor: optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+		ShortestPathCaps: &translate.ProductionShortestPathCaps{
+			StateLimit:       1000,
+			PredecessorLimit: 1000,
+			EnumerationLimit: 1000,
+			OutputBytesLimit: 1 << 20,
+		},
+		AuthorizedBucket: &translate.ProductionTraversalBucket{
+			Direction:             "inbound",
+			ObservationMode:       "one_path",
+			MinimumDepth:          1,
+			MaximumDepth:          64,
+			RelationshipKindCount: 1,
+			UntypedRelationship:   false,
+		},
+		SelectorVersion: optimize.ShortestPathSelectorStaticV6,
+	}
 	evidence := map[string]map[string]string{}
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
-		evidence[role] = map[string]string{"sha256": strings.Repeat("01", sha256.Size)}
+		evidence[role] = map[string]string{"path": role + ".json", "sha256": strings.Repeat("01", sha256.Size)}
 	}
 	raw, err := json.Marshal(map[string]any{
 		"version": 2, "candidate": string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness), "selector_version": optimize.ShortestPathSelectorStaticV6,
 		"source_commit": "integration", "source_sha256": strings.Repeat("0", 64),
 		"binary_sha256": strings.Repeat("0", 64), "corpus_sha256": strings.Repeat("0", 64),
-		"execution_boundary": "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorS4CanonicalWitness),
+		"operational_candidate_sql_sha256": inlineProductionSQLSHA256(t, pgDriver, graphID, query, parameters, productionOptions),
+		"execution_boundary":               "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorS4CanonicalWitness),
 		"caps": map[string]int64{"state_limit": 1000, "predecessor_limit": 1000, "enumeration_limit": 1000, "output_bytes_limit": 1 << 20},
 		"buckets": []map[string]any{{
+			"name":         "inline-canonical-sp-integration",
 			"query_sha256": []string{queryDigest}, "qualification_split": []string{"training", "holdout"},
 			"direction": "inbound", "observation_mode": "one_path", "minimum_depth": 1, "maximum_depth": 64,
 			"relationship_kind_count": 1, "untyped_relationship": false,
@@ -441,6 +481,26 @@ func inlineCanonicalSPTraversalPolicy(t *testing.T, query string) pg.TraversalPo
 		QuerySHA256Allowlist:    []string{queryDigest},
 		ShortestPathExecutor:    optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 	}
+}
+
+// inlineProductionSQLSHA256 renders the exact production candidate statement
+// bound by an integration-test promotion manifest.
+func inlineProductionSQLSHA256(t *testing.T, pgDriver *pg.Driver, graphID int32, query string, parameters map[string]any, options translate.ProductionOptions) string {
+	t.Helper()
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), query)
+	if err != nil {
+		t.Fatalf("parse production candidate query: %v", err)
+	}
+	translation, err := translate.TranslateWithProductionOptions(t.Context(), regularQuery, pgDriver.KindMapper(), parameters, graphID, options)
+	if err != nil {
+		t.Fatalf("translate production candidate query: %v", err)
+	}
+	sqlQuery, err := translate.Translated(translation)
+	if err != nil {
+		t.Fatalf("render production candidate query: %v", err)
+	}
+	digest := sha256.Sum256([]byte(sqlQuery))
+	return hex.EncodeToString(digest[:])
 }
 
 // explainInlineASPTranslation prepares or inspects test evidence for explain inline asp translation.

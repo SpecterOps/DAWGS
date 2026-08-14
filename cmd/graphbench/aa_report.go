@@ -18,8 +18,12 @@ import (
 	"time"
 )
 
-// aaReportVersion identifies the serialized schema revision for A/A report.
-const aaReportVersion = 3
+const (
+	// aaReportVersion identifies the serialized schema revision for A/A report.
+	aaReportVersion = 4
+	// aaPhysicalChronologyVersion identifies process-interval chronology proof.
+	aaPhysicalChronologyVersion = 1
+)
 
 // AAMetricResolution captures relative and absolute within-arm noise for one latency quantile.
 type AAMetricResolution struct {
@@ -62,6 +66,23 @@ type AAResolutionCase struct {
 	P99Reason string `json:"p99_reason,omitempty"`
 }
 
+// AAPhysicalChronology records that the report builder validated the physical
+// process intervals in the immutable A/A source artifacts, rather than only
+// accepting their round and arm-order labels.
+type AAPhysicalChronology struct {
+	// Version identifies the chronology-validation contract.
+	Version int `json:"version"`
+	// Validated reports that all arm and round intervals passed validation.
+	Validated bool `json:"validated"`
+	// ArtifactSHA256 binds this proof to the same immutable artifact set as the
+	// statistical report.
+	ArtifactSHA256 string `json:"artifact_sha256"`
+	// Rounds records the contiguous physically validated round count.
+	Rounds int `json:"rounds"`
+	// Arms records the two explicit arm identities in stable order.
+	Arms []string `json:"arms"`
+}
+
 // AAResolutionReport contains per-case A/A noise floors and the artifact identity used to derive them.
 type AAResolutionReport struct {
 	// Version identifies the serialized schema revision.
@@ -80,6 +101,9 @@ type AAResolutionReport struct {
 	MinimumSamplesPerArmPerRound int `json:"minimum_samples_per_arm_per_round"`
 	// OrderBalanced reports that the two explicitly executed A/A arms have complementary balanced first position.
 	OrderBalanced bool `json:"order_balanced"`
+	// PhysicalChronology proves that source process timestamps follow those
+	// balanced labels without arm or round overlap.
+	PhysicalChronology *AAPhysicalChronology `json:"physical_chronology"`
 	// MinimumP99SamplesPerArm sets the per-arm sample floor required before P99 gating.
 	MinimumP99SamplesPerArm int `json:"minimum_p99_samples_per_arm"`
 	// Cases contains per-workload A/A noise estimates and resolution thresholds.
@@ -103,6 +127,10 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 	}
 
 	all, err := collectExplicitAASeries(records)
+	if err != nil {
+		return AAResolutionReport{}, err
+	}
+	physicalChronology, err := validateAAPhysicalChronology(records)
 	if err != nil {
 		return AAResolutionReport{}, err
 	}
@@ -130,6 +158,7 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 		MinimumRounds:                minimumGateRounds,
 		MinimumSamplesPerArmPerRound: 10,
 		OrderBalanced:                true,
+		PhysicalChronology:           physicalChronology,
 		MinimumP99SamplesPerArm:      10_000,
 	}
 	for idx, key := range keys {
@@ -189,6 +218,150 @@ func buildAAResolutionReport(records []CaseResult, options PerfGateOptions) (AAR
 	}
 
 	return report, nil
+}
+
+// aaPhysicalInvocationIdentity binds one A/A arm to the GraphBench process
+// interval that executed the complete selected cohort for one round.
+type aaPhysicalInvocationIdentity struct {
+	round     int
+	block     int
+	order     int
+	arm       string
+	runUUID   string
+	startedAt time.Time
+	endedAt   time.Time
+}
+
+// validateAAPhysicalChronology verifies the process intervals behind an A/A
+// report. Every arm/round must execute the same exact cohort in one process;
+// declared arm order and round order must agree with non-overlapping timestamps.
+func validateAAPhysicalChronology(records []CaseResult) (*AAPhysicalChronology, error) {
+	invocations := map[string]map[int]aaPhysicalInvocationIdentity{}
+	cases := map[string]map[int]map[performanceKey]struct{}{}
+	expectedKeys := map[performanceKey]struct{}{}
+
+	for _, record := range records {
+		if record.Status != StatusOK || record.ExecutionMode != ModePostgresSQL || !hasWarmLatencySample(record) {
+			continue
+		}
+		if record.Environment == nil {
+			return nil, fmt.Errorf("%s/%s A/A record lacks physical invocation chronology", record.Dataset, record.Name)
+		}
+		environment := record.Environment
+		identity := aaPhysicalInvocationIdentity{
+			round:     environment.Round,
+			block:     environment.Block,
+			order:     environment.ArmOrder,
+			arm:       environment.Arm,
+			runUUID:   environment.RunUUID,
+			startedAt: environment.StartedAt,
+			endedAt:   environment.EndedAt,
+		}
+		if identity.round < 1 || identity.block != identity.round {
+			return nil, fmt.Errorf("%s/%s A/A arm requires block equal to round", record.Dataset, record.Name)
+		}
+		if identity.arm == "" || identity.arm == "unlabeled" || identity.order < 1 || identity.order > 2 || strings.TrimSpace(identity.runUUID) == "" {
+			return nil, fmt.Errorf("%s/%s A/A record has malformed physical arm metadata", record.Dataset, record.Name)
+		}
+		if identity.startedAt.IsZero() || identity.endedAt.IsZero() || identity.endedAt.Before(identity.startedAt) {
+			return nil, fmt.Errorf("%s/%s A/A arm %q round %d has malformed invocation timestamps", record.Dataset, record.Name, identity.arm, identity.round)
+		}
+		for _, sample := range record.Stats.Samples {
+			if sample.Classification != "warm" || sample.Duration <= 0 {
+				continue
+			}
+			if sample.Round != identity.round || sample.Block != identity.block || sample.Arm != identity.arm ||
+				sample.ArmOrder != identity.order || sample.RunUUID != identity.runUUID {
+				return nil, fmt.Errorf("%s/%s A/A warm sample is outside its physical arm invocation", record.Dataset, record.Name)
+			}
+		}
+
+		key := performanceKey{dataset: record.Dataset, name: record.Name, backend: record.ExecutionMode}
+		expectedKeys[key] = struct{}{}
+		if invocations[identity.arm] == nil {
+			invocations[identity.arm] = map[int]aaPhysicalInvocationIdentity{}
+			cases[identity.arm] = map[int]map[performanceKey]struct{}{}
+		}
+		if prior, found := invocations[identity.arm][identity.round]; found && prior != identity {
+			return nil, fmt.Errorf("A/A arm %q round %d mixes invocation identities across the selected cohort", identity.arm, identity.round)
+		}
+		invocations[identity.arm][identity.round] = identity
+		if cases[identity.arm][identity.round] == nil {
+			cases[identity.arm][identity.round] = map[performanceKey]struct{}{}
+		}
+		if _, duplicate := cases[identity.arm][identity.round][key]; duplicate {
+			return nil, fmt.Errorf("A/A arm %q round %d duplicates case %s/%s", identity.arm, identity.round, key.dataset, key.name)
+		}
+		cases[identity.arm][identity.round][key] = struct{}{}
+	}
+
+	if len(invocations) != 2 || len(expectedKeys) == 0 {
+		return nil, fmt.Errorf("A/A physical chronology requires exactly two explicit arms over a nonempty cohort")
+	}
+	armNames := make([]string, 0, 2)
+	for arm := range invocations {
+		armNames = append(armNames, arm)
+	}
+	sort.Strings(armNames)
+	rounds := len(invocations[armNames[0]])
+	if rounds < minimumGateRounds || len(invocations[armNames[1]]) != rounds {
+		return nil, fmt.Errorf("A/A physical chronology does not contain one complete matched round schedule")
+	}
+
+	firstArmFirst := 0
+	runUUID := ""
+	var priorEnded time.Time
+	for round := 1; round <= rounds; round++ {
+		left, leftFound := invocations[armNames[0]][round]
+		right, rightFound := invocations[armNames[1]][round]
+		if !leftFound || !rightFound {
+			return nil, fmt.Errorf("A/A physical chronology must use contiguous rounds starting at 1")
+		}
+		for _, arm := range armNames {
+			current := invocations[arm][round]
+			if current.block != round {
+				return nil, fmt.Errorf("A/A round %d requires block equal to round", round)
+			}
+			if len(cases[arm][round]) != len(expectedKeys) {
+				return nil, fmt.Errorf("A/A arm %q round %d does not contain the exact selected cohort", arm, round)
+			}
+			for key := range expectedKeys {
+				if _, found := cases[arm][round][key]; !found {
+					return nil, fmt.Errorf("A/A arm %q round %d does not contain the exact selected cohort", arm, round)
+				}
+			}
+			if runUUID == "" {
+				runUUID = current.runUUID
+			} else if runUUID != current.runUUID {
+				return nil, fmt.Errorf("A/A physical chronology mixes run UUIDs across arms or rounds")
+			}
+		}
+		if !((left.order == 1 && right.order == 2) || (left.order == 2 && right.order == 1)) {
+			return nil, fmt.Errorf("A/A round %d lacks one complete physical two-arm order", round)
+		}
+		first, second := left, right
+		if right.order == 1 {
+			first, second = right, left
+		} else {
+			firstArmFirst++
+		}
+		if first.endedAt.After(second.startedAt) {
+			return nil, fmt.Errorf("A/A round %d arm timestamps contradict the declared execution order", round)
+		}
+		if !priorEnded.IsZero() && priorEnded.After(first.startedAt) {
+			return nil, fmt.Errorf("A/A round %d overlaps or predates the prior round", round)
+		}
+		priorEnded = second.endedAt
+	}
+	if secondArmFirst := rounds - firstArmFirst; firstArmFirst-secondArmFirst > 1 || secondArmFirst-firstArmFirst > 1 {
+		return nil, fmt.Errorf("A/A physical arm order is not balanced: %d/%d", firstArmFirst, secondArmFirst)
+	}
+	return &AAPhysicalChronology{
+		Version:   aaPhysicalChronologyVersion,
+		Validated: true,
+		Rounds:    rounds,
+		Arms:      armNames,
+	}, nil
 }
 
 // collectExplicitAASeries requires two independently executed arms with
@@ -359,6 +532,7 @@ func createAAResolutionReport(artifactPaths []string, outputPath string, options
 		return err
 	}
 	report.ArtifactSHA256 = artifactSHA256
+	report.PhysicalChronology.ArtifactSHA256 = artifactSHA256
 	return writeAAResolutionReport(outputPath, report)
 }
 

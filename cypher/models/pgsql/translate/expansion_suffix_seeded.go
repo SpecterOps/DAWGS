@@ -70,6 +70,25 @@ func selectedGuardedFixedSuffixDecision(part *PatternPart, decisions map[optimiz
 	return optimize.ExpansionSearchStrategyDecision{}, false
 }
 
+// selectedSuffixReverseGuardDecision returns the statically selected,
+// full-path-only suffix reverse guard without conflating it with an orientation
+// policy. Runtime admission still chooses between exact reverse and exact
+// stepwise-forward execution.
+func selectedSuffixReverseGuardDecision(part *PatternPart, decisions map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision) (optimize.ExpansionSearchStrategyDecision, bool) {
+	for _, step := range part.TraversalSteps {
+		if step == nil || !step.HasSourceTarget {
+			continue
+		}
+		if decision, found := decisions[step.SourceTarget]; found &&
+			decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseGuardV1 &&
+			decision.ObservationMode == optimize.ExpansionSearchObservationFullPath {
+			return decision, true
+		}
+	}
+
+	return optimize.ExpansionSearchStrategyDecision{}, false
+}
+
 // rewriteTraversalPatternAsSuffixSeededReverse replaces a qualified incumbent frame chain with fixed-suffix reverse search.
 func (s *Translator) rewriteTraversalPatternAsSuffixSeededReverse(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
 	if len(part.TraversalSteps) != decision.SuffixEndStep+1 || decision.SuffixLength != 3 || decision.Target.StepIndex != 0 {
@@ -107,6 +126,11 @@ func (s *Translator) rewriteTraversalPatternAsSuffixSeededReverse(part *PatternP
 	suffixSeededQuery, err := s.buildSuffixSeededReverseQuery(part, decision, expansionStep, suffix, rootFrame, ids, finalSelect.Projection)
 	if err != nil {
 		return err
+	}
+	if part.PatternBinding != nil {
+		part.PatternBinding.DataType = pgsql.PathComposite
+		part.PatternBinding.Dependencies = nil
+		part.PatternBinding.MaterializedBy(suffix[len(suffix)-1].Frame)
 	}
 
 	replacement := pgsql.CommonTableExpression{
@@ -186,6 +210,12 @@ func (s *Translator) rewriteTraversalPatternAsGuardedSuffixOrientation(part *Pat
 	if err != nil {
 		return err
 	}
+	materializedCandidatePath := decision.SelectionMode != "shadow_tool" && part.PatternBinding != nil
+	if materializedCandidatePath {
+		part.PatternBinding.DataType = pgsql.PathComposite
+		part.PatternBinding.Dependencies = nil
+		part.PatternBinding.MaterializedBy(suffix[len(suffix)-1].Frame)
+	}
 
 	s.query.CurrentPart().Model.CommonTableExpressions.Expressions = append(ctes[:firstCTE], pgsql.CommonTableExpression{
 		Alias: incumbentFinal.Alias,
@@ -257,7 +287,7 @@ func (s *Translator) buildShadowSuffixOrientationQuery(
 		return pgsql.Query{}, err
 	}
 	shadowMarkers := buildExpansionOrientationShadowMarkers(ids)
-	incumbent, incumbentOutput, err := buildExpansionOrientationIncumbentCTE(ids, incumbentChain, incumbentFinal, incumbentProjection)
+	incumbent, incumbentOutput, err := buildExpansionOrientationIncumbentCTE(ids, incumbentChain, incumbentFinal, incumbentProjection, nil)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
@@ -362,20 +392,38 @@ func (s *Translator) buildGuardedSuffixOrientationQuery(
 	reverseSeed := buildExpansionOrientationReverseSeed(ids)
 	reverseIDs := suffixIDs
 	reverseIDs.boundaries = ids.reverseSeed
-	reverse, err := buildSuffixSeededReverseCTE(expansionStep, decision, reverseIDs, "", "")
+	materializeOrderedPath := part.PatternBinding != nil
+	reverse, err := buildSuffixSeededReverseCTE(expansionStep, decision, reverseIDs, "", "", materializeOrderedPath)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
-	states := expansionOrientationStateProbe(decision, ids)
+	states := expansionOrientationStateProbe(decision, ids, materializeOrderedPath)
 	admission := buildExpansionOrientationAdmission(ids, decision.Admission.StateLimit)
 	executionMarkers := buildExpansionOrientationExecutionMarkers(ids)
-	incumbent, fallbackProjection, err := buildExpansionOrientationIncumbentCTE(ids, incumbentChain, incumbentFinal, incumbentProjection)
+	var incumbentExtras pgsql.Projection
+	if materializeOrderedPath {
+		incumbentPath, pathErr := expressionForPathComposite(part.PatternBinding, s.scope)
+		if pathErr != nil {
+			return pgsql.Query{}, pathErr
+		}
+		incumbentExtras = append(incumbentExtras, &pgsql.AliasedExpression{
+			Expression: incumbentPath,
+			Alias:      models.OptionalValue(part.PatternBinding.Identifier),
+		})
+	}
+	incumbent, fallbackProjection, err := buildExpansionOrientationIncumbentCTE(ids, incumbentChain, incumbentFinal, incumbentProjection, incumbentExtras)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
 	candidateProjection, err := suffixSeededFinalProjection(part, expansionStep, suffix, rootFrame, suffixIDs, ids.states, incumbentProjection, nil)
 	if err != nil {
 		return pgsql.Query{}, err
+	}
+	if materializeOrderedPath {
+		candidateProjection = append(candidateProjection, &pgsql.AliasedExpression{
+			Expression: suffixSeededOrderedPathComposite(s.graphID, expansionStep, suffix, suffixIDs, ids.states),
+			Alias:      models.OptionalValue(part.PatternBinding.Identifier),
+		})
 	}
 
 	suffixEdgeIDs := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
@@ -502,9 +550,10 @@ func buildExpansionOrientationIncumbentCTE(
 	incumbentChain []pgsql.CommonTableExpression,
 	incumbentFinal pgsql.Identifier,
 	incumbentProjection pgsql.Projection,
+	extraProjection pgsql.Projection,
 ) (pgsql.CommonTableExpression, pgsql.Projection, error) {
-	projection := make(pgsql.Projection, 0, len(incumbentProjection))
-	fallback := make(pgsql.Projection, 0, len(incumbentProjection))
+	projection := make(pgsql.Projection, 0, len(incumbentProjection)+len(extraProjection))
+	fallback := make(pgsql.Projection, 0, len(incumbentProjection)+len(extraProjection))
 	for _, item := range incumbentProjection {
 		alias, ok := selectItemAlias(item)
 		if !ok {
@@ -514,6 +563,17 @@ func buildExpansionOrientationIncumbentCTE(
 			Expression: pgsql.CompoundIdentifier{incumbentFinal, alias},
 			Alias:      models.OptionalValue(alias),
 		})
+		fallback = append(fallback, &pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{ids.incumbent, alias},
+			Alias:      models.OptionalValue(alias),
+		})
+	}
+	for _, item := range extraProjection {
+		alias, ok := selectItemAlias(item)
+		if !ok {
+			return pgsql.CommonTableExpression{}, nil, fmt.Errorf("guarded suffix orientation extra incumbent projection contains an unaliased item %T", item)
+		}
+		projection = append(projection, item)
 		fallback = append(fallback, &pgsql.AliasedExpression{
 			Expression: pgsql.CompoundIdentifier{ids.incumbent, alias},
 			Alias:      models.OptionalValue(alias),
@@ -580,7 +640,8 @@ func (s *Translator) buildSuffixSeededReverseQuery(
 			},
 		},
 	}
-	reverse, err := buildSuffixSeededReverseCTE(expansionStep, decision, ids, "", "")
+	materializeOrderedPath := part.PatternBinding != nil
+	reverse, err := buildSuffixSeededReverseCTE(expansionStep, decision, ids, "", "", materializeOrderedPath)
 	if err != nil {
 		return pgsql.Query{}, err
 	}
@@ -588,6 +649,12 @@ func (s *Translator) buildSuffixSeededReverseQuery(
 	projection, err := suffixSeededFinalProjection(part, expansionStep, suffix, rootFrame, ids, ids.reverse, incumbentProjection, nil)
 	if err != nil {
 		return pgsql.Query{}, err
+	}
+	if materializeOrderedPath {
+		projection = append(projection, &pgsql.AliasedExpression{
+			Expression: suffixSeededOrderedPathComposite(s.graphID, expansionStep, suffix, ids, ids.reverse),
+			Alias:      models.OptionalValue(part.PatternBinding.Identifier),
+		})
 	}
 
 	suffixEdgeIDs := pgsql.ArrayLiteral{
@@ -816,7 +883,7 @@ func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep
 }
 
 // buildSuffixSeededReverseCTE recursively walks from suffix boundaries back toward bound roots without reusing edges.
-func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize.ExpansionSearchStrategyDecision, ids suffixSeededIdentifiers, gateSource, gateColumn pgsql.Identifier) (pgsql.CommonTableExpression, error) {
+func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize.ExpansionSearchStrategyDecision, ids suffixSeededIdentifiers, gateSource, gateColumn pgsql.Identifier, carryNodePath bool) (pgsql.CommonTableExpression, error) {
 	if expansionStep.Edge == nil || expansionStep.RightNode == nil {
 		return pgsql.CommonTableExpression{}, fmt.Errorf("forced suffix-seeded reverse expansion step is incomplete")
 	}
@@ -832,6 +899,12 @@ func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize
 			emptyPath,
 		},
 		From: []pgsql.FromClause{tableFrom(ids.boundaries)},
+	}
+	if carryNodePath {
+		seed.Projection = append(seed.Projection, pgsql.ArrayLiteral{
+			Values:   []pgsql.Expression{pgsql.CompoundIdentifier{ids.boundaries, fixedSuffixBoundaryID}},
+			CastType: pgsql.Int8Array,
+		})
 	}
 	if gateSource != "" && gateColumn != "" {
 		seed.From = append(seed.From, tableFrom(gateSource))
@@ -897,13 +970,26 @@ func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize
 		}},
 		Where: recursiveWhere,
 	}
+	if carryNodePath {
+		recursive.Projection = append(recursive.Projection, pgsql.FunctionCall{
+			Function: pgsql.Identifier("array_prepend"),
+			Parameters: []pgsql.Expression{
+				pgsql.CompoundIdentifier{expansionStep.Edge.Identifier, pgsql.ColumnStartID},
+				pgsql.CompoundIdentifier{ids.reverse, expansionNodePath},
+			},
+			CastType: pgsql.Int8Array,
+		})
+	}
+
+	shape := []pgsql.Identifier{fixedSuffixBoundaryID, expansionNextID, expansionDepth, expansionPath}
+	if carryNodePath {
+		shape = append(shape, expansionNodePath)
+	}
 
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
-			Name: ids.reverse,
-			Shape: pgsql.NewRecordShape([]pgsql.Identifier{
-				fixedSuffixBoundaryID, expansionNextID, expansionDepth, expansionPath,
-			}),
+			Name:  ids.reverse,
+			Shape: pgsql.NewRecordShape(shape),
 		},
 		Query: pgsql.Query{
 			Body: pgsql.SetOperation{
@@ -914,6 +1000,124 @@ func buildSuffixSeededReverseCTE(expansionStep *TraversalStep, decision optimize
 			},
 		},
 	}, nil
+}
+
+// suffixSeededOrderedPathComposite hydrates the node and edge arrays already
+// carried in path order by the reverse traversal. Keeping hydration in the
+// translated statement lets PostgreSQL prune directly to the selected graph
+// partitions and avoids recursively reconstructing node order from edge IDs.
+func suffixSeededOrderedPathComposite(graphID int32, expansionStep *TraversalStep, suffix []*TraversalStep, ids suffixSeededIdentifiers, reverseSource pgsql.Identifier) pgsql.Expression {
+	const (
+		pathIndex pgsql.Identifier = "_ordered_path_index"
+		pathNode  pgsql.Identifier = "_ordered_path_node"
+		edgeIndex pgsql.Identifier = "_ordered_edge_index"
+		pathEdge  pgsql.Identifier = "_ordered_path_edge"
+	)
+
+	nodeIDs := pgsql.Expression(pgsql.CompoundIdentifier{reverseSource, expansionNodePath})
+	suffixNodeIDs := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+	for _, step := range suffix {
+		suffixNodeIDs.Values = append(suffixNodeIDs.Values, projectedNodeIDReference(ids.suffix, step.RightNode))
+	}
+	nodeIDs = pgsql.NewBinaryExpression(nodeIDs, pgsql.OperatorConcatenate, suffixNodeIDs)
+
+	edgeIDs := pgsql.Expression(pgsql.CompoundIdentifier{reverseSource, expansionPath})
+	suffixEdgeIDs := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+	for _, step := range suffix {
+		suffixEdgeIDs.Values = append(suffixEdgeIDs.Values, pgsql.CompoundIdentifier{ids.suffix, step.Edge.Identifier})
+	}
+	edgeIDs = pgsql.NewBinaryExpression(edgeIDs, pgsql.OperatorConcatenate, suffixEdgeIDs)
+
+	nodeID := &pgsql.ArrayIndex{
+		Expression: pgsql.NewParenthetical(nodeIDs),
+		Indexes:    []pgsql.Expression{pathIndex},
+		CastType:   pgsql.Int8,
+	}
+	nodes := pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
+		Projection: pgsql.Projection{pgsql.FunctionCall{
+			Function: pgsql.FunctionCoalesce,
+			Parameters: []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function:   pgsql.FunctionArrayAggregate,
+					Parameters: []pgsql.Expression{shortestPathNodeComposite(pathNode)},
+					OrderBy: []*pgsql.OrderBy{{
+						Expression: pathIndex,
+						Ascending:  true,
+					}},
+					CastType: pgsql.NodeCompositeArray,
+				},
+				pgsql.ArrayLiteral{CastType: pgsql.NodeCompositeArray},
+			},
+		}},
+		From: []pgsql.FromClause{{
+			Source: pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function:   pgsql.FunctionGenerateSubscripts,
+					Parameters: []pgsql.Expression{nodeIDs, pgsql.NewLiteral(1, pgsql.Int)},
+				},
+				Alias: models.OptionalValue(pathIndex),
+			},
+			Joins: []pgsql.Join{{
+				Table: expansionNodeTableReference(pathNode),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(
+						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{pathNode, pgsql.ColumnID}, pgsql.OperatorEquals, nodeID),
+						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{pathNode, pgsql.ColumnGraphID}, pgsql.OperatorEquals, pgsql.NewLiteral(graphID, pgsql.Int4)),
+					),
+				},
+			}},
+		}},
+	}}}
+	edgeID := &pgsql.ArrayIndex{
+		Expression: pgsql.NewParenthetical(edgeIDs),
+		Indexes:    []pgsql.Expression{edgeIndex},
+		CastType:   pgsql.Int8,
+	}
+	edges := pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
+		Projection: pgsql.Projection{pgsql.FunctionCall{
+			Function: pgsql.FunctionCoalesce,
+			Parameters: []pgsql.Expression{
+				pgsql.FunctionCall{
+					Function:   pgsql.FunctionArrayAggregate,
+					Parameters: []pgsql.Expression{edgeCompositeValue(pathEdge)},
+					OrderBy: []*pgsql.OrderBy{{
+						Expression: edgeIndex,
+						Ascending:  true,
+					}},
+					CastType: pgsql.EdgeCompositeArray,
+				},
+				pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray},
+			},
+		}},
+		From: []pgsql.FromClause{{
+			Source: pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function:   pgsql.FunctionGenerateSubscripts,
+					Parameters: []pgsql.Expression{edgeIDs, pgsql.NewLiteral(1, pgsql.Int)},
+				},
+				Alias: models.OptionalValue(edgeIndex),
+			},
+			Joins: []pgsql.Join{{
+				Table: expansionEdgeTableReference(pathEdge),
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.OptionalAnd(
+						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{pathEdge, pgsql.ColumnID}, pgsql.OperatorEquals, edgeID),
+						pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{pathEdge, pgsql.ColumnGraphID}, pgsql.OperatorEquals, pgsql.NewLiteral(graphID, pgsql.Int4)),
+					),
+				},
+			}},
+		}},
+	}}}
+
+	return pgsql.CompositeValue{
+		DataType: pgsql.PathComposite,
+		Values: []pgsql.Expression{
+			nodes,
+			edges,
+		},
+	}
 }
 
 // suffixSeededFinalProjection reconstructs the incumbent projection from root, reverse-state, and suffix columns.

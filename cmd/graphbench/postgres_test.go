@@ -18,6 +18,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
+	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -74,6 +76,58 @@ func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	require.Equal(t, "asp-i1-test-v1", options.SelectorVersion)
 	_, err = runner.productionOptions(query + " RETURN 1")
 	require.ErrorContains(t, err, "absent from the provisional production manifest")
+}
+
+func TestPostgresProductionManifestBuildsGuardedDistanceOptions(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:Traverse*1..32]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)"
+	digest := strings.Repeat("0", 64)
+	manifest := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI2GuardedDistance),
+		SelectorVersion: optimize.ShortestPathSelectorStaticV8HiddenFanIn, ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalDistance), SourceCommit: "commit",
+		SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: spI2PromotionCaps(),
+		Buckets: []PromotionBucket{{
+			Name: "hidden-fan-in-depth32", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction: "inbound", ObservationMode: "distance", MinimumDepth: 1, MaximumDepth: 32,
+			RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+	runner := &postgresSQLRunner{}
+	require.NoError(t, runner.setProductionManifest(path))
+	options, err := runner.productionOptions(query)
+	require.NoError(t, err)
+	require.Equal(t, optimize.ShortestPathExecutorI2GuardedDistance, options.ShortestPathExecutor)
+	require.Equal(t, optimize.ShortestPathI2QualifiedStateLimit, options.ShortestPathCaps.StateLimit)
+	require.Equal(t, optimize.ShortestPathI2QualifiedFrontierLimit, options.ShortestPathCaps.FrontierLimit)
+
+	for name, test := range map[string]struct {
+		capName string
+		value   int64
+	}{
+		"non-qualified state cap":    {capName: "state_limit", value: 1000},
+		"non-qualified frontier cap": {capName: "frontier_limit", value: 100},
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := manifest
+			invalid.Caps = clonePromotionCaps(manifest.Caps)
+			invalid.Caps[test.capName] = test.value
+			raw, err := json.Marshal(invalid)
+			require.NoError(t, err)
+			path := filepath.Join(t.TempDir(), "manifest.json")
+			require.NoError(t, os.WriteFile(path, raw, 0o600))
+			err = (&postgresSQLRunner{}).setProductionManifest(path)
+			require.ErrorContains(t, err, fmt.Sprintf(
+				"SP-I2 distance candidate cap %s must equal %d",
+				test.capName,
+				spI2PromotionCaps()[test.capName],
+			))
+		})
+	}
 }
 
 // TestPostgresProductionManifestRequiresStaticV6CanonicalInboundBucket verifies postgres production manifest requires static v6 canonical inbound bucket behavior.
@@ -241,6 +295,129 @@ func TestPostgresProductionManifestRejectsNonExactOrientationContract(t *testing
 	}
 }
 
+// TestPostgresProductionManifestCarriesOrientationProbeV2IntoTranslation verifies
+// provisional production measurement cannot silently fall back to v1.
+func TestPostgresProductionManifestCarriesOrientationProbeV2IntoTranslation(t *testing.T) {
+	query := "MATCH (r)-[:Expand*0..16]->()-[:Suffix]->(e) WHERE id(r) = $root_id RETURN id(e)"
+	digest := strings.Repeat("0", 64)
+	manifest := PromotionManifest{
+		Version:           promotionManifestVersion,
+		Candidate:         string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+		SelectorVersion:   string(optimize.ExpansionSearchPolicyOrientationProbeV2),
+		ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor:  string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit:      "commit",
+		SourceSHA256:      digest,
+		BinarySHA256:      digest,
+		CorpusSHA256:      digest,
+		Caps:              orientationPromotionCaps(),
+		Buckets: []PromotionBucket{{
+			Name:                  "outbound-fixed-suffix-v2",
+			QuerySHA256:           []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction:             "outbound",
+			ObservationMode:       "endpoint_ids",
+			MinimumDepth:          0,
+			MaximumDepth:          16,
+			RelationshipKindCount: 1,
+			QualificationSplit:    []string{"training", "holdout"},
+		}},
+	}
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+
+	runner := &postgresSQLRunner{}
+	require.NoError(t, runner.setProductionManifest(path))
+	options, err := runner.productionOptions(query)
+	require.NoError(t, err)
+	require.True(t, options.EnableExpansionOrientation)
+	require.Equal(t, optimize.ExpansionSearchPolicyOrientationProbeV2, options.ExpansionOrientationPolicy)
+	require.Equal(t, string(optimize.ExpansionSearchPolicyOrientationProbeV2), options.SelectorVersion)
+}
+
+// TestPostgresProductionManifestSQLAnchorIsTwoPass verifies a provisional
+// manifest may omit the SQL anchor only to derive it, while a populated anchor
+// is checked against the exact SQL emitted by production translation.
+func TestPostgresProductionManifestSQLAnchorIsTwoPass(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:Traverse*1..64]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+	digest := strings.Repeat("0", 64)
+	manifest := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		SelectorVersion: optimize.ShortestPathSelectorStaticV6, ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalWitness), SourceCommit: "commit",
+		SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps: map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
+		Buckets: []PromotionBucket{{
+			Name: "canonical-inbound-depth64", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64,
+			RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"},
+		}},
+	}
+	write := func(value PromotionManifest) string {
+		raw, err := json.Marshal(value)
+		require.NoError(t, err)
+		path := filepath.Join(t.TempDir(), "manifest.json")
+		require.NoError(t, os.WriteFile(path, raw, 0o600))
+		return path
+	}
+
+	preflight := &postgresSQLRunner{}
+	require.NoError(t, preflight.setProductionManifest(write(manifest)))
+	require.Empty(t, preflight.productionManifest.OperationalCandidateSQLSHA256)
+
+	manifest.OperationalCandidateSQLSHA256 = strings.Repeat("f", 64)
+	formal := &postgresSQLRunner{}
+	require.NoError(t, formal.setProductionManifest(write(manifest)))
+	require.ErrorContains(t, verifyProductionManifestSQLAnchor(formal.productionManifest, "select 1"), "does not match provisional manifest anchor")
+	formal.productionManifest.OperationalCandidateSQLSHA256 = sqlFingerprint("select 1")
+	require.NoError(t, verifyProductionManifestSQLAnchor(formal.productionManifest, "select 1"))
+
+	multipleQueries := manifest
+	multipleQueries.Buckets = clonePromotionBuckets(manifest.Buckets)
+	multipleQueries.Buckets[0].QuerySHA256 = append(multipleQueries.Buckets[0].QuerySHA256, strings.Repeat("e", 64))
+	require.ErrorContains(t, (&postgresSQLRunner{}).setProductionManifest(write(multipleQueries)), "requires exactly one authorized query digest")
+
+	manifest.OperationalCandidateSQLSHA256 = "NOT-A-DIGEST"
+	require.ErrorContains(t, (&postgresSQLRunner{}).setProductionManifest(write(manifest)), "must be a lowercase SHA-256 digest")
+}
+
+func TestPostgresProductionManifestRejectsAmbiguousSetsAndJSON(t *testing.T) {
+	query := "MATCH p = shortestPath((s)<-[:Traverse*1..64]-(e)) RETURN p"
+	digest := strings.Repeat("a", 64)
+	base := PromotionManifest{
+		Version: promotionManifestVersion, Candidate: string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+		SelectorVersion: optimize.ShortestPathSelectorStaticV6, ExecutionBoundary: "guarded_dual_arm",
+		FallbackExecutor: string(optimize.ShortestPathExecutorS4CanonicalWitness), SourceCommit: "commit",
+		SourceSHA256: digest, BinarySHA256: digest, CorpusSHA256: digest,
+		Caps:    map[string]int64{"state_limit": 10, "predecessor_limit": 20, "enumeration_limit": 30, "output_bytes_limit": 40},
+		Buckets: []PromotionBucket{{Name: "qualified-query", QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)}, Direction: "inbound", ObservationMode: "one_path", MinimumDepth: 1, MaximumDepth: 64, RelationshipKindCount: 1, QualificationSplit: []string{"training", "holdout"}}},
+	}
+	write := func(raw []byte) string {
+		path := filepath.Join(t.TempDir(), "manifest.json")
+		require.NoError(t, os.WriteFile(path, raw, 0o600))
+		return path
+	}
+	encode := func(manifest PromotionManifest) []byte {
+		raw, err := json.Marshal(manifest)
+		require.NoError(t, err)
+		return raw
+	}
+
+	duplicateSplit := base
+	duplicateSplit.Buckets = clonePromotionBuckets(base.Buckets)
+	duplicateSplit.Buckets[0].QualificationSplit = []string{"training", "training", "holdout"}
+	require.ErrorContains(t, (&postgresSQLRunner{}).setProductionManifest(write(encode(duplicateSplit))), "exactly one training and one holdout")
+
+	duplicateQuery := base
+	duplicateQuery.Buckets = clonePromotionBuckets(base.Buckets)
+	duplicateQuery.Buckets[0].QuerySHA256 = append(duplicateQuery.Buckets[0].QuerySHA256, duplicateQuery.Buckets[0].QuerySHA256[0])
+	require.ErrorContains(t, (&postgresSQLRunner{}).setProductionManifest(write(encode(duplicateQuery))), "authorized more than once")
+
+	duplicateKey := strings.Replace(string(encode(base)), `"version":2`, `"version":2,"version":2`, 1)
+	require.ErrorContains(t, (&postgresSQLRunner{}).setProductionManifest(write([]byte(duplicateKey))), "duplicate JSON object key")
+}
+
 // TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode verifies postgres read transaction options match every stable snapshot mode behavior.
 func TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode(t *testing.T) {
 	require.Empty(t, (&postgresSQLRunner{}).readTransactionOptions())
@@ -260,6 +437,22 @@ func TestPostgresReadTransactionOptionsMatchEveryStableSnapshotMode(t *testing.T
 			require.Equal(t, pgx.ReadWrite, pgConfig.Options.AccessMode)
 		})
 	}
+}
+
+func TestSuffixReverseGuardToolOptionsAreExecutableAndAttested(t *testing.T) {
+	options := translate.ToolOptions{EnableExpansionSuffixReverseGuard: true}
+	require.True(t, hasForcedToolOptions(options))
+
+	outcome := translate.TargetLoweringOutcome{
+		TargetKind:    "traversal",
+		Family:        "fixed_suffix_expansion",
+		Candidate:     string(optimize.ExpansionSearchSuffixSeededReverse),
+		EmittedPolicy: string(optimize.ExpansionSearchPolicySuffixReverseGuardV1),
+		Selected:      string(optimize.ExpansionSearchStepwiseForward),
+	}
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), timedRuntimeAttestationIdentity(translate.Result{
+		Optimization: translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}},
+	}))
 }
 
 // TestResolveCaseParams verifies that scalar, explicit-list, and generated-list fixture keys become ordered int64 IDs without disturbing ordinary parameters.

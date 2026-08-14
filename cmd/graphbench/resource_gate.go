@@ -263,7 +263,8 @@ func telemetryRequiredForArchitecture(architecture string) bool {
 		strings.HasPrefix(architecture, "SP-B2-") ||
 		strings.HasPrefix(architecture, "ASP-B1-") ||
 		strings.HasPrefix(architecture, "ASP-B2-") ||
-		isOrientationProbePolicy(architecture)
+		isOrientationProbePolicy(architecture) ||
+		isSuffixReverseGuardPolicy(architecture)
 }
 
 // telemetryRequiredForRecord supports benchmark evidence processing for telemetry required for record.
@@ -276,7 +277,7 @@ func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
 	}
 	if record.Optimization != nil {
 		for _, outcome := range record.Optimization.TargetOutcomes {
-			if isOrientationProbePolicy(outcome.EmittedPolicy) || guardedInlineResourcePolicy(outcome.EmittedPolicy) {
+			if isOrientationProbePolicy(outcome.EmittedPolicy) || isSuffixReverseGuardPolicy(outcome.EmittedPolicy) || guardedInlineResourcePolicy(outcome.EmittedPolicy) {
 				return true
 			}
 		}
@@ -284,6 +285,8 @@ func telemetryRequiredForRecord(record CaseResult, architecture string) bool {
 	return record.TraversalTelemetry != nil &&
 		(isOrientationProbePolicy(record.TraversalTelemetry.Summary.EmittedIdentity) ||
 			isOrientationProbePolicy(record.TraversalTelemetry.Summary.SelectorVersion) ||
+			isSuffixReverseGuardPolicy(record.TraversalTelemetry.Summary.EmittedIdentity) ||
+			isSuffixReverseGuardPolicy(record.TraversalTelemetry.Summary.SelectorVersion) ||
 			guardedInlineResourcePolicy(record.TraversalTelemetry.Summary.EmittedIdentity))
 }
 
@@ -324,6 +327,8 @@ func guardedInlineResourceContractForArchitecture(architecture string) (guardedI
 			namespace:       "inline_asp",
 			label:           "inline ASP",
 		}, true
+	case string(optimize.ShortestPathExecutorI2GuardedDistance):
+		return guardedInlineResourceContract{architecture: architecture, family: "SP", telemetryFamily: TraversalTelemetryFamilySP, policy: optimize.ShortestPathPolicyI2DistanceGuardedV1, namespace: "inline_shortest_distance", label: "inline SP distance"}, true
 	default:
 		return guardedInlineResourceContract{}, false
 	}
@@ -331,7 +336,7 @@ func guardedInlineResourceContractForArchitecture(architecture string) (guardedI
 
 // guardedInlineResourcePolicy supports benchmark evidence processing for guarded inline resource policy.
 func guardedInlineResourcePolicy(policy string) bool {
-	return policy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 || policy == optimize.ShortestPathPolicyASPI1GuardedV1
+	return policy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 || policy == optimize.ShortestPathPolicyASPI1GuardedV1 || policy == optimize.ShortestPathPolicyI2DistanceGuardedV1
 }
 
 // appendGuardedInlineResourceBindingReasons prevents an unguarded comparator
@@ -387,6 +392,7 @@ func appendGuardedInlineResourceBindingReasons(gateCase *ResourceGateCase, recor
 
 	inlineASP := telemetry.Diagnostic.Counters.InlineASP
 	inlineShortestPath := telemetry.Diagnostic.Counters.InlineShortestPath
+	inlineShortestDistance := telemetry.Diagnostic.Counters.InlineShortestDistance
 	switch contract.namespace {
 	case "inline_shortest_path":
 		if inlineShortestPath == nil {
@@ -401,6 +407,20 @@ func appendGuardedInlineResourceBindingReasons(gateCase *ResourceGateCase, recor
 		}
 		if inlineShortestPath != nil {
 			gateCase.Reasons = append(gateCase.Reasons, "inline ASP production telemetry must not use inline_shortest_path counters")
+		}
+	case "inline_shortest_distance":
+		if inlineShortestDistance == nil {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance production telemetry requires inline_shortest_distance counters")
+		} else if inlineShortestDistance.OutputRows != nil && *inlineShortestDistance.OutputRows != record.RowCount {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance typed output does not match the exact public observation")
+		}
+		if inlineASP != nil || inlineShortestPath != nil {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance production telemetry must not use predecessor counter namespaces")
+		}
+		if telemetry.Diagnostic.PlanReplay != nil {
+			if outputRows, found := telemetry.Diagnostic.PlanReplay.Counters["sp_i2_output_rows"]; found && outputRows != record.RowCount {
+				gateCase.Reasons = append(gateCase.Reasons, "inline SP distance plan output does not match the exact public observation")
+			}
 		}
 	}
 }
@@ -531,11 +551,26 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 		}
 		appendOrientationAttributionReasons(gateCase, telemetry.Diagnostic)
 	}
+	if required && (isSuffixReverseGuardPolicy(summary.EmittedIdentity) || isSuffixReverseGuardPolicy(summary.SelectorVersion)) {
+		requiredFamilies := []TraversalTelemetryFamily{TraversalTelemetryFamilySuffixGuard, TraversalTelemetryFamilyOrdinary}
+		if observationRequiresHydration(summary.ObservationMode) {
+			requiredFamilies = append(requiredFamilies, TraversalTelemetryFamilyHydration)
+		}
+		for _, family := range requiredFamilies {
+			if !slices.Contains(telemetry.Diagnostic.RequiredFamilies, family) {
+				gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard qualification is missing required counter family "+string(family))
+			}
+		}
+		appendSuffixGuardAttributionReasons(gateCase, telemetry.Diagnostic)
+	}
 	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyASPI1GuardedV1 {
 		appendInlinePredecessorAttributionReasons(gateCase, telemetry.Diagnostic, "inline ASP")
 	}
 	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyI1CanonicalGuardedV1 {
 		appendInlinePredecessorAttributionReasons(gateCase, telemetry.Diagnostic, "inline canonical SP")
+	}
+	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV1 {
+		appendInlineDistanceAttributionReasons(gateCase, telemetry)
 	}
 
 	observed := traversalNumericObservations(telemetry.Diagnostic.Counters)
@@ -557,8 +592,163 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 		if traversalCapUsesSentinel(name) {
 			allowed++
 		}
-		if value > allowed {
+		if value < 0 {
+			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("traversal counter %s=%d is negative", name, value))
+		} else if value > allowed {
 			gateCase.Reasons = append(gateCase.Reasons, fmt.Sprintf("traversal counter %s=%d exceeds ceiling %d", name, value, allowed))
+		}
+	}
+}
+
+// appendInlineDistanceAttributionReasons binds the SP-I2 runtime receipt to
+// exact named-plan counters. Qualification accepts one marker and one executor
+// loop only, proves the inactive arm remained uninitialized, and requires the
+// typed counters to agree with their plan-derived sources.
+func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetry *TraversalExecutionTelemetry) {
+	if telemetry == nil || telemetry.Diagnostic == nil || telemetry.Diagnostic.PlanReplay == nil {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance qualification requires exact plan branch evidence")
+		return
+	}
+	inline := telemetry.Diagnostic.Counters.InlineShortestDistance
+	if inline == nil {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance counters are missing")
+		return
+	}
+
+	plan := telemetry.Diagnostic.PlanReplay.Counters
+	required := []string{
+		"sp_i2_distance_rows", "sp_i2_target_rows", "sp_i2_output_rows",
+		"sp_i2_candidate_marker_rows", "sp_i2_fallback_marker_rows",
+		"sp_i2_candidate_branch_rows", "sp_i2_fallback_branch_rows",
+		"sp_i2_candidate_executor_loops", "sp_i2_fallback_executor_loops",
+	}
+	for _, name := range required {
+		if _, found := plan[name]; !found {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance execution is missing exact plan counter "+name)
+			return
+		}
+	}
+
+	candidateMarker := plan["sp_i2_candidate_marker_rows"]
+	fallbackMarker := plan["sp_i2_fallback_marker_rows"]
+	candidateRows := plan["sp_i2_candidate_branch_rows"]
+	fallbackRows := plan["sp_i2_fallback_branch_rows"]
+	outputRows := plan["sp_i2_output_rows"]
+	candidateLoops := plan["sp_i2_candidate_executor_loops"]
+	fallbackLoops := plan["sp_i2_fallback_executor_loops"]
+	stateRows := plan["sp_i2_distance_rows"]
+	if (candidateMarker != 0 && candidateMarker != 1) || (fallbackMarker != 0 && fallbackMarker != 1) || candidateMarker+fallbackMarker != 1 {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance execution must attribute exactly one candidate or fallback marker")
+	}
+	if candidateRows < 0 || candidateRows > 1 || fallbackRows < 0 || fallbackRows > 1 || outputRows != candidateRows+fallbackRows {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance output does not equal its complementary branch rows")
+	}
+	if plan["sp_i2_target_rows"] != candidateRows {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate branch does not agree with its target receipt")
+	}
+
+	typed := map[string]*int64{
+		"sp_i2_distance_rows":            inline.StateRows,
+		"sp_i2_output_rows":              inline.OutputRows,
+		"sp_i2_candidate_marker_rows":    inline.CandidateMarkerRows,
+		"sp_i2_fallback_marker_rows":     inline.FallbackMarkerRows,
+		"sp_i2_candidate_branch_rows":    inline.CandidateBranchRows,
+		"sp_i2_fallback_branch_rows":     inline.FallbackBranchRows,
+		"sp_i2_candidate_executor_loops": inline.CandidateExecutorLoops,
+		"sp_i2_fallback_executor_loops":  inline.FallbackExecutorLoops,
+	}
+	for name, value := range typed {
+		if value == nil || *value != plan[name] {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance typed counter does not match plan counter "+name)
+		}
+	}
+	if inline.FrontierRows == nil || inline.StateRows == nil || *inline.FrontierRows != *inline.StateRows {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance conservative frontier bound does not match bounded state rows")
+	}
+
+	summary := telemetry.Summary
+	stateLimit, stateLimitFound := summary.Caps["state_rows"]
+	frontierLimit, frontierLimitFound := summary.Caps["frontier_rows"]
+	validCaps := stateLimitFound && frontierLimitFound && stateLimit > 0 && frontierLimit > 0
+	if !validCaps {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance attribution requires positive state and frontier caps")
+	}
+	if summary.RuntimeOutcomeAvailable == nil || !*summary.RuntimeOutcomeAvailable || summary.FallbackExecuted == nil || summary.Overflow == nil {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance marker selection lacks a complete runtime receipt")
+		return
+	}
+	if candidateMarker == 1 {
+		expectedBranch := "inline_canonical_distance"
+		if outputRows == 0 {
+			expectedBranch = "inline_canonical_distance_no_path"
+		}
+		if candidateLoops != 1 || fallbackLoops != 0 || fallbackRows != 0 {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate selection did not suppress the fallback executor and output arm")
+		}
+		// FrontierRows is deliberately a conservative alias for the complete
+		// bounded state relation, not an independently observable peak level.
+		// Requiring that relation to remain within both reported caps is
+		// conservative and admits the exact boundary without guessing which
+		// aggregate gate would otherwise have fired.
+		if validCaps && (stateRows > stateLimit || stateRows > frontierLimit) {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate selection exceeds its state or conservative frontier cap")
+		}
+		if summary.RuntimeIdentity != string(optimize.ShortestPathExecutorI2GuardedDistance) || summary.RuntimeBranch != expectedBranch || *summary.FallbackExecuted || *summary.Overflow {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate marker contradicts the runtime receipt")
+		}
+	}
+	if fallbackMarker == 1 {
+		if fallbackLoops != 1 || candidateLoops != 0 || candidateRows != 0 {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance fallback selection did not suppress the candidate executor and output arm")
+		}
+		// The current diagnostic contract exposes one bounded-state count and a
+		// conservative frontier alias. It cannot identify which aggregate gate
+		// fired, but an exact cap+1 row for at least one reported bound is required
+		// to corroborate the overflow branch. Qualified production caps are equal,
+		// so every production overflow has this observable sentinel.
+		if validCaps && stateRows != stateLimit+1 && stateRows != frontierLimit+1 {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance fallback selection lacks an exact state or conservative frontier cap+1 sentinel")
+		}
+		if summary.RuntimeIdentity != string(optimize.ShortestPathExecutorS4CanonicalDistance) || summary.RuntimeBranch != "exact_s4_distance_fallback" || !*summary.FallbackExecuted || !*summary.Overflow {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance fallback marker contradicts the runtime receipt")
+		}
+	}
+}
+
+// appendSuffixGuardAttributionReasons proves one and only one output arm ran,
+// and rejects plans that accidentally retain orientation-v2's topology work.
+func appendSuffixGuardAttributionReasons(gateCase *ResourceGateCase, diagnostic *TraversalExecutionDiagnostic) {
+	if diagnostic == nil || diagnostic.PlanReplay == nil {
+		gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard qualification requires exact plan branch and sentinel evidence")
+		return
+	}
+	counters := diagnostic.PlanReplay.Counters
+	candidate, candidatePresent := counters["suffix_guard_candidate_marker_rows"]
+	fallback, fallbackPresent := counters["suffix_guard_fallback_marker_rows"]
+	if !candidatePresent || !fallbackPresent || (candidate != 0 && candidate != 1) || (fallback != 0 && fallback != 1) || candidate+fallback != 1 {
+		gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard execution must attribute exactly one candidate or fallback marker")
+	}
+	candidateRows, candidateRowsPresent := counters["suffix_guard_candidate_branch_rows"]
+	fallbackRows, fallbackRowsPresent := counters["suffix_guard_fallback_branch_rows"]
+	outputRows, outputRowsPresent := counters["suffix_guard_output_rows"]
+	if !candidateRowsPresent || !fallbackRowsPresent || !outputRowsPresent || outputRows != candidateRows+fallbackRows {
+		gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard execution is missing exact complementary output-branch evidence")
+	}
+	candidateLoops, candidateLoopsPresent := counters["suffix_guard_candidate_executor_loops"]
+	fallbackLoops, fallbackLoopsPresent := counters["suffix_guard_fallback_executor_loops"]
+	if !candidateLoopsPresent || !fallbackLoopsPresent {
+		gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard execution is missing candidate or fallback executor-loop evidence")
+	}
+	if candidate == 1 && (candidateLoops != 1 || fallbackLoops != 0 || fallbackRows != 0) {
+		gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard candidate selection did not suppress the fallback executor and output arm")
+	}
+	if fallback == 1 && (fallbackLoops != 1 || candidateLoops != 0 || candidateRows != 0) {
+		gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard fallback selection did not suppress the candidate executor and output arm")
+	}
+	for name := range counters {
+		if strings.HasPrefix(name, "orientation_") &&
+			(strings.Contains(name, "degree") || strings.Contains(name, "score") || strings.Contains(name, "decision")) {
+			gateCase.Reasons = append(gateCase.Reasons, "suffix-reverse guard plan unexpectedly contains orientation topology work "+name)
 		}
 	}
 }
@@ -647,7 +837,7 @@ func appendOrientationAttributionReasons(gateCase *ResourceGateCase, diagnostic 
 // traversalCapUsesSentinel reports whether the counter may observe the
 // deliberate cap+1 row used to prove overflow before exact fallback.
 func traversalCapUsesSentinel(name string) bool {
-	return strings.Contains(name, "probe") || strings.Contains(name, "state") ||
+	return strings.Contains(name, "probe") || strings.Contains(name, "suffix") || strings.Contains(name, "state") ||
 		strings.Contains(name, "frontier") || strings.Contains(name, "queue") ||
 		strings.Contains(name, "seen") || strings.Contains(name, "predecessor") ||
 		strings.Contains(name, "output")
@@ -677,6 +867,13 @@ func traversalNumericObservations(counters TraversalDiagnosticCounters) map[stri
 		}
 		set("survival_rows", orientation.ShallowSurvivalRows)
 		set("branch_loops", orientation.BranchLoops)
+	}
+	if guard := counters.SuffixGuard; guard != nil {
+		set("root_rows", guard.RootPresenceRows)
+		set("suffix_rows", guard.SuffixRows)
+		set("reverse_seed_rows", guard.SuffixRows)
+		set("state_rows", guard.StateRows)
+		set("output_rows", guard.OutputRows)
 	}
 	if shortest := counters.ShortestPath; shortest != nil {
 		set("state_rows", shortest.SeenPeak)
@@ -711,6 +908,12 @@ func traversalNumericObservations(counters TraversalDiagnosticCounters) map[stri
 		set("output_rows", inline.EnumerationRows)
 		set("output_paths", inline.OutputPaths)
 		set("output_bytes", inline.OutputBytes)
+	}
+	if inline := counters.InlineShortestDistance; inline != nil {
+		set("state_rows", inline.StateRows)
+		set("frontier_rows", inline.FrontierRows)
+		set("queue_rows", inline.FrontierRows)
+		set("output_rows", inline.OutputRows)
 	}
 	if hydration := counters.Hydration; hydration != nil {
 		set("hydration_rows", hydration.Rows)

@@ -4498,6 +4498,7 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 		}
 		if decision.SelectedExecutor == optimize.ShortestPathExecutorS3Unidirectional ||
 			decision.SelectedExecutor == optimize.ShortestPathExecutorI1CanonicalDistance ||
+			decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance ||
 			decision.SelectedExecutor == optimize.ShortestPathExecutorS4CanonicalDistance ||
 			decision.SelectedExecutor == optimize.ShortestPathExecutorB1AlternatingNodeDistance ||
 			decision.SelectedExecutor == optimize.ShortestPathExecutorB2SmallerCurrentLevelDistance {
@@ -4693,6 +4694,7 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 	inlineShortest := expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional ||
 		expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 ||
 		expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalDistance ||
+		expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance ||
 		expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalWitness ||
 		expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness ||
 		expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG

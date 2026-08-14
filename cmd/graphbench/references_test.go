@@ -734,6 +734,8 @@ func TestFixedSuffixExpansionReferenceSpecsAvoidAmbiguousArrayContainmentOperato
 func TestFixedSuffixHydrationPrecomputeIsSelectionAware(t *testing.T) {
 	require.True(t, referenceHydrationRequested(nil))
 	require.True(t, referenceHydrationRequested([]string{"hydration_only"}))
+	require.True(t, referenceHydrationRequested([]string{"ordered_path_ids_hydration_only"}))
+	require.False(t, referenceHydrationRequested([]string{"suffix_seeded_reverse_ordered_ids"}))
 }
 
 // TestGeneratedFixedSuffixExpansionReferencesUseDeclaredDepthAndObservation verifies propagation of maximum depth and selection of ID-row versus fully hydrated path output SQL.

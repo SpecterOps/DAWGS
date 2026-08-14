@@ -165,6 +165,13 @@ type config struct {
 	// PostgresExpansionOrientationPolicy selects an immutable tool-only
 	// orientation formula. Empty preserves orientation-probe-v1.
 	PostgresExpansionOrientationPolicy string
+	// PostgresExpansionSuffixReverseGuard executes the static, full-path-only
+	// suffix-reverse guard and its exact forward fallback in one statement.
+	PostgresExpansionSuffixReverseGuard bool
+	// PostgresSuffixGuardSuffixLimit overrides the tool-only cap+1 suffix payload limit.
+	PostgresSuffixGuardSuffixLimit int64
+	// PostgresSuffixGuardStateLimit overrides the tool-only cap+1 reverse-state limit.
+	PostgresSuffixGuardStateLimit int64
 	// ConfirmLeft selects the left artifact used for paired confirmation.
 	ConfirmLeft string
 	// ConfirmRight selects the right artifact used for paired confirmation.
@@ -200,6 +207,10 @@ type config struct {
 	PromotionBindInput string
 	// PromotionBindOutput supplies the promotion bind output input to the config contract.
 	PromotionBindOutput string
+	// OperationalGateInput selects the schema-v2 operational evidence document.
+	OperationalGateInput string
+	// OperationalGateOutput selects the machine-verifiable operational gate report destination.
+	OperationalGateOutput string
 	// BuildCommand supplies the build command input to the config contract.
 	BuildCommand string
 	// ExistingGraph selects read-only execution against a pre-existing graph.
@@ -264,6 +275,16 @@ type config struct {
 	OrientationV2Output string
 	// OrientationV2Protocol selects discovery or confirmation evidence requirements.
 	OrientationV2Protocol string
+	// SuffixGuardIncumbentArtifact selects matched exact-forward feasibility records.
+	SuffixGuardIncumbentArtifact string
+	// SuffixGuardReverseArtifact selects matched exact suffix-reverse feasibility records.
+	SuffixGuardReverseArtifact string
+	// SuffixGuardGuardedArtifact selects matched production-shaped guard records.
+	SuffixGuardGuardedArtifact string
+	// SuffixGuardAA selects matching host A/A timing-resolution evidence.
+	SuffixGuardAA string
+	// SuffixGuardOutput selects the training-only feasibility report destination.
+	SuffixGuardOutput string
 	// SPI1BaselineArtifact selects exact S4 records for the staged inbound-I1 study.
 	SPI1BaselineArtifact string
 	// SPI1CandidateArtifact selects guarded canonical-I1 records for the staged study.
@@ -286,6 +307,28 @@ type config struct {
 	SPI1Output string
 	// SPI1Protocol selects discovery or confirmation evidence requirements.
 	SPI1Protocol string
+	// SPI2BaselineArtifact selects exact S4 distance records for staged SP-I2 qualification.
+	SPI2BaselineArtifact string
+	// SPI2CandidateArtifact selects guarded SP-I2 distance records for the staged study.
+	SPI2CandidateArtifact string
+	// SPI2ResourceReport supplies the candidate artifact's checksummed resource gate.
+	SPI2ResourceReport string
+	// SPI2Freeze binds confirmation reporting or holdout capture to training-only discovery.
+	SPI2Freeze string
+	// SPI2DiscoveryReport supplies the checksummed training-only report bound by the freeze.
+	SPI2DiscoveryReport string
+	// SPI2TrainingBaseline supplies the exact S4 distance training evidence named by the freeze.
+	SPI2TrainingBaseline string
+	// SPI2TrainingCandidate supplies the exact guarded-distance training evidence named by the freeze.
+	SPI2TrainingCandidate string
+	// SPI2TrainingResource supplies the exact training resource report named by the freeze.
+	SPI2TrainingResource string
+	// SPI2FreezeOutput writes the training-only staged-study freeze manifest.
+	SPI2FreezeOutput string
+	// SPI2Output selects the staged S4-to-I2 qualification report destination.
+	SPI2Output string
+	// SPI2Protocol selects discovery or confirmation evidence requirements.
+	SPI2Protocol string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -370,7 +413,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
-	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, SP-I1-C-D, SP-I1-U-E+MAT-M0, SP-I1-C-WE+MAT-M0, SP-B1-C-ALT-NODE-D, SP-B1-C-ALT-NODE-WE+MAT-M0, SP-B2-C-MIN-LEVEL-D, SP-B2-C-MIN-LEVEL-WE+MAT-M0, ASP-A1-DAG, ASP-I1-U-DAG+MAT-M0, ASP-B1-DAG-ALT-NODE, ASP-B2-DAG-MIN-LEVEL)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, SP-I1-C-D, SP-I2-C-D, SP-I1-U-E+MAT-M0, SP-I1-C-WE+MAT-M0, SP-B1-C-ALT-NODE-D, SP-B1-C-ALT-NODE-WE+MAT-M0, SP-B2-C-MIN-LEVEL-D, SP-B2-C-MIN-LEVEL-WE+MAT-M0, ASP-A1-DAG, ASP-I1-U-DAG+MAT-M0, ASP-B1-DAG-ALT-NODE, ASP-B2-DAG-MIN-LEVEL)")
 	flags.StringVar(&cfg.PostgresProductionManifest, "postgres-production-manifest", "", "provisional version-2 manifest for exact guarded PostgreSQL candidate measurement")
 	flags.BoolVar(&cfg.PostgresRepeatableRead, "postgres-repeatable-read", false, "measure PostgreSQL under an explicit Repeatable Read transaction")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
@@ -378,6 +421,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.PostgresExpansionOrientationShadow, "postgres-expansion-orientation-shadow", false, "tool-only orientation-probe shadow mode; executes only the exact incumbent traversal arm")
 	flags.BoolVar(&cfg.PostgresExpansionOrientationTournament, "postgres-expansion-orientation-tournament", false, "tool-only guarded orientation-probe mode; executes the selected exact arm")
 	flags.StringVar(&cfg.PostgresExpansionOrientationPolicy, "postgres-expansion-orientation-policy", "", "tool-only immutable orientation policy (orientation-probe-v1 or orientation-probe-v2; default: v1)")
+	flags.BoolVar(&cfg.PostgresExpansionSuffixReverseGuard, "postgres-expansion-suffix-reverse-guard", false, "tool-only full-path suffix-reverse guard with exact forward fallback")
+	flags.Int64Var(&cfg.PostgresSuffixGuardSuffixLimit, "postgres-suffix-guard-suffix-limit", 0, "tool-only suffix payload cap override (0 uses the immutable policy default)")
+	flags.Int64Var(&cfg.PostgresSuffixGuardStateLimit, "postgres-suffix-guard-state-limit", 0, "tool-only reverse-state cap override (0 uses the immutable policy default)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -398,6 +444,8 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.PromotionBindRole, "promotion-bind-role", "", "promotion evidence role to bind")
 	flags.StringVar(&cfg.PromotionBindInput, "promotion-bind-input", "", "unbound promotion evidence report")
 	flags.StringVar(&cfg.PromotionBindOutput, "promotion-bind-output", "", "identity-bound promotion evidence report")
+	flags.StringVar(&cfg.OperationalGateInput, "operational-gate-input", "", "schema-v2 candidate-bound operational evidence document")
+	flags.StringVar(&cfg.OperationalGateOutput, "operational-gate-output", "", "operational evidence gate JSON report output path")
 	flags.StringVar(&cfg.BuildCommand, "build-command", "go build -trimpath ./cmd/graphbench", "reproducible build command recorded in bundles")
 	flags.BoolVar(&cfg.ExistingGraph, "existing-graph", false, "run non-mutating PostgreSQL cases against an existing graph in read-write sessions without schema, load, clear, vacuum, or persistent writes")
 	flags.StringVar(&cfg.AnchorManifest, "anchor-manifest", "", "versioned logical-key anchor manifest for existing-graph mode")
@@ -430,6 +478,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.OrientationV2FreezeOutput, "orientation-v2-freeze-output", "", "write the training-only orientation-v2 discovery freeze manifest")
 	flags.StringVar(&cfg.OrientationV2Output, "orientation-v2-output", "", "four-arm orientation-v2 qualification JSON output path (default: stdout)")
 	flags.StringVar(&cfg.OrientationV2Protocol, "orientation-v2-protocol", referencePairProtocolConfirmation, "orientation-v2 report protocol (discovery or confirmation)")
+	flags.StringVar(&cfg.SuffixGuardIncumbentArtifact, "suffix-guard-incumbent-artifact", "", "six-round exact-forward training artifact for the suffix-reverse stop gate")
+	flags.StringVar(&cfg.SuffixGuardReverseArtifact, "suffix-guard-reverse-artifact", "", "six-round exact suffix-reverse training artifact")
+	flags.StringVar(&cfg.SuffixGuardGuardedArtifact, "suffix-guard-guarded-artifact", "", "six-round production-shaped suffix-reverse guard training artifact")
+	flags.StringVar(&cfg.SuffixGuardAA, "suffix-guard-aa", "", "matching order-balanced incumbent A/A resolution report")
+	flags.StringVar(&cfg.SuffixGuardOutput, "suffix-guard-output", "", "training-only suffix-reverse feasibility report output path")
 	flags.StringVar(&cfg.SPI1BaselineArtifact, "sp-i1-baseline-artifact", "", "matched exact S4 JSONL artifact for staged inbound-I1 qualification")
 	flags.StringVar(&cfg.SPI1CandidateArtifact, "sp-i1-candidate-artifact", "", "matched guarded canonical-I1 JSONL artifact for staged inbound-I1 qualification")
 	flags.StringVar(&cfg.SPI1ResourceReport, "sp-i1-resource-report", "", "resource-gate report bound to the staged canonical-I1 artifact")
@@ -441,6 +494,17 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.SPI1FreezeOutput, "sp-i1-freeze-output", "", "write the staged SP-I1 training-only freeze manifest")
 	flags.StringVar(&cfg.SPI1Output, "sp-i1-output", "", "staged S4-to-I1 qualification JSON output path")
 	flags.StringVar(&cfg.SPI1Protocol, "sp-i1-protocol", referencePairProtocolConfirmation, "staged SP-I1 report protocol (discovery or confirmation)")
+	flags.StringVar(&cfg.SPI2BaselineArtifact, "sp-i2-baseline-artifact", "", "matched exact S4 distance JSONL artifact for staged SP-I2 qualification")
+	flags.StringVar(&cfg.SPI2CandidateArtifact, "sp-i2-candidate-artifact", "", "matched guarded SP-I2 distance JSONL artifact")
+	flags.StringVar(&cfg.SPI2ResourceReport, "sp-i2-resource-report", "", "resource-gate report bound to the staged SP-I2 artifact")
+	flags.StringVar(&cfg.SPI2Freeze, "sp-i2-freeze", "", "training-only freeze required by SP-I2 confirmation reporting and holdout capture")
+	flags.StringVar(&cfg.SPI2DiscoveryReport, "sp-i2-discovery-report", "", "training-only discovery report bound by the SP-I2 freeze")
+	flags.StringVar(&cfg.SPI2TrainingBaseline, "sp-i2-training-baseline-artifact", "", "exact S4 distance training artifact required to recompute frozen SP-I2 discovery")
+	flags.StringVar(&cfg.SPI2TrainingCandidate, "sp-i2-training-candidate-artifact", "", "exact guarded SP-I2 training artifact required to recompute frozen discovery")
+	flags.StringVar(&cfg.SPI2TrainingResource, "sp-i2-training-resource-report", "", "exact training resource report required to recompute frozen SP-I2 discovery")
+	flags.StringVar(&cfg.SPI2FreezeOutput, "sp-i2-freeze-output", "", "write the staged SP-I2 training-only freeze manifest")
+	flags.StringVar(&cfg.SPI2Output, "sp-i2-output", "", "staged S4-distance-to-I2 qualification JSON output path")
+	flags.StringVar(&cfg.SPI2Protocol, "sp-i2-protocol", referencePairProtocolConfirmation, "staged SP-I2 report protocol (discovery or confirmation)")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -539,6 +603,10 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if promotionBindConfigured && (cfg.PromotionBindManifest == "" || cfg.PromotionBindRole == "" || cfg.PromotionBindInput == "" || cfg.PromotionBindOutput == "") {
 		return config{}, fmt.Errorf("promotion report binding requires manifest, role, input, and output")
 	}
+	operationalGateConfigured := cfg.OperationalGateInput != "" || cfg.OperationalGateOutput != ""
+	if operationalGateConfigured && (cfg.OperationalGateInput == "" || cfg.OperationalGateOutput == "") {
+		return config{}, fmt.Errorf("operational gate requires operational-gate-input and operational-gate-output")
+	}
 	if cfg.BundleRequireClean && cfg.BundleVerify == "" {
 		return config{}, fmt.Errorf("bundle-require-clean requires bundle-verify")
 	}
@@ -611,6 +679,36 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if (cfg.OrientationV2Freeze != "" || cfg.OrientationV2DiscoveryReport != "" || cfg.OrientationV2FreezeOutput != "") && !orientationV2Configured {
 		return config{}, fmt.Errorf("orientation-v2-freeze requires orientation-v2 report mode")
 	}
+	suffixGuardInputs := []string{
+		cfg.SuffixGuardIncumbentArtifact,
+		cfg.SuffixGuardReverseArtifact,
+		cfg.SuffixGuardGuardedArtifact,
+		cfg.SuffixGuardAA,
+		cfg.SuffixGuardOutput,
+	}
+	suffixGuardReportConfigured := false
+	for _, input := range suffixGuardInputs {
+		suffixGuardReportConfigured = suffixGuardReportConfigured || input != ""
+	}
+	if suffixGuardReportConfigured {
+		for _, input := range suffixGuardInputs {
+			if input == "" {
+				return config{}, fmt.Errorf("suffix-guard report requires incumbent, reverse, guarded, A/A, and output artifacts")
+			}
+		}
+		if cfg.OutputJSONL != "" || rawCases != "" || rawDatasets != "" || rawCategories != "" || rawTags != "" {
+			return config{}, fmt.Errorf("suffix-guard report mode cannot also execute or select benchmark cases")
+		}
+		if err := validateDistinctSPI2Paths(map[string]string{
+			"incumbent artifact": cfg.SuffixGuardIncumbentArtifact,
+			"reverse artifact":   cfg.SuffixGuardReverseArtifact,
+			"guarded artifact":   cfg.SuffixGuardGuardedArtifact,
+			"A/A report":         cfg.SuffixGuardAA,
+			"report output":      cfg.SuffixGuardOutput,
+		}); err != nil {
+			return config{}, fmt.Errorf("suffix-guard report: %w", err)
+		}
+	}
 	spI1ReportInputs := []string{cfg.SPI1BaselineArtifact, cfg.SPI1CandidateArtifact, cfg.SPI1ResourceReport}
 	spI1TrainingInputs := []string{cfg.SPI1TrainingBaseline, cfg.SPI1TrainingCandidate, cfg.SPI1TrainingResource}
 	spI1ReportConfigured := cfg.SPI1Output != "" || cfg.SPI1FreezeOutput != ""
@@ -675,6 +773,70 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			return config{}, err
 		}
 	}
+	spI2ReportInputs := []string{cfg.SPI2BaselineArtifact, cfg.SPI2CandidateArtifact, cfg.SPI2ResourceReport}
+	spI2TrainingInputs := []string{cfg.SPI2TrainingBaseline, cfg.SPI2TrainingCandidate, cfg.SPI2TrainingResource}
+	spI2ReportConfigured := cfg.SPI2Output != "" || cfg.SPI2FreezeOutput != ""
+	for _, input := range spI2ReportInputs {
+		spI2ReportConfigured = spI2ReportConfigured || input != ""
+	}
+	if cfg.SPI2Protocol != referencePairProtocolDiscovery && cfg.SPI2Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("sp-i2-protocol must be discovery or confirmation")
+	}
+	if spI2ReportConfigured {
+		for _, input := range spI2ReportInputs {
+			if input == "" {
+				return config{}, fmt.Errorf("SP-I2 report requires baseline, candidate, and resource artifacts")
+			}
+		}
+		if cfg.SPI2Output == "" {
+			return config{}, fmt.Errorf("SP-I2 report requires sp-i2-output")
+		}
+		if cfg.SPI2Protocol == referencePairProtocolDiscovery && cfg.SPI2FreezeOutput == "" {
+			return config{}, fmt.Errorf("SP-I2 discovery requires sp-i2-freeze-output")
+		}
+		if cfg.SPI2Protocol == referencePairProtocolConfirmation && (cfg.SPI2Freeze == "" || cfg.SPI2DiscoveryReport == "") {
+			return config{}, fmt.Errorf("SP-I2 confirmation requires sp-i2-freeze and sp-i2-discovery-report")
+		}
+	} else if (cfg.SPI2Freeze == "") != (cfg.SPI2DiscoveryReport == "") {
+		return config{}, fmt.Errorf("SP-I2 holdout capture requires both sp-i2-freeze and sp-i2-discovery-report")
+	}
+	spI2TrainingInputCount := 0
+	for _, input := range spI2TrainingInputs {
+		if input != "" {
+			spI2TrainingInputCount++
+		}
+	}
+	if cfg.SPI2Freeze != "" && spI2TrainingInputCount != len(spI2TrainingInputs) {
+		return config{}, fmt.Errorf("SP-I2 frozen authorization requires all three exact training evidence artifacts")
+	}
+	if cfg.SPI2Freeze == "" && spI2TrainingInputCount != 0 {
+		return config{}, fmt.Errorf("SP-I2 training evidence inputs require a discovery freeze")
+	}
+	if !spI2ReportConfigured && cfg.SPI2Freeze != "" && cfg.SPI2Protocol != referencePairProtocolConfirmation {
+		return config{}, fmt.Errorf("SP-I2 holdout capture requires the confirmation protocol")
+	}
+	if cfg.SPI2FreezeOutput != "" && cfg.SPI2Protocol != referencePairProtocolDiscovery {
+		return config{}, fmt.Errorf("sp-i2-freeze-output is only valid for discovery")
+	}
+	if spI2ReportConfigured && cfg.SPI2Protocol == referencePairProtocolDiscovery && (cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "") {
+		return config{}, fmt.Errorf("SP-I2 discovery creates a freeze and cannot consume confirmation inputs")
+	}
+	if spI2ReportConfigured && (cfg.OutputJSONL != "" || rawCases != "" || rawDatasets != "" || rawCategories != "" || rawTags != "") {
+		return config{}, fmt.Errorf("SP-I2 report mode cannot also execute or select benchmark cases")
+	}
+	if spI2ReportConfigured {
+		if err := validateDistinctSPI2Paths(map[string]string{
+			"baseline artifact": cfg.SPI2BaselineArtifact, "candidate artifact": cfg.SPI2CandidateArtifact,
+			"resource report": cfg.SPI2ResourceReport, "freeze manifest": cfg.SPI2Freeze,
+			"discovery report": cfg.SPI2DiscoveryReport, "freeze output": cfg.SPI2FreezeOutput,
+			"training baseline artifact":  cfg.SPI2TrainingBaseline,
+			"training candidate artifact": cfg.SPI2TrainingCandidate,
+			"training resource report":    cfg.SPI2TrainingResource,
+			"report output":               cfg.SPI2Output,
+		}); err != nil {
+			return config{}, err
+		}
+	}
 	modeCount := 0
 	if cfg.GateBaseline != "" {
 		modeCount++
@@ -709,6 +871,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if promotionBindConfigured {
 		modeCount++
 	}
+	if operationalGateConfigured {
+		modeCount++
+	}
 	if cfg.ExpandIntoArtifact != "" {
 		modeCount++
 	}
@@ -718,14 +883,23 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if orientationV2Configured {
 		modeCount++
 	}
+	if suffixGuardReportConfigured {
+		modeCount++
+	}
 	if spI1ReportConfigured {
+		modeCount++
+	}
+	if spI2ReportConfigured {
 		modeCount++
 	}
 	if !spI1ReportConfigured && cfg.SPI1Freeze != "" && modeCount > 0 {
 		return config{}, fmt.Errorf("SP-I1 holdout authorization cannot be combined with a standalone report mode")
 	}
+	if !spI2ReportConfigured && cfg.SPI2Freeze != "" && modeCount > 0 {
+		return config{}, fmt.Errorf("SP-I2 holdout authorization cannot be combined with a standalone report mode")
+	}
 	if modeCount > 1 {
-		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, ExpandInto-report, orientation-report, orientation-v2-report, and SP-I1-report modes are mutually exclusive")
+		return config{}, fmt.Errorf("performance-gate, A/A, paired-confirmation, reference-closure, reference-pair, reference-tournament, resource-gate, backend-delta, bundle-verify, promotion-manifest, promotion-bind, operational-gate, ExpandInto-report, orientation-report, orientation-v2-report, suffix-guard-report, SP-I1-report, and SP-I2-report modes are mutually exclusive")
 	}
 	if modeCount > 0 && cfg.BundleDir != "" {
 		return config{}, fmt.Errorf("standalone report modes and bundle-dir are mutually exclusive")
@@ -738,6 +912,9 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	if spI1ReportConfigured && (cfg.GateSeed != 1 || cfg.Confidence != defaultConfidenceLevel) {
 		return config{}, fmt.Errorf("SP-I1 reporting requires frozen seed 1 and confidence %.4f", defaultConfidenceLevel)
+	}
+	if spI2ReportConfigured && (cfg.GateSeed != 1 || cfg.Confidence != defaultConfidenceLevel) {
+		return config{}, fmt.Errorf("SP-I2 reporting requires frozen seed 1 and confidence %.4f", defaultConfidenceLevel)
 	}
 	if cfg.Regression < 0 {
 		return config{}, fmt.Errorf("regression-threshold must not be negative")
@@ -833,6 +1010,21 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if orientationMode && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "") {
 		return config{}, fmt.Errorf("PostgreSQL expansion orientation and forced traversal selectors are mutually exclusive")
 	}
+	if cfg.PostgresExpansionSuffixReverseGuard && (orientationMode || cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" || cfg.PostgresProductionManifest != "") {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard is mutually exclusive with orientation, forced traversal, and production-manifest selectors")
+	}
+	if !cfg.PostgresExpansionSuffixReverseGuard && (cfg.PostgresSuffixGuardSuffixLimit != 0 || cfg.PostgresSuffixGuardStateLimit != 0) {
+		return config{}, fmt.Errorf("PostgreSQL suffix-guard cap overrides require postgres-expansion-suffix-reverse-guard")
+	}
+	if cfg.PostgresSuffixGuardSuffixLimit < 0 || cfg.PostgresSuffixGuardStateLimit < 0 {
+		return config{}, fmt.Errorf("PostgreSQL suffix-guard cap overrides must not be negative")
+	}
+	if cfg.PostgresExpansionSuffixReverseGuard && !cfg.PostgresRepeatableRead {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard measurements require postgres-repeatable-read")
+	}
+	if cfg.PostgresExpansionSuffixReverseGuard && cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard measurements require diagnostic traversal telemetry")
+	}
 	if cfg.PostgresExpansionOrientationPolicy != "" && !orientationMode {
 		return config{}, fmt.Errorf("PostgreSQL expansion orientation policy requires shadow or tournament mode")
 	}
@@ -883,6 +1075,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			return config{}, err
 		}
 	}
+	if !spI2ReportConfigured && cfg.SPI2Freeze != "" {
+		if err := validateSPI2HoldoutCaptureConfig(cfg); err != nil {
+			return config{}, err
+		}
+	}
 
 	return cfg, nil
 }
@@ -898,6 +1095,7 @@ func validForcedShortestPathExecutor(executor string) bool {
 		"SP-S4-C-D",
 		"SP-S4-C-WE+MAT-M0",
 		"SP-I1-C-D",
+		"SP-I2-C-D",
 		"SP-I1-U-E+MAT-M0",
 		"SP-I1-C-WE+MAT-M0",
 		"SP-B1-C-ALT-NODE-D",
@@ -1030,6 +1228,16 @@ func main() {
 		}
 		return
 	}
+	if cfg.OperationalGateInput != "" {
+		passed, err := createOperationalGateReport(cfg.OperationalGateInput, cfg.OperationalGateOutput)
+		if err != nil {
+			fatal("calculate operational gate: %v", err)
+		}
+		if !passed {
+			fatal("operational gate failed")
+		}
+		return
+	}
 	if cfg.OrientationShadowArtifact != "" {
 		passed, err := createOrientationSelectorReport(
 			cfg.OrientationShadowArtifact,
@@ -1076,6 +1284,27 @@ func main() {
 		}
 		return
 	}
+	if cfg.SuffixGuardIncumbentArtifact != "" {
+		passed, err := createSuffixReverseGuardFeasibilityReport(
+			cfg.SuffixGuardIncumbentArtifact,
+			cfg.SuffixGuardReverseArtifact,
+			cfg.SuffixGuardGuardedArtifact,
+			cfg.SuffixGuardAA,
+			cfg.SuffixGuardOutput,
+			SuffixReverseGuardFeasibilityOptions{
+				Seed:           cfg.GateSeed,
+				Confidence:     cfg.Confidence,
+				BootstrapCount: defaultBootstrapCount,
+			},
+		)
+		if err != nil {
+			fatal("calculate suffix-reverse guard feasibility: %v", err)
+		}
+		if !passed {
+			fatal("suffix-reverse guard feasibility stop gate failed")
+		}
+		return
+	}
 	if cfg.SPI1BaselineArtifact != "" {
 		passed, err := createSPI1QualificationReport(
 			cfg.SPI1BaselineArtifact,
@@ -1099,6 +1328,32 @@ func main() {
 		}
 		if cfg.SPI1Protocol == referencePairProtocolConfirmation && !passed {
 			fatal("staged SP-I1 qualification failed")
+		}
+		return
+	}
+	if cfg.SPI2BaselineArtifact != "" {
+		passed, err := createSPI2QualificationReport(
+			cfg.SPI2BaselineArtifact,
+			cfg.SPI2CandidateArtifact,
+			cfg.SPI2ResourceReport,
+			cfg.SPI2Freeze,
+			cfg.SPI2DiscoveryReport,
+			cfg.SPI2FreezeOutput,
+			cfg.SPI2Output,
+			SPI2QualificationOptions{
+				Seed:                  cfg.GateSeed,
+				Confidence:            cfg.Confidence,
+				Protocol:              cfg.SPI2Protocol,
+				TrainingBaselinePath:  cfg.SPI2TrainingBaseline,
+				TrainingCandidatePath: cfg.SPI2TrainingCandidate,
+				TrainingResourcePath:  cfg.SPI2TrainingResource,
+			},
+		)
+		if err != nil {
+			fatal("calculate staged SP-I2 qualification: %v", err)
+		}
+		if cfg.SPI2Protocol == referencePairProtocolConfirmation && !passed {
+			fatal("staged SP-I2 qualification failed")
 		}
 		return
 	}
@@ -1233,7 +1488,7 @@ func main() {
 	if err != nil {
 		fatal("load corpus: %v", err)
 	}
-	corpus, selection, err := selectRunnableScaleCorpus(fullCorpus, CorpusSelectors{
+	corpus, selection, err := selectRunnableScaleCorpusWithSPI2Protection(fullCorpus, CorpusSelectors{
 		Cases:      cfg.Cases,
 		Datasets:   cfg.Datasets,
 		Categories: cfg.Categories,
@@ -1251,6 +1506,17 @@ func main() {
 			cfg.SPI1TrainingBaseline, cfg.SPI1TrainingCandidate, cfg.SPI1TrainingResource,
 		); err != nil {
 			fatal("authorize SP-I1 holdout capture: %v", err)
+		}
+	}
+	if selectedCorpusContainsTag(corpus, spI2HoldoutTag) || selectedCorpusContainsSPI2Holdout(corpus) || cfg.SPI2Freeze != "" {
+		if cfg.SPI2Freeze == "" || cfg.SPI2DiscoveryReport == "" {
+			fatal("SP-I2 holdout capture requires sp-i2-freeze and sp-i2-discovery-report before database setup")
+		}
+		if err := validateSPI2HoldoutCapture(
+			corpus, cfg.SPI2Freeze, cfg.SPI2DiscoveryReport,
+			cfg.SPI2TrainingBaseline, cfg.SPI2TrainingCandidate, cfg.SPI2TrainingResource,
+		); err != nil {
+			fatal("authorize SP-I2 holdout capture: %v", err)
 		}
 	}
 
@@ -1373,6 +1639,9 @@ func main() {
 			runner.toolOptions.EnableExpansionOrientationShadow = cfg.PostgresExpansionOrientationShadow
 			runner.toolOptions.EnableExpansionOrientationTournament = cfg.PostgresExpansionOrientationTournament
 			runner.toolOptions.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicy(cfg.PostgresExpansionOrientationPolicy)
+			runner.toolOptions.EnableExpansionSuffixReverseGuard = cfg.PostgresExpansionSuffixReverseGuard
+			runner.toolOptions.SuffixReverseGuardSuffixRowLimit = cfg.PostgresSuffixGuardSuffixLimit
+			runner.toolOptions.SuffixReverseGuardStateLimit = cfg.PostgresSuffixGuardStateLimit
 			if err := runner.setProductionManifest(cfg.PostgresProductionManifest); err != nil {
 				_ = runner.Close(ctx)
 				fatal("configure PostgreSQL production candidate: %v", err)

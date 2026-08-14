@@ -727,6 +727,14 @@ func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
 		}
 	}
 
+	if selectStmt.Having != nil {
+		builder.Write(" having ")
+
+		if err := formatNode(builder, selectStmt.Having); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

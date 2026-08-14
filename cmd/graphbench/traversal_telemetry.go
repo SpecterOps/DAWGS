@@ -42,6 +42,9 @@ const (
 	TraversalTelemetryFamilyOrdinary TraversalTelemetryFamily = "ordinary"
 	// TraversalTelemetryFamilyOrientation identifies runtime orientation-policy work.
 	TraversalTelemetryFamilyOrientation TraversalTelemetryFamily = "orientation"
+	// TraversalTelemetryFamilySuffixGuard identifies bounded reverse-first
+	// fixed-suffix admission and its exact fallback boundary.
+	TraversalTelemetryFamilySuffixGuard TraversalTelemetryFamily = "suffix_guard"
 	// TraversalTelemetryFamilySP identifies singleton shortest-path work.
 	TraversalTelemetryFamilySP TraversalTelemetryFamily = "shortest_path"
 	// TraversalTelemetryFamilyASP identifies all-shortest-path work.
@@ -154,6 +157,9 @@ type TraversalDiagnosticCounters struct {
 	Ordinary *OrdinaryTraversalCounters `json:"ordinary,omitempty"`
 	// Orientation supplies the orientation input to the TraversalDiagnosticCounters contract.
 	Orientation *OrientationTraversalCounters `json:"orientation,omitempty"`
+	// SuffixGuard records reverse-first fixed-suffix admission independently of
+	// topology-scored orientation probes.
+	SuffixGuard *SuffixGuardTraversalCounters `json:"suffix_guard,omitempty"`
 	// ShortestPath identifies the filesystem shortest path.
 	ShortestPath *ShortestPathTraversalCounters `json:"shortest_path,omitempty"`
 	// AllShortestPaths identifies the filesystem all shortest paths.
@@ -162,10 +168,46 @@ type TraversalDiagnosticCounters struct {
 	InlineASP *InlinePredecessorTraversalCounters `json:"inline_asp,omitempty"`
 	// InlineShortestPath identifies the filesystem inline shortest path.
 	InlineShortestPath *InlinePredecessorTraversalCounters `json:"inline_shortest_path,omitempty"`
+	// InlineShortestDistance records guarded SP-I2 distance-only work.
+	InlineShortestDistance *InlineDistanceTraversalCounters `json:"inline_shortest_distance,omitempty"`
 	// Hydration supplies the hydration input to the TraversalDiagnosticCounters contract.
 	Hydration *TraversalHydrationCounters `json:"hydration,omitempty"`
 	// Workspace supplies the workspace input to the TraversalDiagnosticCounters contract.
 	Workspace *TraversalWorkspaceCounters `json:"workspace,omitempty"`
+}
+
+// InlineDistanceTraversalCounters records the bounded reverse-physical
+// distance relation and complementary candidate/fallback branch receipts.
+type InlineDistanceTraversalCounters struct {
+	StateRows              *int64 `json:"state_rows"`
+	FrontierRows           *int64 `json:"frontier_rows"`
+	OutputRows             *int64 `json:"output_rows"`
+	CandidateMarkerRows    *int64 `json:"candidate_marker_rows"`
+	FallbackMarkerRows     *int64 `json:"fallback_marker_rows"`
+	CandidateBranchRows    *int64 `json:"candidate_branch_rows"`
+	FallbackBranchRows     *int64 `json:"fallback_branch_rows"`
+	CandidateExecutorLoops *int64 `json:"candidate_executor_loops"`
+	FallbackExecutorLoops  *int64 `json:"fallback_executor_loops"`
+}
+
+// SuffixGuardTraversalCounters records the complete bounded relations and
+// complementary branch markers exposed by suffix-reverse-guard-v1. Boolean
+// overflow fields remain pointers so a measured false cannot be confused with
+// missing evidence.
+type SuffixGuardTraversalCounters struct {
+	RootPresenceRows       *int64 `json:"root_presence_rows"`
+	SuffixRows             *int64 `json:"suffix_rows"`
+	DistinctBoundaryRows   *int64 `json:"distinct_boundary_rows"`
+	StateRows              *int64 `json:"state_rows"`
+	OutputRows             *int64 `json:"output_rows"`
+	CandidateMarkerRows    *int64 `json:"candidate_marker_rows"`
+	FallbackMarkerRows     *int64 `json:"fallback_marker_rows"`
+	CandidateBranchRows    *int64 `json:"candidate_branch_rows"`
+	FallbackBranchRows     *int64 `json:"fallback_branch_rows"`
+	CandidateExecutorLoops *int64 `json:"candidate_executor_loops"`
+	FallbackExecutorLoops  *int64 `json:"fallback_executor_loops"`
+	SuffixOverflow         *bool  `json:"suffix_overflow"`
+	StateOverflow          *bool  `json:"state_overflow"`
 }
 
 // InlinePredecessorTraversalCounters records the complete set of bounded
@@ -555,8 +597,12 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 			validateOrdinaryCounters(diagnostic.Counters.Ordinary, diagnostic.Provenance, problems)
 		case TraversalTelemetryFamilyOrientation:
 			validateOrientationCounters(diagnostic.Counters.Orientation, diagnostic.Provenance, problems)
+		case TraversalTelemetryFamilySuffixGuard:
+			validateSuffixGuardCounters(diagnostic.Counters.SuffixGuard, diagnostic.Provenance, problems)
 		case TraversalTelemetryFamilySP:
-			if diagnostic.Counters.InlineShortestPath != nil {
+			if diagnostic.Counters.InlineShortestDistance != nil {
+				validateInlineDistanceCounters(diagnostic.Counters.InlineShortestDistance, diagnostic.Provenance, problems)
+			} else if diagnostic.Counters.InlineShortestPath != nil {
 				validateInlinePredecessorCounters("inline_shortest_path", diagnostic.Counters.InlineShortestPath, diagnostic.Provenance, problems)
 			} else {
 				validateShortestPathCounters("shortest_path", diagnostic.Counters.ShortestPath, diagnostic.Provenance, problems)
@@ -583,7 +629,8 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 	for family, present := range map[TraversalTelemetryFamily]bool{
 		TraversalTelemetryFamilyOrdinary:    diagnostic.Counters.Ordinary != nil,
 		TraversalTelemetryFamilyOrientation: diagnostic.Counters.Orientation != nil,
-		TraversalTelemetryFamilySP:          diagnostic.Counters.ShortestPath != nil || diagnostic.Counters.InlineShortestPath != nil,
+		TraversalTelemetryFamilySuffixGuard: diagnostic.Counters.SuffixGuard != nil,
+		TraversalTelemetryFamilySP:          diagnostic.Counters.ShortestPath != nil || diagnostic.Counters.InlineShortestPath != nil || diagnostic.Counters.InlineShortestDistance != nil,
 		TraversalTelemetryFamilyASP:         diagnostic.Counters.AllShortestPaths != nil || diagnostic.Counters.InlineASP != nil,
 		TraversalTelemetryFamilyHydration:   diagnostic.Counters.Hydration != nil,
 		TraversalTelemetryFamilyWorkspace:   diagnostic.Counters.Workspace != nil,
@@ -592,6 +639,44 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 			*problems = append(*problems, fmt.Sprintf("diagnostic counter family %q is present but not declared", family))
 		}
 	}
+}
+
+// validateSuffixGuardCounters validates the reverse-first guard's complete
+// admission, branch, and sentinel evidence without requiring orientation-only
+// degree samples or scores.
+func validateSuffixGuardCounters(counters *SuffixGuardTraversalCounters, provenance map[string]string, problems *[]string) {
+	if counters == nil {
+		*problems = append(*problems, "diagnostic.counters.suffix_guard is missing")
+		return
+	}
+	requireCounters("suffix_guard", provenance, problems, map[string]*int64{
+		"root_presence_rows":       counters.RootPresenceRows,
+		"suffix_rows":              counters.SuffixRows,
+		"distinct_boundary_rows":   counters.DistinctBoundaryRows,
+		"state_rows":               counters.StateRows,
+		"output_rows":              counters.OutputRows,
+		"candidate_marker_rows":    counters.CandidateMarkerRows,
+		"fallback_marker_rows":     counters.FallbackMarkerRows,
+		"candidate_branch_rows":    counters.CandidateBranchRows,
+		"fallback_branch_rows":     counters.FallbackBranchRows,
+		"candidate_executor_loops": counters.CandidateExecutorLoops,
+		"fallback_executor_loops":  counters.FallbackExecutorLoops,
+	})
+	requirePointerAndProvenance("suffix_guard.suffix_overflow", counters.SuffixOverflow, provenance, problems)
+	requirePointerAndProvenance("suffix_guard.state_overflow", counters.StateOverflow, provenance, problems)
+}
+
+func validateInlineDistanceCounters(counters *InlineDistanceTraversalCounters, provenance map[string]string, problems *[]string) {
+	if counters == nil {
+		*problems = append(*problems, "diagnostic.counters.inline_shortest_distance is missing")
+		return
+	}
+	requireCounters("inline_shortest_distance", provenance, problems, map[string]*int64{
+		"state_rows": counters.StateRows, "frontier_rows": counters.FrontierRows, "output_rows": counters.OutputRows,
+		"candidate_marker_rows": counters.CandidateMarkerRows, "fallback_marker_rows": counters.FallbackMarkerRows,
+		"candidate_branch_rows": counters.CandidateBranchRows, "fallback_branch_rows": counters.FallbackBranchRows,
+		"candidate_executor_loops": counters.CandidateExecutorLoops, "fallback_executor_loops": counters.FallbackExecutorLoops,
+	})
 }
 
 // validateInlinePredecessorCounters validates inline predecessor counters.

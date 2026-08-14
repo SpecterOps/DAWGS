@@ -177,3 +177,73 @@ func TestBackendDeltaReportPreservesIncompletePairs(t *testing.T) {
 	require.Zero(t, report.Cases[0].MedianNeo4jOverPG)
 	require.Zero(t, report.Cases[0].P95Neo4jOverPG)
 }
+
+// TestBackendDeltaReportRanksRepeatedRoundOutliers verifies the descriptive
+// report turns matched rounds into a runtime-attributed optimization ledger.
+func TestBackendDeltaReportRanksRepeatedRoundOutliers(t *testing.T) {
+	root := t.TempDir()
+	artifact, output := filepath.Join(root, "records.jsonl"), filepath.Join(root, "delta.json")
+	var records []CaseResult
+	for round, postgresMedian := range []time.Duration{8 * time.Millisecond, 12 * time.Millisecond} {
+		environment := &RunEnvironment{Round: round + 1}
+		records = append(records,
+			CaseResult{
+				Dataset:           "fixture",
+				Name:              "slow",
+				Category:          "shortest_path",
+				Shape:             WorkloadShape{Direction: "inbound", ExpectedStateClass: "hidden_fanin"},
+				ExecutionMode:     ModePostgresSQL,
+				Status:            StatusOK,
+				RowCount:          1,
+				StableObservation: true,
+				ObservedRows:      []string{"one"},
+				Environment:       environment,
+				Stats:             DurationStats{Median: postgresMedian, P95: postgresMedian + time.Millisecond},
+				SQLFingerprint:    "sql-fingerprint",
+				FallbackReason:    "tournament_unqualified",
+				TraversalTelemetry: &TraversalExecutionTelemetry{Summary: TraversalExecutionSummary{
+					RuntimeIdentity: "SP-S4-C-D",
+					AppliedIdentity: "SP-S4-C-D",
+					RuntimeBranch:   "compact_distance",
+					ObservationMode: "distance",
+					SelectorVersion: "sp-static-v5-contained",
+				}},
+			},
+			CaseResult{
+				Dataset:           "fixture",
+				Name:              "slow",
+				Category:          "shortest_path",
+				ExecutionMode:     ModeNeo4j,
+				Status:            StatusOK,
+				RowCount:          1,
+				StableObservation: true,
+				ObservedRows:      []string{"one"},
+				Environment:       environment,
+				Stats:             DurationStats{Median: 2 * time.Millisecond, P95: 3 * time.Millisecond},
+			},
+		)
+	}
+	// A PostgreSQL win remains in the complete case report but not the outlier ledger.
+	records = append(records,
+		CaseResult{Dataset: "fixture", Name: "fast", ExecutionMode: ModePostgresSQL, Status: StatusOK, RowCount: 1, StableObservation: true, ObservedRows: []string{"one"}, Stats: DurationStats{Median: time.Millisecond}},
+		CaseResult{Dataset: "fixture", Name: "fast", ExecutionMode: ModeNeo4j, Status: StatusOK, RowCount: 1, StableObservation: true, ObservedRows: []string{"one"}, Stats: DurationStats{Median: 2 * time.Millisecond}},
+	)
+
+	require.NoError(t, writeJSONLFile(artifact, records))
+	require.NoError(t, createBackendDeltaReport(artifact, output))
+	raw, err := os.ReadFile(output)
+	require.NoError(t, err)
+	var report BackendDeltaReport
+	require.NoError(t, json.Unmarshal(raw, &report))
+	require.Len(t, report.Outliers, 1)
+	outlier := report.Outliers[0]
+	require.Equal(t, "slow", outlier.Name)
+	require.Equal(t, 2, outlier.Rounds)
+	require.Equal(t, 4.0, outlier.MedianPostgresOverNeo4j)
+	require.Equal(t, 8*time.Millisecond, outlier.PostgresMedian)
+	require.Equal(t, 2*time.Millisecond, outlier.Neo4jMedian)
+	require.Equal(t, []string{"SP-S4-C-D"}, outlier.AppliedIdentities)
+	require.Equal(t, []string{"compact_distance"}, outlier.RuntimeBranches)
+	require.Equal(t, []string{"tournament_unqualified"}, outlier.FallbackReasons)
+	require.Equal(t, "hidden_fanin", outlier.ExpectedStateClass)
+}

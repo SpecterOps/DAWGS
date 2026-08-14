@@ -206,11 +206,31 @@ const (
 	// canonical-witness candidate with an exact compact S4 fallback.
 	ShortestPathPolicyI1CanonicalGuardedV1 = "sp-i1-canonical-guarded-v1"
 
+	// ShortestPathPolicyI2DistanceGuardedV1 identifies reverse-physical inline
+	// distance discovery with independent state/frontier gates and S4 fallback.
+	ShortestPathPolicyI2DistanceGuardedV1 = "sp-i2-distance-guarded-v1"
+
+	// ShortestPathI2QualifiedStateLimit is the immutable total-state ceiling
+	// preregistered by the SP-I2 production-form protocol and policy seam.
+	ShortestPathI2QualifiedStateLimit int64 = 100_000
+
+	// ShortestPathI2QualifiedFrontierLimit is the immutable per-depth frontier
+	// ceiling preregistered by the SP-I2 production-form protocol and policy seam.
+	ShortestPathI2QualifiedFrontierLimit int64 = 100_000
+
 	// ShortestPathSelectorStaticV6 identifies the evidence-gated production
 	// selector for the qualified inbound, typed, single-kind canonical witness
 	// envelope. The automatic selector remains sp-static-v5-contained until a
 	// complete production evidence manifest activates this version.
 	ShortestPathSelectorStaticV6 = "sp-static-v6"
+
+	// ShortestPathSelectorStaticV7Contained extends contained S3/S4 selection
+	// to syntax-open SP ranges using the existing effective depth-15 policy.
+	ShortestPathSelectorStaticV7Contained = "sp-static-v7-contained"
+
+	// ShortestPathSelectorStaticV8HiddenFanIn identifies the exact-bucket,
+	// evidence-gated distance canary for asymmetric physical topology.
+	ShortestPathSelectorStaticV8HiddenFanIn = "sp-static-v8-hidden-fanin"
 
 	// ShortestPathExecutorIncumbentWorkspace selects the existing workspace-table executor.
 	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "SP-S0"
@@ -243,6 +263,10 @@ const (
 	// distance search. The distinct identity prevents evidence collected at an
 	// inline statement boundary from being attributed to a helper function.
 	ShortestPathExecutorI1CanonicalDistance ShortestPathExecutor = "SP-I1-C-D"
+
+	// ShortestPathExecutorI2GuardedDistance selects reverse-physical inline
+	// distance discovery with exact compact S4 fallback.
+	ShortestPathExecutorI2GuardedDistance ShortestPathExecutor = "SP-I2-C-D"
 
 	// ShortestPathExecutorI1CanonicalWitness selects inline recursive SQL with
 	// ordered edge-ID witness state and late M0 path materialization.
@@ -307,6 +331,7 @@ func (s ShortestPathExecutor) Scheduler() ShortestPathScheduler {
 		ShortestPathExecutorS4CanonicalWitness,
 		ShortestPathExecutorASPA1DAG,
 		ShortestPathExecutorI1CanonicalDistance,
+		ShortestPathExecutorI2GuardedDistance,
 		ShortestPathExecutorI1CanonicalWitness,
 		ShortestPathExecutorI1CanonicalPredecessorWitness,
 		ShortestPathExecutorASPI1DAG:
@@ -331,6 +356,7 @@ func (s ShortestPathExecutor) ExecutionBoundary() string {
 	case ShortestPathExecutorS3Unidirectional,
 		ShortestPathExecutorS3EdgeM0,
 		ShortestPathExecutorI1CanonicalDistance,
+		ShortestPathExecutorI2GuardedDistance,
 		ShortestPathExecutorI1CanonicalWitness,
 		ShortestPathExecutorI1CanonicalPredecessorWitness,
 		ShortestPathExecutorASPI1DAG:
@@ -354,6 +380,19 @@ const (
 
 	// ShortestPathObservationUnknown indicates that analysis could not classify downstream path use.
 	ShortestPathObservationUnknown ShortestPathObservationMode = "unknown"
+)
+
+// ShortestPathMaximumDepthSource distinguishes an explicit Cypher upper bound
+// from the repository's existing effective cap for a syntax-open range.
+type ShortestPathMaximumDepthSource string
+
+const (
+	// ShortestPathMaximumDepthExplicit identifies an upper bound written in the query.
+	ShortestPathMaximumDepthExplicit ShortestPathMaximumDepthSource = "explicit"
+
+	// ShortestPathMaximumDepthPolicyDefault identifies the effective depth-15
+	// cap already applied by PostgreSQL translation to an omitted upper bound.
+	ShortestPathMaximumDepthPolicyDefault ShortestPathMaximumDepthSource = "policy_default"
 )
 
 const (
@@ -478,6 +517,9 @@ type ShortestPathExecutorDecision struct {
 	MinimumDepth int64 `json:"minimum_depth"`
 	// MaximumDepth is the inclusive upper traversal-depth bound.
 	MaximumDepth int64 `json:"maximum_depth"`
+	// MaximumDepthSource records whether MaximumDepth was explicit syntax or
+	// supplied by the existing traversal policy.
+	MaximumDepthSource ShortestPathMaximumDepthSource `json:"maximum_depth_source"`
 	// StateLimit caps state admitted by bounded experimental executors.
 	StateLimit int64 `json:"state_limit,omitempty"`
 	// FrontierLimit caps current and queued frontier rows independently of seen state.
@@ -596,6 +638,24 @@ const (
 	// orientation using depth-weighted forward work and the same bounded,
 	// same-statement topology probes as v1.
 	ExpansionSearchPolicyOrientationProbeV2 ExpansionSearchPolicy = "orientation-probe-v2"
+
+	// ExpansionSearchPolicySuffixReverseGuardV1 identifies bounded fixed-suffix
+	// reverse execution with exact stepwise-forward fallback. Unlike the
+	// orientation policies, it performs no topology scoring or directional
+	// degree probes.
+	ExpansionSearchPolicySuffixReverseGuardV1 ExpansionSearchPolicy = "suffix-reverse-guard-v1"
+
+	// ExpansionSearchSelectorFixedSuffixPathV1 identifies the tool-only static
+	// selector for full-path fixed-suffix observations.
+	ExpansionSearchSelectorFixedSuffixPathV1 = "fixed-suffix-path-static-v1"
+
+	// ExpansionSearchSuffixReverseGuardSuffixRowLimit caps complete fixed-suffix
+	// payload rows before reverse execution is admitted.
+	ExpansionSearchSuffixReverseGuardSuffixRowLimit int64 = 512
+
+	// ExpansionSearchSuffixReverseGuardStateLimit caps complete reverse recursive
+	// state before exact forward fallback is selected.
+	ExpansionSearchSuffixReverseGuardStateLimit int64 = 512
 
 	// ExpansionSearchOrientationRootRowLimit caps complete forward-root evidence
 	// for the initial fixed-suffix orientation tournament.

@@ -30,6 +30,11 @@ const (
 	// expansionPath names the recursive-state column containing ordered traversed edge IDs.
 	expansionPath pgsql.Identifier = "path"
 
+	// expansionNodePath names an optional ordered node-ID trail carried by
+	// specialized traversals that can hydrate a complete path without walking
+	// the edge stream again.
+	expansionNodePath pgsql.Identifier = "node_path"
+
 	// expansionForwardFront names the current forward frontier in bidirectional search.
 	expansionForwardFront pgsql.Identifier = "forward_front"
 

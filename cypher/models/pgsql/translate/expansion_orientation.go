@@ -307,43 +307,62 @@ func buildExpansionOrientationRootPresence(ids expansionOrientationIdentifiers) 
 	}
 }
 
-// buildExpansionOrientationDegreeProbe materializes one evidence row per typed
-// adjacency. Each seed row is retained, so duplicate forward roots contribute
-// their real work multiplier while reverse boundaries remain distinct.
+// buildExpansionOrientationDegreeProbe counts a bounded stream of typed
+// adjacencies. The inner limit preserves the cap+1 sentinel and duplicate seed
+// work, while the scalar outer result avoids materializing and rescanning one
+// boolean tuple per adjacency.
 func buildExpansionOrientationDegreeProbe(
 	alias, seedSource, seedColumn pgsql.Identifier,
 	edgeAlias, edgeSeedColumn pgsql.Identifier,
 	edgeConstraint pgsql.Expression,
 	cap int64,
 ) pgsql.CommonTableExpression {
+	sampleRows := pgsql.Identifier(string(alias) + "_samples")
+	samples := pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.NewLiteral(true, pgsql.Boolean)},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{Name: seedSource.AsCompoundIdentifier()},
+				Joins: []pgsql.Join{{
+					Table: expansionEdgeTableReference(edgeAlias),
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeInner,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.CompoundIdentifier{edgeAlias, edgeSeedColumn},
+							pgsql.OperatorEquals,
+							pgsql.CompoundIdentifier{seedSource, seedColumn},
+						),
+					},
+				}},
+			}},
+			Where: edgeConstraint,
+		},
+		Limit: pgsql.NewLiteral(cap+1, pgsql.Int8),
+	}
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: alias},
 		Materialized: &pgsql.Materialized{Materialized: true},
-		Query: pgsql.Query{
-			Body: pgsql.Select{
-				Projection: pgsql.Projection{&pgsql.AliasedExpression{
-					Expression: pgsql.NewLiteral(true, pgsql.Boolean),
-					Alias:      models.OptionalValue(orientationDegreeSample),
-				}},
-				From: []pgsql.FromClause{{
-					Source: pgsql.TableReference{Name: seedSource.AsCompoundIdentifier()},
-					Joins: []pgsql.Join{{
-						Table: expansionEdgeTableReference(edgeAlias),
-						JoinOperator: pgsql.JoinOperator{
-							JoinType: pgsql.JoinTypeInner,
-							Constraint: pgsql.NewBinaryExpression(
-								pgsql.CompoundIdentifier{edgeAlias, edgeSeedColumn},
-								pgsql.OperatorEquals,
-								pgsql.CompoundIdentifier{seedSource, seedColumn},
-							),
-						},
-					}},
-				}},
-				Where: edgeConstraint,
-			},
-			Limit: pgsql.NewLiteral(cap+1, pgsql.Int8),
-		},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{&pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function:   pgsql.FunctionCount,
+					Parameters: []pgsql.Expression{pgsql.Wildcard{}},
+					CastType:   pgsql.Int8,
+				},
+				Alias: models.OptionalValue(orientationDegreeSample),
+			}},
+			From: []pgsql.FromClause{{Source: pgsql.LateralSubquery{
+				Query:   samples,
+				Binding: models.OptionalValue(sampleRows),
+			}}},
+		}},
 	}
+}
+
+// orientationDegreeCount reads the scalar count emitted by a bounded degree
+// probe.
+func orientationDegreeCount(source pgsql.Identifier) pgsql.Expression {
+	return pgsql.CompoundIdentifier{source, orientationDegreeSample}
 }
 
 // buildExpansionOrientationMetrics builds expansion orientation metrics.
@@ -352,38 +371,52 @@ func buildExpansionOrientationMetrics(ids expansionOrientationIdentifiers, caps 
 		pgd.Not(boundedProbeOverflow(ids.rootProbe, caps.RootRowLimit)),
 		pgd.Not(boundedProbeOverflow(ids.suffixProbe, caps.ReverseSeedRowLimit)),
 	)
-	complete = pgsql.OptionalAnd(complete, pgd.Not(boundedProbeOverflow(ids.forwardDegreeProbe, caps.DirectionalDegreeRowLimit)))
-	complete = pgsql.OptionalAnd(complete, pgd.Not(boundedProbeOverflow(ids.reverseDegreeProbe, caps.DirectionalDegreeRowLimit)))
+	complete = pgsql.OptionalAnd(complete, pgsql.NewBinaryExpression(
+		orientationDegreeCount(ids.forwardDegreeProbe),
+		pgsql.OperatorLessThanOrEqualTo,
+		pgsql.NewLiteral(caps.DirectionalDegreeRowLimit, pgsql.Int8),
+	))
+	complete = pgsql.OptionalAnd(complete, pgsql.NewBinaryExpression(
+		orientationDegreeCount(ids.reverseDegreeProbe),
+		pgsql.OperatorLessThanOrEqualTo,
+		pgsql.NewLiteral(caps.DirectionalDegreeRowLimit, pgsql.Int8),
+	))
 
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.metrics},
 		Materialized: &pgsql.Materialized{Materialized: true},
-		Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{
-			&pgsql.AliasedExpression{
-				Expression: orientationCount(ids.rootProbe),
-				Alias:      models.OptionalValue(orientationRootRows),
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: pgsql.Projection{
+				&pgsql.AliasedExpression{
+					Expression: orientationCount(ids.rootProbe),
+					Alias:      models.OptionalValue(orientationRootRows),
+				},
+				&pgsql.AliasedExpression{
+					Expression: orientationCount(ids.suffixProbe),
+					Alias:      models.OptionalValue(orientationSuffixRows),
+				},
+				&pgsql.AliasedExpression{
+					Expression: orientationCount(ids.boundaries),
+					Alias:      models.OptionalValue(orientationBoundaryRows),
+				},
+				&pgsql.AliasedExpression{
+					Expression: orientationDegreeCount(ids.forwardDegreeProbe),
+					Alias:      models.OptionalValue(orientationForwardDegreeRows),
+				},
+				&pgsql.AliasedExpression{
+					Expression: orientationDegreeCount(ids.reverseDegreeProbe),
+					Alias:      models.OptionalValue(orientationReverseDegreeRows),
+				},
+				&pgsql.AliasedExpression{
+					Expression: complete,
+					Alias:      models.OptionalValue(orientationProbesComplete),
+				},
 			},
-			&pgsql.AliasedExpression{
-				Expression: orientationCount(ids.suffixProbe),
-				Alias:      models.OptionalValue(orientationSuffixRows),
+			From: []pgsql.FromClause{
+				tableFrom(ids.forwardDegreeProbe),
+				tableFrom(ids.reverseDegreeProbe),
 			},
-			&pgsql.AliasedExpression{
-				Expression: orientationCount(ids.boundaries),
-				Alias:      models.OptionalValue(orientationBoundaryRows),
-			},
-			&pgsql.AliasedExpression{
-				Expression: orientationCount(ids.forwardDegreeProbe),
-				Alias:      models.OptionalValue(orientationForwardDegreeRows),
-			},
-			&pgsql.AliasedExpression{
-				Expression: orientationCount(ids.reverseDegreeProbe),
-				Alias:      models.OptionalValue(orientationReverseDegreeRows),
-			},
-			&pgsql.AliasedExpression{
-				Expression: complete,
-				Alias:      models.OptionalValue(orientationProbesComplete),
-			},
-		}}},
+		}},
 	}
 }
 
@@ -718,11 +751,15 @@ func gateQueryBehindMarker(
 }
 
 // expansionOrientationStateProbe builds the SQL model fragment responsible for expansion orientation state probe.
-func expansionOrientationStateProbe(decision optimize.ExpansionSearchStrategyDecision, ids expansionOrientationIdentifiers) pgsql.CommonTableExpression {
-	return boundedTraversalStateProbe(ids.states, ids.reverse, []pgsql.Identifier{
+func expansionOrientationStateProbe(decision optimize.ExpansionSearchStrategyDecision, ids expansionOrientationIdentifiers, carryNodePath bool) pgsql.CommonTableExpression {
+	columns := []pgsql.Identifier{
 		fixedSuffixBoundaryID,
 		expansionNextID,
 		expansionDepth,
 		expansionPath,
-	}, decision.Admission.StateLimit, ids.reverseGate)
+	}
+	if carryNodePath {
+		columns = append(columns, expansionNodePath)
+	}
+	return boundedTraversalStateProbe(ids.states, ids.reverse, columns, decision.Admission.StateLimit, ids.reverseGate)
 }

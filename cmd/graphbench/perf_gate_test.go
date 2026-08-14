@@ -419,6 +419,13 @@ func testAAReportForRecords(t *testing.T, records []CaseResult) *AAResolutionRep
 		MinimumRounds:                minimumGateRounds,
 		MinimumSamplesPerArmPerRound: 10,
 		OrderBalanced:                true,
+		PhysicalChronology: &AAPhysicalChronology{
+			Version:        aaPhysicalChronologyVersion,
+			Validated:      true,
+			ArtifactSHA256: strings.Repeat("a", 64),
+			Rounds:         minimumGateRounds,
+			Arms:           []string{"aa-a", "aa-b"},
+		},
 	}
 	for _, key := range sortedPerformanceKeys(keys) {
 		workloadSHA256, err := workloadSHA256ForKey(records, key)

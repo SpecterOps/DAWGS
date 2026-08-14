@@ -38,6 +38,7 @@ var postgresReferenceArms = []string{
 	"suffix_seeded_reverse_ordered_ids",
 	"backward_viability_forward_ordered_ids",
 	"hydration_only",
+	"ordered_path_ids_hydration_only",
 	"complete_reference",
 	"root_reuse_complete",
 	"late_hydration_complete",
@@ -1487,7 +1488,7 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 	}
 	if len(values) == 0 {
 		completeIdx := referenceSpecIndex(specs, "complete_reference")
-		specs = slices.Insert(specs, completeIdx, postgresReferenceSpec{
+		emptyHydration := postgresReferenceSpec{
 			name:               "hydration_only",
 			architecture:       "hydration",
 			implementationID:   "typed_empty_v1",
@@ -1497,7 +1498,10 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 			boundary:           "typed empty path result",
 			sql:                `select null::pathComposite where false`,
 			parameters:         probeParams,
-		})
+		}
+		orderedEmptyHydration := emptyHydration
+		orderedEmptyHydration.name = "ordered_path_ids_hydration_only"
+		specs = slices.Insert(specs, completeIdx, emptyHydration, orderedEmptyHydration)
 		return specs, nil
 	}
 	if len(values) != 3 {
@@ -1513,6 +1517,7 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 	}
 	hydrationParams := copyReferenceParams(probeParams)
 	hydrationParams["root_id"] = nodeIDs[0]
+	hydrationParams["node_ids"] = nodeIDs
 	hydrationParams["edge_ids"] = edgeIDs
 	hydration := postgresReferenceSpec{
 		name:     "hydration_only",
@@ -1526,14 +1531,35 @@ func (s *postgresSQLRunner) fixedSuffixExpansionReferenceSpecs(ctx context.Conte
 from node root where root.graph_id = @graph_id and root.id = @root_id`,
 		parameters: hydrationParams,
 	}
+	orderedHydration := postgresReferenceSpec{
+		name:             "ordered_path_ids_hydration_only",
+		architecture:     "hydration",
+		implementationID: "inline_ordered_path_ids_v1",
+		stateShape:       "precomputed ordered node and edge ID arrays",
+		observationShape: "complete path composite",
+		boundary:         "one complete path composite from precomputed ordered node and edge IDs",
+		sql: `select row(
+  coalesce((
+    select array_agg((n.id, n.kind_ids, n.properties)::nodeComposite order by path_node.ordinality)
+    from unnest(@node_ids::int8[]) with ordinality as path_node(id, ordinality)
+    join node n on n.graph_id = @graph_id and n.id = path_node.id
+  ), array[]::nodeComposite[]),
+  coalesce((
+    select array_agg((e.id, e.start_id, e.end_id, e.kind_id, e.properties)::edgeComposite order by path_edge.ordinality)
+    from unnest(@edge_ids::int8[]) with ordinality as path_edge(id, ordinality)
+    join edge e on e.graph_id = @graph_id and e.id = path_edge.id
+  ), array[]::edgeComposite[])
+)::pathComposite`,
+		parameters: hydrationParams,
+	}
 	completeIdx := referenceSpecIndex(specs, "complete_reference")
-	specs = slices.Insert(specs, completeIdx, hydration)
+	specs = slices.Insert(specs, completeIdx, hydration, orderedHydration)
 	return specs, nil
 }
 
 // referenceHydrationRequested reports whether the selected arm requires precomputed hydration inputs.
 func referenceHydrationRequested(referenceArms []string) bool {
-	return len(referenceArms) == 0 || slices.Contains(referenceArms, "hydration_only")
+	return len(referenceArms) == 0 || slices.Contains(referenceArms, "hydration_only") || slices.Contains(referenceArms, "ordered_path_ids_hydration_only")
 }
 
 // buildFixedSuffixExpansionReferenceSpecs assembles fixed-suffix search and hydration references for one case.

@@ -29,7 +29,8 @@ func TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted, "node_42")
-	require.Contains(t, formatted, "ordered_edge_ids_to_path(42,")
+	require.Contains(t, formatted, "generate_subscripts(s1.path, 1)")
+	require.Contains(t, formatted, "join edge_42")
 	require.NotRegexp(t, `(?i)(from|join) (node|edge)(?:\s|;)`, formatted)
 
 	var fragments []string
@@ -38,7 +39,7 @@ func TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL(t *testing.T) {
 			fragments = append(fragments, fragment)
 		}
 	}
-	require.NotEmpty(t, fragments)
+	require.Empty(t, fragments, "contained inline execution should not emit workspace harness fragments")
 	for _, fragment := range fragments {
 		require.Contains(t, fragment, "edge_42", fmt.Sprintf("unscoped harness fragment: %s", fragment))
 		require.NotRegexp(t, `(?i)(from|join) (node|edge)(?:\s|;)`, fragment)

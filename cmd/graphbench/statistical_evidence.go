@@ -125,6 +125,13 @@ func validateAAResolutionEvidence(report *AAResolutionReport, records []CaseResu
 	if !validSHA256(report.ArtifactSHA256) {
 		return fmt.Errorf("A/A artifact SHA-256 is missing or malformed")
 	}
+	chronology := report.PhysicalChronology
+	if chronology == nil || chronology.Version != aaPhysicalChronologyVersion || !chronology.Validated ||
+		chronology.ArtifactSHA256 != report.ArtifactSHA256 || !validSHA256(chronology.ArtifactSHA256) ||
+		chronology.Rounds < report.MinimumRounds || len(chronology.Arms) != 2 ||
+		strings.TrimSpace(chronology.Arms[0]) == "" || strings.TrimSpace(chronology.Arms[1]) == "" || chronology.Arms[0] == chronology.Arms[1] {
+		return fmt.Errorf("A/A report lacks artifact-bound physical chronology provenance")
+	}
 	hostFingerprint, err := artifactHostFingerprint(records)
 	if err != nil {
 		return err

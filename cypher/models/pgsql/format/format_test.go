@@ -82,6 +82,26 @@ func TestFormat_SelectDistinct(t *testing.T) {
 	require.Equal(t, "select distinct id from node;", formattedQuery)
 }
 
+func TestFormat_SelectHaving(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.Identifier("depth")},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{Name: pgsql.CompoundIdentifier{"frontier"}},
+			}},
+			GroupBy: []pgsql.Expression{pgsql.Identifier("depth")},
+			Having: pgsql.NewBinaryExpression(
+				pgsql.FunctionCall{Function: pgsql.FunctionCount, Parameters: []pgsql.Expression{pgsql.Wildcard{}}},
+				pgsql.OperatorGreaterThan,
+				pgsql.NewLiteral(int64(100), pgsql.Int8),
+			),
+		},
+	}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "select depth from frontier group by depth having count(*) > 100;", formattedQuery)
+}
+
 func TestFormat_LateralSubqueryJoin(t *testing.T) {
 	formattedQuery, err := format.Statement(pgsql.Query{
 		Body: pgsql.Select{

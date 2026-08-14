@@ -6,6 +6,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
@@ -462,6 +463,177 @@ func TestPostgresTraversalTelemetryCompletesGuardedInlineCanonicalSPCounters(t *
 	}
 }
 
+func TestPostgresTraversalTelemetryCompletesGuardedInlineDistanceCounters(t *testing.T) {
+	outcome := translate.TargetLoweringOutcome{
+		Family: "SP", Candidate: string(optimize.ShortestPathExecutorI2GuardedDistance), Selected: string(optimize.ShortestPathExecutorI2GuardedDistance),
+		Applied: string(optimize.ShortestPathExecutorI2GuardedDistance), Fallback: string(optimize.ShortestPathExecutorS4CanonicalDistance),
+		EmittedPolicy: optimize.ShortestPathPolicyI2DistanceGuardedV1, SelectionMode: "production_canary",
+		SelectorVersion: optimize.ShortestPathSelectorStaticV8HiddenFanIn, ExecutionBoundary: "guarded_dual_arm", ObservationMode: "distance",
+		StateLimit: 10, FrontierLimit: 10,
+	}
+	ids := map[string]int64{"sp_i2_distance_bounded": 1, "sp_i2_target": 2, "sp_i2_candidate_marker": 3, "sp_i2_fallback_marker": 4, "sp_i2_candidate_rows": 5, "sp_i2_fallback_rows": 6}
+	node := func(name string, rows int64) PostgresPlanNodeMetric {
+		return PostgresPlanNodeMetric{PlanNodeID: ids[name], NodeType: "Result", SubplanName: "CTE " + name, ActualRows: rows, ActualLoops: 1}
+	}
+	gate := func(branch string, markerRows int64) []PostgresPlanNodeMetric {
+		body := ids["sp_i2_"+branch+"_rows"]
+		return []PostgresPlanNodeMetric{
+			{PlanNodeID: body + 100, ParentPlanNodeID: body, ParentRelationship: "Outer", NodeType: "CTE Scan", CTEName: "sp_i2_" + branch + "_marker", ActualRows: markerRows, ActualLoops: 1},
+			{PlanNodeID: body + 200, ParentPlanNodeID: body, ParentRelationship: "Inner", NodeType: "Result", ActualLoops: markerRows},
+		}
+	}
+	metrics := PostgresPlanMetrics{Provenance: map[string]string{}, PlanNodes: []PostgresPlanNodeMetric{
+		node("sp_i2_distance_bounded", 3), node("sp_i2_target", 1), node("sp_i2_candidate_marker", 1), node("sp_i2_fallback_marker", 0),
+		node("sp_i2_candidate_rows", 1), node("sp_i2_fallback_rows", 0),
+	}}
+	metrics.PlanNodes = append(metrics.PlanNodes, gate("candidate", 1)...)
+	metrics.PlanNodes = append(metrics.PlanNodes, gate("fallback", 0)...)
+	telemetry, err := buildPostgresCaseTraversalTelemetry(translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic)
+	require.NoError(t, err)
+	enrichInlineDistanceTraversalTelemetry(telemetry, 1)
+	require.NoError(t, telemetry.Validate())
+	require.Equal(t, string(optimize.ShortestPathExecutorI2GuardedDistance), telemetry.Summary.RuntimeIdentity)
+	require.Equal(t, "inline_canonical_distance", telemetry.Summary.RuntimeBranch)
+	require.NotNil(t, telemetry.Diagnostic.Counters.InlineShortestDistance)
+	require.Equal(t, int64(3), *telemetry.Diagnostic.Counters.InlineShortestDistance.StateRows)
+	require.Equal(t, int64(1), *telemetry.Diagnostic.Counters.InlineShortestDistance.CandidateExecutorLoops)
+	require.Equal(t, int64(0), *telemetry.Diagnostic.Counters.InlineShortestDistance.FallbackExecutorLoops)
+	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["sp_i2_target_rows"])
+	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["sp_i2_output_rows"])
+
+	mismatched, err := buildPostgresCaseTraversalTelemetry(translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic)
+	require.NoError(t, err)
+	enrichInlineDistanceTraversalTelemetry(mismatched, 2)
+	require.Equal(t, TraversalTelemetryCounterStatusHiddenUnavailable, mismatched.Diagnostic.CounterStatus)
+	require.Contains(t, mismatched.Diagnostic.IncompleteReasons, "inline distance plan output does not match the exact public observation")
+	require.Nil(t, mismatched.Diagnostic.Counters.InlineShortestDistance)
+}
+
+// TestResourceGateRequiresSingularInlineDistanceBranchAndInactiveArm verifies
+// SP-I2 qualification binds complementary markers, branch rows, executor loops,
+// typed counters, and the runtime receipt for both possible guarded arms.
+func TestResourceGateRequiresSingularInlineDistanceBranchAndInactiveArm(t *testing.T) {
+	newTelemetry := func(fallback bool) *TraversalExecutionTelemetry {
+		const limit int64 = 3
+		candidateMarker, fallbackMarker := int64(1), int64(0)
+		candidateRows, fallbackRows := int64(1), int64(0)
+		candidateLoops, fallbackLoops := int64(1), int64(0)
+		stateRows := limit
+		runtimeIdentity := string(optimize.ShortestPathExecutorI2GuardedDistance)
+		runtimeBranch := "inline_canonical_distance"
+		if fallback {
+			candidateMarker, fallbackMarker = 0, 1
+			candidateRows, fallbackRows = 0, 1
+			candidateLoops, fallbackLoops = 0, 1
+			stateRows = limit + 1
+			runtimeIdentity = string(optimize.ShortestPathExecutorS4CanonicalDistance)
+			runtimeBranch = "exact_s4_distance_fallback"
+		}
+		plan := map[string]int64{
+			"sp_i2_distance_rows": stateRows, "sp_i2_target_rows": candidateRows, "sp_i2_output_rows": candidateRows + fallbackRows,
+			"sp_i2_candidate_marker_rows": candidateMarker, "sp_i2_fallback_marker_rows": fallbackMarker,
+			"sp_i2_candidate_branch_rows": candidateRows, "sp_i2_fallback_branch_rows": fallbackRows,
+			"sp_i2_candidate_executor_loops": candidateLoops, "sp_i2_fallback_executor_loops": fallbackLoops,
+		}
+		return &TraversalExecutionTelemetry{
+			Summary: TraversalExecutionSummary{
+				EmittedIdentity: optimize.ShortestPathPolicyI2DistanceGuardedV1, RuntimeIdentity: runtimeIdentity, RuntimeBranch: runtimeBranch,
+				Caps:                    map[string]int64{"state_rows": limit, "frontier_rows": limit},
+				RuntimeOutcomeAvailable: telemetryBool(true), FallbackExecuted: telemetryBool(fallback), Overflow: telemetryBool(fallback),
+			},
+			Diagnostic: &TraversalExecutionDiagnostic{
+				RequiredFamilies: []TraversalTelemetryFamily{TraversalTelemetryFamilySP},
+				Counters: TraversalDiagnosticCounters{InlineShortestDistance: &InlineDistanceTraversalCounters{
+					StateRows: telemetryInt64(stateRows), FrontierRows: telemetryInt64(stateRows), OutputRows: telemetryInt64(candidateRows + fallbackRows),
+					CandidateMarkerRows: telemetryInt64(candidateMarker), FallbackMarkerRows: telemetryInt64(fallbackMarker),
+					CandidateBranchRows: telemetryInt64(candidateRows), FallbackBranchRows: telemetryInt64(fallbackRows),
+					CandidateExecutorLoops: telemetryInt64(candidateLoops), FallbackExecutorLoops: telemetryInt64(fallbackLoops),
+				}},
+				PlanReplay: &TraversalPlanReplayEvidence{Counters: plan},
+			},
+		}
+	}
+
+	t.Run("candidate exact cap boundary", func(t *testing.T) {
+		gateCase := &ResourceGateCase{}
+		appendInlineDistanceAttributionReasons(gateCase, newTelemetry(false))
+		require.Empty(t, gateCase.Reasons)
+	})
+	t.Run("fallback exact cap plus one sentinel", func(t *testing.T) {
+		gateCase := &ResourceGateCase{}
+		appendInlineDistanceAttributionReasons(gateCase, newTelemetry(true))
+		require.Empty(t, gateCase.Reasons)
+	})
+
+	tests := map[string]struct {
+		mutate func(*TraversalExecutionTelemetry)
+		reason string
+	}{
+		"inactive fallback executor": {func(telemetry *TraversalExecutionTelemetry) {
+			telemetry.Diagnostic.PlanReplay.Counters["sp_i2_fallback_executor_loops"] = 1
+		}, "candidate selection did not suppress the fallback executor"},
+		"dual markers": {func(telemetry *TraversalExecutionTelemetry) {
+			telemetry.Diagnostic.PlanReplay.Counters["sp_i2_fallback_marker_rows"] = 1
+		}, "must attribute exactly one candidate or fallback marker"},
+		"branch output mismatch": {func(telemetry *TraversalExecutionTelemetry) {
+			telemetry.Diagnostic.PlanReplay.Counters["sp_i2_output_rows"] = 0
+		}, "output does not equal its complementary branch rows"},
+		"typed counter drift": {func(telemetry *TraversalExecutionTelemetry) {
+			telemetry.Diagnostic.Counters.InlineShortestDistance.CandidateExecutorLoops = telemetryInt64(0)
+		}, "typed counter does not match plan counter sp_i2_candidate_executor_loops"},
+		"runtime receipt drift": {func(telemetry *TraversalExecutionTelemetry) {
+			telemetry.Summary.RuntimeBranch = "exact_s4_distance_fallback"
+		}, "candidate marker contradicts the runtime receipt"},
+		"candidate cap plus one": {func(telemetry *TraversalExecutionTelemetry) {
+			value := telemetry.Summary.Caps["state_rows"] + 1
+			telemetry.Diagnostic.PlanReplay.Counters["sp_i2_distance_rows"] = value
+			telemetry.Diagnostic.Counters.InlineShortestDistance.StateRows = telemetryInt64(value)
+			telemetry.Diagnostic.Counters.InlineShortestDistance.FrontierRows = telemetryInt64(value)
+		}, "candidate selection exceeds its state or conservative frontier cap"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			telemetry := newTelemetry(false)
+			test.mutate(telemetry)
+			gateCase := &ResourceGateCase{}
+			appendInlineDistanceAttributionReasons(gateCase, telemetry)
+			require.Contains(t, strings.Join(gateCase.Reasons, "\n"), test.reason)
+		})
+	}
+
+	for name, stateRows := range map[string]int64{
+		"fallback without sentinel":    3,
+		"fallback beyond cap plus one": 5,
+	} {
+		t.Run(name, func(t *testing.T) {
+			telemetry := newTelemetry(true)
+			telemetry.Diagnostic.PlanReplay.Counters["sp_i2_distance_rows"] = stateRows
+			telemetry.Diagnostic.Counters.InlineShortestDistance.StateRows = telemetryInt64(stateRows)
+			telemetry.Diagnostic.Counters.InlineShortestDistance.FrontierRows = telemetryInt64(stateRows)
+			gateCase := &ResourceGateCase{}
+			appendInlineDistanceAttributionReasons(gateCase, telemetry)
+			require.Contains(t, gateCase.Reasons, "inline SP distance fallback selection lacks an exact state or conservative frontier cap+1 sentinel")
+		})
+	}
+
+	telemetry := newTelemetry(false)
+	record := CaseResult{
+		RowCount: 1, TraversalTelemetry: telemetry,
+		Optimization: &translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{{
+			Family: "SP", Applied: string(optimize.ShortestPathExecutorI2GuardedDistance), EmittedPolicy: optimize.ShortestPathPolicyI2DistanceGuardedV1,
+		}}},
+	}
+	contract, found := guardedInlineResourceContractForArchitecture(string(optimize.ShortestPathExecutorI2GuardedDistance))
+	require.True(t, found)
+	gateCase := &ResourceGateCase{}
+	appendGuardedInlineResourceBindingReasons(gateCase, record, contract)
+	require.Empty(t, gateCase.Reasons)
+	record.RowCount = 2
+	appendGuardedInlineResourceBindingReasons(gateCase, record, contract)
+	require.Contains(t, gateCase.Reasons, "inline SP distance typed output does not match the exact public observation")
+	require.Contains(t, gateCase.Reasons, "inline SP distance plan output does not match the exact public observation")
+}
+
 // TestPostgresTraversalTelemetryRejectsEveryMissingInlinePredecessorCounter verifies postgres traversal telemetry rejects every missing inline predecessor counter behavior.
 func TestPostgresTraversalTelemetryRejectsEveryMissingInlinePredecessorCounter(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
@@ -670,6 +842,120 @@ func inlinePredecessorPlanNodeID(name string) int64 {
 		"asp_i1_candidate_rows": 7, "asp_i1_fallback_rows": 8,
 	}
 	return ids[name]
+}
+
+// TestPostgresTraversalTelemetryCompletesSuffixReverseGuardCounters verifies
+// that the reverse-first guard uses its own counter family and reports both
+// mutually exclusive runtime outcomes without orientation-only score fields.
+func TestPostgresTraversalTelemetryCompletesSuffixReverseGuardCounters(t *testing.T) {
+	tests := []struct {
+		name             string
+		candidateMarker  int64
+		fallbackMarker   int64
+		candidateLoops   int64
+		fallbackLoops    int64
+		suffixRows       int64
+		stateRows        int64
+		expectedIdentity string
+		expectedBranch   string
+		expectedFallback bool
+	}{
+		{name: "candidate", candidateMarker: 1, candidateLoops: 1, suffixRows: 2, stateRows: 9, expectedIdentity: string(optimize.ExpansionSearchSuffixSeededReverse), expectedBranch: "suffix_seeded_reverse"},
+		{name: "suffix overflow fallback", fallbackMarker: 1, fallbackLoops: 1, suffixRows: 513, stateRows: 0, expectedIdentity: string(optimize.ExpansionSearchStepwiseForward), expectedBranch: "exact_forward_suffix_overflow", expectedFallback: true},
+		{name: "state overflow fallback", fallbackMarker: 1, fallbackLoops: 1, suffixRows: 2, stateRows: 513, expectedIdentity: string(optimize.ExpansionSearchStepwiseForward), expectedBranch: "exact_forward_state_overflow", expectedFallback: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			outcome := suffixGuardTestOutcome()
+			metrics := suffixGuardTestMetrics(test.candidateMarker, test.fallbackMarker, test.candidateLoops, test.fallbackLoops, test.suffixRows, test.stateRows)
+			telemetry, err := buildPostgresCaseTraversalTelemetry(
+				translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
+			)
+			require.NoError(t, err)
+			enrichSuffixGuardTraversalTelemetry(telemetry, metrics, 1, []string{`{"path":"p"}`})
+			require.NoError(t, telemetry.Validate())
+			require.Equal(t, test.expectedIdentity, telemetry.Summary.RuntimeIdentity)
+			require.Equal(t, test.expectedBranch, telemetry.Summary.RuntimeBranch)
+			require.Equal(t, test.expectedFallback, *telemetry.Summary.FallbackExecuted)
+			require.Contains(t, telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilySuffixGuard)
+			require.NotNil(t, telemetry.Diagnostic.Counters.SuffixGuard)
+			require.Nil(t, telemetry.Diagnostic.Counters.Orientation)
+			require.Equal(t, test.stateRows, *telemetry.Diagnostic.Counters.SuffixGuard.StateRows)
+			require.Equal(t, test.candidateLoops, *telemetry.Diagnostic.Counters.SuffixGuard.CandidateExecutorLoops)
+			require.Equal(t, test.fallbackLoops, *telemetry.Diagnostic.Counters.SuffixGuard.FallbackExecutorLoops)
+		})
+	}
+}
+
+// TestSuffixReverseGuardRuntimeOutcomeFailsClosedWithoutBothSentinels verifies
+// that marker rows alone cannot invent an admitted branch when either cap+1
+// relation is absent from the exact plan replay.
+func TestSuffixReverseGuardRuntimeOutcomeFailsClosedWithoutBothSentinels(t *testing.T) {
+	metrics := suffixGuardTestMetrics(1, 0, 1, 0, 2, 9)
+	filtered := metrics.PlanNodes[:0]
+	for _, node := range metrics.PlanNodes {
+		if !strings.HasSuffix(strings.ToLower(node.SubplanName), "suffix_guard_states") {
+			filtered = append(filtered, node)
+		}
+	}
+	metrics.PlanNodes = filtered
+	identity, branch, fallback, overflow := runtimeTraversalIdentity(
+		suffixGuardTestOutcome(), metrics, string(optimize.ExpansionSearchSuffixSeededReverse), string(optimize.ExpansionSearchSuffixSeededReverse),
+	)
+	require.Empty(t, identity)
+	require.Equal(t, "runtime_outcome_unavailable", branch)
+	require.False(t, fallback)
+	require.False(t, overflow)
+}
+
+// TestSuffixReverseGuardDiagnosticRejectsPlanOutputMismatch binds typed output
+// telemetry to both the JSON plan and the exact public observation.
+func TestSuffixReverseGuardDiagnosticRejectsPlanOutputMismatch(t *testing.T) {
+	metrics := suffixGuardTestMetrics(1, 0, 1, 0, 2, 9)
+	telemetry, err := buildPostgresCaseTraversalTelemetry(
+		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{suffixGuardTestOutcome()}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
+	)
+	require.NoError(t, err)
+	enrichSuffixGuardTraversalTelemetry(telemetry, metrics, 2, []string{`{"path":"p1"}`, `{"path":"p2"}`})
+	require.Equal(t, TraversalTelemetryCounterStatusHiddenUnavailable, telemetry.Diagnostic.CounterStatus)
+	require.Contains(t, telemetry.Diagnostic.IncompleteReasons, "suffix-reverse guard plan output does not match the exact public observation")
+}
+
+func suffixGuardTestOutcome() translate.TargetLoweringOutcome {
+	return translate.TargetLoweringOutcome{
+		Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
+		Selected: string(optimize.ExpansionSearchSuffixSeededReverse), Applied: string(optimize.ExpansionSearchSuffixSeededReverse),
+		Fallback:          string(optimize.ExpansionSearchStepwiseForward),
+		PlannedCandidates: []string{string(optimize.ExpansionSearchSuffixSeededReverse), string(optimize.ExpansionSearchStepwiseForward)},
+		EmittedCandidates: []string{string(optimize.ExpansionSearchSuffixSeededReverse), string(optimize.ExpansionSearchStepwiseForward)},
+		EmittedPolicy:     string(optimize.ExpansionSearchPolicySuffixReverseGuardV1),
+		SelectorVersion:   optimize.ExpansionSearchSelectorFixedSuffixPathV1,
+		ExecutionBoundary: optimize.ExpansionSearchExecutionBoundaryGuardedDualArm, ObservationMode: string(optimize.ExpansionSearchObservationFullPath),
+		StateLimit: 512, ProbeCaps: &optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: 512},
+	}
+}
+
+// suffixGuardTestMetrics builds the exact marker-outer plan shape required by
+// suffix guard qualification.
+func suffixGuardTestMetrics(candidateMarker, fallbackMarker, candidateLoops, fallbackLoops, suffixRows, stateRows int64) PostgresPlanMetrics {
+	stage := "s5_"
+	planNode := func(id int64, suffix string, rows int64) PostgresPlanNodeMetric {
+		return PostgresPlanNodeMetric{PlanNodeID: id, NodeType: "Result", SubplanName: "CTE " + stage + suffix, ActualRows: rows, ActualLoops: 1}
+	}
+	markerGate := func(id, bodyID int64, branch string, rows int64) PostgresPlanNodeMetric {
+		return PostgresPlanNodeMetric{PlanNodeID: id, ParentPlanNodeID: bodyID, ParentRelationship: "Outer", NodeType: "CTE Scan", CTEName: stage + "suffix_guard_" + branch + "_marker", ActualRows: rows, ActualLoops: 1}
+	}
+	executor := func(id, bodyID int64, branch string, loops int64) PostgresPlanNodeMetric {
+		return PostgresPlanNodeMetric{PlanNodeID: id, ParentPlanNodeID: bodyID, ParentRelationship: "Inner", NodeType: "Result", Alias: "suffix_guard_" + branch + "_executor", ActualLoops: loops}
+	}
+	return PostgresPlanMetrics{Provenance: map[string]string{}, RecursiveRows: stateRows, PlanNodes: []PostgresPlanNodeMetric{
+		planNode(1, "suffix_guard_root_presence", 1), planNode(2, "suffix_guard_suffix_probe", suffixRows),
+		planNode(3, "suffix_guard_boundaries", 1), planNode(4, "suffix_guard_states", stateRows),
+		planNode(5, "suffix_guard_candidate_marker", candidateMarker), planNode(6, "suffix_guard_fallback_marker", fallbackMarker),
+		planNode(7, "suffix_guard_candidate_body", candidateMarker), planNode(8, "suffix_guard_fallback_body", fallbackMarker),
+		markerGate(70, 7, "candidate", candidateMarker), executor(71, 7, "candidate", candidateLoops),
+		markerGate(80, 8, "fallback", fallbackMarker), executor(81, 8, "fallback", fallbackLoops),
+	}}
 }
 
 // TestPostgresTraversalTelemetryPrefersShortestExecutorOverAnalysisOutcomes verifies postgres traversal telemetry prefers shortest executor over analysis outcomes behavior.
@@ -953,18 +1239,36 @@ func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNode
 				ActualTotalMS: .01,
 			},
 			{
-				NodeType:      "Limit",
+				PlanNodeID:    40,
+				NodeType:      "Aggregate",
 				SubplanName:   "CTE s5_orientation_forward_degree_probe",
-				ActualRows:    8,
+				ActualRows:    1,
 				ActualLoops:   1,
 				ActualTotalMS: .01,
 			},
 			{
-				NodeType:      "Limit",
+				PlanNodeID:         41,
+				ParentPlanNodeID:   40,
+				ParentRelationship: "Outer",
+				NodeType:           "Limit",
+				ActualRows:         8,
+				ActualLoops:        1,
+			},
+			{
+				PlanNodeID:    50,
+				NodeType:      "Aggregate",
 				SubplanName:   "CTE s5_orientation_reverse_degree_probe",
 				ActualRows:    1,
 				ActualLoops:   1,
 				ActualTotalMS: .01,
+			},
+			{
+				PlanNodeID:         51,
+				ParentPlanNodeID:   50,
+				ParentRelationship: "Outer",
+				NodeType:           "Limit",
+				ActualRows:         1,
+				ActualLoops:        1,
 			},
 			{
 				NodeType:    "Limit",
@@ -1021,6 +1325,8 @@ func TestPostgresTraversalTelemetryCompletesOrientationCountersFromNamedPlanNode
 	require.Equal(t, TraversalTelemetryCounterStatusComplete, telemetry.Diagnostic.CounterStatus)
 	require.Equal(t, int64(5), *telemetry.Diagnostic.Counters.Orientation.ReverseSeeds)
 	require.Equal(t, int64(2), *telemetry.Diagnostic.Counters.Orientation.DuplicateSeeds)
+	require.Equal(t, int64(8), *telemetry.Diagnostic.Counters.Orientation.ForwardDegreeSamples)
+	require.Equal(t, int64(1), *telemetry.Diagnostic.Counters.Orientation.ReverseDegreeSamples)
 	require.Equal(t, "reverse", telemetry.Diagnostic.Counters.Orientation.SelectedSide)
 	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["orientation_root_probe_loops"])
 	require.Equal(t, int64(1), telemetry.Diagnostic.PlanReplay.Counters["orientation_candidate_branch_loops"])
@@ -1162,6 +1468,30 @@ func TestParseConfigAcceptsExplicitOrientationProbeV2MeasurementModes(t *testing
 		{"-postgres-expansion-orientation-shadow", "-postgres-expansion-orientation-policy", "orientation-probe-v2", "-postgres-traversal-telemetry", "summary"},
 		{"-postgres-expansion-orientation-shadow", "-postgres-expansion-orientation-policy", "orientation-probe-v2", "-postgres-repeatable-read"},
 		{"-postgres-expansion-orientation-tournament"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+func TestParseConfigValidatesSuffixReverseGuardMeasurementMode(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-postgres-expansion-suffix-reverse-guard",
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", "diagnostic",
+		"-postgres-suffix-guard-suffix-limit", "64",
+		"-postgres-suffix-guard-state-limit", "128",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.PostgresExpansionSuffixReverseGuard)
+	require.Equal(t, int64(64), cfg.PostgresSuffixGuardSuffixLimit)
+	require.Equal(t, int64(128), cfg.PostgresSuffixGuardStateLimit)
+
+	for _, args := range [][]string{
+		{"-postgres-expansion-suffix-reverse-guard"},
+		{"-postgres-expansion-suffix-reverse-guard", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "summary"},
+		{"-postgres-suffix-guard-state-limit", "1"},
+		{"-postgres-expansion-suffix-reverse-guard", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-postgres-force-expansion-search", "EXPANSION-SUFFIX-SEEDED-REVERSE"},
 	} {
 		_, err := parseConfig(args, func(string) string { return "" })
 		require.Error(t, err, args)

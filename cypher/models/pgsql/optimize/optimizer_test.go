@@ -2039,6 +2039,7 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 		ShortestPathExecutorS4CanonicalDistance,
 		ShortestPathExecutorS4CanonicalWitness,
 		ShortestPathExecutorI1CanonicalDistance,
+		ShortestPathExecutorI2GuardedDistance,
 		ShortestPathExecutorI1CanonicalWitness,
 		ShortestPathExecutorI1CanonicalPredecessorWitness,
 		ShortestPathExecutorB1AlternatingNodeDistance,
@@ -2267,6 +2268,40 @@ func TestLoweringPlanShortestExecutorV4SelectionMatrix(t *testing.T) {
 			require.Equal(t, test.topology, decision.TopologyClassification)
 			require.Equal(t, test.kindCount, decision.RelationshipKindCount)
 			require.Equal(t, test.untyped, decision.UntypedRelationship)
+			require.Equal(t, ShortestPathMaximumDepthExplicit, decision.MaximumDepthSource)
+		})
+	}
+}
+
+// TestLoweringPlanShortestExecutorUsesPolicyBoundForOpenMaximum verifies a
+// syntax-open SP retains provenance while using the existing effective cap.
+func TestLoweringPlanShortestExecutorUsesPolicyBoundForOpenMaximum(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name        string
+		observation string
+		executor    ShortestPathExecutor
+	}{
+		{name: "distance", observation: "length(p)", executor: ShortestPathExecutorS3Unidirectional},
+		{name: "typed witness", observation: "p", executor: ShortestPathExecutorS3EdgeM0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`
+				MATCH p = shortestPath((s)-[:MemberOf*1..]->(e))
+				WHERE id(s) = $start_id AND id(e) = $end_id
+				RETURN %s
+			`, test.observation))
+			require.NoError(t, err)
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
+			decision := plan.LoweringPlan.ShortestPathExecutor[0]
+			require.True(t, decision.StructurallyEligible)
+			require.Equal(t, int64(15), decision.MaximumDepth)
+			require.Equal(t, ShortestPathMaximumDepthPolicyDefault, decision.MaximumDepthSource)
+			require.Equal(t, test.executor, decision.SelectedExecutor)
+			require.Equal(t, ShortestPathSelectorStaticV7Contained, decision.SelectorVersion)
+			require.Empty(t, decision.FallbackReason)
 		})
 	}
 }
@@ -2473,11 +2508,6 @@ func TestLoweringPlanRecordsStableShortestExecutorFallbackCodes(t *testing.T) {
 			name:   "relationship variable",
 			query:  `MATCH p = shortestPath((s)-[r:MemberOf*1..4]->(e)) RETURN p`,
 			reason: ShortestPathFallbackRelationshipVariable,
-		},
-		{
-			name:   "open depth",
-			query:  `MATCH p = shortestPath((s)-[:MemberOf*1..]->(e)) RETURN p`,
-			reason: ShortestPathFallbackUnsupportedDepth,
 		},
 		{
 			name:   "non singleton",

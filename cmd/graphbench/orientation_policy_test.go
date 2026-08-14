@@ -19,3 +19,12 @@ func TestOrientationProbePolicyRecognitionIsVersionExplicit(t *testing.T) {
 	require.False(t, isOrientationProbePolicy("ORIENTATION-PROBE-V2"))
 	require.False(t, isOrientationProbePolicy(""))
 }
+
+// TestSuffixReverseGuardPolicyIsNotAnOrientationGeneration verifies the new
+// admission-only policy cannot consume orientation-v2 report or manifest paths.
+func TestSuffixReverseGuardPolicyIsNotAnOrientationGeneration(t *testing.T) {
+	require.True(t, isSuffixReverseGuardPolicy("suffix-reverse-guard-v1"))
+	require.True(t, isGuardedExpansionPolicy("suffix-reverse-guard-v1"))
+	require.False(t, isOrientationProbePolicy("suffix-reverse-guard-v1"))
+	require.False(t, isSuffixReverseGuardPolicy("orientation-probe-v2"))
+}
