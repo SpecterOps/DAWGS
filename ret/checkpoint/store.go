@@ -347,9 +347,8 @@ func validateIdentity(identity Identity) error {
 	}
 	if identity.JSONLEnabled {
 		if err := (jsonl.Config{
-			Enabled: true,
-			Codec:   jsonl.Codec(identity.JSONLCodec),
-			Level:   identity.JSONLLevel,
+			Codec: jsonl.Codec(identity.JSONLCodec),
+			Level: identity.JSONLLevel,
 		}).Validate(); err != nil {
 			return fmt.Errorf("JSONL output: %w", err)
 		}
@@ -503,7 +502,7 @@ func validateNodeShards(
 				shard.Count,
 				shard.JSONL.SchemaVersion,
 				shard.JSONL.Path,
-				shard.JSONL.Codec,
+				string(shard.JSONL.Codec),
 				shard.JSONL.SHA256,
 				shard.JSONL.Level,
 				shard.JSONL.Count,
@@ -582,7 +581,7 @@ func validateRelationshipShards(
 				shard.Count,
 				shard.JSONL.SchemaVersion,
 				shard.JSONL.Path,
-				shard.JSONL.Codec,
+				string(shard.JSONL.Codec),
 				shard.JSONL.SHA256,
 				shard.JSONL.Level,
 				shard.JSONL.Count,

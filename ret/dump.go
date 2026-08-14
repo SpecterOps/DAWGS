@@ -526,14 +526,14 @@ func (s *dumpRunner) recountEveryGraph() error {
 
 func (s *dumpRunner) manifest() collection.Manifest {
 	outputs := collection.OutputConfig{}
-	if s.config.JSONL.Enabled {
+	if s.config.JSONL != nil {
 		outputs.JSONL = &collection.JSONLOutput{
 			SchemaVersion: jsonl.SchemaVersion,
 			Codec:         string(s.config.JSONL.Codec),
 			Level:         s.config.JSONL.Level,
 		}
 	}
-	if s.config.Parquet.Enabled {
+	if s.config.Parquet != nil {
 		outputs.Parquet = &collection.ParquetOutput{SchemaVersion: parquet.SchemaVersion}
 	}
 	scrubMetadata := collection.ScrubMetadata{Enabled: s.scrubber != nil}
@@ -555,13 +555,15 @@ func dumpCheckpointIdentity(config DumpConfig, compiled *scrub.Scrubber) checkpo
 		Graphs:               append([]string(nil), config.Graphs...),
 		EntityBatchSize:      config.EntityBatchSize,
 		ShardSize:            config.ShardSize,
-		JSONLEnabled:         config.JSONL.Enabled,
-		JSONLCodec:           string(config.JSONL.Codec),
-		JSONLLevel:           config.JSONL.Level,
-		ParquetEnabled:       config.Parquet.Enabled,
+		JSONLEnabled:         config.JSONL != nil,
+		ParquetEnabled:       config.Parquet != nil,
 		JSONLSchemaVersion:   jsonl.SchemaVersion,
 		ParquetSchemaVersion: parquet.SchemaVersion,
 		ScrubEnabled:         compiled != nil,
+	}
+	if config.JSONL != nil {
+		identity.JSONLCodec = string(config.JSONL.Codec)
+		identity.JSONLLevel = config.JSONL.Level
 	}
 	if compiled != nil {
 		identity.ScrubRulesFingerprint = compiled.RulesFingerprint()

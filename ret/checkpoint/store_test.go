@@ -60,24 +60,28 @@ func fixtureNodeShard(identity Identity, graph string, index int, count int64, c
 		ScrubCounts:  scrub.ActionCounts{Redact: 1},
 	}
 	if identity.JSONLEnabled {
-		shard.JSONL = &jsonl.NodeArtifact{
-			SchemaVersion:     identity.JSONLSchemaVersion,
-			Path:              collection.NodeJSONLPath(graph, index, jsonl.Codec(identity.JSONLCodec)),
-			Codec:             identity.JSONLCodec,
-			SHA256:            strings.Repeat("c", 64),
-			Level:             identity.JSONLLevel,
-			Count:             count,
-			UncompressedBytes: 100,
-			StoredBytes:       50,
+		shard.JSONL = &collection.JSONLArtifact{
+			Path: collection.NodeJSONLPath(graph, index, jsonl.Codec(identity.JSONLCodec)),
+			Artifact: jsonl.Artifact{
+				SchemaVersion:     identity.JSONLSchemaVersion,
+				Codec:             jsonl.Codec(identity.JSONLCodec),
+				SHA256:            strings.Repeat("c", 64),
+				Level:             identity.JSONLLevel,
+				Count:             count,
+				UncompressedBytes: 100,
+				StoredBytes:       50,
+			},
 		}
 	}
 	if identity.ParquetEnabled {
-		shard.Parquet = &parquet.NodeArtifact{
-			SchemaVersion: identity.ParquetSchemaVersion,
-			Path:          collection.NodeParquetPath(graph, index),
-			SHA256:        strings.Repeat("d", 64),
-			Count:         count,
-			StoredBytes:   75,
+		shard.Parquet = &collection.ParquetArtifact{
+			Path: collection.NodeParquetPath(graph, index),
+			Artifact: parquet.Artifact{
+				SchemaVersion: identity.ParquetSchemaVersion,
+				SHA256:        strings.Repeat("d", 64),
+				Count:         count,
+				StoredBytes:   75,
+			},
 		}
 	}
 	return shard
@@ -91,24 +95,28 @@ func fixtureRelationshipShard(identity Identity, graph string, index int, count 
 		ScrubCounts:  scrub.ActionCounts{Redact: 1},
 	}
 	if identity.JSONLEnabled {
-		shard.JSONL = &jsonl.RelationshipArtifact{
-			SchemaVersion:     identity.JSONLSchemaVersion,
-			Path:              collection.RelationshipJSONLPath(graph, index, jsonl.Codec(identity.JSONLCodec)),
-			Codec:             identity.JSONLCodec,
-			SHA256:            strings.Repeat("e", 64),
-			Level:             identity.JSONLLevel,
-			Count:             count,
-			UncompressedBytes: 120,
-			StoredBytes:       60,
+		shard.JSONL = &collection.JSONLArtifact{
+			Path: collection.RelationshipJSONLPath(graph, index, jsonl.Codec(identity.JSONLCodec)),
+			Artifact: jsonl.Artifact{
+				SchemaVersion:     identity.JSONLSchemaVersion,
+				Codec:             jsonl.Codec(identity.JSONLCodec),
+				SHA256:            strings.Repeat("e", 64),
+				Level:             identity.JSONLLevel,
+				Count:             count,
+				UncompressedBytes: 120,
+				StoredBytes:       60,
+			},
 		}
 	}
 	if identity.ParquetEnabled {
-		shard.Parquet = &parquet.RelationshipArtifact{
-			SchemaVersion: identity.ParquetSchemaVersion,
-			Path:          collection.RelationshipParquetPath(graph, index),
-			SHA256:        strings.Repeat("f", 64),
-			Count:         count,
-			StoredBytes:   80,
+		shard.Parquet = &collection.ParquetArtifact{
+			Path: collection.RelationshipParquetPath(graph, index),
+			Artifact: parquet.Artifact{
+				SchemaVersion: identity.ParquetSchemaVersion,
+				SHA256:        strings.Repeat("f", 64),
+				Count:         count,
+				StoredBytes:   80,
+			},
 		}
 	}
 	return shard

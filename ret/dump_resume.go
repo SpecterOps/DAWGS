@@ -10,9 +10,7 @@ import (
 	"github.com/specterops/dawgs/ret/collection"
 	"github.com/specterops/dawgs/ret/dawgs"
 	"github.com/specterops/dawgs/ret/entity"
-	"github.com/specterops/dawgs/ret/jsonl"
 	"github.com/specterops/dawgs/ret/metrics"
-	"github.com/specterops/dawgs/ret/parquet"
 	"github.com/specterops/dawgs/ret/scrub"
 )
 
@@ -164,18 +162,9 @@ func (s *dumpRunner) reconstructNodeShard(
 	var err error
 	switch {
 	case shard.JSONL != nil:
-		var nodes []entity.Node
-		nodes, err = jsonl.ReadNodes(s.config.Directory, *shard.JSONL)
-		if err == nil {
-			for index, node := range nodes {
-				if visitErr := visit(node); visitErr != nil {
-					err = fmt.Errorf("process JSONL node record %d: %w", index+1, visitErr)
-					break
-				}
-			}
-		}
+		err = collection.ReadJSONLNodes(s.config.Directory, *shard.JSONL, visit)
 	case shard.Parquet != nil:
-		err = parquet.ReadNodes(s.config.Directory, *shard.Parquet, visit)
+		err = collection.ReadParquetNodes(s.config.Directory, *shard.Parquet, visit)
 	default:
 		err = errors.New("committed node shard has no concrete artifact")
 	}
@@ -208,18 +197,9 @@ func (s *dumpRunner) reconstructRelationshipShard(
 	var err error
 	switch {
 	case shard.JSONL != nil:
-		var relationships []entity.Relationship
-		relationships, err = jsonl.ReadRelationships(s.config.Directory, *shard.JSONL)
-		if err == nil {
-			for index, relationship := range relationships {
-				if visitErr := visit(relationship); visitErr != nil {
-					err = fmt.Errorf("process JSONL relationship record %d: %w", index+1, visitErr)
-					break
-				}
-			}
-		}
+		err = collection.ReadJSONLRelationships(s.config.Directory, *shard.JSONL, visit)
 	case shard.Parquet != nil:
-		err = parquet.ReadRelationships(s.config.Directory, *shard.Parquet, visit)
+		err = collection.ReadParquetRelationships(s.config.Directory, *shard.Parquet, visit)
 	default:
 		err = errors.New("committed relationship shard has no concrete artifact")
 	}

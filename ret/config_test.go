@@ -12,8 +12,8 @@ import (
 func TestDumpConfigRequiresAnOutput(t *testing.T) {
 	// Break caught: accepting a dump that has no artifact writer enabled.
 	config := validDumpConfig(t)
-	config.JSONL.Enabled = false
-	config.Parquet.Enabled = false
+	config.JSONL = nil
+	config.Parquet = nil
 
 	require.ErrorContains(t, config.Validate(), "output")
 }
@@ -21,8 +21,8 @@ func TestDumpConfigRequiresAnOutput(t *testing.T) {
 func TestParquetOnlyDumpConfigIsValid(t *testing.T) {
 	// Break caught: rejecting a valid concrete Parquet-only dump.
 	config := validDumpConfig(t)
-	config.JSONL.Enabled = false
-	config.Parquet.Enabled = true
+	config.JSONL = nil
+	config.Parquet = pointerTo(parquet.Config{})
 
 	require.NoError(t, config.Validate())
 }
@@ -104,8 +104,8 @@ func validDumpConfig(t *testing.T) DumpConfig {
 		Graphs:          []string{"asset"},
 		EntityBatchSize: 1,
 		ShardSize:       1,
-		JSONL:           jsonl.Config{Enabled: true, Codec: jsonl.CodecNone},
-		Parquet:         parquet.Config{Enabled: true},
+		JSONL:           pointerTo(jsonl.Config{Codec: jsonl.CodecNone}),
+		Parquet:         pointerTo(parquet.Config{}),
 		Scrub:           pointerTo(scrub.DefaultConfig()),
 	}
 }

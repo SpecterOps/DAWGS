@@ -7,9 +7,7 @@ const (
 )
 
 // Config controls creation of Parquet artifacts.
-type Config struct {
-	Enabled bool
-}
+type Config struct{}
 
 // Validate verifies that the configuration can be used to write an artifact.
 func (Config) Validate() error {

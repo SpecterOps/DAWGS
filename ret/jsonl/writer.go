@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -89,7 +90,9 @@ type EntityWriter[E entity.Entity, R record] struct {
 	entityToRecord func(E) R
 	config         Config
 
-	state State
+	state          State
+	resourceClosed bool
+	failure        error
 }
 
 func (s *EntityWriter[E, R]) Push(entities []E) error {
@@ -97,23 +100,20 @@ func (s *EntityWriter[E, R]) Push(entities []E) error {
 	case Closed:
 		return ErrWriterNotOpen
 	case Failed:
-		return ErrWriterFailed
+		return errors.Join(ErrWriterFailed, s.failure)
 	}
 
 	for _, entity := range entities {
 		if err := entity.Validate(); err != nil {
-			s.state = Failed
-			return err
+			return s.fail(fmt.Errorf("validate JSONL record %d: %w", s.recordCount+1, err))
 		}
 
 		record := s.entityToRecord(entity)
 
 		if encoded, err := json.Marshal(record); err != nil {
-			s.state = Failed
-			return err
+			return s.fail(fmt.Errorf("encode JSONL record %d: %w", s.recordCount+1, err))
 		} else if _, err := s.inputWriter.Write(append(encoded, '\n')); err != nil {
-			s.state = Failed
-			return err
+			return s.fail(fmt.Errorf("write JSONL record %d: %w", s.recordCount+1, err))
 		}
 
 		s.recordCount++
@@ -123,12 +123,20 @@ func (s *EntityWriter[E, R]) Push(entities []E) error {
 }
 
 func (s *EntityWriter[E, R]) Close() error {
-	if err := s.compressionWriter.Close(); err != nil {
-		s.state = Failed
-		return err
-	} else if s.state != Failed {
-		s.state = Closed
+	if s.resourceClosed {
+		if s.state == Failed {
+			return errors.Join(ErrWriterFailed, s.failure)
+		}
+		return nil
 	}
+	s.resourceClosed = true
+	if err := s.compressionWriter.Close(); err != nil {
+		s.fail(fmt.Errorf("finish JSONL stream: %w", err))
+	}
+	if s.state == Failed {
+		return errors.Join(ErrWriterFailed, s.failure)
+	}
+	s.state = Closed
 
 	return nil
 }
@@ -138,7 +146,7 @@ func (s *EntityWriter[E, R]) Result() (Artifact, error) {
 	case Open:
 		return Artifact{}, ErrWriterNotClosed
 	case Failed:
-		return Artifact{}, ErrWriterFailed
+		return Artifact{}, errors.Join(ErrWriterFailed, s.failure)
 	}
 
 	return Artifact{
@@ -150,6 +158,16 @@ func (s *EntityWriter[E, R]) Result() (Artifact, error) {
 		UncompressedBytes: s.inputWriter.count,
 		StoredBytes:       s.outputWriter.count,
 	}, nil
+}
+
+func (s *EntityWriter[E, R]) fail(err error) error {
+	if s.failure == nil {
+		s.failure = err
+	} else {
+		s.failure = errors.Join(s.failure, err)
+	}
+	s.state = Failed
+	return err
 }
 
 func newCountingWriter(writer io.Writer) *countingWriter {
@@ -180,9 +198,9 @@ func newCompressionWriter(writer io.Writer, config Config) (io.WriteCloser, erro
 	case CodecNone:
 		return nopWriteCloser{Writer: writer}, nil
 	case CodecGzip:
-		return gzip.NewWriterLevel(writer, config.Level)
+		return gzip.NewWriterLevel(writer, config.gzipLevel())
 	case CodecZstd:
-		return zstd.NewWriter(writer, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(config.Level)))
+		return zstd.NewWriter(writer, zstd.WithEncoderLevel(config.zstdLevel()))
 	default:
 		return nil, fmt.Errorf("unsupported JSONL codec %q", config.Codec)
 	}

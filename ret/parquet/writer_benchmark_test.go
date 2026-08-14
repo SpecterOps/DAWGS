@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	parquetBenchmarkArtifact NodeArtifact
+	parquetBenchmarkArtifact nodeFixtureArtifact
 	parquetBenchmarkRow      NodeRow
 )
 
@@ -53,14 +53,14 @@ func BenchmarkParquetVARIANTWriting(b *testing.B) {
 			},
 		}
 	}
-	config := Config{Enabled: true}
+	config := Config{}
 	directory := b.TempDir()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
 		path := filepath.Join(directory, fmt.Sprintf("nodes-%d.parquet", index))
-		artifact, err := WriteNodes(path, filepath.Base(path), config, nodes)
+		artifact, err := writeNodesFixture(path, filepath.Base(path), config, nodes)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -264,7 +264,7 @@ func writeArchiveTestCollectionNamed(
 	outputs := collection.OutputConfig{}
 
 	if withJSONL {
-		config := jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}
+		config := jsonl.Config{Codec: jsonl.CodecNone}
 		outputs.JSONL = &collection.JSONLOutput{
 			SchemaVersion: jsonl.SchemaVersion,
 			Codec:         string(config.Codec),
@@ -272,45 +272,63 @@ func writeArchiveTestCollectionNamed(
 		}
 		nodePath := collection.NodeJSONLPath(graph.Name, 1, config.Codec)
 		nodeTemporary := filepath.Join(root, "nodes.jsonl.tmp")
-		nodeArtifact, err := jsonl.WriteNodes(nodeTemporary, nodePath, config, nodes)
+		nodeFile, err := os.Create(nodeTemporary)
 		require.NoError(t, err)
+		nodeWriter, err := jsonl.NewNodeWriter(nodeFile, config)
+		require.NoError(t, err)
+		require.NoError(t, nodeWriter.Push(nodes))
+		require.NoError(t, nodeWriter.Close())
+		nodeArtifact, err := nodeWriter.Result()
+		require.NoError(t, err)
+		require.NoError(t, nodeFile.Close())
 		installArchiveTestArtifact(t, root, nodeTemporary, nodePath)
-		graph.NodeShards[0].JSONL = &nodeArtifact
+		graph.NodeShards[0].JSONL = &collection.JSONLArtifact{Path: nodePath, Artifact: nodeArtifact}
 
 		relationshipPath := collection.RelationshipJSONLPath(graph.Name, 1, config.Codec)
 		relationshipTemporary := filepath.Join(root, "relationships.jsonl.tmp")
-		relationshipArtifact, err := jsonl.WriteRelationships(
-			relationshipTemporary,
-			relationshipPath,
-			config,
-			relationships,
-		)
+		relationshipFile, err := os.Create(relationshipTemporary)
 		require.NoError(t, err)
+		relationshipWriter, err := jsonl.NewRelationshipWriter(relationshipFile, config)
+		require.NoError(t, err)
+		require.NoError(t, relationshipWriter.Push(relationships))
+		require.NoError(t, relationshipWriter.Close())
+		relationshipArtifact, err := relationshipWriter.Result()
+		require.NoError(t, err)
+		require.NoError(t, relationshipFile.Close())
 		installArchiveTestArtifact(t, root, relationshipTemporary, relationshipPath)
-		graph.RelationshipShards[0].JSONL = &relationshipArtifact
+		graph.RelationshipShards[0].JSONL = &collection.JSONLArtifact{Path: relationshipPath, Artifact: relationshipArtifact}
 	}
 
 	if withParquet {
-		config := parquet.Config{Enabled: true}
+		config := parquet.Config{}
 		outputs.Parquet = &collection.ParquetOutput{SchemaVersion: parquet.SchemaVersion}
 		nodePath := collection.NodeParquetPath(graph.Name, 1)
 		nodeTemporary := filepath.Join(root, "nodes.parquet.tmp")
-		nodeArtifact, err := parquet.WriteNodes(nodeTemporary, nodePath, config, nodes)
+		nodeFile, err := os.Create(nodeTemporary)
 		require.NoError(t, err)
+		nodeWriter, err := parquet.NewNodeWriter(nodeFile, config)
+		require.NoError(t, err)
+		require.NoError(t, nodeWriter.Push(nodes))
+		require.NoError(t, nodeWriter.Close())
+		nodeArtifact, err := nodeWriter.Result()
+		require.NoError(t, err)
+		require.NoError(t, nodeFile.Close())
 		installArchiveTestArtifact(t, root, nodeTemporary, nodePath)
-		graph.NodeShards[0].Parquet = &nodeArtifact
+		graph.NodeShards[0].Parquet = &collection.ParquetArtifact{Path: nodePath, Artifact: nodeArtifact}
 
 		relationshipPath := collection.RelationshipParquetPath(graph.Name, 1)
 		relationshipTemporary := filepath.Join(root, "relationships.parquet.tmp")
-		relationshipArtifact, err := parquet.WriteRelationships(
-			relationshipTemporary,
-			relationshipPath,
-			config,
-			relationships,
-		)
+		relationshipFile, err := os.Create(relationshipTemporary)
 		require.NoError(t, err)
+		relationshipWriter, err := parquet.NewRelationshipWriter(relationshipFile, config)
+		require.NoError(t, err)
+		require.NoError(t, relationshipWriter.Push(relationships))
+		require.NoError(t, relationshipWriter.Close())
+		relationshipArtifact, err := relationshipWriter.Result()
+		require.NoError(t, err)
+		require.NoError(t, relationshipFile.Close())
 		installArchiveTestArtifact(t, root, relationshipTemporary, relationshipPath)
-		graph.RelationshipShards[0].Parquet = &relationshipArtifact
+		graph.RelationshipShards[0].Parquet = &collection.ParquetArtifact{Path: relationshipPath, Artifact: relationshipArtifact}
 	}
 
 	require.NoError(t, collection.Write(root, collection.Manifest{

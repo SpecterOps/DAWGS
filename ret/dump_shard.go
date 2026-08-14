@@ -15,13 +15,13 @@ import (
 )
 
 var (
-	writeJSONLNodes           = jsonl.WriteNodes
-	writeParquetNodes         = parquet.WriteNodes
-	writeJSONLRelationships   = jsonl.WriteRelationships
-	writeParquetRelationships = parquet.WriteRelationships
+	writeJSONLNodes           = writeJSONLNodeFile
+	writeParquetNodes         = writeParquetNodeFile
+	writeJSONLRelationships   = writeJSONLRelationshipFile
+	writeParquetRelationships = writeParquetRelationshipFile
 	shardRename               = os.Rename
 	shardRemove               = os.Remove
-	shardNonce                uint64
+	shardNonce                atomic.Uint64
 )
 
 func writeNodeShard(
@@ -30,15 +30,15 @@ func writeNodeShard(
 	lastSourceID uint64,
 	counts scrub.ActionCounts,
 	nodes []entity.Node,
-	jsonlConfig jsonl.Config,
-	parquetConfig parquet.Config,
+	jsonlConfig *jsonl.Config,
+	parquetConfig *parquet.Config,
 ) (collection.NodeShard, error) {
 	jsonlPath := ""
-	if jsonlConfig.Enabled {
+	if jsonlConfig != nil {
 		jsonlPath = collection.NodeJSONLPath(graphName, index, jsonlConfig.Codec)
 	}
 	parquetPath := ""
-	if parquetConfig.Enabled {
+	if parquetConfig != nil {
 		parquetPath = collection.NodeParquetPath(graphName, index)
 	}
 
@@ -51,9 +51,9 @@ func writeNodeShard(
 		return collection.NodeShard{}, fmt.Errorf("%w: node shard %d for graph %q: %w", ErrDestinationExists, index, graphName, err)
 	}
 
-	var jsonlArtifact *jsonl.NodeArtifact
-	if jsonlConfig.Enabled {
-		artifact, err := writeJSONLNodes(temporary[0], jsonlPath, jsonlConfig, nodes)
+	var jsonlArtifact *collection.JSONLArtifact
+	if jsonlConfig != nil {
+		artifact, err := writeJSONLNodes(temporary[0], jsonlPath, *jsonlConfig, nodes)
 		if err != nil {
 			return collection.NodeShard{}, cleanup.fail(fmt.Errorf("%w: write JSONL node shard %d for graph %q: %w", ErrArtifactIntegrity, index, graphName, err))
 		}
@@ -63,10 +63,10 @@ func writeNodeShard(
 		jsonlArtifact = &artifact
 	}
 
-	var parquetArtifact *parquet.NodeArtifact
-	if parquetConfig.Enabled {
+	var parquetArtifact *collection.ParquetArtifact
+	if parquetConfig != nil {
 		temporaryIndex := len(temporary) - 1
-		artifact, err := writeParquetNodes(temporary[temporaryIndex], parquetPath, parquetConfig, nodes)
+		artifact, err := writeParquetNodes(temporary[temporaryIndex], parquetPath, *parquetConfig, nodes)
 		if err != nil {
 			return collection.NodeShard{}, cleanup.fail(fmt.Errorf("%w: write Parquet node shard %d for graph %q: %w", ErrArtifactIntegrity, index, graphName, err))
 		}
@@ -89,15 +89,15 @@ func writeRelationshipShard(
 	lastSourceID uint64,
 	counts scrub.ActionCounts,
 	relationships []entity.Relationship,
-	jsonlConfig jsonl.Config,
-	parquetConfig parquet.Config,
+	jsonlConfig *jsonl.Config,
+	parquetConfig *parquet.Config,
 ) (collection.RelationshipShard, error) {
 	jsonlPath := ""
-	if jsonlConfig.Enabled {
+	if jsonlConfig != nil {
 		jsonlPath = collection.RelationshipJSONLPath(graphName, index, jsonlConfig.Codec)
 	}
 	parquetPath := ""
-	if parquetConfig.Enabled {
+	if parquetConfig != nil {
 		parquetPath = collection.RelationshipParquetPath(graphName, index)
 	}
 
@@ -110,9 +110,9 @@ func writeRelationshipShard(
 		return collection.RelationshipShard{}, fmt.Errorf("%w: relationship shard %d for graph %q: %w", ErrDestinationExists, index, graphName, err)
 	}
 
-	var jsonlArtifact *jsonl.RelationshipArtifact
-	if jsonlConfig.Enabled {
-		artifact, err := writeJSONLRelationships(temporary[0], jsonlPath, jsonlConfig, relationships)
+	var jsonlArtifact *collection.JSONLArtifact
+	if jsonlConfig != nil {
+		artifact, err := writeJSONLRelationships(temporary[0], jsonlPath, *jsonlConfig, relationships)
 		if err != nil {
 			return collection.RelationshipShard{}, cleanup.fail(fmt.Errorf("%w: write JSONL relationship shard %d for graph %q: %w", ErrArtifactIntegrity, index, graphName, err))
 		}
@@ -122,10 +122,10 @@ func writeRelationshipShard(
 		jsonlArtifact = &artifact
 	}
 
-	var parquetArtifact *parquet.RelationshipArtifact
-	if parquetConfig.Enabled {
+	var parquetArtifact *collection.ParquetArtifact
+	if parquetConfig != nil {
 		temporaryIndex := len(temporary) - 1
-		artifact, err := writeParquetRelationships(temporary[temporaryIndex], parquetPath, parquetConfig, relationships)
+		artifact, err := writeParquetRelationships(temporary[temporaryIndex], parquetPath, *parquetConfig, relationships)
 		if err != nil {
 			return collection.RelationshipShard{}, cleanup.fail(fmt.Errorf("%w: write Parquet relationship shard %d for graph %q: %w", ErrArtifactIntegrity, index, graphName, err))
 		}
@@ -185,7 +185,7 @@ func (s *shardCleanup) fail(primary error) error {
 func shardPaths(root string, relativePaths ...string) ([]string, []string, error) {
 	finals := make([]string, 0, len(relativePaths))
 	temporary := make([]string, 0, len(relativePaths))
-	nonce := atomic.AddUint64(&shardNonce, 1)
+	nonce := shardNonce.Add(1)
 	for _, relativePath := range relativePaths {
 		if relativePath == "" {
 			continue

@@ -34,7 +34,7 @@ func TestVariantValuesAndRelationshipSourceIDSurviveRoundTrip(t *testing.T) {
 		},
 	}
 	root := t.TempDir()
-	artifact, err := WriteRelationships(filepath.Join(root, "relationships.tmp"), "relationships.parquet", Config{Enabled: true}, []entity.Relationship{want})
+	artifact, err := writeRelationshipsFixture(filepath.Join(root, "relationships.tmp"), "relationships.parquet", Config{}, []entity.Relationship{want})
 	if err != nil {
 		t.Fatalf("write relationships: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestVariantValuesAndRelationshipSourceIDSurviveRoundTrip(t *testing.T) {
 	}
 
 	var got []entity.Relationship
-	if err := ReadRelationships(root, artifact, func(relationship entity.Relationship) error {
+	if err := readRelationshipsFixture(root, artifact, func(relationship entity.Relationship) error {
 		got = append(got, relationship)
 		return nil
 	}); err != nil {
@@ -58,39 +58,39 @@ func TestReadNodesRejectsInvalidArtifactMetadataBeforeVisiting(t *testing.T) {
 	root, artifact := installedNodeArtifact(t, []entity.Node{{SourceID: "1"}})
 	tests := []struct {
 		name   string
-		mutate func(NodeArtifact) NodeArtifact
+		mutate func(nodeFixtureArtifact) nodeFixtureArtifact
 	}{
 		{
 			name: "schema version",
-			mutate: func(value NodeArtifact) NodeArtifact {
+			mutate: func(value nodeFixtureArtifact) nodeFixtureArtifact {
 				value.SchemaVersion = "wrong"
 				return value
 			},
 		},
 		{
 			name: "stored size",
-			mutate: func(value NodeArtifact) NodeArtifact {
+			mutate: func(value nodeFixtureArtifact) nodeFixtureArtifact {
 				value.StoredBytes++
 				return value
 			},
 		},
 		{
 			name: "stored SHA",
-			mutate: func(value NodeArtifact) NodeArtifact {
+			mutate: func(value nodeFixtureArtifact) nodeFixtureArtifact {
 				value.SHA256 = strings.Repeat("0", sha256.Size*2)
 				return value
 			},
 		},
 		{
 			name: "row count",
-			mutate: func(value NodeArtifact) NodeArtifact {
+			mutate: func(value nodeFixtureArtifact) nodeFixtureArtifact {
 				value.Count++
 				return value
 			},
 		},
 		{
 			name: "unsafe path",
-			mutate: func(value NodeArtifact) NodeArtifact {
+			mutate: func(value nodeFixtureArtifact) nodeFixtureArtifact {
 				value.Path = "../nodes.parquet"
 				return value
 			},
@@ -99,12 +99,12 @@ func TestReadNodesRejectsInvalidArtifactMetadataBeforeVisiting(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			visited := 0
-			err := ReadNodes(root, test.mutate(artifact), func(entity.Node) error {
+			err := readNodesFixture(root, test.mutate(artifact), func(entity.Node) error {
 				visited++
 				return nil
 			})
 			if err == nil {
-				t.Fatal("ReadNodes unexpectedly succeeded")
+				t.Fatal("readNodesFixture unexpectedly succeeded")
 			}
 			if visited != 0 {
 				t.Fatalf("visited %d nodes before rejecting artifact", visited)
@@ -145,11 +145,11 @@ func TestReadNodesRejectsCorruptAndTruncatedFiles(t *testing.T) {
 			}
 
 			visited := 0
-			if err := ReadNodes(root, artifact, func(entity.Node) error {
+			if err := readNodesFixture(root, artifact, func(entity.Node) error {
 				visited++
 				return nil
 			}); err == nil {
-				t.Fatal("ReadNodes unexpectedly accepted damaged artifact")
+				t.Fatal("readNodesFixture unexpectedly accepted damaged artifact")
 			}
 			if visited != 0 {
 				t.Fatalf("visited %d nodes from damaged artifact", visited)
@@ -167,7 +167,7 @@ func TestReadRelationshipsRequiresSourceIDBeforeAnyVisit(t *testing.T) {
 	path := "relationships.parquet"
 	writeContents(t, filepath.Join(root, path), contents)
 	hash := sha256.Sum256(contents)
-	artifact := RelationshipArtifact{
+	artifact := relationshipFixtureArtifact{
 		SchemaVersion: SchemaVersion,
 		Path:          path,
 		SHA256:        hex.EncodeToString(hash[:]),
@@ -176,12 +176,12 @@ func TestReadRelationshipsRequiresSourceIDBeforeAnyVisit(t *testing.T) {
 	}
 
 	visited := 0
-	err := ReadRelationships(root, artifact, func(entity.Relationship) error {
+	err := readRelationshipsFixture(root, artifact, func(entity.Relationship) error {
 		visited++
 		return nil
 	})
 	if err == nil {
-		t.Fatal("ReadRelationships unexpectedly accepted empty source ID")
+		t.Fatal("readRelationshipsFixture unexpectedly accepted empty source ID")
 	}
 	if visited != 0 {
 		t.Fatalf("visited %d relationships before validating all source IDs", visited)
@@ -204,7 +204,7 @@ func TestReadersValidateEveryEntityBeforeAnyVisit(t *testing.T) {
 				path := "nodes.parquet"
 				writeContents(t, filepath.Join(root, path), contents)
 				hash := sha256.Sum256(contents)
-				return ReadNodes(root, NodeArtifact{
+				return readNodesFixture(root, nodeFixtureArtifact{
 					SchemaVersion: SchemaVersion,
 					Path:          path,
 					SHA256:        hex.EncodeToString(hash[:]),
@@ -226,7 +226,7 @@ func TestReadersValidateEveryEntityBeforeAnyVisit(t *testing.T) {
 				path := "relationships.parquet"
 				writeContents(t, filepath.Join(root, path), contents)
 				hash := sha256.Sum256(contents)
-				return ReadRelationships(root, RelationshipArtifact{
+				return readRelationshipsFixture(root, relationshipFixtureArtifact{
 					SchemaVersion: SchemaVersion,
 					Path:          path,
 					SHA256:        hex.EncodeToString(hash[:]),
@@ -258,7 +258,7 @@ func TestReadersValidateEveryEntityBeforeAnyVisit(t *testing.T) {
 func TestReadEmptyNodeArtifact(t *testing.T) {
 	root, artifact := installedNodeArtifact(t, nil)
 	visited := 0
-	if err := ReadNodes(root, artifact, func(entity.Node) error {
+	if err := readNodesFixture(root, artifact, func(entity.Node) error {
 		visited++
 		return nil
 	}); err != nil {
@@ -272,7 +272,7 @@ func TestReadEmptyNodeArtifact(t *testing.T) {
 func TestReadNodesVisitsVerifiedSnapshotAfterPathReplacement(t *testing.T) {
 	root, artifact := installedNodeArtifact(t, []entity.Node{{SourceID: "old-1"}, {SourceID: "old-2"}})
 	replacementTemporary := filepath.Join(root, "replacement.tmp")
-	replacementArtifact, err := WriteNodes(replacementTemporary, "replacement.parquet", Config{Enabled: true}, []entity.Node{{SourceID: "new-1"}, {SourceID: "new-2"}})
+	replacementArtifact, err := writeNodesFixture(replacementTemporary, "replacement.parquet", Config{}, []entity.Node{{SourceID: "new-1"}, {SourceID: "new-2"}})
 	if err != nil {
 		t.Fatalf("write replacement: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestReadNodesVisitsVerifiedSnapshotAfterPathReplacement(t *testing.T) {
 	defer func() { afterVerifiedSnapshotForTest = nil }()
 
 	var visited []string
-	if err := ReadNodes(root, artifact, func(node entity.Node) error {
+	if err := readNodesFixture(root, artifact, func(node entity.Node) error {
 		visited = append(visited, node.SourceID)
 		return nil
 	}); err != nil {
@@ -306,11 +306,11 @@ func TestReadNodesRejectsSymlinksBeneathRootBeforeVisiting(t *testing.T) {
 
 	tests := []struct {
 		name string
-		link func(string) (NodeArtifact, error)
+		link func(string) (nodeFixtureArtifact, error)
 	}{
 		{
 			name: "final file",
-			link: func(root string) (NodeArtifact, error) {
+			link: func(root string) (nodeFixtureArtifact, error) {
 				artifact := outsideArtifact
 				artifact.Path = "nodes.parquet"
 				return artifact, os.Symlink(outsidePath, filepath.Join(root, artifact.Path))
@@ -318,7 +318,7 @@ func TestReadNodesRejectsSymlinksBeneathRootBeforeVisiting(t *testing.T) {
 		},
 		{
 			name: "intermediate directory",
-			link: func(root string) (NodeArtifact, error) {
+			link: func(root string) (nodeFixtureArtifact, error) {
 				artifact := outsideArtifact
 				artifact.Path = "linked/nodes.parquet"
 				return artifact, os.Symlink(outsideRoot, filepath.Join(root, "linked"))
@@ -334,12 +334,12 @@ func TestReadNodesRejectsSymlinksBeneathRootBeforeVisiting(t *testing.T) {
 			}
 
 			visited := 0
-			err = ReadNodes(root, artifact, func(entity.Node) error {
+			err = readNodesFixture(root, artifact, func(entity.Node) error {
 				visited++
 				return nil
 			})
 			if err == nil {
-				t.Fatal("ReadNodes unexpectedly followed in-root symlink")
+				t.Fatal("readNodesFixture unexpectedly followed in-root symlink")
 			}
 			if visited != 0 {
 				t.Fatalf("visited %d nodes through in-root symlink", visited)
@@ -348,11 +348,11 @@ func TestReadNodesRejectsSymlinksBeneathRootBeforeVisiting(t *testing.T) {
 	}
 }
 
-func installedNodeArtifact(t *testing.T, nodes []entity.Node) (string, NodeArtifact) {
+func installedNodeArtifact(t *testing.T, nodes []entity.Node) (string, nodeFixtureArtifact) {
 	t.Helper()
 	root := t.TempDir()
 	temporary := filepath.Join(root, "nodes.tmp")
-	artifact, err := WriteNodes(temporary, "nodes.parquet", Config{Enabled: true}, nodes)
+	artifact, err := writeNodesFixture(temporary, "nodes.parquet", Config{}, nodes)
 	if err != nil {
 		t.Fatalf("write nodes: %v", err)
 	}

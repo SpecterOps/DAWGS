@@ -262,7 +262,7 @@ func TestManifestRejectsInvalidConcreteArtifactMetadata(t *testing.T) {
 			message: "JSONL schema",
 		},
 		"JSONL codec": {
-			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].JSONL.Codec = string(jsonl.CodecGzip) },
+			mutate:  func(value *Manifest) { value.Graphs[0].NodeShards[0].JSONL.Codec = jsonl.CodecGzip },
 			message: "JSONL codec",
 		},
 		"JSONL level": {
@@ -413,22 +413,26 @@ func fixtureManifest() Manifest {
 				Count:        2,
 				LastSourceID: 10,
 				ScrubCounts:  scrub.ActionCounts{Pseudonymize: 2},
-				JSONL: &jsonl.NodeArtifact{
-					SchemaVersion:     jsonl.SchemaVersion,
-					Path:              NodeJSONLPath("bloodhound", 1, jsonl.CodecZstd),
-					Codec:             string(jsonl.CodecZstd),
-					SHA256:            strings.Repeat("c", 64),
-					Level:             3,
-					Count:             2,
-					UncompressedBytes: 128,
-					StoredBytes:       80,
+				JSONL: &JSONLArtifact{
+					Path: NodeJSONLPath("bloodhound", 1, jsonl.CodecZstd),
+					Artifact: jsonl.Artifact{
+						SchemaVersion:     jsonl.SchemaVersion,
+						Codec:             jsonl.CodecZstd,
+						SHA256:            strings.Repeat("c", 64),
+						Level:             3,
+						Count:             2,
+						UncompressedBytes: 128,
+						StoredBytes:       80,
+					},
 				},
-				Parquet: &parquet.NodeArtifact{
-					SchemaVersion: parquet.SchemaVersion,
-					Path:          NodeParquetPath("bloodhound", 1),
-					SHA256:        strings.Repeat("d", 64),
-					Count:         2,
-					StoredBytes:   256,
+				Parquet: &ParquetArtifact{
+					Path: NodeParquetPath("bloodhound", 1),
+					Artifact: parquet.Artifact{
+						SchemaVersion: parquet.SchemaVersion,
+						SHA256:        strings.Repeat("d", 64),
+						Count:         2,
+						StoredBytes:   256,
+					},
 				},
 			}},
 			RelationshipShards: []RelationshipShard{{
@@ -436,22 +440,26 @@ func fixtureManifest() Manifest {
 				Count:        1,
 				LastSourceID: 20,
 				ScrubCounts:  scrub.ActionCounts{Preserve: 1},
-				JSONL: &jsonl.RelationshipArtifact{
-					SchemaVersion:     jsonl.SchemaVersion,
-					Path:              RelationshipJSONLPath("bloodhound", 1, jsonl.CodecZstd),
-					Codec:             string(jsonl.CodecZstd),
-					SHA256:            strings.Repeat("e", 64),
-					Level:             3,
-					Count:             1,
-					UncompressedBytes: 96,
-					StoredBytes:       64,
+				JSONL: &JSONLArtifact{
+					Path: RelationshipJSONLPath("bloodhound", 1, jsonl.CodecZstd),
+					Artifact: jsonl.Artifact{
+						SchemaVersion:     jsonl.SchemaVersion,
+						Codec:             jsonl.CodecZstd,
+						SHA256:            strings.Repeat("e", 64),
+						Level:             3,
+						Count:             1,
+						UncompressedBytes: 96,
+						StoredBytes:       64,
+					},
 				},
-				Parquet: &parquet.RelationshipArtifact{
-					SchemaVersion: parquet.SchemaVersion,
-					Path:          RelationshipParquetPath("bloodhound", 1),
-					SHA256:        strings.Repeat("f", 64),
-					Count:         1,
-					StoredBytes:   192,
+				Parquet: &ParquetArtifact{
+					Path: RelationshipParquetPath("bloodhound", 1),
+					Artifact: parquet.Artifact{
+						SchemaVersion: parquet.SchemaVersion,
+						SHA256:        strings.Repeat("f", 64),
+						Count:         1,
+						StoredBytes:   192,
+					},
 				},
 			}},
 			Metrics: builder.Finalize(),

@@ -432,44 +432,72 @@ func writeVerificationCollection(
 	return root
 }
 
-func installJSONLNodes(t *testing.T, root, graph string, nodes []entity.Node) *jsonl.NodeArtifact {
+func installJSONLNodes(t *testing.T, root, graph string, nodes []entity.Node) *collection.JSONLArtifact {
 	t.Helper()
 	path := collection.NodeJSONLPath(graph, 1, jsonl.CodecNone)
 	temporary := filepath.Join(root, "nodes.jsonl.tmp")
-	artifact, err := jsonl.WriteNodes(temporary, path, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, nodes)
+	file, err := os.Create(temporary)
 	require.NoError(t, err)
+	writer, err := jsonl.NewNodeWriter(file, jsonl.Config{Codec: jsonl.CodecNone})
+	require.NoError(t, err)
+	require.NoError(t, writer.Push(nodes))
+	require.NoError(t, writer.Close())
+	artifact, err := writer.Result()
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
 	installArtifact(t, root, temporary, path)
-	return &artifact
+	return &collection.JSONLArtifact{Path: path, Artifact: artifact}
 }
 
-func installJSONLRelationships(t *testing.T, root, graph string, relationships []entity.Relationship) *jsonl.RelationshipArtifact {
+func installJSONLRelationships(t *testing.T, root, graph string, relationships []entity.Relationship) *collection.JSONLArtifact {
 	t.Helper()
 	path := collection.RelationshipJSONLPath(graph, 1, jsonl.CodecNone)
 	temporary := filepath.Join(root, "relationships.jsonl.tmp")
-	artifact, err := jsonl.WriteRelationships(temporary, path, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, relationships)
+	file, err := os.Create(temporary)
 	require.NoError(t, err)
+	writer, err := jsonl.NewRelationshipWriter(file, jsonl.Config{Codec: jsonl.CodecNone})
+	require.NoError(t, err)
+	require.NoError(t, writer.Push(relationships))
+	require.NoError(t, writer.Close())
+	artifact, err := writer.Result()
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
 	installArtifact(t, root, temporary, path)
-	return &artifact
+	return &collection.JSONLArtifact{Path: path, Artifact: artifact}
 }
 
-func installParquetNodes(t *testing.T, root, graph string, nodes []entity.Node) *parquet.NodeArtifact {
+func installParquetNodes(t *testing.T, root, graph string, nodes []entity.Node) *collection.ParquetArtifact {
 	t.Helper()
 	path := collection.NodeParquetPath(graph, 1)
 	temporary := filepath.Join(root, "nodes.parquet.tmp")
-	artifact, err := parquet.WriteNodes(temporary, path, parquet.Config{Enabled: true}, nodes)
+	file, err := os.Create(temporary)
 	require.NoError(t, err)
+	writer, err := parquet.NewNodeWriter(file, parquet.Config{})
+	require.NoError(t, err)
+	require.NoError(t, writer.Push(nodes))
+	require.NoError(t, writer.Close())
+	artifact, err := writer.Result()
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
 	installArtifact(t, root, temporary, path)
-	return &artifact
+	return &collection.ParquetArtifact{Path: path, Artifact: artifact}
 }
 
-func installParquetRelationships(t *testing.T, root, graph string, relationships []entity.Relationship) *parquet.RelationshipArtifact {
+func installParquetRelationships(t *testing.T, root, graph string, relationships []entity.Relationship) *collection.ParquetArtifact {
 	t.Helper()
 	path := collection.RelationshipParquetPath(graph, 1)
 	temporary := filepath.Join(root, "relationships.parquet.tmp")
-	artifact, err := parquet.WriteRelationships(temporary, path, parquet.Config{Enabled: true}, relationships)
+	file, err := os.Create(temporary)
 	require.NoError(t, err)
+	writer, err := parquet.NewRelationshipWriter(file, parquet.Config{})
+	require.NoError(t, err)
+	require.NoError(t, writer.Push(relationships))
+	require.NoError(t, writer.Close())
+	artifact, err := writer.Result()
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
 	installArtifact(t, root, temporary, path)
-	return &artifact
+	return &collection.ParquetArtifact{Path: path, Artifact: artifact}
 }
 
 func installArtifact(t *testing.T, root, temporary, relative string) {

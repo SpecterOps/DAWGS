@@ -62,6 +62,13 @@ type benchPhaseResult struct {
 	CompressedByteSize   int64
 }
 
+func benchJSONLCodec(config *jsonl.Config) string {
+	if config == nil {
+		return ""
+	}
+	return string(config.Codec)
+}
+
 func Bench(ctx context.Context, db graph.Database, driverName string, graphNames []string, options benchOptions) (benchReport, error) {
 	if err := options.validate(); err != nil {
 		return benchReport{}, err
@@ -74,9 +81,9 @@ func Bench(ctx context.Context, db graph.Database, driverName string, graphNames
 		slog.Int("batch_size", options.BatchSize),
 		slog.Int("sample_size", options.SampleSize),
 		slog.Any("workers", options.Workers),
-		slog.Bool("jsonl", options.JSONL.Enabled),
-		slog.String("jsonl_codec", string(options.JSONL.Codec)),
-		slog.Bool("parquet", options.Parquet.Enabled),
+		slog.Bool("jsonl", options.JSONL != nil),
+		slog.String("jsonl_codec", benchJSONLCodec(options.JSONL)),
+		slog.Bool("parquet", options.Parquet != nil),
 	)
 
 	report := benchReport{
@@ -118,14 +125,14 @@ func Bench(ctx context.Context, db graph.Database, driverName string, graphNames
 		}
 
 		for workerIndex, workerCount := range options.Workers {
-			if options.JSONL.Enabled {
+			if options.JSONL != nil {
 				result, err := benchJSONLRun(ctx, db, graphName, snapshot, workerCount, workerIndex, options)
 				if err != nil {
 					return benchReport{}, err
 				}
 				graphReport.Results = append(graphReport.Results, result)
 			}
-			if options.Parquet.Enabled {
+			if options.Parquet != nil {
 				result, err := benchParquetRun(ctx, db, graphName, snapshot, workerCount, workerIndex, options)
 				if err != nil {
 					return benchReport{}, err
@@ -157,7 +164,7 @@ func benchJSONLRun(ctx context.Context, db graph.Database, graphName string, sna
 	nodeResult, err := benchNodes(
 		ctx, db, graphName, "jsonl", snapshot.NodeCount, workers, options,
 		func(path string, nodes []entity.Node) (benchPhaseResult, error) {
-			return benchJSONLNodeBatch(path, nodes, options.JSONL)
+			return benchJSONLNodeBatch(path, nodes, *options.JSONL)
 		},
 	)
 	if err != nil {
@@ -166,7 +173,7 @@ func benchJSONLRun(ctx context.Context, db graph.Database, graphName string, sna
 	relationshipResult, err := benchRelationships(
 		ctx, db, graphName, "jsonl", snapshot.RelationshipCount, workers, options,
 		func(path string, relationships []entity.Relationship) (benchPhaseResult, error) {
-			return benchJSONLRelationshipBatch(path, relationships, options.JSONL)
+			return benchJSONLRelationshipBatch(path, relationships, *options.JSONL)
 		},
 	)
 	if err != nil {
@@ -183,7 +190,7 @@ func benchParquetRun(ctx context.Context, db graph.Database, graphName string, s
 	nodeResult, err := benchNodes(
 		ctx, db, graphName, "parquet", snapshot.NodeCount, workers, options,
 		func(path string, nodes []entity.Node) (benchPhaseResult, error) {
-			return benchParquetNodeBatch(path, nodes, options.Parquet)
+			return benchParquetNodeBatch(path, nodes, *options.Parquet)
 		},
 	)
 	if err != nil {
@@ -192,7 +199,7 @@ func benchParquetRun(ctx context.Context, db graph.Database, graphName string, s
 	relationshipResult, err := benchRelationships(
 		ctx, db, graphName, "parquet", snapshot.RelationshipCount, workers, options,
 		func(path string, relationships []entity.Relationship) (benchPhaseResult, error) {
-			return benchParquetRelationshipBatch(path, relationships, options.Parquet)
+			return benchParquetRelationshipBatch(path, relationships, *options.Parquet)
 		},
 	)
 	if err != nil {
@@ -645,7 +652,10 @@ func benchRelationshipsWithFilesystem(
 
 func benchJSONLNodeBatch(path string, nodes []entity.Node, config jsonl.Config) (benchPhaseResult, error) {
 	startedAt := time.Now()
-	artifact, err := jsonl.WriteNodes(path, filepath.Base(path), config, nodes)
+	artifact, err := benchWriteArtifactFile(path, nodes, func(output io.Writer) (benchArtifactWriter[entity.Node, jsonl.Artifact], error) {
+		writer, err := jsonl.NewNodeWriter(output, config)
+		return &writer, err
+	})
 	elapsed := time.Since(startedAt)
 	if err != nil {
 		return benchPhaseResult{}, err
@@ -660,7 +670,10 @@ func benchJSONLNodeBatch(path string, nodes []entity.Node, config jsonl.Config) 
 
 func benchJSONLRelationshipBatch(path string, relationships []entity.Relationship, config jsonl.Config) (benchPhaseResult, error) {
 	startedAt := time.Now()
-	artifact, err := jsonl.WriteRelationships(path, filepath.Base(path), config, relationships)
+	artifact, err := benchWriteArtifactFile(path, relationships, func(output io.Writer) (benchArtifactWriter[entity.Relationship, jsonl.Artifact], error) {
+		writer, err := jsonl.NewRelationshipWriter(output, config)
+		return &writer, err
+	})
 	elapsed := time.Since(startedAt)
 	if err != nil {
 		return benchPhaseResult{}, err
@@ -675,7 +688,10 @@ func benchJSONLRelationshipBatch(path string, relationships []entity.Relationshi
 
 func benchParquetNodeBatch(path string, nodes []entity.Node, config parquet.Config) (benchPhaseResult, error) {
 	startedAt := time.Now()
-	artifact, err := parquet.WriteNodes(path, filepath.Base(path), config, nodes)
+	artifact, err := benchWriteArtifactFile(path, nodes, func(output io.Writer) (benchArtifactWriter[entity.Node, parquet.Artifact], error) {
+		writer, err := parquet.NewNodeWriter(output, config)
+		return &writer, err
+	})
 	elapsed := time.Since(startedAt)
 	if err != nil {
 		return benchPhaseResult{}, err
@@ -689,7 +705,10 @@ func benchParquetNodeBatch(path string, nodes []entity.Node, config parquet.Conf
 
 func benchParquetRelationshipBatch(path string, relationships []entity.Relationship, config parquet.Config) (benchPhaseResult, error) {
 	startedAt := time.Now()
-	artifact, err := parquet.WriteRelationships(path, filepath.Base(path), config, relationships)
+	artifact, err := benchWriteArtifactFile(path, relationships, func(output io.Writer) (benchArtifactWriter[entity.Relationship, parquet.Artifact], error) {
+		writer, err := parquet.NewRelationshipWriter(output, config)
+		return &writer, err
+	})
 	elapsed := time.Since(startedAt)
 	if err != nil {
 		return benchPhaseResult{}, err
@@ -699,6 +718,40 @@ func benchParquetRelationshipBatch(path string, relationships []entity.Relations
 		EncodeCompressTime: elapsed,
 		CompressedByteSize: artifact.StoredBytes,
 	}, nil
+}
+
+type benchArtifactWriter[E, A any] interface {
+	Push([]E) error
+	Close() error
+	Result() (A, error)
+}
+
+func benchWriteArtifactFile[E, A any](
+	path string,
+	values []E,
+	newWriter func(io.Writer) (benchArtifactWriter[E, A], error),
+) (A, error) {
+	var zero A
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return zero, fmt.Errorf("open benchmark artifact: %w", err)
+	}
+	writer, err := newWriter(file)
+	if err != nil {
+		return zero, errors.Join(err, file.Close())
+	}
+	pushErr := writer.Push(values)
+	closeWriterErr := writer.Close()
+	var artifact A
+	var resultErr error
+	if pushErr == nil && closeWriterErr == nil {
+		artifact, resultErr = writer.Result()
+	}
+	closeFileErr := file.Close()
+	if err := errors.Join(pushErr, closeWriterErr, resultErr, closeFileErr); err != nil {
+		return zero, err
+	}
+	return artifact, nil
 }
 
 func benchPlannedCount(total int64, sampleSize int) int64 {

@@ -3,11 +3,13 @@ package ret
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/ret/checkpoint"
+	"github.com/specterops/dawgs/ret/collection"
 	"github.com/specterops/dawgs/ret/dawgs"
 	"github.com/specterops/dawgs/ret/entity"
 	"github.com/specterops/dawgs/ret/jsonl"
@@ -22,8 +24,8 @@ func TestWriteNodeShardPublishesBothConcreteArtifacts(t *testing.T) {
 	shard, err := writeNodeShard(
 		root, "asset", 1, 42, scrub.ActionCounts{Redact: 1},
 		[]entity.Node{{SourceID: "42", Kinds: []string{"User"}, Properties: map[string]any{"name": "Ada"}}},
-		jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd, Level: 3},
-		parquet.Config{Enabled: true},
+		pointerTo(jsonl.Config{Codec: jsonl.CodecZstd, Level: 3}),
+		pointerTo(parquet.Config{}),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, shard.JSONL)
@@ -38,13 +40,13 @@ func TestWriteNodeShardPublishesExactlyTheEnabledConcreteOutput(t *testing.T) {
 	// Break caught: emitting a disabled format or omitting the one enabled format.
 	for _, test := range []struct {
 		name        string
-		jsonl       jsonl.Config
-		parquet     parquet.Config
+		jsonl       *jsonl.Config
+		parquet     *parquet.Config
 		wantJSONL   bool
 		wantParquet bool
 	}{
-		{name: "jsonl only", jsonl: jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, wantJSONL: true},
-		{name: "parquet only", parquet: parquet.Config{Enabled: true}, wantParquet: true},
+		{name: "jsonl only", jsonl: pointerTo(jsonl.Config{Codec: jsonl.CodecNone}), wantJSONL: true},
+		{name: "parquet only", parquet: pointerTo(parquet.Config{}), wantParquet: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -65,8 +67,8 @@ func TestWriteRelationshipShardPublishesBothConcreteArtifacts(t *testing.T) {
 	shard, err := writeRelationshipShard(
 		root, "asset", 1, 99, scrub.ActionCounts{Redact: 1},
 		[]entity.Relationship{{SourceID: "99", StartID: "1", EndID: "2", Kind: "MemberOf"}},
-		jsonl.Config{Enabled: true, Codec: jsonl.CodecNone},
-		parquet.Config{Enabled: true},
+		pointerTo(jsonl.Config{Codec: jsonl.CodecNone}),
+		pointerTo(parquet.Config{}),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, shard.JSONL)
@@ -79,21 +81,38 @@ func TestWriteRelationshipShardPublishesBothConcreteArtifacts(t *testing.T) {
 func TestWriteNodeShardCleansAllArtifactsWhenSecondWriterFails(t *testing.T) {
 	// Break caught: leaving the first concrete artifact behind when the second writer fails.
 	originalWriteParquetNodes := writeParquetNodes
-	writeParquetNodes = func(string, string, parquet.Config, []entity.Node) (parquet.NodeArtifact, error) {
-		return parquet.NodeArtifact{}, errors.New("injected Parquet failure")
+	writeParquetNodes = func(string, string, parquet.Config, []entity.Node) (collection.ParquetArtifact, error) {
+		return collection.ParquetArtifact{}, errors.New("injected Parquet failure")
 	}
 	t.Cleanup(func() { writeParquetNodes = originalWriteParquetNodes })
 
 	root := t.TempDir()
-	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{Enabled: true})
+	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, pointerTo(jsonl.Config{Codec: jsonl.CodecNone}), pointerTo(parquet.Config{}))
 	require.ErrorContains(t, err, "injected Parquet failure")
 	require.Empty(t, regularFiles(t, root))
+}
+
+func TestArtifactWriterDoesNotOverwriteExistingTemporaryPath(t *testing.T) {
+	temporary := filepath.Join(t.TempDir(), "artifact.tmp")
+	sentinel := []byte("existing temporary contents")
+	require.NoError(t, os.WriteFile(temporary, sentinel, 0o600))
+
+	_, err := writeJSONLNodeFile(
+		temporary,
+		"graphs/asset/nodes/000001.jsonl",
+		jsonl.Config{Codec: jsonl.CodecNone},
+		[]entity.Node{{SourceID: "1"}},
+	)
+	require.ErrorIs(t, err, fs.ErrExist)
+	contents, readErr := os.ReadFile(temporary)
+	require.NoError(t, readErr)
+	require.Equal(t, sentinel, contents)
 }
 
 func TestWriteNodeShardRejectsMismatchedWriterCount(t *testing.T) {
 	// Break caught: publishing metadata whose artifact count disagrees with the logical shard count.
 	originalWriteJSONLNodes := writeJSONLNodes
-	writeJSONLNodes = func(tempPath, finalRelativePath string, config jsonl.Config, nodes []entity.Node) (jsonl.NodeArtifact, error) {
+	writeJSONLNodes = func(tempPath, finalRelativePath string, config jsonl.Config, nodes []entity.Node) (collection.JSONLArtifact, error) {
 		artifact, err := originalWriteJSONLNodes(tempPath, finalRelativePath, config, nodes)
 		artifact.Count++
 		return artifact, err
@@ -101,7 +120,7 @@ func TestWriteNodeShardRejectsMismatchedWriterCount(t *testing.T) {
 	t.Cleanup(func() { writeJSONLNodes = originalWriteJSONLNodes })
 
 	root := t.TempDir()
-	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{})
+	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, pointerTo(jsonl.Config{Codec: jsonl.CodecNone}), pointerTo(parquet.Config{}))
 	require.ErrorIs(t, err, ErrArtifactIntegrity)
 	require.Empty(t, regularFiles(t, root))
 }
@@ -120,7 +139,7 @@ func TestWriteNodeShardCleansPublishedArtifactWhenSecondRenameFails(t *testing.T
 	t.Cleanup(func() { shardRename = originalRename })
 
 	root := t.TempDir()
-	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, parquet.Config{Enabled: true})
+	_, err := writeNodeShard(root, "asset", 1, 42, scrub.ActionCounts{}, []entity.Node{{SourceID: "42"}}, pointerTo(jsonl.Config{Codec: jsonl.CodecNone}), pointerTo(parquet.Config{}))
 	require.ErrorContains(t, err, "injected second rename failure")
 	require.Empty(t, regularFiles(t, root))
 }
@@ -152,7 +171,7 @@ func TestShardStageIsRemovedByCheckpointOrphanCleanup(t *testing.T) {
 	temporary, _, err := shardPaths(root, finalRelativePath)
 	require.NoError(t, err)
 	require.Len(t, temporary, 1)
-	_, err = writeJSONLNodes(temporary[0], finalRelativePath, jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}, []entity.Node{{SourceID: "1"}})
+	_, err = writeJSONLNodes(temporary[0], finalRelativePath, jsonl.Config{Codec: jsonl.CodecNone}, []entity.Node{{SourceID: "1"}})
 	require.NoError(t, err)
 
 	stageRelativePath, err := filepath.Rel(root, temporary[0])

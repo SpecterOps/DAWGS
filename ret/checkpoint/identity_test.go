@@ -39,7 +39,7 @@ func TestValidateIdentityReportsEveryFieldMismatchInStableOrder(t *testing.T) {
 			`JSONL codec: got "gzip" want "zstd"; `+
 			`JSONL level: got 7 want 3; `+
 			`Parquet enabled: got false want true; `+
-			`JSONL schema version: got "ret-jsonl-v0" want "ret-jsonl-v1"; `+
+			`JSONL schema version: got "ret-jsonl-v0" want "retriever-jsonl-v1"; `+
 			`Parquet schema version: got "ret-parquet-v0" want "ret-parquet-v1"; `+
 			`scrub enabled: got false want true; `+
 			`scrub rules fingerprint: got "`+strings.Repeat("c", 64)+`" want "`+strings.Repeat("a", 64)+`"; `+

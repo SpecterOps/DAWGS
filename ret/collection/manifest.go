@@ -106,9 +106,8 @@ func (s OutputConfig) validate() error {
 			return fmt.Errorf("collection JSONL schema %q does not match %q", s.JSONL.SchemaVersion, jsonl.SchemaVersion)
 		}
 		config := jsonl.Config{
-			Enabled: true,
-			Codec:   jsonl.Codec(s.JSONL.Codec),
-			Level:   s.JSONL.Level,
+			Codec: jsonl.Codec(s.JSONL.Codec),
+			Level: s.JSONL.Level,
 		}
 		if err := config.Validate(); err != nil {
 			return fmt.Errorf("collection JSONL output: %w", err)
@@ -241,7 +240,7 @@ func validateNodeShards(
 				shard.Count,
 				shard.JSONL.SchemaVersion,
 				shard.JSONL.Path,
-				shard.JSONL.Codec,
+				string(shard.JSONL.Codec),
 				shard.JSONL.SHA256,
 				shard.JSONL.Level,
 				shard.JSONL.Count,
@@ -317,7 +316,7 @@ func validateRelationshipShards(
 				shard.Count,
 				shard.JSONL.SchemaVersion,
 				shard.JSONL.Path,
-				shard.JSONL.Codec,
+				string(shard.JSONL.Codec),
 				shard.JSONL.SHA256,
 				shard.JSONL.Level,
 				shard.JSONL.Count,

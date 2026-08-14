@@ -466,8 +466,14 @@ func writeLoadCollection(
 	config.Graphs = append([]string(nil), graphOrder...)
 	config.EntityBatchSize = 10
 	config.ShardSize = 10
-	config.JSONL = jsonl.Config{Enabled: jsonlEnabled, Codec: jsonl.CodecNone}
-	config.Parquet = parquet.Config{Enabled: parquetEnabled}
+	config.JSONL = nil
+	if jsonlEnabled {
+		config.JSONL = pointerTo(jsonl.Config{Codec: jsonl.CodecNone})
+	}
+	config.Parquet = nil
+	if parquetEnabled {
+		config.Parquet = pointerTo(parquet.Config{})
+	}
 	config.Scrub = nil
 	_, err := Dump(context.Background(), newDumpTestDatabase(graphs), config)
 	require.NoError(t, err)

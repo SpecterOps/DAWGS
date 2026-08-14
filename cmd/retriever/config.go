@@ -31,16 +31,16 @@ type dumpCommandConfig struct {
 }
 
 func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error) {
+	jsonlConfig := jsonl.Config{
+		Codec: jsonl.CodecZstd,
+		Level: 0,
+	}
+	parquetConfig := parquet.Config{}
 	config := dumpCommandConfig{
 		dump: ret.DumpConfig{
 			EntityBatchSize: defaultEntityBatchSize,
 			ShardSize:       defaultShardSize,
-			JSONL: jsonl.Config{
-				Enabled: true,
-				Codec:   jsonl.CodecZstd,
-				Level:   0,
-			},
-			Parquet: parquet.Config{},
+			JSONL:           &jsonlConfig,
 		},
 	}
 	var (
@@ -48,7 +48,9 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 		scrubMode        string
 		scrubSalt        string
 		scrubConfigPath  string
-		jsonlCompression string
+		jsonlCompression = string(jsonlConfig.Codec)
+		jsonlEnabled     = true
+		parquetEnabled   bool
 		scrubConfig      = scrub.DefaultConfig()
 	)
 	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
@@ -59,10 +61,10 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 	flags.StringVar(&config.dump.Directory, "out", "", "Output collection directory.")
 	flags.BoolVar(&config.force, "force", false, "Replace the exact output directory before a fresh dump.")
 	flags.BoolVar(&config.dump.Resume, "resume", false, "Resume an interrupted dump from its validated checkpoint.")
-	flags.BoolVar(&config.dump.JSONL.Enabled, "jsonl", config.dump.JSONL.Enabled, "Write JSONL artifacts.")
-	flags.StringVar(&jsonlCompression, "jsonl-compression", string(config.dump.JSONL.Codec), "JSONL compression codec: zstd, gzip, or none.")
-	flags.IntVar(&config.dump.JSONL.Level, "jsonl-level", config.dump.JSONL.Level, "JSONL compression level; 0 selects the package default.")
-	flags.BoolVar(&config.dump.Parquet.Enabled, "parquet", config.dump.Parquet.Enabled, "Write Parquet artifacts.")
+	flags.BoolVar(&jsonlEnabled, "jsonl", jsonlEnabled, "Write JSONL artifacts.")
+	flags.StringVar(&jsonlCompression, "jsonl-compression", jsonlCompression, "JSONL compression codec: zstd, gzip, or none.")
+	flags.IntVar(&jsonlConfig.Level, "jsonl-level", jsonlConfig.Level, "JSONL compression level; 0 selects the package default.")
+	flags.BoolVar(&parquetEnabled, "parquet", parquetEnabled, "Write Parquet artifacts.")
 	flags.StringVar(&scrubMode, "scrub", "none", "Scrub mode: none or full.")
 	flags.StringVar(&scrubSalt, "salt", "", "Scrub salt. Overrides RETRIEVER_SCRUB_SALT and is never written.")
 	flags.StringVar(&scrubConfigPath, "config", "", "Optional retriever TOML scrub configuration.")
@@ -76,7 +78,17 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 	fillConnectionFromEnv(&config.database)
 	config.graphs = append([]string(nil), graphs...)
 	config.dump.Directory = strings.TrimSpace(config.dump.Directory)
-	config.dump.JSONL.Codec = jsonl.Codec(strings.TrimSpace(jsonlCompression))
+	jsonlConfig.Codec = jsonl.Codec(strings.TrimSpace(jsonlCompression))
+	if jsonlEnabled {
+		config.dump.JSONL = &jsonlConfig
+	} else {
+		config.dump.JSONL = nil
+	}
+	if parquetEnabled {
+		config.dump.Parquet = &parquetConfig
+	} else {
+		config.dump.Parquet = nil
+	}
 
 	if path := strings.TrimSpace(scrubConfigPath); path != "" {
 		loaded, err := scrub.ReadConfig(path)
@@ -116,14 +128,18 @@ func parseDumpCommand(args []string, output io.Writer) (dumpCommandConfig, error
 	if config.dump.ShardSize <= 0 {
 		return dumpCommandConfig{}, fmt.Errorf("shard-size must be > 0")
 	}
-	if !config.dump.JSONL.Enabled && !config.dump.Parquet.Enabled {
+	if config.dump.JSONL == nil && config.dump.Parquet == nil {
 		return dumpCommandConfig{}, fmt.Errorf("at least one of -jsonl or -parquet must be enabled")
 	}
-	if err := config.dump.JSONL.Validate(); err != nil {
-		return dumpCommandConfig{}, fmt.Errorf("JSONL configuration: %w", err)
+	if config.dump.JSONL != nil {
+		if err := config.dump.JSONL.Validate(); err != nil {
+			return dumpCommandConfig{}, fmt.Errorf("JSONL configuration: %w", err)
+		}
 	}
-	if err := config.dump.Parquet.Validate(); err != nil {
-		return dumpCommandConfig{}, fmt.Errorf("Parquet configuration: %w", err)
+	if config.dump.Parquet != nil {
+		if err := config.dump.Parquet.Validate(); err != nil {
+			return dumpCommandConfig{}, fmt.Errorf("Parquet configuration: %w", err)
+		}
 	}
 	if config.dump.Scrub != nil {
 		if err := config.dump.Scrub.Validate(); err != nil {
@@ -223,8 +239,8 @@ type benchOptions struct {
 	Workers    []int
 	BatchSize  int
 	SampleSize int
-	JSONL      jsonl.Config
-	Parquet    parquet.Config
+	JSONL      *jsonl.Config
+	Parquet    *parquet.Config
 	JSONOutput bool
 }
 
@@ -247,16 +263,16 @@ func (s benchOptions) validate() error {
 		return fmt.Errorf("sample-size must be >= 0")
 	}
 
-	if !s.JSONL.Enabled && !s.Parquet.Enabled {
+	if s.JSONL == nil && s.Parquet == nil {
 		return fmt.Errorf("at least one of -jsonl or -parquet must be enabled")
 	}
 
-	if s.JSONL.Enabled {
+	if s.JSONL != nil {
 		if err := s.JSONL.Validate(); err != nil {
 			return fmt.Errorf("JSONL configuration: %w", err)
 		}
 	}
-	if s.Parquet.Enabled {
+	if s.Parquet != nil {
 		if err := s.Parquet.Validate(); err != nil {
 			return fmt.Errorf("Parquet configuration: %w", err)
 		}
@@ -274,21 +290,22 @@ type benchCommandConfig struct {
 }
 
 func parseBenchCommand(args []string, output io.Writer) (benchCommandConfig, error) {
+	jsonlConfig := jsonl.Config{Codec: jsonl.CodecZstd}
+	parquetConfig := parquet.Config{}
 	config := benchCommandConfig{
 		bench: benchOptions{
 			Workers:    []int{1},
 			BatchSize:  defaultEntityBatchSize,
 			SampleSize: defaultBenchSampleSize,
-			JSONL: jsonl.Config{
-				Enabled: true,
-				Codec:   jsonl.CodecZstd,
-			},
+			JSONL:      &jsonlConfig,
 		},
 	}
 	var (
 		graphs           stringList
 		workers          workerList
-		jsonlCompression = string(config.bench.JSONL.Codec)
+		jsonlCompression = string(jsonlConfig.Codec)
+		jsonlEnabled     = true
+		parquetEnabled   bool
 	)
 	flags := flag.NewFlagSet("retriever bench", flag.ContinueOnError)
 	flags.SetOutput(output)
@@ -298,10 +315,10 @@ func parseBenchCommand(args []string, output io.Writer) (benchCommandConfig, err
 	flags.Var(&workers, "workers", "Comma-separated worker counts.")
 	flags.IntVar(&config.bench.BatchSize, "batch-size", config.bench.BatchSize, "Database read batch size.")
 	flags.IntVar(&config.bench.SampleSize, "sample-size", config.bench.SampleSize, "Maximum nodes and relationships to scan per phase; 0 scans the full graph.")
-	flags.BoolVar(&config.bench.JSONL.Enabled, "jsonl", config.bench.JSONL.Enabled, "Benchmark JSONL artifacts.")
+	flags.BoolVar(&jsonlEnabled, "jsonl", jsonlEnabled, "Benchmark JSONL artifacts.")
 	flags.StringVar(&jsonlCompression, "jsonl-compression", jsonlCompression, "JSONL compression codec: zstd, gzip, or none.")
-	flags.IntVar(&config.bench.JSONL.Level, "jsonl-level", config.bench.JSONL.Level, "JSONL compression level; 0 selects the package default.")
-	flags.BoolVar(&config.bench.Parquet.Enabled, "parquet", config.bench.Parquet.Enabled, "Benchmark Parquet artifacts.")
+	flags.IntVar(&jsonlConfig.Level, "jsonl-level", jsonlConfig.Level, "JSONL compression level; 0 selects the package default.")
+	flags.BoolVar(&parquetEnabled, "parquet", parquetEnabled, "Benchmark Parquet artifacts.")
 	flags.BoolVar(&config.bench.JSONOutput, "json", false, "Emit machine-readable JSON.")
 	commonPprofFlag(flags, &config.pprof)
 	if err := flags.Parse(args); err != nil {
@@ -313,7 +330,17 @@ func parseBenchCommand(args []string, output io.Writer) (benchCommandConfig, err
 	if len(workers) > 0 {
 		config.bench.Workers = append([]int(nil), workers...)
 	}
-	config.bench.JSONL.Codec = jsonl.Codec(strings.TrimSpace(jsonlCompression))
+	jsonlConfig.Codec = jsonl.Codec(strings.TrimSpace(jsonlCompression))
+	if jsonlEnabled {
+		config.bench.JSONL = &jsonlConfig
+	} else {
+		config.bench.JSONL = nil
+	}
+	if parquetEnabled {
+		config.bench.Parquet = &parquetConfig
+	} else {
+		config.bench.Parquet = nil
+	}
 	if err := config.bench.validate(); err != nil {
 		return benchCommandConfig{}, err
 	}

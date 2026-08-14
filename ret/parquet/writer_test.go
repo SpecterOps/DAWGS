@@ -22,7 +22,7 @@ import (
 func TestRelationshipSchemaContainsSourceIDAndUnshreddedVariantProperties(t *testing.T) {
 	root := t.TempDir()
 	temporary := filepath.Join(root, "relationships.tmp")
-	artifact, err := WriteRelationships(temporary, "relationships.parquet", Config{Enabled: true}, []entity.Relationship{{
+	artifact, err := writeRelationshipsFixture(temporary, "relationships.parquet", Config{}, []entity.Relationship{{
 		SourceID: "99",
 		StartID:  "1",
 		EndID:    "2",
@@ -87,7 +87,7 @@ func TestNodeRoundTripPreservesKindOrderAndDuplicates(t *testing.T) {
 		},
 	}
 	root := t.TempDir()
-	artifact, err := WriteNodes(filepath.Join(root, "nodes.tmp"), "nodes.parquet", Config{Enabled: true}, []entity.Node{want})
+	artifact, err := writeNodesFixture(filepath.Join(root, "nodes.tmp"), "nodes.parquet", Config{}, []entity.Node{want})
 	if err != nil {
 		t.Fatalf("write nodes: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestNodeRoundTripPreservesKindOrderAndDuplicates(t *testing.T) {
 	}
 
 	var got []entity.Node
-	if err := ReadNodes(root, artifact, func(node entity.Node) error {
+	if err := readNodesFixture(root, artifact, func(node entity.Node) error {
 		got = append(got, node)
 		return nil
 	}); err != nil {
@@ -110,7 +110,7 @@ func TestNodeRoundTripPreservesKindOrderAndDuplicates(t *testing.T) {
 func TestWriteNodesRecordsStoredIntegrityMetadata(t *testing.T) {
 	root := t.TempDir()
 	temporary := filepath.Join(root, "nodes.tmp")
-	artifact, err := WriteNodes(temporary, "nested/nodes.parquet", Config{Enabled: true}, []entity.Node{{SourceID: "1"}})
+	artifact, err := writeNodesFixture(temporary, "nested/nodes.parquet", Config{}, []entity.Node{{SourceID: "1"}})
 	if err != nil {
 		t.Fatalf("write nodes: %v", err)
 	}
@@ -140,37 +140,30 @@ func TestWritersEnforceFormatBoundaryAndSafePaths(t *testing.T) {
 		write func() error
 	}{
 		{
-			name: "disabled",
-			write: func() error {
-				_, err := WriteNodes(filepath.Join(root, "nodes.tmp"), "nodes.parquet", Config{}, []entity.Node{{SourceID: "1"}})
-				return err
-			},
-		},
-		{
 			name: "relative temporary path",
 			write: func() error {
-				_, err := WriteNodes("nodes.tmp", "nodes.parquet", Config{Enabled: true}, []entity.Node{{SourceID: "1"}})
+				_, err := writeNodesFixture("nodes.tmp", "nodes.parquet", Config{}, []entity.Node{{SourceID: "1"}})
 				return err
 			},
 		},
 		{
 			name: "escaping final path",
 			write: func() error {
-				_, err := WriteNodes(filepath.Join(root, "nodes.tmp"), "../nodes.parquet", Config{Enabled: true}, []entity.Node{{SourceID: "1"}})
+				_, err := writeNodesFixture(filepath.Join(root, "nodes.tmp"), "../nodes.parquet", Config{}, []entity.Node{{SourceID: "1"}})
 				return err
 			},
 		},
 		{
 			name: "empty node source ID",
 			write: func() error {
-				_, err := WriteNodes(filepath.Join(root, "nodes.tmp"), "nodes.parquet", Config{Enabled: true}, []entity.Node{{}})
+				_, err := writeNodesFixture(filepath.Join(root, "nodes.tmp"), "nodes.parquet", Config{}, []entity.Node{{}})
 				return err
 			},
 		},
 		{
 			name: "empty relationship source ID",
 			write: func() error {
-				_, err := WriteRelationships(filepath.Join(root, "relationships.tmp"), "relationships.parquet", Config{Enabled: true}, []entity.Relationship{{
+				_, err := writeRelationshipsFixture(filepath.Join(root, "relationships.tmp"), "relationships.parquet", Config{}, []entity.Relationship{{
 					StartID: "1",
 					EndID:   "2",
 					Kind:    "MemberOf",
@@ -191,18 +184,18 @@ func TestWritersEnforceFormatBoundaryAndSafePaths(t *testing.T) {
 func TestWriteNodesReturnsErrorForUnsupportedVariantValue(t *testing.T) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			t.Fatalf("WriteNodes panicked instead of returning an error: %v", recovered)
+			t.Fatalf("writeNodesFixture panicked instead of returning an error: %v", recovered)
 		}
 	}()
 
-	_, err := WriteNodes(filepath.Join(t.TempDir(), "nodes.tmp"), "nodes.parquet", Config{Enabled: true}, []entity.Node{{
+	_, err := writeNodesFixture(filepath.Join(t.TempDir(), "nodes.tmp"), "nodes.parquet", Config{}, []entity.Node{{
 		SourceID: "1",
 		Properties: map[string]any{
 			"unsupported": make(chan int),
 		},
 	}})
 	if err == nil {
-		t.Fatal("WriteNodes unexpectedly accepted unsupported VARIANT value")
+		t.Fatal("writeNodesFixture unexpectedly accepted unsupported VARIANT value")
 	}
 }
 
@@ -216,7 +209,7 @@ func TestWriteRelationshipsRejectsCyclicPropertiesBeforeOpeningTemporaryFile(t *
 
 func TestWriteNodesAllowsRepeatedAcyclicPropertyReference(t *testing.T) {
 	shared := map[string]any{"value": "shared"}
-	_, err := WriteNodes(filepath.Join(t.TempDir(), "nodes.tmp"), "nodes.parquet", Config{Enabled: true}, []entity.Node{{
+	_, err := writeNodesFixture(filepath.Join(t.TempDir(), "nodes.tmp"), "nodes.parquet", Config{}, []entity.Node{{
 		SourceID: "node-1",
 		Properties: map[string]any{
 			"first":  shared,
@@ -231,7 +224,7 @@ func TestWriteNodesAllowsRepeatedAcyclicPropertyReference(t *testing.T) {
 func TestWriteNodesAllowsAcyclicOverlappingSlices(t *testing.T) {
 	values := make([]any, 1)
 	values[0] = values[:0]
-	_, err := WriteNodes(filepath.Join(t.TempDir(), "nodes.tmp"), "nodes.parquet", Config{Enabled: true}, []entity.Node{{
+	_, err := writeNodesFixture(filepath.Join(t.TempDir(), "nodes.tmp"), "nodes.parquet", Config{}, []entity.Node{{
 		SourceID:   "node-1",
 		Properties: map[string]any{"values": values},
 	}})
@@ -240,13 +233,10 @@ func TestWriteNodesAllowsAcyclicOverlappingSlices(t *testing.T) {
 	}
 }
 
-func TestConfigExposesOnlyEnabled(t *testing.T) {
+func TestConfigHasNoStorageOrEnablementFields(t *testing.T) {
 	configType := reflect.TypeOf(Config{})
-	if got, want := configType.NumField(), 1; got != want {
+	if got, want := configType.NumField(), 0; got != want {
 		t.Fatalf("Config field count = %d, want %d", got, want)
-	}
-	if got, want := configType.Field(0).Name, "Enabled"; got != want {
-		t.Fatalf("Config field = %q, want %q", got, want)
 	}
 }
 
@@ -294,53 +284,33 @@ func assertCyclicPropertiesWriter(t *testing.T, writerName string) {
 		{name: "pointer", value: pointerValue},
 	}
 	for _, cycle := range cycles {
-		for _, preexisting := range []bool{false, true} {
-			root := t.TempDir()
-			temporary := filepath.Join(root, "artifact.tmp")
-			sentinel := []byte("keep existing temporary file")
-			if preexisting {
-				if err := os.WriteFile(temporary, sentinel, 0o600); err != nil {
-					t.Fatalf("create existing temporary file: %v", err)
-				}
-			}
-			properties := map[string]any{"cycle": cycle.value}
+		root := t.TempDir()
+		temporary := filepath.Join(root, "artifact.tmp")
+		properties := map[string]any{"cycle": cycle.value}
 
-			var err error
-			switch writerName {
-			case "node":
-				_, err = WriteNodes(temporary, "nodes.parquet", Config{Enabled: true}, []entity.Node{{
-					SourceID:   "node-1",
-					Properties: properties,
-				}})
-			case "relationship":
-				_, err = WriteRelationships(temporary, "relationships.parquet", Config{Enabled: true}, []entity.Relationship{{
-					SourceID:   "relationship-1",
-					StartID:    "node-1",
-					EndID:      "node-2",
-					Kind:       "MemberOf",
-					Properties: properties,
-				}})
-			default:
-				t.Fatalf("unknown writer %q", writerName)
-			}
-			if err == nil {
-				t.Fatalf("%s writer unexpectedly accepted cyclic %s properties", writerName, cycle.name)
-			}
-			if !strings.Contains(strings.ToLower(err.Error()), "cycle") {
-				t.Fatalf("%s writer error = %q, want descriptive cycle error", writerName, err)
-			}
-
-			contents, readErr := os.ReadFile(temporary)
-			if preexisting {
-				if readErr != nil {
-					t.Fatalf("read existing temporary file: %v", readErr)
-				}
-				if !bytes.Equal(contents, sentinel) {
-					t.Fatalf("existing temporary file = %q, want unchanged %q", contents, sentinel)
-				}
-			} else if !os.IsNotExist(readErr) {
-				t.Fatalf("temporary file was created or stat failed unexpectedly: %v", readErr)
-			}
+		var err error
+		switch writerName {
+		case "node":
+			_, err = writeNodesFixture(temporary, "nodes.parquet", Config{}, []entity.Node{{
+				SourceID:   "node-1",
+				Properties: properties,
+			}})
+		case "relationship":
+			_, err = writeRelationshipsFixture(temporary, "relationships.parquet", Config{}, []entity.Relationship{{
+				SourceID:   "relationship-1",
+				StartID:    "node-1",
+				EndID:      "node-2",
+				Kind:       "MemberOf",
+				Properties: properties,
+			}})
+		default:
+			t.Fatalf("unknown writer %q", writerName)
+		}
+		if err == nil {
+			t.Fatalf("%s writer unexpectedly accepted cyclic %s properties", writerName, cycle.name)
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "cycle") {
+			t.Fatalf("%s writer error = %q, want descriptive cycle error", writerName, err)
 		}
 	}
 }

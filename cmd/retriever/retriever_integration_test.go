@@ -49,24 +49,24 @@ import (
 func TestRetFacadeCollectionMatrix(t *testing.T) {
 	for _, testCase := range []struct {
 		name     string
-		jsonl    jsonl.Config
-		parquet  parquet.Config
+		jsonl    *jsonl.Config
+		parquet  *parquet.Config
 		loadable bool
 	}{
 		{
 			name:     "jsonl",
-			jsonl:    jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
+			jsonl:    &jsonl.Config{Codec: jsonl.CodecZstd},
 			loadable: true,
 		},
 		{
 			name:     "parquet",
-			parquet:  parquet.Config{Enabled: true},
+			parquet:  &parquet.Config{},
 			loadable: false,
 		},
 		{
 			name:     "dual",
-			jsonl:    jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
-			parquet:  parquet.Config{Enabled: true},
+			jsonl:    &jsonl.Config{Codec: jsonl.CodecZstd},
+			parquet:  &parquet.Config{},
 			loadable: true,
 		},
 	} {
@@ -86,9 +86,9 @@ func TestRetFacadeCollectionMatrix(t *testing.T) {
 				t.Fatalf("verify collection: %v", err)
 			}
 			assertOperationCounts(t, verifyResult.GraphCount, verifyResult.NodeCount, verifyResult.RelationshipCount, 1, 4, 3)
-			assertConcreteOutputs(t, config.Directory, testCase.jsonl.Enabled, testCase.parquet.Enabled)
+			assertConcreteOutputs(t, config.Directory, testCase.jsonl != nil, testCase.parquet != nil)
 			assertArchiveRoundTrip(t, config.Directory)
-			if testCase.jsonl.Enabled && testCase.parquet.Enabled {
+			if testCase.jsonl != nil && testCase.parquet != nil {
 				damageFirstParquetArtifact(t, config.Directory)
 			}
 
@@ -142,8 +142,8 @@ func TestRetFacadeDumpResume(t *testing.T) {
 	fixture := harness.seedStandardGraph(t)
 	config := harness.dumpConfig(
 		fixture.name,
-		jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
-		parquet.Config{Enabled: true},
+		&jsonl.Config{Codec: jsonl.CodecZstd},
+		&parquet.Config{},
 	)
 	config.ShardSize = 2
 
@@ -176,8 +176,8 @@ func TestRetFacadeResumeRejectsChangedCounts(t *testing.T) {
 			fixture := harness.seedStandardGraph(t)
 			config := harness.dumpConfig(
 				fixture.name,
-				jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
-				parquet.Config{},
+				&jsonl.Config{Codec: jsonl.CodecZstd},
+				nil,
 			)
 			config.ShardSize = 2
 
@@ -202,8 +202,8 @@ func TestRetFacadeScrubbedDualOutput(t *testing.T) {
 	scrubConfig.Salt = "ret-integration-salt"
 	config := harness.dumpConfig(
 		fixture.name,
-		jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
-		parquet.Config{Enabled: true},
+		&jsonl.Config{Codec: jsonl.CodecZstd},
+		&parquet.Config{},
 	)
 	config.Scrub = &scrubConfig
 
@@ -328,7 +328,7 @@ func (s *retIntegrationHarness) graphName() string {
 	return fmt.Sprintf("ret_it_%d_%d", time.Now().UTC().UnixNano(), retIntegrationSequence.Add(1))
 }
 
-func (s *retIntegrationHarness) dumpConfig(graphName string, jsonlConfig jsonl.Config, parquetConfig parquet.Config) ret.DumpConfig {
+func (s *retIntegrationHarness) dumpConfig(graphName string, jsonlConfig *jsonl.Config, parquetConfig *parquet.Config) ret.DumpConfig {
 	return ret.DumpConfig{
 		Directory:       filepath.Join(s.root, fmt.Sprintf("collection-%d", retIntegrationSequence.Add(1))),
 		Graphs:          []string{graphName},
@@ -744,12 +744,16 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 		if shard.JSONL == nil || shard.Parquet == nil {
 			t.Fatalf("dual node shard %d is missing a concrete artifact", shard.Index)
 		}
-		nodes, err := jsonl.ReadNodes(root, *shard.JSONL)
+		var nodes []entity.Node
+		err := collection.ReadJSONLNodes(root, *shard.JSONL, func(node entity.Node) error {
+			nodes = append(nodes, node)
+			return nil
+		})
 		if err != nil {
 			t.Fatalf("read JSONL node shard %d: %v", shard.Index, err)
 		}
 		result.jsonlNodes = append(result.jsonlNodes, nodes...)
-		if err := parquet.ReadNodes(root, *shard.Parquet, func(node entity.Node) error {
+		if err := collection.ReadParquetNodes(root, *shard.Parquet, func(node entity.Node) error {
 			result.parquetNodes = append(result.parquetNodes, node)
 			return nil
 		}); err != nil {
@@ -761,12 +765,16 @@ func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
 		if shard.JSONL == nil || shard.Parquet == nil {
 			t.Fatalf("dual relationship shard %d is missing a concrete artifact", shard.Index)
 		}
-		relationships, err := jsonl.ReadRelationships(root, *shard.JSONL)
+		var relationships []entity.Relationship
+		err := collection.ReadJSONLRelationships(root, *shard.JSONL, func(relationship entity.Relationship) error {
+			relationships = append(relationships, relationship)
+			return nil
+		})
 		if err != nil {
 			t.Fatalf("read JSONL relationship shard %d: %v", shard.Index, err)
 		}
 		result.jsonlRelationships = append(result.jsonlRelationships, relationships...)
-		if err := parquet.ReadRelationships(root, *shard.Parquet, func(relationship entity.Relationship) error {
+		if err := collection.ReadParquetRelationships(root, *shard.Parquet, func(relationship entity.Relationship) error {
 			result.parquetRelationshipIDs = append(result.parquetRelationshipIDs, relationship.SourceID)
 			relationship.SourceID = ""
 			result.parquetRelationships = append(result.parquetRelationships, relationship)

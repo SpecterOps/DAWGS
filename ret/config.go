@@ -18,8 +18,8 @@ type DumpConfig struct {
 	EntityBatchSize int
 	ShardSize       int
 	Resume          bool
-	JSONL           jsonl.Config
-	Parquet         parquet.Config
+	JSONL           *jsonl.Config
+	Parquet         *parquet.Config
 	Scrub           *scrub.Config // Nil disables scrubbing.
 	Observer        observe.Observer
 }
@@ -51,14 +51,21 @@ func (s DumpConfig) Validate() error {
 	if s.EntityBatchSize <= 0 || s.ShardSize <= 0 {
 		return fmt.Errorf("%w: batch and shard sizes must be positive", ErrInvalidConfig)
 	}
-	if !s.JSONL.Enabled && !s.Parquet.Enabled {
+	if s.JSONL == nil && s.Parquet == nil {
 		return fmt.Errorf("%w: at least one output is required", ErrInvalidConfig)
 	}
 	var scrubErr error
 	if s.Scrub != nil {
 		scrubErr = s.Scrub.Validate()
 	}
-	if err := errors.Join(s.JSONL.Validate(), s.Parquet.Validate(), scrubErr); err != nil {
+	var jsonlErr, parquetErr error
+	if s.JSONL != nil {
+		jsonlErr = s.JSONL.Validate()
+	}
+	if s.Parquet != nil {
+		parquetErr = s.Parquet.Validate()
+	}
+	if err := errors.Join(jsonlErr, parquetErr, scrubErr); err != nil {
 		return fmt.Errorf("%w: dump output and scrub configuration: %w", ErrInvalidConfig, err)
 	}
 	return nil

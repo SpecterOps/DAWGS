@@ -256,7 +256,7 @@ func writeRootArchiveTestCollection(t *testing.T, withJSONL, withParquet bool) s
 	outputs := collection.OutputConfig{}
 
 	if withJSONL {
-		config := jsonl.Config{Enabled: true, Codec: jsonl.CodecNone}
+		config := jsonl.Config{Codec: jsonl.CodecNone}
 		outputs.JSONL = &collection.JSONLOutput{
 			SchemaVersion: jsonl.SchemaVersion,
 			Codec:         string(config.Codec),
@@ -264,17 +264,17 @@ func writeRootArchiveTestCollection(t *testing.T, withJSONL, withParquet bool) s
 		}
 		relative := collection.NodeJSONLPath(graph.Name, 1, config.Codec)
 		temporary := filepath.Join(root, "nodes.jsonl.tmp")
-		artifact, err := jsonl.WriteNodes(temporary, relative, config, nodes)
+		artifact, err := writeJSONLNodeFile(temporary, relative, config, nodes)
 		require.NoError(t, err)
 		installRootArchiveTestArtifact(t, root, temporary, relative)
 		graph.NodeShards[0].JSONL = &artifact
 	}
 	if withParquet {
-		config := parquet.Config{Enabled: true}
+		config := parquet.Config{}
 		outputs.Parquet = &collection.ParquetOutput{SchemaVersion: parquet.SchemaVersion}
 		relative := collection.NodeParquetPath(graph.Name, 1)
 		temporary := filepath.Join(root, "nodes.parquet.tmp")
-		artifact, err := parquet.WriteNodes(temporary, relative, config, nodes)
+		artifact, err := writeParquetNodeFile(temporary, relative, config, nodes)
 		require.NoError(t, err)
 		installRootArchiveTestArtifact(t, root, temporary, relative)
 		graph.NodeShards[0].Parquet = &artifact

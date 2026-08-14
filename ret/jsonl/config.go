@@ -4,6 +4,8 @@ package jsonl
 import (
 	"compress/gzip"
 	"fmt"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 const (
@@ -32,20 +34,42 @@ func (s Config) validate() error {
 	return validateCodecLevel(s.Codec, s.Level)
 }
 
+func (s Config) Validate() error {
+	return s.validate()
+}
+
 func validateCodecLevel(codec Codec, level int) error {
 	switch codec {
 	case CodecNone:
+		if level != 0 {
+			return fmt.Errorf("compression level %d is invalid for codec %q", level, codec)
+		}
 	case CodecGzip:
 		if level < gzip.HuffmanOnly || level > gzip.BestCompression {
-			return fmt.Errorf("invalid compression level")
+			return fmt.Errorf("gzip compression level %d is outside %d..%d", level, gzip.HuffmanOnly, gzip.BestCompression)
 		}
 	case CodecZstd:
 		if level < minZstdLevel || level > maxZstdLevel {
-			return fmt.Errorf("invalid compression level")
+			return fmt.Errorf("zstd compression level %d is outside %d..%d", level, minZstdLevel, maxZstdLevel)
 		}
 	default:
-		return fmt.Errorf("unknown codec")
+		return fmt.Errorf("unsupported JSONL codec %q", codec)
 	}
 
 	return nil
+}
+
+func (s Config) gzipLevel() int {
+	if s.Level == 0 {
+		return gzip.DefaultCompression
+	}
+	return s.Level
+}
+
+func (s Config) zstdLevel() zstd.EncoderLevel {
+	level := s.Level
+	if level == 0 {
+		level = 3
+	}
+	return zstd.EncoderLevelFromZstd(level)
 }

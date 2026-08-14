@@ -84,10 +84,10 @@ func TestDumpResumeContinuesRelationshipPhaseAfterCommittedShard(t *testing.T) {
 		tempPath, relativePath string,
 		output jsonl.Config,
 		relationships []entity.Relationship,
-	) (jsonl.RelationshipArtifact, error) {
+	) (collection.JSONLArtifact, error) {
 		calls++
 		if calls == 2 {
-			return jsonl.RelationshipArtifact{}, injected
+			return collection.JSONLArtifact{}, injected
 		}
 		return originalWrite(tempPath, relativePath, output, relationships)
 	}
@@ -163,7 +163,7 @@ func TestDumpResumePreservesScrubbedArtifactsAndActionCounts(t *testing.T) {
 	config := validRootDumpConfig(t)
 	config.EntityBatchSize = 3
 	config.ShardSize = 1
-	config.Parquet.Enabled = false
+	config.Parquet = nil
 	originalWrite := writeJSONLNodes
 	calls := 0
 	injected := errors.New("injected scrub resume writer failure")
@@ -171,10 +171,10 @@ func TestDumpResumePreservesScrubbedArtifactsAndActionCounts(t *testing.T) {
 		tempPath, relativePath string,
 		output jsonl.Config,
 		nodes []entity.Node,
-	) (jsonl.NodeArtifact, error) {
+	) (collection.JSONLArtifact, error) {
 		calls++
 		if calls == 2 {
-			return jsonl.NodeArtifact{}, injected
+			return collection.JSONLArtifact{}, injected
 		}
 		return originalWrite(tempPath, relativePath, output, nodes)
 	}
@@ -196,7 +196,7 @@ func TestDumpResumePreservesScrubbedArtifactsAndActionCounts(t *testing.T) {
 	require.Len(t, manifest.Graphs[0].NodeShards, 3)
 	for _, shard := range manifest.Graphs[0].NodeShards {
 		require.Equal(t, scrub.ActionCounts{Redact: 1}, shard.ScrubCounts)
-		nodes, err := jsonl.ReadNodes(config.Directory, *shard.JSONL)
+		nodes, err := readJSONLNodesForTest(config.Directory, *shard.JSONL)
 		require.NoError(t, err)
 		for _, node := range nodes {
 			require.Equal(t, "[REDACTED]", node.Properties["password"])
@@ -307,7 +307,7 @@ func TestDumpResumeRejectsIdentityChanges(t *testing.T) {
 		},
 		{
 			name:   "enabled output",
-			mutate: func(config *DumpConfig) { config.Parquet.Enabled = false },
+			mutate: func(config *DumpConfig) { config.Parquet = nil },
 			match:  "Parquet enabled",
 		},
 		{
@@ -374,8 +374,8 @@ func TestDumpResumeRemovesRecognizedUncheckpointedArtifact(t *testing.T) {
 	require.FileExists(t, filepath.Join(config.Directory, filepath.FromSlash(orphan.JSONL.Path)))
 
 	originalWrite := writeJSONLNodes
-	writeJSONLNodes = func(string, string, jsonl.Config, []entity.Node) (jsonl.NodeArtifact, error) {
-		return jsonl.NodeArtifact{}, errors.New("stop after resume cleanup")
+	writeJSONLNodes = func(string, string, jsonl.Config, []entity.Node) (collection.JSONLArtifact, error) {
+		return collection.JSONLArtifact{}, errors.New("stop after resume cleanup")
 	}
 	t.Cleanup(func() { writeJSONLNodes = originalWrite })
 	config.Resume = true
@@ -607,8 +607,12 @@ func interruptedDumpWithGraphs(t *testing.T, jsonlEnabled, parquetEnabled bool, 
 	config.Graphs = append([]string(nil), graphs...)
 	config.EntityBatchSize = 3
 	config.ShardSize = 1
-	config.JSONL.Enabled = jsonlEnabled
-	config.Parquet.Enabled = parquetEnabled
+	if !jsonlEnabled {
+		config.JSONL = nil
+	}
+	if !parquetEnabled {
+		config.Parquet = nil
+	}
 	return interruptedDumpFromConfig(t, config, database)
 }
 
@@ -616,13 +620,13 @@ func interruptedDumpFromConfig(t *testing.T, config DumpConfig, database *dumpTe
 	t.Helper()
 	config.Directory = filepath.Join(t.TempDir(), "collection")
 	injected := errors.New("injected second node shard failure")
-	if config.JSONL.Enabled {
+	if config.JSONL != nil {
 		originalWrite := writeJSONLNodes
 		calls := 0
-		writeJSONLNodes = func(tempPath, relativePath string, output jsonl.Config, nodes []entity.Node) (jsonl.NodeArtifact, error) {
+		writeJSONLNodes = func(tempPath, relativePath string, output jsonl.Config, nodes []entity.Node) (collection.JSONLArtifact, error) {
 			calls++
 			if calls == 2 {
-				return jsonl.NodeArtifact{}, injected
+				return collection.JSONLArtifact{}, injected
 			}
 			return originalWrite(tempPath, relativePath, output, nodes)
 		}
@@ -633,10 +637,10 @@ func interruptedDumpFromConfig(t *testing.T, config DumpConfig, database *dumpTe
 	} else {
 		originalWrite := writeParquetNodes
 		calls := 0
-		writeParquetNodes = func(tempPath, relativePath string, output parquet.Config, nodes []entity.Node) (parquet.NodeArtifact, error) {
+		writeParquetNodes = func(tempPath, relativePath string, output parquet.Config, nodes []entity.Node) (collection.ParquetArtifact, error) {
 			calls++
 			if calls == 2 {
-				return parquet.NodeArtifact{}, injected
+				return collection.ParquetArtifact{}, injected
 			}
 			return originalWrite(tempPath, relativePath, output, nodes)
 		}

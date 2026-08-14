@@ -40,7 +40,7 @@ func TestDumpSplitsDatabaseBatchAcrossLogicalShards(t *testing.T) {
 
 	var sourceIDs []string
 	for _, shard := range manifest.Graphs[0].NodeShards {
-		nodes, err := jsonl.ReadNodes(config.Directory, *shard.JSONL)
+		nodes, err := readJSONLNodesForTest(config.Directory, *shard.JSONL)
 		require.NoError(t, err)
 		for _, node := range nodes {
 			sourceIDs = append(sourceIDs, node.SourceID)
@@ -89,8 +89,12 @@ func TestDumpWritesOnePartialShardForEveryEnabledOutputMode(t *testing.T) {
 			})
 			config := validRootDumpConfig(t)
 			config.ShardSize = 3
-			config.JSONL.Enabled = test.jsonl
-			config.Parquet.Enabled = test.parquet
+			if !test.jsonl {
+				config.JSONL = nil
+			}
+			if !test.parquet {
+				config.Parquet = nil
+			}
 
 			result, err := Dump(context.Background(), database, config)
 
@@ -205,8 +209,8 @@ func TestDumpObserverTerminalEventContainsFailureAndIsLast(t *testing.T) {
 	// success/graph events after a writer has failed.
 	injected := errors.New("injected observer-order writer failure")
 	originalWrite := writeJSONLNodes
-	writeJSONLNodes = func(string, string, jsonl.Config, []entity.Node) (jsonl.NodeArtifact, error) {
-		return jsonl.NodeArtifact{}, injected
+	writeJSONLNodes = func(string, string, jsonl.Config, []entity.Node) (collection.JSONLArtifact, error) {
+		return collection.JSONLArtifact{}, injected
 	}
 	t.Cleanup(func() { writeJSONLNodes = originalWrite })
 
@@ -493,8 +497,7 @@ func TestDumpScrubsConcreteArtifactsAndRecordsPerShardActions(t *testing.T) {
 		},
 	})
 	config := validRootDumpConfig(t)
-	config.JSONL.Enabled = true
-	config.Parquet.Enabled = false
+	config.Parquet = nil
 	config.EntityBatchSize = 2
 	config.ShardSize = 2
 
@@ -504,7 +507,7 @@ func TestDumpScrubsConcreteArtifactsAndRecordsPerShardActions(t *testing.T) {
 	manifest := readDumpManifest(t, result.ManifestPath)
 	require.Equal(t, scrub.ActionCounts{Redact: 2}, manifest.Graphs[0].NodeShards[0].ScrubCounts)
 	require.Equal(t, scrub.ActionCounts{Redact: 1}, manifest.Graphs[0].RelationshipShards[0].ScrubCounts)
-	nodes, err := jsonl.ReadNodes(
+	nodes, err := readJSONLNodesForTest(
 		config.Directory,
 		*manifest.Graphs[0].NodeShards[0].JSONL,
 	)
@@ -514,7 +517,7 @@ func TestDumpScrubsConcreteArtifactsAndRecordsPerShardActions(t *testing.T) {
 		nodePasswords = append(nodePasswords, node.Properties["password"])
 	}
 	require.Equal(t, []any{"[REDACTED]", "[REDACTED]"}, nodePasswords)
-	relationships, err := jsonl.ReadRelationships(
+	relationships, err := readJSONLRelationshipsForTest(
 		config.Directory,
 		*manifest.Graphs[0].RelationshipShards[0].JSONL,
 	)
@@ -534,8 +537,7 @@ func TestDumpWithoutScrubConfigPreservesPropertiesAndDisablesScrubMetadata(t *te
 		},
 	})
 	config := validRootDumpConfig(t)
-	config.JSONL.Enabled = true
-	config.Parquet.Enabled = false
+	config.Parquet = nil
 	config.Scrub = nil
 
 	result, err := Dump(context.Background(), database, config)
@@ -546,7 +548,7 @@ func TestDumpWithoutScrubConfigPreservesPropertiesAndDisablesScrubMetadata(t *te
 	require.Empty(t, manifest.Scrub.RulesFingerprint)
 	require.Empty(t, manifest.Scrub.SaltFingerprint)
 	require.True(t, manifest.Graphs[0].NodeShards[0].ScrubCounts.IsZero())
-	nodes, err := jsonl.ReadNodes(
+	nodes, err := readJSONLNodesForTest(
 		config.Directory,
 		*manifest.Graphs[0].NodeShards[0].JSONL,
 	)
@@ -564,8 +566,8 @@ func validRootDumpConfig(t *testing.T) DumpConfig {
 		Graphs:          []string{"asset"},
 		EntityBatchSize: 2,
 		ShardSize:       2,
-		JSONL:           jsonl.Config{Enabled: true, Codec: jsonl.CodecNone},
-		Parquet:         parquet.Config{Enabled: true},
+		JSONL:           pointerTo(jsonl.Config{Codec: jsonl.CodecNone}),
+		Parquet:         pointerTo(parquet.Config{}),
 		Scrub:           pointerTo(scrub.DefaultConfig()),
 	}
 }

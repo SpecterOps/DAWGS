@@ -16,7 +16,7 @@ func TestParseDumpDefaultsToJSONLZstdWithoutParquet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse dump: %v", err)
 	}
-	if !config.dump.JSONL.Enabled {
+	if config.dump.JSONL == nil {
 		t.Fatal("JSONL is disabled by default")
 	}
 	if config.dump.JSONL.Codec != jsonl.CodecZstd {
@@ -25,7 +25,7 @@ func TestParseDumpDefaultsToJSONLZstdWithoutParquet(t *testing.T) {
 	if config.dump.JSONL.Level != 0 {
 		t.Fatalf("JSONL level = %d, want package default 0", config.dump.JSONL.Level)
 	}
-	if config.dump.Parquet.Enabled {
+	if config.dump.Parquet != nil {
 		t.Fatal("Parquet is enabled by default")
 	}
 	if config.dump.Scrub != nil {
@@ -42,10 +42,10 @@ func TestParseDumpKeepsJSONLAndParquetIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse dump: %v", err)
 	}
-	if config.dump.JSONL.Enabled {
+	if config.dump.JSONL != nil {
 		t.Fatal("JSONL remained enabled")
 	}
-	if !config.dump.Parquet.Enabled {
+	if config.dump.Parquet == nil {
 		t.Fatal("Parquet was not enabled")
 	}
 }
@@ -182,10 +182,7 @@ func TestBenchOptionsValidate(t *testing.T) {
 		Workers:    []int{1},
 		BatchSize:  1,
 		SampleSize: 1,
-		JSONL: jsonl.Config{
-			Enabled: true,
-			Codec:   jsonl.CodecZstd,
-		},
+		JSONL:      &jsonl.Config{Codec: jsonl.CodecZstd},
 	}
 	if err := bench.validate(); err != nil {
 		t.Fatalf("valid bench options: %v", err)
@@ -220,11 +217,11 @@ func TestParseBenchAllowsIndependentFormatSelection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse bench: %v", err)
 			}
-			if config.bench.JSONL.Enabled != (name != "parquet") {
-				t.Fatalf("JSONL enabled = %t", config.bench.JSONL.Enabled)
+			if (config.bench.JSONL != nil) != (name != "parquet") {
+				t.Fatalf("JSONL enabled = %t", config.bench.JSONL != nil)
 			}
-			if config.bench.Parquet.Enabled != (name != "jsonl") {
-				t.Fatalf("Parquet enabled = %t", config.bench.Parquet.Enabled)
+			if (config.bench.Parquet != nil) != (name != "jsonl") {
+				t.Fatalf("Parquet enabled = %t", config.bench.Parquet != nil)
 			}
 		})
 	}
@@ -235,10 +232,10 @@ func TestParseBenchDefaultsToConcreteJSONLZstd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse bench: %v", err)
 	}
-	if !config.bench.JSONL.Enabled || config.bench.JSONL.Codec != jsonl.CodecZstd || config.bench.JSONL.Level != 0 {
+	if config.bench.JSONL == nil || config.bench.JSONL.Codec != jsonl.CodecZstd || config.bench.JSONL.Level != 0 {
 		t.Fatalf("JSONL config = %+v", config.bench.JSONL)
 	}
-	if config.bench.Parquet.Enabled {
+	if config.bench.Parquet != nil {
 		t.Fatal("Parquet enabled by default")
 	}
 	if len(config.bench.Workers) != 1 || config.bench.Workers[0] != 1 {
@@ -262,7 +259,7 @@ func TestParseBenchRejectsNeitherFormatAndInvalidJSONLConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("disabled JSONL config affected Parquet-only benchmark: %v", err)
 	}
-	if config.bench.Parquet != (parquet.Config{Enabled: true}) {
+	if config.bench.Parquet == nil || *config.bench.Parquet != (parquet.Config{}) {
 		t.Fatalf("Parquet config = %+v", config.bench.Parquet)
 	}
 }

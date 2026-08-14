@@ -16,10 +16,8 @@ import (
 	"strings"
 
 	"github.com/specterops/dawgs/ret/entity"
-	"github.com/specterops/dawgs/ret/jsonl"
 	"github.com/specterops/dawgs/ret/metrics"
 	"github.com/specterops/dawgs/ret/observe"
-	"github.com/specterops/dawgs/ret/parquet"
 )
 
 type Verification struct {
@@ -112,38 +110,38 @@ func ReplayGraph(
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("replay graph %q nodes: %w", graph.Name, err)
 		}
-		nodes, err := jsonl.ReadNodes(root, *shard.JSONL)
-		if err != nil {
-			return fmt.Errorf("replay graph %q JSONL node shard %d: %w", graph.Name, shard.Index, err)
-		}
-		for index, node := range nodes {
+		err := ReadJSONLNodes(root, *shard.JSONL, func(node entity.Node) error {
 			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("replay graph %q JSONL node shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+				return err
 			}
 			if visitNode != nil {
 				if err := visitNode(node); err != nil {
-					return fmt.Errorf("replay graph %q JSONL node shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+					return err
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("replay graph %q JSONL node shard %d: %w", graph.Name, shard.Index, err)
 		}
 	}
 	for _, shard := range graph.RelationshipShards {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("replay graph %q relationships: %w", graph.Name, err)
 		}
-		relationships, err := jsonl.ReadRelationships(root, *shard.JSONL)
-		if err != nil {
-			return fmt.Errorf("replay graph %q JSONL relationship shard %d: %w", graph.Name, shard.Index, err)
-		}
-		for index, relationship := range relationships {
+		err := ReadJSONLRelationships(root, *shard.JSONL, func(relationship entity.Relationship) error {
 			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("replay graph %q JSONL relationship shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+				return err
 			}
 			if visitRelationship != nil {
 				if err := visitRelationship(relationship); err != nil {
-					return fmt.Errorf("replay graph %q JSONL relationship shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+					return err
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("replay graph %q JSONL relationship shard %d: %w", graph.Name, shard.Index, err)
 		}
 	}
 	return nil
@@ -157,26 +155,28 @@ func verifyGraph(ctx context.Context, root string, graph Graph, observer observe
 	for _, shard := range graph.NodeShards {
 		var jsonNodes []entity.Node
 		if shard.JSONL != nil {
-			var err error
-			jsonNodes, err = jsonl.ReadNodes(root, *shard.JSONL)
-			if err != nil {
-				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d: %w", graph.Name, shard.Index, err)
-			}
-			for index, node := range jsonNodes {
+			err := ReadJSONLNodes(root, *shard.JSONL, func(node entity.Node) error {
 				if err := ctx.Err(); err != nil {
-					return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+					return err
 				}
 				if err := builder.ObserveNode(node); err != nil {
-					return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+					return err
 				}
 				catalog.observeNode(node)
+				if shard.Parquet != nil {
+					jsonNodes = append(jsonNodes, node)
+				}
+				return nil
+			})
+			if err != nil {
+				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d: %w", graph.Name, shard.Index, err)
 			}
 			emitJSONLNodeArtifactVerified(ctx, observer, graph.Name, *shard.JSONL)
 		}
 
 		if shard.Parquet != nil {
 			parquetRow := 0
-			err := parquet.ReadNodes(root, *shard.Parquet, func(node entity.Node) error {
+			err := ReadParquetNodes(root, *shard.Parquet, func(node entity.Node) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
@@ -212,26 +212,28 @@ func verifyGraph(ctx context.Context, root string, graph Graph, observer observe
 	for _, shard := range graph.RelationshipShards {
 		var jsonRelationships []entity.Relationship
 		if shard.JSONL != nil {
-			var err error
-			jsonRelationships, err = jsonl.ReadRelationships(root, *shard.JSONL)
-			if err != nil {
-				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d: %w", graph.Name, shard.Index, err)
-			}
-			for index, relationship := range jsonRelationships {
+			err := ReadJSONLRelationships(root, *shard.JSONL, func(relationship entity.Relationship) error {
 				if err := ctx.Err(); err != nil {
-					return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+					return err
 				}
 				if err := builder.ObserveRelationship(relationship); err != nil {
-					return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d record %d: %w", graph.Name, shard.Index, index+1, err)
+					return err
 				}
 				catalog.observeRelationship(relationship)
+				if shard.Parquet != nil {
+					jsonRelationships = append(jsonRelationships, relationship)
+				}
+				return nil
+			})
+			if err != nil {
+				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d: %w", graph.Name, shard.Index, err)
 			}
 			emitJSONLRelationshipArtifactVerified(ctx, observer, graph.Name, *shard.JSONL)
 		}
 
 		if shard.Parquet != nil {
 			parquetRow := 0
-			err := parquet.ReadRelationships(root, *shard.Parquet, func(relationship entity.Relationship) error {
+			err := ReadParquetRelationships(root, *shard.Parquet, func(relationship entity.Relationship) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
@@ -280,35 +282,35 @@ func verifyJSONLGraph(ctx context.Context, root string, graph Graph, observer ob
 	catalog := newKindCatalog()
 
 	for _, shard := range graph.NodeShards {
-		nodes, err := jsonl.ReadNodes(root, *shard.JSONL)
-		if err != nil {
-			return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d for load: %w", graph.Name, shard.Index, err)
-		}
-		for index, node := range nodes {
+		err := ReadJSONLNodes(root, *shard.JSONL, func(node entity.Node) error {
 			if err := ctx.Err(); err != nil {
-				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d record %d for load: %w", graph.Name, shard.Index, index+1, err)
+				return err
 			}
 			if err := builder.ObserveNode(node); err != nil {
-				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d record %d for load: %w", graph.Name, shard.Index, index+1, err)
+				return err
 			}
 			catalog.observeNode(node)
+			return nil
+		})
+		if err != nil {
+			return GraphVerification{}, fmt.Errorf("verify graph %q JSONL node shard %d for load: %w", graph.Name, shard.Index, err)
 		}
 		emitJSONLNodeArtifactVerified(ctx, observer, graph.Name, *shard.JSONL)
 	}
 
 	for _, shard := range graph.RelationshipShards {
-		relationships, err := jsonl.ReadRelationships(root, *shard.JSONL)
-		if err != nil {
-			return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d for load: %w", graph.Name, shard.Index, err)
-		}
-		for index, relationship := range relationships {
+		err := ReadJSONLRelationships(root, *shard.JSONL, func(relationship entity.Relationship) error {
 			if err := ctx.Err(); err != nil {
-				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d record %d for load: %w", graph.Name, shard.Index, index+1, err)
+				return err
 			}
 			if err := builder.ObserveRelationship(relationship); err != nil {
-				return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d record %d for load: %w", graph.Name, shard.Index, index+1, err)
+				return err
 			}
 			catalog.observeRelationship(relationship)
+			return nil
+		})
+		if err != nil {
+			return GraphVerification{}, fmt.Errorf("verify graph %q JSONL relationship shard %d for load: %w", graph.Name, shard.Index, err)
 		}
 		emitJSONLRelationshipArtifactVerified(ctx, observer, graph.Name, *shard.JSONL)
 	}
@@ -692,7 +694,7 @@ func inspectNonSymlinkArtifact(root, relative string) error {
 	return nil
 }
 
-func emitJSONLNodeArtifactVerified(ctx context.Context, observer observe.Observer, graph string, artifact jsonl.NodeArtifact) {
+func emitJSONLNodeArtifactVerified(ctx context.Context, observer observe.Observer, graph string, artifact JSONLArtifact) {
 	observe.Emit(ctx, observer, observe.ArtifactVerified{
 		Graph: graph, EntityType: "node", Format: "JSONL", Path: artifact.Path,
 		Count: artifact.Count, Bytes: artifact.StoredBytes,
@@ -703,7 +705,7 @@ func emitJSONLRelationshipArtifactVerified(
 	ctx context.Context,
 	observer observe.Observer,
 	graph string,
-	artifact jsonl.RelationshipArtifact,
+	artifact JSONLArtifact,
 ) {
 	observe.Emit(ctx, observer, observe.ArtifactVerified{
 		Graph: graph, EntityType: "relationship", Format: "JSONL", Path: artifact.Path,
@@ -711,7 +713,7 @@ func emitJSONLRelationshipArtifactVerified(
 	})
 }
 
-func emitParquetNodeArtifactVerified(ctx context.Context, observer observe.Observer, graph string, artifact parquet.NodeArtifact) {
+func emitParquetNodeArtifactVerified(ctx context.Context, observer observe.Observer, graph string, artifact ParquetArtifact) {
 	observe.Emit(ctx, observer, observe.ArtifactVerified{
 		Graph: graph, EntityType: "node", Format: "Parquet", Path: artifact.Path,
 		Count: artifact.Count, Bytes: artifact.StoredBytes,
@@ -722,7 +724,7 @@ func emitParquetRelationshipArtifactVerified(
 	ctx context.Context,
 	observer observe.Observer,
 	graph string,
-	artifact parquet.RelationshipArtifact,
+	artifact ParquetArtifact,
 ) {
 	observe.Emit(ctx, observer, observe.ArtifactVerified{
 		Graph: graph, EntityType: "relationship", Format: "Parquet", Path: artifact.Path,

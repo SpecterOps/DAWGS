@@ -384,7 +384,7 @@ func TestBenchConcreteFormatBatches(t *testing.T) {
 	jsonlResult, err := benchJSONLNodeBatch(
 		jsonlPath,
 		nodes,
-		jsonl.Config{Enabled: true, Codec: jsonl.CodecGzip},
+		jsonl.Config{Codec: jsonl.CodecGzip},
 	)
 	if err != nil {
 		t.Fatalf("bench JSONL node batch: %v", err)
@@ -409,7 +409,7 @@ func TestBenchConcreteFormatBatches(t *testing.T) {
 	parquetResult, err := benchParquetNodeBatch(
 		filepath.Join(t.TempDir(), "nodes.parquet"),
 		nodes,
-		parquet.Config{Enabled: true},
+		parquet.Config{},
 	)
 	if err != nil {
 		t.Fatalf("bench Parquet node batch: %v", err)
@@ -425,7 +425,7 @@ func TestBenchConcreteFormatBatches(t *testing.T) {
 	relationshipResult, err := benchParquetRelationshipBatch(
 		filepath.Join(t.TempDir(), "relationships.parquet"),
 		relationships,
-		parquet.Config{Enabled: true},
+		parquet.Config{},
 	)
 	if err != nil {
 		t.Fatalf("bench Parquet relationship batch: %v", err)
@@ -440,8 +440,8 @@ func TestBenchReportsBothConcreteFormatsIndependently(t *testing.T) {
 		Workers:    []int{1},
 		BatchSize:  10,
 		SampleSize: 10,
-		JSONL:      jsonl.Config{Enabled: true, Codec: jsonl.CodecZstd},
-		Parquet:    parquet.Config{Enabled: true},
+		JSONL:      &jsonl.Config{Codec: jsonl.CodecZstd},
+		Parquet:    &parquet.Config{},
 	})
 	if err != nil {
 		t.Fatalf("bench: %v", err)
