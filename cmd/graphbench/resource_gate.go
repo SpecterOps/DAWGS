@@ -331,7 +331,10 @@ func guardedInlineResourceContractForArchitecture(architecture string) (guardedI
 		return guardedInlineResourceContract{architecture: architecture, family: "SP", telemetryFamily: TraversalTelemetryFamilySP, policy: optimize.ShortestPathPolicyI2DistanceGuardedV1, namespace: "inline_shortest_distance", label: "inline SP distance"}, true
 	case string(optimize.ShortestPathExecutorI2GuardedDistanceV2),
 		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0),
-		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1):
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1),
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1D),
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P),
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP):
 		return guardedInlineResourceContract{architecture: architecture, family: "SP", telemetryFamily: TraversalTelemetryFamilySP, policy: optimize.ShortestPathPolicyI2DistanceGuardedV2, namespace: "inline_shortest_distance", label: "inline SP distance V2"}, true
 	default:
 		return guardedInlineResourceContract{}, false
@@ -628,6 +631,9 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 	}
 	if telemetry.Summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
 		required = append(required, "sp_i2_admission_rows", "sp_i2_admission_loops")
+		if spI2DirectDevelopmentIdentity(telemetry.Summary.RequestedIdentity) {
+			required = append(required, "sp_i2_direct_rows", "sp_i2_direct_loops")
+		}
 	}
 	for _, name := range required {
 		if _, found := plan[name]; !found {
@@ -650,7 +656,11 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 	if candidateRows < 0 || candidateRows > 1 || fallbackRows < 0 || fallbackRows > 1 || outputRows != candidateRows+fallbackRows {
 		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance output does not equal its complementary branch rows")
 	}
-	if plan["sp_i2_target_rows"] != candidateRows {
+	directRows := plan["sp_i2_direct_rows"]
+	if directRows < 0 || directRows > 1 {
+		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance direct floor must return at most one row")
+	}
+	if plan["sp_i2_target_rows"]+directRows != candidateRows {
 		gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate branch does not agree with its target receipt")
 	}
 
@@ -670,6 +680,10 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 		typed["sp_i2_target_rows"] = inline.TargetRows
 		if inline.FrontierGuardDominated == nil || inline.CapRelationship == "" || inline.ObservedOverflowReason == "" {
 			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance V2 admission telemetry is incomplete")
+		}
+		if spI2DirectDevelopmentIdentity(telemetry.Summary.RequestedIdentity) {
+			typed["sp_i2_direct_rows"] = inline.DirectProbeRows
+			typed["sp_i2_direct_loops"] = inline.DirectProbeLoops
 		}
 	}
 	for name, value := range typed {
@@ -694,11 +708,16 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 	}
 	if candidateMarker == 1 {
 		expectedBranch := "inline_canonical_distance"
-		if outputRows == 0 {
+		if directRows == 1 {
+			expectedBranch = "inline_direct_distance"
+		} else if outputRows == 0 {
 			expectedBranch = "inline_canonical_distance_no_path"
 		}
 		if candidateLoops != 1 || fallbackLoops != 0 || fallbackRows != 0 {
 			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate selection did not suppress the fallback executor and output arm")
+		}
+		if directRows == 1 && (stateRows != 0 || plan["sp_i2_admission_rows"] != 0 || plan["sp_i2_target_rows"] != 0) {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance direct floor did not suppress recursive admission and target work")
 		}
 		// FrontierRows is deliberately a conservative alias for the complete
 		// bounded state relation, not an independently observable peak level.

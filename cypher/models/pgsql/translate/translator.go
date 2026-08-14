@@ -1912,6 +1912,9 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 		if decision.ObservationMode != expectedObservation {
 			continue
 		}
+		if spI2ScalarProjectionExecutor(executor) && !spI2ScalarProjectionRequirementsEligible(plan.LoweringPlan.FieldRequirements, decision.Target.QueryPartIndex) {
+			continue
+		}
 		// Two-sided predecessor-DAG discovery is proven only for one distinct,
 		// directed singleton endpoint pair with minimum depth exactly one. The
 		// shared structural facts enforce every condition except this narrower
@@ -1980,6 +1983,9 @@ func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor)
 		optimize.ShortestPathExecutorI2GuardedDistanceV2,
 		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
 		optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1D,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1P,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP,
 		optimize.ShortestPathExecutorI1CanonicalWitness,
 		optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 		optimize.ShortestPathExecutorB1AlternatingNodeDistance,
@@ -1998,7 +2004,10 @@ func isV2GuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorI2GuardedDistanceV2,
 		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
-		optimize.ShortestPathExecutorI2GuardedDistanceV2E1:
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1D,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1P,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP:
 		return true
 	default:
 		return false
@@ -2007,6 +2016,28 @@ func isV2GuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
 
 func isGuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
 	return executor == optimize.ShortestPathExecutorI2GuardedDistance || isV2GuardedDistanceExecutor(executor)
+}
+
+func spI2ScalarProjectionExecutor(executor optimize.ShortestPathExecutor) bool {
+	return executor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1P ||
+		executor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP
+}
+
+func spI2ScalarProjectionRequirementsEligible(decisions []optimize.FieldRequirementDecision, queryPartIndex int) bool {
+	for _, decision := range decisions {
+		if decision.QueryPartIndex != queryPartIndex {
+			continue
+		}
+		for _, field := range decision.Fields {
+			switch field {
+			case optimize.FieldRequirementEntityID, optimize.FieldRequirementOrderedPathEdgeIDs:
+				continue
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // applyForcedExpansionSearchStrategy selects the requested strategy only when exactly one qualified expansion target supports it.

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -302,6 +303,20 @@ func TestParseConfigRejectsSPI2V1DiscoveryAndAcceptsVerification(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "sp-i2-freeze.json", confirmation.SPI2Freeze)
 	require.Equal(t, "sp-i2-discovery.json", confirmation.SPI2DiscoveryReport)
+}
+
+func TestV2GraphBenchExecutorIncludesEveryDevelopmentArm(t *testing.T) {
+	for _, executor := range []optimize.ShortestPathExecutor{
+		optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1D,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1P,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP,
+	} {
+		require.True(t, isV2GraphBenchExecutor(string(executor)), executor)
+	}
+	require.False(t, isV2GraphBenchExecutor(string(optimize.ShortestPathExecutorI2GuardedDistance)))
 }
 
 func TestParseConfigRejectsIncompleteOrMixedSPI2StagedWorkflow(t *testing.T) {

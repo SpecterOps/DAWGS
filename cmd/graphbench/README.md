@@ -1137,8 +1137,13 @@ before target selection. When `frontier_limit >= state_limit` (including the
 production `100000/100000` contract), total-state admission dominates frontier
 admission and the SQL contains no depth aggregate. Unequal diagnostic caps
 retain exactly one frontier aggregate. `SP-I2-C-D-V2-E0` and
-`SP-I2-C-D-V2-E1` are non-promotional development identities. GraphBench
-requires `-sp-i2-generation sp-i2-distance-v2` whenever one is forced.
+`SP-I2-C-D-V2-E1` are non-promotional controls. The component identities
+`SP-I2-C-D-V2-E1D`, `SP-I2-C-D-V2-E1P`, and `SP-I2-C-D-V2-E1DP` respectively
+add the exact direct-edge floor, proven scalar projection elision, or both.
+The direct floor lazily suppresses recursive/admission/target work after a
+depth-one hit. Scalar projection forcing fails closed when entity, property,
+or path hydration is consumed. GraphBench requires
+`-sp-i2-generation sp-i2-distance-v2` whenever any V2 identity is forced.
 
 The authoritative logical declaration is
 `benchmark/testdata/scale/protocols/sp_i2_distance_v2.json`. It fixes 40

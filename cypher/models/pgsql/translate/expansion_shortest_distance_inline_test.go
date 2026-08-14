@@ -83,6 +83,67 @@ func TestGuardedDistanceV2RetainsOneIndependentFrontierCheckForUnequalCaps(t *te
 	require.Contains(t, formatted, "else 'SP-I2-C-D-V2-E1' end")
 }
 
+func TestGuardedDistanceV2DevelopmentComponentArms(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), guardedDistanceToolQuery)
+	require.NoError(t, err)
+
+	for _, testCase := range []struct {
+		name               string
+		executor           optimize.ShortestPathExecutor
+		directFloor        bool
+		scalarProjection   bool
+		expectedIdentity   string
+		expectedDirectName string
+	}{
+		{name: "direct", executor: optimize.ShortestPathExecutorI2GuardedDistanceV2E1D, directFloor: true, expectedIdentity: "SP-I2-C-D-V2-E1D", expectedDirectName: "sp_i2_v2_direct(depth) as materialized"},
+		{name: "projection", executor: optimize.ShortestPathExecutorI2GuardedDistanceV2E1P, scalarProjection: true, expectedIdentity: "SP-I2-C-D-V2-E1P"},
+		{name: "combined", executor: optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP, directFloor: true, scalarProjection: true, expectedIdentity: "SP-I2-C-D-V2-E1DP", expectedDirectName: "sp_i2_v2_direct(depth) as materialized"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			translation, err := TranslateForTool(context.Background(), query, optimizerSafetyKindMapper(), map[string]any{
+				"start_id": int64(1), "end_id": int64(2),
+			}, DefaultGraphID, ToolOptions{
+				ForceShortestPathExecutor:    testCase.executor,
+				GuardedDistanceStateLimit:    10,
+				GuardedDistanceFrontierLimit: 10,
+			})
+			require.NoError(t, err)
+			formatted, err := Translated(translation)
+			require.NoError(t, err)
+			require.Contains(t, formatted, "else '"+testCase.expectedIdentity+"' end")
+			if testCase.directFloor {
+				require.Contains(t, formatted, testCase.expectedDirectName)
+				require.Contains(t, formatted, "'inline_direct_distance'")
+				require.Contains(t, formatted, "where not exists (select 1 from sp_i2_v2_direct limit 1)")
+				require.Contains(t, formatted, "sp_i2_selected_distance(depth) as materialized")
+			} else {
+				require.NotContains(t, formatted, "sp_i2_v2_direct")
+				require.NotContains(t, formatted, "inline_direct_distance")
+			}
+			if testCase.scalarProjection {
+				require.NotContains(t, formatted, "join node as")
+			}
+		})
+	}
+}
+
+func TestGuardedDistanceV2ScalarProjectionRejectsEntityHydration(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = shortestPath((s)<-[:MemberOf*1..32]-(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN length(p), s
+	`)
+	require.NoError(t, err)
+	_, err = TranslateForTool(context.Background(), query, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor:    optimize.ShortestPathExecutorI2GuardedDistanceV2E1P,
+		GuardedDistanceStateLimit:    10,
+		GuardedDistanceFrontierLimit: 10,
+	})
+	require.ErrorContains(t, err, "no structurally eligible distance-only target")
+}
+
 // TestGuardedDistanceToolCapsAreIsolated rejects partial, negative, and
 // unrelated overrides before they can mutate an optimized plan.
 func TestGuardedDistanceToolCapsAreIsolated(t *testing.T) {

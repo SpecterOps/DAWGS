@@ -14,5 +14,20 @@ import (
 // and no GROUP BY depth aggregate is rendered. Unequal diagnostic caps retain
 // exactly one independent frontier check.
 func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRootV2() (pgsql.Query, error) {
-	return s.buildInlineGuardedShortestDistanceRoot(optimize.ShortestPathExecutorI2GuardedDistanceV2, true)
+	return s.buildInlineGuardedShortestDistanceRoot(optimize.ShortestPathExecutorI2GuardedDistanceV2, spI2Architecture{consolidatedAdmission: true})
+}
+
+func spI2DevelopmentArchitecture(executor optimize.ShortestPathExecutor) spI2Architecture {
+	switch executor {
+	case optimize.ShortestPathExecutorI2GuardedDistanceV2E0:
+		return spI2Architecture{}
+	case optimize.ShortestPathExecutorI2GuardedDistanceV2E1D:
+		return spI2Architecture{consolidatedAdmission: true, directFloor: true}
+	case optimize.ShortestPathExecutorI2GuardedDistanceV2E1P:
+		return spI2Architecture{consolidatedAdmission: true, scalarProjection: true}
+	case optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP:
+		return spI2Architecture{consolidatedAdmission: true, directFloor: true, scalarProjection: true}
+	default:
+		return spI2Architecture{consolidatedAdmission: true}
+	}
 }

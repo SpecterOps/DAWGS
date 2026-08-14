@@ -183,6 +183,8 @@ type InlineDistanceTraversalCounters struct {
 	FrontierRows           *int64 `json:"frontier_rows"`
 	AdmissionProbeRows     *int64 `json:"admission_probe_rows,omitempty"`
 	AdmissionProbeLoops    *int64 `json:"admission_probe_loops,omitempty"`
+	DirectProbeRows        *int64 `json:"direct_probe_rows,omitempty"`
+	DirectProbeLoops       *int64 `json:"direct_probe_loops,omitempty"`
 	TargetRows             *int64 `json:"target_rows,omitempty"`
 	OutputRows             *int64 `json:"output_rows"`
 	CandidateMarkerRows    *int64 `json:"candidate_marker_rows"`

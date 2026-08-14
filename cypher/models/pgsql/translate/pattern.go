@@ -213,10 +213,11 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 				traversalStepQuery, err = expansion.BuildShortestDistanceRoot()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
 				traversalStepQuery, err = expansion.BuildInlineGuardedShortestDistanceRoot()
-			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1 {
-				traversalStepQuery, err = expansion.buildInlineGuardedShortestDistanceRoot(traversalStep.Expansion.ShortestPathExecutor, true)
-			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2E0 {
-				traversalStepQuery, err = expansion.buildInlineGuardedShortestDistanceRoot(traversalStep.Expansion.ShortestPathExecutor, false)
+			} else if isV2GuardedDistanceExecutor(traversalStep.Expansion.ShortestPathExecutor) {
+				traversalStepQuery, err = expansion.buildInlineGuardedShortestDistanceRoot(
+					traversalStep.Expansion.ShortestPathExecutor,
+					spI2DevelopmentArchitecture(traversalStep.Expansion.ShortestPathExecutor),
+				)
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalWitness {
 				traversalStepQuery, err = expansion.BuildShortestPathEdgeM0Root()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {

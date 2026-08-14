@@ -415,7 +415,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
-	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (includes SP-I2-C-D-V2 and V2 E0/E1 development identities)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (includes SP-I2-C-D-V2 and V2 E0/E1/E1D/E1P/E1DP development identities)")
 	flags.StringVar(&cfg.PostgresProductionManifest, "postgres-production-manifest", "", "provisional version-2 manifest for exact guarded PostgreSQL candidate measurement")
 	flags.BoolVar(&cfg.PostgresRepeatableRead, "postgres-repeatable-read", false, "measure PostgreSQL under an explicit Repeatable Read transaction")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
@@ -1161,7 +1161,10 @@ func spI2TrainingInputCount(inputs []string) int {
 func isV2GraphBenchExecutor(executor string) bool {
 	return executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2) ||
 		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0) ||
-		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1)
+		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1) ||
+		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1D) ||
+		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P) ||
+		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP)
 }
 
 // parseCaptureBundleEvidenceInputs parses repeatable name=path bundle evidence
