@@ -507,15 +507,6 @@ func dumpGraph(ctx context.Context, db graph.Database, target GraphTarget, optio
 	return graphEntry, schemaEntry, metricsEntry, nil
 }
 
-func countGraphEntities(ctx context.Context, db graph.Database, targetGraph graph.Graph) (int64, int64, error) {
-	entitySnapshot, err := countGraphEntitySnapshot(ctx, db, targetGraph)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return entitySnapshot.NodeCount, entitySnapshot.EdgeCount, nil
-}
-
 func validateCompletedDumpSources(ctx context.Context, db graph.Database, graphEntries []GraphManifest) error {
 	for _, graphEntry := range graphEntries {
 		snapshot, err := countGraphEntitySnapshot(ctx, db, graph.Graph{Name: graphEntry.Name})

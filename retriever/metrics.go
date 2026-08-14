@@ -596,15 +596,6 @@ func validateMetricHistogramSum(graphName string, histogramName string, histogra
 	return nil
 }
 
-func cloneMetricHistogram(source map[string]int64) map[string]int64 {
-	target := make(map[string]int64, len(source))
-	for key, count := range source {
-		target[key] = count
-	}
-
-	return target
-}
-
 func metricKindSetKey(kinds []string) string {
 	seen := map[string]struct{}{}
 	for _, kind := range kinds {
