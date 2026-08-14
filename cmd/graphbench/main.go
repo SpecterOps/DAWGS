@@ -342,6 +342,11 @@ type config struct {
 	SPI2V2DevelopmentArtifact string
 	// SPI2V2DevelopmentStudy selects readiness or tournament validation.
 	SPI2V2DevelopmentStudy string
+	// SPI2V2DevelopmentReportArtifact selects the exact five-arm tournament
+	// artifact consumed by the diagnostic development decision report.
+	SPI2V2DevelopmentReportArtifact string
+	// SPI2V2DevelopmentReportOutput writes the diagnostic development report.
+	SPI2V2DevelopmentReportOutput string
 	// SPI2V2ComponentCheck enables one exact E1D or E1P semantic/plan check.
 	SPI2V2ComponentCheck bool
 	// SPI2V2ComponentAuthorization supplies the exact E1D/E1P authorization
@@ -534,6 +539,8 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.SPI2V2ReadinessComparison, "sp-i2-v2-readiness-comparison", false, "run one arm/round of the fixed non-promotional SP-I2 V2 E0/S4 readiness comparison")
 	flags.StringVar(&cfg.SPI2V2DevelopmentArtifact, "sp-i2-v2-development-artifact", "", "validate one complete non-promotional SP-I2 V2 development JSONL artifact")
 	flags.StringVar(&cfg.SPI2V2DevelopmentStudy, "sp-i2-v2-development-study", "", "development artifact study (readiness or tournament)")
+	flags.StringVar(&cfg.SPI2V2DevelopmentReportArtifact, "sp-i2-v2-development-report-artifact", "", "exact five-arm tournament JSONL artifact used to create the diagnostic development report")
+	flags.StringVar(&cfg.SPI2V2DevelopmentReportOutput, "sp-i2-v2-development-report-output", "", "write the diagnostic SP-I2 V2 development report")
 	flags.BoolVar(&cfg.SPI2V2ComponentCheck, "sp-i2-v2-component-check", false, "capture one exact open-corpus E1D or E1P semantic and plan-invariant check")
 	flags.StringVar(&cfg.SPI2V2ComponentAuthorization, "sp-i2-v2-component-authorization", "", "checksummed E1D/E1P authorization required to capture E1DP")
 	flags.StringVar(&cfg.SPI2V2ComponentE1DArtifact, "sp-i2-v2-component-e1d-artifact", "", "exact E1D component-check JSONL artifact")
@@ -815,7 +822,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	spI2ExecutorRequested := cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 		isV2GraphBenchExecutor(cfg.PostgresForceShortest)
-	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentStudy != "" || cfg.SPI2V2ComponentCheck || cfg.SPI2V2ComponentAuthorization != "" || cfg.SPI2V2ComponentE1DArtifact != "" || cfg.SPI2V2ComponentE1PArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" ||
+	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentStudy != "" || cfg.SPI2V2DevelopmentReportArtifact != "" || cfg.SPI2V2DevelopmentReportOutput != "" || cfg.SPI2V2ComponentCheck || cfg.SPI2V2ComponentAuthorization != "" || cfg.SPI2V2ComponentE1DArtifact != "" || cfg.SPI2V2ComponentE1PArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" ||
 		spI2TrainingInputCount(spI2TrainingInputs) > 0 || spI2ExecutorRequested ||
 		strings.Contains(rawTags, "sp-i2-distance-v1") || strings.Contains(rawTags, "sp-i2-distance-v2")
 	if spI2Requested && cfg.SPI2Generation == "" {
@@ -857,6 +864,19 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 		}
 		if cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || spI2ReportConfigured || cfg.SPI2Freeze != "" {
 			return config{}, fmt.Errorf("SP-I2 V2 development artifact validation cannot be combined with capture or promotional workflows")
+		}
+	}
+	if cfg.SPI2V2DevelopmentReportOutput != "" && cfg.SPI2V2DevelopmentReportArtifact == "" {
+		return config{}, fmt.Errorf("SP-I2 V2 development report output requires its tournament artifact")
+	}
+	if cfg.SPI2V2DevelopmentReportArtifact != "" {
+		if cfg.SPI2Generation != spI2GenerationV2 {
+			return config{}, fmt.Errorf("SP-I2 V2 development reporting requires generation %q", spI2GenerationV2)
+		}
+		if cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2ComponentCheck ||
+			cfg.SPI2V2ComponentE1DArtifact != "" || cfg.SPI2V2ComponentE1PArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" ||
+			spI2ReportConfigured || cfg.SPI2Freeze != "" {
+			return config{}, fmt.Errorf("SP-I2 V2 development reporting cannot be combined with validation, capture, or promotional workflows")
 		}
 	}
 	componentAuthorizationInputs := []string{
@@ -1353,6 +1373,12 @@ func main() {
 		}
 		if !passed {
 			fatal("SP-I2 V2 component authorization failed")
+		}
+		return
+	}
+	if cfg.SPI2V2DevelopmentReportArtifact != "" {
+		if _, err := createSPI2V2DevelopmentReport(cfg.CorpusRoot, cfg.SPI2V2DevelopmentReportArtifact, cfg.SPI2V2DevelopmentReportOutput); err != nil {
+			fatal("create SP-I2 V2 development report: %v", err)
 		}
 		return
 	}

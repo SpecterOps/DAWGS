@@ -396,6 +396,27 @@ func TestParseConfigAcceptsSPI2V2DevelopmentArtifactValidation(t *testing.T) {
 	}
 }
 
+func TestParseConfigAcceptsSPI2V2DevelopmentReportProduction(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-development-report-artifact", "tournament.jsonl",
+		"-sp-i2-v2-development-report-output", "report.json",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "tournament.jsonl", cfg.SPI2V2DevelopmentReportArtifact)
+	require.Equal(t, "report.json", cfg.SPI2V2DevelopmentReportOutput)
+
+	invalid := [][]string{
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-development-report-output", "report.json"},
+		{"-sp-i2-generation", spI2GenerationV1, "-sp-i2-v2-development-report-artifact", "tournament.jsonl"},
+		{"-sp-i2-generation", spI2GenerationV2, "-sp-i2-v2-development-report-artifact", "tournament.jsonl", "-sp-i2-v2-development-artifact", "tournament.jsonl", "-sp-i2-v2-development-study", string(spI2V2StudyTournament)},
+	}
+	for _, args := range invalid {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err)
+	}
+}
+
 func TestParseConfigAcceptsSPI2V2ComponentCheck(t *testing.T) {
 	executor := string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P)
 	cfg, err := parseConfig([]string{

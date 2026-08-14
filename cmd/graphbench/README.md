@@ -1172,6 +1172,26 @@ go run ./cmd/graphbench \
 Use `readiness` for the two-arm E0/S4 artifact. The command exits without
 database setup only after the entire artifact passes validation.
 
+Create the permanently diagnostic five-arm decision report from a complete
+tournament artifact with:
+
+```bash
+go run ./cmd/graphbench \
+  -sp-i2-generation sp-i2-distance-v2 \
+  -sp-i2-v2-development-report-artifact development.jsonl \
+  -sp-i2-v2-development-report-output development-report.json
+```
+
+The report revalidates the raw schedule, semantic observations, canonical
+plans, diagnostic receipts, resource limits, non-fallback identities, and one
+source/binary identity before analysis. It uses paired round-median resampling
+for median and planning-time ratios and paired-round hierarchical resampling
+for p95. Eligibility applies the preregistered E0, E1, and parent contrasts;
+ranking then uses plan-node score, the maximum planning-time upper bound versus
+E0, the maximum p95 upper bound versus E0, and fixed arm order. If no variant
+is eligible, E0 is selected. `promotion_eligible` is always false: this report
+cannot authorize a freeze, holdout, manifest, or production activation.
+
 E1DP is fail-closed until E1D and E1P have independently passed exact semantic,
 canonical-plan, resource, receipt, and fallback checks. Build one GraphBench
 binary and use that same executable for both checks, authorization production,
