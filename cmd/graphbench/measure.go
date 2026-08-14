@@ -593,13 +593,28 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 		preflightObserved []string
 		stabilizeNodeIDs  = resultContainsNodeIDs(expected)
 		stabilizePaths    = resultContainsPaths(expected)
+		stabilization     timedReadAttestation
 	)
+	if attestor != nil {
+		if err := attestor.Begin(ctx, 0); err != nil {
+			return 0, nil, DurationStats{}, fmt.Errorf("arm excluded runtime receipt stabilization: %w", err)
+		}
+	}
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var err error
 		warmupRows, preflightObserved, err = observeReadRows(tx, query, params, idMap, stabilizeNodeIDs, stabilizePaths, raw)
 		return err
 	}, options...); err != nil {
+		if attestor != nil {
+			_, _ = attestor.Complete(context.WithoutCancel(ctx), 0)
+		}
 		return 0, nil, DurationStats{}, err
+	}
+	if attestor != nil {
+		var err error
+		if stabilization, err = attestor.Complete(ctx, 0); err != nil {
+			return 0, nil, DurationStats{}, fmt.Errorf("read excluded runtime receipt stabilization: %w", err)
+		}
 	}
 
 	durations := make([]time.Duration, iterations)
@@ -657,6 +672,14 @@ func measureReadWithWarmupsAndAttestation(ctx context.Context, db graph.Database
 	}
 	stats.WarmupIterations = warmupIterations
 	if attestor != nil {
+		stats.ReceiptStabilization = &RuntimeStabilizationReceipt{
+			InvocationID:      stabilization.InvocationID,
+			RequestedIdentity: stabilization.RequestedIdentity,
+			RuntimeIdentity:   stabilization.RuntimeIdentity,
+			RuntimeBranch:     stabilization.RuntimeBranch,
+			FallbackExecuted:  stabilization.FallbackExecuted,
+			Events:            append([]RuntimeReceiptEvent(nil), stabilization.Events...),
+		}
 		for idx := range attestations {
 			stats.Samples[idx].RuntimeInvocationID = attestations[idx].InvocationID
 			stats.Samples[idx].RequestedIdentity = attestations[idx].RequestedIdentity

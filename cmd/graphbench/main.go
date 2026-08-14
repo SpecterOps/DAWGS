@@ -329,6 +329,8 @@ type config struct {
 	SPI2Output string
 	// SPI2Protocol selects discovery or confirmation evidence requirements.
 	SPI2Protocol string
+	// SPI2Generation explicitly selects the isolated V1 or V2 evidence family.
+	SPI2Generation string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -413,7 +415,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.Int64Var(&cfg.PoolMemoryCeilingBytes, "pool-memory-ceiling-bytes", 0, "declared maximum performance workspace bytes for the complete PostgreSQL pool")
 	flags.BoolVar(&cfg.PostgresReferences, "postgres-references", false, "capture C1 PostgreSQL component floors and full-query references")
 	flags.StringVar(&rawReferenceArms, "postgres-reference-arms", "", "comma-separated PostgreSQL reference arms (default: all applicable arms)")
-	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (supported: SP-S0, SP-S0-DIRECT, SP-S3-U-D, SP-S3-U-E+MAT-M0, SP-S4-C-D, SP-S4-C-WE+MAT-M0, SP-I1-C-D, SP-I2-C-D, SP-I1-U-E+MAT-M0, SP-I1-C-WE+MAT-M0, SP-B1-C-ALT-NODE-D, SP-B1-C-ALT-NODE-WE+MAT-M0, SP-B2-C-MIN-LEVEL-D, SP-B2-C-MIN-LEVEL-WE+MAT-M0, ASP-A1-DAG, ASP-I1-U-DAG+MAT-M0, ASP-B1-DAG-ALT-NODE, ASP-B2-DAG-MIN-LEVEL)")
+	flags.StringVar(&cfg.PostgresForceShortest, "postgres-force-shortest-executor", "", "tool-only forced PostgreSQL shortest executor (includes SP-I2-C-D-V2 and V2 E0/E1 development identities)")
 	flags.StringVar(&cfg.PostgresProductionManifest, "postgres-production-manifest", "", "provisional version-2 manifest for exact guarded PostgreSQL candidate measurement")
 	flags.BoolVar(&cfg.PostgresRepeatableRead, "postgres-repeatable-read", false, "measure PostgreSQL under an explicit Repeatable Read transaction")
 	flags.StringVar(&cfg.PostgresForceExpansion, "postgres-force-expansion-search", "", "tool-only forced PostgreSQL expansion search (supported: EXPANSION-SUFFIX-SEEDED-REVERSE, EXPANSION-ENDPOINT-SEEDED-REVERSE)")
@@ -505,6 +507,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.SPI2FreezeOutput, "sp-i2-freeze-output", "", "write the staged SP-I2 training-only freeze manifest")
 	flags.StringVar(&cfg.SPI2Output, "sp-i2-output", "", "staged S4-distance-to-I2 qualification JSON output path")
 	flags.StringVar(&cfg.SPI2Protocol, "sp-i2-protocol", referencePairProtocolConfirmation, "staged SP-I2 report protocol (discovery or confirmation)")
+	flags.StringVar(&cfg.SPI2Generation, "sp-i2-generation", "", "explicit SP-I2 evidence generation (sp-i2-distance-v1 or sp-i2-distance-v2)")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -778,6 +781,36 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	spI2ReportConfigured := cfg.SPI2Output != "" || cfg.SPI2FreezeOutput != ""
 	for _, input := range spI2ReportInputs {
 		spI2ReportConfigured = spI2ReportConfigured || input != ""
+	}
+	spI2ExecutorRequested := cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
+		isV2GraphBenchExecutor(cfg.PostgresForceShortest)
+	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" ||
+		spI2TrainingInputCount(spI2TrainingInputs) > 0 || spI2ExecutorRequested ||
+		strings.Contains(rawTags, "sp-i2-distance-v1") || strings.Contains(rawTags, "sp-i2-distance-v2")
+	if spI2Requested && cfg.SPI2Generation == "" {
+		return config{}, fmt.Errorf("SP-I2 evidence requires explicit -sp-i2-generation")
+	}
+	if cfg.SPI2Generation != "" && cfg.SPI2Generation != spI2GenerationV1 && cfg.SPI2Generation != spI2GenerationV2 {
+		return config{}, fmt.Errorf("unsupported SP-I2 generation %q", cfg.SPI2Generation)
+	}
+	if cfg.SPI2Generation == spI2GenerationV1 {
+		if cfg.SPI2FreezeOutput != "" {
+			return config{}, fmt.Errorf("SP-I2 V1 is terminally rejected and cannot create a freeze")
+		}
+		if !spI2ReportConfigured && (cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "") {
+			return config{}, fmt.Errorf("SP-I2 V1 is terminally rejected and cannot authorize holdout capture")
+		}
+		if isV2GraphBenchExecutor(cfg.PostgresForceShortest) || strings.Contains(rawTags, "sp-i2-distance-v2") {
+			return config{}, fmt.Errorf("SP-I2 V1 generation cannot select V2 evidence")
+		}
+	}
+	if cfg.SPI2Generation == spI2GenerationV2 {
+		if spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || spI2TrainingInputCount(spI2TrainingInputs) > 0 {
+			return config{}, fmt.Errorf("SP-I2 V2 evidence cannot use V1 report or freeze flags")
+		}
+		if cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) || strings.Contains(rawTags, "sp-i2-distance-v1") {
+			return config{}, fmt.Errorf("SP-I2 V2 generation cannot select V1 evidence")
+		}
 	}
 	if cfg.SPI2Protocol != referencePairProtocolDiscovery && cfg.SPI2Protocol != referencePairProtocolConfirmation {
 		return config{}, fmt.Errorf("sp-i2-protocol must be discovery or confirmation")
@@ -1096,6 +1129,9 @@ func validForcedShortestPathExecutor(executor string) bool {
 		"SP-S4-C-WE+MAT-M0",
 		"SP-I1-C-D",
 		"SP-I2-C-D",
+		"SP-I2-C-D-V2",
+		"SP-I2-C-D-V2-E0",
+		"SP-I2-C-D-V2-E1",
 		"SP-I1-U-E+MAT-M0",
 		"SP-I1-C-WE+MAT-M0",
 		"SP-B1-C-ALT-NODE-D",
@@ -1110,6 +1146,22 @@ func validForcedShortestPathExecutor(executor string) bool {
 	default:
 		return false
 	}
+}
+
+func spI2TrainingInputCount(inputs []string) int {
+	count := 0
+	for _, input := range inputs {
+		if input != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func isV2GraphBenchExecutor(executor string) bool {
+	return executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2) ||
+		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0) ||
+		executor == string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1)
 }
 
 // parseCaptureBundleEvidenceInputs parses repeatable name=path bundle evidence

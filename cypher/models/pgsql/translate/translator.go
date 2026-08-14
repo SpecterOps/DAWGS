@@ -1031,6 +1031,14 @@ func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
 				string(optimize.ShortestPathExecutorS4CanonicalDistance),
 			}
 		}
+		if isV2GuardedDistanceExecutor(decision.SelectedExecutor) && applied == string(decision.SelectedExecutor) {
+			outcome.Candidate = string(decision.SelectedExecutor)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyI2DistanceGuardedV2
+			outcome.EmittedCandidates = []string{
+				string(decision.SelectedExecutor),
+				string(optimize.ShortestPathExecutorS4CanonicalDistance),
+			}
+		}
 		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, outcome)
 	}
 	for _, decision := range plan.ExpansionSearchStrategy {
@@ -1575,7 +1583,7 @@ func productionShortestPathExecutor(executor optimize.ShortestPathExecutor) bool
 	switch executor {
 	case optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 		optimize.ShortestPathExecutorASPI1DAG,
-		optimize.ShortestPathExecutorI2GuardedDistance:
+		optimize.ShortestPathExecutorI2GuardedDistanceV2:
 		return true
 	default:
 		return false
@@ -1590,7 +1598,7 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 	if options.DisableInlineASPDAG && options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG {
 		return fmt.Errorf("inline ASP DAG is disabled by production policy")
 	}
-	if options.DisableInlineSPDistance && options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
+	if options.DisableInlineSPDistance && options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 {
 		return fmt.Errorf("inline SP distance is disabled by production policy")
 	}
 	for idx := range plan.LoweringPlan.ShortestPathExecutor {
@@ -1609,7 +1617,7 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 				return fmt.Errorf("production traversal target does not match its authorized promotion bucket")
 			}
 		}
-		if options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
+		if options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 {
 			if options.AuthorizedBucket == nil {
 				return fmt.Errorf("guarded inline shortest-path production policy requires an exact authorized bucket")
 			}
@@ -1623,10 +1631,10 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 					return fmt.Errorf("canonical SP-I1 production policy requires the qualified inbound typed single-kind one-path depth 1..64 bucket")
 				}
 			}
-			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 {
 				bucket := options.AuthorizedBucket
-				if options.SelectorVersion != optimize.ShortestPathSelectorStaticV8HiddenFanIn {
-					return fmt.Errorf("guarded SP-I2 distance policy requires selector %q", optimize.ShortestPathSelectorStaticV8HiddenFanIn)
+				if options.SelectorVersion != optimize.ShortestPathSelectorStaticV9HiddenFanInTail {
+					return fmt.Errorf("guarded SP-I2 V2 distance policy requires selector %q", optimize.ShortestPathSelectorStaticV9HiddenFanInTail)
 				}
 				if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationDistance) ||
 					bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
@@ -1637,11 +1645,11 @@ func applyProductionShortestPathAuthorization(plan *optimize.Plan, options Produ
 				return fmt.Errorf("guarded inline shortest-path production policy requires immutable caps")
 			}
 			caps := options.ShortestPathCaps
-			if caps.StateLimit <= 0 || (options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance && caps.FrontierLimit <= 0) ||
-				(options.ShortestPathExecutor != optimize.ShortestPathExecutorI2GuardedDistance && (caps.PredecessorLimit <= 0 || caps.EnumerationLimit <= 0 || caps.OutputBytesLimit <= 0)) {
+			if caps.StateLimit <= 0 || (options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 && caps.FrontierLimit <= 0) ||
+				(options.ShortestPathExecutor != optimize.ShortestPathExecutorI2GuardedDistanceV2 && (caps.PredecessorLimit <= 0 || caps.EnumerationLimit <= 0 || caps.OutputBytesLimit <= 0)) {
 				return fmt.Errorf("guarded inline shortest-path production policy requires positive immutable caps")
 			}
-			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance &&
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 &&
 				(caps.StateLimit != optimize.ShortestPathI2QualifiedStateLimit ||
 					caps.FrontierLimit != optimize.ShortestPathI2QualifiedFrontierLimit ||
 					caps.PredecessorLimit != 0 || caps.EnumerationLimit != 0 || caps.OutputBytesLimit != 0) {
@@ -1678,7 +1686,7 @@ func applyProductionShortestPathRollback(plan *optimize.Plan, options Production
 		case options.DisableInlineSPWitness && decision.SelectedExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness:
 			decision.SelectedExecutor = optimize.ShortestPathExecutorS4CanonicalWitness
 			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
-		case options.DisableInlineSPDistance && decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance:
+		case options.DisableInlineSPDistance && (decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance || decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2):
 			decision.SelectedExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
 			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
 		default:
@@ -1714,8 +1722,8 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 		return fmt.Errorf("expansion suffix reverse guard caps require the guard to be enabled")
 	}
 	if options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 {
-		if options.ForceShortestPathExecutor != optimize.ShortestPathExecutorI2GuardedDistance {
-			return fmt.Errorf("guarded distance cap overrides require forcing %q", optimize.ShortestPathExecutorI2GuardedDistance)
+		if !isGuardedDistanceExecutor(options.ForceShortestPathExecutor) {
+			return fmt.Errorf("guarded distance cap overrides require forcing an SP-I2 distance executor")
 		}
 		if options.GuardedDistanceStateLimit <= 0 || options.GuardedDistanceFrontierLimit <= 0 {
 			return fmt.Errorf("guarded distance cap overrides require positive state and frontier limits")
@@ -1731,7 +1739,7 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.GuardedDistanceStateLimit > 0 {
 		for idx := range plan.LoweringPlan.ShortestPathExecutor {
 			decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
-			if decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance && decision.SelectionMode == "forced_tool" {
+			if isGuardedDistanceExecutor(decision.SelectedExecutor) && decision.SelectionMode == "forced_tool" {
 				decision.StateLimit = options.GuardedDistanceStateLimit
 				decision.FrontierLimit = options.GuardedDistanceFrontierLimit
 			}
@@ -1914,9 +1922,9 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 
 		decision.SelectedExecutor = executor
 		decision.ExecutionBoundary = executor.ExecutionBoundary()
-		if executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || executor == optimize.ShortestPathExecutorI2GuardedDistance {
+		if executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || isGuardedDistanceExecutor(executor) {
 			decision.ExecutionBoundary = "guarded_dual_arm"
-			if executor != optimize.ShortestPathExecutorI2GuardedDistance {
+			if !isGuardedDistanceExecutor(executor) {
 				decision.FrontierLimit = 0
 			}
 		}
@@ -1936,6 +1944,13 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 		}
 		if executor == optimize.ShortestPathExecutorI2GuardedDistance {
 			decision.SelectorVersion = optimize.ShortestPathSelectorStaticV8HiddenFanIn
+			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
+			decision.PredecessorLimit = 0
+			decision.EnumerationLimit = 0
+			decision.OutputBytesLimit = 0
+		}
+		if isV2GuardedDistanceExecutor(executor) {
+			decision.SelectorVersion = optimize.ShortestPathSelectorStaticV9HiddenFanInTail
 			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
 			decision.PredecessorLimit = 0
 			decision.EnumerationLimit = 0
@@ -1962,6 +1977,9 @@ func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor)
 		optimize.ShortestPathExecutorASPI1DAG,
 		optimize.ShortestPathExecutorI1CanonicalDistance,
 		optimize.ShortestPathExecutorI2GuardedDistance,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
 		optimize.ShortestPathExecutorI1CanonicalWitness,
 		optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 		optimize.ShortestPathExecutorB1AlternatingNodeDistance,
@@ -1974,6 +1992,21 @@ func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor)
 	default:
 		return false
 	}
+}
+
+func isV2GuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
+	switch executor {
+	case optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1:
+		return true
+	default:
+		return false
+	}
+}
+
+func isGuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
+	return executor == optimize.ShortestPathExecutorI2GuardedDistance || isV2GuardedDistanceExecutor(executor)
 }
 
 // applyForcedExpansionSearchStrategy selects the requested strategy only when exactly one qualified expansion target supports it.

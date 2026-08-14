@@ -274,20 +274,17 @@ func TestParseConfigAcceptsSPI1StagedDiscoveryAndConfirmation(t *testing.T) {
 	require.Equal(t, "sp-i1-discovery.json", confirmation.SPI1DiscoveryReport)
 }
 
-func TestParseConfigAcceptsSPI2StagedDiscoveryAndConfirmation(t *testing.T) {
-	discovery, err := parseConfig([]string{
+func TestParseConfigRejectsSPI2V1DiscoveryAndAcceptsVerification(t *testing.T) {
+	_, err := parseConfig([]string{
 		"-sp-i2-baseline-artifact", "s4-distance-training.jsonl",
 		"-sp-i2-candidate-artifact", "i2-training.jsonl",
 		"-sp-i2-resource-report", "i2-training-resource.json",
 		"-sp-i2-output", "sp-i2-discovery.json",
 		"-sp-i2-freeze-output", "sp-i2-freeze.json",
 		"-sp-i2-protocol", referencePairProtocolDiscovery,
+		"-sp-i2-generation", spI2GenerationV1,
 	}, func(string) string { return "" })
-	require.NoError(t, err)
-	require.Equal(t, "s4-distance-training.jsonl", discovery.SPI2BaselineArtifact)
-	require.Equal(t, "i2-training.jsonl", discovery.SPI2CandidateArtifact)
-	require.Equal(t, "i2-training-resource.json", discovery.SPI2ResourceReport)
-	require.Equal(t, "sp-i2-freeze.json", discovery.SPI2FreezeOutput)
+	require.ErrorContains(t, err, "terminally rejected")
 
 	confirmation, err := parseConfig([]string{
 		"-sp-i2-baseline-artifact", "s4-distance-confirmation.jsonl",
@@ -300,6 +297,7 @@ func TestParseConfigAcceptsSPI2StagedDiscoveryAndConfirmation(t *testing.T) {
 		"-sp-i2-training-candidate-artifact", "i2-training.jsonl",
 		"-sp-i2-training-resource-report", "i2-training-resource.json",
 		"-sp-i2-protocol", referencePairProtocolConfirmation,
+		"-sp-i2-generation", spI2GenerationV1,
 	}, func(string) string { return "" })
 	require.NoError(t, err)
 	require.Equal(t, "sp-i2-freeze.json", confirmation.SPI2Freeze)

@@ -432,7 +432,7 @@ func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics P
 		}
 		return "", "runtime_outcome_unavailable", false, overflow
 	}
-	if outcome.EmittedPolicy == optimize.ShortestPathPolicyI2DistanceGuardedV1 {
+	if outcome.EmittedPolicy == optimize.ShortestPathPolicyI2DistanceGuardedV1 || outcome.EmittedPolicy == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
 		candidateRows, candidatePresent := plan.Counters["sp_i2_candidate_marker_rows"]
 		fallbackRows, fallbackPresent := plan.Counters["sp_i2_fallback_marker_rows"]
 		if !candidatePresent || !fallbackPresent {
@@ -447,7 +447,11 @@ func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics P
 			if outputRows == 0 {
 				branch = "inline_canonical_distance_no_path"
 			}
-			return string(optimize.ShortestPathExecutorI2GuardedDistance), branch, false, false
+			runtimeIdentity := outcome.Applied
+			if runtimeIdentity == "" {
+				runtimeIdentity = outcome.Selected
+			}
+			return runtimeIdentity, branch, false, false
 		}
 		if fallbackRows == 1 && candidateRows == 0 {
 			return string(optimize.ShortestPathExecutorS4CanonicalDistance), "exact_s4_distance_fallback", true, true
@@ -787,6 +791,7 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 		"asp_i1_candidate_rows":      "asp_i1_candidate_branch_rows",
 		"asp_i1_fallback_rows":       "asp_i1_fallback_branch_rows",
 		"sp_i2_distance_bounded":     "sp_i2_distance_rows",
+		"sp_i2_admission":            "sp_i2_admission_rows",
 		"sp_i2_target":               "sp_i2_target_rows",
 		"sp_i2_candidate_marker":     "sp_i2_candidate_marker_rows",
 		"sp_i2_fallback_marker":      "sp_i2_fallback_marker_rows",
@@ -891,6 +896,10 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 		body := bodies[0]
 		replay.Counters[counterName] = body.ActualRows * body.ActualLoops
 		replay.Provenance["counters."+counterName] = "postgres_metrics.plan_nodes.exact_cte_materialization_body"
+		if cteName == "sp_i2_admission" {
+			replay.Counters["sp_i2_admission_loops"] = body.ActualLoops
+			replay.Provenance["counters.sp_i2_admission_loops"] = "postgres_metrics.plan_nodes.exact_cte_materialization_body"
+		}
 
 		branch := ""
 		markerCTE := ""
@@ -1457,11 +1466,16 @@ func enrichSuffixGuardTraversalTelemetry(telemetry *TraversalExecutionTelemetry,
 }
 
 func enrichInlineDistanceTraversalTelemetry(telemetry *TraversalExecutionTelemetry, outputRows int64) {
-	if telemetry == nil || telemetry.Diagnostic == nil || telemetry.Summary.EmittedIdentity != optimize.ShortestPathPolicyI2DistanceGuardedV1 || telemetry.Diagnostic.PlanReplay == nil {
+	if telemetry == nil || telemetry.Diagnostic == nil ||
+		(telemetry.Summary.EmittedIdentity != optimize.ShortestPathPolicyI2DistanceGuardedV1 && telemetry.Summary.EmittedIdentity != optimize.ShortestPathPolicyI2DistanceGuardedV2) ||
+		telemetry.Diagnostic.PlanReplay == nil {
 		return
 	}
 	plan := telemetry.Diagnostic.PlanReplay
 	required := []string{"sp_i2_distance_rows", "sp_i2_target_rows", "sp_i2_output_rows", "sp_i2_candidate_marker_rows", "sp_i2_fallback_marker_rows", "sp_i2_candidate_branch_rows", "sp_i2_fallback_branch_rows", "sp_i2_candidate_executor_loops", "sp_i2_fallback_executor_loops"}
+	if telemetry.Summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
+		required = append(required, "sp_i2_admission_rows", "sp_i2_admission_loops")
+	}
 	for _, name := range required {
 		if _, present := plan.Counters[name]; !present {
 			markTraversalCountersUnavailable(telemetry.Diagnostic, "inline distance plan replay is missing exact named counter: "+name)
@@ -1483,6 +1497,37 @@ func enrichInlineDistanceTraversalTelemetry(telemetry *TraversalExecutionTelemet
 		telemetry.Diagnostic.Provenance["inline_shortest_distance."+name] = "untimed_timing_on_plan.inline_distance_named_ctes"
 	}
 	telemetry.Diagnostic.Provenance["inline_shortest_distance.frontier_rows"] = "untimed_timing_on_plan.inline_distance_state_relation_conservative_frontier_upper_bound"
+	if telemetry.Summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
+		stateLimit := telemetry.Summary.Caps["state_rows"]
+		frontierLimit := telemetry.Summary.Caps["frontier_rows"]
+		dominated := frontierLimit >= stateLimit
+		capRelationship := "frontier_limit<state_limit"
+		if dominated {
+			capRelationship = "frontier_limit>=state_limit"
+		}
+		overflowReason := "none"
+		if telemetry.Summary.Overflow != nil && *telemetry.Summary.Overflow {
+			stateRows := plan.Counters["sp_i2_distance_rows"]
+			switch {
+			case dominated:
+				overflowReason = "state_observed"
+			case stateRows > stateLimit:
+				overflowReason = "state_observed_frontier_indeterminate"
+			default:
+				overflowReason = "frontier_observed"
+			}
+		}
+		inline := telemetry.Diagnostic.Counters.InlineShortestDistance
+		inline.AdmissionProbeRows = get("sp_i2_admission_rows")
+		inline.AdmissionProbeLoops = get("sp_i2_admission_loops")
+		inline.TargetRows = get("sp_i2_target_rows")
+		inline.FrontierGuardDominated = &dominated
+		inline.CapRelationship = capRelationship
+		inline.ObservedOverflowReason = overflowReason
+		for _, name := range []string{"admission_probe_rows", "admission_probe_loops", "target_rows", "frontier_guard_dominated", "cap_relationship", "observed_overflow_reason"} {
+			telemetry.Diagnostic.Provenance["inline_shortest_distance."+name] = "untimed_timing_on_plan.inline_distance_v2_materialized_admission"
+		}
+	}
 	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusComplete
 	telemetry.Diagnostic.IncompleteReasons = nil
 }

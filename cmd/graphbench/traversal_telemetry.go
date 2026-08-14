@@ -181,6 +181,9 @@ type TraversalDiagnosticCounters struct {
 type InlineDistanceTraversalCounters struct {
 	StateRows              *int64 `json:"state_rows"`
 	FrontierRows           *int64 `json:"frontier_rows"`
+	AdmissionProbeRows     *int64 `json:"admission_probe_rows,omitempty"`
+	AdmissionProbeLoops    *int64 `json:"admission_probe_loops,omitempty"`
+	TargetRows             *int64 `json:"target_rows,omitempty"`
 	OutputRows             *int64 `json:"output_rows"`
 	CandidateMarkerRows    *int64 `json:"candidate_marker_rows"`
 	FallbackMarkerRows     *int64 `json:"fallback_marker_rows"`
@@ -188,6 +191,9 @@ type InlineDistanceTraversalCounters struct {
 	FallbackBranchRows     *int64 `json:"fallback_branch_rows"`
 	CandidateExecutorLoops *int64 `json:"candidate_executor_loops"`
 	FallbackExecutorLoops  *int64 `json:"fallback_executor_loops"`
+	FrontierGuardDominated *bool  `json:"frontier_guard_dominated,omitempty"`
+	CapRelationship        string `json:"cap_relationship,omitempty"`
+	ObservedOverflowReason string `json:"observed_overflow_reason,omitempty"`
 }
 
 // SuffixGuardTraversalCounters records the complete bounded relations and
@@ -677,6 +683,18 @@ func validateInlineDistanceCounters(counters *InlineDistanceTraversalCounters, p
 		"candidate_branch_rows": counters.CandidateBranchRows, "fallback_branch_rows": counters.FallbackBranchRows,
 		"candidate_executor_loops": counters.CandidateExecutorLoops, "fallback_executor_loops": counters.FallbackExecutorLoops,
 	})
+	if counters.FrontierGuardDominated != nil {
+		requireCounters("inline_shortest_distance", provenance, problems, map[string]*int64{
+			"admission_probe_rows":  counters.AdmissionProbeRows,
+			"admission_probe_loops": counters.AdmissionProbeLoops,
+			"target_rows":           counters.TargetRows,
+		})
+		requireText("diagnostic.counters.inline_shortest_distance.cap_relationship", counters.CapRelationship, problems)
+		requireText("diagnostic.counters.inline_shortest_distance.observed_overflow_reason", counters.ObservedOverflowReason, problems)
+		requireProvenance("diagnostic.counters.inline_shortest_distance.frontier_guard_dominated", provenance["inline_shortest_distance.frontier_guard_dominated"], problems)
+		requireProvenance("diagnostic.counters.inline_shortest_distance.cap_relationship", provenance["inline_shortest_distance.cap_relationship"], problems)
+		requireProvenance("diagnostic.counters.inline_shortest_distance.observed_overflow_reason", provenance["inline_shortest_distance.observed_overflow_reason"], problems)
+	}
 }
 
 // validateInlinePredecessorCounters validates inline predecessor counters.

@@ -118,6 +118,9 @@ func (s *postgresSQLRunner) setProductionManifest(path string) error {
 	if err := decodePromotionEvidence(raw, &manifest); err != nil {
 		return fmt.Errorf("decode provisional promotion manifest: %w", err)
 	}
+	if manifest.Candidate == string(optimize.ShortestPathExecutorI2GuardedDistance) || manifest.SelectorVersion == optimize.ShortestPathSelectorStaticV8HiddenFanIn {
+		return fmt.Errorf("SP-I2 V1 selector-v8 production activation is terminally rejected")
+	}
 	if manifest.Version != promotionManifestVersion || manifest.ExecutionBoundary != "guarded_dual_arm" || strings.TrimSpace(manifest.SelectorVersion) == "" {
 		return fmt.Errorf("provisional manifest must be version 2 with a selector and guarded_dual_arm boundary")
 	}
@@ -1020,6 +1023,7 @@ func timedRuntimeAttestationIdentity(translation translate.Result) string {
 		requested == string(optimize.ShortestPathExecutorS4CanonicalWitness) ||
 		requested == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) ||
 		requested == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
+		isV2GraphBenchExecutor(requested) ||
 		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
 		isOrientationProbePolicy(outcome.EmittedPolicy) ||
 		isSuffixReverseGuardPolicy(outcome.EmittedPolicy) {

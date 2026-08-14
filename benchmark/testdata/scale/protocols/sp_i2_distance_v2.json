@@ -1,0 +1,99 @@
+{
+  "schema": "sp-i2-tail-protocol-v2",
+  "generation": "sp-i2-distance-v2",
+  "status": "preregistration_declaration",
+  "production_default": "off",
+  "identities": {
+    "executor": "SP-I2-C-D-V2",
+    "policy": "sp-i2-distance-guarded-v2",
+    "selector": "sp-static-v9-hidden-fanin-tail",
+    "fallback_executor": "SP-S4-C-D",
+    "fallback_internal_executor": "SP-S3-U-E+MAT-M0",
+    "training_tag": "sp-i2-distance-v2-training",
+    "holdout_tag": "sp-i2-distance-v2-holdout",
+    "development_tag": "sp-i2-distance-v2-development",
+    "qualification_schema": "sp-i2-tail-qualification-v2",
+    "freeze_schema": "sp-i2-tail-freeze-v2",
+    "aa_schema": "sp-i2-tail-aa-v2",
+    "promotion_manifest_schema": 3,
+    "rollback_switch": "DisableInlineSPDistance",
+    "statistical_implementation": "sp-i2-hier-bootstrap-v2/chacha8-sha256"
+  },
+  "development_executors": [
+    "SP-I2-C-D-V2-E0",
+    "SP-I2-C-D-V2-E1",
+    "SP-I2-C-D-V2-E1D",
+    "SP-I2-C-D-V2-E1P",
+    "SP-I2-C-D-V2-E1DP"
+  ],
+  "selected_architecture": "E1",
+  "limits": {
+    "state_rows": 100000,
+    "frontier_rows": 100000,
+    "maximum_depth": 64,
+    "minimum_depth": 1
+  },
+  "design": {
+    "seed": 1,
+    "confidence_level": 0.975,
+    "bootstrap_replicates": 100000,
+    "rounds": 40,
+    "ordinary_warmups": 25,
+    "attested_stabilizations": 1,
+    "timed_samples_per_round": 100,
+    "pool_size": 1,
+    "isolation": "repeatable_read",
+    "arm_order": "odd_a_then_b_even_b_then_a"
+  },
+  "gates": {
+    "target_median_ratio_upper": 0.95,
+    "target_median_saving_lower_us": 100,
+    "control_median_ratio_upper": 1.10,
+    "control_median_overhead_upper_us": 100,
+    "p95_ratio_upper": 1.05,
+    "control_p95_overhead_upper_us": 100,
+    "aa_equivalence_ratio": 1.05,
+    "aa_first_position_ratio_upper": 1.10,
+    "aa_first_position_overhead_upper_us": 100,
+    "session_first_p95_ratio_upper": 1.25,
+    "session_first_p95_overhead_upper_us": 250
+  },
+  "operational_design": {
+    "blocks": 40,
+    "fresh_sessions_per_arm_case_block": 25,
+    "samples_per_arm_case": 1000,
+    "plan_cache_mode": "auto"
+  },
+  "bootstrap": {
+    "domain": "sp-i2-tail-bootstrap-v2",
+    "case_order": ["dataset", "case"],
+    "ratio_scale": "log",
+    "lower_percentile": 0.0125,
+    "upper_percentile": 0.9875,
+    "quantile": "nearest_rank",
+    "round_resampling": "paired",
+    "within_round_resampling": "independent_by_arm"
+  },
+  "host_admission": {
+    "sequence": ["S4/S4", "V2/V2", "S4/V2"],
+    "maximum_s4_remediations": 1,
+    "candidate_epoch_locked_on_first_invocation": true,
+    "machine_thresholds": {
+      "runner_process_overlap_count": 0,
+      "thermal_throttle_events": 0,
+      "maximum_steal_time_percent": 1.0,
+      "cpu_governor": "performance",
+      "postgresql_session_settings": "exact_match"
+    },
+    "remediable_causes": [
+      "postgresql_or_session_setting_mismatch",
+      "runner_process_overlap",
+      "cpu_governor_violation",
+      "thermal_throttle_violation",
+      "steal_time_violation"
+    ]
+  },
+  "multiplicity_rule": "intersection_union_all_cases_must_pass",
+  "v1_evidence_reuse": false,
+  "holdout_authorization_required_before_database_setup": true
+}

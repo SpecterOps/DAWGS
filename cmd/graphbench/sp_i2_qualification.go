@@ -1710,6 +1710,9 @@ func createSPI2QualificationReport(
 	baselinePath, candidatePath, resourcePath, freezePath, discoveryPath, freezeOutputPath, outputPath string,
 	options SPI2QualificationOptions,
 ) (bool, error) {
+	if freezeOutputPath != "" {
+		return false, fmt.Errorf("SP-I2 V1 is terminally rejected and cannot create a new freeze")
+	}
 	if err := validateDistinctSPI2Paths(map[string]string{
 		"baseline artifact": baselinePath, "candidate artifact": candidatePath, "resource report": resourcePath,
 		"freeze manifest": freezePath, "discovery report": discoveryPath, "freeze output": freezeOutputPath, "report output": outputPath,
@@ -1806,6 +1809,9 @@ func validateSPI2HoldoutCapture(
 	corpus ScaleCorpus,
 	freezePath, discoveryPath, trainingBaselinePath, trainingCandidatePath, trainingResourcePath string,
 ) error {
+	if spI2V1TerminallyRejected() {
+		return fmt.Errorf("SP-I2 V1 is terminally rejected and cannot authorize holdout capture")
+	}
 	cohort, err := canonicalSPI2Cohort()
 	if err != nil {
 		return err
@@ -1838,6 +1844,11 @@ func validateSPI2HoldoutCapture(
 	}
 	return nil
 }
+
+// spI2V1TerminallyRejected is a function rather than a mutable switch so
+// archived verification code remains compilable without exposing an activation
+// seam that production or tooling could override.
+func spI2V1TerminallyRejected() bool { return true }
 
 // validateSPI2FrozenTrainingEvidence reloads and recomputes the exact training
 // closure named by the freeze. This prevents an internally consistent but

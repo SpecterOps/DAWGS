@@ -210,6 +210,10 @@ const (
 	// distance discovery with independent state/frontier gates and S4 fallback.
 	ShortestPathPolicyI2DistanceGuardedV1 = "sp-i2-distance-guarded-v1"
 
+	// ShortestPathPolicyI2DistanceGuardedV2 identifies the independently
+	// qualified tail-stabilized generation. It does not alias V1 evidence.
+	ShortestPathPolicyI2DistanceGuardedV2 = "sp-i2-distance-guarded-v2"
+
 	// ShortestPathI2QualifiedStateLimit is the immutable total-state ceiling
 	// preregistered by the SP-I2 production-form protocol and policy seam.
 	ShortestPathI2QualifiedStateLimit int64 = 100_000
@@ -231,6 +235,10 @@ const (
 	// ShortestPathSelectorStaticV8HiddenFanIn identifies the exact-bucket,
 	// evidence-gated distance canary for asymmetric physical topology.
 	ShortestPathSelectorStaticV8HiddenFanIn = "sp-static-v8-hidden-fanin"
+
+	// ShortestPathSelectorStaticV9HiddenFanInTail is the default-off V2
+	// selector identity. Production activation requires a V2 manifest.
+	ShortestPathSelectorStaticV9HiddenFanInTail = "sp-static-v9-hidden-fanin-tail"
 
 	// ShortestPathExecutorIncumbentWorkspace selects the existing workspace-table executor.
 	ShortestPathExecutorIncumbentWorkspace ShortestPathExecutor = "SP-S0"
@@ -267,6 +275,18 @@ const (
 	// ShortestPathExecutorI2GuardedDistance selects reverse-physical inline
 	// distance discovery with exact compact S4 fallback.
 	ShortestPathExecutorI2GuardedDistance ShortestPathExecutor = "SP-I2-C-D"
+
+	// ShortestPathExecutorI2GuardedDistanceV2 selects the E1 V2 statement with
+	// a single materialized admission decision and exact compact-S4 fallback.
+	ShortestPathExecutorI2GuardedDistanceV2 ShortestPathExecutor = "SP-I2-C-D-V2"
+
+	// Development identities are non-promotional and remain distinguishable in
+	// diagnostic artifacts. Only E1 is emitted by the switch-free V2 builder.
+	ShortestPathExecutorI2GuardedDistanceV2E0   ShortestPathExecutor = "SP-I2-C-D-V2-E0"
+	ShortestPathExecutorI2GuardedDistanceV2E1   ShortestPathExecutor = "SP-I2-C-D-V2-E1"
+	ShortestPathExecutorI2GuardedDistanceV2E1D  ShortestPathExecutor = "SP-I2-C-D-V2-E1D"
+	ShortestPathExecutorI2GuardedDistanceV2E1P  ShortestPathExecutor = "SP-I2-C-D-V2-E1P"
+	ShortestPathExecutorI2GuardedDistanceV2E1DP ShortestPathExecutor = "SP-I2-C-D-V2-E1DP"
 
 	// ShortestPathExecutorI1CanonicalWitness selects inline recursive SQL with
 	// ordered edge-ID witness state and late M0 path materialization.
@@ -332,6 +352,12 @@ func (s ShortestPathExecutor) Scheduler() ShortestPathScheduler {
 		ShortestPathExecutorASPA1DAG,
 		ShortestPathExecutorI1CanonicalDistance,
 		ShortestPathExecutorI2GuardedDistance,
+		ShortestPathExecutorI2GuardedDistanceV2,
+		ShortestPathExecutorI2GuardedDistanceV2E0,
+		ShortestPathExecutorI2GuardedDistanceV2E1,
+		ShortestPathExecutorI2GuardedDistanceV2E1D,
+		ShortestPathExecutorI2GuardedDistanceV2E1P,
+		ShortestPathExecutorI2GuardedDistanceV2E1DP,
 		ShortestPathExecutorI1CanonicalWitness,
 		ShortestPathExecutorI1CanonicalPredecessorWitness,
 		ShortestPathExecutorASPI1DAG:
@@ -357,6 +383,12 @@ func (s ShortestPathExecutor) ExecutionBoundary() string {
 		ShortestPathExecutorS3EdgeM0,
 		ShortestPathExecutorI1CanonicalDistance,
 		ShortestPathExecutorI2GuardedDistance,
+		ShortestPathExecutorI2GuardedDistanceV2,
+		ShortestPathExecutorI2GuardedDistanceV2E0,
+		ShortestPathExecutorI2GuardedDistanceV2E1,
+		ShortestPathExecutorI2GuardedDistanceV2E1D,
+		ShortestPathExecutorI2GuardedDistanceV2E1P,
+		ShortestPathExecutorI2GuardedDistanceV2E1DP,
 		ShortestPathExecutorI1CanonicalWitness,
 		ShortestPathExecutorI1CanonicalPredecessorWitness,
 		ShortestPathExecutorASPI1DAG:

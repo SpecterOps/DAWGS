@@ -213,6 +213,10 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 				traversalStepQuery, err = expansion.BuildShortestDistanceRoot()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
 				traversalStepQuery, err = expansion.BuildInlineGuardedShortestDistanceRoot()
+			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1 {
+				traversalStepQuery, err = expansion.buildInlineGuardedShortestDistanceRoot(traversalStep.Expansion.ShortestPathExecutor, true)
+			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2E0 {
+				traversalStepQuery, err = expansion.buildInlineGuardedShortestDistanceRoot(traversalStep.Expansion.ShortestPathExecutor, false)
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalWitness {
 				traversalStepQuery, err = expansion.BuildShortestPathEdgeM0Root()
 			} else if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
@@ -234,7 +238,7 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 			if err != nil {
 				return err
 			}
-			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalDistance || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalWitness || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || compactShortestExecutor(traversalStep.Expansion.ShortestPathExecutor) || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct ||
+			if traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3Unidirectional || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalDistance || isGuardedDistanceExecutor(traversalStep.Expansion.ShortestPathExecutor) || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalWitness || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || compactShortestExecutor(traversalStep.Expansion.ShortestPathExecutor) || traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorS0Direct ||
 				(traversalStep.Expansion.ShortestPathExecutor == optimize.ShortestPathExecutorIncumbentWorkspace && decisionIsForcedShortest(s, traversalStep.Expansion.ShortestPathTarget)) {
 				s.recordShortestPathExecutor(traversalStep.Expansion.ShortestPathTarget, traversalStep.Expansion.ShortestPathExecutor)
 			}

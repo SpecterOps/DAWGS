@@ -18,7 +18,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,7 +77,7 @@ func TestPostgresProductionManifestBuildsExactGuardedOptions(t *testing.T) {
 	require.ErrorContains(t, err, "absent from the provisional production manifest")
 }
 
-func TestPostgresProductionManifestBuildsGuardedDistanceOptions(t *testing.T) {
+func TestPostgresProductionManifestRejectsV1GuardedDistanceActivation(t *testing.T) {
 	query := "MATCH p = shortestPath((s)<-[:Traverse*1..32]-(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN length(p)"
 	digest := strings.Repeat("0", 64)
 	manifest := PromotionManifest{
@@ -98,36 +97,7 @@ func TestPostgresProductionManifestBuildsGuardedDistanceOptions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "manifest.json")
 	require.NoError(t, os.WriteFile(path, raw, 0o600))
 	runner := &postgresSQLRunner{}
-	require.NoError(t, runner.setProductionManifest(path))
-	options, err := runner.productionOptions(query)
-	require.NoError(t, err)
-	require.Equal(t, optimize.ShortestPathExecutorI2GuardedDistance, options.ShortestPathExecutor)
-	require.Equal(t, optimize.ShortestPathI2QualifiedStateLimit, options.ShortestPathCaps.StateLimit)
-	require.Equal(t, optimize.ShortestPathI2QualifiedFrontierLimit, options.ShortestPathCaps.FrontierLimit)
-
-	for name, test := range map[string]struct {
-		capName string
-		value   int64
-	}{
-		"non-qualified state cap":    {capName: "state_limit", value: 1000},
-		"non-qualified frontier cap": {capName: "frontier_limit", value: 100},
-	} {
-		t.Run(name, func(t *testing.T) {
-			invalid := manifest
-			invalid.Caps = clonePromotionCaps(manifest.Caps)
-			invalid.Caps[test.capName] = test.value
-			raw, err := json.Marshal(invalid)
-			require.NoError(t, err)
-			path := filepath.Join(t.TempDir(), "manifest.json")
-			require.NoError(t, os.WriteFile(path, raw, 0o600))
-			err = (&postgresSQLRunner{}).setProductionManifest(path)
-			require.ErrorContains(t, err, fmt.Sprintf(
-				"SP-I2 distance candidate cap %s must equal %d",
-				test.capName,
-				spI2PromotionCaps()[test.capName],
-			))
-		})
-	}
+	require.ErrorContains(t, runner.setProductionManifest(path), "terminally rejected")
 }
 
 // TestPostgresProductionManifestRequiresStaticV6CanonicalInboundBucket verifies postgres production manifest requires static v6 canonical inbound bucket behavior.

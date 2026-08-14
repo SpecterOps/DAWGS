@@ -329,6 +329,10 @@ func guardedInlineResourceContractForArchitecture(architecture string) (guardedI
 		}, true
 	case string(optimize.ShortestPathExecutorI2GuardedDistance):
 		return guardedInlineResourceContract{architecture: architecture, family: "SP", telemetryFamily: TraversalTelemetryFamilySP, policy: optimize.ShortestPathPolicyI2DistanceGuardedV1, namespace: "inline_shortest_distance", label: "inline SP distance"}, true
+	case string(optimize.ShortestPathExecutorI2GuardedDistanceV2),
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E0),
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1):
+		return guardedInlineResourceContract{architecture: architecture, family: "SP", telemetryFamily: TraversalTelemetryFamilySP, policy: optimize.ShortestPathPolicyI2DistanceGuardedV2, namespace: "inline_shortest_distance", label: "inline SP distance V2"}, true
 	default:
 		return guardedInlineResourceContract{}, false
 	}
@@ -336,7 +340,7 @@ func guardedInlineResourceContractForArchitecture(architecture string) (guardedI
 
 // guardedInlineResourcePolicy supports benchmark evidence processing for guarded inline resource policy.
 func guardedInlineResourcePolicy(policy string) bool {
-	return policy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 || policy == optimize.ShortestPathPolicyASPI1GuardedV1 || policy == optimize.ShortestPathPolicyI2DistanceGuardedV1
+	return policy == optimize.ShortestPathPolicyI1CanonicalGuardedV1 || policy == optimize.ShortestPathPolicyASPI1GuardedV1 || policy == optimize.ShortestPathPolicyI2DistanceGuardedV1 || policy == optimize.ShortestPathPolicyI2DistanceGuardedV2
 }
 
 // appendGuardedInlineResourceBindingReasons prevents an unguarded comparator
@@ -622,6 +626,9 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 		"sp_i2_candidate_branch_rows", "sp_i2_fallback_branch_rows",
 		"sp_i2_candidate_executor_loops", "sp_i2_fallback_executor_loops",
 	}
+	if telemetry.Summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
+		required = append(required, "sp_i2_admission_rows", "sp_i2_admission_loops")
+	}
 	for _, name := range required {
 		if _, found := plan[name]; !found {
 			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance execution is missing exact plan counter "+name)
@@ -656,6 +663,14 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 		"sp_i2_fallback_branch_rows":     inline.FallbackBranchRows,
 		"sp_i2_candidate_executor_loops": inline.CandidateExecutorLoops,
 		"sp_i2_fallback_executor_loops":  inline.FallbackExecutorLoops,
+	}
+	if telemetry.Summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
+		typed["sp_i2_admission_rows"] = inline.AdmissionProbeRows
+		typed["sp_i2_admission_loops"] = inline.AdmissionProbeLoops
+		typed["sp_i2_target_rows"] = inline.TargetRows
+		if inline.FrontierGuardDominated == nil || inline.CapRelationship == "" || inline.ObservedOverflowReason == "" {
+			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance V2 admission telemetry is incomplete")
+		}
 	}
 	for name, value := range typed {
 		if value == nil || *value != plan[name] {
@@ -693,7 +708,11 @@ func appendInlineDistanceAttributionReasons(gateCase *ResourceGateCase, telemetr
 		if validCaps && (stateRows > stateLimit || stateRows > frontierLimit) {
 			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate selection exceeds its state or conservative frontier cap")
 		}
-		if summary.RuntimeIdentity != string(optimize.ShortestPathExecutorI2GuardedDistance) || summary.RuntimeBranch != expectedBranch || *summary.FallbackExecuted || *summary.Overflow {
+		expectedIdentity := string(optimize.ShortestPathExecutorI2GuardedDistance)
+		if summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2 {
+			expectedIdentity = summary.RequestedIdentity
+		}
+		if summary.RuntimeIdentity != expectedIdentity || summary.RuntimeBranch != expectedBranch || *summary.FallbackExecuted || *summary.Overflow {
 			gateCase.Reasons = append(gateCase.Reasons, "inline SP distance candidate marker contradicts the runtime receipt")
 		}
 	}

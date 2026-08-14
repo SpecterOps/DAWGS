@@ -37,6 +37,13 @@ const (
 // independent total-state and per-level frontier gates pass; overflow invokes
 // exact compact S4 in the same top-level statement.
 func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRoot() (pgsql.Query, error) {
+	return s.buildInlineGuardedShortestDistanceRoot(optimize.ShortestPathExecutorI2GuardedDistance, false)
+}
+
+// buildInlineGuardedShortestDistanceRoot retains the byte-stable V1 rendering
+// when consolidatedAdmission is false. V2 uses the same proven recursive and
+// fallback semantics while replacing only admission/target orchestration.
+func (s *ExpansionBuilder) buildInlineGuardedShortestDistanceRoot(runtimeIdentity optimize.ShortestPathExecutor, consolidatedAdmission bool) (pgsql.Query, error) {
 	const validatedEndpoints pgsql.Identifier = "singleton_endpoints"
 
 	expansionModel := s.traversalStep.Expansion
@@ -130,7 +137,7 @@ func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRoot() (pgsql.Query
 		spI2DistanceBounded, spI2Distance, []pgsql.Identifier{spI2NodeID, expansionDepth}, expansionModel.ShortestPathStateLimit,
 	)
 	stateOverflow := boundedProbeOverflow(spI2DistanceBounded, expansionModel.ShortestPathStateLimit)
-	frontierOverflow := pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
+	var frontierOverflow pgsql.Expression = pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{Body: pgsql.Select{
 		Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
 		From:       []pgsql.FromClause{tableFrom(spI2DistanceBounded)},
 		GroupBy:    []pgsql.Expression{pgsql.CompoundIdentifier{spI2DistanceBounded, expansionDepth}},
@@ -140,24 +147,14 @@ func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRoot() (pgsql.Query
 			pgsql.NewLiteral(expansionModel.ShortestPathFrontierLimit, pgsql.Int8),
 		),
 	}, Limit: pgsql.NewLiteral(int64(1), pgsql.Int8)}}}
-	overflow := aspI1OverflowAny(stateOverflow, frontierOverflow)
-
-	target := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: spI2Target, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth})},
-		Materialized: &pgsql.Materialized{Materialized: true},
-		Query: pgsql.Query{
-			Body: pgsql.Select{
-				Projection: pgsql.Projection{pgsql.CompoundIdentifier{spI2DistanceBounded, expansionDepth}},
-				From:       []pgsql.FromClause{tableFrom(spI2DistanceBounded)},
-				Where: pgsql.OptionalAnd(
-					pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{spI2DistanceBounded, spI2NodeID}, pgsql.OperatorEquals, targetRoot),
-					pgd.Not(pgsql.NewParenthetical(overflow)),
-				),
-			},
-			OrderBy: []*pgsql.OrderBy{{Expression: pgsql.CompoundIdentifier{spI2DistanceBounded, expansionDepth}, Ascending: true}},
-			Limit:   pgsql.NewLiteral(int64(1), pgsql.Int8),
-		},
+	frontierGuardDominated := consolidatedAdmission && expansionModel.ShortestPathFrontierLimit >= expansionModel.ShortestPathStateLimit
+	if frontierGuardDominated {
+		// Every frontier row is also a state row. When the frontier cap is at
+		// least the state cap, state admission strictly dominates the frontier
+		// check and the depth aggregate is redundant.
+		frontierOverflow = pgsql.NewLiteral(false, pgsql.Boolean)
 	}
+	overflow := aspI1OverflowAny(stateOverflow, frontierOverflow)
 
 	admission := pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: spI2Admission},
@@ -166,7 +163,42 @@ func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRoot() (pgsql.Query
 			aspI1Aliased(overflow, spI2Overflow),
 		}}},
 	}
+	if consolidatedAdmission {
+		admission.Query.Body = pgsql.Select{Projection: pgsql.Projection{
+			aspI1Aliased(overflow, spI2Overflow),
+			aspI1Aliased(pgsql.NewLiteral(frontierGuardDominated, pgsql.Boolean), pgsql.Identifier("frontier_guard_dominated")),
+			aspI1Aliased(pgsql.NewLiteral(expansionModel.ShortestPathStateLimit, pgsql.Int8), pgsql.Identifier("state_limit")),
+			aspI1Aliased(pgsql.NewLiteral(expansionModel.ShortestPathFrontierLimit, pgsql.Int8), pgsql.Identifier("frontier_limit")),
+		}}
+	}
 	admissionOverflow := pgsql.CompoundIdentifier{spI2Admission, spI2Overflow}
+
+	targetWhere := pgsql.OptionalAnd(
+		pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{spI2DistanceBounded, spI2NodeID}, pgsql.OperatorEquals, targetRoot),
+		pgd.Not(pgsql.NewParenthetical(overflow)),
+	)
+	targetFrom := []pgsql.FromClause{tableFrom(spI2DistanceBounded)}
+	if consolidatedAdmission {
+		targetWhere = pgsql.OptionalAnd(
+			pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{spI2DistanceBounded, spI2NodeID}, pgsql.OperatorEquals, targetRoot),
+			pgd.Not(admissionOverflow),
+		)
+		targetFrom = append(targetFrom, tableFrom(spI2Admission))
+	}
+	target := pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: spI2Target, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionDepth})},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{pgsql.CompoundIdentifier{spI2DistanceBounded, expansionDepth}},
+				From:       targetFrom,
+				Where:      targetWhere,
+			},
+			OrderBy: []*pgsql.OrderBy{{Expression: pgsql.CompoundIdentifier{spI2DistanceBounded, expansionDepth}, Ascending: true}},
+			Limit:   pgsql.NewLiteral(int64(1), pgsql.Int8),
+		},
+	}
+
 	noPath := pgd.Not(pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{
 		Body:  pgsql.Select{Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)}, From: []pgsql.FromClause{tableFrom(spI2Target)}},
 		Limit: pgsql.NewLiteral(int64(1), pgsql.Int8),
@@ -182,7 +214,7 @@ func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRoot() (pgsql.Query
 	runtimeExecutor := pgsql.Case{
 		Conditions: []pgsql.Expression{admissionOverflow},
 		Then:       []pgsql.Expression{pgsql.NewLiteral(string(optimize.ShortestPathExecutorS4CanonicalDistance), pgsql.Text)},
-		Else:       pgsql.NewLiteral(string(optimize.ShortestPathExecutorI2GuardedDistance), pgsql.Text),
+		Else:       pgsql.NewLiteral(string(runtimeIdentity), pgsql.Text),
 	}
 	decision := pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: spI2Decision},
@@ -295,8 +327,13 @@ func (s *ExpansionBuilder) BuildInlineGuardedShortestDistanceRoot() (pgsql.Query
 	query.AddCTE(endpointCTE)
 	query.AddCTE(distance)
 	query.AddCTE(distanceBounded)
-	query.AddCTE(target)
-	query.AddCTE(admission)
+	if consolidatedAdmission {
+		query.AddCTE(admission)
+		query.AddCTE(target)
+	} else {
+		query.AddCTE(target)
+		query.AddCTE(admission)
+	}
 	query.AddCTE(decision)
 	query.AddCTE(marker(spI2CandidateMarker, spI2UseCandidate))
 	query.AddCTE(marker(spI2FallbackMarker, spI2UseFallback))

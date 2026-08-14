@@ -5,6 +5,7 @@ package translate
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -41,6 +42,45 @@ func TestGuardedDistanceToolCapsDriveBothAdmissionSentinels(t *testing.T) {
 	require.Contains(t, formatted, "offset 10 limit 1")
 	require.Contains(t, formatted, "having count(*)::int8 > 10")
 	require.Contains(t, formatted, "shortest_path_compact(")
+}
+
+func TestGuardedDistanceV2ConsolidatesAdmissionAndDominatesEqualFrontierCap(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), guardedDistanceToolQuery)
+	require.NoError(t, err)
+	translation, err := TranslateForTool(context.Background(), query, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor:    optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		GuardedDistanceStateLimit:    10,
+		GuardedDistanceFrontierLimit: 10,
+	})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.NotContains(t, formatted, "group by sp_i2_distance_bounded.depth")
+	require.Contains(t, formatted, "true as frontier_guard_dominated")
+	require.Less(t, strings.Index(formatted, "sp_i2_admission as materialized"), strings.Index(formatted, "sp_i2_target(depth) as materialized"))
+	require.Contains(t, formatted, "else 'SP-I2-C-D-V2' end")
+}
+
+func TestGuardedDistanceV2RetainsOneIndependentFrontierCheckForUnequalCaps(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), guardedDistanceToolQuery)
+	require.NoError(t, err)
+	translation, err := TranslateForTool(context.Background(), query, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{
+		ForceShortestPathExecutor:    optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
+		GuardedDistanceStateLimit:    20,
+		GuardedDistanceFrontierLimit: 10,
+	})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(formatted, "group by sp_i2_distance_bounded.depth"))
+	require.Contains(t, formatted, "false as frontier_guard_dominated")
+	require.Contains(t, formatted, "limit 21")
+	require.Contains(t, formatted, "having count(*)::int8 > 10")
+	require.Contains(t, formatted, "else 'SP-I2-C-D-V2-E1' end")
 }
 
 // TestGuardedDistanceToolCapsAreIsolated rejects partial, negative, and

@@ -1124,10 +1124,28 @@ replay exposes candidate/fallback markers and inactive-arm loop counts under
 the `inline_shortest_distance` namespace. Production evidence and activation
 must use the preregistered production-form `state_limit=100000` and
 `frontier_limit=100000` values; these immutable protocol inputs are not yet
-qualified. The dirty-tree rehearsal stopped before a discovery report or freeze,
-its cycle-control point estimates missed the frozen bounds, and no protected
-holdout was opened. Smaller forced caps remain available only for diagnostic
-overflow and fallback exercises.
+qualified. V1 is now terminally rejected: selector-v8 production admission,
+new V1 freezes, and V1 holdout authorization fail closed. Forced V1 execution
+remains available only for diagnostics and verification of archived evidence.
+The machine-readable rejection is
+`benchmark/testdata/scale/protocols/sp_i2_distance_v1_rejection.json`.
+
+`SP-I2-C-D-V2` is the independent, default-off E1 successor. It emits policy
+`sp-i2-distance-guarded-v2` and selector identity
+`sp-static-v9-hidden-fanin-tail`. Its materialized admission decision executes
+before target selection. When `frontier_limit >= state_limit` (including the
+production `100000/100000` contract), total-state admission dominates frontier
+admission and the SQL contains no depth aggregate. Unequal diagnostic caps
+retain exactly one frontier aggregate. `SP-I2-C-D-V2-E0` and
+`SP-I2-C-D-V2-E1` are non-promotional development identities. GraphBench
+requires `-sp-i2-generation sp-i2-distance-v2` whenever one is forced.
+
+The authoritative logical declaration is
+`benchmark/testdata/scale/protocols/sp_i2_distance_v2.json`. It fixes 40
+rounds, 25 ordinary warmups, one excluded receipt-bearing stabilization, 100
+timed samples, 100,000 deterministic hierarchical bootstrap draws, and the
+unchanged 97.5% confidence and p95 gates. The stabilization receipt is stored
+separately from latency samples and timed iteration one is retained.
 
 ### Frozen canonical-I1 qualification
 
@@ -1292,6 +1310,10 @@ selector; a passing report is input to later canary, rollback, and promotion
 closure.
 
 ### Frozen SP-I2 distance qualification
+
+The commands below document the archived V1 workflow. They cannot create a
+new freeze or authorize a holdout; all V1 evidence use must explicitly pass
+`-sp-i2-generation sp-i2-distance-v1` and is verification-only.
 
 The `sp-i2-distance-v1` study compares exact forced `SP-S4-C-D` with guarded
 forced `SP-I2-C-D`. Its sealed cohort contains six training cases at fixture

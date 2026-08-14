@@ -66,6 +66,20 @@ type DurationStats struct {
 	Max time.Duration `json:"max"`
 	// Samples contains the individual measurements.
 	Samples []LatencySample `json:"samples,omitempty"`
+	// ReceiptStabilization records the single excluded receipt-bearing
+	// invocation immediately preceding timed iteration one.
+	ReceiptStabilization *RuntimeStabilizationReceipt `json:"receipt_stabilization,omitempty"`
+}
+
+// RuntimeStabilizationReceipt preserves the identity and event chain of the
+// excluded pre-timing invocation without inserting its latency into Samples.
+type RuntimeStabilizationReceipt struct {
+	InvocationID      string                `json:"invocation_id"`
+	RequestedIdentity string                `json:"requested_identity"`
+	RuntimeIdentity   string                `json:"runtime_identity"`
+	RuntimeBranch     string                `json:"runtime_branch"`
+	FallbackExecuted  *bool                 `json:"fallback_executed"`
+	Events            []RuntimeReceiptEvent `json:"events"`
 }
 
 // RuntimeReceiptEvent records one ordered executor transition observed during

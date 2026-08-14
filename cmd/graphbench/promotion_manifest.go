@@ -104,6 +104,8 @@ type PromotionManifest struct {
 	Version int `json:"version"`
 	// Candidate identifies the execution strategy being evaluated or authorized.
 	Candidate string `json:"candidate"`
+	// Policy binds the emitted policy generation independently of executor and selector.
+	Policy string `json:"policy,omitempty"`
 	// SelectorVersion identifies the schema version for selector version.
 	SelectorVersion string `json:"selector_version"`
 	// ExecutionBoundary supplies the execution boundary input to the PromotionManifest contract.
@@ -135,6 +137,8 @@ type PromotionManifest struct {
 type PromotionEvidenceIdentity struct {
 	// Candidate identifies the execution strategy being evaluated or authorized.
 	Candidate string `json:"candidate"`
+	// Policy binds the emitted policy generation independently of executor and selector.
+	Policy string `json:"policy,omitempty"`
 	// SelectorVersion identifies the schema version for selector version.
 	SelectorVersion string `json:"selector_version"`
 	// ExecutionBoundary supplies the execution boundary input to the PromotionEvidenceIdentity contract.
@@ -162,6 +166,7 @@ type PromotionEvidenceIdentity struct {
 func promotionEvidenceIdentity(manifest PromotionManifest) PromotionEvidenceIdentity {
 	return PromotionEvidenceIdentity{
 		Candidate:                     manifest.Candidate,
+		Policy:                        manifest.Policy,
 		SelectorVersion:               manifest.SelectorVersion,
 		ExecutionBoundary:             manifest.ExecutionBoundary,
 		FallbackExecutor:              manifest.FallbackExecutor,

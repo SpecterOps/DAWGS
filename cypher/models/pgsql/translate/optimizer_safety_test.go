@@ -849,8 +849,8 @@ func TestProductionGuardedDistanceEmitsReversePhysicalCandidateAndExactFallback(
 	translation, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"start_id": int64(1), "end_id": int64(2),
 	}, DefaultGraphID, ProductionOptions{
-		ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistance,
-		SelectorVersion:      optimize.ShortestPathSelectorStaticV8HiddenFanIn,
+		ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		SelectorVersion:      optimize.ShortestPathSelectorStaticV9HiddenFanInTail,
 		ShortestPathCaps: &ProductionShortestPathCaps{
 			StateLimit:    optimize.ShortestPathI2QualifiedStateLimit,
 			FrontierLimit: optimize.ShortestPathI2QualifiedFrontierLimit,
@@ -868,12 +868,13 @@ func TestProductionGuardedDistanceEmitsReversePhysicalCandidateAndExactFallback(
 	require.Contains(t, formatted, "shortest_path_compact(")
 	require.Contains(t, formatted, "sp_i2_candidate_marker")
 	require.Contains(t, formatted, "sp_i2_fallback_marker")
-	require.Contains(t, formatted, "group by sp_i2_distance_bounded.depth having count(*)::int8 > 100000")
+	require.NotContains(t, formatted, "group by sp_i2_distance_bounded.depth")
+	require.Contains(t, formatted, "true as frontier_guard_dominated")
 
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor, optimize.TraversalStepTarget{})
-	require.Equal(t, string(optimize.ShortestPathExecutorI2GuardedDistance), outcome.Applied)
-	require.Equal(t, optimize.ShortestPathPolicyI2DistanceGuardedV1, outcome.EmittedPolicy)
-	require.Equal(t, []string{string(optimize.ShortestPathExecutorI2GuardedDistance), string(optimize.ShortestPathExecutorS4CanonicalDistance)}, outcome.EmittedCandidates)
+	require.Equal(t, string(optimize.ShortestPathExecutorI2GuardedDistanceV2), outcome.Applied)
+	require.Equal(t, optimize.ShortestPathPolicyI2DistanceGuardedV2, outcome.EmittedPolicy)
+	require.Equal(t, []string{string(optimize.ShortestPathExecutorI2GuardedDistanceV2), string(optimize.ShortestPathExecutorS4CanonicalDistance)}, outcome.EmittedCandidates)
 	require.Equal(t, optimize.ShortestPathI2QualifiedStateLimit, outcome.StateLimit)
 	require.Equal(t, optimize.ShortestPathI2QualifiedFrontierLimit, outcome.FrontierLimit)
 	require.Zero(t, outcome.PredecessorLimit)
@@ -912,8 +913,8 @@ func TestProductionGuardedDistanceRejectsUnqualifiedCaps(t *testing.T) {
 			_, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 				"start_id": int64(1), "end_id": int64(2),
 			}, DefaultGraphID, ProductionOptions{
-				ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistance,
-				SelectorVersion:      optimize.ShortestPathSelectorStaticV8HiddenFanIn,
+				ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistanceV2,
+				SelectorVersion:      optimize.ShortestPathSelectorStaticV9HiddenFanInTail,
 				ShortestPathCaps:     &test.caps,
 				AuthorizedBucket: &ProductionTraversalBucket{
 					Direction: "inbound", ObservationMode: "distance", MinimumDepth: 1, MaximumDepth: 32, RelationshipKindCount: 1,
@@ -922,6 +923,18 @@ func TestProductionGuardedDistanceRejectsUnqualifiedCaps(t *testing.T) {
 			require.ErrorContains(t, err, "requires exactly state_limit=100000 and frontier_limit=100000")
 		})
 	}
+}
+
+func TestProductionGuardedDistanceV1IsTerminallyRejected(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedDistanceToolQuery)
+	require.NoError(t, err)
+	_, err = TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ProductionOptions{
+		ShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistance,
+		SelectorVersion:      optimize.ShortestPathSelectorStaticV8HiddenFanIn,
+	})
+	require.ErrorContains(t, err, "not production-canary eligible")
 }
 
 // TestProductionCanonicalSPRequiresExactStaticV6Envelope verifies production canonical sp requires exact static v6 envelope behavior.
