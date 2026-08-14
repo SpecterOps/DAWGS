@@ -19,374 +19,865 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
-	"strings"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/ops"
-	"github.com/specterops/dawgs/query"
-	"github.com/specterops/dawgs/retriever"
+	"github.com/specterops/dawgs/ret"
+	"github.com/specterops/dawgs/ret/archive"
+	"github.com/specterops/dawgs/ret/collection"
+	"github.com/specterops/dawgs/ret/dawgs"
+	"github.com/specterops/dawgs/ret/entity"
+	"github.com/specterops/dawgs/ret/jsonl"
+	"github.com/specterops/dawgs/ret/observe"
+	"github.com/specterops/dawgs/ret/parquet"
+	"github.com/specterops/dawgs/ret/scrub"
 )
 
-func TestDumpLoadRoundTrip(t *testing.T) {
+func TestRetFacadeCollectionMatrix(t *testing.T) {
+	for _, testCase := range []struct {
+		name     string
+		jsonl    *jsonl.Config
+		parquet  *parquet.Config
+		loadable bool
+	}{
+		{
+			name:     "jsonl",
+			jsonl:    &jsonl.Config{Codec: jsonl.CodecZstd},
+			loadable: true,
+		},
+		{
+			name:     "parquet",
+			parquet:  &parquet.Config{},
+			loadable: false,
+		},
+		{
+			name:     "dual",
+			jsonl:    &jsonl.Config{Codec: jsonl.CodecZstd},
+			parquet:  &parquet.Config{},
+			loadable: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			harness := newRetIntegrationHarness(t)
+			fixture := harness.seedStandardGraph(t)
+			config := harness.dumpConfig(fixture.name, testCase.jsonl, testCase.parquet)
+
+			dumpResult, err := ret.Dump(harness.ctx, harness.database, config)
+			if err != nil {
+				t.Fatalf("dump: %v", err)
+			}
+			assertOperationCounts(t, dumpResult.GraphCount, dumpResult.NodeCount, dumpResult.RelationshipCount, 1, 4, 3)
+
+			verifyResult, err := ret.VerifyCollection(harness.ctx, ret.VerifyCollectionConfig{Directory: config.Directory})
+			if err != nil {
+				t.Fatalf("verify collection: %v", err)
+			}
+			assertOperationCounts(t, verifyResult.GraphCount, verifyResult.NodeCount, verifyResult.RelationshipCount, 1, 4, 3)
+			assertConcreteOutputs(t, config.Directory, testCase.jsonl != nil, testCase.parquet != nil)
+			assertArchiveRoundTrip(t, config.Directory)
+			if testCase.jsonl != nil && testCase.parquet != nil {
+				damageFirstParquetArtifact(t, config.Directory)
+			}
+
+			before := harness.snapshot(t, fixture.name)
+			loadResult, err := ret.Load(harness.ctx, harness.database, ret.LoadConfig{
+				Directory: config.Directory,
+				BatchSize: 2,
+			})
+			if !testCase.loadable {
+				if !errors.Is(err, ret.ErrCollectionNotLoadable) {
+					t.Fatalf("load parquet-only collection error = %v, want %v", err, ret.ErrCollectionNotLoadable)
+				}
+				if after := harness.snapshot(t, fixture.name); after != before {
+					t.Fatalf("parquet-only load mutated target: before=%+v after=%+v", before, after)
+				}
+				return
+			}
+			if !errors.Is(err, ret.ErrNonEmptyTarget) {
+				t.Fatalf("load nonempty target error = %v, want %v", err, ret.ErrNonEmptyTarget)
+			}
+			if after := harness.snapshot(t, fixture.name); after != before {
+				t.Fatalf("nonempty-target rejection mutated target: before=%+v after=%+v", before, after)
+			}
+			harness.assertStandardGraph(t, fixture)
+
+			harness.clearGraph(t, fixture.name)
+			loadResult, err = ret.Load(harness.ctx, harness.database, ret.LoadConfig{
+				Directory: config.Directory,
+				BatchSize: 2,
+			})
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			assertOperationCounts(t, loadResult.GraphCount, loadResult.NodeCount, loadResult.RelationshipCount, 1, 4, 3)
+
+			databaseResult, err := ret.VerifyDatabase(harness.ctx, harness.database, ret.VerifyDatabaseConfig{
+				Directory: config.Directory,
+				BatchSize: 2,
+			})
+			if err != nil {
+				t.Fatalf("verify database: %v", err)
+			}
+			assertOperationCounts(t, databaseResult.GraphCount, databaseResult.NodeCount, databaseResult.RelationshipCount, 1, 4, 3)
+			harness.assertStandardGraph(t, fixture)
+		})
+	}
+}
+
+func TestRetFacadeDumpResume(t *testing.T) {
+	harness := newRetIntegrationHarness(t)
+	fixture := harness.seedStandardGraph(t)
+	config := harness.dumpConfig(
+		fixture.name,
+		&jsonl.Config{Codec: jsonl.CodecZstd},
+		&parquet.Config{},
+	)
+	config.ShardSize = 2
+
+	interruptedConfig, err := interruptDumpAfterFirstNodeShard(harness.ctx, harness.database, config)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("interrupted dump error = %v, want %v", err, context.Canceled)
+	}
+
+	interruptedConfig.Resume = true
+	result, err := ret.Dump(harness.ctx, harness.database, interruptedConfig)
+	if err != nil {
+		t.Fatalf("resume dump: %v", err)
+	}
+	assertOperationCounts(t, result.GraphCount, result.NodeCount, result.RelationshipCount, 1, 4, 3)
+	if _, err := ret.VerifyCollection(harness.ctx, ret.VerifyCollectionConfig{Directory: config.Directory}); err != nil {
+		t.Fatalf("verify resumed collection: %v", err)
+	}
+}
+
+func TestRetFacadeResumeRejectsChangedCounts(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*testing.T, *retIntegrationHarness, seededGraph)
+	}{
+		{name: "node total", mutate: mutateNodeTotal},
+		{name: "relationship total", mutate: mutateRelationshipTotal},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			harness := newRetIntegrationHarness(t)
+			fixture := harness.seedStandardGraph(t)
+			config := harness.dumpConfig(
+				fixture.name,
+				&jsonl.Config{Codec: jsonl.CodecZstd},
+				nil,
+			)
+			config.ShardSize = 2
+
+			interruptedConfig, err := interruptDumpAfterFirstNodeShard(harness.ctx, harness.database, config)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("interrupted dump error = %v, want %v", err, context.Canceled)
+			}
+			testCase.mutate(t, harness, fixture)
+
+			interruptedConfig.Resume = true
+			if _, err := ret.Dump(harness.ctx, harness.database, interruptedConfig); !errors.Is(err, ret.ErrSourceCountChanged) {
+				t.Fatalf("resume after %s change error = %v, want %v", testCase.name, err, ret.ErrSourceCountChanged)
+			}
+		})
+	}
+}
+
+func TestRetFacadeScrubbedDualOutput(t *testing.T) {
+	harness := newRetIntegrationHarness(t)
+	fixture := harness.seedScrubGraph(t)
+	scrubConfig := scrub.DefaultConfig()
+	scrubConfig.Salt = "ret-integration-salt"
+	config := harness.dumpConfig(
+		fixture.name,
+		&jsonl.Config{Codec: jsonl.CodecZstd},
+		&parquet.Config{},
+	)
+	config.Scrub = &scrubConfig
+
+	if _, err := ret.Dump(harness.ctx, harness.database, config); err != nil {
+		t.Fatalf("dump scrubbed collection: %v", err)
+	}
+	if _, err := ret.VerifyCollection(harness.ctx, ret.VerifyCollectionConfig{Directory: config.Directory}); err != nil {
+		t.Fatalf("verify scrubbed collection: %v", err)
+	}
+
+	artifacts := readConcreteArtifacts(t, config.Directory)
+	if !reflect.DeepEqual(normalizeNodes(t, artifacts.jsonlNodes), normalizeNodes(t, artifacts.parquetNodes)) {
+		t.Fatalf("JSONL and Parquet node values differ:\nJSONL: %#v\nParquet: %#v", artifacts.jsonlNodes, artifacts.parquetNodes)
+	}
+	if !reflect.DeepEqual(
+		normalizeRelationships(t, artifacts.jsonlRelationships),
+		normalizeRelationships(t, artifacts.parquetRelationships),
+	) {
+		t.Fatalf("JSONL and Parquet relationship values differ:\nJSONL: %#v\nParquet: %#v", artifacts.jsonlRelationships, artifacts.parquetRelationships)
+	}
+	assertScrubFixture(t, artifacts, fixture.kinds)
+
+	harness.clearGraph(t, fixture.name)
+	if _, err := ret.Load(harness.ctx, harness.database, ret.LoadConfig{
+		Directory: config.Directory,
+		BatchSize: 2,
+	}); err != nil {
+		t.Fatalf("load scrubbed JSONL: %v", err)
+	}
+	if _, err := ret.VerifyDatabase(harness.ctx, harness.database, ret.VerifyDatabaseConfig{
+		Directory: config.Directory,
+		BatchSize: 2,
+	}); err != nil {
+		t.Fatalf("verify scrubbed database: %v", err)
+	}
+	harness.assertScrubGraph(t, fixture, artifacts)
+}
+
+func assertArchiveRoundTrip(t *testing.T, collectionDirectory string) {
+	t.Helper()
+	t.Run("archive", func(t *testing.T) {
+		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+			t.Skip("ret archive publication is supported only on Linux and Darwin")
+		}
+
+		archivePath, unpackedDirectory, recipient, identity := newArchiveFixture(t)
+		if err := ret.Pack(context.Background(), ret.PackConfig{
+			CollectionDirectory: collectionDirectory,
+			ArchivePath:         archivePath,
+			Recipient:           recipient,
+		}); err != nil {
+			t.Fatalf("pack collection: %v", err)
+		}
+		if err := ret.Unpack(context.Background(), ret.UnpackConfig{
+			ArchivePath:     archivePath,
+			OutputDirectory: unpackedDirectory,
+			Identity:        identity,
+		}); err != nil {
+			t.Fatalf("unpack collection: %v", err)
+		}
+		if _, err := ret.VerifyCollection(context.Background(), ret.VerifyCollectionConfig{Directory: unpackedDirectory}); err != nil {
+			t.Fatalf("verify unpacked collection: %v", err)
+		}
+	})
+}
+
+var retIntegrationSequence atomic.Uint64
+
+type retIntegrationHarness struct {
+	ctx      context.Context
+	database graph.Database
+	root     string
+}
+
+type seededGraph struct {
+	name             string
+	nodeIDs          []graph.ID
+	nodeKinds        map[string][]string
+	nodeRoles        map[string]string
+	relationshipKind string
+	kinds            []string
+}
+
+type concreteArtifacts struct {
+	jsonlNodes             []entity.Node
+	parquetNodes           []entity.Node
+	jsonlRelationships     []entity.Relationship
+	parquetRelationships   []entity.Relationship
+	parquetRelationshipIDs []string
+	scrubCounts            scrub.ActionCounts
+	scrubMetadata          collection.ScrubMetadata
+}
+
+func newRetIntegrationHarness(t *testing.T) *retIntegrationHarness {
+	t.Helper()
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING not set")
 	}
-	driverName, err := driverFromConnectionString(connection)
-	if err != nil {
-		t.Fatalf("infer driver: %v", err)
-	}
+
 	ctx := context.Background()
-	db, _, err := openDatabase(ctx, databaseConfig{
-		Connection: connection,
-	})
+	database, _, err := openDatabase(ctx, databaseConfig{Connection: connection})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	defer db.Close(ctx)
-
-	graphName := fmt.Sprintf("retriever_it_%d", time.Now().UTC().UnixNano())
-	userKind := graph.StringKind("RetrieverUser")
-	systemKind := graph.StringKind("RetrieverSystem")
-	adminKind := graph.StringKind("RetrieverAdminTo")
-	graphSchema := graph.Graph{
-		Name:  graphName,
-		Nodes: graph.Kinds{userKind, systemKind},
-		Edges: graph.Kinds{adminKind},
-	}
-	if err := db.AssertSchema(ctx, graph.Schema{
-		Graphs:       []graph.Graph{graphSchema},
-		DefaultGraph: graphSchema,
-	}); err != nil {
-		t.Fatalf("assert schema: %v", err)
-	}
-	clearGraph := func() error {
-		return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			return tx.WithGraph(graph.Graph{
-				Name: graphName,
-			}).Nodes().Delete()
-		})
-	}
-	if err := clearGraph(); err != nil {
-		t.Fatalf("clear graph before seed: %v", err)
-	}
 	t.Cleanup(func() {
-		_ = clearGraph()
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := database.Close(closeCtx); err != nil {
+			t.Errorf("close database: %v", err)
+		}
 	})
 
-	const (
-		nodeCount = 7
-		edgeCount = 5
-		batchSize = 2
-		shardSize = 3
-	)
-	var seededNodeIDs, seededEdgeIDs []graph.ID
-	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{
-			Name: graphName,
-		})
+	return &retIntegrationHarness{
+		ctx:      ctx,
+		database: database,
+		root:     t.TempDir(),
+	}
+}
 
-		nodes := make([]*graph.Node, 0, nodeCount)
-		for index := range nodeCount {
-			kind := userKind
+func (s *retIntegrationHarness) graphName() string {
+	return fmt.Sprintf("ret_it_%d_%d", time.Now().UTC().UnixNano(), retIntegrationSequence.Add(1))
+}
+
+func (s *retIntegrationHarness) dumpConfig(graphName string, jsonlConfig *jsonl.Config, parquetConfig *parquet.Config) ret.DumpConfig {
+	return ret.DumpConfig{
+		Directory:       filepath.Join(s.root, fmt.Sprintf("collection-%d", retIntegrationSequence.Add(1))),
+		Graphs:          []string{graphName},
+		EntityBatchSize: 2,
+		ShardSize:       2,
+		JSONL:           jsonlConfig,
+		Parquet:         parquetConfig,
+	}
+}
+
+func (s *retIntegrationHarness) seedStandardGraph(t *testing.T) seededGraph {
+	t.Helper()
+	graphName := s.graphName()
+	userKind := graph.StringKind("RetIntegrationUser")
+	systemKind := graph.StringKind("RetIntegrationSystem")
+	relationshipKind := graph.StringKind("RetIntegrationLink")
+	s.assertSchema(t, graphName, graph.Kinds{userKind, systemKind}, graph.Kinds{relationshipKind})
+	s.clearGraph(t, graphName)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.clearGraphError(cleanupCtx, graphName); err != nil {
+			t.Errorf("clean up graph %q: %v", graphName, err)
+		}
+	})
+
+	fixture := seededGraph{
+		name:             graphName,
+		nodeKinds:        make(map[string][]string, 4),
+		nodeRoles:        make(map[string]string, 4),
+		relationshipKind: relationshipKind.String(),
+	}
+	if err := s.database.WriteTransaction(s.ctx, func(tx graph.Transaction) error {
+		tx = tx.WithGraph(graph.Graph{Name: graphName})
+		nodes := make([]*graph.Node, 0, 4)
+		for index := range 4 {
+			kinds := graph.Kinds{userKind}
 			if index%2 == 1 {
-				kind = systemKind
+				kinds = graph.Kinds{systemKind}
 			}
-
 			node, err := tx.CreateNode(graph.AsProperties(map[string]any{
 				"name": fmt.Sprintf("node-%d", index),
-				"role": fmt.Sprintf("role-%d", index%3),
-			}), kind)
+				"role": fmt.Sprintf("role-%d", index%2),
+			}), kinds...)
 			if err != nil {
 				return err
 			}
 			nodes = append(nodes, node)
-			seededNodeIDs = append(seededNodeIDs, node.ID)
+			fixture.nodeIDs = append(fixture.nodeIDs, node.ID)
+			name := fmt.Sprintf("node-%d", index)
+			fixture.nodeKinds[name] = kinds.Strings()
+			fixture.nodeRoles[name] = fmt.Sprintf("role-%d", index%2)
 		}
-
-		for index := range edgeCount {
-			relationship, err := tx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
-				"route": fmt.Sprintf("route-%d", index),
-			}))
-			if err != nil {
+		for index := range 3 {
+			if _, err := tx.CreateRelationshipByIDs(
+				nodes[index].ID,
+				nodes[index+1].ID,
+				relationshipKind,
+				graph.AsProperties(map[string]any{"route": fmt.Sprintf("route-%d", index)}),
+			); err != nil {
 				return err
 			}
-			seededEdgeIDs = append(seededEdgeIDs, relationship.ID)
 		}
-
 		return nil
 	}); err != nil {
-		t.Fatalf("seed graph: %v", err)
+		t.Fatalf("seed standard graph: %v", err)
 	}
+	return fixture
+}
 
-	entitySnapshot, err := countGraphEntitySnapshot(ctx, db, graph.Graph{
-		Name: graphName,
-	})
-	if err != nil {
-		t.Fatalf("count graph entities: %v", err)
-	}
-	if entitySnapshot.NodeCount != nodeCount || entitySnapshot.EdgeCount != edgeCount {
-		t.Fatalf("unexpected seeded graph counts: nodes=%d edges=%d", entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
-	}
-
-	assertBoundedRetrieverScans(t, ctx, db, graph.Graph{Name: graphName}, entitySnapshot, batchSize)
-	assertSkipAndLimit(t, ctx, db, graph.Graph{Name: graphName}, seededNodeIDs, seededEdgeIDs)
-
-	dumpDir := t.TempDir()
-	dumpResult, err := retriever.Dump(ctx, db, driverName, []retriever.GraphTarget{{
-		Name: graphName,
-	}}, retriever.DumpOptions{
-		OutputDir:   dumpDir,
-		Scrub:       retriever.ScrubNone,
-		Compression: retriever.CompressionGzip,
-		ZstdLevel:   retriever.DefaultZstdLevel,
-		ShardSize:   shardSize,
-		BatchSize:   batchSize,
-	})
-	if err != nil {
-		t.Fatalf("dump: %v", err)
-	}
-	if dumpResult.NodeCount != nodeCount || dumpResult.EdgeCount != edgeCount {
-		t.Fatalf("unexpected dump counts: nodes=%d edges=%d", dumpResult.NodeCount, dumpResult.EdgeCount)
-	}
-	if got := len(dumpResult.Manifest.Graphs); got != 1 {
-		t.Fatalf("dump manifest graph count = %d", got)
-	}
-	graphEntry := dumpResult.Manifest.Graphs[0]
-	if graphEntry.NodeCount != nodeCount || graphEntry.EdgeCount != edgeCount {
-		t.Fatalf("unexpected manifest graph counts: nodes=%d edges=%d", graphEntry.NodeCount, graphEntry.EdgeCount)
-	}
-	var nodeFiles, edgeFiles int
-	for _, fileEntry := range graphEntry.Files {
-		switch fileEntry.Phase {
-		case retriever.PhaseNodes:
-			nodeFiles++
-		case retriever.PhaseEdges:
-			edgeFiles++
+func (s *retIntegrationHarness) seedScrubGraph(t *testing.T) seededGraph {
+	t.Helper()
+	graphName := s.graphName()
+	firstKind := graph.StringKind("RetIntegrationFirst")
+	secondKind := graph.StringKind("RetIntegrationSecond")
+	relationshipKind := graph.StringKind("RetIntegrationScrubLink")
+	s.assertSchema(t, graphName, graph.Kinds{firstKind, secondKind}, graph.Kinds{relationshipKind})
+	s.clearGraph(t, graphName)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.clearGraphError(cleanupCtx, graphName); err != nil {
+			t.Errorf("clean up graph %q: %v", graphName, err)
 		}
-		if fileEntry.Count > shardSize {
-			t.Fatalf("fragment %s count %d exceeds shard size %d", fileEntry.Path, fileEntry.Count, shardSize)
+	})
+
+	orderedDuplicateKinds := graph.Kinds{secondKind, firstKind, secondKind}
+	graphNodes := []*graph.Node{
+		graph.NewNode(0, graph.AsProperties(map[string]any{
+			"enabled":         true,
+			"preserved_count": int64(42),
+			"email":           "alice@example.com",
+			"password":        "super-secret",
+			"created_at":      "2026-01-01T00:00:00Z",
+		}), orderedDuplicateKinds...),
+		graph.NewNode(0, graph.AsProperties(map[string]any{}), firstKind),
+	}
+	var nodeIDs []graph.ID
+	if err := s.database.BatchOperation(s.ctx, func(batch graph.Batch) error {
+		creator, ok := batch.WithGraph(graph.Graph{Name: graphName}).(graph.NodeBatchCreator)
+		if !ok {
+			return errors.New("database batch does not support correlated node creation")
+		}
+		var err error
+		nodeIDs, err = creator.CreateNodes(graphNodes)
+		return err
+	}, graph.WithBatchSize(2)); err != nil {
+		t.Fatalf("seed scrub nodes: %v", err)
+	}
+	if len(nodeIDs) != 2 {
+		t.Fatalf("seed scrub node IDs = %d, want 2", len(nodeIDs))
+	}
+	if err := s.database.WriteTransaction(s.ctx, func(tx graph.Transaction) error {
+		_, err := tx.WithGraph(graph.Graph{Name: graphName}).CreateRelationshipByIDs(
+			nodeIDs[0],
+			nodeIDs[1],
+			relationshipKind,
+			graph.AsProperties(map[string]any{}),
+		)
+		return err
+	}); err != nil {
+		t.Fatalf("seed scrub relationship: %v", err)
+	}
+
+	nodes, _ := s.fetchGraph(t, graphName)
+	var observedKinds []string
+	for _, node := range nodes {
+		if node.Properties != nil && node.Properties.MapOrEmpty()["enabled"] == true {
+			observedKinds = node.Kinds.Strings()
+			break
 		}
 	}
-	if nodeFiles != 3 || edgeFiles != 2 {
-		t.Fatalf("unexpected manifest shards: node files=%d edge files=%d", nodeFiles, edgeFiles)
+	if observedKinds == nil {
+		t.Fatal("seeded scrub node was not returned by the database")
 	}
-	if dumpResult.Manifest.Metrics == nil {
-		t.Fatalf("dump manifest is missing metrics")
-	}
-	if got := len(dumpResult.Manifest.Metrics.Graphs); got != 1 {
-		t.Fatalf("dump metrics graph count = %d", got)
-	}
-	if dumpResult.Manifest.Metrics.Graphs[0].NodeCount != nodeCount || dumpResult.Manifest.Metrics.Graphs[0].EdgeCount != edgeCount {
-		t.Fatalf("unexpected dump metrics counts: %+v", dumpResult.Manifest.Metrics.Graphs[0])
-	}
+	return seededGraph{name: graphName, nodeIDs: nodeIDs, kinds: observedKinds}
+}
 
-	if _, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{
-		InputDir:      dumpDir,
-		BatchSize:     batchSize,
-		VerifyMetrics: true,
-	}); err == nil || !strings.Contains(err.Error(), "is not empty") {
-		t.Fatalf("expected non-empty target load error, got %v", err)
+func (s *retIntegrationHarness) assertSchema(t *testing.T, graphName string, nodeKinds, relationshipKinds graph.Kinds) {
+	t.Helper()
+	target := graph.Graph{Name: graphName, Nodes: nodeKinds, Edges: relationshipKinds}
+	if err := s.database.AssertSchema(s.ctx, graph.Schema{
+		Graphs:       []graph.Graph{target},
+		DefaultGraph: target,
+	}); err != nil {
+		t.Fatalf("assert graph schema: %v", err)
 	}
+}
 
-	if err := clearGraph(); err != nil {
-		t.Fatalf("clear graph before load: %v", err)
+func (s *retIntegrationHarness) clearGraph(t *testing.T, graphName string) {
+	t.Helper()
+	if err := s.clearGraphError(s.ctx, graphName); err != nil {
+		t.Fatalf("clear graph %q: %v", graphName, err)
 	}
+}
 
-	loadResult, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{
-		InputDir:      dumpDir,
-		BatchSize:     batchSize,
-		VerifyMetrics: true,
+func (s *retIntegrationHarness) clearGraphError(ctx context.Context, graphName string) error {
+	return s.database.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		return tx.WithGraph(graph.Graph{Name: graphName}).Nodes().Delete()
 	})
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if loadResult.NodeCount != nodeCount || loadResult.EdgeCount != edgeCount {
-		t.Fatalf("unexpected load counts: nodes=%d edges=%d", loadResult.NodeCount, loadResult.EdgeCount)
-	}
+}
 
-	var loadedNodes []*graph.Node
-	var loadedEdges []*graph.Relationship
-	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+func (s *retIntegrationHarness) snapshot(t *testing.T, graphName string) dawgs.Snapshot {
+	t.Helper()
+	source, err := dawgs.NewSource(s.database, graphName, 2)
+	if err != nil {
+		t.Fatalf("create graph source: %v", err)
+	}
+	snapshot, err := source.Snapshot(s.ctx)
+	if err != nil {
+		t.Fatalf("snapshot graph: %v", err)
+	}
+	return snapshot
+}
+
+func (s *retIntegrationHarness) fetchGraph(t *testing.T, graphName string) ([]*graph.Node, []*graph.Relationship) {
+	t.Helper()
+	var nodes []*graph.Node
+	var relationships []*graph.Relationship
+	if err := s.database.ReadTransaction(s.ctx, func(tx graph.Transaction) error {
 		tx = tx.WithGraph(graph.Graph{Name: graphName})
 		var err error
-		if loadedNodes, err = ops.FetchNodes(tx.Nodes()); err != nil {
+		if nodes, err = ops.FetchNodes(tx.Nodes()); err != nil {
 			return err
 		}
-		loadedEdges, err = ops.FetchRelationships(tx.Relationships())
+		relationships, err = ops.FetchRelationships(tx.Relationships())
 		return err
 	}); err != nil {
-		t.Fatalf("read restored topology: %v", err)
+		t.Fatalf("fetch graph %q: %v", graphName, err)
 	}
-	if len(loadedNodes) != nodeCount || len(loadedEdges) != edgeCount {
-		t.Fatalf("unexpected restored topology counts: nodes=%d edges=%d", len(loadedNodes), len(loadedEdges))
+	return nodes, relationships
+}
+
+func (s *retIntegrationHarness) assertStandardGraph(t *testing.T, fixture seededGraph) {
+	t.Helper()
+	nodes, relationships := s.fetchGraph(t, fixture.name)
+	if len(nodes) != 4 || len(relationships) != 3 {
+		t.Fatalf("loaded graph counts: nodes=%d relationships=%d, want 4 and 3", len(nodes), len(relationships))
 	}
 
-	nodeNames := make(map[graph.ID]string, len(loadedNodes))
-	expectedRoles := make(map[string]string, nodeCount)
-	expectedKinds := make(map[string]string, nodeCount)
-	for index := range nodeCount {
-		name := fmt.Sprintf("node-%d", index)
-		expectedRoles[name] = fmt.Sprintf("role-%d", index%3)
-		expectedKinds[name] = userKind.String()
-		if index%2 == 1 {
-			expectedKinds[name] = systemKind.String()
+	namesByID := make(map[graph.ID]string, len(nodes))
+	for _, node := range nodes {
+		properties := node.Properties.MapOrEmpty()
+		name := fmt.Sprint(properties["name"])
+		namesByID[node.ID] = name
+		if got, want := node.Kinds.Strings(), fixture.nodeKinds[name]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("node %q kinds = %v, want %v", name, got, want)
 		}
-	}
-	for _, node := range loadedNodes {
-		if node.Properties == nil {
-			t.Fatalf("restored node %d is missing properties", node.ID)
-		}
-		name := fmt.Sprint(node.Properties.Get("name").Any())
-		role := fmt.Sprint(node.Properties.Get("role").Any())
-		nodeNames[node.ID] = name
-		if expectedRole, ok := expectedRoles[name]; !ok || role != expectedRole {
-			t.Fatalf("unexpected restored node properties: %+v", node.Properties.MapOrEmpty())
-		}
-		if len(node.Kinds) != 1 || node.Kinds[0].String() != expectedKinds[name] {
-			t.Fatalf("unexpected restored node kinds for %s: %v", name, node.Kinds.Strings())
+		wantRole := fixture.nodeRoles[name]
+		if got := fmt.Sprint(properties["role"]); got != wantRole {
+			t.Fatalf("node %q role = %q, want %q", name, got, wantRole)
 		}
 	}
 
-	restoredRoutes := map[string]string{}
-	for _, relationship := range loadedEdges {
-		startName, startOK := nodeNames[relationship.StartID]
-		endName, endOK := nodeNames[relationship.EndID]
-		if !startOK || !endOK {
-			t.Fatalf("restored relationship has unresolved endpoint IDs: %+v", relationship)
+	routes := make(map[string]string, len(relationships))
+	for _, relationship := range relationships {
+		if relationship.Kind == nil || relationship.Kind.String() != fixture.relationshipKind {
+			t.Fatalf("relationship kind = %v, want %q", relationship.Kind, fixture.relationshipKind)
 		}
-		if relationship.Kind == nil || relationship.Kind.String() != adminKind.String() {
-			t.Fatalf("unexpected restored relationship kind: %+v", relationship.Kind)
-		}
-		if relationship.Properties == nil {
-			t.Fatalf("restored relationship is missing properties: %+v", relationship)
-		}
-		restoredRoutes[startName+"->"+endName] = fmt.Sprint(relationship.Properties.Get("route").Any())
+		key := namesByID[relationship.StartID] + "->" + namesByID[relationship.EndID]
+		routes[key] = fmt.Sprint(relationship.Properties.MapOrEmpty()["route"])
 	}
-	for index := range edgeCount {
-		path := fmt.Sprintf("node-%d->node-%d", index, index+1)
-		if route := restoredRoutes[path]; route != fmt.Sprintf("route-%d", index) {
-			t.Fatalf("restored route %s = %q", path, route)
+	for index := range 3 {
+		key := fmt.Sprintf("node-%d->node-%d", index, index+1)
+		if got, want := routes[key], fmt.Sprintf("route-%d", index); got != want {
+			t.Fatalf("relationship %q route = %q, want %q", key, got, want)
 		}
 	}
+}
 
-	verifyResult, err := retriever.Verify(ctx, db, driverName, retriever.VerifyOptions{
-		InputDir:  dumpDir,
-		BatchSize: batchSize,
-	})
+func (s *retIntegrationHarness) assertScrubGraph(t *testing.T, fixture seededGraph, artifacts concreteArtifacts) {
+	t.Helper()
+	nodes, relationships := s.fetchGraph(t, fixture.name)
+	if len(nodes) != 2 || len(relationships) != 1 {
+		t.Fatalf("loaded scrub graph counts: nodes=%d relationships=%d, want 2 and 1", len(nodes), len(relationships))
+	}
+	var loaded *graph.Node
+	for _, node := range nodes {
+		if node.Properties != nil && node.Properties.MapOrEmpty()["enabled"] == true {
+			loaded = node
+			break
+		}
+	}
+	if loaded == nil {
+		t.Fatal("loaded scrub graph is missing the primary node")
+	}
+	if got := loaded.Kinds.Strings(); !reflect.DeepEqual(got, fixture.kinds) {
+		t.Fatalf("loaded ordered kinds = %v, want %v", got, fixture.kinds)
+	}
+	artifactNode := primaryArtifactNode(t, artifacts.jsonlNodes)
+	if got, want := normalizeProperties(t, loaded.Properties.MapOrEmpty()), normalizeProperties(t, artifactNode.Properties); !reflect.DeepEqual(got, want) {
+		t.Fatalf("loaded scrub properties = %#v, want %#v", got, want)
+	}
+}
+
+func interruptDumpAfterFirstNodeShard(
+	parent context.Context,
+	database graph.Database,
+	config ret.DumpConfig,
+) (ret.DumpConfig, error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	config.Observer = &cancelOnNodeShardObserver{cancel: cancel}
+	_, err := ret.Dump(ctx, database, config)
+	config.Observer = nil
+	return config, err
+}
+
+type cancelOnNodeShardObserver struct {
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (s *cancelOnNodeShardObserver) Observe(_ context.Context, event observe.Event) {
+	if committed, ok := event.(observe.ShardCommitted); ok && committed.EntityType == "node" {
+		s.once.Do(s.cancel)
+	}
+}
+
+func mutateNodeTotal(t *testing.T, harness *retIntegrationHarness, fixture seededGraph) {
+	t.Helper()
+	if err := harness.database.WriteTransaction(harness.ctx, func(tx graph.Transaction) error {
+		_, err := tx.WithGraph(graph.Graph{Name: fixture.name}).CreateNode(
+			graph.AsProperties(map[string]any{"name": "count-change"}),
+			graph.StringKind("RetIntegrationUser"),
+		)
+		return err
+	}); err != nil {
+		t.Fatalf("mutate node total: %v", err)
+	}
+}
+
+func mutateRelationshipTotal(t *testing.T, harness *retIntegrationHarness, fixture seededGraph) {
+	t.Helper()
+	if err := harness.database.WriteTransaction(harness.ctx, func(tx graph.Transaction) error {
+		_, err := tx.WithGraph(graph.Graph{Name: fixture.name}).CreateRelationshipByIDs(
+			fixture.nodeIDs[0],
+			fixture.nodeIDs[len(fixture.nodeIDs)-1],
+			graph.StringKind("RetIntegrationLink"),
+			graph.AsProperties(map[string]any{"route": "count-change"}),
+		)
+		return err
+	}); err != nil {
+		t.Fatalf("mutate relationship total: %v", err)
+	}
+}
+
+func assertOperationCounts(
+	t *testing.T,
+	graphs int,
+	nodes, relationships int64,
+	wantGraphs int,
+	wantNodes, wantRelationships int64,
+) {
+	t.Helper()
+	if graphs != wantGraphs || nodes != wantNodes || relationships != wantRelationships {
+		t.Fatalf(
+			"operation counts: graphs=%d nodes=%d relationships=%d, want %d %d %d",
+			graphs,
+			nodes,
+			relationships,
+			wantGraphs,
+			wantNodes,
+			wantRelationships,
+		)
+	}
+}
+
+func assertConcreteOutputs(t *testing.T, root string, wantJSONL, wantParquet bool) {
+	t.Helper()
+	manifest, err := collection.Read(root)
 	if err != nil {
-		t.Fatalf("verify: %v", err)
+		t.Fatalf("read collection manifest: %v", err)
 	}
-	if verifyResult.NodeCount != nodeCount || verifyResult.EdgeCount != edgeCount {
-		t.Fatalf("unexpected verify counts: nodes=%d edges=%d", verifyResult.NodeCount, verifyResult.EdgeCount)
+	if got := manifest.Outputs.JSONL != nil; got != wantJSONL {
+		t.Fatalf("manifest JSONL enabled = %t, want %t", got, wantJSONL)
 	}
+	if got := manifest.Outputs.Parquet != nil; got != wantParquet {
+		t.Fatalf("manifest Parquet enabled = %t, want %t", got, wantParquet)
+	}
+	for _, graphEntry := range manifest.Graphs {
+		for _, shard := range graphEntry.NodeShards {
+			if (shard.JSONL != nil) != wantJSONL || (shard.Parquet != nil) != wantParquet {
+				t.Fatalf("node shard %d concrete outputs do not match collection capabilities", shard.Index)
+			}
+		}
+		for _, shard := range graphEntry.RelationshipShards {
+			if (shard.JSONL != nil) != wantJSONL || (shard.Parquet != nil) != wantParquet {
+				t.Fatalf("relationship shard %d concrete outputs do not match collection capabilities", shard.Index)
+			}
+		}
+	}
+}
 
-	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{
-			Name: graphName,
+func damageFirstParquetArtifact(t *testing.T, root string) {
+	t.Helper()
+	manifest, err := collection.Read(root)
+	if err != nil {
+		t.Fatalf("read dual-output manifest before damaging Parquet: %v", err)
+	}
+	for _, graphEntry := range manifest.Graphs {
+		for _, shard := range graphEntry.NodeShards {
+			if shard.Parquet != nil {
+				path := filepath.Join(root, filepath.FromSlash(shard.Parquet.Path))
+				if err := os.WriteFile(path, []byte("intentionally damaged Parquet"), 0o600); err != nil {
+					t.Fatalf("damage Parquet artifact: %v", err)
+				}
+				return
+			}
+		}
+	}
+	t.Fatal("dual-output collection has no Parquet artifact to damage")
+}
+
+func newArchiveFixture(t *testing.T) (string, string, archive.PublicKey, archive.PrivateKey) {
+	t.Helper()
+	root := t.TempDir()
+	privatePath := filepath.Join(root, "identity.key")
+	publicPath := filepath.Join(root, "recipient.key")
+	if err := ret.Keygen(ret.KeygenConfig{
+		PrivateKeyPath: privatePath,
+		PublicKeyPath:  publicPath,
+	}); err != nil {
+		t.Fatalf("generate archive keys: %v", err)
+	}
+	recipient, err := archive.ReadPublicKey(publicPath)
+	if err != nil {
+		t.Fatalf("read archive recipient: %v", err)
+	}
+	identity, err := archive.ReadPrivateKey(privatePath)
+	if err != nil {
+		t.Fatalf("read archive identity: %v", err)
+	}
+	return filepath.Join(root, "collection.ret.enc"), filepath.Join(root, "unpacked"), recipient, identity
+}
+
+func readConcreteArtifacts(t *testing.T, root string) concreteArtifacts {
+	t.Helper()
+	manifest, err := collection.Read(root)
+	if err != nil {
+		t.Fatalf("read scrub manifest: %v", err)
+	}
+	if len(manifest.Graphs) != 1 {
+		t.Fatalf("scrub manifest graph count = %d, want 1", len(manifest.Graphs))
+	}
+	graphEntry := manifest.Graphs[0]
+	result := concreteArtifacts{
+		scrubCounts:   scrub.ActionCounts{},
+		scrubMetadata: manifest.Scrub,
+	}
+	for _, shard := range graphEntry.NodeShards {
+		result.scrubCounts.Add(shard.ScrubCounts)
+		if shard.JSONL == nil || shard.Parquet == nil {
+			t.Fatalf("dual node shard %d is missing a concrete artifact", shard.Index)
+		}
+		var nodes []entity.Node
+		err := collection.ReadJSONLNodes(root, *shard.JSONL, func(node entity.Node) error {
+			nodes = append(nodes, node)
+			return nil
 		})
-		_, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "extra"}), userKind)
-		return err
-	}); err != nil {
-		t.Fatalf("mutate loaded graph: %v", err)
-	}
-
-	_, err = retriever.Verify(ctx, db, driverName, retriever.VerifyOptions{
-		InputDir:  dumpDir,
-		BatchSize: batchSize,
-	})
-	var mismatch retriever.MetricsMismatchError
-	if !errors.As(err, &mismatch) {
-		t.Fatalf("expected metrics mismatch error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "node_count") {
-		t.Fatalf("expected mismatch to include node_count, got %v", err)
-	}
-}
-
-func assertBoundedRetrieverScans(t *testing.T, ctx context.Context, db graph.Database, targetGraph graph.Graph, snapshot graphEntitySnapshot, batchSize int) {
-	t.Helper()
-
-	var nodeIDs []graph.ID
-	processed, err := retriever.ScanDatabaseNodes(ctx, db, targetGraph, snapshot.NodeCount, batchSize, func(node *graph.Node) error {
-		nodeIDs = append(nodeIDs, node.ID)
-		return nil
-	}, func(event retriever.ScanBatchEvent) error {
-		if event.Count > batchSize {
-			return fmt.Errorf("node cursor callback count %d exceeds batch size %d", event.Count, batchSize)
+		if err != nil {
+			t.Fatalf("read JSONL node shard %d: %v", shard.Index, err)
 		}
-		return nil
-	})
-	if err != nil || processed != snapshot.NodeCount {
-		t.Fatalf("bounded node scan processed=%d err=%v", processed, err)
-	}
-	assertStrictIDs(t, "node", nodeIDs)
-
-	var edgeIDs []graph.ID
-	processed, err = retriever.ScanDatabaseRelationships(ctx, db, targetGraph, snapshot.EdgeCount, batchSize, func(relationship *graph.Relationship) error {
-		edgeIDs = append(edgeIDs, relationship.ID)
-		return nil
-	}, func(event retriever.ScanBatchEvent) error {
-		if event.Count > batchSize {
-			return fmt.Errorf("relationship cursor callback count %d exceeds batch size %d", event.Count, batchSize)
-		}
-		return nil
-	})
-	if err != nil || processed != snapshot.EdgeCount {
-		t.Fatalf("bounded relationship scan processed=%d err=%v", processed, err)
-	}
-	assertStrictIDs(t, "relationship", edgeIDs)
-}
-
-func assertStrictIDs(t *testing.T, entityName string, ids []graph.ID) {
-	t.Helper()
-	for index := 1; index < len(ids); index++ {
-		if ids[index] <= ids[index-1] {
-			t.Fatalf("%s IDs are not strictly increasing: %v", entityName, ids)
-		}
-	}
-}
-
-func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, targetGraph graph.Graph, nodeIDs, edgeIDs []graph.ID) {
-	t.Helper()
-
-	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		var actualNodeIDs []graph.ID
-		if err := tx.Nodes().OrderBy(query.NodeID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
-			for id := range cursor.Chan() {
-				actualNodeIDs = append(actualNodeIDs, id)
-			}
-			return cursor.Error()
+		result.jsonlNodes = append(result.jsonlNodes, nodes...)
+		if err := collection.ReadParquetNodes(root, *shard.Parquet, func(node entity.Node) error {
+			result.parquetNodes = append(result.parquetNodes, node)
+			return nil
 		}); err != nil {
-			return err
+			t.Fatalf("read Parquet node shard %d: %v", shard.Index, err)
 		}
-		if !reflect.DeepEqual(actualNodeIDs, nodeIDs[1:3]) {
-			return fmt.Errorf("node skip/limit IDs = %v, want %v", actualNodeIDs, nodeIDs[1:3])
-		}
-
-		var actualEdgeIDs []graph.ID
-		if err := tx.Relationships().OrderBy(query.RelationshipID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
-			for id := range cursor.Chan() {
-				actualEdgeIDs = append(actualEdgeIDs, id)
-			}
-			return cursor.Error()
-		}); err != nil {
-			return err
-		}
-		if !reflect.DeepEqual(actualEdgeIDs, edgeIDs[1:3]) {
-			return fmt.Errorf("relationship skip/limit IDs = %v, want %v", actualEdgeIDs, edgeIDs[1:3])
-		}
-
-		return nil
-	}); err != nil {
-		t.Fatalf("assert skip and limit: %v", err)
 	}
+	for _, shard := range graphEntry.RelationshipShards {
+		result.scrubCounts.Add(shard.ScrubCounts)
+		if shard.JSONL == nil || shard.Parquet == nil {
+			t.Fatalf("dual relationship shard %d is missing a concrete artifact", shard.Index)
+		}
+		var relationships []entity.Relationship
+		err := collection.ReadJSONLRelationships(root, *shard.JSONL, func(relationship entity.Relationship) error {
+			relationships = append(relationships, relationship)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("read JSONL relationship shard %d: %v", shard.Index, err)
+		}
+		result.jsonlRelationships = append(result.jsonlRelationships, relationships...)
+		if err := collection.ReadParquetRelationships(root, *shard.Parquet, func(relationship entity.Relationship) error {
+			result.parquetRelationshipIDs = append(result.parquetRelationshipIDs, relationship.SourceID)
+			relationship.SourceID = ""
+			result.parquetRelationships = append(result.parquetRelationships, relationship)
+			return nil
+		}); err != nil {
+			t.Fatalf("read Parquet relationship shard %d: %v", shard.Index, err)
+		}
+	}
+	return result
+}
+
+func assertScrubFixture(t *testing.T, artifacts concreteArtifacts, wantKinds []string) {
+	t.Helper()
+	if !artifacts.scrubMetadata.Enabled {
+		t.Fatal("scrub metadata is not enabled")
+	}
+	wantCounts := scrub.ActionCounts{
+		Preserve:       2,
+		Pseudonymize:   1,
+		Redact:         1,
+		ShiftTimestamp: 1,
+	}
+	if !reflect.DeepEqual(artifacts.scrubCounts, wantCounts) {
+		t.Fatalf("scrub action counts = %#v, want %#v", artifacts.scrubCounts, wantCounts)
+	}
+	for index, relationship := range artifacts.jsonlRelationships {
+		if relationship.SourceID != "" {
+			t.Fatalf("JSONL relationship %d retained source ID %q", index, relationship.SourceID)
+		}
+	}
+	for index, sourceID := range artifacts.parquetRelationshipIDs {
+		if sourceID == "" {
+			t.Fatalf("Parquet relationship %d omitted its source ID", index)
+		}
+	}
+
+	node := primaryArtifactNode(t, artifacts.jsonlNodes)
+	if !reflect.DeepEqual(node.Kinds, wantKinds) {
+		t.Fatalf("artifact ordered kinds = %v, want database-observed %v", node.Kinds, wantKinds)
+	}
+	if node.Properties["enabled"] != true {
+		t.Fatalf("preserved property = %#v, want true", node.Properties["enabled"])
+	}
+	normalized := normalizeProperties(t, node.Properties)
+	if got, ok := normalized["preserved_count"].(json.Number); !ok || got.String() != "42" {
+		t.Fatalf(
+			"normalized preserved count = %#v (%T), want json.Number(%q)",
+			normalized["preserved_count"],
+			normalized["preserved_count"],
+			"42",
+		)
+	}
+	if node.Properties["password"] != "[REDACTED]" {
+		t.Fatalf("redacted property = %#v, want [REDACTED]", node.Properties["password"])
+	}
+	if node.Properties["created_at"] != "2026-01-18T00:00:00Z" {
+		t.Fatalf("shifted timestamp = %#v, want 2026-01-18T00:00:00Z", node.Properties["created_at"])
+	}
+	if got := fmt.Sprint(node.Properties["email"]); got != "user-d47583d80c3e@example.invalid" {
+		t.Fatalf("pseudonymized email = %q, want user-d47583d80c3e@example.invalid", got)
+	}
+}
+
+func primaryArtifactNode(t *testing.T, nodes []entity.Node) entity.Node {
+	t.Helper()
+	for _, node := range nodes {
+		if node.Properties["enabled"] == true {
+			return node
+		}
+	}
+	t.Fatal("artifact is missing the primary scrub node")
+	return entity.Node{}
+}
+
+func normalizeNodes(t *testing.T, nodes []entity.Node) []entity.Node {
+	t.Helper()
+	normalized := append([]entity.Node(nil), nodes...)
+	for index := range normalized {
+		normalized[index].Properties = normalizeProperties(t, normalized[index].Properties)
+	}
+	return normalized
+}
+
+func normalizeRelationships(t *testing.T, relationships []entity.Relationship) []entity.Relationship {
+	t.Helper()
+	normalized := append([]entity.Relationship(nil), relationships...)
+	for index := range normalized {
+		normalized[index].Properties = normalizeProperties(t, normalized[index].Properties)
+	}
+	return normalized
+}
+
+func normalizeProperties(t *testing.T, properties map[string]any) map[string]any {
+	t.Helper()
+	encoded, err := json.Marshal(properties)
+	if err != nil {
+		t.Fatalf("encode properties for logical normalization: %v", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var normalized map[string]any
+	if err := decoder.Decode(&normalized); err != nil {
+		t.Fatalf("decode properties for logical normalization: %v", err)
+	}
+	return normalized
 }

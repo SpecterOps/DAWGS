@@ -143,7 +143,7 @@ func TestPprofServerRejectsNonLoopbackAddress(t *testing.T) {
 }
 
 func TestLongRunningCommandsExposePprofFlag(t *testing.T) {
-	for _, command := range []string{"dump", "load", "verify", "bench"} {
+	for _, command := range []string{"dump", "load", "verify-database", "bench"} {
 		var (
 			stdout bytes.Buffer
 			stderr bytes.Buffer

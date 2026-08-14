@@ -77,21 +77,30 @@ current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is referen
 comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
 against a previous JSONL baseline.
 
-`go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
-manifest-based collections of compressed JSONL fragments. It supports
-PostgreSQL and Neo4j, uncompressed, gzip, and zstd fragments, bounded keyset
-scans, resumable dump checkpoints, checksum validation before load, optional
-deterministic property scrubbing, and a read-throughput benchmark mode. It can
-also package dumps as single HPKE/ML-KEM encrypted TAR archives.
-See [cmd/retriever/README.md](cmd/retriever/README.md) for dump, encrypted
-archive, load, scrubbed dump, metrics verification, and benchmark examples.
-The same import/export functionality is available to library consumers from
-`github.com/specterops/dawgs/retriever`; callers provide an already-open
-`graph.Database`, and archive helpers support both path-based and stream-based
-APIs. The package exposes CLI-matching default option constructors, structured
-progress callbacks, manifest/metrics helpers, HPKE key envelope reader/writer
-helpers, and typed errors for validation, compatibility, checksum, metrics, and
-count mismatches.
+`go run ./cmd/retriever` exports live Dawgs graphs to local
+`ret-collection-v1` collections. JSONL with zstd is the default output;
+Parquet with unshredded VARIANT properties is enabled independently, and
+JSONL-only, Parquet-only, and dual-output collections are supported. Only
+complete JSONL output is loadable. Parquet-only collections remain valid,
+verifiable analytical exports.
+
+The command surface separates `dump`, `load`, `verify-collection`,
+`verify-database`, `keygen`, `pack`, `unpack`, and `bench`. Archive creation is
+a separate post-dump operation, and an encrypted archive must be unpacked to a
+verified local collection before loading. Dump checkpoints are resumable only
+while source node and relationship counts remain unchanged; same-count content
+mutation is outside that guarantee. Load requires empty target graphs, is not
+resumable, and may leave partial state after a write failure, so clear an
+affected graph before retrying.
+
+The new library surface is the small operation-oriented
+`github.com/specterops/dawgs/ret` facade over concrete component packages.
+Legacy `github.com/specterops/dawgs/retriever` remains temporarily alongside it
+for side-by-side review, but the CLI no longer uses the legacy package. Paths
+are local-filesystem-only. See
+[cmd/retriever/README.md](cmd/retriever/README.md) for exact dump, load,
+verification, encrypted archive, scrubbing, force-replacement, and concrete
+benchmark examples.
 
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective

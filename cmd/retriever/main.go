@@ -2,31 +2,79 @@ package main
 
 import (
 	"context"
-	"crypto/hpke"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
-	"github.com/specterops/dawgs/retriever"
+	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/ret"
+	"github.com/specterops/dawgs/ret/archive"
+	"github.com/specterops/dawgs/ret/observe"
 )
 
 const usage = `usage: retriever <command> [options]
 
 Commands:
-  keygen  Generate an HPKE recipient key pair for encrypted archives.
-  dump    Dump live Dawgs graph data into a manifest-based collection.
-  unpack  Decrypt and unpack an encrypted retriever archive.
-  load    Load a manifest-based collection into a Dawgs graph database.
-  verify  Verify loaded graph metrics against a dump manifest.
-  bench   Benchmark read throughput for dump planning.
+  dump               Dump live Dawgs graph data into a local collection.
+  load               Load a local JSONL collection into a Dawgs database.
+  verify-collection  Verify every artifact in a local collection.
+  verify-database    Verify database metrics against a collection manifest.
+  pack               Create an encrypted archive from a verified collection.
+  unpack             Decrypt, verify, and publish a collection.
+  keygen             Generate an archive recipient key pair.
+  bench              Benchmark read throughput for dump planning.
 `
 
+type commandOperations struct {
+	openDatabase     func(context.Context, databaseConfig) (graph.Database, string, error)
+	dump             func(context.Context, graph.Database, ret.DumpConfig) (ret.DumpResult, error)
+	load             func(context.Context, graph.Database, ret.LoadConfig) (ret.LoadResult, error)
+	verifyCollection func(context.Context, ret.VerifyCollectionConfig) (ret.VerifyCollectionResult, error)
+	verifyDatabase   func(context.Context, graph.Database, ret.VerifyDatabaseConfig) (ret.VerifyDatabaseResult, error)
+	pack             func(context.Context, ret.PackConfig) error
+	unpack           func(context.Context, ret.UnpackConfig) error
+	keygen           func(ret.KeygenConfig) error
+}
+
+func (s commandOperations) withDefaults() commandOperations {
+	if s.openDatabase == nil {
+		s.openDatabase = openDatabase
+	}
+	if s.dump == nil {
+		s.dump = ret.Dump
+	}
+	if s.load == nil {
+		s.load = ret.Load
+	}
+	if s.verifyCollection == nil {
+		s.verifyCollection = ret.VerifyCollection
+	}
+	if s.verifyDatabase == nil {
+		s.verifyDatabase = ret.VerifyDatabase
+	}
+	if s.pack == nil {
+		s.pack = ret.Pack
+	}
+	if s.unpack == nil {
+		s.unpack = ret.Unpack
+	}
+	if s.keygen == nil {
+		s.keygen = ret.Keygen
+	}
+	return s
+}
+
 type commandRuntime struct {
-	stdout io.Writer
-	stderr io.Writer
+	stdout     io.Writer
+	stderr     io.Writer
+	operations commandOperations
+	observer   observe.Observer
+	force      forceReplaceOperations
 }
 
 func main() {
@@ -34,7 +82,6 @@ func main() {
 		stdout: os.Stdout,
 		stderr: os.Stderr,
 	}
-
 	if err := runtime.run(context.Background(), os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "retriever: %v\n", err)
 		os.Exit(1)
@@ -51,16 +98,20 @@ func (s commandRuntime) run(ctx context.Context, args []string) error {
 	case "help", "-h", "--help":
 		fmt.Fprint(s.stdout, usage)
 		return nil
-	case "keygen":
-		return s.runKeygen(args[1:])
 	case "dump":
 		return s.runDump(ctx, args[1:])
-	case "unpack":
-		return s.runUnpack(args[1:])
 	case "load":
 		return s.runLoad(ctx, args[1:])
-	case "verify":
-		return s.runVerify(ctx, args[1:])
+	case "verify-collection":
+		return s.runVerifyCollection(ctx, args[1:])
+	case "verify-database":
+		return s.runVerifyDatabase(ctx, args[1:])
+	case "pack":
+		return s.runPack(ctx, args[1:])
+	case "unpack":
+		return s.runUnpack(ctx, args[1:])
+	case "keygen":
+		return s.runKeygen(args[1:])
 	case "bench":
 		return s.runBench(ctx, args[1:])
 	default:
@@ -70,284 +121,196 @@ func (s commandRuntime) run(ctx context.Context, args []string) error {
 }
 
 func (s commandRuntime) runDump(ctx context.Context, args []string) error {
-	var (
-		dbCfg databaseConfig
-		cfg   = retriever.DefaultDumpOptions("")
-
-		graphs         stringList
-		scrubValue     string
-		compressionVal string
-		archiveOut     string
-		recipientPath  string
-		scrubConfig    string
-		pprofListen    string
-	)
-
-	flags := flag.NewFlagSet("retriever dump", flag.ContinueOnError)
-	flags.SetOutput(s.stderr)
-	commonDatabaseFlags(flags, &dbCfg)
-	flags.Var(&graphs, "graph", "Graph target. May be repeated.")
-	allGraphs := flags.Bool("all-graphs", false, "Dump every graph discoverable by the selected driver.")
-	flags.StringVar(&cfg.OutputDir, "out", "", "Output collection directory.")
-	flags.BoolVar(&cfg.Force, "force", false, "Replace an existing non-empty output directory.")
-	flags.BoolVar(&cfg.Resume, "resume", false, "Resume an interrupted dump from its validated checkpoint.")
-	flags.StringVar(&archiveOut, "archive-out", "", "Optional encrypted archive output path.")
-	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key for -archive-out.")
-	flags.StringVar(&scrubValue, "scrub", string(cfg.Scrub), "Scrub mode: none or full.")
-	flags.StringVar(&cfg.Salt, "salt", "", "Scrub salt. Overrides RETRIEVER_SCRUB_SALT and is never written.")
-	flags.StringVar(&scrubConfig, "config", "", "Optional retriever TOML config for scrub classifier settings.")
-	flags.StringVar(&compressionVal, "compression", string(cfg.Compression), "Compression codec: zstd, gzip, or none.")
-	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
-	flags.IntVar(&cfg.ShardSize, "shard-size", cfg.ShardSize, "Maximum entities per fragment.")
-	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
-	commonPprofFlag(flags, &pprofListen)
-	if err := flags.Parse(args); err != nil {
+	command, err := parseDumpCommand(args, s.stderr)
+	if err != nil {
 		return err
 	}
-
-	fillConnectionFromEnv(&dbCfg)
-
-	cfg.Scrub = retriever.ScrubMode(strings.TrimSpace(scrubValue))
-	cfg.Compression = retriever.CompressionCodec(strings.TrimSpace(compressionVal))
-
-	if strings.TrimSpace(cfg.Salt) == "" {
-		cfg.Salt = strings.TrimSpace(os.Getenv("RETRIEVER_SCRUB_SALT"))
-		if cfg.Salt == "" {
-			cfg.Salt = strings.TrimSpace(os.Getenv("RETRIEVR_SCRUB_SALT"))
-		}
-	}
-
-	if strings.TrimSpace(scrubConfig) != "" {
-		file, err := os.Open(scrubConfig)
-		if err != nil {
-			return fmt.Errorf("open scrub config: %w", err)
-		}
-		defer file.Close()
-
-		cfg.ScrubConfig = file
-	}
-
-	if err := cfg.Validate(); err != nil {
+	if err := validateGraphSelection(command.graphs, command.allGraphs); err != nil {
 		return err
 	}
-
-	var archiveRecipient hpke.PublicKey
-	if strings.TrimSpace(archiveOut) != "" {
-		if strings.TrimSpace(recipientPath) == "" {
-			return fmt.Errorf("-archive-out requires -recipient")
+	if address := strings.TrimSpace(command.pprof); address != "" {
+		if err := validatePprofListenAddress(address); err != nil {
+			return err
 		}
-
-		var err error
-		archiveRecipient, err = retriever.LoadArchivePublicKey(recipientPath)
+	}
+	if command.force {
+		replacement, err := replaceDumpDestination(command.dump.Directory, s.force)
 		if err != nil {
 			return err
 		}
-
-		if err := retriever.PreflightArchiveOutputPath(archiveOut); err != nil {
-			return err
+		command.dump.Directory = replacement.destination
+		if replacement.tombstone != "" {
+			fmt.Fprintf(s.stderr, "force: previous destination preserved intact at %s\n", replacement.tombstone)
 		}
-	} else if strings.TrimSpace(recipientPath) != "" {
-		return fmt.Errorf("-recipient requires -archive-out")
 	}
 
-	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	profileServer, err := startPprofServer(command.pprof, s.stderr)
 	if err != nil {
 		return err
 	}
 	defer stopPprofServer(profileServer, s.stderr)
 
-	db, driverName, err := openDatabase(ctx, dbCfg)
-	if err != nil {
-		return err
-	}
-	defer db.Close(ctx)
-
-	targets, err := resolveGraphTargets(ctx, db, driverName, []string(graphs), *allGraphs)
-	if err != nil {
-		return err
-	}
-
-	result, err := retriever.Dump(ctx, db, driverName, targets, cfg)
-	if err != nil {
-		return err
-	}
-
-	var archiveLine string
-	if strings.TrimSpace(archiveOut) != "" {
-		if err := retriever.WriteEncryptedCollectionArchiveFile(cfg.OutputDir, archiveOut, archiveRecipient); err != nil {
+	operations := s.operations.withDefaults()
+	var result ret.DumpResult
+	if err := func() (resultErr error) {
+		database, driverName, err := operations.openDatabase(ctx, command.database)
+		if err != nil {
 			return err
 		}
+		defer func() {
+			resultErr = errors.Join(resultErr, closeProductDatabase(database))
+		}()
 
-		archiveLine = fmt.Sprintf("archive: %s\n", archiveOut)
-	}
-
-	fmt.Fprintf(s.stdout, "dumped %d graph(s)\nmanifest: %s\n%snodes: %d\nrelationships: %d\n", len(result.Manifest.Graphs), result.ManifestPath, archiveLine, result.NodeCount, result.EdgeCount)
-	return nil
-}
-
-func (s commandRuntime) runKeygen(args []string) error {
-	var cfg retriever.KeygenOptions
-
-	flags := flag.NewFlagSet("retriever keygen", flag.ContinueOnError)
-	flags.SetOutput(s.stderr)
-	flags.StringVar(&cfg.PrivatePath, "private", "", "Private key output path.")
-	flags.StringVar(&cfg.PublicPath, "public", "", "Public key output path.")
-	if err := flags.Parse(args); err != nil {
+		graphs, err := resolveGraphNames(ctx, database, driverName, command.graphs, command.allGraphs)
+		if err != nil {
+			return err
+		}
+		command.dump.Graphs = graphs
+		command.dump.Observer = s.commandObserver()
+		if err := command.dump.Validate(); err != nil {
+			return err
+		}
+		result, err = operations.dump(ctx, database, command.dump)
+		return err
+	}(); err != nil {
 		return err
 	}
-
-	if err := cfg.Validate(); err != nil {
-		return err
-	}
-
-	if err := retriever.Keygen(cfg); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(s.stdout, "private key: %s\npublic key: %s\n", cfg.PrivatePath, cfg.PublicPath)
-	return nil
-}
-
-func (s commandRuntime) runUnpack(args []string) error {
-	var (
-		archivePath  string
-		identityPath string
-		outputDir    string
-		force        bool
+	fmt.Fprintf(s.stdout,
+		"dumped %d graph(s)\nmanifest: %s\nnodes: %d\nrelationships: %d\n",
+		result.GraphCount,
+		result.ManifestPath,
+		result.NodeCount,
+		result.RelationshipCount,
 	)
-
-	flags := flag.NewFlagSet("retriever unpack", flag.ContinueOnError)
-	flags.SetOutput(s.stderr)
-	flags.StringVar(&archivePath, "archive", "", "Encrypted archive input path.")
-	flags.StringVar(&identityPath, "identity", "", "Recipient private key path.")
-	flags.StringVar(&outputDir, "out", "", "Output collection directory.")
-	flags.BoolVar(&force, "force", false, "Replace an existing non-empty output directory.")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-
-	if strings.TrimSpace(archivePath) == "" {
-		return fmt.Errorf("archive path is required; pass -archive")
-	}
-
-	if strings.TrimSpace(identityPath) == "" {
-		return fmt.Errorf("identity key path is required; pass -identity")
-	}
-
-	if strings.TrimSpace(outputDir) == "" {
-		return fmt.Errorf("output directory is required; pass -out")
-	}
-
-	identity, err := retriever.LoadArchivePrivateKey(identityPath)
-	if err != nil {
-		return err
-	}
-
-	if err := retriever.UnpackEncryptedCollectionArchiveFile(archivePath, outputDir, force, identity); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(s.stdout, "unpacked archive: %s\noutput: %s\n", archivePath, outputDir)
 	return nil
 }
 
 func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	var (
-		dbCfg        databaseConfig
-		cfg          = retriever.DefaultLoadOptions("")
-		inputDir     string
-		archivePath  string
-		identityPath string
-		pprofListen  string
+		databaseConfig databaseConfig
+		config         = ret.LoadConfig{BatchSize: defaultEntityBatchSize}
+		verify         bool
+		pprofListen    string
 	)
-
 	flags := flag.NewFlagSet("retriever load", flag.ContinueOnError)
 	flags.SetOutput(s.stderr)
-	commonDatabaseFlags(flags, &dbCfg)
-	flags.StringVar(&inputDir, "in", "", "Input collection directory.")
-	flags.StringVar(&archivePath, "archive", "", "Encrypted archive input path.")
-	flags.StringVar(&identityPath, "identity", "", "Recipient private key path for -archive.")
-	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database write batch size.")
-	flags.BoolVar(&cfg.VerifyMetrics, "verify-metrics", false, "Verify loaded graph metrics against the dump manifest after load.")
+	commonDatabaseFlags(flags, &databaseConfig)
+	flags.StringVar(&config.Directory, "in", "", "Input collection directory.")
+	flags.IntVar(&config.BatchSize, "batch-size", config.BatchSize, "Database write batch size.")
+	flags.BoolVar(&verify, "verify-database", false, "Verify database metrics after a successful load.")
 	commonPprofFlag(flags, &pprofListen)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	fillConnectionFromEnv(&databaseConfig)
+	config.Directory = strings.TrimSpace(config.Directory)
+	config.Observer = s.commandObserver()
+	if err := config.Validate(); err != nil {
+		return err
+	}
 
-	fillConnectionFromEnv(&dbCfg)
-	cfg.InputDir = strings.TrimSpace(inputDir)
+	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	if err != nil {
+		return err
+	}
+	defer stopPprofServer(profileServer, s.stderr)
 
-	if strings.TrimSpace(archivePath) != "" {
-		if cfg.InputDir != "" {
-			return fmt.Errorf("load accepts either -in or -archive, not both")
-		}
-
-		if strings.TrimSpace(identityPath) == "" {
-			return fmt.Errorf("-archive requires -identity")
-		}
-
-		identity, err := retriever.LoadArchivePrivateKey(identityPath)
+	operations := s.operations.withDefaults()
+	var (
+		result       ret.LoadResult
+		verifyResult ret.VerifyDatabaseResult
+	)
+	if err := func() (resultErr error) {
+		database, _, err := operations.openDatabase(ctx, databaseConfig)
 		if err != nil {
 			return err
 		}
+		defer func() {
+			resultErr = errors.Join(resultErr, closeProductDatabase(database))
+		}()
 
-		archiveFile, err := os.Open(archivePath)
+		result, err = operations.load(ctx, database, config)
 		if err != nil {
-			return fmt.Errorf("open archive: %w", err)
+			return fmt.Errorf("load failed; if a graph was partially loaded, clear it before retry: %w", err)
 		}
-		defer archiveFile.Close()
-
-		cfg.ArchiveReader = archiveFile
-		cfg.ArchiveIdentity = identity
-	} else if strings.TrimSpace(identityPath) != "" {
-		return fmt.Errorf("-identity requires -archive")
-	}
-
-	if err := cfg.Validate(); err != nil {
+		if verify {
+			verifyResult, err = operations.verifyDatabase(ctx, database, ret.VerifyDatabaseConfig{
+				Directory: config.Directory,
+				BatchSize: config.BatchSize,
+				Observer:  config.Observer,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
+	fmt.Fprintf(s.stdout,
+		"loaded %d graph(s)\nnodes: %d\nrelationships: %d\n",
+		result.GraphCount,
+		result.NodeCount,
+		result.RelationshipCount,
+	)
 
-	profileServer, err := startPprofServer(pprofListen, s.stderr)
-	if err != nil {
-		return err
+	if verify {
+		fmt.Fprintf(s.stdout,
+			"verified database: %d graph(s)\nnodes: %d\nrelationships: %d\n",
+			verifyResult.GraphCount,
+			verifyResult.NodeCount,
+			verifyResult.RelationshipCount,
+		)
 	}
-	defer stopPprofServer(profileServer, s.stderr)
-
-	db, driverName, err := openDatabase(ctx, dbCfg)
-	if err != nil {
-		return err
-	}
-	defer db.Close(ctx)
-
-	result, err := retriever.Load(ctx, db, driverName, cfg)
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintf(s.stdout, "loaded %d graph(s)\nnodes: %d\nrelationships: %d\n", result.GraphCount, result.NodeCount, result.EdgeCount)
 	return nil
 }
 
-func (s commandRuntime) runVerify(ctx context.Context, args []string) error {
-	var (
-		dbCfg       databaseConfig
-		cfg         = retriever.DefaultVerifyOptions("")
-		pprofListen string
-	)
-
-	flags := flag.NewFlagSet("retriever verify", flag.ContinueOnError)
+func (s commandRuntime) runVerifyCollection(ctx context.Context, args []string) error {
+	var config ret.VerifyCollectionConfig
+	flags := flag.NewFlagSet("retriever verify-collection", flag.ContinueOnError)
 	flags.SetOutput(s.stderr)
-	commonDatabaseFlags(flags, &dbCfg)
-	flags.StringVar(&cfg.InputDir, "in", "", "Input collection directory.")
-	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
+	flags.StringVar(&config.Directory, "in", "", "Input collection directory.")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	config.Directory = strings.TrimSpace(config.Directory)
+	config.Observer = s.commandObserver()
+	if err := config.Validate(); err != nil {
+		return err
+	}
+
+	result, err := s.operations.withDefaults().verifyCollection(ctx, config)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(s.stdout,
+		"verified collection: %d graph(s)\nnodes: %d\nrelationships: %d\n",
+		result.GraphCount,
+		result.NodeCount,
+		result.RelationshipCount,
+	)
+	return nil
+}
+
+func (s commandRuntime) runVerifyDatabase(ctx context.Context, args []string) error {
+	var (
+		databaseConfig databaseConfig
+		config         = ret.VerifyDatabaseConfig{BatchSize: defaultEntityBatchSize}
+		pprofListen    string
+	)
+	flags := flag.NewFlagSet("retriever verify-database", flag.ContinueOnError)
+	flags.SetOutput(s.stderr)
+	commonDatabaseFlags(flags, &databaseConfig)
+	flags.StringVar(&config.Directory, "in", "", "Input collection directory.")
+	flags.IntVar(&config.BatchSize, "batch-size", config.BatchSize, "Database read batch size.")
 	commonPprofFlag(flags, &pprofListen)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-
-	fillConnectionFromEnv(&dbCfg)
-
-	if err := cfg.Validate(); err != nil {
+	fillConnectionFromEnv(&databaseConfig)
+	config.Directory = strings.TrimSpace(config.Directory)
+	config.Observer = s.commandObserver()
+	if err := config.Validate(); err != nil {
 		return err
 	}
 
@@ -357,94 +320,183 @@ func (s commandRuntime) runVerify(ctx context.Context, args []string) error {
 	}
 	defer stopPprofServer(profileServer, s.stderr)
 
-	db, driverName, err := openDatabase(ctx, dbCfg)
+	operations := s.operations.withDefaults()
+	var result ret.VerifyDatabaseResult
+	if err := func() (resultErr error) {
+		database, _, err := operations.openDatabase(ctx, databaseConfig)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			resultErr = errors.Join(resultErr, closeProductDatabase(database))
+		}()
+		result, err = operations.verifyDatabase(ctx, database, config)
+		return err
+	}(); err != nil {
+		return err
+	}
+	fmt.Fprintf(s.stdout,
+		"verified database: %d graph(s)\nnodes: %d\nrelationships: %d\n",
+		result.GraphCount,
+		result.NodeCount,
+		result.RelationshipCount,
+	)
+	return nil
+}
+
+func (s commandRuntime) runPack(ctx context.Context, args []string) error {
+	var (
+		collectionDirectory string
+		archivePath         string
+		recipientPath       string
+	)
+	flags := flag.NewFlagSet("retriever pack", flag.ContinueOnError)
+	flags.SetOutput(s.stderr)
+	flags.StringVar(&collectionDirectory, "in", "", "Input collection directory.")
+	flags.StringVar(&archivePath, "archive", "", "Encrypted archive output path.")
+	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key path.")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(collectionDirectory) == "" {
+		return fmt.Errorf("collection directory is required; pass -in")
+	}
+	if strings.TrimSpace(archivePath) == "" {
+		return fmt.Errorf("archive path is required; pass -archive")
+	}
+	if strings.TrimSpace(recipientPath) == "" {
+		return fmt.Errorf("recipient key path is required; pass -recipient")
+	}
+	recipient, err := archive.ReadPublicKey(recipientPath)
 	if err != nil {
 		return err
 	}
-	defer db.Close(ctx)
+	config := ret.PackConfig{
+		CollectionDirectory: strings.TrimSpace(collectionDirectory),
+		ArchivePath:         strings.TrimSpace(archivePath),
+		Recipient:           recipient,
+		Observer:            s.commandObserver(),
+	}
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	if err := s.operations.withDefaults().pack(ctx, config); err != nil {
+		return err
+	}
+	fmt.Fprintf(s.stdout, "archive: %s\n", config.ArchivePath)
+	return nil
+}
 
-	result, err := retriever.Verify(ctx, db, driverName, cfg)
+func (s commandRuntime) runUnpack(ctx context.Context, args []string) error {
+	var (
+		archivePath  string
+		outputDir    string
+		identityPath string
+	)
+	flags := flag.NewFlagSet("retriever unpack", flag.ContinueOnError)
+	flags.SetOutput(s.stderr)
+	flags.StringVar(&archivePath, "archive", "", "Encrypted archive input path.")
+	flags.StringVar(&outputDir, "out", "", "Output collection directory.")
+	flags.StringVar(&identityPath, "identity", "", "Recipient private key path.")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(archivePath) == "" {
+		return fmt.Errorf("archive path is required; pass -archive")
+	}
+	if strings.TrimSpace(outputDir) == "" {
+		return fmt.Errorf("output directory is required; pass -out")
+	}
+	if strings.TrimSpace(identityPath) == "" {
+		return fmt.Errorf("identity key path is required; pass -identity")
+	}
+	identity, err := archive.ReadPrivateKey(identityPath)
 	if err != nil {
 		return err
 	}
+	config := ret.UnpackConfig{
+		ArchivePath:     strings.TrimSpace(archivePath),
+		OutputDirectory: strings.TrimSpace(outputDir),
+		Identity:        identity,
+		Observer:        s.commandObserver(),
+	}
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	if err := s.operations.withDefaults().unpack(ctx, config); err != nil {
+		return err
+	}
+	fmt.Fprintf(s.stdout, "unpacked archive: %s\noutput: %s\n", config.ArchivePath, config.OutputDirectory)
+	return nil
+}
 
-	fmt.Fprintf(s.stdout, "verified %d graph(s)\nnodes: %d\nrelationships: %d\n", result.GraphCount, result.NodeCount, result.EdgeCount)
+func (s commandRuntime) runKeygen(args []string) error {
+	var config ret.KeygenConfig
+	flags := flag.NewFlagSet("retriever keygen", flag.ContinueOnError)
+	flags.SetOutput(s.stderr)
+	flags.StringVar(&config.PrivateKeyPath, "private-key", "", "Private key output path.")
+	flags.StringVar(&config.PublicKeyPath, "public-key", "", "Public key output path.")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	if err := s.operations.withDefaults().keygen(config); err != nil {
+		return err
+	}
+	fmt.Fprintf(s.stdout, "private key: %s\npublic key: %s\n", config.PrivateKeyPath, config.PublicKeyPath)
 	return nil
 }
 
 func (s commandRuntime) runBench(ctx context.Context, args []string) error {
-	var (
-		dbCfg databaseConfig
-		cfg   benchOptions
-
-		graphs         stringList
-		workers        workerList
-		compressionVal string
-		pprofListen    string
-	)
-
-	cfg.BatchSize = retriever.DefaultBatchSize
-	cfg.SampleSize = defaultBenchSampleSize
-	cfg.ZstdLevel = retriever.DefaultZstdLevel
-
-	flags := flag.NewFlagSet("retriever bench", flag.ContinueOnError)
-	flags.SetOutput(s.stderr)
-	commonDatabaseFlags(flags, &dbCfg)
-	flags.Var(&graphs, "graph", "Graph target. May be repeated.")
-	allGraphs := flags.Bool("all-graphs", false, "Benchmark every graph discoverable by the selected driver.")
-	flags.Var(&workers, "workers", "Comma-separated worker counts.")
-	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database read batch size.")
-	flags.IntVar(&cfg.SampleSize, "sample-size", cfg.SampleSize, "Maximum nodes and relationships to scan per phase; 0 scans the full graph.")
-	flags.StringVar(&compressionVal, "compression", "", "Optional compression codec to include encode/compress timing: zstd, gzip, or none.")
-	flags.IntVar(&cfg.ZstdLevel, "zstd-level", cfg.ZstdLevel, "zstd compression level.")
-	flags.BoolVar(&cfg.JSONOutput, "json", false, "Emit machine-readable JSON.")
-	commonPprofFlag(flags, &pprofListen)
-	if err := flags.Parse(args); err != nil {
+	config, err := parseBenchCommand(args, s.stderr)
+	if err != nil {
 		return err
 	}
 
-	fillConnectionFromEnv(&dbCfg)
-
-	if len(workers) == 0 {
-		workers = workerList{1}
-	}
-
-	cfg.Workers = []int(workers)
-	cfg.Compression = retriever.CompressionCodec(strings.TrimSpace(compressionVal))
-
-	if err := cfg.validate(); err != nil {
-		return err
-	}
-
-	profileServer, err := startPprofServer(pprofListen, s.stderr)
+	profileServer, err := startPprofServer(config.pprof, s.stderr)
 	if err != nil {
 		return err
 	}
 	defer stopPprofServer(profileServer, s.stderr)
 
-	db, driverName, err := openDatabase(ctx, dbCfg)
-	if err != nil {
+	operations := s.operations.withDefaults()
+	var report benchReport
+	if err := func() (resultErr error) {
+		database, driverName, err := operations.openDatabase(ctx, config.database)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			resultErr = errors.Join(resultErr, closeProductDatabase(database))
+		}()
+
+		graphNames, err := resolveGraphNames(ctx, database, driverName, config.graphs, config.allGraphs)
+		if err != nil {
+			return err
+		}
+
+		report, err = Bench(ctx, database, driverName, graphNames, config.bench)
+		if err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
-	defer db.Close(ctx)
-
-	targets, err := resolveGraphTargets(ctx, db, driverName, []string(graphs), *allGraphs)
-	if err != nil {
-		return err
-	}
-
-	report, err := Bench(ctx, db, driverName, targets, cfg)
-	if err != nil {
-		return err
-	}
-
-	if cfg.JSONOutput {
+	if config.bench.JSONOutput {
 		encoder := json.NewEncoder(s.stdout)
 		encoder.SetIndent("", "  ")
-
 		return encoder.Encode(report)
 	}
-
 	writeBenchReport(s.stdout, report)
 	return nil
+}
+
+func (s commandRuntime) commandObserver() observe.Observer {
+	if s.observer != nil {
+		return s.observer
+	}
+	return newCommandObserver(slog.Default())
 }
