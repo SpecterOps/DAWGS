@@ -132,6 +132,9 @@ func TestOptionsValidate(t *testing.T) {
 
 func TestDefaultOptions(t *testing.T) {
 	dump := DefaultDumpOptions(t.TempDir())
+	if dump.Parquet {
+		t.Fatal("expected Parquet output to be disabled by default")
+	}
 	if dump.Scrub != ScrubNone || dump.Compression != CompressionZstd || dump.ZstdLevel != DefaultZstdLevel {
 		t.Fatalf("unexpected dump defaults: %+v", dump)
 	}
@@ -141,6 +144,10 @@ func TestDefaultOptions(t *testing.T) {
 
 	if err := dump.Validate(); err != nil {
 		t.Fatalf("validate default dump options: %v", err)
+	}
+	dump.Parquet = true
+	if err := dump.Validate(); err != nil {
+		t.Fatalf("validate Parquet dump options: %v", err)
 	}
 
 	load := DefaultLoadOptions(t.TempDir())

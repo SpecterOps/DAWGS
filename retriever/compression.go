@@ -156,11 +156,14 @@ func newDecompressionReader(reader io.Reader, codec CompressionCodec) (io.ReadCl
 }
 
 func newCompressedJSONLinesWriter(path string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
+	return newCompressedJSONLinesWriterAtPaths(path, path+".tmp", codec, zstdLevel)
+}
+
+func newCompressedJSONLinesWriterAtPaths(path, tempPath string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create fragment directory: %w", err)
 	}
 
-	tempPath := path + ".tmp"
 	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open fragment temp file: %w", err)

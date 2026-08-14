@@ -78,6 +78,7 @@ type DumpOptions struct {
 	Salt             string
 	ScrubConfig      io.Reader
 	Compression      CompressionCodec
+	Parquet          bool
 	ZstdLevel        int
 	ShardSize        int
 	BatchSize        int

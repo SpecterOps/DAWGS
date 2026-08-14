@@ -613,8 +613,9 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 
 	var (
 		files                = append([]FileManifest(nil), committedFiles...)
-		fragmentWriter       *compressedJSONLinesWriter
+		fragmentWriter       *fragmentWriter[FragmentNode]
 		fragmentRelativePath string
+		parquetRelativePath  string
 		shardActionCounts    scrubActionCounts
 		shardNumber          = len(committedFiles) + 1
 		lastWrittenID        graph.ID
@@ -634,13 +635,13 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 
 		files = append(files, fileEntry)
 		if !hasLastWrittenID {
-			_ = os.Remove(filepath.Join(options.OutputDir, filepath.FromSlash(fileEntry.Path)))
+			removePublishedFragmentOutputs(options.OutputDir, fileEntry.Path, parquetRelativePath, options.Parquet)
 			files = files[:len(files)-1]
 			return fmt.Errorf("node fragment %q closed without a committed source cursor", fileEntry.Path)
 		}
 		if onCommit != nil {
 			if err := onCommit(fileEntry, lastWrittenID); err != nil {
-				_ = os.Remove(filepath.Join(options.OutputDir, filepath.FromSlash(fileEntry.Path)))
+				removePublishedFragmentOutputs(options.OutputDir, fileEntry.Path, parquetRelativePath, options.Parquet)
 				files = files[:len(files)-1]
 				return err
 			}
@@ -653,13 +654,14 @@ func dumpNodePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 
 	if _, err := scanDatabaseNodesFrom(ctx, db, targetGraph, entitySnapshot.NodeCount, options.BatchSize, options.ProgressInterval, afterID, hasAfterID, fileTotal(committedFiles), func(node *graph.Node) error {
 		if fragmentWriter == nil {
-			nextWriter, nextRelativePath, err := openFragmentWriter(options.OutputDir, targetGraph.Name, PhaseNodes, shardNumber, options)
+			nextWriter, nextRelativePath, nextParquetRelativePath, err := openNodeFragmentWriter(options.OutputDir, targetGraph.Name, shardNumber, options)
 			if err != nil {
 				return err
 			}
 
 			fragmentWriter = nextWriter
 			fragmentRelativePath = nextRelativePath
+			parquetRelativePath = nextParquetRelativePath
 		}
 
 		kinds := node.Kinds.Strings()
@@ -720,8 +722,9 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 
 	var (
 		files                = append([]FileManifest(nil), committedFiles...)
-		fragmentWriter       *compressedJSONLinesWriter
+		fragmentWriter       *fragmentWriter[FragmentEdge]
 		fragmentRelativePath string
+		parquetRelativePath  string
 		shardActionCounts    scrubActionCounts
 		shardNumber          = len(committedFiles) + 1
 		lastWrittenID        graph.ID
@@ -741,13 +744,13 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 
 		files = append(files, fileEntry)
 		if !hasLastWrittenID {
-			_ = os.Remove(filepath.Join(options.OutputDir, filepath.FromSlash(fileEntry.Path)))
+			removePublishedFragmentOutputs(options.OutputDir, fileEntry.Path, parquetRelativePath, options.Parquet)
 			files = files[:len(files)-1]
 			return fmt.Errorf("edge fragment %q closed without a committed source cursor", fileEntry.Path)
 		}
 		if onCommit != nil {
 			if err := onCommit(fileEntry, lastWrittenID); err != nil {
-				_ = os.Remove(filepath.Join(options.OutputDir, filepath.FromSlash(fileEntry.Path)))
+				removePublishedFragmentOutputs(options.OutputDir, fileEntry.Path, parquetRelativePath, options.Parquet)
 				files = files[:len(files)-1]
 				return err
 			}
@@ -760,13 +763,14 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 
 	if _, err := scanDatabaseRelationshipsFrom(ctx, db, targetGraph, entitySnapshot.EdgeCount, options.BatchSize, options.ProgressInterval, afterID, hasAfterID, fileTotal(committedFiles), func(relationship *graph.Relationship) error {
 		if fragmentWriter == nil {
-			nextWriter, nextRelativePath, err := openFragmentWriter(options.OutputDir, targetGraph.Name, PhaseEdges, shardNumber, options)
+			nextWriter, nextRelativePath, nextParquetRelativePath, err := openEdgeFragmentWriter(options.OutputDir, targetGraph.Name, shardNumber, options)
 			if err != nil {
 				return err
 			}
 
 			fragmentWriter = nextWriter
 			fragmentRelativePath = nextRelativePath
+			parquetRelativePath = nextParquetRelativePath
 		}
 
 		kind := ""
@@ -824,84 +828,117 @@ func dumpEdgePhase(ctx context.Context, db graph.Database, targetGraph graph.Gra
 }
 
 func writeNodeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentNode, actionCounts map[string]int) (FileManifest, error) {
-	relativePath, err := fragmentPath(graphName, PhaseNodes, shardNumber, options.Compression)
+	writer, relativePath, _, err := openNodeFragmentWriter(outputDir, graphName, shardNumber, options)
 	if err != nil {
 		return FileManifest{}, err
 	}
-
-	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	fileEntry, err := writeCompressedJSONLines(absolutePath, options.Compression, options.ZstdLevel, items)
-	if err != nil {
-		return FileManifest{}, err
+	for _, item := range items {
+		if err := writer.Write(item); err != nil {
+			writer.Abort()
+			return FileManifest{}, err
+		}
 	}
-
-	fileEntry.Phase = PhaseNodes
-	fileEntry.Path = relativePath
-	fileEntry.Count = len(items)
-	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
-
-	return fileEntry, nil
+	return closeFragmentWriter(writer, relativePath, PhaseNodes, actionCounts)
 }
 
 func writeEdgeFragment(outputDir, graphName string, shardNumber int, options DumpOptions, items []FragmentEdge, actionCounts map[string]int) (FileManifest, error) {
-	relativePath, err := fragmentPath(graphName, PhaseEdges, shardNumber, options.Compression)
+	writer, relativePath, _, err := openEdgeFragmentWriter(outputDir, graphName, shardNumber, options)
 	if err != nil {
 		return FileManifest{}, err
 	}
-
-	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	fileEntry, err := writeCompressedJSONLines(absolutePath, options.Compression, options.ZstdLevel, items)
-	if err != nil {
-		return FileManifest{}, err
+	for _, item := range items {
+		if err := writer.Write(item); err != nil {
+			writer.Abort()
+			return FileManifest{}, err
+		}
 	}
-
-	fileEntry.Phase = PhaseEdges
-	fileEntry.Path = relativePath
-	fileEntry.Count = len(items)
-	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
-
-	return fileEntry, nil
+	return closeFragmentWriter(writer, relativePath, PhaseEdges, actionCounts)
 }
 
 func fragmentPath(graphName string, fragmentPhase Phase, shardNumber int, codec CompressionCodec) (string, error) {
 	if shardNumber <= 0 {
 		return "", fmt.Errorf("shard number must be > 0")
 	}
-
 	extension, err := compressionExtension(codec)
 	if err != nil {
 		return "", err
 	}
-
-	var prefix string
-	switch fragmentPhase {
-	case PhaseNodes:
-		prefix = "nodes"
-	case PhaseEdges:
-		prefix = "edges"
-	default:
-		return "", fmt.Errorf("unsupported fragment phase %q", fragmentPhase)
+	prefix, err := fragmentPrefix(fragmentPhase)
+	if err != nil {
+		return "", err
 	}
 
 	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s-%06d.jsonl%s", prefix, shardNumber, extension)), nil
 }
 
-func openFragmentWriter(outputDir, graphName string, fragmentPhase Phase, shardNumber int, options DumpOptions) (*compressedJSONLinesWriter, string, error) {
-	relativePath, err := fragmentPath(graphName, fragmentPhase, shardNumber, options.Compression)
+func parquetFragmentPath(graphName string, fragmentPhase Phase, shardNumber int) (string, error) {
+	if shardNumber <= 0 {
+		return "", fmt.Errorf("shard number must be > 0")
+	}
+	prefix, err := fragmentPrefix(fragmentPhase)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 
-	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
-	writer, err := newCompressedJSONLinesWriter(absolutePath, options.Compression, options.ZstdLevel)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return writer, relativePath, nil
+	return path.Join("graphs", graphDirectoryName(graphName), fmt.Sprintf("%s-%06d.parquet", prefix, shardNumber)), nil
 }
 
-func closeFragmentWriter(writer *compressedJSONLinesWriter, relativePath string, fragmentPhase Phase, actionCounts map[string]int) (FileManifest, error) {
+func fragmentPrefix(fragmentPhase Phase) (string, error) {
+	switch fragmentPhase {
+	case PhaseNodes:
+		return "nodes", nil
+	case PhaseEdges:
+		return "edges", nil
+	default:
+		return "", fmt.Errorf("unsupported fragment phase %q", fragmentPhase)
+	}
+}
+
+func openNodeFragmentWriter(outputDir, graphName string, shardNumber int, options DumpOptions) (*fragmentWriter[FragmentNode], string, string, error) {
+	relativePath, parquetRelativePath, err := fragmentPaths(graphName, PhaseNodes, shardNumber, options.Compression)
+	if err != nil {
+		return nil, "", "", err
+	}
+	writer, err := newNodeFragmentWriter(
+		filepath.Join(outputDir, filepath.FromSlash(relativePath)),
+		filepath.Join(outputDir, filepath.FromSlash(parquetRelativePath)),
+		options,
+	)
+	if err != nil {
+		return nil, "", "", err
+	}
+	return writer, relativePath, parquetRelativePath, nil
+}
+
+func openEdgeFragmentWriter(outputDir, graphName string, shardNumber int, options DumpOptions) (*fragmentWriter[FragmentEdge], string, string, error) {
+	relativePath, parquetRelativePath, err := fragmentPaths(graphName, PhaseEdges, shardNumber, options.Compression)
+	if err != nil {
+		return nil, "", "", err
+	}
+	writer, err := newEdgeFragmentWriter(
+		filepath.Join(outputDir, filepath.FromSlash(relativePath)),
+		filepath.Join(outputDir, filepath.FromSlash(parquetRelativePath)),
+		options,
+	)
+	if err != nil {
+		return nil, "", "", err
+	}
+	return writer, relativePath, parquetRelativePath, nil
+}
+
+func fragmentPaths(graphName string, fragmentPhase Phase, shardNumber int, codec CompressionCodec) (string, string, error) {
+	relativePath, err := fragmentPath(graphName, fragmentPhase, shardNumber, codec)
+	if err != nil {
+		return "", "", err
+	}
+	parquetRelativePath, err := parquetFragmentPath(graphName, fragmentPhase, shardNumber)
+	if err != nil {
+		return "", "", err
+	}
+	return relativePath, parquetRelativePath, nil
+}
+
+func closeFragmentWriter[T any](writer *fragmentWriter[T], relativePath string, fragmentPhase Phase, actionCounts map[string]int) (FileManifest, error) {
 	fileEntry, err := writer.Close()
 	if err != nil {
 		return FileManifest{}, err
@@ -912,6 +949,13 @@ func closeFragmentWriter(writer *compressedJSONLinesWriter, relativePath string,
 	fileEntry.ActionCounts = cloneActionCounts(actionCounts)
 
 	return fileEntry, nil
+}
+
+func removePublishedFragmentOutputs(outputDir, relativePath, parquetRelativePath string, parquetEnabled bool) {
+	_ = os.Remove(filepath.Join(outputDir, filepath.FromSlash(relativePath)))
+	if parquetEnabled {
+		_ = os.Remove(filepath.Join(outputDir, filepath.FromSlash(parquetRelativePath)))
+	}
 }
 
 func fileTotal(files []FileManifest) int64 {
