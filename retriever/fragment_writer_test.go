@@ -25,6 +25,10 @@ func TestNodeFragmentWriter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create node writer: %v", err)
 		}
+		if _, err := os.Stat(jsonlPath + ".tmp"); err != nil {
+			t.Fatalf("stat JSONL staging file: %v", err)
+		}
+		assertAbsent(t, jsonlPath+".tmp.tmp")
 		if err := writer.Write(first); err != nil {
 			t.Fatalf("write first node: %v", err)
 		}
@@ -161,7 +165,6 @@ func TestNodeFragmentWriter(t *testing.T) {
 		for _, path := range []string{
 			jsonlPath,
 			jsonlPath + ".tmp",
-			jsonlPath + ".tmp.tmp",
 			parquetPath,
 			parquetPath + ".tmp",
 		} {
@@ -198,7 +201,7 @@ func TestNodeFragmentWriter(t *testing.T) {
 			t.Fatalf("write error = %v, want %v", err, writeErr)
 		}
 
-		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", jsonlPath + ".tmp.tmp", parquetPath, parquetPath + ".tmp"} {
+		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", parquetPath, parquetPath + ".tmp"} {
 			assertAbsent(t, path)
 		}
 	})
@@ -221,7 +224,7 @@ func TestNodeFragmentWriter(t *testing.T) {
 			t.Fatal("expected JSONL close failure")
 		}
 
-		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", jsonlPath + ".tmp.tmp", parquetPath, parquetPath + ".tmp"} {
+		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", parquetPath, parquetPath + ".tmp"} {
 			assertAbsent(t, path)
 		}
 	})
@@ -245,7 +248,7 @@ func TestNodeFragmentWriter(t *testing.T) {
 			t.Fatal("expected Parquet close failure")
 		}
 
-		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", jsonlPath + ".tmp.tmp", parquetPath, parquetPath + ".tmp"} {
+		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", parquetPath, parquetPath + ".tmp"} {
 			assertAbsent(t, path)
 		}
 	})
@@ -268,7 +271,7 @@ func TestNodeFragmentWriter(t *testing.T) {
 			t.Fatal("expected Parquet publish rename failure")
 		}
 
-		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", jsonlPath + ".tmp.tmp", parquetPath + ".tmp"} {
+		for _, path := range []string{jsonlPath, jsonlPath + ".tmp", parquetPath + ".tmp"} {
 			assertAbsent(t, path)
 		}
 		if info, err := os.Stat(parquetPath); err != nil || !info.IsDir() {

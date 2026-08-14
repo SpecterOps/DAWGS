@@ -353,7 +353,6 @@ func TestDumpResumeRemovesKnownNextShardTemps(t *testing.T) {
 	}
 	tempPaths := []string{
 		filepath.Join(outputDir, filepath.FromSlash(jsonlPath)) + ".tmp",
-		filepath.Join(outputDir, filepath.FromSlash(jsonlPath)) + ".tmp.tmp",
 		filepath.Join(outputDir, filepath.FromSlash(parquetPath)) + ".tmp",
 	}
 	for _, tempPath := range tempPaths {

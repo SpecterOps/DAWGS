@@ -42,7 +42,7 @@ func newFragmentWriter[T any](jsonlPath, parquetPath string, options DumpOptions
 	}
 
 	jsonlStagingPath := jsonlPath + ".tmp"
-	jsonl, err := newCompressedJSONLinesWriterAtPaths(jsonlStagingPath, jsonlStagingPath+".tmp", options.Compression, options.ZstdLevel)
+	jsonl, err := newCompressedJSONLinesWriterAtPaths(jsonlPath, jsonlStagingPath, options.Compression, options.ZstdLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *fragmentWriter[T]) Close() (FileManifest, error) {
 		return s.jsonl.Close()
 	}
 
-	fileEntry, err := s.jsonl.Close()
+	fileEntry, err := s.jsonl.finalize()
 	if err != nil {
 		s.cleanup(false, false)
 		return FileManifest{}, err
@@ -139,7 +139,6 @@ func (s *fragmentWriter[T]) cleanup(jsonlPublished, parquetPublished bool) {
 	}
 
 	_ = os.Remove(s.jsonlStagingPath)
-	_ = os.Remove(s.jsonlStagingPath + ".tmp")
 	_ = os.Remove(s.parquetStagingPath)
 	if jsonlPublished {
 		_ = os.Remove(s.jsonlPath)

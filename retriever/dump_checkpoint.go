@@ -282,7 +282,7 @@ func removeKnownDumpCheckpointTemps(outputDir string, value dumpCheckpoint) erro
 				return err
 			}
 			parquetPath := filepath.Join(outputDir, filepath.FromSlash(nextParquetPath))
-			paths = append(paths, jsonlStagingPath+".tmp", parquetPath, parquetPath+".tmp")
+			paths = append(paths, parquetPath, parquetPath+".tmp")
 		}
 	}
 	for _, candidate := range paths {

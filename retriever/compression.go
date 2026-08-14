@@ -218,6 +218,21 @@ func (s *compressedJSONLinesWriter) Count() int {
 }
 
 func (s *compressedJSONLinesWriter) Close() (FileManifest, error) {
+	fileEntry, err := s.finalize()
+	if err != nil {
+		return FileManifest{}, err
+	}
+
+	if err := os.Rename(s.tempPath, s.path); err != nil {
+		_ = os.Remove(s.tempPath)
+
+		return FileManifest{}, fmt.Errorf("rename fragment: %w", err)
+	}
+
+	return fileEntry, nil
+}
+
+func (s *compressedJSONLinesWriter) finalize() (FileManifest, error) {
 	if s.closed {
 		return FileManifest{}, fmt.Errorf("close JSONL fragment more than once")
 	}
@@ -234,12 +249,6 @@ func (s *compressedJSONLinesWriter) Close() (FileManifest, error) {
 		_ = os.Remove(s.tempPath)
 
 		return FileManifest{}, fmt.Errorf("close fragment file: %w", err)
-	}
-
-	if err := os.Rename(s.tempPath, s.path); err != nil {
-		_ = os.Remove(s.tempPath)
-
-		return FileManifest{}, fmt.Errorf("rename fragment: %w", err)
 	}
 
 	return FileManifest{
