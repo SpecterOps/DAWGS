@@ -342,6 +342,17 @@ type config struct {
 	SPI2V2DevelopmentArtifact string
 	// SPI2V2DevelopmentStudy selects readiness or tournament validation.
 	SPI2V2DevelopmentStudy string
+	// SPI2V2ComponentCheck enables one exact E1D or E1P semantic/plan check.
+	SPI2V2ComponentCheck bool
+	// SPI2V2ComponentAuthorization supplies the exact E1D/E1P authorization
+	// required before the combined E1DP arm may reach database setup.
+	SPI2V2ComponentAuthorization string
+	// SPI2V2ComponentE1DArtifact supplies the exact E1D component-check artifact.
+	SPI2V2ComponentE1DArtifact string
+	// SPI2V2ComponentE1PArtifact supplies the exact E1P component-check artifact.
+	SPI2V2ComponentE1PArtifact string
+	// SPI2V2ComponentAuthorizationOutput writes the combined-arm authorization.
+	SPI2V2ComponentAuthorizationOutput string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -523,6 +534,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.SPI2V2ReadinessComparison, "sp-i2-v2-readiness-comparison", false, "run one arm/round of the fixed non-promotional SP-I2 V2 E0/S4 readiness comparison")
 	flags.StringVar(&cfg.SPI2V2DevelopmentArtifact, "sp-i2-v2-development-artifact", "", "validate one complete non-promotional SP-I2 V2 development JSONL artifact")
 	flags.StringVar(&cfg.SPI2V2DevelopmentStudy, "sp-i2-v2-development-study", "", "development artifact study (readiness or tournament)")
+	flags.BoolVar(&cfg.SPI2V2ComponentCheck, "sp-i2-v2-component-check", false, "capture one exact open-corpus E1D or E1P semantic and plan-invariant check")
+	flags.StringVar(&cfg.SPI2V2ComponentAuthorization, "sp-i2-v2-component-authorization", "", "checksummed E1D/E1P authorization required to capture E1DP")
+	flags.StringVar(&cfg.SPI2V2ComponentE1DArtifact, "sp-i2-v2-component-e1d-artifact", "", "exact E1D component-check JSONL artifact")
+	flags.StringVar(&cfg.SPI2V2ComponentE1PArtifact, "sp-i2-v2-component-e1p-artifact", "", "exact E1P component-check JSONL artifact")
+	flags.StringVar(&cfg.SPI2V2ComponentAuthorizationOutput, "sp-i2-v2-component-authorization-output", "", "write the checksummed E1DP component authorization")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -799,7 +815,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	}
 	spI2ExecutorRequested := cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 		isV2GraphBenchExecutor(cfg.PostgresForceShortest)
-	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentStudy != "" ||
+	spI2Requested := spI2ReportConfigured || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || cfg.SPI2V2DevelopmentArtifact != "" || cfg.SPI2V2DevelopmentStudy != "" || cfg.SPI2V2ComponentCheck || cfg.SPI2V2ComponentAuthorization != "" || cfg.SPI2V2ComponentE1DArtifact != "" || cfg.SPI2V2ComponentE1PArtifact != "" || cfg.SPI2V2ComponentAuthorizationOutput != "" ||
 		spI2TrainingInputCount(spI2TrainingInputs) > 0 || spI2ExecutorRequested ||
 		strings.Contains(rawTags, "sp-i2-distance-v1") || strings.Contains(rawTags, "sp-i2-distance-v2")
 	if spI2Requested && cfg.SPI2Generation == "" {
@@ -824,7 +840,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			return config{}, fmt.Errorf("SP-I2 V2 evidence cannot use V1 report or freeze flags")
 		}
 		if cfg.PostgresForceShortest == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
-			(strings.Contains(rawTags, "sp-i2-distance-v1") && !cfg.SPI2V2DevelopmentTournament && !cfg.SPI2V2ReadinessComparison) {
+			(strings.Contains(rawTags, "sp-i2-distance-v1") && !cfg.SPI2V2DevelopmentTournament && !cfg.SPI2V2ReadinessComparison && !cfg.SPI2V2ComponentCheck) {
 			return config{}, fmt.Errorf("SP-I2 V2 generation cannot select V1 evidence")
 		}
 	}
@@ -841,6 +857,25 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 		}
 		if cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison || spI2ReportConfigured || cfg.SPI2Freeze != "" {
 			return config{}, fmt.Errorf("SP-I2 V2 development artifact validation cannot be combined with capture or promotional workflows")
+		}
+	}
+	componentAuthorizationInputs := []string{
+		cfg.SPI2V2ComponentE1DArtifact,
+		cfg.SPI2V2ComponentE1PArtifact,
+		cfg.SPI2V2ComponentAuthorizationOutput,
+	}
+	componentAuthorizationCount := 0
+	for _, input := range componentAuthorizationInputs {
+		if input != "" {
+			componentAuthorizationCount++
+		}
+	}
+	if componentAuthorizationCount != 0 && componentAuthorizationCount != len(componentAuthorizationInputs) {
+		return config{}, fmt.Errorf("SP-I2 V2 component authorization production requires E1D, E1P, and output artifacts")
+	}
+	if componentAuthorizationCount != 0 {
+		if cfg.SPI2Generation != spI2GenerationV2 || cfg.SPI2V2ComponentCheck || cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison {
+			return config{}, fmt.Errorf("SP-I2 V2 component authorization production cannot be combined with capture workflows")
 		}
 	}
 	if cfg.SPI2Protocol != referencePairProtocolDiscovery && cfg.SPI2Protocol != referencePairProtocolConfirmation {
@@ -1154,6 +1189,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			return config{}, err
 		}
 	}
+	if cfg.SPI2V2ComponentCheck {
+		if err := validateSPI2V2ComponentCheckCaptureConfig(cfg); err != nil {
+			return config{}, err
+		}
+	}
 
 	return cfg, nil
 }
@@ -1300,6 +1340,21 @@ func main() {
 	cfg, err := parseConfig(os.Args[1:], os.Getenv)
 	if err != nil {
 		fatal("%v", err)
+	}
+	if cfg.SPI2V2ComponentAuthorizationOutput != "" {
+		passed, err := createSPI2V2ComponentAuthorization(
+			cfg.CorpusRoot,
+			cfg.SPI2V2ComponentE1DArtifact,
+			cfg.SPI2V2ComponentE1PArtifact,
+			cfg.SPI2V2ComponentAuthorizationOutput,
+		)
+		if err != nil {
+			fatal("create SP-I2 V2 component authorization: %v", err)
+		}
+		if !passed {
+			fatal("SP-I2 V2 component authorization failed")
+		}
+		return
 	}
 	if cfg.SPI2V2DevelopmentArtifact != "" {
 		if err := validateSPI2V2DevelopmentArtifact(cfg.SPI2V2DevelopmentArtifact, spI2V2DevelopmentStudy(cfg.SPI2V2DevelopmentStudy)); err != nil {

@@ -1172,6 +1172,38 @@ go run ./cmd/graphbench \
 Use `readiness` for the two-arm E0/S4 artifact. The command exits without
 database setup only after the entire artifact passes validation.
 
+E1DP is fail-closed until E1D and E1P have independently passed exact semantic,
+canonical-plan, resource, receipt, and fallback checks. Build one GraphBench
+binary and use that same executable for both checks, authorization production,
+and the subsequent E1DP tournament positions:
+
+```bash
+graphbench \
+  -sp-i2-generation sp-i2-distance-v2 \
+  -sp-i2-v2-component-check \
+  -modes postgres_sql -iterations 1 -warmup-iterations 1 \
+  -round 1 -block 1 -arm-order 1 -run-uuid component-e1d \
+  -arm SP-I2-C-D-V2-E1D -tags sp-i2-distance-v1-training \
+  -jsonl-output .coverage/sp-i2-v2-component-e1d.jsonl \
+  -postgres-force-shortest-executor SP-I2-C-D-V2-E1D \
+  -postgres-repeatable-read -postgres-traversal-telemetry diagnostic
+
+# Repeat with E1P, its executor/arm identity, run UUID, and output path.
+
+graphbench \
+  -sp-i2-generation sp-i2-distance-v2 \
+  -sp-i2-v2-component-e1d-artifact .coverage/sp-i2-v2-component-e1d.jsonl \
+  -sp-i2-v2-component-e1p-artifact .coverage/sp-i2-v2-component-e1p.jsonl \
+  -sp-i2-v2-component-authorization-output .coverage/sp-i2-v2-components.json
+```
+
+Every E1DP tournament invocation must then supply
+`-sp-i2-v2-component-authorization .coverage/sp-i2-v2-components.json`.
+GraphBench rejects a missing, malformed, failed, protocol-mismatched, or
+source/binary-mismatched authorization before database setup. Evidence paths
+should remain under an ignored directory so creating them does not change the
+bound working-tree fingerprint.
+
 The authoritative logical declaration is
 `benchmark/testdata/scale/protocols/sp_i2_distance_v2.json`. It fixes 40
 rounds, 25 ordinary warmups, one excluded receipt-bearing stabilization, 100

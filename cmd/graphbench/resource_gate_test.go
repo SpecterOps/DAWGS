@@ -497,6 +497,49 @@ func TestResourceGateRejectsDeclaredMemoryCeilingsWithoutMeasuredWorkspace(t *te
 	require.Contains(t, report.Cases[0].Reasons, "declared workspace memory ceilings lack measured session and pool high-water evidence")
 }
 
+func TestResourceGateRequiresExactV2InlineDistanceAttribution(t *testing.T) {
+	telemetry := validTraversalTelemetry()
+	telemetry.Level = TraversalTelemetryLevelDiagnostic
+	telemetry.Summary.RequestedIdentity = string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1D)
+	telemetry.Summary.PlannedIdentities = []string{
+		string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1D),
+		string(optimize.ShortestPathExecutorS4CanonicalDistance),
+	}
+	telemetry.Summary.EmittedIdentity = optimize.ShortestPathPolicyI2DistanceGuardedV2
+	telemetry.Summary.RuntimeIdentity = string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1D)
+	telemetry.Summary.AppliedIdentity = string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1D)
+	telemetry.Summary.RuntimeOutcomeAvailable = telemetryBool(true)
+	telemetry.Summary.Caps = map[string]int64{"state_rows": 100, "frontier_rows": 100}
+	telemetry.Summary.Provenance["runtime_outcome_available"] = "test.receipt"
+	telemetry.Summary.Provenance["caps.state_rows"] = "test.cap.state"
+	telemetry.Summary.Provenance["caps.frontier_rows"] = "test.cap.frontier"
+	telemetry.Diagnostic = ordinaryDiagnostic()
+	telemetry.Diagnostic.RequiredFamilies = []TraversalTelemetryFamily{TraversalTelemetryFamilySP}
+	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusComplete
+	telemetry.Diagnostic.Counters.InlineShortestDistance = &InlineDistanceTraversalCounters{}
+	telemetry.Diagnostic.PlanReplay = &TraversalPlanReplayEvidence{
+		Source: "test-plan",
+		Counters: map[string]int64{
+			"sp_i2_distance_rows":            1,
+			"sp_i2_target_rows":              1,
+			"sp_i2_output_rows":              1,
+			"sp_i2_candidate_marker_rows":    1,
+			"sp_i2_fallback_marker_rows":     0,
+			"sp_i2_candidate_branch_rows":    1,
+			"sp_i2_fallback_branch_rows":     0,
+			"sp_i2_candidate_executor_loops": 1,
+			"sp_i2_fallback_executor_loops":  0,
+			"sp_i2_admission_rows":           1,
+			"sp_i2_admission_loops":          1,
+			// The direct counter is deliberately absent. V2 E1D must fail closed.
+		},
+		Provenance: map[string]string{"counters.sp_i2_distance_rows": "test.plan"},
+	}
+	gateCase := ResourceGateCase{}
+	appendInlineDistanceAttributionReasons(&gateCase, &telemetry)
+	require.Contains(t, gateCase.Reasons, "inline SP distance execution is missing exact plan counter sp_i2_direct_rows")
+}
+
 // TestResourceGateRequiresCompleteOrientationPolicyAndExactBranchAttribution verifies resource gate requires complete orientation policy and exact branch attribution behavior.
 func TestResourceGateRequiresCompleteOrientationPolicyAndExactBranchAttribution(t *testing.T) {
 	artifact := filepath.Join(t.TempDir(), "records.jsonl")

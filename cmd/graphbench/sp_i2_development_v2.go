@@ -65,7 +65,7 @@ func spI2V2ReadinessOrder(round int) ([]optimize.ShortestPathExecutor, error) {
 // validateSPI2V2DevelopmentCaptureConfig freezes one invocation's position in
 // the open-corpus component tournament before any database setup occurs.
 func validateSPI2V2DevelopmentCaptureConfig(cfg config) error {
-	if cfg.SPI2V2ReadinessComparison {
+	if cfg.SPI2V2ReadinessComparison || cfg.SPI2V2ComponentCheck {
 		return fmt.Errorf("SP-I2 V2 development tournament and readiness comparison are mutually exclusive")
 	}
 	if cfg.SPI2Generation != spI2GenerationV2 {
@@ -95,6 +95,16 @@ func validateSPI2V2DevelopmentCaptureConfig(cfg config) error {
 	if cfg.Arm != string(executor) || cfg.ArmOrder != expectedOrder {
 		return fmt.Errorf("SP-I2 V2 development round %d requires arm %q at order %d", cfg.Round, executor, expectedOrder)
 	}
+	if executor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP {
+		if strings.TrimSpace(cfg.SPI2V2ComponentAuthorization) == "" {
+			return fmt.Errorf("SP-I2 V2 E1DP capture requires an exact E1D/E1P component authorization")
+		}
+		if err := validateSPI2V2ComponentAuthorizationForCapture(cfg.SPI2V2ComponentAuthorization, cfg.CorpusRoot); err != nil {
+			return err
+		}
+	} else if cfg.SPI2V2ComponentAuthorization != "" {
+		return fmt.Errorf("SP-I2 V2 component authorization may be supplied only for E1DP capture")
+	}
 	if !cfg.PostgresRepeatableRead || cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic ||
 		cfg.PostgresProductionManifest != "" || cfg.PostgresForceExpansion != "" ||
 		cfg.PostgresExpansionOrientationShadow || cfg.PostgresExpansionOrientationTournament ||
@@ -111,7 +121,7 @@ func validateSPI2V2DevelopmentCaptureConfig(cfg config) error {
 // validateSPI2V2ReadinessCaptureConfig freezes one invocation's position in
 // the supplemental open-corpus E0/S4 comparison before database setup.
 func validateSPI2V2ReadinessCaptureConfig(cfg config) error {
-	if cfg.SPI2V2DevelopmentTournament {
+	if cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ComponentCheck {
 		return fmt.Errorf("SP-I2 V2 readiness comparison and development tournament are mutually exclusive")
 	}
 	if cfg.SPI2Generation != spI2GenerationV2 {
@@ -150,6 +160,45 @@ func validateSPI2V2ReadinessCaptureConfig(cfg config) error {
 	}
 	if cfg.OutputJSONL == "" || cfg.Round > 1 && !cfg.AppendJSONL {
 		return fmt.Errorf("SP-I2 V2 readiness comparison requires a JSONL output and append mode after round 1")
+	}
+	return nil
+}
+
+// validateSPI2V2ComponentCheckCaptureConfig freezes the diagnostic semantic
+// and plan-invariant capture used to authorize the combined E1DP arm.
+func validateSPI2V2ComponentCheckCaptureConfig(cfg config) error {
+	if cfg.SPI2V2DevelopmentTournament || cfg.SPI2V2ReadinessComparison {
+		return fmt.Errorf("SP-I2 V2 component check cannot be combined with development timing captures")
+	}
+	if cfg.SPI2Generation != spI2GenerationV2 {
+		return fmt.Errorf("SP-I2 V2 component check requires generation %q", spI2GenerationV2)
+	}
+	if len(cfg.Modes) != 1 || cfg.Modes[0] != ModePostgresSQL || cfg.ExistingGraph || cfg.Discovery {
+		return fmt.Errorf("SP-I2 V2 component check requires one managed PostgreSQL mode")
+	}
+	if cfg.Iterations != 1 || cfg.WarmupIterations != 1 || cfg.PoolSize != 1 || len(cfg.Concurrency) != 0 {
+		return fmt.Errorf("SP-I2 V2 component check requires exactly one sample, one warmup, pool size 1, and no concurrency block")
+	}
+	if cfg.Round != 1 || cfg.Block != 1 || cfg.ArmOrder != 1 || strings.TrimSpace(cfg.RunUUID) == "" {
+		return fmt.Errorf("SP-I2 V2 component check requires round, block, and arm order 1 with an explicit run UUID")
+	}
+	if len(cfg.Tags) != 1 || cfg.Tags[0] != spI2TrainingTag || len(cfg.Cases) != 0 || len(cfg.Datasets) != 0 || len(cfg.Categories) != 0 {
+		return fmt.Errorf("SP-I2 V2 component check is restricted to the six open V1 training cases")
+	}
+	executor := optimize.ShortestPathExecutor(cfg.PostgresForceShortest)
+	if !validSPI2V2ComponentExecutor(executor) || cfg.Arm != string(executor) {
+		return fmt.Errorf("SP-I2 V2 component check must force and label exact E1D or E1P")
+	}
+	if !cfg.PostgresRepeatableRead || cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic ||
+		cfg.PostgresProductionManifest != "" || cfg.PostgresForceExpansion != "" ||
+		cfg.PostgresExpansionOrientationShadow || cfg.PostgresExpansionOrientationTournament ||
+		cfg.PostgresReferences || len(cfg.PostgresReferenceArms) != 0 || cfg.Baseline != "" ||
+		cfg.BundleDir != "" || len(cfg.BundleEvidence) != 0 || cfg.SPI2Freeze != "" || cfg.SPI2DiscoveryReport != "" ||
+		cfg.SPI2V2ComponentAuthorization != "" {
+		return fmt.Errorf("SP-I2 V2 component check requires Repeatable Read with diagnostic telemetry and no supplemental or protected evidence")
+	}
+	if cfg.OutputJSONL == "" || cfg.AppendJSONL {
+		return fmt.Errorf("SP-I2 V2 component check requires one fresh JSONL output")
 	}
 	return nil
 }

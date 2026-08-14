@@ -6,6 +6,8 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,6 +158,87 @@ func TestValidateSPI2V2ReadinessCaptureConfig(t *testing.T) {
 		mutate(&copy)
 		require.Error(t, validateSPI2V2ReadinessCaptureConfig(copy))
 	}
+}
+
+func TestValidateSPI2V2ComponentCheckCaptureConfig(t *testing.T) {
+	executor := optimize.ShortestPathExecutorI2GuardedDistanceV2E1D
+	cfg := config{
+		SPI2Generation:             spI2GenerationV2,
+		SPI2V2ComponentCheck:       true,
+		Modes:                      []ExecutionMode{ModePostgresSQL},
+		Iterations:                 1,
+		WarmupIterations:           1,
+		PoolSize:                   1,
+		Round:                      1,
+		Block:                      1,
+		Arm:                        string(executor),
+		ArmOrder:                   1,
+		RunUUID:                    "component-check",
+		Tags:                       []string{spI2TrainingTag},
+		OutputJSONL:                "component.jsonl",
+		PostgresForceShortest:      string(executor),
+		PostgresRepeatableRead:     true,
+		PostgresTraversalTelemetry: postgresTraversalTelemetryDiagnostic,
+	}
+	require.NoError(t, validateSPI2V2ComponentCheckCaptureConfig(cfg))
+
+	for _, mutate := range []func(*config){
+		func(cfg *config) { cfg.Iterations = 2 },
+		func(cfg *config) { cfg.WarmupIterations = 0 },
+		func(cfg *config) { cfg.Tags = []string{spI2HoldoutTag} },
+		func(cfg *config) {
+			cfg.PostgresForceShortest = string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1)
+		},
+		func(cfg *config) { cfg.Arm = "alias" },
+		func(cfg *config) { cfg.PostgresRepeatableRead = false },
+		func(cfg *config) { cfg.SPI2V2DevelopmentTournament = true },
+		func(cfg *config) { cfg.SPI2V2ComponentAuthorization = "authorization.json" },
+	} {
+		copy := cfg
+		mutate(&copy)
+		require.Error(t, validateSPI2V2ComponentCheckCaptureConfig(copy))
+	}
+}
+
+func TestValidateSPI2V2DevelopmentCaptureRequiresAuthorizationForCombinedArm(t *testing.T) {
+	order, err := spI2V2DevelopmentOrder(1)
+	require.NoError(t, err)
+	executor := optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP
+	cfg := config{
+		SPI2Generation:              spI2GenerationV2,
+		SPI2V2DevelopmentTournament: true,
+		Modes:                       []ExecutionMode{ModePostgresSQL},
+		Iterations:                  100,
+		WarmupIterations:            25,
+		PoolSize:                    1,
+		Round:                       1,
+		Block:                       1,
+		Arm:                         string(executor),
+		ArmOrder:                    slices.Index(order, executor) + 1,
+		RunUUID:                     "development-series",
+		Tags:                        []string{spI2TrainingTag},
+		OutputJSONL:                 "development.jsonl",
+		PostgresForceShortest:       string(executor),
+		PostgresRepeatableRead:      true,
+		PostgresTraversalTelemetry:  postgresTraversalTelemetryDiagnostic,
+	}
+	require.ErrorContains(t, validateSPI2V2DevelopmentCaptureConfig(cfg), "requires an exact E1D/E1P component authorization")
+
+	_, protocolSHA256, err := loadSPI2ProtocolV2("../../benchmark/testdata/scale/protocols/sp_i2_distance_v2.json")
+	require.NoError(t, err)
+	authorization := validSPI2V2ComponentAuthorization(protocolSHA256)
+	authorization.SourceCommit = commandOutput("git", "rev-parse", "HEAD")
+	authorization.DirtyDiffSHA256 = workingTreeSHA256()
+	authorization.BinarySHA256 = executableSHA256()
+	authorizationPath := filepath.Join(t.TempDir(), "authorization.json")
+	require.NoError(t, writeIndentedJSON(authorizationPath, authorization))
+	cfg.CorpusRoot = "../../benchmark/testdata/scale"
+	cfg.SPI2V2ComponentAuthorization = authorizationPath
+	require.NoError(t, validateSPI2V2DevelopmentCaptureConfig(cfg))
+
+	authorization.BinarySHA256 = strings.Repeat("f", 64)
+	require.NoError(t, writeIndentedJSON(authorizationPath, authorization))
+	require.ErrorContains(t, validateSPI2V2DevelopmentCaptureConfig(cfg), "does not bind the current source tree and executable")
 }
 
 func TestValidateSPI2V2DevelopmentEvidenceAcceptsCompleteStudies(t *testing.T) {

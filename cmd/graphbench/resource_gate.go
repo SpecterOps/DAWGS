@@ -576,7 +576,8 @@ func appendTelemetryResourceReasons(gateCase *ResourceGateCase, telemetry *Trave
 	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyI1CanonicalGuardedV1 {
 		appendInlinePredecessorAttributionReasons(gateCase, telemetry.Diagnostic, "inline canonical SP")
 	}
-	if required && summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV1 {
+	if required && (summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV1 ||
+		summary.EmittedIdentity == optimize.ShortestPathPolicyI2DistanceGuardedV2) {
 		appendInlineDistanceAttributionReasons(gateCase, telemetry)
 	}
 

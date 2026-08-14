@@ -396,6 +396,47 @@ func TestParseConfigAcceptsSPI2V2DevelopmentArtifactValidation(t *testing.T) {
 	}
 }
 
+func TestParseConfigAcceptsSPI2V2ComponentCheck(t *testing.T) {
+	executor := string(optimize.ShortestPathExecutorI2GuardedDistanceV2E1P)
+	cfg, err := parseConfig([]string{
+		"-modes", string(ModePostgresSQL),
+		"-iterations", "1",
+		"-warmup-iterations", "1",
+		"-round", "1",
+		"-block", "1",
+		"-arm", executor,
+		"-arm-order", "1",
+		"-run-uuid", "component-check",
+		"-tags", spI2TrainingTag,
+		"-jsonl-output", "component.jsonl",
+		"-postgres-force-shortest-executor", executor,
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", postgresTraversalTelemetryDiagnostic,
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-component-check",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.SPI2V2ComponentCheck)
+}
+
+func TestParseConfigAcceptsSPI2V2ComponentAuthorizationProduction(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-component-e1d-artifact", "e1d.jsonl",
+		"-sp-i2-v2-component-e1p-artifact", "e1p.jsonl",
+		"-sp-i2-v2-component-authorization-output", "authorization.json",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "authorization.json", cfg.SPI2V2ComponentAuthorizationOutput)
+
+	_, err = parseConfig([]string{
+		"-sp-i2-generation", spI2GenerationV2,
+		"-sp-i2-v2-component-e1d-artifact", "e1d.jsonl",
+		"-sp-i2-v2-component-authorization-output", "authorization.json",
+	}, func(string) string { return "" })
+	require.Error(t, err)
+}
+
 func TestParseConfigRejectsIncompleteOrMixedSPI2StagedWorkflow(t *testing.T) {
 	discovery := []string{
 		"-sp-i2-baseline-artifact", "s4.jsonl",
