@@ -1705,6 +1705,9 @@ func main() {
 			fatal("authorize SP-I2 holdout capture: %v", err)
 		}
 	}
+	if selectedCorpusContainsSPI2V2FormalHoldout(corpus) {
+		fatal("SP-I2 V2 formal holdout requires a sealed V2 discovery freeze and authorization before database setup")
+	}
 
 	if !cfg.ExistingGraph {
 		for _, mode := range cfg.Modes {

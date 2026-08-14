@@ -99,6 +99,19 @@ authorized confirmation executes the exact four-training/three-holdout cohort
 on PostgreSQL. Neo4j remains in the declaration for cross-backend semantic
 coverage, not as a holdout timing arm in this study.
 
+`cases/generated_sp_i2_distance_v2.json` is the fresh formal scalar-distance
+cohort for SP-I2 V2. Its eight training cases freeze three adverse controls
+(direct acyclic, direct cyclic, and post-target-cycle shapes) and five efficacy
+targets spanning early, full-depth, mixed-fan-in, high-fan-in, and disconnected
+execution. Its six protected holdouts use previously unused case and fixture
+identities and freeze two adverse controls plus four efficacy targets. Each
+declaration carries an immutable `qualification_role`; report code may not
+infer that role from timings. Ordinary selectors omit the union of V1 and V2
+protected cases. Exact V1/V2 protocol selectors cannot be mixed, and V2
+holdout resolution is rejected before database setup without V2 authorization.
+The protocol declaration binds the training, holdout, and full corpus,
+declaration, and resolved-selection digests.
+
 `shape.fixture_tier` is one of `normal`, `envelope`, or `stress`.
 `shape.qualification_split` is independently one of `training`, `holdout`, or
 `diagnostic`; selector thresholds may use training records but must be frozen

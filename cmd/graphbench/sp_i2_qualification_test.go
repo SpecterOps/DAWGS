@@ -536,8 +536,8 @@ func TestRunnableCorpusExcludesSPI2HoldoutUntilExactOptIn(t *testing.T) {
 	require.False(t, selectedCorpusContainsSPI2Holdout(ordinary))
 	require.False(t, manifest.DiagnosticOnly)
 	require.Equal(t, manifest.FullDeclarationCount, manifest.SelectedDeclarationCount+manifest.OmittedDeclarationCount)
-	require.Equal(t, 14, manifest.OmittedDeclarationCount)
-	require.Equal(t, 14, manifest.ProtectedDeclarationCount)
+	require.Equal(t, 26, manifest.OmittedDeclarationCount)
+	require.Equal(t, 26, manifest.ProtectedDeclarationCount)
 	require.True(t, lowercaseSHA256(manifest.ProtectedDeclarationSHA256))
 	require.True(t, selectedCorpusContainsTag(ordinary, spI2TrainingTag))
 

@@ -121,6 +121,14 @@ func validateScaleCase(testCase ScaleCase) error {
 	if split := testCase.Shape.QualificationSplit; split != "" && split != "training" && split != "holdout" && split != "diagnostic" {
 		return fmt.Errorf("shape.qualification_split must be training, holdout, or diagnostic")
 	}
+	if role := testCase.Shape.QualificationRole; role != "" && role != "adverse_control" && role != "efficacy_target" {
+		return fmt.Errorf("shape.qualification_role must be adverse_control or efficacy_target")
+	}
+	if slices.Contains(testCase.Tags, "sp-i2-distance-v2-training") || slices.Contains(testCase.Tags, "sp-i2-distance-v2-holdout") {
+		if testCase.Shape.QualificationRole == "" {
+			return fmt.Errorf("formal SP-I2 V2 cases require shape.qualification_role")
+		}
+	}
 	if expectation := testCase.Shape.FallbackExpectation; expectation != "" && expectation != "forbidden" && expectation != "required" && expectation != "allowed" {
 		return fmt.Errorf("shape.fallback_expectation must be forbidden, required, or allowed")
 	}

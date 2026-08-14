@@ -226,6 +226,9 @@ type WorkloadShape struct {
 	// holdout, or a diagnostic boundary. Selector tuning must not consume
 	// holdout records.
 	QualificationSplit string `json:"qualification_split,omitempty"`
+	// QualificationRole freezes the statistical role independently of observed
+	// performance. Formal SP-I2 V2 cases use adverse_control or efficacy_target.
+	QualificationRole string `json:"qualification_role,omitempty"`
 	// FallbackExpectation is the typed runtime contract for candidate execution:
 	// forbidden, required, or allowed. Prioritized corpus declarations receive a
 	// deterministic value during loading when older files omit it.

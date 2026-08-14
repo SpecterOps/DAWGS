@@ -93,6 +93,20 @@
       "steal_time_violation"
     ]
   },
+  "corpus": {
+    "source": "cases/generated_sp_i2_distance_v2.json",
+    "training_cases": 8,
+    "holdout_cases": 6,
+    "training_corpus_sha256": "b57e77369d9686123a847e24fd4037d7ee4bc4c9b3d6f73b67eca7a956b0493b",
+    "holdout_corpus_sha256": "16a4f8663cdc1c537c99a85571931c3e7d3f9f71500cb1311375aa9930f8c201",
+    "full_corpus_sha256": "f057a779bd1587ff08596459de42ef51f7befcc0365a9bf86f894a77e0e06d0e",
+    "training_declaration_sha256": "5d704f62c70fea909565ae0541d8a74a925c6cc14587a49a9a6422d5aa077133",
+    "holdout_declaration_sha256": "009101538c650a213e807189bd45dede5ab6785dd5ac9e93dc3f1ad328b3fcfa",
+    "full_declaration_sha256": "1721f48e724b227e0bf4d9a1e03b0471f10fc23ef7402e47536b664af6b96a69",
+    "training_resolved_sha256": "75802b0d76034fac1b2c144c125069f8b971180997540b6b2bf46b89523fbacc",
+    "holdout_resolved_sha256": "d08d149fcaf29e91750fde1e1eae1f3b2f2a6819608a073558ee4d6f13d82ce9",
+    "full_resolved_sha256": "fa1abc601d60d295add2095c0ff343c47d013165fe23b9a09eeca429254318c2"
+  },
   "multiplicity_rule": "intersection_union_all_cases_must_pass",
   "v1_evidence_reuse": false,
   "holdout_authorization_required_before_database_setup": true

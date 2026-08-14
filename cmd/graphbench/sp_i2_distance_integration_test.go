@@ -238,3 +238,64 @@ func TestPostgreSQLSPI2V2DevelopmentArms(t *testing.T) {
 		})
 	}
 }
+
+// TestSPI2V2FormalTrainingSemantics executes only the fresh open training
+// cohort on the backend selected by CONNECTION_STRING. Holdouts remain
+// unreachable through this test.
+func TestSPI2V2FormalTrainingSemantics(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	full, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectRunnableScaleCorpusWithSPI2Protection(full, CorpusSelectors{Tags: []string{spI2V2TrainingTag}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 8)
+	for _, testCase := range selected.Cases {
+		require.Equal(t, "training", testCase.Shape.QualificationSplit)
+		require.NotContains(t, testCase.Tags, spI2V2HoldoutTag)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	var records []CaseResult
+	switch connectionURL.Scheme {
+	case "postgres", "postgresql":
+		runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "")
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+		runner.repeatableRead = true
+		runner.traversalTelemetry = postgresTraversalTelemetryDiagnostic
+		runner.toolOptions = translate.ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorI2GuardedDistanceV2E1}
+		records, err = runner.Run(ctx, 0, 1, selected)
+		require.NoError(t, err)
+	case "neo4j", "neo4j+s", "neo4j+ssc":
+		runner, err := newNeo4jRunner(ctx, "../../integration/testdata", connection, selected)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, runner.Close(ctx)) })
+		records, err = runner.Run(ctx, 0, 1, selected)
+		require.NoError(t, err)
+	default:
+		t.Skip("CONNECTION_STRING does not select PostgreSQL or Neo4j")
+	}
+	require.Len(t, records, 8)
+	for _, record := range records {
+		require.Equal(t, StatusOK, record.Status, record.Error)
+		require.True(t, record.StableObservation, record.Name)
+		require.NoError(t, validateExpectedObservations(findScaleCase(t, selected, record.Name).Expected, record.ObservedRows), record.Name)
+	}
+}
+
+func findScaleCase(t *testing.T, corpus ScaleCorpus, name string) ScaleCase {
+	t.Helper()
+	for _, testCase := range corpus.Cases {
+		if testCase.Name == name {
+			return testCase
+		}
+	}
+	t.Fatalf("missing scale case %s", name)
+	return ScaleCase{}
+}

@@ -32,9 +32,25 @@ type spI2ProtocolV2 struct {
 	OperationalDesign                 spI2OperationalDesignV2  `json:"operational_design"`
 	Bootstrap                         spI2ProtocolBootstrapV2  `json:"bootstrap"`
 	HostAdmission                     spI2HostAdmissionV2      `json:"host_admission"`
+	Corpus                            spI2ProtocolCorpusV2     `json:"corpus"`
 	MultiplicityRule                  string                   `json:"multiplicity_rule"`
 	V1EvidenceReuse                   bool                     `json:"v1_evidence_reuse"`
 	HoldoutAuthorizationBeforeDBSetup bool                     `json:"holdout_authorization_required_before_database_setup"`
+}
+
+type spI2ProtocolCorpusV2 struct {
+	Source                    string `json:"source"`
+	TrainingCases             int    `json:"training_cases"`
+	HoldoutCases              int    `json:"holdout_cases"`
+	TrainingCorpusSHA256      string `json:"training_corpus_sha256"`
+	HoldoutCorpusSHA256       string `json:"holdout_corpus_sha256"`
+	FullCorpusSHA256          string `json:"full_corpus_sha256"`
+	TrainingDeclarationSHA256 string `json:"training_declaration_sha256"`
+	HoldoutDeclarationSHA256  string `json:"holdout_declaration_sha256"`
+	FullDeclarationSHA256     string `json:"full_declaration_sha256"`
+	TrainingResolvedSHA256    string `json:"training_resolved_sha256"`
+	HoldoutResolvedSHA256     string `json:"holdout_resolved_sha256"`
+	FullResolvedSHA256        string `json:"full_resolved_sha256"`
 }
 
 type spI2V1Rejection struct {
@@ -209,6 +225,15 @@ func validateSPI2ProtocolV2(protocol spI2ProtocolV2) error {
 	if protocol.SelectedArchitecture != "E1" || protocol.Limits.StateRows != optimize.ShortestPathI2QualifiedStateLimit ||
 		protocol.Limits.FrontierRows != optimize.ShortestPathI2QualifiedFrontierLimit || protocol.Limits.MinimumDepth != 1 || protocol.Limits.MaximumDepth != 64 {
 		return fmt.Errorf("SP-I2 V2 architecture or cap contract is invalid")
+	}
+	corpus := protocol.Corpus
+	if corpus.Source != "cases/generated_sp_i2_distance_v2.json" || corpus.TrainingCases != 8 || corpus.HoldoutCases != 6 ||
+		corpus.TrainingCorpusSHA256 != spI2V2TrainingCorpusSHA256 || corpus.HoldoutCorpusSHA256 != spI2V2HoldoutCorpusSHA256 ||
+		corpus.FullCorpusSHA256 != spI2V2FullCorpusSHA256 || corpus.TrainingDeclarationSHA256 != spI2V2TrainingDeclarationSHA256 ||
+		corpus.HoldoutDeclarationSHA256 != spI2V2HoldoutDeclarationSHA256 || corpus.FullDeclarationSHA256 != spI2V2FullDeclarationSHA256 ||
+		corpus.TrainingResolvedSHA256 != spI2V2TrainingResolvedSHA256 || corpus.HoldoutResolvedSHA256 != spI2V2HoldoutResolvedSHA256 ||
+		corpus.FullResolvedSHA256 != spI2V2FullResolvedSHA256 {
+		return fmt.Errorf("SP-I2 V2 formal corpus contract is invalid")
 	}
 	if protocol.Design.Seed != 1 || protocol.Design.ConfidenceLevel != 0.975 || protocol.Design.BootstrapReplicates != 100_000 ||
 		protocol.Design.Rounds != 40 || protocol.Design.OrdinaryWarmups != 25 || protocol.Design.AttestedStabilizations != 1 ||
