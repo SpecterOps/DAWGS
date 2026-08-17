@@ -67,6 +67,7 @@ The REPL supports command-name completion with `Tab`; ambiguous matches render a
 Available commands:
 
 ```
+    connect-local                   Connects to the default local Postgres using the default dev credentials
     copy-opengraph                  Copies all graph data from one connection to another
     exit                            Quit
     explain-psql                    Explains a translated query over an active PG connection
@@ -126,6 +127,24 @@ first time they need it; `load-db-kinds` forces an immediate refresh
 and dumps the result.
 
 ## Examples
+
+### Connect to the default local backend
+
+For the repository's docker-compose Postgres, `connect-local` opens a
+connection using the default development credentials and initializes
+the `default` graph if it does not already exist:
+
+    dawgrun > connect-local
+    Opened pg connection 'local'
+
+The connection name defaults to `local`; pass an optional name to
+override it:
+
+    dawgrun > connect-local dev
+    Opened pg connection 'dev'
+
+This is equivalent to running `open -init-graph local
+"postgres://dawgs:weneedbetterpasswords@localhost:65432/dawgs?sslmode=disable"`.
 
 ### Open a backend connection
 

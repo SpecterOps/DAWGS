@@ -115,6 +115,35 @@ func openCmd() CommandDesc {
 	}
 }
 
+const (
+	// defaultConnectionName is the connection name used by connect-local when none is supplied.
+	defaultConnectionName = "local"
+	// defaultPGConnectionString is the docker-compose Postgres connection string using the repo's default dev credentials.
+	defaultPGConnectionString = "postgres://dawgs:weneedbetterpasswords@localhost:65432/dawgs?sslmode=disable"
+)
+
+func connectLocalCmd() CommandDesc {
+	return CommandDesc{
+		args: []string{"[name]"},
+		help: "Connects to the default local Postgres using the default dev credentials",
+		desc: "Opens the docker-compose Postgres at " + defaultPGConnectionString + " and initializes the 'default' graph if needed. The connection name defaults to '" + defaultConnectionName + "'.",
+
+		Fn: func(ctx *CommandContext, fields []string) error {
+			name := defaultConnectionName
+			if len(fields) >= 1 {
+				name = fields[0]
+			}
+
+			_, err := openConnection(ctx, name, defaultPGConnectionString, openConnectionOptions{
+				driverName:       "",
+				defaultGraphName: "default",
+				initGraphOnFail:  true,
+			})
+			return err
+		},
+	}
+}
+
 func openConnection(ctx *CommandContext, name string, connStr string, options openConnectionOptions) (string, error) {
 	querier, driverName, err := ctx.scope.openDatabase(ctx, connStr, options)
 	if err != nil {
@@ -154,7 +183,6 @@ func openDAWGSDatabase(ctx context.Context, connStr string, options openConnecti
 	if options.defaultGraphName == "" {
 		options.defaultGraphName = "default"
 	}
-
 	config := dawgs.Config{
 		ConnectionString: connStr,
 	}

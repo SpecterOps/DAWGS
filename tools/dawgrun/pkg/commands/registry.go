@@ -7,6 +7,7 @@ import (
 )
 
 var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
+	"connect-local":    connectLocalCmd(),
 	"copy-opengraph":   copyOpenGraphCmd(),
 	"exit":             quitCmd(),
 	"explain-psql":     explainAsPsqlCmd(),
