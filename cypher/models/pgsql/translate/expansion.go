@@ -2417,6 +2417,23 @@ func isSelfLoopEndpoints(traversalStep *TraversalStep) bool {
 	return traversalStep.LeftNode.Identifier == traversalStep.RightNode.Identifier
 }
 
+// isUnboundSelfLoop reports whether a traversal step is a self-loop whose node is not genuinely carried
+// by the previous frame. A self-loop marks the node as bound because both endpoints share a binding, but
+// in MATCH (x) MATCH (n)-[*..]->(n) the node n is not exported by the previous frame and must be seeded
+// independently. In MATCH (n) WITH n MATCH (n)-[*..]->(n) the node is exported, so it stays tied to the
+// previous frame and this returns false.
+func isUnboundSelfLoop(traversalStep *TraversalStep) bool {
+	if !isSelfLoopEndpoints(traversalStep) {
+		return false
+	}
+
+	if traversalStep.Frame == nil || traversalStep.Frame.Previous == nil {
+		return true
+	}
+
+	return !traversalStep.Frame.Previous.Exported.Contains(traversalStep.LeftNode.Identifier)
+}
+
 // expansionProjectionNodeJoins builds the projection node-lookup joins for an expansion frame. When the
 // endpoints are the same variable a single join on root_id is emitted to avoid a duplicate table alias;
 // otherwise the usual root_id/next_id pair is returned.
@@ -2475,7 +2492,9 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		seed            *expansionSeed
 	)
 
-	if traversalStep.LeftNodeBound {
+	// A self-loop marks LeftNodeBound even when its node is new, so seed an unbound self-loop from all
+	// nodes rather than the previous frame. A self-loop carried in (e.g. via WITH) stays bound.
+	if traversalStep.LeftNodeBound && !isUnboundSelfLoop(traversalStep) {
 		if traversalStep.Frame.Previous == nil {
 			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
 		}
@@ -2483,7 +2502,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		boundSeed := newExpansionBoundNodeSeed(seedIdentifier, traversalStep.Frame.Previous, traversalStep.LeftNode.Identifier, seedConstraints)
 		seed = &boundSeed
 		expansion.UseUnionAll = true
-	} else if seedConstraints != nil {
+	} else if seedConstraints != nil || isUnboundSelfLoop(traversalStep) {
 		nodeSeed := newExpansionNodeSeed(seedIdentifier, traversalStep.LeftNode.Identifier, seedConstraints)
 		seed = &nodeSeed
 		expansion.UseUnionAll = primerExternal == nil
@@ -2616,7 +2635,10 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 			projectionConstraints,
 			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
 		)
-		if previousProjectionFrameID != "" && traversalStep.LeftNodeBound {
+		// Skip these gates for an unbound self-loop: its node is not a column of the previous frame, so the
+		// gates would emit an invalid (prevFrame.n) reference, and selfLoopIdentityConstraint already ties
+		// the endpoints. A carried self-loop keeps the gates.
+		if previousProjectionFrameID != "" && traversalStep.LeftNodeBound && !isUnboundSelfLoop(traversalStep) {
 			projectionConstraints = pgsql.OptionalAnd(
 				projectionConstraints,
 				boundEndpointProjectionConstraint(
@@ -2627,7 +2649,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				),
 			)
 		}
-		if previousProjectionFrameID != "" && traversalStep.RightNodeBound {
+		if previousProjectionFrameID != "" && traversalStep.RightNodeBound && !isUnboundSelfLoop(traversalStep) {
 			projectionConstraints = pgsql.OptionalAnd(
 				projectionConstraints,
 				boundEndpointProjectionConstraint(

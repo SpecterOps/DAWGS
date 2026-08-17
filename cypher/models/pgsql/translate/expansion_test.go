@@ -1,14 +1,66 @@
 package translate
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
+	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
+
+// translateCypher parses and translates a Cypher query into formatted PostgreSQL for shape assertions.
+func translateCypher(t *testing.T, cypher string) string {
+	t.Helper()
+
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("NodeKind1"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), cypher)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	return formatted
+}
+
+// TestSelfLoopExpansionInLaterFrameSeedsIndependently covers a variable-length self-loop introduced in a
+// later MATCH part. The endpoints share a binding, but the node is not exported by the previous frame, so
+// it must be seeded from all nodes rather than from the previous frame, and no previous-frame endpoint
+// constraint may be emitted. See isUnboundSelfLoop.
+func TestSelfLoopExpansionInLaterFrameSeedsIndependently(t *testing.T) {
+	formatted := translateCypher(t, `MATCH (x) MATCH (n)-[*..]->(n) RETURN x, n`)
+
+	// Seed reads from the node table, not from the previous frame s0.
+	require.Contains(t, formatted, "select n1.id as root_id from node n1")
+	// No invalid previous-frame reference to the self-loop node is emitted anywhere.
+	require.NotContains(t, formatted, "(s0.n1)")
+	// The self-loop identity constraint still ties the endpoints.
+	require.Contains(t, formatted, "s2.root_id = s2.next_id")
+	// The carried x binding is still projected.
+	require.Contains(t, formatted, "s1.n0 as x")
+}
+
+// TestSelfLoopExpansionCarriedNodeStaysBound covers a variable-length self-loop whose node is genuinely
+// carried by a previous WITH. The node is exported by the previous frame, so it must stay bound to that
+// frame (seeded from it and constrained to it) rather than being seeded independently.
+func TestSelfLoopExpansionCarriedNodeStaysBound(t *testing.T) {
+	formatted := translateCypher(t, `MATCH (n) WITH n MATCH (n)-[*..]->(n) RETURN n`)
+
+	// Seed reads the carried node from the previous frame.
+	require.Contains(t, formatted, "select distinct (s0.n0).id as root_id from s0")
+	// The expansion stays constrained to the carried node.
+	require.Contains(t, formatted, "(s0.n0).id = s3.root_id")
+}
 
 const (
 	shortestPathSeedTestPreviousFrame pgsql.Identifier = "s0"

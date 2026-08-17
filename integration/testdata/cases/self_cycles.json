@@ -140,6 +140,36 @@
         "keys": ["a", "b"],
         "row_count": 8
       }
+    },
+    {
+      "name": "self-loop in a later match part seeds n independently of the prior variable and returns the 24 cycle nodes once per each of the 26 x nodes",
+      "cypher": "match (x) match (n)-[*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 624
+      }
+    },
+    {
+      "name": "self-loop in a later match part returns the full cartesian product of x and the 24 cycle nodes",
+      "cypher": "match (x) match (n)-[*..]->(n) return x, n",
+      "assert": {
+        "keys": ["x", "n"],
+        "row_count": 624
+      }
+    },
+    {
+      "name": "self-loop whose node is carried by WITH stays bound to that node and returns only the carried cycle node a",
+      "cypher": "match (n) where n.name = 'a' with n match (n)-[*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 1,
+        "node_id_set": ["a"]
+      }
+    },
+    {
+      "name": "self-loop whose node is carried by WITH but is an acyclic decoy returns no rows",
+      "cypher": "match (n) where n.name = 'p' with n match (n)-[*..]->(n) return n",
+      "assert": "empty"
     }
   ]
 }
