@@ -206,6 +206,9 @@ func runP5AdjacencyFeasibilityCapture(ctx context.Context, cfg config, connectio
 	if err := dropP5AdjacencyShadow(ctx, control.db); err != nil {
 		return P5AdjacencyFeasibilityReport{}, fmt.Errorf("reset P5 adjacency shadow: %w", err)
 	}
+	if err := cleanupP5AdjacencyOwnedGraphs(ctx, control); err != nil {
+		return P5AdjacencyFeasibilityReport{}, fmt.Errorf("reset abandoned P5 adjacency graphs: %w", err)
+	}
 
 	postgres, err := captureP5PostgresEnvironment(ctx, control.pool)
 	if err != nil {
@@ -800,6 +803,14 @@ func deleteP5AdjacencyGraph(ctx context.Context, graphState *p5AdjacencyGraph, s
 		}
 	}
 	return nil
+}
+
+// cleanupP5AdjacencyOwnedGraphs removes only prior runner fixtures that may
+// remain if a process is interrupted before its normal graph-drop cleanup.
+// The current control graph remains available for P5 schema setup and removal.
+func cleanupP5AdjacencyOwnedGraphs(ctx context.Context, control *p5AdjacencyGraph) error {
+	_, err := control.pool.Exec(ctx, `delete from graph where name like 'p5_adjacency_%' and id <> $1`, control.graphID)
+	return err
 }
 
 func assertP5AdjacencyAbsent(ctx context.Context, queryer p5AdjacencyRowQueryer) error {

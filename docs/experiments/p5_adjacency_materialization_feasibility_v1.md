@@ -94,6 +94,11 @@ timed Cypher observations. The graph-clear/reload rollback sample clears the
 fixture within its transaction and uses the required rollback to restore the
 same fixture before the next sample.
 
+Before it starts, the runner removes any abandoned `p5_adjacency_*` graphs
+from an interrupted earlier P5 capture, after first dropping any residual
+shadow relation. That namespace is reserved for this disposable experiment;
+the runner never selects or removes an arbitrary application graph.
+
 For example, build the artifact from a clean commit and write the report to an
 ignored workspace location:
 
