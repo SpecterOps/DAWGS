@@ -56,7 +56,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_bdd test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_bdd_integration test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
