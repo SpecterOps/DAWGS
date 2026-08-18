@@ -777,13 +777,13 @@ func openP5AdjacencyGraph(ctx context.Context, connection string) (*p5AdjacencyG
 func installP5AdjacencyShadow(ctx context.Context, db graph.Database) error {
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		return pgquery.On(tx).InstallP5AdjacencyShadow()
-	})
+	}, pg.OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol))
 }
 
 func dropP5AdjacencyShadow(ctx context.Context, db graph.Database) error {
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		return pgquery.On(tx).DropP5AdjacencyShadow()
-	})
+	}, pg.OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol))
 }
 
 func deleteP5AdjacencyGraph(ctx context.Context, graphState *p5AdjacencyGraph, shadow bool) error {
