@@ -232,6 +232,38 @@ prospective: changing cases, binary, arm definitions, counts, warm-ups, or
 orders creates a new generation. Only after all open captures are exact and
 the early-stop gate passes may a separately authorized holdout step begin.
 
+## Clean P1 open result (terminal)
+
+The prospective capture completed on 2026-08-18 from committed source
+`3737dd57cb6baeb2bbc21f936adc0049a19ae19e` and GraphBench binary SHA-256
+`6a2c49a6ca903c4794569109491c5c185eecd677801fb0782a70430560db2655`.
+It contains all six frozen orders, 216 independently reloaded one-case arm
+artifacts, and 1,080 timed PostgreSQL observations (30 per case/arm). Every
+artifact was exact, carried the clean source digest, and used the shared run
+identity `p1-srr-v1-3737dd5-20260818`. The ignored artifact set is
+`.coverage/p1-clean-3737dd5`; its sorted per-artifact SHA-256 ledger hashes to
+`3ce552fa1e522333a24c90f655672d203ad209f83beb44785348c6d61fc45028`.
+
+Every reverse-only arm remained reverse-only. Every retry observation had its
+required receipt chain: the boundary, high-fan-in, and byte controls emitted
+suffix, state, and output-byte overflow respectively, followed by
+`exact_forward_retry_complete`; all other retry targets emitted only
+`reverse_complete`.
+
+Pooling the 30 timed samples per arm makes the early-stop failure
+unambiguous. The lowest retry-to-exact-reverse median ratio among all 12 cases
+was `1.47x` (an additional `2.02ms`), and the lowest pooled nearest-rank p95
+ratio was `1.31x`. Thus every fast-path target violates both the
+`1.10`/`100us` median bound and the `1.05` p95 bound. The two long sparse
+targets did improve materially over ordinary forward (retry/forward medians
+`0.102x` and `0.117x`), and the no-path control reached `0.646x`, but those
+gains cannot offset the required fast-path-overhead failure across the full
+roster.
+
+This generation is terminally stopped. Do not retune it, repeat it as an
+authorization attempt, or run a protected holdout. Its artifact is evidence
+for a future, separately identified executor or policy generation only.
+
 ## Early stop gate
 
 The generation stops before a protected holdout unless every open case has
