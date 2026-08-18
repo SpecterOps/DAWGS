@@ -1,0 +1,84 @@
+{
+  "schema": "asp-p4-i1-disconnected-preflight-v1",
+  "generation": "asp-p4-i1-disconnected-preflight-v1",
+  "status": "frozen_pending_clean_capture",
+  "production_default": "ASP-A1-DAG",
+  "purpose": "training-only A1-versus-inline-I1 telemetry preflight for the selected all-shortest disconnected target; not a power study, performance qualification, or selector change",
+  "predecessor": {
+    "protocol": "asp-p4-open-baseline-v1",
+    "source_commit": "bf055b3aaeda1f887e652a399b065290db560236",
+    "artifact": ".coverage/p4-open-baseline-bf055b3/round-1.jsonl",
+    "artifact_sha256": "69c29c0a79e2ca566bbd54e533c896138a7770b245d030dc347ebc9413e6b6fe",
+    "selection": "GSPV2-TRAINING-disconnected-all-shortest-max64; four matched PostgreSQL/Neo4j median ratios were 7.0414939412490645, 5.8250091002483355, 10.559733195363082, and 5.227608712020583"
+  },
+  "identities": {
+    "incumbent": "ASP-A1-DAG",
+    "candidate": "ASP-I1-U-DAG+MAT-M0",
+    "candidate_fallback": "ASP-A1-DAG",
+    "candidate_telemetry_schema": "asp-i1-guarded-v1",
+    "incumbent_telemetry_reader": "public.read_all_shortest_paths_a1_diagnostic_v1"
+  },
+  "design": {
+    "modes": ["postgres_sql"],
+    "pool_size": 1,
+    "postgres_isolation": "repeatable_read",
+    "postgres_traversal_telemetry": "diagnostic",
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "rounds": 4,
+    "arm_orders": [
+      ["A1", "I1"],
+      ["I1", "A1"],
+      ["A1", "I1"],
+      ["I1", "A1"]
+    ],
+    "cap_overrides_permitted": false,
+    "reference_and_concurrency_permitted": false
+  },
+  "corpus": {
+    "target_cases": [
+      "GSPV2-TRAINING-disconnected-all-shortest-max64"
+    ],
+    "adverse_control_cases": [
+      "GSPV2-TRAINING-early-depth1-all-shortest-max16",
+      "GSPV2-TRAINING-early-depth2-all-shortest-max64",
+      "GSPV2-TRAINING-reconvergent-all-shortest-max16"
+    ],
+    "excluded": [
+      "all generated_shortest_paths_v2 holdout cases",
+      "all generated_shortest_paths_v2 diagnostic and stress cases",
+      "all other open baseline cases",
+      "all ASP-B1 and ASP-B2 candidate executors",
+      "all historical ASP-I1 artifacts because they mixed protected holdouts"
+    ]
+  },
+  "acceptance_requirements": {
+    "exact_public_path_multiset": true,
+    "incumbent_runtime_identity": "ASP-A1-DAG",
+    "incumbent_complete_a1_telemetry": true,
+    "candidate_runtime_identity": "ASP-I1-U-DAG+MAT-M0",
+    "candidate_runtime_branches": {
+      "GSPV2-TRAINING-disconnected-all-shortest-max64": "inline_no_path",
+      "adverse_controls": "inline_predecessor_dag"
+    },
+    "candidate_complete_typed_inline_telemetry": true,
+    "candidate_fallback_disqualifies": true,
+    "complete_hydration_and_workspace_telemetry": true,
+    "missing_hidden_or_contradictory_counter_disqualifies": true
+  },
+  "next_authorization": {
+    "requires": [
+      "all 32 frozen case/arm/round records exact",
+      "all 16 candidate records retain ASP-I1-U-DAG+MAT-M0 with complete asp-i1-guarded-v1 telemetry and zero fallback",
+      "the disconnected target records use inline_no_path",
+      "all adverse-control records use inline_predecessor_dag",
+      "a checksummed capture ledger and a separately frozen next-stage decision"
+    ],
+    "does_not_authorize": [
+      "candidate timing outside this frozen roster",
+      "formal power or performance qualification",
+      "protected holdout or diagnostic/stress capture",
+      "production selector, manifest, or default changes"
+    ]
+  }
+}

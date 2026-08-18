@@ -478,13 +478,17 @@ deferred before protected timing with a documented reason.
 - [`docs/experiments/asp_p4_open_baseline_v1.md`](docs/experiments/asp_p4_open_baseline_v1.md)
   freezes the fresh training-only P4 baseline needed to choose an all-shortest
   target without reusing protected historical captures.
+- [`docs/experiments/asp_p4_i1_disconnected_preflight_v1.md`](docs/experiments/asp_p4_i1_disconnected_preflight_v1.md)
+  freezes the sole authorized A1-versus-I1 PostgreSQL telemetry preflight for
+  that selected disconnected target.
 
 ## Immediate next actions
 
 1. Retain the completed clean P4 baseline and its selected open target,
    `GSPV2-TRAINING-disconnected-all-shortest-max64`; the earlier first round
    remains a stopped artifact because A1's Function Scan hid those counters.
-2. Freeze a distinct A1-versus-one-candidate telemetry preflight roster for
+2. Capture only the frozen A1-versus-I1 PostgreSQL telemetry preflight for
    that target. Do not reuse protected historical ASP-I1 observations.
-3. Require complete exact observations and candidate telemetry from the
-   preflight before any power study, formal corpus, holdout, or selector work.
+3. Require complete exact observations and candidate telemetry from that
+   preflight before any separately frozen power study, formal corpus, holdout,
+   or selector work.
