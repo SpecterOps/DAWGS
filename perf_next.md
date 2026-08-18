@@ -249,6 +249,16 @@ probe to rescue it.
 - The successful reverse path contains no selection scan and no inactive
   forward body.
 
+### P1 disposition
+
+The clean six-round `suffix-reverse-retry-v1` capture is terminally rejected:
+the retry fast path exceeded the frozen exact-reverse overhead gate on every
+open case. Its exact receipt and timing evidence is recorded in
+[`docs/experiments/suffix_reverse_retry_v1.md`](docs/experiments/suffix_reverse_retry_v1.md).
+No P1 holdout was opened. P2 may therefore proceed only through the separately
+frozen, pre-implementation power study in
+[`docs/experiments/sp_i2_successor_power_study_v3.md`](docs/experiments/sp_i2_successor_power_study_v3.md).
+
 ## P2: hidden-fan-in distance successor
 
 ### Rationale
