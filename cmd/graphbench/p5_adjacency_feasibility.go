@@ -763,6 +763,9 @@ func p5AdjacencyDropGraph(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFix
 }
 
 func setupP5AdjacencyFixture(ctx context.Context, graphState *p5AdjacencyGraph, targets int, shadow bool) (p5AdjacencyFixture, int64, error) {
+	if err := disableP5AdjacencyAutovacuum(ctx, graphState.pool, false); err != nil {
+		return p5AdjacencyFixture{}, 0, err
+	}
 	if shadow {
 		if err := installP5AdjacencyShadow(ctx, graphState.db); err != nil {
 			return p5AdjacencyFixture{}, 0, err
@@ -1044,8 +1047,14 @@ func disableP5AdjacencyAutovacuum(ctx context.Context, pool *pgxpool.Pool, shado
 		relations = append(relations, "public.p5_adjacency_v1")
 	}
 	for _, relation := range relations {
-		if _, err := pool.Exec(ctx, "alter table "+relation+" set (autovacuum_enabled = false)"); err != nil {
+		children, err := p5AdjacencyPartitions(ctx, pool, relation)
+		if err != nil {
 			return err
+		}
+		for _, child := range children {
+			if _, err := pool.Exec(ctx, "alter table "+child+" set (autovacuum_enabled = false)"); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -1056,11 +1065,39 @@ func disableP5AdjacencyAutovacuum(ctx context.Context, pool *pgxpool.Pool, shado
 // have been removed, so only core relations are reset here.
 func restoreP5AdjacencyAutovacuum(ctx context.Context, pool *pgxpool.Pool) error {
 	for _, relation := range []string{"node", "edge"} {
-		if _, err := pool.Exec(ctx, "alter table "+relation+" reset (autovacuum_enabled)"); err != nil {
+		children, err := p5AdjacencyPartitions(ctx, pool, relation)
+		if err != nil {
 			return err
+		}
+		for _, child := range children {
+			if _, err := pool.Exec(ctx, "alter table "+child+" reset (autovacuum_enabled)"); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func p5AdjacencyPartitions(ctx context.Context, pool *pgxpool.Pool, parent string) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		select child.oid::regclass::text
+		from pg_inherits
+		join pg_class child on child.oid = inhrelid
+		where inhparent = to_regclass($1)
+		order by child.oid`, parent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var children []string
+	for rows.Next() {
+		var child string
+		if err := rows.Scan(&child); err != nil {
+			return nil, err
+		}
+		children = append(children, child)
+	}
+	return children, rows.Err()
 }
 
 func waitForP5WALQuiescence(ctx context.Context, pool *pgxpool.Pool) error {
