@@ -7,7 +7,9 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/kanmu/go-sqlfmt/sqlfmt"
-	"github.com/specterops/dawgs/cypher/models/pgsql/format"
+	cypherFormat "github.com/specterops/dawgs/cypher/models/cypher/format"
+	pgFormat "github.com/specterops/dawgs/cypher/models/pgsql/format"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -92,12 +94,12 @@ func translateToPsqlCmd() CommandDesc {
 
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
+			queryBuilder := pgFormat.NewOutputBuilder()
 			if result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
 
-			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
+			sqlQuery, err := pgFormat.Statement(result.Statement, queryBuilder)
 			if err != nil {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
@@ -153,12 +155,12 @@ func explainAsPsqlCmd() CommandDesc {
 
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := format.NewOutputBuilder()
+			queryBuilder := pgFormat.NewOutputBuilder()
 			if result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
 
-			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
+			sqlQuery, err := pgFormat.Statement(result.Statement, queryBuilder)
 			if err != nil {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
@@ -279,6 +281,77 @@ func queryCypherCmd() CommandDesc {
 
 				return fmt.Errorf("unknown output format: %s", outputFormat)
 			})
+		},
+	}
+}
+
+func optimizeCypherCmd() CommandDesc {
+	return CommandDesc{
+		args: []string{"<...query>"},
+		help: "Optimizes a Cypher query",
+		desc: "Runs a Cypher query through the DAWGS query optimizer, dumping the plan, as well as the optimized query",
+
+		Fn: func(ctx *CommandContext, fields []string) error {
+			query, err := parseQueryArray(fields)
+			if err != nil {
+				return fmt.Errorf("error trying to parse query '%s': %w", fields, err)
+			}
+
+			optimizer := optimize.NewOptimizer(optimize.DefaultRules()...)
+			optimizationPlan, err := optimizer.Optimize(query)
+			if err != nil {
+				return fmt.Errorf("could not optimize query '%s': %w", fields, err)
+			}
+
+			originalQuery, err := cypherFormat.RegularQuery(query, false)
+			if err != nil {
+				return fmt.Errorf("could not format original query '%s': %w", fields, err)
+			}
+
+			optimizedQuery, err := cypherFormat.RegularQuery(optimizationPlan.Query, false)
+			if err != nil {
+				return fmt.Errorf("could not format optimized query: %w", err)
+			}
+
+			fmt.Fprintf(ctx.output, "Original Query:\n")
+			ctx.output.WriteHighlighted(originalQuery, "cypher")
+			fmt.Fprintf(ctx.output, "\n\n")
+
+			fmt.Fprintf(ctx.output, "Optimized Query:\n")
+			ctx.output.WriteHighlighted(optimizedQuery, "cypher")
+			fmt.Fprintf(ctx.output, "\n\n")
+
+			includePredicateAttachments := false
+			fmt.Fprintf(ctx.output, "Optimization rules considered:\n")
+			for _, ruleResult := range optimizationPlan.Rules {
+				isApplied := "not applied"
+				if ruleResult.Applied {
+					isApplied = "APPLIED"
+				}
+
+				if ruleResult.Name == "PredicateAttachment" && ruleResult.Applied {
+					includePredicateAttachments = true
+				}
+
+				fmt.Fprintf(ctx.output, " - %s: %s\n", ruleResult.Name, isApplied)
+			}
+			fmt.Fprintf(ctx.output, "\n")
+
+			fmt.Fprintf(ctx.output, "Analysis:\n")
+			ctx.output.WriteHighlighted(spew.Sdump(optimizationPlan.Analysis), "golang")
+			fmt.Fprintf(ctx.output, "\n")
+
+			fmt.Fprintf(ctx.output, "Lowering Plan:\n")
+			ctx.output.WriteHighlighted(spew.Sdump(optimizationPlan.LoweringPlan), "golang")
+			fmt.Fprintf(ctx.output, "\n")
+
+			if includePredicateAttachments {
+				fmt.Fprintf(ctx.output, "Predicate Attachments:\n")
+				ctx.output.WriteHighlighted(spew.Sdump(optimizationPlan.PredicateAttachments), "golang")
+				fmt.Fprintf(ctx.output, "\n")
+			}
+
+			return nil
 		},
 	}
 }
