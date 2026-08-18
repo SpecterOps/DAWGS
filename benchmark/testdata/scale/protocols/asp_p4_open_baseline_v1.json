@@ -1,7 +1,7 @@
 {
   "schema": "asp-p4-open-baseline-v1",
   "generation": "asp-p4-open-baseline-v1",
-  "status": "ready_for_clean_recapture",
+  "status": "completed_target_selected_pending_candidate_preflight_roster",
   "production_default": "ASP-A1-DAG",
   "purpose": "training-only cross-backend baseline and A1 telemetry inventory; not an ASP candidate comparison or performance qualification",
   "baseline": {
@@ -55,20 +55,18 @@
   },
   "next_authorization": {
     "requires": [
-      "a fresh clean-source build containing the implemented and validated A1 diagnostic contract",
-      "a fresh clean four-round capture with all 72 case-backend-round records exact",
-      "complete A1 PostgreSQL telemetry for every training record",
-      "a newly measured open target materially behind Neo4j",
-      "a separately frozen A1-versus-one-candidate P4 preflight roster"
+      "a separately frozen A1-versus-one-candidate P4 telemetry preflight roster for GSPV2-TRAINING-disconnected-all-shortest-max64",
+      "complete exact public observations and complete candidate telemetry for every preflight record",
+      "a new clean source commit before any follow-on candidate capture"
     ],
     "does_not_authorize": [
-      "ASP-I1, ASP-B1, or ASP-B2 timing",
+      "ASP-I1, ASP-B1, or ASP-B2 timing outside the separately frozen one-candidate P4 preflight",
       "formal power or performance qualification",
       "protected holdout or diagnostic/stress capture",
       "production selector or manifest changes"
     ]
   },
-  "result": {
+  "prior_stop_result": {
     "source_commit": "3a74d14be83f2c99b1694109d54840501ebbc3f5",
     "binary_sha256": "4e47611c0e06d508e81011cc35d348a167c4c9a1d863095e3b72add821780c91",
     "artifact": ".coverage/p4-open-baseline-3a74d14/round-1.jsonl",
@@ -80,8 +78,37 @@
     "public_observations": "all 18 records exact; PostgreSQL reported ASP-A1-DAG with no fallback",
     "stop_reason": "Every PostgreSQL diagnostic reported hidden_counters_unavailable because the outer Function Scan does not expose invocation-local traversal work counters. The remaining rounds were not run."
   },
+  "result": {
+    "source_commit": "bf055b3aaeda1f887e652a399b065290db560236",
+    "binary_sha256": "8a8cdd0998ef9391776ee4a6de3689f31f0a2133675bc96d9cffd95d6caceb31",
+    "artifact": ".coverage/p4-open-baseline-bf055b3/round-1.jsonl",
+    "artifact_sha256": "69c29c0a79e2ca566bbd54e533c896138a7770b245d030dc347ebc9413e6b6fe",
+    "records": 72,
+    "postgres_records": 36,
+    "neo4j_records": 36,
+    "timed_samples": 360,
+    "warmup_samples": 72,
+    "public_observations": "all 72 records exact; every PostgreSQL record reported ASP-A1-DAG, no fallback, and complete all-shortest, hydration, and workspace telemetry",
+    "capture_condition": "CPU governor powersave; descriptive target selection only, not performance qualification"
+  },
+  "target_selection": {
+    "name": "GSPV2-TRAINING-disconnected-all-shortest-max64",
+    "selection_basis": "four matched backend rounds with PostgreSQL/Neo4j median ratio 5.8250091002483355 and p95 ratio 5.263006089799886",
+    "all_round_median_ratios": [7.0414939412490645, 5.8250091002483355, 10.559733195363082, 5.227608712020583],
+    "runtime_branch": "search_no_path",
+    "a1_receipt": {
+      "candidate_edges": 32,
+      "seen_peak": 33,
+      "predecessor_peak": 32,
+      "output_paths": 0,
+      "workspace_bytes": 229376
+    },
+    "excluded_from_matching": [
+      "GSPV2-TRAINING-cycle-dead-tail-all-shortest-max64 has exact per-backend records but nonmatching cross-backend serialized observations"
+    ]
+  },
   "a1_diagnostic_prerequisite": {
-    "status": "implemented_and_validated_pending_clean_recapture",
+    "status": "implemented_validated_and_used_in_clean_recapture",
     "reader": "public.read_all_shortest_paths_a1_diagnostic_v1",
     "scope": "untimed Repeatable Read GraphBench replay on the timed physical PostgreSQL connection; separate from B1/B2 telemetry",
     "unarmed_executor_behavior": "one local GUC check and no diagnostic workspace or telemetry-table operations",
@@ -90,6 +117,6 @@
       "stale and contradictory receipt rejection",
       "session isolation, cancellation rollback, and backend reuse"
     ],
-    "next_step": "commit the implementation, build from that clean commit, and restart the four-round baseline at round one"
+    "next_step": "freeze the selected target's distinct A1-versus-one-candidate preflight roster"
   }
 }

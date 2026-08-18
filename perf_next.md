@@ -481,13 +481,10 @@ deferred before protected timing with a documented reason.
 
 ## Immediate next actions
 
-1. Commit the separately implemented and validated A1 invocation-local
-   diagnostic, then build from that clean source.
-2. Restart the training-only P4 ASP-A1/Neo4j open baseline at round one with
-   complete PostgreSQL traversal telemetry. The prior first round remains a
-   stopped artifact because A1's Function Scan hid those counters.
-3. Select at most one open all-shortest target only from that fresh baseline;
-   do not reuse protected historical ASP-I1 observations.
-4. If an open target is material, freeze a distinct A1-versus-one-candidate
-   telemetry preflight before any power study, formal corpus, holdout, or
-   selector work.
+1. Retain the completed clean P4 baseline and its selected open target,
+   `GSPV2-TRAINING-disconnected-all-shortest-max64`; the earlier first round
+   remains a stopped artifact because A1's Function Scan hid those counters.
+2. Freeze a distinct A1-versus-one-candidate telemetry preflight roster for
+   that target. Do not reuse protected historical ASP-I1 observations.
+3. Require complete exact observations and candidate telemetry from the
+   preflight before any power study, formal corpus, holdout, or selector work.

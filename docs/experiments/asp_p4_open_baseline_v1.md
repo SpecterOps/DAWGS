@@ -1,8 +1,8 @@
 # All-shortest P4 open baseline v1
 
-Status: A1 diagnostic prerequisite implemented; fresh clean-source recapture
-pending. This is a training-only baseline and telemetry inventory, not an ASP
-candidate comparison, power study, qualification, or selector change.
+Status: completed training-only baseline; one open target selected for a
+separately frozen candidate preflight. This is not an ASP candidate comparison,
+power study, qualification, or selector change.
 
 ## Why this is a fresh baseline
 
@@ -69,6 +69,50 @@ defines the distinct prerequisite required before a clean recapture.
 
 The separate A1 invocation-local diagnostic is now implemented and validated
 for shallow, recursive, reconvergent, inbound, no-path, session-isolation, and
-cancellation/rollback paths. The next capture must use a clean commit that
-contains that diagnostic and must restart at round one. It may not merge,
-pool, or compare the stopped V1 round with the new capture.
+cancellation/rollback paths. The clean capture below used a commit that
+contains that diagnostic and restarted at round one. It does not merge, pool,
+or compare the stopped V1 round with the new capture.
+
+## Clean recapture result
+
+The fresh capture ran from `bf055b3aaeda1f887e652a399b065290db560236` with
+GraphBench SHA-256
+`8a8cdd0998ef9391776ee4a6de3689f31f0a2133675bc96d9cffd95d6caceb31`.
+The appended four-round artifact
+`.coverage/p4-open-baseline-bf055b3/round-1.jsonl` hashes to
+`69c29c0a79e2ca566bbd54e533c896138a7770b245d030dc347ebc9413e6b6fe`.
+It contains 72 exact records (36 PostgreSQL and 36 Neo4j), 360 timed samples,
+and 72 excluded warm-up samples. The source diff hash is empty in every record.
+
+Every PostgreSQL record has runtime/applied identity `ASP-A1-DAG`, no fallback,
+and complete all-shortest, hydration, and `spd_*` workspace receipts. Every
+Neo4j record is exact and present. The capture host reported the `powersave`
+CPU governor, so the deltas below are target-selection diagnostics only—not
+performance qualification evidence.
+
+| Open case | Matched median PostgreSQL/Neo4j | Matched p95 PostgreSQL/Neo4j | Branch |
+| --- | ---: | ---: | --- |
+| `GSPV2-TRAINING-disconnected-all-shortest-max64` | 5.825× | 5.263× | `search_no_path` |
+| `GSPV2-NORMAL-outbound-all-shortest-depth3` | 3.801× | 2.942× | `single_ended_search` |
+| `GSPV2-TRAINING-early-depth3-all-shortest-max16` | 3.076× | 3.766× | `single_ended_search` |
+| `GSPV2-TRAINING-inbound-early-depth3-all-shortest-max64` | 2.852× | 2.703× | `single_ended_search` |
+| shallow/reconvergent controls | 1.125–1.206× | 1.018–1.242× | preflight |
+
+The cycle/dead-tail case is exact on each backend but its serialized public
+observations do not match across backends, so it is visible in the artifact but
+excluded from the matched backend-delta ranking. The descriptive delta report
+is `.coverage/p4-open-baseline-bf055b3/backend-delta.json` (SHA-256
+`e127d5d09bf68bd809c41f1c849044f2d61f5dc6c0d363c6a8d33eab28765fa0`).
+
+## Selected target and next gate
+
+`GSPV2-TRAINING-disconnected-all-shortest-max64` is the sole selected open
+target: all four matched median ratios exceed 5.22×, its four-round median is
+5.825×, and its p95 ratio is 5.263×. Its A1 receipt consistently reports the
+`search_no_path` branch with 32 candidate edges, seen peak 33, predecessor peak
+32, zero output paths, and 229,376 bytes of `spd_*` workspace.
+
+This selection authorizes only a new, immutable A1-versus-one-candidate P4
+telemetry preflight roster. It does not authorize candidate timing beyond that
+separately frozen preflight, a power study, holdouts, a selector change, or
+reuse of the stopped V1 round.
