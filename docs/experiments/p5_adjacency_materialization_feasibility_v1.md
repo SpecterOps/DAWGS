@@ -74,3 +74,38 @@ non-rewrite, node-delete cascade, rollback, canceled statement recovery through
 a replacement pooled connection, graph deletion, and shadow removal. It does
 not provide any P5 latency, WAL, storage, or query-performance result; those
 still require a clean source capture under this roster.
+
+## Capture runner
+
+`graphbench -p5-adjacency-feasibility-output <report.json>` is the sole capture
+entry point for this roster. It requires the disposable PostgreSQL guard, a
+clean source tree, and a one-connection pool. It fixes the four counterbalanced
+blocks, one warm-up, five timed rollback-only samples, fixture sizes, and
+mutation roster internally; it rejects Cypher corpus selectors and normal
+GraphBench result outputs.
+
+The runner first captures base-only blocks with the shadow relation removed,
+then alternates shadow and base conditions by dropping or reinstalling the
+explicit shadow schema at each block boundary. It creates a fresh graph-scoped
+fixture per condition, verifies exact base/shadow mapping around every write,
+and records raw base and shadow adjacency probes separately. Its committed
+calibration graph runs report setup and per-mutation WAL deltas; they are never
+timed Cypher observations. The graph-clear/reload rollback sample clears the
+fixture within its transaction and uses the required rollback to restore the
+same fixture before the next sample.
+
+For example, build the artifact from a clean commit and write the report to an
+ignored workspace location:
+
+```bash
+go build -trimpath -o .coverage/graphbench-p5 ./cmd/graphbench
+CONNECTION_STRING='postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs' \
+  ./.coverage/graphbench-p5 \
+  -p5-adjacency-feasibility-output .coverage/p5-adjacency-feasibility.json
+```
+
+The JSON report contains the protocol checksum, clean source and binary
+identity, per-operation p50/p95 values, committed WAL deltas, relation bytes,
+raw parameterized lookup plans with buffers, and cancellation/pool-reuse
+evidence. A successful report remains a feasibility record only: it cannot set
+a write budget or authorize a Cypher read-path experiment.

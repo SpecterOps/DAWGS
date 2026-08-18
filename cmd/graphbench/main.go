@@ -371,6 +371,9 @@ type config struct {
 	SPI2V2SimulationCandidateTrace string
 	// SPI2V2SimulationOutput writes the prospective calibration report.
 	SPI2V2SimulationOutput string
+	// P5AdjacencyFeasibilityOutput writes the isolated P5 shadow-adjacency
+	// physical feasibility report. It never executes a Cypher read path.
+	P5AdjacencyFeasibilityOutput string
 }
 
 // parseConfig parses graphbench flags and rejects unsafe or incomplete workflow combinations.
@@ -565,6 +568,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.StringVar(&cfg.SPI2V2SimulationBaselineTrace, "sp-i2-v2-simulation-baseline-trace", "", "frozen clean V1 S4 JSONL trace used for prospective calibration")
 	flags.StringVar(&cfg.SPI2V2SimulationCandidateTrace, "sp-i2-v2-simulation-candidate-trace", "", "frozen clean V1 I2 JSONL trace used for prospective calibration")
 	flags.StringVar(&cfg.SPI2V2SimulationOutput, "sp-i2-v2-simulation-output", "", "write the frozen prospective power and coverage report")
+	flags.StringVar(&cfg.P5AdjacencyFeasibilityOutput, "p5-adjacency-feasibility-output", "", "write the isolated P5 shadow-adjacency feasibility report")
 
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -1271,6 +1275,23 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 			return config{}, err
 		}
 	}
+	if cfg.P5AdjacencyFeasibilityOutput != "" {
+		if len(cfg.Modes) != 1 || cfg.Modes[0] != ModePostgresSQL {
+			return config{}, fmt.Errorf("P5 adjacency feasibility capture requires only postgres_sql mode")
+		}
+		if cfg.ExistingGraph {
+			return config{}, fmt.Errorf("P5 adjacency feasibility capture requires a disposable managed graph")
+		}
+		if cfg.PoolSize != 1 {
+			return config{}, fmt.Errorf("P5 adjacency feasibility capture requires pool-size 1")
+		}
+		if cfg.OutputJSONL != "" || cfg.Summary != "" || cfg.SummaryJSON != "" {
+			return config{}, fmt.Errorf("P5 adjacency feasibility output cannot be combined with benchmark result outputs")
+		}
+		if len(cfg.Cases) != 0 || len(cfg.Datasets) != 0 || len(cfg.Categories) != 0 || len(cfg.Tags) != 0 {
+			return config{}, fmt.Errorf("P5 adjacency feasibility capture does not accept corpus selectors")
+		}
+	}
 
 	return cfg, nil
 }
@@ -1417,6 +1438,31 @@ func main() {
 	cfg, err := parseConfig(os.Args[1:], os.Getenv)
 	if err != nil {
 		fatal("%v", err)
+	}
+	if cfg.P5AdjacencyFeasibilityOutput != "" {
+		pgConnection := cfg.PGConnection
+		if pgConnection == "" {
+			pgConnection = cfg.Connection
+		}
+		if pgConnection == "" {
+			fatal("P5 adjacency feasibility capture requires -pg-connection, -connection, PG_CONNECTION_STRING, or CONNECTION_STRING")
+		}
+		if err := databaseguard.ValidateEnvironment(pgConnection); err != nil {
+			fatal("refuse destructive P5 adjacency feasibility target: %v", err)
+		}
+		runLock, err := acquireDestructiveRunLock(cfg.DestructiveLock)
+		if err != nil {
+			fatal("acquire destructive run lock: %v", err)
+		}
+		defer func() {
+			if err := runLock.Close(); err != nil {
+				fatal("release destructive run lock: %v", err)
+			}
+		}()
+		if _, err := runP5AdjacencyFeasibilityCapture(context.Background(), cfg, pgConnection, os.Args); err != nil {
+			fatal("capture P5 adjacency feasibility: %v", err)
+		}
+		return
 	}
 	if cfg.SPI2V2SimulationOutput != "" {
 		report, err := createSPI2PowerSimulationReportV2(cfg.CorpusRoot, cfg.SPI2V2SimulationBaselineTrace, cfg.SPI2V2SimulationCandidateTrace, cfg.SPI2V2SimulationOutput)
