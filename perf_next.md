@@ -444,9 +444,12 @@ for a maintained copy. The repository also has no native-extension delivery
 package, and the local PostgreSQL 18 build interface does not match the live
 PostgreSQL 17 target. See
 [`docs/experiments/p5_architecture_feasibility_v1.md`](docs/experiments/p5_architecture_feasibility_v1.md).
-No P5 schema, candidate, timing, or selector is authorized. A successor must
-first freeze one architecture's versioned delivery and mutation-cost
-feasibility protocol.
+The separately frozen
+[`docs/experiments/p5_adjacency_materialization_feasibility_v1.md`](docs/experiments/p5_adjacency_materialization_feasibility_v1.md)
+authorizes only a shadow adjacency schema and its mutation/storage inventory.
+No Cypher candidate, selector, cache-key change, protected timing, or
+production schema is authorized until a distinct budget decision follows that
+report.
 
 ## Validation matrix
 
@@ -515,5 +518,5 @@ deferred before protected timing with a documented reason.
 2. Do not run a power study, broader I1 timing, protected cases, or selector
    work from the P4 artifacts.
 3. Reopen P4 only with a distinct executor and separately frozen clean-source
-   roster. P5 remains deferred until a separately frozen, one-architecture
-   delivery and mutation-cost feasibility protocol exists.
+   roster. Implement only the frozen P5 shadow-adjacency feasibility roster;
+   decide its budget before considering any Cypher candidate.
