@@ -475,15 +475,16 @@ deferred before protected timing with a documented reason.
   inventories the existing SP/ASP kernels, telemetry, and promotion gaps.
 - [`docs/experiments/asp_i1_inline_v1.md`](docs/experiments/asp_i1_inline_v1.md)
   defines the current all-shortest correctness and resource boundary.
+- [`docs/experiments/asp_p4_open_baseline_v1.md`](docs/experiments/asp_p4_open_baseline_v1.md)
+  freezes the fresh training-only P4 baseline needed to choose an all-shortest
+  target without reusing protected historical captures.
 
 ## Immediate next actions
 
-1. Execute P0 and confirm the fixed-suffix family remains the top multi-case
-   opportunity.
-2. Write a short P1 protocol that freezes the optimistic retry transaction,
-   buffering, sentinel, receipt, and exact-forward retry contracts.
-3. Prototype only the reverse-only status-returning statement and same-
-   transaction retry; do not add metadata or a production selector yet.
-4. Run the open P1 tournament and its early stop gate.
-5. If P1 passes, freeze its formal corpus and evidence sequence. If it fails,
-   seal the result and move to the P2 prospective-power design.
+1. Capture the training-only P4 ASP-A1/Neo4j open baseline with complete
+   PostgreSQL traversal telemetry.
+2. Select at most one open all-shortest target only from that fresh baseline;
+   do not reuse protected historical ASP-I1 observations.
+3. If an open target is material, freeze a distinct A1-versus-one-candidate
+   telemetry preflight before any power study, formal corpus, holdout, or
+   selector work.

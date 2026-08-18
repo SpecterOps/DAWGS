@@ -1,0 +1,70 @@
+{
+  "schema": "asp-p4-open-baseline-v1",
+  "generation": "asp-p4-open-baseline-v1",
+  "status": "scheduled",
+  "production_default": "ASP-A1-DAG",
+  "purpose": "training-only cross-backend baseline and A1 telemetry inventory; not an ASP candidate comparison or performance qualification",
+  "baseline": {
+    "predecessor_commit": "7f5d0f9dcc7bd1a86dd2846e7180e06b7795c13c",
+    "note": "The retained P0 all-shortest ratio is a single protected shallow-diamond observation and cannot select a P4 target; the clean capture commit is recorded with the result."
+  },
+  "identities": {
+    "postgres_incumbent": "ASP-A1-DAG",
+    "postgres_selector": "asp-static-v1",
+    "neo4j_reference": "neo4j-default"
+  },
+  "design": {
+    "modes": ["postgres_sql", "neo4j"],
+    "pool_size": 1,
+    "postgres_isolation": "repeatable_read",
+    "postgres_traversal_telemetry": "diagnostic",
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "rounds": 4,
+    "backend_order": "GraphBench alternates the requested backend order on even rounds",
+    "postgres_force_shortest_executor": "ASP-A1-DAG",
+    "cap_overrides_permitted": false,
+    "reference_and_concurrency_permitted": false
+  },
+  "corpus": {
+    "training_cases": [
+      "GSPV2-NORMAL-outbound-all-shortest-depth3",
+      "GSPV2-TRAINING-early-depth1-all-shortest-max16",
+      "GSPV2-TRAINING-early-depth2-all-shortest-max64",
+      "GSPV2-TRAINING-early-depth3-all-shortest-max16",
+      "GSPV2-TRAINING-inbound-early-depth1-all-shortest-max16",
+      "GSPV2-TRAINING-inbound-early-depth3-all-shortest-max64",
+      "GSPV2-TRAINING-cycle-dead-tail-all-shortest-max64",
+      "GSPV2-TRAINING-reconvergent-all-shortest-max16",
+      "GSPV2-TRAINING-disconnected-all-shortest-max64"
+    ],
+    "excluded": [
+      "all generated_shortest_paths_v2 holdout cases",
+      "all generated_shortest_paths_v2 diagnostic and stress cases",
+      "all legacy ASP-I1 archived captures because they mixed protected holdouts",
+      "all ASP-I1, ASP-B1, and ASP-B2 candidate executors"
+    ]
+  },
+  "preflight_requirements": {
+    "exact_public_path_multiset": true,
+    "postgres_expected_runtime_identity": "ASP-A1-DAG",
+    "postgres_complete_all_shortest_telemetry": true,
+    "postgres_complete_hydration_and_workspace_telemetry": true,
+    "no_fallback_or_hidden_counter": true,
+    "neo4j_records_required": true
+  },
+  "next_authorization": {
+    "requires": [
+      "all 72 case-backend-round records exact",
+      "complete A1 PostgreSQL telemetry for every training record",
+      "a newly measured open target materially behind Neo4j",
+      "a separately frozen A1-versus-one-candidate P4 preflight roster"
+    ],
+    "does_not_authorize": [
+      "ASP-I1, ASP-B1, or ASP-B2 timing",
+      "formal power or performance qualification",
+      "protected holdout or diagnostic/stress capture",
+      "production selector or manifest changes"
+    ]
+  }
+}
