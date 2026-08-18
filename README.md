@@ -30,6 +30,11 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 make test_integration
 ```
 
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+make test_bdd_integration
+```
+
 Use this module from another Go project:
 
 ```bash

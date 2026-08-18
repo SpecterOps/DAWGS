@@ -38,7 +38,7 @@ jobs:
         run: echo "Artifact ID from previous job is $COV_FILE_ID"
 
       - name: Checkout source code for this repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
@@ -60,7 +60,7 @@ jobs:
           printf 'Coverage Value: %s\n' "$current_coverage"
 
       - name: Download Main Coverage
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.call-run-upload-main-coverage-files.outputs.coverage-artifact-id }}
           path: tmp/
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18
+        image: index.docker.io/library/postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941 # ratchet:postgres:18
         env:
           POSTGRES_USER: dawgs
           POSTGRES_PASSWORD: weneedbetterpasswords
@@ -103,7 +103,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout source code for this repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       neo4j:
-        image: neo4j:4.4.42
+        image: index.docker.io/library/neo4j@sha256:73b5a47eb9952f47fcc42fcc80bdd6bd0d6b71eea9a1a345c216675498c790e4 # ratchet:neo4j:4.4.42
         env:
           NEO4J_AUTH: neo4j/weneedbetterpasswords
         ports:
@@ -136,7 +136,7 @@ jobs:
           --health-start-period 40s
     steps:
       - name: Checkout source code for this repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
@@ -150,3 +150,70 @@ jobs:
           CONNECTION_STRING: neo4j://neo4j:weneedbetterpasswords@localhost:7687
         run: |
           make test_integration
+
+  bdd-integration-test-pg:
+    name: Run BDD integration tests (pg)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: index.docker.io/library/postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941 # ratchet:postgres:18
+        env:
+          POSTGRES_USER: dawgs
+          POSTGRES_PASSWORD: weneedbetterpasswords
+          POSTGRES_DB: dawgs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dawgs -d dawgs"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout source code for this repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
+
+      - name: Install Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Run BDD integration tests
+        env:
+          CONNECTION_STRING: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
+        run: |
+          make test_bdd_integration
+
+  bdd-integration-test-neo4j:
+    name: Run BDD integration tests (neo4j)
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: index.docker.io/library/neo4j@sha256:73b5a47eb9952f47fcc42fcc80bdd6bd0d6b71eea9a1a345c216675498c790e4 # ratchet:neo4j:4.4.42
+        env:
+          NEO4J_AUTH: neo4j/weneedbetterpasswords
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "wget -q -O /dev/null http://localhost:7474 || exit 1"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 40s
+    steps:
+      - name: Checkout source code for this repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
+
+      - name: Install Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Run BDD integration tests
+        env:
+          CONNECTION_STRING: neo4j://neo4j:weneedbetterpasswords@localhost:7687
+        run: |
+          make test_bdd_integration

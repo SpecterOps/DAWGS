@@ -56,7 +56,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_bdd test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
@@ -92,12 +92,14 @@ test: $(METRICS_DIR)
 	@$(GO_CMD) tool cover -func=$(COVERAGE_PROFILE) > $(COVERAGE_FUNC_REPORT)
 	@echo "Coverage report written to $(COVERAGE_FUNC_REPORT)"
 
-test_all: test test_integration
+test_all: test test_integration test_bdd
 
 test_integration:
 	@echo "Running all integration tests..."
 	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
-
+test_bdd_integration:
+	@echo "Running all BDD integration tests..."
+	@$(GO_CMD) test -v -tags 'bdd_integration' -count=1 ./bdd
 test_bench:
 	@echo "Running benchmarks..."
 	@$(GO_CMD) test -run '^$$' -bench '$(BENCH)' -benchmem -count=$(BENCH_COUNT) -benchtime=$(BENCH_TIME) $(MAIN_PACKAGES)
