@@ -763,14 +763,14 @@ func p5AdjacencyDropGraph(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFix
 }
 
 func setupP5AdjacencyFixture(ctx context.Context, graphState *p5AdjacencyGraph, targets int, shadow bool) (p5AdjacencyFixture, int64, error) {
-	if err := disableP5AdjacencyAutovacuum(ctx, graphState.pool, false); err != nil {
+	if err := disableP5AdjacencyFixtureAutovacuum(ctx, graphState.pool, graphState.graphID, false); err != nil {
 		return p5AdjacencyFixture{}, 0, err
 	}
 	if shadow {
 		if err := installP5AdjacencyShadow(ctx, graphState.db); err != nil {
 			return p5AdjacencyFixture{}, 0, err
 		}
-		if err := disableP5AdjacencyAutovacuum(ctx, graphState.pool, true); err != nil {
+		if err := disableP5AdjacencyFixtureAutovacuum(ctx, graphState.pool, graphState.graphID, true); err != nil {
 			return p5AdjacencyFixture{}, 0, err
 		}
 	}
@@ -1055,6 +1055,19 @@ func disableP5AdjacencyAutovacuum(ctx context.Context, pool *pgxpool.Pool, shado
 			if _, err := pool.Exec(ctx, "alter table "+child+" set (autovacuum_enabled = false)"); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func disableP5AdjacencyFixtureAutovacuum(ctx context.Context, pool *pgxpool.Pool, graphID int32, shadow bool) error {
+	relations := []string{fmt.Sprintf("node_%d", graphID), fmt.Sprintf("edge_%d", graphID)}
+	if shadow {
+		relations = append(relations, fmt.Sprintf("p5_adjacency_v1_%d", graphID))
+	}
+	for _, relation := range relations {
+		if _, err := pool.Exec(ctx, "alter table "+relation+" set (autovacuum_enabled = false)"); err != nil {
+			return err
 		}
 	}
 	return nil
