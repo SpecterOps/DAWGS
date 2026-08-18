@@ -32,7 +32,7 @@
     "timed_iterations": 5,
     "isolation": "repeatable_read_for_read_probes",
     "write_measurement": "each warm-up and timed mutation runs in a transaction that validates state and rolls back",
-    "wal_measurement": "record pg_current_wal_lsn before and after each committed shadow setup/mutation calibration outside timed Cypher observations",
+    "wal_measurement": "record pg_current_wal_lsn before and after each committed setup/mutation calibration only while autovacuum is quiescent; record EXPLAIN (ANALYZE, WAL) statement-local mutation bytes as the attributed mutation value and retain the LSN delta as a cross-check outside timed Cypher observations",
     "read_measurement": "raw parameterized adjacency lookup only after exact shadow-state validation; no public Cypher result may use the relation",
     "cap_overrides_permitted": false,
     "protected_case_access_permitted": false
@@ -75,7 +75,7 @@
     "status": "opt_in_shadow_only",
     "install": "query.On(tx).InstallP5AdjacencyShadow",
     "remove": "query.On(tx).DropP5AdjacencyShadow",
-    "capture_runner": "graphbench -p5-adjacency-feasibility-output <report.json>; fixed four counterbalanced blocks, one warm-up, five rollback-only timed samples, committed WAL calibrations, and raw SQL read probes only",
+    "capture_runner": "graphbench -p5-adjacency-feasibility-output <report.json>; fixed four counterbalanced blocks, one warm-up, five rollback-only timed samples, autovacuum-quiescent setup LSN calibration plus statement-local EXPLAIN WAL mutation calibration, and raw SQL read probes only",
     "normal_schema_change": "none; schema_up.sql and normal driver startup do not install or read p5_adjacency_v1",
     "validation": [
       "unit SQL boundary test",

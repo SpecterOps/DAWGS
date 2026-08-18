@@ -114,3 +114,12 @@ identity, per-operation p50/p95 values, committed WAL deltas, relation bytes,
 raw parameterized lookup plans with buffers, and cancellation/pool-reuse
 evidence. A successful report remains a feasibility record only: it cannot set
 a write budget or authorize a Cypher read-path experiment.
+
+The first clean-source execution completed every state oracle but was rejected
+as a feasibility artifact: background autovacuum inflated its global LSN
+deltas, making several WAL values unattributable. The runner now disables and
+later restores autovacuum on the disposable graph parents, waits for an idle
+autovacuum state around setup LSN reads, and records statement-local mutation
+WAL bytes with `EXPLAIN (ANALYZE, WAL)`. The global LSN delta remains in the
+artifact as a quiescent cross-check, not as the mutation WAL result. A fresh
+clean capture is required; the rejected artifact makes no feasibility claim.

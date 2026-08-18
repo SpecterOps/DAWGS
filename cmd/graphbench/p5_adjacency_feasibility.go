@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/databaseguard"
@@ -117,14 +118,16 @@ type P5AdjacencyReadProbe struct {
 
 // P5AdjacencyCalibration records one committed setup or mutation calibration.
 type P5AdjacencyCalibration struct {
-	Condition   string                         `json:"condition"`
-	Targets     int                            `json:"targets"`
-	Operation   string                         `json:"operation"`
-	GraphID     int32                          `json:"graph_id"`
-	SetupWAL    int64                          `json:"setup_wal_bytes"`
-	MutationWAL int64                          `json:"mutation_wal_bytes"`
-	Duration    time.Duration                  `json:"duration"`
-	Observed    P5AdjacencyMutationObservation `json:"observed"`
+	Condition         string                         `json:"condition"`
+	Targets           int                            `json:"targets"`
+	Operation         string                         `json:"operation"`
+	GraphID           int32                          `json:"graph_id"`
+	SetupWAL          int64                          `json:"setup_wal_lsn_delta_bytes"`
+	MutationWALLSN    int64                          `json:"mutation_wal_lsn_delta_bytes"`
+	StatementWALBytes int64                          `json:"statement_wal_bytes"`
+	WALQuiescent      bool                           `json:"wal_quiescent"`
+	Duration          time.Duration                  `json:"duration"`
+	Observed          P5AdjacencyMutationObservation `json:"observed"`
 }
 
 // P5AdjacencyCancellation records recovery after a cancelled write. pgx may
@@ -209,6 +212,14 @@ func runP5AdjacencyFeasibilityCapture(ctx context.Context, cfg config, connectio
 	if err := cleanupP5AdjacencyOwnedGraphs(ctx, control); err != nil {
 		return P5AdjacencyFeasibilityReport{}, fmt.Errorf("reset abandoned P5 adjacency graphs: %w", err)
 	}
+	if err := disableP5AdjacencyAutovacuum(ctx, control.pool, false); err != nil {
+		return P5AdjacencyFeasibilityReport{}, fmt.Errorf("disable autovacuum for P5 WAL attribution: %w", err)
+	}
+	defer func() {
+		if restoreErr := restoreP5AdjacencyAutovacuum(ctx, control.pool); err == nil && restoreErr != nil {
+			err = fmt.Errorf("restore autovacuum after P5 capture: %w", restoreErr)
+		}
+	}()
 
 	postgres, err := captureP5PostgresEnvironment(ctx, control.pool)
 	if err != nil {
@@ -373,6 +384,9 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
 	}
+	if err := waitForP5WALQuiescence(ctx, graphState.pool); err != nil {
+		return P5AdjacencyCalibration{}, err
+	}
 	beforeWAL, err := p5AdjacencyWALPosition(ctx, graphState.pool)
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
@@ -381,7 +395,7 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
 	}
-	observation, duration, runErr := runP5AdjacencyMutationTimed(ctx, tx, fixture, shadow, operation)
+	observation, duration, statementWAL, runErr := runP5AdjacencyMutationWithWAL(ctx, tx, fixture, shadow, operation)
 	if runErr == nil {
 		runErr = tx.Commit(ctx)
 	} else {
@@ -390,9 +404,15 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 	if runErr != nil {
 		return P5AdjacencyCalibration{}, fmt.Errorf("committed %s calibration: %w", operation, runErr)
 	}
+	if err := waitForP5WALQuiescence(ctx, graphState.pool); err != nil {
+		return P5AdjacencyCalibration{}, err
+	}
 	afterWAL, err := p5AdjacencyWALPosition(ctx, graphState.pool)
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
+	}
+	if afterWAL-beforeWAL < statementWAL {
+		return P5AdjacencyCalibration{}, fmt.Errorf("%s statement WAL bytes exceed its LSN delta", operation)
 	}
 	if shadow {
 		if err := assertP5AdjacencyExact(ctx, graphState.pool, fixture.graphID); err != nil {
@@ -405,14 +425,16 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 		return P5AdjacencyCalibration{}, err
 	}
 	return P5AdjacencyCalibration{
-		Condition:   condition,
-		Targets:     targets,
-		Operation:   operation,
-		GraphID:     fixture.graphID,
-		SetupWAL:    setupWAL,
-		MutationWAL: afterWAL - beforeWAL,
-		Duration:    duration,
-		Observed:    observation,
+		Condition:         condition,
+		Targets:           targets,
+		Operation:         operation,
+		GraphID:           fixture.graphID,
+		SetupWAL:          setupWAL,
+		MutationWALLSN:    afterWAL - beforeWAL,
+		StatementWALBytes: statementWAL,
+		WALQuiescent:      true,
+		Duration:          duration,
+		Observed:          observation,
 	}, nil
 }
 
@@ -477,30 +499,42 @@ func p5AdjacencyQuantiles(durations []time.Duration) (time.Duration, time.Durati
 	return median, p95
 }
 
+type p5AdjacencyMutationExecution struct {
+	observation       P5AdjacencyMutationObservation
+	duration          time.Duration
+	statementWALBytes int64
+}
+
 func runP5AdjacencyMutationTimed(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string) (P5AdjacencyMutationObservation, time.Duration, error) {
-	return runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, true)
+	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, false)
+	return execution.observation, execution.duration, err
+}
+
+func runP5AdjacencyMutationWithWAL(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string) (P5AdjacencyMutationObservation, time.Duration, int64, error) {
+	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, true)
+	return execution.observation, execution.duration, execution.statementWALBytes, err
 }
 
 func runP5AdjacencyMutation(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string) (P5AdjacencyMutationObservation, error) {
-	observation, _, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, false)
-	return observation, err
+	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, false)
+	return execution.observation, err
 }
 
-func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string, timed bool) (P5AdjacencyMutationObservation, time.Duration, error) {
+func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string, collectStatementWAL bool) (p5AdjacencyMutationExecution, error) {
 	if shadow {
 		if err := assertP5AdjacencyExact(ctx, tx, fixture.graphID); err != nil {
-			return P5AdjacencyMutationObservation{}, 0, err
+			return p5AdjacencyMutationExecution{}, err
 		}
 	} else if err := assertP5AdjacencyAbsent(ctx, tx); err != nil {
-		return P5AdjacencyMutationObservation{}, 0, err
+		return p5AdjacencyMutationExecution{}, err
 	}
 	observation := P5AdjacencyMutationObservation{}
 	if err := tx.QueryRow(ctx, `select count(*) from edge where graph_id = $1`, fixture.graphID).Scan(&observation.BaseEdgesBefore); err != nil {
-		return P5AdjacencyMutationObservation{}, 0, err
+		return p5AdjacencyMutationExecution{}, err
 	}
 	if shadow {
 		if err := tx.QueryRow(ctx, `select count(*) from public.p5_adjacency_v1 where graph_id = $1`, fixture.graphID).Scan(&observation.ShadowRowsBefore); err != nil {
-			return P5AdjacencyMutationObservation{}, 0, err
+			return p5AdjacencyMutationExecution{}, err
 		}
 	}
 	identityBefore := ""
@@ -508,65 +542,130 @@ func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5Ad
 		var err error
 		identityBefore, err = p5AdjacencyShadowIdentity(ctx, tx, fixture)
 		if err != nil {
-			return P5AdjacencyMutationObservation{}, 0, err
+			return p5AdjacencyMutationExecution{}, err
 		}
 	}
 
+	statement, arguments, err := p5AdjacencyMutationStatement(fixture, operation)
+	if err != nil {
+		return p5AdjacencyMutationExecution{}, err
+	}
 	start := time.Now()
-	var affected int64
-	var err error
-	switch operation {
-	case "batch_relationship_create":
-		affected, err = p5AdjacencyCreateRelationships(ctx, tx, fixture)
-	case "relationship_upsert_conflict_merge":
-		affected, err = p5AdjacencyUpsertRelationships(ctx, tx, fixture)
-	case "relationship_property_only_update":
-		affected, err = p5AdjacencyUpdateRelationshipProperties(ctx, tx, fixture)
-	case "batched_relationship_delete":
-		affected, err = p5AdjacencyDeleteRelationships(ctx, tx, fixture)
-	case "batched_node_delete_cascade":
-		affected, err = p5AdjacencyDeleteNodes(ctx, tx, fixture)
-	case "graph_clear_reload":
-		affected, err = p5AdjacencyClearGraph(ctx, tx, fixture)
-	case "graph_drop":
-		affected, err = p5AdjacencyDropGraph(ctx, tx, fixture)
-	default:
-		return P5AdjacencyMutationObservation{}, 0, fmt.Errorf("unknown P5 mutation %q", operation)
+	var (
+		affected          int64
+		statementWALBytes int64
+	)
+	if collectStatementWAL {
+		var plan []byte
+		err = tx.QueryRow(ctx, "explain (analyze, wal, format json) "+statement, arguments...).Scan(&plan)
+		if err == nil {
+			statementWALBytes, err = p5AdjacencyStatementWALBytes(plan)
+		}
+		if err == nil {
+			affected, err = p5AdjacencyExpectedAffected(fixture, operation)
+		}
+	} else {
+		var result pgconn.CommandTag
+		result, err = tx.Exec(ctx, statement, arguments...)
+		affected = result.RowsAffected()
 	}
 	duration := time.Since(start)
 	if err != nil {
-		return P5AdjacencyMutationObservation{}, 0, err
+		return p5AdjacencyMutationExecution{}, err
 	}
 	observation.AffectedRows = affected
 	if err := tx.QueryRow(ctx, `select count(*) from edge where graph_id = $1`, fixture.graphID).Scan(&observation.BaseEdgesAfter); err != nil {
-		return P5AdjacencyMutationObservation{}, 0, err
+		return p5AdjacencyMutationExecution{}, err
 	}
 	if err := assertP5AdjacencyMutationPostState(ctx, tx, fixture, operation, observation); err != nil {
-		return P5AdjacencyMutationObservation{}, 0, err
+		return p5AdjacencyMutationExecution{}, err
 	}
 	if shadow {
 		if err := tx.QueryRow(ctx, `select count(*) from public.p5_adjacency_v1 where graph_id = $1`, fixture.graphID).Scan(&observation.ShadowRowsAfter); err != nil {
-			return P5AdjacencyMutationObservation{}, 0, err
+			return p5AdjacencyMutationExecution{}, err
 		}
 		observation.MaintenanceRowsChanged = absInt64(observation.ShadowRowsAfter - observation.ShadowRowsBefore)
 		if err := assertP5AdjacencyExact(ctx, tx, fixture.graphID); err != nil {
-			return P5AdjacencyMutationObservation{}, 0, err
+			return p5AdjacencyMutationExecution{}, err
 		}
 		if identityBefore != "" {
 			identityAfter, err := p5AdjacencyShadowIdentity(ctx, tx, fixture)
 			if err != nil {
-				return P5AdjacencyMutationObservation{}, 0, err
+				return p5AdjacencyMutationExecution{}, err
 			}
 			observation.PropertyRowsUnchanged = identityBefore == identityAfter
 			if !observation.PropertyRowsUnchanged {
-				return P5AdjacencyMutationObservation{}, 0, fmt.Errorf("%s rewrote P5 shadow rows", operation)
+				return p5AdjacencyMutationExecution{}, fmt.Errorf("%s rewrote P5 shadow rows", operation)
 			}
 		}
 	}
-	if timed {
-		return observation, duration, nil
+	return p5AdjacencyMutationExecution{observation: observation, duration: duration, statementWALBytes: statementWALBytes}, nil
+}
+
+func p5AdjacencyMutationStatement(fixture p5AdjacencyFixture, operation string) (string, []any, error) {
+	switch operation {
+	case "batch_relationship_create":
+		return `
+			insert into edge(graph_id, start_id, end_id, kind_id, properties)
+			select $1, $2, target_id, $3, '{"p5_create":true}'::jsonb
+			from unnest($4::bigint[]) as targets(target_id)`,
+			[]any{fixture.graphID, fixture.rootID, fixture.createKindID, fixture.targetIDs}, nil
+	case "relationship_upsert_conflict_merge":
+		return `
+			insert into edge(graph_id, start_id, end_id, kind_id, properties)
+			select $1, $2, target_id, $3, '{"p5_upsert":true}'::jsonb
+			from unnest($4::bigint[]) as targets(target_id)
+			on conflict (start_id, end_id, kind_id, graph_id) do update
+			  set properties = edge.properties || excluded.properties`,
+			[]any{fixture.graphID, fixture.rootID, fixture.updateKindID, fixture.targetIDs}, nil
+	case "relationship_property_only_update":
+		return `update edge set properties = properties || '{"p5_property_only":true}'::jsonb where graph_id = $1 and id = any($2::bigint[])`,
+			[]any{fixture.graphID, fixture.updateEdgeIDs}, nil
+	case "batched_relationship_delete":
+		return `delete from edge where graph_id = $1 and id = any($2::bigint[])`, []any{fixture.graphID, fixture.deleteEdgeIDs}, nil
+	case "batched_node_delete_cascade":
+		return `delete from node where graph_id = $1 and id = any($2::bigint[])`, []any{fixture.graphID, fixture.targetIDs}, nil
+	case "graph_clear_reload":
+		return `delete from node where graph_id = $1`, []any{fixture.graphID}, nil
+	case "graph_drop":
+		return `delete from graph where id = $1`, []any{fixture.graphID}, nil
+	default:
+		return "", nil, fmt.Errorf("unknown P5 mutation %q", operation)
 	}
-	return observation, duration, nil
+}
+
+func p5AdjacencyExpectedAffected(fixture p5AdjacencyFixture, operation string) (int64, error) {
+	switch operation {
+	case "batch_relationship_create", "relationship_upsert_conflict_merge", "relationship_property_only_update", "batched_relationship_delete", "batched_node_delete_cascade":
+		return int64(len(fixture.targetIDs)), nil
+	case "graph_clear_reload":
+		return fixture.nodes, nil
+	case "graph_drop":
+		return 1, nil
+	default:
+		return 0, fmt.Errorf("unknown P5 mutation %q", operation)
+	}
+}
+
+func p5AdjacencyStatementWALBytes(raw []byte) (int64, error) {
+	var explain []struct {
+		Plan map[string]json.RawMessage `json:"Plan"`
+	}
+	if err := json.Unmarshal(raw, &explain); err != nil {
+		return 0, fmt.Errorf("decode statement WAL plan: %w", err)
+	}
+	if len(explain) != 1 {
+		return 0, fmt.Errorf("statement WAL plan must contain exactly one root")
+	}
+	value, found := explain[0].Plan["WAL Bytes"]
+	if !found {
+		return 0, fmt.Errorf("statement WAL plan is missing WAL Bytes")
+	}
+	var walBytes int64
+	if err := json.Unmarshal(value, &walBytes); err != nil {
+		return 0, fmt.Errorf("decode statement WAL bytes: %w", err)
+	}
+	return walBytes, nil
 }
 
 func assertP5AdjacencyMutationPostState(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, operation string, observation P5AdjacencyMutationObservation) error {
@@ -668,6 +767,12 @@ func setupP5AdjacencyFixture(ctx context.Context, graphState *p5AdjacencyGraph, 
 		if err := installP5AdjacencyShadow(ctx, graphState.db); err != nil {
 			return p5AdjacencyFixture{}, 0, err
 		}
+		if err := disableP5AdjacencyAutovacuum(ctx, graphState.pool, true); err != nil {
+			return p5AdjacencyFixture{}, 0, err
+		}
+	}
+	if err := waitForP5WALQuiescence(ctx, graphState.pool); err != nil {
+		return p5AdjacencyFixture{}, 0, err
 	}
 	beforeWAL, err := p5AdjacencyWALPosition(ctx, graphState.pool)
 	if err != nil {
@@ -676,6 +781,9 @@ func setupP5AdjacencyFixture(ctx context.Context, graphState *p5AdjacencyGraph, 
 	fixtureGraph := testutil.NewDirectWriteScaleFixture(targets)
 	idMap, err := opengraph.WriteGraph(ctx, graphState.db, fixtureGraph)
 	if err != nil {
+		return p5AdjacencyFixture{}, 0, err
+	}
+	if err := waitForP5WALQuiescence(ctx, graphState.pool); err != nil {
 		return p5AdjacencyFixture{}, 0, err
 	}
 	afterWAL, err := p5AdjacencyWALPosition(ctx, graphState.pool)
@@ -924,6 +1032,63 @@ func p5AdjacencyWALPosition(ctx context.Context, pool *pgxpool.Pool) (int64, err
 	var position int64
 	err := pool.QueryRow(ctx, `select pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint`).Scan(&position)
 	return position, err
+}
+
+// disableP5AdjacencyAutovacuum prevents disposable fixture cleanup from
+// changing the global LSN during the setup calibration. Statement-level WAL
+// remains the authoritative mutation value, while the LSN deltas are retained
+// as a quiescent cross-check.
+func disableP5AdjacencyAutovacuum(ctx context.Context, pool *pgxpool.Pool, shadow bool) error {
+	relations := []string{"node", "edge"}
+	if shadow {
+		relations = append(relations, "public.p5_adjacency_v1")
+	}
+	for _, relation := range relations {
+		if _, err := pool.Exec(ctx, "alter table "+relation+" set (autovacuum_enabled = false)"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// restoreP5AdjacencyAutovacuum restores the database-wide parent settings
+// after the disposable capture has finished. The shadow relation may already
+// have been removed, so only core relations are reset here.
+func restoreP5AdjacencyAutovacuum(ctx context.Context, pool *pgxpool.Pool) error {
+	for _, relation := range []string{"node", "edge"} {
+		if _, err := pool.Exec(ctx, "alter table "+relation+" reset (autovacuum_enabled)"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func waitForP5WALQuiescence(ctx context.Context, pool *pgxpool.Pool) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		var activeAutovacuum int
+		if err := pool.QueryRow(ctx, `
+			select count(*)
+			from pg_stat_activity
+			where datname = current_database()
+			  and backend_type = 'autovacuum worker'
+			  and state <> 'idle'`).Scan(&activeAutovacuum); err != nil {
+			return err
+		}
+		if activeAutovacuum == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("autovacuum remained active during P5 WAL calibration")
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func captureP5PostgresEnvironment(ctx context.Context, pool *pgxpool.Pool) (PostgresEnvironment, error) {

@@ -34,6 +34,15 @@ func TestP5AdjacencyQuantiles(t *testing.T) {
 	require.Equal(t, 5*time.Nanosecond, p95)
 }
 
+func TestP5AdjacencyStatementWALBytes(t *testing.T) {
+	walBytes, err := p5AdjacencyStatementWALBytes([]byte(`[{"Plan":{"Node Type":"Update","WAL Bytes":1234}}]`))
+	require.NoError(t, err)
+	require.Equal(t, int64(1234), walBytes)
+
+	_, err = p5AdjacencyStatementWALBytes([]byte(`[{"Plan":{"Node Type":"Update"}}]`))
+	require.ErrorContains(t, err, "missing WAL Bytes")
+}
+
 func TestWriteP5AdjacencyFeasibilityReportIsImmutable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "p5.json")
 	report := P5AdjacencyFeasibilityReport{Schema: p5AdjacencyFeasibilitySchema, Passed: true}
