@@ -466,7 +466,7 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
 	}
-	statementWALTag := p5AdjacencyStatementWALTag(fixture, condition, operation)
+	statementWALTag := p5AdjacencyStatementWALTag(operation)
 	observation, duration, statementWAL, runErr := runP5AdjacencyMutationWithWAL(ctx, tx, fixture, shadow, operation, statementWALTag)
 	if runErr == nil {
 		runErr = tx.Commit(ctx)
@@ -630,16 +630,19 @@ func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5Ad
 	if walTag != "" {
 		if statementWAL, err = p5AdjacencyStatementWALStats(ctx, tx, walTag); err != nil {
 			return p5AdjacencyMutationExecution{}, err
-		} else if statementWAL.Calls != 0 {
-			return p5AdjacencyMutationExecution{}, fmt.Errorf("P5 statement WAL tag %q already has %d calls", walTag, statementWAL.Calls)
 		}
 		var result pgconn.CommandTag
 		start := time.Now()
-		result, err = tx.Exec(ctx, "/* "+walTag+" */ "+statement, arguments...)
+		result, err = tx.Exec(ctx, "with "+walTag+" as (select 1) "+statement, arguments...)
 		duration = time.Since(start)
 		affected = result.RowsAffected()
 		if err == nil {
-			statementWAL, err = p5AdjacencyStatementWALStats(ctx, tx, walTag)
+			afterWAL, statsErr := p5AdjacencyStatementWALStats(ctx, tx, walTag)
+			if statsErr != nil {
+				err = statsErr
+			} else {
+				statementWAL, err = p5AdjacencyStatementWALDelta(statementWAL, afterWAL)
+			}
 		}
 		if err == nil && (statementWAL.Calls != 1 || statementWAL.Bytes <= 0) {
 			err = fmt.Errorf("P5 statement WAL tag %q recorded calls=%d bytes=%d", walTag, statementWAL.Calls, statementWAL.Bytes)
@@ -715,8 +718,8 @@ func p5AdjacencyMutationStatement(fixture p5AdjacencyFixture, operation string) 
 	}
 }
 
-func p5AdjacencyStatementWALTag(fixture p5AdjacencyFixture, condition, operation string) string {
-	return fmt.Sprintf("p5_adjacency_v2_graph_%d_%s_%s", fixture.graphID, condition, operation)
+func p5AdjacencyStatementWALTag(operation string) string {
+	return "p5_adjacency_v2_wal_" + operation
 }
 
 func p5AdjacencyStatementWALStats(ctx context.Context, queryer p5AdjacencyRowQueryer, tag string) (P5AdjacencyStatementWAL, error) {
@@ -728,7 +731,7 @@ func p5AdjacencyStatementWALStats(ctx context.Context, queryer p5AdjacencyRowQue
 		  coalesce(sum(wal_fpi), 0)::bigint,
 		  coalesce(sum(wal_bytes), 0)::bigint
 		from pg_stat_statements
-		where query like '%' || $1 || '%'`, tag).Scan(
+		where query like 'with ' || $1 || '%'`, tag).Scan(
 		&measurement.Calls,
 		&measurement.Records,
 		&measurement.FPI,
@@ -738,6 +741,22 @@ func p5AdjacencyStatementWALStats(ctx context.Context, queryer p5AdjacencyRowQue
 		return P5AdjacencyStatementWAL{}, fmt.Errorf("read pg_stat_statements WAL for %q: %w", tag, err)
 	}
 	return measurement, nil
+}
+
+func p5AdjacencyStatementWALDelta(before, after P5AdjacencyStatementWAL) (P5AdjacencyStatementWAL, error) {
+	if before.Tag != after.Tag {
+		return P5AdjacencyStatementWAL{}, fmt.Errorf("P5 statement WAL tags differ: %q and %q", before.Tag, after.Tag)
+	}
+	if after.Calls < before.Calls || after.Records < before.Records || after.FPI < before.FPI || after.Bytes < before.Bytes {
+		return P5AdjacencyStatementWAL{}, fmt.Errorf("P5 statement WAL counters moved backwards for %q", before.Tag)
+	}
+	return P5AdjacencyStatementWAL{
+		Tag:     before.Tag,
+		Calls:   after.Calls - before.Calls,
+		Records: after.Records - before.Records,
+		FPI:     after.FPI - before.FPI,
+		Bytes:   after.Bytes - before.Bytes,
+	}, nil
 }
 
 func assertP5AdjacencyMutationPostState(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, operation string, observation P5AdjacencyMutationObservation) error {

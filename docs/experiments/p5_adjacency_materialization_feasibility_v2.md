@@ -14,12 +14,12 @@ write cost.
 
 ## Measurement correction
 
-For each committed calibration V2 executes the ordinary mutation once with a
-unique SQL comment tag, then reads that tagged top-level statement's one-call
-delta from `pg_stat_statements`. PostgreSQL attributes the mutation's trigger
-maintenance to that statement, so the artifact separately records WAL records,
-full-page images, and bytes. The report also preserves quiescent LSN deltas as
-diagnostics, but does not use them as the attributed mutation result.
+For each committed calibration V2 executes the ordinary mutation once with an
+operation-specific no-op CTE marker, then reads that statement's before/after
+one-call delta from `pg_stat_statements`. PostgreSQL attributes the mutation's
+trigger maintenance to that statement, so the artifact separately records WAL
+records, full-page images, and bytes. The report also preserves quiescent LSN
+deltas as diagnostics, but does not use them as the attributed mutation result.
 
 The capture-only runner may install `pg_stat_statements` in its disposable
 database when the extension is absent, and removes it again only if it created

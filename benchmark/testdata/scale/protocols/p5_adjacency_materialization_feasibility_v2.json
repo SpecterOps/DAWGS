@@ -40,7 +40,7 @@
     "timed_iterations": 5,
     "isolation": "repeatable_read_for_read_probes",
     "write_measurement": "each warm-up and timed mutation runs in a transaction that validates state and rolls back",
-    "wal_measurement": "for each committed calibration, a unique comment tag identifies the ordinary top-level mutation in pg_stat_statements; its one-call delta records WAL records, full-page images, and bytes including trigger maintenance. The capture may create and later remove pg_stat_statements only in the disposable database, and requires PostgreSQL to preload it. Quiescent pg_current_wal_lsn setup and mutation deltas remain diagnostic cross-checks only.",
+    "wal_measurement": "for each committed calibration, an operation-specific no-op CTE marker identifies the ordinary top-level mutation in pg_stat_statements; its before/after one-call delta records WAL records, full-page images, and bytes including trigger maintenance. The capture may create and later remove pg_stat_statements only in the disposable database, and requires PostgreSQL to preload it. Quiescent pg_current_wal_lsn setup and mutation deltas remain diagnostic cross-checks only.",
     "read_measurement": "raw parameterized adjacency lookup only after exact shadow-state validation; no public Cypher result may use the relation",
     "cap_overrides_permitted": false,
     "protected_case_access_permitted": false

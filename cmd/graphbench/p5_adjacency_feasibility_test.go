@@ -35,8 +35,15 @@ func TestP5AdjacencyQuantiles(t *testing.T) {
 }
 
 func TestP5AdjacencyStatementWALTag(t *testing.T) {
-	tag := p5AdjacencyStatementWALTag(p5AdjacencyFixture{graphID: 42}, "shadow", "batched_relationship_delete")
-	require.Equal(t, "p5_adjacency_v2_graph_42_shadow_batched_relationship_delete", tag)
+	tag := p5AdjacencyStatementWALTag("batched_relationship_delete")
+	require.Equal(t, "p5_adjacency_v2_wal_batched_relationship_delete", tag)
+
+	delta, err := p5AdjacencyStatementWALDelta(
+		P5AdjacencyStatementWAL{Tag: tag, Calls: 3, Records: 10, FPI: 1, Bytes: 100},
+		P5AdjacencyStatementWAL{Tag: tag, Calls: 4, Records: 13, FPI: 2, Bytes: 140},
+	)
+	require.NoError(t, err)
+	require.Equal(t, P5AdjacencyStatementWAL{Tag: tag, Calls: 1, Records: 3, FPI: 1, Bytes: 40}, delta)
 }
 
 func TestWriteP5AdjacencyFeasibilityReportIsImmutable(t *testing.T) {
