@@ -27,6 +27,7 @@ import (
 	"github.com/cucumber/godog"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/integration"
+	"github.com/stretchr/testify/assert"
 )
 
 func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Context, c *dbContext) {
@@ -80,5 +81,38 @@ func TestFeatures(t *testing.T) {
 
 	if num := suite.Run(); num != 0 {
 		log.Fatalf("TestSuite execution failed")
+	}
+}
+
+func TestFormatGraphResults(t *testing.T) {
+	nodes := []graph.Node{
+		{
+			ID:    1,
+			Kinds: graph.Kinds{graph.StringKind("A")},
+			Properties: &graph.Properties{
+				Map: map[string]any{"name": "a"},
+			},
+		},
+		{
+			ID:    2,
+			Kinds: graph.Kinds{graph.StringKind("B")},
+			Properties: &graph.Properties{
+				Map: map[string]any{"name": "b"},
+			},
+		},
+		{
+			ID: 3,
+			Properties: &graph.Properties{
+				Map: map[string]any{"name": "c"},
+			},
+		},
+	}
+	actualList, err := formatGraphResults(nodes)
+	assert.Nil(t, err)
+
+	expectedList := []string{"(:A{name: 'a'})", "(:B{name: 'b'})", "({name: 'c'})"}
+
+	for i := 0; i < len(expectedList); i++ {
+		assert.Equal(t, actualList[i], expectedList[i])
 	}
 }
