@@ -1,8 +1,8 @@
 # All-shortest P4 open baseline v1
 
-Status: scheduled. This is a training-only baseline and telemetry inventory,
-not an ASP candidate comparison, power study, qualification, or selector
-change.
+Status: stopped at the A1 diagnostic prerequisite. This is a training-only
+baseline and telemetry inventory, not an ASP candidate comparison, power
+study, qualification, or selector change.
 
 ## Why this is a fresh baseline
 
@@ -46,3 +46,21 @@ candidate timing. A completed baseline only authorizes a separately frozen
 A1-versus-one-candidate P4 preflight if an open training case is materially
 behind Neo4j. It does not authorize ASP-I1/B1/B2 timing, a power study,
 protected cases, a manifest, or automatic selection.
+
+## V1 stop result
+
+The first clean combined-backend round ran from
+`3a74d14be83f2c99b1694109d54840501ebbc3f5` with GraphBench binary SHA-256
+`4e47611c0e06d508e81011cc35d348a167c4c9a1d863095e3b72add821780c91`.
+Its artifact `.coverage/p4-open-baseline-3a74d14/round-1.jsonl` hashes to
+`b6c09fbd9dd1e46bd262af224469c12a9a69367f5ad7e504e853da5247fb53f6`.
+All 18 records (nine PostgreSQL and nine Neo4j) had exact public observations;
+PostgreSQL reported `ASP-A1-DAG`, the selected branch, and no fallback.
+
+The diagnostic replay failed the frozen telemetry condition for every A1
+record. The outer `Function Scan` exposes neither invocation-local search nor
+predecessor, enumeration, hydration, and workspace counters, and therefore
+reported `hidden_counters_unavailable`. The remaining three rounds were not
+run. The first round is retained only as a stop artifact and cannot select a
+P4 target. [`docs/experiments/asp_a1_diagnostic_prerequisite_v1.md`](asp_a1_diagnostic_prerequisite_v1.md)
+defines the distinct prerequisite required before a clean recapture.

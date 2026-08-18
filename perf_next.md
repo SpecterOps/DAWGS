@@ -482,9 +482,12 @@ deferred before protected timing with a documented reason.
 ## Immediate next actions
 
 1. Capture the training-only P4 ASP-A1/Neo4j open baseline with complete
-   PostgreSQL traversal telemetry.
-2. Select at most one open all-shortest target only from that fresh baseline;
+   PostgreSQL traversal telemetry. The first round stopped because A1's
+   Function Scan hides those counters.
+2. Implement and validate the separate A1 invocation-local diagnostic
+   prerequisite before recapturing any P4 baseline round.
+3. Select at most one open all-shortest target only from that fresh baseline;
    do not reuse protected historical ASP-I1 observations.
-3. If an open target is material, freeze a distinct A1-versus-one-candidate
+4. If an open target is material, freeze a distinct A1-versus-one-candidate
    telemetry preflight before any power study, formal corpus, holdout, or
    selector work.
