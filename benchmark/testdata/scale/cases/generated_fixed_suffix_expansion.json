@@ -81,7 +81,8 @@
       "expected": {"row_count": 4, "result_kind": "path_set", "path_rows": [{"nodes":["fse-root","fse-head-root-00","fse-middle-root-00","fse-terminal"],"relationship_kinds":["EnterSuffix","ContinueSuffix","CompleteSuffix"],"relationship_keys":["root:enter","root:continue","root:complete"]},{"nodes":["fse-root","fse-head-root-01","fse-middle-root-01","fse-terminal"],"relationship_kinds":["EnterSuffix","ContinueSuffix","CompleteSuffix"],"relationship_keys":["root:enter","root:continue","root:complete"]},{"nodes":["fse-root","fse-head-root-02","fse-middle-root-02","fse-terminal"],"relationship_kinds":["EnterSuffix","ContinueSuffix","CompleteSuffix"],"relationship_keys":["root:enter","root:continue","root:complete"]},{"nodes":["fse-root","fse-head-root-03","fse-middle-root-03","fse-terminal"],"relationship_kinds":["EnterSuffix","ContinueSuffix","CompleteSuffix"],"relationship_keys":["root:enter","root:continue","root:complete"]}]},
       "observes": {"paths": true, "nodes": true, "relationships": true, "properties": true},
       "shape": {"qualification_split": "training", "fixture_tier": "normal", "root_predicate": "selective_property", "terminal_predicate": "fixed_suffix", "edge_kinds": ["Expand", "EnterSuffix", "ContinueSuffix", "CompleteSuffix"], "min_depth": 0, "max_depth": 0, "path_materialization_required": true},
-      "candidate_modes": ["postgres_sql", "neo4j"],
+      "candidate_modes": ["postgres_sql"],
+      "unsupported_modes": {"neo4j": "P1 retry-buffer output-byte control is PostgreSQL-specific; the hydrated payload does not complete within the 90-second Neo4j diagnostic deadline"},
       "tags": ["generated", "normal-tier", "fixed-suffix-expansion-v2", "suffix-reverse-retry-v1-training", "path", "output-byte-retry", "payload-2100000", "p1-open", "training"]
     },
     {

@@ -115,9 +115,12 @@ The three P1-only declarations use fresh V2 fixture identities and the
 orientation cohorts or reuse a legacy holdout. The byte case returns four
 complete paths whose hydrated root and heads carry 2,100,000-byte payloads,
 intentionally exceeding the frozen 16 MiB candidate buffer while remaining an
-exact forward-retry control. Do not reuse a legacy holdout as a convenience
-control. Adding, deleting, or replacing any roster identity creates a new P1
-generation.
+exact forward-retry control. It is PostgreSQL-only in GraphBench because it
+tests that driver's retry buffer; Neo4j does not contribute a comparable
+execution boundary and did not complete this hydrated 25 MiB observation
+within a 90-second diagnostic deadline. Do not reuse a legacy holdout as a
+convenience control. Adding, deleting, or replacing any roster identity
+creates a new P1 generation.
 
 One-iteration PostgreSQL smokes on 2026-08-18 confirmed exact observations for
 all three controls. The high-fan-in path naturally produced
