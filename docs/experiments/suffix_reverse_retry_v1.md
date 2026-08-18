@@ -59,6 +59,26 @@ and `.coverage/p0-20260818-round2.jsonl`
 Before any qualifying P1 timing, repeat P0 from a clean committed source and
 freeze the open training selection.
 
+## Clean P0 baseline
+
+On 2026-08-18, P0 was repeated from committed source
+`57be1681140a2642639df0c06f7167bc17203e9b` with GraphBench binary SHA-256
+`5f9c5c3b7dcfbb7ffd69554b04b75b899cc6a6f1772e1e952d90a1abd0814c8c`.
+Each of two independently reloaded rounds used pool size one, one warm-up, and
+three timed iterations in both PostgreSQL and Neo4j modes. Every record was
+exact: 176 PostgreSQL and 176 Neo4j records in each round. The raw captures
+are `.coverage/p0-clean-57be168-round1.jsonl`
+(`5cd14dc4b13008f5e307d44a16c56ff608eb79596b2ecaddf59d1eb70c31c6a1`)
+and `.coverage/p0-clean-57be168-round2.jsonl`
+(`3bb71d1951b66559677abd4bba5441d844567269e6c1b1694cc95b67b4bc1f4d`).
+
+The protected hidden-fan-in stress case remains the largest cross-backend
+loss, at about `82.21x` PostgreSQL/Neo4j by the two-round case-median ratio.
+Among open P1 targets, `GFSE-D16-F1000-sparse_path` and
+`GFSE-V2-D16-F1000-R1-X1-M1-sparse_path` remain the leading sparse full-path
+opportunities, at about `50.03x` and `39.02x`, respectively. This baseline
+authorizes P1 open timing only; it does not authorize a protected holdout.
+
 ## Open transaction smoke
 
 The initial open transaction smoke ran on 2026-08-18 against the P0 sparse
@@ -193,6 +213,24 @@ contains multiple endpoint-only and path-observed declarations, so it is not a
 valid P1 selector. Build the fresh P1 training/control roster from explicit
 single-case captures (or add a dedicated, frozen P1 cohort) before beginning a
 multi-case tournament.
+
+## Frozen P1 capture schedule
+
+Each frozen roster member receives three separately invoked PostgreSQL arms in
+each of six rounds: ordinary exact forward (`F`), forced exact suffix-seeded
+reverse (`R`), and transaction retry (`T`). The round orders are the six
+permutations `FRT`, `FTR`, `RFT`, `RTF`, `TFR`, and `TRF`, in that order. Each
+arm uses the committed binary, pool size one, Repeatable Read, diagnostic
+telemetry, one warm-up, and five timed iterations. No cap override, reference,
+or concurrency option is permitted.
+
+An arm is one exact case invocation and writes its own JSONL artifact. Its
+GraphBench `round`, `block`, `arm`, and `arm-order` fields must match this
+schedule. A retry arm must retain exact rows and timed receipt chains; a
+reverse-only arm must never contain a forward retry receipt. The schedule is
+prospective: changing cases, binary, arm definitions, counts, warm-ups, or
+orders creates a new generation. Only after all open captures are exact and
+the early-stop gate passes may a separately authorized holdout step begin.
 
 ## Early stop gate
 
