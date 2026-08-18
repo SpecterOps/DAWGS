@@ -1,6 +1,7 @@
 # P5 adjacency materialization feasibility v1
 
-Status: frozen pending shadow implementation. This is a prospective
+Status: implemented and PostgreSQL-integration-validated; pending a clean
+feasibility capture. This is a prospective
 storage-and-mutation feasibility study only. It does not authorize a Cypher
 candidate, query routing, a production schema migration, protected-corpus
 timing, or a promotion claim.
@@ -55,3 +56,21 @@ unattributed write/WAL/storage metric, or read-path access by a Cypher
 candidate stops the study. Even a complete report authorizes only a separately
 frozen budget decision. It cannot authorize a production schema, automatic
 selector, cache-key change, protected corpus, or performance claim.
+
+## Implemented shadow boundary
+
+The shadow is an explicit `query.On(tx).InstallP5AdjacencyShadow` action;
+ordinary `schema_up.sql` and normal driver startup neither install nor read it.
+The paired remove action leaves core graph storage intact. Installation creates
+graph partitions for existing graphs, backfills each edge into one outbound and
+one inbound row, and then enables same-transaction triggers for edge insert,
+endpoint/kind update, and delete. A property-only edge update does not touch
+the shadow rows. The base edge foreign key and node-delete edge cascade remove
+shadow rows on relationship/node/graph deletion.
+
+The unit SQL boundary test and targeted PostgreSQL lifecycle test pass. The
+lifecycle test covers backfill, insert, endpoint update, property-only
+non-rewrite, node-delete cascade, rollback, canceled statement recovery through
+a replacement pooled connection, graph deletion, and shadow removal. It does
+not provide any P5 latency, WAL, storage, or query-performance result; those
+still require a clean source capture under this roster.

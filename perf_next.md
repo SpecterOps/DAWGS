@@ -446,10 +446,10 @@ PostgreSQL 17 target. See
 [`docs/experiments/p5_architecture_feasibility_v1.md`](docs/experiments/p5_architecture_feasibility_v1.md).
 The separately frozen
 [`docs/experiments/p5_adjacency_materialization_feasibility_v1.md`](docs/experiments/p5_adjacency_materialization_feasibility_v1.md)
-authorizes only a shadow adjacency schema and its mutation/storage inventory.
-No Cypher candidate, selector, cache-key change, protected timing, or
-production schema is authorized until a distinct budget decision follows that
-report.
+has an opt-in, PostgreSQL-integration-validated shadow implementation and
+authorizes only its mutation/storage inventory. No Cypher candidate, selector,
+cache-key change, protected timing, or production schema is authorized until a
+distinct budget decision follows that report.
 
 ## Validation matrix
 
@@ -518,5 +518,5 @@ deferred before protected timing with a documented reason.
 2. Do not run a power study, broader I1 timing, protected cases, or selector
    work from the P4 artifacts.
 3. Reopen P4 only with a distinct executor and separately frozen clean-source
-   roster. Implement only the frozen P5 shadow-adjacency feasibility roster;
+   roster. Capture only the frozen P5 shadow-adjacency feasibility inventory;
    decide its budget before considering any Cypher candidate.

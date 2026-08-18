@@ -1,7 +1,7 @@
 {
   "schema": "p5-adjacency-materialization-feasibility-v1",
   "generation": "p5-adjacency-materialization-feasibility-v1",
-  "status": "frozen_pending_shadow_implementation",
+  "status": "implemented_validated_pending_clean_capture",
   "purpose": "prospective shadow-only feasibility measurement for a graph-scoped directed adjacency materialization; not a Cypher executor, selector, read-performance qualification, or production schema change",
   "predecessor": {
     "source_commit": "6a0a252bad44f1a73b3fdace9de8d84d7fed11f5",
@@ -70,6 +70,16 @@
     "same_connection_cancellation_and_pool_reuse": true,
     "checksummed_clean_source_artifacts": true,
     "no_automatic_budget_or_candidate_pass": true
+  },
+  "implementation": {
+    "status": "opt_in_shadow_only",
+    "install": "query.On(tx).InstallP5AdjacencyShadow",
+    "remove": "query.On(tx).DropP5AdjacencyShadow",
+    "normal_schema_change": "none; schema_up.sql and normal driver startup do not install or read p5_adjacency_v1",
+    "validation": [
+      "unit SQL boundary test",
+      "PostgreSQL lifecycle test for backfill, insert, endpoint update, property-only update, node cascade, rollback, cancellation, pool reuse, graph deletion, and removal"
+    ]
   },
   "next_authorization": {
     "requires": [
