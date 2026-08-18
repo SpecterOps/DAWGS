@@ -104,6 +104,35 @@ func TestPostgresTraversalTelemetryRequiresExactlyOneSingletonSearchCall(t *test
 	require.ErrorContains(t, err, "exactly one search call")
 }
 
+// TestPostgresTraversalTelemetryAcceptsSQLPreflightBranchesAndNoPathSentinel
+// verifies the Go reader accepts the exact runtime branch spellings emitted by
+// the compact SQL kernel, including its nil call/-1 aggregate no-path
+// distance representation.
+func TestPostgresTraversalTelemetryAcceptsSQLPreflightBranchesAndNoPathSentinel(t *testing.T) {
+	for _, branch := range []string{
+		"zero_hop_preflight",
+		"one_hop_preflight",
+		"two_hop_preflight",
+		"preflight_no_path",
+		"search_no_path",
+	} {
+		t.Run(branch, func(t *testing.T) {
+			telemetry := bidirectionalCaseTelemetry(t, TraversalTelemetryLevelDiagnostic)
+			document := validBidirectionalDiagnosticDocument(telemetry.Diagnostic.InvocationID)
+			document.RuntimeBranch = branch
+			document.Calls[0].RuntimeBranch = branch
+			if branch == "preflight_no_path" || branch == "search_no_path" {
+				document.Counters.FrozenDistance = traversalTelemetryPointer(int64(-1))
+				document.Calls[0].FrozenDistance = nil
+			}
+
+			require.NoError(t, applyBidirectionalTraversalDiagnostic(telemetry, document, telemetry.Diagnostic.InvocationID, "9123"))
+			require.NoError(t, telemetry.Validate())
+			require.Equal(t, branch, telemetry.Summary.RuntimeBranch)
+		})
+	}
+}
+
 // TestPostgresTraversalTelemetryCapturesASPWorkAndWorkspaceButFailsClosedWithoutHydration verifies postgres traversal telemetry captures asp work and workspace but fails closed without hydration behavior.
 func TestPostgresTraversalTelemetryCapturesASPWorkAndWorkspaceButFailsClosedWithoutHydration(t *testing.T) {
 	telemetry := bidirectionalASPCaseTelemetry(t)

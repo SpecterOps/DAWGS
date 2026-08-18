@@ -2127,7 +2127,7 @@ func applyBidirectionalTraversalDiagnostic(
 		return fmt.Errorf("bidirectional diagnostic runtime outcome flags are missing")
 	}
 	if err := validateDiagnosticRuntimeOutcome(document.RuntimeBranch, *document.Overflowed, *document.FallbackExecuted, "exact_s4_fallback", []string{
-		"preflight_zero_hop", "preflight_one_hop", "preflight_two_hop", "preflight_no_path", "search_no_path", "bidirectional_search",
+		"zero_hop_preflight", "one_hop_preflight", "two_hop_preflight", "preflight_no_path", "search_no_path", "bidirectional_search",
 	}); err != nil {
 		return fmt.Errorf("bidirectional diagnostic: %w", err)
 	}
@@ -2326,7 +2326,7 @@ func validateBidirectionalDiagnosticCallsFor(calls []postgresBidirectionalDiagno
 			return fmt.Errorf("bidirectional diagnostic call %d outcome flags are missing", idx)
 		}
 		if err := validateDiagnosticRuntimeOutcome(call.RuntimeBranch, *call.Overflowed, *call.FallbackExecuted, exactFallback, []string{
-			"preflight_zero_hop", "preflight_one_hop", "preflight_two_hop", "preflight_no_path", "search_no_path", "bidirectional_search",
+			"zero_hop_preflight", "one_hop_preflight", "two_hop_preflight", "preflight_no_path", "search_no_path", "bidirectional_search",
 		}); err != nil {
 			return fmt.Errorf("bidirectional diagnostic call %d: %w", idx, err)
 		}
@@ -2363,11 +2363,20 @@ func validateBidirectionalSingleCallAggregate(counters *postgresBidirectionalDia
 		"seen_peak":          {counters.SeenPeak, call.SeenPeak}, "frontier_peak": {counters.FrontierPeak, call.FrontierPeak},
 		"queue_peak": {counters.QueuePeak, call.QueuePeak}, "predecessor_peak": {counters.PredecessorPeak, call.PredecessorPeak},
 		"meeting_candidates": {counters.MeetingCandidates, call.MeetingCandidates},
-		"frozen_distance":    {counters.FrozenDistance, call.FrozenDistance}, "witness_rows": {counters.WitnessRows, call.WitnessRows},
+		"witness_rows":       {counters.WitnessRows, call.WitnessRows},
 	} {
 		if values[0] == nil || values[1] == nil || *values[0] != *values[1] {
 			return fmt.Errorf("bidirectional diagnostic aggregate counter %s differs from its single call", name)
 		}
+	}
+	// The SQL reader serializes an absent call-level meeting distance as the
+	// explicit aggregate -1 sentinel. A completed meeting is always a concrete
+	// non-negative value, so accepting only this nil/-1 pairing preserves the
+	// distinction instead of manufacturing a distance for a no-path result.
+	if counters.FrozenDistance == nil ||
+		(call.FrozenDistance == nil && *counters.FrozenDistance != -1) ||
+		(call.FrozenDistance != nil && *counters.FrozenDistance != *call.FrozenDistance) {
+		return fmt.Errorf("bidirectional diagnostic aggregate counter frozen_distance differs from its single call")
 	}
 	for idx, level := range counters.Levels {
 		if level.SearchID == nil || call.SearchID == nil || *level.SearchID != *call.SearchID {
