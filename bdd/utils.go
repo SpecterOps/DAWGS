@@ -122,7 +122,7 @@ func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
 		return fmt.Errorf("Invalid row count expected %d actual %d", c.rowCount, len(expectedTable.Rows))
 	}
 
-	for i := 0; i < len(expectedRows); i++ {
+	for i := range len(expectedRows) {
 		// TODO normalize exptected and actual rows by removing empty spaces and sorting kinds and their properties
 		if expectedRows[i] != c.actualRows[i] {
 			return fmt.Errorf("Detected a drift expected %s, actual %s", expectedRows[i], c.actualRows[i])
