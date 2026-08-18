@@ -320,8 +320,8 @@ shortest-path shapes on the incumbent.
 ## P3: unbounded one-path and distance search
 
 P3's telemetry-first preflight is frozen in
-`docs/experiments/sp_bidirectional_p3_preflight_v1.md` and
-`benchmark/testdata/scale/protocols/sp_bidirectional_p3_preflight_v1.json`.
+`docs/experiments/sp_bidirectional_p3_preflight_v2.md` and
+`benchmark/testdata/scale/protocols/sp_bidirectional_p3_preflight_v2.json`.
 It is non-qualifying: its open B1/B2/S3/S4 roster must establish complete
 component and resource attribution before a separately powered formal
 tournament can be proposed.

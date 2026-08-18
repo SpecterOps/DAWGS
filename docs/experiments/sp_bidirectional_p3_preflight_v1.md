@@ -1,8 +1,19 @@
 # Compact bidirectional shortest-path P3 preflight V1
 
-Status: frozen before capture. This is a telemetry and component-boundary
-readiness preflight, not a performance qualification. It does not authorize a
-selector, a formal tournament, a protected holdout, or production activation.
+Status: superseded before direct-floor capture. This is a telemetry and
+component-boundary readiness preflight, not a performance qualification. It
+does not authorize a selector, a formal tournament, a protected holdout, or
+production activation.
+
+## Disposition
+
+The primary S3/S4/B1/B2 captures were diagnostic-only and cannot qualify this
+generation. The declared direct-floor comparison used the nonexistent
+`SP-S4-C-DIRECT` identity, so the frozen schedule could not complete. V1 is
+superseded rather than amended. Its raw observations may explain the correction
+but must not support a P3 decision. V2 preserves the primary roster and uses
+the real `SP-S4-C-D` and `SP-S4-C-WE+MAT-M0` arms in distinct direct-floor
+distance and one-path comparisons.
 
 ## Purpose and separation
 
