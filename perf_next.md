@@ -322,9 +322,10 @@ shortest-path shapes on the incumbent.
 P3's telemetry-first preflight is frozen in
 `docs/experiments/sp_bidirectional_p3_preflight_v2.md` and
 `benchmark/testdata/scale/protocols/sp_bidirectional_p3_preflight_v2.json`.
-It is non-qualifying: its open B1/B2/S3/S4 roster must establish complete
-component and resource attribution before a separately powered formal
-tournament can be proposed.
+The current B1/B2 function-workspace arms are terminally rejected: complete
+telemetry showed them materially slower than S4 on every frozen target. A new
+P3 executor must use a distinct generation and power study; V2 cannot authorize
+component work, formal timing, a selector, or a holdout.
 
 ### Hypothesis
 

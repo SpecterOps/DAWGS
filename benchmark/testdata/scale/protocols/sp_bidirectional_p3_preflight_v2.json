@@ -1,7 +1,7 @@
 {
   "schema": "sp-bidirectional-p3-preflight-v2",
   "generation": "sp-bidirectional-p3-preflight-v2",
-  "status": "frozen_before_capture",
+  "status": "terminally_rejected_current_b1_b2_arms",
   "production_default": "off",
   "purpose": "telemetry and component-boundary readiness only; not a performance qualification",
   "supersedes": "sp-bidirectional-p3-preflight-v1",
@@ -79,5 +79,22 @@
       "a separately frozen power simulation calibrated from the preflight trace"
     ],
     "does_not_authorize": ["production selector", "formal performance tournament", "protected holdout access"]
+  },
+  "result": {
+    "source_commit": "d77409674d6da4b00c3e379356955a5678dccbae",
+    "binary_sha256": "e08dd6d7f95b83421d91e3af19e7462b35d56b3a704b26d11d2e200d44d57ae4",
+    "artifact_directory": ".coverage/p3-preflight-d774096",
+    "primary_artifacts": 32,
+    "direct_floor_artifacts": 8,
+    "exact_records": 248,
+    "timed_samples": 1240,
+    "capture_ledger_sha256": "edd64b293ea0bb8a19fac41ee8e58d7042a511090b8043d5f85736fa4a2b567a",
+    "b1_b2_telemetry": "120 records exact with complete invocation-local counters, zero fallback, and matching runtime identity",
+    "target_median_ratio_to_s4": {
+      "GSP-D08-F001_distance_inbound": {"b1": 4.587563248375879, "b2": 3.265546008201876},
+      "GSP-D08-F001_path_inbound": {"b1": 4.652223697591718, "b2": 3.7439601040489365},
+      "GSP-D64-F1000_path": {"b1": 8.125883158637967, "b2": 4.190687443553809}
+    },
+    "disposition": "Both existing compact B1/B2 function-workspace arms fail every frozen target before a power study. Retain S4 and S3 references; do not add component work, formal timing, a selector, or a holdout for these identities."
   }
 }

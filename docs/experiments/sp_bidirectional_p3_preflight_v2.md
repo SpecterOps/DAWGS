@@ -1,9 +1,10 @@
 # Compact bidirectional shortest-path P3 preflight V2
 
-Status: frozen before capture. This is a telemetry and component-boundary
-readiness preflight, not a performance qualification. It supersedes the
-incomplete V1 schedule and does not authorize a selector, formal performance
-tournament, protected holdout, or production activation.
+Status: current B1/B2 function-workspace arms terminally rejected. This was a
+telemetry and component-boundary readiness preflight, not a performance
+qualification. It supersedes the incomplete V1 schedule and does not authorize
+a selector, formal performance tournament, protected holdout, or production
+activation.
 
 ## V2 correction and fixed scope
 
@@ -56,3 +57,41 @@ is `benchmark/testdata/scale/protocols/sp_bidirectional_p3_preflight_v2.json`.
 After—and only after—a complete V2 capture, a new separately named power study
 may be calibrated. No V2 result can itself authorize formal timing, a holdout,
 or a production selector.
+
+## Clean V2 result
+
+The complete V2 capture ran from clean source
+`d77409674d6da4b00c3e379356955a5678dccbae` with GraphBench binary SHA-256
+`e08dd6d7f95b83421d91e3af19e7462b35d56b3a704b26d11d2e200d44d57ae4`.
+The ignored artifact directory `.coverage/p3-preflight-d774096` contains 32
+primary and eight direct-floor JSONL artifacts: 248 exact records and 1,240
+timed observations. The sorted full capture ledger hashes to
+`edd64b293ea0bb8a19fac41ee8e58d7042a511090b8043d5f85736fa4a2b567a`.
+
+All 120 B1/B2 case-round records were exact, had matching candidate runtime
+identity, emitted no fallback, and supplied complete invocation-local search,
+workspace, hydration, and plan-resource telemetry. The preflight therefore
+resolved the earlier validator defects rather than hiding them. It was still
+diagnostic-only—its host recorded a `powersave` CPU governor—so it does not
+constitute a powered qualification result.
+
+That limitation cannot rescue either existing B arm: pooling the 20 warm samples
+per target/arm gives the following B-to-S4 ratios.
+
+| Target | B1 median / p95 | B2 median / p95 |
+| --- | ---: | ---: |
+| `GSP-D08-F001_distance_inbound` | 4.59x / 3.90x | 3.27x / 2.79x |
+| `GSP-D08-F001_path_inbound` | 4.65x / 3.92x | 3.74x / 3.18x |
+| `GSP-D64-F1000_path` | 8.13x / 8.98x | 4.19x / 4.25x |
+
+B2 is the faster compact arm but fails the incumbent on every frozen target by
+more than threefold. The direct floor is observation-sensitive as expected:
+S0 reduces the distance median from 536us to 371us, but raises the one-path
+median from 724us to 1,145us. It cannot justify a broad direct policy.
+
+This stops the existing B1/B2 stored-function/workspace identities before any
+component implementation, power simulation, formal performance tournament,
+holdout, or selector work. Keep S4 (and the markedly faster S3 references) on
+the tested shapes. A future P3 successor requires a distinct executor,
+workspace boundary, roster, telemetry contract, and prospective power study;
+these V2 observations cannot be repurposed as its qualification evidence.
