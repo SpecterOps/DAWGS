@@ -34,13 +34,9 @@ func TestP5AdjacencyQuantiles(t *testing.T) {
 	require.Equal(t, 5*time.Nanosecond, p95)
 }
 
-func TestP5AdjacencyStatementWALBytes(t *testing.T) {
-	walBytes, err := p5AdjacencyStatementWALBytes([]byte(`[{"Plan":{"Node Type":"Update","WAL Bytes":1234}}]`))
-	require.NoError(t, err)
-	require.Equal(t, int64(1234), walBytes)
-
-	_, err = p5AdjacencyStatementWALBytes([]byte(`[{"Plan":{"Node Type":"Update"}}]`))
-	require.ErrorContains(t, err, "missing WAL Bytes")
+func TestP5AdjacencyStatementWALTag(t *testing.T) {
+	tag := p5AdjacencyStatementWALTag(p5AdjacencyFixture{graphID: 42}, "shadow", "batched_relationship_delete")
+	require.Equal(t, "p5_adjacency_v2_graph_42_shadow_batched_relationship_delete", tag)
 }
 
 func TestWriteP5AdjacencyFeasibilityReportIsImmutable(t *testing.T) {

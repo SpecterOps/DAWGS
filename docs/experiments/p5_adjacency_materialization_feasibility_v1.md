@@ -1,10 +1,11 @@
 # P5 adjacency materialization feasibility v1
 
-Status: implemented and PostgreSQL-integration-validated; pending a clean
-feasibility capture. This is a prospective
-storage-and-mutation feasibility study only. It does not authorize a Cypher
-candidate, query routing, a production schema migration, protected-corpus
-timing, or a promotion claim.
+Status: rejected for incomplete trigger-WAL attribution. The architecture and
+all state oracles remain valid, but V1's completed clean-source artifact cannot
+support a feasibility disposition. Its successor is
+[`P5 adjacency materialization feasibility v2`](p5_adjacency_materialization_feasibility_v2.md).
+Neither version authorizes a Cypher candidate, query routing, a production
+schema migration, protected-corpus timing, or a promotion claim.
 
 ## Chosen architecture
 
@@ -117,9 +118,15 @@ a write budget or authorize a Cypher read-path experiment.
 
 The first clean-source execution completed every state oracle but was rejected
 as a feasibility artifact: background autovacuum inflated its global LSN
-deltas, making several WAL values unattributable. The runner now disables and
-later restores autovacuum on the disposable graph partitions, waits for an idle
-autovacuum state around setup LSN reads, and records statement-local mutation
-WAL bytes with `EXPLAIN (ANALYZE, WAL)`. The global LSN delta remains in the
-artifact as a quiescent cross-check, not as the mutation WAL result. A fresh
-clean capture is required; the rejected artifact makes no feasibility claim.
+deltas, making several WAL values unattributable. A second clean-source run
+disabled and restored autovacuum successfully, but exposed a different
+attribution defect: `EXPLAIN (ANALYZE, WAL)` reported base-plan WAL only and
+omitted the shadow's row-trigger writes. For a 1,000-edge shadow delete it
+reported 54,000 bytes, while an isolated `pg_stat_statements` probe recorded
+162,000 bytes for the same top-level mutation. The exact artifact and its
+rejection are frozen in
+[`p5_adjacency_materialization_feasibility_v1_rejection.json`](../../benchmark/testdata/scale/protocols/p5_adjacency_materialization_feasibility_v1_rejection.json).
+
+V2 replaces the invalid plan-WAL measurement with tagged
+`pg_stat_statements` WAL deltas and retains quiescent LSN only as a diagnostic
+cross-check. V1 makes no feasibility claim and creates no budget decision.

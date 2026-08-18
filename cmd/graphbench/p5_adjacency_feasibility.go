@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	p5AdjacencyFeasibilitySchema   = "p5-adjacency-materialization-feasibility-v1"
-	p5AdjacencyFeasibilityProtocol = "benchmark/testdata/scale/protocols/p5_adjacency_materialization_feasibility_v1.json"
+	p5AdjacencyFeasibilitySchema   = "p5-adjacency-materialization-feasibility-v2"
+	p5AdjacencyFeasibilityProtocol = "benchmark/testdata/scale/protocols/p5_adjacency_materialization_feasibility_v2.json"
 	p5WarmupIterations             = 1
 	p5TimedIterations              = 5
 	p5Blocks                       = 4
@@ -49,6 +49,7 @@ type P5AdjacencyFeasibilityReport struct {
 	SourceArchiveSHA256 string                       `json:"source_archive_sha256"`
 	Environment         RunEnvironment               `json:"environment"`
 	Postgres            PostgresEnvironment          `json:"postgres"`
+	WALAttribution      P5AdjacencyWALAttribution    `json:"wal_attribution"`
 	Conditions          []P5AdjacencyConditionResult `json:"conditions"`
 	Calibrations        []P5AdjacencyCalibration     `json:"committed_calibrations"`
 	Cancellation        P5AdjacencyCancellation      `json:"cancellation_and_pool_reuse"`
@@ -63,11 +64,22 @@ type P5AdjacencyConditionResult struct {
 	Condition     string                            `json:"condition"`
 	Targets       int                               `json:"targets"`
 	GraphID       int32                             `json:"graph_id"`
-	SetupWAL      int64                             `json:"setup_wal_bytes"`
+	SetupWAL      int64                             `json:"setup_wal_lsn_delta_bytes"`
 	BaseStorage   P5AdjacencyRelationSize           `json:"base_edge_storage"`
 	ShadowStorage *P5AdjacencyRelationSize          `json:"shadow_storage,omitempty"`
 	Operations    []P5AdjacencyOperationMeasurement `json:"operations"`
 	ReadProbes    []P5AdjacencyReadProbe            `json:"read_probes"`
+}
+
+// P5AdjacencyWALAttribution describes the capture-only PostgreSQL facility
+// used to account for a top-level mutation and all trigger maintenance it
+// invokes. It is not a runtime dependency of the driver or the shadow schema.
+type P5AdjacencyWALAttribution struct {
+	Source              string `json:"source"`
+	ExtensionVersion    string `json:"extension_version"`
+	Track               string `json:"track"`
+	ExtensionWasPresent bool   `json:"extension_was_present"`
+	ExtensionCreated    bool   `json:"extension_created_for_capture"`
 }
 
 // P5AdjacencyRelationSize reports heap and index bytes for one physical relation.
@@ -118,16 +130,27 @@ type P5AdjacencyReadProbe struct {
 
 // P5AdjacencyCalibration records one committed setup or mutation calibration.
 type P5AdjacencyCalibration struct {
-	Condition         string                         `json:"condition"`
-	Targets           int                            `json:"targets"`
-	Operation         string                         `json:"operation"`
-	GraphID           int32                          `json:"graph_id"`
-	SetupWAL          int64                          `json:"setup_wal_lsn_delta_bytes"`
-	MutationWALLSN    int64                          `json:"mutation_wal_lsn_delta_bytes"`
-	StatementWALBytes int64                          `json:"statement_wal_bytes"`
-	WALQuiescent      bool                           `json:"wal_quiescent"`
-	Duration          time.Duration                  `json:"duration"`
-	Observed          P5AdjacencyMutationObservation `json:"observed"`
+	Condition      string                         `json:"condition"`
+	Targets        int                            `json:"targets"`
+	Operation      string                         `json:"operation"`
+	GraphID        int32                          `json:"graph_id"`
+	SetupWAL       int64                          `json:"setup_wal_lsn_delta_bytes"`
+	MutationWALLSN int64                          `json:"mutation_wal_lsn_delta_bytes"`
+	StatementWAL   P5AdjacencyStatementWAL        `json:"statement_wal"`
+	WALQuiescent   bool                           `json:"wal_quiescent"`
+	Duration       time.Duration                  `json:"duration"`
+	Observed       P5AdjacencyMutationObservation `json:"observed"`
+}
+
+// P5AdjacencyStatementWAL is the pg_stat_statements delta for one committed
+// top-level mutation. PostgreSQL attributes trigger writes to that statement,
+// unlike EXPLAIN's plan-node WAL counters.
+type P5AdjacencyStatementWAL struct {
+	Tag     string `json:"tag"`
+	Calls   int64  `json:"calls"`
+	Records int64  `json:"records"`
+	FPI     int64  `json:"full_page_images"`
+	Bytes   int64  `json:"bytes"`
 }
 
 // P5AdjacencyCancellation records recovery after a cancelled write. pgx may
@@ -220,6 +243,15 @@ func runP5AdjacencyFeasibilityCapture(ctx context.Context, cfg config, connectio
 			err = fmt.Errorf("restore autovacuum after P5 capture: %w", restoreErr)
 		}
 	}()
+	walAttribution, releaseWALAttribution, err := prepareP5AdjacencyWALAttribution(ctx, control.pool)
+	if err != nil {
+		return P5AdjacencyFeasibilityReport{}, err
+	}
+	defer func() {
+		if releaseErr := releaseWALAttribution(); err == nil && releaseErr != nil {
+			err = fmt.Errorf("release P5 WAL attribution extension: %w", releaseErr)
+		}
+	}()
 
 	postgres, err := captureP5PostgresEnvironment(ctx, control.pool)
 	if err != nil {
@@ -232,6 +264,7 @@ func runP5AdjacencyFeasibilityCapture(ctx context.Context, cfg config, connectio
 		SourceArchiveSHA256: sourceArchive,
 		Environment:         environment,
 		Postgres:            postgres,
+		WALAttribution:      walAttribution,
 		NoBudgetDecision:    true,
 		NoCypherReadPath:    true,
 	}
@@ -295,6 +328,44 @@ func runP5AdjacencyFeasibilityCapture(ctx context.Context, cfg config, connectio
 		return P5AdjacencyFeasibilityReport{}, err
 	}
 	return report, nil
+}
+
+func prepareP5AdjacencyWALAttribution(ctx context.Context, pool *pgxpool.Pool) (P5AdjacencyWALAttribution, func() error, error) {
+	attribution := P5AdjacencyWALAttribution{Source: "pg_stat_statements"}
+	if err := pool.QueryRow(ctx, `select exists (select 1 from pg_extension where extname = 'pg_stat_statements')`).Scan(&attribution.ExtensionWasPresent); err != nil {
+		return P5AdjacencyWALAttribution{}, nil, fmt.Errorf("check pg_stat_statements extension: %w", err)
+	}
+	if !attribution.ExtensionWasPresent {
+		if _, err := pool.Exec(ctx, `create extension pg_stat_statements`); err != nil {
+			return P5AdjacencyWALAttribution{}, nil, fmt.Errorf("install capture-only pg_stat_statements extension: %w", err)
+		}
+		attribution.ExtensionCreated = true
+	}
+	release := func() error {
+		if !attribution.ExtensionCreated {
+			return nil
+		}
+		_, err := pool.Exec(ctx, `drop extension pg_stat_statements`)
+		return err
+	}
+	if err := pool.QueryRow(ctx, `select extversion from pg_extension where extname = 'pg_stat_statements'`).Scan(&attribution.ExtensionVersion); err != nil {
+		_ = release()
+		return P5AdjacencyWALAttribution{}, nil, fmt.Errorf("read pg_stat_statements extension version: %w", err)
+	}
+	if err := pool.QueryRow(ctx, `show pg_stat_statements.track`).Scan(&attribution.Track); err != nil {
+		_ = release()
+		return P5AdjacencyWALAttribution{}, nil, fmt.Errorf("read pg_stat_statements tracking mode: %w", err)
+	}
+	if attribution.Track != "top" && attribution.Track != "all" {
+		_ = release()
+		return P5AdjacencyWALAttribution{}, nil, fmt.Errorf("pg_stat_statements.track must be top or all, got %q", attribution.Track)
+	}
+	var entries int64
+	if err := pool.QueryRow(ctx, `select count(*) from pg_stat_statements`).Scan(&entries); err != nil {
+		_ = release()
+		return P5AdjacencyWALAttribution{}, nil, fmt.Errorf("query pg_stat_statements; add it to shared_preload_libraries before starting PostgreSQL: %w", err)
+	}
+	return attribution, release, nil
 }
 
 func p5AdjacencyOperations() []string {
@@ -395,7 +466,8 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
 	}
-	observation, duration, statementWAL, runErr := runP5AdjacencyMutationWithWAL(ctx, tx, fixture, shadow, operation)
+	statementWALTag := p5AdjacencyStatementWALTag(fixture, condition, operation)
+	observation, duration, statementWAL, runErr := runP5AdjacencyMutationWithWAL(ctx, tx, fixture, shadow, operation, statementWALTag)
 	if runErr == nil {
 		runErr = tx.Commit(ctx)
 	} else {
@@ -411,7 +483,7 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 	if err != nil {
 		return P5AdjacencyCalibration{}, err
 	}
-	if afterWAL-beforeWAL < statementWAL {
+	if afterWAL-beforeWAL < statementWAL.Bytes {
 		return P5AdjacencyCalibration{}, fmt.Errorf("%s statement WAL bytes exceed its LSN delta", operation)
 	}
 	if shadow {
@@ -425,16 +497,16 @@ func runP5AdjacencyCalibration(ctx context.Context, connection, condition string
 		return P5AdjacencyCalibration{}, err
 	}
 	return P5AdjacencyCalibration{
-		Condition:         condition,
-		Targets:           targets,
-		Operation:         operation,
-		GraphID:           fixture.graphID,
-		SetupWAL:          setupWAL,
-		MutationWALLSN:    afterWAL - beforeWAL,
-		StatementWALBytes: statementWAL,
-		WALQuiescent:      true,
-		Duration:          duration,
-		Observed:          observation,
+		Condition:      condition,
+		Targets:        targets,
+		Operation:      operation,
+		GraphID:        fixture.graphID,
+		SetupWAL:       setupWAL,
+		MutationWALLSN: afterWAL - beforeWAL,
+		StatementWAL:   statementWAL,
+		WALQuiescent:   true,
+		Duration:       duration,
+		Observed:       observation,
 	}, nil
 }
 
@@ -500,27 +572,27 @@ func p5AdjacencyQuantiles(durations []time.Duration) (time.Duration, time.Durati
 }
 
 type p5AdjacencyMutationExecution struct {
-	observation       P5AdjacencyMutationObservation
-	duration          time.Duration
-	statementWALBytes int64
+	observation  P5AdjacencyMutationObservation
+	duration     time.Duration
+	statementWAL P5AdjacencyStatementWAL
 }
 
 func runP5AdjacencyMutationTimed(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string) (P5AdjacencyMutationObservation, time.Duration, error) {
-	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, false)
+	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, "")
 	return execution.observation, execution.duration, err
 }
 
-func runP5AdjacencyMutationWithWAL(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string) (P5AdjacencyMutationObservation, time.Duration, int64, error) {
-	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, true)
-	return execution.observation, execution.duration, execution.statementWALBytes, err
+func runP5AdjacencyMutationWithWAL(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation, walTag string) (P5AdjacencyMutationObservation, time.Duration, P5AdjacencyStatementWAL, error) {
+	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, walTag)
+	return execution.observation, execution.duration, execution.statementWAL, err
 }
 
 func runP5AdjacencyMutation(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string) (P5AdjacencyMutationObservation, error) {
-	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, false)
+	execution, err := runP5AdjacencyMutationInternal(ctx, tx, fixture, shadow, operation, "")
 	return execution.observation, err
 }
 
-func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation string, collectStatementWAL bool) (p5AdjacencyMutationExecution, error) {
+func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, shadow bool, operation, walTag string) (p5AdjacencyMutationExecution, error) {
 	if shadow {
 		if err := assertP5AdjacencyExact(ctx, tx, fixture.graphID); err != nil {
 			return p5AdjacencyMutationExecution{}, err
@@ -550,26 +622,35 @@ func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5Ad
 	if err != nil {
 		return p5AdjacencyMutationExecution{}, err
 	}
-	start := time.Now()
 	var (
-		affected          int64
-		statementWALBytes int64
+		affected     int64
+		duration     time.Duration
+		statementWAL P5AdjacencyStatementWAL
 	)
-	if collectStatementWAL {
-		var plan []byte
-		err = tx.QueryRow(ctx, "explain (analyze, wal, format json) "+statement, arguments...).Scan(&plan)
-		if err == nil {
-			statementWALBytes, err = p5AdjacencyStatementWALBytes(plan)
+	if walTag != "" {
+		if statementWAL, err = p5AdjacencyStatementWALStats(ctx, tx, walTag); err != nil {
+			return p5AdjacencyMutationExecution{}, err
+		} else if statementWAL.Calls != 0 {
+			return p5AdjacencyMutationExecution{}, fmt.Errorf("P5 statement WAL tag %q already has %d calls", walTag, statementWAL.Calls)
 		}
+		var result pgconn.CommandTag
+		start := time.Now()
+		result, err = tx.Exec(ctx, "/* "+walTag+" */ "+statement, arguments...)
+		duration = time.Since(start)
+		affected = result.RowsAffected()
 		if err == nil {
-			affected, err = p5AdjacencyExpectedAffected(fixture, operation)
+			statementWAL, err = p5AdjacencyStatementWALStats(ctx, tx, walTag)
+		}
+		if err == nil && (statementWAL.Calls != 1 || statementWAL.Bytes <= 0) {
+			err = fmt.Errorf("P5 statement WAL tag %q recorded calls=%d bytes=%d", walTag, statementWAL.Calls, statementWAL.Bytes)
 		}
 	} else {
 		var result pgconn.CommandTag
+		start := time.Now()
 		result, err = tx.Exec(ctx, statement, arguments...)
+		duration = time.Since(start)
 		affected = result.RowsAffected()
 	}
-	duration := time.Since(start)
 	if err != nil {
 		return p5AdjacencyMutationExecution{}, err
 	}
@@ -599,7 +680,7 @@ func runP5AdjacencyMutationInternal(ctx context.Context, tx pgx.Tx, fixture p5Ad
 			}
 		}
 	}
-	return p5AdjacencyMutationExecution{observation: observation, duration: duration, statementWALBytes: statementWALBytes}, nil
+	return p5AdjacencyMutationExecution{observation: observation, duration: duration, statementWAL: statementWAL}, nil
 }
 
 func p5AdjacencyMutationStatement(fixture p5AdjacencyFixture, operation string) (string, []any, error) {
@@ -634,38 +715,29 @@ func p5AdjacencyMutationStatement(fixture p5AdjacencyFixture, operation string) 
 	}
 }
 
-func p5AdjacencyExpectedAffected(fixture p5AdjacencyFixture, operation string) (int64, error) {
-	switch operation {
-	case "batch_relationship_create", "relationship_upsert_conflict_merge", "relationship_property_only_update", "batched_relationship_delete", "batched_node_delete_cascade":
-		return int64(len(fixture.targetIDs)), nil
-	case "graph_clear_reload":
-		return fixture.nodes, nil
-	case "graph_drop":
-		return 1, nil
-	default:
-		return 0, fmt.Errorf("unknown P5 mutation %q", operation)
-	}
+func p5AdjacencyStatementWALTag(fixture p5AdjacencyFixture, condition, operation string) string {
+	return fmt.Sprintf("p5_adjacency_v2_graph_%d_%s_%s", fixture.graphID, condition, operation)
 }
 
-func p5AdjacencyStatementWALBytes(raw []byte) (int64, error) {
-	var explain []struct {
-		Plan map[string]json.RawMessage `json:"Plan"`
+func p5AdjacencyStatementWALStats(ctx context.Context, queryer p5AdjacencyRowQueryer, tag string) (P5AdjacencyStatementWAL, error) {
+	measurement := P5AdjacencyStatementWAL{Tag: tag}
+	err := queryer.QueryRow(ctx, `
+		select
+		  coalesce(sum(calls), 0)::bigint,
+		  coalesce(sum(wal_records), 0)::bigint,
+		  coalesce(sum(wal_fpi), 0)::bigint,
+		  coalesce(sum(wal_bytes), 0)::bigint
+		from pg_stat_statements
+		where query like '%' || $1 || '%'`, tag).Scan(
+		&measurement.Calls,
+		&measurement.Records,
+		&measurement.FPI,
+		&measurement.Bytes,
+	)
+	if err != nil {
+		return P5AdjacencyStatementWAL{}, fmt.Errorf("read pg_stat_statements WAL for %q: %w", tag, err)
 	}
-	if err := json.Unmarshal(raw, &explain); err != nil {
-		return 0, fmt.Errorf("decode statement WAL plan: %w", err)
-	}
-	if len(explain) != 1 {
-		return 0, fmt.Errorf("statement WAL plan must contain exactly one root")
-	}
-	value, found := explain[0].Plan["WAL Bytes"]
-	if !found {
-		return 0, fmt.Errorf("statement WAL plan is missing WAL Bytes")
-	}
-	var walBytes int64
-	if err := json.Unmarshal(value, &walBytes); err != nil {
-		return 0, fmt.Errorf("decode statement WAL bytes: %w", err)
-	}
-	return walBytes, nil
+	return measurement, nil
 }
 
 func assertP5AdjacencyMutationPostState(ctx context.Context, tx pgx.Tx, fixture p5AdjacencyFixture, operation string, observation P5AdjacencyMutationObservation) error {
