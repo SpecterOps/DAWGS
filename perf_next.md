@@ -402,6 +402,17 @@ control. A focused median win cannot average away one failed case.
 The passing deep/stress buckets reduce the current `4.8-5.4x` gaps, while A1
 remains automatic for shallow or high-multiplicity shapes that did not pass.
 
+### P4 disposition
+
+The one-authorized `ASP-I1-U-DAG+MAT-M0` preflight is terminally rejected for
+the current P4 generation. It improved the selected disconnected no-path
+target, but regressed every frozen shallow/reconvergent control at the pooled
+median. Its exact observations and complete telemetry are recorded in
+[`docs/experiments/asp_p4_i1_disconnected_preflight_v1.md`](docs/experiments/asp_p4_i1_disconnected_preflight_v1.md),
+but they authorize no power study, extra I1 timing, holdout, selector, or
+manifest work. A future P4 successor must have a distinct executor and a new
+frozen clean-source roster.
+
 ## P5: architectural escalation beyond generated SQL
 
 Begin this lane only when P1 or P3 shows that the best exact SQL/function
@@ -484,11 +495,11 @@ deferred before protected timing with a documented reason.
 
 ## Immediate next actions
 
-1. Retain the completed clean P4 baseline and its selected open target,
-   `GSPV2-TRAINING-disconnected-all-shortest-max64`; the earlier first round
-   remains a stopped artifact because A1's Function Scan hid those counters.
-2. Capture only the frozen A1-versus-I1 PostgreSQL telemetry preflight for
-   that target. Do not reuse protected historical ASP-I1 observations.
-3. Require complete exact observations and candidate telemetry from that
-   preflight before any separately frozen power study, formal corpus, holdout,
-   or selector work.
+1. Retain the completed P4 A1 baseline and the terminal I1 preflight. The
+   earlier first round remains a stopped artifact because A1's Function Scan
+   hid those counters; the later I1 artifact fails shallow/reconvergent
+   controls despite its no-path target win.
+2. Do not run a power study, broader I1 timing, protected cases, or selector
+   work from the P4 artifacts.
+3. Reopen P4 only with a distinct executor and separately frozen clean-source
+   roster; otherwise assess a separately scoped P5 feasibility lane.
