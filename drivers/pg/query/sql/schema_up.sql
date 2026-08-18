@@ -1147,6 +1147,221 @@ $$
   language plpgsql
   volatile;
 
+-- The A1 diagnostic workspace is armed only by GraphBench's untimed replay.
+-- It stays separate from the A1 search workspace so ordinary calls neither
+-- allocate telemetry state nor retain a previous invocation's counters.
+create or replace function public.ensure_all_shortest_paths_a1_diagnostic_workspace_v1()
+  returns void as
+$$
+begin
+  if to_regclass('pg_temp.asd_telemetry_invocation') is null then
+    create temporary table asd_telemetry_invocation
+    (
+      invocation_id text not null primary key,
+      schema_version int4 not null,
+      search_calls int8 not null default 0,
+      source_id int8,
+      target_id int8,
+      runtime_branch text,
+      target_depth int4,
+      output_paths int8,
+      fallback_executed bool,
+      check (btrim(invocation_id) <> ''),
+      check (search_calls >= 0),
+      check (output_paths is null or output_paths >= 0)
+    ) on commit preserve rows;
+
+    create temporary table asd_telemetry_level
+    (
+      invocation_id text not null,
+      action_index int8 not null,
+      depth int4 not null,
+      candidate_edges int8 not null,
+      distinct_new_nodes int8 not null,
+      seen_rows int8 not null,
+      predecessor_rows int8 not null,
+      primary key (invocation_id, action_index),
+      check (action_index >= 1),
+      check (depth >= 0),
+      check (candidate_edges >= 0),
+      check (distinct_new_nodes >= 0),
+      check (seen_rows >= 0),
+      check (predecessor_rows >= 0)
+    ) on commit preserve rows;
+  end if;
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.begin_all_shortest_paths_a1_diagnostic_v1(target_invocation_id text)
+  returns void as
+$$
+begin
+  if target_invocation_id is null or btrim(target_invocation_id) = '' or length(target_invocation_id) > 256 then
+    raise exception using errcode = '22023', message = 'A1 all-shortest diagnostic invocation ID must contain 1 to 256 characters';
+  end if;
+  perform public.ensure_all_shortest_paths_a1_diagnostic_workspace_v1();
+  delete from pg_temp.asd_telemetry_level where invocation_id = target_invocation_id;
+  delete from pg_temp.asd_telemetry_invocation where invocation_id = target_invocation_id;
+  insert into pg_temp.asd_telemetry_invocation(invocation_id, schema_version)
+  values (target_invocation_id, 1);
+  -- A shallow A1 call does not otherwise touch spd_*, so clear it before every
+  -- replay and make stale recursive state impossible to report as shallow work.
+  perform public.reset_shortest_dag_workspace();
+  perform set_config('dawgs.asd_diagnostic_invocation_id', target_invocation_id, true);
+end;
+$$
+  language plpgsql
+  volatile
+  strict;
+
+create or replace function public._start_all_shortest_paths_a1_diagnostic_v1(target_source_id int8, target_target_id int8)
+  returns void as
+$$
+declare
+  target_invocation_id text := nullif(current_setting('dawgs.asd_diagnostic_invocation_id', true), '');
+begin
+  if target_invocation_id is null then
+    return;
+  end if;
+  update pg_temp.asd_telemetry_invocation
+  set search_calls = search_calls + 1,
+      source_id = target_source_id,
+      target_id = target_target_id
+  where invocation_id = target_invocation_id;
+  if not found then
+    raise exception using errcode = '55000', message = 'A1 all-shortest diagnostic invocation is missing';
+  end if;
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public._record_all_shortest_paths_a1_diagnostic_level_v1(
+                                                          target_depth int4,
+                                                          target_candidate_edges int8,
+                                                          target_distinct_new_nodes int8,
+                                                          target_seen_rows int8,
+                                                          target_predecessor_rows int8)
+  returns void as
+$$
+declare
+  target_invocation_id text := nullif(current_setting('dawgs.asd_diagnostic_invocation_id', true), '');
+  next_action_index int8;
+begin
+  if target_invocation_id is null then
+    return;
+  end if;
+  if target_depth < 0 or target_candidate_edges < 0 or target_distinct_new_nodes < 0 or
+     target_seen_rows < 0 or target_predecessor_rows < 0 then
+    raise exception using errcode = '22023', message = 'A1 all-shortest diagnostic counters must be non-negative';
+  end if;
+  if not exists (select 1 from pg_temp.asd_telemetry_invocation where invocation_id = target_invocation_id) then
+    raise exception using errcode = '55000', message = 'A1 all-shortest diagnostic invocation is missing';
+  end if;
+  select coalesce(max(action_index), 0) + 1 into next_action_index
+  from pg_temp.asd_telemetry_level
+  where invocation_id = target_invocation_id;
+  insert into pg_temp.asd_telemetry_level(invocation_id, action_index, depth, candidate_edges,
+                                          distinct_new_nodes, seen_rows, predecessor_rows)
+  values (target_invocation_id, next_action_index, target_depth, target_candidate_edges,
+          target_distinct_new_nodes, target_seen_rows, target_predecessor_rows);
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public._finish_all_shortest_paths_a1_diagnostic_v1(
+                                                          target_runtime_branch text,
+                                                          completed_depth int4,
+                                                          completed_output_paths int8)
+  returns void as
+$$
+declare
+  target_invocation_id text := nullif(current_setting('dawgs.asd_diagnostic_invocation_id', true), '');
+begin
+  if target_invocation_id is null then
+    return;
+  end if;
+  if target_runtime_branch is null or btrim(target_runtime_branch) = '' or
+     completed_depth < -1 or completed_output_paths < 0 then
+    raise exception using errcode = '22023', message = 'A1 all-shortest diagnostic completion is invalid';
+  end if;
+  update pg_temp.asd_telemetry_invocation
+  set runtime_branch = target_runtime_branch,
+      target_depth = completed_depth,
+      output_paths = completed_output_paths,
+      fallback_executed = false
+  where invocation_id = target_invocation_id;
+  if not found then
+    raise exception using errcode = '55000', message = 'A1 all-shortest diagnostic invocation is missing';
+  end if;
+end;
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.read_all_shortest_paths_a1_diagnostic_v1(target_invocation_id text)
+  returns jsonb as
+$$
+declare
+  result jsonb;
+begin
+  if target_invocation_id is null or btrim(target_invocation_id) = '' then
+    return null;
+  end if;
+  select jsonb_build_object(
+    'schema_version', invocation.schema_version,
+    'invocation_id', invocation.invocation_id,
+    'scheduler', 'single_ended_level',
+    'search_calls', invocation.search_calls,
+    'source_id', invocation.source_id,
+    'target_id', invocation.target_id,
+    'runtime_branch', invocation.runtime_branch,
+    'target_depth', invocation.target_depth,
+    'output_paths', invocation.output_paths,
+    'fallback_executed', invocation.fallback_executed,
+    'levels', coalesce(levels.value, '[]'::jsonb)
+  ) into result
+  from pg_temp.asd_telemetry_invocation invocation
+  left join lateral (
+    select jsonb_agg(jsonb_build_object(
+      'action_index', level.action_index,
+      'depth', level.depth,
+      'candidate_edges', level.candidate_edges,
+      'distinct_new_nodes', level.distinct_new_nodes,
+      'seen_rows', level.seen_rows,
+      'predecessor_rows', level.predecessor_rows
+    ) order by level.action_index) as value
+    from pg_temp.asd_telemetry_level level
+    where level.invocation_id = invocation.invocation_id
+  ) levels on true
+  where invocation.invocation_id = target_invocation_id;
+  return result;
+end;
+$$
+  language plpgsql
+  stable
+  strict;
+
+create or replace function public.clear_all_shortest_paths_a1_diagnostic_v1(target_invocation_id text)
+  returns void as
+$$
+begin
+  if to_regclass('pg_temp.asd_telemetry_invocation') is not null then
+    delete from pg_temp.asd_telemetry_level where invocation_id = target_invocation_id;
+    delete from pg_temp.asd_telemetry_invocation where invocation_id = target_invocation_id;
+  end if;
+  if current_setting('dawgs.asd_diagnostic_invocation_id', true) = target_invocation_id then
+    perform set_config('dawgs.asd_diagnostic_invocation_id', '', true);
+  end if;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;
+
 -- all_shortest_paths_dag separates minimum-depth discovery from path
 -- enumeration. It retains every relationship-distinct predecessor edge at a
 -- node's minimum depth, then enumerates only the resulting predecessor DAG.
@@ -1171,6 +1386,11 @@ declare
   search_depth int4;
   target_depth int4;
   emitted_count int8;
+  candidate_count int8;
+  distinct_node_count int8;
+  seen_count int8;
+  predecessor_count int8;
+  diagnostic_enabled bool := nullif(current_setting('dawgs.asd_diagnostic_invocation_id', true), '') is not null;
 begin
   if source_id is null or target_id is null or max_depth < 1 then
     return;
@@ -1180,6 +1400,9 @@ begin
   end if;
   if source_id = target_id then
     perform public.shortest_path_self_endpoint_error(source_id, target_id);
+  end if;
+  if diagnostic_enabled then
+    perform public._start_all_shortest_paths_a1_diagnostic_v1(source_id, target_id);
   end if;
 
   -- Exact depth-one fast arm. Every qualifying parallel edge is observable.
@@ -1202,6 +1425,10 @@ begin
   end if;
   get diagnostics emitted_count = row_count;
   if emitted_count > 0 then
+    if diagnostic_enabled then
+      perform public._record_all_shortest_paths_a1_diagnostic_level_v1(1, emitted_count, 1, 2, emitted_count);
+      perform public._finish_all_shortest_paths_a1_diagnostic_v1('one_hop_preflight', 1, emitted_count);
+    end if;
     return;
   end if;
 
@@ -1233,11 +1460,34 @@ begin
     end if;
     get diagnostics emitted_count = row_count;
     if emitted_count > 0 then
+      if diagnostic_enabled then
+        if not inbound then
+          select count(distinct e1.end_id) into distinct_node_count
+          from edge e1
+          join edge e2 on e2.graph_id = target_graph_id and e2.start_id = e1.end_id
+          where e1.graph_id = target_graph_id and e1.start_id = source_id and e2.end_id = target_id and e1.id <> e2.id
+            and (cardinality(edge_kind_ids) = 0 or e1.kind_id = any(edge_kind_ids))
+            and (cardinality(edge_kind_ids) = 0 or e2.kind_id = any(edge_kind_ids));
+        else
+          select count(distinct e1.start_id) into distinct_node_count
+          from edge e1
+          join edge e2 on e2.graph_id = target_graph_id and e2.end_id = e1.start_id
+          where e1.graph_id = target_graph_id and e1.end_id = source_id and e2.start_id = target_id and e1.id <> e2.id
+            and (cardinality(edge_kind_ids) = 0 or e1.kind_id = any(edge_kind_ids))
+            and (cardinality(edge_kind_ids) = 0 or e2.kind_id = any(edge_kind_ids));
+        end if;
+        perform public._record_all_shortest_paths_a1_diagnostic_level_v1(2, emitted_count * 2, coalesce(distinct_node_count, 0) + 1, coalesce(distinct_node_count, 0) + 2, emitted_count * 2);
+        perform public._finish_all_shortest_paths_a1_diagnostic_v1('two_hop_preflight', 2, emitted_count);
+      end if;
       return;
     end if;
   end if;
 
   if max_depth <= 2 then
+    if diagnostic_enabled then
+      perform public._record_all_shortest_paths_a1_diagnostic_level_v1(max_depth, 0, 0, 1, 0);
+      perform public._finish_all_shortest_paths_a1_diagnostic_v1('preflight_no_path', -1, 0);
+    end if;
     return;
   end if;
 
@@ -1264,8 +1514,17 @@ begin
         and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.start_id)
       on conflict do nothing;
     end if;
+    get diagnostics candidate_count = row_count;
+
+    if diagnostic_enabled then
+      select count(*) into seen_count from pg_temp.spd_seen;
+      select count(*) into predecessor_count from pg_temp.spd_predecessor;
+    end if;
 
     if not exists (select 1 from pg_temp.spd_candidate where depth = search_depth) then
+      if diagnostic_enabled then
+        perform public._record_all_shortest_paths_a1_diagnostic_level_v1(search_depth, candidate_count, 0, seen_count, predecessor_count);
+      end if;
       exit;
     end if;
 
@@ -1279,6 +1538,14 @@ begin
     select distinct node_id, search_depth from pg_temp.spd_candidate
     where depth = search_depth
     on conflict do nothing;
+    get diagnostics distinct_node_count = row_count;
+    if diagnostic_enabled then
+      select count(*) into seen_count from pg_temp.spd_seen;
+      select count(*) into predecessor_count from pg_temp.spd_predecessor;
+    end if;
+    if diagnostic_enabled then
+      perform public._record_all_shortest_paths_a1_diagnostic_level_v1(search_depth, candidate_count, distinct_node_count, seen_count, predecessor_count);
+    end if;
 
     if exists (select 1 from pg_temp.spd_candidate where depth = search_depth and node_id = target_id) then
       target_depth = search_depth;
@@ -1287,6 +1554,9 @@ begin
   end loop;
 
   if target_depth is null then
+    if diagnostic_enabled then
+      perform public._finish_all_shortest_paths_a1_diagnostic_v1('search_no_path', -1, 0);
+    end if;
     return;
   end if;
 
@@ -1306,6 +1576,10 @@ begin
     from shortest_paths
     where shortest_paths.node_id = source_id and shortest_paths.path_depth = 0
     order by shortest_paths.edge_ids;
+  get diagnostics emitted_count = row_count;
+  if diagnostic_enabled then
+    perform public._finish_all_shortest_paths_a1_diagnostic_v1('single_ended_search', target_depth, emitted_count);
+  end if;
 end;
 $$
   language plpgsql

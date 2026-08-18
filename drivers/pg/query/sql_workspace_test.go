@@ -139,6 +139,48 @@ func TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration(t *testing.T) {
 	require.NotContains(t, executor, "execute ")
 }
 
+// TestAllShortestDAGA1DiagnosticIsSessionLocalAndOptIn verifies the A1
+// counter reader clears and reads only the existing predecessor-DAG workspace,
+// while ordinary executor work retains no telemetry calls after its one GUC
+// check.
+func TestAllShortestDAGA1DiagnosticIsSessionLocalAndOptIn(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.ensure_all_shortest_paths_a1_diagnostic_workspace_v1")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(sqlSchemaUp[start:], "create or replace function public.all_shortest_paths_dag")
+	require.NotEqual(t, -1, end)
+	telemetry := sqlSchemaUp[start : start+end]
+
+	for _, table := range []string{"asd_telemetry_invocation", "asd_telemetry_level"} {
+		require.Contains(t, telemetry, "create temporary table "+table)
+	}
+	require.Contains(t, telemetry, "perform public.reset_shortest_dag_workspace()")
+	require.Contains(t, telemetry, "set_config('dawgs.asd_diagnostic_invocation_id', target_invocation_id, true)")
+	require.Contains(t, telemetry, "'single_ended_level'")
+	require.NotContains(t, telemetry, "create table public.asd_telemetry")
+
+	executorStart := strings.Index(sqlSchemaUp, "create or replace function public.all_shortest_paths_dag")
+	executorEnd := strings.Index(sqlSchemaUp[executorStart:], "create or replace function public.shortest_path_compact")
+	require.NotEqual(t, executorStart, -1)
+	require.NotEqual(t, executorEnd, -1)
+	executor := sqlSchemaUp[executorStart : executorStart+executorEnd]
+	require.Contains(t, executor, "diagnostic_enabled bool := nullif(current_setting('dawgs.asd_diagnostic_invocation_id', true), '') is not null")
+	require.Contains(t, executor, "if diagnostic_enabled then")
+	require.Contains(t, executor, "_record_all_shortest_paths_a1_diagnostic_level_v1")
+	require.Contains(t, executor, "_finish_all_shortest_paths_a1_diagnostic_v1('single_ended_search'")
+
+	for _, signature := range []string{
+		"clear_all_shortest_paths_a1_diagnostic_v1(text)",
+		"read_all_shortest_paths_a1_diagnostic_v1(text)",
+		"_finish_all_shortest_paths_a1_diagnostic_v1(text, int4, int8)",
+		"_record_all_shortest_paths_a1_diagnostic_level_v1(int4, int8, int8, int8, int8)",
+		"_start_all_shortest_paths_a1_diagnostic_v1(int8, int8)",
+		"begin_all_shortest_paths_a1_diagnostic_v1(text)",
+		"ensure_all_shortest_paths_a1_diagnostic_workspace_v1()",
+	} {
+		require.Contains(t, sqlSchemaDown, "drop function if exists "+signature)
+	}
+}
+
 // TestCompactSingletonOverflowFallsBackBeforeReturning verifies compact overflow takes the safe fallback before emitting a result.
 func TestCompactSingletonOverflowFallsBackBeforeReturning(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.shortest_path_compact")

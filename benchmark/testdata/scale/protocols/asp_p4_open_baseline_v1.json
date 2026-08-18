@@ -1,7 +1,7 @@
 {
   "schema": "asp-p4-open-baseline-v1",
   "generation": "asp-p4-open-baseline-v1",
-  "status": "stopped_missing_a1_diagnostic_telemetry",
+  "status": "ready_for_clean_recapture",
   "production_default": "ASP-A1-DAG",
   "purpose": "training-only cross-backend baseline and A1 telemetry inventory; not an ASP candidate comparison or performance qualification",
   "baseline": {
@@ -55,7 +55,7 @@
   },
   "next_authorization": {
     "requires": [
-      "a separately implemented and validated A1 diagnostic contract",
+      "a fresh clean-source build containing the implemented and validated A1 diagnostic contract",
       "a fresh clean four-round capture with all 72 case-backend-round records exact",
       "complete A1 PostgreSQL telemetry for every training record",
       "a newly measured open target materially behind Neo4j",
@@ -79,5 +79,17 @@
     "timed_samples": 90,
     "public_observations": "all 18 records exact; PostgreSQL reported ASP-A1-DAG with no fallback",
     "stop_reason": "Every PostgreSQL diagnostic reported hidden_counters_unavailable because the outer Function Scan does not expose invocation-local traversal work counters. The remaining rounds were not run."
+  },
+  "a1_diagnostic_prerequisite": {
+    "status": "implemented_and_validated_pending_clean_recapture",
+    "reader": "public.read_all_shortest_paths_a1_diagnostic_v1",
+    "scope": "untimed Repeatable Read GraphBench replay on the timed physical PostgreSQL connection; separate from B1/B2 telemetry",
+    "unarmed_executor_behavior": "one local GUC check and no diagnostic workspace or telemetry-table operations",
+    "validation": [
+      "complete shallow, recursive, reconvergent, inbound, and no-path A1 receipts",
+      "stale and contradictory receipt rejection",
+      "session isolation, cancellation rollback, and backend reuse"
+    ],
+    "next_step": "commit the implementation, build from that clean commit, and restart the four-round baseline at round one"
   }
 }

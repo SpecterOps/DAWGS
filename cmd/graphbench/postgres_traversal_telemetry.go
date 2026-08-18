@@ -37,6 +37,10 @@ const (
 
 	// postgresBidirectionalAllShortestDiagnosticSource reserves the stable protocol value used to recognize postgres bidirectional all shortest diagnostic source across artifacts and executions.
 	postgresBidirectionalAllShortestDiagnosticSource = "public.read_bidirectional_all_shortest_path_diagnostic_v1"
+
+	// postgresA1AllShortestDiagnosticSource identifies the invocation-local A1
+	// workspace reader used only by untimed GraphBench diagnostic replays.
+	postgresA1AllShortestDiagnosticSource = "public.read_all_shortest_paths_a1_diagnostic_v1"
 )
 
 // buildPostgresCaseTraversalTelemetry binds optimizer, emitted SQL, and
@@ -738,6 +742,13 @@ func isBidirectionalTelemetryIdentity(summary TraversalExecutionSummary) bool {
 		isBidirectionalSPIdentity(summary.RequestedIdentity) || isBidirectionalASPIdentity(summary.RequestedIdentity)
 }
 
+// isA1AllShortestTelemetryIdentity reports whether the exact A1 stored helper
+// needs its separate single-ended diagnostic reader.
+func isA1AllShortestTelemetryIdentity(summary TraversalExecutionSummary) bool {
+	identity := string(optimize.ShortestPathExecutorASPA1DAG)
+	return summary.RuntimeIdentity == identity || summary.RequestedIdentity == identity
+}
+
 // bidirectionalTelemetryIdentity derives the stable identity used to compare bidirectional telemetry.
 func bidirectionalTelemetryIdentity(summary TraversalExecutionSummary) string {
 	for _, identity := range []string{summary.RuntimeIdentity, summary.RequestedIdentity} {
@@ -1336,6 +1347,35 @@ type postgresBidirectionalAllShortestDiagnosticCall struct {
 	FallbackExecuted *bool `json:"fallback_executed"`
 }
 
+// postgresA1AllShortestDiagnosticDocument is the single-ended A1 workspace
+// receipt read after an untimed replay. It deliberately does not share the
+// B1/B2 document: no bidirectional scheduler or meeting counters are implied.
+type postgresA1AllShortestDiagnosticDocument struct {
+	SchemaVersion    int                                    `json:"schema_version"`
+	InvocationID     string                                 `json:"invocation_id"`
+	Scheduler        string                                 `json:"scheduler"`
+	SearchCalls      *int64                                 `json:"search_calls"`
+	SourceID         *int64                                 `json:"source_id"`
+	TargetID         *int64                                 `json:"target_id"`
+	RuntimeBranch    string                                 `json:"runtime_branch"`
+	TargetDepth      *int64                                 `json:"target_depth"`
+	OutputPaths      *int64                                 `json:"output_paths"`
+	FallbackExecuted *bool                                  `json:"fallback_executed"`
+	Levels           []postgresA1AllShortestDiagnosticLevel `json:"levels"`
+	WorkspaceBytes   int64                                  `json:"-"`
+}
+
+// postgresA1AllShortestDiagnosticLevel records one exact single-ended A1
+// breadth-first layer from the session-local predecessor-DAG workspace.
+type postgresA1AllShortestDiagnosticLevel struct {
+	ActionIndex      *int64 `json:"action_index"`
+	Depth            *int64 `json:"depth"`
+	CandidateEdges   *int64 `json:"candidate_edges"`
+	DistinctNewNodes *int64 `json:"distinct_new_nodes"`
+	SeenRows         *int64 `json:"seen_rows"`
+	PredecessorRows  *int64 `json:"predecessor_rows"`
+}
+
 // attachPostgresTraversalTelemetry runs only after every timed case,
 // reference, raw-PGX, and concurrency sample has completed.
 func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context, record *CaseResult, parameters map[string]any) error {
@@ -1366,6 +1406,9 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 				enrichInlineDistanceTraversalTelemetry(telemetry, record.RowCount)
 				if err := s.enrichBidirectionalTraversalTelemetry(ctx, telemetry, record.SQL, parameters, record.RowCount, record.ObservedRows, *record.PostgresMetrics); err != nil {
 					return fmt.Errorf("capture PostgreSQL case traversal telemetry: %w", err)
+				}
+				if err := s.enrichA1AllShortestTraversalTelemetry(ctx, telemetry, record.SQL, parameters, record.RowCount, record.ObservedRows, *record.PostgresMetrics); err != nil {
+					return fmt.Errorf("capture PostgreSQL A1 all-shortest traversal telemetry: %w", err)
 				}
 			}
 			record.TraversalTelemetry = telemetry
@@ -1821,6 +1864,274 @@ func orientationPolicyMaximumDepth(summary translate.OptimizationSummary, policy
 	return 0
 }
 
+// enrichA1AllShortestTraversalTelemetry completes the A1 stored-helper
+// diagnostic only from its own single-ended workspace receipt. The replay runs
+// after timing, on the same physical connection, and cannot affect samples.
+func (s *postgresSQLRunner) enrichA1AllShortestTraversalTelemetry(
+	ctx context.Context,
+	telemetry *TraversalExecutionTelemetry,
+	sqlQuery string,
+	parameters map[string]any,
+	expectedRows int64,
+	observedRows []string,
+	metrics PostgresPlanMetrics,
+) error {
+	if telemetry == nil || telemetry.Level != TraversalTelemetryLevelDiagnostic || !isA1AllShortestTelemetryIdentity(telemetry.Summary) {
+		return nil
+	}
+
+	invocationID := newRunUUID()
+	if telemetry.Diagnostic != nil {
+		invocationID = telemetry.Diagnostic.InvocationID
+	}
+	document, unavailableReason, err := s.replayA1AllShortestTraversalDiagnostic(ctx, invocationID, sqlQuery, parameters, expectedRows)
+	if err != nil {
+		if telemetry.Diagnostic != nil {
+			markTraversalCountersUnavailable(telemetry.Diagnostic, err.Error())
+			return telemetry.Validate()
+		}
+		markTraversalSummaryUnavailable(telemetry, err.Error())
+		return telemetry.Validate()
+	}
+	if unavailableReason != "" {
+		if telemetry.Diagnostic != nil {
+			markTraversalCountersUnavailable(telemetry.Diagnostic, unavailableReason)
+			return telemetry.Validate()
+		}
+		markTraversalSummaryUnavailable(telemetry, unavailableReason)
+		return telemetry.Validate()
+	}
+	if err := applyA1AllShortestTraversalDiagnostic(telemetry, document, invocationID, s.backendPID, observedRows, metrics); err != nil {
+		if telemetry.Diagnostic != nil {
+			markTraversalCountersUnavailable(telemetry.Diagnostic, err.Error())
+			return telemetry.Validate()
+		}
+		markTraversalSummaryUnavailable(telemetry, err.Error())
+		return telemetry.Validate()
+	}
+	return telemetry.Validate()
+}
+
+// replayA1AllShortestTraversalDiagnostic runs the unmodified A1 statement
+// after a diagnostic begin step has cleared the spd_* workspace.
+func (s *postgresSQLRunner) replayA1AllShortestTraversalDiagnostic(
+	ctx context.Context,
+	invocationID string,
+	sqlQuery string,
+	parameters map[string]any,
+	expectedRows int64,
+) (*postgresA1AllShortestDiagnosticDocument, string, error) {
+	rawDocument, workspaceBytes, unavailableReason, err := s.replayInvocationLocalTraversalDiagnostic(
+		ctx, invocationID, sqlQuery, parameters, expectedRows,
+		"select public.begin_all_shortest_paths_a1_diagnostic_v1($1)",
+		"select coalesce(public.read_all_shortest_paths_a1_diagnostic_v1($1)::text, '')",
+		"select public.clear_all_shortest_paths_a1_diagnostic_v1($1)",
+		[]string{"spd_%"},
+	)
+	if err != nil || unavailableReason != "" {
+		return nil, unavailableReason, err
+	}
+	document := &postgresA1AllShortestDiagnosticDocument{}
+	if err := json.Unmarshal([]byte(rawDocument), document); err != nil {
+		return nil, "A1 all-shortest diagnostic reader returned malformed JSON: " + err.Error(), nil
+	}
+	document.WorkspaceBytes = workspaceBytes
+	return document, "", nil
+}
+
+// applyA1AllShortestTraversalDiagnostic validates and maps the A1 receipt
+// into the common all-shortest counter family without implying any two-sided
+// search work.
+func applyA1AllShortestTraversalDiagnostic(
+	telemetry *TraversalExecutionTelemetry,
+	document *postgresA1AllShortestDiagnosticDocument,
+	expectedInvocationID string,
+	expectedConnectionID string,
+	observedRows []string,
+	metrics PostgresPlanMetrics,
+) error {
+	if telemetry == nil || document == nil {
+		return fmt.Errorf("A1 all-shortest diagnostic document is missing")
+	}
+	if document.SchemaVersion != 1 || document.InvocationID != expectedInvocationID {
+		return fmt.Errorf("A1 all-shortest diagnostic identity is invalid")
+	}
+	if telemetry.Diagnostic != nil && telemetry.Diagnostic.ConnectionID != expectedConnectionID {
+		return fmt.Errorf("A1 all-shortest diagnostic connection identity differs from replay connection")
+	}
+	if document.Scheduler != "single_ended_level" || document.Scheduler != telemetry.Summary.SchedulerVersion {
+		return fmt.Errorf("A1 all-shortest diagnostic scheduler %q differs from planned scheduler %q", document.Scheduler, telemetry.Summary.SchedulerVersion)
+	}
+	if document.SearchCalls == nil || *document.SearchCalls != 1 || document.SourceID == nil || document.TargetID == nil ||
+		document.TargetDepth == nil || document.OutputPaths == nil || document.FallbackExecuted == nil || *document.FallbackExecuted {
+		return fmt.Errorf("A1 all-shortest diagnostic invocation state is incomplete")
+	}
+	if *document.OutputPaths < 0 || int64(len(observedRows)) != *document.OutputPaths {
+		return fmt.Errorf("A1 all-shortest diagnostic output count differs from the exact public observation")
+	}
+	if len(document.Levels) == 0 {
+		return fmt.Errorf("A1 all-shortest diagnostic levels are missing")
+	}
+
+	var candidateEdges, distinctNewNodes, seenPeak, frontierPeak, predecessorPeak int64
+	for idx, level := range document.Levels {
+		if level.ActionIndex == nil || level.Depth == nil || level.CandidateEdges == nil || level.DistinctNewNodes == nil ||
+			level.SeenRows == nil || level.PredecessorRows == nil || *level.ActionIndex != int64(idx+1) || *level.Depth < 0 ||
+			*level.CandidateEdges < 0 || *level.DistinctNewNodes < 0 || *level.SeenRows < 0 || *level.PredecessorRows < 0 {
+			return fmt.Errorf("A1 all-shortest diagnostic level %d is incomplete", idx)
+		}
+		candidateEdges += *level.CandidateEdges
+		distinctNewNodes += *level.DistinctNewNodes
+		seenPeak = max(seenPeak, *level.SeenRows)
+		frontierPeak = max(frontierPeak, *level.DistinctNewNodes)
+		predecessorPeak = max(predecessorPeak, *level.PredecessorRows)
+	}
+
+	validBranch := false
+	switch document.RuntimeBranch {
+	case "one_hop_preflight":
+		validBranch = *document.TargetDepth == 1 && *document.OutputPaths > 0
+	case "two_hop_preflight":
+		validBranch = *document.TargetDepth == 2 && *document.OutputPaths > 0
+	case "preflight_no_path", "search_no_path":
+		validBranch = *document.TargetDepth == -1 && *document.OutputPaths == 0
+	case "single_ended_search":
+		validBranch = *document.TargetDepth >= 3 && *document.OutputPaths > 0
+	}
+	if !validBranch {
+		return fmt.Errorf("A1 all-shortest diagnostic runtime branch %q contradicts its result", document.RuntimeBranch)
+	}
+
+	sameDepthPredecessors := max(predecessorPeak-distinctNewNodes, int64(0))
+	edgeCells := int64(0)
+	if *document.TargetDepth > 0 {
+		edgeCells = *document.TargetDepth * *document.OutputPaths
+	}
+	outputBytes := int64(0)
+	for _, row := range observedRows {
+		outputBytes += int64(len(row))
+	}
+	fallback := false
+	frozenDistance := *document.TargetDepth
+	pathCountSaturated := false
+	levels := make([]ShortestPathLevelCounters, len(document.Levels))
+	for idx, level := range document.Levels {
+		levels[idx] = ShortestPathLevelCounters{
+			SearchID:          int64(1),
+			ActionIndex:       *level.ActionIndex,
+			Side:              "forward",
+			Action:            "expand_level",
+			Depth:             level.Depth,
+			FrontierRows:      level.DistinctNewNodes,
+			CandidateEdges:    level.CandidateEdges,
+			DistinctNewNodes:  level.DistinctNewNodes,
+			SeenRows:          level.SeenRows,
+			QueueRows:         level.DistinctNewNodes,
+			PredecessorRows:   level.PredecessorRows,
+			MeetingCandidates: traversalTelemetryPointer(int64(0)),
+			Provenance:        fmt.Sprintf("%s.levels[%d]", postgresA1AllShortestDiagnosticSource, idx),
+		}
+	}
+
+	telemetry.Summary.RuntimeIdentity = string(optimize.ShortestPathExecutorASPA1DAG)
+	telemetry.Summary.AppliedIdentity = string(optimize.ShortestPathExecutorASPA1DAG)
+	telemetry.Summary.FallbackIdentity = ""
+	telemetry.Summary.RuntimeBranch = document.RuntimeBranch
+	telemetry.Summary.RuntimeOutcomeAvailable = traversalTelemetryPointer(true)
+	telemetry.Summary.Overflow = traversalTelemetryPointer(false)
+	telemetry.Summary.FallbackExecuted = traversalTelemetryPointer(false)
+	for _, name := range []string{"runtime_identity", "applied_identity", "runtime_branch", "runtime_outcome_available", "overflow", "fallback_executed", "scheduler_version"} {
+		telemetry.Summary.Provenance[name] = postgresA1AllShortestDiagnosticSource
+	}
+	if telemetry.Diagnostic == nil {
+		return nil
+	}
+	telemetry.Diagnostic.RequiredFamilies = traversalRequiredFamilies(telemetry.Summary, TraversalTelemetryFamilyASP)
+	if !slices.Contains(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace) {
+		telemetry.Diagnostic.RequiredFamilies = append(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace)
+	}
+	telemetry.Diagnostic.Counters = TraversalDiagnosticCounters{AllShortestPaths: &AllShortestPathsTraversalCounters{
+		Search: ShortestPathTraversalCounters{
+			SchedulerActions:  traversalTelemetryPointer(int64(len(levels))),
+			Levels:            levels,
+			CandidateEdges:    traversalTelemetryPointer(candidateEdges),
+			DistinctNewNodes:  traversalTelemetryPointer(distinctNewNodes),
+			SeenPeak:          traversalTelemetryPointer(seenPeak),
+			FrontierPeak:      traversalTelemetryPointer(frontierPeak),
+			QueuePeak:         traversalTelemetryPointer(frontierPeak),
+			PredecessorPeak:   traversalTelemetryPointer(predecessorPeak),
+			MeetingCandidates: traversalTelemetryPointer(int64(0)),
+			FrozenDistance:    traversalTelemetryPointer(frozenDistance),
+			WitnessRows:       document.OutputPaths,
+			FallbackExecuted:  traversalTelemetryPointer(fallback),
+		},
+		SameDepthPredecessorAdditions: traversalTelemetryPointer(sameDepthPredecessors),
+		PredecessorPeak:               traversalTelemetryPointer(predecessorPeak),
+		MeetingNodes:                  traversalTelemetryPointer(int64(0)),
+		CutDepth:                      traversalTelemetryPointer(max(frozenDistance, int64(0))),
+		PathCountEstimate:             document.OutputPaths,
+		PathCountSaturated:            traversalTelemetryPointer(pathCountSaturated),
+		EnumeratedCandidates:          document.OutputPaths,
+		DuplicateRejects:              traversalTelemetryPointer(int64(0)),
+		OutputPaths:                   document.OutputPaths,
+		OutputEdgeCells:               traversalTelemetryPointer(edgeCells),
+		OutputBytes:                   traversalTelemetryPointer(outputBytes),
+	}}
+	telemetry.Diagnostic.Counters.Workspace = &TraversalWorkspaceCounters{
+		SessionPeakBytes: traversalTelemetryPointer(document.WorkspaceBytes),
+		PoolPeakBytes:    traversalTelemetryPointer(document.WorkspaceBytes),
+	}
+	telemetry.Diagnostic.Provenance = map[string]string{}
+	for _, name := range []string{"scheduler_actions", "candidate_edges", "distinct_new_nodes", "seen_peak", "frontier_peak", "queue_peak", "predecessor_peak", "meeting_candidates", "frozen_distance", "witness_rows", "fallback_executed"} {
+		telemetry.Diagnostic.Provenance["all_shortest_paths.search."+name] = postgresA1AllShortestDiagnosticSource
+	}
+	for _, name := range []string{"same_depth_predecessor_additions", "predecessor_peak", "meeting_nodes", "cut_depth", "path_count_estimate", "path_count_saturated", "enumerated_candidates", "duplicate_rejects", "output_paths", "output_edge_cells", "output_bytes"} {
+		telemetry.Diagnostic.Provenance["all_shortest_paths."+name] = postgresA1AllShortestDiagnosticSource
+	}
+	telemetry.Diagnostic.Provenance["workspace.session_peak_bytes"] = "pg_total_relation_size(pg_temp.spd_*)"
+	telemetry.Diagnostic.Provenance["workspace.pool_peak_bytes"] = "single_connection_diagnostic_pool.session_peak_bytes"
+	enrichA1AllShortestHydrationTelemetry(telemetry, document.OutputPaths, traversalTelemetryPointer(edgeCells), observedRows, metrics)
+	return nil
+}
+
+// enrichA1AllShortestHydrationTelemetry binds outer path materialization to
+// the exact A1 output counts without claiming function-internal plan nodes.
+func enrichA1AllShortestHydrationTelemetry(
+	telemetry *TraversalExecutionTelemetry,
+	pathCount, edgeCells *int64,
+	observedRows []string,
+	metrics PostgresPlanMetrics,
+) {
+	if telemetry == nil || telemetry.Diagnostic == nil || pathCount == nil || edgeCells == nil {
+		return
+	}
+	bytes := int64(0)
+	for _, row := range observedRows {
+		bytes += int64(len(row))
+	}
+	nodeLookups := *pathCount + *edgeCells
+	rows := metrics.HydrationRows
+	if rows == 0 {
+		rows = nodeLookups + *edgeCells
+	}
+	var timeNS int64
+	for _, node := range metrics.PlanNodes {
+		if node.RelationName == "node" {
+			timeNS += int64(node.ActualTotalMS * float64(time.Millisecond))
+		}
+	}
+	telemetry.Diagnostic.Counters.Hydration = &TraversalHydrationCounters{
+		PathCount: pathCount, NodeLookups: traversalTelemetryPointer(nodeLookups), EdgeLookups: edgeCells,
+		Loops: traversalTelemetryPointer(metrics.HydrationLoops), Rows: traversalTelemetryPointer(rows),
+		TimeNS: traversalTelemetryPointer(timeNS), Bytes: traversalTelemetryPointer(bytes),
+	}
+	for _, name := range []string{"path_count", "node_lookups", "edge_lookups", "loops", "rows", "time_ns", "bytes"} {
+		telemetry.Diagnostic.Provenance["hydration."+name] = "A1_invocation_local_path_counts+untimed_timing_on_plan+exact_public_observation"
+	}
+	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusComplete
+	telemetry.Diagnostic.IncompleteReasons = nil
+}
+
 // enrichBidirectionalTraversalTelemetry replaces opaque Function Scan
 // evidence only when the exact SP-B1/B2 statement reports a validated,
 // invocation-local diagnostic document. Other hidden functions stay
@@ -1950,6 +2261,7 @@ func (s *postgresSQLRunner) replayBidirectionalTraversalDiagnostic(
 		"select public.begin_bidirectional_shortest_path_diagnostic_v1($1)",
 		"select coalesce(public.read_bidirectional_shortest_path_diagnostic_v1($1)::text, '')",
 		"select public.clear_bidirectional_shortest_path_diagnostic_v1($1)",
+		[]string{"spb_%", "asb_%"},
 	)
 	if err != nil || unavailableReason != "" {
 		return nil, unavailableReason, err
@@ -1975,6 +2287,7 @@ func (s *postgresSQLRunner) replayBidirectionalAllShortestTraversalDiagnostic(
 		"select public.begin_bidirectional_all_shortest_path_diagnostic_v1($1)",
 		"select coalesce(public.read_bidirectional_all_shortest_path_diagnostic_v1($1)::text, '')",
 		"select public.clear_bidirectional_all_shortest_path_diagnostic_v1($1)",
+		[]string{"spb_%", "asb_%"},
 	)
 	if err != nil || unavailableReason != "" {
 		return nil, unavailableReason, err
@@ -1997,6 +2310,7 @@ func (s *postgresSQLRunner) replayInvocationLocalTraversalDiagnostic(
 	beginSQL string,
 	readSQL string,
 	clearSQL string,
+	workspacePatterns []string,
 ) (string, int64, string, error) {
 	connection, err := s.pool.Acquire(ctx)
 	if err != nil {
@@ -2059,13 +2373,16 @@ func (s *postgresSQLRunner) replayInvocationLocalTraversalDiagnostic(
 		return "", 0, "", fmt.Errorf("untimed diagnostic replay row count %d differs from measured row count %d", rowCount, expectedRows)
 	}
 	var workspaceBytes int64
+	if len(workspacePatterns) == 0 {
+		return "", 0, "", fmt.Errorf("diagnostic workspace patterns are required")
+	}
 	if err := tx.QueryRow(ctx, `
 		select coalesce(sum(pg_total_relation_size(c.oid)), 0)::int8
 		from pg_class c
 		where c.relnamespace = pg_my_temp_schema()
-		  and (c.relname like 'spb_%' or c.relname like 'asb_%')
+		  and c.relname like any($1::text[])
 		  and c.relname not like '%telemetry%'
-	`).Scan(&workspaceBytes); err != nil {
+	`, workspacePatterns).Scan(&workspaceBytes); err != nil {
 		return "", 0, "", fmt.Errorf("measure diagnostic workspace high-water bytes: %w", err)
 	}
 

@@ -194,6 +194,200 @@ func postgresPlanNodeLoops(t *testing.T, raw json.RawMessage, alias string) []in
 	return loops
 }
 
+// TestPostgreSQLA1AllShortestDiagnosticTelemetry verifies the baseline A1
+// helper exposes a complete session-local receipt for its shallow, recursive,
+// inbound, and no-path branches without borrowing B1/B2 telemetry.
+func TestPostgreSQLA1AllShortestDiagnosticTelemetry(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{
+		"GSPV2-TRAINING-early-depth1-all-shortest-max16",
+		"GSPV2-TRAINING-early-depth2-all-shortest-max64",
+		"GSPV2-TRAINING-inbound-early-depth3-all-shortest-max64",
+		"GSPV2-TRAINING-reconvergent-all-shortest-max16",
+		"GSPV2-TRAINING-disconnected-all-shortest-max64",
+	}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 5)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "ASP-A1-DAG", "")
+	require.NoError(t, err)
+	runner.repeatableRead = true
+	runner.traversalTelemetry = postgresTraversalTelemetryDiagnostic
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 5)
+	expectedBranches := map[string]string{
+		"GSPV2-TRAINING-early-depth1-all-shortest-max16":         "one_hop_preflight",
+		"GSPV2-TRAINING-early-depth2-all-shortest-max64":         "two_hop_preflight",
+		"GSPV2-TRAINING-inbound-early-depth3-all-shortest-max64": "single_ended_search",
+		"GSPV2-TRAINING-reconvergent-all-shortest-max16":         "two_hop_preflight",
+		"GSPV2-TRAINING-disconnected-all-shortest-max64":         "search_no_path",
+	}
+	for _, record := range records {
+		require.Equal(t, StatusOK, record.Status, record.Error)
+		require.NotNil(t, record.TraversalTelemetry)
+		require.Equal(t, "ASP-A1-DAG", record.TraversalTelemetry.Summary.RuntimeIdentity)
+		require.Equal(t, expectedBranches[record.Name], record.TraversalTelemetry.Summary.RuntimeBranch)
+		require.NotNil(t, record.TraversalTelemetry.Diagnostic)
+		require.Equal(t, TraversalTelemetryCounterStatusComplete, record.TraversalTelemetry.Diagnostic.CounterStatus)
+		require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.AllShortestPaths)
+		require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.Hydration)
+		require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.Workspace)
+	}
+}
+
+// TestPostgreSQLA1AllShortestDiagnosticCancellationAndSessionIsolation verifies
+// A1's own diagnostic rows remain session-local and disappear after a cancelled
+// invocation rolls back, leaving the same physical connection reusable.
+func TestPostgreSQLA1AllShortestDiagnosticCancellationAndSessionIsolation(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{
+		"GSPV2-NORMAL-outbound-all-shortest-depth3",
+	}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 2, 1, nil, false, nil, "ASP-A1-DAG", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, StatusOK, records[0].Status, records[0].Error)
+	translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, records[0].Params)
+	require.NoError(t, err)
+	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+	first, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer first.Release()
+	second, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer second.Release()
+	firstPID, secondPID := first.Conn().PgConn().PID(), second.Conn().PgConn().PID()
+	require.NotEqual(t, firstPID, secondPID)
+	// Materialize the session-local diagnostic tables outside rollback checks so
+	// the test can inspect an empty receipt after a cancelled transaction.
+	_, err = first.Exec(ctx, "select public.ensure_all_shortest_paths_a1_diagnostic_workspace_v1()")
+	require.NoError(t, err)
+	_, err = second.Exec(ctx, "select public.ensure_all_shortest_paths_a1_diagnostic_workspace_v1()")
+	require.NoError(t, err)
+
+	drain := func(tx pgx.Tx) int64 {
+		rows, err := tx.Query(ctx, sqlQuery, queryArgs...)
+		require.NoError(t, err)
+		defer rows.Close()
+		var count int64
+		for rows.Next() {
+			_, err = rows.Values()
+			require.NoError(t, err)
+			count++
+		}
+		require.NoError(t, rows.Err())
+		return count
+	}
+	readCalls := func(tx pgx.Tx, invocationID string) (int64, bool) {
+		var raw string
+		err := tx.QueryRow(ctx, "select coalesce(public.read_all_shortest_paths_a1_diagnostic_v1($1)::text, '')", invocationID).Scan(&raw)
+		require.NoError(t, err)
+		if raw == "" {
+			return 0, false
+		}
+		var document struct {
+			SearchCalls int64 `json:"search_calls"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(raw), &document))
+		return document.SearchCalls, true
+	}
+
+	firstTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	secondTx, err := second.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	const sharedInvocation = "a1-same-key-different-sessions"
+	_, err = firstTx.Exec(ctx, "select public.begin_all_shortest_paths_a1_diagnostic_v1($1)", sharedInvocation)
+	require.NoError(t, err)
+	_, err = secondTx.Exec(ctx, "select public.begin_all_shortest_paths_a1_diagnostic_v1($1)", sharedInvocation)
+	require.NoError(t, err)
+	require.Equal(t, records[0].RowCount, drain(firstTx))
+	firstCalls, found := readCalls(firstTx, sharedInvocation)
+	require.True(t, found)
+	require.Equal(t, int64(1), firstCalls)
+	secondCalls, found := readCalls(secondTx, sharedInvocation)
+	require.True(t, found)
+	require.Zero(t, secondCalls)
+	_, err = firstTx.Exec(ctx, "select public.clear_all_shortest_paths_a1_diagnostic_v1($1)", sharedInvocation)
+	require.NoError(t, err)
+	_, found = readCalls(firstTx, sharedInvocation)
+	require.False(t, found)
+	_, found = readCalls(secondTx, sharedInvocation)
+	require.True(t, found)
+	require.NoError(t, firstTx.Rollback(ctx))
+	require.NoError(t, secondTx.Rollback(ctx))
+
+	cancelTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	const cancelledInvocation = "a1-cancelled-replay"
+	_, err = cancelTx.Exec(ctx, "select public.begin_all_shortest_paths_a1_diagnostic_v1($1)", cancelledInvocation)
+	require.NoError(t, err)
+	_, err = cancelTx.Exec(ctx, "set local statement_timeout = '1ms'")
+	require.NoError(t, err)
+	started := time.Now()
+	_, queryErr := cancelTx.Exec(ctx, "select pg_sleep(0.05)")
+	cancellationLatency := time.Since(started)
+	var postgresError *pgconn.PgError
+	require.ErrorAs(t, queryErr, &postgresError)
+	require.Equal(t, "57014", postgresError.Code)
+	require.Less(t, cancellationLatency, 250*time.Millisecond)
+	require.NoError(t, cancelTx.Rollback(ctx))
+	require.Equal(t, firstPID, first.Conn().PgConn().PID())
+
+	reuseTx, err := first.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite})
+	require.NoError(t, err)
+	_, found = readCalls(reuseTx, cancelledInvocation)
+	require.False(t, found, "rolled-back A1 diagnostic state must not survive")
+	const reuseInvocation = "a1-successful-reuse"
+	_, err = reuseTx.Exec(ctx, "select public.begin_all_shortest_paths_a1_diagnostic_v1($1)", reuseInvocation)
+	require.NoError(t, err)
+	require.Equal(t, records[0].RowCount, drain(reuseTx))
+	reuseCalls, found := readCalls(reuseTx, reuseInvocation)
+	require.True(t, found)
+	require.Equal(t, int64(1), reuseCalls)
+	_, err = reuseTx.Exec(ctx, "select public.clear_all_shortest_paths_a1_diagnostic_v1($1)", reuseInvocation)
+	require.NoError(t, err)
+	require.NoError(t, reuseTx.Commit(ctx))
+	t.Logf("cancelled A1 diagnostic in %s and reused backend PID %d without cross-session state from PID %d", cancellationLatency, firstPID, secondPID)
+}
+
 // TestPostgreSQLScalePlanInvariants verifies analyzed-plan capture, indexed anchors, correct mutation targets, and preserved branch-local predicates across required scale representatives.
 func TestPostgreSQLScalePlanInvariants(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")

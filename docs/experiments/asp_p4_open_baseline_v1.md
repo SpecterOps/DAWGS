@@ -1,8 +1,8 @@
 # All-shortest P4 open baseline v1
 
-Status: stopped at the A1 diagnostic prerequisite. This is a training-only
-baseline and telemetry inventory, not an ASP candidate comparison, power
-study, qualification, or selector change.
+Status: A1 diagnostic prerequisite implemented; fresh clean-source recapture
+pending. This is a training-only baseline and telemetry inventory, not an ASP
+candidate comparison, power study, qualification, or selector change.
 
 ## Why this is a fresh baseline
 
@@ -64,3 +64,11 @@ reported `hidden_counters_unavailable`. The remaining three rounds were not
 run. The first round is retained only as a stop artifact and cannot select a
 P4 target. [`docs/experiments/asp_a1_diagnostic_prerequisite_v1.md`](asp_a1_diagnostic_prerequisite_v1.md)
 defines the distinct prerequisite required before a clean recapture.
+
+## Clean-recapture boundary
+
+The separate A1 invocation-local diagnostic is now implemented and validated
+for shallow, recursive, reconvergent, inbound, no-path, session-isolation, and
+cancellation/rollback paths. The next capture must use a clean commit that
+contains that diagnostic and must restart at round one. It may not merge,
+pool, or compare the stopped V1 round with the new capture.

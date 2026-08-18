@@ -481,11 +481,11 @@ deferred before protected timing with a documented reason.
 
 ## Immediate next actions
 
-1. Capture the training-only P4 ASP-A1/Neo4j open baseline with complete
-   PostgreSQL traversal telemetry. The first round stopped because A1's
-   Function Scan hides those counters.
-2. Implement and validate the separate A1 invocation-local diagnostic
-   prerequisite before recapturing any P4 baseline round.
+1. Commit the separately implemented and validated A1 invocation-local
+   diagnostic, then build from that clean source.
+2. Restart the training-only P4 ASP-A1/Neo4j open baseline at round one with
+   complete PostgreSQL traversal telemetry. The prior first round remains a
+   stopped artifact because A1's Function Scan hid those counters.
 3. Select at most one open all-shortest target only from that fresh baseline;
    do not reuse protected historical ASP-I1 observations.
 4. If an open target is material, freeze a distinct A1-versus-one-candidate

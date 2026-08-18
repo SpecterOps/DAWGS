@@ -241,6 +241,49 @@ func TestPostgresTraversalTelemetryLeavesNonBidirectionalHiddenFunctionsUnavaila
 	require.Contains(t, telemetry.Diagnostic.IncompleteReasons[0], "Function Scan")
 }
 
+// TestPostgresTraversalTelemetryCompletesA1AllShortestWorkspaceReceipt verifies
+// the A1 reader maps its own single-ended workspace receipt into complete
+// all-shortest, hydration, and workspace telemetry.
+func TestPostgresTraversalTelemetryCompletesA1AllShortestWorkspaceReceipt(t *testing.T) {
+	telemetry := a1AllShortestCaseTelemetry(t)
+	document := validA1AllShortestDiagnosticDocument(telemetry.Diagnostic.InvocationID)
+	observed := []string{`["path-1"]`, `["path-2"]`}
+	metrics := PostgresPlanMetrics{
+		HydrationRows:  8,
+		HydrationLoops: 4,
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType: "Index Scan", RelationName: "node", ActualRows: 2, ActualLoops: 4, ActualTotalMS: .25,
+		}},
+	}
+
+	require.NoError(t, applyA1AllShortestTraversalDiagnostic(telemetry, document, telemetry.Diagnostic.InvocationID, "9123", observed, metrics))
+	require.NoError(t, telemetry.Validate())
+	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAG), telemetry.Summary.RuntimeIdentity)
+	require.Equal(t, "single_ended_search", telemetry.Summary.RuntimeBranch)
+	require.Equal(t, TraversalTelemetryCounterStatusComplete, telemetry.Diagnostic.CounterStatus)
+	require.Equal(t, int64(6), *telemetry.Diagnostic.Counters.AllShortestPaths.Search.CandidateEdges)
+	require.Equal(t, int64(2), *telemetry.Diagnostic.Counters.AllShortestPaths.OutputPaths)
+	require.Equal(t, int64(6), *telemetry.Diagnostic.Counters.AllShortestPaths.OutputEdgeCells)
+	require.NotNil(t, telemetry.Diagnostic.Counters.Hydration)
+	require.NotNil(t, telemetry.Diagnostic.Counters.Workspace)
+	require.Equal(t, int64(4096), *telemetry.Diagnostic.Counters.Workspace.SessionPeakBytes)
+}
+
+// TestPostgresTraversalTelemetryRejectsA1AllShortestStaleOrContradictoryReceipt
+// keeps the A1 diagnostic fail-closed when a prior session workspace is reused.
+func TestPostgresTraversalTelemetryRejectsA1AllShortestStaleOrContradictoryReceipt(t *testing.T) {
+	telemetry := a1AllShortestCaseTelemetry(t)
+	document := validA1AllShortestDiagnosticDocument(telemetry.Diagnostic.InvocationID)
+	document.SearchCalls = traversalTelemetryPointer(int64(2))
+	err := applyA1AllShortestTraversalDiagnostic(telemetry, document, telemetry.Diagnostic.InvocationID, "9123", []string{`["path-1"]`, `["path-2"]`}, PostgresPlanMetrics{})
+	require.ErrorContains(t, err, "invocation state is incomplete")
+
+	telemetry = a1AllShortestCaseTelemetry(t)
+	document = validA1AllShortestDiagnosticDocument(telemetry.Diagnostic.InvocationID)
+	err = applyA1AllShortestTraversalDiagnostic(telemetry, document, telemetry.Diagnostic.InvocationID, "9123", []string{`["path-1"]`}, PostgresPlanMetrics{})
+	require.ErrorContains(t, err, "output count")
+}
+
 // TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation verifies postgres traversal telemetry uses plan replay for sql visible orientation behavior.
 func TestPostgresTraversalTelemetryUsesPlanReplayForSQLVisibleOrientation(t *testing.T) {
 	outcome := translate.TargetLoweringOutcome{
@@ -1683,6 +1726,70 @@ func bidirectionalASPCaseTelemetry(t *testing.T) *TraversalExecutionTelemetry {
 	require.NoError(t, err)
 	require.NotNil(t, telemetry)
 	return telemetry
+}
+
+// a1AllShortestCaseTelemetry prepares the opaque function-scan baseline that
+// the A1 invocation-local workspace receipt must complete.
+func a1AllShortestCaseTelemetry(t *testing.T) *TraversalExecutionTelemetry {
+	t.Helper()
+	identity := string(optimize.ShortestPathExecutorASPA1DAG)
+	outcome := translate.TargetLoweringOutcome{
+		Family:            "ASP",
+		Candidate:         identity,
+		Selected:          identity,
+		Applied:           identity,
+		Fallback:          "SP-S0",
+		PlannedCandidates: []string{identity},
+		Scheduler:         "single_ended_level",
+		SelectorVersion:   "asp-tool-v1",
+		StateLimit:        100,
+		FrontierLimit:     50,
+		PredecessorLimit:  25,
+		EnumerationLimit:  1000,
+		OutputBytesLimit:  4096,
+	}
+	metrics := PostgresPlanMetrics{
+		PlanNodes: []PostgresPlanNodeMetric{{
+			NodeType: "Function Scan", FunctionName: "all_shortest_paths_dag", ActualRows: 2, ActualLoops: 1,
+		}},
+		Provenance: map[string]string{},
+	}
+	telemetry, err := buildPostgresCaseTraversalTelemetry(
+		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, telemetry)
+	return telemetry
+}
+
+// validA1AllShortestDiagnosticDocument returns a complete recursive A1
+// workspace receipt with two exact output paths at depth three.
+func validA1AllShortestDiagnosticDocument(invocationID string) *postgresA1AllShortestDiagnosticDocument {
+	return &postgresA1AllShortestDiagnosticDocument{
+		SchemaVersion:    1,
+		InvocationID:     invocationID,
+		Scheduler:        "single_ended_level",
+		SearchCalls:      traversalTelemetryPointer(int64(1)),
+		SourceID:         traversalTelemetryPointer(int64(10)),
+		TargetID:         traversalTelemetryPointer(int64(20)),
+		RuntimeBranch:    "single_ended_search",
+		TargetDepth:      traversalTelemetryPointer(int64(3)),
+		OutputPaths:      traversalTelemetryPointer(int64(2)),
+		FallbackExecuted: traversalTelemetryPointer(false),
+		WorkspaceBytes:   4096,
+		Levels: []postgresA1AllShortestDiagnosticLevel{
+			{
+				ActionIndex: traversalTelemetryPointer(int64(1)), Depth: traversalTelemetryPointer(int64(1)),
+				CandidateEdges: traversalTelemetryPointer(int64(2)), DistinctNewNodes: traversalTelemetryPointer(int64(2)),
+				SeenRows: traversalTelemetryPointer(int64(3)), PredecessorRows: traversalTelemetryPointer(int64(2)),
+			},
+			{
+				ActionIndex: traversalTelemetryPointer(int64(2)), Depth: traversalTelemetryPointer(int64(2)),
+				CandidateEdges: traversalTelemetryPointer(int64(4)), DistinctNewNodes: traversalTelemetryPointer(int64(2)),
+				SeenRows: traversalTelemetryPointer(int64(5)), PredecessorRows: traversalTelemetryPointer(int64(4)),
+			},
+		},
+	}
 }
 
 // validBidirectionalAllShortestDiagnosticDocument returns a self-consistent all-shortest runtime receipt.
